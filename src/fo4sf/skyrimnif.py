@@ -204,6 +204,20 @@ def texture_set(n, shader_ref) -> Optional[List[str]]:
     return paths
 
 
+SLSF2_DOUBLE_SIDED = 0x10            # Shader Flags 2 bit 4 (nif.xml SkyrimShaderPropertyFlags2)
+
+
+def double_sided(n, shader_ref) -> bool:
+    """True when the shape's BSLightingShaderProperty sets SLSF2_Double_Sided (leaves, banners, cloth, cobwebs).
+    Layout as texture_set: shader type, name, extra data list, controller, Shader Flags 1, Shader Flags 2."""
+    if not (0 <= shader_ref < len(n.blocks)) or n.type_of(shader_ref) != "BSLightingShaderProperty":
+        return False
+    blk = n.blocks[shader_ref]
+    n_extra, = struct.unpack_from("<I", blk, 8)
+    flags2, = struct.unpack_from("<I", blk, 12 + 4 * n_extra + 8)
+    return bool(flags2 & SLSF2_DOUBLE_SIDED)
+
+
 def alpha_test(n, alpha_ref) -> Tuple[bool, bool, int]:
     """(alpha test, alpha blend, threshold 0..255) from a NiAlphaProperty (flags bit 0 blend, bit 9 test)."""
     if not (0 <= alpha_ref < len(n.blocks)) or n.type_of(alpha_ref) != "NiAlphaProperty":

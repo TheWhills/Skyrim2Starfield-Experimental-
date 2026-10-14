@@ -114,7 +114,8 @@ class CityBuildTests(unittest.TestCase):
         self.assertAlmostEqual(rock["pos"][0], (3 * 4096 + 1000.0) / 70.0 - ox, places=3)
         self.assertAlmostEqual(rock["pos"][1], (2 * 4096 + 1500.0) / 70.0 - oy, places=3)
         self.assertTrue(plan and all(len(e["points"]) >= 2 for e in plan))   # city-distance probes fit
-        self.assertTrue(all(math.hypot(p["x"], p["y"]) < 260.0 for e in plan for p in e["points"]))
+        lo, hi = o["bounds_min_m"] + 50.0, o["bounds_max_m"] - 50.0       # inside the overlay, 50 m edge keep
+        self.assertTrue(all(lo <= p[k] <= hi for e in plan for p in e["points"] for k in ("x", "y")))
 
 
 def add_to_wrld_group(raw: bytes, payload: bytes) -> bytes:

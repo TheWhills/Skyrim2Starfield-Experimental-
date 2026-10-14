@@ -68,11 +68,12 @@ class SseNif:
         return self.add("NiTriShape", self.av(self.s(name)) + struct.pack("<iiI", data, -1, 0) + struct.pack("<iB", -1, 0)
                         + struct.pack("<ii", shader, alpha))
 
-    def lighting(self, diffuse, normal):
+    def lighting(self, diffuse, normal, double_sided=False):
         paths = [diffuse, normal] + [""] * 7
         ts = self.add("BSShaderTextureSet", struct.pack("<I", len(paths))
                       + b"".join(struct.pack("<I", len(p)) + p.encode() for p in paths))
-        return self.add("BSLightingShaderProperty", struct.pack("<IiIiII", 1, -1, 0, -1, 0x80000000, 0x8001)
+        flags2 = 0x8001 | (0x10 if double_sided else 0)               # SLSF2_Double_Sided
+        return self.add("BSLightingShaderProperty", struct.pack("<IiIiII", 1, -1, 0, -1, 0x80000000, flags2)
                         + struct.pack("<4f", 0, 0, 1, 1) + struct.pack("<i", ts) + bytes(60))
 
     def effect(self):
@@ -178,7 +179,7 @@ def rock_nif(radius=600.0):
 
 
 def tree_nif():
-    """Trunk (opaque) + leaves (alpha-tested) + capsule trunk collision through a rigid body T."""
+    """Trunk (opaque) + leaves (alpha-tested, double-sided as vanilla leaves are) + capsule trunk collision through a rigid body T."""
     n = SseNif()
     root = n.reserve("BSFadeNode")
     trunk = n.trishape(b"Trunk", [(0, 0, 0), (40, 0, 0), (0, 40, 0), (0, 0, 800)], [(0, 0), (1, 0), (0, 1), (1, 1)],
@@ -186,7 +187,7 @@ def tree_nif():
                        shader=n.lighting("textures\\landscape\\trees\\bark.dds", "textures\\landscape\\trees\\bark_n.dds"))
     leaves = n.trishape(b"Leaves", [(-300, -300, 600), (300, -300, 600), (300, 300, 900)], [(0, 0), (1, 0), (1, 1)],
                         [(0, 1, 2)], shader=n.lighting("textures\\landscape\\trees\\leaves.dds",
-                                                       "textures\\landscape\\trees\\leaves_n.dds"),
+                                                       "textures\\landscape\\trees\\leaves_n.dds", double_sided=True),
                         alpha=n.alpha(0x200 | 0xEC, 120))
     coll = n.collision(root, n.capsule((0, 0, 0.5), (0, 0, 10.0), 0.3), rigid_t=((0.0, 0.0, 0.2), (0, 0, 0, 1)))
     n.node(root, b"TreePine01", [trunk, leaves], coll=coll)

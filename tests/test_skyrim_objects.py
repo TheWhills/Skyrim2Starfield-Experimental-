@@ -92,6 +92,39 @@ class NifTests(unittest.TestCase):
             self.assertEqual([len(s.triangles) for s in got], [1, 1])
             self.assertEqual(got[0].uvs[1], (1.0, 0.0))
 
+    def test_double_sided_flag_and_back_faces(self):
+        n = F.SseNif()
+        root = n.reserve("BSFadeNode")
+        v, uv = [(0, 0, 0), (100, 0, 0), (0, 100, 0)], [(0, 0), (1, 0), (0, 1)]
+        two = n.trishape(b"Leaf", v, uv, [(0, 1, 2)], shader=n.lighting("a.dds", "a_n.dds", double_sided=True))
+        one = n.trishape(b"Bark", v, uv, [(0, 1, 2)], shader=n.lighting("b.dds", "b_n.dds"))
+        n.node(root, b"Root", [two, one])
+        src = nif.parse(n.bytes())
+        leaf, bark = skyrimnif.trishapes(src)
+        self.assertTrue(skyrimnif.double_sided(src, leaf.shader_ref))
+        self.assertFalse(skyrimnif.double_sided(src, bark.shader_ref))
+        self.assertFalse(skyrimnif.double_sided(src, -1))
+        d = skyrimconvert.with_back_faces(leaf)
+        self.assertEqual(d.positions, leaf.positions * 2)
+        self.assertEqual(d.uvs, leaf.uvs * 2)
+        self.assertEqual(d.triangles, [(0, 1, 2), (3, 5, 4)])                 # mirrored copy: reversed winding
+
+        def face_normal(s, t):
+            a, b, c = (s.positions[i] for i in t)
+            u, w = [b[k] - a[k] for k in range(3)], [c[k] - a[k] for k in range(3)]
+            return (u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0])
+        front, back = face_normal(d, d.triangles[0]), face_normal(d, d.triangles[1])
+        self.assertGreater(front[2], 0)
+        self.assertLess(back[2], 0)                                            # faces the other way
+        for i in range(3):                                                     # vertex normals follow their face
+            self.assertGreater(d.normals[i][2], 0.9)
+            self.assertLess(d.normals[3 + i][2], -0.9)
+        from fo4sf import convert_static
+        m = convert_static.shape_to_mesh(d, 1 / 70)
+        self.assertEqual((len(m.positions), len(m.triangles)), (6, 2))
+        big = skyrimconvert.dataclasses.replace(leaf, positions=[(0, 0, 0)] * 40000)
+        self.assertIsNone(skyrimconvert.with_back_faces(big))                 # 80,000 vertices: no u16 room
+
     def test_collision_shapes_decode_to_their_geometry(self):
         rock = nif.parse(F.rock_nif())
         pts, tris = skyrimnif.collision_triangles(rock)
@@ -255,6 +288,14 @@ class ConverterTests(unittest.TestCase):
             opaque = load(os.path.join(tmp, "out", *tree["materials"][0].split("\\")))
             self.assertIn("opacity", json.dumps(leaves).lower())                  # cutout: opacity texture
             self.assertNotIn("_opacity.dds", json.dumps(opaque).lower())
+            # double-sided leaves get back faces; the trunk and every other model stay one-sided
+            self.assertEqual((tree["double_sided_shapes"], tree["double_sided_too_big"]), (1, 0))
+            self.assertEqual(sum(r["double_sided_shapes"] for r in res.values()), 1)
+            tn = nif.parse(open(os.path.join(tmp, "out", "meshes", "skyrim", "landscape", "trees",
+                                             "treepine01.nif"), "rb").read())
+            tris = sorted(sfnif.parse_bsgeometry(tn.blocks[i]).meshes[0].indices_size // 3
+                          for i in range(len(tn.blocks)) if tn.type_of(i) == "BSGeometry")
+            self.assertEqual(tris, [2, 3])                                       # leaves 1 -> 2, trunk 3
             # the written rock NIF: one BSGeometry, collision bodies, mesh positions = Skyrim units / 70
             out = nif.parse(open(os.path.join(tmp, "out", "meshes", "skyrim", "landscape", "rocks",
                                               "rockcliff01.nif"), "rb").read())

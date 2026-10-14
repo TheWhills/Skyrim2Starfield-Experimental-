@@ -37,8 +37,12 @@ south / west cell win shared edges, which put a 56 m error on the neighbours in 
 - **H (supported for Skyrim)**: Skyrim units / 70 = metres, as for FO4 (same Bethesda unit). The ray probes test it.
 - Local frame = Skyrim position / 70 from Skyrim's origin (pad `origin`, as core64). Skyrim's map is not centred on
   its origin, so the square overlay is sized by the farther side.
-- Outside Skyrim's LAND the overlay repeats the nearest edge height (the builder's clamp rule): streaks in the
-  north / south strips of the square. The overlay mask blends its outer cell ring into procedural Mars terrain.
+- Outside Skyrim's LAND rectangle (Skyrim has no ground there) each vertex takes the nearest edge height eased
+  (smoothstep) to the worldspace's default land height over `--edge-falloff-cells` (default 4 cells = 234 m), then
+  stays flat at that height to the square's edge. This replaced repeating the edge height outwards (streaks in the
+  north / south strips, and walls where the edge is a mountain: Starfield blends an overlay's edge into the planet,
+  starfield-community-notes.md). The overlay mask blends its outer cell ring into procedural Mars terrain.
+  Unresolved: the planet's own height there; a flat border at Skyrim's default height is the neutral guess.
 - Mars registration: experiment 2b's (latitude 0.3, longitude -1.2 -> planet cell (-12, -27)), verified in game.
   **Never install with another terrain experiment** (every Mars plugin overrides MarsPlanetData).
 

@@ -201,25 +201,61 @@ class SkyrimLand:
                 "named_cells": len(self.edids)}
 
 
-class SkyrimHeights:
-    """Drop-in for make_cw_overlays.Fo4Heights backed by an already read SkyrimLand (no second pass over the ESM)."""
+FALLOFF_CELLS = 4.0               # outside the LAND rectangle: blend from the edge height to the fill over 4 cells (234 m)
 
-    def __init__(self, land, grid=None, fill=None):
+
+def falloff_weight(d, length):
+    """1 at the LAND edge (d = 0), falling smoothly (smoothstep) to 0 at d >= length; d and length in game units."""
+    if length <= 0:
+        return (np.asarray(d) <= 0).astype(np.float64)
+    t = np.clip(np.asarray(d, dtype=np.float64) / length, 0.0, 1.0)
+    return 1.0 - t * t * (3.0 - 2.0 * t)
+
+
+class SkyrimHeights:
+    """Drop-in for make_cw_overlays.Fo4Heights backed by an already read SkyrimLand (no second pass over the ESM).
+
+    Inside the LAND rectangle (`grid`) heights are Skyrim's, holes at the fill height. Outside it Skyrim has no ground
+    at all, and the square overlay still needs heights there: instead of repeating the edge vertex outwards (streaks,
+    and a cliff wherever the edge is a mountain, which Starfield's edge blending turns into a wall), each outside
+    vertex takes the nearest edge height eased to the fill height over `falloff` game units. The value depends only on
+    the vertex's position, so neighbouring tiles agree on their seams."""
+
+    def __init__(self, land, grid=None, fill=None, falloff_cells=FALLOFF_CELLS):
         self.land = land
         self.world = land.world
         self.grid = tuple(grid) if grid else land.grid_bounds
         self.fill = land.fill_height() if fill is None else fill
+        self.falloff = float(falloff_cells) * fo4land.CELL_UNITS
         self.grids = dict(land.grids)
 
     def load(self, cells):        # everything is already decoded
         return None
 
     def merged(self, x0, x1, y0, y1):
+        """Vertex grid (game units) and origin for the inclusive cell rectangle, NOT clamped to the LAND grid."""
         gx0, gx1, gy0, gy1 = self.grid
-        x0, x1 = max(x0, gx0), min(x1, gx1)
-        y0, y1 = max(y0, gy0), min(y1, gy1)
-        return merge_with_fill(self.grids, x0, x1, y0, y1, self.fill), (x0 * fo4land.CELL_UNITS,
-                                                                       y0 * fo4land.CELL_UNITS)
+        origin = (x0 * fo4land.CELL_UNITS, y0 * fo4land.CELL_UNITS)
+        ix0, ix1, iy0, iy1 = max(x0, gx0), min(x1, gx1), max(y0, gy0), min(y1, gy1)
+        if (ix0, ix1, iy0, iy1) == (x0, x1, y0, y1):
+            return merge_with_fill(self.grids, x0, x1, y0, y1, self.fill), origin
+        q = fo4land.GRID - 1                                  # vertices per cell edge (32)
+        cols = np.arange(x0 * q, (x1 + 1) * q + 1)            # global vertex indices of the requested grid
+        rows = np.arange(y0 * q, (y1 + 1) * q + 1)
+        if ix0 > ix1 or iy0 > iy1:                            # entirely outside: the nearest edge is the whole grid's
+            ix0, ix1, iy0, iy1 = gx0, gx1, gy0, gy1
+        inner = merge_with_fill(self.grids, ix0, ix1, iy0, iy1, self.fill)
+        lo_c, hi_c, lo_r, hi_r = ix0 * q, (ix1 + 1) * q, iy0 * q, (iy1 + 1) * q
+        cc, rr = np.clip(cols, lo_c, hi_c), np.clip(rows, lo_r, hi_r)
+        step = fo4land.CELL_UNITS / q
+        dx2 = (((cols - cc) * step) ** 2)[None, :]
+        out = np.empty((len(rows), len(cols)))
+        for a in range(0, len(rows), 512):                    # row chunks: no full-size temporaries for all of Tamriel
+            b = min(a + 512, len(rows))
+            edge = inner[np.ix_(rr[a:b] - lo_r, cc - lo_c)]   # nearest vertex of the LAND rectangle
+            d = np.sqrt((((rows[a:b] - rr[a:b]) * step) ** 2)[:, None] + dx2)
+            out[a:b] = self.fill + (edge - self.fill) * falloff_weight(d, self.falloff)
+        return out, origin
 
 
 def merge_with_fill(grids, x0, x1, y0, y1, fill):

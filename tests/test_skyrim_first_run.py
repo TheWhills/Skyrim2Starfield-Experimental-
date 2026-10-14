@@ -76,11 +76,13 @@ class FirstRunTests(unittest.TestCase):
         self.assertEqual(sv["collision_overlaps_render"], 2)        # tree and house
         self.assertIn("bhkConvexTransformShape", sv["havok_and_geometry_block_types"])
         self.assertEqual(list(sv["nif_bs_versions"]), ["100"])
+        self.assertEqual((sv["double_sided_shapes"], sv["models_with_double_sided"]), (1, 1))   # the tree's leaves
         sm = rep["sample"]
         self.assertEqual(sm["converted"] + sm["failed"], len(sm["results"]))
         self.assertGreaterEqual(sm["converted"], 3)
         self.assertIn("survey: 5 models", text)
         self.assertIn("MISPLACED 1", text)
+        self.assertIn("double-sided shapes 1 in 1 models", text)
         self.assertIn("Paste", log.getvalue())
 
     def test_refuses_work_folder_inside_the_repo(self):

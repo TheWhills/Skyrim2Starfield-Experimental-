@@ -176,7 +176,8 @@ def survey(a, state):
         step = len(names) / a.survey
         names = [names[int(i * step)] for i in range(a.survey)]
     res = {"models": len(names), "missing": 0, "parse_failed": 0, "no_geometry": 0, "with_collision": 0,
-           "collision_overlaps_render": 0, "collision_misplaced": 0}
+           "collision_overlaps_render": 0, "collision_misplaced": 0, "double_sided_shapes": 0,
+           "double_sided_too_big": 0, "models_with_double_sided": 0}
     blocks, geom, errors, unsupported, bs_versions = {}, {}, {}, {}, {}
     misplaced = []
     for name in names:
@@ -197,6 +198,10 @@ def survey(a, state):
                 continue
             for s in shapes:
                 bump(geom, n.type_of(s.block))
+            two = [s for s in shapes if skyrimnif.double_sided(n, s.shader_ref)]
+            res["double_sided_shapes"] += len(two)
+            res["double_sided_too_big"] += sum(1 for s in two if 2 * len(s.positions) > 0xFFFF)
+            res["models_with_double_sided"] += bool(two)
             rep = {}
             pts, tris = skyrimnif.collision_triangles(n, rep)
             for u in rep.get("unsupported", []):
@@ -265,6 +270,7 @@ def sample(a, state):
         results.append({"model": name, "ok": r["ok"], "reason": r.get("reason"), "shapes": r.get("shapes"),
                         "fallback_materials": r.get("fallback_materials"),
                         "skipped_effect_shapes": r.get("skipped_effect_shapes"),
+                        "double_sided_shapes": r.get("double_sided_shapes"),
                         "collision": {k: c[k] for k in ("source", "method", "boxes", "column_cell_m",
                                                         "collision_overlaps_render", "unsupported") if k in c},
                         "seconds": round(time.time() - t0, 1)})
@@ -309,6 +315,8 @@ def summary(run) -> str:
         L.append(f"  NIF BS versions {v['nif_bs_versions']}; geometry {v['geometry_blocks']}")
         L.append(f"  havok/geometry blocks {v['havok_and_geometry_block_types']}")
         L.append(f"  unsupported collision (incl. non-unit body rotations) {v['unsupported_collision']}")
+        L.append(f"  double-sided shapes {v.get('double_sided_shapes', 0)} in {v.get('models_with_double_sided', 0)} "
+                 f"models (too big to double: {v.get('double_sided_too_big', 0)})")
         for k, e in v["parse_errors"].items():
             L.append(f"  parse error x{e['count']}: {k} (e.g. {e['example']})")
         for m in v["misplaced_examples"][:5]:

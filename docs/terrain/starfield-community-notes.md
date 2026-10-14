@@ -23,8 +23,8 @@ our own measurements; **unresolved** = one report or untested.
 * A CK modder moving vanilla locations found the engine **auto-blends a worldspace's terrain into the surrounding
   planet terrain at its edge**; terrain cut off at the edge became **vertical walls** after blending. Vanilla
   locations ship a 16 x 16 "block pattern" of terrain blocks so the blend lines up. Source: thecommabandit.bearblog.dev.
-* Consequence here: the square padding around Tamriel should fall to the planet's height around the overlay, not
-  edge-extend (which also invents ground past Skyrim's coast; see skyrim-objects.md, "Lessons from tes4skyrim").
+* Consequence here: the square padding around Tamriel no longer edge-extends (which also invented ground past
+  Skyrim's coast); it eases to Skyrim's default land height and stays flat to the overlay edge (skyrim-tamriel.md).
 
 ## Plugins and records (supported)
 * Full master: about 16.7 M forms; **medium master: 65,535**; small: 4,095 (Nexus article 688). The object plugin
@@ -41,10 +41,12 @@ our own measurements; **unresolved** = one report or untested.
 * Material Editor Lite (Nexus mod 14659) edits Standard1Layer, **StandardTwoSided1Layer** and ColorEmissive `.mat`
   files with a live preview: the quickest way to inspect a converted material by hand. If materials do not show in the
   CK, use its "refresh materials" button.
-* **Double-sided surfaces are not translated yet.** Skyrim marks double-sided shapes in the shader flags (leaves,
-  banners, cloth); this pipeline writes one-sided materials (FO4's two-sided flag is parsed but unused), so those
-  faces vanish from behind. Two ways: a two-sided material (needs its `.mat` layout researched first) or duplicating the
-  triangles with reversed winding (no new format). First real-data check: look at a tree from below.
+* **Double-sided surfaces:** Skyrim marks them in Shader Flags 2 (SLSF2_Double_Sided, 0x10: leaves, banners,
+  cloth). Done without a new material format: each such shape gets a mirrored copy of its triangles (reversed winding,
+  normals negated), so it shows from both sides with the one-sided materials this pipeline writes. A shape whose
+  doubled vertex count would pass 65,535 stays one-sided and is counted (`double_sided_too_big`). The first-run survey
+  counts double-sided shapes; first in-game check: look at a tree from below. Unresolved: whether Starfield's
+  StandardTwoSided1Layer material would be cheaper than doubled geometry (its `.mat` layout is not researched).
 * After installing new textures or materials, **reset the shader cache**, or visual errors can appear (Nexus mod 16332).
 
 ## Reference scale (supported; checked here)

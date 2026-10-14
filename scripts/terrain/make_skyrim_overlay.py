@@ -210,7 +210,7 @@ def cmd_build(a, rest):
         sys.exit("--coc must end in Spawn (the runner's COC naming)")
     if not re.fullmatch(r"[0-9A-Fa-f]{2}", ca.load_byte):
         sys.exit("--load-byte must be two hex digits")
-    ca.heights = skyrimland.SkyrimHeights(land)
+    ca.heights = skyrimland.SkyrimHeights(land, falloff_cells=a.edge_falloff_cells)
     ca.landmarks = marks
     ca.ray_landmarks = ()
     ca.arrival = arrival[0][0] if arrival else ""   # "" never matches a point label: the COC sits at the centre
@@ -225,6 +225,8 @@ def cmd_build(a, rest):
               "filled_cells_in_overlay": sum(1 for h in land.holes
                                              if cells[0] <= h[0] <= cells[1] and cells[2] <= h[1] <= cells[3]),
               "fill_height_units": ca.heights.fill,
+              "outside_land": f"edge height eased to the fill height over {a.edge_falloff_cells:g} cells "
+                              "(Skyrim has no ground past its LAND rectangle)",
               "frame": "local metres = Skyrim units / 70 from Skyrim's origin; height = Skyrim z / 70 (hypothesis H, "
                        "verified for FO4 in core64; same unit for Skyrim is a supported hypothesis)",
               "not_included": ["objects (STAT/TREE/...: make_skyrim_objects.py)", "water planes", "grass", "object LOD",
@@ -282,6 +284,9 @@ def main(argv=None):
     ap.add_argument("--frame", choices=("skyrim", "local"), default="skyrim",
                     help="skyrim: overlay centred on Skyrim's origin (local = Skyrim position / 70; Tamriel); local: centred "
                          "on the cells (walled cities: a small overlay wherever the city is)")
+    ap.add_argument("--edge-falloff-cells", type=float, default=skyrimland.FALLOFF_CELLS,
+                    help="build: past Skyrim's LAND rectangle, ease the edge height down to the worldspace's default "
+                         "land height over this many Skyrim cells (default 4 = 234 m; 0 = drop at the edge)")
     ap.add_argument("--display-name", default="", help="in-game WRLD/Location name (default 'Skyrim')")
     ap.add_argument("--find", default="", help="info: list exterior cell EditorIDs matching this regex")
     ap.add_argument("--land-textures", action="store_true",

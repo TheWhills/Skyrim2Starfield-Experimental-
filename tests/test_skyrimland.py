@@ -131,9 +131,33 @@ class SkyrimLandTests(Fixture):
         np.testing.assert_array_equal(g[32:32 + G, 64], east[:, 0])
         _, north = cell_vhgt(2, 2)                                        # hole's north neighbour
         np.testing.assert_array_equal(g[64, 32:32 + G], north[0, :])
-        g2, origin2 = h.merged(-50, -5, -50, -3)                          # clamped to the LAND extent
-        self.assertEqual(origin2, (-6 * 4096.0, -4 * 4096.0))
-        self.assertEqual(g2.shape, (2 * 32 + 1, 2 * 32 + 1))
+
+    def test_outside_the_land_eases_to_the_fill_height(self):
+        """Past the LAND rectangle the edge height is eased to the fill height over the falloff (no edge streaks),
+        the value depends only on position (adjacent requests agree), and inside nothing changes."""
+        land = skyrimland.SkyrimLand(self.esm)
+        h = skyrimland.SkyrimHeights(land)                                # falloff 4 cells = 16,384 units
+        g, origin = h.merged(-12, -5, -10, -3)                            # SW corner: mostly outside
+        self.assertEqual(origin, (-12 * 4096.0, -10 * 4096.0))
+        self.assertEqual(g.shape, (8 * 32 + 1, 8 * 32 + 1))
+        _, sw = cell_vhgt(-6, -4)
+        np.testing.assert_array_equal(g[6 * 32:6 * 32 + G, 6 * 32:6 * 32 + G], sw)   # real cell untouched
+        row = 6 * 32 + 10                                                 # a row inside the land, going west
+        edge = sw[10, 0]
+        self.assertEqual(g[row, 6 * 32], edge)
+        self.assertAlmostEqual(g[row, 6 * 32 - 64], DEFAULT_LAND + (edge - DEFAULT_LAND) * 0.5)   # halfway: 2 cells
+        self.assertTrue(np.all(g[row, :6 * 32 - 128 + 1] == DEFAULT_LAND))                       # >= 4 cells out
+        out = g[row, 6 * 32 - 128:6 * 32 + 1]
+        self.assertTrue(np.all(np.diff(out) * np.sign(edge - DEFAULT_LAND) >= 0))                  # monotone
+        corner = g[:6 * 32, :6 * 32]                                      # diagonal: Euclidean distance to the corner
+        self.assertEqual(float(corner[6 * 32 - 100, 6 * 32 - 100]), DEFAULT_LAND)
+        a, _ = h.merged(-12, -8, -10, -3)                                 # two adjacent requests share column x = -7
+        b, _ = h.merged(-7, -5, -10, -3)
+        np.testing.assert_array_equal(a[:, -1], b[:, 0])
+        np.testing.assert_array_equal(a, g[:, :5 * 32 + 1])
+        g0, _ = skyrimland.SkyrimHeights(land, falloff_cells=0).merged(-7, -6, -4, -4)
+        self.assertTrue(np.all(g0[:, :32] == DEFAULT_LAND))               # 0: straight down at the edge
+        np.testing.assert_array_equal(g0[:, 32:], sw[:, :])
 
     def test_missing_world_and_empty_world(self):
         with self.assertRaises(KeyError):
@@ -188,10 +212,18 @@ class OverlayBuildTests(Fixture):
         #    within one quantisation step
         land = skyrimland.SkyrimLand(self.esm)
         x0, x1, y0, y1 = EXTENT
-        g, (ox, oy) = skyrimland.SkyrimHeights(land).merged(x0, x1, y0, y1)
+        g, (ox, oy) = skyrimland.SkyrimHeights(land).merged(x0 - 3, x1 + 3, y0 - 3, y1 + 3)   # whole overlay
         xs = tg.sample_coords(n)
         want = tg.resample_bilinear(g, ox, oy, 128.0, xs * 70.0, xs * 70.0) / 70.0
         self.assertLessEqual(float(np.abs(dec - want).max()), step * 1.0001)
+        # outside Skyrim's land (south of y = -4 cells) the BTD eases toward the default land height: halfway down
+        # 2 cells (117 m) past the edge, instead of repeating the edge height (the old north / south streaks)
+        half_y = (y0 * 4096.0 - 2 * 4096.0) / 70.0
+        for xu in (-20480.0, 0.0, 16384.0):
+            edge = hills(xu, y0 * 4096.0)
+            got = tg.btd_height_at(dec, n, xu / 70.0, half_y)
+            self.assertAlmostEqual(got, (DEFAULT_LAND + (edge - DEFAULT_LAND) * 0.5) / 70.0, delta=0.05)
+            self.assertGreater(abs(got - edge / 70.0), 5.0)
         # 2) Skyrim vertices away from the hole: resampling a 1.83 m grid onto 0.78 m keeps them within the runner's
         #    0.5 m tolerance (kinks between Skyrim quads are not on the BTD lattice, so not exact)
         errs = []

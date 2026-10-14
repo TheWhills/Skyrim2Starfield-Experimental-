@@ -15,7 +15,7 @@ after the terrain records (dotnet/TerrainOverlays' existing `objects.json` mode,
 |---|---|
 | `src/fo4sf/bsa.py` | Skyrim archives: BSA v104 (zlib) / v105 (SE, LZ4 frames), embedded names; `SkyrimArchives` = the Data folder in load order, loose files win (the interface pipeline.Converter uses) |
 | `src/fo4sf/skyrimnif.py` | Skyrim SE meshes (NIF BS 100): BSTriShape / BSLODTriShape (vertex layout from the descriptor), NiTriShape / NiTriStrips (both "Material CRC" variants), texture sets, NiAlphaProperty; Skyrim Havok collision -> triangles: compressed mesh (chunks, strips, big triangles, transforms), packed strips, box, sphere, capsule, convex vertices, list, (convex) transform shapes, rigid body T; scaled by 69.99124 game units per havok unit |
-| `src/fo4sf/skyrimconvert.py` | `SkyrimConverter(pipeline.Converter)`: FO4's texture conversion, caps and material templates reused; Skyrim materials (diffuse + normal; alpha test -> cutout, alpha blend -> decal, effect shaders skipped); collision as boxes (below) |
+| `src/fo4sf/skyrimconvert.py` | `SkyrimConverter(pipeline.Converter)`: FO4's texture conversion, caps and material templates reused; Skyrim materials (diffuse + normal; alpha test -> cutout, alpha blend -> decal, effect shaders skipped); double-sided shapes (SLSF2_Double_Sided: leaves, banners, cloth) get a mirrored back copy of their triangles, so no two-sided material is needed; collision as boxes (below) |
 | `src/fo4sf/skyrimrefs.py` | Skyrim.esm -> the schema-v2 placement export FO4 uses (docs/CELL-EXPORT.md): base type, model (MODL / armour MOD2), position, rotation, scale, disabled flag, persistence, cell, enable parent; actors deferred |
 | `scripts/terrain/make_skyrim_objects.py` | `export / select / convert / stage / check` |
 | `src/fo4sf/checkpoints.py` | optional output prefix (FO4 default `fo4port` unchanged), so resumed Skyrim conversions verify their materials and textures too |
@@ -118,8 +118,8 @@ Confirmed (no change needed):
 
 To keep in mind (not done):
 * **Absent LAND past the coastline means "no ground"**; edge-extending heights there invents terrain with steps
-  between columns. Inside the landmass a fill is right. The Tamriel overlay's square padding currently edge-extends
-  (the north / south streaks); a better rule is to fall off to below sea level outside the LAND extent.
+  between columns. Inside the landmass a fill is right. Done: the Tamriel overlay's square padding now eases to the
+  default land height outside the LAND extent instead of edge-extending (skyrim-tamriel.md).
 * **Water**, when it is translated: a cell has water when CELL DATA bit 0x02 is set; its height is XCLW, but
   `-2147483648.0` (0xCF000000) is the "use the worldspace default" sentinel (WRLD DNAM), never a height.
 * **Specular**: Skyrim's normal-map ALPHA is the specular mask (landscape and objects); roughness here is uniform.

@@ -13,6 +13,7 @@ boxes (sfcollision.mesh_boxes: thin boxes behind flat surfaces + voxel boxes for
 collision gets none (grass, small plants, cobwebs: the player walks through them in Skyrim too). Boxes are an
 approximation of curved rock and tree collision, not Starfield's native mesh shape (see docs/terrain/skyrim-objects.md).
 """
+import dataclasses
 import hashlib
 import os
 import re
@@ -139,6 +140,24 @@ def collision_boxes(src: nifmod.NifFile, template: bytes, report: dict, landscap
     return [sfcollision.box_blob(template, c, h) for c, h in boxes]
 
 
+MAX_VERTICES = 0xFFFF                 # Starfield .mesh triangle indices are u16
+
+
+def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
+    """The shape plus a mirrored copy of every triangle (reversed winding, normals negated, tangents kept so the
+    recomputed handedness flips with the normal): a double-sided Skyrim surface as plain one-sided Starfield geometry,
+    with no new material type. None when the doubled vertex count would not fit u16 indices."""
+    nv = len(s.positions)
+    if 2 * nv > MAX_VERTICES:
+        return None
+    return dataclasses.replace(
+        s, positions=list(s.positions) * 2, uvs=list(s.uvs) * 2 if s.uvs else s.uvs,
+        normals=list(s.normals) + [(-x, -y, -z) for x, y, z in s.normals] if s.normals else s.normals,
+        tangents=list(s.tangents) * 2 if s.tangents else s.tangents,
+        colors=list(s.colors) * 2 if s.colors else s.colors,
+        triangles=[tuple(t) for t in s.triangles] + [(a + nv, c + nv, b + nv) for a, b, c in s.triangles])
+
+
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
                        collision_template: Optional[bytes], report: dict, landscape: bool = False) -> Dict[str, bytes]:
     files, static_shapes, all_pts = {}, [], []
@@ -228,6 +247,14 @@ class SkyrimConverter(pipeline.Converter):
             mats = [self._shape_material(src, s) for s in shapes]
             if all(m is None for m in mats):
                 raise ValueError("only effect-shader shapes, skipped")
+            doubled = too_big = 0
+            for i, s in enumerate(shapes):
+                if mats[i] is not None and skyrimnif.double_sided(src, s.shader_ref):
+                    d = with_back_faces(s)
+                    if d is None:
+                        too_big += 1                  # left one-sided: visible from the front only
+                    else:
+                        shapes[i], doubled = d, doubled + 1
             rel = re.sub(r"^meshes[\\/]", "", nif_name.replace("\\", "/"), flags=re.I)
             out_name = f"{self.prefix}/{os.path.splitext(rel)[0].lower()}"
             report = {}
@@ -241,7 +268,8 @@ class SkyrimConverter(pipeline.Converter):
             res.update(ok=True, out_name=out_name, shapes=len(shapes), materials=mats,
                        collision="skyrim" if self.collision_template is not None else None,
                        collision_report=report, skipped_effect_shapes=sum(1 for m in mats if m is None),
-                       fallback_materials=sum(1 for m in mats if m == self.neutral))
+                       fallback_materials=sum(1 for m in mats if m == self.neutral),
+                       double_sided_shapes=doubled, double_sided_too_big=too_big)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"
