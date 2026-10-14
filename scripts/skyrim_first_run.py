@@ -177,7 +177,7 @@ def survey(a, state):
         names = [names[int(i * step)] for i in range(a.survey)]
     res = {"models": len(names), "missing": 0, "parse_failed": 0, "no_geometry": 0, "with_collision": 0,
            "collision_overlaps_render": 0, "collision_misplaced": 0}
-    blocks, geom, errors, unsupported, rb_offsets, bs_versions = {}, {}, {}, {}, {}, {}
+    blocks, geom, errors, unsupported, bs_versions = {}, {}, {}, {}, {}
     misplaced = []
     for name in names:
         raw = src.mesh(name)
@@ -201,8 +201,6 @@ def survey(a, state):
             pts, tris = skyrimnif.collision_triangles(n, rep)
             for u in rep.get("unsupported", []):
                 bump(unsupported, u)
-            if "rigid_body_offset" in rep:
-                bump(rb_offsets, rep["rigid_body_offset"])
             if tris:
                 res["with_collision"] += 1
                 rp = []
@@ -229,7 +227,7 @@ def survey(a, state):
                 errors[key] = {"count": 0, "example": name}
             errors[key]["count"] += 1
     res.update(nif_bs_versions=bs_versions, geometry_blocks=top(geom), havok_and_geometry_block_types=top(blocks, 30),
-               unsupported_collision=top(unsupported), rigid_body_t_offsets=rb_offsets,
+               unsupported_collision=top(unsupported),
                parse_errors=dict(sorted(errors.items(), key=lambda kv: -kv[1]["count"])[:12]),
                misplaced_examples=misplaced)
     return res
@@ -310,7 +308,7 @@ def summary(run) -> str:
                  f"MISPLACED {v['collision_misplaced']})")
         L.append(f"  NIF BS versions {v['nif_bs_versions']}; geometry {v['geometry_blocks']}")
         L.append(f"  havok/geometry blocks {v['havok_and_geometry_block_types']}")
-        L.append(f"  unsupported collision {v['unsupported_collision']}; rigid body T offsets {v['rigid_body_t_offsets']}")
+        L.append(f"  unsupported collision (incl. non-unit body rotations) {v['unsupported_collision']}")
         for k, e in v["parse_errors"].items():
             L.append(f"  parse error x{e['count']}: {k} (e.g. {e['example']})")
         for m in v["misplaced_examples"][:5]:

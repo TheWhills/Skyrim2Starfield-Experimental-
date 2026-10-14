@@ -12,8 +12,8 @@ Shapes carry WORLD transforms (nif.world_transforms: every NiNode ancestor compo
 Collision (`collision_triangles`): bhkCollisionObject -> bhkRigidBody[T] -> shape tree. Supported shapes:
 bhkMoppBvTreeShape, bhkCompressedMeshShape (+ data: chunks with strips / lists and big triangles), bhkPackedNiTriStrips-
 Shape (+ hkPackedNiTriStripsData), bhkBoxShape, bhkSphereShape, bhkCapsuleShape, bhkConvexVerticesShape, bhkList-
-Shape, bhkConvexListShape, bhkTransformShape, bhkConvexTransformShape. Havok coordinates are scaled by Skyrim's havok
-scale (69.99124 game units per havok unit), then the target node's world transform applies. Anything else is reported
+Shape, bhkConvexListShape, bhkTransformShape, bhkConvexTransformShape. The rigid body's own transform applies (plain
+and T bodies), then Skyrim's havok scale (69.99124 game units per havok unit), then the target node's world transform. Anything else is reported
 by name, never guessed.
 
 Field layouts follow niftools' nif.xml for Skyrim / Skyrim SE. They are checked here against synthetic files only; the
@@ -25,7 +25,8 @@ from typing import List, Optional, Tuple
 
 from . import nif as nifmod
 
-HAVOK_SCALE = 69.99124             # Skyrim game units per havok unit
+HAVOK_SCALE = 69.99124             # Skyrim game units per havok unit (tes4skyrim measured 69.9913 in SkyrimSE.exe)
+CMS_STEP = 0.001                   # compressed-mesh chunk vertices: u16 offsets in 1/1000 havok-unit steps
 BS_SSE = 100
 TRI_TYPES = ("BSTriShape", "BSLODTriShape", "BSMeshLODTriShape")
 VF_VERTEX, VF_UV, VF_NORMAL, VF_TANGENT, VF_COLOR, VF_SKIN = 0x1, 0x2, 0x8, 0x10, 0x20, 0x40
@@ -254,20 +255,25 @@ def _hull(points):
         return _box(lo, hi)
 
 
-def _rigid_body_transform(blk) -> Tuple[tuple, tuple]:
-    """(translation in havok units, rotation matrix) of a bhkRigidBodyT. bhkWorldObject is 28 bytes; Skyrim's
-    rigid-body info places the translation Vector4 at 56 and the rotation quaternion at 72 (niftools layout). The
-    quaternion must be unit length; otherwise the first offset in 40..96 holding a unit quaternion after a translation
-    is used (reported by the caller through the 'rigid_body_offset' key)."""
-    for off in [56] + list(range(40, 100, 4)):
-        if off + 32 > len(blk):
-            continue
-        q = struct.unpack_from("<4f", blk, off + 16)
-        if all(math.isfinite(c) for c in q) and abs(sum(c * c for c in q) - 1.0) < 1e-3:
-            t = struct.unpack_from("<3f", blk, off)
-            if all(math.isfinite(c) and abs(c) < 1e5 for c in t):
-                return t, _quat_matrix(*q), off
-    raise CollisionError("bhkRigidBodyT: no unit rotation quaternion found")
+RB_TRANSLATION, RB_ROTATION = 52, 68
+
+
+def _rigid_body_transform(blk) -> Tuple[tuple, tuple, bool]:
+    """(translation in havok units, rotation matrix, stored-as-unit) of a bhkRigidBody / bhkRigidBodyT.
+
+    Layout (niftools nif.xml, cross-checked with tes4skyrim's 250-byte bhkRigidBody: bhkWorldObject 28 + bhkEntityCInfo
+    4 + bhkRigidBodyCInfo2010 212): CInfo2010 starts at 32 with unused 4, HavokFilter 4, unused 4, UnknownInt1 4,
+    response / unused / contact delay 4, so Translation (Vector4) sits at 52 and Rotation (quaternion x y z w) at 68.
+    Skyrim APPLIES both fields on BOTH body classes (tes4skyrim docs/commentary/asset_convert_collision.md: vanilla
+    trapmace01's plain body carries the inverse of its node's 0.5 degree rotation; every other vanilla plain body is
+    identity). A rotation that is not a unit quaternion is reported and treated as identity, never searched for: one
+    field off, an identity body reads (0, 0, 1, 0), itself a unit quaternion (a 180 degree turn)."""
+    t = struct.unpack_from("<3f", blk, RB_TRANSLATION)
+    q = struct.unpack_from("<4f", blk, RB_ROTATION)
+    unit = all(math.isfinite(c) for c in q) and abs(sum(c * c for c in q) - 1.0) < 1e-3
+    if not unit or not all(math.isfinite(c) and abs(c) < 1e5 for c in t):
+        return (0.0, 0.0, 0.0), IDENT, False
+    return t, _quat_matrix(*q), True
 
 
 def _vec4s(d, p, count):
@@ -276,7 +282,6 @@ def _vec4s(d, p, count):
 
 def _cms_data(d: bytes):
     """Vertices (havok units) and triangles of a bhkCompressedMeshShapeData."""
-    error, = struct.unpack_from("<f", d, 16)
     p = 54                                     # bits, masks, error, AABB min/max, welding and material types
     for _ in range(3):                         # materials 32 / 16 / 8
         k, = struct.unpack_from("<I", d, p); p += 4 + 4 * k
@@ -310,9 +315,10 @@ def _cms_data(d: bytes):
         nw, = struct.unpack_from("<I", d, p); p += 4 + 2 * nw
         t, m = transforms[ti] if ti < len(transforms) else ((0.0, 0.0, 0.0), IDENT)
         base = len(verts)
-        for k in range(nv // 3):
-            v = (ct[0] + q[3 * k] * error, ct[1] + q[3 * k + 1] * error, ct[2] + q[3 * k + 2] * error)
-            verts.append(_apply(m, t, v))
+        for k in range(nv // 3):            # NifSkope drawCMS / tes4skyrim cms.py: translations, then the rotation
+            v = (ct[0] + t[0] + q[3 * k] * CMS_STEP, ct[1] + t[1] + q[3 * k + 1] * CMS_STEP,
+                 ct[2] + t[2] + q[3 * k + 2] * CMS_STEP)
+            verts.append(_apply(m, (0.0, 0.0, 0.0), v))
         o = 0
         for ln in strips:
             s = idx[o:o + ln]
@@ -412,11 +418,10 @@ def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None):
         shape, = struct.unpack_from("<i", blk, 0)
         v, f, b = _shape(n, shape)
         bad += b
-        if n.type_of(body) == "bhkRigidBodyT":
-            t, m, off = _rigid_body_transform(blk)
-            v = [_apply(m, t, x) for x in v]
-            if report is not None and off != 56:
-                report["rigid_body_offset"] = off
+        t, m, unit = _rigid_body_transform(blk)            # applied on plain and T bodies alike (Skyrim does)
+        if not unit:
+            bad.append(f"{n.type_of(body)} rotation is not a unit quaternion (identity used)")
+        v = [_apply(m, t, x) for x in v]
         tr, rot, scale = world(target) if 0 <= target < len(n.blocks) else ((0.0, 0.0, 0.0), IDENT, 1.0)
         base = len(points)
         for x in v:

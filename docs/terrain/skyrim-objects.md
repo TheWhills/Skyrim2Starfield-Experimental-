@@ -85,3 +85,46 @@ be near 0 (synthetic: 0.00 m, 6 of 6 within 3 m). A large constant offset means 
 On the first real run also read `convert/manifest.json`: `failure_reasons` (counts), `collision` (columns / surfaces /
 none per model), material fallbacks, and any model with `"collision_overlaps_render": false` or `"unsupported"`
 collision shapes (layouts read from niftools' nif.xml, checked on synthetic files only).
+
+## Lessons from tes4skyrim (bryantmh/tes4skyrim), which WRITES the Skyrim formats read here
+Read 2026-10-14 from its docs and code (`docs/commentary/asset_convert_collision.md`, `asset_convert_nif.md`,
+`asset_convert_terrain.md`, `tes5_import_landscape.md`, `docs/audits/worldspace_havok_range.md`,
+`asset_convert/collision/cms.py`). It converts Oblivion / Morrowind / Fallout into Skyrim SE and checks its output
+against vanilla Skyrim and in game, so its layouts are the best evidence available here short of real files.
+
+Fixed on this branch because of it:
+* **bhkRigidBody translation is at byte 52 and rotation at 68** (bhkWorldObject 28 + bhkEntityCInfo 4 +
+  bhkRigidBodyCInfo2010 212 = 250 bytes; current nif.xml field order). This reader used 56 / 72: on an identity body
+  the four floats at 72 are (0, 0, 1, 0), itself a unit quaternion, so every rigid-body-T collision would have been
+  turned 180 degrees. Regression test: `test_rigid_body_transform_offsets_and_plain_bodies` (fails at 56 / 72).
+* **Skyrim applies the transform on PLAIN bhkRigidBody too**, not only bhkRigidBodyT (vanilla `trapmace01.nif`
+  carries the inverse of its node's 0.5 degree rotation on a plain body; every other vanilla plain body is identity).
+  Applied on both now; a non-unit rotation is reported in the survey and treated as identity, never searched for.
+* **Compressed-mesh vertices**: `R x (chunk translation + transform translation + u16 / 1000)` (NifSkope drawCMS,
+  tes4skyrim `cms.py`, validated there against the engine's own shape keys), with the fixed 1/1000 step. Vanilla uses
+  one identity transform per mesh, so this changes nothing on vanilla data; it is the verified order.
+
+Confirmed (no change needed):
+* Havok scale: 1 havok unit = 69.9913 game units, measured in SkyrimSE.exe (here 69.99124).
+* Vanilla Skyrim collision is always MOPP + compressed mesh for statics (0 of 17,216 vanilla meshes ship
+  bhkPackedNiTriStripsShape, 0 ship bhkMultiSphereShape); clutter adds boxes, convex hulls, lists and transform shapes.
+* A rigid body sits at its OWNING node's full world transform (rotation, uniform scale, translation).
+* Vanilla trees and flora use NiTriShape (not only BSTriShape); leaves carry NiAlphaProperty 0x92EC, threshold 128
+  (test bit 0x200 set, blend bit 0x1 clear).
+* LAND: BTXT / ATXT hold LTEX FormIDs directly; VTXT is a 17 x 17 grid, position = row x 17 + column, layers in ATXT
+  layer order; row 0 is SOUTH for VHGT, VTXT and VCLR.
+* Unpainted quadrants (no BTXT) are common (22.6 % of Oblivion's Tamriel quadrants, the sea floor): the engine draws
+  its default land texture there; `landtex` maps them to the engine-default entry.
+
+To keep in mind (not done):
+* **Absent LAND past the coastline means "no ground"**; edge-extending heights there invents terrain with steps
+  between columns. Inside the landmass a fill is right. The Tamriel overlay's square padding currently edge-extends
+  (the north / south streaks); a better rule is to fall off to below sea level outside the LAND extent.
+* **Water**, when it is translated: a cell has water when CELL DATA bit 0x02 is set; its height is XCLW, but
+  `-2147483648.0` (0xCF000000) is the "use the worldspace default" sentinel (WRLD DNAM), never a height.
+* **Specular**: Skyrim's normal-map ALPHA is the specular mask (landscape and objects); roughness here is uniform.
+  Deriving Starfield roughness from that alpha is the next material improvement.
+* Grass in Skyrim comes only from LAND layers whose LTEX has GNAM (no references): a later ground-cover step reads it
+  from the same layers `landtex` already decodes.
+* Skyrim's own +-64-cell Havok world limit (262,144 units) is a Skyrim engine constant; it does not apply in
+  Starfield, but Tamriel's real extent (about -57..61) sits inside it anyway.

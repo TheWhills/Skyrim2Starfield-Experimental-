@@ -82,16 +82,16 @@ class SseNif:
         return self.add("NiAlphaProperty", struct.pack("<iIiHB", -1, 0, -1, flags, threshold))
 
     # -- collision
-    def collision(self, target, shape, rigid_t=None):
-        body = self.reserve("bhkRigidBodyT" if rigid_t else "bhkRigidBody")
+    def collision(self, target, shape, rigid_t=None, plain_transform=False):
+        body = self.reserve("bhkRigidBody" if (plain_transform or not rigid_t) else "bhkRigidBodyT")
         co = self.add("bhkCollisionObject", struct.pack("<iHi", target, 0x81, body))
-        b = bytearray(250)
+        b = bytearray(250)                       # bhkRigidBody: translation at 52, rotation (x y z w) at 68
         struct.pack_into("<i", b, 0, shape)
-        struct.pack_into("<4f", b, 72, 0, 0, 0, 1)
+        struct.pack_into("<4f", b, 68, 0, 0, 0, 1)
         if rigid_t:
             t, q = rigid_t
-            struct.pack_into("<4f", b, 56, *t, 0)
-            struct.pack_into("<4f", b, 72, *q)
+            struct.pack_into("<4f", b, 52, *t, 0)
+            struct.pack_into("<4f", b, 68, *q)
         self.set(body, bytes(b))
         return co
 

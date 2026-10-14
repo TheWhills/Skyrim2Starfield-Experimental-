@@ -128,6 +128,37 @@ class NifTests(unittest.TestCase):
         self.assertAlmostEqual(pts[4][0] - pts[3][0], 1.0 * H, places=3)   # 1000 steps of 0.001
         self.assertEqual(rep["skyrim_bodies"], 1)
 
+    def test_rigid_body_transform_offsets_and_plain_bodies(self):
+        """Translation at 52, rotation at 68 (tes4skyrim's 250-byte layout); applied on plain bodies too. An identity
+        body laid out as vanilla stores it (rotation 0 0 0 1 followed by a zero linear velocity) must stay unrotated:
+        read four bytes late, its floats are (0, 0, 1, 0), a valid 180 degree turn."""
+        def body_points(shifted=False, **kw):
+            n = F.SseNif()
+            root = n.reserve("BSFadeNode")
+            shape = n.box((1.0, 0.5, 0.25))
+            if shifted:                                                 # asymmetric: a 180 degree flip would show
+                shape = n.transform(shape, (3.0, 0.0, 0.0))
+            n.node(root, b"Root", [], coll=n.collision(root, shape, **kw))
+            return skyrimnif.collision_triangles(nif.parse(n.bytes()))[0]
+        ident = body_points(shifted=True, rigid_t=((0.0, 0.0, 0.0), (0, 0, 0, 1)))
+        self.assertAlmostEqual(min(p[0] for p in ident), 2.0 * H, places=3)
+        self.assertAlmostEqual(max(p[0] for p in ident), 4.0 * H, places=3)
+        s = math.sqrt(0.5)                                              # 90 degrees about Z, moved 2 units up
+        for plain in (False, True):
+            pts = body_points(rigid_t=((0.0, 0.0, 2.0), (0, 0, s, s)), plain_transform=plain)
+            self.assertAlmostEqual(max(p[0] for p in pts), 0.5 * H, places=3)     # x and y swapped by the turn
+            self.assertAlmostEqual(max(p[1] for p in pts), 1.0 * H, places=3)
+            self.assertAlmostEqual(min(p[2] for p in pts), (2.0 - 0.25) * H, places=3)
+
+    def test_non_unit_body_rotation_is_reported_and_ignored(self):
+        n = F.SseNif()
+        root = n.reserve("BSFadeNode")
+        n.node(root, b"Root", [], coll=n.collision(root, n.box((1.0, 1.0, 1.0)), rigid_t=((5.0, 0, 0), (0, 0, 3, 0))))
+        rep = {}
+        pts, _ = skyrimnif.collision_triangles(nif.parse(n.bytes()), rep)
+        self.assertAlmostEqual(max(p[0] for p in pts), 1.0 * H, places=3)          # identity used, translation too
+        self.assertIn("not a unit quaternion", rep["unsupported"][0])
+
     def test_unsupported_shape_is_reported_not_guessed(self):
         n = F.SseNif()
         root = n.reserve("BSFadeNode")
