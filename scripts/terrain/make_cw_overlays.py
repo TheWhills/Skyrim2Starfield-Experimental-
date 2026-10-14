@@ -715,7 +715,9 @@ def snap_inside(td, x, y, keep, radius=16, flat=RAY_FLAT_DEG):
     r0, c0 = (int(round(v)) for v in td.rc_of(x, y))
     cand = sorted(((r, c) for r in range(r0 - radius, r0 + radius + 1) for c in range(c0 - radius, c0 + radius + 1)),
                   key=lambda rc: (rc[0] - r0) ** 2 + (rc[1] - c0) ** 2)
-    inside = [(r, c) for r, c in cand if edge_distance(t, *td.vertex(r, c)[:2]) >= keep]
+    rows, cols = td.verts.shape                    # candidates beyond the source vertex grid have no height
+    inside = [(r, c) for r, c in cand if 0 <= r < rows and 0 <= c < cols
+              and edge_distance(t, *td.vertex(r, c)[:2]) >= keep]
     for slope in (flat, MAX_SLOPE):
         rc = next(((r, c) for r, c in inside if td.eligible(r, c, max_slope=slope)), None)
         if rc is not None:

@@ -69,7 +69,7 @@ Cost on a Tamriel-sized map: about 5 s extra.
 ## Not included
 Objects (statics, trees, buildings: now on branch `skyrim/objects`, [skyrim-objects.md](skyrim-objects.md)), water (Tamriel's sea
 and lakes are dry basins at Mars gravity), grass, object LOD, navmesh,
-actors, the walled-city worldspaces (Whiterun, Solitude, ... are separate WRLDs).
+actors. The walled cities (separate WRLDs): branch `skyrim/cities`, [skyrim-cities.md](skyrim-cities.md).
 
 ## Running it (Windows; outputs stay outside the repo)
 

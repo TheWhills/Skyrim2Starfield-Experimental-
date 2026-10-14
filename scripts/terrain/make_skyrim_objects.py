@@ -63,10 +63,17 @@ def terrain_overlay(terrain):
     prm = load(os.path.join(terrain, "overlays_params.json"))
     if len(prm["overlays"]) != 1:
         sys.exit("the terrain folder must hold ONE overlay (make_skyrim_overlay.py build)")
-    ov = prm["overlays"][0]
-    if [float(v) for v in ov["origin_cw_m"]] != [0.0, 0.0]:
-        sys.exit(f"overlay origin {ov['origin_cw_m']} != [0, 0]: objects use local = Skyrim position / 70")
-    return prm, ov
+    return prm, prm["overlays"][0]
+
+
+def to_local(refs, ov):
+    """Copies of the references with positions in the overlay's own frame: local = Skyrim position - the overlay's
+    origin (origin_cw_m, whole 100 m cells; [0, 0] for Tamriel with --frame skyrim, the city's centre for --frame local).
+    Heights are not shifted (the BTD stores absolute heights)."""
+    ox, oy = (float(v) * 70.0 for v in ov["origin_cw_m"])
+    if ox == 0.0 and oy == 0.0:
+        return refs
+    return [dict(r, pos=[r["pos"][0] - ox, r["pos"][1] - oy, r["pos"][2]]) for r in refs]
 
 
 # ---------------------------------------------------------------------------------------------------------- export
@@ -90,7 +97,7 @@ def cmd_select(a):
     sub, skipped = exterior.select(exp, skyrimrefs.CONVERT_TYPES)
     cmin, cmax = ov["cell_min"], ov["cell_max"]
     by_model, outside = {}, 0
-    for r in sub["refs"]:
+    for r in to_local(sub["refs"], ov):
         by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
                                                               "formkey": r["formkey"]})
         c = tg.sf_cell_of(r["pos"][0] / 70.0, r["pos"][1] / 70.0)
@@ -242,6 +249,7 @@ def cmd_stage(a):
     sel = load(os.path.join(a.work, "selected.json"))
     selrep = load(os.path.join(a.work, "selection.json"))
     man = load(os.path.join(a.work, "convert", "manifest.json"))
+    sel = dict(sel, refs=to_local(sel["refs"], ov))
     bases, placed, skipped_conv = exterior.place(sel, man, ov["cell_min"], ov["cell_max"], EDID_PREFIX)
     items = {i["source"].replace("/", "\\").lower(): i for i in man["items"]}
     for b in bases:

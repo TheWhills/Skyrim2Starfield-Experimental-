@@ -42,16 +42,32 @@ DEFAULTS = {
     "mars_plugin": "SkyrimTerrainTamriel_Mars.esm", "experiment": "skyrim_tamriel", "display_name": "Skyrim",
     "ref_lat": 0.3, "ref_lon": -1.2, "ref_offset": (-12, -27), "centre_cell": (-12, -27),
 }
+LOCAL_MIN_N = 5                 # --frame local: at least 5 x 5 cells (the outer ring blends into Mars)
+LOCAL_EDGE_KEEP = 50.0          # and probes up to 50 m from its edge, at city distances
+LOCAL_RAY_DISTANCES = (0.0, 25.0, 50.0, 100.0, 200.0)
 DEFAULT_ARRIVAL = "Riverwood"   # exterior cell EditorID; falls back to the overlay centre if the plugin has no such cell
 
 
-def single_tile_n(cells, max_n=MAX_N):
-    """Smallest n whose one n x n overlay (pad 'origin': local frame = source frame / 70) covers the source cells."""
+def single_tile_n(cells, max_n=MAX_N, pad="origin"):
+    """Smallest n whose one n x n overlay covers the source cells. pad 'origin': local frame = source frame / 70 (the
+    overlay is centred on Skyrim's origin); 'centre': the overlay is centred on the cells (a city far from the origin
+    stays small; its local frame is shifted by the tile's origin)."""
     rect = og.sf_cells_of_fo4_rect(*cells)
     for n in range(3, max_n + 1):
-        if len(og.split(*rect, n, "origin")) == 1:
+        if len(og.split(*rect, n, pad)) == 1:
             return n
     return None
+
+
+def names_for(world_edid: str) -> dict:
+    """Plugin / worldspace names for a source worldspace: Tamriel keeps its names; others (cities) get their own, so a
+    city build never shares a plugin, worldspace or archive name with the Tamriel build."""
+    if world_edid.lower() == "tamriel":
+        return dict(DEFAULTS)
+    stem = re.sub(r"[^A-Za-z0-9]", "", world_edid)
+    return dict(DEFAULTS, world=f"SKY_{stem}", plugin=f"SkyrimTerrain{stem}.esm",
+                mars_plugin=f"SkyrimTerrain{stem}_Mars.esm", experiment=f"skyrim_{stem.lower()}",
+                display_name=re.sub(r"World$", "", stem) or stem)
 
 
 def resolve(land, specs, what):
@@ -88,7 +104,7 @@ def land_textures(a, land, out):
     sf = landtex.starfield_ltex(sf_esm)
     if not sf:
         sys.exit(f"no LTEX records read from {sf_esm}")
-    cells, ltex = landtex.read_world_textures(a.skyrim, a.world_edid)
+    cells, ltex = landtex.read_world_textures(a.skyrim, land.land_source)   # a city paints with its parent's land
     override = None
     if a.ltex_mapping:
         with open(a.ltex_mapping, encoding="utf-8") as f:
@@ -106,7 +122,7 @@ def land_textures(a, land, out):
     names = {v: k for k, v in sf.items()}
     os.makedirs(out, exist_ok=True)
     landtex.save_mapping(os.path.join(out, "ltex_mapping.json"), mapping, landtex.coverage(cells_t, used, names))
-    x0, x1, y0, y1 = land.extent
+    x0, x1, y0, y1 = land.grid_bounds
     planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0),
                                    0, 1) * 255).astype(np.uint8) for fid in used}
     sp, ox, oy = tg.FO4_VERTEX_UNITS, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS
@@ -141,7 +157,9 @@ def land_textures(a, land, out):
 def cmd_info(a):
     land = skyrimland.SkyrimLand(a.skyrim, a.world_edid)
     cells = tuple(a.cells) if a.cells else land.extent
-    out = {"source": land.summary(), "seams": land.seams(), "plan": plan_numbers(land, cells, single_tile_n(cells))}
+    pad = "centre" if a.frame == "local" else "origin"
+    out = {"source": land.summary(), "seams": land.seams(),
+           "plan": plan_numbers(land, cells, single_tile_n(cells, pad=pad))}
     if a.find:
         out["find"] = [{"edid": e, "cell": list(xy)} for e, xy in land.find_cells(a.find)[:200]]
     print(json.dumps(out, indent=1))
@@ -157,24 +175,31 @@ def cmd_build(a, rest):
           f"{s['holes']} holes, heights {s['heights_m'][0]:.1f}..{s['heights_m'][1]:.1f} m, "
           f"default land {land.default_land} units")
     cells = tuple(a.cells) if a.cells else land.extent
-    n = a.tile or single_tile_n(cells)
+    pad = "centre" if a.frame == "local" else "origin"
+    if a.arrival == DEFAULT_ARRIVAL and a.world_edid.lower() != "tamriel":
+        a.arrival = ""                               # a city: arrive at its centre unless told otherwise
+    n = a.tile or single_tile_n(cells, pad=pad)
+    if n is not None and a.frame == "local" and not a.tile:
+        n = max(n, LOCAL_MIN_N)                     # room inside the blend ring around a small city
     if n is None or n > MAX_N:
         sys.exit(f"source cells {cells} need more than {MAX_N} x {MAX_N} Starfield cells as one overlay; pass a "
                  f"smaller --cells rectangle (largest vanilla BTD is {MAX_N} x {MAX_N})")
-    if len(og.split(*og.sf_cells_of_fo4_rect(*cells), n, "origin")) != 1:
+    if len(og.split(*og.sf_cells_of_fo4_rect(*cells), n, pad)) != 1:
         sys.exit(f"--tile {n} does not cover {cells} as one overlay (omit --tile to choose the smallest that does)")
 
     arrival, arr_rep = resolve(land, [a.arrival] if a.arrival else [], "arrival")
     extra, extra_rep = resolve(land, a.landmark, "landmark")
     marks = tuple(arrival + extra)
 
-    d = DEFAULTS
+    d = names_for(a.world_edid)
     argv = ["build", "--out", a.out, "--sf-data", a.sf_data, "--fo4", a.skyrim,
-            "--fo4-cells", *map(str, cells), "--tile", str(n), "--pad", "origin", "--plan", "rays",
+            "--fo4-cells", *map(str, cells), "--tile", str(n), "--pad", pad, "--plan", "rays",
             "--prefix", d["prefix"], "--world", d["world"], "--plugin", d["plugin"], "--mars-plugin", d["mars_plugin"],
             "--experiment", d["experiment"], "--btd-copy-meshes",
             "--ref-lat", str(d["ref_lat"]), "--ref-lon", str(d["ref_lon"]),
             "--ref-offset", *map(str, d["ref_offset"]), "--centre-cell", *map(str, d["centre_cell"])]
+    if a.frame == "local":                           # a city-sized overlay: probes at city distances
+        argv += ["--edge-keep", str(LOCAL_EDGE_KEEP), "--ray-distances", *map(str, LOCAL_RAY_DISTANCES)]
     ca = cw.parser().parse_args(argv + rest)           # later options win: anything in `rest` overrides the recipe
     if not ca.coc:
         ca.coc = f"{ca.world}{(arrival[0][0].title().replace('_', '') if arrival else '')}Spawn"
@@ -242,7 +267,7 @@ def main(argv=None):
     # not be taken as an abbreviation of one of ours (--world-edid)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                  allow_abbrev=False)
-    ap.add_argument("cmd", choices=("info", "build", "check"))
+    ap.add_argument("cmd", choices=("info", "worlds", "build", "check"))
     ap.add_argument("--skyrim", help="Skyrim.esm (Special Edition; read-only)")
     ap.add_argument("--world-edid", default=skyrimland.WORLD, help="source worldspace EditorID (default Tamriel)")
     ap.add_argument("--sf-data", default="", help="Starfield Data folder (build: LTEX template BTD; check)")
@@ -254,6 +279,9 @@ def main(argv=None):
                     help="exterior cell EditorID or 'X,Y' Skyrim cell the COC marker goes next to ('' = overlay centre)")
     ap.add_argument("--landmark", action="append", default=[],
                     help="extra probe target (cell EditorID or 'X,Y'), added to the ray nearest its bearing; repeatable")
+    ap.add_argument("--frame", choices=("skyrim", "local"), default="skyrim",
+                    help="skyrim: overlay centred on Skyrim's origin (local = Skyrim position / 70; Tamriel); local: centred "
+                         "on the cells (walled cities: a small overlay wherever the city is)")
     ap.add_argument("--display-name", default="", help="in-game WRLD/Location name (default 'Skyrim')")
     ap.add_argument("--find", default="", help="info: list exterior cell EditorIDs matching this regex")
     ap.add_argument("--land-textures", action="store_true",
@@ -261,10 +289,13 @@ def main(argv=None):
                          "--sf-data; writes ltex_mapping.json); default: one plain ground texture")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
     a, rest = ap.parse_known_args(join_coordinates(sys.argv[1:] if argv is None else argv))
-    if a.cmd in ("info", "build") and not a.skyrim:
+    if a.cmd in ("info", "worlds", "build") and not a.skyrim:
         sys.exit("--skyrim <Skyrim.esm> is required")
     if a.cmd in ("build", "check") and not (a.out and a.sf_data):
         sys.exit("--out and --sf-data are required")
+    if a.cmd == "worlds":
+        print(json.dumps(skyrimland.list_worlds(a.skyrim), indent=1))
+        return 0
     if a.cmd == "info":
         if rest:
             sys.exit(f"unknown options: {rest}")

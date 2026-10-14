@@ -27,6 +27,7 @@ import numpy as np
 from fo4sf import fo4land
 
 WORLD = "Tamriel"
+CHILD_MARGIN = 4                   # parent cells read around a child worldspace (a city's surroundings)
 CELL_UNITS = fo4land.CELL_UNITS
 
 
@@ -36,6 +37,53 @@ def world_dnam(fields):
         if sig == b"DNAM" and len(d) >= 8:
             return struct.unpack_from("<ff", d)
     return None, None
+
+
+def world_parent(fields):
+    """(parent WRLD form id or None, parent flags) from WNAM / PNAM (PNAM bit 0x1 = Use Land Data)."""
+    parent, flags = None, 0
+    for sig, d in fields:
+        if sig == b"WNAM" and len(d) >= 4:
+            parent = struct.unpack_from("<I", d)[0] or None
+        elif sig == b"PNAM" and len(d) >= 2:
+            flags = struct.unpack_from("<H", d)[0]
+    return parent, flags
+
+
+def world_edid(p: fo4land.Plugin, fid: int) -> str:
+    start, end = p.top_group(b"WRLD")
+    for item in fo4land.iter_items(p.buf, start, end):
+        if item[0] != "GRUP" and item[3] == fid:
+            for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, item[1])):
+                if sig == b"EDID":
+                    return fo4land.zstring(d)
+    raise KeyError(f"worldspace {fid:08X} not found")
+
+
+def list_worlds(esm: str) -> list:
+    """[{edid, form_id, parent, use_land, cells, land, extent}] of every worldspace in the plugin."""
+    out = []
+    with fo4land.Plugin(esm) as p:
+        start, end = p.top_group(b"WRLD")
+        recs = [(item[1], item[3]) for item in fo4land.iter_items(p.buf, start, end) if item[0] == b"WRLD"]
+        names = {}
+        for off, fid in recs:
+            for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)):
+                if sig == b"EDID":
+                    names[fid] = fo4land.zstring(d)
+        for off, fid in recs:
+            fields = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
+            parent, flags = world_parent(fields)
+            w = p.read_world(names[fid], cells=None, refs=False)
+            cells = list(w["cells"])
+            land = sum(1 for c in w["cells"].values() if c["vhgt"])
+            ext = None
+            if cells:
+                xs, ys = [x for x, _ in cells], [y for _, y in cells]
+                ext = [min(xs), max(xs), min(ys), max(ys)]
+            out.append({"edid": names[fid], "form_id": "%08X" % fid, "parent": names.get(parent),
+                        "use_parent_land": bool(flags & 1), "cells": len(cells), "land": land, "extent": ext})
+    return out
 
 
 class SkyrimLand:
@@ -49,22 +97,44 @@ class SkyrimLand:
 
     def __init__(self, esm, world=WORLD):
         self.esm, self.world = esm, world
+        self.land_source = world                  # the worldspace whose LAND the heights come from
+        child_extent = None
         with fo4land.Plugin(esm) as p:
             w = p.read_world(world, cells=None, refs=False)
-        self.world_fid = w["world_fid"]
-        self.default_land, self.default_water = world_dnam(w["world_fields"])
-        self.grids, self.edids, self.cells = {}, {}, set()
-        for xy, c in w["cells"].items():
-            self.cells.add(xy)
-            if c["edid"]:
-                self.edids[xy] = c["edid"]
-            if c["vhgt"]:
-                self.grids[xy] = fo4land.decode_vhgt(c["vhgt"])
+            self.world_fid = w["world_fid"]
+            self.default_land, self.default_water = world_dnam(w["world_fields"])
+            self.parent, self.parent_flags = world_parent(w["world_fields"])
+            self.grids, self.edids, self.cells = {}, {}, set()
+            for xy, c in w["cells"].items():
+                self.cells.add(xy)
+                if c["edid"]:
+                    self.edids[xy] = c["edid"]
+                if c["vhgt"]:
+                    self.grids[xy] = fo4land.decode_vhgt(c["vhgt"])
+            if not self.grids and self.parent and self.cells:
+                # a child worldspace without LAND of its own (Skyrim's walled cities use their parent's terrain, flag
+                # "Use Land Data"; they share the parent's coordinates): the parent's LAND under the child's cells
+                pedid = world_edid(p, self.parent)
+                xs = [x for x, _ in self.cells]
+                ys = [y for _, y in self.cells]
+                child_extent = (min(xs), max(xs), min(ys), max(ys))
+                m = CHILD_MARGIN                  # plus a ring of the parent's terrain around the city (outside the walls)
+                want = {(x, y) for x in range(min(xs) - m, max(xs) + m + 1) for y in range(min(ys) - m, max(ys) + m + 1)}
+                pw = p.read_world(pedid, cells=want, refs=False)
+                for xy, c in pw["cells"].items():
+                    if c["vhgt"]:
+                        self.grids[xy] = fo4land.decode_vhgt(c["vhgt"])
+                if self.default_land is None:
+                    self.default_land, self.default_water = world_dnam(pw["world_fields"])
+                self.land_source = pedid
         if not self.grids:
-            raise ValueError(f"{esm}: worldspace {world!r} has no LAND/VHGT")
+            raise ValueError(f"{esm}: worldspace {world!r} has no LAND/VHGT" +
+                             (" and its parent none under its cells" if self.parent else ""))
         xs = [x for x, _ in self.grids]
         ys = [y for _, y in self.grids]
-        self.extent = (min(xs), max(xs), min(ys), max(ys))
+        self.grid_bounds = (min(xs), max(xs), min(ys), max(ys))       # every cell with heights
+        # the rectangle the overlay is sized for: the LAND extent, or for a child on its parent's land the child's cells
+        self.extent = child_extent if self.land_source != world else self.grid_bounds
         x0, x1, y0, y1 = self.extent
         self.holes = sorted((x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1) if (x, y) not in self.grids)
 
@@ -120,7 +190,8 @@ class SkyrimLand:
     def summary(self):
         lo, hi = self.height_range()
         x0, x1, y0, y1 = self.extent
-        return {"world": self.world, "world_fid": "%08X" % self.world_fid, "cells": len(self.cells),
+        return {"world": self.world, "world_fid": "%08X" % self.world_fid, "land_source": self.land_source,
+                "cells": len(self.cells),
                 "cells_with_vhgt": len(self.grids), "extent": {"x": [x0, x1], "y": [y0, y1]},
                 "extent_m": {"x": [x0 * CELL_UNITS / 70.0, (x1 + 1) * CELL_UNITS / 70.0],
                              "y": [y0 * CELL_UNITS / 70.0, (y1 + 1) * CELL_UNITS / 70.0]},
@@ -136,7 +207,7 @@ class SkyrimHeights:
     def __init__(self, land, grid=None, fill=None):
         self.land = land
         self.world = land.world
-        self.grid = tuple(grid) if grid else land.extent
+        self.grid = tuple(grid) if grid else land.grid_bounds
         self.fill = land.fill_height() if fill is None else fill
         self.grids = dict(land.grids)
 

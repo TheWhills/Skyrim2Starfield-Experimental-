@@ -314,7 +314,7 @@ BASES = [  # (sig, form id, editor id, model)
 ]
 
 
-def build_esm(world_items_cells, hills, extent, base_records=BASES, persistent_refs=()):
+def build_esm(world_items_cells, hills, extent, base_records=BASES, persistent_refs=(), extra_worlds=()):
     """Skyrim.esm-shaped plugin: base groups, Tamriel with LAND everywhere in `extent` and the given references.
     world_items_cells: {(cx, cy): [(sig, fid, base, pos, rot, scale, flags, xesp)]}"""
     from test_fo4land import grup, rec
@@ -352,4 +352,13 @@ def build_esm(world_items_cells, hills, extent, base_records=BASES, persistent_r
             sub.append(grup(cfid, 6, [grup(cfid, 9, kids)]))
     items.append(grup(b"\0\0\0\0", 4, [grup(b"\0\0\0\0", 5, sub)]))
     wrld = rec(b"WRLD", 0x3C, [(b"EDID", b"Tamriel\0"), (b"DNAM", struct.pack("<ff", -2048.0, -14000.0))])
-    return out + grup(b"WRLD", 0, [wrld, grup(0x3C, 1, items)])
+    worlds = [wrld, grup(0x3C, 1, items)]
+    for wfid, wedid, parent, pflags, cells, refs in extra_worlds:      # child worldspaces (cities): no LAND
+        csub, cfid = [], wfid * 0x100
+        for x, y in cells:
+            csub.append(rec(b"CELL", cfid, [(b"XCLC", struct.pack("<iiI", x, y, 0))]))
+            csub.append(grup(cfid, 6, [grup(cfid, 9, [ref(*r) for r in refs.get((x, y), [])])]))
+            cfid += 1
+        wf = [(b"EDID", wedid.encode() + b"\0"), (b"WNAM", struct.pack("<I", parent)), (b"PNAM", struct.pack("<H", pflags))]
+        worlds += [rec(b"WRLD", wfid, wf), grup(wfid, 1, [grup(b"\0\0\0\0", 4, [grup(b"\0\0\0\0", 5, csub)])])]
+    return out + grup(b"WRLD", 0, worlds)
