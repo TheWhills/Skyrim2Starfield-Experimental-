@@ -43,6 +43,19 @@ waterfall spray), doors that open (Skyrim doors are statics here; load doors lea
 snow / moss directional overlays on rocks (Skyrim's projected material is not translated: rocks show their base
 texture), tree wind animation, object LOD. Roughness is uniform (Skyrim keeps specular in the normal map's alpha).
 
+## First run on real files: one command, one report
+Before any long conversion, run the diagnostic. It checks the setup (numpy, Pillow, lz4, .NET 9, texconv, Skyrim.esm,
+Starfield.esm, ContentResources.zip, the box template), reads Tamriel's terrain, opens every BSA, exports every placed
+reference, **parses up to 3,000 distinct Skyrim models read-only** (geometry blocks, collision decoded, unsupported
+collision types, collision bounds against render bounds, parse errors grouped) and really converts 20 models near
+Riverwood. A few minutes; nothing is installed into either game.
+
+    python -I scripts\skyrim_first_run.py --skyrim-data "<Skyrim Special Edition>\Data" --starfield "<Starfield>" ^
+        --texconv "<xEdit>\Edit Scripts\texconv.exe" --work C:\Modding\work\skyrim_first_run
+
+It writes `report.txt` (short: paste it back) and `report.json` (everything). The survey's `MISPLACED` count and
+`parse error` lines are where a wrong field layout from nif.xml would show.
+
 ## Running it (Windows; outputs stay outside the repo)
 Prerequisites: the staged terrain (`make_skyrim_overlay.py build`), Python with `numpy`, `Pillow` and **`lz4`**
 (`pip install numpy pillow lz4`), `texconv.exe` (xEdit's `Edit Scripts`), `Starfield\Tools\ContentResources.zip` (Creation
