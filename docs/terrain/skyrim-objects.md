@@ -126,5 +126,7 @@ To keep in mind (not done):
   Deriving Starfield roughness from that alpha is the next material improvement.
 * Grass in Skyrim comes only from LAND layers whose LTEX has GNAM (no references): a later ground-cover step reads it
   from the same layers `landtex` already decodes.
+* Starfield community leads (AssetWatcher collision, edge blending, double-sided surfaces, Mars map overrides):
+  [starfield-community-notes.md](starfield-community-notes.md).
 * Skyrim's own +-64-cell Havok world limit (262,144 units) is a Skyrim engine constant; it does not apply in
   Starfield, but Tamriel's real extent (about -57..61) sits inside it anyway.
