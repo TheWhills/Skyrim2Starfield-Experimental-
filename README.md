@@ -1,3 +1,9 @@
+> **Skyrim2Starfield-Experimental** — an experimental fork of
+> [fo4sf/fo4-to-starfield](https://github.com/fo4sf/fo4-to-starfield) (MIT), taken from its
+> `claude/terrain-core64-objects` branch at `86e214a`, adding **Skyrim's Tamriel as native Starfield terrain**:
+> [docs/terrain/skyrim-tamriel.md](docs/terrain/skyrim-tamriel.md). Status: offline-tested on synthetic data only;
+> not yet run on a real `Skyrim.esm` or in game. Everything below is the upstream project's README.
+
 # fo4-to-starfield
 
 **Research and toolchain for porting Fallout 4 to Starfield's engine (Creation Engine 2).**
