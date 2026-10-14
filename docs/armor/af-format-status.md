@@ -26,9 +26,11 @@ Do **not** paste or port CALUMI source into this MIT repository; an independent 
 the files themselves (round-trip evidence), not from translating LGPL code.
 
 ## How "completely understood" gets measured
-1. Round-trip survey on the owner's PC: every vanilla `.af` in `Starfield - Animations.ba2` read and re-saved through
-   CALUMI; count byte-identical / differing / failed, grouped by which section differs. That number is the real
-   coverage.
+1. Round-trip survey on the owner's PC (`scripts/armor/af_roundtrip_survey.py`): every vanilla `.af` read through
+   CALUMI with its rig, decoded, re-saved, reloaded and compared value by value. CALUMI's writer stores every bone
+   uncompressed ("Will need compression algorithm eventually", SFBGS_AnimationScene.cpp), so the measure is decoded
+   values, not bytes. load_failed / no_rig = what CALUMI cannot read; values_differ = reader / writer disagreement;
+   values_equal = self-consistent, not yet proof the game agrees (step 2).
 2. In-game write test: replace one vanilla idle `.af` (loose file, same path) with a CALUMI-written edit of itself
    (e.g. one arm raised) and see it play.
 3. Study only what the survey shows is not round-tripping (the UNKNOWN fields above), with controlled synthetic clips.
