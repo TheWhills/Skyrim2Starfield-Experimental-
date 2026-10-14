@@ -78,6 +78,65 @@ def plan_numbers(land, cells, n):
             "btd_estimate_mb": None if n is None else round(n * n * BTD_BYTES_PER_CELL / 1e6, 1)}
 
 
+# ---------------------------------------------------------------------------------------------------------- textures
+def land_textures(a, land, out):
+    """Skyrim's ground texture layers for the BTD (src/fo4sf/landtex.py): returns tile -> (LTEX table, sample weights,
+    quad map) for make_cw_overlays.build, and writes <out>/ltex_mapping.json (editable; pass back with --ltex-mapping)."""
+    import numpy as np
+    from fo4sf import landtex
+    sf_esm = os.path.join(a.sf_data, "Starfield.esm")
+    sf = landtex.starfield_ltex(sf_esm)
+    if not sf:
+        sys.exit(f"no LTEX records read from {sf_esm}")
+    cells, ltex = landtex.read_world_textures(a.skyrim, a.world_edid)
+    override = None
+    if a.ltex_mapping:
+        with open(a.ltex_mapping, encoding="utf-8") as f:
+            override = json.load(f)
+        override = {k: override.get(k) for k in ("categories", "skyrim", "default") if override.get(k)}
+        if "categories" in override and isinstance(next(iter(override["categories"].values()), None), dict):
+            override["categories"] = {k: v["edid"] for k, v in override["categories"].items()}
+        if "skyrim" in override and isinstance(next(iter(override["skyrim"].values()), None), dict):
+            override["skyrim"] = {v["edid"]: v["starfield"] for v in override["skyrim"].values()}
+    mapping = landtex.build_mapping(ltex, sf, override)
+    cells_t, used = landtex.target_cells(cells, mapping, sf)
+    default_sf = sf[mapping["skyrim"][landtex.DEFAULT_LTEX]["starfield"]]
+    if default_sf not in used:
+        used = sorted(set(used) | {default_sf})
+    names = {v: k for k, v in sf.items()}
+    os.makedirs(out, exist_ok=True)
+    landtex.save_mapping(os.path.join(out, "ltex_mapping.json"), mapping, landtex.coverage(cells_t, used, names))
+    x0, x1, y0, y1 = land.extent
+    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0),
+                                   0, 1) * 255).astype(np.uint8) for fid in used}
+    sp, ox, oy = tg.FO4_VERTEX_UNITS, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS
+    stats = {"starfield_ltex": [names[f] for f in used], "skyrim_ltex": len(ltex), "cells_with_layers": len(cells)}
+
+    def per_tile(t):
+        xs, ys = t.sample_coords()
+        xu, size = xs * tg.UNITS_PER_METRE, len(xs)
+        qmap = np.zeros((2 * t.n, 2 * t.n, 8), np.uint8)
+        words = np.zeros((size, size), np.uint16)
+        beyond = []
+        last = next(iter(planes.values())).shape[0] - 1
+        for r0 in range(0, size, 64):
+            yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
+            lo = int(min(max(np.floor((yu[0] - oy) / sp), 0), last))
+            hi = int(min(max(np.floor((yu[-1] - oy) / sp) + 1, 0), last))
+            if hi <= lo:
+                lo, hi = max(min(lo, last - 1), 0), min(max(lo, 0) + 1, last)
+            band = np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp, sp,
+                                                  xu, yu) for f in used])
+            q, w, st = landtex.encode_quadrants(band, used, used)
+            qmap[r0 // 64] = q[0]
+            words[r0:r0 + 64] = w
+            beyond.append(st["weight_beyond_six_layers"])
+        stats["weight_beyond_six_layers_max"] = round(max(beyond), 5) if beyond else 0.0
+        return used, words, qmap
+
+    return per_tile, stats
+
+
 # ---------------------------------------------------------------------------------------------------------- commands
 def cmd_info(a):
     land = skyrimland.SkyrimLand(a.skyrim, a.world_edid)
@@ -131,6 +190,9 @@ def cmd_build(a, rest):
     ca.ray_landmarks = ()
     ca.arrival = arrival[0][0] if arrival else ""   # "" never matches a point label: the COC sits at the centre
     ca.display_name = a.display_name or d["display_name"]
+    tex_stats = None
+    if a.land_textures:
+        ca.land_textures, tex_stats = land_textures(a, land, a.out)
 
     os.makedirs(a.out, exist_ok=True)
     source = {"esm": os.path.basename(a.skyrim), "summary": s, "seams": land.seams(),
@@ -140,13 +202,20 @@ def cmd_build(a, rest):
               "fill_height_units": ca.heights.fill,
               "frame": "local metres = Skyrim units / 70 from Skyrim's origin; height = Skyrim z / 70 (hypothesis H, "
                        "verified for FO4 in core64; same unit for Skyrim is a supported hypothesis)",
-              "not_included": ["objects (STAT/TREE/...)", "water planes", "land textures (one plain ground LTEX)",
-                               "grass", "object LOD", "navmesh", "actors"]}
-    with open(os.path.join(a.out, "skyrim_source.json"), "w", encoding="utf-8") as f:
-        json.dump(source, f, indent=1)
+              "not_included": ["objects (STAT/TREE/...: make_skyrim_objects.py)", "water planes", "grass", "object LOD",
+                               "navmesh", "actors"] + ([] if a.land_textures else
+                                                        ["land textures (one plain ground LTEX; --land-textures)"])}
+    def write_source():
+        if tex_stats is not None:
+            source["land_textures"] = tex_stats
+        with open(os.path.join(a.out, "skyrim_source.json"), "w", encoding="utf-8") as f:
+            json.dump(source, f, indent=1)
+    write_source()
     print(f"overlay {ca.world}: {n} x {n} cells ({n / 10:g} km), source cells {cells}, arrival "
           f"{arrival[0][0] if arrival else 'overlay centre'}, {len(extra)} extra landmarks")
-    return cw.build(ca)
+    res = cw.build(ca)
+    write_source()                                   # with the texture stats the build filled in
+    return res
 
 
 def cmd_check(a, rest):
@@ -187,6 +256,10 @@ def main(argv=None):
                     help="extra probe target (cell EditorID or 'X,Y'), added to the ray nearest its bearing; repeatable")
     ap.add_argument("--display-name", default="", help="in-game WRLD/Location name (default 'Skyrim')")
     ap.add_argument("--find", default="", help="info: list exterior cell EditorIDs matching this regex")
+    ap.add_argument("--land-textures", action="store_true",
+                    help="build: Skyrim's ground texture layers mapped onto Starfield LTEX (reads Starfield.esm from "
+                         "--sf-data; writes ltex_mapping.json); default: one plain ground texture")
+    ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
     a, rest = ap.parse_known_args(join_coordinates(sys.argv[1:] if argv is None else argv))
     if a.cmd in ("info", "build") and not a.skyrim:
         sys.exit("--skyrim <Skyrim.esm> is required")

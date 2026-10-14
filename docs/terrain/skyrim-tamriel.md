@@ -42,9 +42,33 @@ south / west cell win shared edges, which put a 56 m error on the neighbours in 
 - Mars registration: experiment 2b's (latitude 0.3, longitude -1.2 -> planet cell (-12, -27)), verified in game.
   **Never install with another terrain experiment** (every Mars plugin overrides MarsPlanetData).
 
+## Ground textures (`--land-textures`; supported hypothesis, not in-game tested)
+Without the option the BTD carries one plain ground texture (LDirtFootprints01, as every terrain experiment so far).
+With it, Skyrim's own texture painting is carried over (`src/fo4sf/landtex.py`, tests in `tests/test_landtex.py`):
+
+1. **Skyrim layers -> weights.** Each LAND's BTXT (base per quadrant) and ATXT + VTXT (layers with per-vertex opacity)
+   become an effective weight per Skyrim LTEX at every vertex (layers draw in order over the base).
+2. **Skyrim LTEX -> Starfield LTEX.** Every Skyrim texture gets a category from its EditorID and diffuse path (snow,
+   ice, road, gravel, rock, sand, mud, ash, forest floor, grass, dirt); every category gets the first Starfield.esm
+   LTEX whose EditorID names it (else LDirtFootprints01). The result goes to `ltex_mapping.json` next to the build,
+   with each texture's share of the map: **edit it and pass it back with `--ltex-mapping`** (per category, or per
+   Skyrim EditorID). Choosing good Starfield textures is a look-and-adjust step.
+3. **Encoding.** Weights are resampled onto the 0.78 m BTD grid in 64-row bands. Per 50 m quadrant: the most-used
+   texture is the base (byte 5), up to five more are overlays (bytes 0-4, least used on top), and 3-bit alphas per
+   sample are solved top-down so the stacked blend reproduces Skyrim's weights (synthetic round trip: mean error under
+   5 %; a quadrant needing more than six textures drops the rest, reported as `weight_beyond_six_layers_max`).
+
+The byte layout is verified (architecture.md 1.4); its MEANING is a **supported hypothesis** taken from fo76utils,
+which renders Starfield terrain: overlay byte i pairs with weight bits 3i..3i+2, the base is the last valid byte, and
+layers are tested top-down from byte 0 (btdfile.cpp `getCellTextureSet` / `getCellLandTexture`, landtxt.cpp). Vanilla
+surveys so far only saw single-texture quadrants. Also unresolved: whether the worldspace must list its LTEX (only
+TempJemisonWorld has `LandscapeTextures`). In game: if the ground looks like the mapping (snow on the mountains,
+roads where Skyrim's are), the hypothesis holds; if layers appear in the wrong places, the byte / bit pairing differs.
+Cost on a Tamriel-sized map: about 5 s extra.
+
 ## Not included
 Objects (statics, trees, buildings: now on branch `skyrim/objects`, [skyrim-objects.md](skyrim-objects.md)), water (Tamriel's sea
-and lakes are dry basins at Mars gravity), land textures (one plain ground texture), grass, object LOD, navmesh,
+and lakes are dry basins at Mars gravity), grass, object LOD, navmesh,
 actors, the walled-city worldspaces (Whiterun, Solitude, ... are separate WRLDs).
 
 ## Running it (Windows; outputs stay outside the repo)
@@ -58,7 +82,8 @@ actors, the walled-city worldspaces (Whiterun, Solitude, ... are separate WRLDs)
 Options: `--cells X0 X1 Y0 Y1` (a smaller Skyrim cell rectangle, e.g. a first test of one hold), `--arrival
 <cell EditorID | X,Y>` (default `Riverwood`; falls back to the overlay centre if no such cell), `--landmark ...`
 (repeatable, extra probe targets), `--display-name`, and any `make_cw_overlays.py build` option (`--mask-writer
-builtin` without texconv, `--no-mars`, `--ray-distances ...`). Negative coordinates work as `--landmark -30,-20`.
+builtin` without texconv, `--no-mars`, `--ray-distances ...`). Negative coordinates work as `--landmark -30,-20`. `--land-textures` (+ `--ltex-mapping <edited json>`) adds Skyrim's ground
+textures (section above).
 
 Install by hand (game closed; the runner's `exp_install.py --pack` on `claude/integration-1011` does the same): pack
 the staged `Data\Terrain`, `Data\meshes`, `Data\textures` into `SkyrimTerrainTamriel - Main.ba2` with

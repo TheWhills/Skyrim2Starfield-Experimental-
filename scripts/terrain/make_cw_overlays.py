@@ -338,8 +338,9 @@ def interior_points(td, tiles, grid_points=0, marks=LANDMARKS):
     pts.append(td.point(*centre, f"centre_T{t.tag}", "centre"))
     r0, c0 = (int(round(v)) for v in td.rc_of(cx + 50.0, cy + 50.0))
     best = None
-    for r in range(r0 - 80, r0 + 81, 2):
-        for c in range(c0 - 80, c0 + 81, 2):
+    rows, cols = td.verts.shape                    # stay inside the vertex grid (negative indices would wrap)
+    for r in range(max(r0 - 80, 1), min(r0 + 81, rows - 1), 2):
+        for c in range(max(c0 - 80, 1), min(c0 + 81, cols - 1), 2):
             s = tg.local_slope_deg(td.verts, r, c, tg.FO4_VERTEX_UNITS)
             if 5.0 <= s <= MAX_SLOPE and (best is None or s > best[0]) and td.eligible(r, c):
                 best = (s, r, c)
@@ -380,8 +381,12 @@ def build(a):
         raw = np.empty((t.n * tg.SF_CELL_SAMPLES, t.n * tg.SF_CELL_SAMPLES), np.uint16)
         for r0, h in tile_strips(fo4, t):
             raw[r0:r0 + h.shape[0]] = btd.quantize(h, hmin, hmax)
-        data = btd.write(btd.Btd(6, hmin, hmax, table, raw, np.zeros_like(raw),
-                                 np.tile(np.frombuffer(quad, np.uint8), (2 * t.n, 2 * t.n, 1))))
+        land_tex = getattr(a, "land_textures", None)   # optional (tab, weights, quad map) per tile, e.g. Skyrim's layers
+        if land_tex:
+            tab, wts, qmap = land_tex(t)
+        else:
+            tab, wts, qmap = table, np.zeros_like(raw), np.tile(np.frombuffer(quad, np.uint8), (2 * t.n, 2 * t.n, 1))
+        data = btd.write(btd.Btd(6, hmin, hmax, tab, raw, wts, qmap))
         path = os.path.join(a.out, "Data", "Terrain", world_name(a, t) + ".btd")
         for p in [path] + [os.path.join(a.out, *c.split("/")) for c in btd_copies(a, t)]:
             os.makedirs(os.path.dirname(p), exist_ok=True)
