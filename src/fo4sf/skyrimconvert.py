@@ -1,0 +1,249 @@
+"""Skyrim (Special Edition) static models -> Starfield NIF + .mesh + .mat + DDS, on top of pipeline.Converter.
+
+What is reused unchanged: Starfield mesh / NIF writing (convert_static.shape_to_mesh, sfnif.build_static_nif), texture
+conversion and caps (Converter._convert_texture_set: colour BC1, normal BC5, roughness BC4, opacity BC4), the cloned
+vanilla material templates (opaque, alpha-tested cutout, decal), the neutral fallback material, and the box-collision
+writer verified in game (sfcollision.box_blob).
+
+What is Skyrim's: geometry (skyrimnif.trishapes: BS 100 BSTriShape, NiTriShape / NiTriStrips), materials named by
+BSShaderTextureSet (diffuse + normal; Skyrim keeps specular in the normal map's alpha and has no smoothness map, so
+roughness is the converter's uniform "fairly rough"), NiAlphaProperty test / blend (foliage cutouts, decals), and
+collision: Skyrim's own Havok collision decoded to triangles (skyrimnif.collision_triangles) and rebuilt as Starfield
+boxes (sfcollision.mesh_boxes: thin boxes behind flat surfaces + voxel boxes for the rest). A model Skyrim gives no
+collision gets none (grass, small plants, cobwebs: the player walks through them in Skyrim too). Boxes are an
+approximation of curved rock and tree collision, not Starfield's native mesh shape (see docs/terrain/skyrim-objects.md).
+"""
+import hashlib
+import os
+import re
+from typing import Dict, List, Optional
+
+from . import convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimnif
+
+UNIT = 1.0 / 70.0
+# landscape pieces (rocks, cliffs, mountains, boulders): solid from below, what matters is the walkable top and the
+# sides, so they get column boxes; everything else (buildings, ruins, bridges, trees, props) keeps the surface/voxel
+# boxes FO4 architecture uses (thin walls, floors and arches stay open)
+LANDSCAPE_RE = re.compile(r"[\\/]landscape[\\/]|rock|cliff|mountain|boulder|glacier|iceberg", re.I)
+COLUMN_MIN_BOXES, COLUMN_MAX_BOXES = 128, 512
+
+
+def column_budget(points) -> int:
+    """Boxes a landscape piece may use: one per 16 m2 of footprint, at least 128, at most 512."""
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+    return int(min(COLUMN_MAX_BOXES, max(COLUMN_MIN_BOXES, area / 16.0)))
+
+
+def _surface_samples(P, T, spacing):
+    """Vertices plus barycentric samples so that no point of any triangle is farther than about `spacing` from one."""
+    import numpy as np
+    a, b, c = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+    edge = np.max(np.stack([np.linalg.norm(a - b, axis=1), np.linalg.norm(b - c, axis=1),
+                            np.linalg.norm(c - a, axis=1)]), axis=0)
+    k = np.clip(np.ceil(edge / spacing), 1, 64).astype(np.int64)
+    out = [P]
+    for kk in np.unique(k):
+        if kk < 2:
+            continue
+        sel = k == kk
+        w = np.array([(i / kk, j / kk) for i in range(kk + 1) for j in range(kk + 1 - i)])
+        u, v = w[:, 0][None, :, None], w[:, 1][None, :, None]
+        pts = (1 - u - v) * a[sel][:, None, :] + u * b[sel][:, None, :] + v * c[sel][:, None, :]
+        out.append(pts.reshape(-1, 3))
+    return np.concatenate(out)
+
+
+def column_boxes(points, triangles, max_boxes=None, cell=None, report=None):
+    """Axis-aligned boxes covering a solid landscape piece: the collision surface is rasterised into vertical columns of
+    `cell` metres (each spans from the piece's lowest point up to the highest surface point in it), columns are merged along x then y where
+    their bottoms and tops agree within a tolerance, and the grid coarsens (x 1.25) until the count fits the budget
+    (column_budget unless given). Nothing is dropped: a large piece gets coarser columns, never holes. Walkable tops
+    keep the surface height within about half a cell times the slope. Returns [(centre, half)]."""
+    import numpy as np
+    P = np.asarray(points, np.float64)
+    T = np.asarray(triangles, np.int64)
+    budget = max_boxes or column_budget(points)
+    lo, hi = P.min(axis=0), P.max(axis=0)
+    area = max((hi[0] - lo[0]) * (hi[1] - lo[1]), 1e-6)
+    cell = cell or max(0.5, 0.5 * (area / budget) ** 0.5)       # start near the size that can fit the budget
+    S = _surface_samples(P, T, cell / 2.0)
+    while True:
+        ix = np.floor((S[:, 0] - lo[0]) / cell).astype(np.int64)
+        iy = np.floor((S[:, 1] - lo[1]) / cell).astype(np.int64)
+        key = ix * (iy.max() + 2) + iy
+        order = np.argsort(key, kind="stable")
+        ks, zs = key[order], S[order, 2]
+        starts = np.flatnonzero(np.r_[True, ks[1:] != ks[:-1]])
+        zmax = np.maximum.reduceat(zs, starts)
+        cx, cy = ix[order][starts], iy[order][starts]
+        # solid from the piece's lowest point: Skyrim rock collision is often open underneath (sunk into the
+        # ground); a column then still blocks from below, and merging depends on the tops only
+        cols = {(int(x), int(y)): (float(lo[2]), float(b)) for x, y, b in zip(cx, cy, zmax)}
+        tol = max(0.1, 0.3 * cell)
+        runs = []                                   # merge along x into runs, then equal x spans along y
+        for y in sorted({k[1] for k in cols}):
+            cur = None
+            for x in sorted(k[0] for k in cols if k[1] == y):
+                z0, z1 = cols[(x, y)]
+                if cur and x == cur[1] + 1 and abs(z0 - cur[2]) <= tol and abs(z1 - cur[3]) <= tol:
+                    cur = [cur[0], x, min(cur[2], z0), max(cur[3], z1), y, y]
+                else:
+                    if cur:
+                        runs.append(cur)
+                    cur = [x, x, z0, z1, y, y]
+            if cur:
+                runs.append(cur)
+        merged, open_ = [], {}
+        for r in sorted(runs, key=lambda r: (r[4], r[0])):
+            o = open_.get((r[0], r[1]))
+            if o and r[4] == o[5] + 1 and abs(r[2] - o[2]) <= tol and abs(r[3] - o[3]) <= tol:
+                o[2], o[3], o[5] = min(o[2], r[2]), max(o[3], r[3]), r[4]
+            else:
+                if o:
+                    merged.append(o)
+                open_[(r[0], r[1])] = list(r)
+        merged += open_.values()
+        if len(merged) <= budget:
+            boxes = []
+            for x0, x1, z0, z1, y0, y1 in merged:
+                bl = (lo[0] + x0 * cell, lo[1] + y0 * cell, z0)
+                bh = (min(lo[0] + (x1 + 1) * cell, hi[0]), min(lo[1] + (y1 + 1) * cell, hi[1]), max(z1, z0 + 0.05))
+                boxes.append((tuple((bl[k] + bh[k]) / 2 for k in range(3)), tuple((bh[k] - bl[k]) / 2 for k in range(3))))
+            if report is not None:
+                report["column_cell_m"] = round(cell, 3)
+                report["boxes"] = len(boxes)
+                report["column_budget"] = budget
+            return boxes
+        cell *= 1.25
+
+
+def collision_boxes(src: nifmod.NifFile, template: bytes, report: dict, landscape: bool = False) -> list:
+    """Starfield single-box physics blobs approximating the model's own Skyrim collision (metres), or []."""
+    pts, tris = skyrimnif.collision_triangles(src, report)
+    if not tris:
+        report["source"] = "skyrim-none"
+        return []
+    m = [(x * UNIT, y * UNIT, z * UNIT) for x, y, z in pts]
+    lo = [min(p[a] for p in m) for a in range(3)]
+    hi = [max(p[a] for p in m) for a in range(3)]
+    report["collision_bounds_m"] = [[round(v, 3) for v in lo], [round(v, 3) for v in hi]]
+    if landscape:
+        boxes = column_boxes(m, tris, report=report)
+        report["method"] = "columns"
+    else:
+        boxes = sfcollision.mesh_boxes(m, tris, report=report)
+        report["method"] = "surfaces+voxels"
+    report["source"] = "skyrim-boxes"
+    return [sfcollision.box_blob(template, c, h) for c, h in boxes]
+
+
+def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
+                       collision_template: Optional[bytes], report: dict, landscape: bool = False) -> Dict[str, bytes]:
+    files, static_shapes, all_pts = {}, [], []
+    for i, s in enumerate(shapes):
+        if material_paths[i] is None:                 # effect shader / skipped shape
+            continue
+        m = convert_static.shape_to_mesh(s, UNIT)
+        data = sfmesh.serialize(m)
+        d, f = convert_static.mesh_file_path(data)
+        files[f"geometries/{d}/{f}.mesh"] = data
+        pts = [sfmesh.decode_position(p, m.scale) for p in m.positions]
+        all_pts += pts
+        sphere, box = sfnif.bounds_from_points(pts)
+        static_shapes.append(sfnif.StaticShape(s.name or f"Shape{i}".encode(), f"{d}\\{f}".encode(),
+                                               len(m.triangles) * 3, len(m.positions), material_paths[i], sphere, box))
+    if not static_shapes:
+        raise nifmod.NifError("no shape left after skipping effect shaders")
+    lo = [min(p[a] for p in all_pts) for a in range(3)]
+    hi = [max(p[a] for p in all_pts) for a in range(3)]
+    report["render_bounds_m"] = [[round(v, 3) for v in lo], [round(v, 3) for v in hi]]
+    blobs = collision_boxes(src, collision_template, report, landscape) if collision_template is not None else []
+    if "collision_bounds_m" in report:               # sanity on real data: collision should overlap the visible model
+        cl, ch = report["collision_bounds_m"]
+        overlap = all(cl[a] <= hi[a] + 0.5 and ch[a] >= lo[a] - 0.5 for a in range(3))
+        report["collision_overlaps_render"] = overlap
+    node = out_name.rsplit("/", 1)[-1].encode()
+    out = sfnif.build_static_nif(node, static_shapes, child_collision_blobs=blobs)
+    files[f"meshes/{out_name}.nif"] = nifmod.serialize(out)
+    return files
+
+
+class SkyrimConverter(pipeline.Converter):
+    """pipeline.Converter with a Skyrim source (bsa.SkyrimArchives) and Skyrim materials / geometry / collision."""
+
+    def __init__(self, src, staging, texconv_exe, content_resources, collision_template=None, prefix="skyrim",
+                 max_texture=None):
+        super().__init__(src, staging, texconv_exe, content_resources, collision_template, prefix=prefix,
+                         no_collision_pattern="", max_texture=max_texture)
+
+    def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int) -> Optional[str]:
+        kind = "decal" if blend and not test else "cutout" if test else "opaque"
+        ident = "|".join([diffuse.replace("\\", "/").lower(), normal.replace("\\", "/").lower(), kind, str(ref)])
+        stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
+        stem = os.path.splitext(stem)[0] + "_" + hashlib.sha1(ident.encode()).hexdigest()[:8]
+        if kind == "decal":
+            stem = "decals/" + stem
+        key = "sky:" + stem
+        if key not in self._materials:
+            try:
+                self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=test,
+                                                                 alpha_ref=ref, decal=(kind == "decal"))
+                self.stats["materials_ok"] += 1
+            except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
+                self._materials[key] = None
+                self.stats["materials_fallback"] += 1
+                self.material_errors[key] = f"{type(e).__name__}: {e}"
+        return self._materials[key]
+
+    def _shape_material(self, src, s) -> Optional[str]:
+        if s.shader_ref < 0:
+            return self.neutral
+        kind = src.type_of(s.shader_ref)
+        if kind == "BSEffectShaderProperty":          # glow, fog, waterfall spray, magic: not translated
+            return None
+        paths = skyrimnif.texture_set(src, s.shader_ref)
+        if not paths or not paths[0]:
+            return self.neutral
+        test, blend, ref = skyrimnif.alpha_test(src, s.alpha_ref)
+        normal = paths[1] if len(paths) > 1 else ""
+        if not normal and not (blend and not test):
+            return self.neutral
+        mat = self.skyrim_material(paths[0], normal, test, blend, ref)
+        if mat is None and blend and not test:
+            return None                               # an overlay we could not convert: leave it out, as FO4 does
+        return mat or self.neutral
+
+    def convert_nif(self, nif_name: str) -> dict:
+        res = {"nif": nif_name, "ok": False}
+        try:
+            raw = self.src.mesh(nif_name)
+            if raw is None:
+                raise FileNotFoundError("mesh not in the Skyrim archives or loose files")
+            src = nifmod.parse(raw)
+            shapes = skyrimnif.trishapes(src)
+            if not shapes:
+                raise ValueError("no triangle geometry")
+            mats = [self._shape_material(src, s) for s in shapes]
+            if all(m is None for m in mats):
+                raise ValueError("only effect-shader shapes, skipped")
+            rel = re.sub(r"^meshes[\\/]", "", nif_name.replace("\\", "/"), flags=re.I)
+            out_name = f"{self.prefix}/{os.path.splitext(rel)[0].lower()}"
+            report = {}
+            files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
+                                       landscape=bool(LANDSCAPE_RE.search(nif_name)))
+            for relp, data in files.items():
+                p = os.path.join(self.staging, *relp.split("/"))
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                with open(p, "wb") as f:
+                    f.write(data)
+            res.update(ok=True, out_name=out_name, shapes=len(shapes), materials=mats,
+                       collision="skyrim" if self.collision_template is not None else None,
+                       collision_report=report, skipped_effect_shapes=sum(1 for m in mats if m is None),
+                       fallback_materials=sum(1 for m in mats if m == self.neutral))
+            self.stats["assets"] += 1
+        except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
+            res["reason"] = f"{type(e).__name__}: {e}"
+            self.stats["failed"] += 1
+        return res

@@ -43,7 +43,7 @@ south / west cell win shared edges, which put a 56 m error on the neighbours in 
   **Never install with another terrain experiment** (every Mars plugin overrides MarsPlanetData).
 
 ## Not included
-Objects (statics, trees, buildings: make_core64c.py's path, needs the Skyrim mesh converter), water (Tamriel's sea
+Objects (statics, trees, buildings: now on branch `skyrim/objects`, [skyrim-objects.md](skyrim-objects.md)), water (Tamriel's sea
 and lakes are dry basins at Mars gravity), land textures (one plain ground texture), grass, object LOD, navmesh,
 actors, the walled-city worldspaces (Whiterun, Solitude, ... are separate WRLDs).
 

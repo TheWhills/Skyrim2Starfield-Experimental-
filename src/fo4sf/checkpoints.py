@@ -73,9 +73,10 @@ def output_inventory(staging, result, prefix="fo4port"):
 
 
 class Checkpoints:
-    def __init__(self, staging, signature):
+    def __init__(self, staging, signature, prefix="fo4port"):
         self.staging = Path(staging)
         self.signature = signature
+        self.prefix = prefix                 # converter output folder (materials/<prefix>, textures/<prefix>)
         self.directory = self.staging / ".checkpoints"
         self.expected = {}
 
@@ -97,7 +98,7 @@ class Checkpoints:
             if any(type(result.get(field)) is not int or result[field] < 0
                    for field in ("shapes", "fallback_materials")):
                 return None
-            if output_inventory(self.staging, result) != cached["outputs"]:
+            if output_inventory(self.staging, result, self.prefix) != cached["outputs"]:
                 return None
             if result.get("ok") is not True:
                 return None
@@ -111,7 +112,7 @@ class Checkpoints:
             self.path(source).unlink(missing_ok=True)
             return False  # Retry degraded/failing conversions rather than freezing a placeholder.
         try:
-            outputs = output_inventory(self.staging, result)
+            outputs = output_inventory(self.staging, result, self.prefix)
         except (OSError, ValueError, KeyError, TypeError, struct.error):
             # The batch runner may continue after checkpoint I/O errors. Keep an
             # explicit failed expectation so it cannot publish an unverified build.
