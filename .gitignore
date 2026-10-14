@@ -1,0 +1,37 @@
+# local configuration and outputs (never commit paths or game-derived data)
+config.toml
+work/
+staging/
+out/
+*.log
+
+# game data (the guard also enforces this)
+*.ba2
+*.bsa
+*.esm
+*.esp
+*.esl
+*.nif
+*.dds
+*.mesh
+*.hkx
+*.fuz
+*.wem
+*.xwm
+*.bgsm
+*.bgem
+*.btd
+*.btr
+*.bto
+*.cdb
+*.pex
+*.swf
+
+# python / dotnet
+__pycache__/
+*.pyc
+.venv/
+bin/
+obj/
+.vs/
+scripts/game/cycle_pid.txt

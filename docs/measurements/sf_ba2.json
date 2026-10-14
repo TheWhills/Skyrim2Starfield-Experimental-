@@ -1,0 +1,1363 @@
+﻿{
+ "label": "Starfield",
+ "archives": [
+  {
+   "file": "BlueprintShips-Starfield - Localization.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 27,
+   "extensions": {
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9
+   }
+  },
+  {
+   "file": "SFBGS003 - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 5296,
+   "extensions": {
+    "ffxanim": 4462,
+    "mesh": 474,
+    "wem": 97,
+    "nif": 85,
+    "txt": 78,
+    "af": 28,
+    "afx": 28,
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9,
+    "dat": 7,
+    "rig": 4
+   }
+  },
+  {
+   "file": "SFBGS003 - Textures.ba2",
+   "version": 2,
+   "type": "DX10",
+   "compression_method": null,
+   "file_count": 433,
+   "extensions": {
+    "dds": 433
+   }
+  },
+  {
+   "file": "SFBGS003 - Voices_de.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 4120,
+   "extensions": {
+    "wem": 4120
+   }
+  },
+  {
+   "file": "SFBGS003 - Voices_en.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 4462,
+   "extensions": {
+    "wem": 4462
+   }
+  },
+  {
+   "file": "SFBGS003 - Voices_es.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 4120,
+   "extensions": {
+    "wem": 4120
+   }
+  },
+  {
+   "file": "SFBGS003 - Voices_fr.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 4120,
+   "extensions": {
+    "wem": 4120
+   }
+  },
+  {
+   "file": "SFBGS003 - Voices_ja.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 4120,
+   "extensions": {
+    "wem": 4120
+   }
+  },
+  {
+   "file": "SFBGS004 - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 739,
+   "extensions": {
+    "ffxanim": 532,
+    "mesh": 150,
+    "txt": 20,
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9,
+    "nif": 6,
+    "dat": 1,
+    "bnk": 1,
+    "json": 1,
+    "wem": 1
+   }
+  },
+  {
+   "file": "SFBGS004 - Textures.ba2",
+   "version": 2,
+   "type": "DX10",
+   "compression_method": null,
+   "file_count": 18,
+   "extensions": {
+    "dds": 18
+   }
+  },
+  {
+   "file": "SFBGS004 - Voices_de.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 532,
+   "extensions": {
+    "wem": 532
+   }
+  },
+  {
+   "file": "SFBGS004 - Voices_en.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 532,
+   "extensions": {
+    "wem": 532
+   }
+  },
+  {
+   "file": "SFBGS004 - Voices_es.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 532,
+   "extensions": {
+    "wem": 532
+   }
+  },
+  {
+   "file": "SFBGS004 - Voices_fr.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 532,
+   "extensions": {
+    "wem": 532
+   }
+  },
+  {
+   "file": "SFBGS004 - Voices_ja.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 532,
+   "extensions": {
+    "wem": 532
+   }
+  },
+  {
+   "file": "SFBGS006 - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 27,
+   "extensions": {
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9
+   }
+  },
+  {
+   "file": "SFBGS006 - Textures.ba2",
+   "version": 2,
+   "type": "DX10",
+   "compression_method": null,
+   "file_count": 172,
+   "extensions": {
+    "dds": 172
+   }
+  },
+  {
+   "file": "SFBGS007 - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 29,
+   "extensions": {
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9,
+    "cdb": 1,
+    "": 1
+   }
+  },
+  {
+   "file": "SFBGS008 - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 97,
+   "extensions": {
+    "mesh": 62,
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9,
+    "nif": 5,
+    "cdb": 1,
+    "": 1,
+    "dat": 1
+   }
+  },
+  {
+   "file": "SFBGS00D - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 11974,
+   "extensions": {
+    "ffxanim": 6058,
+    "mesh": 3460,
+    "nif": 934,
+    "wem": 922,
+    "pex": 293,
+    "btd": 108,
+    "lod": 73,
+    "dds": 44,
+    "af": 17,
+    "afx": 17,
+    "txt": 9,
+    "dlstrings": 9
+   }
+  },
+  {
+   "file": "SFBGS00D - Textures.ba2",
+   "version": 2,
+   "type": "DX10",
+   "compression_method": null,
+   "file_count": 3836,
+   "extensions": {
+    "dds": 3836
+   }
+  },
+  {
+   "file": "SFBGS00D - Voices_de.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 6025,
+   "extensions": {
+    "wem": 6025
+   }
+  },
+  {
+   "file": "SFBGS00D - Voices_en.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 6054,
+   "extensions": {
+    "wem": 6054
+   }
+  },
+  {
+   "file": "SFBGS00D - Voices_es.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 6025,
+   "extensions": {
+    "wem": 6025
+   }
+  },
+  {
+   "file": "SFBGS00D - Voices_fr.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 21,
+   "extensions": {
+    "wem": 21
+   }
+  },
+  {
+   "file": "SFBGS00D - Voices_ja.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 6028,
+   "extensions": {
+    "wem": 6028
+   }
+  },
+  {
+   "file": "SFBGS047 - Main.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 228,
+   "extensions": {
+    "mesh": 79,
+    "af": 35,
+    "afx": 35,
+    "txt": 34,
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9,
+    "nif": 4,
+    "rig": 4,
+    "blob": 2,
+    "gfx": 1,
+    "swf": 1
+   }
+  },
+  {
+   "file": "SFBGS047 - Textures.ba2",
+   "version": 2,
+   "type": "DX10",
+   "compression_method": null,
+   "file_count": 8,
+   "extensions": {
+    "dds": 8
+   }
+  },
+  {
+   "file": "Starfield - Animations.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 47162,
+   "extensions": {
+    "af": 19358,
+    "afx": 19303,
+    "txt": 7744,
+    "rig": 390,
+    "agx": 347,
+    "xtbl": 12,
+    "": 4,
+    "csv": 3,
+    "ma": 1
+   }
+  },
+  {
+   "file": "Starfield - DensityMaps.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 7761,
+   "extensions": {
+    "dds": 7761
+   }
+  },
+  {
+   "file": "Starfield - FaceAnimation01.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 76659,
+   "extensions": {
+    "ffxanim": 76659
+   }
+  },
+  {
+   "file": "Starfield - FaceAnimation02.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 59348,
+   "extensions": {
+    "ffxanim": 59348
+   }
+  },
+  {
+   "file": "Starfield - FaceAnimation03.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 48535,
+   "extensions": {
+    "ffxanim": 48535
+   }
+  },
+  {
+   "file": "Starfield - FaceAnimation04.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 62100,
+   "extensions": {
+    "ffxanim": 62096,
+    "ffxactor": 2,
+    "ffxbones": 2
+   }
+  },
+  {
+   "file": "Starfield - FaceAnimationPatch.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 20896,
+   "extensions": {
+    "ffxanim": 20892,
+    "ffxactor": 2,
+    "ffxbones": 2
+   }
+  },
+  {
+   "file": "Starfield - FaceMeshes.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 6114,
+   "extensions": {
+    "mesh": 4832,
+    "nif": 1282
+   }
+  },
+  {
+   "file": "Starfield - GeneratedTextures.ba2",
+   "version": 2,
+   "type": "DX10",
+   "compression_method": null,
+   "file_count": 5749,
+   "extensions": {
+    "dds": 5749
+   }
+  },
+  {
+   "file": "Starfield - Interface.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 426,
+   "extensions": {
+    "swf": 250,
+    "png": 114,
+    "gfx": 29,
+    "txt": 29,
+    "json": 3,
+    "bat": 1
+   }
+  },
+  {
+   "file": "Starfield - LODMeshes.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 20400,
+   "extensions": {
+    "nif": 19535,
+    "lod": 864,
+    "bgsdb": 1
+   }
+  },
+  {
+   "file": "Starfield - LODMeshesPatch.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 20405,
+   "extensions": {
+    "nif": 19540,
+    "lod": 864,
+    "bgsdb": 1
+   }
+  },
+  {
+   "file": "Starfield - LODTextures01.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 58408,
+   "extensions": {
+    "dds": 58408
+   }
+  },
+  {
+   "file": "Starfield - LODTextures02.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 654,
+   "extensions": {
+    "dds": 654
+   }
+  },
+  {
+   "file": "Starfield - Localization.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 27,
+   "extensions": {
+    "dlstrings": 9,
+    "ilstrings": 9,
+    "strings": 9
+   }
+  },
+  {
+   "file": "Starfield - Materials.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 1,
+   "extensions": {
+    "cdb": 1
+   }
+  },
+  {
+   "file": "Starfield - Meshes01.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 320483,
+   "extensions": {
+    "mesh": 288231,
+    "nif": 31058,
+    "dat": 1194
+   }
+  },
+  {
+   "file": "Starfield - Meshes02.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 70238,
+   "extensions": {
+    "mesh": 62685,
+    "nif": 7552,
+    "dat": 1
+   }
+  },
+  {
+   "file": "Starfield - MeshesPatch.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 354341,
+   "extensions": {
+    "mesh": 324491,
+    "nif": 29849,
+    "dat": 1
+   }
+  },
+  {
+   "file": "Starfield - Misc.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 4753,
+   "extensions": {
+    "pex": 4740,
+    "csv": 11,
+    "dat": 1,
+    "bin": 1
+   }
+  },
+  {
+   "file": "Starfield - Particles.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 833,
+   "extensions": {
+    "psfx": 831,
+    "blob": 1,
+    "json": 1
+   }
+  },
+  {
+   "file": "Starfield - PlanetData.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 1438,
+   "extensions": {
+    "biom": 1438
+   }
+  },
+  {
+   "file": "Starfield - Shaders.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 1,
+   "extensions": {
+    "fxp": 1
+   }
+  },
+  {
+   "file": "Starfield - Terrain01.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 885,
+   "extensions": {
+    "btd": 885
+   }
+  },
+  {
+   "file": "Starfield - Terrain02.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 315,
+   "extensions": {
+    "btd": 315
+   }
+  },
+  {
+   "file": "Starfield - Terrain03.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 247,
+   "extensions": {
+    "btd": 247
+   }
+  },
+  {
+   "file": "Starfield - Terrain04.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 552,
+   "extensions": {
+    "btd": 552
+   }
+  },
+  {
+   "file": "Starfield - TerrainPatch.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 5,
+   "extensions": {
+    "btd": 5
+   }
+  },
+  {
+   "file": "Starfield - Textures01.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 5574,
+   "extensions": {
+    "dds": 5574
+   }
+  },
+  {
+   "file": "Starfield - Textures02.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 4134,
+   "extensions": {
+    "dds": 4134
+   }
+  },
+  {
+   "file": "Starfield - Textures03.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 3807,
+   "extensions": {
+    "dds": 3807
+   }
+  },
+  {
+   "file": "Starfield - Textures04.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 3130,
+   "extensions": {
+    "dds": 3130
+   }
+  },
+  {
+   "file": "Starfield - Textures05.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 7084,
+   "extensions": {
+    "dds": 7084
+   }
+  },
+  {
+   "file": "Starfield - Textures06.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 2937,
+   "extensions": {
+    "dds": 2937
+   }
+  },
+  {
+   "file": "Starfield - Textures07.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 3630,
+   "extensions": {
+    "dds": 3630
+   }
+  },
+  {
+   "file": "Starfield - Textures08.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 2198,
+   "extensions": {
+    "dds": 2198
+   }
+  },
+  {
+   "file": "Starfield - Textures09.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 3218,
+   "extensions": {
+    "dds": 3218
+   }
+  },
+  {
+   "file": "Starfield - Textures10.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 5706,
+   "extensions": {
+    "dds": 5706
+   }
+  },
+  {
+   "file": "Starfield - Textures11.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 1327,
+   "extensions": {
+    "dds": 1327
+   }
+  },
+  {
+   "file": "Starfield - TexturesPatch01.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 2958,
+   "extensions": {
+    "dds": 2958
+   }
+  },
+  {
+   "file": "Starfield - TexturesPatch02.ba2",
+   "version": 3,
+   "type": "DX10",
+   "compression_method": 3,
+   "file_count": 53,
+   "extensions": {
+    "dds": 53
+   }
+  },
+  {
+   "file": "Starfield - Voices01.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 158843,
+   "extensions": {
+    "wem": 158843
+   }
+  },
+  {
+   "file": "Starfield - Voices02.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 86290,
+   "extensions": {
+    "wem": 86290
+   }
+  },
+  {
+   "file": "Starfield - VoicesPatch.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 928,
+   "extensions": {
+    "wem": 928
+   }
+  },
+  {
+   "file": "Starfield - WwiseSounds01.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 5502,
+   "extensions": {
+    "wem": 5498,
+    "bnk": 4
+   }
+  },
+  {
+   "file": "Starfield - WwiseSounds02.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 6068,
+   "extensions": {
+    "wem": 6054,
+    "bnk": 14
+   }
+  },
+  {
+   "file": "Starfield - WwiseSounds03.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 5715,
+   "extensions": {
+    "wem": 5715
+   }
+  },
+  {
+   "file": "Starfield - WwiseSounds04.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 5799,
+   "extensions": {
+    "wem": 5799
+   }
+  },
+  {
+   "file": "Starfield - WwiseSounds05.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 3602,
+   "extensions": {
+    "wem": 3600,
+    "json": 2
+   }
+  },
+  {
+   "file": "Starfield - WwiseSoundsPatch.ba2",
+   "version": 2,
+   "type": "GNRL",
+   "compression_method": null,
+   "file_count": 3776,
+   "extensions": {
+    "wem": 3744,
+    "json": 17,
+    "bnk": 15
+   }
+  }
+ ],
+ "extension_totals": {
+  "mesh": 684464,
+  "wem": 325246,
+  "ffxanim": 278582,
+  "dds": 122839,
+  "nif": 109850,
+  "af": 19438,
+  "afx": 19383,
+  "txt": 7914,
+  "pex": 5034,
+  "btd": 2112,
+  "lod": 1801,
+  "biom": 1438,
+  "dat": 1209,
+  "psfx": 831,
+  "rig": 399,
+  "agx": 351,
+  "swf": 251,
+  "png": 114,
+  "dlstrings": 81,
+  "ilstrings": 81,
+  "strings": 81,
+  "bnk": 36,
+  "gfx": 30,
+  "json": 26,
+  "csv": 14,
+  "xtbl": 12,
+  "": 9,
+  "blob": 7,
+  "cdb": 6,
+  "ffxactor": 4,
+  "ffxbones": 4,
+  "bgsdb": 2,
+  "rx": 1,
+  "ma": 1,
+  "bat": 1,
+  "bin": 1,
+  "fxp": 1
+ },
+ "top_dirs": {
+  "geometries": 684464,
+  "sound": 603886,
+  "meshes": 158590,
+  "textures": 122839,
+  "scripts": 5034,
+  "terrain": 2058,
+  "lodsettings": 1801,
+  "planetdata": 1438,
+  "particles": 839,
+  "interface": 428,
+  "strings": 243,
+  "materials": 11,
+  "space": 11,
+  "misc": 9,
+  "distantlod": 2,
+  "shadersfx": 1
+ },
+ "extension_samples": {
+  "dlstrings": [
+   "strings/blueprintships-starfield_de.dlstrings",
+   "strings/blueprintships-starfield_en.dlstrings",
+   "strings/blueprintships-starfield_es.dlstrings",
+   "strings/blueprintships-starfield_fr.dlstrings"
+  ],
+  "ilstrings": [
+   "strings/blueprintships-starfield_de.ilstrings",
+   "strings/blueprintships-starfield_en.ilstrings",
+   "strings/blueprintships-starfield_es.ilstrings",
+   "strings/blueprintships-starfield_fr.ilstrings"
+  ],
+  "strings": [
+   "strings/blueprintships-starfield_de.strings",
+   "strings/blueprintships-starfield_en.strings",
+   "strings/blueprintships-starfield_es.strings",
+   "strings/blueprintships-starfield_fr.strings"
+  ],
+  "mesh": [
+   "geometries/0024965a94937a847041/f66e90898c3334f02c7d.mesh",
+   "geometries/009b9d4bd726af5efb32/6d9f68b4be070071f062.mesh",
+   "geometries/019d7211c36e7c4984da/e83cbe447b5a83ff599d.mesh",
+   "geometries/025b7743a670a06f9ad2/edb162f5650f2691961b.mesh"
+  ],
+  "cdb": [
+   "materials/creations/sfbgs003/materialsbeta.cdb",
+   "materials/creations/sfbgs007/materialsbeta.cdb",
+   "materials/creations/sfbgs008/materialsbeta.cdb",
+   "materials/creations/sfbgs00d/materialsbeta.cdb"
+  ],
+  "": [
+   "materials/weapons/bigbang/decals",
+   "materials/weapons/bigbang/decals",
+   "materials/weapons/bigbang/decals",
+   "materials/weapons/bigbang/decals"
+  ],
+  "nif": [
+   "meshes/actors/character/facegendata/facegeom/sfbgs003.esm/00000e90.nif",
+   "meshes/actors/character/facegendata/facegeom/sfbgs003.esm/00000e93.nif",
+   "meshes/actors/character/facegendata/facegeom/sfbgs003.esm/00000e94.nif",
+   "meshes/actors/character/facegendata/facegeom/sfbgs003.esm/00000e97.nif"
+  ],
+  "af": [
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/enterfromstand.af",
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/enterinstant.af",
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/exittostand.af",
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/idle.af"
+  ],
+  "afx": [
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/enterfromstand.afx",
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/enterinstant.afx",
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/exittostand.afx",
+   "meshes/actors/sfbgs003/human/animations/furniture/sfbgs003_zerog_welder/idle.afx"
+  ],
+  "rig": [
+   "meshes/actors/sfbgs003/human/characterassets/skeleton.rig",
+   "meshes/actors/sfbgs003/human/characterassets/female/skeleton.rig",
+   "meshes/actors/sfbgs003/human/_1stperson/characterassets/skeleton.rig",
+   "meshes/actors/sfbgs003/human/_1stperson/characterassets/female/skeleton.rig"
+  ],
+  "txt": [
+   "meshes/animtextdata/animationfiledata/11762079386782928700.txt",
+   "meshes/animtextdata/animationfiledata/12367398908971590831.txt",
+   "meshes/animtextdata/animationfiledata/12367398909950790542.txt",
+   "meshes/animtextdata/animationfiledata/12863599159797633636.txt"
+  ],
+  "dat": [
+   "meshes/morphs/sfbgs003/clothes/spacesuit_etes/spacesuit_etes_f/chargen/spacesuit_etes_lowerbody_f/morph.dat",
+   "meshes/morphs/sfbgs003/clothes/spacesuit_etes/spacesuit_etes_f/chargen/spacesuit_etes_sleeves_f/morph.dat",
+   "meshes/morphs/sfbgs003/clothes/spacesuit_etes/spacesuit_etes_f/chargen/spacesuit_etes_upperbody_f/morph.dat",
+   "meshes/morphs/sfbgs003/clothes/spacesuit_etes/spacesuit_etes_m/chargen/spacesuit_etes_lowerbody_m/morph.dat"
+  ],
+  "blob": [
+   "particles/creations/sfbgs003/completepsfx.blob",
+   "particles/creations/sfbgs003/minimalpsfx.blob",
+   "particles/creations/sfbgs00d/completepsfx.blob",
+   "particles/creations/sfbgs00d/minimalpsfx.blob"
+  ],
+  "wem": [
+   "sound/soundbanks/1000628662.wem",
+   "sound/soundbanks/1005679773.wem",
+   "sound/soundbanks/1021930765.wem",
+   "sound/soundbanks/1022140366.wem"
+  ],
+  "bnk": [
+   "sound/soundbanks/2344192837.bnk",
+   "sound/soundbanks/2344192834.bnk",
+   "sound/soundbanks/2344192786.bnk",
+   "sound/soundbanks/1134823960.bnk"
+  ],
+  "json": [
+   "sound/soundbanks/2344192837.json",
+   "sound/soundbanks/2344192834.json",
+   "sound/soundbanks/2344192786.json",
+   "interface/providers/powersmenudata.json"
+  ],
+  "ffxanim": [
+   "sound/voice/sfbgs003.esm/genericfemale10/0004487f.ffxanim",
+   "sound/voice/sfbgs003.esm/genericfemale10/0042e792.ffxanim",
+   "sound/voice/sfbgs003.esm/genericfemale10/0053e785.ffxanim",
+   "sound/voice/sfbgs003.esm/genericfemale10/005856d2.ffxanim"
+  ],
+  "dds": [
+   "textures/actors/character/facecustomization/sfbgs003.esm/00000e90_ao.dds",
+   "textures/actors/character/facecustomization/sfbgs003.esm/00000e90_color.dds",
+   "textures/actors/character/facecustomization/sfbgs003.esm/00000e90_normal.dds",
+   "textures/actors/character/facecustomization/sfbgs003.esm/00000e90_rough.dds"
+  ],
+  "lod": [
+   "lodsettings/cydoniacity.lod",
+   "lodsettings/dr010world.lod",
+   "lodsettings/dr011world.lod",
+   "lodsettings/dr024world.lod"
+  ],
+  "agx": [
+   "meshes/animtextdata/tables/graphs/shiptransitionout2fx.agx",
+   "meshes/animtextdata/tables/graphs/shiptransitionoutfx.agx",
+   "meshes/animtextdata/tables/graphs/shiptransitionout_end_fx.agx",
+   "meshes/animtextdata/tables/graphs/sfbgs047_vehicle.agx"
+  ],
+  "btd": [
+   "meshes/terrain/overlaypoibiomegrottolayered01.btd",
+   "meshes/terrain/overlaypoibiomegrottorough01.btd",
+   "meshes/terrain/overlaypoibiomegrottosharp01.btd",
+   "meshes/terrain/overlaypoibiomegrottoveiny01.btd"
+  ],
+  "pex": [
+   "scripts/sfbgs00d/actionfigureachievementscript.pex",
+   "scripts/sfbgs00d/addperkonpickupscript.pex",
+   "scripts/sfbgs00d/calculatevendorcredits.pex",
+   "scripts/sfbgs00d/castspellondeath.pex"
+  ],
+  "gfx": [
+   "interface/ccsupmoonjumper.gfx",
+   "interface/buttonclips.gfx",
+   "interface/buttonclips_lrg.gfx",
+   "interface/explosiveindicator.gfx"
+  ],
+  "swf": [
+   "interface/ccsupmoonjumper.swf",
+   "interface/alertmessage.swf",
+   "interface/alertmessage_lrg.swf",
+   "interface/almanacmenu.swf"
+  ],
+  "rx": [
+   "meshes/actors/sfbgs047/modela/characterassets/skeleton.rx"
+  ],
+  "csv": [
+   "meshes/actors/human/characterassets/humanracefacialboneregionsmapping.csv",
+   "meshes/actors/human_crowd/characterassets/humancrowdracefacialboneregionsmapping.csv",
+   "meshes/actors/octopedea/characterassets/morphsanimation.csv",
+   "space/biomedata.csv"
+  ],
+  "ma": [
+   "meshes/actors/mantida/animations/meleeattack_tail01.ma"
+  ],
+  "xtbl": [
+   "meshes/animtextdata/tables/anim_actions.xtbl",
+   "meshes/animtextdata/tables/anim_events.xtbl",
+   "meshes/animtextdata/tables/anim_files.xtbl",
+   "meshes/animtextdata/tables/anim_flags.xtbl"
+  ],
+  "ffxactor": [
+   "meshes/facefx/starfieldhumanfemale.ffxactor",
+   "meshes/facefx/starfieldhumanmale.ffxactor",
+   "meshes/facefx/starfieldhumanfemale.ffxactor",
+   "meshes/facefx/starfieldhumanmale.ffxactor"
+  ],
+  "ffxbones": [
+   "meshes/facefx/starfieldhumanfemale.ffxbones",
+   "meshes/facefx/starfieldhumanmale.ffxbones",
+   "meshes/facefx/starfieldhumanfemale.ffxbones",
+   "meshes/facefx/starfieldhumanmale.ffxbones"
+  ],
+  "bat": [
+   "interface/clearallswfs.bat"
+  ],
+  "png": [
+   "interface/marketplace/assetselecti01.png",
+   "interface/marketplace/assetselectionpx6.png",
+   "interface/marketplace/assetv1_blur01.png",
+   "interface/marketplace/assetv1_blur02.png"
+  ],
+  "bgsdb": [
+   "distantlod/lodruntimedb.bgsdb",
+   "distantlod/lodruntimedb.bgsdb"
+  ],
+  "bin": [
+   "misc/faceemotions.bin"
+  ],
+  "psfx": [
+   "particles/bitsblowingground_broadleaf01.psfx",
+   "particles/bitsblowingground_broadleaf02.psfx",
+   "particles/bitsblowingground_grass01.psfx",
+   "particles/bitsblowingground_grass02.psfx"
+  ],
+  "biom": [
+   "planetdata/biomemaps/abetti.biom",
+   "planetdata/biomemaps/agamon a.biom",
+   "planetdata/biomemaps/agamon b.biom",
+   "planetdata/biomemaps/agamon c.biom"
+  ],
+  "fxp": [
+   "shadersfx/shaderspc_dx12_105.fxp"
+  ]
+ },
+ "nif_samples": [
+  {
+   "pick": "weapons\\",
+   "archive": "SFBGS003 - Main.ba2",
+   "name": "meshes/weapons/sfbgs003/plasmacutter/plasmacutter_additive_accelerant.nif",
+   "size": 9092,
+   "header": "Gamebryo File Format, Version 20.2.0.7",
+   "version": "0x14020007",
+   "user_version": 12,
+   "bs_version": 175,
+   "num_blocks": 11,
+   "block_types": [
+    "BSConnectPoint",
+    "BSGeometry",
+    "BSLightingShaderProperty",
+    "BSXFlags",
+    "NiIntegerExtraData",
+    "NiNode",
+    "bhkNPCollisionObject",
+    "bhkPhysicsSystem",
+    "hkArray",
+    "hkBaseObject",
+    "hkCompressedMassProperties",
+    "hkContainerHeapAllocator",
+    "hkEnum",
+    "hkFlags",
+    "hkFloat3",
+    "hkHalf16",
+    "hkInt16",
+    "hkInt32",
+    "hkInt8",
+    "hkLocalFrame",
+    "hkPackedVector3",
+    "hkQuaternion",
+    "hkQuaternionf",
+    "hkReal",
+    "hkRefCountedProperties",
+    "hkRefPtr",
+    "hkReferencedObject",
+    "hkRelArray",
+    "hkStringPtr",
+    "hkUFloat8",
+    "hkUint16",
+    "hkUint32",
+    "hkUint64",
+    "hkUint8",
+    "hkUlong",
+    "hkVector4",
+    "hkVector4f",
+    "hknpBodyCinfo",
+    "hknpBodyId",
+    "hknpCollisionControl",
+    "hknpCollisionDispatchType",
+    "hknpCollisionFlags",
+    "hknpConstraintCinfo",
+    "hknpConvexHull",
+    "hknpConvexShape",
+    "hknpMassDistribution",
+    "hknpMaterial",
+    "hknpMotionProperties",
+    "hknpPhysicsSystemData",
+    "hknpRefDragProperties",
+    "hknpRefMassDistribution",
+    "hknpShape",
+    "hknpShapeMassProperties",
+    "hknpShapeType",
+    "hknpSurfaceVelocity"
+   ],
+   "block_types_heuristic": true,
+   "referenced_files": [
+    "materials\\weapons\\sfbgs003\\plasmacutter\\plasmacutter_accelerant.mat",
+    "materials\\weapons\\sfbgs003\\plasmacutter\\plasmacutter_decals.mat"
+   ]
+  },
+  {
+   "pick": "actors\\character\\",
+   "archive": "SFBGS003 - Main.ba2",
+   "name": "meshes/actors/character/facegendata/facegeom/sfbgs003.esm/00000e90.nif",
+   "size": 16912,
+   "header": "Gamebryo File Format, Version 20.2.0.7",
+   "version": "0x14020007",
+   "user_version": 12,
+   "bs_version": 175,
+   "num_blocks": 76,
+   "block_types": [
+    "BSFaceGenNiNode",
+    "BSFaceGenNiNodeSkinned",
+    "BSGeometry",
+    "BSLightingShaderProperty",
+    "BSSkin",
+    "NiIntegerExtraData",
+    "NiIntegersExtraData"
+   ],
+   "block_types_heuristic": true,
+   "referenced_files": [
+    "Geometries\\1a21a65f2d2f0e8c7510\\4465428f562ff4a3f881.mesh",
+    "Geometries\\1f552a45401e421bf4f9\\2fbe25b10d0019e7e172.mesh",
+    "Geometries\\2e8a3f64e12d814874c6\\ecb9d726aaa92c316ab7.mesh",
+    "Geometries\\3e4863a74188fcb7570f\\942646c19454fe6c7036.mesh",
+    "Geometries\\444586ca99b320f716a2\\65d663048926d1fbb1d9.mesh",
+    "Geometries\\75201d36af0e96f07fa7\\360373f9d7ae9d3cf6d2.mesh",
+    "Geometries\\7d224c7004a9b3613dc4\\13704264d5fbb3265a72.mesh",
+    "Geometries\\c73973476941fbf35f7e\\1c5b743c169c23b33245.mesh",
+    "Geometries\\ddab6560b24ccb245c7f\\eb55b2dbd5c68930dc3f.mesh",
+    "Geometries\\f8fa90d83754bbe8b085\\8cba2186f71d80405300.mesh",
+    "Geometries\\fcf91a5f1372751846e5\\5a0ce682d81a1a484c08.mesh",
+    "Materials\\Actors\\Human\\Eyebrows\\Male_Eyebrows01.mat"
+   ]
+  },
+  {
+   "pick": "architecture\\",
+   "archive": "SFBGS00D - Main.ba2",
+   "name": "meshes/architecture/city/akila/sfbgs00d/sfbgs00d_ak_slumspole03.nif",
+   "size": 13041,
+   "header": "Gamebryo File Format, Version 20.2.0.7",
+   "version": "0x14020007",
+   "user_version": 12,
+   "bs_version": 175,
+   "num_blocks": 52,
+   "block_types": [
+    "BSGeometry",
+    "BSLightingShaderProperty",
+    "BSXFlags",
+    "NiIntegerExtraData",
+    "NiNode",
+    "bhkNPCollisionObject",
+    "bhkPhysicsSystem",
+    "hkArray",
+    "hkBaseObject",
+    "hkCompressedMassProperties",
+    "hkContainerHeapAllocator",
+    "hkEnum",
+    "hkFlags",
+    "hkFloat3",
+    "hkHalf16",
+    "hkInt16",
+    "hkInt32",
+    "hkInt8",
+    "hkLocalFrame",
+    "hkMatrix3Impl",
+    "hkPackedVector3",
+    "hkQuaternion",
+    "hkQuaternionf",
+    "hkReal",
+    "hkRefCountedProperties",
+    "hkRefPtr",
+    "hkReferencedObject",
+    "hkRelArray",
+    "hkRotationImpl",
+    "hkRotationf",
+    "hkStringPtr",
+    "hkTransformf",
+    "hkUFloat8",
+    "hkUint16",
+    "hkUint32",
+    "hkUint64",
+    "hkUint8",
+    "hkUlong",
+    "hkVector4",
+    "hkVector4f",
+    "hknpBodyCinfo",
+    "hknpBodyId",
+    "hknpBoxShape",
+    "hknpCollisionControl",
+    "hknpCollisionDispatchType",
+    "hknpCollisionFlags",
+    "hknpConstraintCinfo",
+    "hknpConvexHull",
+    "hknpConvexShape",
+    "hknpMaterial",
+    "hknpMotionProperties",
+    "hknpPhysicsSystemData",
+    "hknpRefDragProperties",
+    "hknpRefMassDistribution",
+    "hknpShape",
+    "hknpShapeMassProperties",
+    "hknpShapeType",
+    "hknpSurfaceVelocity"
+   ],
+   "block_types_heuristic": true,
+   "referenced_files": [
+    "\\materials\\common\\concrete\\concreteplain01.mat",
+    "\\materials\\common\\decal\\decalboltstrims02.mat",
+    "\\materials\\common\\metal\\metalironcast01.mat",
+    "\\materials\\common\\trim\\trimwiresducts01.mat",
+    "\\materials\\common\\wood\\woodknurled01.mat"
+   ]
+  },
+  {
+   "pick": "furniture\\",
+   "archive": "SFBGS00D - Main.ba2",
+   "name": "meshes/furniture/sfbgs00d/asteroidmanor/asteroidmanor_armchair01.nif",
+   "size": 29582,
+   "header": "Gamebryo File Format, Version 20.2.0.7",
+   "version": "0x14020007",
+   "user_version": 12,
+   "bs_version": 175,
+   "num_blocks": 19,
+   "block_types": [
+    "BSGeometry",
+    "BSLightingShaderProperty",
+    "BSXFlags",
+    "NiIntegerExtraData",
+    "NiNode",
+    "bhkNPCollisionObject",
+    "bhkPhysicsSystem"
+   ],
+   "block_types_heuristic": true,
+   "referenced_files": [
+    "\\materials\\common\\metal\\metalaluminum01.mat",
+    "\\materials\\common\\rubber\\rubberbare01.mat",
+    "\\materials\\furniture\\sfbgs00d\\asteroidmanor\\asteroidmanor_armchair01.mat",
+    "\\materials\\furniture\\sfbgs00d\\asteroidmanor\\asteroidmanor_furniturewood01.mat"
+   ]
+  }
+ ]
+}

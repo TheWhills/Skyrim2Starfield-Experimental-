@@ -1,0 +1,20 @@
+# Copy to config.toml (git-ignored) and edit. All paths must be on your machine, outside this repository.
+
+[fo4]
+# Clean vanilla Fallout 4 data (base game + DLC you own). Needs Fallout4.esm and the Fallout4 - *.ba2 archives.
+data_dirs = ["D:/fo4-vanilla/Data"]
+version = "1.10.163"
+
+[starfield]
+data_dir = "D:/SteamLibrary/steamapps/common/Starfield/Data"
+version = "1.16.244"
+
+[paths]
+work_dir = "D:/fo4sf-work"        # intermediate representation, caches, manifest
+staging_dir = "D:/fo4sf-staging"  # Data/-layout output, copied to Starfield after verification
+
+[tools]
+nifskope = "C:/Modding/tools/nifskope-fo76utils/NifSkope/NifSkope.exe"
+xsfedit = "C:/Modding/tools/xedit/xSFEdit64.exe"
+creation_kit = "D:/SteamLibrary/steamapps/common/Starfield/CreationKit.exe"
+blender = "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe"

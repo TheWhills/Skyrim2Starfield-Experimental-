@@ -1,0 +1,40 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "fo4-lead",
+  "subagent_depth": 1,
+  "instructions": ["AGENTS.md", "CONTRIBUTING.md", "docs/CODEX-HANDOFF.md"],
+  "model": "guardian/fo4-lead",
+  "provider": {
+    "guardian": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio via Resource Guardian (local)",
+      "options": { "baseURL": "http://127.0.0.1:1235/v1" },
+      "models": {
+        "fo4-lead":      { "name": "Lead (local)",           "tool_call": true, "limit": { "context": 32768, "output": 4096 } },
+        "fo4-implement": { "name": "Implementation (local)", "tool_call": true, "limit": { "context": 32768, "output": 4096 } },
+        "fo4-research":  { "name": "Research (local)",       "tool_call": true, "limit": { "context": 32768, "output": 4096 } },
+        "fo4-qa":        { "name": "QA (local)",             "tool_call": true, "limit": { "context": 32768, "output": 4096 } }
+      }
+    }
+  },
+  "permission": {
+    "external_directory": "ask",
+    "webfetch": "ask",
+    "websearch": "ask",
+    "bash": {
+      "*": "ask",
+      "git status*": "allow", "git diff*": "allow", "git log*": "allow", "git show*": "allow", "git branch*": "allow",
+      "git worktree list*": "allow",
+      "git push*": "deny", "git merge*": "deny", "git rebase*": "deny", "git reset --hard*": "deny",
+      "git clean*": "deny", "git checkout -- *": "deny", "git stash*": "deny",
+      "gh pr merge*": "deny", "gh repo delete*": "deny", "gh api*": "ask",
+      "rm *": "deny", "del *": "deny", "Remove-Item*": "deny", "rmdir*": "deny", "format*": "deny",
+      "python tools/ai-team/guardian/guardian.py status*": "allow",
+      "python tools/ai-team/guardian/guardian.py report*": "allow"
+    }
+  },
+  "agent": {
+    "build": { "disable": true },
+    "plan": { "disable": true }
+  }
+}
