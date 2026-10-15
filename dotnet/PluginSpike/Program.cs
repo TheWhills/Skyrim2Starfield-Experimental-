@@ -119,8 +119,8 @@ string Setting(string cell, string key, string fallback) =>
 // ---- Skyrim lights (cell refs carrying a "light" object, from scripts/interior/make_skyrim_interior.py) -----------------
 // One Starfield LIGH per distinct Skyrim light: a copy of the cell's OMNI_LIGHT base with the Skyrim radius (units / 70 =
 // metres, x LIGHT_RADIUS_SCALE), colour, flicker, a colour temperature estimated from the colour (LIGHT_TEMPERATURE=keep
-// leaves the template's) and luminous power = template lumens x LIGHT_POWER x Skyrim fade x (radius / template radius)^2,
-// clamped to 0.25x..16x of the template's. Field names follow Mutagen's Starfield Light (DAT2: Radius, Color,
+// leaves the template's) and luminous power = template lumens x LIGHT_POWER x max(fade, 1) x max(1, (radius / template
+// radius)^2), clamped to 1x..16x of the template's (owner's first run: scaling below the template made the inn darker). Field names follow Mutagen's Starfield Light (DAT2: Radius, Color,
 // FlickerPeriod, FlickerIntensityAmplitude, FlickerMovementAmplitude, PbrLightTemperatureK, PbrLuminousPowerLm); they are
 // set by reflection so a renamed field is reported (lightNotes) instead of breaking the build.
 // CELL_AMBIENT=skyrim (opt-in): the cell gets its own XCLL, copied field by field from its lighting template, with the
@@ -170,7 +170,7 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     float power = float.Parse(Setting(cell, "LIGHT_POWER", "1"), CultureInfo.InvariantCulture);
     float rscale = float.Parse(Setting(cell, "LIGHT_RADIUS_SCALE", "1"), CultureInfo.InvariantCulture);
     var temperature = Setting(cell, "LIGHT_TEMPERATURE", "skyrim");
-    float radius = F("radius", 300f) / UnitsPerMetre * rscale, fade = Math.Max(F("fade", 1f), 0.05f);
+    float radius = Math.Max(F("radius", 300f) / UnitsPerMetre, 1f) * rscale, fade = Math.Max(F("fade", 1f), 0.05f);
     bool flicker = L.TryGetProperty("flicker", out var fl) && fl.ValueKind == JsonValueKind.True;
     var key = string.Create(CultureInfo.InvariantCulture,
         $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{(flicker ? 1 : 0)}");
@@ -186,8 +186,9 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     if (temperature != "keep") SetProp(nl, "PbrLightTemperatureK", ColourTemperature(cr, cg, cb));
     if (tplLm > 0)
     {
-        var area = tplRadius > 0 ? Math.Pow(radius / tplRadius, 2) : 1.0;
-        var lm = tplLm * Math.Clamp(power * fade * area, 0.25, 16.0);
+        // bigger than the template: more lumens to reach as far; smaller: the template's (scaling down made the inn darker)
+        var area = tplRadius > 0 ? Math.Max(1.0, Math.Pow(radius / tplRadius, 2)) : 1.0;
+        var lm = tplLm * Math.Clamp(power * Math.Max(fade, 1f) * area, 1.0, 16.0);
         SetProp(nl, "PbrLuminousPowerLm", (uint)Math.Round(lm));
     }
     else lightNotes.Add($"template {template} has no PbrLuminousPowerLm: power not scaled");

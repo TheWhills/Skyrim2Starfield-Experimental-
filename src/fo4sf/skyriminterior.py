@@ -19,6 +19,7 @@ from fo4sf import fo4land, skyrimrefs
 
 INTERIOR = 0x1                     # CELL DATA flag
 COC_MARKER = "COCMarkerHeading"
+MIN_REF_RADIUS = 64.0             # units (~0.9 m): smaller XRDS values on light references are ignored
 LIGHT_FLICKER, LIGHT_PULSE, LIGHT_OFF_BY_DEFAULT = 0x8, 0x80, 0x20      # LIGH DATA flags (xEdit wbDefinitionsTES5)
 
 
@@ -221,8 +222,12 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dic
             if btype == "Light" and r["base"] in lights:
                 light = dict(lights[r["base"]])
                 xr = _xrds(data)
-                if xr is not None and xr > 0:                       # the reference's own radius override
-                    light["radius"] = round(xr, 2)
+                if xr is not None:
+                    light["ref_radius"] = round(xr, 2)
+                    # the reference's own radius override; values under MIN_REF_RADIUS are not lighting radii (owner's
+                    # Sleeping Giant Inn: ~10 units on several lights turned them into 0.14 m pinpricks)
+                    if xr >= MIN_REF_RADIUS:
+                        light["radius"] = round(xr, 2)
                 entry["light"] = light
             x = _xtel(data)
             if x:

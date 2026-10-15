@@ -108,6 +108,13 @@ def cmd_export(a):
     print(f"arrival: {arr['source'] if arr else 'NONE (no coc marker, no door): add one by hand'}; "
           f"{len(rep['load_doors'])} load doors (not linked yet: doors are scenery)")
     print(f"lighting: {lighting} in {os.path.join(work, 'convert', 'lighting.json')}")
+    for r in cell["refs"]:
+        if r["type"] == "Light" and "light" in r:
+            L = r["light"]
+            ref = "" if L.get("ref_radius") is None else f" (reference override {L['ref_radius']:g})"
+            flick = " flicker" if L.get("flicker") else ""
+            print(f"  light {r['base_editor_id'][:32]:32} radius {L['radius']:7.1f}{ref} colour {L['color']} "
+                  f"fade {L['fade']:g}{flick}")
     print(f"next: make_skyrim_objects.py convert --work {work} ... (see this script's help)")
     return 0
 

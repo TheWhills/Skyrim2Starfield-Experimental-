@@ -57,3 +57,8 @@ compiler in the cloud workspace (nuget blocked): first build on the owner's PC.
   are effect shaders, so the fire is logs + ash only until effects are translated (a Starfield fire FX placed at the
   same spot is the likely route). Candles have no flame shapes of their own (their flames are separate effects).
 - **Doors do nothing:** expected, load doors are scenery until door linking.
+
+Owner's first run with translated lights (Test A): it built and set every field (no light notes), but the inn got
+darker. Two of my mistakes: several light references carry an XRDS of ~10 units, which became a 0.14 m light with a
+quarter of the lumens (XRDS under 64 units is now ignored, `ref_radius` keeps the raw value), and lights smaller than the
+8 m / 2000 lm template had their lumens scaled down (now never below the template; only bigger lights get more).

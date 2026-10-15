@@ -57,6 +57,7 @@ def build():
         ref(0x2001, WALL, (100.0, 0.0, 0.0)), ref(0x2002, WALL, (300.0, 0.0, 0.0), (0.0, 0.0, 1.57)),
         ref(0x2003, TORCH, (150.0, 50.0, 200.0)),
         ref(0x2004, TORCH, (160.0, 50.0, 200.0), extra=[(b"XRDS", struct.pack("<f", 800.0))]),
+        ref(0x2006, TORCH, (400.0, 50.0, 200.0), extra=[(b"XRDS", struct.pack("<f", 9.68))]),   # not a radius
         ref(INN_DOOR, DOOR_B, (0.0, 0.0, 0.0), flags=PERSISTENT, extra=[xtel(OUT_DOOR, (5000.0, 6000.0, 700.0))]),
         rec(b"ACHR", 0x2005, [(b"NAME", struct.pack("<I", NPC_B)), (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))])],
         extra=[xcll((90, 70, 50)), (b"LTMP", struct.pack("<I", 0x5000))])
@@ -86,14 +87,14 @@ class InteriorTests(unittest.TestCase):
         cells = {c["edid"]: c for c in skyriminterior.list_interiors(self.esm)}
         self.assertEqual(sorted(cells), ["EmptyRoom", "SleepingGiantInn", "TestHouse"])
         inn = cells["SleepingGiantInn"]
-        self.assertEqual((inn["refs"], inn["lights"], inn["doors"], inn["actors"], inn["coc"]), (5, 2, 1, 1, False))
+        self.assertEqual((inn["refs"], inn["lights"], inn["doors"], inn["actors"], inn["coc"]), (6, 3, 1, 1, False))
         self.assertTrue(cells["TestHouse"]["coc"])
         self.assertEqual(cells["EmptyRoom"]["refs"], 0)
 
     def test_export_arrival_from_the_door_that_leads_in(self):
         exp = skyriminterior.export_interior(self.esm, "sleepinggiantinn")
         self.assertEqual((exp["cell"], exp["cell_formkey"]), ("SleepingGiantInn", "002000:Skyrim.esm"))
-        self.assertEqual(len(exp["refs"]), 5)
+        self.assertEqual(len(exp["refs"]), 6)
         self.assertEqual([d["reason"] for d in exp["deferred_refs"]], ["placed actor: NPCs are not translated"])
         self.assertEqual(exp["arrival"]["pos"], [40.0, 0.0, 0.0])
         self.assertAlmostEqual(exp["arrival"]["rot"][2], 3.14, places=5)
@@ -108,7 +109,8 @@ class InteriorTests(unittest.TestCase):
 
     def test_lights_and_cell_lighting(self):
         exp = skyriminterior.export_interior(self.esm, "SleepingGiantInn")
-        a, b = [r["light"] for r in exp["refs"] if r["type"] == "Light"]
+        a, b, c = [r["light"] for r in exp["refs"] if r["type"] == "Light"]
+        self.assertEqual((c["radius"], c["ref_radius"]), (512.0, 9.68))         # tiny override ignored
         self.assertEqual((a["radius"], a["color"], a["fade"], a["flicker"]), (512.0, [255, 160, 80], 1.5, True))
         self.assertAlmostEqual(a["flicker_period"], 0.2, places=5)
         self.assertEqual(b["radius"], 800.0)                                   # XRDS on the reference wins
@@ -119,7 +121,7 @@ class InteriorTests(unittest.TestCase):
         self.assertEqual(lt["template"], "005000:Skyrim.esm")
         cell = skyriminterior.plugin_cell(exp, [])
         self.assertEqual(cell["skyrim_lighting"]["ambient"], [90, 70, 50])
-        self.assertEqual(sorted(r["light"]["radius"] for r in cell["refs"] if r["type"] == "Light"), [512.0, 800.0])
+        self.assertEqual(sorted(r["light"]["radius"] for r in cell["refs"] if r["type"] == "Light"), [512.0, 512.0, 800.0])
         self.assertIsNone(skyriminterior.export_interior(self.esm, "TestHouse")["lighting"])
 
     def test_plugin_cell_keeps_selected_refs_lights_and_adds_arrival(self):
@@ -127,7 +129,7 @@ class InteriorTests(unittest.TestCase):
         walls = [r for r in exp["refs"] if r["type"] == "Static"]
         cell = skyriminterior.plugin_cell(exp, walls)
         types = sorted(r["type"] for r in cell["refs"])
-        self.assertEqual(types, ["Light", "Light", "Static", "Static", "Static"])      # 2 walls + coc marker
+        self.assertEqual(types, ["Light", "Light", "Light", "Static", "Static", "Static"])      # 2 walls + coc marker
         coc, = [r for r in cell["refs"] if r["base_editor_id"] == "COCMarkerHeading"]
         self.assertEqual(coc["pos"], [40.0, 0.0, 10.0])
         house = skyriminterior.export_interior(self.esm, "TestHouse")
@@ -147,7 +149,7 @@ class InteriorTests(unittest.TestCase):
         self.assertEqual(sorted(m["model"] for m in conv["refs"]),
                          ["Architecture\\Whiterun\\WRInnDoor01.nif", "Architecture\\Whiterun\\WRInnWall01.nif"])
         rep = json.load(open(os.path.join(work, "interior.json")))
-        self.assertEqual((rep["to_convert"], rep["lights"], rep["models"]), (3, 2, 2))
+        self.assertEqual((rep["to_convert"], rep["lights"], rep["models"]), (3, 3, 2))
         # the convert step's manifest (make_skyrim_objects.py convert): the wall converted, the door failed
         os.makedirs(os.path.join(work, "convert", "meshes", "skyrim", "architecture"))
         open(os.path.join(work, "convert", "meshes", "skyrim", "architecture", "wrinnwall01.nif"), "wb").close()
