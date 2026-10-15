@@ -394,6 +394,20 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(sorted(r["formkey"][:6] for r in only["refs"]),
                              ["002001", "002005", "002006", "002007", "002008", "002009"])
 
+    def test_export_around_a_cell(self):
+        import make_skyrim_objects as mo
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = write_esm(os.path.join(tmp, "Skyrim.esm"))
+            self.assertEqual(mo.around_cells(esm, "1,-2", 2), (-1, 3, -4, 0))
+            work = os.path.join(tmp, "w")
+            os.makedirs(work)
+            with contextlib.redirect_stdout(io.StringIO()):
+                mo.main(["export", "--skyrim", esm, "--work", work, "--around", "0,0", "--radius", "0"])
+            got = sorted(r["formkey"][:6] for r in load(os.path.join(work, "export.json"))["refs"])
+            self.assertEqual(got, ["002001", "002005", "002006", "002007", "002008", "002009"])
+            with self.assertRaises(SystemExit):
+                mo.main(["export", "--skyrim", esm, "--work", work, "--around", "NoSuchPlace"])
+
 
 # ---------------------------------------------------------------------------------------------------------- pipeline
 class PipelineTests(unittest.TestCase):

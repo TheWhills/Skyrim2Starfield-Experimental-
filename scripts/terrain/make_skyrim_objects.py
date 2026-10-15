@@ -77,9 +77,30 @@ def to_local(refs, ov):
 
 
 # ---------------------------------------------------------------------------------------------------------- export
+def around_cells(esm, around, radius):
+    """(X0, X1, Y0, Y1): the Skyrim cells within `radius` of an exterior cell EditorID ("Riverwood") or "X,Y"."""
+    if re.fullmatch(r"-?\d+,-?\d+", around):
+        x, y = (int(v) for v in around.split(","))
+    else:
+        from fo4sf import skyrimland
+        land = skyrimland.SkyrimLand(esm)
+        c = land.cell_by_edid(around)
+        if c is None:
+            similar = [e for e, _ in land.find_cells(re.escape(around[:5]))][:8]
+            sys.exit(f"no exterior cell {around!r} in {esm}" + (f"; similar: {similar}" if similar else ""))
+        x, y = c
+    return x - radius, x + radius, y - radius, y + radius
+
+
 def cmd_export(a):
     t0 = time.time()
-    exp = skyrimrefs.export_world(a.skyrim, a.world_edid, tuple(a.cells) if a.cells else None)
+    cells = tuple(a.cells) if a.cells else None
+    if a.around:
+        if cells:
+            sys.exit("pass --cells or --around, not both")
+        cells = around_cells(a.skyrim, a.around, a.radius)
+        print(f"{a.around}: cells x {cells[0]}..{cells[1]}, y {cells[2]}..{cells[3]}")
+    exp = skyrimrefs.export_world(a.skyrim, a.world_edid, cells)
     save(os.path.join(a.work, "export.json"), exp)
     types = {}
     for r in exp["refs"]:
@@ -395,6 +416,8 @@ def main(argv=None):
     ap.add_argument("cmd", choices=("export", "select", "convert", "stage", "check"))
     ap.add_argument("--skyrim", help="export: Skyrim.esm")
     ap.add_argument("--world-edid", default="Tamriel")
+    ap.add_argument("--around", default="", help="export: cells around an exterior cell EditorID (Riverwood) or X,Y")
+    ap.add_argument("--radius", type=int, default=2, help="export with --around: cells each side (default 2: 5 x 5)")
     ap.add_argument("--cells", type=int, nargs=4, metavar=("X0", "X1", "Y0", "Y1"),
                     help="export: only this inclusive Skyrim cell rectangle (e.g. a first test around Riverwood)")
     ap.add_argument("--work", help="work folder outside the repo (export, selection, conversion)")

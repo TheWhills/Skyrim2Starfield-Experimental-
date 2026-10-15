@@ -72,9 +72,16 @@ Kit), the .NET 9 SDK. Start with a small region; find its cells with
         --out C:\Modding\staging\skyrim_objects --sf-esm "<Starfield>\Data\Starfield.esm"
     python scripts\terrain\make_skyrim_objects.py check --out C:\Modding\staging\skyrim_objects
 
+`export --around Riverwood --radius 2` picks the 5 x 5 Skyrim cells around a named exterior cell (or `X,Y`) instead of
+`--cells`. Install / uninstall with `scripts\deploy_skyrim_exterior.py` (below).
+
 `--max-texture 1024` keeps one archive under 4 GiB for large regions (core64c needed caps for the Commonwealth);
 `check` fails when the staged Data tree would not fit one stored archive. Install exactly as the terrain
 (skyrim-tamriel.md): Archive2 over `Terrain,meshes,geometries,materials,textures`, both plugins, `coc` the arrival.
+`scripts\deploy_skyrim_exterior.py install --staging <stage --out> --starfield <game>` does that reversibly: one stored
+(`-compression=None`) General archive `<plugin> - Main.ba2`, both plugins, Plugins.txt lines, a manifest
+(`Data\SkyrimExterior.deploy.json`); it refuses to overwrite files or to sit next to another `*_Mars.esm` terrain
+experiment. `uninstall` removes exactly what it added.
 
 ## What `check` verifies, and what to read first on real data
 Every base model, every geometry / material file the models name and every converted texture the materials name
