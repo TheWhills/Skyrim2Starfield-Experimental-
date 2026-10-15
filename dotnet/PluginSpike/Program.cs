@@ -8,7 +8,9 @@
 // removing assets never renumbers existing records (saves and cross-references keep working). Keys:
 //   STAT:<editor id>   CELL:<cell name>   REFR:<cell name>:<source FO4 FormKey>   (lights and COC markers use their source ref)
 using System.Text.Json;
+using System.Globalization;
 using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Plugins.Records;
 using Mutagen.Bethesda.Starfield;
 using Noggog;
@@ -101,7 +103,9 @@ static P3Float RotateOffset(P3Float v, P3Float r, float scale)
 }
 
 // Optional per-cell lighting overrides: <output dir>/lighting.json = { "<cell>": { "LIGHTING_TEMPLATE": "06BCF8", ... },
-// "*": { ...defaults for every cell... } }. Keys: LIGHTING_TEMPLATE, IMAGE_SPACE, OMNI_LIGHT, LIGHT_MERGE_M.
+// "*": { ...defaults for every cell... } }. Keys: LIGHTING_TEMPLATE, IMAGE_SPACE, OMNI_LIGHT, LIGHT_MERGE_M; for cells
+// exported from Skyrim also SKYRIM_LIGHTS (0 = the plain omni), LIGHT_POWER, LIGHT_RADIUS_SCALE, LIGHT_TEMPERATURE
+// (skyrim | keep), CELL_AMBIENT (template | skyrim), AMBIENT_SCALE (see "Skyrim lights" below).
 // Lookup order: cell entry, "*" entry, environment variable, built-in default.
 var lightCfgPath = Path.Combine(outDir, "lighting.json");
 var lightCfg = File.Exists(lightCfgPath)
@@ -111,6 +115,118 @@ string Setting(string cell, string key, string fallback) =>
     lightCfg.TryGetValue(cell, out var c) && c.TryGetValue(key, out var v) ? v
     : lightCfg.TryGetValue("*", out var d) && d.TryGetValue(key, out var w) ? w
     : Environment.GetEnvironmentVariable(key) ?? fallback;
+
+// ---- Skyrim lights (cell refs carrying a "light" object, from scripts/interior/make_skyrim_interior.py) -----------------
+// One Starfield LIGH per distinct Skyrim light: a copy of the cell's OMNI_LIGHT base with the Skyrim radius (units / 70 =
+// metres, x LIGHT_RADIUS_SCALE), colour, flicker, a colour temperature estimated from the colour (LIGHT_TEMPERATURE=keep
+// leaves the template's) and luminous power = template lumens x LIGHT_POWER x Skyrim fade x (radius / template radius)^2,
+// clamped to 0.25x..16x of the template's. Field names follow Mutagen's Starfield Light (DAT2: Radius, Color,
+// FlickerPeriod, FlickerIntensityAmplitude, FlickerMovementAmplitude, PbrLightTemperatureK, PbrLuminousPowerLm); they are
+// set by reflection so a renamed field is reported (lightNotes) instead of breaking the build.
+// CELL_AMBIENT=skyrim (opt-in): the cell gets its own XCLL, copied field by field from its lighting template, with the
+// Skyrim cell's ambient / directional colours (x AMBIENT_SCALE).
+var sfData0 = Environment.GetEnvironmentVariable("STARFIELD_DATA");
+IStarfieldModGetter? sfMod = null;          // Starfield.esm, read lazily (only when a Skyrim light or CELL_AMBIENT needs it)
+ILinkCache? sfCache = null;
+ILinkCache SfCache()
+{
+    if (sfCache != null) return sfCache;
+    var esm = Path.Combine(sfData0 ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder"), "Starfield.esm");
+    var overlay = StarfieldMod.CreateFromBinaryOverlay(esm, release);    // as dotnet/SfInspect
+    sfMod = overlay;
+    return sfCache = overlay.ToImmutableLinkCache();
+}
+var lightNotes = new SortedSet<string>();
+var lightBases = new Dictionary<string, FormKey>();
+object? GetProp(object o, string name) => o.GetType().GetProperty(name)?.GetValue(o);
+void SetProp(object o, string name, object value)
+{
+    var p = o.GetType().GetProperty(name);
+    if (p == null || !p.CanWrite) { lightNotes.Add($"{o.GetType().Name}.{name}: no writable property, not set"); return; }
+    var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+    try
+    {
+        p.SetValue(o, t.IsInstanceOfType(value) ? value : Convert.ChangeType(value, t, CultureInfo.InvariantCulture));
+    }
+    catch (Exception e) { lightNotes.Add($"{o.GetType().Name}.{name} ({t.Name}): {e.GetType().Name}, not set"); }
+}
+double ToDouble(object? v) => v == null ? 0 : Convert.ToDouble(v, CultureInfo.InvariantCulture);
+// McCamy's approximation: sRGB colour -> correlated colour temperature (K), clamped to 1000..10000
+static uint ColourTemperature(int r8, int g8, int b8)
+{
+    static double Lin(int c) { var v = c / 255.0; return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4); }
+    double r = Lin(r8), g = Lin(g8), b = Lin(b8);
+    double X = 0.4124 * r + 0.3576 * g + 0.1805 * b, Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, Z = 0.0193 * r + 0.1192 * g + 0.9505 * b;
+    var sum = X + Y + Z;
+    if (sum <= 1e-9) return 6500;
+    double x = X / sum, y = Y / sum, n = (x - 0.3320) / (0.1858 - y);
+    return (uint)Math.Clamp(449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33, 1000, 10000);
+}
+FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
+{
+    float F(string k, float d) => L.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetSingle() : d;
+    var c = L.GetProperty("color");
+    int cr = c[0].GetInt32(), cg = c[1].GetInt32(), cb = c[2].GetInt32();
+    float power = float.Parse(Setting(cell, "LIGHT_POWER", "1"), CultureInfo.InvariantCulture);
+    float rscale = float.Parse(Setting(cell, "LIGHT_RADIUS_SCALE", "1"), CultureInfo.InvariantCulture);
+    var temperature = Setting(cell, "LIGHT_TEMPERATURE", "skyrim");
+    float radius = F("radius", 300f) / UnitsPerMetre * rscale, fade = Math.Max(F("fade", 1f), 0.05f);
+    bool flicker = L.TryGetProperty("flicker", out var fl) && fl.ValueKind == JsonValueKind.True;
+    var key = string.Create(CultureInfo.InvariantCulture,
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{(flicker ? 1 : 0)}");
+    if (lightBases.TryGetValue(key, out var have)) return have;
+    if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
+        throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
+    var nl = (Light)tpl.Duplicate(Id(key));
+    nl.EditorID = $"FO4Port_SkyLight_{lightBases.Count:D3}";
+    double tplRadius = ToDouble(GetProp(nl, "Radius")), tplLm = ToDouble(GetProp(nl, "PbrLuminousPowerLm"));
+    SetProp(nl, "Radius", radius);
+    var oldColour = GetProp(nl, "Color") is System.Drawing.Color oc ? oc : System.Drawing.Color.White;
+    SetProp(nl, "Color", System.Drawing.Color.FromArgb(oldColour.A, cr, cg, cb));
+    if (temperature != "keep") SetProp(nl, "PbrLightTemperatureK", ColourTemperature(cr, cg, cb));
+    if (tplLm > 0)
+    {
+        var area = tplRadius > 0 ? Math.Pow(radius / tplRadius, 2) : 1.0;
+        var lm = tplLm * Math.Clamp(power * fade * area, 0.25, 16.0);
+        SetProp(nl, "PbrLuminousPowerLm", (uint)Math.Round(lm));
+    }
+    else lightNotes.Add($"template {template} has no PbrLuminousPowerLm: power not scaled");
+    if (flicker)
+    {
+        SetProp(nl, "FlickerPeriod", F("flicker_period", 0.2f));
+        SetProp(nl, "FlickerIntensityAmplitude", F("flicker_intensity", 0.2f));
+        SetProp(nl, "FlickerMovementAmplitude", F("flicker_movement", 0f));
+    }
+    mod.Lights.Add(nl);
+    lightBases[key] = nl.FormKey;
+    if (lightBases.Count <= 12)
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"  light {nl.EditorID}: radius {tplRadius:0.##} -> {GetProp(nl, "Radius")} m, lumens {tplLm:0} -> {GetProp(nl, "PbrLuminousPowerLm")}, " +
+            $"colour {cr},{cg},{cb}, {GetProp(nl, "PbrLightTemperatureK")} K{(flicker ? ", flicker" : "")}"));
+    return nl.FormKey;
+}
+void SkyrimAmbient(Cell cell, string src4, JsonElement sl, FormKey templateKey)
+{
+    if (!SfCache().TryResolve<ILightingTemplateGetter>(templateKey, out var tpl))
+    {
+        lightNotes.Add($"lighting template {templateKey} not found: CELL_AMBIENT ignored");
+        return;
+    }
+    var cl = new CellLighting();
+    foreach (var p in typeof(CellLighting).GetProperties().Where(p => p.CanWrite))
+    {
+        var name = p.Name switch { "LightFadeBegin" => "LightFadeStartDistance", "LightFadeEnd" => "LightFadeEndDistance", var n => n };
+        var v = GetProp(tpl, name);
+        if (v != null && (Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType).IsInstanceOfType(v)) p.SetValue(cl, v);
+    }
+    var scale = float.Parse(Setting(src4, "AMBIENT_SCALE", "1"), CultureInfo.InvariantCulture);
+    System.Drawing.Color Col(JsonElement a, object? old) => System.Drawing.Color.FromArgb(old is System.Drawing.Color o ? o.A : 0,
+        (int)Math.Clamp(a[0].GetInt32() * scale, 0, 255), (int)Math.Clamp(a[1].GetInt32() * scale, 0, 255), (int)Math.Clamp(a[2].GetInt32() * scale, 0, 255));
+    if (sl.TryGetProperty("ambient", out var amb)) SetProp(cl, "AmbientColor", Col(amb, GetProp(cl, "AmbientColor")));
+    if (sl.TryGetProperty("directional", out var dir)) SetProp(cl, "DirectionalColor", Col(dir, GetProp(cl, "DirectionalColor")));
+    cell.Lighting = cl;
+    Console.WriteLine($"  cell lighting: template {templateKey} values + Skyrim ambient {amb} x{scale}");
+}
 
 // ---- cells ------------------------------------------------------------------------------------------------------------
 P3Float Pos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre, p[1].GetSingle() / UnitsPerMetre, p[2].GetSingle() / UnitsPerMetre);
@@ -132,6 +248,9 @@ foreach (var cellPath in args.Skip(2))
     var cocMarker = new FormKey(sfEsm, 0x000032);                                        // COCMarkerHeading
     var omni = new FormKey(sfEsm, Convert.ToUInt32(Setting(src4, "OMNI_LIGHT", "03D38C"), 16)); // LGT_ShipInterior_Omni_NS_Neutral_2k
     var merge = float.Parse(Setting(src4, "LIGHT_MERGE_M", "3"), System.Globalization.CultureInfo.InvariantCulture);
+    if (root.TryGetProperty("skyrim_lighting", out var skyLighting) && skyLighting.ValueKind == JsonValueKind.Object
+        && Setting(src4, "CELL_AMBIENT", "template") == "skyrim")
+        SkyrimAmbient(cell, src4, skyLighting, new FormKey(sfEsm, Convert.ToUInt32(ltHex, 16)));
     var lit = new List<P3Float>();
     int lights = 0, placed = 0, skipped = 0, disabled = 0;
     foreach (var r in root.GetProperty("refs").EnumerateArray())
@@ -150,7 +269,9 @@ foreach (var cellPath in args.Skip(2))
             var pos = Pos(r.GetProperty("pos"));
             if (lit.Any(q => Math.Abs(q.X - pos.X) < merge && Math.Abs(q.Y - pos.Y) < merge && Math.Abs(q.Z - pos.Z) < merge)) continue;
             lit.Add(pos);
-            obj = new PlacedObject(Id($"REFR:{cellName}:{src}"), release) { Base = new FormLinkNullable<IPlaceableObjectGetter>(omni), Position = pos };
+            var lightBase = r.TryGetProperty("light", out var lj) && lj.ValueKind == JsonValueKind.Object
+                            && Setting(src4, "SKYRIM_LIGHTS", "1") != "0" ? SkyrimLight(src4, lj, omni) : omni;
+            obj = new PlacedObject(Id($"REFR:{cellName}:{src}"), release) { Base = new FormLinkNullable<IPlaceableObjectGetter>(lightBase), Position = pos };
             lights++;
         }
         else
@@ -212,6 +333,9 @@ if (Environment.GetEnvironmentVariable("FO4PORT_DOORTEST") is string testDoor)
     mod.Cells.Records.Add(block);
     Console.WriteLine($"door test cell {cell.FormKey} with {testDoor}");
 }
+
+if (lightBases.Count > 0) Console.WriteLine($"{lightBases.Count} Starfield lights made from Skyrim lights");
+foreach (var note in lightNotes) Console.WriteLine($"  light note: {note}");
 
 mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);

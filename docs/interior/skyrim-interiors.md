@@ -34,8 +34,21 @@ the right place with Skyrim's textures. Three findings:
   8 lights were merged within 3 m into a few small Starfield lamps. Skyrim interiors take most of their light from the
   cell's ambient lighting (not translated yet). `export` now writes `<work>\convert\lighting.json` with this cell on
   Starfield's ship interior template `006658` and `LIGHT_MERGE_M` 1; values already in the file win, and
-  `--lighting-template` / `--light-merge-m` override both. Next: translate the Skyrim cell's XCLL ambient / directional
-  colours and each LIGH's radius / colour into the choice of template and light bases.
+  `--lighting-template` / `--light-merge-m` override both. Still dark in game with 006658, so lights are now
+  translated (below).
+
+### Skyrim lights -> Starfield lights
+
+`export` carries each light reference's Skyrim LIGH data (radius, or the reference's XRDS override; colour; fade;
+flicker) and the cell's own lighting (XCLL ambient / directional / fog colours, light fade, LTMP, XCIM) into
+`cell.json`. PluginSpike makes one Starfield LIGH per distinct Skyrim light by copying the cell's `OMNI_LIGHT` base
+(Starfield lights are physically based: `PbrLuminousPowerLm`, `PbrLightTemperatureK`) and setting radius (units / 70),
+colour, an estimated colour temperature, flicker, and lumens = template lumens x `LIGHT_POWER` x fade x (radius /
+template radius)^2, clamped to 0.25..16x. Knobs in `lighting.json`: `SKYRIM_LIGHTS` 0 (old behaviour), `LIGHT_POWER`,
+`LIGHT_RADIUS_SCALE`, `LIGHT_TEMPERATURE` keep, and opt-in `CELL_AMBIENT` skyrim + `AMBIENT_SCALE` (the cell gets its own
+XCLL: the template's values with the Skyrim ambient / directional colours). Field names come from Mutagen's Starfield
+Light definition and are set by reflection; anything that does not match is printed as a "light note". Written without a
+compiler in the cloud workspace (nuget blocked): first build on the owner's PC.
 - **The fire pit showed as a big blue / purple crystal.** `inspect_nif.py` named it: `clutter\woodfires\
   fireplacewood01burning.nif` shape `Plane03`, the heat-haze plane above the fire, a BSLightingShaderProperty with
   Shader Flags 1 `82418309` (Refraction 0x8000 + Fire_Refraction 0x10000) and `effects\VaporTileNormal_n.dds` in the

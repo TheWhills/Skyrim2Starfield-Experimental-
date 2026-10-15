@@ -19,6 +19,63 @@ from fo4sf import fo4land, skyrimrefs
 
 INTERIOR = 0x1                     # CELL DATA flag
 COC_MARKER = "COCMarkerHeading"
+LIGHT_FLICKER, LIGHT_PULSE, LIGHT_OFF_BY_DEFAULT = 0x8, 0x80, 0x20      # LIGH DATA flags (xEdit wbDefinitionsTES5)
+
+
+def _rgb(d, off):
+    return list(d[off:off + 3])
+
+
+def read_lights(p) -> dict:
+    """{LIGH form id: light data} from the LIGH top group. DATA (SSE, 48 bytes; xEdit wbDefinitionsTES5): time i32,
+    radius u32 (units), colour RGBx, flags u32, falloff exponent, FOV, near clip, flicker period, flicker intensity
+    amplitude, flicker movement amplitude (f32), value u32, weight f32. FNAM: fade (brightness multiplier)."""
+    rng = p.top_group(b"LIGH")
+    out = {}
+    if rng is None:
+        return out
+    for typ, off, flags, fid in fo4land.iter_items(p.buf, *rng):
+        if typ == "GRUP" or flags & skyrimrefs.DELETED:
+            continue
+        light = {"radius": 0.0, "color": [255, 255, 255], "flags": 0, "fade": 1.0}
+        for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)):
+            if sig == b"DATA" and len(d) >= 40:
+                _t, radius = struct.unpack_from("<iI", d, 0)
+                fl, fexp, fov, near, period, amp, move = struct.unpack_from("<I6f", d, 12)
+                light.update(radius=float(radius), color=_rgb(d, 8), flags=fl, falloff_exponent=round(fexp, 4),
+                             fov=round(fov, 2), flicker=bool(fl & (LIGHT_FLICKER | LIGHT_PULSE)),
+                             flicker_period=round(period, 4), flicker_intensity=round(amp, 4),
+                             flicker_movement=round(move, 4), off_by_default=bool(fl & LIGHT_OFF_BY_DEFAULT))
+            elif sig == b"FNAM" and len(d) >= 4:
+                light["fade"] = round(struct.unpack_from("<f", d)[0], 4)
+        out[fid] = light
+    return out
+
+
+def cell_lighting(fields, plugin_name="Skyrim.esm"):
+    """The Skyrim cell's own lighting: XCLL (ambient, directional, fog near colours, fog near / far, ..., directional
+    ambient x6, specular, fresnel, fog far colour, fog max, light fade begin / end, inherit flags), LTMP lighting
+    template, XCIM image space. None when the cell has none of them."""
+    out = {}
+    for sig, d in fields:
+        if sig == b"XCLL" and len(d) >= 12:
+            out.update(ambient=_rgb(d, 0), directional=_rgb(d, 4), fog_near_color=_rgb(d, 8))
+            if len(d) >= 92:
+                out.update(fog_far_color=_rgb(d, 72), light_fade_begin=round(struct.unpack_from("<f", d, 80)[0], 1),
+                           light_fade_end=round(struct.unpack_from("<f", d, 84)[0], 1),
+                           inherits=struct.unpack_from("<I", d, 88)[0])
+        elif sig == b"LTMP" and len(d) >= 4 and struct.unpack_from("<I", d)[0]:
+            out["template"] = skyrimrefs.formkey(struct.unpack_from("<I", d)[0], plugin_name)
+        elif sig == b"XCIM" and len(d) >= 4 and struct.unpack_from("<I", d)[0]:
+            out["image_space"] = skyrimrefs.formkey(struct.unpack_from("<I", d)[0], plugin_name)
+    return out or None
+
+
+def _xrds(data):
+    for sig, d in fo4land.iter_subrecords(data):
+        if sig == b"XRDS" and len(d) >= 4:
+            return struct.unpack_from("<f", d)[0]
+    return None
 
 
 def _cells(p):
@@ -136,6 +193,7 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dic
     deferred_refs (actors, placed hazards, unknown bases), "arrival" {pos, rot, source} and per-door teleport links."""
     with fo4land.Plugin(esm) as p:
         bases = skyrimrefs.read_bases(p)
+        lights = read_lights(p)
         hit = None
         for fid, fields, rng in _cells(p):
             if _is_interior(fields) and _edid(fields).lower() == edid.lower():
@@ -160,6 +218,12 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dic
                      "persistent": bool(pers or flags & skyrimrefs.PERSISTENT),
                      "enable_parent": None if r["xesp"] is None else
                      {"reference": skyrimrefs.formkey(r["xesp"][0], plugin_name), "flags": r["xesp"][1]}}
+            if btype == "Light" and r["base"] in lights:
+                light = dict(lights[r["base"]])
+                xr = _xrds(data)
+                if xr is not None and xr > 0:                       # the reference's own radius override
+                    light["radius"] = round(xr, 2)
+                entry["light"] = light
             x = _xtel(data)
             if x:
                 entry["teleport_destination"] = {"door": skyrimrefs.formkey(x[0], plugin_name), "pos": x[1],
@@ -193,23 +257,29 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dic
             else:
                 arrival = None
     return {"schema_version": 2, "cell": name, "cell_formkey": skyrimrefs.formkey(cfid, plugin_name),
-            "interior": True, "source": plugin_name, "refs": refs, "deferred_refs": deferred, "arrival": arrival,
+            "interior": True, "source": plugin_name, "lighting": cell_lighting(fields, plugin_name), "refs": refs, "deferred_refs": deferred, "arrival": arrival,
             "load_doors": [e["formkey"] for _f, e in doors if "teleport_destination" in e]}
 
 
 def plugin_cell(export: dict, selected_refs: list) -> dict:
     """The cell JSON PluginSpike reads (`cell`, `refs` with formkey / type / base_editor_id / model / pos / rot / scale /
-    disabled): the references selected for conversion, every light (PluginSpike places a Starfield omni light per light,
-    merged within 3 m), and one COCMarkerHeading at the arrival point when the cell has none of its own."""
+    disabled): the references selected for conversion, every light (with its Skyrim "light" data: PluginSpike makes a
+    Starfield light per distinct Skyrim light), the cell's "skyrim_lighting", and one COCMarkerHeading at the arrival
+    point when the cell has none of its own."""
     keep = {r["formkey"] for r in selected_refs}
     refs = []
     for r in export["refs"]:
         if r["formkey"] in keep or r["type"] == "Light" or r["base_editor_id"] == COC_MARKER:
             refs.append({k: r.get(k) for k in ("formkey", "type", "base_editor_id", "model", "pos", "rot", "scale",
                                                "disabled")})
+            if "light" in r:
+                refs[-1]["light"] = r["light"]
     arr = export.get("arrival")
     if arr and not any(r["base_editor_id"] == COC_MARKER for r in refs):
         z_up = [arr["pos"][0], arr["pos"][1], arr["pos"][2] + 10.0]     # 10 units up: spawn above the floor, not in it
         refs.append({"formkey": "ARRIVAL:" + export["cell"], "type": "Static", "base_editor_id": COC_MARKER,
                      "model": "", "pos": z_up, "rot": arr["rot"], "scale": 1.0, "disabled": 0})
-    return {"schema_version": 2, "cell": export["cell"], "refs": refs}
+    out = {"schema_version": 2, "cell": export["cell"], "refs": refs}
+    if export.get("lighting"):
+        out["skyrim_lighting"] = export["lighting"]
+    return out

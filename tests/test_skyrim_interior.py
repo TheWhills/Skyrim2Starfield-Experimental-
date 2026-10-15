@@ -34,8 +34,13 @@ def xtel(door, pos, rot=(0.0, 0.0, 1.5)):
     return (b"XTEL", struct.pack("<I6fI", door, *pos, *rot, 0))
 
 
-def interior(fid, edid, children):
-    cell = rec(b"CELL", fid, [(b"EDID", z(edid)), (b"DATA", b"\x01\x00")])
+def xcll(ambient):
+    d = bytes(ambient) + b"\0" + bytes([200, 150, 100, 0]) + bytes(4) + bytes(60)
+    return (b"XCLL", d + bytes([10, 20, 30, 0]) + struct.pack("<3fI", 0.0, 1500.0, 3000.0, 0x1))
+
+
+def interior(fid, edid, children, extra=()):
+    cell = rec(b"CELL", fid, [(b"EDID", z(edid)), (b"DATA", b"\x01\x00"), *extra])
     return [cell, grup(fid, 6, [grup(fid, 9, children)])] if children else [cell]
 
 
@@ -43,13 +48,18 @@ def build():
     tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.71, 0, 0x800))])
     stat = grup(b"STAT", 0, [rec(b"STAT", WALL, [(b"EDID", z("WRInnWall01")), (b"MODL", z("Architecture\\Whiterun\\WRInnWall01.nif"))]),
                              rec(b"STAT", COC, [(b"EDID", z("COCMarkerHeading")), (b"MODL", z("Marker_COCHeading.nif"))])])
-    ligh = grup(b"LIGH", 0, [rec(b"LIGH", TORCH, [(b"EDID", z("TorchSconce01"))])])
+    # a warm flickering torch, radius 512 units, fade 1.5 (DATA as xEdit wbDefinitionsTES5, SSE 48 bytes)
+    tdata = struct.pack("<iI4BI6fIf", -1, 512, 255, 160, 80, 0, 0x8, 1.0, 90.0, 0.0, 0.2, 0.3, 0.1, 0, 0.0)
+    ligh = grup(b"LIGH", 0, [rec(b"LIGH", TORCH, [(b"EDID", z("TorchSconce01")), (b"DATA", tdata),
+                                                  (b"FNAM", struct.pack("<f", 1.5))])])
     door = grup(b"DOOR", 0, [rec(b"DOOR", DOOR_B, [(b"EDID", z("WRInnDoor01")), (b"MODL", z("Architecture\\Whiterun\\WRInnDoor01.nif"))])])
     inn = interior(INN, "SleepingGiantInn", [
         ref(0x2001, WALL, (100.0, 0.0, 0.0)), ref(0x2002, WALL, (300.0, 0.0, 0.0), (0.0, 0.0, 1.57)),
-        ref(0x2003, TORCH, (150.0, 50.0, 200.0)), ref(0x2004, TORCH, (160.0, 50.0, 200.0)),
+        ref(0x2003, TORCH, (150.0, 50.0, 200.0)),
+        ref(0x2004, TORCH, (160.0, 50.0, 200.0), extra=[(b"XRDS", struct.pack("<f", 800.0))]),
         ref(INN_DOOR, DOOR_B, (0.0, 0.0, 0.0), flags=PERSISTENT, extra=[xtel(OUT_DOOR, (5000.0, 6000.0, 700.0))]),
-        rec(b"ACHR", 0x2005, [(b"NAME", struct.pack("<I", NPC_B)), (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))])])
+        rec(b"ACHR", 0x2005, [(b"NAME", struct.pack("<I", NPC_B)), (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))])],
+        extra=[xcll((90, 70, 50)), (b"LTMP", struct.pack("<I", 0x5000))])
     house = interior(HOUSE, "TestHouse", [ref(0x2101, WALL, (0.0, 0.0, 0.0)), ref(0x2102, COC, (10.0, 20.0, 30.0))])
     empty = interior(EMPTY, "EmptyRoom", [])
     cells = grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, inn + house + empty)])])
@@ -95,6 +105,22 @@ class InteriorTests(unittest.TestCase):
         self.assertEqual(house["arrival"]["source"], "COCMarkerHeading in the cell")
         with self.assertRaises(KeyError):
             skyriminterior.export_interior(self.esm, "Tamriel")
+
+    def test_lights_and_cell_lighting(self):
+        exp = skyriminterior.export_interior(self.esm, "SleepingGiantInn")
+        a, b = [r["light"] for r in exp["refs"] if r["type"] == "Light"]
+        self.assertEqual((a["radius"], a["color"], a["fade"], a["flicker"]), (512.0, [255, 160, 80], 1.5, True))
+        self.assertAlmostEqual(a["flicker_period"], 0.2, places=5)
+        self.assertEqual(b["radius"], 800.0)                                   # XRDS on the reference wins
+        lt = exp["lighting"]
+        self.assertEqual((lt["ambient"], lt["directional"], lt["fog_far_color"]), ([90, 70, 50], [200, 150, 100],
+                                                                                   [10, 20, 30]))
+        self.assertEqual((lt["light_fade_begin"], lt["light_fade_end"], lt["inherits"]), (1500.0, 3000.0, 1))
+        self.assertEqual(lt["template"], "005000:Skyrim.esm")
+        cell = skyriminterior.plugin_cell(exp, [])
+        self.assertEqual(cell["skyrim_lighting"]["ambient"], [90, 70, 50])
+        self.assertEqual(sorted(r["light"]["radius"] for r in cell["refs"] if r["type"] == "Light"), [512.0, 800.0])
+        self.assertIsNone(skyriminterior.export_interior(self.esm, "TestHouse")["lighting"])
 
     def test_plugin_cell_keeps_selected_refs_lights_and_adds_arrival(self):
         exp = skyriminterior.export_interior(self.esm, "SleepingGiantInn")
