@@ -162,7 +162,7 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
                        collision_template: Optional[bytes], report: dict, landscape: bool = False) -> Dict[str, bytes]:
     files, static_shapes, all_pts = {}, [], []
     for i, s in enumerate(shapes):
-        if material_paths[i] is None:                 # effect shader / skipped shape
+        if material_paths[i] is None:                 # effect shader / refraction / skipped shape
             continue
         m = convert_static.shape_to_mesh(s, UNIT)
         data = sfmesh.serialize(m)
@@ -222,7 +222,11 @@ class SkyrimConverter(pipeline.Converter):
         kind = src.type_of(s.shader_ref)
         if kind == "BSEffectShaderProperty":          # glow, fog, waterfall spray, magic: not translated
             return None
+        if skyrimnif.refraction(src, s.shader_ref):  # heat haze / refraction: not translated, like effect shaders
+            return None
         paths = skyrimnif.texture_set(src, s.shader_ref)
+        if skyrimnif.normal_map_as_diffuse(paths):
+            return None
         if not paths or not paths[0]:
             return self.neutral
         test, blend, ref = skyrimnif.alpha_test(src, s.alpha_ref)
@@ -246,7 +250,7 @@ class SkyrimConverter(pipeline.Converter):
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
             if all(m is None for m in mats):
-                raise ValueError("only effect-shader shapes, skipped")
+                raise ValueError("only effect-shader / refraction shapes, skipped")
             doubled = too_big = 0
             for i, s in enumerate(shapes):
                 if mats[i] is not None and skyrimnif.double_sided(src, s.shader_ref):

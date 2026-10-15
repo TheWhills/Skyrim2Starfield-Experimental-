@@ -297,7 +297,7 @@ class ConverterTests(unittest.TestCase):
             self.assertTrue(rock["collision_report"]["collision_overlaps_render"])
             house = res["meshes\\architecture\\whiterun\\wrhouse01.nif"]
             self.assertEqual(house["collision_report"]["method"], "surfaces+voxels")
-            self.assertEqual(house["skipped_effect_shapes"], 1)                   # the glow shape
+            self.assertEqual(house["skipped_effect_shapes"], 2)                   # the glow shape + heat haze
             self.assertEqual(res["meshes\\landscape\\plants\\fern01.nif"]["collision_report"]["source"], "skyrim-none")
             tree = res["meshes\\landscape\\trees\\treepine01.nif"]
             self.assertEqual(tree["fallback_materials"], 0)

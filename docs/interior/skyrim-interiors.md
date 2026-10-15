@@ -36,8 +36,11 @@ the right place with Skyrim's textures. Three findings:
   Starfield's ship interior template `006658` and `LIGHT_MERGE_M` 1; values already in the file win, and
   `--lighting-template` / `--light-merge-m` override both. Next: translate the Skyrim cell's XCLL ambient / directional
   colours and each LIGH's radius / colour into the choice of template and light bases.
-- **The fire pit showed as a big blue / purple crystal.** The flames are effect-shader shapes (skipped); something else
-  in the fire model converted into a solid material. `scripts\tools\inspect_nif.py` lists every shape of the fire
-  models (shader type, flags, emissive, textures, alpha, what the converter did) so the culprit can be named before
-  changing the converter.
+- **The fire pit showed as a big blue / purple crystal.** `inspect_nif.py` named it: `clutter\woodfires\
+  fireplacewood01burning.nif` shape `Plane03`, the heat-haze plane above the fire, a BSLightingShaderProperty with
+  Shader Flags 1 `82418309` (Refraction 0x8000 + Fire_Refraction 0x10000) and `effects\VaporTileNormal_n.dds` in the
+  diffuse slot. The converter now skips refraction shapes and shapes whose diffuse is a normal map, as it skips
+  effect shaders. The flames (`Flames:0/1`, effect shader on `FXFireAtlas04.dds`), the glow and the particle sparks
+  are effect shaders, so the fire is logs + ash only until effects are translated (a Starfield fire FX placed at the
+  same spot is the likely route). Candles have no flame shapes of their own (their flames are separate effects).
 - **Doors do nothing:** expected, load doors are scenery until door linking.

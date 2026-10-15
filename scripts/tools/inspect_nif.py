@@ -23,13 +23,17 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 from fo4sf import bsa, exterior, nif as nifmod, skyrimnif  # noqa: E402
 
 
-def converter_decision(info, alpha, has_normal):
+def converter_decision(info, alpha, has_normal, refracts=False):
     """Mirror of SkyrimConverter._shape_material (no textures converted here)."""
     test, blend, _ = alpha
     if info["type"] is None:
         return "neutral material (no shader)"
     if info["type"] == "BSEffectShaderProperty":
         return "SKIPPED (effect shader)"
+    if refracts:
+        return "SKIPPED (refraction / heat haze)"
+    if skyrimnif.normal_map_as_diffuse(info.get("textures")):
+        return "SKIPPED (normal map in the diffuse slot)"
     if not info.get("textures"):
         return "neutral material (no textures)"
     kind = "decal" if blend and not test else "cutout" if test else "opaque"
@@ -59,7 +63,8 @@ def inspect(src, name):
                     "size_units": [round(h - l, 1) for l, h in zip(lo, hi)], "skinned": bool(s.skinned),
                     "shader": info, "alpha": {"test": alpha[0], "blend": alpha[1], "ref": alpha[2]},
                     "double_sided": skyrimnif.double_sided(n, s.shader_ref),
-                    "converter": converter_decision(info, alpha, len(paths) > 1 and bool(paths[1]))})
+                    "converter": converter_decision(info, alpha, len(paths) > 1 and bool(paths[1]),
+                                                   skyrimnif.refraction(n, s.shader_ref))})
     others = sorted({n.type_of(i) for i in range(len(n.blocks))} - {"NiNode", "BSFadeNode"})
     return {"nif": name, "shapes": out, "block_types": others}
 

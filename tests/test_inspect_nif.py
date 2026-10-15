@@ -54,6 +54,21 @@ class InspectNifTests(unittest.TestCase):
             self.assertIn("Embers", out.getvalue())
             self.assertNotIn("bucket", out.getvalue().lower())
 
+    def test_refraction_and_normal_map_diffuse(self):
+        from fo4sf import nif
+        b = SseNif()
+        haze = b.lighting("textures\\effects\\VaporTileNormal_n.dds", "x_n.dds", flags1=0x82418309)  # owner's fire
+        plain = b.lighting("a.dds", "a_n.dds", flags1=0x82400301)
+        n = nif.parse(b.bytes())
+        self.assertTrue(skyrimnif.refraction(n, haze))
+        self.assertFalse(skyrimnif.refraction(n, plain))
+        self.assertTrue(skyrimnif.normal_map_as_diffuse(skyrimnif.texture_set(n, haze)))
+        self.assertFalse(skyrimnif.normal_map_as_diffuse(skyrimnif.texture_set(n, plain)))
+        import inspect_nif
+        info = skyrimnif.shader_info(n, haze)
+        self.assertEqual(inspect_nif.converter_decision(info, (False, False, 128), True, True),
+                         "SKIPPED (refraction / heat haze)")
+
     def test_shader_info_lighting_flags(self):
         b = SseNif()
         sh = b.lighting("a.dds", "b.dds", double_sided=True)

@@ -71,12 +71,12 @@ class SseNif:
             return self.add("BSLODTriShape", body + struct.pack("<3I", *lod))
         return self.add("NiTriShape", body)
 
-    def lighting(self, diffuse, normal, double_sided=False):
+    def lighting(self, diffuse, normal, double_sided=False, flags1=0x80000000):
         paths = [diffuse, normal] + [""] * 7
         ts = self.add("BSShaderTextureSet", struct.pack("<I", len(paths))
                       + b"".join(struct.pack("<I", len(p)) + p.encode() for p in paths))
         flags2 = 0x8001 | (0x10 if double_sided else 0)               # SLSF2_Double_Sided
-        return self.add("BSLightingShaderProperty", struct.pack("<IiIiII", 1, -1, 0, -1, 0x80000000, flags2)
+        return self.add("BSLightingShaderProperty", struct.pack("<IiIiII", 1, -1, 0, -1, flags1, flags2)
                         + struct.pack("<4f", 0, 0, 1, 1) + struct.pack("<i", ts) + bytes(60))
 
     def effect(self):
@@ -198,8 +198,9 @@ def tree_nif():
 
 
 def building_nif():
-    """A box house: floor and walls as NiTriShape (older layout), a glow effect shape, list-shape collision of a floor
-    box, a convex wall and a transformed box."""
+    """A box house: floor and walls as NiTriShape (older layout), a glow effect shape, a fire heat-haze plane (lighting
+    shader with Refraction + Fire_Refraction and a normal map as diffuse, as fireplacewood01burning.nif "Plane03"),
+    list-shape collision of a floor box, a convex wall and a transformed box."""
     n = SseNif()
     root = n.reserve("BSFadeNode")
     v = [(0, 0, 0), (700, 0, 0), (700, 700, 0), (0, 700, 0), (0, 0, 350), (700, 0, 350)]
@@ -212,7 +213,10 @@ def building_nif():
     wall = n.convex([(0, 0, 0), (700 * s, 0, 0), (700 * s, 10 * s, 0), (0, 10 * s, 0), (0, 0, 350 * s),
                      (700 * s, 0, 350 * s), (700 * s, 10 * s, 350 * s), (0, 10 * s, 350 * s)])
     coll = n.collision(root, n.list_shape([floor_t, wall]))
-    n.node(root, b"WRHouse01", [walls, glow], coll=coll)
+    haze = n.trishape(b"Plane03", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 0)] * 3, [(0, 1, 2)],
+                      shader=n.lighting("textures\\effects\\vaportilenormal_n.dds",
+                                        "textures\\effects\\vaportilenormal_n.dds", flags1=0x82418309))
+    n.node(root, b"WRHouse01", [walls, glow, haze], coll=coll)
     return n.bytes()
 
 

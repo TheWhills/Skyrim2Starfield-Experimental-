@@ -273,6 +273,27 @@ def shader_info(n, shader_ref) -> dict:
     return info
 
 
+SLSF1_REFRACTION = 0x8000           # Shader Flags 1 bit 15 (nif.xml SkyrimShaderPropertyFlags1)
+SLSF1_FIRE_REFRACTION = 0x10000     # bit 16
+
+
+def refraction(n, shader_ref) -> bool:
+    """True for a BSLightingShaderProperty that only bends what is behind it: the heat-haze plane above Skyrim fires
+    (fireplacewood01burning.nif "Plane03": Refraction + Fire_Refraction, a normal map in the diffuse slot), which a
+    solid Starfield material turns into a blue / purple slab (owner's Sleeping Giant Inn test)."""
+    if not (0 <= shader_ref < len(n.blocks)) or n.type_of(shader_ref) != "BSLightingShaderProperty":
+        return False
+    blk = n.blocks[shader_ref]
+    n_extra, = struct.unpack_from("<I", blk, 8)
+    flags1, = struct.unpack_from("<I", blk, 12 + 4 * n_extra + 4)
+    return bool(flags1 & (SLSF1_REFRACTION | SLSF1_FIRE_REFRACTION))
+
+
+def normal_map_as_diffuse(paths) -> bool:
+    """A texture set whose diffuse slot holds a normal map ("..._n.dds"): a distortion surface, not a coloured one."""
+    return bool(paths) and paths[0].lower().endswith("_n.dds")
+
+
 def alpha_test(n, alpha_ref) -> Tuple[bool, bool, int]:
     """(alpha test, alpha blend, threshold 0..255) from a NiAlphaProperty (flags bit 0 blend, bit 9 test)."""
     if not (0 <= alpha_ref < len(n.blocks)) or n.type_of(alpha_ref) != "NiAlphaProperty":
