@@ -58,6 +58,29 @@ def cmd_list(a):
     return 0
 
 
+# PluginSpike's default lighting template is a dark underground Fallout 4 base (06BCF8): the first converted Skyrim
+# interior (owner's Sleeping Giant Inn test) was too dark to see. Skyrim interiors get most of their light from the
+# cell's ambient lighting, which is not translated yet, so they start from Starfield's brighter ship interior template
+# and keep lights that are 1 m apart instead of merging everything within 3 m.
+INTERIOR_LIGHTING = {"LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1"}
+
+
+def write_lighting(work, cell, a):
+    """<work>/convert/lighting.json (read by PluginSpike from its output folder): defaults for this cell, under
+    values already in the file (hand edits survive a re-export), under --lighting-template / --light-merge-m."""
+    path = os.path.join(work, "convert", "lighting.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    cfg = load(path) if os.path.exists(path) else {}
+    entry = {**INTERIOR_LIGHTING, **cfg.get(cell, {})}       # a hand-edited value for this cell is kept
+    if a.lighting_template:
+        entry["LIGHTING_TEMPLATE"] = a.lighting_template
+    if a.light_merge_m is not None:
+        entry["LIGHT_MERGE_M"] = str(a.light_merge_m)
+    cfg[cell] = entry
+    save(path, cfg)
+    return entry
+
+
 def cmd_export(a):
     work = outside_repo(a.work)
     os.makedirs(work, exist_ok=True)
@@ -72,17 +95,19 @@ def cmd_export(a):
     save(os.path.join(work, "export.json"), exp)
     save(os.path.join(work, "convert_input.json"), {"schema_version": 2, "cell": exp["cell"], "refs": models})
     save(os.path.join(work, "cell.json"), cell)
+    lighting = write_lighting(work, exp["cell"], a)
     rep = {"cell": exp["cell"], "cell_formkey": exp["cell_formkey"], "refs": len(exp["refs"]),
            "deferred": len(exp["deferred_refs"]), "to_convert": len(sub["refs"]), "models": len(models),
            "lights": sum(1 for r in cell["refs"] if r["type"] == "Light"), "skipped": len(skipped),
            "skip_reasons": exterior.reason_counts(skipped), "arrival": exp["arrival"],
-           "load_doors": exp["load_doors"]}
+           "load_doors": exp["load_doors"], "lighting": lighting}
     save(os.path.join(work, "interior.json"), rep)
     arr = exp["arrival"]
     print(f"{exp['cell']}: {rep['to_convert']} references to convert ({rep['models']} models), {rep['lights']} lights, "
           f"skipped {rep['skipped']} {rep['skip_reasons']}")
     print(f"arrival: {arr['source'] if arr else 'NONE (no coc marker, no door): add one by hand'}; "
           f"{len(rep['load_doors'])} load doors (not linked yet: doors are scenery)")
+    print(f"lighting: {lighting} in {os.path.join(work, 'convert', 'lighting.json')}")
     print(f"next: make_skyrim_objects.py convert --work {work} ... (see this script's help)")
     return 0
 
@@ -129,6 +154,8 @@ def parser():
     ap.add_argument("--skyrim", help="Skyrim.esm (read-only)")
     ap.add_argument("--cell", help="export: interior cell EditorID (from list)")
     ap.add_argument("--work", help="work folder OUTSIDE the repo")
+    ap.add_argument("--lighting-template", help="export: Starfield LGTM FormID hex for the cell (default 006658)")
+    ap.add_argument("--light-merge-m", type=float, help="export: merge lights closer than this many metres (default 1)")
     ap.add_argument("--find", default="", help="list: regex on the EditorID")
     ap.add_argument("--max", type=int, default=200, help="list: rows to print")
     return ap

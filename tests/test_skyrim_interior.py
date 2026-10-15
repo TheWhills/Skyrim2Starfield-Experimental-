@@ -140,6 +140,27 @@ class InteriorTests(unittest.TestCase):
         self.assertIn("deploy_starfield.py install", out.getvalue())
         self.assertIn("coc FO4Port_SleepingGiantInn", out.getvalue())
 
+    def test_export_writes_brighter_lighting_and_keeps_hand_edits(self):
+        import make_skyrim_interior as mi
+        work = os.path.join(self.tmp.name, "work")
+        path = os.path.join(work, "convert", "lighting.json")
+        with contextlib.redirect_stdout(io.StringIO()):
+            mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
+        self.assertEqual(json.load(open(path)), {"SleepingGiantInn": {"LIGHTING_TEMPLATE": "006658",
+                                                                      "LIGHT_MERGE_M": "1"}})
+        cfg = {"*": {"IMAGE_SPACE": "000123"}, "SleepingGiantInn": {"LIGHTING_TEMPLATE": "0ABCDE", "OMNI_LIGHT": "1"}}
+        json.dump(cfg, open(path, "w"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
+        got = json.load(open(path))
+        self.assertEqual(got["*"], {"IMAGE_SPACE": "000123"})
+        self.assertEqual(got["SleepingGiantInn"], {"LIGHTING_TEMPLATE": "0ABCDE", "LIGHT_MERGE_M": "1", "OMNI_LIGHT": "1"})
+        with contextlib.redirect_stdout(io.StringIO()):
+            mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work,
+                     "--lighting-template", "111111", "--light-merge-m", "0.5"])
+        got = json.load(open(path))["SleepingGiantInn"]
+        self.assertEqual((got["LIGHTING_TEMPLATE"], got["LIGHT_MERGE_M"]), ("111111", "0.5"))
+
     def test_refuses_work_inside_the_repository(self):
         import make_skyrim_interior as mi
         with self.assertRaises(SystemExit):

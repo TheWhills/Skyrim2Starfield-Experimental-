@@ -236,6 +236,43 @@ def double_sided(n, shader_ref) -> bool:
     return bool(flags2 & SLSF2_DOUBLE_SIDED)
 
 
+SKYRIM_SHADER_TYPES = {0: "default", 1: "environment map", 2: "glow", 3: "parallax", 4: "face tint", 5: "skin tint",
+                       6: "hair tint", 7: "parallax occlusion", 11: "landscape", 14: "multilayer parallax", 15: "tree",
+                       16: "eye environment", 18: "snow", 19: "sparkle snow"}
+
+
+def shader_info(n, shader_ref) -> dict:
+    """What a shape's shader property says, for inspection: block type, Skyrim shader type (lighting only), Shader
+    Flags 1 / 2, emissive colour and multiple, textures (lighting: the texture set; effect: the source and greyscale
+    textures). Layouts as texture_set (SSE, BS 100)."""
+    if not (0 <= shader_ref < len(n.blocks)):
+        return {"type": None}
+    t, blk = n.type_of(shader_ref), n.blocks[shader_ref]
+    info = {"type": t}
+    try:
+        if t == "BSLightingShaderProperty":
+            st, = struct.unpack_from("<I", blk, 0)
+            n_extra, = struct.unpack_from("<I", blk, 8)
+            p = 12 + 4 * n_extra + 4
+            f1, f2 = struct.unpack_from("<II", blk, p)
+            p += 8 + 16 + 4                                    # flags, UV offset + scale, texture set
+            emit = struct.unpack_from("<4f", blk, p)
+            info.update(shader_type=SKYRIM_SHADER_TYPES.get(st, st), flags1=f"{f1:08X}", flags2=f"{f2:08X}",
+                        emissive=[round(v, 3) for v in emit[:3]], emissive_multiple=round(emit[3], 3),
+                        textures=[x for x in (texture_set(n, shader_ref) or []) if x])
+        elif t == "BSEffectShaderProperty":
+            n_extra, = struct.unpack_from("<I", blk, 4)
+            p = 8 + 4 * n_extra + 4
+            f1, f2 = struct.unpack_from("<II", blk, p)
+            p += 8 + 16
+            ln, = struct.unpack_from("<I", blk, p)
+            info.update(flags1=f"{f1:08X}", flags2=f"{f2:08X}",
+                        textures=[blk[p + 4:p + 4 + ln].decode("latin-1").rstrip("\0")] if ln else [])
+    except struct.error:
+        info["error"] = "shader block shorter than expected"
+    return info
+
+
 def alpha_test(n, alpha_ref) -> Tuple[bool, bool, int]:
     """(alpha test, alpha blend, threshold 0..255) from a NiAlphaProperty (flags bit 0 blend, bit 9 test)."""
     if not (0 <= alpha_ref < len(n.blocks)) or n.type_of(alpha_ref) != "NiAlphaProperty":

@@ -24,3 +24,20 @@ units so the player spawns above the floor.
 Load doors (doors are scenery; enter with `coc`), NPCs, navmesh, Skyrim's light colours / radii (one Starfield omni
 type for all), Skyrim lighting templates / fog, water planes, effects. First in-game target: a small cell (an inn or
 a house), checked for walkable floors and stairs, collision at doorways and readable lighting; then a dungeon.
+
+## First in-game test: Sleeping Giant Inn (owner, 2026-10)
+
+`RiverwoodSleepingGiantInn`: 423 references, 151 models; 140 converted, 393 of 424 placed. In game every piece sat in
+the right place with Skyrim's textures. Three findings:
+
+- **Too dark.** PluginSpike's default lighting template (06BCF8) is a dark underground Fallout 4 base, and the inn's
+  8 lights were merged within 3 m into a few small Starfield lamps. Skyrim interiors take most of their light from the
+  cell's ambient lighting (not translated yet). `export` now writes `<work>\convert\lighting.json` with this cell on
+  Starfield's ship interior template `006658` and `LIGHT_MERGE_M` 1; values already in the file win, and
+  `--lighting-template` / `--light-merge-m` override both. Next: translate the Skyrim cell's XCLL ambient / directional
+  colours and each LIGH's radius / colour into the choice of template and light bases.
+- **The fire pit showed as a big blue / purple crystal.** The flames are effect-shader shapes (skipped); something else
+  in the fire model converted into a solid material. `scripts\tools\inspect_nif.py` lists every shape of the fire
+  models (shader type, flags, emissive, textures, alpha, what the converter did) so the culprit can be named before
+  changing the converter.
+- **Doors do nothing:** expected, load doors are scenery until door linking.
