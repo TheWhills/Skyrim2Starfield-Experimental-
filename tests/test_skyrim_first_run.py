@@ -84,6 +84,9 @@ class FirstRunTests(unittest.TestCase):
         self.assertEqual(sv["models"], 5)
         self.assertEqual(sv["parse_failed"], 1)                     # the junk NIF, grouped with its message
         self.assertEqual(sv["collision_misplaced"], 1)              # the rock whose collision is 100 m away
+        self.assertEqual(sv["misplaced_fixed_by"], {"nothing": 1})  # its offset is in the shape, not the body
+        self.assertEqual(sv["misplaced_all"], ["meshes\\landscape\\rocks\\rockcliff01.nif"])
+        self.assertEqual(sv["parse_failed_all"], ["meshes\\clutter\\doesnotexist.nif"])
         self.assertEqual(sv["misplaced_examples"][0]["model"], "meshes\\landscape\\rocks\\rockcliff01.nif")
         self.assertEqual(sv["collision_overlaps_render"], 2)        # tree and house
         self.assertIn("bhkConvexTransformShape", sv["havok_and_geometry_block_types"])
@@ -131,3 +134,23 @@ class ArchivesStepTests(unittest.TestCase):
         self.assertEqual(out["texture_read"], {"name": "textures\\landscape\\dirt01.dds", "bytes": 8, "magic": "DDS "})
         self.assertEqual((out["textures"], out["dds_outside_textures"]), (1, 1))
         self.assertEqual(out["mesh_read"]["bytes"], 3)
+
+
+class ExtractMeshesTests(unittest.TestCase):
+    def test_extract_from_report(self):
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "tools"))
+        import extract_meshes
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "Skyrim - Meshes0.bsa"), "wb") as f:
+                f.write(bsa.build({"meshes\\a\\bad.nif": b"bad", "meshes\\a\\far.nif": b"far", "meshes\\a\\ok.nif": b"ok"}))
+            rep = os.path.join(tmp, "report.json")
+            with open(rep, "w") as f:
+                json.dump({"survey": {"parse_failed_all": ["meshes\\a\\bad.nif"],
+                                      "misplaced_all": ["meshes\\a\\far.nif", "meshes\\a\\gone.nif"]}}, f)
+            out = os.path.join(tmp, "x.zip")
+            with contextlib.redirect_stdout(io.StringIO()) as log:
+                extract_meshes.main(["--skyrim-data", tmp, "--report", rep, "--out", out])
+            with zipfile.ZipFile(out) as z:
+                self.assertEqual(sorted(z.namelist()), ["meshes/a/bad.nif", "meshes/a/far.nif"])
+            self.assertIn("not found", log.getvalue())

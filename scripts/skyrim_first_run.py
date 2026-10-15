@@ -183,7 +183,8 @@ def survey(a, state):
         step = len(names) / a.survey
         names = [names[int(i * step)] for i in range(a.survey)]
     res = {"models": len(names), "missing": 0, "parse_failed": 0, "no_geometry": 0, "with_collision": 0,
-           "collision_overlaps_render": 0, "collision_misplaced": 0, "double_sided_shapes": 0,
+           "collision_overlaps_render": 0, "collision_misplaced": 0, "misplaced_fixed_by": {},
+           "misplaced_body_classes": {}, "misplaced_all": [], "parse_failed_all": [], "missing_all": [], "double_sided_shapes": 0,
            "double_sided_too_big": 0, "models_with_double_sided": 0}
     blocks, geom, errors, unsupported, bs_versions = {}, {}, {}, {}, {}
     misplaced = []
@@ -191,6 +192,7 @@ def survey(a, state):
         raw = src.mesh(name)
         if raw is None:
             res["missing"] += 1
+            res["missing_all"].append(name)
             continue
         try:
             n = nif.parse(raw)
@@ -226,14 +228,33 @@ def survey(a, state):
                 clo = [min(p[k] for p in pts) for k in range(3)]
                 chi = [max(p[k] for p in pts) for k in range(3)]
                 size = max(hi[k] - lo[k] for k in range(3)) or 1.0
-                if all(clo[k] <= hi[k] + 0.25 * size and chi[k] >= lo[k] - 0.25 * size for k in range(3)):
+
+                def overlaps(p):
+                    a = [min(q[k] for q in p) for k in range(3)]
+                    b = [max(q[k] for q in p) for k in range(3)]
+                    return all(a[k] <= hi[k] + 0.25 * size and b[k] >= lo[k] - 0.25 * size for k in range(3))
+                if overlaps(pts):
                     res["collision_overlaps_render"] += 1
                 else:
                     res["collision_misplaced"] += 1
+                    # which body-transform rule would put this collision on the visible model?
+                    fixes = []
+                    for mode in skyrimnif.BODY_TRANSFORM_MODES[1:]:
+                        alt, _t = skyrimnif.collision_triangles(n, None, body_transform=mode)
+                        if alt and overlaps(alt):
+                            fixes.append(mode)
+                            bump(res["misplaced_fixed_by"], mode)
+                    if not fixes:
+                        bump(res["misplaced_fixed_by"], "nothing")
+                    for b in rep.get("body_list", []):
+                        bump(res["misplaced_body_classes"], f"{b['class']} layer {b['layer']}")
+                    res["misplaced_all"].append(name)
                     if len(misplaced) < 15:
-                        misplaced.append({"model": name, "render": [lo, hi], "collision": [clo, chi]})
+                        misplaced.append({"model": name, "render": [lo, hi], "collision": [clo, chi],
+                                          "fixed_by": fixes, "bodies": rep.get("body_list", [])[:4]})
         except Exception as e:                       # noqa: BLE001
             res["parse_failed"] += 1
+            res["parse_failed_all"].append(name)
             key = re.sub(r"\d+", "#", f"{type(e).__name__}: {e}")[:90]
             if key not in errors:
                 errors[key] = {"count": 0, "example": name}
@@ -372,8 +393,11 @@ def summary(run) -> str:
                  f"models (too big to double: {v.get('double_sided_too_big', 0)})")
         for k, e in v["parse_errors"].items():
             L.append(f"  parse error x{e['count']}: {k} (e.g. {e['example']})")
+        L.append(f"  misplaced collision fixed by body-transform rule: {v.get('misplaced_fixed_by')}; bodies "
+                 f"{dict(sorted(v.get('misplaced_body_classes', {}).items(), key=lambda kv: -kv[1])[:8])}")
         for m in v["misplaced_examples"][:5]:
-            L.append(f"  misplaced: {m['model']} render {fmt(m['render'])} collision {fmt(m['collision'])}")
+            L.append(f"  misplaced: {m['model']} render {fmt(m['render'])} collision {fmt(m['collision'])} "
+                     f"fixed by {m.get('fixed_by')}")
     ar = s.get("armor", {})
     if ar.get("ok"):
         i, v = ar["inventory"], ar["survey"]

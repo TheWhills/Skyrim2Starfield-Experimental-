@@ -183,6 +183,18 @@ class NifTests(unittest.TestCase):
             self.assertAlmostEqual(max(p[1] for p in pts), 1.0 * H, places=3)
             self.assertAlmostEqual(min(p[2] for p in pts), (2.0 - 0.25) * H, places=3)
 
+    def test_body_transform_modes(self):
+        """The survey's alternative rules: the tree's rigid body T carries translation (0, 0, 0.2) havok units."""
+        tree = nif.parse(F.tree_nif())
+        zmax = {m: max(p[2] for p in skyrimnif.collision_triangles(tree, None, body_transform=m)[0])
+                for m in skyrimnif.BODY_TRANSFORM_MODES}
+        self.assertAlmostEqual(zmax["all"] - zmax["none"], 0.2 * H, places=3)
+        self.assertAlmostEqual(zmax["t_only"], zmax["all"], places=6)     # a T body: applied under t_only too
+        rep = {}
+        skyrimnif.collision_triangles(tree, rep)
+        b, = rep["body_list"]
+        self.assertEqual((b["class"], b["translation"], b["rotated"]), ("bhkRigidBodyT", [0.0, 0.0, round(0.2 * H, 1)], False))
+
     def test_non_unit_body_rotation_is_reported_and_ignored(self):
         n = F.SseNif()
         root = n.reserve("BSFadeNode")

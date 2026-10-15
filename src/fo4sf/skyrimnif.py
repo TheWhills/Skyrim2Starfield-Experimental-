@@ -416,9 +416,17 @@ def _shape(n, i, depth=0):
     return [], [], [t]
 
 
-def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None):
+BODY_TRANSFORM_MODES = ("all", "t_only", "none", "body_only")
+
+
+def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None, body_transform: str = "all"):
     """(points, triangles) of every rigid body's collision in the NIF's root frame, in GAME units; empty when the
-    model has no collision. Unsupported shape types go to report['unsupported'] (the model then keeps what decoded)."""
+    model has no collision. Unsupported shape types go to report['unsupported'] (the model then keeps what decoded).
+
+    body_transform: how a body's own stored translation / rotation (bytes 52 / 68) combines with its node's world
+    transform. "all" (default): applied on every body, then the node (tes4skyrim's reading); "t_only": only on
+    bhkRigidBodyT; "none": never; "body_only": the body transform replaces the node's. The alternatives exist for the
+    first-run survey, which measures on real meshes which rule puts collision on the visible model."""
     world = nifmod.world_transforms(n)
     points, tris, bad, bodies = [], [], [], 0
     for i in range(len(n.blocks)):
@@ -435,8 +443,17 @@ def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None):
         t, m, unit = _rigid_body_transform(blk)            # applied on plain and T bodies alike (Skyrim does)
         if not unit:
             bad.append(f"{n.type_of(body)} rotation is not a unit quaternion (identity used)")
-        v = [_apply(m, t, x) for x in v]
+        is_t = n.type_of(body) == "bhkRigidBodyT"
+        if body_transform in ("all", "body_only") or (body_transform == "t_only" and is_t):
+            v = [_apply(m, t, x) for x in v]
         tr, rot, scale = world(target) if 0 <= target < len(n.blocks) else ((0.0, 0.0, 0.0), IDENT, 1.0)
+        if body_transform == "body_only":
+            tr, rot, scale = (0.0, 0.0, 0.0), IDENT, 1.0
+        if report is not None:
+            report.setdefault("body_list", []).append({
+                "class": n.type_of(body), "layer": blk[4] if len(blk) > 4 else None,
+                "translation": [round(c * HAVOK_SCALE, 1) for c in t], "rotated": m != IDENT,
+                "node_translation": [round(c, 1) for c in tr]})
         base = len(points)
         for x in v:
             g = tuple(c * HAVOK_SCALE for c in x)
