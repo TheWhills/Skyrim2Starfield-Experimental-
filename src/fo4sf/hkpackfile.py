@@ -1,5 +1,6 @@
-"""Minimal reader for Havok 2014 binary packfiles (the `bhkPhysicsSystem` payload in Fallout 4 NIFs, "hk_2014.1.0-r1",
-64-bit little-endian layout). Enough to locate objects by class and follow their array / pointer fields; no class
+"""Minimal reader for Havok binary packfiles, 64-bit little-endian: 2014 ("hk_2014.1.0-r1", the `bhkPhysicsSystem`
+payload in Fallout 4 NIFs; file version 11, 64-byte section headers) and 2010 ("hk_2010.2.0-r1", Skyrim SE .hkx
+animations and skeletons; file version 8, 48-byte section headers). Enough to locate objects by class and follow their array / pointer fields; no class
 reflection is used (the layouts we need are decoded by hand in fo4collision.py).
 
 Packfile layout: 64-byte header, then one 64-byte header per section (tag[20], absoluteDataStart, localFixupsOffset,
@@ -39,11 +40,12 @@ class Packfile:
             raise PackfileError("only 64-bit packfiles are supported")
         nsec, = struct.unpack_from("<i", data, 20)
         self.version = data[40:56].split(b"\0")[0].decode("latin-1")
-        hdr = 64 + (16 if version >= 11 else 0) - 16       # v11: section headers start at 64 (padding inside header)
-        hdr = 64
+        hdr = 64                                             # section headers start after the 64-byte file header
+        self.file_version = version
+        sh = 64 if version >= 11 else 48                     # 2014 (v11) pads each section header to 64; 2010 (v8): 48
         self.sections: List[Section] = []
         for i in range(nsec):
-            h = hdr + 64 * i
+            h = hdr + sh * i
             tag = data[h:h + 20].split(b"\0")[0].decode("latin-1")
             start, loc, glo, vir, exp, imp, end = struct.unpack_from("<7i", data, h + 20)
             s = Section(tag, start, end)
@@ -58,7 +60,7 @@ class Packfile:
             self.sections.append(s)
         cls = self.sections[0]
         for s in self.sections:                              # virtual fixups need the class-name section
-            h = hdr + 64 * self.sections.index(s)
+            h = hdr + sh * self.sections.index(s)
             start, loc, glo, vir, exp = struct.unpack_from("<5i", data, h + 20)
             for p in range(start + vir, start + exp - 11, 12):
                 a, sec, b = struct.unpack_from("<iii", data, p)
