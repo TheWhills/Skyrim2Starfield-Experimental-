@@ -161,10 +161,12 @@ class NifTests(unittest.TestCase):
         self.assertAlmostEqual(pts[4][0] - pts[3][0], 1.0 * H, places=3)   # 1000 steps of 0.001
         self.assertEqual(rep["skyrim_bodies"], 1)
 
-    def test_rigid_body_transform_offsets_and_plain_bodies(self):
-        """Translation at 52, rotation at 68 (tes4skyrim's 250-byte layout); applied on plain bodies too. An identity
+    def test_rigid_body_transform_offsets_t_bodies_only(self):
+        """Translation at 52, rotation at 68 (tes4skyrim's 250-byte layout), applied on bhkRigidBodyT only. An identity
         body laid out as vanilla stores it (rotation 0 0 0 1 followed by a zero linear velocity) must stay unrotated:
-        read four bytes late, its floats are (0, 0, 1, 0), a valid 180 degree turn."""
+        read four bytes late, its floats are (0, 0, 1, 0), a valid 180 degree turn. A PLAIN bhkRigidBody's stored
+        transform is ignored: on the owner's Skyrim SE, applying it put 284 of 285 vanilla models' collision off the
+        visible mesh (baskets 768 units away, the Orc door's body repeating its node's position: doubled)."""
         def body_points(shifted=False, **kw):
             n = F.SseNif()
             root = n.reserve("BSFadeNode")
@@ -177,11 +179,13 @@ class NifTests(unittest.TestCase):
         self.assertAlmostEqual(min(p[0] for p in ident), 2.0 * H, places=3)
         self.assertAlmostEqual(max(p[0] for p in ident), 4.0 * H, places=3)
         s = math.sqrt(0.5)                                              # 90 degrees about Z, moved 2 units up
-        for plain in (False, True):
-            pts = body_points(rigid_t=((0.0, 0.0, 2.0), (0, 0, s, s)), plain_transform=plain)
-            self.assertAlmostEqual(max(p[0] for p in pts), 0.5 * H, places=3)     # x and y swapped by the turn
-            self.assertAlmostEqual(max(p[1] for p in pts), 1.0 * H, places=3)
-            self.assertAlmostEqual(min(p[2] for p in pts), (2.0 - 0.25) * H, places=3)
+        pts = body_points(rigid_t=((0.0, 0.0, 2.0), (0, 0, s, s)))      # bhkRigidBodyT: applied
+        self.assertAlmostEqual(max(p[0] for p in pts), 0.5 * H, places=3)         # x and y swapped by the turn
+        self.assertAlmostEqual(max(p[1] for p in pts), 1.0 * H, places=3)
+        self.assertAlmostEqual(min(p[2] for p in pts), (2.0 - 0.25) * H, places=3)
+        plain = body_points(rigid_t=((0.0, 0.0, 2.0), (0, 0, s, s)), plain_transform=True)   # plain body: ignored
+        self.assertAlmostEqual(max(p[0] for p in plain), 1.0 * H, places=3)
+        self.assertAlmostEqual(min(p[2] for p in plain), -0.25 * H, places=3)
 
     def test_body_transform_modes(self):
         """The survey's alternative rules: the tree's rigid body T carries translation (0, 0, 0.2) havok units."""
@@ -190,6 +194,7 @@ class NifTests(unittest.TestCase):
                 for m in skyrimnif.BODY_TRANSFORM_MODES}
         self.assertAlmostEqual(zmax["all"] - zmax["none"], 0.2 * H, places=3)
         self.assertAlmostEqual(zmax["t_only"], zmax["all"], places=6)     # a T body: applied under t_only too
+        self.assertEqual(skyrimnif.BODY_TRANSFORM_DEFAULT, "t_only")
         rep = {}
         skyrimnif.collision_triangles(tree, rep)
         b, = rep["body_list"]
@@ -447,3 +452,26 @@ class PipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReadBasesTests(unittest.TestCase):
+    def test_armor_world_model_is_mod2_not_its_armature_formids(self):
+        """Real SE: ARMO's MODL holds armature FormIDs; reading them as a path gave 75 garbage model names."""
+        import struct as st
+        from fo4sf import fo4land
+        from test_fo4land import grup, rec
+        armo = rec(b"ARMO", 0x200, [(b"EDID", b"ArmorIronCuirass\0"), (b"MOD2", b"Armor\\Iron\\CuirassGND.nif\0"),
+                                    (b"MODL", st.pack("<I", 0x100))])
+        stat = rec(b"STAT", 0x300, [(b"EDID", b"Rock\0"), (b"MODL", b"Landscape\\Rock.nif\0")])
+        bad = rec(b"STAT", 0x301, [(b"EDID", b"Odd\0"), (b"MODL", st.pack("<I", 0x0D0A0B02))])
+        data = rec(b"TES4", 0, [(b"HEDR", st.pack("<fII", 1.71, 0, 0x800))]) + grup(b"ARMO", 0, [armo]) \
+            + grup(b"STAT", 0, [stat, bad])
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "Skyrim.esm")
+            with open(p, "wb") as f:
+                f.write(data)
+            with fo4land.Plugin(p) as pl:
+                bases = skyrimrefs.read_bases(pl)
+        self.assertEqual(bases[0x200], ("Armor", "ArmorIronCuirass", "Armor\\Iron\\CuirassGND.nif"))
+        self.assertEqual(bases[0x300][2], "Landscape\\Rock.nif")
+        self.assertEqual(bases[0x301][2], "")

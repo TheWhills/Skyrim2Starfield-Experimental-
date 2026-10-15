@@ -97,9 +97,11 @@ Fixed on this branch because of it:
   bhkRigidBodyCInfo2010 212 = 250 bytes; current nif.xml field order). This reader used 56 / 72: on an identity body
   the four floats at 72 are (0, 0, 1, 0), itself a unit quaternion, so every rigid-body-T collision would have been
   turned 180 degrees. Regression test: `test_rigid_body_transform_offsets_and_plain_bodies` (fails at 56 / 72).
-* **Skyrim applies the transform on PLAIN bhkRigidBody too**, not only bhkRigidBodyT (vanilla `trapmace01.nif`
-  carries the inverse of its node's 0.5 degree rotation on a plain body; every other vanilla plain body is identity).
-  Applied on both now; a non-unit rotation is reported in the survey and treated as identity, never searched for.
+* ~~Skyrim applies the transform on PLAIN bhkRigidBody too~~ **CORRECTED 2026-10-15 on the owner's files:** applying
+  it put 285 of 2,473 surveyed vanilla models' collision off the visible mesh (clutter baskets 768 units away, Shack
+  kit planks ~1,600, the Orc door's body repeating its node's translation so it doubled); applying it on
+  bhkRigidBodyT only fixes 284 of them (the 285th is a collision-only wall piece). Plain bodies' stored transform is
+  now ignored; the first run re-measures every rule each time (`misplaced_fixed_by`).
 * **Compressed-mesh vertices**: `R x (chunk translation + transform translation + u16 / 1000)` (NifSkope drawCMS,
   tes4skyrim `cms.py`, validated there against the engine's own shape keys), with the fixed 1/1000 step. Vanilla uses
   one identity transform per mesh, so this changes nothing on vanilla data; it is the verified order.
@@ -130,3 +132,10 @@ To keep in mind (not done):
   [starfield-community-notes.md](starfield-community-notes.md).
 * Skyrim's own +-64-cell Havok world limit (262,144 units) is a Skyrim engine constant; it does not apply in
   Starfield, but Tamriel's real extent (about -57..61) sits inside it anyway.
+
+## First real run (2026-10-15, owner's Skyrim SE + 76 Creation Club archives)
+Verified: terrain (11,186 cells, no holes, -529..563 m), 93 archives / 35,489 textures read, 250,824 placed references
+(220,258 to convert, 3,034 models), worn armor meshes (400 parsed, 0 failures, max 77 bones per shape). Fixed from
+it: Skyrim's BSLODTriShape is NiTriShape-based (16 vanilla stumps / logs / flora failed to parse), plain rigid-body
+transforms (above), ARMO's MODL is a list of armature FormIDs not a path (75 garbage model names), the texture
+sample picking an Interface .dds. Open: cell-edge seams up to 96 units (1.4 m) somewhere in Tamriel.

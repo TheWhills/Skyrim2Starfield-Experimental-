@@ -42,6 +42,8 @@ class SseNif:
                  + struct.pack(f"<{len(children)}i", *children) + struct.pack("<I", 0))
 
     def trishape(self, name, verts, uvs, tris, shader=-1, alpha=-1, t=(0, 0, 0), lod=False):
+        if lod:                                # Skyrim's BSLODTriShape is NiTriShape-based (nif.xml; real files)
+            return self.nitrishape(name, verts, uvs, tris, shader, alpha, lod=(len(tris), 0, 0))
         vsize = 28
         desc = (vsize // 4) | (4 << 8) | (5 << 16) | (6 << 20) | ((0x1 | 0x2 | 0x8 | 0x10) << 44)
         vb = b""
@@ -52,11 +54,9 @@ class SseNif:
         body = self.av(self.s(name), t) + struct.pack("<4f", 0, 0, 0, 1) + struct.pack("<iii", -1, shader, alpha) \
             + struct.pack("<Q", desc) + struct.pack("<HHI", len(tris), len(verts), len(vb) + len(tb)) + vb + tb \
             + struct.pack("<I", 0)
-        if lod:
-            body += struct.pack("<3I", len(tris), 0, 0)
-        return self.add("BSLODTriShape" if lod else "BSTriShape", body)
+        return self.add("BSTriShape", body)
 
-    def nitrishape(self, name, verts, uvs, tris, shader=-1, alpha=-1, crc=False):
+    def nitrishape(self, name, verts, uvs, tris, shader=-1, alpha=-1, crc=False, lod=None):
         nv = len(verts)
         d = struct.pack("<iHBBB", 0, nv, 0, 0, 1) + b"".join(struct.pack("<3f", *v) for v in verts)
         d += struct.pack("<H", 0x1) + (struct.pack("<I", 0) if crc else b"")
@@ -65,8 +65,11 @@ class SseNif:
         d += struct.pack("<Hi", 0, -1) + struct.pack("<H", len(tris)) + struct.pack("<I", 3 * len(tris)) + b"\x01"
         d += b"".join(struct.pack("<3H", *t) for t in tris) + struct.pack("<H", 0)
         data = self.add("NiTriShapeData", d)
-        return self.add("NiTriShape", self.av(self.s(name)) + struct.pack("<iiI", data, -1, 0) + struct.pack("<iB", -1, 0)
-                        + struct.pack("<ii", shader, alpha))
+        body = self.av(self.s(name)) + struct.pack("<iiI", data, -1, 0) + struct.pack("<iB", -1, 0) \
+            + struct.pack("<ii", shader, alpha)
+        if lod is not None:                    # BSLODTriShape: + LOD0 / LOD1 / LOD2 triangle counts
+            return self.add("BSLODTriShape", body + struct.pack("<3I", *lod))
+        return self.add("NiTriShape", body)
 
     def lighting(self, diffuse, normal, double_sided=False):
         paths = [diffuse, normal] + [""] * 7

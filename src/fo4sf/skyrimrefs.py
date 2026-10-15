@@ -47,8 +47,12 @@ def read_bases(p: fo4land.Plugin, wanted_sigs=tuple(SIG_TYPES)) -> dict:
             for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)):
                 if sig == b"EDID":
                     edid = fo4land.zstring(d)
-                elif sig == b"MODL" and not model:
-                    model = fo4land.zstring(d)
+                elif sig == b"MODL" and not model and typ != b"ARMO":
+                    # ARMO's MODL entries are its armature FormIDs (4 bytes), not paths: reading them as text produced
+                    # 75 garbage model names on the owner's Skyrim SE. Its world model is MOD2. Paths end in .nif.
+                    cand = fo4land.zstring(d)
+                    if cand.lower().endswith(".nif"):
+                        model = cand
                 elif sig == b"MOD2" and not mod2:
                     mod2 = fo4land.zstring(d)
             out[fid] = (SIG_TYPES.get(typ.decode("ascii"), typ.decode("ascii")), edid, model or mod2)

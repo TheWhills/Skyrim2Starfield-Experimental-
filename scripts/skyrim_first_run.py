@@ -239,7 +239,9 @@ def survey(a, state):
                     res["collision_misplaced"] += 1
                     # which body-transform rule would put this collision on the visible model?
                     fixes = []
-                    for mode in skyrimnif.BODY_TRANSFORM_MODES[1:]:
+                    for mode in skyrimnif.BODY_TRANSFORM_MODES:
+                        if mode == skyrimnif.BODY_TRANSFORM_DEFAULT:
+                            continue
                         alt, _t = skyrimnif.collision_triangles(n, None, body_transform=mode)
                         if alt and overlaps(alt):
                             fixes.append(mode)

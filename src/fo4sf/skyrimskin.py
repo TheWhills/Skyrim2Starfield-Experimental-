@@ -182,9 +182,9 @@ def skinned_shapes(n: nifmod.NifFile) -> List[SkinnedShape]:
     out = []
     for i, blk in enumerate(n.blocks):
         t = n.type_of(i)
-        if t not in skyrimnif.TRI_TYPES + ("BSDynamicTriShape", "NiTriShape", "NiTriStrips"):
+        if t not in skyrimnif.TRI_TYPES + skyrimnif.NITRI_TYPES + ("BSDynamicTriShape",):
             continue
-        if t in ("NiTriShape", "NiTriStrips"):
+        if t in skyrimnif.NITRI_TYPES:
             p = skyrimnif._av_size(blk)
             skin_ref, = struct.unpack_from("<i", blk, p + 4)
         else:
@@ -212,7 +212,7 @@ def _one(n, i, blk, t, skin_ref):
     shader = alpha = -1
     pos = uv = nor = tan = tris = []
     vertex_skin = None
-    if t in ("NiTriShape", "NiTriStrips"):
+    if t in skyrimnif.NITRI_TYPES:
         s = skyrimnif._nitrishape(n, i, blk, nifmod.world_transforms(n))
         if s is not None:
             pos, uv, nor, tan, tris, shader, alpha = (s.positions, s.uvs, s.normals, s.tangents, s.triangles,

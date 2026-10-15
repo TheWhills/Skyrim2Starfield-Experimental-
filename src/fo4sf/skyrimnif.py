@@ -2,11 +2,14 @@
 render geometry, shader textures, alpha testing, and Skyrim's own Havok collision decoded to triangles.
 
 Geometry (returned as nif.Fo4Shape so the existing converter code can take it):
-* BSTriShape / BSLODTriShape (BS 100): NiAVObject fields as FO4, then bounding sphere, skin, shader, alpha refs,
+* BSTriShape (BS 100): NiAVObject fields as FO4, then bounding sphere, skin, shader, alpha refs,
   u64 vertex descriptor, u16 triangle count (u32 only from BS 130), u16 vertex count, u32 data size. Vertex attribute
   offsets come from the descriptor's nibbles (x 4 bytes); positions are always full floats in BS 100 (BSVertexDataSSE).
 * NiTriShape / NiTriStrips + their data blocks (older-style meshes, common in mods): parsed with and without the
   optional "Material CRC" field, keeping the variant that consumes the block exactly.
+* BSLODTriShape: Skyrim's is an NiTriShape (NiTriBasedGeom: data block, skin, materials, shader, alpha) plus LOD0 /
+  LOD1 / LOD2 triangle counts (nif.xml; vanilla tree stumps, logs and flora use it). Verified on the owner's files: an
+  earlier reading as a BSTriShape failed on 16 of 3,000 vanilla meshes (2026-10-15 first run).
 Shapes carry WORLD transforms (nif.world_transforms: every NiNode ancestor composed), as nif.fo4_trishapes does.
 
 Collision (`collision_triangles`): bhkCollisionObject -> bhkRigidBody[T] -> shape tree. Supported shapes:
@@ -28,7 +31,8 @@ from . import nif as nifmod
 HAVOK_SCALE = 69.99124             # Skyrim game units per havok unit (tes4skyrim measured 69.9913 in SkyrimSE.exe)
 CMS_STEP = 0.001                   # compressed-mesh chunk vertices: u16 offsets in 1/1000 havok-unit steps
 BS_SSE = 100
-TRI_TYPES = ("BSTriShape", "BSLODTriShape", "BSMeshLODTriShape")
+TRI_TYPES = ("BSTriShape", "BSMeshLODTriShape")                 # BSTriShape layout (vertex buffer in the block)
+NITRI_TYPES = ("NiTriShape", "NiTriStrips", "BSLODTriShape")    # NiTriBasedGeom layout (separate data block)
 VF_VERTEX, VF_UV, VF_NORMAL, VF_TANGENT, VF_COLOR, VF_SKIN = 0x1, 0x2, 0x8, 0x10, 0x20, 0x40
 
 
@@ -76,7 +80,7 @@ def _bstrishape(n, i, blk, world):
             col.append(tuple(blk[q + o_c:q + o_c + 4]))
     p += vsize * nvert
     tris = list(struct.iter_unpack("<HHH", blk[p:p + ntri * 6]))
-    if n.type_of(i) in ("BSLODTriShape", "BSMeshLODTriShape") and len(blk) >= 12:
+    if n.type_of(i) == "BSMeshLODTriShape" and len(blk) >= 12:
         sizes = struct.unpack_from("<3I", blk, len(blk) - 12)
         if sum(sizes) == ntri and max(sizes) > 0:      # all LOD levels back to back: keep the most detailed
             k = max(range(3), key=lambda j: sizes[j])
@@ -159,6 +163,11 @@ def _nitrishape(n, i, blk, world):
     if got is None:
         raise nifmod.NifError(f"block {data}: {n.type_of(data)} layout not recognised")
     pos, uv, nor, tan, col, tris = got
+    if n.type_of(i) == "BSLODTriShape" and len(blk) >= p + 8 + 12:
+        sizes = struct.unpack_from("<3I", blk, p + 8)
+        if sum(sizes) == len(tris) and max(sizes) > 0:          # LOD levels back to back: keep the most detailed
+            k = max(range(3), key=lambda j: sizes[j])
+            tris = tris[sum(sizes[:k]):sum(sizes[:k]) + sizes[k]]
     tr, rot, scale = world(i)
     return nifmod.Fo4Shape(_name(n, blk), tr, rot, scale, shader, alpha, skin, pos, uv, nor, tan, col, tris,
                            skin >= 0, i)
@@ -174,7 +183,7 @@ def trishapes(n: nifmod.NifFile) -> List[nifmod.Fo4Shape]:
         t = n.type_of(i)
         if t in TRI_TYPES:
             s = _bstrishape(n, i, blk, world)
-        elif t in ("NiTriShape", "NiTriStrips"):
+        elif t in NITRI_TYPES:
             s = _nitrishape(n, i, blk, world)
         else:
             continue
@@ -278,9 +287,10 @@ def _rigid_body_transform(blk) -> Tuple[tuple, tuple, bool]:
     Layout (niftools nif.xml, cross-checked with tes4skyrim's 250-byte bhkRigidBody: bhkWorldObject 28 + bhkEntityCInfo
     4 + bhkRigidBodyCInfo2010 212): CInfo2010 starts at 32 with unused 4, HavokFilter 4, unused 4, UnknownInt1 4,
     response / unused / contact delay 4, so Translation (Vector4) sits at 52 and Rotation (quaternion x y z w) at 68.
-    Skyrim APPLIES both fields on BOTH body classes (tes4skyrim docs/commentary/asset_convert_collision.md: vanilla
-    trapmace01's plain body carries the inverse of its node's 0.5 degree rotation; every other vanilla plain body is
-    identity). A rotation that is not a unit quaternion is reported and treated as identity, never searched for: one
+    Applied on bhkRigidBodyT only (collision_triangles). CORRECTION 2026-10-15: tes4skyrim's note that Skyrim also
+    applies them on plain bhkRigidBody (its trapmace01 example) does not hold for vanilla clutter on the owner's files:
+    plain bodies store values the engine evidently ignores (baskets 768 units off, the Orc door repeating its node
+    translation), and applying them misplaced 284 surveyed models. A rotation that is not a unit quaternion is reported and treated as identity, never searched for: one
     field off, an identity body reads (0, 0, 1, 0), itself a unit quaternion (a 180 degree turn)."""
     t = struct.unpack_from("<3f", blk, RB_TRANSLATION)
     q = struct.unpack_from("<4f", blk, RB_ROTATION)
@@ -417,16 +427,19 @@ def _shape(n, i, depth=0):
 
 
 BODY_TRANSFORM_MODES = ("all", "t_only", "none", "body_only")
+BODY_TRANSFORM_DEFAULT = "t_only"
 
 
-def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None, body_transform: str = "all"):
+def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None,
+                        body_transform: str = BODY_TRANSFORM_DEFAULT):
     """(points, triangles) of every rigid body's collision in the NIF's root frame, in GAME units; empty when the
     model has no collision. Unsupported shape types go to report['unsupported'] (the model then keeps what decoded).
 
     body_transform: how a body's own stored translation / rotation (bytes 52 / 68) combines with its node's world
-    transform. "all" (default): applied on every body, then the node (tes4skyrim's reading); "t_only": only on
-    bhkRigidBodyT; "none": never; "body_only": the body transform replaces the node's. The alternatives exist for the
-    first-run survey, which measures on real meshes which rule puts collision on the visible model."""
+    transform. "t_only" (default, VERIFIED on the owner's Skyrim SE 2026-10-15): applied on bhkRigidBodyT only, then
+    the node. "all" (tes4skyrim's reading, plain bodies too) put 285 of 2,473 surveyed vanilla models' collision off
+    the visible mesh; "t_only" fixes 284 (the last is a collision-only wall piece). "all", "none" and "body_only"
+    stay for the first-run survey, which re-measures this on every run."""
     world = nifmod.world_transforms(n)
     points, tris, bad, bodies = [], [], [], 0
     for i in range(len(n.blocks)):
@@ -440,7 +453,7 @@ def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None, body_t
         shape, = struct.unpack_from("<i", blk, 0)
         v, f, b = _shape(n, shape)
         bad += b
-        t, m, unit = _rigid_body_transform(blk)            # applied on plain and T bodies alike (Skyrim does)
+        t, m, unit = _rigid_body_transform(blk)            # used on bhkRigidBodyT only by default (see docstring)
         if not unit:
             bad.append(f"{n.type_of(body)} rotation is not a unit quaternion (identity used)")
         is_t = n.type_of(body) == "bhkRigidBodyT"
