@@ -832,7 +832,8 @@ def stage(a, tiles, tds, own, anchors, pairs, seam_rep, targets, latlon, hmin, h
               "note": "latitude/longitude in radians; PNDT CNAM stores latitude first (Mutagen calls it Longitude)"}
     masks = []
     for o in overlays:
-        masks.append(write_mask(a.out, o["world"], o["n"], o["mask_outer_edges"], a.mask_writer))
+        masks.append(write_mask(a.out, o["world"], o["n"], o["mask_outer_edges"], a.mask_writer,
+                                getattr(a, "texconv", None) or orc.TEXCONV))
     check = {"points": sum(len(e["points"]) for e in plan), "seams": seam_rep,
              "max_point_error_m": max(p["error_m"] for e in entries for p in e["points"]),
              "quantisation_step_m": (hmax - hmin) / 65535.0,
@@ -865,7 +866,7 @@ def stage(a, tiles, tds, own, anchors, pairs, seam_rep, targets, latlon, hmin, h
           f"--project dotnet/TerrainOverlays -c Release -- <Starfield.esm> {a.out}")
 
 
-def write_mask(out, world, n, edges, writer):
+def write_mask(out, world, n, edges, writer, texconv=None):
     img = overlay.mask_array(n, edges=edges) if edges else np.zeros((n * 100, n * 100), np.uint8)
     dst = os.path.join(out, *orc.mask_rel(world).split("/"))
     os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -875,10 +876,14 @@ def write_mask(out, world, n, edges, writer):
         import subprocess
         import tempfile
         from PIL import Image
+        texconv = texconv or orc.TEXCONV
+        if not os.path.isfile(texconv):
+            sys.exit(f"texconv not found at {texconv}: pass --texconv <path to texconv.exe> "
+                     "(or --mask-writer builtin)")
         with tempfile.TemporaryDirectory() as tmp:
             png = os.path.join(tmp, world.lower() + ".png")
             Image.fromarray(img, "L").save(png)
-            r = subprocess.run([orc.TEXCONV, "-nologo", "-y", "-f", "BC4_UNORM", "-m", "1", "-o", tmp, png],
+            r = subprocess.run([texconv, "-nologo", "-y", "-f", "BC4_UNORM", "-m", "1", "-o", tmp, png],
                                capture_output=True, text=True)
             made = os.path.join(tmp, world.lower() + ".dds")
             if r.returncode != 0 or not os.path.isfile(made):
@@ -1556,6 +1561,8 @@ def parser():
                     help="measured planet cell of the reference overlay's local origin")
     ap.add_argument("--centre-cell", type=int, nargs=2, default=[0, 0], help="planet cell for the region's centre")
     ap.add_argument("--mask-writer", choices=("texconv", "builtin"), default="texconv")
+    ap.add_argument("--texconv", default=os.environ.get("TEXCONV", ""),
+                    help=f"texconv.exe for the overlay mask (default: the TEXCONV environment variable, else {orc.TEXCONV})")
     ap.add_argument("--mask-ns", choices=og.MASK_NS, default="symmetric",
                     help="north / south mask rings: 'symmetric' only in pairs (mask row order unresolved), 'outer' on "
                          "every outer edge")
