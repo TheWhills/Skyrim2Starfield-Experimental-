@@ -238,6 +238,52 @@ def survey(a, state):
     return res
 
 
+def armor(a, state):
+    """Armor inventory (ARMO / ARMA) and a read-only parse of up to --armor-survey worn meshes with the skin reader."""
+    from fo4sf import nif, skyrimarmor, skyrimskin
+    inv = skyrimarmor.read_armor(os.path.join(a.skyrim_data, "Skyrim.esm"))
+    out = {"inventory": skyrimarmor.summary(inv)}
+    src = state["src"]
+    worn = sorted({w for m in inv["arma"].values() for w in skyrimarmor.worn_models(m)})
+    if len(worn) > a.armor_survey:
+        step = len(worn) / a.armor_survey
+        worn = [worn[int(i * step)] for i in range(a.armor_survey)]
+    res = {"meshes": len(worn), "missing": 0, "parse_failed": 0, "no_skin": 0, "skinned_shapes": 0,
+           "weight_sources": {}, "max_bones_per_shape": 0, "shapes_over_80_bones": 0, "unweighted_vertices": 0,
+           "out_of_range_triangles": 0, "body_parts": {}}
+    bones, errors = {}, {}
+    for name in worn:
+        raw = src.mesh(name)
+        if raw is None:
+            res["missing"] += 1
+            continue
+        try:
+            shapes = skyrimskin.skinned_shapes(nif.parse(raw))
+        except Exception as e:                       # noqa: BLE001
+            res["parse_failed"] += 1
+            key = re.sub(r"\d+", "#", f"{type(e).__name__}: {e}")[:90]
+            errors.setdefault(key, {"count": 0, "example": name})["count"] += 1
+            continue
+        if not shapes:
+            res["no_skin"] += 1
+        for sh in shapes:
+            c = skyrimskin.check(sh)
+            res["skinned_shapes"] += 1
+            bump(res["weight_sources"], c["weight_source"])
+            res["max_bones_per_shape"] = max(res["max_bones_per_shape"], c["bones"])
+            res["shapes_over_80_bones"] += c["bones"] > 80
+            res["unweighted_vertices"] += c["unweighted_vertices"]
+            res["out_of_range_triangles"] += c["out_of_range_triangles"]
+            for bp in c["body_parts"]:
+                bump(res["body_parts"], bp)
+            for b in sh.bones:
+                bump(bones, b.decode("latin-1"))
+    res["bone_names"] = dict(sorted(bones.items(), key=lambda kv: -kv[1]))
+    res["parse_errors"] = dict(sorted(errors.items(), key=lambda kv: -kv[1]["count"])[:12])
+    out["survey"] = res
+    return out
+
+
 def sample(a, state):
     from fo4sf import convert_static, exterior, skyrimconvert, skyrimrefs
     arrival = state.get("arrival") or (0, 0)
@@ -284,7 +330,7 @@ def sample(a, state):
 def summary(run) -> str:
     s = run.steps
     L = ["Skyrim2Starfield first run", "=" * 26]
-    for name in ("setup", "terrain", "archives", "objects", "survey", "sample"):
+    for name in ("setup", "terrain", "archives", "objects", "survey", "armor", "sample"):
         st = s.get(name)
         if st is None:
             L.append(f"{name}: not run")
@@ -321,6 +367,20 @@ def summary(run) -> str:
             L.append(f"  parse error x{e['count']}: {k} (e.g. {e['example']})")
         for m in v["misplaced_examples"][:5]:
             L.append(f"  misplaced: {m['model']} render {fmt(m['render'])} collision {fmt(m['collision'])}")
+    ar = s.get("armor", {})
+    if ar.get("ok"):
+        i, v = ar["inventory"], ar["survey"]
+        L.append(f"  armor: {i['armo_playable']} playable ARMO ({i['armor_types']}), {i['arma']} ARMA, {i['worn_meshes']} "
+                 f"worn meshes ({i['arma_weight_slider']} ARMA with weight slider), races {i['arma_races']}")
+        L.append(f"  armor slots {i['slots']}")
+        L.append(f"  worn-mesh survey: {v['meshes']} meshes, missing {v['missing']}, parse failed {v['parse_failed']}, "
+                 f"no skin {v['no_skin']}, {v['skinned_shapes']} skinned shapes, weights from {v['weight_sources']}, "
+                 f"max bones/shape {v['max_bones_per_shape']} (>80: {v['shapes_over_80_bones']}), unweighted vertices "
+                 f"{v['unweighted_vertices']}, bad triangles {v['out_of_range_triangles']}")
+        L.append(f"  body parts {v['body_parts']}")
+        L.append(f"  bones used ({len(v['bone_names'])}): " + ", ".join(list(v["bone_names"])[:80]))
+        for k, e in v["parse_errors"].items():
+            L.append(f"  armor parse error x{e['count']}: {k} (e.g. {e['example']})")
     sm = s.get("sample", {})
     if sm.get("ok"):
         L.append(f"  sample: {sm['converted']} converted, {sm['failed']} failed near cell {sm['arrival_cell']}; "
@@ -350,6 +410,7 @@ def main(argv=None):
     ap.add_argument("--radius", type=int, default=2, help="sample: cells around --around")
     ap.add_argument("--survey", type=int, default=3000, help="models to parse in the read-only survey")
     ap.add_argument("--sample", type=int, default=20, help="models to really convert")
+    ap.add_argument("--armor-survey", type=int, default=400, help="worn armor meshes to parse in the armor step")
     a = ap.parse_args(argv)
     if os.path.abspath(a.work).lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--work must be outside the repository (it receives converted game data)")
@@ -359,6 +420,7 @@ def main(argv=None):
     run.step("terrain", lambda: terrain(a, state))
     if run.step("archives", lambda: archives(a, state))["ok"] and run.step("objects", lambda: objects(a, state))["ok"]:
         run.step("survey", lambda: survey(a, state))
+        run.step("armor", lambda: armor(a, state))
         if run.steps["setup"].get("box_template") and os.path.isfile(a.texconv):
             run.step("sample", lambda: sample(a, state))
     with open(os.path.join(a.work, "report.json"), "w", encoding="utf-8") as f:

@@ -9,6 +9,9 @@ What it gathers (read-only):
               Robes of Oblivion's records copy, for comparing a working worn NIF against vanilla), plus the external
               geometries\\*.mesh files those NIFs reference.
 
+Plus a few animation samples for the animation work: Skyrim's Havok skeleton(s) and a handful of .hkx clips (an idle,
+a walk, attacks), and Starfield's human skeleton.rig file(s) and a few idle / walk .af clips.
+
 It always writes candidates.txt (every matching path, archive and size, also the ones not extracted) so a wrong
 guess about Starfield's folder layout is visible and fixable with --starfield-pattern.
 
@@ -67,7 +70,46 @@ def skyrim_files(data_dir):
 
 def starfield_archives(data_dir):
     return [ba2.Ba2(os.path.join(data_dir, fn)) for fn in sorted(os.listdir(data_dir))
-            if fn.lower().startswith("starfield - meshes") and fn.lower().endswith(".ba2")]
+            if fn.lower().startswith(("starfield - meshes", "starfield - animations")) and fn.lower().endswith(".ba2")]
+
+
+# animation samples for the .hkx reader and the .af work: (regex on the normalised path, how many to take)
+SKYRIM_ANIM_SAMPLES = [
+    (r"actors/character/character assets[^/]*/skeleton[^/]*\.hkx$", 4),      # the Havok skeletons (male, female)
+    (r"actors/character/animations/mt_idle\.hkx$", 1),
+    (r"actors/character/animations/mt_walkforward\.hkx$", 1),
+    (r"actors/character/animations/1hm_attack[^/]*\.hkx$", 2),
+    (r"actors/character/animations/idle[^/]*\.hkx$", 3),
+]
+STARFIELD_ANIM_SAMPLES = [
+    (r"actors/human/.*characterassets/[^/]*\.rig$", 4),
+    (r"actors/human/.*idle[^/]*\.af$", 4),
+    (r"actors/human/.*walk[^/]*\.af$", 2),
+]
+
+
+def pick(names, samples):
+    """[name] chosen by (regex, count) pairs over sorted normalised names, each name once."""
+    out = []
+    for rx, k in samples:
+        r = re.compile(rx, re.I)
+        out += [n for n in sorted(names, key=norm) if r.search(norm(n)) and n not in out][:k]
+    return out
+
+
+def skyrim_animations(data_dir, samples=SKYRIM_ANIM_SAMPLES):
+    src = bsa.SkyrimArchives(data_dir)
+    names = {n for arc in src.archives for n in arc.names if n.lower().endswith(".hkx")}
+    return {n: d for n in pick(names, samples) for d in [src._read(norm(n).replace("/", "\\"))] if d is not None}
+
+
+def starfield_animations(archives, samples=STARFIELD_ANIM_SAMPLES):
+    where = {}
+    for arc in archives:
+        for i, n in enumerate(arc.names):
+            if norm(n).endswith((".af", ".rig")):
+                where.setdefault(n, (arc, i))
+    return {n: where[n][0].read(where[n][1]) for n in pick(list(where), samples)}
 
 
 def external_meshes(nif_bytes):
@@ -138,11 +180,14 @@ def main(argv=None):
     os.makedirs(out, exist_ok=True)
 
     sky = skyrim_files(a.skyrim_data)
+    sky.update(skyrim_animations(a.skyrim_data))
     archives = starfield_archives(a.starfield_data)
     if not archives:
         sys.exit(f"no 'Starfield - Meshes*.ba2' in {a.starfield_data}")
+    sf_anims = {} if a.list_only else starfield_animations(archives)
     cands, sf, missing = starfield_files(archives, STARFIELD_PATTERNS + a.starfield_pattern,
                                          0 if a.list_only else MAX_STARFIELD_NIFS)
+    sf.update(sf_anims)
 
     lines = [f"Skyrim files ({len(sky)}):"] + [f"  {n}  {len(d):,} B" for n, d in sky.items()]
     lines += [f"", f"Starfield candidates ({len(cands)}; first {min(len(cands), MAX_STARFIELD_NIFS)} extracted):"]

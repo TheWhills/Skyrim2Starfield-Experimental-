@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests"))
 from fo4sf import bsa, textures  # noqa: E402
 import skyrim_fixtures as F  # noqa: E402
 import test_skyrim_objects as T  # noqa: E402
+import test_skyrim_armor as A  # noqa: E402
 
 
 def misplaced_nif():
@@ -38,7 +39,18 @@ class FirstRunTests(unittest.TestCase):
             T.write_esm(os.path.join(sky, "Skyrim.esm"))
             with open(os.path.join(sky, "Update.bsa"), "wb") as f:       # later archive: a broken + a misplaced model
                 f.write(bsa.build({"meshes\\clutter\\doesnotexist.nif": b"Gamebryo junk",
-                                   "meshes\\landscape\\rocks\\rockcliff01.nif": misplaced_nif()}))
+                                   "meshes\\landscape\\rocks\\rockcliff01.nif": misplaced_nif(),
+                                   "meshes\\armor\\iron\\cuirass_0.nif": A.skinned_nif_bytes(),
+                                   "meshes\\armor\\iron\\cuirass_1.nif": b"Gamebryo broken weight variant"}))
+            from fo4sf import skyrimarmor
+            inv = {"armo": {0x200: {"edid": "ArmorIronCuirass", "slots": [32], "armor_type": "heavy",
+                                    "non_playable": False, "addons": [0x100], "template": None}},
+                   "arma": {0x100: {"edid": "IronCuirassAA", "slots": [32], "race": "NordRace", "extra_races": [],
+                                    "male": "Armor\\Iron\\Cuirass_1.nif", "female": "", "male_1st": "",
+                                    "female_1st": "", "weight_slider": (True, False), "priority": (5, 5)}}}
+            patch_armor = mock.patch.object(skyrimarmor, "read_armor", return_value=inv)
+            patch_armor.start()
+            self.addCleanup(patch_armor.stop)
             sf = os.path.join(tmp, "Starfield")
             os.makedirs(os.path.join(sf, "Data"))
             os.makedirs(os.path.join(sf, "Tools"))
@@ -62,7 +74,7 @@ class FirstRunTests(unittest.TestCase):
                 text = f.read()
             if os.environ.get("SHOW_REPORT"):
                 print(text, file=sys.stderr)
-        for step in ("setup", "terrain", "archives", "objects", "survey", "sample"):
+        for step in ("setup", "terrain", "archives", "objects", "survey", "armor", "sample"):
             self.assertTrue(rep[step]["ok"], (step, rep[step].get("error")))
         self.assertTrue(rep["setup"]["box_template"])
         self.assertEqual(rep["terrain"]["extent"], {"x": [-6, 5], "y": [-4, 4]})
@@ -77,6 +89,14 @@ class FirstRunTests(unittest.TestCase):
         self.assertIn("bhkConvexTransformShape", sv["havok_and_geometry_block_types"])
         self.assertEqual(list(sv["nif_bs_versions"]), ["100"])
         self.assertEqual((sv["double_sided_shapes"], sv["models_with_double_sided"]), (1, 1))   # the tree's leaves
+        ar = rep["armor"]
+        self.assertEqual((ar["inventory"]["armo_playable"], ar["inventory"]["worn_meshes"]), (1, 2))
+        av = ar["survey"]
+        self.assertEqual((av["meshes"], av["parse_failed"], av["skinned_shapes"]), (2, 1, 1))
+        self.assertEqual(av["body_parts"], {"32": 1, "34": 1} if isinstance(next(iter(av["body_parts"])), str)
+                         else {32: 1, 34: 1})
+        self.assertIn("NPC L Forearm [LLar]", av["bone_names"])
+        self.assertIn("bones used (3): NPC Spine2 [Spn2]", text)
         sm = rep["sample"]
         self.assertEqual(sm["converted"] + sm["failed"], len(sm["results"]))
         self.assertGreaterEqual(sm["converted"], 3)

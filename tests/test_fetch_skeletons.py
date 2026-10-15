@@ -38,7 +38,10 @@ class FetchSkeletonsTests(unittest.TestCase):
                     "meshes\\actors\\character\\character assets female\\skeleton_female.nif": b"sk-fskel",
                     "meshes\\actors\\character\\character assets\\1stpersonmalebody_0.nif": b"sk-1st",
                     "meshes\\actors\\character\\character assets\\dummy.nif": b"other",
-                    "meshes\\clutter\\bucket01.nif": b"bucket"}))
+                    "meshes\\clutter\\bucket01.nif": b"bucket",
+                    "meshes\\actors\\character\\character assets\\skeleton.hkx": b"sk-hkx-skel",
+                    "meshes\\actors\\character\\animations\\mt_idle.hkx": b"sk-idle",
+                    "meshes\\actors\\character\\animations\\sneakmtidle.hkx": b"not picked"}))
             loose = os.path.join(sky, "meshes", "actors", "character", "character assets")
             os.makedirs(loose)
             with open(os.path.join(loose, "malebody_0.nif"), "wb") as f:      # loose file wins, as in game
@@ -49,6 +52,9 @@ class FetchSkeletonsTests(unittest.TestCase):
                 "meshes\\actors\\human\\characterassets\\naked_m.nif": body,
                 "meshes\\clothes\\outfit_nightwear_01\\outfit_nightwear_upperbody_01_m.nif": b"sf-nightwear",
                 "meshes\\clothes\\outfit_ucpolice\\helmet.nif": b"not wanted"})
+            F.starfield_meshes_ba2(os.path.join(sf, "Starfield - Animations.ba2"), {
+                "meshes\\actors\\human\\characterassets\\skeleton.rig": b"sf-rig",
+                "meshes\\actors\\human\\animations\\idles\\idle_stand.af": b"sf-idle-af"})
             F.starfield_meshes_ba2(os.path.join(sf, "Starfield - Meshes02.ba2"), {
                 "geometries\\" + MESH_PATH + ".mesh": b"sf-mesh-bytes"})
             out = os.path.join(tmp, "work")
@@ -68,6 +74,11 @@ class FetchSkeletonsTests(unittest.TestCase):
             for unwanted in ("dummy.nif", "bucket01.nif", "helmet.nif"):
                 self.assertFalse(any(n.endswith(unwanted) for n in names), unwanted)
             self.assertIn("Starfield - Meshes01.ba2", cand)
+            self.assertIn("skyrim/meshes/actors/character/character assets/skeleton.hkx", names)
+            self.assertIn("skyrim/meshes/actors/character/animations/mt_idle.hkx", names)
+            self.assertFalse(any(n.endswith("sneakmtidle.hkx") for n in names))
+            self.assertIn("starfield/meshes/actors/human/characterassets/skeleton.rig", names)
+            self.assertIn("starfield/meshes/actors/human/animations/idles/idle_stand.af", names)
             self.assertLess(cand.index("skeleton.nif"), cand.index("naked_m.nif"))  # skeletons first
 
     def test_refuses_output_inside_the_repository(self):
