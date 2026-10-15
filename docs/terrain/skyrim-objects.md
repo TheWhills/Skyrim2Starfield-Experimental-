@@ -150,3 +150,14 @@ sample picking an Interface .dds. Second run: 0 parse failures, 0 missing models
 Riverwood (27 materials). Fixed after it: shader texture paths with Bethesda's build folder in front
 (`skyrimhd\build\pc\data\textures\...`, thicket01 / thistle01). Open: cell-edge seams up to 96 units (1.4 m)
 somewhere in Tamriel.
+
+## First in-game exterior (owner, 2026-10-15): Riverwood on Mars
+
+Full Tamriel overlay (11,186 cells, 73 x 73 Starfield cells, BTD 133 MB) + the 5 x 5 Skyrim cells around Riverwood
+(`export --around Riverwood --radius 2`: 2,183 references; 258 models, 255 converted, 3 effect-only; 1,951 placed;
+offline frame check median -0.115 m, 95 % within 3 m; Data 0.58 GiB), installed with `deploy_skyrim_exterior.py`.
+`coc SKY_TamrielRiverwoodSpawn` did nothing at first: the plugin was not active in game although the installer had added
+it to Plugins.txt; once activated, the arrival worked. In game: the village (houses, mill and water wheel, stone bridge,
+walkways, carts), trees and rocks stand on terrain shaped like Riverwood's valley, with the mountains behind. Ground
+is Mars's own material (Skyrim ground textures not enabled), the river is a dry bed (no water), no grass.
+[screenshot: owner's chat, not in the repo]
