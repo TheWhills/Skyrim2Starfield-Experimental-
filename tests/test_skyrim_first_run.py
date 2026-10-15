@@ -113,3 +113,21 @@ class FirstRunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArchivesStepTests(unittest.TestCase):
+    def test_texture_sample_comes_from_textures_folder(self):
+        """Real Skyrim SE: Skyrim - Interface.bsa sorts first and holds .dds outside textures\\ (the first run crashed
+        sampling one of those)."""
+        import skyrim_first_run as fr
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, "Skyrim - Interface.bsa"), "wb") as f:
+                f.write(bsa.build({"interface\\exported\\icon.dds": b"DDS iface"}))
+            with open(os.path.join(tmp, "Skyrim - Textures0.bsa"), "wb") as f:
+                f.write(bsa.build({"textures\\landscape\\dirt01.dds": b"DDS dirt"}))
+            with open(os.path.join(tmp, "Skyrim - Meshes0.bsa"), "wb") as f:
+                f.write(bsa.build({"meshes\\clutter\\bucket01.nif": b"nif"}))
+            out = fr.archives(type("A", (), {"skyrim_data": tmp})(), {})
+        self.assertEqual(out["texture_read"], {"name": "textures\\landscape\\dirt01.dds", "bytes": 8, "magic": "DDS "})
+        self.assertEqual((out["textures"], out["dds_outside_textures"]), (1, 1))
+        self.assertEqual(out["mesh_read"]["bytes"], 3)

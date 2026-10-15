@@ -140,13 +140,20 @@ def archives(a, state):
     out = {"archives": [{"file": os.path.basename(x.path), "version": x.version, "files": len(x.names)}
                         for x in src.archives]}
     meshes = [n for x in src.archives for n in x.names if n.endswith(".nif")]
-    texs = [n for x in src.archives for n in x.names if n.endswith(".dds")]
+    # only textures\ .dds: other archives hold .dds too (interface, ...) that the texture lookup never asks for
+    texs = [n for x in src.archives for n in x.names if n.endswith(".dds") and n.startswith("textures\\")]
     out["meshes"], out["textures"] = len(set(meshes)), len(set(texs))
+    out["dds_outside_textures"] = sum(1 for x in src.archives for n in x.names
+                                      if n.endswith(".dds") and not n.startswith("textures\\"))
     if meshes:
-        out["mesh_read_bytes"] = len(src.mesh(meshes[0]))
+        m = src.mesh(meshes[0])
+        out["mesh_read"] = {"name": meshes[0], "bytes": len(m) if m is not None else None}
     if texs:
         t = src.texture(texs[0])
-        out["texture_read"] = {"name": texs[0], "bytes": len(t), "magic": t[:4].decode("latin-1")}
+        out["texture_read"] = {"name": texs[0], "bytes": len(t) if t is not None else None,
+                               "magic": t[:4].decode("latin-1") if t is not None else None}
+        if t is None:
+            raise RuntimeError(f"texture listed in an archive could not be read back: {texs[0]}")
     return out
 
 
