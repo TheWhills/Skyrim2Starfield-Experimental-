@@ -174,15 +174,17 @@ class InteriorTests(unittest.TestCase):
         path = os.path.join(work, "convert", "lighting.json")
         with contextlib.redirect_stdout(io.StringIO()):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
-        self.assertEqual(json.load(open(path)), {"SleepingGiantInn": {"LIGHTING_TEMPLATE": "006658",
-                                                                      "LIGHT_MERGE_M": "1"}})
+        self.assertEqual(json.load(open(path)), {"SleepingGiantInn": {
+            "LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim",
+            "LIGHT_POWER": "4"}})
         cfg = {"*": {"IMAGE_SPACE": "000123"}, "SleepingGiantInn": {"LIGHTING_TEMPLATE": "0ABCDE", "OMNI_LIGHT": "1"}}
         json.dump(cfg, open(path, "w"))
         with contextlib.redirect_stdout(io.StringIO()):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
         got = json.load(open(path))
         self.assertEqual(got["*"], {"IMAGE_SPACE": "000123"})
-        self.assertEqual(got["SleepingGiantInn"], {"LIGHTING_TEMPLATE": "0ABCDE", "LIGHT_MERGE_M": "1", "OMNI_LIGHT": "1"})
+        self.assertEqual(got["SleepingGiantInn"], {"LIGHTING_TEMPLATE": "0ABCDE", "LIGHT_MERGE_M": "1", "OMNI_LIGHT": "1",
+                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "4"})
         with contextlib.redirect_stdout(io.StringIO()):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work,
                      "--lighting-template", "111111", "--light-merge-m", "0.5"])

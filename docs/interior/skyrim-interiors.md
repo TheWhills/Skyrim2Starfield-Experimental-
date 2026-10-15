@@ -62,3 +62,18 @@ Owner's first run with translated lights (Test A): it built and set every field 
 darker. Two of my mistakes: several light references carry an XRDS of ~10 units, which became a 0.14 m light with a
 quarter of the lumens (XRDS under 64 units is now ignored, `ref_radius` keeps the raw value), and lights smaller than the
 8 m / 2000 lm template had their lumens scaled down (now never below the template; only bigger lights get more).
+
+### Settled defaults (owner's tests, 2026-10-15)
+
+With the fixes above the inn was visible but green-grey: the cell's image space (`LGT_LUT_Int_Gen_v01_curve` 122393,
+a sibling of the `v00` LUT upstream rejected for a green cast). `SfInspect imgs` listed Starfield's image spaces;
+tested on the inn with template 006658, Skyrim ambient (45, 48, 48) and 4x lumens:
+
+| image space | result |
+|---|---|
+| `LGT_NoLut` 1C6C37 | warm wood, readable stone and bar: **default** |
+| `_RENAME_Test_NaturalColorInterior_IS` 0606C1 | about the same, a little more contrast (a test record: may change) |
+| `LGT_LUT_Int_Gen_v04_curve` 03D206 | dark |
+
+`export` now writes `LIGHTING_TEMPLATE` 006658, `IMAGE_SPACE` 1C6C37, `CELL_AMBIENT` skyrim, `LIGHT_POWER` 4,
+`LIGHT_MERGE_M` 1 for every Skyrim interior (values already in `lighting.json` still win).

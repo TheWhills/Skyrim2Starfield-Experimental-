@@ -58,11 +58,12 @@ def cmd_list(a):
     return 0
 
 
-# PluginSpike's default lighting template is a dark underground Fallout 4 base (06BCF8): the first converted Skyrim
-# interior (owner's Sleeping Giant Inn test) was too dark to see. Skyrim interiors get most of their light from the
-# cell's ambient lighting, which is not translated yet, so they start from Starfield's brighter ship interior template
-# and keep lights that are 1 m apart instead of merging everything within 3 m.
-INTERIOR_LIGHTING = {"LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1"}
+# Owner's Sleeping Giant Inn tests (2026-10-15): PluginSpike's defaults (underground template 06BCF8, LUT image space
+# 122393) left the inn dark and green-grey. What looked like Skyrim: the ship interior template 006658, the Skyrim cell's
+# own ambient (CELL_AMBIENT skyrim), translated lights at 4x the template lumens, and no colour grading (LGT_NoLut
+# 1C6C37; _RENAME_Test_NaturalColorInterior_IS 0606C1 looked about the same, LGT_LUT_Int_Gen_v04_curve 03D206 was dark).
+INTERIOR_LIGHTING = {"LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37",
+                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "4"}
 
 
 def write_lighting(work, cell, a):
