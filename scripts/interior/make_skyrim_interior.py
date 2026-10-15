@@ -112,12 +112,13 @@ def cmd_check(a):
            "coc_marker": coc, "manifest_models_without_nif": files_missing[:10]}
     save(os.path.join(work, "check.json"), rep)
     print(json.dumps(rep, indent=1))
-    out = os.path.join(work, "plugin")
-    print("\nnext (needs the .NET 9 SDK; STARFIELD_DATA = your Starfield Data folder):\n"
-          f"  set STARFIELD_DATA=<Starfield>\\Data\n"
-          f"  dotnet run --project dotnet\\PluginSpike -- \"{out}\" \"{man_path}\" \"{os.path.join(work, 'cell.json')}\"\n"
-          f"then install {out}\\FO4Port.esm plus the converted Data tree ({os.path.join(work, 'convert')}: meshes, "
-          f"geometries, materials, textures) and in game: coc FO4Port_{cell['cell']}")
+    staging = os.path.join(work, "convert")
+    print("\nnext (needs the .NET 9 SDK; Starfield closed; PowerShell):\n"
+          f"  $env:STARFIELD_DATA = \"<Starfield>\\Data\"\n"
+          f"  dotnet run --project dotnet\\PluginSpike -- \"{staging}\" \"{man_path}\" \"{os.path.join(work, 'cell.json')}\"\n"
+          f"  python -I scripts\\deploy_starfield.py install --staging \"{staging}\" --starfield \"<Starfield>\"\n"
+          f"in game, console: coc FO4Port_{cell['cell']}\n"
+          f"afterwards: python -I scripts\\deploy_starfield.py uninstall --starfield \"<Starfield>\"")
     return 0 if ok and coc and not files_missing else 1
 
 

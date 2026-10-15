@@ -137,6 +137,7 @@ class InteriorTests(unittest.TestCase):
         self.assertEqual(chk["missing_reasons"], {"NifError: x #": 1})
         self.assertEqual(code, 0)
         self.assertIn("dotnet run --project dotnet\\PluginSpike", out.getvalue())
+        self.assertIn("deploy_starfield.py install", out.getvalue())
         self.assertIn("coc FO4Port_SleepingGiantInn", out.getvalue())
 
     def test_refuses_work_inside_the_repository(self):
