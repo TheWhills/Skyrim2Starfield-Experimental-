@@ -475,3 +475,25 @@ class ReadBasesTests(unittest.TestCase):
         self.assertEqual(bases[0x200], ("Armor", "ArmorIronCuirass", "Armor\\Iron\\CuirassGND.nif"))
         self.assertEqual(bases[0x300][2], "Landscape\\Rock.nif")
         self.assertEqual(bases[0x301][2], "")
+
+
+class TexturePathTests(unittest.TestCase):
+    def test_build_folder_prefix_is_dropped(self):
+        """Real SE (thicket01, thistle01): texture paths with Bethesda's build folder in front."""
+        self.assertEqual(skyrimnif.texture_path("skyrimhd\\build\\pc\\data\\textures\\plants\\thistle01.dds"),
+                         "textures\\plants\\thistle01.dds")
+        self.assertEqual(skyrimnif.texture_path("textures\\plants\\thistle01.dds"), "textures\\plants\\thistle01.dds")
+        self.assertEqual(skyrimnif.texture_path("Data/Textures/Rocks/rock01.dds"), "Textures\\Rocks\\rock01.dds")
+        self.assertEqual(skyrimnif.texture_path("plants\\mytextures\\x.dds"), "plants\\mytextures\\x.dds")
+        self.assertEqual(skyrimnif.texture_path(""), "")
+        self.assertEqual(skyrimnif.texture_path("x\\textures\\a\\textures\\b.dds"), "textures\\a\\textures\\b.dds")
+        n = F.SseNif()
+        root = n.reserve("BSFadeNode")
+        sh = n.trishape(b"T", [(0, 0, 0), (1, 0, 0), (0, 1, 0)], [(0, 0)] * 3, [(0, 1, 2)],
+                        shader=n.lighting("skyrimhd\\build\\pc\\data\\textures\\plants\\thistle01.dds",
+                                          "skyrimhd\\build\\pc\\data\\textures\\plants\\thistle01_n.dds"))
+        n.node(root, b"Root", [sh])
+        src = nif.parse(n.bytes())
+        s, = skyrimnif.trishapes(src)
+        self.assertEqual(skyrimnif.texture_set(src, s.shader_ref)[:2],
+                         ["textures\\plants\\thistle01.dds", "textures\\plants\\thistle01_n.dds"])

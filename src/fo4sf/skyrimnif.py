@@ -208,9 +208,18 @@ def texture_set(n, shader_ref) -> Optional[List[str]]:
     paths, p = [], 4
     for _ in range(count):
         ln, = struct.unpack_from("<I", tb, p)
-        paths.append(tb[p + 4:p + 4 + ln].decode("latin-1").rstrip("\0"))
+        paths.append(texture_path(tb[p + 4:p + 4 + ln].decode("latin-1").rstrip("\0")))
         p += 4 + ln
     return paths
+
+
+def texture_path(path: str) -> str:
+    """A shader texture path as the archives store it: some vanilla meshes keep Bethesda's build folder in front
+    ("skyrimhd\\build\\pc\\data\\textures\\plants\\thistle01.dds": owner's first real run, thicket01 / thistle01), so
+    everything before the first "textures\\" folder is dropped. Paths without one are returned unchanged."""
+    norm = path.replace("/", "\\")
+    k = ("\\" + norm.lower()).find("\\textures\\")     # index of "textures" in norm
+    return norm[k:] if k > 0 else path
 
 
 SLSF2_DOUBLE_SIDED = 0x10            # Shader Flags 2 bit 4 (nif.xml SkyrimShaderPropertyFlags2)

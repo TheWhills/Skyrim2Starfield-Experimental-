@@ -138,4 +138,8 @@ Verified: terrain (11,186 cells, no holes, -529..563 m), 93 archives / 35,489 te
 (220,258 to convert, 3,034 models), worn armor meshes (400 parsed, 0 failures, max 77 bones per shape). Fixed from
 it: Skyrim's BSLODTriShape is NiTriShape-based (16 vanilla stumps / logs / flora failed to parse), plain rigid-body
 transforms (above), ARMO's MODL is a list of armature FormIDs not a path (75 garbage model names), the texture
-sample picking an Interface .dds. Open: cell-edge seams up to 96 units (1.4 m) somewhere in Tamriel.
+sample picking an Interface .dds. Second run: 0 parse failures, 0 missing models, collision on the render mesh for
+2,543 of 2,544 (the last is the collision-only wrwalltower01collpiece); the sample converted 20 of 20 models near
+Riverwood (27 materials). Fixed after it: shader texture paths with Bethesda's build folder in front
+(`skyrimhd\build\pc\data\textures\...`, thicket01 / thistle01). Open: cell-edge seams up to 96 units (1.4 m)
+somewhere in Tamriel.
