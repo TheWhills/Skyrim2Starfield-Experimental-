@@ -517,9 +517,9 @@ def main(argv=None):
     ap.add_argument("--skyrim-water", action="store_true",
                     help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
                          "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
-    ap.add_argument("--skyrim-water-sea", action="store_true",
-                    help="build --skyrim-water: also give sea-level cells water (the planet's ocean does not draw "
-                         "inside the overlay: owner's whole-map test, Solitude docks and the coast were dry)")
+    ap.add_argument("--skyrim-water-sea", action=argparse.BooleanOptionalAction, default=True,
+                    help="build --skyrim-water: also give sea-level cells water (default on; the planet's ocean does "
+                         "not draw inside the overlay: owner's whole-map test, verified)")
     ap.add_argument("--skyrim-water-form", default="0560D0",
                     help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 0560D0 "
                          "WaterOceanDark, the owner's pick; also tried WaterClear 000018, WaterClearLake 01C0CC, "

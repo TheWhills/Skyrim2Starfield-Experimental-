@@ -260,3 +260,6 @@ Distant water sheets (2026-10-16): cell-sized flat water planes far away and in 
 cell's own XCLW water is right). Suspect: the world-level CellWaterHeightLocations / WaterHeights lists, whose
 coordinates are not cell coordinates (New Atlantis lists (5, -6) .. (3, -4)). TerrainOverlays now leaves them empty
 unless "water": {"world_lists": true}. **Supported hypothesis.**
+**Verified in game (2026-10-16):** with the world-level lists off the distant / sky sheets are gone, and with
+sea-level cells written the ocean and Solitude's docks have water. `--skyrim-water-sea` is now on by default
+(`--no-skyrim-water-sea` to leave the sea to the planet).
