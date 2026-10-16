@@ -393,10 +393,13 @@ def cmd_lod(a):
     objects = load(obj_path)
     data = os.path.join(a.out, "Data")
     st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius)
+    flagged = set(st["flag_bases"])
     for i, b in enumerate(objects["bases"]):
         b.pop("distant_lod", None)
-        if i in set(st["flag_bases"]):
+        b.pop("lod_layer", None)
+        if i in flagged:
             b["distant_lod"] = True
+            b["lod_layer"] = skyrimlod.layer_name(b["edid"])
     save(obj_path, objects)
     print(f"lod: lodsettings {st['lodsettings']}; {st['objects_with_lod']:,} objects, {st['instances']:,} references "
           f"(radius >= {a.lod_min_radius:g} m; {st['skipped_small']:,} smaller skipped) -> {st['nif_files']:,} LOD NIFs, "

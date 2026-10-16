@@ -25,6 +25,11 @@ LEVELS = 4
 MAX_VERTS = 0xFFFF
 
 
+def layer_name(base_edid: str) -> str:
+    """The LAYR EditorID (= composite file name prefix) for a base's LOD."""
+    return f"{base_edid}_LOD"
+
+
 def lodsettings(cell_min: int, cell_max: int) -> Tuple[bytes, Tuple[int, int, int]]:
     """(file bytes, (x0, y0, size)): a square from cell_min, size rounded up to a multiple of 2^(LEVELS-1)."""
     step = 2 ** (LEVELS - 1)
@@ -185,7 +190,7 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
         for (bi, cell), shapes in level0.items():
             blocks.setdefault((bi, block_of(cell, (x0, y0), level)), []).extend(shapes)
         for (bi, blk), shapes in sorted(blocks.items()):
-            name = f"{bases[bi]['edid']}_{blk[0]}_{blk[1]}_lod_{level}_cell0"
+            name = f"{layer_name(bases[bi]['edid'])}_{blk[0]}_{blk[1]}_lod_{level}_cell0"
             node = f"Composite\\{world}\\{name}".encode()
             f = sfnif.build_static_nif(node, shapes)
             with open(os.path.join(root, name.lower() + ".nif"), "wb") as fh:

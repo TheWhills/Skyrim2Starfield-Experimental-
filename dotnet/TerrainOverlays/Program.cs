@@ -219,6 +219,32 @@ if (Has(prm, "objects"))
     if (!cellsOf.TryGetValue(world, out var cellAt)) throw new InvalidDataException($"objects.json names world {world}, not an overlay of these params");
     var baseKeys = new List<FormKey>();
     var baseIds = new Dictionary<string, string>();
+    // "lod_layer" (make_skyrim_objects.py lod): the LAYR whose EditorID names this base's composite LOD files
+    // (<layer>_<x>_<y>_lod_<L>_cell0.nif). Vanilla: Gagarin_LOD_Grp012 / NA_LOD_ApolloTower are LAYR records (owner's
+    // find_in_plugin.py run); references join a layer through XLYR. LodBehavior from "lod_behavior" (default Aggregate).
+    var layerByBase = new Dictionary<int, FormKey>();
+    var layers = new Dictionary<string, Layer>();
+    var lodBehavior = Has(o, "lod_behavior")
+        ? Enum.Parse<Layer.LodBehaviorType>(o.GetProperty("lod_behavior").GetString()!) : Layer.LodBehaviorType.Aggregate;
+    {
+        int bi = 0;
+        foreach (var b in o.GetProperty("bases").EnumerateArray())
+        {
+            if (b.TryGetProperty("lod_layer", out var lj))
+            {
+                var ln = lj.GetString()!;
+                if (!layers.TryGetValue(ln, out var layer))
+                {
+                    layer = new Layer(NewKey(), release) { EditorID = ln, LodBehavior = lodBehavior };
+                    mod.Layers.Add(layer);
+                    layers[ln] = layer;
+                }
+                layerByBase[bi] = layer.FormKey;
+            }
+            bi++;
+        }
+        if (layers.Count > 0) Console.WriteLine($"{layers.Count} LOD layers ({lodBehavior})");
+    }
     foreach (var b in o.GetProperty("bases").EnumerateArray())
     {
         var edid = b.GetProperty("edid").GetString()!;
@@ -275,6 +301,7 @@ if (Has(prm, "objects"))
         };
         var scale = r.GetProperty("scale").GetSingle();
         if (Math.Abs(scale - 1f) > 1e-4) obj.Scale = scale;
+        if (layerByBase.TryGetValue(r.GetProperty("base").GetInt32(), out var lk)) obj.Layer.SetTo(lk);
         if (r.GetProperty("disabled").GetBoolean())
         {
             obj.MajorRecordFlagsRaw |= 0x800;                                // Initially Disabled, as in FO4

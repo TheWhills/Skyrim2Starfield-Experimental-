@@ -65,7 +65,7 @@ class CommandTests(unittest.TestCase):
             files = glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "sky_tamriel", "*.nif"))
             rock_ref = next(r for r in obj["refs"] if r["src"] == "002002:Skyrim.esm")
             rock_base = obj["bases"][rock_ref["base"]]
-            mine = [f for f in files if os.path.basename(f).startswith(rock_base["edid"].lower() + "_")]
+            mine = [f for f in files if os.path.basename(f).startswith(rock_base["edid"].lower() + "_lod_")]
             import math
             cx, cy = (int(math.floor(v / 100.0)) for v in rock_ref["pos"][:2])
             lv0 = [f for f in mine if f.endswith(f"_{cx}_{cy}_lod_0_cell0.nif")]
@@ -81,7 +81,8 @@ class CommandTests(unittest.TestCase):
             ok, rep = so.check(out)
         self.assertEqual(struct.unpack("<5i", lodset)[3:], (0, 0))
         self.assertTrue(rock_base.get("distant_lod"))
-        self.assertEqual(sorted({f.split("_lod_")[1][0] for f in mine}), ["0", "1", "2", "3"])
+        self.assertEqual(rock_base.get("lod_layer"), rock_base["edid"] + "_LOD")
+        self.assertEqual(sorted({f.rsplit("_lod_", 1)[1][0] for f in mine}), ["0", "1", "2", "3"])
         self.assertTrue(pts)
         c = np.mean(np.asarray(pts), 0)
         self.assertLess(abs(c[0] - rock_ref["pos"][0]) + abs(c[1] - rock_ref["pos"][1]), 40.0)  # world coordinates

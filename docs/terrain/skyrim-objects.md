@@ -226,3 +226,9 @@ overlay world) compared: lodsettings (-3, -14, 32, 0, 0), composite blocks in th
 `Materials\\LOD\\Generated\\Composite\\<world>\\<name>.mat` per file. The name prefix (Gagarin_LOD_Grp012,
 NA_LOD_ApolloTower) is not a STAT EditorID (SfInspect found no Static NA_LOD_Apollo). How the engine knows which
 composite names exist is the open question.
+**Found (owner's find_in_plugin.py run):** the composite name prefixes are LAYR (layer) records: Gagarin_LOD,
+Gagarin_LOD_Grp01 .. Grp016, Gagarin_LOD_Crane01, NA_LOD_ApolloTower. Mutagen Starfield Layer: PNAM parent, XCLP
+colour, LODB LodBehavior {Default, Aggregate, NoLods}; references join a layer through XLYR. So composite LOD is made
+per layer and block. The generator now writes one LAYR `<base>_LOD` per LOD base (LodBehavior Aggregate by default,
+objects.json "lod_behavior" to change), links those references to it (XLYR) and names the composites after it.
+**Supported hypothesis**: the engine loads composites by the layers its references use.
