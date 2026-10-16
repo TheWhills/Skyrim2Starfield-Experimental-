@@ -212,3 +212,7 @@ Follow-up with `ground_at.py` at the old pale spot (getpos 866.21, -1956.37): Sk
 build had five overlays at alpha 0 and LDirt02 as a byte-5 base, and the game showed blue = overlay 4. So Starfield
 reads only bytes 0..4 and the base is the last valid one among them (**supported hypothesis**). The build now writes
 at most four overlays and the base right after them (single texture: `1 0 0 0 0 0 0 0`, vanilla's form).
+**Verified in game (2026-10-16):** with the head index rule and the base inside bytes 0..4 the colour test put every
+painted texture where Skyrim paints it (LDirt02 cyan under the tree at getpos 866, -1956), and the normal build shows
+Skyrim's own ground textures there (dirt, pine needles, riverbed). Still missing: Skyrim's per-vertex land colour
+(VCLR, which tints the textures warmer / greener in Skyrim), grass (GRAS) and the river water.
