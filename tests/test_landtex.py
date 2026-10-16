@@ -147,7 +147,7 @@ class LayerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             cells, ltex = landtex.read_world_textures(skyrim_esm(os.path.join(tmp, "Skyrim.esm")))
         self.assertEqual(len(cells), 12 * 9)
-        self.assertEqual(ltex[SNOW], {"edid": "LSnow01", "diffuse": "landscape\\snow01.dds"})
+        self.assertEqual(ltex[SNOW], {"edid": "LSnow01", "diffuse": "landscape\\snow01.dds", "normal": ""})
         self.assertAlmostEqual(cells[(-1, -1)][SNOW][30, 30], 1.0)
         self.assertAlmostEqual(cells[(0, 0)][ROAD][5, 5], 0.5)
         self.assertAlmostEqual(cells[(0, 0)][GRASS][5, 5], 0.5)
