@@ -63,6 +63,31 @@ def btd_sample(path, x, y):  # noqa: D401
     return q, alphas, list(t.ltex), (r, c)
 
 
+def hypotheses(q, word, table):
+    """[(label, LTEX fid)] the sample shows under each candidate reading: texture index rule (landtex.INDEX_RULES) x
+    which alpha bits belong to overlay byte i (bits 3i, or 3(4 - i): fo76utils reverses the five groups on load).
+    Alphas count as on at 4 and above (the build's solid blend writes only 0 or 7)."""
+    from fo4sf import landtex as lt
+    n = len(table)
+    valid = [i for i in range(8) if 0 < q[i] <= n]
+    if not valid:
+        return []
+    out = []
+    for rule in lt.INDEX_RULES:
+        for order in ("bits 3i", "bits 3(4-i)"):
+            pick = valid[-1]
+            for i in range(5):
+                if i == valid[-1] or not 0 < q[i] <= n:
+                    continue
+                g = i if order == "bits 3i" else 4 - i
+                if ((word >> (3 * g)) & 7) >= 4:
+                    pick = i
+                    break
+            out.append((f"index {rule}, alpha {order}" + (" (build)" if (rule, order) == (lt.INDEX_RULE, "bits 3i")
+                                                          else ""), table[lt.entry_for(q[pick], n, rule)]))
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
@@ -73,6 +98,8 @@ def main(argv=None):
                          "planet's merged grid, so this gives the shift to the overlay's own frame")
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="the build's --ltex-index (default head)")
+    ap.add_argument("--colours", default="",
+                    help="the build's --skyrim-ground-colours string, to print the colour each reading predicts")
     ap.add_argument("--texconv", default="", help="with --zip: texconv.exe for the PNG previews")
     ap.add_argument("--zip", default="", help="write the Skyrim textures found here as PNG previews (outside the repo)")
     a = ap.parse_args(argv)
@@ -107,6 +134,15 @@ def main(argv=None):
         if q[i]:
             print(f"  overlay {i}: {name(q[i])}  alpha {alphas[i]}/7")
     print(f"  base: {name(q[5])}")
+    cols = {k: v for k, v in (p.split("=") for p in a.colours.replace(" ", "").split(",") if "=" in p)} \
+        if a.colours else {}
+    sky_of = {int(o["form_id"]): o["skyrim"] for o in prm.get("ltex_overrides", [])}
+    word = sum(al << (3 * i) for i, al in enumerate(alphas))
+    print("what each reading of the file would show at this spot (compare with the screen):")
+    for label, fid in hypotheses(q, word, table):
+        sk = sky_of.get(fid, "")
+        print(f"  {label:34} {sk or f'{fid:08X} (not a Skyrim texture)':30} "
+              f"{cols.get(sk.lower(), cols.get(sk, '')) if sk else ''}")
     if a.zip:
         if not a.texconv:
             sys.exit("--zip needs --texconv for the PNG previews")

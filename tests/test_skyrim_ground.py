@@ -269,6 +269,18 @@ class HeightOffsetTests(unittest.TestCase):
 
 
 
+class HypothesesTests(unittest.TestCase):
+    def test_readings_differ(self):
+        import ground_at
+        table = [0x10, 0x20, 0x30]
+        q = [1, 2, 0, 0, 0, 3, 0, 0]                 # head: overlay 0 = 0x10, overlay 1 = 0x20, base 0x30
+        word = 7 << 3                                # only alpha group 1 on
+        got = dict(ground_at.hypotheses(q, word, table))
+        self.assertEqual(got["index head, alpha bits 3i (build)"], 0x20)
+        self.assertEqual(got["index head, alpha bits 3(4-i)"], 0x30)      # group 1 belongs to byte 3 (empty)
+        self.assertEqual(got["index tail, alpha bits 3i"], 0x20)          # byte 1 -> entry 3 - 2 = 1
+
+
 class GroundAtTests(unittest.TestCase):
     def test_reports_skyrim_layers_and_btd_bytes(self):
         import make_cw_overlays as cw
