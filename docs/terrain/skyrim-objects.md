@@ -236,3 +236,8 @@ Second LOD test (layers, Aggregate): still not drawn. Vanilla layer Gagarin_LOD_
 Gagarin_LOD 0799F1. WRLD comparison (owner's dumps): SettleGagarinWorld and NewAtlantis (composite LOD) have HNAM [5],
 the Mars template LC172World (no composites) HNAM [0]; Gagarin also has Water 000018. TerrainOverlays now puts the
 LOD layers under a parent `<world>_LOD` and sets the world's HNAM to [5] when it writes LOD layers.
+Vanilla LOD layer contents (owner's `SfInspect layers SettleGagarinWorld Gagarin_LOD`): ordinary placed statics of
+ordinary bases (MacKitSmBase68, IndExtSupBeamLg01, ...; ref flags 0, base flags 0 / 0x200, no HasDistantLod), so our
+layer setup matches vanilla. Third test (HNAM 5 + parent layer): still not drawn. Remaining differences: our
+composites carry several BSGeometry shapes and the full models' materials (vanilla: one shape, baked composite
+material and textures), BSXFlags (now 1 as vanilla), and the surface block record (to compare).
