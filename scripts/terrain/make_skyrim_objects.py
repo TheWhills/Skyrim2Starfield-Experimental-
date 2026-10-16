@@ -22,6 +22,8 @@ stage    places the converted references (exterior.place) in the overlay's cells
          (+ "objects"), the overlay's plan.json, skipped.json; with --sf-esm runs dotnet/TerrainOverlays.
 grass    Skyrim's grass (LTEX GNAM -> GRAS) scattered once around --around (default Riverwood, --radius cells) and
          merged per cell and model into patch statics -> <work>/grass (src/fo4sf/skyrimgrass.py); stage adds them.
+lod      after stage: distant-object LOD (composite NIFs per object and block, lodsettings) for large statics into
+         <out>/Data in vanilla Starfield's layout (src/fo4sf/skyrimlod.py); --sf-esm rebuilds the plugins.
 check    every model / mesh / material / texture file present, references inside the BTD, each object's origin height
          against the terrain under it (the frame check), collision kinds, archive size estimate -> offline_check.json.
 Everything this writes stays outside the repo (derived game data).
@@ -380,6 +382,31 @@ def cmd_grass(a):
     return 0
 
 
+# ---------------------------------------------------------------------------------------------------------- lod
+def cmd_lod(a):
+    """Distant-object LOD for a staged build (src/fo4sf/skyrimlod.py): composite LOD NIFs + lodsettings into
+    <out>/Data, marks those bases distant_lod in objects.json, and with --sf-esm rebuilds the plugins."""
+    from fo4sf import skyrimlod
+    t0 = time.time()
+    prm, ov = terrain_overlay(a.out)
+    obj_path = os.path.join(a.out, "objects.json")
+    objects = load(obj_path)
+    data = os.path.join(a.out, "Data")
+    st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius)
+    for i, b in enumerate(objects["bases"]):
+        b.pop("distant_lod", None)
+        if i in set(st["flag_bases"]):
+            b["distant_lod"] = True
+    save(obj_path, objects)
+    print(f"lod: lodsettings {st['lodsettings']}; {st['objects_with_lod']:,} objects, {st['instances']:,} references "
+          f"(radius >= {a.lod_min_radius:g} m; {st['skipped_small']:,} smaller skipped) -> {st['nif_files']:,} LOD NIFs, "
+          f"{st['meshes']:,} meshes ({st['mesh_bytes'] / 2 ** 20:,.0f} MiB); {time.time() - t0:.0f} s")
+    if a.sf_esm:
+        subprocess.run(["dotnet", "run", "--project", os.path.join(REPO, "dotnet", "TerrainOverlays"), "-c", "Release",
+                        "--", a.sf_esm, a.out], check=True)
+    return 0
+
+
 # ---------------------------------------------------------------------------------------------------------- stage
 def link_tree(src, dst):
     """Hard-link (copy across volumes) every file under src into dst; returns the number of files."""
@@ -570,7 +597,7 @@ def cmd_check(a):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("export", "select", "convert", "grass", "stage", "check"))
+    ap.add_argument("cmd", choices=("export", "select", "convert", "grass", "stage", "lod", "check"))
     ap.add_argument("--skyrim", help="export: Skyrim.esm")
     ap.add_argument("--world-edid", default="Tamriel")
     ap.add_argument("--around", default="", help="export: cells around an exterior cell EditorID (Riverwood) or X,Y")
@@ -596,6 +623,9 @@ def main(argv=None):
                          "under it, as Skyrim tints grass with the ground")
     ap.add_argument("--grass-density", type=float, default=1.0, help="grass: multiplier on each grass's density")
     ap.add_argument("--seed", type=int, default=1, help="grass: random seed (same seed, same grass)")
+    ap.add_argument("--lod-min-radius", type=float, default=20.0,
+                    help="lod: only statics whose bounding radius x scale is at least this many metres (default 20: "
+                         "mountains, cliffs, buildings)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
@@ -603,13 +633,13 @@ def main(argv=None):
     need = {"export": ("skyrim", "work"), "select": ("work", "terrain"),
             "convert": ("work", "skyrim_data", "content_resources", "texconv"),
             "grass": ("skyrim", "skyrim_data", "content_resources", "texconv", "terrain", "work"),
-            "stage": ("work", "terrain", "out"), "check": ("out",)}[a.cmd]
+            "stage": ("work", "terrain", "out"), "lod": ("out",), "check": ("out",)}[a.cmd]
     missing = [f"--{k.replace('_', '-')}" for k in need if not getattr(a, k)]
     if a.cmd == "convert" and not (a.collision_template or a.starfield_data):
         missing.append("--collision-template or --starfield-data")
     if missing:
         sys.exit(f"{a.cmd} needs {' '.join(missing)}")
-    return {"export": cmd_export, "select": cmd_select, "convert": cmd_convert, "grass": cmd_grass, "stage": cmd_stage,
+    return {"export": cmd_export, "select": cmd_select, "convert": cmd_convert, "grass": cmd_grass, "stage": cmd_stage, "lod": cmd_lod,
             "check": cmd_check}[a.cmd](a)
 
 

@@ -215,3 +215,8 @@ Second survey (composite samples + NewAtlantis cell list), **verified**:
 * NewAtlantis cells span x -8..18, y -14..8 (city core -7..6); lodsettings (-35, -59, 136) covers a larger square.
 **Unresolved:** how the engine finds the composite files (folder scan by world vs an index), and whether HasDistantLod +
 per-object `_lod_N` models alone draw distant objects without composites.
+**First LOD generator** (`make_skyrim_objects.py lod`, after stage; src/fo4sf/skyrimlod.py): lodsettings
+(cell_min, cell_min, size rounded to 8, 0, 0); every reference of a static with radius x scale >= `--lod-min-radius`
+(default 20 m; trees skipped) merged per object and cell into level-0 meshes in world coordinates using the full
+converted model and its own materials; level-L NIFs list the level-0 meshes of their 2^L block (no geometry stored
+twice); those bases get STAT flag HasDistantLod (0x8000). Not yet seen in game.

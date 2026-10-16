@@ -249,6 +249,9 @@ if (Has(prm, "objects"))
         else
         {
             var stat = new Static(NewKey(), release) { EditorID = edid, Model = new Model { File = model } };
+            // "distant_lod" (make_skyrim_objects.py lod): composite distant LOD exists for this base
+            if (b.TryGetProperty("distant_lod", out var dl) && dl.GetBoolean())
+                stat.MajorRecordFlagsRaw |= 0x8000;                                  // Static.MajorFlag.HasDistantLod
             mod.Statics.Add(stat);
             baseKeys.Add(stat.FormKey);
             nStat++;
