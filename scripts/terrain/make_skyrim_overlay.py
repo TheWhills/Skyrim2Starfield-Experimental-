@@ -164,9 +164,11 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
         v = ltex[fid]
         stem = "ground/" + re.sub(r"[^a-z0-9]+", "_", v["edid"].lower()).strip("_")
         try:
-            files = dict(flat)
+            files = {k: v for k, v in flat.items() if k != "RoughnessMatte"}
             if a.skyrim_ground_roughness == "vanilla":      # the vanilla dirt's own roughness map (terrain convention)
                 files["Roughness"] = tslots["Roughness"]["File"]
+            elif a.skyrim_ground_roughness == "matte":      # fully rough everywhere: no sheen
+                files["Roughness"] = flat["RoughnessMatte"]
             if not a.skyrim_ground_flat_height:            # blend heights from the texture's own detail
                 d = conv.src.texture(skyrimground.texture_path(v["diffuse"]))
                 if d is not None:
@@ -515,14 +517,14 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-tint", choices=("vertex", "none"), default="vertex",
                     help="build --skyrim-ground: 'vertex' (default) multiplies each ground texture by the mean Skyrim "
                          "vertex colour (LAND VCLR) where it is painted, as Skyrim does per vertex")
-    ap.add_argument("--skyrim-ground-roughness", choices=("vanilla", "uniform"), default="vanilla",
-                    help="build --skyrim-ground: 'vanilla' (default) keeps the template dirt's own roughness map; "
-                         "'uniform' writes the object converter's 'fairly rough' value, which the terrain drew as a "
-                         "pale sky-reflecting mirror (owner's tests)")
-    ap.add_argument("--skyrim-ground-alpha", choices=("zero", "one", "keep"), default="zero",
-                    help="build --skyrim-ground: the colour texture's alpha, which Terrain1Layer reads as a smooth, "
-                         "frost-like sheen (owner's tests: Skyrim's specular alpha -> white blobs, all 1 -> one pale "
-                         "patch). 'zero' (default, BC3), 'one' (BC1), 'keep' (Skyrim's)")
+    ap.add_argument("--skyrim-ground-roughness", choices=("matte", "vanilla", "uniform"), default="matte",
+                    help="build --skyrim-ground: 'matte' (default) fully rough, like Skyrim's unlit-specular ground "
+                         "(the owner's grass field showed a wet sheen with 'vanilla'); 'vanilla' the template dirt's "
+                         "own roughness map; 'uniform' the object converter's 'fairly rough' value")
+    ap.add_argument("--skyrim-ground-alpha", choices=("one", "zero", "keep"), default="one",
+                    help="build --skyrim-ground: the colour texture's alpha. 'one' (default, BC1 like the vanilla "
+                         "dirt), 'zero' (BC3), 'keep' (Skyrim's specular alpha). The earlier zero default was chosen "
+                         "while the BTD index bug drew the wrong textures, so those tests did not show its effect")
     ap.add_argument("--skyrim-ground-flat-normal", action="store_true",
                     help="build --skyrim-ground: flat normal maps instead of Skyrim's (diagnosis)")
     ap.add_argument("--skyrim-ground-flat-height", action="store_true",

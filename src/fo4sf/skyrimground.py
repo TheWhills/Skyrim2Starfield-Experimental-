@@ -206,7 +206,8 @@ def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:
     import numpy as np
     from fo4sf import convert_material as cm, textures
     out = {}
-    for slot, value, name in (("AmbientOcclusion", 255, "_flat_ao"), ("Height", 128, "_flat_height")):
+    for slot, value, name in (("AmbientOcclusion", 255, "_flat_ao"), ("Height", 128, "_flat_height"),
+                              ("RoughnessMatte", 255, "_flat_rough")):     # fully rough: Skyrim's matte ground
         rel = f"textures/{prefix}/ground/{name}.dds"
         dst = os.path.join(staging, *rel.split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)

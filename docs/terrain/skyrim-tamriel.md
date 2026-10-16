@@ -220,3 +220,7 @@ Side-by-sides with Skyrim (same Riverwood spots) showed our ground far paler and
 defaults to 0 (Skyrim's own colours; the 0.15 scaling was added for the patch that turned out to be the index bug),
 and `--skyrim-ground-tint vertex` (default) multiplies each Skyrim ground texture by the mean LAND VCLR vertex colour
 where Skyrim paints it, the way Skyrim tints per vertex (one tint per texture: an approximation).
+Grass-field close-up (2026-10-16): Skyrim's LFieldGrass texture drew as a smooth, wet-looking dark sheet with only its
+flowers visible. The roughness / colour-alpha defaults were chosen while the index bug drew other textures, so they
+are reset: `--skyrim-ground-roughness matte` (default; a fully rough map, Skyrim's ground has no sheen) and
+`--skyrim-ground-alpha one` (default; BC1 like the vanilla dirt). `vanilla` / `zero` remain for comparison.

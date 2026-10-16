@@ -128,7 +128,7 @@ class GroundTests(unittest.TestCase):
                     d = open(c, "rb").read()
                     h = tx.read_dds_header(d)
                     px = np.frombuffer(d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
-                    self.assertEqual(int(px.reshape(-1, 4)[:, 3].max()), 0)        # default: alpha zero
+                    self.assertEqual(int(px.reshape(-1, 4)[:, 3].min()), 255)      # default: alpha one (as vanilla)
             if test_mode:
                 colours = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(out, "Data", "textures"))
                            for f in fs if f.endswith("_color.dds") and "ground" in r.replace("\\", "/")]
@@ -153,10 +153,11 @@ class GroundTests(unittest.TestCase):
         for m in mats:                                                   # cloned from the plain ground's material
             files = [v["File"] for v in m["Summary"]["Layer1"]["Textures"].values()]
             self.assertEqual([f for f in files if "skyrim/ground" not in f.replace("\\", "/").lower()],
-                             ["terrain/r.dds"], files)
+                             [], files)                                  # matte: our own fully rough map
+            self.assertTrue(any("_flat_rough" in f.lower() for f in files), files)
             comp = [c["Data"]["FileName"] for o in m["Objects"] for c in o["Components"]
                     if c["Type"] == "BSMaterial::MRTextureFile"]
-            self.assertEqual([f for f in comp if f.startswith("terrain/")], ["terrain/r.dds"], comp)   # only roughness
+            self.assertEqual([f for f in comp if f.startswith("terrain/")], [], comp)   # no template map left
             self.assertTrue(any(f.lower().endswith("_height.dds") and "_flat_" not in f.lower() for f in comp), comp)
             self.assertTrue(any(f.lower().endswith("_flat_ao.dds") for f in comp))
             ts = [c["Data"] for o in m["Objects"] for c in o["Components"]
