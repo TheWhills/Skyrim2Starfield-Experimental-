@@ -132,3 +132,8 @@ turns Skyrim's green pines brown-grey too; Starfield may also tint terrain with 
 overrides not taking effect. `--skyrim-ground-test` paints a magenta / green checkerboard into every converted ground
 texture to tell the two apart. Grass is separate: Skyrim's grass is GRAS objects scattered over grass textures, not
 translated yet.
+Checkerboard result (owner, same day): the checkers cover the ground with Skyrim's layout, so the overridden LTEX records
+and cloned materials are what the terrain draws. Colours are washed toward pink (Mars light) but recognisable; a white
+speckle overlays them (likely template texture slots left at the vanilla files); one texture repeat is about 4 m
+(Skyrim's is about 10 m). Riverwood's green comes largely from Skyrim's LAND vertex colours (VCLR) and grass objects,
+neither translated yet. The build now prints the template's texture slots and writes it to ground_template.mat.json.
