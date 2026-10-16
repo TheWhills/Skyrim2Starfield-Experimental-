@@ -220,3 +220,9 @@ per-object `_lod_N` models alone draw distant objects without composites.
 (default 20 m; trees skipped) merged per object and cell into level-0 meshes in world coordinates using the full
 converted model and its own materials; level-L NIFs list the level-0 meshes of their 2^L block (no geometry stored
 twice); those bases get STAT flag HasDistantLod (0x8000). Not yet seen in game.
+First in-game LOD test (2026-10-16, Throat of the World view): our composites do NOT draw. Gagarin (a vanilla planet
+overlay world) compared: lodsettings (-3, -14, 32, 0, 0), composite blocks in the world's own cells with the same
+2^L alignment as ours, one BSGeometry per file, BSXFlags 1 (ours 0), material
+`Materials\\LOD\\Generated\\Composite\\<world>\\<name>.mat` per file. The name prefix (Gagarin_LOD_Grp012,
+NA_LOD_ApolloTower) is not a STAT EditorID (SfInspect found no Static NA_LOD_Apollo). How the engine knows which
+composite names exist is the open question.
