@@ -203,5 +203,15 @@ gets its own density roll, and the GRAS water rule is honoured (0 above / 1 abov
 * Per-world generated output: `meshes\lod\generated\composite\<world>\<object>_<x>_<y>_lod_<L>_cell0.nif`, one file per
   source object per block and level; block coordinates step 1 / 2 / 4 / 8 at levels 0..3 (NewAtlantis 1,324 files,
   CydoniaCity 1,060), plus `textures\lod\generated\composite\` textures. No .bto / .btr files.
-**Unresolved:** how the engine finds the composite files (folder scan by world vs an index), the block size in cells,
-and whether HasDistantLod + per-object `_lod_N` models alone draw distant objects without composites.
+Second survey (composite samples + NewAtlantis cell list), **verified**:
+* A composite NIF holds ONE BSGeometry with identity transform whose geometry is already in world coordinates (metres):
+  NA_LOD_ApolloTower's sphere centre (218, 254, 260) m sits in cell (2, 2) and appears in lod0 blocks (2, 2) and (1, 2).
+* Block size is 2^L cells (L = LOD level 0..3: 1, 2, 4, 8 cells = 100..800 m), blocks aligned to the lodsettings origin
+  (NewAtlantis origin (-35, -59): lod1 blocks odd, lod2 at 1 mod 4, lod3 at -3 mod 8; all match). The file name gives the
+  block's south-west cell.
+* Each composite has its own material `Materials\LOD\Generated\Composite\<World>\<name>.mat` and baked textures
+  `textures\lod\generated\composite\<world>\<name>_{color,normal,rough,metal,emissive,opacity}.dds`.
+* The name prefix is the source object's EditorID (NA_LOD_ApolloTower: a LOD-only STAT), one file per object per block.
+* NewAtlantis cells span x -8..18, y -14..8 (city core -7..6); lodsettings (-35, -59, 136) covers a larger square.
+**Unresolved:** how the engine finds the composite files (folder scan by world vs an index), and whether HasDistantLod +
+per-object `_lod_N` models alone draw distant objects without composites.
