@@ -221,7 +221,8 @@ class SkyrimHeights:
     vertex takes the nearest edge height eased to the fill height over `falloff` game units. The value depends only on
     the vertex's position, so neighbouring tiles agree on their seams."""
 
-    def __init__(self, land, grid=None, fill=None, falloff_cells=FALLOFF_CELLS):
+    def __init__(self, land, grid=None, fill=None, falloff_cells=FALLOFF_CELLS, offset_units=0.0):
+        self.offset = float(offset_units)            # added to every height (--height-offset: e.g. above a planet's sea)
         self.land = land
         self.world = land.world
         self.grid = tuple(grid) if grid else land.grid_bounds
@@ -233,6 +234,11 @@ class SkyrimHeights:
         return None
 
     def merged(self, x0, x1, y0, y1):
+        """Vertex grid (game units, + the height offset) and origin for the inclusive cell rectangle."""
+        g, origin = self._merged(x0, x1, y0, y1)
+        return (g + self.offset if self.offset else g), origin
+
+    def _merged(self, x0, x1, y0, y1):
         """Vertex grid (game units) and origin for the inclusive cell rectangle, NOT clamped to the LAND grid."""
         gx0, gx1, gy0, gy1 = self.grid
         origin = (x0 * fo4land.CELL_UNITS, y0 * fo4land.CELL_UNITS)

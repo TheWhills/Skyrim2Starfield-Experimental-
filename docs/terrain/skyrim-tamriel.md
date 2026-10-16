@@ -154,3 +154,9 @@ Jemison surface location is `SAlphaCentauri_PJemison_Surface` (01AB2B).
 --location-parent 01AB2B` registers the overlay on Jemison half a turn of longitude from New Atlantis and keeps the
 generic Mars overlay records as templates, replacing only the world's biome / climate and the location's parent
 (`world_overrides`, `location_parent` in overlays_params.json; `--template-*` still swap whole records).
+First Jemison test (owner): HUD read JEMISON, so the registration took; but it was night (half a turn of longitude from
+New Atlantis: opposite local time) and the player floated in an ocean with Skyrim's mountains rising out of it (Jemison
+has a sea level; Mars has none, and Riverwood sits near 0 m in the overlay frame). Next: same longitude as New Atlantis,
+another latitude (`--latlon -0.6 2.281`), and `--height-offset <m>` (terrain + objects lifted together; objects through
+`height_offset_m` in overlays_params.json, applied in make_skyrim_objects.to_local) so Skyrim's sea (-14000 units =
+-200 m) meets Jemison's sea level, measured with `player.getpos z` at the water surface.

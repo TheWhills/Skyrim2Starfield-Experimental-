@@ -296,7 +296,8 @@ def cmd_build(a, rest):
         sys.exit("--coc must end in Spawn (the runner's COC naming)")
     if not re.fullmatch(r"[0-9A-Fa-f]{2}", ca.load_byte):
         sys.exit("--load-byte must be two hex digits")
-    ca.heights = skyrimland.SkyrimHeights(land, falloff_cells=a.edge_falloff_cells)
+    ca.heights = skyrimland.SkyrimHeights(land, falloff_cells=a.edge_falloff_cells,
+                                          offset_units=a.height_offset * 70.0)
     ca.landmarks = marks
     ca.ray_landmarks = ()
     ca.arrival = arrival[0][0] if arrival else ""   # "" never matches a point label: the COC sits at the centre
@@ -341,6 +342,10 @@ def cmd_build(a, rest):
         print(f"overlays_params.json: {len(prm['ltex_overrides'])} Starfield LTEX overrides with Skyrim ground materials")
     if a.planet:
         apply_planet(prm, a)
+    for o in prm["overlays"]:                        # make_skyrim_objects.to_local lifts the objects by the same amount
+        o["height_offset_m"] = a.height_offset
+    if a.height_offset:
+        print(f"overlays_params.json: terrain and objects lifted {a.height_offset:g} m")
     with open(pp, "w", encoding="utf-8") as f:
         json.dump(prm, f, indent=1)
     return res
@@ -424,6 +429,9 @@ def main(argv=None):
     ap.add_argument("--land-textures", action="store_true",
                     help="build: Skyrim's ground texture layers mapped onto Starfield LTEX (reads Starfield.esm from "
                          "--sf-data; writes ltex_mapping.json); default: one plain ground texture")
+    ap.add_argument("--height-offset", type=float, default=0.0,
+                    help="build: metres added to every terrain height (and object, via overlays_params) - e.g. to put "
+                         "Skyrim's sea level (-14000 units = -200 m) on an ocean planet's sea level")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")
     ap.add_argument("--latlon", type=float, nargs=2, metavar=("LAT", "LON"), help="build --planet: radians")
     ap.add_argument("--biome", default="", help="build --planet: hex FormID of the planet's biome for the world")

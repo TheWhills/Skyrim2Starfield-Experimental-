@@ -69,11 +69,13 @@ def terrain_overlay(terrain):
 def to_local(refs, ov):
     """Copies of the references with positions in the overlay's own frame: local = Skyrim position - the overlay's
     origin (origin_cw_m, whole 100 m cells; [0, 0] for Tamriel with --frame skyrim, the city's centre for --frame local).
-    Heights are not shifted (the BTD stores absolute heights)."""
+    Heights are lifted by the overlay's height_offset_m (make_skyrim_overlay.py --height-offset; 0 by default), the
+    same amount the terrain was."""
     ox, oy = (float(v) * 70.0 for v in ov["origin_cw_m"])
-    if ox == 0.0 and oy == 0.0:
+    oz = float(ov.get("height_offset_m") or 0.0) * 70.0
+    if ox == 0.0 and oy == 0.0 and oz == 0.0:
         return refs
-    return [dict(r, pos=[r["pos"][0] - ox, r["pos"][1] - oy, r["pos"][2]]) for r in refs]
+    return [dict(r, pos=[r["pos"][0] - ox, r["pos"][1] - oy, r["pos"][2] + oz]) for r in refs]
 
 
 # ---------------------------------------------------------------------------------------------------------- export

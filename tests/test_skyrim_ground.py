@@ -172,5 +172,34 @@ class PlanetTests(unittest.TestCase):
         self.assertEqual((prm["overlays"][0]["latitude"], prm["overlays"][0]["longitude"]), (-0.3, -0.8606))
 
 
+
+class HeightOffsetTests(unittest.TestCase):
+    def test_terrain_and_objects_lift_together(self):
+        import make_cw_overlays as cw
+        import make_skyrim_objects as mo
+        import make_skyrim_overlay as sk
+        hs = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = TL.skyrim_esm(os.path.join(tmp, "Skyrim.esm"))
+            sfd = os.path.join(tmp, "SF")
+            os.makedirs(sfd)
+            starfield_esm(os.path.join(sfd, "Starfield.esm"))
+            for off in (0.0, 200.0):
+                out = os.path.join(tmp, f"out{off:g}")
+                with mock.patch.object(cw, "ltex_source", return_value=([PLAIN], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
+                             "--arrival", "", "--height-offset", f"{off:g}"])
+                t = btd.read(open(os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd"), "rb").read())
+                prm = json.load(open(os.path.join(out, "overlays_params.json")))
+                hs[off] = (t.heights_m(), prm["overlays"][0])
+        import numpy as np
+        self.assertAlmostEqual(float(np.median(hs[200.0][0] - hs[0.0][0])), 200.0, delta=0.05)
+        ov = hs[200.0][1]
+        self.assertEqual(ov["height_offset_m"], 200.0)
+        r, = mo.to_local([{"pos": [70.0, 140.0, 700.0]}], ov)
+        self.assertAlmostEqual(r["pos"][2], 700.0 + 200.0 * 70.0)
+
+
 if __name__ == "__main__":
     unittest.main()
