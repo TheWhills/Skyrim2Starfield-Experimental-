@@ -139,7 +139,8 @@ class GroundTests(unittest.TestCase):
             comp = [c["Data"]["FileName"] for o in m["Objects"] for c in o["Components"]
                     if c["Type"] == "BSMaterial::MRTextureFile"]
             self.assertFalse([f for f in comp if f.startswith("terrain/")], comp)        # no vanilla map left
-            self.assertTrue(any(f.lower().endswith("_flat_height.dds") for f in comp))
+            self.assertTrue(any(f.lower().endswith("_height.dds") and "_flat_" not in f.lower() for f in comp), comp)
+            self.assertTrue(any(f.lower().endswith("_flat_ao.dds") for f in comp))
             ts = [c["Data"] for o in m["Objects"] for c in o["Components"]
                   if c["Type"] == "BSMaterial::TerrainSettingsComponent"]
             self.assertEqual(ts, [{"MaxDisplacement": "0", "TilingDistance": "9.75"}])
@@ -171,6 +172,28 @@ class PlanetTests(unittest.TestCase):
         self.assertEqual(prm["location_parent"], "01AB2B")
         self.assertEqual((prm["overlays"][0]["latitude"], prm["overlays"][0]["longitude"]), (-0.3, -0.8606))
 
+
+
+class HeightMapTests(unittest.TestCase):
+    def test_height_from_diffuse_is_centred_detail(self):
+        import numpy as np
+        from fo4sf import textures as tx
+        rng = np.random.default_rng(1)
+        px = np.zeros((64, 64, 4), np.uint8)
+        px[..., :3] = (200 + rng.integers(-40, 40, (64, 64, 1))).clip(0, 255)   # bright (snow-like) with detail
+        px[..., 3] = 255
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "s.dds")
+            tx.write_dds_dx10(src, 64, 64, tx.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            dst = os.path.join(tmp, "out", "h.dds")
+            with mock.patch.object(textures, "texconv", lambda *a, **k: None):
+                skyrimground.height_from_diffuse(open(src, "rb").read(), "texconv", dst, size=32)
+            d = open(dst, "rb").read()
+        h = tx.read_dds_header(d)
+        v = np.frombuffer(d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"]], np.uint8)
+        self.assertEqual((h["width"], h["height"]), (32, 32))
+        self.assertAlmostEqual(float(v.mean()), 128.0, delta=4.0)     # brightness removed: no texture always "on top"
+        self.assertGreater(float(v.std()), 20.0)
 
 
 class HeightOffsetTests(unittest.TestCase):

@@ -160,3 +160,12 @@ has a sea level; Mars has none, and Riverwood sits near 0 m in the overlay frame
 another latitude (`--latlon -0.6 2.281`), and `--height-offset <m>` (terrain + objects lifted together; objects through
 `height_offset_m` in overlays_params.json, applied in make_skyrim_objects.to_local) so Skyrim's sea (-14000 units =
 -200 m) meets Jemison's sea level, measured with `player.getpos z` at the water surface.
+
+**Riverwood on Jemison (owner, 2026-10-16):** `--planet JemisonPlanetData --latlon -0.6 2.281 --biome 1CBD6A --climate
+24E982 --location-parent 01AB2B --height-offset 185` (Jemison's sea level measured at about -15 m in the overlay frame
+with `player.getpos z`; Skyrim's sea is -200 m): daylight, blue sky with clouds, the HUD reads JEMISON, Riverwood dry
+and in place, colours close to Skyrim's (green pines, grey stone, pale thatch). Mars's atmosphere was the sepia cast.
+Remaining on the ground: hard-edged blobs where Skyrim textures blend (snow over dirt), from the flat height maps that
+Terrain1Layer blends by. Each Skyrim ground material now gets a height map from its own detail
+(`skyrimground.height_from_diffuse`: luminance high-pass, mean 128, fixed spread, so no texture always wins), with
+MaxDisplacement still 0; `--skyrim-ground-flat-height` restores the flat maps.

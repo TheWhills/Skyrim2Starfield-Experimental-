@@ -159,6 +159,39 @@ def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:
     return out
 
 
+def height_from_diffuse(diffuse_dds: bytes, texconv: str, dst: str, size: int = 256) -> None:
+    """A blend height map for one Skyrim ground texture, from its own detail: luminance, high-passed (texture-scale
+    detail only, no overall brightness), normalised to mean 128 and a fixed spread so that every texture competes on
+    equal terms when Terrain1Layer blends layers by height. With flat height maps the BTD's coarse 3-bit layer weights
+    showed as hard-edged blobs (owner's Jemison close-ups: white snow patches over dirt). Written as BC4 to dst."""
+    import tempfile
+    import numpy as np
+    from fo4sf import textures
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "h.dds")
+        with open(src, "wb") as f:
+            f.write(diffuse_dds)
+        textures.texconv(texconv, src, tmp, "R8G8B8A8_UNORM", ("-m", "1"))
+        raw = open(src, "rb").read()
+    h = textures.read_dds_header(raw)
+    px = np.frombuffer(raw[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
+    rgb = px.reshape(h["height"], h["width"], 4)[:, :, :3].astype(np.float32)
+    lum = rgb @ np.array([0.2126, 0.7152, 0.0722], np.float32)
+    step = max(1, min(lum.shape) // size)               # box-downsample to about `size`
+    hh, ww = (lum.shape[0] // step) * step, (lum.shape[1] // step) * step
+    lum = lum[:hh, :ww].reshape(hh // step, step, ww // step, step).mean(axis=(1, 3))
+    k = max(1, min(lum.shape) // 16)                     # high-pass: minus a wide (wrapping) box blur
+    blur = lum.copy()
+    for ax in (0, 1):
+        blur = sum(np.roll(blur, d, axis=ax) for d in range(-k, k + 1)) / (2 * k + 1)
+    det = lum - blur
+    sd = float(det.std()) or 1.0
+    out = np.clip(128.0 + det / sd * 40.0, 0, 255).astype(np.uint8)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    textures.write_r8(dst, out)
+    textures.texconv(texconv, dst, os.path.dirname(dst), "BC4_UNORM")
+
+
 def terrain_settings(mat: dict, tiling_m: float, max_displacement: float = 0.0) -> int:
     """Set the Terrain1Layer TerrainSettingsComponent: TilingDistance (metres per texture repeat; vanilla dirt 3.2) and
     MaxDisplacement (0: the flat height map must not lift the ground). Returns how many components were changed."""

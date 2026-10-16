@@ -98,7 +98,7 @@ def plan_numbers(land, cells, n):
 def skyrim_ground(a, ltex, cells, usage, out):
     """--skyrim-ground: convert the most-covering Skyrim landscape texture sets into Starfield materials (staged under
     <out>/Data) and assign each one a spare Starfield.esm LTEX to override (src/fo4sf/skyrimground.py)."""
-    from fo4sf import bsa, landtex, skyrimconvert, skyrimground
+    from fo4sf import bsa, convert_material as cm, landtex, skyrimconvert, skyrimground
     sf_esm = os.path.join(a.sf_data, "Starfield.esm")
     if not (a.content_resources and a.texconv):
         sys.exit("--skyrim-ground needs --content-resources (Starfield Tools\\ContentResources.zip) and --texconv")
@@ -132,20 +132,27 @@ def skyrim_ground(a, ltex, cells, usage, out):
         print("skyrim ground: TEST MODE, ground diffuse textures replaced by a magenta / green checkerboard")
     flat = skyrimground.flat_textures(os.path.join(out, "Data"), a.texconv)
     tiling = a.skyrim_ground_tiling
-    print(f"skyrim ground: flat AO / height maps, tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
+    print(f"skyrim ground: flat AO, {'flat' if a.skyrim_ground_flat_height else 'detail'} height maps for blending, "
+          f"tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
     names, sky, overrides, failed, done = {}, {}, [], {}, {}
     for fid, slot in chosen:
         v = ltex[fid]
         stem = "ground/" + re.sub(r"[^a-z0-9]+", "_", v["edid"].lower()).strip("_")
         try:
+            files = dict(flat)
+            if not a.skyrim_ground_flat_height:            # blend heights from the texture's own detail
+                d = conv.src.texture(skyrimground.texture_path(v["diffuse"]))
+                if d is not None:
+                    rel = f"textures/skyrim/{stem}_height.dds"
+                    skyrimground.height_from_diffuse(d, a.texconv, os.path.join(out, "Data", *rel.split("/")))
+                    files["Height"] = cm.game_path(rel)
             mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]),
                                             skyrimground.texture_path(v.get("normal")), "", template=template,
-                                            extra_files=flat)
+                                            extra_files=files)
             mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
             with open(mp, encoding="utf-8") as f:
                 md = json.load(f)
             skyrimground.terrain_settings(md, tiling)
-            from fo4sf import convert_material as cm
             with open(mp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(cm.dump_mat(md))
         except Exception as e:                       # noqa: BLE001  (reported; that texture uses the category pick)
@@ -449,6 +456,9 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
                     help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
                          "Starfield's dirt uses 3.2)")
+    ap.add_argument("--skyrim-ground-flat-height", action="store_true",
+                    help="build --skyrim-ground: flat height maps (hard-edged blends) instead of ones from each "
+                         "texture's own detail")
     ap.add_argument("--skyrim-ground-max", type=int, default=200, help="build: at most this many converted ground textures")
     ap.add_argument("--content-resources", default="", help="build --skyrim-ground: Starfield Tools\\ContentResources.zip")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
