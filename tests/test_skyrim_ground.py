@@ -240,8 +240,12 @@ class GroundAtTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
                          "--arrival", "", "--land-textures"])
+            spawn = json.load(open(os.path.join(out, "overlays_params.json")))["overlays"][0]["spawn"]
             with contextlib.redirect_stdout(io.StringIO()) as so:          # cell (-1, -1) NE quadrant: all snow
-                ground_at.main(["--skyrim", esm, "--terrain", out, "--pos", f"{-1000 / 70:.3f}", f"{-1000 / 70:.3f}"])
+                # positions as the game reports them: shifted by a merge offset of (500, -300) m
+                ground_at.main(["--skyrim", esm, "--terrain", out,
+                                "--pos", f"{-1000 / 70 + 500:.3f}", f"{-1000 / 70 - 300:.3f}",
+                                "--spawn-at", f"{spawn[0] + 500:.3f}", f"{spawn[1] - 300:.3f}"])
         txt = so.getvalue()
         self.assertIn("LSnow01", txt)
         self.assertIn("cell (-1, -1)", txt)

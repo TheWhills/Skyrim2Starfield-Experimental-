@@ -1,13 +1,14 @@
 """What ground textures are at one spot of a Skyrim overlay build (read-only), for "why does the ground look like this".
 
-Give the position `player.getpos x` / `player.getpos y` prints in game (metres in the overlay's frame). Prints:
+Give the position `player.getpos x` / `player.getpos y` prints in game, and with --spawn-at the same two values read
+right after `coc` (Starfield reports the planet's merged grid; the arrival gives the shift). Prints:
   * Skyrim: the LTEX layers Skyrim paints at the nearest LAND vertex (EditorID, diffuse texture, weight);
   * the build: the quadrant's LTEX table bytes and the sample's 3-bit alphas in the staged BTD, i.e. what Starfield
     draws there, with the Skyrim texture each overridden Starfield LTEX stands for.
 With --zip it also writes those Skyrim diffuse (and normal) textures as PNG previews (texconv -ft png) into a zip.
 
     python -I scripts\\terrain\\ground_at.py --skyrim "<Skyrim SE>\\Data\\Skyrim.esm" ^
-        --terrain C:\\Modding\\staging\\skyrim_tamriel --pos 270.5 -680.2 --texconv C:\\Modding\\tools\\texconv.exe ^
+        --terrain C:\\Modding\\staging\\skyrim_tamriel --pos 867.06 -1956.06 --spawn-at 900.1 -1900.3 --texconv C:\\Modding\\tools\\texconv.exe ^
         --zip C:\\Modding\\work\\ground_at.zip
 """
 import argparse
@@ -67,12 +68,20 @@ def main(argv=None):
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
     ap.add_argument("--terrain", required=True, help="the staged overlay build (make_skyrim_overlay.py build --out)")
     ap.add_argument("--pos", type=float, nargs=2, required=True, metavar=("X", "Y"), help="player.getpos x / y")
+    ap.add_argument("--spawn-at", type=float, nargs=2, metavar=("X", "Y"),
+                    help="player.getpos x / y right after coc, before moving: Starfield reports positions in the "
+                         "planet's merged grid, so this gives the shift to the overlay's own frame")
     ap.add_argument("--texconv", default="", help="with --zip: texconv.exe for the PNG previews")
     ap.add_argument("--zip", default="", help="write the Skyrim textures found here as PNG previews (outside the repo)")
     a = ap.parse_args(argv)
     with open(os.path.join(a.terrain, "overlays_params.json"), encoding="utf-8") as f:
         prm = json.load(f)
     ov = prm["overlays"][0]
+    if a.spawn_at:                                    # planet frame -> overlay frame through the COC marker
+        sx, sy = ov["spawn"][:2]
+        a.pos = [a.pos[0] - a.spawn_at[0] + sx, a.pos[1] - a.spawn_at[1] + sy]
+        print(f"merge shift ({a.spawn_at[0] - sx:.2f}, {a.spawn_at[1] - sy:.2f}) m: overlay position "
+              f"({a.pos[0]:.2f}, {a.pos[1]:.2f})")
     ox, oy = (float(v) for v in ov.get("origin_cw_m", [0, 0]))
     xu, yu = (a.pos[0] + ox) * 70.0, (a.pos[1] + oy) * 70.0
     (cx, cy, row, col), layers = skyrim_layers(a.skyrim, xu, yu)
