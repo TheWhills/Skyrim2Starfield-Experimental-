@@ -121,6 +121,24 @@ def texture_path(p: str) -> str:
     return p if not p or p.lower().startswith("textures\\") else "textures\\" + p
 
 
+def checker_dds(size: int = 256, cells: int = 8) -> bytes:
+    """A loud magenta / green checkerboard RGBA DDS (--skyrim-ground-test): on the ground in game it proves that the
+    overridden LTEX records and their materials are what the terrain draws, whatever the planet tints."""
+    import tempfile
+    import numpy as np
+    from fo4sf import textures
+    yy, xx = np.mgrid[0:size, 0:size] // (size // cells)
+    on = ((yy + xx) % 2).astype(bool)
+    px = np.zeros((size, size, 4), np.uint8)
+    px[on] = (255, 0, 255, 255)
+    px[~on] = (0, 255, 0, 255)
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "checker.dds")
+        textures.write_dds_dx10(p, size, size, textures.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+        with open(p, "rb") as f:
+            return f.read()
+
+
 def bnam_for(material_rel: str, vanilla_bnam: str) -> str:
     """Our staged material path ('materials\\skyrim\\ground\\x.mat') written the way vanilla BNAM values are."""
     rel = material_rel.replace("/", "\\")

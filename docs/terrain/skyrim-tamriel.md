@@ -124,3 +124,11 @@ points in `README.txt` / `plan.json`. Keep every `player.setpos` move within abo
 | Heights scaled by a constant factor | Skyrim's unit differs from FO4's (refutes H for Skyrim) |
 | Probes far from the arrival hang at the drop height | streaming distance, as measured for core64; compare per ray |
 | No ground at the arrival | compare with core64 on the same install (the records are the same code path) |
+
+**First in-game test of `--skyrim-ground` (owner, 2026-10-15):** built and installed cleanly (55 spare Starfield LTEX
+records, 55 of Skyrim's 66 ground textures in use converted, 10 borrowing). The ground went from plain to a detailed
+reddish dirt that does not look like Riverwood. Not yet known whether that is Skyrim's texture tinted (the Mars sky
+turns Skyrim's green pines brown-grey too; Starfield may also tint terrain with the planet's ground colour) or the
+overrides not taking effect. `--skyrim-ground-test` paints a magenta / green checkerboard into every converted ground
+texture to tell the two apart. Grass is separate: Skyrim's grass is GRAS objects scattered over grass textures, not
+translated yet.

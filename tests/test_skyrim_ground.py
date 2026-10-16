@@ -63,7 +63,22 @@ class GroundTests(unittest.TestCase):
         self.assertEqual(skyrimground.bnam_for("materials\\skyrim\\ground\\x.mat", BNAM),
                          "materials\\skyrim\\ground\\x.mat")
 
+    def test_checker_dds(self):
+        from fo4sf import textures as tx
+        d = skyrimground.checker_dds(16, 2)
+        h = tx.read_dds_header(d)
+        px = d[h["data_offset"]:h["data_offset"] + 16 * 16 * 4]
+        self.assertEqual((h["width"], h["height"]), (16, 16))
+        self.assertEqual((px[:4], px[8 * 4:8 * 4 + 4]), (bytes([0, 255, 0, 255]), bytes([255, 0, 255, 255])))
+
     def test_overlay_build_with_skyrim_ground(self):
+        self._build(test_mode=False)
+
+    def test_test_mode_paints_the_checkerboard(self):
+        out, so = self._build(test_mode=True)
+        self.assertIn("TEST MODE", so)
+
+    def _build(self, test_mode):
         import make_cw_overlays as cw
         import make_skyrim_overlay as sk
         with tempfile.TemporaryDirectory() as tmp:
@@ -93,7 +108,12 @@ class GroundTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()) as so:
                 sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
                          "--arrival", "", "--skyrim-ground", "--content-resources", cr, "--texconv", "texconv.exe",
-                         "--skyrim-ground-max", "3"])
+                         "--skyrim-ground-max", "3"] + (["--skyrim-ground-test"] if test_mode else []))
+            if test_mode:
+                colours = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(out, "Data", "textures"))
+                           for f in fs if f.endswith("_color.dds") and "ground" in r.replace("\\", "/")]
+                self.assertTrue(colours)
+                self.assertTrue(all(open(c, "rb").read() == skyrimground.checker_dds() for c in colours))
             prm = json.load(open(os.path.join(out, "overlays_params.json")))
             t = btd.read(open(os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd"), "rb").read())
             ov = prm["ltex_overrides"]
@@ -107,6 +127,7 @@ class GroundTests(unittest.TestCase):
         for m in mats:                                                   # cloned from the plain ground's material
             files = [v["File"] for v in m["Summary"]["Layer1"]["Textures"].values()]
             self.assertTrue(all("skyrim/ground" in f.replace("\\", "/").lower() for f in files), files)
+        return out, so.getvalue()
 
 
 if __name__ == "__main__":
