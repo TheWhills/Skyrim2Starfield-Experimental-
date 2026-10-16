@@ -224,5 +224,29 @@ class HeightOffsetTests(unittest.TestCase):
         self.assertAlmostEqual(r["pos"][2], 700.0 + 200.0 * 70.0)
 
 
+
+class GroundAtTests(unittest.TestCase):
+    def test_reports_skyrim_layers_and_btd_bytes(self):
+        import make_cw_overlays as cw
+        import make_skyrim_overlay as sk
+        import ground_at
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = TL.skyrim_esm(os.path.join(tmp, "Skyrim.esm"))
+            sfd = os.path.join(tmp, "SF")
+            os.makedirs(sfd)
+            TL.starfield_esm(os.path.join(sfd, "Starfield.esm"))
+            out = os.path.join(tmp, "out")
+            with mock.patch.object(cw, "ltex_source", return_value=([PLAIN], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
+                         "--arrival", "", "--land-textures"])
+            with contextlib.redirect_stdout(io.StringIO()) as so:          # cell (-1, -1) NE quadrant: all snow
+                ground_at.main(["--skyrim", esm, "--terrain", out, "--pos", f"{-1000 / 70:.3f}", f"{-1000 / 70:.3f}"])
+        txt = so.getvalue()
+        self.assertIn("LSnow01", txt)
+        self.assertIn("cell (-1, -1)", txt)
+        self.assertIn(f"{TL.SF['LSnowDeep01']:08X}", txt)              # the BTD draws the snow pick there
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -174,3 +174,6 @@ that the renderer reads as a probability (fo76utils' rule, now matching what is 
 (a 15-30 % dusting of snow or gravel) into hard-edged scattered specks. `--ltex-blend solid` (now the default) snaps
 each alpha to 0 or 7 at one half: a sample shows the layer that covers most of what is left there, faint layers give
 way to the ones below. `--ltex-blend dither` keeps the old encoding.
+Solid blending did not remove the specks either (owner, same day), so they are most likely inside one texture or its
+conversion, not the blend. `scripts\terrain\ground_at.py --pos X Y` (from `player.getpos x / y`) prints the Skyrim LTEX
+layers at that spot and what the staged BTD draws there, and with `--zip` exports those Skyrim textures as PNG previews.
