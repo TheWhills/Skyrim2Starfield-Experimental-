@@ -98,7 +98,10 @@ foreach (var o in overlays)
     loc.MasterSpecialReferences?.Clear();
     loc.MasterInitiallyDisabledReferences?.Clear();
     loc.Keywords = new ExtendedList<IFormLinkGetter<IKeywordGetter>> { new FormLink<IKeywordGetter>(new FormKey(sfEsm, 0x2CA99D)) };
-    loc.ParentLocation.SetTo(new FormKey(sfEsm, 0x01B736));                  // SSol_PMars_Surface
+    // parent: SSol_PMars_Surface by default; "location_parent" (hex) for another planet (Jemison: 01AB2B
+    // SAlphaCentauri_PJemison_Surface, owner's SfInspect dump)
+    loc.ParentLocation.SetTo(new FormKey(sfEsm, prm.TryGetProperty("location_parent", out var lp)
+        ? Convert.ToUInt32(lp.GetString(), 16) : 0x01B736));
     mod.Locations.Add(loc);
 
     var w = (Worldspace)templateWorld.Duplicate(NewKey());
@@ -109,6 +112,14 @@ foreach (var o in overlays)
     w.OffsetData = null;
     w.CellSizeData = null;
     w.Location.SetTo(loc.FormKey);
+    // "world_overrides" {"biome", "climate"} (hex): the Mars template's biome (2A3777) drives its ground cover / weather;
+    // another planet uses one of its own (Jemison: New Atlantis's biome 1CBD6A and climate 24E982, owner's dump)
+    if (prm.TryGetProperty("world_overrides", out var wo))
+    {
+        if (wo.TryGetProperty("biome", out var bi)) w.Biome.SetTo(new FormKey(sfEsm, Convert.ToUInt32(bi.GetString(), 16)));
+        if (wo.TryGetProperty("climate", out var cl)) w.Climate.SetTo(new FormKey(sfEsm, Convert.ToUInt32(cl.GetString(), 16)));
+        Console.WriteLine($"  {world}: biome {w.Biome.FormKey}, climate {w.Climate.FormKey}, location parent {loc.ParentLocation.FormKey}");
+    }
     w.Components.OfType<WorldSpaceOverlayComponent>().First().SurfaceBlock.SetTo(block.FormKey);
     // object bounds are raw metres; Mutagen shows them divided by 4096
     float bmin = o.GetProperty("bounds_min_m").GetSingle() / 4096f, bmax = o.GetProperty("bounds_max_m").GetSingle() / 4096f;

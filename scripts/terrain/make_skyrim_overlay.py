@@ -348,23 +348,33 @@ def cmd_build(a, rest):
 
 def apply_planet(prm, a):
     """--planet: register the overlay on another planet's PNDT (default Mars, experiment 2b's verified registration) at
-    --latlon, with that planet's overlay world / surface block / location as the record templates (--template-*). The
-    plan's probe points stay in the overlay's own frame (local metres), which does not depend on the planet."""
-    if not (a.latlon and a.template_world and a.template_block and a.template_location):
-        sys.exit("--planet needs --latlon LAT LON (radians) and --template-world / --template-block / "
-                 "--template-location (hex FormIDs of one of that planet's overlay worlds; SfInspect planetworlds / sfbk)")
+    --latlon. The generic Mars overlay records stay the templates; only what ties them to Mars is replaced: the
+    world's biome (and a climate) and the location's parent (--biome / --climate / --location-parent, hex FormIDs;
+    owner's SfInspect dumps: LC172World carries Mars biome 2A3777, its location sits under SSol_PMars_Surface 01B736).
+    --template-* still swap whole templates. The probe plan stays in the overlay's own frame."""
+    if not a.latlon:
+        sys.exit("--planet needs --latlon LAT LON (radians)")
     if not prm.get("mars"):
         sys.exit("--planet with --no-mars: nothing registers the overlay")
     prm["mars"]["planet"] = a.planet
     prm["mars"]["hypothesis"] = (f"registered on {a.planet} at lat {a.latlon[0]} lon {a.latlon[1]} rad (owner's choice, "
                                  "away from the planet's own locations); not verified in game")
     prm["mars"].pop("reference", None)
-    prm["templates"] = {"world": a.template_world, "block": a.template_block, "location": a.template_location}
+    tpl = {k: v for k, v in (("world", a.template_world), ("block", a.template_block),
+                             ("location", a.template_location)) if v}
+    if tpl:
+        prm["templates"] = tpl
+    wo = {k: v for k, v in (("biome", a.biome), ("climate", a.climate)) if v}
+    if wo:
+        prm["world_overrides"] = wo
+    if a.location_parent:
+        prm["location_parent"] = a.location_parent
     for o in prm["overlays"]:
         o["latitude"], o["longitude"] = a.latlon
         o.pop("planet_target_cell", None)
-    print(f"overlays_params.json: registered on {a.planet} at lat {a.latlon[0]:g} lon {a.latlon[1]:g}; templates "
-          f"WRLD {a.template_world} SFBK {a.template_block} LCTN {a.template_location}")
+    print(f"overlays_params.json: registered on {a.planet} at lat {a.latlon[0]:g} lon {a.latlon[1]:g}; "
+          f"templates {tpl or 'Mars (default)'}; world {wo or 'unchanged'}; location parent "
+          f"{a.location_parent or 'Mars surface (default)'}")
 
 
 def cmd_check(a, rest):
@@ -416,6 +426,9 @@ def main(argv=None):
                          "--sf-data; writes ltex_mapping.json); default: one plain ground texture")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")
     ap.add_argument("--latlon", type=float, nargs=2, metavar=("LAT", "LON"), help="build --planet: radians")
+    ap.add_argument("--biome", default="", help="build --planet: hex FormID of the planet's biome for the world")
+    ap.add_argument("--climate", default="", help="build --planet: hex FormID of a climate for the world")
+    ap.add_argument("--location-parent", default="", help="build --planet: hex FormID of the planet's surface LCTN")
     ap.add_argument("--template-world", default="", help="build --planet: hex FormID of that planet's overlay WRLD")
     ap.add_argument("--template-block", default="", help="build --planet: hex FormID of that world's SFBK")
     ap.add_argument("--template-location", default="", help="build --planet: hex FormID of that world's LCTN")

@@ -145,9 +145,12 @@ ground materials now get a shared white AO and mid-grey (flat) height map, MaxDi
 (Skyrim repeats a landscape texture ~6 times per 4,096-unit cell; `--skyrim-ground-tiling` to change).
 
 ### Another planet (`--planet`; owner's idea: Jemison, away from New Atlantis; not tested in game)
-Mars's atmosphere and weather tint everything (stone, wood and snow share the ground's sepia cast). `make_skyrim_overlay.py
-build --planet <PNDT EditorID> --latlon LAT LON --template-world <hex> --template-block <hex> --template-location <hex>`
-registers the overlay on that planet's PNDT at the given latitude / longitude (radians) and copies that planet's own
-overlay WRLD / SFBK / LCTN as templates (`templates` in overlays_params.json, read by dotnet/TerrainOverlays; Mars's
-experiment 2b records stay the default). The plugin keeps its `_Mars.esm` name. Pick the spot and templates from
-`SfInspect planetworlds` (every planet's registered worlds with lat / long) and `SfInspect sfbk`.
+Mars's atmosphere and weather tint everything (stone, wood and snow share the ground's sepia cast). Owner's SfInspect
+dumps: the Mars template world `LC172World` carries the Mars biome `2A3777` and no climate; its location
+`LC172WorldLocation` sits under `SSol_PMars_Surface` (01B736). Jemison registers only `NewAtlantis` (stored latitude
+0.7111, longitude 2.2810 rad; SfInspect prints the two swapped), which uses biome `1CBD6A` and climate `24E982`; the
+Jemison surface location is `SAlphaCentauri_PJemison_Surface` (01AB2B).
+`make_skyrim_overlay.py build --planet JemisonPlanetData --latlon -0.3 -0.8606 --biome 1CBD6A --climate 24E982
+--location-parent 01AB2B` registers the overlay on Jemison half a turn of longitude from New Atlantis and keeps the
+generic Mars overlay records as templates, replacing only the world's biome / climate and the location's parent
+(`world_overrides`, `location_parent` in overlays_params.json; `--template-*` still swap whole records).

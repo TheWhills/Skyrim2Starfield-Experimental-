@@ -160,14 +160,16 @@ class PlanetTests(unittest.TestCase):
             base = ["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin", "--arrival", ""]
             with mock.patch.object(cw, "ltex_source", return_value=([PLAIN], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
                     contextlib.redirect_stdout(io.StringIO()):
-                sk.main(base + ["--planet", "JemisonPlanetData", "--latlon", "-0.7", "2.1", "--template-world", "0ABCDE",
-                                "--template-block", "012345", "--template-location", "0FEDCB"])
+                sk.main(base + ["--planet", "JemisonPlanetData", "--latlon", "-0.3", "-0.8606", "--biome", "1CBD6A",
+                                "--climate", "24E982", "--location-parent", "01AB2B"])
                 prm = json.load(open(os.path.join(out, "overlays_params.json")))
-                with self.assertRaises(SystemExit):                        # a planet needs its templates
-                    sk.main(base + ["--planet", "JemisonPlanetData", "--latlon", "0", "1"])
+                with self.assertRaises(SystemExit):                        # a planet needs its spot
+                    sk.main(base + ["--planet", "JemisonPlanetData"])
         self.assertEqual(prm["mars"]["planet"], "JemisonPlanetData")
-        self.assertEqual(prm["templates"], {"world": "0ABCDE", "block": "012345", "location": "0FEDCB"})
-        self.assertEqual((prm["overlays"][0]["latitude"], prm["overlays"][0]["longitude"]), (-0.7, 2.1))
+        self.assertNotIn("templates", prm)                                 # the generic Mars records stay
+        self.assertEqual(prm["world_overrides"], {"biome": "1CBD6A", "climate": "24E982"})
+        self.assertEqual(prm["location_parent"], "01AB2B")
+        self.assertEqual((prm["overlays"][0]["latitude"], prm["overlays"][0]["longitude"]), (-0.3, -0.8606))
 
 
 if __name__ == "__main__":
