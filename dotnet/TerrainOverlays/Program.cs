@@ -39,9 +39,15 @@ var release = StarfieldRelease.Starfield;
 var sfEsm = ModKey.FromNameAndExtension("Starfield.esm");
 using var sf = StarfieldMod.CreateFromBinaryOverlay(sfPath, release);
 
-var templateWorld = sf.Worldspaces.First(w => w.FormKey.ID == 0x02DF8C);                                   // LC172World (Mars)
-var templateBlock = sf.EnumerateMajorRecords<ISurfaceBlockGetter>().First(b => b.FormKey.ID == 0x102382);   // OverlayBlockLC172World
-var templateLoc = sf.Locations.First(l => l.FormKey.ID == 0x3807BE);                                        // LC172WorldLocation
+// Templates: the Mars overlay records of experiment 2b by default; optional "templates": {"world", "block", "location"}
+// (hex FormIDs in Starfield.esm) copy another planet's overlay world instead (make_skyrim_overlay.py --planet: a Jemison
+// world, so the copy carries Jemison's climate / location parent rather than Mars's).
+uint Tpl(string k, uint dflt) => prm.TryGetProperty("templates", out var t) && t.TryGetProperty(k, out var v)
+    ? Convert.ToUInt32(v.GetString(), 16) : dflt;
+var templateWorld = sf.Worldspaces.First(w => w.FormKey.ID == Tpl("world", 0x02DF8C));                                   // LC172World (Mars)
+var templateBlock = sf.EnumerateMajorRecords<ISurfaceBlockGetter>().First(b => b.FormKey.ID == Tpl("block", 0x102382));   // OverlayBlockLC172World
+var templateLoc = sf.Locations.First(l => l.FormKey.ID == Tpl("location", 0x3807BE));                                    // LC172WorldLocation
+Console.WriteLine($"templates: WRLD {templateWorld.EditorID}, SFBK {templateBlock.EditorID}, LCTN {templateLoc.EditorID}");
 
 var modKey = ModKey.FromNameAndExtension(prm.GetProperty("plugin").GetString()!);
 var mod = new StarfieldMod(modKey, release);
@@ -274,7 +280,8 @@ if (Has(prm, "mars"))
     var marsKey = ModKey.FromNameAndExtension(m.GetProperty("plugin").GetString()!);
     var mars = new StarfieldMod(marsKey, release);
     mars.ModHeader.Flags |= StarfieldModHeader.HeaderFlag.Master;
-    var planet = (Planet)sf.Planets.First(pl => pl.EditorID == "MarsPlanetData").DeepCopy();   // same FormKey = override
+    var planetEdid = m.TryGetProperty("planet", out var pe) ? pe.GetString()! : "MarsPlanetData";
+    var planet = (Planet)sf.Planets.First(pl => pl.EditorID == planetEdid).DeepCopy();   // same FormKey = override
     mars.Planets.Add(planet);
     foreach (var (w, o) in worlds)
         planet.MasterWorldspaces!.Add(new MasterWorldspace
@@ -287,5 +294,5 @@ if (Has(prm, "mars"))
     var marsPath = Path.Combine(outDir, marsKey.FileName);
     mars.BeginWrite.ToPath(marsPath).WithLoadOrder(sfEsm, modKey)
         .WithKnownMasters(new KeyedMasterStyle(sfEsm, MasterStyle.Full), new KeyedMasterStyle(modKey, MasterStyle.Full)).Write();
-    Console.WriteLine($"wrote {marsPath} ({new FileInfo(marsPath).Length:N0} bytes); Mars master worldspaces now {planet.MasterWorldspaces!.Count}");
+    Console.WriteLine($"wrote {marsPath} ({new FileInfo(marsPath).Length:N0} bytes); {planetEdid} master worldspaces now {planet.MasterWorldspaces!.Count}");
 }

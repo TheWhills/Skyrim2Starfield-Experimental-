@@ -333,15 +333,38 @@ def cmd_build(a, rest):
           f"{arrival[0][0] if arrival else 'overlay centre'}, {len(extra)} extra landmarks")
     res = cw.build(ca)
     write_source()                                   # with the texture stats the build filled in
+    pp = os.path.join(a.out, "overlays_params.json")
+    with open(pp, encoding="utf-8") as f:
+        prm = json.load(f)
     if tex_stats and tex_stats.get("ltex_overrides"):  # for dotnet/TerrainOverlays: override these Starfield.esm LTEX
-        pp = os.path.join(a.out, "overlays_params.json")
-        with open(pp, encoding="utf-8") as f:
-            prm = json.load(f)
         prm["ltex_overrides"] = tex_stats["ltex_overrides"]
-        with open(pp, "w", encoding="utf-8") as f:
-            json.dump(prm, f, indent=1)
         print(f"overlays_params.json: {len(prm['ltex_overrides'])} Starfield LTEX overrides with Skyrim ground materials")
+    if a.planet:
+        apply_planet(prm, a)
+    with open(pp, "w", encoding="utf-8") as f:
+        json.dump(prm, f, indent=1)
     return res
+
+
+def apply_planet(prm, a):
+    """--planet: register the overlay on another planet's PNDT (default Mars, experiment 2b's verified registration) at
+    --latlon, with that planet's overlay world / surface block / location as the record templates (--template-*). The
+    plan's probe points stay in the overlay's own frame (local metres), which does not depend on the planet."""
+    if not (a.latlon and a.template_world and a.template_block and a.template_location):
+        sys.exit("--planet needs --latlon LAT LON (radians) and --template-world / --template-block / "
+                 "--template-location (hex FormIDs of one of that planet's overlay worlds; SfInspect planetworlds / sfbk)")
+    if not prm.get("mars"):
+        sys.exit("--planet with --no-mars: nothing registers the overlay")
+    prm["mars"]["planet"] = a.planet
+    prm["mars"]["hypothesis"] = (f"registered on {a.planet} at lat {a.latlon[0]} lon {a.latlon[1]} rad (owner's choice, "
+                                 "away from the planet's own locations); not verified in game")
+    prm["mars"].pop("reference", None)
+    prm["templates"] = {"world": a.template_world, "block": a.template_block, "location": a.template_location}
+    for o in prm["overlays"]:
+        o["latitude"], o["longitude"] = a.latlon
+        o.pop("planet_target_cell", None)
+    print(f"overlays_params.json: registered on {a.planet} at lat {a.latlon[0]:g} lon {a.latlon[1]:g}; templates "
+          f"WRLD {a.template_world} SFBK {a.template_block} LCTN {a.template_location}")
 
 
 def cmd_check(a, rest):
@@ -391,6 +414,11 @@ def main(argv=None):
     ap.add_argument("--land-textures", action="store_true",
                     help="build: Skyrim's ground texture layers mapped onto Starfield LTEX (reads Starfield.esm from "
                          "--sf-data; writes ltex_mapping.json); default: one plain ground texture")
+    ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")
+    ap.add_argument("--latlon", type=float, nargs=2, metavar=("LAT", "LON"), help="build --planet: radians")
+    ap.add_argument("--template-world", default="", help="build --planet: hex FormID of that planet's overlay WRLD")
+    ap.add_argument("--template-block", default="", help="build --planet: hex FormID of that world's SFBK")
+    ap.add_argument("--template-location", default="", help="build --planet: hex FormID of that world's LCTN")
     ap.add_argument("--skyrim-ground", action="store_true",
                     help="build: with --land-textures, Skyrim's OWN ground textures (converted, on spare Starfield LTEX "
                          "records the terrain plugin overrides); needs --content-resources and --texconv")

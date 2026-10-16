@@ -143,3 +143,11 @@ The template (owner's `ground_template.mat.json`, `Materials\Terrain\DirtFootpri
 0.28, DisplacementMidpoint 0.504). The speckle was the vanilla footprint AO / height maps left in slots 5 / 6. Skyrim
 ground materials now get a shared white AO and mid-grey (flat) height map, MaxDisplacement 0, and TilingDistance 9.75 m
 (Skyrim repeats a landscape texture ~6 times per 4,096-unit cell; `--skyrim-ground-tiling` to change).
+
+### Another planet (`--planet`; owner's idea: Jemison, away from New Atlantis; not tested in game)
+Mars's atmosphere and weather tint everything (stone, wood and snow share the ground's sepia cast). `make_skyrim_overlay.py
+build --planet <PNDT EditorID> --latlon LAT LON --template-world <hex> --template-block <hex> --template-location <hex>`
+registers the overlay on that planet's PNDT at the given latitude / longitude (radians) and copies that planet's own
+overlay WRLD / SFBK / LCTN as templates (`templates` in overlays_params.json, read by dotnet/TerrainOverlays; Mars's
+experiment 2b records stay the default). The plugin keeps its `_Mars.esm` name. Pick the spot and templates from
+`SfInspect planetworlds` (every planet's registered worlds with lat / long) and `SfInspect sfbk`.

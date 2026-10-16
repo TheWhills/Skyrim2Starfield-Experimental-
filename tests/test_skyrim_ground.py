@@ -146,5 +146,29 @@ class GroundTests(unittest.TestCase):
         return out, so.getvalue()
 
 
+
+class PlanetTests(unittest.TestCase):
+    def test_register_on_another_planet(self):
+        import make_cw_overlays as cw
+        import make_skyrim_overlay as sk
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = TL.skyrim_esm(os.path.join(tmp, "Skyrim.esm"))
+            sfd = os.path.join(tmp, "SF")
+            os.makedirs(sfd)
+            starfield_esm(os.path.join(sfd, "Starfield.esm"))
+            out = os.path.join(tmp, "out")
+            base = ["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin", "--arrival", ""]
+            with mock.patch.object(cw, "ltex_source", return_value=([PLAIN], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                sk.main(base + ["--planet", "JemisonPlanetData", "--latlon", "-0.7", "2.1", "--template-world", "0ABCDE",
+                                "--template-block", "012345", "--template-location", "0FEDCB"])
+                prm = json.load(open(os.path.join(out, "overlays_params.json")))
+                with self.assertRaises(SystemExit):                        # a planet needs its templates
+                    sk.main(base + ["--planet", "JemisonPlanetData", "--latlon", "0", "1"])
+        self.assertEqual(prm["mars"]["planet"], "JemisonPlanetData")
+        self.assertEqual(prm["templates"], {"world": "0ABCDE", "block": "012345", "location": "0FEDCB"})
+        self.assertEqual((prm["overlays"][0]["latitude"], prm["overlays"][0]["longitude"]), (-0.7, 2.1))
+
+
 if __name__ == "__main__":
     unittest.main()
