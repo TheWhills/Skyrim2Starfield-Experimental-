@@ -121,6 +121,42 @@ def texture_path(p: str) -> str:
     return p if not p or p.lower().startswith("textures\\") else "textures\\" + p
 
 
+TEST_COLOURS = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), "yellow": (255, 255, 0),
+                "magenta": (255, 0, 255), "cyan": (0, 255, 255), "orange": (255, 128, 0), "white": (255, 255, 255),
+                "black": (0, 0, 0)}
+
+
+def colour_dds(rgb, size: int = 64) -> bytes:
+    """A solid colour RGBA DDS with a faint 8 x 8 checker (so the tiling stays visible): --skyrim-ground-colours."""
+    import tempfile
+    import numpy as np
+    from fo4sf import textures
+    yy, xx = np.mgrid[0:size, 0:size] // (size // 8)
+    on = ((yy + xx) % 2).astype(bool)
+    px = np.zeros((size, size, 4), np.uint8)
+    px[..., :3] = rgb
+    px[on, :3] = (np.array(rgb) * 0.75).astype(np.uint8)
+    px[..., 3] = 255
+    with tempfile.TemporaryDirectory() as tmp:
+        p = os.path.join(tmp, "c.dds")
+        textures.write_dds_dx10(p, size, size, textures.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+        with open(p, "rb") as f:
+            return f.read()
+
+
+def parse_colours(spec: str) -> dict:
+    """'LDirt02=cyan,LPineForest01=red' -> {Skyrim LTEX EditorID (lower case): RGB}."""
+    out = {}
+    for part in (spec or "").split(","):
+        if not part.strip():
+            continue
+        edid, _, name = part.partition("=")
+        if name.strip().lower() not in TEST_COLOURS:
+            raise ValueError(f"colour {name!r} not in {sorted(TEST_COLOURS)}")
+        out[edid.strip().lower()] = TEST_COLOURS[name.strip().lower()]
+    return out
+
+
 def checker_dds(size: int = 256, cells: int = 8) -> bytes:
     """A loud magenta / green checkerboard RGBA DDS (--skyrim-ground-test): on the ground in game it proves that the
     overridden LTEX records and their materials are what the terrain draws, whatever the planet tints."""

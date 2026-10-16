@@ -137,6 +137,16 @@ def skyrim_ground(a, ltex, cells, usage, out):
           f"{'flat' if a.skyrim_ground_flat_normal else 'Skyrim'} normals, flat AO, "
           f"{'flat' if a.skyrim_ground_flat_height else 'detail'} height maps for blending, "
           f"tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
+    if a.skyrim_ground_colours:                       # named Skyrim textures become solid test colours
+        cols = skyrimground.parse_colours(a.skyrim_ground_colours)
+        by_diffuse = {skyrimground.texture_path(ltex[f]["diffuse"]).lower(): cols[ltex[f]["edid"].lower()]
+                      for f, _s in chosen if ltex[f]["edid"].lower() in cols}
+        missing = sorted(set(cols) - {ltex[f]["edid"].lower() for f, _s in chosen})
+        real2 = conv.src.texture
+        conv.src.texture = lambda name: (skyrimground.colour_dds(by_diffuse[name.replace("/", "\\").lower()])
+                                         if name.replace("/", "\\").lower() in by_diffuse else real2(name))
+        print(f"skyrim ground: COLOUR TEST, {len(by_diffuse)} textures painted solid"
+              + (f"; not among the converted textures: {missing}" if missing else ""))
     names, sky, overrides, failed, done = {}, {}, [], {}, {}
     for fid, slot in chosen:
         v = ltex[fid]
@@ -156,7 +166,9 @@ def skyrim_ground(a, ltex, cells, usage, out):
                                             template=template, extra_files=files,
                                             color_alpha=None if a.skyrim_ground_alpha == "keep"
                                             else (0 if a.skyrim_ground_alpha == "zero" else 255),
-                                            albedo_luminance=None if a.skyrim_ground_test
+                                            albedo_luminance=None if (a.skyrim_ground_test or
+                                                                      v["edid"].lower() in skyrimground.parse_colours(
+                                                                          a.skyrim_ground_colours))
                                             else (a.skyrim_ground_brightness or None))
             mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
             with open(mp, encoding="utf-8") as f:
@@ -462,6 +474,10 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground", action="store_true",
                     help="build: with --land-textures, Skyrim's OWN ground textures (converted, on spare Starfield LTEX "
                          "records the terrain plugin overrides); needs --content-resources and --texconv")
+    ap.add_argument("--skyrim-ground-colours", default="",
+                    help="build --skyrim-ground: paint named Skyrim textures as solid colours to see which layer the "
+                         "terrain draws where, e.g. LDirt02=cyan,LPineForest01=red (red green blue yellow magenta cyan "
+                         "orange white black)")
     ap.add_argument("--skyrim-ground-test", action="store_true",
                     help="build --skyrim-ground: paint a magenta / green checkerboard instead of Skyrim's colours, to "
                          "see in game whether the overridden ground textures are what the terrain draws")

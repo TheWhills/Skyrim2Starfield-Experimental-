@@ -214,6 +214,18 @@ class HeightMapTests(unittest.TestCase):
         self.assertGreater(float(v.std()), 20.0)
 
 
+class ColourTestTests(unittest.TestCase):
+    def test_parse_and_colour_dds(self):
+        from fo4sf import textures as tx
+        cols = skyrimground.parse_colours("LDirt02=cyan, LPineForest01=red")
+        self.assertEqual(cols, {"ldirt02": (0, 255, 255), "lpineforest01": (255, 0, 0)})
+        with self.assertRaises(ValueError):
+            skyrimground.parse_colours("LDirt02=chartreuse")
+        d = skyrimground.colour_dds((0, 255, 255), 16)
+        h = tx.read_dds_header(d)
+        self.assertEqual(d[h["data_offset"]:h["data_offset"] + 4], bytes([0, 255, 255, 255]))
+
+
 class AlbedoTests(unittest.TestCase):
     def test_dark_skyrim_dirt_is_brought_to_starfield_brightness(self):
         import numpy as np
