@@ -588,9 +588,9 @@ def main(argv=None):
     ap.add_argument("--starfield-data", help="convert: Starfield Data folder, to read the box template from its archives "
                                              "instead of --collision-template")
     ap.add_argument("--max-texture", default="", help="convert: texture caps, e.g. 1024 or color=1024,normal=512")
-    ap.add_argument("--grass-spacing", type=float, default=0.75,
-                    help="grass: metres between grass candidates (default 0.75; Skyrim tries every 20-60 units = "
-                         "0.3-0.9 m; smaller = denser, bigger files and a longer build)")
+    ap.add_argument("--grass-spacing", type=float, default=0.3,
+                    help="grass: metres between grass candidates (default 0.3 = Skyrim's iMinGrassSize 20 units; "
+                         "bigger = sparser, smaller files and a faster build)")
     ap.add_argument("--grass-tint", choices=("vertex", "none"), default="vertex",
                     help="grass: 'vertex' (default) multiplies each grass texture by the mean Skyrim vertex colour "
                          "under it, as Skyrim tints grass with the ground")

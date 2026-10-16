@@ -78,6 +78,20 @@ class ScatterTests(unittest.TestCase):
         self.assertEqual(len(skyrimgrass.scatter({1: np.ones((33, 33))}, steep, self.LG, self.gras(max_slope=60),
                                                  512.0, rng)), 64)
 
+    def test_every_grass_of_a_texture_and_water_rules(self):
+        lg = {1: [5, 6]}
+        g = {5: dict(skyrimgrass.parse_gras_data(gras_data()), model="a.nif", edid="A"),
+             6: dict(skyrimgrass.parse_gras_data(struct.pack("<BBBBHHIffffB3x", 100, 0, 90, 0, 50, 0, 2, 0, 0, 0, 0,
+                                                             0)), model="kelp.nif", edid="Kelp")}
+        w, flat = {1: np.ones((33, 33))}, np.zeros((33, 33))
+        dry = skyrimgrass.scatter(w, flat, lg, g, 512.0, np.random.default_rng(0))
+        self.assertEqual({x[0] for x in dry}, {5})                # no water: the underwater kelp does not grow
+        wet = skyrimgrass.scatter(w, flat, lg, g, 512.0, np.random.default_rng(0), water=100.0)
+        self.assertEqual(sum(1 for x in wet if x[0] == 6), 64)    # 100 units under water, kelp needs 50
+        self.assertFalse([x for x in wet if x[0] == 5])
+        self.assertTrue(skyrimgrass._water_ok(10.0, 0.0, {"units_from_water": 5, "water_rule": 0}))
+        self.assertFalse(skyrimgrass._water_ok(10.0, 0.0, {"units_from_water": 5, "water_rule": 1}))
+
     def test_half_painted_texture_grows_on_its_half(self):
         w1 = np.zeros((33, 33)); w1[:, :16] = 1.0             # west half
         w = {1: w1, 2: 1.0 - w1}

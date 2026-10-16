@@ -71,6 +71,13 @@ def _bilinear(g: np.ndarray, u: float, v: float) -> float:
                  g[r0 + 1, c0] * (1 - fu) * fv + g[r0 + 1, c0 + 1] * fu * fv)
 
 
+def _water_ok(z: float, water: float, gr: dict) -> bool:
+    """GRAS water rule (UESP "Units From Water Type"): 0 above at least, 1 above at most, 2 below at least, 3 below at
+    most, 4 either at least, 5 either at most; units = the GRAS's units from water."""
+    d, u, rule = z - water, gr["units_from_water"], gr["water_rule"]
+    return {0: d >= u, 1: 0 <= d <= u, 2: d <= -u, 3: -u <= d <= 0, 4: abs(d) >= u, 5: abs(d) <= u}.get(rule, d >= u)
+
+
 def scatter(weights: Dict[int, np.ndarray], heights: np.ndarray, ltex_grass: Dict[int, List[int]],
             gras: Dict[int, dict], spacing: float, rng: np.random.Generator, density_scale: float = 1.0,
             water: Optional[float] = None, stats: Optional[dict] = None) -> List[tuple]:
@@ -100,28 +107,28 @@ def scatter(weights: Dict[int, np.ndarray], heights: np.ndarray, ltex_grass: Dic
             if not choices:
                 drop("no_grass_texture")
                 continue
-            g = choices[int(rng.integers(len(choices)))]
-            gr = gras[g]
-            if rng.random() >= gr["density"] / 100.0 * density_scale:
-                drop("density")
-                continue
             ua, ub, va, vb = max(u - 0.5, 0.0), min(u + 0.5, 32.0), max(v - 0.5, 0.0), min(v + 0.5, 32.0)
             dzdx = (_bilinear(heights, ub, v) - _bilinear(heights, ua, v)) / ((ub - ua) * STEP)
             dzdy = (_bilinear(heights, u, vb) - _bilinear(heights, u, va)) / ((vb - va) * STEP)
             slope = math.degrees(math.atan(math.hypot(dzdx, dzdy)))
-            if not gr["min_slope"] <= slope <= max(gr["max_slope"], gr["min_slope"]):
-                drop("slope")
-                continue
-            jitter = gr["position_range"]
-            px = min(max(x + (rng.random() * 2 - 1) * jitter, 0.0), CELL)
-            py = min(max(y + (rng.random() * 2 - 1) * jitter, 0.0), CELL)
-            z = _bilinear(heights, px / STEP, py / STEP)
-            if water is not None and z < water + gr["units_from_water"] * (gr["water_rule"] == 0):
-                drop("water")
-                continue
-            drop("kept")
-            scale = max(0.3, 1.0 + (rng.random() * 2 - 1) * 0.5 * gr["height_range"])
-            out.append((g, px, py, z, rng.random() * 2 * math.pi, scale))
+            for g in choices:                         # like Skyrim, every grass of the texture gets its own chance
+                gr = gras[g]
+                if rng.random() >= gr["density"] / 100.0 * density_scale:
+                    drop("density")
+                    continue
+                if not gr["min_slope"] <= slope <= max(gr["max_slope"], gr["min_slope"]):
+                    drop("slope")
+                    continue
+                jitter = gr["position_range"]
+                px = min(max(x + (rng.random() * 2 - 1) * jitter, 0.0), CELL)
+                py = min(max(y + (rng.random() * 2 - 1) * jitter, 0.0), CELL)
+                z = _bilinear(heights, px / STEP, py / STEP)
+                if not _water_ok(z, -1e9 if water is None else water, gr):   # no water: only land rules pass
+                    drop("water")
+                    continue
+                drop("kept")
+                scale = max(0.3, 1.0 + (rng.random() * 2 - 1) * 0.5 * gr["height_range"])
+                out.append((g, px, py, z, rng.random() * 2 * math.pi, scale))
     return out
 
 

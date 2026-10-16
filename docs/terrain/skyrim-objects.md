@@ -186,3 +186,8 @@ for models that do). The real cause: the colour textures were written as BC1, wh
 every texel under alpha 0.5 as transparent black, and Skyrim's diffuse alpha is a specular mask. FieldGrass02 on the
 ledge tops kept only its bright flowers. The converter now writes opaque colour (alpha 255) before BC1; cutouts keep
 their separate opacity map.
+Grass density follow-up (owner's stats, Riverwood 5 x 5 cells at 0.75 m): 152,100 candidates, 85 % on textures without
+grass, 2,354 kept. Skyrim's own GRAS densities there are 3-37 %, and Skyrim tries every grass of a texture at every
+grid point (iMinGrassSize 20 units). Now: default `--grass-spacing 0.3` (20 units), every grass in the texture's list
+gets its own density roll, and the GRAS water rule is honoured (0 above / 1 above at most / 2 below / 3 below at most /
+4 either / 5 either at most; cells without water only pass the above-water rules, so kelp stays in rivers).
