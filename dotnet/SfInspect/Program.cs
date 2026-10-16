@@ -6,6 +6,7 @@
 //   wrld [substr]            every WRLD with terrain/planet/parent fields      sfbk [substr]   every SurfaceBlock (BTD path, sizes)
 //   planetworlds             planets registering master worldspaces            wcells <WRLD> [out.tsv]   cells + ref positions
 //   form <hex>... | form type:<TypePrefix> <EditorID substr>   one-level dump of any record      landcount
+//   list <TypePrefix> [EditorID substr]   FormKey + EditorID of every matching record (e.g. list Water)
 // Note: opening a plugin other than Starfield.esm needs a master flag lookup (not implemented).
 using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Starfield;
@@ -126,6 +127,19 @@ switch (args[1])
                         }
                 }
             }
+        }
+        break;
+    case "list":     // read-only: list <TypePrefix> [EditorID substr] -> FormKey + EditorID of every match (max 500)
+        {
+            var tp = args[2]; var sub = args.Length > 3 ? args[3] : "";
+            int n = 0;
+            foreach (var r in mod.EnumerateMajorRecords().Where(r => r.GetType().Name.StartsWith(tp)
+                         && (r.EditorID ?? "").Contains(sub, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (n++ >= 500) { Console.WriteLine("... (more)"); break; }
+                Console.WriteLine($"{r.FormKey}  {r.EditorID}");
+            }
+            Console.WriteLine($"{Math.Min(n, 500)} {tp} records");
         }
         break;
     case "form":     // read-only: form <hexid>... -> record type, EditorID and a one-level property dump
