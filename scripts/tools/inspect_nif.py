@@ -64,6 +64,11 @@ def inspect(src, name):
                     "size_units": [round(h - l, 1) for l, h in zip(lo, hi)], "skinned": bool(s.skinned),
                     "shader": info, "alpha": {"test": alpha[0], "blend": alpha[1], "ref": alpha[2]},
                     "double_sided": skyrimnif.double_sided(n, s.shader_ref),
+                    "vertex_colours": ({"mean_rgba": [round(sum(c[k] for c in s.colors) / len(s.colors), 1)
+                                                      for k in range(4)],
+                                        "min_rgba": [min(c[k] for c in s.colors) for k in range(4)]}
+                                       if s.colors else None),
+                    "normals": bool(s.normals), "tangents": bool(s.tangents),
                     "converter": converter_decision(info, alpha, len(paths) > 1 and bool(paths[1]),
                                                    skyrimnif.refraction(n, s.shader_ref))})
     others = sorted({n.type_of(i) for i in range(len(n.blocks))} - {"NiNode", "BSFadeNode"})
@@ -107,6 +112,10 @@ def main(argv=None):
             print(f"     {sh['type']} {sh.get('shader_type', '')} f1={sh.get('flags1')} f2={sh.get('flags2')}"
                   f" emit={sh.get('emissive')}x{sh.get('emissive_multiple')} alpha test={al['test']} blend={al['blend']}"
                   f" ref={al['ref']} double={s['double_sided']}")
+            vc = s.get("vertex_colours")
+            if vc:
+                print(f"     vertex colours mean RGBA {vc['mean_rgba']} min {vc['min_rgba']}"
+                      f" (SLSF2 Vertex_Colors {'on' if sh.get('flags2') and int(sh['flags2'], 16) & 0x20 else 'off'})")
             for t in sh.get("textures", []):
                 print(f"     tex {t}")
             print(f"     -> {s['converter']}")
