@@ -177,3 +177,8 @@ way to the ones below. `--ltex-blend dither` keeps the old encoding.
 Solid blending did not remove the specks either (owner, same day), so they are most likely inside one texture or its
 conversion, not the blend. `scripts\terrain\ground_at.py --pos X Y` (from `player.getpos x / y`) prints the Skyrim LTEX
 layers at that spot and what the staged BTD draws there, and with `--zip` exports those Skyrim textures as PNG previews.
+`ground_at.py` at a white-blob spot (owner, merge shift (600, -1300) m): Skyrim paints 100 % `LDirt02` there and the
+BTD draws `LDirt02` as base with every overlay at alpha 0, so the blobs are not blending. Skyrim's `Dirt02.dds` has no
+blobs; its alpha is a speckled specular mask. Suspect: the colour texture kept that alpha (BC1 keeps 1-bit alpha) and
+Terrain1Layer reads albedo alpha. Ground colours are now written opaque (`--skyrim-ground-keep-alpha` keeps it);
+`--skyrim-ground-flat-normal` exists to rule the normal maps in or out if blobs remain.

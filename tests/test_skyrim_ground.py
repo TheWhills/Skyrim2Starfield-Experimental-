@@ -118,6 +118,17 @@ class GroundTests(unittest.TestCase):
                 sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
                          "--arrival", "", "--skyrim-ground", "--content-resources", cr, "--texconv", "texconv.exe",
                          "--skyrim-ground-max", "3"] + (["--skyrim-ground-test"] if test_mode else []))
+            if not test_mode:                                # the ground colour has no alpha left
+                from fo4sf import textures as tx
+                import numpy as np
+                cols = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(out, "Data", "textures"))
+                        for f in fs if f.endswith("_color.dds") and "ground" in r.replace("\\", "/")]
+                self.assertTrue(cols)
+                for c in cols:
+                    d = open(c, "rb").read()
+                    h = tx.read_dds_header(d)
+                    px = np.frombuffer(d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
+                    self.assertEqual(int(px.reshape(-1, 4)[:, 3].min()), 255)
             if test_mode:
                 colours = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(out, "Data", "textures"))
                            for f in fs if f.endswith("_color.dds") and "ground" in r.replace("\\", "/")]

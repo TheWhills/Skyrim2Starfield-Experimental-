@@ -132,7 +132,9 @@ def skyrim_ground(a, ltex, cells, usage, out):
         print("skyrim ground: TEST MODE, ground diffuse textures replaced by a magenta / green checkerboard")
     flat = skyrimground.flat_textures(os.path.join(out, "Data"), a.texconv)
     tiling = a.skyrim_ground_tiling
-    print(f"skyrim ground: flat AO, {'flat' if a.skyrim_ground_flat_height else 'detail'} height maps for blending, "
+    print(f"skyrim ground: colour alpha {'kept' if a.skyrim_ground_keep_alpha else 'removed'}, "
+          f"{'flat' if a.skyrim_ground_flat_normal else 'Skyrim'} normals, flat AO, "
+          f"{'flat' if a.skyrim_ground_flat_height else 'detail'} height maps for blending, "
           f"tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
     names, sky, overrides, failed, done = {}, {}, [], {}, {}
     for fid, slot in chosen:
@@ -146,9 +148,10 @@ def skyrim_ground(a, ltex, cells, usage, out):
                     rel = f"textures/skyrim/{stem}_height.dds"
                     skyrimground.height_from_diffuse(d, a.texconv, os.path.join(out, "Data", *rel.split("/")))
                     files["Height"] = cm.game_path(rel)
-            mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]),
-                                            skyrimground.texture_path(v.get("normal")), "", template=template,
-                                            extra_files=files)
+            normal = "" if a.skyrim_ground_flat_normal else skyrimground.texture_path(v.get("normal"))
+            mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]), normal, "",
+                                            template=template, extra_files=files,
+                                            opaque_color=not a.skyrim_ground_keep_alpha)
             mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
             with open(mp, encoding="utf-8") as f:
                 md = json.load(f)
@@ -459,6 +462,11 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
                     help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
                          "Starfield's dirt uses 3.2)")
+    ap.add_argument("--skyrim-ground-keep-alpha", action="store_true",
+                    help="build --skyrim-ground: keep the Skyrim diffuse alpha (its specular mask) in the colour "
+                         "texture; by default it is removed (suspected cause of white blobs on the ground)")
+    ap.add_argument("--skyrim-ground-flat-normal", action="store_true",
+                    help="build --skyrim-ground: flat normal maps instead of Skyrim's (diagnosis)")
     ap.add_argument("--skyrim-ground-flat-height", action="store_true",
                     help="build --skyrim-ground: flat height maps (hard-edged blends) instead of ones from each "
                          "texture's own detail")
