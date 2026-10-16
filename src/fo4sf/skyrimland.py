@@ -104,9 +104,11 @@ class SkyrimLand:
             self.world_fid = w["world_fid"]
             self.default_land, self.default_water = world_dnam(w["world_fields"])
             self.parent, self.parent_flags = world_parent(w["world_fields"])
-            self.grids, self.edids, self.cells = {}, {}, set()
+            self.grids, self.edids, self.cells, self.water = {}, {}, set(), {}
             for xy, c in w["cells"].items():
                 self.cells.add(xy)
+                if c.get("flags", 0) & 0x2:              # cell DATA "has water": XCLW or the world's default height
+                    self.water[xy] = c.get("water") if c.get("water") is not None else self.default_water
                 if c["edid"]:
                     self.edids[xy] = c["edid"]
                 if c["vhgt"]:

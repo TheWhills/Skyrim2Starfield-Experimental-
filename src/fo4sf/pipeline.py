@@ -248,7 +248,7 @@ class Converter:
                              alpha_test: bool = False, alpha_ref: int = 128, decal: bool = False,
                              template: Optional[dict] = None, extra_files: Optional[dict] = None,
                              color_alpha: Optional[int] = None, albedo_luminance: Optional[float] = None,
-                             albedo_tint: Optional[tuple] = None) -> str:
+                             albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -256,7 +256,8 @@ class Converter:
         tex_rel = f"textures/{self.prefix}/{stem}"
         d, n = self.src.texture(diffuse), (self.src.texture(normal) if normal else None)
         s = self.src.texture(spec) if spec else None
-        if d is None or (n is None and not decal and template is None):   # decals / ground may lack a normal: flat
+        if d is None or (n is None and not decal and template is None and not flat_normal_ok):   # decals / ground
+            # / grass may lack a normal: flat
             raise FileNotFoundError("diffuse or normal texture missing from archives")
         out = {}
         with tempfile.TemporaryDirectory() as tmp:

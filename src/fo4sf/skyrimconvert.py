@@ -197,7 +197,8 @@ class SkyrimConverter(pipeline.Converter):
         super().__init__(src, staging, texconv_exe, content_resources, collision_template, prefix=prefix,
                          no_collision_pattern="", max_texture=max_texture)
 
-    def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int) -> Optional[str]:
+    def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
+                        flat_normal_ok: bool = False) -> Optional[str]:
         kind = "decal" if blend and not test else "cutout" if test else "opaque"
         ident = "|".join([diffuse.replace("\\", "/").lower(), normal.replace("\\", "/").lower(), kind, str(ref)])
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
@@ -208,7 +209,8 @@ class SkyrimConverter(pipeline.Converter):
         if key not in self._materials:
             try:
                 self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=test,
-                                                                 alpha_ref=ref, decal=(kind == "decal"))
+                                                                 alpha_ref=ref, decal=(kind == "decal"),
+                                                                 flat_normal_ok=flat_normal_ok)
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None
@@ -216,7 +218,9 @@ class SkyrimConverter(pipeline.Converter):
                 self.material_errors[key] = f"{type(e).__name__}: {e}"
         return self._materials[key]
 
-    def _shape_material(self, src, s) -> Optional[str]:
+    def _shape_material(self, src, s, flat_normal_ok: bool = False) -> Optional[str]:
+        """flat_normal_ok: a diffuse without a normal map converts with a flat normal (Skyrim grass) instead of
+        falling back to the neutral material."""
         if s.shader_ref < 0:
             return self.neutral
         kind = src.type_of(s.shader_ref)
@@ -231,9 +235,9 @@ class SkyrimConverter(pipeline.Converter):
             return self.neutral
         test, blend, ref = skyrimnif.alpha_test(src, s.alpha_ref)
         normal = paths[1] if len(paths) > 1 else ""
-        if not normal and not (blend and not test):
+        if not normal and not (blend and not test) and not flat_normal_ok:
             return self.neutral
-        mat = self.skyrim_material(paths[0], normal, test, blend, ref)
+        mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok)
         if mat is None and blend and not test:
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral

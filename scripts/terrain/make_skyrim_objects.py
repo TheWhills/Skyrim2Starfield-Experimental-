@@ -7,6 +7,8 @@ position / 70 on the SKY_Tamriel overlay built by make_skyrim_overlay.py.
     python scripts/terrain/make_skyrim_objects.py convert --work <work> --skyrim-data <Skyrim SE Data>
            --content-resources <Starfield\\Tools\\ContentResources.zip> --texconv <texconv.exe>
            --starfield-data <Starfield Data> (or --collision-template <vanilla box NIF>) [--max-texture 1024] [--resume]
+    python scripts/terrain/make_skyrim_objects.py grass   --work <work> --terrain <overlay> --skyrim <Skyrim.esm>
+           --skyrim-data <Skyrim SE Data> --content-resources <zip> --texconv <texconv.exe> [--around Riverwood --radius 2]
     python scripts/terrain/make_skyrim_objects.py stage   --work <work> --terrain <overlay> --out <dir> [--sf-esm <Starfield.esm>]
     python scripts/terrain/make_skyrim_objects.py check   --out <dir>
 
@@ -18,6 +20,8 @@ convert  every selected model through skyrimconvert.SkyrimConverter -> <work>/co
 stage    places the converted references (exterior.place) in the overlay's cells, hard-links the converted files and
          copies the overlay's own Data files (BTD, mask) into <out>/Data, writes objects.json, overlays_params.json
          (+ "objects"), the overlay's plan.json, skipped.json; with --sf-esm runs dotnet/TerrainOverlays.
+grass    Skyrim's grass (LTEX GNAM -> GRAS) scattered once around --around (default Riverwood, --radius cells) and
+         merged per cell and model into patch statics -> <work>/grass (src/fo4sf/skyrimgrass.py); stage adds them.
 check    every model / mesh / material / texture file present, references inside the BTD, each object's origin height
          against the terrain under it (the frame check), collision kinds, archive size estimate -> offline_check.json.
 Everything this writes stays outside the repo (derived game data).
@@ -237,6 +241,111 @@ def cmd_convert(a):
     return 0
 
 
+# ---------------------------------------------------------------------------------------------------------- grass
+def cmd_grass(a):
+    """Skyrim's grass around --around (src/fo4sf/skyrimgrass.py) -> <work>/grass: per-cell merged patch models
+    (meshes, geometries, materials, textures) + grass.json (bases and references in stage's final form)."""
+    import numpy as np
+    from fo4sf import bsa, landtex, skyrimconvert, skyrimgrass, skyrimland, skyrimnif
+    from fo4sf import nif as nifmod
+    t0 = time.time()
+    _prm, ov = terrain_overlay(a.terrain)
+    x0, x1, y0, y1 = (tuple(a.cells) if a.cells else around_cells(a.skyrim, a.around or "Riverwood", a.radius))
+    print(f"grass: Skyrim cells x {x0}..{x1}, y {y0}..{y1}; spacing {a.grass_spacing:g} m, density x{a.grass_density:g}")
+    ltex_grass, gras = skyrimgrass.read_grass(a.skyrim)
+    land = skyrimland.SkyrimLand(a.skyrim, a.world_edid)
+    weights, _ltex = landtex.read_world_textures(a.skyrim, land.land_source)
+    print(f"grass: {len(gras)} GRAS records, {len(ltex_grass)} landscape textures with grass")
+    rng = np.random.default_rng(a.seed)
+    spacing = a.grass_spacing * 70.0
+    out = os.path.join(a.work, "grass")
+    os.makedirs(out, exist_ok=True)
+    conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), out, a.texconv, a.content_resources, None,
+                                         prefix=ASSET_PREFIX, max_texture=a.max_texture)
+    models, failed = {}, {}
+
+    def model(name):
+        if name in models or name in failed:
+            return models.get(name)
+        try:
+            raw = conv.src.mesh(name)
+            if raw is None:
+                raise FileNotFoundError("not in the Skyrim archives")
+            src = nifmod.parse(raw)
+            shapes = skyrimnif.trishapes(src)
+            mats = [conv._shape_material(src, sh, flat_normal_ok=True) for sh in shapes]   # grass: often no normal
+            keep = []
+            for sh, m in zip(shapes, mats):
+                if m is None:
+                    continue
+                if skyrimnif.double_sided(src, sh.shader_ref):
+                    sh = skyrimconvert.with_back_faces(sh) or sh
+                keep.append((sh, m))
+            if not keep:
+                raise ValueError("no drawable shape")
+            models[name] = (src, keep)
+        except Exception as e:                       # noqa: BLE001  (reported; that grass is left out)
+            failed[name] = f"{type(e).__name__}: {e}"
+        return models.get(name)
+
+    bases, refs, counts = [], [], {}
+    total = 0
+    oz = float(ov.get("height_offset_m") or 0.0)
+    for cy in range(y0, y1 + 1):
+        print(f"  row y {cy}: {total:,} instances so far, {time.time() - t0:.0f} s")
+        for cx in range(x0, x1 + 1):
+            ws, hg = weights.get((cx, cy)), land.grids.get((cx, cy))
+            if not ws or hg is None:
+                continue
+            inst = skyrimgrass.scatter(ws, hg, ltex_grass, gras, spacing, rng, a.grass_density, land.water.get((cx, cy)))
+            by_model = {}
+            for g, x, y, z, yaw, sc in inst:
+                by_model.setdefault(gras[g]["model"], []).append((cx * skyrimgrass.CELL + x, cy * skyrimgrass.CELL + y,
+                                                                 z, yaw, sc))
+            for mname, pts in sorted(by_model.items()):
+                full = "meshes\\" + mname.replace("/", "\\").lstrip("\\")
+                mdl = model(full)
+                if mdl is None:
+                    continue
+                src, keep = mdl
+                origin = ((cx + 0.5) * skyrimgrass.CELL, (cy + 0.5) * skyrimgrass.CELL, min(p[2] for p in pts))
+                merged = skyrimgrass.instance_shapes([k[0] for k in keep], pts, origin, skyrimconvert.MAX_VERTICES)
+                if not merged:
+                    continue
+                stem = skyrimgrass.patch_stem(cx, cy, mname)
+                out_name = f"{ASSET_PREFIX}/grass/{stem}"
+                files = skyrimconvert.convert_static_sse(src, [m for _i, m in merged], out_name,
+                                                         [keep[i][1] for i, _m in merged], None, {})
+                for relp, data in files.items():
+                    pth = os.path.join(out, *relp.split("/"))
+                    os.makedirs(os.path.dirname(pth), exist_ok=True)
+                    with open(pth, "wb") as f:
+                        f.write(data)
+                pos = [origin[0] / 70.0 - float(ov["origin_cw_m"][0]), origin[1] / 70.0 - float(ov["origin_cw_m"][1]),
+                       origin[2] / 70.0 + oz]
+                cell = tg.sf_cell_of(pos[0], pos[1])
+                if not (ov["cell_min"] <= cell[0] <= ov["cell_max"] and ov["cell_min"] <= cell[1] <= ov["cell_max"]):
+                    continue
+                edid = (EDID_PREFIX + "Grass_" + re.sub(r"[^A-Za-z0-9_]", "_", stem))[:200]
+                bases.append({"edid": edid, "model": out_name.replace("/", "\\") + ".nif", "source": full,
+                              "collision": "none"})
+                refs.append({"src": f"grass:{cx},{cy}:{stem}", "base": len(bases) - 1, "cell": list(cell),
+                             "pos": [round(v, 5) for v in pos], "rot": [0.0, 0.0, 0.0], "scale": 1.0,
+                             "disabled": False})
+                counts[mname] = counts.get(mname, 0) + len(pts)
+                total += len(pts)
+    save(os.path.join(out, "grass.json"), {"bases": bases, "refs": refs, "instances": counts, "failed": failed,
+                                           "cells": [x0, x1, y0, y1], "spacing_m": a.grass_spacing,
+                                           "density": a.grass_density})
+    print(f"grass: {total:,} instances of {len(counts)} models in {len(refs):,} patches; "
+          f"{len(failed)} models failed; {time.time() - t0:.0f} s")
+    for k, v in sorted(counts.items(), key=lambda kv: -kv[1])[:8]:
+        print(f"  {v:7,}  {k}")
+    for k, v in list(failed.items())[:5]:
+        print(f"  FAILED {k}: {v}")
+    return 0
+
+
 # ---------------------------------------------------------------------------------------------------------- stage
 def link_tree(src, dst):
     """Hard-link (copy across volumes) every file under src into dst; returns the number of files."""
@@ -300,6 +409,18 @@ def cmd_stage(a):
     objects = {"world": ov["world"], "edid_prefix": EDID_PREFIX,
                "bases": [{k: b[k] for k in ("edid", "model", "source", "collision") if k in b} for b in bases],
                "refs": [{k: p[k] for k in ("src", "base", "cell", "pos", "rot", "scale", "disabled")} for p in placed]}
+    grass_json = os.path.join(a.work, "grass", "grass.json")
+    if os.path.isfile(grass_json) and not a.no_grass:     # make_skyrim_objects.py grass: merged patches, appended
+        gr = load(grass_json)
+        off = len(objects["bases"])
+        taken = {b["edid"].lower() for b in objects["bases"]}
+        objects["bases"] += [b for b in gr["bases"] if b["edid"].lower() not in taken]
+        if len(objects["bases"]) != off + len(gr["bases"]):
+            sys.exit("grass base EditorIDs clash with object bases")
+        objects["refs"] += [dict(r, base=r["base"] + off) for r in gr["refs"]]
+        for tree in DATA_TREES:
+            link_tree(os.path.join(a.work, "grass", tree), os.path.join(out, "Data", tree))
+        print(f"grass: {len(gr['refs']):,} patches ({sum(gr['instances'].values()):,} instances) from {grass_json}")
     save(os.path.join(out, "objects.json"), objects)
     save(os.path.join(out, "overlays_params.json"), dict(prm, objects="objects.json"), indent=1)
     save(os.path.join(out, "skipped.json"), {"counts": exterior.reason_counts(skipped), "refs": skipped})
@@ -415,7 +536,7 @@ def cmd_check(a):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("export", "select", "convert", "stage", "check"))
+    ap.add_argument("cmd", choices=("export", "select", "convert", "grass", "stage", "check"))
     ap.add_argument("--skyrim", help="export: Skyrim.esm")
     ap.add_argument("--world-edid", default="Tamriel")
     ap.add_argument("--around", default="", help="export: cells around an exterior cell EditorID (Riverwood) or X,Y")
@@ -433,18 +554,25 @@ def main(argv=None):
     ap.add_argument("--starfield-data", help="convert: Starfield Data folder, to read the box template from its archives "
                                              "instead of --collision-template")
     ap.add_argument("--max-texture", default="", help="convert: texture caps, e.g. 1024 or color=1024,normal=512")
+    ap.add_argument("--grass-spacing", type=float, default=1.5,
+                    help="grass: metres between grass candidates (Skyrim tries every 20-60 units; smaller = denser, "
+                         "bigger files)")
+    ap.add_argument("--grass-density", type=float, default=1.0, help="grass: multiplier on each grass's density")
+    ap.add_argument("--seed", type=int, default=1, help="grass: random seed (same seed, same grass)")
+    ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
     a = ap.parse_args(argv)
     need = {"export": ("skyrim", "work"), "select": ("work", "terrain"),
             "convert": ("work", "skyrim_data", "content_resources", "texconv"),
+            "grass": ("skyrim", "skyrim_data", "content_resources", "texconv", "terrain", "work"),
             "stage": ("work", "terrain", "out"), "check": ("out",)}[a.cmd]
     missing = [f"--{k.replace('_', '-')}" for k in need if not getattr(a, k)]
     if a.cmd == "convert" and not (a.collision_template or a.starfield_data):
         missing.append("--collision-template or --starfield-data")
     if missing:
         sys.exit(f"{a.cmd} needs {' '.join(missing)}")
-    return {"export": cmd_export, "select": cmd_select, "convert": cmd_convert, "stage": cmd_stage,
+    return {"export": cmd_export, "select": cmd_select, "convert": cmd_convert, "grass": cmd_grass, "stage": cmd_stage,
             "check": cmd_check}[a.cmd](a)
 
 

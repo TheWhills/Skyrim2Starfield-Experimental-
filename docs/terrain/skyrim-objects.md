@@ -161,3 +161,14 @@ it to Plugins.txt; once activated, the arrival worked. In game: the village (hou
 walkways, carts), trees and rocks stand on terrain shaped like Riverwood's valley, with the mountains behind. Ground
 is Mars's own material (Skyrim ground textures not enabled), the river is a dry bed (no water), no grass.
 [screenshot: owner's chat, not in the repo]
+
+## Grass (make_skyrim_objects.py grass)
+Skyrim grows grass at run time from the landscape textures (LTEX GNAM -> GRAS: model, density, slope range, position
+and height variation). Starfield has nothing that does this for a custom BTD overlay, so `grass` scatters it once
+(src/fo4sf/skyrimgrass.py): per Skyrim cell around `--around` (default Riverwood, `--radius` cells), a jittered grid
+every `--grass-spacing` metres (default 1.5) picks a painted texture by weight, one of its grasses, and keeps the
+point with the grass's density x `--grass-density`, within its slope range and above the cell's water (XCLW). All
+instances of one model in one cell are merged into one static (`SKY_Grass_c<x>_<y>_<model>`, no collision) placed by
+one reference at the cell's centre. Grass without a normal map converts with a flat normal. `stage` adds
+<work>/grass/grass.json automatically (`--no-grass` leaves it out). Not yet: wind, colour range, fit-to-slope tilt,
+Skyrim's fade distance (patches draw as ordinary statics).

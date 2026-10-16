@@ -218,14 +218,19 @@ class Plugin:
             typ, off, _flags, fid = item
             if typ != b"CELL":
                 continue
-            xy, name = None, ""
+            xy, name, water, cflags = None, "", None, 0
             for sig, d in iter_subrecords(record_data(self.buf, off)):
                 if sig == b"XCLC" and len(d) >= 8:
                     xy = struct.unpack_from("<ii", d)
                 elif sig == b"EDID":
                     name = zstring(d)
+                elif sig == b"XCLW" and len(d) >= 4:
+                    w = struct.unpack_from("<f", d)[0]
+                    water = w if abs(w) < 1e30 else None     # 0x7F7FFFFF: no water
+                elif sig == b"DATA" and len(d) >= 1:
+                    cflags = d[0] | ((d[1] << 8) if len(d) >= 2 else 0)
             new = {"fid": fid, "edid": name, "x": None, "y": None, "vhgt": None, "land_fid": None,
-                   "refs": [], "persistent_refs": []}
+                   "refs": [], "persistent_refs": [], "water": water, "flags": cflags}
             if not in_block or xy is None:
                 # The worldspace's persistent cell sits directly in the world children group, outside the exterior
                 # blocks. In Fallout4.esm Commonwealth it is CELL 00018AA2 with XCLC (0, 0) and 33,146 persistent
