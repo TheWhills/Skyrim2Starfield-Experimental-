@@ -232,3 +232,7 @@ colour, LODB LodBehavior {Default, Aggregate, NoLods}; references join a layer t
 per layer and block. The generator now writes one LAYR `<base>_LOD` per LOD base (LodBehavior Aggregate by default,
 objects.json "lod_behavior" to change), links those references to it (XLYR) and names the composites after it.
 **Supported hypothesis**: the engine loads composites by the layers its references use.
+Second LOD test (layers, Aggregate): still not drawn. Vanilla layer Gagarin_LOD_Grp012: LodBehavior Aggregate, Parent
+Gagarin_LOD 0799F1. WRLD comparison (owner's dumps): SettleGagarinWorld and NewAtlantis (composite LOD) have HNAM [5],
+the Mars template LC172World (no composites) HNAM [0]; Gagarin also has Water 000018. TerrainOverlays now puts the
+LOD layers under a parent `<world>_LOD` and sets the world's HNAM to [5] when it writes LOD layers.

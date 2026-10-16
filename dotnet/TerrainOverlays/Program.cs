@@ -243,7 +243,21 @@ if (Has(prm, "objects"))
             }
             bi++;
         }
-        if (layers.Count > 0) Console.WriteLine($"{layers.Count} LOD layers ({lodBehavior})");
+        if (layers.Count > 0)
+        {
+            // as vanilla Gagarin: the LOD layers sit under one parent layer (Gagarin_LOD_Grp012 -> Gagarin_LOD), and the
+            // world's HNAM is [5] (SettleGagarinWorld, NewAtlantis: worlds with composite LOD) where the Mars template
+            // LC172World (no composites) has [0] (owner's SfInspect wrld dumps). HNAM's meaning is unresolved.
+            var parent = new Layer(NewKey(), release) { EditorID = world + "_LOD", LodBehavior = Layer.LodBehaviorType.Default };
+            mod.Layers.Add(parent);
+            foreach (var l in layers.Values) l.Parent.SetTo(parent.FormKey);
+            var lw = worlds.First(x => x.World.EditorID == world).World;
+            var hp = lw.GetType().GetProperty("HNAM")!;
+            var ht = Nullable.GetUnderlyingType(hp.PropertyType) ?? hp.PropertyType;
+            object hv = ht == typeof(byte[]) ? new byte[] { 5 } : System.Activator.CreateInstance(ht, new object[] { new byte[] { 5 } })!;
+            hp.SetValue(lw, hv);
+            Console.WriteLine($"{layers.Count} LOD layers ({lodBehavior}) under {parent.EditorID}; {world} HNAM = [5]");
+        }
     }
     foreach (var b in o.GetProperty("bases").EnumerateArray())
     {
