@@ -241,3 +241,10 @@ ordinary bases (MacKitSmBase68, IndExtSupBeamLg01, ...; ref flags 0, base flags 
 layer setup matches vanilla. Third test (HNAM 5 + parent layer): still not drawn. Remaining differences: our
 composites carry several BSGeometry shapes and the full models' materials (vanilla: one shape, baked composite
 material and textures), BSXFlags (now 1 as vanilla), and the surface block record (to compare).
+**Decisive test (2026-10-16): `lod --vanilla-test`** replaced all 6,612 of our composites with vanilla Gagarin crane
+composites (vanilla mesh and baked material) moved over our objects: still nothing drawn from the Throat of the World.
+So the engine does not load composite LOD for this overlay world at all; our file contents are not the (only) cause.
+Matched so far without effect: lodsettings, composite names / folder / 2^L blocks, LAYR Aggregate layers with a
+parent, XLYR on the references, world HNAM 5, BSXFlags 1, STAT HasDistantLod. **Unresolved, parked.** Untested ideas:
+something in a vanilla world's records we cannot see in Mutagen's view (unknown subrecords), a cache built only by
+the Creation Kit, or the engine skipping composite LOD for worlds added by plugins.
