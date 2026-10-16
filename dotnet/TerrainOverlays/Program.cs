@@ -247,7 +247,7 @@ if (Has(prm, "ltex_overrides"))
         var t = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
         try
         {
-            object? link = t == typeof(string) ? matPath : Activator.CreateInstance(t, matPath);
+            object? link = t == typeof(string) ? matPath : System.Activator.CreateInstance(t, matPath);
             prop.SetValue(lt, link);
         }
         catch (Exception e)

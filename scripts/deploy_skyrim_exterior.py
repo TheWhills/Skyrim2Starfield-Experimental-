@@ -67,6 +67,11 @@ def staged(staging):
     for p in plugins:
         if not os.path.exists(os.path.join(staging, p)):
             sys.exit(f"{p} not in {staging}: run dotnet/TerrainOverlays (or stage --sf-esm) first")
+        # a failed plugin build leaves the previous run's plugin behind (owner's run: the stage step's dotnet build
+        # failed and the old plugin was installed): refuse plugins older than the params they were built from
+        if os.path.getmtime(os.path.join(staging, p)) < os.path.getmtime(prm_path):
+            sys.exit(f"{p} is older than overlays_params.json: the plugin build did not finish (stage / "
+                     "dotnet/TerrainOverlays failed?); rebuild before installing")
     dirs = [d for d in DATA_DIRS if os.path.isdir(os.path.join(staging, "Data", d))]
     if "Terrain" not in dirs:
         sys.exit(f"{staging}\\Data\\Terrain missing")

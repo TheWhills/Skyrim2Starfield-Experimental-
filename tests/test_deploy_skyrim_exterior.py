@@ -29,11 +29,11 @@ class DeployTests(unittest.TestCase):
         os.makedirs(os.path.join(self.staging, "Data", "Terrain"))
         os.makedirs(os.path.join(self.staging, "Data", "meshes"))
         open(os.path.join(self.staging, "Data", "Terrain", "x.btd"), "wb").write(b"btd")
+        with open(os.path.join(self.staging, "overlays_params.json"), "w") as f:
+            json.dump({"plugin": "SkyrimTerrainTamriel.esm", "mars": {"plugin": "SkyrimTerrainTamriel_Mars.esm"},
+                       "overlays": [{"coc": "SKY_TamrielRiverwoodSpawn"}]}, f)
         for p in ("SkyrimTerrainTamriel.esm", "SkyrimTerrainTamriel_Mars.esm"):
             open(os.path.join(self.staging, p), "wb").write(b"TES4" + p.encode())
-        json.dump({"plugin": "SkyrimTerrainTamriel.esm", "mars": {"plugin": "SkyrimTerrainTamriel_Mars.esm"},
-                   "overlays": [{"coc": "SKY_TamrielRiverwoodSpawn"}]},
-                  open(os.path.join(self.staging, "overlays_params.json"), "w"))
         os.makedirs(os.path.join(self.game, "Data"))
         os.makedirs(os.path.join(self.game, "Tools", "Archive2"))
         open(os.path.join(self.game, "Tools", "Archive2", "Archive2.exe"), "wb").close()
@@ -76,6 +76,14 @@ class DeployTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             self.run_main("install", "--staging", self.staging, "--starfield", self.game)
         self.assertIn("refusing to overwrite", str(cm.exception))
+
+    def test_refuses_plugins_older_than_params(self):
+        pp = os.path.join(self.staging, "overlays_params.json")
+        t = os.path.getmtime(os.path.join(self.staging, "SkyrimTerrainTamriel.esm"))
+        os.utime(pp, (t + 60, t + 60))                       # params rewritten after the plugin: a failed rebuild
+        with self.assertRaises(SystemExit) as cm:
+            self.run_main("install", "--staging", self.staging, "--starfield", self.game)
+        self.assertIn("older than overlays_params.json", str(cm.exception))
 
     def test_uninstall_keeps_a_changed_file(self):
         self.run_main("install", "--staging", self.staging, "--starfield", self.game)
