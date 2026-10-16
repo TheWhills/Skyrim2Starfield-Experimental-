@@ -154,6 +154,33 @@ foreach (var o in overlays)
             sub.Items.Add(c);
         }
     w.TopCell = new Cell(NewKey(), release) { Flags = Cell.Flag.HasWater };   // persistent top cell (as experiments 1 and 2)
+    // Optional "water": {"form": hex WATR, "cells": [[x, y, height_m], ...]} (make_skyrim_overlay.py --skyrim-water):
+    // Skyrim's river / lake levels as cell water (XCLW / XCWT / HasWater), listed on the world like New Atlantis's
+    // CellWaterHeightLocations + WaterHeights (owner's SfInspect dump). Supported hypothesis, not yet seen in game.
+    if (Has(prm, "water"))
+    {
+        var wp = prm.GetProperty("water");
+        var waterKey = new FormKey(sfEsm, Convert.ToUInt32(wp.GetProperty("form").GetString(), 16));
+        var locs = new ExtendedList<P2Int16>();
+        var hts = new ExtendedList<float>();
+        int nWater = 0;
+        foreach (var e in wp.GetProperty("cells").EnumerateArray())
+        {
+            var v = e.EnumerateArray().ToArray();
+            int wx = v[0].GetInt32(), wy = v[1].GetInt32();
+            float h = v[2].GetSingle();
+            if (!cellAt.TryGetValue((wx, wy), out var wc)) continue;
+            wc.Flags |= Cell.Flag.HasWater;
+            wc.WaterHeight = h;
+            wc.Water.SetTo(waterKey);
+            locs.Add(new P2Int16((short)wx, (short)wy));
+            hts.Add(h);
+            nWater++;
+        }
+        w.CellWaterHeightLocations = locs;
+        w.WaterHeights = hts;
+        Console.WriteLine($"  {world}: {nWater} cells with water (WATR {waterKey})");
+    }
     var a = o.GetProperty("anchor");
     var p = a.GetProperty("local").EnumerateArray().Select(e => e.GetSingle()).ToArray();
     var anchor = new PlacedObject(new FormKey(modKey, a.GetProperty("form_id").GetUInt32()), release)

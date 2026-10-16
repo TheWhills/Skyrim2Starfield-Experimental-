@@ -228,3 +228,12 @@ are reset: `--skyrim-ground-roughness matte` (default; a fully rough map, Skyrim
 metres away while objects with the same texture kept it; rebuilt with `--skyrim-ground-alpha one` (BC1, the new
 default) and `--skyrim-ground-roughness matte`, the distant darkening is gone. Terrain1Layer reads the albedo alpha;
 keep it at 1 like the vanilla dirt.
+
+## Water (`--skyrim-water`, 2026-10-16)
+Skyrim's rivers and lakes are cell water: DATA flag 0x2 and an XCLW level per cell (the sea is the worldspace
+default). Starfield keeps the same cell fields (Mutagen Starfield Cell.xml: XCLW, XCWT, HasWater) and its worlds list
+cells with their own level (WRLD XCLW CellWaterHeightLocations + WHGT WaterHeights; New Atlantis lists 8 cells in the
+owner's dump). `build --skyrim-water` gives each 100 m Starfield cell the Skyrim level that keeps most of Skyrim's wet /
+dry LAND vertices inside it right (src/fo4sf/skyrimwater.py); TerrainOverlays sets HasWater, WaterHeight, Water
+(`--skyrim-water-form`, default WATR 000018) and fills the world's two lists. Sea-level cells stay the planet ocean.
+**Supported hypothesis**, not yet seen in game. Not included: Skyrim's placed waterfalls / flowing-water effect meshes.

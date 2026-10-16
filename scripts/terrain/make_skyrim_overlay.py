@@ -391,6 +391,17 @@ def cmd_build(a, rest):
         apply_planet(prm, a)
     for o in prm["overlays"]:                        # make_skyrim_objects.to_local lifts the objects by the same amount
         o["height_offset_m"] = a.height_offset
+    if a.skyrim_water:                               # Skyrim's rivers / lakes as Starfield cell water (skyrimwater.py)
+        from fo4sf import skyrimwater
+        o = prm["overlays"][0]
+        lv = skyrimwater.cell_levels(land.grids, land.water, land.default_water,
+                                     tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
+                                     (o["cell_min"], o["cell_max"]))
+        prm["water"] = {"form": a.skyrim_water_form, "cells": [[c["cell"][0], c["cell"][1], c["height_m"]] for c in lv]}
+        agree = sum(c["agree"] for c in lv) / len(lv) if lv else 1.0
+        print(f"overlays_params.json: {len(lv)} cells with Skyrim river / lake water (WATR {a.skyrim_water_form}), "
+              f"levels {min((c['height_m'] for c in lv), default=0):.1f}..{max((c['height_m'] for c in lv), default=0):.1f} m,"
+              f" {agree:.0%} of Skyrim's wet / dry vertices kept")
     if a.height_offset:
         print(f"overlays_params.json: terrain and objects lifted {a.height_offset:g} m")
     with open(pp, "w", encoding="utf-8") as f:
@@ -479,6 +490,12 @@ def main(argv=None):
     ap.add_argument("--height-offset", type=float, default=0.0,
                     help="build: metres added to every terrain height (and object, via overlays_params) - e.g. to put "
                          "Skyrim's sea level (-14000 units = -200 m) on an ocean planet's sea level")
+    ap.add_argument("--skyrim-water", action="store_true",
+                    help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
+                         "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
+    ap.add_argument("--skyrim-water-form", default="000018",
+                    help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 000018, "
+                         "the LOD water New Atlantis and the Mars template name)")
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="which LTEX table entry a BTD quadrant byte b names: head = b - 1 (Starfield, default), "
                          "tail = n - b (Fallout 76, the old rule; only for comparison)")

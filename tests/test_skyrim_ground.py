@@ -276,7 +276,7 @@ class HeightOffsetTests(unittest.TestCase):
                 with mock.patch.object(cw, "ltex_source", return_value=([PLAIN], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
                         contextlib.redirect_stdout(io.StringIO()):
                     sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
-                             "--arrival", "", "--height-offset", f"{off:g}"])
+                             "--arrival", "", "--height-offset", f"{off:g}", "--skyrim-water"])
                 t = btd.read(open(os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd"), "rb").read())
                 prm = json.load(open(os.path.join(out, "overlays_params.json")))
                 hs[off] = (t.heights_m(), prm["overlays"][0])
@@ -284,6 +284,7 @@ class HeightOffsetTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.median(hs[200.0][0] - hs[0.0][0])), 200.0, delta=0.05)
         ov = hs[200.0][1]
         self.assertEqual(ov["height_offset_m"], 200.0)
+        self.assertEqual(prm["water"], {"form": "000018", "cells": []})   # fixture cells have no water flag
         r, = mo.to_local([{"pos": [70.0, 140.0, 700.0]}], ov)
         self.assertAlmostEqual(r["pos"][2], 700.0 + 200.0 * 70.0)
 
