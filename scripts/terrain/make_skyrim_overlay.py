@@ -95,6 +95,53 @@ def plan_numbers(land, cells, n):
 
 
 # ---------------------------------------------------------------------------------------------------------- textures
+def skyrim_ground(a, ltex, cells, usage, out):
+    """--skyrim-ground: convert the most-covering Skyrim landscape texture sets into Starfield materials (staged under
+    <out>/Data) and assign each one a spare Starfield.esm LTEX to override (src/fo4sf/skyrimground.py)."""
+    from fo4sf import bsa, landtex, skyrimconvert, skyrimground
+    sf_esm = os.path.join(a.sf_data, "Starfield.esm")
+    if not (a.content_resources and a.texconv):
+        sys.exit("--skyrim-ground needs --content-resources (Starfield Tools\\ContentResources.zip) and --texconv")
+    fields = skyrimground.ltex_fields(sf_esm)
+    plain = fields.get(landtex.PLAIN_GROUND)
+    if not plain or not plain["bnam"]:
+        sys.exit("Starfield.esm has no plain ground LTEX (LDirtFootprints01) with a material to clone")
+    template = skyrimground.template_material(a.content_resources, plain["bnam"])
+    print(f"skyrim ground: material template {plain['bnam']} (from {plain['edid']}); finding spare LTEX records...")
+    slots = skyrimground.free_slots(sf_esm, usage, fields)
+    cov = skyrimground.coverage(cells)
+    chosen, fallback = skyrimground.plan(ltex, cov, slots[:a.skyrim_ground_max])
+    print(f"skyrim ground: {len(slots)} spare Starfield LTEX records; converting {len(chosen)} of "
+          f"{sum(1 for f in cov if cov[f] > 0)} Skyrim ground textures in use")
+    conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(os.path.dirname(os.path.abspath(a.skyrim))),
+                                         os.path.join(out, "Data"), a.texconv, a.content_resources)
+    names, sky, overrides, failed, done = {}, {}, [], {}, {}
+    for fid, slot in chosen:
+        v = ltex[fid]
+        stem = "ground/" + re.sub(r"[^a-z0-9]+", "_", v["edid"].lower()).strip("_")
+        try:
+            mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]),
+                                            skyrimground.texture_path(v.get("normal")), "", template=template)
+        except Exception as e:                       # noqa: BLE001  (reported; that texture uses the category pick)
+            failed[v["edid"]] = f"{type(e).__name__}: {e}"
+            continue
+        name = "SKYG_" + v["edid"]
+        names[name], sky[v["edid"]], done[fid] = slot, name, name
+        overrides.append({"form_id": slot, "vanilla_edid": fields[slot]["edid"], "skyrim": v["edid"],
+                          "material": skyrimground.bnam_for(mat, plain["bnam"])})
+    borrowed = 0
+    for fid, src in fallback.items():
+        if src in done and ltex[fid]["edid"] not in sky:
+            sky[ltex[fid]["edid"]] = done[src]
+            borrowed += 1
+    for e, why in list(failed.items())[:5]:
+        print(f"  ground texture {e} not converted: {why}")
+    print(f"skyrim ground: {len(overrides)} converted, {len(failed)} failed, {borrowed} more Skyrim textures borrow a "
+          f"converted one of their category")
+    return {"names": names, "skyrim": sky, "overrides": overrides, "converted": len(overrides), "failed": failed,
+            "free_slots": len(slots), "borrowed": borrowed}
+
+
 def land_textures(a, land, out):
     """Skyrim's ground texture layers for the BTD (src/fo4sf/landtex.py): returns tile -> (LTEX table, sample weights,
     quad map) for make_cw_overlays.build, and writes <out>/ltex_mapping.json (editable; pass back with --ltex-mapping)."""
@@ -116,6 +163,12 @@ def land_textures(a, land, out):
             override["skyrim"] = {v["edid"]: v["starfield"] for v in override["skyrim"].values()}
     usage, _first, nbtd, _skip = landtex.vanilla_usage(a.sf_data)
     print(f"ground textures: {nbtd} vanilla BTDs surveyed, {len(usage)} Starfield LTEX in use")
+    ground = None
+    if a.skyrim_ground:
+        ground = skyrim_ground(a, ltex, cells, usage, out)
+        sf = dict(sf, **ground["names"])                    # "SKYG_<Skyrim EditorID>" -> the overridden slot
+        override = dict(override or {})
+        override["skyrim"] = dict(ground["skyrim"], **(override.get("skyrim") or {}))
     mapping = landtex.build_mapping(ltex, sf, override, usage if nbtd else None)
     for cat, v in mapping["categories"].items():
         print(f"  {cat:7} -> {v['edid']}" + (f" (in {v['vanilla_btds']} vanilla BTDs)" if "vanilla_btds" in v else ""))
@@ -131,6 +184,9 @@ def land_textures(a, land, out):
                                    0, 1) * 255).astype(np.uint8) for fid in used}
     sp, ox, oy = tg.FO4_VERTEX_UNITS, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS
     stats = {"starfield_ltex": [names[f] for f in used], "skyrim_ltex": len(ltex), "cells_with_layers": len(cells)}
+    if ground:
+        stats["skyrim_ground"] = {k: ground[k] for k in ("converted", "failed", "free_slots", "borrowed")}
+        stats["ltex_overrides"] = ground["overrides"]
 
     def per_tile(t):
         xs, ys = t.sample_coords()
@@ -220,6 +276,9 @@ def cmd_build(a, rest):
     ca.arrival = arrival[0][0] if arrival else ""   # "" never matches a point label: the COC sits at the centre
     ca.display_name = a.display_name or d["display_name"]
     tex_stats = None
+    a.texconv = ca.texconv or getattr(a, "texconv", "")   # --texconv belongs to make_cw_overlays' parser (passed in rest)
+    if a.skyrim_ground:
+        a.land_textures = True
     if a.land_textures:
         ca.land_textures, tex_stats = land_textures(a, land, a.out)
 
@@ -246,6 +305,14 @@ def cmd_build(a, rest):
           f"{arrival[0][0] if arrival else 'overlay centre'}, {len(extra)} extra landmarks")
     res = cw.build(ca)
     write_source()                                   # with the texture stats the build filled in
+    if tex_stats and tex_stats.get("ltex_overrides"):  # for dotnet/TerrainOverlays: override these Starfield.esm LTEX
+        pp = os.path.join(a.out, "overlays_params.json")
+        with open(pp, encoding="utf-8") as f:
+            prm = json.load(f)
+        prm["ltex_overrides"] = tex_stats["ltex_overrides"]
+        with open(pp, "w", encoding="utf-8") as f:
+            json.dump(prm, f, indent=1)
+        print(f"overlays_params.json: {len(prm['ltex_overrides'])} Starfield LTEX overrides with Skyrim ground materials")
     return res
 
 
@@ -296,6 +363,11 @@ def main(argv=None):
     ap.add_argument("--land-textures", action="store_true",
                     help="build: Skyrim's ground texture layers mapped onto Starfield LTEX (reads Starfield.esm from "
                          "--sf-data; writes ltex_mapping.json); default: one plain ground texture")
+    ap.add_argument("--skyrim-ground", action="store_true",
+                    help="build: with --land-textures, Skyrim's OWN ground textures (converted, on spare Starfield LTEX "
+                         "records the terrain plugin overrides); needs --content-resources and --texconv")
+    ap.add_argument("--skyrim-ground-max", type=int, default=200, help="build: at most this many converted ground textures")
+    ap.add_argument("--content-resources", default="", help="build --skyrim-ground: Starfield Tools\\ContentResources.zip")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
     a, rest = ap.parse_known_args(join_coordinates(sys.argv[1:] if argv is None else argv))
     if a.cmd in ("info", "worlds", "build") and not a.skyrim:

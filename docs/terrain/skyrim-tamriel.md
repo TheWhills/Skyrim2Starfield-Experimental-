@@ -78,6 +78,18 @@ picks, per category, the matching LTEX that vanilla terrain uses most; a categor
 plain ground (LDirtFootprints01). The picks and their vanilla BTD counts are printed and kept in `ltex_mapping.json`.
 `scripts\terrain\survey_ltex.py` prints the whole usage table, the unused LTEX and each record's fields.
 
+### Skyrim's own ground textures (`--skyrim-ground`; supported hypothesis, not yet tested in game)
+The BTD's LTEX table stores raw FormIDs, and a new LTEX in a mod plugin has no fixed FormID at run time, so
+`src/fo4sf/skyrimground.py` reuses spare Starfield.esm LTEX records instead: ones no vanilla BTD lists and no BIOM / GCVR
+/ PNDT / SFBK record names. The most-covering Skyrim landscape texture sets (TXST TX00 diffuse, TX01 normal; flat normal
+when absent) are converted like object textures, with the material cloned from the plain ground's own vanilla material
+(LDirtFootprints01's BNAM, read from ContentResources.zip) instead of the object template. dotnet/TerrainOverlays
+overrides each chosen record (same FormKey, vanilla material type and friction kept) with BNAM pointing at the new
+material (`ltex_overrides` in overlays_params.json). Skyrim textures beyond the spare records borrow the converted one of
+their category with the most coverage. Vanilla planets do not use the overridden records, so they look the same.
+Build: `make_skyrim_overlay.py build ... --skyrim-ground --content-resources <Starfield>\Tools\ContentResources.zip
+--texconv <texconv.exe>` (implies `--land-textures`); textures and materials are staged under the build's `Data`.
+
 ## Not included
 Objects (statics, trees, buildings: now on branch `skyrim/objects`, [skyrim-objects.md](skyrim-objects.md)), water (Tamriel's sea
 and lakes are dry basins at Mars gravity), grass, object LOD, navmesh,

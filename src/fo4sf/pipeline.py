@@ -245,7 +245,8 @@ class Converter:
 
     def _convert_texture_set(self, stem: str, diffuse: str, normal: str, spec: str,
                              smoothness: float = 1.0, spec_mult: float = 1.0,
-                             alpha_test: bool = False, alpha_ref: int = 128, decal: bool = False) -> str:
+                             alpha_test: bool = False, alpha_ref: int = 128, decal: bool = False,
+                             template: Optional[dict] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -253,7 +254,7 @@ class Converter:
         tex_rel = f"textures/{self.prefix}/{stem}"
         d, n = self.src.texture(diffuse), (self.src.texture(normal) if normal else None)
         s = self.src.texture(spec) if spec else None
-        if d is None or (n is None and not decal):         # decals (effect grime) may have no normal map: flat normal
+        if d is None or (n is None and not decal and template is None):   # decals / ground may lack a normal: flat
             raise FileNotFoundError("diffuse or normal texture missing from archives")
         out = {}
         with tempfile.TemporaryDirectory() as tmp:
@@ -291,7 +292,10 @@ class Converter:
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 self._publish_texture(os.path.join(tmp, fn), dst, kind)
                 out[kind] = cm.game_path(f"{tex_rel}_{kind}.dds")
-        if decal:
+        if template is not None:                           # any single-layer vanilla material (terrain ground, ...)
+            mat = cm.build_from_template(template, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", stem),
+                                         {"Albedo": out["color"], "Normal": out["normal"], "Roughness": out["rough"]})
+        elif decal:
             if self._decal_template is None:
                 self._decal_template = cm.read_template_path(self.content_resources, cm.DECAL_TEMPLATE_MAT)
             mat = cm.build_from_template(self._decal_template, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", stem),

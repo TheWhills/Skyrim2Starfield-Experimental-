@@ -229,6 +229,38 @@ if (Has(prm, "objects"))
     var ids = new Dictionary<string, object> { ["plugin"] = modKey.FileName.String, ["world"] = world, ["bases"] = baseIds, ["refs"] = refIds };
     File.WriteAllText(Path.Combine(outDir, "formids.json"), JsonSerializer.Serialize(ids));
 }
+// Optional "ltex_overrides": [{"form_id", "material", ...}] (make_skyrim_overlay.py build --skyrim-ground,
+// src/fo4sf/skyrimground.py): spare Starfield.esm LTEX records (no vanilla BTD or biome uses them) overridden with BNAM
+// = a material made from a Skyrim ground texture. Same FormKey as the vanilla record, so the BTD's raw FormIDs resolve.
+// BNAM is set by reflection (AssetLink type differs between Mutagen versions); a failure is reported, not fatal.
+if (Has(prm, "ltex_overrides"))
+{
+    int nLtex = 0;
+    foreach (var lo in prm.GetProperty("ltex_overrides").EnumerateArray())
+    {
+        var fk = new FormKey(sfEsm, lo.GetProperty("form_id").GetUInt32());
+        var src = sf.LandscapeTextures.FirstOrDefault(l => l.FormKey == fk);
+        if (src == null) { Console.WriteLine($"  LTEX {fk} not in Starfield.esm: skipped"); continue; }
+        var lt = (LandscapeTexture)src.DeepCopy();
+        var matPath = lo.GetProperty("material").GetString()!;
+        var prop = typeof(LandscapeTexture).GetProperty("MaterialPath")!;
+        var t = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+        try
+        {
+            object? link = t == typeof(string) ? matPath : Activator.CreateInstance(t, matPath);
+            prop.SetValue(lt, link);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"  LTEX {fk}: could not set MaterialPath ({t.Name}): {e.GetType().Name} {e.Message}");
+            continue;
+        }
+        mod.LandscapeTextures.Add(lt);
+        nLtex++;
+    }
+    Console.WriteLine($"{nLtex} Starfield LTEX overridden with Skyrim ground materials");
+}
+
 mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)

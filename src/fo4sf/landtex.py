@@ -7,7 +7,8 @@ Skyrim (UESP "Skyrim Mod:Mod File Format/LAND", "LTEX"; verified only on synthet
   the base: colour = lerp(colour, layer, opacity). So a vertex's effective weight of layer k is
   opacity_k * prod(1 - opacity_j for the layers j above k), and the base keeps prod(1 - opacity_j) over all layers.
   BTXT FormID 0 is the engine's default land texture.
-* LTEX: EDID, TNAM -> TXST whose TX00 is the diffuse texture (used to recognise what the texture is).
+* LTEX: EDID, TNAM -> TXST whose TX00 is the diffuse texture (used to recognise what the texture is) and TX01 the
+  normal map (both converted by --skyrim-ground, src/fo4sf/skyrimground.py).
 
 Starfield BTD (docs/terrain/architecture.md 1.4 for the byte layout, verified; the meaning below is a SUPPORTED
 hypothesis from fo76utils, which renders Starfield terrain: btdfile.cpp getCellTextureSet / getCellLandTexture and
@@ -73,12 +74,12 @@ def read_ltex(p: fo4land.Plugin) -> Dict[int, dict]:
                 continue
             fields = dict((s, d) for s, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
             if typ == b"TXST":
-                txst[fid] = fo4land.zstring(fields.get(b"TX00", b""))
+                txst[fid] = (fo4land.zstring(fields.get(b"TX00", b"")), fo4land.zstring(fields.get(b"TX01", b"")))
             else:
                 tn = struct.unpack_from("<I", fields[b"TNAM"])[0] if len(fields.get(b"TNAM", b"")) >= 4 else 0
                 ltex[fid] = {"edid": fo4land.zstring(fields.get(b"EDID", b"")), "txst": tn}
     for v in ltex.values():
-        v["diffuse"] = txst.get(v.pop("txst"), "")
+        v["diffuse"], v["normal"] = txst.get(v.pop("txst"), ("", ""))
     return ltex
 
 
