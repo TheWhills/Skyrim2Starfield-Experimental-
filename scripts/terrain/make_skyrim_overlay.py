@@ -114,7 +114,11 @@ def land_textures(a, land, out):
             override["categories"] = {k: v["edid"] for k, v in override["categories"].items()}
         if "skyrim" in override and isinstance(next(iter(override["skyrim"].values()), None), dict):
             override["skyrim"] = {v["edid"]: v["starfield"] for v in override["skyrim"].values()}
-    mapping = landtex.build_mapping(ltex, sf, override)
+    usage, _first, nbtd, _skip = landtex.vanilla_usage(a.sf_data)
+    print(f"ground textures: {nbtd} vanilla BTDs surveyed, {len(usage)} Starfield LTEX in use")
+    mapping = landtex.build_mapping(ltex, sf, override, usage if nbtd else None)
+    for cat, v in mapping["categories"].items():
+        print(f"  {cat:7} -> {v['edid']}" + (f" (in {v['vanilla_btds']} vanilla BTDs)" if "vanilla_btds" in v else ""))
     cells_t, used = landtex.target_cells(cells, mapping, sf)
     default_sf = sf[mapping["skyrim"][landtex.DEFAULT_LTEX]["starfield"]]
     if default_sf not in used:

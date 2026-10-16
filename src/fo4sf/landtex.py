@@ -183,9 +183,52 @@ def starfield_ltex(sf_esm: str) -> Dict[str, int]:
     return out
 
 
-def build_mapping(ltex: Dict[int, dict], sf: Dict[str, int], override: Optional[dict] = None) -> dict:
+TERRAIN_ARCHIVES = ("Starfield - Terrain01.ba2", "Starfield - Terrain02.ba2", "Starfield - Terrain03.ba2",
+                    "Starfield - Terrain04.ba2", "Starfield - TerrainPatch.ba2")
+BTD_LTEX_TABLE = 0x28                   # u32 n, n x u32 LTEX FormIDs (docs/terrain/architecture.md 1.4)
+
+
+def vanilla_usage(sf_data: str):
+    """(Counter {LTEX form id: vanilla BTDs listing it}, Counter {form id: BTDs where it is the first entry}, BTDs read,
+    BTDs skipped). Only each BTD's header is read: the vanilla terrain archives store BTDs uncompressed."""
+    import os
+    from collections import Counter
+    from fo4sf import ba2
+    listed, first, n, skipped = Counter(), Counter(), 0, 0
+    for name in TERRAIN_ARCHIVES:
+        path = os.path.join(sf_data, name)
+        if not os.path.exists(path):
+            continue
+        arc = ba2.Ba2(path)
+        with open(path, "rb") as f:
+            for e in arc.entries:
+                if not e.name.lower().endswith(".btd"):
+                    continue
+                if e.kind != "GNRL" or e.packed:
+                    skipped += 1
+                    continue
+                f.seek(e.offset)
+                head = f.read(BTD_LTEX_TABLE + 4)
+                k = struct.unpack_from("<I", head, BTD_LTEX_TABLE)[0] if len(head) == BTD_LTEX_TABLE + 4 else 1 << 30
+                if k > 4096:
+                    skipped += 1
+                    continue
+                t = struct.unpack(f"<{k}I", f.read(4 * k))
+                n += 1
+                listed.update(set(t))
+                if t:
+                    first[t[0]] += 1
+    return listed, first, n, skipped
+
+
+def build_mapping(ltex: Dict[int, dict], sf: Dict[str, int], override: Optional[dict] = None,
+                  usage: Optional[Dict[int, int]] = None) -> dict:
     """{"skyrim": {ltex: {"edid", "diffuse", "category", "starfield"}}, "categories": {category: {"edid", "form_id"}}}.
-    override (ltex_mapping.json): {"categories": {category: SF EditorID}, "skyrim": {Skyrim EditorID: SF EditorID}}."""
+    override (ltex_mapping.json): {"categories": {category: SF EditorID}, "skyrim": {Skyrim EditorID: SF EditorID}}.
+    usage ({SF LTEX form id: vanilla BTDs listing it}, from vanilla_usage): among the LTEX whose EditorID matches a
+    category, the one vanilla terrain uses most wins, and one no vanilla BTD uses is never picked automatically (the
+    plain ground is used instead). Without usage: the first match alphabetically (owner's first in-game test of that:
+    pale pink ground everywhere)."""
     override = override or {}
     lower = {k.lower(): k for k in sorted(sf)}
     fallback = next((k for k, v in sf.items() if v == PLAIN_GROUND), None) or (sorted(sf)[0] if sf else None)
@@ -193,10 +236,17 @@ def build_mapping(ltex: Dict[int, dict], sf: Dict[str, int], override: Optional[
     for cat, words in SF_KEYWORDS.items():
         pick = override.get("categories", {}).get(cat)
         if pick is None:
-            pick = next((lower[k] for w in words for k in sorted(lower) if w in k), fallback)
+            matches = list(dict.fromkeys(lower[k] for w in words for k in sorted(lower) if w in k))
+            if usage is not None:
+                used = sorted((m for m in matches if usage.get(sf[m], 0) > 0), key=lambda m: -usage[sf[m]])
+                pick = used[0] if used else fallback
+            else:
+                pick = matches[0] if matches else fallback
         if pick is not None and pick not in sf:
             raise ValueError(f"Starfield LTEX {pick!r} (category {cat}) is not in Starfield.esm")
         cats[cat] = {"edid": pick, "form_id": sf.get(pick)}
+        if usage is not None and pick is not None:
+            cats[cat]["vanilla_btds"] = int(usage.get(sf[pick], 0))
     sky = {}
     for fid, v in sorted(ltex.items()):
         cat = category(v["edid"], v["diffuse"])

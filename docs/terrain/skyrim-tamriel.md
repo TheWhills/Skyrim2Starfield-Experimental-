@@ -70,6 +70,14 @@ TempJemisonWorld has `LandscapeTextures`). In game: if the ground looks like the
 roads where Skyrim's are), the hypothesis holds; if layers appear in the wrong places, the byte / bit pairing differs.
 Cost on a Tamriel-sized map: about 5 s extra.
 
+**First in-game test (owner, 2026-10-15, Riverwood):** the layers were carried over (patterns follow the terrain) but
+the ground rendered pale pink-white everywhere. The automatic picks took the alphabetically first Starfield LTEX whose
+EditorID contains the category word, which can be a test or unused record. The build now surveys the LTEX tables of
+every vanilla BTD (`landtex.vanilla_usage`: headers only, the vanilla terrain archives store BTDs uncompressed) and
+picks, per category, the matching LTEX that vanilla terrain uses most; a category with no vanilla-used match takes the
+plain ground (LDirtFootprints01). The picks and their vanilla BTD counts are printed and kept in `ltex_mapping.json`.
+`scripts\terrain\survey_ltex.py` prints the whole usage table, the unused LTEX and each record's fields.
+
 ## Not included
 Objects (statics, trees, buildings: now on branch `skyrim/objects`, [skyrim-objects.md](skyrim-objects.md)), water (Tamriel's sea
 and lakes are dry basins at Mars gravity), grass, object LOD, navmesh,
