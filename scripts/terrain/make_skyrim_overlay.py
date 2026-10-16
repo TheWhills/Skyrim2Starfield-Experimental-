@@ -132,7 +132,7 @@ def skyrim_ground(a, ltex, cells, usage, out):
         print("skyrim ground: TEST MODE, ground diffuse textures replaced by a magenta / green checkerboard")
     flat = skyrimground.flat_textures(os.path.join(out, "Data"), a.texconv)
     tiling = a.skyrim_ground_tiling
-    print(f"skyrim ground: colour alpha {'kept' if a.skyrim_ground_keep_alpha else 'removed'}, "
+    print(f"skyrim ground: colour alpha {a.skyrim_ground_alpha}, "
           f"{'flat' if a.skyrim_ground_flat_normal else 'Skyrim'} normals, flat AO, "
           f"{'flat' if a.skyrim_ground_flat_height else 'detail'} height maps for blending, "
           f"tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
@@ -151,7 +151,8 @@ def skyrim_ground(a, ltex, cells, usage, out):
             normal = "" if a.skyrim_ground_flat_normal else skyrimground.texture_path(v.get("normal"))
             mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]), normal, "",
                                             template=template, extra_files=files,
-                                            opaque_color=not a.skyrim_ground_keep_alpha)
+                                            color_alpha=None if a.skyrim_ground_alpha == "keep"
+                                            else (0 if a.skyrim_ground_alpha == "zero" else 255))
             mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
             with open(mp, encoding="utf-8") as f:
                 md = json.load(f)
@@ -462,9 +463,10 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
                     help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
                          "Starfield's dirt uses 3.2)")
-    ap.add_argument("--skyrim-ground-keep-alpha", action="store_true",
-                    help="build --skyrim-ground: keep the Skyrim diffuse alpha (its specular mask) in the colour "
-                         "texture; by default it is removed (suspected cause of white blobs on the ground)")
+    ap.add_argument("--skyrim-ground-alpha", choices=("zero", "one", "keep"), default="zero",
+                    help="build --skyrim-ground: the colour texture's alpha, which Terrain1Layer reads as a smooth, "
+                         "frost-like sheen (owner's tests: Skyrim's specular alpha -> white blobs, all 1 -> one pale "
+                         "patch). 'zero' (default, BC3), 'one' (BC1), 'keep' (Skyrim's)")
     ap.add_argument("--skyrim-ground-flat-normal", action="store_true",
                     help="build --skyrim-ground: flat normal maps instead of Skyrim's (diagnosis)")
     ap.add_argument("--skyrim-ground-flat-height", action="store_true",

@@ -182,3 +182,7 @@ BTD draws `LDirt02` as base with every overlay at alpha 0, so the blobs are not 
 blobs; its alpha is a speckled specular mask. Suspect: the colour texture kept that alpha (BC1 keeps 1-bit alpha) and
 Terrain1Layer reads albedo alpha. Ground colours are now written opaque (`--skyrim-ground-keep-alpha` keeps it);
 `--skyrim-ground-flat-normal` exists to rule the normal maps in or out if blobs remain.
+Owner's test with the alpha forced to 1: the specks were gone but the whole Dirt02 area turned into one pale, smooth,
+sky-reflecting patch. So Terrain1Layer reads albedo alpha as a smooth, frost-like sheen: Skyrim's specular alpha (bright
+specks) drew the blobs, alpha 1 everywhere drew the patch, and the alpha-0 areas between the blobs looked like proper
+dirt. Default is now alpha 0 (`--skyrim-ground-alpha zero`), written as BC3 because BC1 turns alpha-0 texels black.

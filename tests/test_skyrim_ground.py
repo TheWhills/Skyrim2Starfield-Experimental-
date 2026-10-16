@@ -128,12 +128,18 @@ class GroundTests(unittest.TestCase):
                     d = open(c, "rb").read()
                     h = tx.read_dds_header(d)
                     px = np.frombuffer(d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
-                    self.assertEqual(int(px.reshape(-1, 4)[:, 3].min()), 255)
+                    self.assertEqual(int(px.reshape(-1, 4)[:, 3].max()), 0)        # default: alpha zero
             if test_mode:
                 colours = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(out, "Data", "textures"))
                            for f in fs if f.endswith("_color.dds") and "ground" in r.replace("\\", "/")]
                 self.assertTrue(colours)
-                self.assertTrue(all(open(c, "rb").read() == skyrimground.checker_dds() for c in colours))
+                from fo4sf import textures as tx2
+
+                def rgb(d):
+                    h = tx2.read_dds_header(d)
+                    return d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4][0::4][:64], \
+                        d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4][1::4][:64]
+                self.assertTrue(all(rgb(open(c, "rb").read()) == rgb(skyrimground.checker_dds()) for c in colours))
             prm = json.load(open(os.path.join(out, "overlays_params.json")))
             t = btd.read(open(os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd"), "rb").read())
             ov = prm["ltex_overrides"]

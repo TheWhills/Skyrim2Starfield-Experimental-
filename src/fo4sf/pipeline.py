@@ -247,7 +247,7 @@ class Converter:
                              smoothness: float = 1.0, spec_mult: float = 1.0,
                              alpha_test: bool = False, alpha_ref: int = 128, decal: bool = False,
                              template: Optional[dict] = None, extra_files: Optional[dict] = None,
-                             opaque_color: bool = False) -> str:
+                             color_alpha: Optional[int] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -272,16 +272,18 @@ class Converter:
                     textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
                     textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
                     opacity = "o_in.dds"
-            if opaque_color:                               # drop the source alpha (Skyrim ground: specular mask)
+            if color_alpha is not None:                    # replace the source alpha (Skyrim ground: specular mask)
                 textures.texconv(self.texconv, os.path.join(tmp, "d.dds"), tmp, "R8G8B8A8_UNORM", ("-m", "1"))
                 raw_d = open(os.path.join(tmp, "d.dds"), "rb").read()
                 hd = textures.read_dds_header(raw_d)
                 pd = np.frombuffer(raw_d[hd["data_offset"]:hd["data_offset"] + hd["width"] * hd["height"] * 4],
                                    np.uint8).reshape(hd["height"], hd["width"], 4).copy()
-                pd[:, :, 3] = 255
+                pd[:, :, 3] = color_alpha
                 textures.write_dds_dx10(os.path.join(tmp, "d.dds"), hd["width"], hd["height"],
                                         textures.DXGI_R8G8B8A8_UNORM, pd.tobytes(), 4)
-            textures.texconv(self.texconv, os.path.join(tmp, "d.dds"), tmp, "BC1_UNORM_SRGB", ("-srgbi",))
+            # BC1 cannot keep a colour under alpha 0 (punch-through black): an explicit alpha needs BC3
+            fmt = "BC3_UNORM_SRGB" if color_alpha is not None and color_alpha < 255 else "BC1_UNORM_SRGB"
+            textures.texconv(self.texconv, os.path.join(tmp, "d.dds"), tmp, fmt, ("-srgbi",))
             if n is not None:
                 nr, ng = _plane_pair(n, tmp, self.texconv)
             else:                                          # flat: x = y = 0 in signed form
