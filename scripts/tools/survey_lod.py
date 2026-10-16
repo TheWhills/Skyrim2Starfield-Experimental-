@@ -78,10 +78,24 @@ def main(argv=None):
         picks = mine[:a.samples * 4]
         gen = [h for h in hits if "\\generated\\" in h[1].lower().replace("/", "\\")][:a.samples]
         settings = [h for h in hits if h[1].lower().endswith(".lod")][:a.samples]
+        comp = [h for h in hits if f"/composite/{w}/" in h[1].lower().replace("\\", "/")]
+        comp = [h for h in comp if h[1].lower().endswith(".nif") and re.search(r"_lod_[0-3]_cell", h[1].lower())]
+        by_level = {}
+        for h in comp:                                   # a few per LOD level, the same object where possible
+            lv = re.search(r"_lod_([0-3])_cell", h[1].lower()).group(1)
+            by_level.setdefault(lv, []).append(h)
+        comp = [h for lv in sorted(by_level) for h in by_level[lv][:a.samples]]
+        picks = [p for p in picks if not p[1].lower().endswith(".lod")] + [
+            h for h in hits if h[1].lower().endswith(f"lodsettings/{w}.lod")
+            or h[1].lower().endswith(f"lodsettings\\{w}.lod")][:1]
         with zipfile.ZipFile(a.zip, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("lod_files.json", json.dumps({"counts": counts, "archives": per_archive,
                                                      "files": [list(h) for h in hits]}, indent=0))
-            for arcn, name, _s in dict.fromkeys(picks + gen + settings):
+            seen = set()
+            for arcn, name, _s in picks + gen + settings + comp:
+                if name.lower() in seen:
+                    continue
+                seen.add(name.lower())
                 try:
                     data = ba2.Ba2(os.path.join(a.sf_data, arcn)).read(name)
                 except Exception as e:               # noqa: BLE001

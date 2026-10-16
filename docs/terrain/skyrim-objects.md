@@ -191,3 +191,17 @@ grass, 2,354 kept. Skyrim's own GRAS densities there are 3-37 %, and Skyrim trie
 grid point (iMinGrassSize 20 units). Now: default `--grass-spacing 0.3` (20 units), every grass in the texture's list
 gets its own density roll, and the GRAS water rule is honoured (0 above / 1 above at most / 2 below / 3 below at most /
 4 either / 5 either at most; cells without water only pass the above-water rules, so kelp stays in rivers).
+
+## Distant-object LOD: survey of vanilla Starfield (2026-10-16, owner's survey_lod.py run)
+**Verified from the owner's archives:**
+* `lodsettings\<world>.lod`, 20 bytes = 5 x int32: (-35, -59, 136, 0, 0) for NewAtlantis, (-6, -6, 16, 0, 0) for
+  CydoniaCity, (-4, -3, 8, 0, 0) for DR010World: south-west cell x, y, cells per side, then two zeros (FO4's had
+  lowest / highest LOD level there). 1,903 of them.
+* Per-object LOD models mirror the full model's path: `meshes\lod\generated\<model path>_lod_<0..3>.nif`, e.g.
+  `...\streetclutter\nabenchaangle45a01_lod_0.nif` (NiNode + BSGeometry + BSLightingShaderProperty, .mat paths).
+  STAT major flag HasDistantLod 0x8000 (Mutagen) is the switch candidate; Starfield STAT has no FO4-style MNAM list.
+* Per-world generated output: `meshes\lod\generated\composite\<world>\<object>_<x>_<y>_lod_<L>_cell0.nif`, one file per
+  source object per block and level; block coordinates step 1 / 2 / 4 / 8 at levels 0..3 (NewAtlantis 1,324 files,
+  CydoniaCity 1,060), plus `textures\lod\generated\composite\` textures. No .bto / .btr files.
+**Unresolved:** how the engine finds the composite files (folder scan by world vs an index), the block size in cells,
+and whether HasDistantLod + per-object `_lod_N` models alone draw distant objects without composites.
