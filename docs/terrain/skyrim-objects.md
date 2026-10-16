@@ -175,3 +175,10 @@ Skyrim's fade distance (patches draw as ordinary statics).
 First in-game look (2026-10-16): only sparse, pale yellow clumps. Changes: `--grass-spacing` default 0.75 m (was 1.5;
 Skyrim tries every 20-60 units, 0.3-0.9 m), and `--grass-tint vertex` (default) multiplies each grass model's texture
 by the mean Skyrim vertex colour (VCLR) under its instances, as Skyrim tints grass with the ground.
+
+## Model-space normal maps (2026-10-16)
+Riverwood's riverbank ledges and cliffs drew dark and flat with only the grass texture's flowers showing, while the
+same texture on the flat terrain looked right. Skyrim landscape objects often set SLSF1 Model_Space_Normals (bit 12,
+`_msn` maps: object-space normals); Starfield reads every normal map as tangent space. The converter now drops such
+maps and lights those shapes from their vertex normals (flat normal map; **supported hypothesis**, not yet seen in
+game). A proper model -> tangent space bake would keep their surface detail. `inspect_nif.py` marks such shapes.

@@ -289,6 +289,22 @@ def refraction(n, shader_ref) -> bool:
     return bool(flags1 & (SLSF1_REFRACTION | SLSF1_FIRE_REFRACTION))
 
 
+SLSF1_MODEL_SPACE_NORMALS = 0x1000   # Shader Flags 1 bit 12: the normal map holds object-space normals (_msn)
+
+
+def model_space_normals(n, shader_ref) -> bool:
+    """True when a BSLightingShaderProperty's normal map is in model (object) space, as on many Skyrim landscape
+    objects (riverbank ledges, cliffs). Starfield reads every normal map as tangent space, so such a map used as is
+    tilts the lighting wrongly: the owner's Riverwood ledges drew dark and flat while the same texture on the
+    terrain looked right."""
+    if not (0 <= shader_ref < len(n.blocks)) or n.type_of(shader_ref) != "BSLightingShaderProperty":
+        return False
+    blk = n.blocks[shader_ref]
+    n_extra, = struct.unpack_from("<I", blk, 8)
+    flags1, = struct.unpack_from("<I", blk, 12 + 4 * n_extra + 4)
+    return bool(flags1 & SLSF1_MODEL_SPACE_NORMALS)
+
+
 def normal_map_as_diffuse(paths) -> bool:
     """A texture set whose diffuse slot holds a normal map ("..._n.dds"): a distortion surface, not a coloured one."""
     return bool(paths) and paths[0].lower().endswith("_n.dds")

@@ -238,6 +238,11 @@ class SkyrimConverter(pipeline.Converter):
             return self.neutral
         test, blend, ref = skyrimnif.alpha_test(src, s.alpha_ref)
         normal = paths[1] if len(paths) > 1 else ""
+        if normal and skyrimnif.model_space_normals(src, s.shader_ref):
+            # an object-space normal map would light the surface wrongly in Starfield's tangent-space shader: drop it
+            # and light from the mesh's own vertex normals (flat normal map) until a model -> tangent bake exists
+            normal, flat_normal_ok = "", True
+            self.stats["model_space_normals_dropped"] = self.stats.get("model_space_normals_dropped", 0) + 1
         if not normal and not (blend and not test) and not flat_normal_ok:
             return self.neutral
         mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok,

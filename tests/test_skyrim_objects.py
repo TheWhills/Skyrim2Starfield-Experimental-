@@ -92,6 +92,27 @@ class NifTests(unittest.TestCase):
             self.assertEqual([len(s.triangles) for s in got], [1, 1])
             self.assertEqual(got[0].uvs[1], (1.0, 0.0))
 
+    def test_model_space_normal_map_is_dropped(self):
+        n = F.SseNif()
+        root = n.reserve("BSFadeNode")
+        v, uv = [(0, 0, 0), (100, 0, 0), (0, 100, 0)], [(0, 0), (1, 0), (0, 1)]
+        msn = n.trishape(b"Ledge", v, uv, [(0, 1, 2)], shader=n.lighting("l.dds", "l_msn.dds", flags1=0x80001000))
+        ts = n.trishape(b"Rock", v, uv, [(0, 1, 2)], shader=n.lighting("r.dds", "r_n.dds"))
+        n.node(root, b"Root", [msn, ts])
+        src = nif.parse(n.bytes())
+        a, b = skyrimnif.trishapes(src)
+        self.assertTrue(skyrimnif.model_space_normals(src, a.shader_ref))
+        self.assertFalse(skyrimnif.model_space_normals(src, b.shader_ref))
+        conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)   # no archives / templates needed
+        conv.stats, conv.neutral = {}, "neutral"
+        calls = []
+        conv.skyrim_material = lambda d, nrm, t, bl, r, flat_normal_ok=False, albedo_tint=None: \
+            calls.append((d, nrm, flat_normal_ok)) or "m"
+        conv._shape_material(src, a)
+        conv._shape_material(src, b)
+        self.assertEqual(calls, [("l.dds", "", True), ("r.dds", "r_n.dds", False)])
+        self.assertEqual(conv.stats["model_space_normals_dropped"], 1)
+
     def test_double_sided_flag_and_back_faces(self):
         n = F.SseNif()
         root = n.reserve("BSFadeNode")

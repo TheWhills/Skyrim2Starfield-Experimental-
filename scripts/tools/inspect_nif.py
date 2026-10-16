@@ -28,6 +28,7 @@ def converter_decision(info, alpha, has_normal, refracts=False):
     test, blend, _ = alpha
     if info["type"] is None:
         return "neutral material (no shader)"
+    msn = info.get("flags1") and int(info["flags1"], 16) & skyrimnif.SLSF1_MODEL_SPACE_NORMALS
     if info["type"] == "BSEffectShaderProperty":
         return "SKIPPED (effect shader)"
     if refracts:
@@ -39,7 +40,7 @@ def converter_decision(info, alpha, has_normal, refracts=False):
     kind = "decal" if blend and not test else "cutout" if test else "opaque"
     if not has_normal and kind != "decal":
         return "neutral material (no normal map)"
-    return f"{kind} material from the diffuse"
+    return f"{kind} material from the diffuse" + (" (model-space normal map dropped: flat normal)" if msn else "")
 
 
 def inspect(src, name):
