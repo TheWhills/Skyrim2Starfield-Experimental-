@@ -256,3 +256,7 @@ Skyrim texture (default: LDirt02), so no vanilla Starfield ground remains.
 Whole-map test (2026-10-16, 218,217 objects, 3.49 GiB): the sea and Solitude's docks had no water (the planet ocean
 does not draw inside the overlay), and pale flat sheets hung in the sky. `--skyrim-water-sea` gives sea-level cells
 water too; `ground_at.py` now prints the water level of the Starfield cell at a position, to trace the sky sheets.
+Distant water sheets (2026-10-16): cell-sized flat water planes far away and in the sky, gone up close (where each
+cell's own XCLW water is right). Suspect: the world-level CellWaterHeightLocations / WaterHeights lists, whose
+coordinates are not cell coordinates (New Atlantis lists (5, -6) .. (3, -4)). TerrainOverlays now leaves them empty
+unless "water": {"world_lists": true}. **Supported hypothesis.**

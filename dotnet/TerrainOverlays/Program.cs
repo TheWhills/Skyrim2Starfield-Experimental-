@@ -177,9 +177,20 @@ foreach (var o in overlays)
             hts.Add(h);
             nWater++;
         }
-        w.CellWaterHeightLocations = locs;
-        w.WaterHeights = hts;
-        Console.WriteLine($"  {world}: {nWater} cells with water (WATR {waterKey})");
+        // The world-level lists stay off by default: their coordinates are not cell coordinates (New Atlantis lists
+        // (5, -6) .. (3, -4) for a much larger city), and with them the owner saw cell-sized water sheets far away and
+        // in the sky that vanished up close, where the cells' own XCLW water drew right. "world_lists": true restores.
+        if (wp.TryGetProperty("world_lists", out var wl) && wl.GetBoolean())
+        {
+            w.CellWaterHeightLocations = locs;
+            w.WaterHeights = hts;
+        }
+        else
+        {
+            w.CellWaterHeightLocations = null;
+            w.WaterHeights = null;
+        }
+        Console.WriteLine($"  {world}: {nWater} cells with water (WATR {waterKey}), world lists {(w.WaterHeights != null ? "on" : "off")}");
     }
     var a = o.GetProperty("anchor");
     var p = a.GetProperty("local").EnumerateArray().Select(e => e.GetSingle()).ToArray();
