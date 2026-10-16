@@ -246,7 +246,7 @@ class Converter:
     def _convert_texture_set(self, stem: str, diffuse: str, normal: str, spec: str,
                              smoothness: float = 1.0, spec_mult: float = 1.0,
                              alpha_test: bool = False, alpha_ref: int = 128, decal: bool = False,
-                             template: Optional[dict] = None) -> str:
+                             template: Optional[dict] = None, extra_files: Optional[dict] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -294,7 +294,8 @@ class Converter:
                 out[kind] = cm.game_path(f"{tex_rel}_{kind}.dds")
         if template is not None:                           # any single-layer vanilla material (terrain ground, ...)
             mat = cm.build_from_template(template, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", stem),
-                                         {"Albedo": out["color"], "Normal": out["normal"], "Roughness": out["rough"]})
+                                         dict({"Albedo": out["color"], "Normal": out["normal"], "Roughness": out["rough"]},
+                                              **(extra_files or {})))
         elif decal:
             if self._decal_template is None:
                 self._decal_template = cm.read_template_path(self.content_resources, cm.DECAL_TEMPLATE_MAT)

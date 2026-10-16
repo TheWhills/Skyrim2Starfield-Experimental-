@@ -139,6 +139,39 @@ def checker_dds(size: int = 256, cells: int = 8) -> bytes:
             return f.read()
 
 
+SKYRIM_TILING_M = 4096.0 / 6.0 / 70.0    # Skyrim repeats a landscape texture about 6 times per cell: ~9.75 m
+
+
+def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:
+    """Shared neutral maps for every Skyrim ground material: AmbientOcclusion white (no occlusion) and Height at the
+    terrain shader's displacement midpoint (flat). The vanilla template's own footprint AO / height maps showed as a
+    white speckle and bumps under the Skyrim colours (owner's checkerboard test). Returns {slot: game path}."""
+    import numpy as np
+    from fo4sf import convert_material as cm, textures
+    out = {}
+    for slot, value, name in (("AmbientOcclusion", 255, "_flat_ao"), ("Height", 128, "_flat_height")):
+        rel = f"textures/{prefix}/ground/{name}.dds"
+        dst = os.path.join(staging, *rel.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        textures.write_r8(dst, np.full((4, 4), value, np.uint8))
+        textures.texconv(texconv, dst, os.path.dirname(dst), "BC4_UNORM")
+        out[slot] = cm.game_path(rel)
+    return out
+
+
+def terrain_settings(mat: dict, tiling_m: float, max_displacement: float = 0.0) -> int:
+    """Set the Terrain1Layer TerrainSettingsComponent: TilingDistance (metres per texture repeat; vanilla dirt 3.2) and
+    MaxDisplacement (0: the flat height map must not lift the ground). Returns how many components were changed."""
+    n = 0
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::TerrainSettingsComponent":
+                c.setdefault("Data", {})["TilingDistance"] = f"{tiling_m:g}"
+                c["Data"]["MaxDisplacement"] = f"{max_displacement:g}"
+                n += 1
+    return n
+
+
 def bnam_for(material_rel: str, vanilla_bnam: str) -> str:
     """Our staged material path ('materials\\skyrim\\ground\\x.mat') written the way vanilla BNAM values are."""
     rel = material_rel.replace("/", "\\")

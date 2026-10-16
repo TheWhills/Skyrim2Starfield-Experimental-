@@ -95,10 +95,19 @@ class GroundTests(unittest.TestCase):
             starfield_meshes_ba2(os.path.join(sfd, "Starfield - Terrain01.ba2"),
                                  {"terrain/a.btd": vanilla_btd([PLAIN, USED])})
             cr = os.path.join(tmp, "ContentResources.zip")
-            tmpl = {"Objects": [{"Components": [{"Type": "BSComponentDB::CTName", "Data": {"Name": "t"}}]}],
+            # shaped like the owner's real template (Terrain1Layer, DirtFootprints01.mat): five slots + terrain settings
+            tmpl = {"Objects": [{"Components": [{"Type": "BSComponentDB::CTName", "Data": {"Name": "t"}},
+                                                {"Type": "BSMaterial::TerrainSettingsComponent",
+                                                 "Data": {"MaxDisplacement": "0.24", "TilingDistance": "3.2"}}]},
+                                {"Components": [{"Type": "BSMaterial::MRTextureFile", "Index": i, "Data": {"FileName": f}}
+                                                for i, f in ((0, "terrain/a.dds"), (1, "terrain/n.dds"),
+                                                             (3, "terrain/r.dds"), (5, "terrain/ao.dds"),
+                                                             (6, "terrain/h.dds"))]}],
                     "Summary": {"Layer1": {"Textures": {"Albedo": {"File": "terrain/a.dds"},
                                                         "Normal": {"File": "terrain/n.dds"},
-                                                        "Roughness": {"File": "terrain/r.dds"}}}}}
+                                                        "Roughness": {"File": "terrain/r.dds"},
+                                                        "AmbientOcclusion": {"File": "terrain/ao.dds"},
+                                                        "Height": {"File": "terrain/h.dds"}}}}}
             content_resources(cr)                                        # the converter's own object templates
             with zipfile.ZipFile(cr, "a") as z:
                 z.writestr("Materials/Terrain/LDirtFootprints01.mat", json.dumps(tmpl))
@@ -127,6 +136,13 @@ class GroundTests(unittest.TestCase):
         for m in mats:                                                   # cloned from the plain ground's material
             files = [v["File"] for v in m["Summary"]["Layer1"]["Textures"].values()]
             self.assertTrue(all("skyrim/ground" in f.replace("\\", "/").lower() for f in files), files)
+            comp = [c["Data"]["FileName"] for o in m["Objects"] for c in o["Components"]
+                    if c["Type"] == "BSMaterial::MRTextureFile"]
+            self.assertFalse([f for f in comp if f.startswith("terrain/")], comp)        # no vanilla map left
+            self.assertTrue(any(f.lower().endswith("_flat_height.dds") for f in comp))
+            ts = [c["Data"] for o in m["Objects"] for c in o["Components"]
+                  if c["Type"] == "BSMaterial::TerrainSettingsComponent"]
+            self.assertEqual(ts, [{"MaxDisplacement": "0", "TilingDistance": "9.75"}])
         return out, so.getvalue()
 
 

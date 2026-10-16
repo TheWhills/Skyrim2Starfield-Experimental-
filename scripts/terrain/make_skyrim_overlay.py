@@ -130,13 +130,24 @@ def skyrim_ground(a, ltex, cells, usage, out):
         diffuses = {skyrimground.texture_path(ltex[f]["diffuse"]).lower() for f, _s in chosen}
         conv.src.texture = lambda name: checker if name.replace("/", "\\").lower() in diffuses else real(name)
         print("skyrim ground: TEST MODE, ground diffuse textures replaced by a magenta / green checkerboard")
+    flat = skyrimground.flat_textures(os.path.join(out, "Data"), a.texconv)
+    tiling = a.skyrim_ground_tiling
+    print(f"skyrim ground: flat AO / height maps, tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
     names, sky, overrides, failed, done = {}, {}, [], {}, {}
     for fid, slot in chosen:
         v = ltex[fid]
         stem = "ground/" + re.sub(r"[^a-z0-9]+", "_", v["edid"].lower()).strip("_")
         try:
             mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]),
-                                            skyrimground.texture_path(v.get("normal")), "", template=template)
+                                            skyrimground.texture_path(v.get("normal")), "", template=template,
+                                            extra_files=flat)
+            mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
+            with open(mp, encoding="utf-8") as f:
+                md = json.load(f)
+            skyrimground.terrain_settings(md, tiling)
+            from fo4sf import convert_material as cm
+            with open(mp, "w", encoding="utf-8", newline="\n") as f:
+                f.write(cm.dump_mat(md))
         except Exception as e:                       # noqa: BLE001  (reported; that texture uses the category pick)
             failed[v["edid"]] = f"{type(e).__name__}: {e}"
             continue
@@ -386,6 +397,9 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-test", action="store_true",
                     help="build --skyrim-ground: paint a magenta / green checkerboard instead of Skyrim's colours, to "
                          "see in game whether the overridden ground textures are what the terrain draws")
+    ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
+                    help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
+                         "Starfield's dirt uses 3.2)")
     ap.add_argument("--skyrim-ground-max", type=int, default=200, help="build: at most this many converted ground textures")
     ap.add_argument("--content-resources", default="", help="build --skyrim-ground: Starfield Tools\\ContentResources.zip")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")

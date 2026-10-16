@@ -137,3 +137,9 @@ and cloned materials are what the terrain draws. Colours are washed toward pink 
 speckle overlays them (likely template texture slots left at the vanilla files); one texture repeat is about 4 m
 (Skyrim's is about 10 m). Riverwood's green comes largely from Skyrim's LAND vertex colours (VCLR) and grass objects,
 neither translated yet. The build now prints the template's texture slots and writes it to ground_template.mat.json.
+The template (owner's `ground_template.mat.json`, `Materials\Terrain\DirtFootprints01.mat`) uses shader model
+`Terrain1Layer` with five texture slots (Albedo 0, Normal 1, Roughness 3, AmbientOcclusion 5, Height 6) and a
+`BSMaterial::TerrainSettingsComponent` (TilingDistance 3.2 m, MaxDisplacement 0.24, RotationAngle 148, BlendSoftness
+0.28, DisplacementMidpoint 0.504). The speckle was the vanilla footprint AO / height maps left in slots 5 / 6. Skyrim
+ground materials now get a shared white AO and mid-grey (flat) height map, MaxDisplacement 0, and TilingDistance 9.75 m
+(Skyrim repeats a landscape texture ~6 times per 4,096-unit cell; `--skyrim-ground-tiling` to change).
