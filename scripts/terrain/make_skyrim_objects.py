@@ -401,6 +401,18 @@ def cmd_lod(a):
             b["distant_lod"] = True
             b["lod_layer"] = skyrimlod.layer_name(b["edid"])
     save(obj_path, objects)
+    if a.vanilla_test:
+        from fo4sf import ba2
+        import glob as _g
+        arcs = [ba2.Ba2(p) for p in sorted(_g.glob(os.path.join(a.vanilla_test, "Starfield - LODMeshes*.ba2")))]
+
+        def read(name):
+            for arc in arcs:
+                if arc.find(name) is not None:
+                    return arc.read(name)
+            raise FileNotFoundError(name)
+        n = skyrimlod.vanilla_test(data, ov["world"], read)
+        print(f"lod: VANILLA TEST, {n:,} composite NIFs replaced by Gagarin's crane LOD (60 m above our objects)")
     print(f"lod: lodsettings {st['lodsettings']}; {st['objects_with_lod']:,} objects, {st['instances']:,} references "
           f"(radius >= {a.lod_min_radius:g} m; {st['skipped_small']:,} smaller skipped) -> {st['nif_files']:,} LOD NIFs, "
           f"{st['meshes']:,} meshes ({st['mesh_bytes'] / 2 ** 20:,.0f} MiB); {time.time() - t0:.0f} s")
@@ -629,6 +641,9 @@ def main(argv=None):
     ap.add_argument("--lod-min-radius", type=float, default=20.0,
                     help="lod: only statics whose bounding radius x scale is at least this many metres (default 20: "
                          "mountains, cliffs, buildings)")
+    ap.add_argument("--vanilla-test", default="",
+                    help="lod: Starfield Data folder; replace our composite NIFs with a vanilla Gagarin crane composite "
+                         "(diagnostic: does the engine load our files at all)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")

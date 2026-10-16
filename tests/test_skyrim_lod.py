@@ -79,6 +79,12 @@ class CommandTests(unittest.TestCase):
                         m = sfmesh.parse(open(os.path.join(out, "Data", "geometries", *p) + ".mesh", "rb").read())
                         pts += [sfmesh.decode_position(v, m.scale) for v in m.positions]
             ok, rep = so.check(out)
+            any_nif = open(files[0], "rb").read()
+            n = skyrimlod.vanilla_test(os.path.join(out, "Data"), "SKY_Tamriel", lambda name: any_nif)
+            moved = nif.parse(open(files[-1], "rb").read())
+            tr = nif._av_transform(moved.blocks[0])[0]
+        self.assertEqual(n, len(files))
+        self.assertNotEqual(tuple(tr), (0.0, 0.0, 0.0))                      # moved by its root node
         self.assertEqual(struct.unpack("<5i", lodset)[3:], (0, 0))
         self.assertTrue(rock_base.get("distant_lod"))
         self.assertEqual(rock_base.get("lod_layer"), rock_base["edid"] + "_LOD")

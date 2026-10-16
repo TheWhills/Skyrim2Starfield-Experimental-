@@ -204,3 +204,49 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
     return {"lodsettings": [x0, y0, size], "objects_with_lod": len(flagged), "instances": ninst,
             "skipped_small": skipped_small, "meshes": nmesh, "mesh_bytes": nbytes, "nif_files": nfiles,
             "flag_bases": sorted(flagged)}
+
+
+VANILLA_TEST = {   # a vanilla composite per LOD level (SettleGagarinWorld's crane; owner's survey), source of --vanilla-test
+    0: "meshes\\lod\\generated\\composite\\settlegagarinworld\\gagarin_lod_crane01_1_1_lod_0_cell0.nif",
+    1: "meshes\\lod\\generated\\composite\\settlegagarinworld\\gagarin_lod_crane01_1_0_lod_1_cell0.nif",
+    2: "meshes\\lod\\generated\\composite\\settlegagarinworld\\gagarin_lod_crane01_1_-2_lod_2_cell0.nif",
+    3: "meshes\\lod\\generated\\composite\\settlegagarinworld\\gagarin_lod_crane01_-3_-6_lod_3_cell0.nif",
+}
+
+
+def _first_sphere(n):
+    for i in range(len(n.blocks)):
+        if n.type_of(i) == "BSGeometry":
+            return sfnif.parse_bsgeometry(n.blocks[i]).sphere
+    return None
+
+
+def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
+    """Diagnostic: replace every composite LOD NIF this build wrote with a vanilla Gagarin crane composite of the same
+    level (its mesh and baked material stay vanilla), moved by its root node so the crane stands where our first shape
+    was. If cranes then show far away, the engine loads our files and our NIF / material contents are the problem;
+    if not, it does not look at them at all. read_vanilla(path) -> bytes. Returns files replaced."""
+    import json
+    src = {lv: nifmod.parse(read_vanilla(pth)) for lv, pth in VANILLA_TEST.items()}
+    manifest = os.path.join(data_dir, "lodsettings", f"{world.lower()}.files.json")
+    n = 0
+    for rel in json.load(open(manifest, encoding="utf-8")):
+        if not rel.endswith(".nif"):
+            continue
+        p = os.path.join(data_dir, *rel.split("/"))
+        lv = int(rel.rsplit("_lod_", 1)[1][0])
+        ours = _first_sphere(nifmod.parse(open(p, "rb").read()))
+        v = src[lv]
+        vs = _first_sphere(v)
+        if ours is None or vs is None:
+            continue
+        blk = bytearray(v.blocks[0])
+        nextra, = struct.unpack_from("<I", blk, 4)
+        off = 8 + 4 * nextra + 8
+        struct.pack_into("<3f", blk, off, ours[0] - vs[0], ours[1] - vs[1], ours[2] - vs[2] + 60.0)
+        v2 = nifmod.parse(nifmod.serialize(v))
+        v2.blocks[0] = bytes(blk)
+        with open(p, "wb") as fh:
+            fh.write(nifmod.serialize(v2))
+        n += 1
+    return n
