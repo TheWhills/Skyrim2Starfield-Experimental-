@@ -108,13 +108,14 @@ def skyrim_ground(a, ltex, cells, usage, out):
         sys.exit("Starfield.esm has no plain ground LTEX (LDirtFootprints01) with a material to clone")
     template = skyrimground.template_material(a.content_resources, plain["bnam"])
     print(f"skyrim ground: material template {plain['bnam']} (from {plain['edid']}); finding spare LTEX records...")
-    slots = template["Summary"]["Layer1"].get("Textures", {})
+    tslots = template["Summary"]["Layer1"].get("Textures", {})
     print("  template texture slots: " + ", ".join(f"{k}={(v or {}).get('File') or (v or {}).get('Replacement') or '-'}"
-                                                 for k, v in slots.items()))
+                                                 for k, v in tslots.items()))
     uv = [c.get("Data") for o in template.get("Objects", []) for c in o.get("Components", [])
           if "UVStream" in c.get("Type", "") or "Scale" in json.dumps(c.get("Data", {}))[:200]]
     if uv:
         print(f"  template UV / scale components: {json.dumps(uv)[:600]}")
+    os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, "ground_template.mat.json"), "w", encoding="utf-8") as f:
         json.dump(template, f, indent=1)
     slots = skyrimground.free_slots(sf_esm, usage, fields)
