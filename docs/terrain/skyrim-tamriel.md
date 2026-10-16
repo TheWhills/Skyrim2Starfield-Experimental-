@@ -169,3 +169,8 @@ Remaining on the ground: hard-edged blobs where Skyrim textures blend (snow over
 Terrain1Layer blends by. Each Skyrim ground material now gets a height map from its own detail
 (`skyrimground.height_from_diffuse`: luminance high-pass, mean 128, fixed spread, so no texture always wins), with
 MaxDisplacement still 0; `--skyrim-ground-flat-height` restores the flat maps.
+Detail height maps did not change the specks (owner's next close-ups), so the cause is the encoding: 3-bit alphas
+that the renderer reads as a probability (fo76utils' rule, now matching what is seen) turn Skyrim's faint, wide layers
+(a 15-30 % dusting of snow or gravel) into hard-edged scattered specks. `--ltex-blend solid` (now the default) snaps
+each alpha to 0 or 7 at one half: a sample shows the layer that covers most of what is left there, faint layers give
+way to the ones below. `--ltex-blend dither` keeps the old encoding.

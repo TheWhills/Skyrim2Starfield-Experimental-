@@ -289,10 +289,19 @@ def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill):
     return g
 
 
-def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int]):
+BLEND_MODES = ("solid", "dither")
+
+
+def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blend: str = "dither"):
     """weights [k, rows, cols] (rows, cols multiples of 64; one plane per id in `ids`) -> (quad map [rows/64, cols/64, 8]
     uint8, sample weights [rows, cols] uint16, stats). Per 64 x 64 quadrant: base = most weight, up to five more as
-    overlays, least weight on top (byte 0), alphas solved top-down from the effective weights."""
+    overlays, least weight on top (byte 0), alphas solved top-down from the effective weights.
+    blend "dither": each alpha quantised to 0..7 (the renderer shows layer i with probability alpha / 7, so a faint
+    Skyrim layer becomes scattered hard-edged specks: owner's Jemison close-ups). "solid": each alpha snapped to 0 or 7
+    at one half, so a sample shows the layer that covers most of what is left there and faint layers give way to
+    the ones below: clean patches where Skyrim clearly paints a texture."""
+    if blend not in BLEND_MODES:
+        raise ValueError(f"blend {blend!r} not in {BLEND_MODES}")
     k, rows, cols = weights.shape
     n = len(table)
     index = {fid: table.index(fid) for fid in ids}
@@ -319,6 +328,13 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int]):
                 qmap[qr, qc, byte] = n - index[ids[i]]
                 wi = w[i] / s
                 a = np.clip(wi / np.maximum(remaining, 1e-6), 0.0, 1.0)
+                if blend == "solid":
+                    on = a >= 0.5
+                    q = np.where(on, 7, 0).astype(np.uint16)
+                    word |= q << (3 * byte)
+                    # a sample this layer took is fully covered; elsewhere its weight passes to the layers below
+                    remaining = np.where(on, 0.0, remaining).astype(np.float32)
+                    continue
                 q = np.rint(a * 7.0).astype(np.uint16)
                 word |= q << (3 * byte)
                 remaining = np.maximum(remaining - wi, 0.0)

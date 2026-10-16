@@ -117,6 +117,24 @@ class LayerTests(unittest.TestCase):
         self.assertLess(float(err.mean()), 0.05)                       # 3-bit alphas, one texture beyond six dropped
         self.assertGreater(st["weight_beyond_six_layers"], 0.0)
 
+    def test_solid_blend_drops_faint_layers_and_fills_strong_ones(self):
+        table = [landtex.PLAIN_GROUND, 0x10, 0x20]
+        w = np.zeros((3, 64, 64), np.float32)
+        w[0] = 1.0                                         # base everywhere
+        w[1, :, :32] = 0.3                                 # faint dusting on the west half (dither: specks)
+        w[2, :, 32:] = 0.8                                 # a strong layer on the east half
+        w[0] -= w[1] + w[2]
+        qmap, words, _ = landtex.encode_quadrants(w, table, table, blend="solid")
+        dec = landtex.decode_quadrants(qmap, words, table)
+        self.assertEqual(float(dec.get(0x10, np.zeros((64, 64))).max()), 0.0)        # faint layer gone
+        self.assertEqual(float(dec[0x20][:, 32:].min()), 1.0)                           # strong layer solid
+        self.assertEqual(float(dec[landtex.PLAIN_GROUND][:, :32].min()), 1.0)          # base shows through
+        dith, dwords, _ = landtex.encode_quadrants(w, table, table, blend="dither")
+        self.assertTrue(any(0 < int(v) < 7 for v in np.unique(dwords & 7)) or
+                        any(0 < int(v) < 7 for v in np.unique((dwords >> 3) & 7)))     # dither keeps partials
+        with self.assertRaises(ValueError):
+            landtex.encode_quadrants(w, table, table, blend="nope")
+
     def test_single_texture_quadrant_matches_vanilla_form(self):
         w = np.zeros((1, 64, 64), np.float32)
         w[0] = 1.0
@@ -166,7 +184,7 @@ class OverlayTextureTests(unittest.TestCase):
             with mock.patch.object(cw, "ltex_source", return_value=([0x001235C2], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
                     contextlib.redirect_stdout(io.StringIO()):
                 sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
-                         "--arrival", "", "--land-textures"])
+                         "--arrival", "", "--land-textures", "--ltex-blend", "dither"])
             with open(os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd"), "rb") as f:
                 t = btd.read(f.read())
             with open(os.path.join(out, "ltex_mapping.json"), encoding="utf-8") as f:

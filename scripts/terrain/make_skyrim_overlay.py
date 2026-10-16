@@ -236,7 +236,7 @@ def land_textures(a, land, out):
                 lo, hi = max(min(lo, last - 1), 0), min(max(lo, 0) + 1, last)
             band = np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp, sp,
                                                   xu, yu) for f in used])
-            q, w, st = landtex.encode_quadrants(band, used, used)
+            q, w, st = landtex.encode_quadrants(band, used, used, blend=a.ltex_blend)
             qmap[r0 // 64] = q[0]
             words[r0:r0 + 64] = w
             beyond.append(st["weight_beyond_six_layers"])
@@ -439,6 +439,9 @@ def main(argv=None):
     ap.add_argument("--height-offset", type=float, default=0.0,
                     help="build: metres added to every terrain height (and object, via overlays_params) - e.g. to put "
                          "Skyrim's sea level (-14000 units = -200 m) on an ocean planet's sea level")
+    ap.add_argument("--ltex-blend", choices=("solid", "dither"), default="solid",
+                    help="build --land-textures: 'solid' (default) gives each ground sample the layer covering most of "
+                         "it; 'dither' keeps partial weights, which Starfield draws as scattered specks")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")
     ap.add_argument("--latlon", type=float, nargs=2, metavar=("LAT", "LON"), help="build --planet: radians")
     ap.add_argument("--biome", default="", help="build --planet: hex FormID of the planet's biome for the world")
