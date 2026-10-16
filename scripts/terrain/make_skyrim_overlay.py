@@ -95,7 +95,7 @@ def plan_numbers(land, cells, n):
 
 
 # ---------------------------------------------------------------------------------------------------------- textures
-def skyrim_ground(a, ltex, cells, usage, out):
+def skyrim_ground(a, ltex, cells, usage, out, colours=None):
     """--skyrim-ground: convert the most-covering Skyrim landscape texture sets into Starfield materials (staged under
     <out>/Data) and assign each one a spare Starfield.esm LTEX to override (src/fo4sf/skyrimground.py)."""
     from fo4sf import bsa, convert_material as cm, landtex, skyrimconvert, skyrimground
@@ -136,6 +136,11 @@ def skyrim_ground(a, ltex, cells, usage, out):
         print("skyrim ground: TEST MODE, ground diffuse textures replaced by a magenta / green checkerboard")
     flat = skyrimground.flat_textures(os.path.join(out, "Data"), a.texconv)
     tiling = a.skyrim_ground_tiling
+    tints = skyrimground.vertex_tints(cells, colours or {}) if a.skyrim_ground_tint == "vertex" else {}
+    if tints:
+        top = [f for f, _s in chosen[:5] if f in tints]
+        print("skyrim ground: Skyrim vertex-colour tint per texture, e.g. " + ", ".join(
+            f"{ltex[f]['edid']} ({', '.join(f'{v:.2f}' for v in tints[f])})" for f in top))
     print(f"skyrim ground: brightness {a.skyrim_ground_brightness:g}, roughness {a.skyrim_ground_roughness}, "
           f"colour alpha {a.skyrim_ground_alpha}, "
           f"{'flat' if a.skyrim_ground_flat_normal else 'Skyrim'} normals, flat AO, "
@@ -176,7 +181,11 @@ def skyrim_ground(a, ltex, cells, usage, out):
                                             albedo_luminance=None if (a.skyrim_ground_test or
                                                                       v["edid"].lower() in skyrimground.parse_colours(
                                                                           a.skyrim_ground_colours))
-                                            else (a.skyrim_ground_brightness or None))
+                                            else (a.skyrim_ground_brightness or None),
+                                            albedo_tint=None if (a.skyrim_ground_test or
+                                                                 v["edid"].lower() in skyrimground.parse_colours(
+                                                                     a.skyrim_ground_colours))
+                                            else tints.get(fid))
             mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
             with open(mp, encoding="utf-8") as f:
                 md = json.load(f)
@@ -212,7 +221,8 @@ def land_textures(a, land, out):
     sf = landtex.starfield_ltex(sf_esm)
     if not sf:
         sys.exit(f"no LTEX records read from {sf_esm}")
-    cells, ltex = landtex.read_world_textures(a.skyrim, land.land_source)   # a city paints with its parent's land
+    colours = {}
+    cells, ltex = landtex.read_world_textures(a.skyrim, land.land_source, colours)   # a city paints with its parent's
     override = None
     if a.ltex_mapping:
         with open(a.ltex_mapping, encoding="utf-8") as f:
@@ -226,7 +236,7 @@ def land_textures(a, land, out):
     print(f"ground textures: {nbtd} vanilla BTDs surveyed, {len(usage)} Starfield LTEX in use")
     ground = None
     if a.skyrim_ground:
-        ground = skyrim_ground(a, ltex, cells, usage, out)
+        ground = skyrim_ground(a, ltex, cells, usage, out, colours)
         sf = dict(sf, **ground["names"])                    # "SKYG_<Skyrim EditorID>" -> the overridden slot
         override = dict(override or {})
         override["skyrim"] = dict(ground["skyrim"], **(override.get("skyrim") or {}))
@@ -497,10 +507,13 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
                     help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
                          "Starfield's dirt uses 3.2)")
-    ap.add_argument("--skyrim-ground-brightness", type=float, default=0.15,
+    ap.add_argument("--skyrim-ground-brightness", type=float, default=0.0,
                     help="build --skyrim-ground: mean linear luminance each Skyrim ground colour is scaled to (default "
-                         "0.15; Starfield's dirt is about 0.17; 0 keeps Skyrim's dark colours, which Starfield draws as "
-                         "a pale sky sheen)")
+                         "0 = Skyrim's own colours; the owner's side-by-sides showed 0.15 far paler than Skyrim; "
+                         "Starfield's dirt is about 0.17)")
+    ap.add_argument("--skyrim-ground-tint", choices=("vertex", "none"), default="vertex",
+                    help="build --skyrim-ground: 'vertex' (default) multiplies each ground texture by the mean Skyrim "
+                         "vertex colour (LAND VCLR) where it is painted, as Skyrim does per vertex")
     ap.add_argument("--skyrim-ground-roughness", choices=("vanilla", "uniform"), default="vanilla",
                     help="build --skyrim-ground: 'vanilla' (default) keeps the template dirt's own roughness map; "
                          "'uniform' writes the object converter's 'fairly rough' value, which the terrain drew as a "

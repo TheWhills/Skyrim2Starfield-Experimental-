@@ -139,8 +139,18 @@ def cell_weights(layers) -> Dict[int, np.ndarray]:
     return out
 
 
-def read_world_textures(esm: str, world: str = "Tamriel"):
-    """({(cx, cy): {ltex: (33, 33) weight}}, {ltex: {"edid", "diffuse"}}) for every cell with LAND texture data."""
+def land_colours(data: bytes) -> Optional[np.ndarray]:
+    """A LAND record's VCLR vertex colours as (33, 33, 3) uint8 (row 0 = south; 255 = no tint), or None."""
+    for sig, d in fo4land.iter_subrecords(data):
+        if sig == b"VCLR" and len(d) >= 33 * 33 * 3:
+            return np.frombuffer(d[:33 * 33 * 3], np.uint8).reshape(33, 33, 3).copy()
+    return None
+
+
+def read_world_textures(esm: str, world: str = "Tamriel", colours: Optional[dict] = None):
+    """({(cx, cy): {ltex: (33, 33) weight}}, {ltex: {"edid", "diffuse"}}) for every cell with LAND texture data.
+    colours: a dict to fill with {(cx, cy): (33, 33, 3) VCLR} for those cells (Skyrim multiplies the ground textures
+    by these per-vertex colours)."""
     cells = {}
     with fo4land.Plugin(esm) as p:
         ltex = read_ltex(p)
@@ -157,9 +167,14 @@ def read_world_textures(esm: str, world: str = "Tamriel"):
                     elif gtype in (8, 9) and cell is not None and cell[1] is not None:
                         for it in fo4land.iter_items(p.buf, off + 24, gend):
                             if it[0] != "GRUP" and it[0] == b"LAND":
-                                lay = land_layers(fo4land.record_data(p.buf, it[1]))
+                                data = fo4land.record_data(p.buf, it[1])
+                                lay = land_layers(data)
                                 if lay:
                                     cells[cell[1]] = cell_weights(lay)
+                                    if colours is not None:
+                                        vc = land_colours(data)
+                                        if vc is not None:
+                                            colours[cell[1]] = vc
                     continue
                 typ, off, _fl, fid = item
                 if typ == b"CELL":

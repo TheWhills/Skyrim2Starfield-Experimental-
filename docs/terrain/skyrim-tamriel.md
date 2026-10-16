@@ -216,3 +216,7 @@ at most four overlays and the base right after them (single texture: `1 0 0 0 0 
 painted texture where Skyrim paints it (LDirt02 cyan under the tree at getpos 866, -1956), and the normal build shows
 Skyrim's own ground textures there (dirt, pine needles, riverbed). Still missing: Skyrim's per-vertex land colour
 (VCLR, which tints the textures warmer / greener in Skyrim), grass (GRAS) and the river water.
+Side-by-sides with Skyrim (same Riverwood spots) showed our ground far paler and greyer. Now: `--skyrim-ground-brightness`
+defaults to 0 (Skyrim's own colours; the 0.15 scaling was added for the patch that turned out to be the index bug),
+and `--skyrim-ground-tint vertex` (default) multiplies each Skyrim ground texture by the mean LAND VCLR vertex colour
+where Skyrim paints it, the way Skyrim tints per vertex (one tint per texture: an approximation).

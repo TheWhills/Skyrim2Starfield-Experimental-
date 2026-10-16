@@ -214,6 +214,25 @@ class HeightMapTests(unittest.TestCase):
         self.assertGreater(float(v.std()), 20.0)
 
 
+class TintTests(unittest.TestCase):
+    def test_land_colours_and_vertex_tints(self):
+        import numpy as np
+        from fo4sf import landtex
+        vc = np.zeros((33, 33, 3), np.uint8)
+        vc[...] = (128, 255, 64)
+        data = b"VCLR" + struct.pack("<H", vc.size) + vc.tobytes()
+        got = landtex.land_colours(data)
+        self.assertEqual(got.shape, (33, 33, 3))
+        self.assertEqual(tuple(got[5, 5]), (128, 255, 64))
+        self.assertIsNone(landtex.land_colours(b"DATA" + struct.pack("<H", 4) + b"\0" * 4))
+        w_a = np.zeros((33, 33)); w_a[:16] = 1.0          # texture A on the southern half
+        w_b = np.ones((33, 33)) - w_a
+        vc2 = np.full((33, 33, 3), 255, np.uint8); vc2[:16] = (0, 0, 0)   # the southern half painted black
+        tints = skyrimground.vertex_tints({(0, 0): {1: w_a, 2: w_b}}, {(0, 0): vc2})
+        self.assertEqual(tints[1], (0.0, 0.0, 0.0))
+        self.assertEqual(tints[2], (1.0, 1.0, 1.0))
+
+
 class ColourTestTests(unittest.TestCase):
     def test_parse_and_colour_dds(self):
         from fo4sf import textures as tx

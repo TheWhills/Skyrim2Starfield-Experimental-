@@ -234,10 +234,10 @@ def linear_to_srgb(v):
 
 def scale_albedo(rgb, target_luminance: float, max_gain: float = 6.0):
     """Scale an sRGB colour image (uint8 [..., 3]) in linear light so its mean luminance becomes target_luminance
-    (linear, 0..1), keeping hue and relative detail; the gain is capped. Skyrim's ground textures are drawn dark for
-    Skyrim's lighting (which brightens them with vertex colour); under Starfield's PBR a near-black ground shows mostly
-    the sky's Fresnel reflection (owner's Riverwood tests: Skyrim Dirt02, mean sRGB 44, drew as a pale sky-tinted
-    patch; vanilla DirtFootprints01 averages sRGB (144, 109, 90), linear luminance about 0.17)."""
+    (linear, 0..1), keeping hue and relative detail; the gain is capped. Opt-in for Skyrim ground
+    (--skyrim-ground-brightness): the pale Riverwood patch it was added for turned out to be a wrong BTD texture index,
+    and the owner's side-by-sides showed Skyrim's own dark colours are right (vanilla DirtFootprints01 averages sRGB
+    (144, 109, 90), linear luminance about 0.17)."""
     import numpy as np
     lin = srgb_to_linear(rgb)
     lum = float((lin @ np.array([0.2126, 0.7152, 0.0722], np.float32)).mean())

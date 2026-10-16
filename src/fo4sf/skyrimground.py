@@ -69,6 +69,27 @@ def free_slots(sf_esm: str, usage: Dict[int, int], fields: Optional[Dict[int, di
     return [f for f in cand if f not in used]
 
 
+def vertex_tints(cells, colours) -> Dict[int, tuple]:
+    """{Skyrim LTEX: (r, g, b) 0..1}: the mean VCLR vertex colour where each texture is painted, weighted by its
+    weight. Skyrim multiplies a ground texture by the vertex colour under it; Starfield has no per-vertex land colour,
+    so --skyrim-ground-tint bakes this mean into each texture's colour (an approximation: one tint per texture)."""
+    import numpy as np
+    acc: Dict[int, np.ndarray] = {}
+    tot: Dict[int, float] = {}
+    for xy, ws in cells.items():
+        vc = colours.get(xy)
+        if vc is None:
+            continue
+        c = vc.astype(np.float64) / 255.0
+        for fid, w in ws.items():
+            s = float(w.sum())
+            if s <= 0:
+                continue
+            acc[fid] = acc.get(fid, 0.0) + (c * w[..., None]).sum(axis=(0, 1))
+            tot[fid] = tot.get(fid, 0.0) + s
+    return {f: tuple(float(v) for v in acc[f] / tot[f]) for f in acc}
+
+
 def coverage(cells) -> Dict[int, float]:
     """{Skyrim LTEX: summed weight over the map} from landtex.read_world_textures cells."""
     tot: Dict[int, float] = {}
