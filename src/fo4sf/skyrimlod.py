@@ -192,7 +192,7 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
         for (bi, blk), shapes in sorted(blocks.items()):
             name = f"{layer_name(bases[bi]['edid'])}_{blk[0]}_{blk[1]}_lod_{level}_cell0"
             node = f"Composite\\{world}\\{name}".encode()
-            f = sfnif.build_static_nif(node, shapes)
+            f = sfnif.build_static_nif(node, shapes, bsx=1)            # vanilla composites: BSXFlags 1
             with open(os.path.join(root, name.lower() + ".nif"), "wb") as fh:
                 fh.write(nifmod.serialize(f))
             written.append(f"meshes/lod/generated/composite/{wl}/{name.lower()}.nif")
