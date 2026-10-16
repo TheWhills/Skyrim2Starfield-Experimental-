@@ -21,7 +21,10 @@ landtxt.cpp renderPixel*):
 * per sample one u16: bits 3i..3i+2 = alpha 0..7 of the overlay in byte i. Rendering takes the first layer, from byte 0
   (top) to byte 4, whose alpha passes, else the base: layer i shows with probability alpha_i / 7 where every layer
   above it failed. So effective weights w (top first) invert to alpha_i = w_i / (1 - sum of w above), clamped.
-Here a quadrant puts its base in byte 5 and up to five overlays in bytes 0..4 (least common texture on top).
+Starfield (owner's Jemison colour test, 2026-10-16: a spot whose five overlays all had alpha 0 showed overlay 4, not
+the byte-5 base) reads only bytes 0..4: the base must be the last valid byte AMONG 0..4. So a quadrant here holds
+at most four overlays in bytes 0..k-1 (least common on top) and the base in byte k, the rest 0 (vanilla's single
+texture "1 0 0 0 0 0 0 0" is the k = 0 case).
 """
 import json
 import re
@@ -294,6 +297,7 @@ def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill):
 
 BLEND_MODES = ("solid", "dither")
 INDEX_RULES = ("head", "tail")
+MAX_OVERLAYS = 4                               # + the base = five textures in bytes 0..4 (Starfield ignores 5..7)
 INDEX_RULE = "head"
 
 
@@ -314,7 +318,7 @@ def entry_for(b: int, n: int, rule: str = INDEX_RULE) -> int:
 def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blend: str = "dither",
                      index_rule: str = INDEX_RULE):
     """weights [k, rows, cols] (rows, cols multiples of 64; one plane per id in `ids`) -> (quad map [rows/64, cols/64, 8]
-    uint8, sample weights [rows, cols] uint16, stats). Per 64 x 64 quadrant: base = most weight, up to five more as
+    uint8, sample weights [rows, cols] uint16, stats). Per 64 x 64 quadrant: base = most weight, up to four more as
     overlays, least weight on top (byte 0), alphas solved top-down from the effective weights.
     blend "dither": each alpha quantised to 0..7 (the renderer shows layer i with probability alpha / 7, so a faint
     Skyrim layer becomes scattered hard-edged specks: owner's Jemison close-ups). "solid": each alpha snapped to 0 or 7
@@ -336,9 +340,9 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blen
             order = [i for i in np.argsort(-sums) if sums[i] > 0]
             if not order:
                 order = [0]
-            base, over = order[0], order[1:6]
-            dropped += float(sum(sums[i] for i in order[6:]))
-            qmap[qr, qc, 5] = byte_for(index[ids[base]], n, index_rule)
+            base, over = order[0], order[1:MAX_OVERLAYS + 1]
+            dropped += float(sum(sums[i] for i in order[MAX_OVERLAYS + 1:]))
+            qmap[qr, qc, len(over)] = byte_for(index[ids[base]], n, index_rule)   # base right after the overlays
             stack = list(reversed(over))                        # least weight first = byte 0 = top
             s = w.sum(axis=0)
             s[s <= 0] = 1.0

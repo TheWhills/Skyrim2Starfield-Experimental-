@@ -276,9 +276,14 @@ class HypothesesTests(unittest.TestCase):
         q = [1, 2, 0, 0, 0, 3, 0, 0]                 # head: overlay 0 = 0x10, overlay 1 = 0x20, base 0x30
         word = 7 << 3                                # only alpha group 1 on
         got = dict(ground_at.hypotheses(q, word, table))
-        self.assertEqual(got["index head, alpha bits 3i (build)"], 0x20)
+        self.assertEqual(got["index head, alpha bits 3i"], 0x20)
         self.assertEqual(got["index head, alpha bits 3(4-i)"], 0x30)      # group 1 belongs to byte 3 (empty)
         self.assertEqual(got["index tail, alpha bits 3i"], 0x20)          # byte 1 -> entry 3 - 2 = 1
+        # the owner's blue spot: five overlays all alpha 0 and a byte-5 base -> Starfield shows overlay 4
+        q2 = [1, 1, 1, 1, 2, 3, 0, 0]
+        got2 = dict(ground_at.hypotheses(q2, 0, table))
+        self.assertEqual(got2["index head, alpha bits 3i, bytes 0..4 only (Starfield)"], 0x20)
+        self.assertEqual(got2["index head, alpha bits 3i"], 0x30)
 
 
 class GroundAtTests(unittest.TestCase):

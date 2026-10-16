@@ -107,14 +107,14 @@ class LayerTests(unittest.TestCase):
         table = [0x100 + i for i in range(k)]
         qmap, words, st = landtex.encode_quadrants(w.astype(np.float32), table, table)
         self.assertEqual(qmap.shape, (2, 2, 8))
-        self.assertTrue((qmap[:, :, 5] > 0).all())                     # base in byte 5
-        self.assertTrue((qmap[:, :, 6:] == 0).all())
+        self.assertTrue((qmap[:, :, 4] > 0).all())                     # 4 overlays, base in byte 4
+        self.assertTrue((qmap[:, :, 5:] == 0).all())
         dec = landtex.decode_quadrants(qmap, words, table)
         got = np.stack([dec.get(t, np.zeros((128, 128))) for t in table])
         kept = got.sum(axis=0)
         np.testing.assert_allclose(kept, 1.0, atol=1e-9)
         err = np.abs(got - w)
-        self.assertLess(float(err.mean()), 0.05)                       # 3-bit alphas, one texture beyond six dropped
+        self.assertLess(float(err.mean()), 0.08)                       # 3-bit alphas, 2 of 7 textures dropped
         self.assertGreater(st["weight_beyond_six_layers"], 0.0)
 
     def test_solid_blend_drops_faint_layers_and_fills_strong_ones(self):
@@ -139,7 +139,7 @@ class LayerTests(unittest.TestCase):
         w = np.zeros((1, 64, 64), np.float32)
         w[0] = 1.0
         qmap, words, _ = landtex.encode_quadrants(w, [landtex.PLAIN_GROUND], [landtex.PLAIN_GROUND])
-        self.assertEqual(list(qmap[0, 0]), [0, 0, 0, 0, 0, 1, 0, 0])
+        self.assertEqual(list(qmap[0, 0]), [1, 0, 0, 0, 0, 0, 0, 0])
         self.assertEqual(int(words.max()), 0)
 
     def test_categories_and_mapping_overrides(self):
@@ -250,6 +250,15 @@ class IndexRuleTests(unittest.TestCase):
         w = np.zeros((3, 64, 64), np.float32)
         w[0] = 1.0                                   # the whole quadrant is table entry 0
         qmap, _words, _ = landtex.encode_quadrants(w, table, table, blend="solid")
-        self.assertEqual(int(qmap[0, 0, 5]), 1)
+        self.assertEqual([int(b) for b in qmap[0, 0]], [1, 0, 0, 0, 0, 0, 0, 0])    # vanilla's single-texture form
         qmap, _words, _ = landtex.encode_quadrants(w, table, table, blend="solid", index_rule="tail")
-        self.assertEqual(int(qmap[0, 0, 5]), 3)
+        self.assertEqual(int(qmap[0, 0, 0]), 3)
+
+    def test_base_follows_overlays_within_bytes_0_to_4(self):
+        table = list(range(0x100, 0x100 + 7))
+        w = np.ones((7, 64, 64), np.float32) * np.arange(7, 0, -1)[:, None, None]
+        qmap, _words, st = landtex.encode_quadrants(w, table, table, blend="solid")
+        b = [int(x) for x in qmap[0, 0]]
+        self.assertEqual(b[5:], [0, 0, 0])
+        self.assertEqual(b[4], 1)                    # base = the most weight = table entry 0 (head: byte 1)
+        self.assertGreater(st["weight_beyond_six_layers"], 0)

@@ -208,3 +208,7 @@ b as table entry b - 1 instead of n - b (the Fallout 76 rule from fo76utils) mir
 all three: LDirt02 (entry 0) showed the last entry, which the slot skip replaced. **Supported hypothesis**: the build
 now writes `--ltex-index head` (b = index + 1); `--ltex-index tail` rebuilds the old way for comparison. Next test:
 the same colour build with head, expecting cyan on the village paths, red under the pines, magenta/yellow in the river.
+Follow-up with `ground_at.py` at the old pale spot (getpos 866.21, -1956.37): Skyrim paints LDirt02 100 %, the
+build had five overlays at alpha 0 and LDirt02 as a byte-5 base, and the game showed blue = overlay 4. So Starfield
+reads only bytes 0..4 and the base is the last valid one among them (**supported hypothesis**). The build now writes
+at most four overlays and the base right after them (single texture: `1 0 0 0 0 0 0 0`, vanilla's form).

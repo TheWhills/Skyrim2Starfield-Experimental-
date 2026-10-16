@@ -69,12 +69,13 @@ def hypotheses(q, word, table):
     Alphas count as on at 4 and above (the build's solid blend writes only 0 or 7)."""
     from fo4sf import landtex as lt
     n = len(table)
-    valid = [i for i in range(8) if 0 < q[i] <= n]
-    if not valid:
-        return []
     out = []
-    for rule in lt.INDEX_RULES:
-        for order in ("bits 3i", "bits 3(4-i)"):
+    for rule, order, five in [(r, o, False) for r in lt.INDEX_RULES for o in ("bits 3i", "bits 3(4-i)")] + \
+            [("head", "bits 3i", True)]:
+        valid = [i for i in range(5 if five else 8) if 0 < q[i] <= n]
+        if not valid:
+            continue
+        if True:
             pick = valid[-1]
             for i in range(5):
                 if i == valid[-1] or not 0 < q[i] <= n:
@@ -83,8 +84,8 @@ def hypotheses(q, word, table):
                 if ((word >> (3 * g)) & 7) >= 4:
                     pick = i
                     break
-            out.append((f"index {rule}, alpha {order}" + (" (build)" if (rule, order) == (lt.INDEX_RULE, "bits 3i")
-                                                          else ""), table[lt.entry_for(q[pick], n, rule)]))
+            out.append((f"index {rule}, alpha {order}" + (", bytes 0..4 only (Starfield)" if five else "")
+                        , table[lt.entry_for(q[pick], n, rule)]))
     return out
 
 
@@ -131,9 +132,11 @@ def main(argv=None):
         return f"{fid:08X}" + (f" (Skyrim {over[fid]})" if fid in over else "")
     print(f"the build draws (BTD sample row {r} col {c}; overlay bytes 0..4 top first, then the base):")
     for i in range(5):
-        if q[i]:
+        if q[i] and i != max(j for j in range(8) if q[j]):
             print(f"  overlay {i}: {name(q[i])}  alpha {alphas[i]}/7")
-    print(f"  base: {name(q[5])}")
+    vb = [i for i in range(8) if q[i]]
+    if vb:
+        print(f"  base (byte {vb[-1]}): {name(q[vb[-1]])}")
     cols = {k: v for k, v in (p.split("=") for p in a.colours.replace(" ", "").split(",") if "=" in p)} \
         if a.colours else {}
     sky_of = {int(o["form_id"]): o["skyrim"] for o in prm.get("ltex_overrides", [])}
