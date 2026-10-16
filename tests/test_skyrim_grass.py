@@ -105,6 +105,12 @@ class MergeTests(unittest.TestCase):
         np.testing.assert_allclose(a.normals[3], (-1.0, 0.0, 0.0), atol=1e-9)
         self.assertEqual(len(got[1][1].positions), 3)
 
+    def test_vertex_colour(self):
+        vc = np.zeros((33, 33, 3), np.uint8)
+        vc[:, 16:] = (255, 128, 0)                              # east half
+        np.testing.assert_allclose(skyrimgrass.vertex_colour(vc, 4000.0, 100.0), (1.0, 128 / 255, 0.0))
+        np.testing.assert_allclose(skyrimgrass.vertex_colour(vc, 0.0, 0.0), (0.0, 0.0, 0.0))
+
     def test_patch_stem(self):
         self.assertEqual(skyrimgrass.patch_stem(-3, 7, "Landscape\\Grass\\FieldGrass01.nif"), "cm3_7_fieldgrass01")
 
@@ -147,7 +153,7 @@ class CommandTests(unittest.TestCase):
             ok, rep = so.check(out)
             obj = json.load(open(os.path.join(out, "objects.json")))
         self.assertTrue(ok, [c for c in rep["checks"] if not c[1]])
-        self.assertEqual(len(g["refs"]), 1)                        # one cell, one model: one patch
+        self.assertEqual(len(g["refs"]), 1, (g["failed"], log.getvalue()[-1500:]))   # one cell, one model: one patch
         self.assertGreater(g["instances"]["landscape\\plants\\fern01.nif"], 10)
         patch = obj["bases"][-1]
         self.assertTrue(patch["edid"].startswith("SKY_Grass_c0_0_fern01"))

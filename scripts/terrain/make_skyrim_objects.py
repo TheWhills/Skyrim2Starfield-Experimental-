@@ -254,17 +254,43 @@ def cmd_grass(a):
     print(f"grass: Skyrim cells x {x0}..{x1}, y {y0}..{y1}; spacing {a.grass_spacing:g} m, density x{a.grass_density:g}")
     ltex_grass, gras = skyrimgrass.read_grass(a.skyrim)
     land = skyrimland.SkyrimLand(a.skyrim, a.world_edid)
-    weights, _ltex = landtex.read_world_textures(a.skyrim, land.land_source)
+    colours = {}
+    weights, _ltex = landtex.read_world_textures(a.skyrim, land.land_source, colours)
     print(f"grass: {len(gras)} GRAS records, {len(ltex_grass)} landscape textures with grass")
     rng = np.random.default_rng(a.seed)
     spacing = a.grass_spacing * 70.0
     out = os.path.join(a.work, "grass")
+    if os.path.isdir(out):                            # a fresh scatter: no patches of an earlier run left behind
+        shutil.rmtree(out)
     os.makedirs(out, exist_ok=True)
+    # pass 1: scatter every cell; per model the mean Skyrim vertex colour (LAND VCLR) under its instances, which
+    # Skyrim multiplies into grass the way it does into the ground (src/fo4sf/skyrimgrass.py)
+    cells_inst, tint_acc = {}, {}
+    for cy in range(y0, y1 + 1):
+        for cx in range(x0, x1 + 1):
+            ws, hg = weights.get((cx, cy)), land.grids.get((cx, cy))
+            if not ws or hg is None:
+                continue
+            inst = skyrimgrass.scatter(ws, hg, ltex_grass, gras, spacing, rng, a.grass_density, land.water.get((cx, cy)))
+            vc = colours.get((cx, cy))
+            by_model = {}
+            for g, x, y, z, yaw, sc in inst:
+                m = gras[g]["model"]
+                by_model.setdefault(m, []).append((cx * skyrimgrass.CELL + x, cy * skyrimgrass.CELL + y, z, yaw, sc))
+                if vc is not None and a.grass_tint == "vertex":
+                    acc = tint_acc.setdefault(m, [0.0, 0.0, 0.0, 0])
+                    c = skyrimgrass.vertex_colour(vc, x, y)
+                    acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]; acc[3] += 1
+            if by_model:
+                cells_inst[(cx, cy)] = by_model
+    tints = {m: (v[0] / v[3], v[1] / v[3], v[2] / v[3]) for m, v in tint_acc.items() if v[3]}
+    print(f"grass: scattered {sum(len(p) for bm in cells_inst.values() for p in bm.values()):,} instances in "
+          f"{time.time() - t0:.0f} s")
     conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), out, a.texconv, a.content_resources, None,
                                          prefix=ASSET_PREFIX, max_texture=a.max_texture)
     models, failed = {}, {}
 
-    def model(name):
+    def model(name, tint):
         if name in models or name in failed:
             return models.get(name)
         try:
@@ -273,7 +299,8 @@ def cmd_grass(a):
                 raise FileNotFoundError("not in the Skyrim archives")
             src = nifmod.parse(raw)
             shapes = skyrimnif.trishapes(src)
-            mats = [conv._shape_material(src, sh, flat_normal_ok=True) for sh in shapes]   # grass: often no normal
+            mats = [conv._shape_material(src, sh, flat_normal_ok=True, albedo_tint=tint)   # grass: often no normal
+                    for sh in shapes]
             keep = []
             for sh, m in zip(shapes, mats):
                 if m is None:
@@ -291,20 +318,13 @@ def cmd_grass(a):
     bases, refs, counts = [], [], {}
     total = 0
     oz = float(ov.get("height_offset_m") or 0.0)
-    for cy in range(y0, y1 + 1):
-        print(f"  row y {cy}: {total:,} instances so far, {time.time() - t0:.0f} s")
-        for cx in range(x0, x1 + 1):
-            ws, hg = weights.get((cx, cy)), land.grids.get((cx, cy))
-            if not ws or hg is None:
-                continue
-            inst = skyrimgrass.scatter(ws, hg, ltex_grass, gras, spacing, rng, a.grass_density, land.water.get((cx, cy)))
-            by_model = {}
-            for g, x, y, z, yaw, sc in inst:
-                by_model.setdefault(gras[g]["model"], []).append((cx * skyrimgrass.CELL + x, cy * skyrimgrass.CELL + y,
-                                                                 z, yaw, sc))
+    for (cx, cy), by_model in sorted(cells_inst.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        if cx == x0:
+            print(f"  row y {cy}: {total:,} instances built, {time.time() - t0:.0f} s")
+        if True:
             for mname, pts in sorted(by_model.items()):
                 full = "meshes\\" + mname.replace("/", "\\").lstrip("\\")
-                mdl = model(full)
+                mdl = model(full, tints.get(mname))
                 if mdl is None:
                     continue
                 src, keep = mdl
@@ -334,7 +354,10 @@ def cmd_grass(a):
                              "disabled": False})
                 counts[mname] = counts.get(mname, 0) + len(pts)
                 total += len(pts)
+    for m, t in sorted(tints.items(), key=lambda kv: -counts.get(kv[0], 0))[:5]:
+        print(f"  tint {', '.join(f'{v:.2f}' for v in t)}  {m}")
     save(os.path.join(out, "grass.json"), {"bases": bases, "refs": refs, "instances": counts, "failed": failed,
+                                           "tints": tints,
                                            "cells": [x0, x1, y0, y1], "spacing_m": a.grass_spacing,
                                            "density": a.grass_density})
     print(f"grass: {total:,} instances of {len(counts)} models in {len(refs):,} patches; "
@@ -554,9 +577,12 @@ def main(argv=None):
     ap.add_argument("--starfield-data", help="convert: Starfield Data folder, to read the box template from its archives "
                                              "instead of --collision-template")
     ap.add_argument("--max-texture", default="", help="convert: texture caps, e.g. 1024 or color=1024,normal=512")
-    ap.add_argument("--grass-spacing", type=float, default=1.5,
-                    help="grass: metres between grass candidates (Skyrim tries every 20-60 units; smaller = denser, "
-                         "bigger files)")
+    ap.add_argument("--grass-spacing", type=float, default=0.75,
+                    help="grass: metres between grass candidates (default 0.75; Skyrim tries every 20-60 units = "
+                         "0.3-0.9 m; smaller = denser, bigger files and a longer build)")
+    ap.add_argument("--grass-tint", choices=("vertex", "none"), default="vertex",
+                    help="grass: 'vertex' (default) multiplies each grass texture by the mean Skyrim vertex colour "
+                         "under it, as Skyrim tints grass with the ground")
     ap.add_argument("--grass-density", type=float, default=1.0, help="grass: multiplier on each grass's density")
     ap.add_argument("--seed", type=int, default=1, help="grass: random seed (same seed, same grass)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")

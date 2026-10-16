@@ -172,3 +172,6 @@ instances of one model in one cell are merged into one static (`SKY_Grass_c<x>_<
 one reference at the cell's centre. Grass without a normal map converts with a flat normal. `stage` adds
 <work>/grass/grass.json automatically (`--no-grass` leaves it out). Not yet: wind, colour range, fit-to-slope tilt,
 Skyrim's fade distance (patches draw as ordinary statics).
+First in-game look (2026-10-16): only sparse, pale yellow clumps. Changes: `--grass-spacing` default 0.75 m (was 1.5;
+Skyrim tries every 20-60 units, 0.3-0.9 m), and `--grass-tint vertex` (default) multiplies each grass model's texture
+by the mean Skyrim vertex colour (VCLR) under its instances, as Skyrim tints grass with the ground.

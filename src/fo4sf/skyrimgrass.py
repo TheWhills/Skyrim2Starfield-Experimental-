@@ -153,6 +153,12 @@ def instance_shapes(shapes, instances, origin, max_vertices: int):
     return out
 
 
+def vertex_colour(vc: np.ndarray, x: float, y: float) -> tuple:
+    """A cell's VCLR (33, 33, 3) uint8 at (x, y) units from its south-west corner, as 0..1 RGB (bilinear)."""
+    u, v = min(max(x / STEP, 0.0), 32.0), min(max(y / STEP, 0.0), 32.0)
+    return tuple(_bilinear(vc[..., k].astype(np.float64), u, v) / 255.0 for k in range(3))
+
+
 def patch_stem(cx: int, cy: int, model: str) -> str:
     stem = re.sub(r"[^a-z0-9]+", "_", model.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()).strip("_")
     return f"c{cx}_{cy}".replace("-", "m") + "_" + stem

@@ -161,7 +161,7 @@ class GroundTests(unittest.TestCase):
             self.assertTrue(any(f.lower().endswith("_flat_ao.dds") for f in comp))
             ts = [c["Data"] for o in m["Objects"] for c in o["Components"]
                   if c["Type"] == "BSMaterial::TerrainSettingsComponent"]
-            self.assertEqual(ts, [{"MaxDisplacement": "0", "TilingDistance": "9.75"}])
+            self.assertEqual(ts, [{"MaxDisplacement": "0", "TilingDistance": "4.88"}])
         return out, so.getvalue()
 
 

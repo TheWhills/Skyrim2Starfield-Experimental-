@@ -196,7 +196,7 @@ def checker_dds(size: int = 256, cells: int = 8) -> bytes:
             return f.read()
 
 
-SKYRIM_TILING_M = 4096.0 / 6.0 / 70.0    # Skyrim repeats a landscape texture about 6 times per cell: ~9.75 m
+SKYRIM_TILING_M = 4096.0 / 12.0 / 70.0   # ~4.88 m: Skyrim-sized detail in the owner's side-by-sides (9.75 was 2x)
 
 
 def flat_textures(staging: str, texconv: str, prefix: str = "skyrim") -> dict:

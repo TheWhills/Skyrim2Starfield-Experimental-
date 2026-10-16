@@ -198,9 +198,10 @@ class SkyrimConverter(pipeline.Converter):
                          no_collision_pattern="", max_texture=max_texture)
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
-                        flat_normal_ok: bool = False) -> Optional[str]:
+                        flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None) -> Optional[str]:
         kind = "decal" if blend and not test else "cutout" if test else "opaque"
-        ident = "|".join([diffuse.replace("\\", "/").lower(), normal.replace("\\", "/").lower(), kind, str(ref)])
+        ident = "|".join([diffuse.replace("\\", "/").lower(), normal.replace("\\", "/").lower(), kind, str(ref)]
+                         + ([",".join(f"{v:.3f}" for v in albedo_tint)] if albedo_tint else []))
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_" + hashlib.sha1(ident.encode()).hexdigest()[:8]
         if kind == "decal":
@@ -210,7 +211,8 @@ class SkyrimConverter(pipeline.Converter):
             try:
                 self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=test,
                                                                  alpha_ref=ref, decal=(kind == "decal"),
-                                                                 flat_normal_ok=flat_normal_ok)
+                                                                 flat_normal_ok=flat_normal_ok,
+                                                                 albedo_tint=albedo_tint)
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None
@@ -218,7 +220,8 @@ class SkyrimConverter(pipeline.Converter):
                 self.material_errors[key] = f"{type(e).__name__}: {e}"
         return self._materials[key]
 
-    def _shape_material(self, src, s, flat_normal_ok: bool = False) -> Optional[str]:
+    def _shape_material(self, src, s, flat_normal_ok: bool = False,
+                        albedo_tint: Optional[tuple] = None) -> Optional[str]:
         """flat_normal_ok: a diffuse without a normal map converts with a flat normal (Skyrim grass) instead of
         falling back to the neutral material."""
         if s.shader_ref < 0:
@@ -237,7 +240,8 @@ class SkyrimConverter(pipeline.Converter):
         normal = paths[1] if len(paths) > 1 else ""
         if not normal and not (blend and not test) and not flat_normal_ok:
             return self.neutral
-        mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok)
+        mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok,
+                                   albedo_tint=albedo_tint)
         if mat is None and blend and not test:
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral

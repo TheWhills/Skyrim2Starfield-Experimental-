@@ -504,9 +504,10 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-test", action="store_true",
                     help="build --skyrim-ground: paint a magenta / green checkerboard instead of Skyrim's colours, to "
                          "see in game whether the overridden ground textures are what the terrain draws")
-    ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
-                    help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
-                         "Starfield's dirt uses 3.2)")
+    ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 12.0 / 70.0, 2),
+                    help="build --skyrim-ground: metres per ground texture repeat (default 4.88 = 12 per Skyrim cell, "
+                         "from the owner's side-by-sides: 9.75 drew Skyrim's flowers and needles about twice their "
+                         "size; Starfield's dirt uses 3.2)")
     ap.add_argument("--skyrim-ground-brightness", type=float, default=0.0,
                     help="build --skyrim-ground: mean linear luminance each Skyrim ground colour is scaled to (default "
                          "0 = Skyrim's own colours; the owner's side-by-sides showed 0.15 far paler than Skyrim; "
