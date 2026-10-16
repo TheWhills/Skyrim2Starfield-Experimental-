@@ -13,8 +13,11 @@ Skyrim (UESP "Skyrim Mod:Mod File Format/LAND", "LTEX"; verified only on synthet
 Starfield BTD (docs/terrain/architecture.md 1.4 for the byte layout, verified; the meaning below is a SUPPORTED
 hypothesis from fo76utils, which renders Starfield terrain: btdfile.cpp getCellTextureSet / getCellLandTexture and
 landtxt.cpp renderPixel*):
-* per cell quadrant 8 bytes; a byte b in 1..n names LTEX table entry n - b, 0 = none. Bytes 0..4 are the five overlay
+* per cell quadrant 8 bytes; a byte b in 1..n names an LTEX table entry, 0 = none. Bytes 0..4 are the five overlay
   layers; the base (default) texture is the LAST valid byte (vanilla single-texture quadrants: "1 0 0 0 0 0 0 0").
+  Which entry: fo76utils reads Fallout 76 BTDs as entry n - b ("tail"). Starfield reads entry b - 1 ("head", the
+  default here; supported hypothesis from the owner's Jemison colour tests, docs/terrain/skyrim-tamriel.md): with
+  "tail" every Skyrim texture showed in another one's place, and the mix-up moved when the table changed.
 * per sample one u16: bits 3i..3i+2 = alpha 0..7 of the overlay in byte i. Rendering takes the first layer, from byte 0
   (top) to byte 4, whose alpha passes, else the base: layer i shows with probability alpha_i / 7 where every layer
   above it failed. So effective weights w (top first) invert to alpha_i = w_i / (1 - sum of w above), clamped.
@@ -290,9 +293,26 @@ def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill):
 
 
 BLEND_MODES = ("solid", "dither")
+INDEX_RULES = ("head", "tail")
+INDEX_RULE = "head"
 
 
-def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blend: str = "dither"):
+def byte_for(index: int, n: int, rule: str = INDEX_RULE) -> int:
+    """The quadrant byte naming LTEX table entry `index` of n (rule: INDEX_RULES, see the module notes)."""
+    if rule not in INDEX_RULES:
+        raise ValueError(f"index rule {rule!r} not in {INDEX_RULES}")
+    return index + 1 if rule == "head" else n - index
+
+
+def entry_for(b: int, n: int, rule: str = INDEX_RULE) -> int:
+    """The LTEX table index a quadrant byte b (1..n) names."""
+    if rule not in INDEX_RULES:
+        raise ValueError(f"index rule {rule!r} not in {INDEX_RULES}")
+    return b - 1 if rule == "head" else n - b
+
+
+def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blend: str = "dither",
+                     index_rule: str = INDEX_RULE):
     """weights [k, rows, cols] (rows, cols multiples of 64; one plane per id in `ids`) -> (quad map [rows/64, cols/64, 8]
     uint8, sample weights [rows, cols] uint16, stats). Per 64 x 64 quadrant: base = most weight, up to five more as
     overlays, least weight on top (byte 0), alphas solved top-down from the effective weights.
@@ -318,14 +338,14 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blen
                 order = [0]
             base, over = order[0], order[1:6]
             dropped += float(sum(sums[i] for i in order[6:]))
-            qmap[qr, qc, 5] = n - index[ids[base]]
+            qmap[qr, qc, 5] = byte_for(index[ids[base]], n, index_rule)
             stack = list(reversed(over))                        # least weight first = byte 0 = top
             s = w.sum(axis=0)
             s[s <= 0] = 1.0
             remaining = np.ones((64, 64), np.float32)
             word = np.zeros((64, 64), np.uint16)
             for byte, i in enumerate(stack):
-                qmap[qr, qc, byte] = n - index[ids[i]]
+                qmap[qr, qc, byte] = byte_for(index[ids[i]], n, index_rule)
                 wi = w[i] / s
                 a = np.clip(wi / np.maximum(remaining, 1e-6), 0.0, 1.0)
                 if blend == "solid":
@@ -342,7 +362,7 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blen
     return qmap, out, {"weight_beyond_six_layers": round(dropped / total, 5)}
 
 
-def decode_quadrants(qmap, word, table):
+def decode_quadrants(qmap, word, table, index_rule: str = INDEX_RULE):
     """Effective weights {form id: [rows, cols]} implied by a quad map + sample words (the rendering rule above)."""
     rows, cols = word.shape
     n = len(table)
@@ -351,14 +371,14 @@ def decode_quadrants(qmap, word, table):
         for qc in range(cols // 64):
             b = qmap[qr, qc]
             valid = [i for i in range(8) if 0 < b[i] <= n]
-            base = table[n - b[valid[-1]]]
+            base = table[entry_for(int(b[valid[-1]]), n, index_rule)]
             wd = word[qr * 64:(qr + 1) * 64, qc * 64:(qc + 1) * 64].astype(np.int64)
             remaining = np.ones((64, 64))
             for i in range(5):
                 if 0 < b[i] <= n and i != valid[-1]:
                     a = ((wd >> (3 * i)) & 7) / 7.0
                     w = a * remaining
-                    t = table[n - b[i]]
+                    t = table[entry_for(int(b[i]), n, index_rule)]
                     out.setdefault(t, np.zeros((rows, cols)))[qr * 64:(qr + 1) * 64, qc * 64:(qc + 1) * 64] += w
                     remaining = remaining - w
             out.setdefault(base, np.zeros((rows, cols)))[qr * 64:(qr + 1) * 64, qc * 64:(qc + 1) * 64] += remaining

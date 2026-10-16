@@ -46,7 +46,7 @@ def skyrim_layers(esm, xu, yu):
     return (cx, cy, row, col), sorted(out, key=lambda t: -t[4])
 
 
-def btd_sample(path, x, y):
+def btd_sample(path, x, y):  # noqa: D401
     """(quadrant LTEX table indices bytes, 3-bit alphas of bytes 0..4, LTEX table, (row, col)) at local metres."""
     with open(path, "rb") as f:
         t = btd.read(f.read())
@@ -71,6 +71,8 @@ def main(argv=None):
     ap.add_argument("--spawn-at", type=float, nargs=2, metavar=("X", "Y"),
                     help="player.getpos x / y right after coc, before moving: Starfield reports positions in the "
                          "planet's merged grid, so this gives the shift to the overlay's own frame")
+    ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
+                    help="the build's --ltex-index (default head)")
     ap.add_argument("--texconv", default="", help="with --zip: texconv.exe for the PNG previews")
     ap.add_argument("--zip", default="", help="write the Skyrim textures found here as PNG previews (outside the repo)")
     a = ap.parse_args(argv)
@@ -98,7 +100,7 @@ def main(argv=None):
     def name(b):
         if not b:
             return "-"
-        fid = table[n - b]
+        fid = table[landtex.entry_for(b, n, a.ltex_index)]
         return f"{fid:08X}" + (f" (Skyrim {over[fid]})" if fid in over else "")
     print(f"the build draws (BTD sample row {r} col {c}; overlay bytes 0..4 top first, then the base):")
     for i in range(5):

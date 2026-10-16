@@ -8,7 +8,7 @@ files (docs/terrain/architecture.md, section 1.4):
     4 x i32 cell rectangle                                    always 0 in Starfield
     u32 n, n x u32 LTEX FormIDs
     per cell        f32 min, f32 max                          of the decoded LOD0 heights
-    per quadrant    8 bytes LTEX table indices                (stored as n - index; copied from a template here)
+    per quadrant    8 bytes LTEX table indices                (index + 1 in Starfield, landtex.INDEX_RULE)
     LOD4            8 x 8 u16 heights per cell, then 8 x 8 u16 land-texture weights (every 16th sample)
     zlib tables     (u32 offset, u32 size) for LOD3 (8x8-cell groups), LOD2 (4x4), LOD1 (2x2), LOD0 (1 cell)
     zlib blocks     65,536 bytes each: 128 x 128 u16 heights then 128 x 128 u16 weights; LOD l = full grid sampled

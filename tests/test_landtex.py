@@ -232,3 +232,24 @@ class OverlayTextureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IndexRuleTests(unittest.TestCase):
+    def test_head_is_starfield_default(self):
+        self.assertEqual(landtex.INDEX_RULE, "head")
+        for rule in landtex.INDEX_RULES:
+            for i in range(5):
+                self.assertEqual(landtex.entry_for(landtex.byte_for(i, 5, rule), 5, rule), i)
+        self.assertEqual(landtex.byte_for(0, 5, "head"), 1)
+        self.assertEqual(landtex.byte_for(0, 5, "tail"), 5)
+        with self.assertRaises(ValueError):
+            landtex.byte_for(0, 5, "middle")
+
+    def test_encode_writes_head_bytes(self):
+        table = [0x100, 0x200, 0x300]
+        w = np.zeros((3, 64, 64), np.float32)
+        w[0] = 1.0                                   # the whole quadrant is table entry 0
+        qmap, _words, _ = landtex.encode_quadrants(w, table, table, blend="solid")
+        self.assertEqual(int(qmap[0, 0, 5]), 1)
+        qmap, _words, _ = landtex.encode_quadrants(w, table, table, blend="solid", index_rule="tail")
+        self.assertEqual(int(qmap[0, 0, 5]), 3)

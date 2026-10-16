@@ -199,3 +199,12 @@ under Starfield's PBR a near-black ground is dominated by the sky's Fresnel refl
 detail-less, sky-tinted patch and why alpha and roughness changes did nothing while the brighter pine-needle textures
 looked fine. Each Skyrim ground colour is now scaled in linear light to a mean luminance of 0.15
 (`--skyrim-ground-brightness`, vanilla dirt about 0.17; 0 = off), hue and detail kept.
+
+### Colour tests: the BTD texture index rule (2026-10-16)
+`--skyrim-ground-colours` painted six Skyrim textures solid. The pale patch (base LDirt02 by `ground_at.py`) never
+took LDirt02's colour; cyan (LDirt02) showed on a hillside, blue (LFieldGrass02NoGrass) in the river, and skipping
+one LTEX slot (`--skyrim-ground-skip-slots 00030139`) changed which texture filled the patch. Reading quadrant byte
+b as table entry b - 1 instead of n - b (the Fallout 76 rule from fo76utils) mirrors the sorted table, which fits
+all three: LDirt02 (entry 0) showed the last entry, which the slot skip replaced. **Supported hypothesis**: the build
+now writes `--ltex-index head` (b = index + 1); `--ltex-index tail` rebuilds the old way for comparison. Next test:
+the same colour build with head, expecting cyan on the village paths, red under the pines, magenta/yellow in the river.
