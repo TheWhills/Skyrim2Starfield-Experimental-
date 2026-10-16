@@ -115,6 +115,13 @@ def main(argv=None):
     ox, oy = (float(v) for v in ov.get("origin_cw_m", [0, 0]))
     xu, yu = (a.pos[0] + ox) * 70.0, (a.pos[1] + oy) * 70.0
     (cx, cy, row, col), layers = skyrim_layers(a.skyrim, xu, yu)
+    from fo4sf import terrain_grid as tgrid
+    sc = tgrid.sf_cell_of(a.pos[0], a.pos[1])
+    wl = {(c[0], c[1]): c[2] for c in (prm.get("water") or {}).get("cells", [])}
+    near = sorted(((x, y), h) for (x, y), h in wl.items() if abs(x - sc[0]) <= 1 and abs(y - sc[1]) <= 1)
+    print(f"Starfield cell {list(sc)}: water level {wl.get(sc, 'none')}"
+          + (f"; neighbours with water {near}" if near else "") + f" (overlay height offset "
+          f"{ov.get('height_offset_m', 0)} m)")
     print(f"position {a.pos[0]:g}, {a.pos[1]:g} m -> Skyrim ({xu:.0f}, {yu:.0f}) units, cell ({cx}, {cy}) vertex "
           f"row {row} col {col}")
     print("Skyrim paints here (weight, EditorID, diffuse):")

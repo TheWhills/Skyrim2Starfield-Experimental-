@@ -253,3 +253,6 @@ Starfield's own LDirtFootprints01, the plain-ground fallback. Skyrim's engine-de
 the Skyrim textures beyond the spare records mapped to it, near and far; the "distant view shows the record's vanilla
 look" idea above was wrong for that. With `--skyrim-ground` every category and the default now map to a converted
 Skyrim texture (default: LDirt02), so no vanilla Starfield ground remains.
+Whole-map test (2026-10-16, 218,217 objects, 3.49 GiB): the sea and Solitude's docks had no water (the planet ocean
+does not draw inside the overlay), and pale flat sheets hung in the sky. `--skyrim-water-sea` gives sea-level cells
+water too; `ground_at.py` now prints the water level of the Starfield cell at a position, to trace the sky sheets.

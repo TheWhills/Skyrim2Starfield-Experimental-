@@ -420,7 +420,7 @@ def cmd_build(a, rest):
         o = prm["overlays"][0]
         lv = skyrimwater.cell_levels(land.grids, land.water, land.default_water,
                                      tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
-                                     (o["cell_min"], o["cell_max"]))
+                                     (o["cell_min"], o["cell_max"]), include_sea=a.skyrim_water_sea)
         prm["water"] = {"form": a.skyrim_water_form, "cells": [[c["cell"][0], c["cell"][1], c["height_m"]] for c in lv]}
         agree = sum(c["agree"] for c in lv) / len(lv) if lv else 1.0
         print(f"overlays_params.json: {len(lv)} cells with Skyrim river / lake water (WATR {a.skyrim_water_form}), "
@@ -517,6 +517,9 @@ def main(argv=None):
     ap.add_argument("--skyrim-water", action="store_true",
                     help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
                          "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
+    ap.add_argument("--skyrim-water-sea", action="store_true",
+                    help="build --skyrim-water: also give sea-level cells water (the planet's ocean does not draw "
+                         "inside the overlay: owner's whole-map test, Solitude docks and the coast were dry)")
     ap.add_argument("--skyrim-water-form", default="0560D0",
                     help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 0560D0 "
                          "WaterOceanDark, the owner's pick; also tried WaterClear 000018, WaterClearLake 01C0CC, "

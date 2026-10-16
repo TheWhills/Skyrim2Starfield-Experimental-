@@ -41,6 +41,12 @@ class LevelTests(unittest.TestCase):
         got = skyrimwater.cell_levels({(0, 0): lake, (1, 0): valley}, {(0, 0): 700.0}, SEA, max_false_wet=1.0)
         self.assertEqual(len(got), 1)
 
+    def test_sea_cells_on_request(self):
+        low = np.full((33, 33), -15000.0)
+        self.assertEqual(skyrimwater.cell_levels({(0, 0): low}, {(0, 0): SEA}, SEA), [])
+        got = skyrimwater.cell_levels({(0, 0): low}, {(0, 0): SEA}, SEA, offset_m=185.0, include_sea=True)
+        self.assertEqual(got[0]["height_m"], round(SEA / 70 + 185.0, 3))
+
     def test_cell_range_and_origin(self):
         got = skyrimwater.cell_levels({(0, 0): np.zeros((33, 33))}, {(0, 0): 700.0}, SEA, origin_m=(200.0, 0.0),
                                       cell_range=(-36, 36))
