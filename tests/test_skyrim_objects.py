@@ -326,6 +326,15 @@ class ConverterTests(unittest.TestCase):
             opaque = load(os.path.join(tmp, "out", *tree["materials"][0].split("\\")))
             self.assertIn("opacity", json.dumps(leaves).lower())                  # cutout: opacity texture
             self.assertNotIn("_opacity.dds", json.dumps(opaque).lower())
+            import numpy as np
+            cols = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(tmp, "out", "textures"))
+                    for f in fs if f.endswith("_color.dds")]
+            self.assertTrue(cols)
+            for c in cols:                        # the fixtures' diffuse has alpha 0 at (0, 0): never BC1 black
+                d = open(c, "rb").read()
+                h = textures.read_dds_header(d)
+                px = np.frombuffer(d[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
+                self.assertEqual(int(px.reshape(-1, 4)[:, 3].min()), 255, c)
             # double-sided leaves get back faces; the trunk and every other model stay one-sided
             self.assertEqual((tree["double_sided_shapes"], tree["double_sided_too_big"]), (1, 0))
             self.assertEqual(sum(r["double_sided_shapes"] for r in res.values()), 1)

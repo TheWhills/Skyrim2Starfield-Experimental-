@@ -180,5 +180,9 @@ by the mean Skyrim vertex colour (VCLR) under its instances, as Skyrim tints gra
 Riverwood's riverbank ledges and cliffs drew dark and flat with only the grass texture's flowers showing, while the
 same texture on the flat terrain looked right. Skyrim landscape objects often set SLSF1 Model_Space_Normals (bit 12,
 `_msn` maps: object-space normals); Starfield reads every normal map as tangent space. The converter now drops such
-maps and lights those shapes from their vertex normals (flat normal map; **supported hypothesis**, not yet seen in
-game). A proper model -> tangent space bake would keep their surface detail. `inspect_nif.py` marks such shapes.
+maps and lights those shapes from their vertex normals (flat normal map). **Correction:** `inspect_nif.py` showed
+the Riverwood ledges (landscape\dirtcliffs\*) do NOT set that flag, so it was not their cause (the handling stays
+for models that do). The real cause: the colour textures were written as BC1, whose 1-bit alpha makes texconv encode
+every texel under alpha 0.5 as transparent black, and Skyrim's diffuse alpha is a specular mask. FieldGrass02 on the
+ledge tops kept only its bright flowers. The converter now writes opaque colour (alpha 255) before BC1; cutouts keep
+their separate opacity map.

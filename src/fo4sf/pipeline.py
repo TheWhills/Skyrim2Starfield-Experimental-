@@ -274,6 +274,12 @@ class Converter:
                     textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
                     textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
                     opacity = "o_in.dds"
+            if color_alpha is None:
+                # BC1 below keeps 1-bit alpha: texconv turns every texel under alpha 0.5 into transparent BLACK.
+                # Skyrim / FO4 diffuse alpha is often a specular mask, not opacity (cutouts use the opacity map
+                # above), so those texels drew black: Skyrim's FieldGrass02 on the riverbank ledges showed only its
+                # bright flowers on a near-black sheet (owner's Riverwood tests). Opaque colour it is.
+                color_alpha = 255
             if color_alpha is not None or albedo_luminance is not None or albedo_tint is not None:   # rewrite colour
                 textures.texconv(self.texconv, os.path.join(tmp, "d.dds"), tmp, "R8G8B8A8_UNORM", ("-m", "1"))
                 raw_d = open(os.path.join(tmp, "d.dds"), "rb").read()
