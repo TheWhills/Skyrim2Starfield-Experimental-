@@ -192,3 +192,10 @@ drawn pale and sky-reflecting. A very dark albedo reading as a mirror points at 
 uniform roughness (190 / 255) is apparently read the other way round by the terrain shader. Skyrim ground materials now
 keep the vanilla dirt's own roughness map (`--skyrim-ground-roughness vanilla`, default; `uniform` for the old value).
 Alpha stays 0 in BC3 (harmless, and BC1's black texels are avoided).
+`dds_info.py` (owner): vanilla `DirtFootprints01_color` is BC1_UNORM_SRGB 2048 px averaging sRGB (144, 109, 90); our
+`ldirt02_color` is BC3_UNORM_SRGB 1024 px averaging (44, 43, 36), normal BC5_SNORM and roughness BC4 like vanilla. The
+file is right; the colour is about a third as bright. Skyrim draws its ground dark and brightens it with vertex colour;
+under Starfield's PBR a near-black ground is dominated by the sky's Fresnel reflection, which explains the pale,
+detail-less, sky-tinted patch and why alpha and roughness changes did nothing while the brighter pine-needle textures
+looked fine. Each Skyrim ground colour is now scaled in linear light to a mean luminance of 0.15
+(`--skyrim-ground-brightness`, vanilla dirt about 0.17; 0 = off), hue and detail kept.

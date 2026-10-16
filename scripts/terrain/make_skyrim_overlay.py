@@ -132,7 +132,8 @@ def skyrim_ground(a, ltex, cells, usage, out):
         print("skyrim ground: TEST MODE, ground diffuse textures replaced by a magenta / green checkerboard")
     flat = skyrimground.flat_textures(os.path.join(out, "Data"), a.texconv)
     tiling = a.skyrim_ground_tiling
-    print(f"skyrim ground: roughness {a.skyrim_ground_roughness}, colour alpha {a.skyrim_ground_alpha}, "
+    print(f"skyrim ground: brightness {a.skyrim_ground_brightness:g}, roughness {a.skyrim_ground_roughness}, "
+          f"colour alpha {a.skyrim_ground_alpha}, "
           f"{'flat' if a.skyrim_ground_flat_normal else 'Skyrim'} normals, flat AO, "
           f"{'flat' if a.skyrim_ground_flat_height else 'detail'} height maps for blending, "
           f"tiling {tiling:g} m per repeat (vanilla dirt 3.2 m), no displacement")
@@ -154,7 +155,9 @@ def skyrim_ground(a, ltex, cells, usage, out):
             mat = conv._convert_texture_set(stem, skyrimground.texture_path(v["diffuse"]), normal, "",
                                             template=template, extra_files=files,
                                             color_alpha=None if a.skyrim_ground_alpha == "keep"
-                                            else (0 if a.skyrim_ground_alpha == "zero" else 255))
+                                            else (0 if a.skyrim_ground_alpha == "zero" else 255),
+                                            albedo_luminance=None if a.skyrim_ground_test
+                                            else (a.skyrim_ground_brightness or None))
             mp = os.path.join(out, "Data", *mat.replace("\\", "/").split("/"))
             with open(mp, encoding="utf-8") as f:
                 md = json.load(f)
@@ -465,6 +468,10 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-tiling", type=float, default=round(4096.0 / 6.0 / 70.0, 2),
                     help="build --skyrim-ground: metres per ground texture repeat (default 9.75, Skyrim's ~6 per cell; "
                          "Starfield's dirt uses 3.2)")
+    ap.add_argument("--skyrim-ground-brightness", type=float, default=0.15,
+                    help="build --skyrim-ground: mean linear luminance each Skyrim ground colour is scaled to (default "
+                         "0.15; Starfield's dirt is about 0.17; 0 keeps Skyrim's dark colours, which Starfield draws as "
+                         "a pale sky sheen)")
     ap.add_argument("--skyrim-ground-roughness", choices=("vanilla", "uniform"), default="vanilla",
                     help="build --skyrim-ground: 'vanilla' (default) keeps the template dirt's own roughness map; "
                          "'uniform' writes the object converter's 'fairly rough' value, which the terrain drew as a "

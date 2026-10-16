@@ -214,6 +214,20 @@ class HeightMapTests(unittest.TestCase):
         self.assertGreater(float(v.std()), 20.0)
 
 
+class AlbedoTests(unittest.TestCase):
+    def test_dark_skyrim_dirt_is_brought_to_starfield_brightness(self):
+        import numpy as np
+        from fo4sf import textures as tx
+        rng = np.random.default_rng(2)
+        rgb = np.clip(rng.normal((44, 43, 36), 12, (64, 64, 3)), 0, 255).astype(np.uint8)   # Skyrim Dirt02-like
+        out = tx.scale_albedo(rgb, 0.15)
+        lum = float((tx.srgb_to_linear(out) @ np.array([0.2126, 0.7152, 0.0722])).mean())
+        self.assertAlmostEqual(lum, 0.15, delta=0.02)
+        self.assertGreater(float(out.mean()), 90.0)                       # visibly brighter in sRGB
+        self.assertGreater(float(out[..., 0].mean()), float(out[..., 2].mean()))   # hue kept (warmer than blue)
+        self.assertGreater(float(out.std()), float(rgb.std()))            # detail scaled with it, not flattened
+
+
 class HeightOffsetTests(unittest.TestCase):
     def test_terrain_and_objects_lift_together(self):
         import make_cw_overlays as cw

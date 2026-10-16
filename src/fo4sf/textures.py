@@ -218,3 +218,28 @@ def roughness_from_smoothness(g, smoothness: float = 1.0, spec_mult: float = 1.0
 
 def flip_green(g):
     return (255 - g.astype(np.int32)).astype(np.uint8)
+
+
+def srgb_to_linear(v):
+    import numpy as np
+    v = np.asarray(v, np.float32) / 255.0
+    return np.where(v <= 0.04045, v / 12.92, ((v + 0.055) / 1.055) ** 2.4)
+
+
+def linear_to_srgb(v):
+    import numpy as np
+    v = np.clip(np.asarray(v, np.float32), 0.0, 1.0)
+    return np.where(v <= 0.0031308, v * 12.92, 1.055 * v ** (1 / 2.4) - 0.055) * 255.0
+
+
+def scale_albedo(rgb, target_luminance: float, max_gain: float = 6.0):
+    """Scale an sRGB colour image (uint8 [..., 3]) in linear light so its mean luminance becomes target_luminance
+    (linear, 0..1), keeping hue and relative detail; the gain is capped. Skyrim's ground textures are drawn dark for
+    Skyrim's lighting (which brightens them with vertex colour); under Starfield's PBR a near-black ground shows mostly
+    the sky's Fresnel reflection (owner's Riverwood tests: Skyrim Dirt02, mean sRGB 44, drew as a pale sky-tinted
+    patch; vanilla DirtFootprints01 averages sRGB (144, 109, 90), linear luminance about 0.17)."""
+    import numpy as np
+    lin = srgb_to_linear(rgb)
+    lum = float((lin @ np.array([0.2126, 0.7152, 0.0722], np.float32)).mean())
+    gain = min(max_gain, target_luminance / lum) if lum > 1e-6 else 1.0
+    return np.rint(linear_to_srgb(lin * gain)).astype(np.uint8)
