@@ -224,3 +224,7 @@ Grass-field close-up (2026-10-16): Skyrim's LFieldGrass texture drew as a smooth
 flowers visible. The roughness / colour-alpha defaults were chosen while the index bug drew other textures, so they
 are reset: `--skyrim-ground-roughness matte` (default; a fully rough map, Skyrim's ground has no sheen) and
 `--skyrim-ground-alpha one` (default; BC1 like the vanilla dirt). `vanilla` / `zero` remain for comparison.
+**Verified in game (2026-10-16):** with colour alpha zero (BC3) the Skyrim ground lost its texture and went dark a few
+metres away while objects with the same texture kept it; rebuilt with `--skyrim-ground-alpha one` (BC1, the new
+default) and `--skyrim-ground-roughness matte`, the distant darkening is gone. Terrain1Layer reads the albedo alpha;
+keep it at 1 like the vanilla dirt.
