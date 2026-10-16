@@ -248,3 +248,9 @@ Matched so far without effect: lodsettings, composite names / folder / 2^L block
 parent, XLYR on the references, world HNAM 5, BSXFlags 1, STAT HasDistantLod. **Unresolved, parked.** Untested ideas:
 something in a vanilla world's records we cannot see in Mutagen's view (unknown subrecords), a cache built only by
 the Creation Kit, or the engine skipping composite LOD for worlds added by plugins.
+**Correction (same day): the decisive test was not decisive.** Vanilla composites have an identity root node and keep
+world coordinates in their vertices; the first `--vanilla-test` moved the cranes with the root node's translation,
+which the engine may ignore for LOD (then all 6,612 cranes stood at Gagarin's (125, 110) m in our world, out of the
+Throat of the World view). `--vanilla-test` now bakes the offset into a copy of the vanilla mesh (vanilla material kept)
+and writes identity-root NIFs like vanilla's. LOD is un-parked until that test runs. Composite node names now use the
+lowercase world folder, as vanilla's do.

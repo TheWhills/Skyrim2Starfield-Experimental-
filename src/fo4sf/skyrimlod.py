@@ -191,7 +191,7 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
             blocks.setdefault((bi, block_of(cell, (x0, y0), level)), []).extend(shapes)
         for (bi, blk), shapes in sorted(blocks.items()):
             name = f"{layer_name(bases[bi]['edid'])}_{blk[0]}_{blk[1]}_lod_{level}_cell0"
-            node = f"Composite\\{world}\\{name}".encode()
+            node = f"Composite\\{wl}\\{name}".encode()   # vanilla: lowercase world folder
             f = sfnif.build_static_nif(node, shapes, bsx=1)            # vanilla composites: BSXFlags 1
             with open(os.path.join(root, name.lower() + ".nif"), "wb") as fh:
                 fh.write(nifmod.serialize(f))
@@ -223,30 +223,54 @@ def _first_sphere(n):
 
 def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
     """Diagnostic: replace every composite LOD NIF this build wrote with a vanilla Gagarin crane composite of the same
-    level (its mesh and baked material stay vanilla), moved by its root node so the crane stands where our first shape
-    was. If cranes then show far away, the engine loads our files and our NIF / material contents are the problem;
-    if not, it does not look at them at all. read_vanilla(path) -> bytes. Returns files replaced."""
+    level (vanilla material; the vanilla mesh with its vertices moved so the crane stands 60 m above our first shape).
+    The offset is baked into the vertices, as vanilla composites keep world coordinates with identity transforms (the
+    first version moved the root node instead, which the engine may ignore: then every crane stood at Gagarin's
+    (125, 110) m in our world). If cranes then show far away, the engine loads our files and our NIF / material
+    contents are the problem; if not, it does not look at them at all. read_vanilla(archive path) -> bytes. Returns
+    files replaced."""
+    import dataclasses
     import json
-    src = {lv: nifmod.parse(read_vanilla(pth)) for lv, pth in VANILLA_TEST.items()}
+    src = {}
+    for lv, pth in VANILLA_TEST.items():
+        v = nifmod.parse(read_vanilla(pth))
+        gi = next(i for i in range(len(v.blocks)) if v.type_of(i) == "BSGeometry")
+        g = sfnif.parse_bsgeometry(v.blocks[gi])
+        ref = next(m for m in g.meshes if m)
+        si, = struct.unpack_from("<i", v.blocks[g.shader], 0)
+        mesh = sfmesh.parse(read_vanilla("geometries\\" + ref.path.decode("latin-1") + ".mesh"))
+        pos = np.asarray(mesh.positions, np.float64) / 32767.0 * mesh.scale
+        src[lv] = (v.strings[si].decode("latin-1"), mesh, pos, np.asarray(g.sphere[:3], np.float64))
     manifest = os.path.join(data_dir, "lodsettings", f"{world.lower()}.files.json")
-    n = 0
-    for rel in json.load(open(manifest, encoding="utf-8")):
+    written = json.load(open(manifest, encoding="utf-8"))
+    n, extra = 0, []
+    for rel in list(written):
         if not rel.endswith(".nif"):
             continue
         p = os.path.join(data_dir, *rel.split("/"))
         lv = int(rel.rsplit("_lod_", 1)[1][0])
         ours = _first_sphere(nifmod.parse(open(p, "rb").read()))
-        v = src[lv]
-        vs = _first_sphere(v)
-        if ours is None or vs is None:
+        if ours is None:
             continue
-        blk = bytearray(v.blocks[0])
-        nextra, = struct.unpack_from("<I", blk, 4)
-        off = 8 + 4 * nextra + 8
-        struct.pack_into("<3f", blk, off, ours[0] - vs[0], ours[1] - vs[1], ours[2] - vs[2] + 60.0)
-        v2 = nifmod.parse(nifmod.serialize(v))
-        v2.blocks[0] = bytes(blk)
+        material, mesh, pos, centre = src[lv]
+        moved = pos + (np.asarray(ours[:3], np.float64) - centre + (0.0, 0.0, 60.0))
+        scale, raw = sfmesh.encode_positions([tuple(q) for q in moved])
+        m = sfmesh.build_meshlets(dataclasses.replace(mesh, scale=scale, positions=raw))
+        data = sfmesh.serialize(m)
+        d, fn = convert_static.mesh_file_path(data)
+        mp = os.path.join(data_dir, "geometries", d, fn + ".mesh")
+        os.makedirs(os.path.dirname(mp), exist_ok=True)
+        with open(mp, "wb") as fh:
+            fh.write(data)
+        extra.append(f"geometries/{d}/{fn}.mesh")
+        sphere, box = sfnif.bounds_from_points([sfmesh.decode_position(q, scale) for q in raw])
+        node = os.path.splitext(os.path.basename(p))[0]
+        node = f"Composite\\{world.lower()}\\{node}".encode()
+        f = sfnif.build_static_nif(node, [sfnif.StaticShape(node + b":0", f"{d}\\{fn}".encode(), len(m.triangles) * 3,
+                                                            len(m.positions), material, sphere, box)], bsx=1)
         with open(p, "wb") as fh:
-            fh.write(nifmod.serialize(v2))
+            fh.write(nifmod.serialize(f))
         n += 1
+    with open(manifest, "w", encoding="utf-8") as fh:      # so the next lod run removes the moved meshes too
+        json.dump(written + extra, fh)
     return n

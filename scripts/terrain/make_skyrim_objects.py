@@ -404,15 +404,23 @@ def cmd_lod(a):
     if a.vanilla_test:
         from fo4sf import ba2
         import glob as _g
-        arcs = [ba2.Ba2(p) for p in sorted(_g.glob(os.path.join(a.vanilla_test, "Starfield - LODMeshes*.ba2")))]
+        found = sorted(_g.glob(os.path.join(a.vanilla_test, "Starfield - *.ba2")))
+        found.sort(key=lambda p: "lodmeshes" not in p.lower())           # the LOD archive first, then the rest
+        arcs = {}
 
         def read(name):
-            for arc in arcs:
-                if arc.find(name) is not None:
-                    return arc.read(name)
+            for p in found:
+                if p not in arcs:
+                    try:
+                        arcs[p] = ba2.Ba2(p)
+                    except Exception:                    # noqa: BLE001 (texture archives etc. we cannot index)
+                        arcs[p] = None
+                if arcs[p] is not None and arcs[p].find(name) is not None:
+                    return arcs[p].read(name)
             raise FileNotFoundError(name)
         n = skyrimlod.vanilla_test(data, ov["world"], read)
-        print(f"lod: VANILLA TEST, {n:,} composite NIFs replaced by Gagarin's crane LOD (60 m above our objects)")
+        print(f"lod: VANILLA TEST, {n:,} composite NIFs replaced by Gagarin's crane LOD (60 m above our objects, "
+              f"moved in the vertices)")
     print(f"lod: lodsettings {st['lodsettings']}; {st['objects_with_lod']:,} objects, {st['instances']:,} references "
           f"(radius >= {a.lod_min_radius:g} m; {st['skipped_small']:,} smaller skipped) -> {st['nif_files']:,} LOD NIFs, "
           f"{st['meshes']:,} meshes ({st['mesh_bytes'] / 2 ** 20:,.0f} MiB); {time.time() - t0:.0f} s")

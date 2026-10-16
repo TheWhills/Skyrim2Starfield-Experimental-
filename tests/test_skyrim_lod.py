@@ -80,11 +80,23 @@ class CommandTests(unittest.TestCase):
                         pts += [sfmesh.decode_position(v, m.scale) for v in m.positions]
             ok, rep = so.check(out)
             any_nif = open(files[0], "rb").read()
-            n = skyrimlod.vanilla_test(os.path.join(out, "Data"), "SKY_Tamriel", lambda name: any_nif)
+            first_sphere = skyrimlod._first_sphere(nif.parse(open(files[-1], "rb").read()))
+
+            def read_vanilla(name):                    # our first composite stands in for Gagarin's crane
+                if name.endswith(".mesh"):
+                    return open(os.path.join(out, "Data", *name.split("\\")), "rb").read()
+                return any_nif
+            n = skyrimlod.vanilla_test(os.path.join(out, "Data"), "SKY_Tamriel", read_vanilla)
             moved = nif.parse(open(files[-1], "rb").read())
             tr = nif._av_transform(moved.blocks[0])[0]
+            mg = sfnif.parse_bsgeometry(next(moved.blocks[i] for i in range(len(moved.blocks))
+                                             if moved.type_of(i) == "BSGeometry"))
+            mm = sfmesh.parse(open(os.path.join(out, "Data", "geometries", *mg.meshes[0].path.decode().split("\\"))
+                                   + ".mesh", "rb").read())
+            self.assertTrue(mm.positions)
         self.assertEqual(n, len(files))
-        self.assertNotEqual(tuple(tr), (0.0, 0.0, 0.0))                      # moved by its root node
+        self.assertEqual(tuple(tr), (0.0, 0.0, 0.0))                         # identity root, as vanilla
+        self.assertLess(abs(mg.sphere[2] - first_sphere[2] - 60.0), 1.0)     # baked into the vertices
         self.assertEqual(struct.unpack("<5i", lodset)[3:], (0, 0))
         self.assertTrue(rock_base.get("distant_lod"))
         self.assertEqual(rock_base.get("lod_layer"), rock_base["edid"] + "_LOD")
