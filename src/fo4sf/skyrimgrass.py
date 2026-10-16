@@ -73,8 +73,13 @@ def _bilinear(g: np.ndarray, u: float, v: float) -> float:
 
 def scatter(weights: Dict[int, np.ndarray], heights: np.ndarray, ltex_grass: Dict[int, List[int]],
             gras: Dict[int, dict], spacing: float, rng: np.random.Generator, density_scale: float = 1.0,
-            water: Optional[float] = None) -> List[tuple]:
-    """[(GRAS fid, x, y, z, yaw, scale)] in units inside one cell (x, y from its south-west corner; z absolute)."""
+            water: Optional[float] = None, stats: Optional[dict] = None) -> List[tuple]:
+    """[(GRAS fid, x, y, z, yaw, scale)] in units inside one cell (x, y from its south-west corner; z absolute).
+    stats: a dict counting why candidates were dropped (no_grass_texture, density, slope, water) and kept."""
+    st = stats if stats is not None else {}
+
+    def drop(why):
+        st[why] = st.get(why, 0) + 1
     grown = [f for f in weights if any(g in gras for g in ltex_grass.get(f, []))]
     if not grown:
         return []
@@ -93,23 +98,28 @@ def scatter(weights: Dict[int, np.ndarray], heights: np.ndarray, ltex_grass: Dic
             f = fids[int(rng.choice(len(fids), p=w / tot))]
             choices = [g for g in ltex_grass.get(f, []) if g in gras]
             if not choices:
+                drop("no_grass_texture")
                 continue
             g = choices[int(rng.integers(len(choices)))]
             gr = gras[g]
             if rng.random() >= gr["density"] / 100.0 * density_scale:
+                drop("density")
                 continue
             ua, ub, va, vb = max(u - 0.5, 0.0), min(u + 0.5, 32.0), max(v - 0.5, 0.0), min(v + 0.5, 32.0)
             dzdx = (_bilinear(heights, ub, v) - _bilinear(heights, ua, v)) / ((ub - ua) * STEP)
             dzdy = (_bilinear(heights, u, vb) - _bilinear(heights, u, va)) / ((vb - va) * STEP)
             slope = math.degrees(math.atan(math.hypot(dzdx, dzdy)))
             if not gr["min_slope"] <= slope <= max(gr["max_slope"], gr["min_slope"]):
+                drop("slope")
                 continue
             jitter = gr["position_range"]
             px = min(max(x + (rng.random() * 2 - 1) * jitter, 0.0), CELL)
             py = min(max(y + (rng.random() * 2 - 1) * jitter, 0.0), CELL)
             z = _bilinear(heights, px / STEP, py / STEP)
             if water is not None and z < water + gr["units_from_water"] * (gr["water_rule"] == 0):
+                drop("water")
                 continue
+            drop("kept")
             scale = max(0.3, 1.0 + (rng.random() * 2 - 1) * 0.5 * gr["height_range"])
             out.append((g, px, py, z, rng.random() * 2 * math.pi, scale))
     return out

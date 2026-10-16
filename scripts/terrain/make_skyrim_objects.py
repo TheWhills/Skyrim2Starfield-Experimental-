@@ -265,13 +265,15 @@ def cmd_grass(a):
     os.makedirs(out, exist_ok=True)
     # pass 1: scatter every cell; per model the mean Skyrim vertex colour (LAND VCLR) under its instances, which
     # Skyrim multiplies into grass the way it does into the ground (src/fo4sf/skyrimgrass.py)
-    cells_inst, tint_acc = {}, {}
+    cells_inst, tint_acc, why, used_g = {}, {}, {}, set()
     for cy in range(y0, y1 + 1):
         for cx in range(x0, x1 + 1):
             ws, hg = weights.get((cx, cy)), land.grids.get((cx, cy))
             if not ws or hg is None:
                 continue
-            inst = skyrimgrass.scatter(ws, hg, ltex_grass, gras, spacing, rng, a.grass_density, land.water.get((cx, cy)))
+            inst = skyrimgrass.scatter(ws, hg, ltex_grass, gras, spacing, rng, a.grass_density, land.water.get((cx, cy)),
+                                       why)
+            used_g.update(g for g, *_r in inst)
             vc = colours.get((cx, cy))
             by_model = {}
             for g, x, y, z, yaw, sc in inst:
@@ -284,6 +286,15 @@ def cmd_grass(a):
             if by_model:
                 cells_inst[(cx, cy)] = by_model
     tints = {m: (v[0] / v[3], v[1] / v[3], v[2] / v[3]) for m, v in tint_acc.items() if v[3]}
+    print(f"grass: candidates {sum(why.values()):,}: " + ", ".join(f"{k} {v:,}" for k, v in
+                                                                 sorted(why.items(), key=lambda kv: -kv[1])))
+    painted = {g for f in weights.get(((x0 + x1) // 2, (y0 + y1) // 2), {}) for g in ltex_grass.get(f, [])}
+    for g in sorted(used_g | painted, key=lambda g: gras[g]["edid"] if g in gras else ""):
+        if g in gras:
+            r = gras[g]
+            print(f"  GRAS {r['edid']:24} density {r['density']:3} slope {r['min_slope']}-{r['max_slope']} "
+                  f"from water {r['units_from_water']} (rule {r['water_rule']}) pos range {r['position_range']:g} "
+                  f"height range {r['height_range']:g}  {r['model']}")
     print(f"grass: scattered {sum(len(p) for bm in cells_inst.values() for p in bm.values()):,} instances in "
           f"{time.time() - t0:.0f} s")
     conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), out, a.texconv, a.content_resources, None,
