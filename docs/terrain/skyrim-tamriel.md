@@ -186,3 +186,9 @@ Owner's test with the alpha forced to 1: the specks were gone but the whole Dirt
 sky-reflecting patch. So Terrain1Layer reads albedo alpha as a smooth, frost-like sheen: Skyrim's specular alpha (bright
 specks) drew the blobs, alpha 1 everywhere drew the patch, and the alpha-0 areas between the blobs looked like proper
 dirt. Default is now alpha 0 (`--skyrim-ground-alpha zero`), written as BC3 because BC1 turns alpha-0 texels black.
+Correction (owner's alpha-0 test: still one pale patch): the alpha was a red herring. BC1 turned every low-alpha texel of
+Dirt02 black, so the "proper dirt" between the old blobs was black texels and the blobs were the texture's real colour,
+drawn pale and sky-reflecting. A very dark albedo reading as a mirror points at roughness: the object converter's
+uniform roughness (190 / 255) is apparently read the other way round by the terrain shader. Skyrim ground materials now
+keep the vanilla dirt's own roughness map (`--skyrim-ground-roughness vanilla`, default; `uniform` for the old value).
+Alpha stays 0 in BC3 (harmless, and BC1's black texels are avoided).

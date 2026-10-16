@@ -152,10 +152,11 @@ class GroundTests(unittest.TestCase):
         self.assertNotIn(BIOME_ONLY, t.ltex)
         for m in mats:                                                   # cloned from the plain ground's material
             files = [v["File"] for v in m["Summary"]["Layer1"]["Textures"].values()]
-            self.assertTrue(all("skyrim/ground" in f.replace("\\", "/").lower() for f in files), files)
+            self.assertEqual([f for f in files if "skyrim/ground" not in f.replace("\\", "/").lower()],
+                             ["terrain/r.dds"], files)
             comp = [c["Data"]["FileName"] for o in m["Objects"] for c in o["Components"]
                     if c["Type"] == "BSMaterial::MRTextureFile"]
-            self.assertFalse([f for f in comp if f.startswith("terrain/")], comp)        # no vanilla map left
+            self.assertEqual([f for f in comp if f.startswith("terrain/")], ["terrain/r.dds"], comp)   # only roughness
             self.assertTrue(any(f.lower().endswith("_height.dds") and "_flat_" not in f.lower() for f in comp), comp)
             self.assertTrue(any(f.lower().endswith("_flat_ao.dds") for f in comp))
             ts = [c["Data"] for o in m["Objects"] for c in o["Components"]
