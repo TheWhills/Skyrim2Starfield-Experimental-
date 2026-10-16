@@ -145,6 +145,9 @@ class GroundTests(unittest.TestCase):
             ov = prm["ltex_overrides"]
             mats = [json.load(open(os.path.join(out, "Data", *("materials\\" + o["material"].split("materials\\", 1)[-1])
                                                 .split("\\")))) for o in ov]
+            mp = json.load(open(os.path.join(out, "ltex_mapping.json")))
+        used = {v["starfield"] for v in mp["skyrim"].values()}
+        self.assertTrue(all(u.startswith("SKYG_") for u in used), used)   # no vanilla ground left anywhere
         self.assertEqual(len(ov), 3, so.getvalue())                      # 4 Skyrim textures, 3 spare records
         self.assertEqual(sorted(o["form_id"] for o in ov), [SPARE1, SPARE2, SPARE3])
         self.assertTrue(all(o["material"].lower().startswith("materials\\skyrim\\ground\\") for o in ov))

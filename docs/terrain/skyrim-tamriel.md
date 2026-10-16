@@ -248,3 +248,8 @@ how many matched. **Supported hypothesis.** (2) Flat water sheets hung in the ai
 refuses any level that floods more than 2 % of ground Skyrim keeps dry. (3) Water default is now WaterOceanDark
 0560D0 (owner's final pick). (4) Mountains look bare and white because only the cells around Riverwood have objects:
 Skyrim covers its mountains with mountain / cliff meshes; widen `make_skyrim_objects.py export --radius`.
+**Correction (2026-10-16):** the orange ground (owner's close-up at getpos 911.74, -1783.52: boot prints) is
+Starfield's own LDirtFootprints01, the plain-ground fallback. Skyrim's engine-default land texture (BTXT FormID 0) and
+the Skyrim textures beyond the spare records mapped to it, near and far; the "distant view shows the record's vanilla
+look" idea above was wrong for that. With `--skyrim-ground` every category and the default now map to a converted
+Skyrim texture (default: LDirt02), so no vanilla Starfield ground remains.

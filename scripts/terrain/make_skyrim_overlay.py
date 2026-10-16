@@ -223,7 +223,7 @@ def land_textures(a, land, out):
     """Skyrim's ground texture layers for the BTD (src/fo4sf/landtex.py): returns tile -> (LTEX table, sample weights,
     quad map) for make_cw_overlays.build, and writes <out>/ltex_mapping.json (editable; pass back with --ltex-mapping)."""
     import numpy as np
-    from fo4sf import landtex
+    from fo4sf import landtex, skyrimground
     sf_esm = os.path.join(a.sf_data, "Starfield.esm")
     sf = landtex.starfield_ltex(sf_esm)
     if not sf:
@@ -247,6 +247,25 @@ def land_textures(a, land, out):
         sf = dict(sf, **ground["names"])                    # "SKYG_<Skyrim EditorID>" -> the overridden slot
         override = dict(override or {})
         override["skyrim"] = dict(ground["skyrim"], **(override.get("skyrim") or {}))
+        # nothing may fall back to a vanilla Starfield texture (owner's Riverwood: the engine-default Skyrim ground and
+        # the few unconverted textures drew as Starfield's orange DirtFootprints01, near and far): every category and
+        # the default take the most-covering converted Skyrim texture of that category (else of any)
+        by_edid = {v["edid"]: v for v in ltex.values()}
+        conv_order = [o["skyrim"] for o in ground["overrides"]]          # coverage order
+        if conv_order:
+            first = {}
+            for e in conv_order:
+                first.setdefault(landtex.category(e, by_edid.get(e, {}).get("diffuse", "")), ground["skyrim"][e])
+            anyone = ground["skyrim"][conv_order[0]]
+            cats = dict(override.get("categories") or {})
+            for c, _w in landtex.CATEGORIES:
+                cats.setdefault(c, first.get(c) or next((first[r] for r in skyrimground.RELATED.get(c, ())
+                                                          if r in first), anyone))
+            override["categories"] = cats
+            dirt = ground["skyrim"].get("LDirt02") or cats["dirt"]
+            override.setdefault("default", dirt)
+            print(f"skyrim ground: engine-default ground -> {override['default']}; unconverted textures use their "
+                  f"category's converted Skyrim texture (no vanilla Starfield ground)")
     mapping = landtex.build_mapping(ltex, sf, override, usage if nbtd else None)
     for cat, v in mapping["categories"].items():
         print(f"  {cat:7} -> {v['edid']}" + (f" (in {v['vanilla_btds']} vanilla BTDs)" if "vanilla_btds" in v else ""))
