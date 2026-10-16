@@ -284,7 +284,7 @@ class HeightOffsetTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.median(hs[200.0][0] - hs[0.0][0])), 200.0, delta=0.05)
         ov = hs[200.0][1]
         self.assertEqual(ov["height_offset_m"], 200.0)
-        self.assertEqual(prm["water"], {"form": "000018", "cells": []})   # fixture cells have no water flag
+        self.assertEqual(prm["water"], {"form": "01C0CC", "cells": []})   # fixture cells have no water flag
         r, = mo.to_local([{"pos": [70.0, 140.0, 700.0]}], ov)
         self.assertAlmostEqual(r["pos"][2], 700.0 + 200.0 * 70.0)
 

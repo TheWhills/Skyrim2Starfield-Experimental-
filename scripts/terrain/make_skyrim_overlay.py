@@ -493,9 +493,10 @@ def main(argv=None):
     ap.add_argument("--skyrim-water", action="store_true",
                     help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
                          "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
-    ap.add_argument("--skyrim-water-form", default="000018",
-                    help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 000018, "
-                         "the LOD water New Atlantis and the Mars template name)")
+    ap.add_argument("--skyrim-water-form", default="01C0CC",
+                    help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 01C0CC "
+                         "WaterClearLake, the owner's pick over WaterClear 000018, WaterOceanDark 0560D0 and WaterSilt "
+                         "190D1F in Riverwood side-by-sides)")
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="which LTEX table entry a BTD quadrant byte b names: head = b - 1 (Starfield, default), "
                          "tail = n - b (Fallout 76, the old rule; only for comparison)")

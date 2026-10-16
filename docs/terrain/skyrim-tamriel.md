@@ -235,5 +235,8 @@ default). Starfield keeps the same cell fields (Mutagen Starfield Cell.xml: XCLW
 cells with their own level (WRLD XCLW CellWaterHeightLocations + WHGT WaterHeights; New Atlantis lists 8 cells in the
 owner's dump). `build --skyrim-water` gives each 100 m Starfield cell the Skyrim level that keeps most of Skyrim's wet /
 dry LAND vertices inside it right (src/fo4sf/skyrimwater.py); TerrainOverlays sets HasWater, WaterHeight, Water
-(`--skyrim-water-form`, default WATR 000018) and fills the world's two lists. Sea-level cells stay the planet ocean.
+(`--skyrim-water-form`, default WATR 01C0CC WaterClearLake) and fills the world's two lists. Sea-level cells stay the planet ocean.
 **Supported hypothesis**, not yet seen in game. Not included: Skyrim's placed waterfalls / flowing-water effect meshes.
+**Verified in game (2026-10-16):** Riverwood's river fills its channel at Skyrim's level. Water type: the owner
+compared WaterClear 000018 (bright lagoon green), WaterOceanDark 0560D0, WaterClearLake 01C0CC and WaterSilt 190D1F
+and picked WaterClearLake, now the default. `SfInspect list Water` lists the 15 Starfield.esm WATR records.
