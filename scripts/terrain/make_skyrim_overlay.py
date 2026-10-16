@@ -124,7 +124,12 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
         slots = [f for f in slots if f not in skip]
         print(f"skyrim ground: not using LTEX slots {', '.join(f'{f:08X}' for f in sorted(skip))}")
     cov = skyrimground.coverage(cells)
-    chosen, fallback = skyrimground.plan(ltex, cov, slots[:a.skyrim_ground_max])
+    chosen, fallback = skyrimground.plan(ltex, cov, slots[:a.skyrim_ground_max] if a.skyrim_ground_max < len(slots)
+                                         else slots, {sl: fields[sl]["edid"] for sl in slots})
+    matched = sum(1 for f, sl in chosen if skyrimground.slot_score(
+        landtex.category(ltex[f]["edid"], ltex[f]["diffuse"]), fields[sl]["edid"]) >= 3)
+    print(f"skyrim ground: {matched} of {len(chosen)} Skyrim textures on a spare record of the same kind of ground "
+          f"(distant terrain shows the record's vanilla look)")
     print(f"skyrim ground: {len(slots)} spare Starfield LTEX records; converting {len(chosen)} of "
           f"{sum(1 for f in cov if cov[f] > 0)} Skyrim ground textures in use")
     conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(os.path.dirname(os.path.abspath(a.skyrim))),
@@ -493,10 +498,10 @@ def main(argv=None):
     ap.add_argument("--skyrim-water", action="store_true",
                     help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
                          "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
-    ap.add_argument("--skyrim-water-form", default="01C0CC",
-                    help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 01C0CC "
-                         "WaterClearLake, the owner's pick over WaterClear 000018, WaterOceanDark 0560D0 and WaterSilt "
-                         "190D1F in Riverwood side-by-sides)")
+    ap.add_argument("--skyrim-water-form", default="0560D0",
+                    help="build --skyrim-water: hex FormID of the Starfield.esm WATR the cells use (default 0560D0 "
+                         "WaterOceanDark, the owner's pick; also tried WaterClear 000018, WaterClearLake 01C0CC, "
+                         "WaterSilt 190D1F)")
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="which LTEX table entry a BTD quadrant byte b names: head = b - 1 (Starfield, default), "
                          "tail = n - b (Fallout 76, the old rule; only for comparison)")

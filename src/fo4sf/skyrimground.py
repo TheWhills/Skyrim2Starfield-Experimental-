@@ -99,12 +99,40 @@ def coverage(cells) -> Dict[int, float]:
     return tot
 
 
-def plan(ltex: Dict[int, dict], cov: Dict[int, float], slots: List[int]):
+# categories that look alike from afar (landtex.CATEGORIES names)
+RELATED = {"snow": ("ice",), "ice": ("snow",), "road": ("gravel", "dirt"), "gravel": ("road", "rock", "dirt"),
+           "rock": ("gravel", "ash"), "sand": ("dirt", "gravel"), "mud": ("dirt",), "ash": ("rock", "gravel"),
+           "forest": ("grass", "dirt"), "grass": ("forest",), "dirt": ("mud", "gravel", "road", "sand")}
+ODD_COLOURS = ("orange", "purple", "red", "sulfur", "sulphur", "blue", "pink", "yellow", "black", "white", "teal",
+               "green", "alien", "volcan", "lava", "toxic", "crystal")
+
+
+def slot_score(sky_cat: str, vanilla_edid: str) -> int:
+    """How well a spare Starfield LTEX suits a Skyrim texture of category sky_cat. Starfield draws distant terrain
+    with something tied to the LTEX record itself, not to the material our override points at: the owner's Jemison
+    views showed the overridden records' VANILLA looks far away (orange / purple sand patches on Skyrim grass, snow
+    on dirt). So a Skyrim texture takes a record whose vanilla ground looks alike: same category 4, a related one 2,
+    minus 1 for a coloured variant (…_Orange, …_Purple)."""
+    vc = landtex.category(vanilla_edid, "")
+    score = 4 if vc == sky_cat else 2 if vc in RELATED.get(sky_cat, ()) else 0
+    return score - (1 if any(w in vanilla_edid.lower() for w in ODD_COLOURS) else 0)
+
+
+def plan(ltex: Dict[int, dict], cov: Dict[int, float], slots: List[int], slot_edids: Optional[Dict[int, str]] = None):
     """(chosen [(skyrim fid, slot fid)], fallback {skyrim fid: chosen skyrim fid}): the most-covering Skyrim textures
-    with a diffuse get the free slots in order; every other covered Skyrim texture borrows the chosen one of its
-    category with the most coverage (absent: no entry, the category's Starfield pick applies)."""
+    with a diffuse get the free slots; with slot_edids ({slot: vanilla EditorID}) each takes, in coverage order, the
+    free slot whose vanilla ground looks most like it (slot_score), else slots in order. Every other covered Skyrim
+    texture borrows the chosen one of its category with the most coverage (absent: the category's Starfield pick)."""
     ranked = [f for f in sorted(cov, key=lambda f: -cov[f]) if f in ltex and ltex[f].get("diffuse") and cov[f] > 0]
-    chosen = list(zip(ranked, slots))
+    if slot_edids:
+        free, chosen = list(slots), []
+        for f in ranked[:len(slots)]:
+            cat = landtex.category(ltex[f]["edid"], ltex[f]["diffuse"])
+            best_slot = max(free, key=lambda sl: (slot_score(cat, slot_edids.get(sl, "")), -free.index(sl)))
+            free.remove(best_slot)
+            chosen.append((f, best_slot))
+    else:
+        chosen = list(zip(ranked, slots))
     picked = {f for f, _s in chosen}
     best = {}
     for f, _s in chosen:

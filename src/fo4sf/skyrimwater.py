@@ -11,7 +11,8 @@ water at their XCLW.
 
 Starfield cells are 100 m, Skyrim's 58.5 m, so one Starfield cell can span two river steps. Each Starfield cell takes
 the level that keeps most of Skyrim's LAND vertices inside it right: wet where Skyrim had water above the ground, dry
-where it had none. Cells whose best level is the sea (the default) are left to the planet's own ocean.
+where it had none, and never more than 2 % of them wet where Skyrim is dry (owner's Jemison views: a mountain lake's
+level otherwise hung as a flat sheet over the slope beside it). Cells whose best level is the sea (the default) are left to the planet's own ocean.
 """
 from typing import Dict, List, Optional, Tuple
 
@@ -24,7 +25,7 @@ STEP = fo4land.CELL_UNITS / 32.0
 
 def cell_levels(grids: Dict[Tuple[int, int], "object"], water: Dict[Tuple[int, int], Optional[float]],
                 default_water: Optional[float], origin_m=(0.0, 0.0), offset_m: float = 0.0,
-                cell_range: Optional[Tuple[int, int]] = None) -> List[dict]:
+                cell_range: Optional[Tuple[int, int]] = None, max_false_wet: float = 0.02) -> List[dict]:
     """[{"cell": [x, y], "height_m", "wet_vertices", "agree"}] for every Starfield cell that should hold water above
     the sea. grids: SkyrimLand.grids (33 x 33 heights, units); water: SkyrimLand.water (units, cells with water only);
     origin_m: the overlay's origin_cw_m; offset_m: --height-offset; cell_range: (min, max) overlay cell index."""
@@ -46,9 +47,16 @@ def cell_levels(grids: Dict[Tuple[int, int], "object"], water: Dict[Tuple[int, i
             continue
         best, best_score = None, -1
         for h in sorted({w for _z, w in wet}):
+            # a level that floods ground Skyrim keeps dry (a mountain lake's level over the valley beside it) would
+            # hang in the air as a flat sheet over that ground: allow at most max_false_wet of the cell's vertices
+            false_wet = sum(1 for z, w in verts if z < h and not (w is not None and z < w))
+            if false_wet > max_false_wet * len(verts):
+                continue
             score = sum(1 for z, w in verts if (w is not None and z < w) == (z < h))
             if score > best_score:
                 best, best_score = h, score
+        if best is None:
+            continue
         if default_water is not None and abs(best - default_water) < 1.0:
             continue                                   # the sea: the planet's ocean already draws it
         out.append({"cell": list(sc), "height_m": round(best / UNITS_PER_M + offset_m, 3), "wet_vertices": len(wet),

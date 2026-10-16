@@ -33,6 +33,14 @@ class LevelTests(unittest.TestCase):
         self.assertIn(c["height_m"], (5.0, -5.0))
         self.assertGreaterEqual(c["agree"], 0.5)
 
+    def test_a_level_that_floods_dry_ground_is_refused(self):
+        lake = np.full((33, 33), 1000.0); lake[:5, :5] = 0.0         # a small lake (water 700) in high ground
+        valley = np.full((33, 33), -3000.0)                           # dry valley beside it, far below the lake
+        got = skyrimwater.cell_levels({(0, 0): lake, (1, 0): valley}, {(0, 0): 700.0}, SEA)
+        self.assertEqual(got, [])                                     # the lake's level would hang over the valley
+        got = skyrimwater.cell_levels({(0, 0): lake, (1, 0): valley}, {(0, 0): 700.0}, SEA, max_false_wet=1.0)
+        self.assertEqual(len(got), 1)
+
     def test_cell_range_and_origin(self):
         got = skyrimwater.cell_levels({(0, 0): np.zeros((33, 33))}, {(0, 0): 700.0}, SEA, origin_m=(200.0, 0.0),
                                       cell_range=(-36, 36))

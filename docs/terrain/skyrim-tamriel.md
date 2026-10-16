@@ -240,3 +240,11 @@ dry LAND vertices inside it right (src/fo4sf/skyrimwater.py); TerrainOverlays se
 **Verified in game (2026-10-16):** Riverwood's river fills its channel at Skyrim's level. Water type: the owner
 compared WaterClear 000018 (bright lagoon green), WaterOceanDark 0560D0, WaterClearLake 01C0CC and WaterSilt 190D1F
 and picked WaterClearLake, now the default. `SfInspect list Water` lists the 15 Starfield.esm WATR records.
+Owner's wider Jemison views (2026-10-16): (1) far away, Skyrim grass showed orange / purple sand and dirt showed snow:
+the distant terrain draws with something tied to the LTEX record, not to the override's material, so it shows the
+spare records' VANILLA looks (LSandRipple01_Orange, LSandRough03_Purple, LSnowLumpy01, ...). Spare records are now
+matched by ground kind (skyrimground.slot_score: same category, related one, coloured variants last); the build prints
+how many matched. **Supported hypothesis.** (2) Flat water sheets hung in the air beside mountain lakes: a cell now
+refuses any level that floods more than 2 % of ground Skyrim keeps dry. (3) Water default is now WaterOceanDark
+0560D0 (owner's final pick). (4) Mountains look bare and white because only the cells around Riverwood have objects:
+Skyrim covers its mountains with mountain / cliff meshes; widen `make_skyrim_objects.py export --radius`.

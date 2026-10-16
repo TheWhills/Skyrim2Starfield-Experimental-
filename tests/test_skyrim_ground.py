@@ -234,6 +234,23 @@ class TintTests(unittest.TestCase):
         self.assertEqual(tints[2], (1.0, 1.0, 1.0))
 
 
+class SlotMatchTests(unittest.TestCase):
+    def test_textures_take_records_whose_vanilla_ground_looks_alike(self):
+        self.assertGreater(skyrimground.slot_score("grass", "LGrassMeadow01"),
+                           skyrimground.slot_score("grass", "LSandRipple01_Orange"))
+        self.assertGreater(skyrimground.slot_score("sand", "LSandWavy01_Gray"),
+                           skyrimground.slot_score("sand", "LSandRipple01_Orange"))
+        ltex = {1: {"edid": "LFieldGrass01", "diffuse": "g.dds"}, 2: {"edid": "LSnow01", "diffuse": "s.dds"},
+                3: {"edid": "LDirt02", "diffuse": "d.dds"}}
+        cov = {1: 30.0, 2: 20.0, 3: 10.0}
+        slots = [0x10, 0x11, 0x12]
+        names = {0x10: "LSnowLumpy01", 0x11: "LSandRipple01_Orange", 0x12: "LGrassAridSparse01"}
+        chosen, _fb = skyrimground.plan(ltex, cov, slots, names)
+        self.assertEqual(dict(chosen), {1: 0x12, 2: 0x10, 3: 0x11})
+        chosen, _fb = skyrimground.plan(ltex, cov, slots)              # without names: slots in order
+        self.assertEqual(dict(chosen), {1: 0x10, 2: 0x11, 3: 0x12})
+
+
 class ColourTestTests(unittest.TestCase):
     def test_parse_and_colour_dds(self):
         from fo4sf import textures as tx
@@ -284,7 +301,7 @@ class HeightOffsetTests(unittest.TestCase):
         self.assertAlmostEqual(float(np.median(hs[200.0][0] - hs[0.0][0])), 200.0, delta=0.05)
         ov = hs[200.0][1]
         self.assertEqual(ov["height_offset_m"], 200.0)
-        self.assertEqual(prm["water"], {"form": "01C0CC", "cells": []})   # fixture cells have no water flag
+        self.assertEqual(prm["water"], {"form": "0560D0", "cells": []})   # fixture cells have no water flag
         r, = mo.to_local([{"pos": [70.0, 140.0, 700.0]}], ov)
         self.assertAlmostEqual(r["pos"][2], 700.0 + 200.0 * 70.0)
 
