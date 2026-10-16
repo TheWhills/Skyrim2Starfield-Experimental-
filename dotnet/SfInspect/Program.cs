@@ -6,6 +6,7 @@
 //   wrld [substr]            every WRLD with terrain/planet/parent fields      sfbk [substr]   every SurfaceBlock (BTD path, sizes)
 //   planetworlds             planets registering master worldspaces            wcells <WRLD> [out.tsv]   cells + ref positions
 //   form <hex>... | form type:<TypePrefix> <EditorID substr>   one-level dump of any record      landcount
+//   layers <WRLD> [layer substr]   refs per layer; refs (and their bases) of matching layers
 //   list <TypePrefix> [EditorID substr]   FormKey + EditorID of every matching record (e.g. list Water)
 // Note: opening a plugin other than Starfield.esm needs a master flag lookup (not implemented).
 using Mutagen.Bethesda.Plugins.Cache;
@@ -228,6 +229,37 @@ switch (args[1])
                         tsv.WriteLine($"{g?.X}\t{g?.Y}\t{r.FormKey}\t{r.Base.FormKey}\t{bt?.GetType().Name.Replace("BinaryOverlay", "")}\t{bt?.EditorID}\t{r.Position.X}\t{r.Position.Y}\t{r.Position.Z}");
                     }
             }
+        }
+        break;
+    case "layers":   // read-only: layers <WRLD EditorID> [layer substr] -> refs per layer; for matching layers each ref's base
+        {
+            var w = mod.Worldspaces.First(x => string.Equals(x.EditorID, args[2], StringComparison.OrdinalIgnoreCase));
+            var sub = w.SubCells.SelectMany(b => b.Items).SelectMany(s => s.Items).ToList();
+            var all = sub.Concat(w.TopCell != null ? new[] { w.TopCell } : Array.Empty<ICellGetter>());
+            var want = args.Length > 3 ? args[3] : "";
+            var per = new Dictionary<string, int>();
+            int shown = 0;
+            foreach (var c in all)
+                foreach (var r in c.Temporary.Concat(c.Persistent).OfType<IPlacedObjectGetter>())
+                {
+                    var ln = r.Layer.IsNull ? "(none)" : (cache.TryResolve<ILayerGetter>(r.Layer.FormKey, out var l) ? l.EditorID ?? "?" : r.Layer.FormKey.ToString());
+                    per[ln] = per.GetValueOrDefault(ln) + 1;
+                    if (want.Length > 0 && ln.Contains(want, StringComparison.OrdinalIgnoreCase) && shown < 40)
+                    {
+                        var b = cache.TryResolve(r.Base.FormKey, out var br) ? br : null;
+                        string model = "";
+                        if (b != null)
+                        {
+                            var mp = b.GetType().GetProperty("Model")?.GetValue(b);
+                            model = mp?.GetType().GetProperty("File")?.GetValue(mp)?.ToString() ?? "";
+                        }
+                        Console.WriteLine($"  [{ln}] ref {r.FormKey} flags=0x{r.MajorRecordFlagsRaw:X} cell {c.Grid?.Point} pos ({r.Position.X:F1}, {r.Position.Y:F1}, {r.Position.Z:F1}) scale {r.Scale} " +
+                                          $"base {r.Base.FormKey} {b?.GetType().Name.Replace("BinaryOverlay", "")} {b?.EditorID} flags=0x{b?.MajorRecordFlagsRaw:X} model={model}");
+                        shown++;
+                    }
+                }
+            foreach (var kv in per.OrderByDescending(kv => kv.Value).Take(40))
+                Console.WriteLine($"{kv.Value,7}  {kv.Key}");
         }
         break;
     case "planetworlds": // read-only: planets (PNDT) that register master worldspaces (lat/long) + their surface tree
