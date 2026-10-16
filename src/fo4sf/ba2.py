@@ -101,11 +101,18 @@ class Ba2:
                 f.seek(e.offset)
                 raw = f.read(e.packed or e.unpacked)
                 return zlib.decompress(raw) if e.packed else raw
-            if self.version == 3 and self.compression == 3:
-                raise Ba2Error("LZ4-compressed (v3) textures are not supported")
+            lz4 = self.version == 3 and self.compression == 3
+            if lz4:
+                try:
+                    import lz4.block as lz4block              # Starfield's texture archives: LZ4 block chunks
+                except ImportError as ex:
+                    raise Ba2Error("LZ4-compressed (v3) textures need the lz4 package (pip install lz4)") from ex
             out = [_dds_header_dx10(e.width, e.height, e.mips, e.dxgi, e.cubemap)]
             for off, pk, up, _s, _e in e.chunks:
                 f.seek(off)
                 raw = f.read(pk or up)
-                out.append(zlib.decompress(raw) if pk else raw)
+                if pk and lz4:
+                    out.append(lz4block.decompress(raw, uncompressed_size=up))
+                else:
+                    out.append(zlib.decompress(raw) if pk else raw)
             return b"".join(out)
