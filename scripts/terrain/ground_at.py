@@ -90,7 +90,8 @@ def main(argv=None):
     print("Skyrim paints here (weight, EditorID, diffuse):")
     for fid, edid, diff, _nrm, w in layers:
         print(f"  {w:5.3f}  {edid:32} {diff}")
-    over = {int(o["form_id"]): o["skyrim"] for o in prm.get("ltex_overrides", [])}
+    over = {int(o["form_id"]): f"{o['skyrim']}, vanilla record {o.get('vanilla_edid', '?')}"
+            for o in prm.get("ltex_overrides", [])}
     q, alphas, table, (r, c) = btd_sample(os.path.join(a.terrain, "Data", "Terrain", f"{ov['world']}.btd"), *a.pos)
     n = len(table)
 

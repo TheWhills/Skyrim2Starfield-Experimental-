@@ -119,6 +119,10 @@ def skyrim_ground(a, ltex, cells, usage, out):
     with open(os.path.join(out, "ground_template.mat.json"), "w", encoding="utf-8") as f:
         json.dump(template, f, indent=1)
     slots = skyrimground.free_slots(sf_esm, usage, fields)
+    skip = {int(x, 16) for x in (a.skyrim_ground_skip_slots or "").replace(" ", "").split(",") if x}
+    if skip:
+        slots = [f for f in slots if f not in skip]
+        print(f"skyrim ground: not using LTEX slots {', '.join(f'{f:08X}' for f in sorted(skip))}")
     cov = skyrimground.coverage(cells)
     chosen, fallback = skyrimground.plan(ltex, cov, slots[:a.skyrim_ground_max])
     print(f"skyrim ground: {len(slots)} spare Starfield LTEX records; converting {len(chosen)} of "
@@ -147,6 +151,9 @@ def skyrim_ground(a, ltex, cells, usage, out):
                                          if name.replace("/", "\\").lower() in by_diffuse else real2(name))
         print(f"skyrim ground: COLOUR TEST, {len(by_diffuse)} textures painted solid"
               + (f"; not among the converted textures: {missing}" if missing else ""))
+        for f, slot in chosen:
+            if ltex[f]["edid"].lower() in cols:
+                print(f"  {ltex[f]['edid']:28} -> LTEX {slot:08X} (vanilla {fields[slot]['edid']})")
     names, sky, overrides, failed, done = {}, {}, [], {}, {}
     for fid, slot in chosen:
         v = ltex[fid]
@@ -478,6 +485,9 @@ def main(argv=None):
                     help="build --skyrim-ground: paint named Skyrim textures as solid colours to see which layer the "
                          "terrain draws where, e.g. LDirt02=cyan,LPineForest01=red (red green blue yellow magenta cyan "
                          "orange white black)")
+    ap.add_argument("--skyrim-ground-skip-slots", default="",
+                    help="build --skyrim-ground: spare Starfield LTEX FormIDs (hex, comma separated) not to override, "
+                         "e.g. one whose override does not show in game")
     ap.add_argument("--skyrim-ground-test", action="store_true",
                     help="build --skyrim-ground: paint a magenta / green checkerboard instead of Skyrim's colours, to "
                          "see in game whether the overridden ground textures are what the terrain draws")
