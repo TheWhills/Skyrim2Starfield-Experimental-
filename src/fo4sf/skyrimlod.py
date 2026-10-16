@@ -136,6 +136,14 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
         cell = (int(math.floor(r["pos"][0] / CELL_M)), int(math.floor(r["pos"][1] / CELL_M)))
         groups.setdefault((r["base"], cell), []).append((np.asarray(r["pos"], np.float64),
                                                          np.asarray(exterior.ref_matrix(r["rot"])).reshape(3, 3), sc))
+    manifest = os.path.join(data_dir, "lodsettings", f"{world.lower()}.files.json")
+    if os.path.isfile(manifest):                      # a rerun: remove what the previous run wrote
+        import json
+        for rel in json.load(open(manifest, encoding="utf-8")):
+            p = os.path.join(data_dir, *rel.split("/"))
+            if os.path.isfile(p):
+                os.remove(p)
+    written: List[str] = []
     data, (x0, y0, size) = lodsettings(cell_min, cell_max)
     wl = world.lower()
     os.makedirs(os.path.join(data_dir, "lodsettings"), exist_ok=True)
@@ -160,6 +168,7 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
                 os.makedirs(os.path.dirname(mp), exist_ok=True)
                 with open(mp, "wb") as f:
                     f.write(raw)
+                written.append(f"geometries/{d}/{fn}.mesh")
                 pts = [sfmesh.decode_position(p, m.scale) for p in m.positions]
                 sphere, box = sfnif.bounds_from_points(pts)
                 out.append(sfnif.StaticShape(b"LOD", f"{d}\\{fn}".encode(), len(m.triangles) * 3, len(m.positions),
@@ -181,8 +190,12 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
             f = sfnif.build_static_nif(node, shapes)
             with open(os.path.join(root, name.lower() + ".nif"), "wb") as fh:
                 fh.write(nifmod.serialize(f))
+            written.append(f"meshes/lod/generated/composite/{wl}/{name.lower()}.nif")
             nfiles += 1
             flagged.add(bi)
+    import json
+    with open(manifest, "w", encoding="utf-8") as fh:
+        json.dump(written, fh)
     return {"lodsettings": [x0, y0, size], "objects_with_lod": len(flagged), "instances": ninst,
             "skipped_small": skipped_small, "meshes": nmesh, "mesh_bytes": nbytes, "nif_files": nfiles,
             "flag_bases": sorted(flagged)}

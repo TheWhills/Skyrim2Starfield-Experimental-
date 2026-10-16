@@ -54,6 +54,12 @@ class CommandTests(unittest.TestCase):
                      "--texconv", texconv, "--collision-template", sf["collision_template"]])
             so.main(["stage", "--work", work, "--terrain", terrain, "--out", out])
             so.main(["lod", "--out", out, "--lod-min-radius", "1"])
+            first = len(glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*", "*.nif")))
+            so.main(["lod", "--out", out, "--lod-min-radius", "100000"])          # a rerun cleans up the first
+            self.assertEqual(glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*",
+                                                    "*.nif")), [])
+            self.assertGreater(first, 0)
+            so.main(["lod", "--out", out, "--lod-min-radius", "1"])
             obj = json.load(open(os.path.join(out, "objects.json")))
             lodset = open(os.path.join(out, "Data", "lodsettings", "sky_tamriel.lod"), "rb").read()
             files = glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "sky_tamriel", "*.nif"))
