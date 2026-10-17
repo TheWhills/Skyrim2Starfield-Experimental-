@@ -410,6 +410,7 @@ def cmd_lod(a):
     objects = load(obj_path)
     data = os.path.join(a.out, "Data")
     distant_sea(a, objects, data, ov)
+    river_meshes(a, prm, objects, data)
     if a.no_metal_fix:
         print("materials: metalness fix off")
     elif not a.texconv:
@@ -524,6 +525,25 @@ def distant_sea(a, objects, data, ov):
                        colour=tuple(int(v) for v in a.sea_colour.split(",")), roughness=a.sea_roughness)
     print(f"distant sea: {st['pieces']} pieces ({st['tile_m']:g} m tiles over the map, reaching {st['reach_m']:g} m "
           f"past it) at z {st['z']:g} m (sea level {float(sea):g} m)")
+
+
+def river_meshes(a, prm, objects, data):
+    """--river-meshes: Skyrim's rivers / lakes as flat water statics at each water cell's level (skyrimsea.add_rivers),
+    for Jemison's ocean spot, where our cell water did not draw."""
+    from fo4sf import skyrimsea
+    if not a.river_meshes:
+        n = skyrimsea.remove(objects, skyrimsea.RIVER_EDID, skyrimsea.RIVER_SRC)
+        if n:
+            print("river meshes: off (earlier ones removed)")
+        return
+    if not (a.content_resources and a.texconv):
+        sys.exit("--river-meshes needs --content-resources and --texconv (for the water material)")
+    cells = (prm.get("water") or {}).get("cells") or []
+    material = skyrimsea.write_material(data, a.content_resources, a.texconv,
+                                        tuple(int(v) for v in a.sea_colour.split(",")), a.sea_roughness)
+    n = skyrimsea.add_rivers(objects, data, cells, material)
+    print(f"river meshes: {n} water pieces (one per river / lake cell)"
+          + ("" if n else "; overlays_params.json has no water cells (build the terrain with --skyrim-water)"))
 
 
 def object_lod(a, objects, data, world):
@@ -808,6 +828,8 @@ def main(argv=None):
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
     ap.add_argument("--no-metal-fix", action="store_true",
                     help="lod: leave the materials' metalness as converted (constant 0 replacement)")
+    ap.add_argument("--river-meshes", action="store_true",
+                    help="lod: rivers / lakes as flat water objects too (Jemison's ocean spot drew no cell water)")
     ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")
     ap.add_argument("--sea-reach", type=float, default=60000.0, help="lod: how far the distant sea reaches past the map (m)")
     ap.add_argument("--sea-colour", default=",".join(map(str, skyrimsea_defaults()[0])),

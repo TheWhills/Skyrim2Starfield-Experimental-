@@ -145,16 +145,16 @@ def write_material(data_dir: str, content_resources: str, texconv: str, colour=C
     return MAT_REL.replace("/", "\\")
 
 
-def remove(objects: dict) -> int:
-    """Drop an earlier run's sea bases and references from objects.json (reindexing the other references)."""
-    keep = [i for i, b in enumerate(objects["bases"]) if not b["edid"].startswith(EDID_PREFIX)]
+def remove(objects: dict, prefix: str = EDID_PREFIX, src_prefix: str = SRC_PREFIX) -> int:
+    """Drop an earlier run's sea (or river) bases and references from objects.json (reindexing the other references)."""
+    keep = [i for i, b in enumerate(objects["bases"]) if not b["edid"].startswith(prefix)]
     if len(keep) == len(objects["bases"]):
         return 0
     new = {old: new for new, old in enumerate(keep)}
     n = len(objects["bases"]) - len(keep)
     objects["bases"] = [objects["bases"][i] for i in keep]
     objects["refs"] = [dict(r, base=new[r["base"]]) for r in objects["refs"]
-                       if not str(r.get("src", "")).startswith(SRC_PREFIX) and r["base"] in new]
+                       if not str(r.get("src", "")).startswith(src_prefix) and r["base"] in new]
     return n
 
 
@@ -201,3 +201,28 @@ def add(objects: dict, data_dir: str, cell_min: int, cell_max: int, sea_level_m:
                                 "disabled": False})
         n += 1
     return {"pieces": n, "tile_m": round(t, 3), "reach_m": reach, "z": z}
+
+
+RIVER_EDID = "SKY_RiverWater"
+RIVER_SRC = "river_water:"
+
+
+def add_rivers(objects: dict, data_dir: str, cells, material: str, below_m: float = 0.1) -> int:
+    """One flat 100 m water piece per river / lake cell [[x, y, height_m], ...] (overlays_params.json "water"), at
+    the cell's level: at Jemison's ocean spot the engine drew none of our cell water (owner, 2026-10-17: rivers gone,
+    the planet's sea present), so the rivers are drawn like the distant sea. Like cell water, a piece covers its whole
+    cell and the banks above its level hide it."""
+    remove(objects, RIVER_EDID, RIVER_SRC)
+    if not cells:
+        return 0
+    o = 0.5
+    pos, uv, tris = quads(-50.0 - o, 50.0 + o, -50.0 - o, 50.0 + o, 0.0, 101.0)
+    model, bounds = write_model(data_dir, "river", pos, uv, tris, material)
+    bi = len(objects["bases"])
+    objects["bases"].append({"edid": RIVER_EDID, "model": model, "source": "generated: river water",
+                             "collision": "none", "bounds": bounds})
+    for n, (x, y, h) in enumerate(cells):
+        objects["refs"].append({"src": f"{RIVER_SRC}{n}", "base": bi, "cell": [int(x), int(y)],
+                                "pos": [int(x) * 100.0 + 50.0, int(y) * 100.0 + 50.0, round(float(h) - below_m, 4)],
+                                "rot": [0.0, 0.0, 0.0], "scale": 1.0, "disabled": False})
+    return len(cells)

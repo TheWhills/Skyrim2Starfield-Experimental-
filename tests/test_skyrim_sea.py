@@ -51,6 +51,16 @@ class DistantSea(unittest.TestCase):
             self.assertEqual(objects["refs"], [{"src": "x", "base": 0, "cell": [0, 0], "pos": [1, 2, 3],
                                                 "rot": [0, 0, 0], "scale": 1}])
 
+    def test_rivers_one_piece_per_cell_and_rerun(self):
+        objects = {"bases": [], "refs": []}
+        with tempfile.TemporaryDirectory() as d:
+            n = sea.add_rivers(objects, d, [[2, -7, 195.0], [-3, 4, 300.5]], "materials\\skyrim\\distantsea\\sea.mat")
+            self.assertEqual(n, 2)
+            self.assertEqual(objects["refs"][1]["pos"], [-250.0, 450.0, 300.4])
+            self.assertEqual(objects["refs"][0]["cell"], [2, -7])
+            sea.add_rivers(objects, d, [[2, -7, 195.0]], "m.mat")
+            self.assertEqual((len(objects["bases"]), len(objects["refs"])), (1, 1))
+
     def test_wave_normals_tile(self):
         r, g = sea.wave_normals(64)
         self.assertEqual(r.shape, (64, 64))

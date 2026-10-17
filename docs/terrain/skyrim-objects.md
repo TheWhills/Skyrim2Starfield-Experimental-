@@ -385,3 +385,9 @@ clone of the cast-iron template made non-metal by a constant metalness replaceme
 distant renderer ignores that replacement and draws the template's metal. `lod` now gives every material under
 materials\skyrim an explicit black metalness texture in slot 4 instead (needs `--texconv`; `--no-metal-fix` skips).
 Not yet seen in game.
+
+**Ocean spot works (owner, 2026-10-17):** Jemison lat -0.15, lon 2.281, `--height-offset 390 --no-skyrim-water-sea`,
+`bBorderRegionsEnabled=0` under [General] in StarfieldCustom.ini: no walls, the planet's sea round Skyrim to the
+horizon, no Starfield land in view. Still open there: no river water (our cell water did not draw) and the glossy LOD.
+`lod --river-meshes` draws each river / lake cell as a flat water static at its level (skyrimsea.add_rivers; also in
+object LOD). Not yet seen in game.
