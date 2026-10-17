@@ -295,3 +295,8 @@ Layer test result: Skyrim LOD references in the vanilla LAYR NA_LOD_TheMast (22A
 still nothing over Skyrim. So neither the files, the archive nor our LAYR records are the problem: the Skyrim
 worldspace itself is not given composite LOD. Next: `scripts/tools/compare_cells.py` (cell records and cell children,
 NewAtlantis / Dazra / LC030World against LC172World and ours).
+**Cell comparison (owner's compare_cells.py):** no per-cell field only the LOD worlds have (their 5-10 % BFCB/REFL
+reflection-probe components aside); vanilla cells have DATA, LTMP and XILS where ours have none, but so does
+LC172World. (Cell record flag 0x40000 is just "compressed".) Remaining WRLD difference: OFST / CLSZ, the cell index.
+LC172World has it too, but it has no LOD files, so it was never a counterexample. `scripts/tools/world_offsets.py`
+verifies the index layout on a vanilla world (LC030World) and writes it into our plugin after TerrainOverlays.
