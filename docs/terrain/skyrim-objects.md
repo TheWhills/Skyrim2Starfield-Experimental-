@@ -260,3 +260,7 @@ meshes, geometries, materials and textures. Every vanilla LOD world ships its .l
 plugin's own archive, holds 66, e.g. sfbgs001dazraworld.lod, next to 2,519 Dazra composites: plugin worlds do get
 composite LOD). So all four in-game LOD tests ran without LOD settings and none of them tells us anything about our
 files. The installer now packs `lodsettings`; the lod run's file list moved to `Data\<world>.lodfiles.json` (not packed).
+Fifth test (2026-10-17, with lodsettings installed): our own composites, then the vertex-moved crane test: nothing
+drawn either time. Next: `scripts/tools/compare_worlds.py` compares the WRLD records raw (every subrecord, record and
+plugin header flags, child groups) of SettleGagarinWorld, NewAtlantis, ShatteredSpace's SFBGS001DazraWorld (a plugin
+world with composite LOD), LC172World and SKY_Tamriel.
