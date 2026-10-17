@@ -300,3 +300,9 @@ reflection-probe components aside); vanilla cells have DATA, LTMP and XILS where
 LC172World. (Cell record flag 0x40000 is just "compressed".) Remaining WRLD difference: OFST / CLSZ, the cell index.
 LC172World has it too, but it has no LOD files, so it was never a counterexample. `scripts/tools/world_offsets.py`
 verifies the index layout on a vanilla world (LC030World) and writes it into our plugin after TerrainOverlays.
+Cell index test (2026-10-17): OFST / CLSZ verified on LC030World (90/90, offsets relative to the WRLD record, x fastest,
+CLSZ = record size with header) and written for SKY_Tamriel (74 x 74): still no cranes. **Eliminated so far:** file
+contents, archive, names, lodsettings presence, our LAYR records (vanilla layer test), HNAM, RNAM, overlay SNAM / PNAM,
+OFST / CLSZ, STAT HasDistantLod, BSXFlags. Untested: anything the Creation Kit computes on save that we cannot see,
+how the player arrives (coc vs landing), the BTD / SFBK, the planet registration. Next step proposed: open and resave
+the plugin in the owner's Creation Kit (or its LOD generation, if offered) and diff what it writes.
