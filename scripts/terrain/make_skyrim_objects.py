@@ -383,13 +383,22 @@ def cmd_grass(a):
     return 0
 
 
-def add_cell_index(out, sf_esm):
+def add_cell_index(out, sf_esm, env_from=""):
     """The WRLD cell index (OFST / CLSZ) that the Creation Kit writes and Mutagen does not, added to the plugin
-    TerrainOverlays just wrote (scripts/tools/world_offsets.py; layout verified on LC030World first)."""
+    TerrainOverlays just wrote (scripts/tools/world_offsets.py; layout verified on LC030World first). env_from: a
+    vanilla world whose music / ambient set / environment maps (ZNAM, WAMB, XEMP, XWEM) are copied first: both NeonCity
+    and NewAtlantis have them, ours had none (owner's compare_worlds run; the ocean-spot "underwater" coating)."""
     sys.path.insert(0, os.path.join(REPO, "scripts", "tools"))
     import world_offsets
     from fo4sf import fo4land
     prm = load(os.path.join(out, "overlays_params.json"))
+    if env_from:
+        with fo4land.Plugin(sf_esm) as p:
+            env = world_offsets.world_fields(p.buf, p.body, env_from, world_offsets.ENV_FIELDS)
+        print(f"world fields from {env_from}: " + ", ".join(f"{k.decode()}={v.rstrip(bytes(1)).decode('latin-1') if k in (b'XEMP', b'XWEM') else v.hex()}"
+                                                          for k, v in env.items()))
+        for ov in prm["overlays"]:
+            world_offsets.set_fields(os.path.join(out, prm["plugin"]), ov["world"], env)
     with fo4land.Plugin(sf_esm) as p:
         reading = world_offsets.verify(p.buf, p.body, "LC030World", log=lambda *x: None)
     if not reading:
@@ -494,9 +503,13 @@ def cmd_lod(a):
               f"skipped) -> {st['nif_files']:,} composite NIFs, {st['meshes']:,} meshes "
               f"({st['mesh_bytes'] / 2 ** 20:,.0f} MiB)")
     if a.sf_esm:
+        pp = os.path.join(a.out, "overlays_params.json")
+        if prm.get("water"):                         # world-level water lists, as NewAtlantis (on Jemison's ocean) has
+            prm["water"]["world_lists"] = bool(a.water_world_lists)
+            save(pp, prm, indent=1)
         subprocess.run(["dotnet", "run", "--project", os.path.join(REPO, "dotnet", "TerrainOverlays"), "-c", "Release",
                         "--", a.sf_esm, a.out], check=True)
-        add_cell_index(a.out, a.sf_esm)
+        add_cell_index(a.out, a.sf_esm, a.world_env_from)
     if not a.no_object_lod:
         object_lod(a, objects, data, ov["world"])
     print(f"lod: done in {time.time() - t0:.0f} s")
@@ -832,6 +845,11 @@ def main(argv=None):
     ap.add_argument("--object-lod-sizes", default="8,12,24,48",
                     help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
+    ap.add_argument("--world-env-from", default="",
+                    help="lod: copy music / ambient / environment maps (ZNAM WAMB XEMP XWEM) from this vanilla world, "
+                         "e.g. NewAtlantis (ours had none; ocean-spot coating)")
+    ap.add_argument("--water-world-lists", action="store_true",
+                    help="lod: list the cell water heights on the world too (XCLW / WHGT), as NewAtlantis does")
     ap.add_argument("--standalone-materials", action="store_true",
                     help="lod: EXPERIMENT, rebuild plain object materials without vanilla inheritance (olive coating at "
                          "the ocean spot); re-run stage to undo")

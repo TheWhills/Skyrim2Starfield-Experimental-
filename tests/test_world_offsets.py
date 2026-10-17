@@ -52,6 +52,28 @@ class WorldOffsets(unittest.TestCase):
                 # the plugin still parses: every cell found again
                 self.assertEqual(set(cells), set(xy[:2]))
 
+    def test_set_fields_then_cell_index(self):
+        xy = [(-2, -1), (0, 0)]
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "V.esm")
+            open(src, "wb").write(plugin(xy, extra=[(b"XEMP", b"Cubemaps\\X.dds\0"), (b"ZNAM", b"\x01\0\0\0")]))
+            with fo4land.Plugin(src) as pl:
+                env = wo.world_fields(pl.buf, pl.body, "W", wo.ENV_FIELDS)
+            self.assertEqual(set(env), {b"XEMP", b"ZNAM"})
+            ours = os.path.join(d, "O.esm")
+            open(ours, "wb").write(plugin(xy))
+            wo.set_fields(ours, "W", env, log=lambda *a: None)
+            wo.write(ours, "W", ("WRLD record", True, True), log=lambda *a: None)
+            with fo4land.Plugin(ours) as pl:
+                _t, woff, fields, _k, cells = wo.find(pl.buf, pl.body, "W")
+                sigs = [s for s, _d in fields]
+                self.assertLess(sigs.index(b"XEMP"), sigs.index(b"HNAM"))
+                self.assertEqual(dict(fields)[b"XEMP"], b"Cubemaps\\X.dds\0")
+                self.assertEqual(set(cells), set(xy))
+                f = dict(fields)
+                vals = struct.unpack(f"<{len(f[b'OFST']) // 4}I", f[b"OFST"])
+                self.assertIn(cells[(0, 0)][0] - woff, vals)
+
 
 if __name__ == "__main__":
     unittest.main()

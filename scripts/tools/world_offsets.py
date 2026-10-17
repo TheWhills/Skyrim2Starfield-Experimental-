@@ -171,6 +171,45 @@ def write(path, edid, reading, log=print):
     return len(order)
 
 
+ENV_FIELDS = (b"ZNAM", b"WAMB", b"XEMP", b"XWEM")       # music, ambient set, environment map, water environment map
+
+
+def world_fields(buf, body, edid, sigs):
+    """{sig: data} of those subrecords in a world record (first occurrence)."""
+    _top, _woff, fields, _kids, _cells = find(buf, body, edid)
+    out = {}
+    for s, d in fields:
+        if s in sigs and s not in out:
+            out[s] = bytes(d)
+    return out
+
+
+def set_fields(path, edid, new: dict, log=print):
+    """Add / replace subrecords of a world record in place (raw), in vanilla order: ZNAM, WAMB, XEMP before HNAM,
+    XWEM last. Cells move, so the cell index must be written again afterwards (write() strips and recomputes it)."""
+    raw = bytearray(open(path, "rb").read())
+    body = 24 + REC.unpack_from(raw, 0)[1]
+    top, woff, _fields, _kids, _cells = find(raw, body, edid)
+    _t, size, flags, _fid = REC.unpack_from(raw, woff)
+    data = bytes(raw[woff + 24:woff + 24 + size])
+    if flags & fo4land.COMPRESSED:
+        data = zlib.decompress(data[4:])
+        flags &= ~fo4land.COMPRESSED
+    subs = [(s, bytes(d)) for s, d in fo4land.iter_subrecords(data) if s not in new]
+    before = [(s, d) for s, d in new.items() if s != b"XWEM"]
+    at = next((i for i, (s, _d) in enumerate(subs) if s == b"HNAM"), len(subs))
+    subs = subs[:at] + before + subs[at:] + ([(b"XWEM", new[b"XWEM"])] if b"XWEM" in new else [])
+    new_data = b"".join(s + struct.pack("<H", len(d)) + d for s, d in subs)
+    delta = len(new_data) - size
+    raw[woff + 24:woff + 24 + size] = new_data
+    struct.pack_into("<I", raw, woff + 4, len(new_data))
+    struct.pack_into("<I", raw, woff + 8, flags)
+    struct.pack_into("<I", raw, top + 4, GRP.unpack_from(raw, top)[1] + delta)
+    with open(path, "wb") as fh:
+        fh.write(raw)
+    log(f"{edid}: world fields {', '.join(s.decode() for s in new)} set ({delta:+d} bytes)")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=("verify", "write"))

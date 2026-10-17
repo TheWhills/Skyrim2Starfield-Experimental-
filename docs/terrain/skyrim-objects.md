@@ -402,3 +402,10 @@ glossy, "underwater / mossy" coating; at the land spot the same mountains were g
 PlasticPlainSmooth01 (Import + Parent); no global-layer component of their own. `lod --standalone-materials`
 (experiment) rebuilds the plain opaque ones with convert_material.build_mat_standalone (generic Root parents only);
 re-running stage undoes it.
+Standalone materials changed nothing (owner): the coating is an effect the engine draws on top (owner: "the textures
+themselves get an underwater-like feature"). compare_worlds NeonCity (a city over Volii's ocean) / NewAtlantis /
+ours: both vanilla worlds have ZNAM (music), WAMB (ambient set), XEMP (environment map: Cell_CaveCube /
+Cell_TestVideoCube); NewAtlantis also XWEM (water environment map) and world water lists XCLW / WHGT (heights 242 m);
+ours none of them. DNAM default water: Neon 236, NewAtlantis 41, ours -200 m. `lod --world-env-from NewAtlantis` copies
+ZNAM / WAMB / XEMP / XWEM into our world (then the cell index is rewritten). Supported hypothesis: the missing
+environment map is the coating.
