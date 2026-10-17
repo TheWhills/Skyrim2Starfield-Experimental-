@@ -333,3 +333,20 @@ the working option is the reference flag "Is Full LOD" (REFR record flag bit 16 
 owner's r/starfieldmods and Nexus finds; `-MockWorldSpaceLOD` crashed the owner's CK at "Initializing FaceGen" for
 our plugin and Starfield.esm alike, and that command was reported for Fallout 4). The lod step now flags every LOD
 reference (radius x scale >= --lod-min-radius) Is Full LOD (`--no-full-lod` to skip). Unverified in game.
+
+## Object LOD (works, 2026-10-17)
+**Verified in game:** distant objects of a modded worldspace come from the Creation Kit's `-MockWorldSpaceLOD` layout,
+not from composite LOD. The owner ran `CreationKit.exe -MockWorldSpaceLOD:SkyrimTerrainTamriel.esm SKY_Tamriel` from
+cmd in the Starfield folder (it ran once despite earlier crashes at "Initializing FaceGen"); its 3,316 NIFs + 1 lodsettings,
+packed into our archive, showed Whiterun, forests and cliffs from the Throat of the World. Layout (src/fo4sf/objectlod.py):
+`lodsettings\SKYTamriel.LOD` (-33, -25, 69, 0, 0) = the cells holding references; `meshes\terrain\SKYTamriel\objects\
+SKYTamriel.<L>.<x>.<y>.nif`, L = 1 / 2 / 4 / 8 (2,402 / 672 / 187 / 55 files), every level listing all 218,219 references
+(cell = floor(pos / 100 m), blocks aligned to the lodsettings origin). Each NIF (bs 175) is one BSWeakReferenceNode:
+NiNode header, then per base (raw FormID, crc(model stem), "nif\0", crc("meshes\" + model folder), count, per instance
+3 x (3 f32 rotation, 0), x, y, z, scale, then u32 0), then 10 zero bytes. crc = sfnif.material_id. Our writer
+reproduces all 3,316 CK files byte for byte from their parsed entries, and the hashes for 17,156 of our entries. The CK
+names the world without underscores (SKYTamriel); which name the game reads is not yet known, so both are written.
+The CK also listed two vanilla markers (XMarker, COCMarkerHeading); ours leaves Starfield.esm bases out.
+`make_skyrim_objects.py lod` now writes object LOD after the plugin build (needs formids.json); composite LOD is opt-in
+(`--composite-lod`), Is Full LOD opt-in (`--full-lod`). `--ck-lod-reference <CK Objects folder>` compares ours with the
+CK's and picks the rotation convention.

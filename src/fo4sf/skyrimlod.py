@@ -128,7 +128,7 @@ def _encode(parts, material) -> sfmesh.SfMesh:
 
 def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int, min_radius: float = 20.0,
           layer: Optional[str] = None,
-          skip_paths=("\\trees\\", "/trees/"), log=print) -> dict:
+          skip_paths=("\\trees\\", "/trees/"), log=print, write: bool = True) -> dict:
     """Write the LOD files for objects.json (stage output) into data_dir; returns stats incl. the base indices with
     LOD (to flag distant_lod)."""
     bases = objects["bases"]
@@ -173,6 +173,10 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
                 if os.path.isfile(p):
                     os.remove(p)
             os.remove(mf)
+    if not write:                                     # only the large references; old composites removed above
+        return {"lodsettings": None, "objects_with_lod": 0, "instances": sum(len(v) for v in groups.values()),
+                "skipped_small": skipped_small, "meshes": 0, "mesh_bytes": 0, "nif_files": 0, "flag_bases": [],
+                "large_refs": large}
     written: List[str] = []
     data, (x0, y0, size) = lodsettings(cell_min, cell_max)
     wl = world.lower()

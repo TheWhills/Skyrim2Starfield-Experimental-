@@ -409,8 +409,10 @@ def cmd_lod(a):
     obj_path = os.path.join(a.out, "objects.json")
     objects = load(obj_path)
     data = os.path.join(a.out, "Data")
+    # composite LOD (vanilla city layout) is opt-in: it never drew for our world (docs "Distant-object LOD"); object
+    # LOD (objectlod.py, the Creation Kit's -MockWorldSpaceLOD layout) is what works, written after the plugin build
     st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius,
-                         layer=a.lod_layer or None)
+                         layer=a.lod_layer or None, write=a.composite_lod or bool(a.vanilla_test))
     flagged = set(st["flag_bases"])
     # object bounds (STAT OBND) for every static: vanilla statics all have them; ours had none, and the owner's
     # Creation Kit then called all 19,494 of our large-reference entries "not a large ref" (zero-size objects)
@@ -445,10 +447,10 @@ def cmd_lod(a):
     # any distance. What Starfield modders use for custom locations, where the Creation Kit's LOD layers produce
     # nothing (r/starfieldmods, Nexus forums); composite LOD never drew for our world. Same references as the LOD
     # ones (radius x scale >= --lod-min-radius), so only the big, far-visible objects pay for it.
-    if not a.no_full_lod:
+    if a.full_lod:
         for ri in st["large_refs"]:
             objects["refs"][ri]["full_lod"] = True
-    print(f"lod: {0 if a.no_full_lod else len(st['large_refs']):,} references flagged Is Full LOD")
+        print(f"lod: {len(st['large_refs']):,} references flagged Is Full LOD")
     save(obj_path, objects)
     if a.vanilla_test:
         from fo4sf import ba2
@@ -470,14 +472,51 @@ def cmd_lod(a):
         n = skyrimlod.vanilla_test(data, ov["world"], read)
         print(f"lod: VANILLA TEST, {n:,} composite NIFs replaced by Gagarin's crane LOD (60 m above our objects, "
               f"moved in the vertices)")
-    print(f"lod: lodsettings {st['lodsettings']}; {st['objects_with_lod']:,} objects, {st['instances']:,} references "
-          f"(radius >= {a.lod_min_radius:g} m; {st['skipped_small']:,} smaller skipped) -> {st['nif_files']:,} LOD NIFs, "
-          f"{st['meshes']:,} meshes ({st['mesh_bytes'] / 2 ** 20:,.0f} MiB); {time.time() - t0:.0f} s")
+    if st["nif_files"]:
+        print(f"lod: composite lodsettings {st['lodsettings']}; {st['objects_with_lod']:,} objects, "
+              f"{st['instances']:,} references (radius >= {a.lod_min_radius:g} m; {st['skipped_small']:,} smaller "
+              f"skipped) -> {st['nif_files']:,} composite NIFs, {st['meshes']:,} meshes "
+              f"({st['mesh_bytes'] / 2 ** 20:,.0f} MiB)")
     if a.sf_esm:
         subprocess.run(["dotnet", "run", "--project", os.path.join(REPO, "dotnet", "TerrainOverlays"), "-c", "Release",
                         "--", a.sf_esm, a.out], check=True)
         add_cell_index(a.out, a.sf_esm)
+    if not a.no_object_lod:
+        object_lod(a, objects, data, ov["world"])
+    print(f"lod: done in {time.time() - t0:.0f} s")
     return 0
+
+
+def object_lod(a, objects, data, world):
+    """Object LOD in the Creation Kit's -MockWorldSpaceLOD layout (src/fo4sf/objectlod.py), from objects.json and the
+    plugin's formids.json. --ck-lod-reference <the CK's Objects folder> checks ours against the CK's (and picks the
+    rotation convention that matches)."""
+    from fo4sf import objectlod
+    fpath = os.path.join(a.out, "formids.json")
+    if not os.path.isfile(fpath):
+        print("object LOD: no formids.json (run with --sf-esm first); skipped")
+        return
+    ids = load(fpath)["bases"]
+    base_fids = {i: int(ids[b["edid"]], 16) for i, b in enumerate(objects["bases"]) if b["edid"] in ids}
+    names = [n for n in (a.object_lod_names.split(",") if a.object_lod_names else
+                         [world.replace("_", ""), world]) if n]
+    names = list(dict.fromkeys(names))
+    transpose = a.lod_rotation == "transposed"
+    if a.ck_lod_reference:
+        lodset, levels = objectlod.plan(objects, base_fids, transpose=False)
+        st = objectlod.compare(a.ck_lod_reference, world.replace("_", ""), levels)
+        print(f"object LOD vs Creation Kit: {st}")
+        if st["pos_ok"] and st["rot_T"] > st["rot_R"]:
+            transpose = True
+        print(f"object LOD: rotation {'transposed' if transpose else 'as ref_matrix'} "
+              f"(R {st['rot_R']:,} / T {st['rot_T']:,} of {st['pos_ok']:,} matched instances)")
+    lodset, levels = objectlod.plan(objects, base_fids, transpose=transpose)
+    if lodset is None:
+        print("object LOD: no references")
+        return
+    n = objectlod.write(data, names, lodset, levels, os.path.join(data, f"{world.lower()}.objectlod.json"))
+    print(f"object LOD: lodsettings {lodset}, {sum(len(b) for b in levels.values()):,} block files per name, "
+          f"names {names} -> {n:,} files")
 
 
 # ---------------------------------------------------------------------------------------------------------- stage
@@ -706,8 +745,19 @@ def main(argv=None):
     ap.add_argument("--lod-layer", default="",
                     help="lod: put every LOD object in this one layer (composites named after it); a vanilla LAYR "
                          "EditorID (e.g. NA_LOD_TheMast) is used as is instead of a new layer (diagnostic)")
-    ap.add_argument("--no-full-lod", action="store_true",
-                    help="lod: do not flag the LOD references Is Full LOD (full model at any distance)")
+    ap.add_argument("--full-lod", action="store_true",
+                    help="lod: flag the big references (--lod-min-radius) Is Full LOD (full model at any distance)")
+    ap.add_argument("--composite-lod", action="store_true",
+                    help="lod: also write composite LOD (vanilla city layout; never drew for our world)")
+    ap.add_argument("--no-object-lod", action="store_true",
+                    help="lod: do not write object LOD (the Creation Kit's -MockWorldSpaceLOD layout)")
+    ap.add_argument("--object-lod-names", default="",
+                    help="lod: comma-separated world names for the object LOD files (default: the world EditorID "
+                         "without underscores, as the CK writes it, and with them)")
+    ap.add_argument("--lod-rotation", choices=("matrix", "transposed"), default="matrix",
+                    help="lod: rotation convention of object LOD instances (--ck-lod-reference picks it)")
+    ap.add_argument("--ck-lod-reference", default="",
+                    help="lod: the Creation Kit's Objects folder (Meshes\\Terrain\\<World>\\Objects) to compare with")
     ap.add_argument("--no-large-refs", action="store_true",
                     help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")

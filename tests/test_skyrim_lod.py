@@ -53,16 +53,16 @@ class CommandTests(unittest.TestCase):
             so.main(["convert", "--work", work, "--skyrim-data", data, "--content-resources", sf["content_resources"],
                      "--texconv", texconv, "--collision-template", sf["collision_template"]])
             so.main(["stage", "--work", work, "--terrain", terrain, "--out", out])
-            so.main(["lod", "--out", out, "--lod-min-radius", "1"])
+            so.main(["lod", "--out", out, "--lod-min-radius", "1", "--composite-lod"])
             first = len(glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*", "*.nif")))
-            so.main(["lod", "--out", out, "--lod-min-radius", "100000"])          # a rerun cleans up the first
+            so.main(["lod", "--out", out, "--lod-min-radius", "100000", "--composite-lod"])          # a rerun cleans up the first
             self.assertEqual(glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*",
                                                     "*.nif")), [])
             self.assertGreater(first, 0)
-            so.main(["lod", "--out", out, "--lod-min-radius", "1", "--lod-layer", "NA_LOD_TheMast"])
+            so.main(["lod", "--out", out, "--lod-min-radius", "1", "--lod-layer", "NA_LOD_TheMast", "--composite-lod"])
             one = glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*", "*.nif"))
             one_obj = json.load(open(os.path.join(out, "objects.json")))
-            so.main(["lod", "--out", out, "--lod-min-radius", "1"])
+            so.main(["lod", "--out", out, "--lod-min-radius", "1", "--composite-lod", "--full-lod"])
             obj = json.load(open(os.path.join(out, "objects.json")))
             lodset = open(os.path.join(out, "Data", "lodsettings", "sky_tamriel.lod"), "rb").read()
             files = glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "sky_tamriel", "*.nif"))
@@ -81,6 +81,13 @@ class CommandTests(unittest.TestCase):
                         p = g.meshes[0].path.decode().split("\\")
                         m = sfmesh.parse(open(os.path.join(out, "Data", "geometries", *p) + ".mesh", "rb").read())
                         pts += [sfmesh.decode_position(v, m.scale) for v in m.positions]
+            # object LOD (the default) needs the plugin's formids.json: a stand-in for TerrainOverlays' output
+            json.dump({"bases": {b["edid"]: f"{0x1D00 + i:06X}" for i, b in enumerate(obj["bases"])}},
+                      open(os.path.join(out, "formids.json"), "w"))
+            so.main(["lod", "--out", out, "--lod-min-radius", "1", "--composite-lod"])
+            olod = glob.glob(os.path.join(out, "Data", "meshes", "terrain", "*", "objects", "*.nif"))
+            olod_dirs = sorted(d for d in os.listdir(os.path.join(out, "Data", "meshes", "terrain"))
+                               if os.path.isdir(os.path.join(out, "Data", "meshes", "terrain", d)))
             ok, rep = so.check(out)
             lod_dir_files = sorted(os.listdir(os.path.join(out, "Data", "lodsettings")))
             any_nif = open(files[0], "rb").read()
@@ -115,7 +122,7 @@ class CommandTests(unittest.TestCase):
         lo, hi = rock_base["bounds"]                                          # OBND for every static
         self.assertTrue(all(a < b for a, b in zip(lo, hi)))
         self.assertIn([cx, cy], rock_ref["large_cells"])                     # a large reference (WRLD RNAM)
-        self.assertTrue(rock_ref.get("full_lod"))                              # REFR Is Full LOD
+        self.assertTrue(rock_ref.get("full_lod"))                              # REFR Is Full LOD (--full-lod)
         self.assertTrue(all("large_cells" not in r or obj["bases"][r["base"]].get("distant_lod") for r in obj["refs"]))
         self.assertEqual(rock_base.get("lod_layer"), rock_base["edid"] + "_LOD")
         self.assertEqual(sorted({f.rsplit("_lod_", 1)[1][0] for f in mine}), ["0", "1", "2", "3"])
@@ -123,11 +130,13 @@ class CommandTests(unittest.TestCase):
         c = np.mean(np.asarray(pts), 0)
         self.assertLess(abs(c[0] - rock_ref["pos"][0]) + abs(c[1] - rock_ref["pos"][1]), 40.0)  # world coordinates
         self.assertTrue(ok, [x for x in rep["checks"] if not x[1]])
-        self.assertIn("lod: lodsettings", log.getvalue())
+        self.assertIn("lod: composite lodsettings", log.getvalue())
         self.assertTrue(one and all(os.path.basename(f).startswith("na_lod_themast_") for f in one))
         self.assertLessEqual(len(one), first)                                  # one file per block, not per object
         self.assertEqual({b["lod_layer"] for b in one_obj["bases"] if b.get("distant_lod")}, {"NA_LOD_TheMast"})
-        self.assertEqual(lod_dir_files, ["sky_tamriel.lod"])                 # nothing else gets packed there
+        self.assertEqual(lod_dir_files, ["sky_tamriel.lod", "skytamriel.lod"])  # nothing else gets packed there
+        self.assertTrue(olod)
+        self.assertEqual(olod_dirs, ["sky_tamriel", "skytamriel"])
 
     def test_installer_packs_lodsettings(self):
         import importlib.util
