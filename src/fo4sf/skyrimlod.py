@@ -97,6 +97,15 @@ def load_model(data_dir: str, model: str) -> Tuple[List[Shape], float]:
     return shapes, radius
 
 
+def model_bounds(data_dir: str, model: str):
+    """[[min x, y, z], [max x, y, z]] in metres of a converted static's geometry (load_model), or None."""
+    shapes, _r = load_model(data_dir, model)
+    if not shapes:
+        return None
+    pts = np.concatenate([s.pos for s in shapes])
+    return [[round(float(v), 4) for v in pts.min(0)], [round(float(v), 4) for v in pts.max(0)]]
+
+
 def _encode(parts, material) -> sfmesh.SfMesh:
     pos = np.concatenate([p[0] for p in parts])
     m = sfmesh.SfMesh(version=2)

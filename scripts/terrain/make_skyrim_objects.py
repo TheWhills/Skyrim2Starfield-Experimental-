@@ -34,6 +34,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -411,6 +412,20 @@ def cmd_lod(a):
     st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius,
                          layer=a.lod_layer or None)
     flagged = set(st["flag_bases"])
+    # object bounds (STAT OBND) for every static: vanilla statics all have them; ours had none, and the owner's
+    # Creation Kit then called all 19,494 of our large-reference entries "not a large ref" (zero-size objects)
+    nb = 0
+    for b in objects["bases"]:
+        if b.get("door") or b.get("bounds"):
+            continue
+        try:
+            bb = skyrimlod.model_bounds(data, b["model"])
+        except (OSError, ValueError, struct.error):
+            bb = None
+        if bb:
+            b["bounds"] = bb
+            nb += 1
+    print(f"lod: object bounds for {nb:,} statics")
     for i, b in enumerate(objects["bases"]):
         b.pop("distant_lod", None)
         b.pop("lod_layer", None)

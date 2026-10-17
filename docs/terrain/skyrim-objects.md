@@ -313,3 +313,8 @@ Found instead: our exterior cells had no DATA at all (Mutagen's nullable Flags s
 null is null, so even the water cells' HasWater was never written), and no XILS; every vanilla exterior cell has DATA
 0x2 (HasWater), XCLW (float max = no water) and XILS 1.0. TerrainOverlays now writes all three on every cell, and
 make_skyrim_objects.py adds the cell index (world_offsets.py) after every plugin build.
+**CK warnings export (owner, after the DATA fix):** only cell 01001222 ((-1, -1)) is still refused. 19,494 x "Reference
+(...) to STAT 'SKY_...' is not a large ref" = every RNAM entry: our STATs had no OBND (object bounds), so to the CK
+every object is zero-sized. 104 x "Reference (01000800) attached to wrong cell for its location: 'Surface' (2147483647,
+2147483647)" (our anchor in the persistent cell). The lod step now stores each static's mesh bounds (metres) in
+objects.json and TerrainOverlays writes them as OBND.

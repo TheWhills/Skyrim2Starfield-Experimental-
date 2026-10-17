@@ -112,6 +112,8 @@ class CommandTests(unittest.TestCase):
         self.assertLess(abs(mg.sphere[2] - first_sphere[2] - 60.0), 1.0)     # baked into the vertices
         self.assertEqual(struct.unpack("<5i", lodset)[3:], (0, 0))
         self.assertTrue(rock_base.get("distant_lod"))
+        lo, hi = rock_base["bounds"]                                          # OBND for every static
+        self.assertTrue(all(a < b for a, b in zip(lo, hi)))
         self.assertIn([cx, cy], rock_ref["large_cells"])                     # a large reference (WRLD RNAM)
         self.assertTrue(all("large_cells" not in r or obj["bases"][r["base"]].get("distant_lod") for r in obj["refs"]))
         self.assertEqual(rock_base.get("lod_layer"), rock_base["edid"] + "_LOD")

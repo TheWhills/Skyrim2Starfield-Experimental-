@@ -337,6 +337,13 @@ if (Has(prm, "objects"))
         else
         {
             var stat = new Static(NewKey(), release) { EditorID = edid, Model = new Model { File = model } };
+            // "bounds" [[min xyz], [max xyz]] (metres, make_skyrim_objects.py lod): OBND, as every vanilla static has
+            if (b.TryGetProperty("bounds", out var sb) && sb.ValueKind == JsonValueKind.Array)
+                stat.ObjectBounds = new ObjectBounds
+                {
+                    First = new P3Float(sb[0][0].GetSingle(), sb[0][1].GetSingle(), sb[0][2].GetSingle()),
+                    Second = new P3Float(sb[1][0].GetSingle(), sb[1][1].GetSingle(), sb[1][2].GetSingle()),
+                };
             // "distant_lod" (make_skyrim_objects.py lod): composite distant LOD exists for this base
             if (b.TryGetProperty("distant_lod", out var dl) && dl.GetBoolean())
                 stat.MajorRecordFlagsRaw |= 0x8000;                                  // Static.MajorFlag.HasDistantLod
