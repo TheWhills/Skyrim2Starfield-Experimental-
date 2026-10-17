@@ -37,6 +37,12 @@ def lodsettings(cell_min: int, cell_max: int) -> Tuple[bytes, Tuple[int, int, in
     return struct.pack("<5i", cell_min, cell_min, size, 0, 0), (cell_min, cell_min, size)
 
 
+def manifest_path(data_dir: str, world: str) -> str:
+    """The list of files a lod run wrote (so the next run removes them). It sits in Data's root, outside the folders
+    the installer packs (it used to sit in lodsettings\\, which is now packed too)."""
+    return os.path.join(data_dir, f"{world.lower()}.lodfiles.json")
+
+
 def block_of(cell: Tuple[int, int], origin: Tuple[int, int], level: int) -> Tuple[int, int]:
     s = 2 ** level
     return tuple(origin[a] + ((cell[a] - origin[a]) // s) * s for a in range(2))
@@ -141,13 +147,16 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
         cell = (int(math.floor(r["pos"][0] / CELL_M)), int(math.floor(r["pos"][1] / CELL_M)))
         groups.setdefault((r["base"], cell), []).append((np.asarray(r["pos"], np.float64),
                                                          np.asarray(exterior.ref_matrix(r["rot"])).reshape(3, 3), sc))
-    manifest = os.path.join(data_dir, "lodsettings", f"{world.lower()}.files.json")
-    if os.path.isfile(manifest):                      # a rerun: remove what the previous run wrote
-        import json
-        for rel in json.load(open(manifest, encoding="utf-8")):
-            p = os.path.join(data_dir, *rel.split("/"))
-            if os.path.isfile(p):
-                os.remove(p)
+    manifest = manifest_path(data_dir, world)
+    old_manifest = os.path.join(data_dir, "lodsettings", f"{world.lower()}.files.json")
+    for mf in (manifest, old_manifest):              # a rerun: remove what the previous run wrote
+        if os.path.isfile(mf):
+            import json
+            for rel in json.load(open(mf, encoding="utf-8")):
+                p = os.path.join(data_dir, *rel.split("/"))
+                if os.path.isfile(p):
+                    os.remove(p)
+            os.remove(mf)
     written: List[str] = []
     data, (x0, y0, size) = lodsettings(cell_min, cell_max)
     wl = world.lower()
@@ -241,7 +250,7 @@ def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
         mesh = sfmesh.parse(read_vanilla("geometries\\" + ref.path.decode("latin-1") + ".mesh"))
         pos = np.asarray(mesh.positions, np.float64) / 32767.0 * mesh.scale
         src[lv] = (v.strings[si].decode("latin-1"), mesh, pos, np.asarray(g.sphere[:3], np.float64))
-    manifest = os.path.join(data_dir, "lodsettings", f"{world.lower()}.files.json")
+    manifest = manifest_path(data_dir, world)
     written = json.load(open(manifest, encoding="utf-8"))
     n, extra = 0, []
     for rel in list(written):

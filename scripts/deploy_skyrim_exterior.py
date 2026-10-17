@@ -3,7 +3,7 @@
 The staging folder is make_skyrim_overlay.py build --out (terrain only) or make_skyrim_objects.py stage --out (terrain +
 objects), after dotnet/TerrainOverlays wrote its plugins there. Its overlays_params.json names them.
 
-install  : packs <staging>\\Data (Terrain, meshes, geometries, materials, textures) into "<plugin stem> - Main.ba2" with
+install  : packs <staging>\\Data (Terrain, meshes, geometries, materials, textures, lodsettings) into "<plugin stem> - Main.ba2" with
            the official Archive2 (Starfield Creation Kit) and -compression=None: the terrain BTD must be stored
            uncompressed (experiment 2b read a packed BTD as flat ground). Copies the archive, the plugin and the Mars
            registration plugin into Starfield\\Data, activates both in Plugins.txt (plugin first), and records everything
@@ -23,7 +23,9 @@ import sys
 import tempfile
 
 MANIFEST = "SkyrimExterior.deploy.json"
-DATA_DIRS = ("Terrain", "meshes", "geometries", "materials", "textures")
+# lodsettings: distant-object LOD's <world>.lod (make_skyrim_objects.py lod); it was missing from the first LOD
+# installs, so the engine never had our world's LOD settings
+DATA_DIRS = ("Terrain", "meshes", "geometries", "materials", "textures", "lodsettings")
 ARCHIVE_LIMIT = 4 * 1024 ** 3                      # one stored General archive
 
 

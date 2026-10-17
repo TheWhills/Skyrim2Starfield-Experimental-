@@ -254,3 +254,9 @@ which the engine may ignore for LOD (then all 6,612 cranes stood at Gagarin's (1
 Throat of the World view). `--vanilla-test` now bakes the offset into a copy of the vanilla mesh (vanilla material kept)
 and writes identity-root NIFs like vanilla's. LOD is un-parked until that test runs. Composite node names now use the
 lowercase world folder, as vanilla's do.
+**Found (2026-10-17): our lodsettings file was never installed.** The owner's archive survey lists 6,612 composites in
+`SkyrimTerrainTamriel - Main.ba2` but no `lodsettings\sky_tamriel.lod`: deploy_skyrim_exterior.py packed only Terrain,
+meshes, geometries, materials and textures. Every vanilla LOD world ships its .lod (ShatteredSpace - Main01.ba2, a
+plugin's own archive, holds 66, e.g. sfbgs001dazraworld.lod, next to 2,519 Dazra composites: plugin worlds do get
+composite LOD). So all four in-game LOD tests ran without LOD settings and none of them tells us anything about our
+files. The installer now packs `lodsettings`; the lod run's file list moved to `Data\<world>.lodfiles.json` (not packed).

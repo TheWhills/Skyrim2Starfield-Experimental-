@@ -79,6 +79,7 @@ class CommandTests(unittest.TestCase):
                         m = sfmesh.parse(open(os.path.join(out, "Data", "geometries", *p) + ".mesh", "rb").read())
                         pts += [sfmesh.decode_position(v, m.scale) for v in m.positions]
             ok, rep = so.check(out)
+            lod_dir_files = sorted(os.listdir(os.path.join(out, "Data", "lodsettings")))
             any_nif = open(files[0], "rb").read()
             first_sphere = skyrimlod._first_sphere(nif.parse(open(files[-1], "rb").read()))
 
@@ -106,6 +107,14 @@ class CommandTests(unittest.TestCase):
         self.assertLess(abs(c[0] - rock_ref["pos"][0]) + abs(c[1] - rock_ref["pos"][1]), 40.0)  # world coordinates
         self.assertTrue(ok, [x for x in rep["checks"] if not x[1]])
         self.assertIn("lod: lodsettings", log.getvalue())
+        self.assertEqual(lod_dir_files, ["sky_tamriel.lod"])                 # nothing else gets packed there
+
+    def test_installer_packs_lodsettings(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("deploy", os.path.join(ROOT, "scripts", "deploy_skyrim_exterior.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertIn("lodsettings", mod.DATA_DIRS)
 
 
 if __name__ == "__main__":
