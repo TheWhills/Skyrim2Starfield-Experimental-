@@ -241,7 +241,9 @@ def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
     import dataclasses
     import json
     src = {}
-    for lv, pth in VANILLA_TEST.items():
+    # one small crane for every level (level 3's: ~1,400 vertices): a moved copy per file of each level's own crane
+    # pushed the owner's whole-map build past one archive's 4 GiB
+    for lv, pth in ((lv, VANILLA_TEST[3]) for lv in VANILLA_TEST):
         v = nifmod.parse(read_vanilla(pth))
         gi = next(i for i in range(len(v.blocks)) if v.type_of(i) == "BSGeometry")
         g = sfnif.parse_bsgeometry(v.blocks[gi])
@@ -252,6 +254,11 @@ def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
         src[lv] = (v.strings[si].decode("latin-1"), mesh, pos, np.asarray(g.sphere[:3], np.float64))
     manifest = manifest_path(data_dir, world)
     written = json.load(open(manifest, encoding="utf-8"))
+    for rel in [r for r in written if r.endswith(".mesh")]:   # our own LOD meshes: no longer referenced
+        pth = os.path.join(data_dir, *rel.split("/"))
+        if os.path.isfile(pth):
+            os.remove(pth)
+        written.remove(rel)
     n, extra = 0, []
     for rel in list(written):
         if not rel.endswith(".nif"):
