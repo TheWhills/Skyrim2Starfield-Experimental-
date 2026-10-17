@@ -25,7 +25,7 @@ import tempfile
 MANIFEST = "SkyrimExterior.deploy.json"
 # lodsettings: distant-object LOD's <world>.lod (make_skyrim_objects.py lod); it was missing from the first LOD
 # installs, so the engine never had our world's LOD settings
-DATA_DIRS = ("Terrain", "meshes", "geometries", "materials", "textures", "lodsettings")
+DATA_DIRS = ("Terrain", "meshes", "geometries", "materials", "textures", "lodsettings", "planetdata")
 ARCHIVE_LIMIT = 4 * 1024 ** 3                      # one stored General archive
 
 

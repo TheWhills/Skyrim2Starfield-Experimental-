@@ -276,3 +276,15 @@ olive "underwater" effect on every object and no cell water; the land spot has n
 land past the map. Owner's plan: an own planet whose biome map is land exactly under Skyrim and ocean elsewhere,
 small enough (biome pixels ~ radius / 81 on the 256 x 256 polar maps, a supported estimate) for the map to follow the
 coast. First step: `scripts/tools/dump_records.py` prints vanilla PNDT / STDT / BIOM records to clone from.
+
+**Custom planet, first version (`scripts/terrain/make_planet.py`):** owner's choices: a new planet **Nirn** in Alpha
+Centauri. After `lod`, make_planet.py replaces the planet plugin's content (the `_Mars` plugin TerrainOverlays wrote,
+masters Starfield.esm + the terrain plugin) with a clone of JemisonPlanetData as a new planet (FormID 02000800): EDID
+NirnPlanetData, FULL / ANAM "Nirn", radius `--radius-km` (200), slot `--slot` (30) in Jemison's star system, orbit
+distances x `--orbit-scale` (1.3), PPBD only OceanLife04 95 % + ForestDeciduousLifeJemison 5 %, CNAM = our world at
+the overlay's lat / lon. Biome map `Data\planetdata\biomemaps\nirn.biom` (packed: deploy DATA_DIRS now includes
+planetdata): a land disc of `--land-px` (3) pixels round the centre of both pole maps, ocean elsewhere, so the overlay
+goes on a pole (`--latlon -1.5707963 0`): the map projection is not verified, the poles are the only points whose pixel
+is certain. Re-run make_planet.py after every lod / stage (they rewrite the planet plugin). Unknowns: whether the
+engine finds the biome map by ANAM, a 200 km planet's look on the ground, the location parent (still Jemison's
+surface), the Magnus mod's own nirn.biom (conflict if both are installed).
