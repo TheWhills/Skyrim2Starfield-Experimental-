@@ -61,3 +61,18 @@ class ObjectLod(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Compare(unittest.TestCase):
+    def test_compare_matches_by_position_and_finds_convention(self):
+        lodset, levels = ol.plan(objects(), {0: 0x1D6F, 1: 0x23FE})
+        _l2, other_ids = ol.plan(objects(), {0: 0x2000, 1: 0x2001})           # another build: other FormIDs
+        with tempfile.TemporaryDirectory() as d:
+            ol.write(d, ["SKYTamriel"], lodset, other_ids, os.path.join(d, "m.json"))
+            ck = os.path.join(d, "meshes", "terrain", "skytamriel", "objects")
+            st = ol.compare(ck, "SKYTamriel", levels)
+            _l3, transposed = ol.plan(objects(), {0: 0x1D6F, 1: 0x23FE}, transpose=True)
+            st_t = ol.compare(ck, "SKYTamriel", transposed)
+        self.assertEqual((st["pos_ok"], st["hash_ok"], st["rot_R"]), (4, 4, 4))
+        self.assertEqual(st_t["rot_T"], 4)
+        self.assertLess(st_t["rot_R"], 4)

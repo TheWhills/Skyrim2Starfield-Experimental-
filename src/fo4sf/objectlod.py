@@ -76,8 +76,13 @@ def nif_bytes(block: bytes) -> bytes:
     return nifmod.serialize(f)
 
 
+def f32(v: float) -> float:
+    """The value as the plugin stores it (REFR DATA is float32): 3599.99997 in objects.json is 3600.0 there."""
+    return struct.unpack("<f", struct.pack("<f", v))[0]
+
+
 def cell_of(pos) -> Tuple[int, int]:
-    return int(math.floor(pos[0] / CELL_M)), int(math.floor(pos[1] / CELL_M))
+    return int(math.floor(f32(pos[0]) / CELL_M)), int(math.floor(f32(pos[1]) / CELL_M))
 
 
 def settings(cells: Iterable[Tuple[int, int]]) -> Tuple[int, int, int]:
@@ -172,32 +177,31 @@ def parse_node(block: bytes) -> Dict[int, Tuple[Tuple[int, int], List[bytes]]]:
 
 
 def compare(ck_dir: str, world_ck_name: str, levels, sample: int = 200) -> dict:
-    """Compare our planned level-1 files with the Creation Kit's in ck_dir: entries matched, hash and instance
-    agreement (positions within 1 cm, rotations within 1e-3, both rotation conventions tried)."""
-    st = {"files": 0, "missing": 0, "entries": 0, "hash_ok": 0, "inst": 0, "pos_ok": 0, "rot_R": 0, "rot_T": 0}
-    names = sorted(levels.get(1, {}))[:sample]
-    for (bx, by) in names:
+    """Compare our planned level-1 files with the Creation Kit's in ck_dir, matching instances by POSITION (within
+    1 cm; FormIDs differ between builds): how many matched, whether their entry hashes agree, and which rotation
+    convention (as ref_matrix R, or transposed T) agrees within 1e-3."""
+    st = {"files": 0, "missing": 0, "inst": 0, "pos_ok": 0, "hash_ok": 0, "rot_R": 0, "rot_T": 0}
+    for (bx, by) in sorted(levels.get(1, {}))[:sample]:
         p = os.path.join(ck_dir, f"{world_ck_name}.1.{bx}.{by}.nif")
         if not os.path.isfile(p):
             st["missing"] += 1
             continue
         st["files"] += 1
-        ck = parse_node(nifmod.parse(open(p, "rb").read()).blocks[0])
-        for fid, (h, inst) in levels[1][(bx, by)].items():
-            if fid not in ck:
-                continue
-            st["entries"] += 1
-            st["hash_ok"] += ck[fid][0] == h
-            cki = [struct.unpack("<16f", b) for b in ck[fid][1]]
+        ck = []
+        for (h, inst) in parse_node(nifmod.parse(open(p, "rb").read()).blocks[0]).values():
+            ck += [(h, struct.unpack("<16f", b)) for b in inst]
+        for (h, inst) in levels[1][(bx, by)].values():
             for b in inst:
                 v = struct.unpack("<16f", b)
-                m = min(cki, key=lambda c: sum((c[12 + k] - v[12 + k]) ** 2 for k in range(3)))
                 st["inst"] += 1
-                if all(abs(m[12 + k] - v[12 + k]) < 0.01 for k in range(3)):
-                    st["pos_ok"] += 1
-                    r = (v[0], v[1], v[2], v[4], v[5], v[6], v[8], v[9], v[10])
-                    t = (r[0], r[3], r[6], r[1], r[4], r[7], r[2], r[5], r[8])
-                    c = (m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10])
-                    st["rot_R"] += all(abs(a - b) < 1e-3 for a, b in zip(r, c))
-                    st["rot_T"] += all(abs(a - b) < 1e-3 for a, b in zip(t, c))
+                hm, m = min(ck, key=lambda c: sum((c[1][12 + k] - v[12 + k]) ** 2 for k in range(3)))
+                if not all(abs(m[12 + k] - v[12 + k]) < 0.01 for k in range(3)):
+                    continue
+                st["pos_ok"] += 1
+                st["hash_ok"] += hm == h
+                r = (v[0], v[1], v[2], v[4], v[5], v[6], v[8], v[9], v[10])
+                t = (r[0], r[3], r[6], r[1], r[4], r[7], r[2], r[5], r[8])
+                c = (m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10])
+                st["rot_R"] += all(abs(a - b) < 1e-3 for a, b in zip(r, c))
+                st["rot_T"] += all(abs(a - b) < 1e-3 for a, b in zip(t, c))
     return st
