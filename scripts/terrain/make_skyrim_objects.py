@@ -501,16 +501,17 @@ def object_lod(a, objects, data, world):
     names = [n for n in (a.object_lod_names.split(",") if a.object_lod_names else
                          [world.replace("_", ""), world]) if n]
     names = list(dict.fromkeys(names))
-    transpose = a.lod_rotation == "transposed"
+    convention = a.lod_rotation
     if a.ck_lod_reference:
-        lodset, levels = objectlod.plan(objects, base_fids, transpose=False)
-        st = objectlod.compare(a.ck_lod_reference, world.replace("_", ""), levels)
-        print(f"object LOD vs Creation Kit: {st}")
-        if st["pos_ok"] and st["rot_T"] > st["rot_R"]:
-            transpose = True
-        print(f"object LOD: rotation {'transposed' if transpose else 'as ref_matrix'} "
-              f"(R {st['rot_R']:,} / T {st['rot_T']:,} of {st['pos_ok']:,} matched instances)")
-    lodset, levels = objectlod.plan(objects, base_fids, transpose=transpose)
+        st = objectlod.compare(a.ck_lod_reference, world.replace("_", ""), objects, base_fids)
+        rot = st.pop("rot")
+        best = max(rot, key=rot.get)
+        print(f"object LOD vs Creation Kit: {st}; rotation conventions matching: "
+              f"{dict(sorted(rot.items(), key=lambda kv: -kv[1])[:4])}")
+        if rot[best] > 0:
+            convention = best
+    print(f"object LOD: rotation convention {convention}")
+    lodset, levels = objectlod.plan(objects, base_fids, convention=convention)
     if lodset is None:
         print("object LOD: no references")
         return
@@ -754,8 +755,9 @@ def main(argv=None):
     ap.add_argument("--object-lod-names", default="",
                     help="lod: comma-separated world names for the object LOD files (default: the world EditorID "
                          "without underscores, as the CK writes it, and with them)")
-    ap.add_argument("--lod-rotation", choices=("matrix", "transposed"), default="matrix",
-                    help="lod: rotation convention of object LOD instances (--ck-lod-reference picks it)")
+    ap.add_argument("--lod-rotation", default="zyx-",
+                    help="lod: rotation convention of object LOD instances, e.g. zyx- (exterior.ref_matrix), zyx--T "
+                         "(its transpose); --ck-lod-reference picks the one matching the Creation Kit")
     ap.add_argument("--ck-lod-reference", default="",
                     help="lod: the Creation Kit's Objects folder (Meshes\\Terrain\\<World>\\Objects) to compare with")
     ap.add_argument("--no-large-refs", action="store_true",

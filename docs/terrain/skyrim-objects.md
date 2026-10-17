@@ -350,3 +350,7 @@ The CK also listed two vanilla markers (XMarker, COCMarkerHeading); ours leaves 
 `make_skyrim_objects.py lod` now writes object LOD after the plugin build (needs formids.json); composite LOD is opt-in
 (`--composite-lod`), Is Full LOD opt-in (`--full-lod`). `--ck-lod-reference <CK Objects folder>` compares ours with the
 CK's and picks the rotation convention.
+Rotation: matched by position, the CK's instance rotations agreed with exterior.ref_matrix (R) for 465 and with its
+transpose for 3,544 of 10,220 instances (owner's run), and the transposed build showed tilted rocks turned wrongly
+(owner's screenshots): the CK combines the angles in another order. compare() now tries 24 conventions (axis order x
+sign x transpose) and the lod step uses the best (`--lod-rotation`, default zyx- = ref_matrix).

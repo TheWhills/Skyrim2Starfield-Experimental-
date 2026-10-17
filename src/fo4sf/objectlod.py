@@ -20,6 +20,7 @@ flags 0x2000000E, no children, then
 crc = Bethesda's CRC32 (sfnif.material_id) of the lowercase, backslash path. The world name the CK used is the
 EditorID without underscores ("SKYTamriel"); which one the game reads is not yet known, so both can be written.
 """
+import itertools
 import math
 import os
 import struct
@@ -41,15 +42,41 @@ def model_hashes(model: str) -> Tuple[int, int]:
     return sfnif.material_id(stem), sfnif.material_id("meshes\\" + folder if folder else "meshes")
 
 
-def rotation_rows(rot, transpose: bool = False):
-    m = exterior.ref_matrix(rot)
+def _elem(axis, a):
+    c, s = math.cos(a), math.sin(a)
+    if axis == "x":
+        return (1, 0, 0, 0, c, -s, 0, s, c)
+    if axis == "y":
+        return (c, 0, s, 0, 1, 0, -s, 0, c)
+    return (c, -s, 0, s, c, 0, 0, 0, 1)
+
+
+def _mul(a, b):
+    return tuple(sum(a[3 * r + k] * b[3 * k + c] for k in range(3)) for r in range(3) for c in range(3))
+
+
+# Candidate conventions for a reference's (x, y, z) angles -> the 3x3 rows the CK writes: the order the elementary
+# rotations multiply in (left to right), the angle sign, and whether the result is transposed. "zyx-T" (= our
+# exterior.ref_matrix transposed) matched only 3,544 of 10,220 CK instances (mostly z-only turns): the CK combines
+# the angles differently; compare() tries them all.
+CONVENTIONS = [f"{''.join(o)}{sg}{'-T' if t else ''}" for o in itertools.permutations("xyz") for sg in ("+", "-")
+               for t in (False, True)]
+
+
+def rotation_rows(rot, convention="zyx-"):
+    order, sign, transpose = convention[:3], convention[3], convention.endswith("-T")
+    k = -1.0 if sign == "-" else 1.0
+    ang = {"x": rot[0] * k, "y": rot[1] * k, "z": rot[2] * k}
+    m = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+    for axis in order:
+        m = _mul(m, _elem(axis, ang[axis]))
     if transpose:
         m = (m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8])
     return m
 
 
-def instance_bytes(pos, rot, scale, transpose=False) -> bytes:
-    m = rotation_rows(rot, transpose)
+def instance_bytes(pos, rot, scale, convention="zyx-") -> bytes:
+    m = rotation_rows(rot, convention)
     return struct.pack("<16f", m[0], m[1], m[2], 0.0, m[3], m[4], m[5], 0.0, m[6], m[7], m[8], 0.0,
                        pos[0], pos[1], pos[2], scale)
 
@@ -96,7 +123,7 @@ def block_of(cell, origin, level):
     return tuple(origin[a] + ((cell[a] - origin[a]) // level) * level for a in range(2))
 
 
-def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, transpose: bool = False):
+def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, convention: str = "zyx-"):
     """(lodsettings (x0, y0, side), {level: {block: {raw FormID: (hashes, [instance bytes])}}}) for objects.json
     (stage output) and base index -> FormID (low 24 bits, from formids.json)."""
     bases = objects["bases"]
@@ -109,7 +136,7 @@ def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, transp
         if bi not in hashes:
             hashes[bi] = model_hashes(bases[bi]["model"])
         placed.append((cell_of(r["pos"]), (plugin_index << 24) | base_fids[bi], hashes[bi],
-                       instance_bytes(r["pos"], r["rot"], float(r.get("scale") or 1.0), transpose)))
+                       instance_bytes(r["pos"], r["rot"], float(r.get("scale") or 1.0), convention)))
     if not placed:
         return None, {}
     x0, y0, side = settings(c for c, *_ in placed)
@@ -176,32 +203,35 @@ def parse_node(block: bytes) -> Dict[int, Tuple[Tuple[int, int], List[bytes]]]:
     return out
 
 
-def compare(ck_dir: str, world_ck_name: str, levels, sample: int = 200) -> dict:
-    """Compare our planned level-1 files with the Creation Kit's in ck_dir, matching instances by POSITION (within
-    1 cm; FormIDs differ between builds): how many matched, whether their entry hashes agree, and which rotation
-    convention (as ref_matrix R, or transposed T) agrees within 1e-3."""
-    st = {"files": 0, "missing": 0, "inst": 0, "pos_ok": 0, "hash_ok": 0, "rot_R": 0, "rot_T": 0}
+def compare(ck_dir: str, world_ck_name: str, objects: dict, base_fids: Dict[int, int], sample: int = 200) -> dict:
+    """Match our references to the Creation Kit's level-1 instances in ck_dir by POSITION (within 1 cm; FormIDs
+    differ between builds) and count, for every rotation convention in CONVENTIONS, how many rotations agree within
+    1e-3. Returns {"files", "inst", "pos_ok", "hash_ok", "rot": {convention: count}}."""
+    _ls, levels = plan(objects, base_fids)
+    pos_index: Dict[Tuple[int, int], List[Tuple[Tuple[float, ...], tuple]]] = {}
+    for r in objects["refs"]:
+        if r["base"] in base_fids:
+            pos_index.setdefault(cell_of(r["pos"]), []).append(
+                (tuple(f32(v) for v in r["pos"]), tuple(r["rot"]), model_hashes(objects["bases"][r["base"]]["model"])))
+    st = {"files": 0, "missing": 0, "inst": 0, "pos_ok": 0, "hash_ok": 0, "rot": {c: 0 for c in CONVENTIONS}}
     for (bx, by) in sorted(levels.get(1, {}))[:sample]:
         p = os.path.join(ck_dir, f"{world_ck_name}.1.{bx}.{by}.nif")
         if not os.path.isfile(p):
             st["missing"] += 1
             continue
         st["files"] += 1
-        ck = []
+        ours = pos_index.get((bx, by), [])
         for (h, inst) in parse_node(nifmod.parse(open(p, "rb").read()).blocks[0]).values():
-            ck += [(h, struct.unpack("<16f", b)) for b in inst]
-        for (h, inst) in levels[1][(bx, by)].values():
             for b in inst:
-                v = struct.unpack("<16f", b)
+                c = struct.unpack("<16f", b)
                 st["inst"] += 1
-                hm, m = min(ck, key=lambda c: sum((c[1][12 + k] - v[12 + k]) ** 2 for k in range(3)))
-                if not all(abs(m[12 + k] - v[12 + k]) < 0.01 for k in range(3)):
+                hit = next((o for o in ours if all(abs(o[0][k] - c[12 + k]) < 0.01 for k in range(3))), None)
+                if hit is None:
                     continue
                 st["pos_ok"] += 1
-                st["hash_ok"] += hm == h
-                r = (v[0], v[1], v[2], v[4], v[5], v[6], v[8], v[9], v[10])
-                t = (r[0], r[3], r[6], r[1], r[4], r[7], r[2], r[5], r[8])
-                c = (m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10])
-                st["rot_R"] += all(abs(a - b) < 1e-3 for a, b in zip(r, c))
-                st["rot_T"] += all(abs(a - b) < 1e-3 for a, b in zip(t, c))
+                st["hash_ok"] += hit[2] == h
+                ck_rot = (c[0], c[1], c[2], c[4], c[5], c[6], c[8], c[9], c[10])
+                for conv in CONVENTIONS:
+                    if all(abs(a - b) < 1e-3 for a, b in zip(rotation_rows(hit[1], conv), ck_rot)):
+                        st["rot"][conv] += 1
     return st

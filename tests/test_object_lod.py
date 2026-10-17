@@ -64,15 +64,22 @@ if __name__ == "__main__":
 
 
 class Compare(unittest.TestCase):
+    def test_conventions(self):
+        from fo4sf import exterior
+        rot = (0.3, -0.2, 1.1)
+        self.assertEqual(len(ol.CONVENTIONS), 24)
+        for a, b in zip(ol.rotation_rows(rot, "zyx-"), exterior.ref_matrix(rot)):
+            self.assertAlmostEqual(a, b, 9)
+
     def test_compare_matches_by_position_and_finds_convention(self):
-        lodset, levels = ol.plan(objects(), {0: 0x1D6F, 1: 0x23FE})
-        _l2, other_ids = ol.plan(objects(), {0: 0x2000, 1: 0x2001})           # another build: other FormIDs
+        obj = objects()
+        obj["refs"][0]["rot"] = [0.2, -0.3, 0.3]                          # tilted: conventions differ
+        lodset, other = ol.plan(obj, {0: 0x2000, 1: 0x2001}, convention="xyz+")   # "the CK": another build
         with tempfile.TemporaryDirectory() as d:
-            ol.write(d, ["SKYTamriel"], lodset, other_ids, os.path.join(d, "m.json"))
+            ol.write(d, ["SKYTamriel"], lodset, other, os.path.join(d, "m.json"))
             ck = os.path.join(d, "meshes", "terrain", "skytamriel", "objects")
-            st = ol.compare(ck, "SKYTamriel", levels)
-            _l3, transposed = ol.plan(objects(), {0: 0x1D6F, 1: 0x23FE}, transpose=True)
-            st_t = ol.compare(ck, "SKYTamriel", transposed)
-        self.assertEqual((st["pos_ok"], st["hash_ok"], st["rot_R"]), (4, 4, 4))
-        self.assertEqual(st_t["rot_T"], 4)
-        self.assertLess(st_t["rot_R"], 4)
+            st = ol.compare(ck, "SKYTamriel", obj, {0: 0x1D6F, 1: 0x23FE})
+        self.assertEqual((st["pos_ok"], st["hash_ok"]), (4, 4))
+        self.assertEqual(st["rot"]["xyz+"], 4)
+        self.assertEqual(max(st["rot"], key=st["rot"].get), "xyz+")
+        self.assertLess(st["rot"]["zyx-"], 4)
