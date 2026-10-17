@@ -81,3 +81,59 @@ def apply(data_dir: str, texconv: str, prefix: str = "skyrim") -> Dict[str, int]
             except (OSError, ValueError, KeyError, TypeError):
                 st["failed"] += 1
     return st
+
+
+# ----------------------------------------------------------------------------------------------- standalone rebuild
+# Owner's views (2026-10-17): at Jemison's ocean spot every converted object, near and far, wears an olive, glossy,
+# "underwater / mossy" coating; at the land spot the same mountains were grey rock. Our materials inherit everything
+# but their three textures from vanilla PlasticPlainSmooth01 (Import + Parent); supported hypothesis: an inherited
+# setting lets the planet's biome (ocean there) coat them. Rebuilt standalone (convert_material.build_mat_standalone,
+# parents only the generic Root classes), nothing vanilla is inherited.
+OBJECT_PARENTS = ("\\common\\plastic\\", "\\common\\metal\\")
+
+
+def standalone(mat: dict):
+    """The standalone rebuild of a plain opaque converted material, or None (cutouts, decals, glass, ground: kept)."""
+    layer = mat.get("Summary", {}).get("Layer1", {})
+    parent = (layer.get("Parent") or "").lower()
+    if not any(p in parent for p in OBJECT_PARENTS):
+        return None
+    tex = layer.get("Textures", {})
+    files = {k: (v or {}).get("File") for k, v in tex.items()}
+    if any(files.get(k) for k in ("Opacity",)) or not files.get("Albedo"):
+        return None
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::AlphaSettingsComponent" or \
+                    (c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") == 2):
+                return None
+    name = next((c["Data"]["Name"] for c in mat["Objects"][0].get("Components", [])
+                 if c.get("Type") == "BSComponentDB::CTName"), "SKY_Material")
+    t = layer.get("Tint") or {}
+    tint = (float(t.get("x", 1.0)), float(t.get("y", 1.0)), float(t.get("z", 1.0)), float(t.get("w", 0.0)))
+    return cm.build_mat_standalone(name, files["Albedo"], files.get("Normal") or "", files.get("Roughness") or "", tint)
+
+
+def apply_standalone(data_dir: str, prefix: str = "skyrim") -> Dict[str, int]:
+    st = {"materials": 0, "rebuilt": 0, "kept": 0, "failed": 0}
+    for d, _dirs, files in os.walk(os.path.join(data_dir, "materials", prefix)):
+        for fn in files:
+            if not fn.lower().endswith(".mat"):
+                continue
+            p = os.path.join(d, fn)
+            st["materials"] += 1
+            try:
+                with open(p, encoding="utf-8-sig") as fh:
+                    mat = json.load(fh)
+                new = standalone(mat)
+                if new is None:
+                    st["kept"] += 1
+                    continue
+                tmp = p + ".tmp"
+                with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(cm.dump_mat(new))
+                os.replace(tmp, p)                       # a new file: the hard-linked original stays untouched
+                st["rebuilt"] += 1
+            except (OSError, ValueError, KeyError, TypeError):
+                st["failed"] += 1
+    return st

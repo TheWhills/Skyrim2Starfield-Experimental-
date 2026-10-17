@@ -52,5 +52,25 @@ class MetalFix(unittest.TestCase):
             self.assertFalse(json.load(open(staged))["Summary"]["Layer1"]["Textures"]["Metalness"]["UseReplacement"])
 
 
+    def test_standalone_only_plain_object_materials(self):
+        m = mat()
+        m["Summary"]["Layer1"].update({"Parent": "Data\\MATERIALS\\Common\\Plastic\\PlasticPlainSmooth01.mat",
+                                       "Tint": {"x": 1.0, "y": 1.0, "z": 1.0, "w": 0.0}})
+        m["Summary"]["Layer1"]["Textures"].update({"Albedo": {"File": "Data\\textures\\a_color.dds"},
+                                                   "Roughness": {"File": "Data\\textures\\a_rough.dds"}})
+        new = lm.standalone(m)
+        text = json.dumps(new)
+        self.assertNotIn("PlasticPlainSmooth01", text)
+        self.assertIn("Layered\\\\Root", text)
+        self.assertIn("a_color.dds", text)
+        ground = json.loads(json.dumps(m))
+        ground["Summary"]["Layer1"]["Parent"] = "Data\\Materials\\Terrain\\DirtFootprints01.mat"
+        self.assertIsNone(lm.standalone(ground))
+        cut = json.loads(json.dumps(m))
+        cut["Objects"][1]["Components"].append({"Data": {"FileName": "x.dds"}, "Index": 2,
+                                               "Type": "BSMaterial::MRTextureFile"})
+        self.assertIsNone(lm.standalone(cut))
+
+
 if __name__ == "__main__":
     unittest.main()

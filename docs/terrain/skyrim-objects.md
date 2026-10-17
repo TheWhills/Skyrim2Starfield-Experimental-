@@ -396,3 +396,9 @@ included) the near rocks and the ground turned shiny / gold-metallic too, so it 
 experiment) and a stage re-run relinks the converted materials. The glossy distant objects at the ocean spot are
 unexplained again (owner's hypothesis: Starfield's wet-surface effect there). River pieces drew (Riverwood's river
 present) but bright opaque cyan: own material now, darker and rougher (`--river-colour`, `--river-roughness`).
+**Coating at the ocean spot (owner, 2026-10-17):** every converted object there, near and far, wears an olive,
+glossy, "underwater / mossy" coating; at the land spot the same mountains were grey rock. Our object materials
+(sample gray_86d7593e.mat) hold only their three textures and a few replacements and inherit the rest from vanilla
+PlasticPlainSmooth01 (Import + Parent); no global-layer component of their own. `lod --standalone-materials`
+(experiment) rebuilds the plain opaque ones with convert_material.build_mat_standalone (generic Root parents only);
+re-running stage undoes it.

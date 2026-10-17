@@ -411,6 +411,11 @@ def cmd_lod(a):
     data = os.path.join(a.out, "Data")
     distant_sea(a, objects, data, ov)
     river_meshes(a, prm, objects, data)
+    if a.standalone_materials:                       # biome coating at the ocean spot (src/fo4sf/lodmatfix.py)
+        from fo4sf import lodmatfix
+        ms = lodmatfix.apply_standalone(data)
+        print(f"materials: {ms['rebuilt']:,} of {ms['materials']:,} rebuilt standalone (nothing inherited from vanilla); "
+              f"{ms['kept']:,} kept (cutouts, decals, glass, ground)" + (f", {ms['failed']} unreadable" if ms["failed"] else ""))
     if not a.metal_fix:
         pass                                         # owner, 2026-10-17: with it near rock and ground turned shiny too
     elif not a.texconv:
@@ -827,6 +832,9 @@ def main(argv=None):
     ap.add_argument("--object-lod-sizes", default="8,12,24,48",
                     help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
+    ap.add_argument("--standalone-materials", action="store_true",
+                    help="lod: EXPERIMENT, rebuild plain object materials without vanilla inheritance (olive coating at "
+                         "the ocean spot); re-run stage to undo")
     ap.add_argument("--metal-fix", action="store_true",
                     help="lod: EXPERIMENT, black metalness texture in every material (made everything shinier in game; "
                          "re-run stage to undo: it relinks the converted materials)")
