@@ -27,10 +27,10 @@ SRC_PREFIX = "distant_sea:"
 MODEL_DIR = "skyrim\\distantsea"
 TEX_REL = "textures/skyrim/distantsea/sea"
 MAT_REL = "materials/skyrim/distantsea/sea.mat"
-WAVE_M = 16.0          # one repeat of the wave normal map
+WAVE_M = 48.0          # one repeat of the wave normal map (16 m showed a visible grid from afar, owner)
 OVERLAP_M = 2.0        # neighbouring pieces overlap, so position quantisation leaves no cracks
-COLOUR = (22, 48, 58)  # sRGB, dark sea
-ROUGHNESS = 40         # 0..255, low = glossy / reflective
+COLOUR = (12, 34, 46)  # sRGB, dark sea (22, 48, 58 read pale / milky next to the cell water, owner)
+ROUGHNESS = 60         # 0..255, low = glossy / reflective
 
 
 def tile_layout(cell_min: int, cell_max: int, target_cells: int = 8) -> Tuple[float, int, float]:
@@ -98,14 +98,15 @@ def wave_normals(size: int = 256, seed: int = 7):
     rng = np.random.default_rng(seed)
     y, x = np.mgrid[0:size, 0:size] / size * 2.0 * np.pi
     h = np.zeros((size, size))
-    for fx, fy, amp in ((3, 1, 1.0), (1, 4, 0.8), (5, -2, 0.5), (-2, 7, 0.35), (9, 4, 0.2)):
+    for fx, fy, amp in ((1, 2, 1.0), (2, -1, 0.9), (3, 1, 0.7), (1, 4, 0.6), (5, -2, 0.45), (-2, 7, 0.35),
+                        (9, 4, 0.25), (-7, 11, 0.18), (13, -6, 0.12)):
         h += amp * np.sin(fx * x + fy * y + rng.uniform(0, 2 * np.pi))
     spec = np.fft.fft2(rng.normal(size=(size, size)))
     fy_, fx_ = np.meshgrid(np.fft.fftfreq(size) * size, np.fft.fftfreq(size) * size, indexing="ij")
     r = np.hypot(fx_, fy_)
-    spec *= np.where((r > 6) & (r < 30), 1.0 / np.maximum(r, 1.0), 0.0)
+    spec *= np.where((r > 4) & (r < 60), 1.0 / np.maximum(r, 1.0), 0.0)
     noise = np.real(np.fft.ifft2(spec))
-    h += noise / (np.abs(noise).max() or 1.0) * 0.4
+    h += noise / (np.abs(noise).max() or 1.0) * 0.8
     gx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5
     gy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5
     k = 0.6 / (max(np.abs(gx).max(), np.abs(gy).max()) or 1.0)     # gentle slopes: |n.xy| <= ~0.5
@@ -116,20 +117,20 @@ def wave_normals(size: int = 256, seed: int = 7):
     return to_u8(nx), to_u8(ny)
 
 
-def write_material(data_dir: str, content_resources: str, texconv: str) -> str:
+def write_material(data_dir: str, content_resources: str, texconv: str, colour=COLOUR, roughness: int = ROUGHNESS) -> str:
     """Sea colour / wave normal / roughness textures and a .mat cloned from the converter's template; returns the
     material path as NIFs store it ("materials\\...")."""
     out = {}
     with tempfile.TemporaryDirectory() as tmp:
         c = np.zeros((64, 64, 4), np.uint8)
-        c[..., :3] = COLOUR
+        c[..., :3] = colour
         c[..., 3] = 255
         textures.write_dds_dx10(os.path.join(tmp, "c_in.dds"), 64, 64, textures.DXGI_R8G8B8A8_UNORM, c.tobytes(), 4)
         textures.texconv(texconv, os.path.join(tmp, "c_in.dds"), tmp, "BC1_UNORM_SRGB")
-        r, g = wave_normals()
+        r, g = wave_normals(512)
         textures.write_rg8_snorm(os.path.join(tmp, "n_in.dds"), r, g)
         textures.texconv(texconv, os.path.join(tmp, "n_in.dds"), tmp, "BC5_SNORM")
-        textures.write_r8(os.path.join(tmp, "r_in.dds"), np.full((64, 64), ROUGHNESS, np.uint8))
+        textures.write_r8(os.path.join(tmp, "r_in.dds"), np.full((64, 64), int(roughness), np.uint8))
         textures.texconv(texconv, os.path.join(tmp, "r_in.dds"), tmp, "BC4_UNORM")
         for kind, fn in (("color", "c_in.dds"), ("normal", "n_in.dds"), ("rough", "r_in.dds")):
             dst = os.path.join(data_dir, *f"{TEX_REL}_{kind}.dds".split("/"))
@@ -173,16 +174,18 @@ def pieces(cell_min: int, cell_max: int, reach_m: float):
 
 
 def add(objects: dict, data_dir: str, cell_min: int, cell_max: int, sea_level_m: float, content_resources: str,
-        texconv: str, reach_m: float = 20000.0, below_m: float = 0.3, double_sided: bool = False) -> Dict[str, int]:
+        texconv: str, reach_m: float = 60000.0, below_m: float = 0.3, double_sided: bool = False,
+        colour=COLOUR, roughness: int = ROUGHNESS) -> Dict[str, int]:
     """Write the sea models and material under data_dir and append their bases / references to objects.json's dict."""
     remove(objects)
-    material = write_material(data_dir, content_resources, texconv)
+    material = write_material(data_dir, content_resources, texconv, colour, roughness)
     t, _k, _x0 = tile_layout(cell_min, cell_max)
     h, o = t / 2, OVERLAP_M
     reach = max(t, round(reach_m / t) * t)
+    far = max(t / 2, reach / 100.0)               # <= 100 x 100 quads (40,000 vertices; one mesh holds 65,535)
     shapes = {"tile": quads(-h - o, h + o, -h - o, h + o, 0.0, t),
-              "strip": quads(-h - o, h + o, h - o, h + reach, 0.0, t / 2),
-              "corner": quads(h - o, h + reach, h - o, h + reach, 0.0, t / 2)}
+              "strip": quads(-h - o, h + o, h - o, h + reach, 0.0, far),
+              "corner": quads(h - o, h + reach, h - o, h + reach, 0.0, far)}
     base_of = {}
     for kind, (pos, uv, tris) in shapes.items():
         model, bounds = write_model(data_dir, kind, pos, uv, tris, material, double_sided)

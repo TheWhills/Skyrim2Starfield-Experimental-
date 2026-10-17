@@ -370,7 +370,11 @@ the sea floor showed dry, icebergs standing on it). The planet's own ocean does 
 lat -0.15, offset 390: right level, no Starfield land in view) but there the engine walls the player in ("You cannot
 go that way" in Riverwood) and the river water vanished. So at the land spot the `lod` step now adds flat sea pieces
 at the overlay's `sea_level_m` (written by make_skyrim_overlay.py build; 0.3 m below the cell water): 10 x 10 tiles
-over the map, strips and corners reaching `--sea-reach` (20 km) past it, one-sided facing up, our own material
+over the map, strips and corners reaching `--sea-reach` (60 km; 20 km left Jemison land on the horizon) past it, one-sided facing up, our own material
 (dark sea colour, tiling wave normals, low roughness; needs `--content-resources` / `--texconv`); they are big statics,
 so object LOD draws them at every distance. `--no-distant-sea` removes them, `--sea-double-sided` if they turn out
 invisible. Supported hypothesis: how water-like a flat mesh looks from afar; not yet seen in game.
+First view (owner, 2026-10-17): the sea reaches the horizon round the icebergs; it read paler / milkier than the cell
+water (a visible line where they meet), its 16 m wave repeat showed as a grid, and Jemison land stood past 20 km.
+Now darker (12, 34, 46), roughness 60, a 48 m multi-scale wave repeat, 60 km reach; `--sea-colour R,G,B` and
+`--sea-roughness` tune it without code.

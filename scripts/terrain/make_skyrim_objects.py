@@ -488,6 +488,11 @@ def cmd_lod(a):
     return 0
 
 
+def skyrimsea_defaults():
+    from fo4sf import skyrimsea
+    return skyrimsea.COLOUR, skyrimsea.ROUGHNESS
+
+
 def distant_sea(a, objects, data, ov):
     """Flat sea pieces at Skyrim's sea level, drawn at any distance through object LOD (src/fo4sf/skyrimsea.py): cell
     water only draws in the loaded cells. Needs the overlay's sea_level_m (make_skyrim_overlay.py build) and
@@ -506,7 +511,8 @@ def distant_sea(a, objects, data, ov):
         print(f"distant sea: skipped, needs {', '.join(missing)}")
         return
     st = skyrimsea.add(objects, data, ov["cell_min"], ov["cell_max"], float(sea), a.content_resources, a.texconv,
-                       reach_m=a.sea_reach, double_sided=a.sea_double_sided)
+                       reach_m=a.sea_reach, double_sided=a.sea_double_sided,
+                       colour=tuple(int(v) for v in a.sea_colour.split(",")), roughness=a.sea_roughness)
     print(f"distant sea: {st['pieces']} pieces ({st['tile_m']:g} m tiles over the map, reaching {st['reach_m']:g} m "
           f"past it) at z {st['z']:g} m (sea level {float(sea):g} m)")
 
@@ -792,7 +798,11 @@ def main(argv=None):
                     help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
     ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")
-    ap.add_argument("--sea-reach", type=float, default=20000.0, help="lod: how far the distant sea reaches past the map (m)")
+    ap.add_argument("--sea-reach", type=float, default=60000.0, help="lod: how far the distant sea reaches past the map (m)")
+    ap.add_argument("--sea-colour", default=",".join(map(str, skyrimsea_defaults()[0])),
+                    help="lod: distant sea colour R,G,B (sRGB 0..255)")
+    ap.add_argument("--sea-roughness", type=int, default=skyrimsea_defaults()[1],
+                    help="lod: distant sea roughness 0..255 (lower = shinier, more sky reflection)")
     ap.add_argument("--sea-double-sided", action="store_true",
                     help="lod: draw the distant sea from below too (if it turns out invisible from above)")
     ap.add_argument("--object-lod-plants", action="store_true", help="lod: keep trees and plants in object LOD")
