@@ -318,3 +318,8 @@ make_skyrim_objects.py adds the cell index (world_offsets.py) after every plugin
 every object is zero-sized. 104 x "Reference (01000800) attached to wrong cell for its location: 'Surface' (2147483647,
 2147483647)" (our anchor in the persistent cell). The lod step now stores each static's mesh bounds (metres) in
 objects.json and TerrainOverlays writes them as OBND.
+CK after OBND: "not a large ref" down from 19,494 to 149 (SKY_fcHawkNoNest, SKY_WinterholdExtTowerRingBase), one
+"Invalid large ref data found for world 'SKYTamriel'". The last refused cell: "Cell (01001CD6) Surface already exists at
+coord (-1, -1)": the CK put our persistent cell (no XCLC) at (-1, -1), then refused the real (-1, -1) and attached its
+100 references to the persistent cell. The persistent cell now gets XCLC (int.MaxValue, int.MaxValue), where the CK
+files it anyway and where LC172World's sits. Still no LOD in game after OBND.
