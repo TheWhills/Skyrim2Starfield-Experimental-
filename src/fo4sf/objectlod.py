@@ -58,12 +58,13 @@ def _mul(a, b):
 # Candidate conventions for a reference's (x, y, z) angles -> the 3x3 rows the CK writes: the order the elementary
 # rotations multiply in (left to right), the angle sign, and whether the result is transposed. "zyx-T" (= our
 # exterior.ref_matrix transposed) matched only 3,544 of 10,220 CK instances (mostly z-only turns): the CK combines
-# the angles differently; compare() tries them all.
+# the angles differently; compare() tries them all. Verified: "zyx+" (= Rz(z) Ry(y) Rx(x), positive angles; the same
+# matrix as "xyz--T") matched 10,140 of 10,220 CK instances (owner's run), and tilted rocks then looked right in game.
 CONVENTIONS = [f"{''.join(o)}{sg}{'-T' if t else ''}" for o in itertools.permutations("xyz") for sg in ("+", "-")
                for t in (False, True)]
 
 
-def rotation_rows(rot, convention="zyx-"):
+def rotation_rows(rot, convention="zyx+"):
     order, sign, transpose = convention[:3], convention[3], convention.endswith("-T")
     k = -1.0 if sign == "-" else 1.0
     ang = {"x": rot[0] * k, "y": rot[1] * k, "z": rot[2] * k}
@@ -75,7 +76,7 @@ def rotation_rows(rot, convention="zyx-"):
     return m
 
 
-def instance_bytes(pos, rot, scale, convention="zyx-") -> bytes:
+def instance_bytes(pos, rot, scale, convention="zyx+") -> bytes:
     m = rotation_rows(rot, convention)
     return struct.pack("<16f", m[0], m[1], m[2], 0.0, m[3], m[4], m[5], 0.0, m[6], m[7], m[8], 0.0,
                        pos[0], pos[1], pos[2], scale)
@@ -123,7 +124,7 @@ def block_of(cell, origin, level):
     return tuple(origin[a] + ((cell[a] - origin[a]) // level) * level for a in range(2))
 
 
-def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, convention: str = "zyx-"):
+def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, convention: str = "zyx+"):
     """(lodsettings (x0, y0, side), {level: {block: {raw FormID: (hashes, [instance bytes])}}}) for objects.json
     (stage output) and base index -> FormID (low 24 bits, from formids.json)."""
     bases = objects["bases"]

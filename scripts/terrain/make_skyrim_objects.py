@@ -755,9 +755,9 @@ def main(argv=None):
     ap.add_argument("--object-lod-names", default="",
                     help="lod: comma-separated world names for the object LOD files (default: the world EditorID "
                          "without underscores, as the CK writes it, and with them)")
-    ap.add_argument("--lod-rotation", default="zyx-",
-                    help="lod: rotation convention of object LOD instances, e.g. zyx- (exterior.ref_matrix), zyx--T "
-                         "(its transpose); --ck-lod-reference picks the one matching the Creation Kit")
+    ap.add_argument("--lod-rotation", default="zyx+",
+                    help="lod: rotation convention of object LOD instances (default zyx+: matched 10,140 of 10,220 "
+                         "Creation Kit instances; --ck-lod-reference re-checks and picks the best)")
     ap.add_argument("--ck-lod-reference", default="",
                     help="lod: the Creation Kit's Objects folder (Meshes\\Terrain\\<World>\\Objects) to compare with")
     ap.add_argument("--no-large-refs", action="store_true",

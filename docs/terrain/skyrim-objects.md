@@ -354,3 +354,7 @@ Rotation: matched by position, the CK's instance rotations agreed with exterior.
 transpose for 3,544 of 10,220 instances (owner's run), and the transposed build showed tilted rocks turned wrongly
 (owner's screenshots): the CK combines the angles in another order. compare() now tries 24 conventions (axis order x
 sign x transpose) and the lod step uses the best (`--lod-rotation`, default zyx- = ref_matrix).
+**Rotation verified (owner, 2026-10-17):** convention zyx+ (Rz(z) Ry(y) Rx(x), positive angles; = xyz--T) matched
+10,140 of 10,220 CK instances; with it the mountain LOD looked right in game. Now the default. Moving the world to an
+ocean spot of Jemison (lat -0.15) placed it ~200 m lower (Riverwood at the planet's sea level, -16 m, flooded): the
+overlay's height follows the planet's surface there (the sea floor). Back at -0.6, 2.281: dry again.
