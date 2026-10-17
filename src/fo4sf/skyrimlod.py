@@ -142,6 +142,8 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
         b = bases[r["base"]]
         if b.get("door") or any(s in (b.get("source") or "").lower() for s in skip_paths):
             continue
+        if (b.get("source") or "").startswith("generated:"):  # distant sea / river pieces: object LOD draws them;
+            continue                                  # a 60 km sea corner listed per cell ran the plugin build out of memory
         if b["model"] not in cache:
             try:
                 cache[b["model"]] = load_model(data_dir, b["model"])
@@ -157,10 +159,10 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
             continue
         cell = (int(math.floor(r["pos"][0] / CELL_M)), int(math.floor(r["pos"][1] / CELL_M)))
         rad = mdl[1] * sc
-        large[ri] = [[x, y] for x in range(int(math.floor((r["pos"][0] - rad) / CELL_M)),
-                                           int(math.floor((r["pos"][0] + rad) / CELL_M)) + 1)
-                     for y in range(int(math.floor((r["pos"][1] - rad) / CELL_M)),
-                                    int(math.floor((r["pos"][1] + rad) / CELL_M)) + 1)]
+        lo = lambda v: max(cell_min, int(math.floor((v - rad) / CELL_M)))       # noqa: E731  (only the world's cells)
+        hi = lambda v: min(cell_max, int(math.floor((v + rad) / CELL_M)))       # noqa: E731
+        large[ri] = [[x, y] for x in range(lo(r["pos"][0]), hi(r["pos"][0]) + 1)
+                     for y in range(lo(r["pos"][1]), hi(r["pos"][1]) + 1)]
         groups.setdefault((r["base"], cell), []).append((np.asarray(r["pos"], np.float64),
                                                          np.asarray(exterior.ref_matrix(r["rot"])).reshape(3, 3), sc))
     manifest = manifest_path(data_dir, world)
