@@ -378,3 +378,10 @@ First view (owner, 2026-10-17): the sea reaches the horizon round the icebergs; 
 water (a visible line where they meet), its 16 m wave repeat showed as a grid, and Jemison land stood past 20 km.
 Now darker (12, 34, 46), roughness 60, a 48 m multi-scale wave repeat, 60 km reach; `--sea-colour R,G,B` and
 `--sea-roughness` tune it without code.
+
+**Glossy LOD (2026-10-17, src/fo4sf/lodmatfix.py):** owner's views: distant rocks, icebergs and mountains (object LOD)
+look glossy and mottled, like wet metal, while the same objects up close look right. Every converted material is a
+clone of the cast-iron template made non-metal by a constant metalness replacement (slot 4); supported hypothesis: the
+distant renderer ignores that replacement and draws the template's metal. `lod` now gives every material under
+materials\skyrim an explicit black metalness texture in slot 4 instead (needs `--texconv`; `--no-metal-fix` skips).
+Not yet seen in game.

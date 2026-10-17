@@ -410,6 +410,15 @@ def cmd_lod(a):
     objects = load(obj_path)
     data = os.path.join(a.out, "Data")
     distant_sea(a, objects, data, ov)
+    if a.no_metal_fix:
+        print("materials: metalness fix off")
+    elif not a.texconv:
+        print("materials: metalness fix skipped, needs --texconv")
+    else:                                            # glossy, metal-looking object LOD (src/fo4sf/lodmatfix.py)
+        from fo4sf import lodmatfix
+        ms = lodmatfix.apply(data, a.texconv)
+        print(f"materials: black metalness texture in {ms['patched']:,} of {ms['materials']:,} materials"
+              + (f" ({ms['failed']} unreadable)" if ms["failed"] else ""))
     # composite LOD (vanilla city layout) is opt-in: it never drew for our world (docs "Distant-object LOD"); object
     # LOD (objectlod.py, the Creation Kit's -MockWorldSpaceLOD layout) is what works, written after the plugin build
     st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius,
@@ -797,6 +806,8 @@ def main(argv=None):
     ap.add_argument("--object-lod-sizes", default="8,12,24,48",
                     help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
+    ap.add_argument("--no-metal-fix", action="store_true",
+                    help="lod: leave the materials' metalness as converted (constant 0 replacement)")
     ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")
     ap.add_argument("--sea-reach", type=float, default=60000.0, help="lod: how far the distant sea reaches past the map (m)")
     ap.add_argument("--sea-colour", default=",".join(map(str, skyrimsea_defaults()[0])),
