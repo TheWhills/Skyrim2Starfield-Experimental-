@@ -429,7 +429,7 @@ def cmd_build(a, rest):
         lv = skyrimwater.cell_levels(land.grids, land.water, land.default_water,
                                      tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
                                      (o["cell_min"], o["cell_max"]), include_sea=a.skyrim_water_sea)
-        if a.outside_fill == "sea" and land.default_water is not None:
+        if a.outside_fill == "sea" and a.skyrim_water_sea and land.default_water is not None:
             sea = skyrimwater.outside_sea((o["cell_min"], o["cell_max"]),
                                           tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
                                           land.grid_bounds, land.holes, float(land.default_water),
