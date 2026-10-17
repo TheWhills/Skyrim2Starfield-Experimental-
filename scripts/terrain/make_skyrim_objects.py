@@ -437,9 +437,18 @@ def cmd_lod(a):
     # (owner's compare_worlds.py run).
     for r in objects["refs"]:
         r.pop("large_cells", None)
+        r.pop("full_lod", None)
     if not a.no_large_refs:
         for ri, cells in st["large_refs"].items():
             objects["refs"][ri]["large_cells"] = cells
+    # "Is Full LOD" (REFR record flag bit 16, 0x10000; xEdit wbDefinitionsSF1): the reference draws its full model at
+    # any distance. What Starfield modders use for custom locations, where the Creation Kit's LOD layers produce
+    # nothing (r/starfieldmods, Nexus forums); composite LOD never drew for our world. Same references as the LOD
+    # ones (radius x scale >= --lod-min-radius), so only the big, far-visible objects pay for it.
+    if not a.no_full_lod:
+        for ri in st["large_refs"]:
+            objects["refs"][ri]["full_lod"] = True
+    print(f"lod: {0 if a.no_full_lod else len(st['large_refs']):,} references flagged Is Full LOD")
     save(obj_path, objects)
     if a.vanilla_test:
         from fo4sf import ba2
@@ -697,6 +706,8 @@ def main(argv=None):
     ap.add_argument("--lod-layer", default="",
                     help="lod: put every LOD object in this one layer (composites named after it); a vanilla LAYR "
                          "EditorID (e.g. NA_LOD_TheMast) is used as is instead of a new layer (diagnostic)")
+    ap.add_argument("--no-full-lod", action="store_true",
+                    help="lod: do not flag the LOD references Is Full LOD (full model at any distance)")
     ap.add_argument("--no-large-refs", action="store_true",
                     help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")

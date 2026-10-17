@@ -115,6 +115,7 @@ class CommandTests(unittest.TestCase):
         lo, hi = rock_base["bounds"]                                          # OBND for every static
         self.assertTrue(all(a < b for a, b in zip(lo, hi)))
         self.assertIn([cx, cy], rock_ref["large_cells"])                     # a large reference (WRLD RNAM)
+        self.assertTrue(rock_ref.get("full_lod"))                              # REFR Is Full LOD
         self.assertTrue(all("large_cells" not in r or obj["bases"][r["base"]].get("distant_lod") for r in obj["refs"]))
         self.assertEqual(rock_base.get("lod_layer"), rock_base["edid"] + "_LOD")
         self.assertEqual(sorted({f.rsplit("_lod_", 1)[1][0] for f in mine}), ["0", "1", "2", "3"])

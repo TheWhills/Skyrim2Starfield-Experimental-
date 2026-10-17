@@ -328,3 +328,8 @@ records (compare_cells: no fields at all); ours had DATA HasWater since experime
 Empty persistent cell: the CK then refused (0, 0) instead (0100126C), so it files a persistent cell it does not
 recognise at a default grid. Vanilla: one cell per world has record flag 0x400 (Persistent), LC172World's at XCLC
 (MAXINT, MAXINT). Ours now has both.
+**Full LOD (2026-10-17):** modders report that the CK's LOD layers generate nothing for custom locations and that
+the working option is the reference flag "Is Full LOD" (REFR record flag bit 16 = 0x10000, xEdit wbDefinitionsSF1;
+owner's r/starfieldmods and Nexus finds; `-MockWorldSpaceLOD` crashed the owner's CK at "Initializing FaceGen" for
+our plugin and Starfield.esm alike, and that command was reported for Fallout 4). The lod step now flags every LOD
+reference (radius x scale >= --lod-min-radius) Is Full LOD (`--no-full-lod` to skip). Unverified in game.

@@ -382,6 +382,8 @@ if (Has(prm, "objects"))
         var scale = r.GetProperty("scale").GetSingle();
         if (Math.Abs(scale - 1f) > 1e-4) obj.Scale = scale;
         if (layerByBase.TryGetValue(r.GetProperty("base").GetInt32(), out var lk)) obj.Layer.SetTo(lk);
+        // "full_lod" (make_skyrim_objects.py lod): REFR flag Is Full LOD (bit 16): full model at any distance
+        if (r.TryGetProperty("full_lod", out var fl) && fl.GetBoolean()) obj.MajorRecordFlagsRaw |= 0x10000;
         if (r.GetProperty("disabled").GetBoolean())
         {
             obj.MajorRecordFlagsRaw |= 0x800;                                // Initially Disabled, as in FO4
