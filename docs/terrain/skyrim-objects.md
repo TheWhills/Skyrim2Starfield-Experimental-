@@ -323,3 +323,5 @@ CK after OBND: "not a large ref" down from 19,494 to 149 (SKY_fcHawkNoNest, SKY_
 coord (-1, -1)": the CK put our persistent cell (no XCLC) at (-1, -1), then refused the real (-1, -1) and attached its
 100 references to the persistent cell. The persistent cell now gets XCLC (int.MaxValue, int.MaxValue), where the CK
 files it anyway and where LC172World's sits. Still no LOD in game after OBND.
+XCLC (MAXINT, MAXINT) on the persistent cell did not stop the CK refusing (-1, -1). Vanilla persistent cells are empty
+records (compare_cells: no fields at all); ours had DATA HasWater since experiment 1. It is now empty too.

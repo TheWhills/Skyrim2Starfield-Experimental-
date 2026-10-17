@@ -163,14 +163,10 @@ foreach (var o in overlays)
             if (!subs.TryGetValue((sx, sy), out var sub)) { sub = new WorldspaceSubBlock { BlockNumberX = (short)sx, BlockNumberY = (short)sy, GroupType = GroupTypeEnum.ExteriorCellSubBlock }; subs[(sx, sy)] = sub; blk.Items.Add(sub); }
             sub.Items.Add(c);
         }
-    // persistent top cell (as experiments 1 and 2). Its grid is (int.MaxValue, int.MaxValue), as the CK files it
-    // ("'Surface' (2147483647, 2147483647)") and as LC172World's has: without XCLC the owner's Creation Kit first put
-    // it at (-1, -1) ("Cell ... Surface already exists at coord (-1, -1)") and destroyed our real cell (-1, -1).
-    w.TopCell = new Cell(NewKey(), release)
-    {
-        Flags = Cell.Flag.HasWater,
-        Grid = new CellGrid { Point = new P2Int(int.MaxValue, int.MaxValue) },
-    };
+    // persistent top cell: EMPTY, as every vanilla world's (owner's compare_cells.py: no DATA, no XCLC, nothing). Ours
+    // had DATA HasWater, and the owner's Creation Kit then put it at (-1, -1) ("Cell ... Surface already exists at coord
+    // (-1, -1)") and destroyed our real cell (-1, -1); an XCLC of (int.MaxValue, int.MaxValue) did not stop that.
+    w.TopCell = new Cell(NewKey(), release);
     // Optional "water": {"form": hex WATR, "cells": [[x, y, height_m], ...]} (make_skyrim_overlay.py --skyrim-water):
     // Skyrim's river / lake levels as cell water (XCLW / XCWT / HasWater), listed on the world like New Atlantis's
     // CellWaterHeightLocations + WaterHeights (owner's SfInspect dump). Supported hypothesis, not yet seen in game.
