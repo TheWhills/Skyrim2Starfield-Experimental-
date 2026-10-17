@@ -391,3 +391,8 @@ Not yet seen in game.
 horizon, no Starfield land in view. Still open there: no river water (our cell water did not draw) and the glossy LOD.
 `lod --river-meshes` draws each river / lake cell as a flat water static at its level (skyrimsea.add_rivers; also in
 object LOD). Not yet seen in game.
+**Metal fix refuted (owner, 2026-10-17):** with the black metalness texture in all 1,141 materials (ground materials
+included) the near rocks and the ground turned shiny / gold-metallic too, so it is now opt-in (`--metal-fix`,
+experiment) and a stage re-run relinks the converted materials. The glossy distant objects at the ocean spot are
+unexplained again (owner's hypothesis: Starfield's wet-surface effect there). River pieces drew (Riverwood's river
+present) but bright opaque cyan: own material now, darker and rougher (`--river-colour`, `--river-roughness`).

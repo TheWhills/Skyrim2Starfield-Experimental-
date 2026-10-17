@@ -411,8 +411,8 @@ def cmd_lod(a):
     data = os.path.join(a.out, "Data")
     distant_sea(a, objects, data, ov)
     river_meshes(a, prm, objects, data)
-    if a.no_metal_fix:
-        print("materials: metalness fix off")
+    if not a.metal_fix:
+        pass                                         # owner, 2026-10-17: with it near rock and ground turned shiny too
     elif not a.texconv:
         print("materials: metalness fix skipped, needs --texconv")
     else:                                            # glossy, metal-looking object LOD (src/fo4sf/lodmatfix.py)
@@ -540,7 +540,8 @@ def river_meshes(a, prm, objects, data):
         sys.exit("--river-meshes needs --content-resources and --texconv (for the water material)")
     cells = (prm.get("water") or {}).get("cells") or []
     material = skyrimsea.write_material(data, a.content_resources, a.texconv,
-                                        tuple(int(v) for v in a.sea_colour.split(",")), a.sea_roughness)
+                                        tuple(int(v) for v in a.river_colour.split(",")), a.river_roughness,
+                                        rel=skyrimsea.RIVER_MAT_REL, tex_rel=skyrimsea.RIVER_TEX_REL)
     n = skyrimsea.add_rivers(objects, data, cells, material)
     print(f"river meshes: {n} water pieces (one per river / lake cell)"
           + ("" if n else "; overlays_params.json has no water cells (build the terrain with --skyrim-water)"))
@@ -826,8 +827,12 @@ def main(argv=None):
     ap.add_argument("--object-lod-sizes", default="8,12,24,48",
                     help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
-    ap.add_argument("--no-metal-fix", action="store_true",
-                    help="lod: leave the materials' metalness as converted (constant 0 replacement)")
+    ap.add_argument("--metal-fix", action="store_true",
+                    help="lod: EXPERIMENT, black metalness texture in every material (made everything shinier in game; "
+                         "re-run stage to undo: it relinks the converted materials)")
+    ap.add_argument("--river-colour", default="18,36,34", help="lod --river-meshes: water colour R,G,B (sRGB)")
+    ap.add_argument("--river-roughness", type=int, default=140,
+                    help="lod --river-meshes: 0..255 (60 read as bright opaque cyan: the sky's reflection)")
     ap.add_argument("--river-meshes", action="store_true",
                     help="lod: rivers / lakes as flat water objects too (Jemison's ocean spot drew no cell water)")
     ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")

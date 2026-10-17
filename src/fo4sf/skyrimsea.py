@@ -117,7 +117,12 @@ def wave_normals(size: int = 256, seed: int = 7):
     return to_u8(nx), to_u8(ny)
 
 
-def write_material(data_dir: str, content_resources: str, texconv: str, colour=COLOUR, roughness: int = ROUGHNESS) -> str:
+RIVER_TEX_REL = "textures/skyrim/distantsea/river"
+RIVER_MAT_REL = "materials/skyrim/distantsea/river.mat"
+
+
+def write_material(data_dir: str, content_resources: str, texconv: str, colour=COLOUR, roughness: int = ROUGHNESS,
+                   rel: str = MAT_REL, tex_rel: str = TEX_REL) -> str:
     """Sea colour / wave normal / roughness textures and a .mat cloned from the converter's template; returns the
     material path as NIFs store it ("materials\\...")."""
     out = {}
@@ -133,16 +138,17 @@ def write_material(data_dir: str, content_resources: str, texconv: str, colour=C
         textures.write_r8(os.path.join(tmp, "r_in.dds"), np.full((64, 64), int(roughness), np.uint8))
         textures.texconv(texconv, os.path.join(tmp, "r_in.dds"), tmp, "BC4_UNORM")
         for kind, fn in (("color", "c_in.dds"), ("normal", "n_in.dds"), ("rough", "r_in.dds")):
-            dst = os.path.join(data_dir, *f"{TEX_REL}_{kind}.dds".split("/"))
+            dst = os.path.join(data_dir, *f"{tex_rel}_{kind}.dds".split("/"))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(os.path.join(tmp, fn), dst)
-            out[kind] = cm.game_path(f"{TEX_REL}_{kind}.dds")
-    mat = cm.build_mat(cm.read_template(content_resources), "SKY_DistantSea", out["color"], out["normal"], out["rough"])
-    p = os.path.join(data_dir, *MAT_REL.split("/"))
+            out[kind] = cm.game_path(f"{tex_rel}_{kind}.dds")
+    name = "SKY_" + os.path.splitext(os.path.basename(rel))[0].capitalize()
+    mat = cm.build_mat(cm.read_template(content_resources), name, out["color"], out["normal"], out["rough"])
+    p = os.path.join(data_dir, *rel.split("/"))
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(cm.dump_mat(mat))
-    return MAT_REL.replace("/", "\\")
+    return rel.replace("/", "\\")
 
 
 def remove(objects: dict, prefix: str = EDID_PREFIX, src_prefix: str = SRC_PREFIX) -> int:
