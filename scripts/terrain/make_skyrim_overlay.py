@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -406,6 +407,8 @@ def cmd_build(a, rest):
         with open(os.path.join(a.out, "skyrim_source.json"), "w", encoding="utf-8") as f:
             json.dump(source, f, indent=1)
     write_source()
+    with open(os.path.join(a.out, "build_command.txt"), "w", encoding="utf-8") as f:
+        f.write(subprocess.list2cmdline([sys.executable, os.path.abspath(sys.argv[0])] + list(getattr(a, "raw_argv", []))) + "\n")
     print(f"overlay {ca.world}: {n} x {n} cells ({n / 10:g} km), source cells {cells}, arrival "
           f"{arrival[0][0] if arrival else 'overlay centre'}, {len(extra)} extra landmarks")
     res = cw.build(ca)
@@ -595,7 +598,9 @@ def main(argv=None):
     ap.add_argument("--skyrim-ground-max", type=int, default=200, help="build: at most this many converted ground textures")
     ap.add_argument("--content-resources", default="", help="build --skyrim-ground: Starfield Tools\\ContentResources.zip")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
-    a, rest = ap.parse_known_args(join_coordinates(sys.argv[1:] if argv is None else argv))
+    raw = sys.argv[1:] if argv is None else list(argv)
+    a, rest = ap.parse_known_args(join_coordinates(raw))
+    a.raw_argv = raw
     if a.cmd in ("info", "worlds", "build") and not a.skyrim:
         sys.exit("--skyrim <Skyrim.esm> is required")
     if a.cmd in ("build", "check") and not (a.out and a.sf_data):
