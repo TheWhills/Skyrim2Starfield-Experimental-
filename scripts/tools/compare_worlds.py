@@ -1,6 +1,6 @@
 """Compare worldspace records field by field, raw (read-only): every subrecord of each WRLD, including ones Mutagen does
 not name, plus the record's flags and its plugin's header flags. For finding what worlds whose composite LOD draws
-(SettleGagarinWorld, NewAtlantis, ShatteredSpace's SFBGS001DazraWorld) have that ours (SKY_Tamriel) lacks.
+(NewAtlantis, ShatteredSpace's SFBGS001DazraWorld) have that ours (SKY_Tamriel) lacks.
 
     python -I scripts\\tools\\compare_worlds.py --data "<Starfield>\\Data" > C:\\Modding\\work\\worlds.txt
 
@@ -18,9 +18,10 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 from fo4sf import fo4land  # noqa: E402
 
-DEFAULT = ["Starfield.esm::SettleGagarinWorld", "Starfield.esm::NewAtlantis", "ShatteredSpace.esm::SFBGS001DazraWorld",
+DEFAULT = ["Starfield.esm::NewAtlantis", "ShatteredSpace.esm::SFBGS001DazraWorld",
            "Starfield.esm::LC172World", "SkyrimTerrainTamriel.esm::SKY_Tamriel"]
-LOD_WORLDS = 3                       # the first three of DEFAULT have composite LOD that draws
+LOD_WORLDS = 2                       # the first two of DEFAULT have composite LOD that draws (SettleGagarinWorld is not
+                                     # that world's EditorID in Starfield.esm: owner's run)
 
 
 def world_record(path, edid):

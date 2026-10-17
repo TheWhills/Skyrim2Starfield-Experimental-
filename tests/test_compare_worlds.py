@@ -33,7 +33,7 @@ class CompareWorlds(unittest.TestCase):
             open(os.path.join(d, "B.esm"), "wb").write(plugin([(0x40, "Ours", [(b"HNAM", b"\x05")])]))
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                compare_worlds.main(["--data", d, "A.esm::W1", "A.esm::W2", "A.esm::W3", "B.esm::Ours"])
+                compare_worlds.main(["--data", d, "A.esm::W1", "A.esm::W2", "B.esm::Ours"])
         out = buf.getvalue()
         self.assertIn("ZZZZ  <- every LOD world has it", out)
         self.assertIn("B.esm::Ours: -", out)

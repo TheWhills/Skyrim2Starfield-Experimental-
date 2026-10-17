@@ -400,6 +400,14 @@ def cmd_lod(a):
         if i in flagged:
             b["distant_lod"] = True
             b["lod_layer"] = skyrimlod.layer_name(b["edid"])
+    # large references (WRLD RNAM): every LOD reference, listed in each cell its bounds cover. Both worlds whose
+    # composite LOD draws (NewAtlantis, ShatteredSpace's Dazra) have RNAM; the Mars template and ours had none
+    # (owner's compare_worlds.py run).
+    for r in objects["refs"]:
+        r.pop("large_cells", None)
+    if not a.no_large_refs:
+        for ri, cells in st["large_refs"].items():
+            objects["refs"][ri]["large_cells"] = cells
     save(obj_path, objects)
     if a.vanilla_test:
         from fo4sf import ba2
@@ -652,6 +660,8 @@ def main(argv=None):
     ap.add_argument("--vanilla-test", default="",
                     help="lod: Starfield Data folder; replace our composite NIFs with a vanilla Gagarin crane composite "
                          "(diagnostic: does the engine load our files at all)")
+    ap.add_argument("--no-large-refs", action="store_true",
+                    help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")

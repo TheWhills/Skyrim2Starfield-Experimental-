@@ -299,6 +299,10 @@ if (Has(prm, "objects"))
         baseIds[edid] = baseKeys[^1].ID.ToString("X6");
     }
     var refIds = new Dictionary<string, string>();
+    // "large_cells" (make_skyrim_objects.py lod): the reference is a large reference, listed in the world's RNAM under
+    // every cell its bounds cover (with its own cell). NewAtlantis and ShatteredSpace's Dazra (composite LOD that draws)
+    // have RNAM; LC172World and ours had none (owner's compare_worlds.py). Mutagen: Worldspace.LargeReferences.
+    var large = new SortedDictionary<(int, int), List<WorldspaceReference>>();
     foreach (var r in o.GetProperty("refs").EnumerateArray())
     {
         float[] V(string k) => r.GetProperty(k).EnumerateArray().Select(e => e.GetSingle()).ToArray();
@@ -322,8 +326,31 @@ if (Has(prm, "objects"))
             nDisabled++;
         }
         cell.Temporary.Add(obj);
+        if (r.TryGetProperty("large_cells", out var lc))
+            foreach (var g in lc.EnumerateArray())
+            {
+                var key = (g[0].GetInt32(), g[1].GetInt32());
+                if (!large.TryGetValue(key, out var lst)) large[key] = lst = new List<WorldspaceReference>();
+                lst.Add(new WorldspaceReference
+                {
+                    Reference = new FormLink<IPlacedObjectGetter>(obj.FormKey),
+                    Position = new P2Int16((short)cxy[0], (short)cxy[1]),
+                });
+            }
         refIds[r.GetProperty("src").GetString()!] = obj.FormKey.ID.ToString("X6");
         nRef++;
+    }
+    if (large.Count > 0)
+    {
+        var lw = worlds.First(x => x.World.EditorID == world).World;
+        lw.LargeReferences.Clear();
+        foreach (var (key, lst) in large)
+        {
+            var gr = new WorldspaceGridReference { GridPosition = new P2Int16((short)key.Item1, (short)key.Item2) };
+            gr.References.AddRange(lst);
+            lw.LargeReferences.Add(gr);
+        }
+        Console.WriteLine($"{world}: {large.Values.Sum(l => l.Count):N0} large-reference entries in {large.Count:N0} cells (RNAM)");
     }
     var ids = new Dictionary<string, object> { ["plugin"] = modKey.FileName.String, ["world"] = world, ["bases"] = baseIds, ["refs"] = refIds };
     File.WriteAllText(Path.Combine(outDir, "formids.json"), JsonSerializer.Serialize(ids));

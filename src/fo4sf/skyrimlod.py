@@ -125,7 +125,8 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
     cache: Dict[str, Optional[Tuple[List[Shape], float]]] = {}
     groups: Dict[Tuple[int, Tuple[int, int]], list] = {}          # (base, cell) -> [(pos, matrix, scale)]
     skipped_small = 0
-    for r in objects["refs"]:
+    large: Dict[int, List[List[int]]] = {}                    # ref index -> cells its bounding circle covers
+    for ri, r in enumerate(objects["refs"]):
         if r.get("disabled"):
             continue
         b = bases[r["base"]]
@@ -145,6 +146,11 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
             skipped_small += 1
             continue
         cell = (int(math.floor(r["pos"][0] / CELL_M)), int(math.floor(r["pos"][1] / CELL_M)))
+        rad = mdl[1] * sc
+        large[ri] = [[x, y] for x in range(int(math.floor((r["pos"][0] - rad) / CELL_M)),
+                                           int(math.floor((r["pos"][0] + rad) / CELL_M)) + 1)
+                     for y in range(int(math.floor((r["pos"][1] - rad) / CELL_M)),
+                                    int(math.floor((r["pos"][1] + rad) / CELL_M)) + 1)]
         groups.setdefault((r["base"], cell), []).append((np.asarray(r["pos"], np.float64),
                                                          np.asarray(exterior.ref_matrix(r["rot"])).reshape(3, 3), sc))
     manifest = manifest_path(data_dir, world)
@@ -212,7 +218,7 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
         json.dump(written, fh)
     return {"lodsettings": [x0, y0, size], "objects_with_lod": len(flagged), "instances": ninst,
             "skipped_small": skipped_small, "meshes": nmesh, "mesh_bytes": nbytes, "nif_files": nfiles,
-            "flag_bases": sorted(flagged)}
+            "flag_bases": sorted(flagged), "large_refs": large}
 
 
 VANILLA_TEST = {   # a vanilla composite per LOD level (SettleGagarinWorld's crane; owner's survey), source of --vanilla-test

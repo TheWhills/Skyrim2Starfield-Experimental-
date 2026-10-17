@@ -264,3 +264,10 @@ Fifth test (2026-10-17, with lodsettings installed): our own composites, then th
 drawn either time. Next: `scripts/tools/compare_worlds.py` compares the WRLD records raw (every subrecord, record and
 plugin header flags, child groups) of SettleGagarinWorld, NewAtlantis, ShatteredSpace's SFBGS001DazraWorld (a plugin
 world with composite LOD), LC172World and SKY_Tamriel.
+**WRLD comparison (owner's compare_worlds.py, 2026-10-17):** fields both LOD worlds (NewAtlantis, SFBGS001DazraWorld)
+have and ours lacks: RNAM (large references; LC172World has none either), OFST / CLSZ (the Creation Kit's cell offset
+tables; LC172World has them), XCLW / WHGT (water lists, deliberately off). HNAM is 0 in Dazra, so HNAM is not the LOD
+switch. RNAM (Mutagen WorldspaceGridReference: grid cell, then [reference, its own cell]) lists, per cell, large
+references of that cell and its neighbours. Sixth test: the lod step now lists every LOD reference as a large
+reference in each 100 m cell its bounding circle covers (`--no-large-refs` to skip); TerrainOverlays writes them to
+Worldspace.LargeReferences. Unverified. OFST / CLSZ are not written (Mutagen does not build them).
