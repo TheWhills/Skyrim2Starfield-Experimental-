@@ -136,6 +136,9 @@ def main(argv=None):
     ap.add_argument("--radius-km", type=float, default=200.0)
     ap.add_argument("--land-px", type=float, default=3.0,
                     help="land disc radius in biome-map pixels (one pixel ~ pi/2 x radius / 128 km)")
+    ap.add_argument("--only-biome", default="",
+                    help="diagnostic: one biome everywhere (hex FormID with a PPBD entry in the template, e.g. 0FD00D "
+                         "FrozenLife07): snow round Skyrim proves the engine reads our biome map")
     ap.add_argument("--slot", type=int, default=30, help="planet slot in the star system (unused by vanilla)")
     ap.add_argument("--orbit-scale", type=float, default=1.3, help="orbit distances x this (away from the template)")
     a = ap.parse_args(argv)
@@ -154,14 +157,15 @@ def main(argv=None):
             worlds.append((float(ov["latitude"]), float(ov["longitude"]), wfid))   # terrain plugin = master index 1
     with fo4land.Plugin(a.sf_esm) as p:
         _off, header, subs = find_record(p.buf, p.body, b"PNDT", a.template)
+    only = int(a.only_biome, 16) if a.only_biome else None
     new = planet_subrecords(subs, a.name, f"{a.name}PlanetData", a.radius_km, a.slot, worlds,
-                            {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale)
+                            {only: 100.0} if only else {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale)
     fid = (len(masters) << 24) | 0x800
     n = write_plugin(plugin, header, new, fid)
     bm = os.path.join(a.staging, "Data", "planetdata", "biomemaps", f"{a.name.lower()}.biom")
     os.makedirs(os.path.dirname(bm), exist_ok=True)
     with open(bm, "wb") as fh:
-        fh.write(biome_map(a.land_px))
+        fh.write(biome_map(0.0, land=only, ocean=only) if only else biome_map(a.land_px))
     px_km = math.pi / 2 * a.radius_km / 128
     print(f"{prm['mars']['plugin']}: new planet {a.name} ({fid:08X}, {n:,} bytes of fields, cloned from {a.template}), "
           f"radius {a.radius_km:g} km, slot {a.slot}, master worldspaces {[(round(la, 4), round(lo, 4), hex(f)) for la, lo, f in worlds]}")

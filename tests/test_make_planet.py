@@ -53,6 +53,11 @@ class MakePlanet(unittest.TestCase):
         px = lambda x, y: struct.unpack_from("<I", b, first + 4 * (y * 256 + x))[0]   # noqa: E731
         self.assertEqual((px(128, 128), px(127, 127), px(0, 0), px(128, 140)), (mp.LAND, mp.LAND, mp.OCEAN, mp.OCEAN))
 
+    def test_single_biome_map(self):
+        b = mp.biome_map(0.0, land=0x0FD00D, ocean=0x0FD00D)
+        self.assertEqual(struct.unpack_from("<2I", b, 6), (0x0FD00D, 0x0FD00D))
+        self.assertEqual(struct.unpack_from("<I", b, 6 + 8 + 4 + 12 + 4 * 32896)[0], 0x0FD00D)
+
     def test_write_plugin_replaces_content(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "X_Mars.esm")
