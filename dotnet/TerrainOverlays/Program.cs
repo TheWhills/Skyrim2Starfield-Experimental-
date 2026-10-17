@@ -166,7 +166,11 @@ foreach (var o in overlays)
     // persistent top cell: EMPTY, as every vanilla world's (owner's compare_cells.py: no DATA, no XCLC, nothing). Ours
     // had DATA HasWater, and the owner's Creation Kit then put it at (-1, -1) ("Cell ... Surface already exists at coord
     // (-1, -1)") and destroyed our real cell (-1, -1); an XCLC of (int.MaxValue, int.MaxValue) did not stop that.
-    w.TopCell = new Cell(NewKey(), release);
+    // Then (empty) the CK put it at (0, 0) instead. Every vanilla world has exactly one cell with the record flag
+    // Persistent (0x400; owner's compare_cells: flags 0x00040400 = persistent + compressed), LC172World's at XCLC
+    // (int.MaxValue, int.MaxValue): so ours gets both, and the CK should know it for the persistent cell.
+    w.TopCell = new Cell(NewKey(), release) { Grid = new CellGrid { Point = new P2Int(int.MaxValue, int.MaxValue) } };
+    w.TopCell.MajorRecordFlagsRaw |= 0x400;
     // Optional "water": {"form": hex WATR, "cells": [[x, y, height_m], ...]} (make_skyrim_overlay.py --skyrim-water):
     // Skyrim's river / lake levels as cell water (XCLW / XCWT / HasWater), listed on the world like New Atlantis's
     // CellWaterHeightLocations + WaterHeights (owner's SfInspect dump). Supported hypothesis, not yet seen in game.

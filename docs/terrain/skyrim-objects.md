@@ -325,3 +325,6 @@ coord (-1, -1)": the CK put our persistent cell (no XCLC) at (-1, -1), then refu
 files it anyway and where LC172World's sits. Still no LOD in game after OBND.
 XCLC (MAXINT, MAXINT) on the persistent cell did not stop the CK refusing (-1, -1). Vanilla persistent cells are empty
 records (compare_cells: no fields at all); ours had DATA HasWater since experiment 1. It is now empty too.
+Empty persistent cell: the CK then refused (0, 0) instead (0100126C), so it files a persistent cell it does not
+recognise at a default grid. Vanilla: one cell per world has record flag 0x400 (Persistent), LC172World's at XCLC
+(MAXINT, MAXINT). Ours now has both.
