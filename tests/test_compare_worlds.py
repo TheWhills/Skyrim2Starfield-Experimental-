@@ -63,3 +63,17 @@ class CompareCells(unittest.TestCase):
         self.assertIn("1 exterior cells", out)
         self.assertIn("in GRUP 9: REFR", out)
         self.assertIn("QQQQ\n    A.esm::W: 100%", out)
+
+
+class LabelRules(unittest.TestCase):
+    def test_negative_cell_label_rule(self):
+        import compare_cells
+        tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 0.96, 0, 0x800))])
+        cell = rec(b"CELL", 0x11, [(b"XCLC", struct.pack("<iiI", -1, -9, 0))])     # x -1, y -9
+        world = grup(struct.pack("<I", 0x10), 1, [grup(struct.pack("<hh", -1, -1), 4, [
+            grup(struct.pack("<hh", -2, -1), 5, [cell])])])                         # (y, x) floor
+        data = tes4 + grup(b"WRLD", 0, [rec(b"WRLD", 0x10, [(b"EDID", b"W\0")]), world])
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "A.esm"), "wb").write(data)
+            r = compare_cells.survey(os.path.join(d, "A.esm"), "W")
+        self.assertEqual(dict(r["labels"]), {"(y, x) floor": 1})
