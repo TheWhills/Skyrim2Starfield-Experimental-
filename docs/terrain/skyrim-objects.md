@@ -291,3 +291,7 @@ With all 662 New Atlantis composites overridden from `SkyrimTerrainTamriel - Mai
 or the archive. Next test, `lod --lod-layer NA_LOD_TheMast --vanilla-test`: every Skyrim LOD reference joins that
 vanilla LAYR (TerrainOverlays uses a Starfield.esm LAYR of that EditorID as is), composites named after it, one file per
 block: cranes over Skyrim = our own LAYR records are the problem; none = the world is.
+Layer test result: Skyrim LOD references in the vanilla LAYR NA_LOD_TheMast (22A26A), composites named after it, cranes:
+still nothing over Skyrim. So neither the files, the archive nor our LAYR records are the problem: the Skyrim
+worldspace itself is not given composite LOD. Next: `scripts/tools/compare_cells.py` (cell records and cell children,
+NewAtlantis / Dazra / LC030World against LC172World and ours).

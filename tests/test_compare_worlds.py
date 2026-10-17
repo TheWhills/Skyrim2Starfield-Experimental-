@@ -43,3 +43,23 @@ class CompareWorlds(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompareCells(unittest.TestCase):
+    def test_counts_cell_fields_and_children(self):
+        import compare_cells
+        tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 0.96, 0, 0x800))])
+        cell = rec(b"CELL", 0x11, [(b"DATA", b"\x02"), (b"XCLC", struct.pack("<iiI", 0, 0, 0)), (b"QQQQ", b"\x07")])
+        kids = grup(struct.pack("<I", 0x11), 9, [rec(b"REFR", 0x12, [(b"NAME", struct.pack("<I", 1))])])
+        world = grup(struct.pack("<I", 0x10), 1, [rec(b"CELL", 0x13, [(b"DATA", b"\x02")]),
+                                                  grup(b"\0\0\0\0", 4, [grup(b"\0\0\0\0", 5, [cell, kids])])])
+        data = tes4 + grup(b"WRLD", 0, [rec(b"WRLD", 0x10, [(b"EDID", b"W\0")]), world])
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "A.esm"), "wb").write(data)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                compare_cells.main(["--data", d, "A.esm::W"])
+        out = buf.getvalue()
+        self.assertIn("1 exterior cells", out)
+        self.assertIn("in GRUP 9: REFR", out)
+        self.assertIn("QQQQ\n    A.esm::W: 100%", out)
