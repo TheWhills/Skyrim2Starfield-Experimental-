@@ -358,3 +358,9 @@ sign x transpose) and the lod step uses the best (`--lod-rotation`, default zyx-
 10,140 of 10,220 CK instances; with it the mountain LOD looked right in game. Now the default. Moving the world to an
 ocean spot of Jemison (lat -0.15) placed it ~200 m lower (Riverwood at the planet's sea level, -16 m, flooded): the
 overlay's height follows the planet's surface there (the sea floor). Back at -0.6, 2.281: dry again.
+
+**Object LOD size filter (2026-10-17):** with every one of the 218,217 references in all four levels (what the CK's
+mock LOD wrote), the owner's game used 30.8 of 31.9 GB RAM and stuttered / froze on the way to the coast (supported
+hypothesis that object LOD is the cause: LOD draws each base's full converted model). `lod` now keeps a reference in
+level 1 / 2 / 4 / 8 only when its base's largest extent x scale reaches `--object-lod-sizes` (default 8,12,24,48 m;
+`0` = all) and leaves trees and plants out (`--object-lod-plants` keeps them); it prints the count per level.

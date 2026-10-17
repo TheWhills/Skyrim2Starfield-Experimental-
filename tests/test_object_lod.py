@@ -46,6 +46,23 @@ class ObjectLod(unittest.TestCase):
         f = nif.parse(ol.nif_bytes(block))
         self.assertEqual((f.bs_version, f.type_of(0), f.strings), (175, "BSWeakReferenceNode", [b""]))
 
+    def test_size_filter_and_plants(self):
+        obj = objects()
+        obj["bases"][0]["bounds"] = [[-5, -2, 0], [5, 2, 1]]               # 10 m road chunk
+        obj["bases"][1]["bounds"] = [[-0.5, -0.5, 0], [0.5, 0.5, 0.6]]     # 1 m pot: never in LOD
+        obj["bases"].append({"edid": "SKY_T", "model": "skyrim\\trees\\pine01.nif", "bounds": [[0, 0, 0], [20, 20, 30]]})
+        obj["refs"].append({"base": 3, "pos": [203.0, -689.0, 183.0], "rot": [0, 0, 0]})
+        fids = {0: 0x1D6F, 1: 0x23FE, 3: 0x3000}
+        stats = {}
+        _ls, levels = ol.plan(obj, fids, min_size={1: 8, 2: 12, 4: 24, 8: 48}, skip_plants=True, stats=stats)
+        # road chunks: 10 m and 12.5 m (scale 1.25) -> both in level 1, only the scaled one in level 2, none after
+        self.assertEqual(stats, {1: 2, 2: 1, 4: 0, 8: 0})
+        self.assertEqual(levels[4], {})
+        self.assertNotIn(0x01003000, {f for e in levels[1].values() for f in e})
+        stats = {}
+        ol.plan(obj, fids, min_size={1: 8, 2: 12, 4: 24, 8: 48}, stats=stats)        # trees kept: 30 m tall
+        self.assertEqual(stats, {1: 3, 2: 2, 4: 1, 8: 0})
+
     def test_write_and_rerun_cleans(self):
         lodset, levels = ol.plan(objects(), {0: 0x1D6F, 1: 0x23FE})
         with tempfile.TemporaryDirectory() as d:

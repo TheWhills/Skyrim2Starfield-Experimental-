@@ -124,9 +124,30 @@ def block_of(cell, origin, level):
     return tuple(origin[a] + ((cell[a] - origin[a]) // level) * level for a in range(2))
 
 
-def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, convention: str = "zyx+"):
+TREE_PATHS = ("\\trees\\", "/trees/", "\\plants\\", "/plants/", "\\landscape\\grass", "/landscape/grass")
+
+
+def base_size(base: dict):
+    """Largest extent of a base's bounds (metres, unscaled), or None without bounds."""
+    bb = base.get("bounds")
+    if not bb:
+        return None
+    return max(float(bb[1][i]) - float(bb[0][i]) for i in range(3))
+
+
+def is_plant(base: dict) -> bool:
+    k = ("\\" + (base.get("source") or "") + "|\\" + (base.get("model") or "")).lower().replace("/", "\\")
+    return any(t.replace("/", "\\") in k for t in TREE_PATHS)
+
+
+def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, convention: str = "zyx+",
+         min_size: Dict[int, float] = None, skip_plants: bool = False, stats: dict = None):
     """(lodsettings (x0, y0, side), {level: {block: {raw FormID: (hashes, [instance bytes])}}}) for objects.json
-    (stage output) and base index -> FormID (low 24 bits, from formids.json)."""
+    (stage output) and base index -> FormID (low 24 bits, from formids.json).
+
+    min_size {level: metres}: a reference goes into a level only when its base's largest extent x scale reaches that
+    level's size (bases without bounds are left out once any size is set); skip_plants leaves trees, plants and
+    grass out of every level. Without either, every reference is in every level (what the Creation Kit wrote)."""
     bases = objects["bases"]
     hashes = {}
     placed = []
@@ -134,20 +155,34 @@ def plan(objects: dict, base_fids: Dict[int, int], plugin_index: int = 1, conven
         bi = r["base"]
         if bi not in base_fids:
             continue
+        if skip_plants and is_plant(bases[bi]):
+            continue
+        scale = float(r.get("scale") or 1.0)
+        size = base_size(bases[bi])
+        size = None if size is None else size * scale
+        if min_size and (size is None or size < min(min_size.values())):
+            continue
         if bi not in hashes:
             hashes[bi] = model_hashes(bases[bi]["model"])
         placed.append((cell_of(r["pos"]), (plugin_index << 24) | base_fids[bi], hashes[bi],
-                       instance_bytes(r["pos"], r["rot"], float(r.get("scale") or 1.0), convention)))
+                       instance_bytes(r["pos"], r["rot"], scale, convention), size))
     if not placed:
         return None, {}
     x0, y0, side = settings(c for c, *_ in placed)
     levels = {}
     for level in LEVELS:
+        need = (min_size or {}).get(level, 0.0)
         blocks: Dict[Tuple[int, int], Dict[int, Tuple[Tuple[int, int], List[bytes]]]] = {}
-        for cell, fid, h, inst in placed:
+        n = 0
+        for cell, fid, h, inst, size in placed:
+            if need and (size is None or size < need):
+                continue
+            n += 1
             e = blocks.setdefault(block_of(cell, (x0, y0), level), {})
             e.setdefault(fid, (h, []))[1].append(inst)
         levels[level] = {b: dict(sorted(e.items())) for b, e in blocks.items()}
+        if stats is not None:
+            stats[level] = n
     return (x0, y0, side), levels
 
 

@@ -511,10 +511,19 @@ def object_lod(a, objects, data, world):
         if rot[best] > 0:
             convention = best
     print(f"object LOD: rotation convention {convention}")
-    lodset, levels = objectlod.plan(objects, base_fids, convention=convention)
+    sizes = [float(v) for v in a.object_lod_sizes.split(",")] if a.object_lod_sizes else [0.0]
+    sizes = (sizes * 4)[:4] if len(sizes) == 1 else sizes
+    min_size = {lv: sz for lv, sz in zip(objectlod.LEVELS, sizes) if sz > 0}
+    counts = {}
+    lodset, levels = objectlod.plan(objects, base_fids, convention=convention, min_size=min_size or None,
+                                    skip_plants=not a.object_lod_plants, stats=counts)
     if lodset is None:
         print("object LOD: no references")
         return
+    print(f"object LOD: references per level (of {len(objects['refs']):,}): "
+          + ", ".join(f"level {lv}: {n:,}" + (f" (>= {min_size[lv]:g} m)" if lv in min_size else "")
+                      for lv, n in counts.items())
+          + ("" if a.object_lod_plants else "; trees and plants left out"))
     n = objectlod.write(data, names, lodset, levels, os.path.join(data, f"{world.lower()}.objectlod.json"))
     print(f"object LOD: lodsettings {lodset}, {sum(len(b) for b in levels.values()):,} block files per name, "
           f"names {names} -> {n:,} files")
@@ -755,6 +764,10 @@ def main(argv=None):
     ap.add_argument("--object-lod-names", default="",
                     help="lod: comma-separated world names for the object LOD files (default: the world EditorID "
                          "without underscores, as the CK writes it, and with them)")
+    ap.add_argument("--object-lod-sizes", default="8,12,24,48",
+                    help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
+                         "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
+    ap.add_argument("--object-lod-plants", action="store_true", help="lod: keep trees and plants in object LOD")
     ap.add_argument("--lod-rotation", default="zyx+",
                     help="lod: rotation convention of object LOD instances (default zyx+: matched 10,140 of 10,220 "
                          "Creation Kit instances; --ck-lod-reference re-checks and picks the best)")
