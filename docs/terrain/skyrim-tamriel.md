@@ -270,3 +270,9 @@ not Jemison: outside Skyrim's LAND rectangle (and in its holes) the overlay took
 (now the default) fills there with sea floor `--sea-floor-depth` (40 m) below Skyrim's sea level, and with
 `--skyrim-water` every overlay cell reaching past Skyrim's ground gets sea water (skyrimwater.outside_sea).
 `--outside-fill land` restores the old plateau. The overlay stays 73 x 73 cells (vanilla's largest BTD is 100 x 100).
+
+**Toward a custom planet (owner's decision, 2026-10-17):** the ocean spot gave the planet's sea to the horizon but an
+olive "underwater" effect on every object and no cell water; the land spot has neither problem but shows Jemison's
+land past the map. Owner's plan: an own planet whose biome map is land exactly under Skyrim and ocean elsewhere,
+small enough (biome pixels ~ radius / 81 on the 256 x 256 polar maps, a supported estimate) for the map to follow the
+coast. First step: `scripts/tools/dump_records.py` prints vanilla PNDT / STDT / BIOM records to clone from.
