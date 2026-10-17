@@ -281,3 +281,6 @@ SciIntSegSmRailMid03; Dazra: MacKitMedWheel04, which has a LodOwnerComponent, RE
 `scripts/tools/lod_override_test.py`: our archive overrides New Atlantis's own Apollo tower composites with cranes at
 the vanilla paths. Cranes over the tower from afar = composite LOD is read from a plugin's archive and our NIF layout
 draws (so the Skyrim world's setup is the problem); none = it is not read from our archive.
+Override test 1 (Apollo tower only): New Atlantis looked unchanged from outside the city, but NA_LOD_ApolloTower is
+not the obvious spire (the MAST is na_lod_themast), so inconclusive. The tool now replaces every New Atlantis
+composite by default.

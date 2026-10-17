@@ -1,5 +1,5 @@
 """LOD diagnostic in a vanilla world whose distant composites draw (New Atlantis by default): puts a Gagarin crane in
-place of one vanilla object's composite LOD files (every level and block), into a staged build's Data, so the next
+place of vanilla composite LOD files (every level and block), into a staged build's Data, so the next
 install packs them into our archive at the vanilla paths. In game, look at that object from far away (outside the
 loaded cells, over 1 km): cranes standing above it mean the engine reads composite LOD from a plugin's archive and
 draws our NIF / mesh layout, so the Skyrim world's problem is in how that world is set up; no cranes mean composite
@@ -8,7 +8,9 @@ LOD is not read from our archive at all (or not our layout).
     python -I scripts\\tools\\lod_override_test.py --sf-data "<Starfield>\\Data" --out C:\\Modding\\staging\\skyrim_all
     python -I scripts\\tools\\lod_override_test.py --out C:\\Modding\\staging\\skyrim_all --remove
 
-Then uninstall / install as usual. --prefix picks the object (default na_lod_apollotower, New Atlantis's Apollo tower).
+Then uninstall / install as usual. By default every New Atlantis composite is replaced, so from afar the city's skyline turns into cranes (owner's first
+run, Apollo tower only: the city looked unchanged from outside, but that tower is not the obvious spire). --prefix picks
+one object instead (na_lod_themast is the MAST spire).
 """
 import argparse
 import glob
@@ -43,7 +45,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="the staged build (its Data folder gets the files)")
     ap.add_argument("--sf-data", help="Starfield Data folder (read-only)")
     ap.add_argument("--world", default="newatlantis", help="composite folder (lowercase world EditorID)")
-    ap.add_argument("--prefix", default="na_lod_apollotower", help="composite file name prefix (the LOD layer)")
+    ap.add_argument("--prefix", default="all",
+                    help="composite file name prefix (the LOD layer, e.g. na_lod_themast), or 'all' (default): every "
+                         "composite of the world, so its whole distant skyline turns into cranes")
     ap.add_argument("--remove", action="store_true", help="remove what an earlier run wrote")
     a = ap.parse_args(argv)
     data = os.path.join(a.out, "Data")
@@ -72,7 +76,7 @@ def main(argv=None):
             if x is not None and x.find(name) is not None:
                 return x.read(name)
         raise FileNotFoundError(name)
-    want = f"meshes/lod/generated/composite/{a.world.lower()}/{a.prefix.lower()}_"
+    want = f"meshes/lod/generated/composite/{a.world.lower()}/" + ("" if a.prefix == "all" else f"{a.prefix.lower()}_")
     targets, seen = [], set()
     for p in found[:2]:
         x = arc(p)
