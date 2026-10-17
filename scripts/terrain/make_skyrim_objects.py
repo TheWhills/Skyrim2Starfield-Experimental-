@@ -392,14 +392,15 @@ def cmd_lod(a):
     obj_path = os.path.join(a.out, "objects.json")
     objects = load(obj_path)
     data = os.path.join(a.out, "Data")
-    st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius)
+    st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius,
+                         layer=a.lod_layer or None)
     flagged = set(st["flag_bases"])
     for i, b in enumerate(objects["bases"]):
         b.pop("distant_lod", None)
         b.pop("lod_layer", None)
         if i in flagged:
             b["distant_lod"] = True
-            b["lod_layer"] = skyrimlod.layer_name(b["edid"])
+            b["lod_layer"] = a.lod_layer or skyrimlod.layer_name(b["edid"])
     # large references (WRLD RNAM): every LOD reference, listed in each cell its bounds cover. Both worlds whose
     # composite LOD draws (NewAtlantis, ShatteredSpace's Dazra) have RNAM; the Mars template and ours had none
     # (owner's compare_worlds.py run).
@@ -660,6 +661,9 @@ def main(argv=None):
     ap.add_argument("--vanilla-test", default="",
                     help="lod: Starfield Data folder; replace our composite NIFs with a vanilla Gagarin crane composite "
                          "(diagnostic: does the engine load our files at all)")
+    ap.add_argument("--lod-layer", default="",
+                    help="lod: put every LOD object in this one layer (composites named after it); a vanilla LAYR "
+                         "EditorID (e.g. NA_LOD_TheMast) is used as is instead of a new layer (diagnostic)")
     ap.add_argument("--no-large-refs", action="store_true",
                     help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")

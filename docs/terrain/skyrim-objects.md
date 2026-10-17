@@ -284,3 +284,10 @@ draws (so the Skyrim world's setup is the problem); none = it is not read from o
 Override test 1 (Apollo tower only): New Atlantis looked unchanged from outside the city, but NA_LOD_ApolloTower is
 not the obvious spire (the MAST is na_lod_themast), so inconclusive. The tool now replaces every New Atlantis
 composite by default.
+**Verified (override test 2, 2026-10-17): composite LOD is read from a plugin's archive and our NIF layout draws.**
+With all 662 New Atlantis composites overridden from `SkyrimTerrainTamriel - Main.ba2` by vertex-moved cranes
+(identity-root NIF from sfnif.build_static_nif, our .mesh, vanilla material), New Atlantis's distant skyline was cranes
+(owner's screenshot). So the Skyrim world's missing LOD is in how the world or its layers are set up, not in the files
+or the archive. Next test, `lod --lod-layer NA_LOD_TheMast --vanilla-test`: every Skyrim LOD reference joins that
+vanilla LAYR (TerrainOverlays uses a Starfield.esm LAYR of that EditorID as is), composites named after it, one file per
+block: cranes over Skyrim = our own LAYR records are the problem; none = the world is.

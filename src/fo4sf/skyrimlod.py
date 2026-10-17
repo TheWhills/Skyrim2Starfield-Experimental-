@@ -118,6 +118,7 @@ def _encode(parts, material) -> sfmesh.SfMesh:
 
 
 def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int, min_radius: float = 20.0,
+          layer: Optional[str] = None,
           skip_paths=("\\trees\\", "/trees/"), log=print) -> dict:
     """Write the LOD files for objects.json (stage output) into data_dir; returns stats incl. the base indices with
     LOD (to flag distant_lod)."""
@@ -201,18 +202,20 @@ def build(objects: dict, data_dir: str, world: str, cell_min: int, cell_max: int
     root = os.path.join(data_dir, "meshes", "lod", "generated", "composite", wl)
     os.makedirs(root, exist_ok=True)
     for level in range(LEVELS):
-        blocks: Dict[Tuple[int, Tuple[int, int]], List[sfnif.StaticShape]] = {}
+        # one file per layer and block (vanilla); `layer` puts every object in one layer (e.g. a vanilla one)
+        blocks: Dict[Tuple[str, Tuple[int, int]], List[sfnif.StaticShape]] = {}
         for (bi, cell), shapes in level0.items():
-            blocks.setdefault((bi, block_of(cell, (x0, y0), level)), []).extend(shapes)
-        for (bi, blk), shapes in sorted(blocks.items()):
-            name = f"{layer_name(bases[bi]['edid'])}_{blk[0]}_{blk[1]}_lod_{level}_cell0"
+            ln = layer or layer_name(bases[bi]["edid"])
+            blocks.setdefault((ln, block_of(cell, (x0, y0), level)), []).extend(shapes)
+            flagged.add(bi)
+        for (ln, blk), shapes in sorted(blocks.items()):
+            name = f"{ln}_{blk[0]}_{blk[1]}_lod_{level}_cell0"
             node = f"Composite\\{wl}\\{name}".encode()   # vanilla: lowercase world folder
             f = sfnif.build_static_nif(node, shapes, bsx=1)            # vanilla composites: BSXFlags 1
             with open(os.path.join(root, name.lower() + ".nif"), "wb") as fh:
                 fh.write(nifmod.serialize(f))
             written.append(f"meshes/lod/generated/composite/{wl}/{name.lower()}.nif")
             nfiles += 1
-            flagged.add(bi)
     import json
     with open(manifest, "w", encoding="utf-8") as fh:
         json.dump(written, fh)

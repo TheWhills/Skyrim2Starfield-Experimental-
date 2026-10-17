@@ -224,6 +224,7 @@ if (Has(prm, "objects"))
     // find_in_plugin.py run); references join a layer through XLYR. LodBehavior from "lod_behavior" (default Aggregate).
     var layerByBase = new Dictionary<int, FormKey>();
     var layers = new Dictionary<string, Layer>();
+    var vanillaLayers = new HashSet<string>();
     var lodBehavior = Has(o, "lod_behavior")
         ? Enum.Parse<Layer.LodBehaviorType>(o.GetProperty("lod_behavior").GetString()!) : Layer.LodBehaviorType.Aggregate;
     {
@@ -233,6 +234,15 @@ if (Has(prm, "objects"))
             if (b.TryGetProperty("lod_layer", out var lj))
             {
                 var ln = lj.GetString()!;
+                // a vanilla LAYR of that EditorID (make_skyrim_objects.py lod --lod-layer, diagnostic) is used as is
+                var vanillaLayer = sf.Layers.FirstOrDefault(l => string.Equals(l.EditorID, ln, StringComparison.OrdinalIgnoreCase));
+                if (vanillaLayer != null)
+                {
+                    if (!vanillaLayers.Contains(ln)) { vanillaLayers.Add(ln); Console.WriteLine($"LOD layer {ln}: vanilla {vanillaLayer.FormKey}"); }
+                    layerByBase[bi] = vanillaLayer.FormKey;
+                    bi++;
+                    continue;
+                }
                 if (!layers.TryGetValue(ln, out var layer))
                 {
                     layer = new Layer(NewKey(), release) { EditorID = ln, LodBehavior = lodBehavior };
@@ -243,7 +253,7 @@ if (Has(prm, "objects"))
             }
             bi++;
         }
-        if (layers.Count > 0)
+        if (layers.Count > 0 || vanillaLayers.Count > 0)
         {
             // as vanilla Gagarin: the LOD layers sit under one parent layer (Gagarin_LOD_Grp012 -> Gagarin_LOD), and the
             // world's HNAM is [5] (SettleGagarinWorld, NewAtlantis: worlds with composite LOD) where the Mars template

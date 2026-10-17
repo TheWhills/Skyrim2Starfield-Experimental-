@@ -59,6 +59,9 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*",
                                                     "*.nif")), [])
             self.assertGreater(first, 0)
+            so.main(["lod", "--out", out, "--lod-min-radius", "1", "--lod-layer", "NA_LOD_TheMast"])
+            one = glob.glob(os.path.join(out, "Data", "meshes", "lod", "generated", "composite", "*", "*.nif"))
+            one_obj = json.load(open(os.path.join(out, "objects.json")))
             so.main(["lod", "--out", out, "--lod-min-radius", "1"])
             obj = json.load(open(os.path.join(out, "objects.json")))
             lodset = open(os.path.join(out, "Data", "lodsettings", "sky_tamriel.lod"), "rb").read()
@@ -118,6 +121,9 @@ class CommandTests(unittest.TestCase):
         self.assertLess(abs(c[0] - rock_ref["pos"][0]) + abs(c[1] - rock_ref["pos"][1]), 40.0)  # world coordinates
         self.assertTrue(ok, [x for x in rep["checks"] if not x[1]])
         self.assertIn("lod: lodsettings", log.getvalue())
+        self.assertTrue(one and all(os.path.basename(f).startswith("na_lod_themast_") for f in one))
+        self.assertLessEqual(len(one), first)                                  # one file per block, not per object
+        self.assertEqual({b["lod_layer"] for b in one_obj["bases"] if b.get("distant_lod")}, {"NA_LOD_TheMast"})
         self.assertEqual(lod_dir_files, ["sky_tamriel.lod"])                 # nothing else gets packed there
 
     def test_installer_packs_lodsettings(self):
