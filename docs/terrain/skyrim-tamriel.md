@@ -288,3 +288,8 @@ goes on a pole (`--latlon -1.5707963 0`): the map projection is not verified, th
 is certain. Re-run make_planet.py after every lod / stage (they rewrite the planet plugin). Unknowns: whether the
 engine finds the biome map by ANAM, a 200 km planet's look on the ground, the location parent (still Jemison's
 surface), the Magnus mod's own nirn.biom (conflict if both are installed).
+Nirn tests (owner, 2026-10-17): HUD reads NIRN, the coating is gone and the river is real water (Skyrim on land), but
+no sea and empty generated land round the map; not at 200 km, not at 7484 km, not with an all-ocean map, and a
+frozen-only map (`--only-biome 0FD00D`) gave no snow: the engine did not read biomemaps\nirn.biom (packed, the
+install listed planetdata). SFStarEditor (github.com/tridashafox/SFStarEditor) says a planet defined in an ESM takes
+its map from biomemaps\<plugin>.esm\<planet>.biom (unverified there); make_planet.py now writes both paths.

@@ -162,10 +162,18 @@ def main(argv=None):
                             {only: 100.0} if only else {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale)
     fid = (len(masters) << 24) | 0x800
     n = write_plugin(plugin, header, new, fid)
-    bm = os.path.join(a.staging, "Data", "planetdata", "biomemaps", f"{a.name.lower()}.biom")
-    os.makedirs(os.path.dirname(bm), exist_ok=True)
-    with open(bm, "wb") as fh:
-        fh.write(biome_map(0.0, land=only, ocean=only) if only else biome_map(a.land_px))
+    # where the engine looks: biomemaps\<planet>.biom for Starfield.esm's planets (Jemison Biome Overhaul replaces
+    # jemison.biom there); for a planet defined in an ESM, biomemaps\<plugin>.esm\<planet>.biom (SFStarEditor's
+    # README, unverified there). The first Nirn tests with only the root file showed no sign of it (owner: a frozen-only
+    # map gave no snow). Both are written.
+    data = biome_map(0.0, land=only, ocean=only) if only else biome_map(a.land_px)
+    root = os.path.join(a.staging, "Data", "planetdata", "biomemaps")
+    paths = [os.path.join(root, f"{a.name.lower()}.biom"), os.path.join(root, prm["mars"]["plugin"], f"{a.name.lower()}.biom")]
+    for bm in paths:
+        os.makedirs(os.path.dirname(bm), exist_ok=True)
+        with open(bm, "wb") as fh:
+            fh.write(data)
+    bm = " and ".join(paths)
     px_km = math.pi / 2 * a.radius_km / 128
     print(f"{prm['mars']['plugin']}: new planet {a.name} ({fid:08X}, {n:,} bytes of fields, cloned from {a.template}), "
           f"radius {a.radius_km:g} km, slot {a.slot}, master worldspaces {[(round(la, 4), round(lo, 4), hex(f)) for la, lo, f in worlds]}")
