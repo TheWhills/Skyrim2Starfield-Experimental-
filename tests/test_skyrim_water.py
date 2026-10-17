@@ -57,3 +57,17 @@ class LevelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutsideSea(unittest.TestCase):
+    def test_cells_past_land_and_holes_get_sea(self):
+        from fo4sf import skyrimwater
+        # Skyrim LAND cells x 0..2, y 0..2 (4096 units = 58.5 m each); overlay frame = Skyrim / 70; hole (2, 2)
+        out = skyrimwater.outside_sea((-1, 1), (0.0, 0.0), 10.0, (0, 2, 0, 2), [(2, 2)], -14000.0,
+                                      taken=[(1, 0)])
+        cells = {tuple(c["cell"]) for c in out}
+        self.assertIn((-1, 0), cells)                       # west of the LAND rectangle
+        self.assertIn((1, 1), cells)                        # 100..200 m reaches Skyrim cell 2 x 2: the hole
+        self.assertNotIn((0, 0), cells)                     # 0..100 m: inside cells (0..1, 0..1), no hole
+        self.assertNotIn((1, 0), cells)                     # already has water
+        self.assertEqual({c["height_m"] for c in out}, {-14000.0 / 70.0 + 10.0})

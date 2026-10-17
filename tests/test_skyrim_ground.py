@@ -296,7 +296,8 @@ class HeightOffsetTests(unittest.TestCase):
                 with mock.patch.object(cw, "ltex_source", return_value=([PLAIN], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
                         contextlib.redirect_stdout(io.StringIO()):
                     sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
-                             "--arrival", "", "--height-offset", f"{off:g}", "--skyrim-water"])
+                             "--arrival", "", "--height-offset", f"{off:g}", "--skyrim-water",
+                             "--outside-fill", "land"])
                 t = btd.read(open(os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd"), "rb").read())
                 prm = json.load(open(os.path.join(out, "overlays_params.json")))
                 hs[off] = (t.heights_m(), prm["overlays"][0])

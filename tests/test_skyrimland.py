@@ -182,11 +182,23 @@ class OverlayBuildTests(Fixture):
         import make_skyrim_overlay as sk
         out = os.path.join(self.tmp.name, "stage")
         argv = ["build", "--skyrim", self.esm, "--sf-data", self.tmp.name, "--out", out,
-                "--mask-writer", "builtin", "--landmark", "BleakFallsExterior01", "--landmark", "Solitude", *extra]
+                "--mask-writer", "builtin", "--landmark", "BleakFallsExterior01", "--landmark", "Solitude",
+                "--outside-fill", "land", *extra]
         with mock.patch.object(cw, "ltex_source", return_value=PLAIN_LTEX), \
                 contextlib.redirect_stdout(io.StringIO()) as log:
             sk.main(argv)
         return out, log.getvalue()
+
+    def test_outside_fill_sea(self):
+        out, log = self.build("--outside-fill", "sea", "--skyrim-water")
+        src = load_json(os.path.join(out, "skyrim_source.json"))
+        self.assertEqual(src["fill_height_units"], DEFAULT_WATER - 40.0 * 70.0)    # sea floor, 40 m below the sea
+        prm = load_json(os.path.join(out, "overlays_params.json"))
+        o = prm["overlays"][0]
+        sea = [c for c in prm["water"]["cells"] if c[2] == round(DEFAULT_WATER / 70.0, 3)]
+        self.assertTrue(sea)                                                        # cells past the LAND rectangle
+        self.assertTrue(all(o["cell_min"] <= c[0] <= o["cell_max"] for c in sea))
+        self.assertIn("past Skyrim's ground get sea water", log)
 
     def test_tamriel_overlay_end_to_end(self):
         import make_cw_overlays as cw

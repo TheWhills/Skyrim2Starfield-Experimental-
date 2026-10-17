@@ -64,3 +64,33 @@ def cell_levels(grids: Dict[Tuple[int, int], "object"], water: Dict[Tuple[int, i
         out.append({"cell": list(sc), "height_m": round(best / UNITS_PER_M + offset_m, 3), "wet_vertices": len(wet),
                     "agree": round(best_score / len(verts), 3)})
     return out
+
+
+def outside_sea(cell_range: Tuple[int, int], origin_m, offset_m: float, grid_bounds, holes, sea_units: float,
+                taken=()) -> List[dict]:
+    """Sea water for every overlay cell that reaches past Skyrim's ground: cells (part) outside the LAND rectangle
+    `grid_bounds` (Skyrim cell x0, x1, y0, y1) or over a hole (a Skyrim cell without LAND), which the overlay builder
+    fills with sea floor (make_skyrim_overlay.py --outside-fill sea). `taken`: overlay cells that already have water.
+    Owner's view (2026-10-17): with the old land-height fill the overlay's outer ring was a flat plateau ~155 m above
+    Jemison's sea, a pale cliff around Skyrim's coast."""
+    x0, x1, y0, y1 = grid_bounds
+    holes = set(map(tuple, holes))
+    taken = set(map(tuple, taken))
+    cu = fo4land.CELL_UNITS
+    out = []
+    lo, hi = cell_range
+    for sx in range(lo, hi + 1):
+        for sy in range(lo, hi + 1):
+            if (sx, sy) in taken:
+                continue
+            ux0, ux1 = (sx * 100.0 + origin_m[0]) * UNITS_PER_M, ((sx + 1) * 100.0 + origin_m[0]) * UNITS_PER_M
+            uy0, uy1 = (sy * 100.0 + origin_m[1]) * UNITS_PER_M, ((sy + 1) * 100.0 + origin_m[1]) * UNITS_PER_M
+            kx0, kx1 = int(ux0 // cu), int((ux1 - 1e-6) // cu)
+            ky0, ky1 = int(uy0 // cu), int((uy1 - 1e-6) // cu)
+            beyond = kx0 < x0 or kx1 > x1 or ky0 < y0 or ky1 > y1
+            if not beyond:
+                beyond = any((kx, ky) in holes for kx in range(kx0, kx1 + 1) for ky in range(ky0, ky1 + 1))
+            if beyond:
+                out.append({"cell": [sx, sy], "height_m": round(sea_units / UNITS_PER_M + offset_m, 3),
+                            "wet_vertices": 0, "agree": 1.0, "outside": True})
+    return out

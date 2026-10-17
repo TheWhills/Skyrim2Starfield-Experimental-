@@ -367,7 +367,12 @@ def cmd_build(a, rest):
         sys.exit("--coc must end in Spawn (the runner's COC naming)")
     if not re.fullmatch(r"[0-9A-Fa-f]{2}", ca.load_byte):
         sys.exit("--load-byte must be two hex digits")
-    ca.heights = skyrimland.SkyrimHeights(land, falloff_cells=a.edge_falloff_cells,
+    fill = None                                      # --outside-fill land: the world's default land height
+    if a.outside_fill == "sea" and land.default_water is not None:
+        # past Skyrim's ground (and in its holes): sea floor below Skyrim's sea, under cell water (skyrimwater
+        # .outside_sea); the default-land fill was a flat plateau ~155 m above Jemison's sea, a cliff round the coast
+        fill = float(land.default_water) - a.sea_floor_depth * 70.0
+    ca.heights = skyrimland.SkyrimHeights(land, fill=fill, falloff_cells=a.edge_falloff_cells,
                                           offset_units=a.height_offset * 70.0)
     ca.landmarks = marks
     ca.ray_landmarks = ()
@@ -421,6 +426,13 @@ def cmd_build(a, rest):
         lv = skyrimwater.cell_levels(land.grids, land.water, land.default_water,
                                      tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
                                      (o["cell_min"], o["cell_max"]), include_sea=a.skyrim_water_sea)
+        if a.outside_fill == "sea" and land.default_water is not None:
+            sea = skyrimwater.outside_sea((o["cell_min"], o["cell_max"]),
+                                          tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
+                                          land.grid_bounds, land.holes, float(land.default_water),
+                                          taken=[tuple(c["cell"]) for c in lv])
+            print(f"overlays_params.json: {len(sea)} cells past Skyrim's ground get sea water (sea floor fill)")
+            lv = lv + sea
         prm["water"] = {"form": a.skyrim_water_form, "cells": [[c["cell"][0], c["cell"][1], c["height_m"]] for c in lv]}
         agree = sum(c["agree"] for c in lv) / len(lv) if lv else 1.0
         print(f"overlays_params.json: {len(lv)} cells with Skyrim river / lake water (WATR {a.skyrim_water_form}), "
@@ -517,6 +529,11 @@ def main(argv=None):
     ap.add_argument("--skyrim-water", action="store_true",
                     help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
                          "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
+    ap.add_argument("--outside-fill", choices=("sea", "land"), default="sea",
+                    help="build: past Skyrim's ground and in its holes: sea floor under sea water (default; with "
+                         "--skyrim-water) or the world's default land height (the old flat plateau)")
+    ap.add_argument("--sea-floor-depth", type=float, default=40.0,
+                    help="build --outside-fill sea: metres below Skyrim's sea level (default 40)")
     ap.add_argument("--skyrim-water-sea", action=argparse.BooleanOptionalAction, default=True,
                     help="build --skyrim-water: also give sea-level cells water (default on; the planet's ocean does "
                          "not draw inside the overlay: owner's whole-map test, verified)")

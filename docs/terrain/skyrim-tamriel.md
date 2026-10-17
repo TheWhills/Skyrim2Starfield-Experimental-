@@ -263,3 +263,10 @@ unless "water": {"world_lists": true}. **Supported hypothesis.**
 **Verified in game (2026-10-16):** with the world-level lists off the distant / sky sheets are gone, and with
 sea-level cells written the ocean and Solitude's docks have water. `--skyrim-water-sea` is now on by default
 (`--no-skyrim-water-sea` to leave the sea to the planet).
+
+**Sea past Skyrim's ground (2026-10-17):** the pale flat-topped cliff the owner saw past the coast was our own fill,
+not Jemison: outside Skyrim's LAND rectangle (and in its holes) the overlay took the world's default land height
+(-2048 units = -29 m, +185 m offset = ~155 m above Jemison's sea), a plateau rising from the sea. `--outside-fill sea`
+(now the default) fills there with sea floor `--sea-floor-depth` (40 m) below Skyrim's sea level, and with
+`--skyrim-water` every overlay cell reaching past Skyrim's ground gets sea water (skyrimwater.outside_sea).
+`--outside-fill land` restores the old plateau. The overlay stays 73 x 73 cells (vanilla's largest BTD is 100 x 100).
