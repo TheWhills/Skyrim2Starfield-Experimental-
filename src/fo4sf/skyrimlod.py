@@ -236,28 +236,47 @@ def _first_sphere(n):
     return None
 
 
-def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
-    """Diagnostic: replace every composite LOD NIF this build wrote with a vanilla Gagarin crane composite of the same
-    level (vanilla material; the vanilla mesh with its vertices moved so the crane stands 60 m above our first shape).
-    The offset is baked into the vertices, as vanilla composites keep world coordinates with identity transforms (the
-    first version moved the root node instead, which the engine may ignore: then every crane stood at Gagarin's
-    (125, 110) m in our world). If cranes then show far away, the engine loads our files and our NIF / material
-    contents are the problem; if not, it does not look at them at all. read_vanilla(archive path) -> bytes. Returns
-    files replaced."""
+def _load_crane(read_vanilla):
+    """(material path, SfMesh, vertex positions (n, 3) m, sphere centre) of the vanilla Gagarin level-3 crane."""
+    v = nifmod.parse(read_vanilla(VANILLA_TEST[3]))
+    gi = next(i for i in range(len(v.blocks)) if v.type_of(i) == "BSGeometry")
+    g = sfnif.parse_bsgeometry(v.blocks[gi])
+    ref = next(m for m in g.meshes if m)
+    si, = struct.unpack_from("<i", v.blocks[g.shader], 0)
+    mesh = sfmesh.parse(read_vanilla("geometries\\" + ref.path.decode("latin-1") + ".mesh"))
+    pos = np.asarray(mesh.positions, np.float64) / 32767.0 * mesh.scale
+    return v.strings[si].decode("latin-1"), mesh, pos, np.asarray(g.sphere[:3], np.float64)
+
+
+def _write_crane(crane, data_dir: str, at, node: bytes) -> Tuple[bytes, str]:
+    """(NIF bytes, mesh path under data_dir) of the crane moved (in its vertices) so its sphere centre is at `at`."""
     import dataclasses
+    material, mesh, pos, centre = crane
+    moved = pos + (np.asarray(at, np.float64) - centre)
+    scale, raw = sfmesh.encode_positions([tuple(q) for q in moved])
+    m = sfmesh.build_meshlets(dataclasses.replace(mesh, scale=scale, positions=raw))
+    data = sfmesh.serialize(m)
+    d, fn = convert_static.mesh_file_path(data)
+    mp = os.path.join(data_dir, "geometries", d, fn + ".mesh")
+    os.makedirs(os.path.dirname(mp), exist_ok=True)
+    with open(mp, "wb") as fh:
+        fh.write(data)
+    sphere, box = sfnif.bounds_from_points([sfmesh.decode_position(q, scale) for q in raw])
+    f = sfnif.build_static_nif(node, [sfnif.StaticShape(node + b":0", f"{d}\\{fn}".encode(), len(m.triangles) * 3,
+                                                        len(m.positions), material, sphere, box)], bsx=1)
+    return nifmod.serialize(f), f"geometries/{d}/{fn}.mesh"
+
+
+def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
+    """Diagnostic: replace every composite LOD NIF this build wrote with a vanilla Gagarin crane composite
+    (vanilla material; the vanilla level-3 mesh with its vertices moved so the crane stands 60 m above our first
+    shape). The offset is baked into the vertices, as vanilla composites keep world coordinates with identity
+    transforms (the first version moved the root node instead, which the engine may ignore). If cranes then show far
+    away, the engine loads our files and our NIF / material contents are the problem; if not, it does not look at them
+    at all. One small crane for every level: a moved copy per file of each level's own crane pushed the owner's
+    whole-map build past one archive's 4 GiB. read_vanilla(archive path) -> bytes. Returns files replaced."""
     import json
-    src = {}
-    # one small crane for every level (level 3's: ~1,400 vertices): a moved copy per file of each level's own crane
-    # pushed the owner's whole-map build past one archive's 4 GiB
-    for lv, pth in ((lv, VANILLA_TEST[3]) for lv in VANILLA_TEST):
-        v = nifmod.parse(read_vanilla(pth))
-        gi = next(i for i in range(len(v.blocks)) if v.type_of(i) == "BSGeometry")
-        g = sfnif.parse_bsgeometry(v.blocks[gi])
-        ref = next(m for m in g.meshes if m)
-        si, = struct.unpack_from("<i", v.blocks[g.shader], 0)
-        mesh = sfmesh.parse(read_vanilla("geometries\\" + ref.path.decode("latin-1") + ".mesh"))
-        pos = np.asarray(mesh.positions, np.float64) / 32767.0 * mesh.scale
-        src[lv] = (v.strings[si].decode("latin-1"), mesh, pos, np.asarray(g.sphere[:3], np.float64))
+    crane = _load_crane(read_vanilla)
     manifest = manifest_path(data_dir, world)
     written = json.load(open(manifest, encoding="utf-8"))
     for rel in [r for r in written if r.endswith(".mesh")]:   # our own LOD meshes: no longer referenced
@@ -270,29 +289,38 @@ def vanilla_test(data_dir: str, world: str, read_vanilla) -> int:
         if not rel.endswith(".nif"):
             continue
         p = os.path.join(data_dir, *rel.split("/"))
-        lv = int(rel.rsplit("_lod_", 1)[1][0])
         ours = _first_sphere(nifmod.parse(open(p, "rb").read()))
         if ours is None:
             continue
-        material, mesh, pos, centre = src[lv]
-        moved = pos + (np.asarray(ours[:3], np.float64) - centre + (0.0, 0.0, 60.0))
-        scale, raw = sfmesh.encode_positions([tuple(q) for q in moved])
-        m = sfmesh.build_meshlets(dataclasses.replace(mesh, scale=scale, positions=raw))
-        data = sfmesh.serialize(m)
-        d, fn = convert_static.mesh_file_path(data)
-        mp = os.path.join(data_dir, "geometries", d, fn + ".mesh")
-        os.makedirs(os.path.dirname(mp), exist_ok=True)
-        with open(mp, "wb") as fh:
-            fh.write(data)
-        extra.append(f"geometries/{d}/{fn}.mesh")
-        sphere, box = sfnif.bounds_from_points([sfmesh.decode_position(q, scale) for q in raw])
-        node = os.path.splitext(os.path.basename(p))[0]
-        node = f"Composite\\{world.lower()}\\{node}".encode()
-        f = sfnif.build_static_nif(node, [sfnif.StaticShape(node + b":0", f"{d}\\{fn}".encode(), len(m.triangles) * 3,
-                                                            len(m.positions), material, sphere, box)], bsx=1)
+        node = f"Composite\\{world.lower()}\\{os.path.splitext(os.path.basename(p))[0]}".encode()
+        data, mrel = _write_crane(crane, data_dir, (ours[0], ours[1], ours[2] + 60.0), node)
         with open(p, "wb") as fh:
-            fh.write(nifmod.serialize(f))
+            fh.write(data)
+        extra.append(mrel)
         n += 1
     with open(manifest, "w", encoding="utf-8") as fh:      # so the next lod run removes the moved meshes too
         json.dump(written + extra, fh)
     return n
+
+
+def override_test(data_dir: str, targets, read_vanilla) -> List[str]:
+    """Diagnostic in a vanilla world whose composite LOD draws: for each vanilla composite (archive path, NIF bytes) in
+    `targets`, write a file at the SAME path under data_dir holding the crane, standing 20 m above the top of the
+    vanilla object's bounding sphere. Packed into our archive, it overrides the vanilla file: if cranes then show
+    there from afar, the engine reads composite LOD from a plugin's archive (and our NIF / mesh layout draws). Returns
+    the files written (relative, '/')."""
+    crane = _load_crane(read_vanilla)
+    out = []
+    for path, raw in targets:
+        sph = _first_sphere(nifmod.parse(raw))
+        if sph is None:
+            continue
+        rel = path.replace("\\", "/").lower()
+        node = ("Composite\\" + "\\".join(rel.split("/")[-2:])[:-4]).encode()
+        data, mrel = _write_crane(crane, data_dir, (sph[0], sph[1], sph[2] + sph[3] + 20.0), node)
+        p = os.path.join(data_dir, *rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as fh:
+            fh.write(data)
+        out += [rel, mrel]
+    return out

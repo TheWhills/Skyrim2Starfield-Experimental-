@@ -83,11 +83,18 @@ class CommandTests(unittest.TestCase):
             any_nif = open(files[0], "rb").read()
             first_sphere = skyrimlod._first_sphere(nif.parse(open(files[-1], "rb").read()))
 
+            seen_meshes = {}
+
             def read_vanilla(name):                    # our first composite stands in for Gagarin's crane
-                if name.endswith(".mesh"):
-                    return open(os.path.join(out, "Data", *name.split("\\")), "rb").read()
+                if name.endswith(".mesh"):             # kept: vanilla_test removes our own meshes
+                    if name not in seen_meshes:
+                        seen_meshes[name] = open(os.path.join(out, "Data", *name.split("\\")), "rb").read()
+                    return seen_meshes[name]
                 return any_nif
             n = skyrimlod.vanilla_test(os.path.join(out, "Data"), "SKY_Tamriel", read_vanilla)
+            ov = skyrimlod.override_test(os.path.join(out, "Data"), [
+                ("meshes\\lod\\generated\\composite\\NewAtlantis\\NA_LOD_X_0_0_lod_0_cell0.nif", any_nif)], read_vanilla)
+            ov_nif = nif.parse(open(os.path.join(out, "Data", *ov[0].split("/")), "rb").read())
             moved = nif.parse(open(files[-1], "rb").read())
             tr = nif._av_transform(moved.blocks[0])[0]
             mg = sfnif.parse_bsgeometry(next(moved.blocks[i] for i in range(len(moved.blocks))
@@ -97,6 +104,8 @@ class CommandTests(unittest.TestCase):
             self.assertTrue(mm.positions)
         self.assertEqual(n, len(files))
         self.assertEqual(tuple(tr), (0.0, 0.0, 0.0))                         # identity root, as vanilla
+        self.assertEqual(ov[0], "meshes/lod/generated/composite/newatlantis/na_lod_x_0_0_lod_0_cell0.nif")
+        self.assertTrue(ov[1].startswith("geometries/") and ov_nif.strings[0].startswith(b"Composite\\newatlantis\\"))
         self.assertLess(abs(mg.sphere[2] - first_sphere[2] - 60.0), 1.0)     # baked into the vertices
         self.assertEqual(struct.unpack("<5i", lodset)[3:], (0, 0))
         self.assertTrue(rock_base.get("distant_lod"))

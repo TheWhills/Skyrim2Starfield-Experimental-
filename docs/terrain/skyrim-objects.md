@@ -276,3 +276,8 @@ compare_worlds runs):** the WRLD's WorldSpaceOverlayComponent SNAM is a placed r
 (NewAtlantis 011720, base 25586D, layer 01CCB9; Dazra 01D1BA, base 29AE97; LC030World 012CDE) and 0 in LC172World and
 ours; its PNAM has bit 0 set in every LOD world (3, 0x15, 1) and is 4 in LC172World and ours. Seventh test: with LOD
 layers, TerrainOverlays sets SNAM = our persistent anchor (XMarker) and PNAM |= 1. Meaning of both unresolved.
+Seventh test result (SNAM / PNAM): nothing drawn. The SNAM references are ordinary statics (NewAtlantis: base
+SciIntSegSmRailMid03; Dazra: MacKitMedWheel04, which has a LodOwnerComponent, REFL "BETH" ...). Next test,
+`scripts/tools/lod_override_test.py`: our archive overrides New Atlantis's own Apollo tower composites with cranes at
+the vanilla paths. Cranes over the tower from afar = composite LOD is read from a plugin's archive and our NIF layout
+draws (so the Skyrim world's setup is the problem); none = it is not read from our archive.
