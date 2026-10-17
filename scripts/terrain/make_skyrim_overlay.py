@@ -423,6 +423,8 @@ def cmd_build(a, rest):
         apply_planet(prm, a)
     for o in prm["overlays"]:                        # make_skyrim_objects.to_local lifts the objects by the same amount
         o["height_offset_m"] = a.height_offset
+        if land.default_water is not None:           # Skyrim's sea level in the overlay (make_skyrim_objects lod: sea)
+            o["sea_level_m"] = round(float(land.default_water) / 70.0 + a.height_offset, 4)
     if a.skyrim_water:                               # Skyrim's rivers / lakes as Starfield cell water (skyrimwater.py)
         from fo4sf import skyrimwater
         o = prm["overlays"][0]

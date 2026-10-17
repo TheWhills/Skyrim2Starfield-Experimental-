@@ -364,3 +364,13 @@ mock LOD wrote), the owner's game used 30.8 of 31.9 GB RAM and stuttered / froze
 hypothesis that object LOD is the cause: LOD draws each base's full converted model). `lod` now keeps a reference in
 level 1 / 2 / 4 / 8 only when its base's largest extent x scale reaches `--object-lod-sizes` (default 8,12,24,48 m;
 `0` = all) and leaves trees and plants out (`--object-lod-plants` keeps them); it prints the count per level.
+
+**Distant sea (2026-10-17, src/fo4sf/skyrimsea.py):** cell water draws only in the loaded cells (owner: past them
+the sea floor showed dry, icebergs standing on it). The planet's own ocean does draw to the horizon (owner, ocean spot
+lat -0.15, offset 390: right level, no Starfield land in view) but there the engine walls the player in ("You cannot
+go that way" in Riverwood) and the river water vanished. So at the land spot the `lod` step now adds flat sea pieces
+at the overlay's `sea_level_m` (written by make_skyrim_overlay.py build; 0.3 m below the cell water): 10 x 10 tiles
+over the map, strips and corners reaching `--sea-reach` (20 km) past it, one-sided facing up, our own material
+(dark sea colour, tiling wave normals, low roughness; needs `--content-resources` / `--texconv`); they are big statics,
+so object LOD draws them at every distance. `--no-distant-sea` removes them, `--sea-double-sided` if they turn out
+invisible. Supported hypothesis: how water-like a flat mesh looks from afar; not yet seen in game.

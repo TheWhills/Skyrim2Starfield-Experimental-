@@ -409,6 +409,7 @@ def cmd_lod(a):
     obj_path = os.path.join(a.out, "objects.json")
     objects = load(obj_path)
     data = os.path.join(a.out, "Data")
+    distant_sea(a, objects, data, ov)
     # composite LOD (vanilla city layout) is opt-in: it never drew for our world (docs "Distant-object LOD"); object
     # LOD (objectlod.py, the Creation Kit's -MockWorldSpaceLOD layout) is what works, written after the plugin build
     st = skyrimlod.build(objects, data, ov["world"], ov["cell_min"], ov["cell_max"], a.lod_min_radius,
@@ -485,6 +486,29 @@ def cmd_lod(a):
         object_lod(a, objects, data, ov["world"])
     print(f"lod: done in {time.time() - t0:.0f} s")
     return 0
+
+
+def distant_sea(a, objects, data, ov):
+    """Flat sea pieces at Skyrim's sea level, drawn at any distance through object LOD (src/fo4sf/skyrimsea.py): cell
+    water only draws in the loaded cells. Needs the overlay's sea_level_m (make_skyrim_overlay.py build) and
+    --content-resources / --texconv for its material."""
+    from fo4sf import skyrimsea
+    if a.no_distant_sea:
+        n = skyrimsea.remove(objects)
+        print(f"distant sea: off{f' ({n} earlier sea bases removed)' if n else ''}")
+        return
+    sea = ov.get("sea_level_m")
+    missing = [n for n, v in (("sea_level_m in overlays_params.json (rebuild the terrain with today's "
+                               "make_skyrim_overlay.py)", sea is not None),
+                              ("--content-resources", a.content_resources), ("--texconv", a.texconv)) if not v]
+    if missing:
+        skyrimsea.remove(objects)
+        print(f"distant sea: skipped, needs {', '.join(missing)}")
+        return
+    st = skyrimsea.add(objects, data, ov["cell_min"], ov["cell_max"], float(sea), a.content_resources, a.texconv,
+                       reach_m=a.sea_reach, double_sided=a.sea_double_sided)
+    print(f"distant sea: {st['pieces']} pieces ({st['tile_m']:g} m tiles over the map, reaching {st['reach_m']:g} m "
+          f"past it) at z {st['z']:g} m (sea level {float(sea):g} m)")
 
 
 def object_lod(a, objects, data, world):
@@ -767,6 +791,10 @@ def main(argv=None):
     ap.add_argument("--object-lod-sizes", default="8,12,24,48",
                     help="lod: smallest object (largest extent x scale, metres) in object LOD levels 1,2,4,8; "
                          "one value for all levels; 0 = every reference (the full list made the game run out of RAM)")
+    ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")
+    ap.add_argument("--sea-reach", type=float, default=20000.0, help="lod: how far the distant sea reaches past the map (m)")
+    ap.add_argument("--sea-double-sided", action="store_true",
+                    help="lod: draw the distant sea from below too (if it turns out invisible from above)")
     ap.add_argument("--object-lod-plants", action="store_true", help="lod: keep trees and plants in object LOD")
     ap.add_argument("--lod-rotation", default="zyx+",
                     help="lod: rotation convention of object LOD instances (default zyx+: matched 10,140 of 10,220 "
