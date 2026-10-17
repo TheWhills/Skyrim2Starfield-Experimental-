@@ -135,7 +135,17 @@ foreach (var o in overlays)
     for (int x = cmin; x <= cmax; x++)
         for (int y = cmin; y <= cmax; y++)
         {
-            var c = new Cell(NewKey(), release) { Grid = new CellGrid { Point = new P2Int(x, y) } };
+            // As every vanilla exterior cell (owner's compare_cells.py: NewAtlantis, Dazra, LC030World, LC172World):
+            // DATA = HasWater (0x2), XCLW = float.MaxValue ("no water here"), XILS 1.0. Without them (Mutagen leaves
+            // the nullable Flags null, so no DATA; `Flags |= HasWater` on null stays null) the Creation Kit refused
+            // our cells: "Error adding cell ... to world space ... Cell will be destroyed".
+            var c = new Cell(NewKey(), release)
+            {
+                Grid = new CellGrid { Point = new P2Int(x, y) },
+                Flags = Cell.Flag.HasWater,
+                WaterHeight = float.MaxValue,
+                XILS = 1f,
+            };
             cellAt[(x, y)] = c;
             if (x == spawnCell[0] && y == spawnCell[1])
             {
@@ -170,7 +180,7 @@ foreach (var o in overlays)
             int wx = v[0].GetInt32(), wy = v[1].GetInt32();
             float h = v[2].GetSingle();
             if (!cellAt.TryGetValue((wx, wy), out var wc)) continue;
-            wc.Flags |= Cell.Flag.HasWater;
+            wc.Flags = (wc.Flags ?? 0) | Cell.Flag.HasWater;
             wc.WaterHeight = h;
             wc.Water.SetTo(waterKey);
             locs.Add(new P2Int16((short)wx, (short)wy));

@@ -306,3 +306,10 @@ contents, archive, names, lodsettings presence, our LAYR records (vanilla layer 
 OFST / CLSZ, STAT HasDistantLod, BSXFlags. Untested: anything the Creation Kit computes on save that we cannot see,
 how the player arrives (coc vs landing), the BTD / SFBK, the planet registration. Next step proposed: open and resave
 the plugin in the owner's Creation Kit (or its LOD generation, if offered) and diff what it writes.
+**Creation Kit (owner, 2026-10-17):** loading the plugin gives "CELLS: Error adding cell (01000805) to world space
+(01000803). Cell will be destroyed." for our south-west cells (OK crashes the CK). GRUP block / sub-block labels are
+not the cause: ours follow the vanilla rule ((y, x), floor division by 32 / 8) for 5,329 / 5,329 cells (compare_cells).
+Found instead: our exterior cells had no DATA at all (Mutagen's nullable Flags stayed null; `Flags |= HasWater` on
+null is null, so even the water cells' HasWater was never written), and no XILS; every vanilla exterior cell has DATA
+0x2 (HasWater), XCLW (float max = no water) and XILS 1.0. TerrainOverlays now writes all three on every cell, and
+make_skyrim_objects.py adds the cell index (world_offsets.py) after every plugin build.

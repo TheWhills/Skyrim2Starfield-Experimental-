@@ -382,6 +382,22 @@ def cmd_grass(a):
     return 0
 
 
+def add_cell_index(out, sf_esm):
+    """The WRLD cell index (OFST / CLSZ) that the Creation Kit writes and Mutagen does not, added to the plugin
+    TerrainOverlays just wrote (scripts/tools/world_offsets.py; layout verified on LC030World first)."""
+    sys.path.insert(0, os.path.join(REPO, "scripts", "tools"))
+    import world_offsets
+    from fo4sf import fo4land
+    prm = load(os.path.join(out, "overlays_params.json"))
+    with fo4land.Plugin(sf_esm) as p:
+        reading = world_offsets.verify(p.buf, p.body, "LC030World", log=lambda *x: None)
+    if not reading:
+        print("cell index: no reading explains LC030World's OFST; not written")
+        return
+    for ov in prm["overlays"]:
+        world_offsets.write(os.path.join(out, prm["plugin"]), ov["world"], reading)
+
+
 # ---------------------------------------------------------------------------------------------------------- lod
 def cmd_lod(a):
     """Distant-object LOD for a staged build (src/fo4sf/skyrimlod.py): composite LOD NIFs + lodsettings into
@@ -436,6 +452,7 @@ def cmd_lod(a):
     if a.sf_esm:
         subprocess.run(["dotnet", "run", "--project", os.path.join(REPO, "dotnet", "TerrainOverlays"), "-c", "Release",
                         "--", a.sf_esm, a.out], check=True)
+        add_cell_index(a.out, a.sf_esm)
     return 0
 
 
@@ -525,6 +542,7 @@ def cmd_stage(a):
     if a.sf_esm:
         subprocess.run(["dotnet", "run", "--project", os.path.join(REPO, "dotnet", "TerrainOverlays"), "-c", "Release",
                         "--", a.sf_esm, out], check=True)
+        add_cell_index(out, a.sf_esm)
     else:
         print(f"next: dotnet run --project dotnet/TerrainOverlays -c Release -- <Starfield.esm> {out}")
     return 0
