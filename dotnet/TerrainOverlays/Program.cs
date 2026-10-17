@@ -257,6 +257,34 @@ if (Has(prm, "objects"))
             object hv = ht == typeof(byte[]) ? new byte[] { 5 } : System.Activator.CreateInstance(ht, new object[] { new byte[] { 5 } })!;
             hp.SetValue(lw, hv);
             Console.WriteLine($"{layers.Count} LOD layers ({lodBehavior}) under {parent.EditorID}; {world} HNAM = [5]");
+            // The overlay component's SNAM / PNAM (Mutagen: unknown byte arrays). Every world whose composite LOD draws
+            // (NewAtlantis, ShatteredSpace's Dazra, LC030World) has SNAM = a placed reference of that world and PNAM
+            // with bit 0 set (3, 0x15, 1); the Mars template LC172World and ours had SNAM 0 and PNAM 4 (owner's
+            // compare_worlds.py / SfInspect runs). Supported hypothesis, unverified: SNAM = our persistent anchor
+            // (raw FormID, this plugin = master index 1 after Starfield.esm), PNAM |= 1.
+            var ov = lw.Components.OfType<WorldSpaceOverlayComponent>().First();
+            void SetBytes(object target, string prop, byte[] value)
+            {
+                var pp = target.GetType().GetProperty(prop)!;
+                var pt = Nullable.GetUnderlyingType(pp.PropertyType) ?? pp.PropertyType;
+                pp.SetValue(target, pt == typeof(byte[]) ? value : System.Activator.CreateInstance(pt, new object[] { value })!);
+            }
+            byte[] GetBytes(object target, string prop)
+            {
+                var v = target.GetType().GetProperty(prop)!.GetValue(target);
+                if (v == null) return new byte[4];
+                if (v is byte[] b) return b;
+                var arr = v.GetType().GetMethod("ToArray", Type.EmptyTypes)!.Invoke(v, null);
+                return (byte[])arr!;
+            }
+            var anchorRef = lw.TopCell!.Persistent.OfType<PlacedObject>().First(r => r.EditorID != null);
+            var snam = BitConverter.GetBytes(0x01000000u | anchorRef.FormKey.ID);
+            SetBytes(ov, "SNAM", snam);
+            var pnam = GetBytes(ov, "PNAM").ToArray();
+            if (pnam.Length == 0) pnam = new byte[4];
+            pnam[0] |= 1;
+            SetBytes(ov, "PNAM", pnam);
+            Console.WriteLine($"{world} overlay component: SNAM = anchor {anchorRef.FormKey} (raw {BitConverter.ToUInt32(snam):X8}), PNAM = [{string.Join(", ", pnam)}]");
         }
     }
     foreach (var b in o.GetProperty("bases").EnumerateArray())
