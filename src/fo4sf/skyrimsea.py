@@ -232,3 +232,28 @@ def add_rivers(objects: dict, data_dir: str, cells, material: str, below_m: floa
                                 "pos": [int(x) * 100.0 + 50.0, int(y) * 100.0 + 50.0, round(float(h) - below_m, 4)],
                                 "rot": [0.0, 0.0, 0.0], "scale": 1.0, "disabled": False})
     return len(cells)
+
+
+VANILLA_WATER_EDID = "SKY_RiverWaterVanilla"
+VANILLA_WATER_SRC = "river_water_vanilla:"
+WATER50M = "05486F"          # Water50mClearLake: ACTI, model Water\\Water50m.nif, water type WaterClearLake (owner's
+                             # find_water_objects.py run); New Atlantis's canals use activators of this kind
+
+
+def add_vanilla_water(objects: dict, cells, form: str = WATER50M, piece_m: float = 50.0, cell_m: float = 100.0) -> int:
+    """One vanilla placeable water activator per river / lake cell [[x, y, height_m], ...], scaled from its piece_m
+    plane to the 100 m cell, at the cell's water level: real water where the planet's ocean biome stops our cell water
+    from drawing (owner, Nirn all-ocean test 2026-10-18: sea present, rivers gone). Supported hypothesis: the
+    activator's plane is piece_m square and centred on its origin."""
+    remove(objects, VANILLA_WATER_EDID, VANILLA_WATER_SRC)
+    if not cells:
+        return 0
+    bi = len(objects["bases"])
+    objects["bases"].append({"edid": VANILLA_WATER_EDID, "vanilla": form, "model": "",
+                             "source": "generated: vanilla placeable water", "collision": "none"})
+    scale = round(cell_m / piece_m * 1.01, 4)            # 1 % overlap between neighbouring cells
+    for n, (x, y, h) in enumerate(cells):
+        objects["refs"].append({"src": f"{VANILLA_WATER_SRC}{n}", "base": bi, "cell": [int(x), int(y)],
+                                "pos": [int(x) * cell_m + cell_m / 2, int(y) * cell_m + cell_m / 2, round(float(h), 4)],
+                                "rot": [0.0, 0.0, 0.0], "scale": scale, "disabled": False})
+    return len(cells)

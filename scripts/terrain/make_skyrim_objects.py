@@ -420,6 +420,13 @@ def cmd_lod(a):
     data = os.path.join(a.out, "Data")
     distant_sea(a, objects, data, ov)
     river_meshes(a, prm, objects, data)
+    from fo4sf import skyrimsea as _sea
+    if a.river_water:                                # vanilla placeable water per river cell (ocean-biome planets)
+        cells = (prm.get("water") or {}).get("cells") or []
+        n = _sea.add_vanilla_water(objects, cells, a.river_water_form)
+        print(f"river water: {n} vanilla water activators ({a.river_water_form}) at the river / lake levels")
+    elif _sea.remove(objects, _sea.VANILLA_WATER_EDID, _sea.VANILLA_WATER_SRC):
+        print("river water: off (earlier activators removed)")
     if a.standalone_materials:                       # biome coating at the ocean spot (src/fo4sf/lodmatfix.py)
         from fo4sf import lodmatfix
         ms = lodmatfix.apply_standalone(data)
@@ -443,7 +450,7 @@ def cmd_lod(a):
     # Creation Kit then called all 19,494 of our large-reference entries "not a large ref" (zero-size objects)
     nb = 0
     for b in objects["bases"]:
-        if b.get("door") or b.get("bounds"):
+        if b.get("door") or b.get("bounds") or b.get("vanilla"):
             continue
         try:
             bb = skyrimlod.model_bounds(data, b["model"])
@@ -859,6 +866,10 @@ def main(argv=None):
     ap.add_argument("--river-colour", default="18,36,34", help="lod --river-meshes: water colour R,G,B (sRGB)")
     ap.add_argument("--river-roughness", type=int, default=140,
                     help="lod --river-meshes: 0..255 (60 read as bright opaque cyan: the sky's reflection)")
+    ap.add_argument("--river-water", action="store_true",
+                    help="lod: rivers / lakes as vanilla placeable water (real water) at each water cell's level, for "
+                         "planets whose ocean biome stops cell water from drawing")
+    ap.add_argument("--river-water-form", default="05486F", help="lod --river-water: the activator (Water50mClearLake)")
     ap.add_argument("--river-meshes", action="store_true",
                     help="lod: rivers / lakes as flat water objects too (Jemison's ocean spot drew no cell water)")
     ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")

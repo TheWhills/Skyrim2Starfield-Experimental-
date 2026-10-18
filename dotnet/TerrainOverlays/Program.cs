@@ -317,6 +317,13 @@ if (Has(prm, "objects"))
     foreach (var b in o.GetProperty("bases").EnumerateArray())
     {
         var edid = b.GetProperty("edid").GetString()!;
+        // "vanilla" (hex FormID in Starfield.esm): place that base as is, no record of ours (make_skyrim_objects.py lod
+        // --river-water: the vanilla placeable water activators, e.g. Water50mClearLake 05486F)
+        if (b.TryGetProperty("vanilla", out var vj) && vj.ValueKind == JsonValueKind.String)
+        {
+            baseKeys.Add(new FormKey(sfEsm, Convert.ToUInt32(vj.GetString(), 16)));
+            continue;
+        }
         var model = b.GetProperty("model").GetString()!;
         if (b.TryGetProperty("door", out var d) && d.ValueKind == JsonValueKind.Object)
         {

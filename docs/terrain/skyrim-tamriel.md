@@ -301,3 +301,9 @@ material, BIOM EFSD: OceanLife04 gl_slimeocean01.mat, FrozenLife07 gl_snow_heavy
 make_planet.py now clones OceanLife04 into the planet plugin as <Name>OceanNoCoating (02000801) without EFSD and uses
 it for the planet's ocean (PPBD + map; `--keep-ocean-coating` for the vanilla one). Unverified: whether a plugin's
 biome map names its own biomes by plugin-local FormID (02000801 written).
+All-ocean Nirn with the coating-free ocean biome, Skyrim lifted 395 m (owner, 2026-10-18): the planet's sea all round
+to the horizon, surf on the beaches; but rivers and lakes gone (our cell water does not draw over an ocean biome, as
+at Jemison's ocean spot). `lod --river-water` places the vanilla placeable water activator Water50mClearLake (05486F,
+found by find_water_objects.py) at each river / lake cell's level, scaled x2.02 to the 100 m cell; objects.json bases
+may now name a vanilla base ("vanilla": hex), which TerrainOverlays places without a record of ours. Unverified: the
+activator's plane size / origin (50 m, centred assumed).

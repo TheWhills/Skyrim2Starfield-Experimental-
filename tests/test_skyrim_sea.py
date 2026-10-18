@@ -61,6 +61,15 @@ class DistantSea(unittest.TestCase):
             sea.add_rivers(objects, d, [[2, -7, 195.0]], "m.mat")
             self.assertEqual((len(objects["bases"]), len(objects["refs"])), (1, 1))
 
+    def test_vanilla_water_per_cell(self):
+        objects = {"bases": [{"edid": "SKY_A", "model": "a.nif"}], "refs": []}
+        self.assertEqual(sea.add_vanilla_water(objects, [[2, -7, 195.0], [3, -7, 196.5]]), 2)
+        self.assertEqual(objects["bases"][1]["vanilla"], "05486F")
+        r = objects["refs"][1]
+        self.assertEqual((r["pos"], r["scale"], r["base"]), ([350.0, -650.0, 196.5], 2.02, 1))
+        sea.add_vanilla_water(objects, [[2, -7, 195.0]])
+        self.assertEqual((len(objects["bases"]), len(objects["refs"])), (2, 1))
+
     def test_wave_normals_tile(self):
         r, g = sea.wave_normals(64)
         self.assertEqual(r.shape, (64, 64))
