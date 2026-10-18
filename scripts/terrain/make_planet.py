@@ -124,26 +124,107 @@ def group_bytes(typ: bytes, recs) -> bytes:
     return struct.pack("<4sI4si", b"GRUP", 24 + len(body), typ, 0) + bytes(8) + body
 
 
-def write_plugin(path, planet_header: bytes, subs, fid: int, before=()):
+def write_plugin(path, planet_header: bytes, subs, fid: int, before=(), after_groups=b"", extra_records=0,
+                 top_fid=0):
     """Replace the planet plugin's content: its TES4 header (masters as TerrainOverlays wrote them), the `before`
     records ((type, header, subs, FormID), one top group per type, e.g. our BIOM) and one PNDT group with the planet."""
     raw = open(path, "rb").read()
     tes4_size = REC.unpack_from(raw, 0)[1]
     tes4 = bytearray(raw[:24 + tes4_size])
     data = b"".join(s + struct.pack("<H", len(d)) + d for s, d in subs)
-    groups = b"".join(group_bytes(t, [record_bytes(t, h, sb, f)]) for t, h, sb, f in before)
-    grp = groups + group_bytes(b"PNDT", [record_bytes(b"PNDT", planet_header, subs, fid)])
-    top = max([fid] + [f for _t, _h, _s, f in before]) & 0xFFFFFF
+    by_type = {}
+    for t, h, sb, f in before:                       # one top group per record type, in first-seen order
+        by_type.setdefault(t, []).append(record_bytes(t, h, sb, f))
+    groups = b"".join(group_bytes(t, recs) for t, recs in by_type.items())
+    grp = groups + group_bytes(b"PNDT", [record_bytes(b"PNDT", planet_header, subs, fid)]) + after_groups
+    top = max([fid, top_fid] + [f for _t, _h, _s, f in before if f >> 24 == fid >> 24]) & 0xFFFFFF
     # TES4 HEDR: version f32, record count u32, next object id u32
     subs4 = list(fo4land.iter_subrecords(bytes(tes4[24:])))
     off = 24
     for s, d in subs4:
         if s == b"HEDR" and len(d) >= 12:
-            struct.pack_into("<II", tes4, off + 6 + 4, 1 + len(before), top + 1)
+            struct.pack_into("<II", tes4, off + 6 + 4, 1 + len(before) + extra_records, top + 1)
         off += 6 + len(d)
     with open(path, "wb") as fh:
         fh.write(bytes(tes4) + grp)
     return len(data)
+
+
+# --------------------------------------------------------------------------------------- locations and markers
+# New Atlantis's chain (owner's survey_markers.py run): CityNewAtlantisLocation -> SAlphaCentauri_PJemison_Surface
+# (0001AB2B) -> SAlphaCentauri_PJemison (0001AB29) -> SAlphaCentauri; Jemison's three planet locations (planet,
+# _Surface, _Orbit) carry XNAM = the star system id (011720) and YNAM = the planet's slot (3). Landing pads:
+# ShipLandingMarker_80m_Large (FURN 00007145); map markers: MapMarker (STAT 00000010) with XMRK, FNAM flags (0x13 on
+# the spaceport's), FULL, TNAM type, VNAM, UNAM, VISI and XLKR to the pad.
+JEMISON_LOCS = ("SAlphaCentauri_PJemison", "SAlphaCentauri_PJemison_Surface", "SAlphaCentauri_PJemison_Orbit")
+LANDING_MARKER = 0x00007145
+MAP_MARKER = 0x00000010
+PERSISTENT = 0x400
+
+
+def location_subrecords(subs, edid, name, parent=None, slot=None, drop=(b"LCSR", b"LCEP")):
+    out = []
+    for s, d in subs:
+        if s in drop:
+            continue
+        if s == b"EDID":
+            d = zs(edid)
+        elif s == b"FULL":
+            d = zs(name)
+        elif s == b"PNAM" and parent is not None:
+            d = struct.pack("<I", parent)
+        elif s == b"YNAM" and slot is not None:
+            d = struct.pack("<I", slot)
+        out.append((s, d))
+    return out
+
+
+def world_and_persistent_cell(buf, body, edid):
+    """((WRLD header, subs, FormID), (persistent CELL header, subs, FormID)) of a world in a plugin."""
+    wrld, pending = None, None
+    for item in fo4land.iter_items(buf, body, len(buf)):
+        if item[0] == "GRUP" and item[3] == b"WRLD":
+            for it in fo4land.iter_items(buf, item[1] + 24, item[2]):
+                if it[0] == "GRUP":
+                    if pending and it[4] == 1 and struct.unpack("<I", it[3])[0] == pending[2]:
+                        for c in fo4land.iter_items(buf, it[1] + 24, it[2]):
+                            if c[0] != "GRUP" and c[0] == b"CELL":
+                                csubs = [(s, bytes(d)) for s, d in fo4land.iter_subrecords(fo4land.record_data(buf, c[1]))]
+                                return pending, (bytes(buf[c[1]:c[1] + 24]), csubs, c[3])
+                    continue
+                typ, off, _fl, fid = it
+                if typ == b"WRLD":
+                    subs = [(s, bytes(d)) for s, d in fo4land.iter_subrecords(fo4land.record_data(buf, off))]
+                    if next((fo4land.zstring(d) for s, d in subs if s == b"EDID"), "") == edid:
+                        pending = (bytes(buf[off:off + 24]), subs, fid)
+    raise KeyError(f"world {edid} (with its persistent cell) not found")
+
+
+def ref_subrecords(edid, base, pos, extra=()):
+    return [(b"EDID", zs(edid)), (b"NAME", struct.pack("<I", base))] + list(extra) + \
+        [(b"DATA", struct.pack("<6f", float(pos[0]), float(pos[1]), float(pos[2]), 0.0, 0.0, 0.0))]
+
+
+def map_marker_extra(name, landing_fid, flags=0x13, kind=4):
+    return [(b"XMRK", b""), (b"FNAM", struct.pack("<I", flags)), (b"FULL", zs(name)), (b"TNAM", struct.pack("<H", kind)),
+            (b"VNAM", struct.pack("<H", 0)), (b"UNAM", struct.pack("<I", 0)), (b"VISI", b"\0"),
+            (b"XLKR", struct.pack("<II", 0, landing_fid))]
+
+
+def world_group(wrld, cell, refs) -> bytes:
+    """Top WRLD group: the world record (override), its children group with the persistent cell (override) and that
+    cell's persistent children (our references)."""
+    wh, wsubs, wfid = wrld
+    ch, csubs, cfid = cell
+    wsubs = [(s, d) for s, d in wsubs if s not in (b"OFST", b"CLSZ")]         # file offsets of the terrain plugin
+    recs = b"".join(refs)
+    pers = struct.pack("<4sI4si", b"GRUP", 24 + len(recs), struct.pack("<I", cfid), 8) + bytes(8) + recs
+    kids6 = struct.pack("<4sI4si", b"GRUP", 24 + len(pers), struct.pack("<I", cfid), 6) + bytes(8) + pers
+    cellrec = record_bytes(b"CELL", ch, csubs, cfid)
+    body1 = cellrec + kids6
+    kids1 = struct.pack("<4sI4si", b"GRUP", 24 + len(body1), struct.pack("<I", wfid), 1) + bytes(8) + body1
+    wrec = record_bytes(b"WRLD", wh, wsubs, wfid)
+    return group_bytes(b"WRLD", [wrec + kids1])
 
 
 def masters_of(path):
@@ -166,6 +247,9 @@ def main(argv=None):
                          "FrozenLife07): snow round Skyrim proves the engine reads our biome map")
     ap.add_argument("--keep-ocean-coating", action="store_true",
                     help="use vanilla OceanLife04 as is (its slime global layer coats every object)")
+    ap.add_argument("--no-locations", action="store_true",
+                    help="no Nirn planet / surface / orbit locations, no landing or map marker")
+    ap.add_argument("--marker-name", default="Skyrim", help="the map marker's name")
     ap.add_argument("--slot", type=int, default=30, help="planet slot in the star system (unused by vanilla)")
     ap.add_argument("--orbit-scale", type=float, default=1.3, help="orbit distances x this (away from the template)")
     a = ap.parse_args(argv)
@@ -195,7 +279,46 @@ def main(argv=None):
     new = planet_subrecords(subs, a.name, f"{a.name}PlanetData", a.radius_km, a.slot, worlds,
                             {only: 100.0} if only else {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale,
                             remap=None if only else {OCEAN: ocean_fid})
-    n = write_plugin(plugin, header, new, fid, before)
+    after, n_extra, top_fid, notes = b"", 0, 0, []
+    if not a.no_locations:
+        loc, surf, orb = own | 0x802, own | 0x803, own | 0x804
+        with fo4land.Plugin(a.sf_esm) as p:
+            jl = {e: find_record(p.buf, p.body, b"LCTN", e) for e in JEMISON_LOCS}
+        before += [(b"LCTN", jl[JEMISON_LOCS[0]][1],
+                    location_subrecords(jl[JEMISON_LOCS[0]][2], f"S{a.name}_P{a.name}", a.name, slot=a.slot), loc),
+                   (b"LCTN", jl[JEMISON_LOCS[1]][1],
+                    location_subrecords(jl[JEMISON_LOCS[1]][2], f"S{a.name}_P{a.name}_Surface", a.name,
+                                        parent=loc, slot=a.slot), surf),
+                   (b"LCTN", jl[JEMISON_LOCS[2]][1],
+                    location_subrecords(jl[JEMISON_LOCS[2]][2], f"S{a.name}_P{a.name}_Orbit", a.name,
+                                        parent=loc, slot=a.slot), orb)]
+        with fo4land.Plugin(terrain) as p:
+            for ov in prm["overlays"]:                   # our world's location moves under Nirn's surface
+                _o, lh, lsubs = find_record(p.buf, p.body, b"LCTN", ov["location"])
+                lfid = struct.unpack_from("<I", lh, 12)[0]
+                before.append((b"LCTN", lh, [(s, struct.pack("<I", surf) if s == b"PNAM" else d) for s, d in lsubs], lfid))
+            wrld, cell = world_and_persistent_cell(p.buf, p.body, prm["overlays"][0]["world"])
+        site = prm.get("landing")
+        if site:
+            land_fid, mark_fid = own | 0x810, own | 0x811
+            hdr = cell[0][:8] + struct.pack("<I", PERSISTENT) + cell[0][12:]
+            pos = (site["x"], site["y"], site["z"])
+            refs = [record_bytes(b"REFR", hdr, ref_subrecords(f"SKY_{a.name}LandingMarker", LANDING_MARKER, pos), land_fid),
+                    record_bytes(b"REFR", hdr, ref_subrecords(f"SKY_{a.name}MapMarker", MAP_MARKER,
+                                                             (pos[0], pos[1], pos[2] + 2.0),
+                                                             map_marker_extra(a.marker_name, land_fid)), mark_fid)]
+            after = world_group(wrld, cell, refs)
+            n_extra, top_fid = 4, mark_fid
+            notes.append(f"landing marker + map marker '{a.marker_name}' at ({site['x']:g}, {site['y']:g}, "
+                         f"{site['z']:g}) in {prm['overlays'][0]['world']}'s persistent cell")
+        else:
+            notes.append("no landing site in overlays_params.json (rebuild the terrain with today's "
+                         "make_skyrim_overlay.py): no landing / map marker")
+        notes.insert(0, f"locations S{a.name}_P{a.name} / _Surface / _Orbit (slot {a.slot}); "
+                        f"{', '.join(o['location'] for o in prm['overlays'])} now under S{a.name}_P{a.name}_Surface")
+    n = write_plugin(plugin, header, new, fid, before, after, n_extra, top_fid)
+    for t in notes:
+        print(t)
     # where the engine looks: biomemaps\<planet>.biom for Starfield.esm's planets (Jemison Biome Overhaul replaces
     # jemison.biom there); for a planet defined in an ESM, biomemaps\<plugin>.esm\<planet>.biom (SFStarEditor's
     # README, unverified there). The first Nirn tests with only the root file showed no sign of it (owner: a frozen-only

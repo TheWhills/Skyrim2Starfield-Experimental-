@@ -425,6 +425,18 @@ def cmd_build(a, rest):
         o["height_offset_m"] = a.height_offset
         if land.default_water is not None:           # Skyrim's sea level in the overlay (make_skyrim_objects lod: sea)
             o["sea_level_m"] = round(float(land.default_water) / 70.0 + a.height_offset, 4)
+    if not a.no_landing:                             # a flat dry 80 m pad near the arrival (make_planet.py markers)
+        from fo4sf import skyrimsite
+        o = prm["overlays"][0]
+        site = skyrimsite.flat_site(land.grids, land.water, land.default_water,
+                                    tuple(float(v) for v in o.get("origin_cw_m", [0, 0])), a.height_offset,
+                                    tuple(o["spawn"][:2]), radius_m=a.landing_radius)
+        if site:
+            prm["landing"] = site
+            print(f"overlays_params.json: landing site {site['distance_m']:g} m from the arrival at "
+                  f"({site['x']:g}, {site['y']:g}, {site['z']:g}), ground range {site['range_m']:g} m over 80 m")
+        else:
+            print("overlays_params.json: no flat dry landing site found near the arrival")
     if a.skyrim_water:                               # Skyrim's rivers / lakes as Starfield cell water (skyrimwater.py)
         from fo4sf import skyrimwater
         o = prm["overlays"][0]
@@ -539,6 +551,9 @@ def main(argv=None):
     ap.add_argument("--skyrim-water", action="store_true",
                     help="build: Skyrim's river and lake levels (cell XCLW) as Starfield cell water "
                          "(src/fo4sf/skyrimwater.py); the sea stays the planet's ocean")
+    ap.add_argument("--no-landing", action="store_true", help="build: no ship landing site in overlays_params.json")
+    ap.add_argument("--landing-radius", type=float, default=1500.0,
+                    help="build: search the flattest dry 80 m pad this far from the arrival (m)")
     ap.add_argument("--outside-fill", choices=("sea", "land"), default="sea",
                     help="build: past Skyrim's ground and in its holes: sea floor under sea water (default; with "
                          "--skyrim-water) or the world's default land height (the old flat plateau)")

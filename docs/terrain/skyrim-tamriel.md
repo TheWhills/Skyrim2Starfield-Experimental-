@@ -313,3 +313,13 @@ cell covered banks and slopes beside the rivers (owner: "not following the way S
 now also writes `water.pieces`: 16 m squares where >= 15 % of Skyrim's LAND vertices lie under their cell's water
 level, at the level most of them share (skyrimwater.water_pieces); `lod --river-water` places Water16mClearLake
 (039FD6) on each (`--river-water-cells` for the old 50 m per cell).
+
+**Landing on Nirn (2026-10-18):** from the owner's survey_markers.py run of NewAtlantis (landing pads =
+ShipLandingMarker_80m_Large FURN 00007145; map markers = MapMarker STAT 00000010 with XMRK, FNAM 0x13 on the
+spaceport's, FULL, TNAM, VNAM, UNAM, VISI, XLKR to the pad; chain CityNewAtlantisLocation -> PJemison_Surface ->
+PJemison -> SAlphaCentauri, Jemison's locations carrying XNAM 011720 (system) / YNAM 3 (slot)): the overlay build
+writes `landing`, the flattest dry 80 m square within 1.5 km of the arrival (src/fo4sf/skyrimsite.py; Skyrim's LAND
+heights), and make_planet.py adds to the planet plugin: SNirn_PNirn / _Surface / _Orbit (clones of Jemison's, YNAM =
+the slot, orbit without its LCSR / LCEP), an override of our world's location with PNAM -> SNirn_PNirn_Surface, and in
+an override of our world's persistent cell a landing marker and a map marker ("Skyrim", flags 0x13, type 4, linked
+to the pad). Not yet seen in game.

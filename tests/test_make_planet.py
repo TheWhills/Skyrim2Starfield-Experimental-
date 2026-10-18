@@ -91,5 +91,60 @@ class MakePlanet(unittest.TestCase):
                 self.assertEqual(struct.unpack_from("<II", hedr, 4), (2, 0x802))
 
 
+    def test_main_end_to_end_locations_and_markers(self):
+        import json
+        z = lambda t: t.encode() + b"\0"                                  # noqa: E731
+        tes4 = lambda masters: rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 0.96, 1, 0x800))] +   # noqa: E731
+                                   [(b"MAST", z(m)) for m in masters])
+        loc = lambda fid, e, extra=(): rec(b"LCTN", fid, [(b"EDID", z(e)), (b"FULL", b"\1\0\0\0")] + list(extra) +   # noqa: E731
+                                           [(b"PNAM", struct.pack("<I", 0x61581)), (b"XNAM", struct.pack("<I", 0x11720)),
+                                            (b"YNAM", struct.pack("<I", 3))])
+        sf = tes4([]) + grup(b"BIOM", 0, [rec(b"BIOM", mp.OCEAN, [(b"EDID", z("OceanLife04")), (b"EFSD", z("gl.mat"))])]) + \
+            grup(b"LCTN", 0, [loc(0x1AB29, "SAlphaCentauri_PJemison"), loc(0x1AB2B, "SAlphaCentauri_PJemison_Surface"),
+                              loc(0x1AB2C, "SAlphaCentauri_PJemison_Orbit", [(b"LCSR", b"x" * 20)])]) + \
+            grup(b"PNDT", 0, [rec(b"PNDT", 0x3F5A1, jemison_subs())])
+        world = 0x01000803
+        terrain = tes4(["Starfield.esm"]) + grup(b"LCTN", 0, [rec(b"LCTN", 0x01000802, [
+            (b"EDID", z("SKY_TamrielLocation")), (b"PNAM", struct.pack("<I", 0x1AB2B))])]) + \
+            grup(b"WRLD", 0, [rec(b"WRLD", world, [(b"EDID", z("SKY_Tamriel")), (b"OFST", b"\0" * 8)]),
+                              grup(world, 1, [rec(b"CELL", 0x01000804, [(b"DATA", b"\2\0")]),
+                                              grup(b"\0\0\0\0", 4, [])])])
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, "Starfield.esm"), "wb").write(sf)
+            open(os.path.join(d, "T.esm"), "wb").write(terrain)
+            open(os.path.join(d, "T_Mars.esm"), "wb").write(tes4(["Starfield.esm", "T.esm"]))
+            json.dump({"plugin": "T.esm", "mars": {"plugin": "T_Mars.esm"},
+                       "overlays": [{"world": "SKY_Tamriel", "location": "SKY_TamrielLocation",
+                                     "latitude": -1.5707963, "longitude": 0.0}],
+                       "landing": {"x": 100.0, "y": -50.0, "z": 400.0}}, open(os.path.join(d, "overlays_params.json"), "w"))
+            os.makedirs(os.path.join(d, "Data"))
+            import contextlib, io
+            with contextlib.redirect_stdout(io.StringIO()):
+                mp.main(["--sf-esm", os.path.join(d, "Starfield.esm"), "--staging", d, "--radius-km", "7484",
+                         "--land-px", "0"])
+            out = os.path.join(d, "T_Mars.esm")
+            with fo4land.Plugin(out) as pl:
+                _o, h, subs = mp.find_record(pl.buf, pl.body, b"LCTN", "SNirn_PNirn_Surface")
+                dd = dict(subs)
+                self.assertEqual(struct.unpack_from("<I", h, 12)[0], 0x02000803)
+                self.assertEqual(struct.unpack("<I", dd[b"PNAM"])[0], 0x02000802)
+                self.assertEqual(struct.unpack("<I", dd[b"YNAM"])[0], 30)
+                _o, h, subs = mp.find_record(pl.buf, pl.body, b"LCTN", "SNirn_PNirn_Orbit")
+                self.assertNotIn(b"LCSR", dict(subs))
+                _o, h, subs = mp.find_record(pl.buf, pl.body, b"LCTN", "SKY_TamrielLocation")
+                self.assertEqual(struct.unpack("<I", dict(subs)[b"PNAM"])[0], 0x02000803)
+                (wh, wsubs, wfid), (ch, csubs, cfid) = mp.world_and_persistent_cell(pl.buf, pl.body, "SKY_Tamriel")
+                self.assertEqual((wfid, cfid), (world, 0x01000804))
+                self.assertNotIn(b"OFST", dict(wsubs))
+                refs = []
+                for it in fo4land.iter_items(pl.buf, pl.body, len(pl.buf)):
+                    pass
+                wd = pl.read_world("SKY_Tamriel")
+                pers = wd["persistent_cell"]["persistent_refs"]
+                self.assertEqual(sorted(r["base"] for r in pers), [0x10, 0x7145])
+                hedr = dict(fo4land.iter_subrecords(bytes(pl.buf[24:24 + struct.unpack_from("<I", pl.buf, 4)[0]])))[b"HEDR"]
+                self.assertEqual(struct.unpack_from("<II", hedr, 4), (10, 0x812))
+
+
 if __name__ == "__main__":
     unittest.main()
