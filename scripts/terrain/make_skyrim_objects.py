@@ -421,10 +421,16 @@ def cmd_lod(a):
     distant_sea(a, objects, data, ov)
     river_meshes(a, prm, objects, data)
     from fo4sf import skyrimsea as _sea
-    if a.river_water:                                # vanilla placeable water per river cell (ocean-biome planets)
-        cells = (prm.get("water") or {}).get("cells") or []
-        n = _sea.add_vanilla_water(objects, cells, a.river_water_form)
-        print(f"river water: {n} vanilla water activators ({a.river_water_form}) at the river / lake levels")
+    if a.river_water:                                # vanilla placeable water (ocean-biome planets: no cell water)
+        pieces = (prm.get("water") or {}).get("pieces")
+        if pieces and not a.river_water_cells:
+            n = _sea.add_vanilla_water_pieces(objects, pieces)
+            print(f"river water: {n:,} vanilla 16 m water pieces ({_sea.WATER16M}) where Skyrim had water")
+        else:
+            cells = (prm.get("water") or {}).get("cells") or []
+            n = _sea.add_vanilla_water(objects, cells, a.river_water_form)
+            print(f"river water: {n} vanilla 50 m water activators ({a.river_water_form}), one per river / lake cell"
+                  + ("" if pieces else " (rebuild the terrain for the finer 16 m pieces)"))
     elif _sea.remove(objects, _sea.VANILLA_WATER_EDID, _sea.VANILLA_WATER_SRC):
         print("river water: off (earlier activators removed)")
     if a.standalone_materials:                       # biome coating at the ocean spot (src/fo4sf/lodmatfix.py)
@@ -870,6 +876,8 @@ def main(argv=None):
                     help="lod: rivers / lakes as vanilla placeable water (real water) at each water cell's level, for "
                          "planets whose ocean biome stops cell water from drawing")
     ap.add_argument("--river-water-form", default="05486F", help="lod --river-water: the activator (Water50mClearLake)")
+    ap.add_argument("--river-water-cells", action="store_true",
+                    help="lod --river-water: one 50 m piece per 100 m cell instead of the 16 m pieces")
     ap.add_argument("--river-meshes", action="store_true",
                     help="lod: rivers / lakes as flat water objects too (Jemison's ocean spot drew no cell water)")
     ap.add_argument("--no-distant-sea", action="store_true", help="lod: no flat distant sea pieces")

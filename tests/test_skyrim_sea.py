@@ -70,6 +70,13 @@ class DistantSea(unittest.TestCase):
         sea.add_vanilla_water(objects, [[2, -7, 195.0]])
         self.assertEqual((len(objects["bases"]), len(objects["refs"])), (2, 1))
 
+    def test_vanilla_water_pieces(self):
+        objects = {"bases": [], "refs": []}
+        self.assertEqual(sea.add_vanilla_water_pieces(objects, [[8.0, 24.0, 195.0], [-8.0, -120.0, 190.0]]), 2)
+        self.assertEqual(objects["bases"][0]["vanilla"], "039FD6")
+        self.assertEqual([r["cell"] for r in objects["refs"]], [[0, 0], [-1, -2]])
+        self.assertEqual(objects["refs"][1]["pos"], [-8.0, -120.0, 190.0])
+
     def test_wave_normals_tile(self):
         r, g = sea.wave_normals(64)
         self.assertEqual(r.shape, (64, 64))

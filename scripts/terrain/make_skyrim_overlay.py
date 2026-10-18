@@ -439,6 +439,11 @@ def cmd_build(a, rest):
             print(f"overlays_params.json: {len(sea)} cells past Skyrim's ground get sea water (sea floor fill)")
             lv = lv + sea
         prm["water"] = {"form": a.skyrim_water_form, "cells": [[c["cell"][0], c["cell"][1], c["height_m"]] for c in lv]}
+        # finer water for vanilla placeable water pieces (make_skyrim_objects.py lod --river-water)
+        prm["water"]["pieces"] = skyrimwater.water_pieces(
+            land.grids, land.water, land.default_water, tuple(float(v) for v in o.get("origin_cw_m", [0, 0])),
+            a.height_offset, (o["cell_min"], o["cell_max"]), piece_m=16.0, include_sea=a.skyrim_water_sea)
+        print(f"overlays_params.json: {len(prm['water']['pieces'])} 16 m water pieces where Skyrim had river / lake water")
         agree = sum(c["agree"] for c in lv) / len(lv) if lv else 1.0
         print(f"overlays_params.json: {len(lv)} cells with Skyrim river / lake water (WATR {a.skyrim_water_form}), "
               f"levels {min((c['height_m'] for c in lv), default=0):.1f}..{max((c['height_m'] for c in lv), default=0):.1f} m,"

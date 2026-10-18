@@ -307,3 +307,9 @@ at Jemison's ocean spot). `lod --river-water` places the vanilla placeable water
 found by find_water_objects.py) at each river / lake cell's level, scaled x2.02 to the 100 m cell; objects.json bases
 may now name a vanilla base ("vanilla": hex), which TerrainOverlays places without a record of ours. Unverified: the
 activator's plane size / origin (50 m, centred assumed).
+Vanilla water activators measured (owner's model_bounds.py runs): Water\Water50m.nif is a 50 m square centred on its
+origin, Water\Water16m.nif a 16 m square centred within 0.12 m; so the 50 m pieces sat right, but one level per 100 m
+cell covered banks and slopes beside the rivers (owner: "not following the way Skyrim water was"). The overlay build
+now also writes `water.pieces`: 16 m squares where >= 15 % of Skyrim's LAND vertices lie under their cell's water
+level, at the level most of them share (skyrimwater.water_pieces); `lod --river-water` places Water16mClearLake
+(039FD6) on each (`--river-water-cells` for the old 50 m per cell).

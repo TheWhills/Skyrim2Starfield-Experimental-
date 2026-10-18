@@ -94,3 +94,37 @@ def outside_sea(cell_range: Tuple[int, int], origin_m, offset_m: float, grid_bou
                 out.append({"cell": [sx, sy], "height_m": round(sea_units / UNITS_PER_M + offset_m, 3),
                             "wet_vertices": 0, "agree": 1.0, "outside": True})
     return out
+
+
+def water_pieces(grids, water, default_water: Optional[float], origin_m=(0.0, 0.0), offset_m: float = 0.0,
+                 cell_range: Optional[Tuple[int, int]] = None, piece_m: float = 16.0, min_wet: float = 0.15,
+                 include_sea: bool = False) -> List[List[float]]:
+    """[[x, y, height_m], ...]: centres (overlay metres) of piece_m squares where Skyrim had water, each at the level
+    most of its wet Skyrim vertices share. A square takes water when at least min_wet of its Skyrim LAND vertices lie
+    below their own cell's water level. For vanilla placeable water (Water16m), finer than one level per 100 m cell
+    (owner's view 2026-10-18: per-cell sheets covered banks and slopes beside the rivers). The sea (default water) is
+    left to the planet's ocean unless include_sea."""
+    per: Dict[Tuple[int, int], List[Optional[float]]] = {}
+    for (cx, cy), g in grids.items():
+        own = water.get((cx, cy))
+        sea = own is None or (default_water is not None and abs(own - default_water) < 1.0)
+        for r in range(33):
+            for c in range(33):
+                x = (cx * fo4land.CELL_UNITS + c * STEP) / UNITS_PER_M - origin_m[0]
+                y = (cy * fo4land.CELL_UNITS + r * STEP) / UNITS_PER_M - origin_m[1]
+                if cell_range:
+                    sc = tg.sf_cell_of(x, y)
+                    if not (cell_range[0] <= sc[0] <= cell_range[1] and cell_range[0] <= sc[1] <= cell_range[1]):
+                        continue
+                key = (int(x // piece_m), int(y // piece_m))
+                wet = own is not None and float(g[r, c]) < own and (include_sea or not sea)
+                per.setdefault(key, []).append(own if wet else None)
+    out = []
+    for (i, j), levels in sorted(per.items()):
+        wet = [w for w in levels if w is not None]
+        if not wet or len(wet) < min_wet * len(levels):
+            continue
+        level = max(set(wet), key=wet.count)
+        out.append([round((i + 0.5) * piece_m, 3), round((j + 0.5) * piece_m, 3),
+                    round(level / UNITS_PER_M + offset_m, 3)])
+    return out

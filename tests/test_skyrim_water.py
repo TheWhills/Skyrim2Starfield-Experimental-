@@ -59,6 +59,24 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class Pieces(unittest.TestCase):
+    def test_pieces_only_where_wet_at_their_level(self):
+        g = np.full((33, 33), 1000.0)                     # dry ground, with a river channel in columns 0..8
+        g[:, :9] = 0.0
+        low = np.full((33, 33), -15000.0)
+        grids = {(0, 0): g, (6, 0): low}
+        water = {(0, 0): 700.0, (6, 0): SEA}
+        got = skyrimwater.water_pieces(grids, water, SEA, offset_m=185.0)
+        self.assertTrue(got)
+        self.assertTrue(all(abs(h - 195.0) < 1e-6 for _x, _y, h in got))
+        # the channel: x = 0..14.6 m (8 steps of 1.83 m) -> 16 m squares with x centre 8 only; no piece over the dry
+        # ground beyond, none over the sea cell
+        self.assertEqual({x for x, _y, _h in got}, {8.0})
+        self.assertEqual(len(got), 4)                     # y 0..58.5 m -> squares 0..3
+        sea = skyrimwater.water_pieces(grids, water, SEA, include_sea=True)
+        self.assertGreater(len(sea), len(got))
+
+
 class OutsideSea(unittest.TestCase):
     def test_cells_past_land_and_holes_get_sea(self):
         from fo4sf import skyrimwater

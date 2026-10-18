@@ -257,3 +257,23 @@ def add_vanilla_water(objects: dict, cells, form: str = WATER50M, piece_m: float
                                 "pos": [int(x) * cell_m + cell_m / 2, int(y) * cell_m + cell_m / 2, round(float(h), 4)],
                                 "rot": [0.0, 0.0, 0.0], "scale": scale, "disabled": False})
     return len(cells)
+
+
+WATER16M = "039FD6"          # Water16mClearLake: ACTI, model Water\\Water16m.nif (16 m square, centred within 0.12 m:
+                             # owner's model_bounds.py run), water type WaterClearLake
+
+
+def add_vanilla_water_pieces(objects: dict, pieces, form: str = WATER16M, piece_m: float = 16.0) -> int:
+    """One vanilla 16 m water activator per piece [[x, y, height_m], ...] (skyrimwater.water_pieces)."""
+    remove(objects, VANILLA_WATER_EDID, VANILLA_WATER_SRC)
+    if not pieces:
+        return 0
+    bi = len(objects["bases"])
+    objects["bases"].append({"edid": VANILLA_WATER_EDID, "vanilla": form, "model": "",
+                             "source": "generated: vanilla placeable water", "collision": "none"})
+    for n, (x, y, h) in enumerate(pieces):
+        objects["refs"].append({"src": f"{VANILLA_WATER_SRC}{n}", "base": bi,
+                                "cell": [int(math.floor(x / 100.0)), int(math.floor(y / 100.0))],
+                                "pos": [float(x), float(y), float(h)], "rot": [0.0, 0.0, 0.0], "scale": 1.03,
+                                "disabled": False})
+    return len(pieces)
