@@ -339,7 +339,7 @@ def main(argv=None):
               f"(gl_slimeocean01: the underwater / mossy coat)")
     print(f"biome map {bm}: land disc {a.land_px:g} px (~{a.land_px * px_km:.1f} km, one pixel ~{px_km:.2f} km) at both "
           f"poles, ocean elsewhere")
-    if any(abs(abs(la) - math.pi / 2) > 0.01 for la, _lo, _f in worlds):
+    if a.land_px > 0 and any(abs(abs(la) - math.pi / 2) > 0.01 for la, _lo, _f in worlds):
         print("WARNING: the overlay is not on a pole; the land disc is at the poles (rebuild the terrain with "
               "--latlon -1.5707963 0)")
     return 0

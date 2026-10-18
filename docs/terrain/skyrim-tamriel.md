@@ -327,3 +327,7 @@ to the pad). Not yet seen in game.
 sea meets Skyrim's coast ("the sea appears to work now"; calibration: at 395, Riverwood spawn read z 193.03 and the
 sea surface -16.13, so Skyrim's coast sat ~10 m above the planet sea). Landing from space on Nirn works: the ship
 landed at the generated pad (483.7 m from the Riverwood arrival, ground range 4.8 m over 80 m).
+Sun path: at the pole (--latlon -1.5707963 0) the owner found the sun's position "a little strange" (supported
+hypothesis: at a pole the sun circles near the horizon instead of rising in the east and setting in the west). With
+the all-ocean biome map (--land-px 0) the pole is no longer needed, so the next test moves the overlay to lat 45 deg N
+(--latlon 0.7853982 0); make_planet.py now warns about a non-pole latitude only when a land disc is used.
