@@ -293,3 +293,11 @@ no sea and empty generated land round the map; not at 200 km, not at 7484 km, no
 frozen-only map (`--only-biome 0FD00D`) gave no snow: the engine did not read biomemaps\nirn.biom (packed, the
 install listed planetdata). SFStarEditor (github.com/tridashafox/SFStarEditor) says a planet defined in an ESM takes
 its map from biomemaps\<plugin>.esm\<planet>.biom (unverified there); make_planet.py now writes both paths.
+Biome map read once written under biomemaps\SkyrimTerrainTamriel_Mars.esm\ (owner: a frozen-only map put snow on all of
+Skyrim's ground). A forest land disc at the pole gave forest / savanna as far as the owner flew (the disc's ground
+size is not what the radius / 128 estimate says, or biomes blend far); an all-ocean map at 7,484 km gave the planet's
+sea (Riverwood flooded at offset 185, as at Jemison's ocean spot). The coatings are the biomes' global-layer
+material, BIOM EFSD: OceanLife04 gl_slimeocean01.mat, FrozenLife07 gl_snow_heavy_01.mat, the forest biome none.
+make_planet.py now clones OceanLife04 into the planet plugin as <Name>OceanNoCoating (02000801) without EFSD and uses
+it for the planet's ocean (PPBD + map; `--keep-ocean-coating` for the vanilla one). Unverified: whether a plugin's
+biome map names its own biomes by plugin-local FormID (02000801 written).

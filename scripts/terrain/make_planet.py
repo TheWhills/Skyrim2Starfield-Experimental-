@@ -54,7 +54,7 @@ def zs(text: str) -> bytes:
     return text.encode("latin-1") + b"\0"
 
 
-def planet_subrecords(subs, name, edid, radius_km, slot, worlds, biomes, orbit_scale):
+def planet_subrecords(subs, name, edid, radius_km, slot, worlds, biomes, orbit_scale, remap=None):
     """The cloned subrecords with the changes listed in the module docstring. worlds: [(lat, lon, raw FormID)];
     biomes: {FormID: coverage %} (PPBD entries of other biomes are dropped)."""
     out, seen = [], {}
@@ -81,12 +81,26 @@ def planet_subrecords(subs, name, edid, radius_km, slot, worlds, biomes, orbit_s
             fid = struct.unpack_from("<I", d)[0]
             if fid not in biomes:
                 continue
-            d = d[:4] + struct.pack("<f", float(biomes[fid])) + d[8:]
+            d = struct.pack("<If", (remap or {}).get(fid, fid), float(biomes[fid])) + d[8:]
         out.append((s, d))
-    have = {struct.unpack_from("<I", d)[0] for s, d in out if s == b"PPBD"}
+    back = {v: k for k, v in (remap or {}).items()}
+    have = {back.get(struct.unpack_from("<I", d)[0], struct.unpack_from("<I", d)[0]) for s, d in out if s == b"PPBD"}
     missing = set(biomes) - have
     if missing:
         raise ValueError(f"the template planet has no PPBD entry for biomes {sorted(hex(m) for m in missing)}")
+    return out
+
+
+COATING = b"EFSD"     # a biome's global-layer material: OceanLife04 gl_slimeocean01.mat, FrozenLife07 gl_snow_heavy_01.mat,
+                      # ForestDeciduousLifeJemison none (owner's dump_records run); the "underwater / mossy" and snow
+                      # coats on every object at the ocean spot / frozen test
+
+
+def clean_biome(subs, edid: str):
+    """A biome's subrecords without its global-layer coating (EFSD), renamed."""
+    out = [(s, zs(edid) if s == b"EDID" else d) for s, d in subs if s != COATING]
+    if len(out) == len(subs):
+        raise ValueError("the biome has no EFSD (coating) to remove")
     return out
 
 
@@ -99,22 +113,33 @@ def biome_map(land_px: float, land=LAND, ocean=OCEAN, size=256) -> bytes:
     return struct.pack("<HI", 0x105, 2) + struct.pack("<2I", ocean, land) + struct.pack("<I", 2) + one + one
 
 
-def write_plugin(path, planet_header: bytes, subs, fid: int):
-    """Replace the planet plugin's content: its TES4 header (masters as TerrainOverlays wrote them) and one PNDT group
-    holding the new planet."""
+def record_bytes(typ: bytes, header: bytes, subs, fid: int) -> bytes:
+    data = b"".join(s + struct.pack("<H", len(d)) + d for s, d in subs)
+    _t, _size, flags, _fid = REC.unpack_from(header, 0)
+    return struct.pack("<4sIII", typ, len(data), flags & ~fo4land.COMPRESSED, fid) + header[16:24] + data
+
+
+def group_bytes(typ: bytes, recs) -> bytes:
+    body = b"".join(recs)
+    return struct.pack("<4sI4si", b"GRUP", 24 + len(body), typ, 0) + bytes(8) + body
+
+
+def write_plugin(path, planet_header: bytes, subs, fid: int, before=()):
+    """Replace the planet plugin's content: its TES4 header (masters as TerrainOverlays wrote them), the `before`
+    records ((type, header, subs, FormID), one top group per type, e.g. our BIOM) and one PNDT group with the planet."""
     raw = open(path, "rb").read()
     tes4_size = REC.unpack_from(raw, 0)[1]
     tes4 = bytearray(raw[:24 + tes4_size])
     data = b"".join(s + struct.pack("<H", len(d)) + d for s, d in subs)
-    _t, _size, flags, _fid = REC.unpack_from(planet_header, 0)
-    rec = struct.pack("<4sIII", b"PNDT", len(data), flags & ~fo4land.COMPRESSED, fid) + planet_header[16:24] + data
-    grp = struct.pack("<4sI4si", b"GRUP", 24 + len(rec), b"PNDT", 0) + bytes(8) + rec
+    groups = b"".join(group_bytes(t, [record_bytes(t, h, sb, f)]) for t, h, sb, f in before)
+    grp = groups + group_bytes(b"PNDT", [record_bytes(b"PNDT", planet_header, subs, fid)])
+    top = max([fid] + [f for _t, _h, _s, f in before]) & 0xFFFFFF
     # TES4 HEDR: version f32, record count u32, next object id u32
     subs4 = list(fo4land.iter_subrecords(bytes(tes4[24:])))
     off = 24
     for s, d in subs4:
         if s == b"HEDR" and len(d) >= 12:
-            struct.pack_into("<II", tes4, off + 6 + 4, 1, (fid & 0xFFFFFF) + 1)
+            struct.pack_into("<II", tes4, off + 6 + 4, 1 + len(before), top + 1)
         off += 6 + len(d)
     with open(path, "wb") as fh:
         fh.write(bytes(tes4) + grp)
@@ -139,6 +164,8 @@ def main(argv=None):
     ap.add_argument("--only-biome", default="",
                     help="diagnostic: one biome everywhere (hex FormID with a PPBD entry in the template, e.g. 0FD00D "
                          "FrozenLife07): snow round Skyrim proves the engine reads our biome map")
+    ap.add_argument("--keep-ocean-coating", action="store_true",
+                    help="use vanilla OceanLife04 as is (its slime global layer coats every object)")
     ap.add_argument("--slot", type=int, default=30, help="planet slot in the star system (unused by vanilla)")
     ap.add_argument("--orbit-scale", type=float, default=1.3, help="orbit distances x this (away from the template)")
     a = ap.parse_args(argv)
@@ -155,18 +182,25 @@ def main(argv=None):
         for ov in prm["overlays"]:
             wfid, _s, _e, _f = p.find_world(ov["world"])
             worlds.append((float(ov["latitude"]), float(ov["longitude"]), wfid))   # terrain plugin = master index 1
+    own = len(masters) << 24
+    fid = own | 0x800
+    ocean_fid, before = OCEAN, []
     with fo4land.Plugin(a.sf_esm) as p:
         _off, header, subs = find_record(p.buf, p.body, b"PNDT", a.template)
+        if not a.keep_ocean_coating:
+            ocean_fid = own | 0x801
+            _o, bh, bsubs = find_record(p.buf, p.body, b"BIOM", "OceanLife04")
+            before = [(b"BIOM", bh, clean_biome(bsubs, f"{a.name}OceanNoCoating"), ocean_fid)]
     only = int(a.only_biome, 16) if a.only_biome else None
     new = planet_subrecords(subs, a.name, f"{a.name}PlanetData", a.radius_km, a.slot, worlds,
-                            {only: 100.0} if only else {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale)
-    fid = (len(masters) << 24) | 0x800
-    n = write_plugin(plugin, header, new, fid)
+                            {only: 100.0} if only else {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale,
+                            remap=None if only else {OCEAN: ocean_fid})
+    n = write_plugin(plugin, header, new, fid, before)
     # where the engine looks: biomemaps\<planet>.biom for Starfield.esm's planets (Jemison Biome Overhaul replaces
     # jemison.biom there); for a planet defined in an ESM, biomemaps\<plugin>.esm\<planet>.biom (SFStarEditor's
     # README, unverified there). The first Nirn tests with only the root file showed no sign of it (owner: a frozen-only
     # map gave no snow). Both are written.
-    data = biome_map(0.0, land=only, ocean=only) if only else biome_map(a.land_px)
+    data = biome_map(0.0, land=only, ocean=only) if only else biome_map(a.land_px, ocean=ocean_fid)
     root = os.path.join(a.staging, "Data", "planetdata", "biomemaps")
     paths = [os.path.join(root, f"{a.name.lower()}.biom"), os.path.join(root, prm["mars"]["plugin"], f"{a.name.lower()}.biom")]
     for bm in paths:
@@ -177,6 +211,9 @@ def main(argv=None):
     px_km = math.pi / 2 * a.radius_km / 128
     print(f"{prm['mars']['plugin']}: new planet {a.name} ({fid:08X}, {n:,} bytes of fields, cloned from {a.template}), "
           f"radius {a.radius_km:g} km, slot {a.slot}, master worldspaces {[(round(la, 4), round(lo, 4), hex(f)) for la, lo, f in worlds]}")
+    if before:
+        print(f"ocean biome: {a.name}OceanNoCoating ({ocean_fid:08X}), OceanLife04 without its EFSD global layer "
+              f"(gl_slimeocean01: the underwater / mossy coat)")
     print(f"biome map {bm}: land disc {a.land_px:g} px (~{a.land_px * px_km:.1f} km, one pixel ~{px_km:.2f} km) at both "
           f"poles, ocean elsewhere")
     if any(abs(abs(la) - math.pi / 2) > 0.01 for la, _lo, _f in worlds):

@@ -44,6 +44,15 @@ class MakePlanet(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<If", out[b"PPBD"][1]), (mp.LAND, 5.0))
         self.assertEqual(out[b"PPBD"][1][8:], b"\1\2")
 
+    def test_remap_and_clean_biome(self):
+        subs = mp.planet_subrecords(jemison_subs(), "Nirn", "NirnPlanetData", 500, 30, [], {mp.OCEAN: 100.0}, 1.0,
+                                    remap={mp.OCEAN: 0x02000801})
+        self.assertEqual([struct.unpack_from("<If", d) for s, d in subs if s == b"PPBD"], [(0x02000801, 100.0)])
+        b = mp.clean_biome([(b"EDID", b"OceanLife04\0"), (b"JNAM", b"w.mat\0"), (b"EFSD", b"gl.mat\0")], "NirnOcean")
+        self.assertEqual(b, [(b"EDID", b"NirnOcean\0"), (b"JNAM", b"w.mat\0")])
+        with self.assertRaises(ValueError):
+            mp.clean_biome(b, "x")
+
     def test_biome_map_layout(self):
         b = mp.biome_map(3.0)
         self.assertEqual(len(b), 6 + 8 + 4 + 2 * (12 + 4 * 65536 + 4 + 65536))
@@ -67,13 +76,19 @@ class MakePlanet(unittest.TestCase):
             open(p, "wb").write(tes4 + old)
             self.assertEqual(mp.masters_of(p), ["Starfield.esm", "X.esm"])
             hdr = struct.pack("<4sIII", b"PNDT", 0, 0x40000, 0x3F5A1) + bytes(8)
-            mp.write_plugin(p, hdr, [(b"EDID", b"NirnPlanetData\0"), (b"ANAM", b"Nirn\0")], 0x02000800)
+            bh = struct.pack("<4sIII", b"BIOM", 0, 0, 0x7F88A) + bytes(8)
+            mp.write_plugin(p, hdr, [(b"EDID", b"NirnPlanetData\0"), (b"ANAM", b"Nirn\0")], 0x02000800,
+                            [(b"BIOM", bh, [(b"EDID", b"NirnOcean\0")], 0x02000801)])
             with fo4land.Plugin(p) as pl:
                 _off, h, subs = mp.find_record(pl.buf, pl.body, b"PNDT", "NirnPlanetData")
                 self.assertEqual(struct.unpack_from("<4sIII", h)[2:], (0, 0x02000800))
                 self.assertEqual(dict(subs)[b"ANAM"], b"Nirn\0")
                 with self.assertRaises(KeyError):
                     mp.find_record(pl.buf, pl.body, b"PNDT", "JemisonPlanetData")
+                _o, bh2, _bs = mp.find_record(pl.buf, pl.body, b"BIOM", "NirnOcean")
+                self.assertEqual(struct.unpack_from("<I", bh2, 12)[0], 0x02000801)
+                hedr = dict(fo4land.iter_subrecords(bytes(pl.buf[24:24 + struct.unpack_from("<I", pl.buf, 4)[0]])))[b"HEDR"]
+                self.assertEqual(struct.unpack_from("<II", hedr, 4), (2, 0x802))
 
 
 if __name__ == "__main__":
