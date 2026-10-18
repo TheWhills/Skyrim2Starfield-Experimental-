@@ -323,3 +323,7 @@ heights), and make_planet.py adds to the planet plugin: SNirn_PNirn / _Surface /
 the slot, orbit without its LCSR / LCEP), an override of our world's location with PNAM -> SNirn_PNirn_Surface, and in
 an override of our world's persistent cell a landing marker and a map marker ("Skyrim", flags 0x13, type 4, linked
 to the pad). Not yet seen in game.
+**Verified in game (2026-10-18, owner):** with `--height-offset 385` on all-ocean Nirn (radius 7484 km) the planet's
+sea meets Skyrim's coast ("the sea appears to work now"; calibration: at 395, Riverwood spawn read z 193.03 and the
+sea surface -16.13, so Skyrim's coast sat ~10 m above the planet sea). Landing from space on Nirn works: the ship
+landed at the generated pad (483.7 m from the Riverwood arrival, ground range 4.8 m over 80 m).
