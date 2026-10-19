@@ -191,3 +191,6 @@ Findings:
 * For the in-game test, `hkx_to_af.py` saves against the game's own human skeleton.rig (found in Starfield -
   Animations.ba2) so bone indexing matches vanilla clips. Unverified until it plays: how the human graph finds a
   replacement clip (path / .afx tag), root motion, and the WEAPON placement.
+* First in-game test path (no graph work): `hkx_to_af.py --osf "Skyrim Port"` writes an OSF Animation content pack
+  (clips + a `clipLibrary` catalog, OSF docs/GETTING_STARTED.md), played from OSF's in-game browser on the player or an
+  NPC. OSF decodes .af through CALUMI itself, so this tests our clips on a real Starfield actor.

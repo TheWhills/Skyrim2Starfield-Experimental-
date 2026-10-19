@@ -13,6 +13,11 @@ Sources (each either a file or read from the game's archives):
                     default: the human .rig found in Starfield - Animations.ba2, extracted next to the output);
                     --own-rig writes a rig built from the skeleton NIF instead
 Writes <out>\\<clip>.af / .afx / .events.json and report.json (per clip: frames, keys, bytes, read-back error).
+
+--osf PACK: write the clips as an OSF Animation content pack instead (Nexus 17457, github.com/ozooma10/osf-animation;
+plays .af / .glb clips on actors from an in-game browser, F10): <out>\\OSF\\Animations\\<PACK>\\*.af plus
+<out>\\OSF\\<pack>.osf.json (a "clipLibrary" catalog, per OSF's docs/GETTING_STARTED.md). Copy <out>\\OSF into
+Starfield's Data folder, then in game: cgf "OSF.ReloadPacks", F10, pick the clip, play it on the player or an NPC.
 """
 import argparse
 import json
@@ -92,6 +97,7 @@ def main(argv=None):
     ap.add_argument("--own-rig", action="store_true", help="write a rig from the skeleton NIF instead of the game's")
     ap.add_argument("--tag", help="the .afx tag (default: the clip's file name)")
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--osf", metavar="PACK", help="write an OSF Animation content pack named PACK (see above)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -123,6 +129,11 @@ def main(argv=None):
                 print(f"Starfield rig: {name} (saved against it)")
         if rig_path is None:
             print("no game rig found: writing our own (--own-rig); the in-game test needs the game's rig")
+    clip_dir = out
+    if a.osf:
+        pack_id = re.sub(r"[^A-Za-z0-9_]+", "", a.osf) or "SkyrimPort"
+        clip_dir = os.path.join(out, "OSF", "Animations", pack_id)
+        os.makedirs(clip_dir, exist_ok=True)
     clips = list(a.clip)
     if a.clip_dir:
         for d, _ds, fns in os.walk(a.clip_dir):
@@ -143,7 +154,7 @@ def main(argv=None):
                 raise
             res = retarget.retarget(clip, sk, sf)
             chk = retarget.check(clip, sk, sf, res)
-            w = af_writer.write(a.calumi, out, name, sf.names, sf.parents, sf.t, sf.q, res["t"], res["q"],
+            w = af_writer.write(a.calumi, clip_dir, name, sf.names, sf.parents, sf.t, sf.q, res["t"], res["q"],
                                 tag=a.tag or name, rig_path=rig_path, events=clip["annotations"])
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
                        foot_lowest_m=chk["foot_lowest_m"], events=len(clip["annotations"]))
@@ -161,6 +172,15 @@ def main(argv=None):
         print({k: v for k, v in row.items() if k not in ("clip", "af")})
     with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)
+    if a.osf:
+        done_rows = [r for r in report if "af" in r]
+        pack = {"schema": 1, "pack": a.osf, "clipRoot": f"OSF/Animations/{pack_id}", "folder": "Skyrim",
+                "clipLibrary": [{"file": os.path.basename(r["af"]), "name": r["name"].replace("_", " ")}
+                                for r in done_rows]}
+        pj = os.path.join(out, "OSF", f"{pack_id.lower()}.osf.json")
+        with open(pj, "w", encoding="utf-8") as fh:
+            json.dump(pack, fh, indent=1)
+        print(f"OSF pack: {pj} ({len(done_rows)} clips); copy {os.path.join(out, 'OSF')} into Starfield's Data")
     done = sum("error" not in r and "skipped" not in r for r in report)
     print(f"{done} clips written, {sum('skipped' in r for r in report)} skipped (not animations), "
           f"{sum('error' in r for r in report)} failed; {os.path.join(out, 'report.json')}")
