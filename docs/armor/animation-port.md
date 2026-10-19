@@ -161,3 +161,13 @@ Human ("character"): 35 graphs, 5,269 states, 4,975 clips over 2,178 animation f
 mount / dismount). Horse: 66 states, 73 animations, events HorseEnter / HorseExit / HorseLocomotion / HorseDismount;
 mounting is a paired clip with the rider (sharedkillmoves/human&horse/paired_mount.hkx). These are the sizes of the
 behaviour each Starfield creature graph must cover.
+
+**2026-10-19, retargeter** (`src/fo4sf/retarget.py`): world-space rotation deltas from each Skyrim bone (relative to its
+rest) applied to the mapped Starfield bone's rest; Starfield bone lengths kept; COM movement scaled by the leg-length
+ratio (Starfield 0.827 m / Skyrim 0.898 m = 0.921). Conventions verified first: Skyrim .hkx reference-pose FK equals
+the Skyrim .nif skeleton joints (median 3e-5 units), and .nif rotation matrices used as stored equal the .hkx
+quaternions (max 5e-5). On the 7 real SE clips: every mapped limb segment turns exactly as in Skyrim (angle change
+0.0 deg); lowest foot point over the clip, Skyrim vs Starfield: sneak idle -0.009 / -0.025 m, sneak attack intro
+-0.003 / -0.036 m, others within 0.013 m (scaling the COM by hip height instead sank feet up to 0.11 m). Starfield's
+rest toe sits 0.019 m above the ground (Skyrim 0.001 m). Open: a foot-planting (IK) pass; root motion; WEAPON
+placement unverified until a weapon clip plays in game.
