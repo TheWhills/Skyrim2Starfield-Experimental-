@@ -171,3 +171,23 @@ quaternions (max 5e-5). On the 7 real SE clips: every mapped limb segment turns 
 -0.003 / -0.036 m, others within 0.013 m (scaling the COM by hip height instead sank feet up to 0.11 m). Starfield's
 rest toe sits 0.019 m above the ground (Skyrim 0.001 m). Open: a foot-planting (IK) pass; root motion; WEAPON
 placement unverified until a weapon clip plays in game.
+
+**2026-10-19, first .af files from Skyrim clips** (`src/fo4sf/af_writer.py`, `scripts/armor/hkx_to_af.py`):
+decode -> retarget -> write .af / .afx / events.json through CALUMI -> read back through CALUMI. CALUMI now also builds
+on Linux (`scripts/armor/build_calumi_linux.sh`: clones commit b0f3b5c outside the repo and applies portability edits;
+no CALUMI code enters the repo), so the chain runs and is checked here. All 7 real SE clips: written (7 to 60 KB,
+115 Starfield bones; the skeleton's one unnamed leaf under Camera is dropped, CALUMI rejects unnamed bones) and read
+back within 0.0005 rotation / 0.25 mm translation, except one IK helper key in idlebook_onepage (0.012).
+Findings:
+* **verified**: a port pitfall, not CALUMI's: GCC resolves bare `abs(float)` to C's `int abs`, which made the encoder
+  never drop x / y / z, so rotations over 90 degrees came back clamped near 90 (probe: 120 / 150 / 179 deg about X
+  read back as 87 / 89 / 95). With `using std::abs` every probe angle round-trips within 2e-5 (5e-4 on a diagonal axis).
+* **verified (encoder behaviour)**: CALUMI drops a quaternion component only if it exceeds 1/sqrt 2, else it drops w;
+  when w is near 0 and two components are both about 0.70, rebuilding w loses precision (0.012, about 1.4 deg, the
+  idlebook outlier). The format marks which component is missing, so an encoder that drops the largest one would avoid
+  it: worth reporting upstream.
+* **verified**: rotations are stored as given (not relative to the rig's bind pose): a bone with a 150 deg rest
+  animated at 140-170 deg showed the same clamping before the fix.
+* For the in-game test, `hkx_to_af.py` saves against the game's own human skeleton.rig (found in Starfield -
+  Animations.ba2) so bone indexing matches vanilla clips. Unverified until it plays: how the human graph finds a
+  replacement clip (path / .afx tag), root motion, and the WEAPON placement.

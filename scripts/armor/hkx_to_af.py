@@ -1,0 +1,171 @@
+"""Convert Skyrim .hkx animations into Starfield .af clips: decode (skyrimhkx / hkxspline), retarget onto Starfield's
+human skeleton (retarget, skeletonmap), write .af + .afx + events through CALUMI (af_writer), and read every file back
+through CALUMI to check it (--no-verify skips that). Outputs go outside the repository.
+
+    python -I scripts\\armor\\hkx_to_af.py --calumi "<CALUMI.Animation.dll>" --skyrim-data "$SKY" --starfield-data "$SF\\Data" ^
+        --out C:\\Modding\\work\\af_test --clip "meshes\\actors\\character\\animations\\mt_idle.hkx" [--clip ...] [--tag Idle]
+
+Sources (each either a file or read from the game's archives):
+  clips             --clip <archive path inside Skyrim's BSAs or a .hkx file on disk> (repeatable), or --clip-dir
+  Skyrim skeleton   --skyrim-skeleton <skeleton.hkx>, default meshes\\actors\\character\\character assets\\skeleton.hkx
+  Starfield skeleton --starfield-skeleton <skeleton.nif>, default the human skeleton.nif from the Meshes BA2s
+  Starfield rig     --starfield-rig <skeleton.rig>: save against the game's own rig (what the in-game test needs;
+                    default: the human .rig found in Starfield - Animations.ba2, extracted next to the output);
+                    --own-rig writes a rig built from the skeleton NIF instead
+Writes <out>\\<clip>.af / .afx / .events.json and report.json (per clip: frames, keys, bytes, read-back error).
+"""
+import argparse
+import json
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(REPO, "src"))
+
+import numpy as np  # noqa: E402
+
+from fo4sf import af_writer, ba2, bsa, retarget, skyrimhkx  # noqa: E402
+
+SKY_SKELETON = r"meshes\actors\character\character assets\skeleton.hkx"
+SF_SKELETON_RX = re.compile(r"meshes/actors/human/characterassets/skeleton\.nif$", re.I)
+SF_RIG_RX = re.compile(r"actors/human/.*characterassets/skeleton\.rig$", re.I)
+
+
+def read_any(path, skyrim=None):
+    if os.path.isfile(path):
+        with open(path, "rb") as fh:
+            return fh.read()
+    if skyrim is None:
+        raise SystemExit(f"not found: {path}")
+    d = skyrim._read(bsa.norm(path))
+    if d is None:
+        raise SystemExit(f"not in Skyrim's archives: {path}")
+    return d
+
+
+def starfield_find(data_dir, rx, prefixes=("starfield - meshes", "starfield - animations")):
+    for fn in sorted(os.listdir(data_dir)):
+        if fn.lower().startswith(prefixes) and fn.lower().endswith(".ba2"):
+            arc = ba2.Ba2(os.path.join(data_dir, fn))
+            for i, n in enumerate(arc.names):
+                if rx.search(n.replace("\\", "/")):
+                    return n, arc.read(i)
+    return None, None
+
+
+def compare(rb, res, sf_index):
+    """Largest read-back error over every frame (sign-aligned nlerp between keys)."""
+    def at(keys, f, quat):
+        fr = [k for k, _ in keys]
+        j = int(np.searchsorted(fr, f))
+        if j < len(fr) and fr[j] == f:
+            return np.array(keys[j][1])
+        a, b = np.array(keys[j - 1][1]), np.array(keys[j][1])
+        t = (f - keys[j - 1][0]) / (keys[j][0] - keys[j - 1][0])
+        if quat and np.dot(a, b) < 0:
+            b = -b
+        v = a * (1 - t) + b * t
+        return v / np.linalg.norm(v) if quat else v
+    mq = mt = 0.0
+    for n in rb["bones"]:
+        i = sf_index[n]
+        for f in range(res["frames"]):
+            q, w = at(rb["rotations"][n], f, True), res["q"][f, i]
+            mq = max(mq, min(np.max(np.abs(q - w)), np.max(np.abs(q + w))))
+            mt = max(mt, float(np.max(np.abs(at(rb["translations"][n], f, False) - res["t"][f, i]))))
+    return round(float(mq), 5), round(mt, 6)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--calumi", required=True, help="CALUMI.Animation.dll (Windows) or libcalumi.so (Linux build)")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--clip", action="append", default=[])
+    ap.add_argument("--clip-dir", help="convert every .hkx animation in this folder")
+    ap.add_argument("--skyrim-data")
+    ap.add_argument("--starfield-data")
+    ap.add_argument("--skyrim-skeleton")
+    ap.add_argument("--starfield-skeleton")
+    ap.add_argument("--starfield-rig")
+    ap.add_argument("--own-rig", action="store_true", help="write a rig from the skeleton NIF instead of the game's")
+    ap.add_argument("--tag", help="the .afx tag (default: the clip's file name)")
+    ap.add_argument("--no-verify", action="store_true")
+    a = ap.parse_args(argv)
+    out = os.path.abspath(a.out)
+    if out.lower().startswith(os.path.abspath(REPO).lower()):
+        sys.exit("--out must be outside the repository")
+    os.makedirs(out, exist_ok=True)
+    sky = bsa.SkyrimArchives(a.skyrim_data) if a.skyrim_data else None
+    sk_desc = skyrimhkx.describe(read_any(a.skyrim_skeleton or SKY_SKELETON, sky))
+    sk = retarget.rig_from_hkx_skeleton(next(s for s in sk_desc["skeletons"] if len(s["bones"]) > 20))
+    if a.starfield_skeleton:
+        sf_nif = read_any(a.starfield_skeleton)
+    else:
+        if not a.starfield_data:
+            sys.exit("give --starfield-skeleton or --starfield-data")
+        name, sf_nif = starfield_find(a.starfield_data, SF_SKELETON_RX)
+        if sf_nif is None:
+            sys.exit("Starfield human skeleton.nif not found in the Meshes archives")
+        print(f"Starfield skeleton: {name}")
+    sf = retarget.rig_from_nif(sf_nif)
+    rig_path = None
+    if not a.own_rig:
+        if a.starfield_rig:
+            rig_path = a.starfield_rig
+        elif a.starfield_data:
+            name, data = starfield_find(a.starfield_data, SF_RIG_RX, ("starfield - animations",))
+            if data is not None:
+                rig_path = os.path.join(out, "vanilla_skeleton.rig")
+                with open(rig_path, "wb") as fh:
+                    fh.write(data)
+                print(f"Starfield rig: {name} (saved against it)")
+        if rig_path is None:
+            print("no game rig found: writing our own (--own-rig); the in-game test needs the game's rig")
+    clips = list(a.clip)
+    if a.clip_dir:
+        for d, _ds, fns in os.walk(a.clip_dir):
+            clips += [os.path.join(d, f) for f in sorted(fns) if f.lower().endswith(".hkx")]
+    report = []
+    for c in clips:
+        name = os.path.splitext(os.path.basename(c.replace("\\", "/")))[0]
+        row = {"clip": c, "name": name}
+        try:
+            data = read_any(c, sky)
+            try:
+                clip = skyrimhkx.decode_clip(data, sk.names)
+            except skyrimhkx.HkxError as e:
+                if "no hkaSplineCompressedAnimation" in str(e):  # skeletons, behaviours: not clips
+                    row["skipped"] = "not an animation"
+                    report.append(row)
+                    continue
+                raise
+            res = retarget.retarget(clip, sk, sf)
+            chk = retarget.check(clip, sk, sf, res)
+            w = af_writer.write(a.calumi, out, name, sf.names, sf.parents, sf.t, sf.q, res["t"], res["q"],
+                                tag=a.tag or name, rig_path=rig_path, events=clip["annotations"])
+            row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
+                       foot_lowest_m=chk["foot_lowest_m"], events=len(clip["annotations"]))
+            if not a.no_verify:
+                rb = af_writer.read_back(a.calumi, w["af"], w["rig"])
+                missing = [n for n in rb["bones"] if n not in sf.index]
+                row["readback_bones"] = len(rb["bones"])
+                if missing:
+                    row["readback_unknown_bones"] = missing[:10]
+                else:
+                    row["readback_max_rotation_err"], row["readback_max_translation_err_m"] = compare(rb, res, sf.index)
+        except Exception as e:                               # noqa: BLE001 - reported per clip
+            row["error"] = f"{type(e).__name__}: {e}"
+        report.append(row)
+        print({k: v for k, v in row.items() if k not in ("clip", "af")})
+    with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as fh:
+        json.dump(report, fh, indent=1)
+    done = sum("error" not in r and "skipped" not in r for r in report)
+    print(f"{done} clips written, {sum('skipped' in r for r in report)} skipped (not animations), "
+          f"{sum('error' in r for r in report)} failed; {os.path.join(out, 'report.json')}")
+    return 0 if all("error" not in r for r in report) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
