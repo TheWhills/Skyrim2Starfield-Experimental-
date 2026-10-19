@@ -185,9 +185,11 @@ def from_rest_relative(rest_t, rest_q, key_t, key_q):
 def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: List[int], rest_t, rest_q,
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
           tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
-          variables=(), like_afx: Optional[bytes] = None, like_last: Optional[int] = None, file_name: Optional[str] = None) -> Dict:
+          variables=(), like_afx: Optional[bytes] = None, like_last: Optional[int] = None, file_name: Optional[str] = None,
+          omit=()) -> Dict:
     """Write <out>/<name>.af (+ skeleton.rig unless rig_path, + <name>.afx, + <name>.events.json). Translations in
-    metres, quaternions (x, y, z, w). Returns {"af", "rig", "keys", "frames"}."""
+    metres, quaternions (x, y, z, w). Bones named in `omit` get no track (the game keeps driving them, e.g.
+    skeletonmap.NOT_ANIMATED). Returns {"af", "rig", "keys", "frames"}."""
     out = pathlib.Path(out_dir).resolve()
     repo = pathlib.Path(__file__).resolve().parents[2]
     if out == repo or repo in out.parents:
@@ -239,7 +241,10 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
         add_sq = {k: L.fn(f"Add{k}SqToAnimBlockC", [p, p, c.c_uint, b], b) for k in entries}
         dele = {k: L.fn(f"Delete{k}EntryC", [p], b) for k in entries}
         add_block = L.fn("AddAnimBlockToAnimationC", [p, p, b, p], b)
+        skip = set(omit)
         for i, n in enumerate(bones):
+            if n in skip:
+                continue
             blk = L.require(mk_block(n.encode("utf-8"), i, L.error), f"block {n}")
             try:
                 q = clip_q[:, i, :].copy()
@@ -286,7 +291,7 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
                                                                    indent=1))
         return {"af": str(af), "rig": str(rig_path or rig_file), "keys": keys, "frames": F, "bones": B,
                 "events_in_afx": len(mapped), "events_not_mapped": len(unmapped),
-                "dropped_unnamed": dropped, "retime": retime}
+                "dropped_unnamed": dropped, "retime": retime, "omitted": sorted(skip & set(bones))}
     finally:
         if anim:
             L.fn("DeleteAnimationC", [p], b)(anim)

@@ -85,6 +85,19 @@ class AfWriterTests(unittest.TestCase):
         self.assertEqual(ET.fromstring(out2).findtext("filename"), "X.af")
 
     @unittest.skipUnless(os.environ.get("CALUMI_LIB"), "set CALUMI_LIB to a CALUMI build to run the round trip")
+    def test_omitted_bones_get_no_track(self):
+        q = np.tile([0, 0, 0, 1.0], (3, 3, 1))
+        t = np.zeros((3, 3, 3))
+        q[:, 2] = qa((0, 0, 1), 40)                                         # would tilt the "camera"
+        with tempfile.TemporaryDirectory() as d:
+            w = AF.write(os.environ["CALUMI_LIB"], d, "omit", ["Root", "Bone", "Camera"], [-1, 0, 0],
+                         np.zeros((3, 3)), [[0, 0, 0, 1.0]] * 3, t, q, omit=("Camera", "Absent"))
+            rb = AF.read_back(os.environ["CALUMI_LIB"], w["af"], w["rig"])
+        self.assertEqual(w["omitted"], ["Camera"])
+        self.assertNotIn("Camera", rb["bones"])
+        self.assertIn("Bone", rb["bones"])
+
+    @unittest.skipUnless(os.environ.get("CALUMI_LIB"), "set CALUMI_LIB to a CALUMI build to run the round trip")
     def test_round_trip_large_rotations(self):
         angles = [0, 60, 120, 150, 179, -170]
         q = np.zeros((len(angles), 3, 4))

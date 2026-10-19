@@ -48,5 +48,12 @@ class SkeletonMapTests(unittest.TestCase):
         self.assertIn("C_Spine1", cov["table_starfield_not_in_skeleton"])
 
 
+class NotAnimatedTests(unittest.TestCase):
+    def test_camera_and_helpers_are_left_to_the_game(self):
+        for n in ("Camera", "Camera Control", "CameraTarget", "Root", "C_Waist", "L_Arm"):
+            self.assertIn(n, M.NOT_ANIMATED)
+        for n in ("COM", "C_Hips", "R_Wrist", "Weapon", "C_Head"):
+            self.assertNotIn(n, M.NOT_ANIMATED)
+
 if __name__ == "__main__":
     unittest.main()

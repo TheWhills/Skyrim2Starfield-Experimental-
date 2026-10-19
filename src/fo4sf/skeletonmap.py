@@ -81,6 +81,14 @@ REST = ("", "HumanExportRoot", "CharacterBumper", "CharacterController", "Camera
         "CamTargetParent", "CameraTarget", "Eye_Target", "L_Eye", "R_Eye", "C_BackPack", "C_BackPackHose",
         "AnimObjectC", "AnimObjectD", "L_AnimObject2", "L_AnimObject3", "R_AnimObject2", "R_AnimObject3")
 
+# Bones vanilla human clips never animate (verified 2026-10-19 on the vanilla chair Idle and sword attacks: their tracks
+# are absent): the game drives the cameras, prop slots, eye target and helpers itself. A converted clip must leave them
+# out too: a track on Camera / Camera Control tilts the third-person camera into the floor (owner, in game). Root is
+# only animated for root motion (vanilla attacks move it forward each frame).
+NOT_ANIMATED = ("Camera", "Camera Control", "Camera Control FP", "CamTargetParent", "CameraTarget", "Eye_Target",
+                "AnimObjectA", "AnimObjectB", "AnimObjectC", "AnimObjectD", "L_AnimObject1", "L_AnimObject2",
+                "L_AnimObject3", "R_AnimObject1", "R_AnimObject2", "R_AnimObject3", "L_Arm", "R_Arm", "C_Waist", "Root")
+
 WORLD: Dict[str, str] = {"WEAPON": "Weapon", "WeaponLeft": "Shield",
                          "R_HandIk": "NPC R Hand [RHnd]", "L_HandIk": "NPC L Hand [LHnd]"}
 

@@ -260,6 +260,16 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: sword pack in game: attacks play, camera tipped over (owner) -> camera bones left out
+**Verified in game:** with the sword pack, attacking in third person played our clip but threw the camera into a tilted
+view at floor level. Cause (verified from the vanilla clips): vanilla human clips never carry tracks for the camera
+bones (Camera, Camera Control, Camera Control FP, CamTargetParent, CameraTarget), the prop slots (AnimObject*,
+L_/R_AnimObject*), Eye_Target, L_Arm / R_Arm or C_Waist; Root only for root motion (vanilla attacks move it a few mm per
+frame). Our clips wrote all 82, and the NIF's Camera orientation differs from the rig's, so the camera got a rotated
+track. skeletonmap.NOT_ANIMATED lists them; hkx_to_af writes no track for them (62 tracks, vanilla attack 64 incl.
+Root). Packs rebuilt: every one-handed set (sword, generic, knife; player and NPC; 47 clips) and every chair-family
+idle (chair, chair_executive, chairleanback, 13 animflavor idles, female chair; seat-aligned).
+
 ### 2026-10-19: first Skyrim clip playing in Starfield (owner, in game)
 **Verified in game:** Skyrim's chair_idlearmscrossedvar1, converted by hkx_to_af against the vanilla human rig (rest-
 relative keys, 82 animated bones), played on the player through OSF Animation (scene "Skyrim: chair idlearmscrossedvar

@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 import numpy as np  # noqa: E402
 
-from fo4sf import af_writer, ba2, bsa, retarget, skyrimhkx  # noqa: E402
+from fo4sf import af_writer, ba2, bsa, retarget, skeletonmap, skyrimhkx  # noqa: E402
 
 SKY_SKELETON = r"meshes\actors\character\character assets\skeleton.hkx"
 SF_SKELETON_RX = re.compile(r"meshes/actors/human/characterassets/skeleton\.nif$", re.I)
@@ -267,7 +267,8 @@ def main(argv=None):
             w = af_writer.write(a.calumi, target_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
                                 out_t, out_q, tag=a.tag or name, rig_path=save_rig if game_rig is not None
                                 else rig_path, events=clip["annotations"],
-                                like_afx=like, like_last=like_last, file_name=file_name)
+                                like_afx=like, like_last=like_last, file_name=file_name,
+                                omit=skeletonmap.NOT_ANIMATED if game_rig is not None else ())
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
