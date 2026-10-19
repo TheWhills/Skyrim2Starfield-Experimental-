@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "armor"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 import sf_anim_survey as S  # noqa: E402
+from test_agx import GRAPH  # noqa: E402
 import skyrim_fixtures as F  # noqa: E402
 
 
@@ -33,12 +34,16 @@ class SfAnimSurveyTests(unittest.TestCase):
                     b"<root><tag>PowerCast</tag><filename>cast_start.af</filename></root>",
                 "animtextdata\\tables\\graphs\\humanbase01.agx": b"\x01\x02\x00graphEventPowerCast\x00AnimSpeed\x00",
                 "animtextdata\\tables\\graphs\\door01.agx": b"<graph>door</graph>",
+                "animtextdata\\tables\\graphs\\wolfcreature.agx": GRAPH,
                 "meshes\\clutter\\bucket.nif": b"not animation"})
             out = os.path.join(tmp, "out")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(S.main(["--starfield-data", sf, "--out", out]), 0)
             rep = open(os.path.join(out, "report.txt"), encoding="utf-8").read()
-            self.assertIn("5 animation-system files", rep)
+            self.assertIn("6 animation-system files", rep)
+            self.assertIn("link events (1, graphs using each): BowDrawStart 1", rep)
+            self.assertIn("Prefix:iSyncRelaxReadySneak:Relaxed/Sneak x1", rep)
+            self.assertIn("wolfcreature.agx: 3 nodes; tags ['BowDraw']", rep)
             self.assertIn("graphEventPowerCast", rep)                 # binary graph strings printed
             self.assertIn("PowerCast 1", rep)                        # descriptor tag counted
             self.assertIn("[cast / powers] 2", rep)                   # the .af and its .afx

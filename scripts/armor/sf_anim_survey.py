@@ -24,6 +24,7 @@ Open, Close and variables AnimSpeed, OpenCloseFormState), a skeleton (BNAM, skel
 (CNAM); each clip .af has an .afx XML descriptor beside it (<tag>Open</tag><filename>Open.af</filename>, is_state).
 """
 import argparse
+import collections
 import os
 import re
 import sys
@@ -34,7 +35,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from fo4sf import ba2  # noqa: E402
+from fo4sf import agx, ba2  # noqa: E402
 
 EXTS = (".af", ".afx", ".agx", ".rig", ".ffxanim", ".gltf", ".glb")      # glTF: Native Animation Framework mods
 KEYWORDS = {
@@ -203,6 +204,35 @@ def main(argv=None):
             s = strings_of(d)
             w(f"  first 32 bytes: {d[:32].hex(' ')}")
             w(f"  {len(s)} strings: " + " | ".join(s[:400]) + (" ..." if len(s) > 400 else ""))
+    # the engine <-> graph interface, from every text graph (TES4 AutoConvert's first step for creatures: enumerate the
+    # events the engine sends, the variables it drives, the events graphs emit, before generating any graph)
+    all_events, all_vars, all_tags, refs_by, alters = (collections.Counter() for _ in range(5))
+    per_graph, bad_graphs = [], 0
+    for p in graphs:
+        fn, arc, i, n = where[p]
+        try:
+            g = agx.read_graph(arc.read(i))
+        except Exception:                                    # noqa: BLE001 - binary or malformed: counted
+            bad_graphs += 1
+            continue
+        sm = agx.summary(g)
+        all_events.update(sm["events"])
+        all_vars.update(sm["variables"])
+        all_tags.update(sm["tags"])
+        refs_by.update(sm["graph_refs"])
+        alters.update(f"{a['mode']}:{a['variable'] or a['switch']}:{'/'.join(a['cases'])}" for a in sm["tag_alterations"])
+        per_graph.append((p, sm))
+    w(f"\ngraph interface over {len(per_graph):,} text graphs ({bad_graphs} unreadable):")
+    w(f"  link events ({len(all_events):,}, graphs using each): " + ", ".join(f"{e} {k}" for e, k in all_events.most_common(400)))
+    w(f"  variables ({len(all_vars):,}): " + ", ".join(f"{v} {k}" for v, k in all_vars.most_common(400)))
+    w(f"  most referenced graphs: " + ", ".join(f"{r} {k}" for r, k in refs_by.most_common(80)))
+    w(f"  tag alterations: " + ", ".join(f"{t} x{k}" for t, k in alters.most_common(60)))
+    w(f"  clip tags ({len(all_tags):,}): " + ", ".join(f"{t}" for t, _k in all_tags.most_common(600)))
+    w("  per graph (nodes, tags, refs, events), creature / non-human graphs first:")
+    order = sorted(per_graph, key=lambda x: ("human" in x[0] or "player" in x[0], x[0]))
+    for p, sm in order[:400]:
+        w(f"    {os.path.basename(p)}: {sm['nodes']} nodes; tags {sm['tags'][:12]}; refs {sm['graph_refs'][:10]}; "
+          f"events {sm['events'][:16]}")
     # descriptors
     afx = [p for p in where if p.endswith(".afx")]
     elem_count, tag_by_folder, tag_count = Counter(), defaultdict(Counter), Counter()

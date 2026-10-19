@@ -234,3 +234,37 @@ Not known yet. What is known:
   AttackStateNextAttack, AttackEnd, AssignVariable with payloads, CameraShake), and variable windows (bDontAllowBlock,
   bDontAllowAttack, bFreeMovement, bCanComboAttack, bAllowFinisher, bNoLeftHandIK ...). af_writer now writes the
   mapped Skyrim annotations into the .afx (others stay in <clip>.events.json); rampout = blend-out frames.
+
+## Creatures: lessons from TES4 AutoConvert (2026-10-19)
+Read from its design notes (github.com/bryantmh/tes4skyrim, docs/commentary/asset_convert_creature.md,
+docs/plans/horse_rideability.md, docs/reference/creature_race_equivalence.md; read only, no code taken). Its creature
+port (Oblivion / Morrowind / FNV -> Skyrim) is live end to end. What carries over:
+* **Gap table per layer first**: record, skeleton, body mesh, animation, animation selection, movement / combat data.
+  Theirs found one layer with no source (Oblivion has no behaviour graphs: selection is hard-coded by file name).
+  Ours differs: both Skyrim and Starfield have graphs, so the question is translate vs. generate vs. borrow.
+* **Enumerate the engine <-> graph interface from vanilla graphs before writing any**: events the engine sends
+  (their list for Skyrim: moveStart / moveStop, turnLeft, weaponDraw, attackStart_<Name>, staggerStart, deathStart,
+  ...), variables it drives (Speed, Direction, TurnDelta, iCombatStance, bAnimationDriven, ...), events the graph must
+  emit (preHitFrame, HitFrame, SoundPlay, FootFront / FootBack, attackStop). Records must match the graph (their RACE
+  attack events ATKE = graph events; generated on both sides so they agree by construction).
+  Done here: sf_anim_survey.py now summarises every text .agx (events, variables, tags, graph refs, tag alterations).
+* **Generate from a template, don't hand-pick donors, for anything that must work for any mod**: they rejected donor
+  graphs because each hard-codes its species' clip set and needs per-creature hand mapping; they generate one graph
+  per creature from a template keyed on the clip inventory, and keep donors only as **development scaffolding** (put
+  the converted creature on a vanilla graph to test skeleton / mesh / clips in game before the generator exists).
+* **Clip claiming tables**: map each source clip to a role (forward, run, attack, stagger, death, swim, block,
+  equip ...) by name, with a fallback on the clip's internal name; a missing role leaves the actor sliding.
+* **Movement speed lives in records** (their MOVT speeds are baked from each clip's root motion); root motion and
+  per-clip events are sidecar data the generator writes.
+* **Per-layer A/B bisection**: point a converted race at vanilla assets to tell record faults from graph faults.
+* Death / ragdoll physics and the spell-casting handshake were each large separate efforts; horse riding is a plan
+  there (unimplemented): a "Ridden" state added to the horse graph plus the rider-side vanilla assets.
+For us, by creature class:
+* quadrupeds and bipeds (wolf, bear, horse, troll, draugr ...): template generation in Starfield's .agx, keyed on
+  Skyrim's clip inventory (behavior_inventory.py) and the Starfield interface (the survey); scaffold first on the
+  closest Starfield creature graph.
+* Skyrim's own graphs can also be **translated** (hkbStateMachine / hkbClipGenerator / hkbBlenderGenerator /
+  transitions with events -> .agx state machines / animation nodes / blend nodes / links with events), which keeps
+  modded behaviours too, but Bethesda modifiers without a Starfield node (BSTweener, BSLimbIK, ...) need substitutes.
+* dragons: flight needs engine support for flying actors (Skyrim's engine has a fly movement type and flight AI);
+  whether Starfield has any flying creature and movement type is unverified and is the first thing to check.
