@@ -190,3 +190,72 @@ class Tagfile:
         while t and not self.types[t].size:
             t = self.types[t].parent
         return self.types[t].size if t else 0
+
+    # -- values -------------------------------------------------------------------------------------------------------
+    # Type format (TBDY opt 0x1), worked out on Starfield cloth (SDK 20190200, 2026-10-19): kind = format & 0x1F:
+    # 2 bool, 3 string (0x80 = pointer string: hkStringPtr), 4 int (0x200 signed; 0x2000 / 0x4000 / 0x8000 /
+    # 0x10000 = 1 / 2 / 4 / 8 bytes), 5 float (size from the type: 4 = float, 2 = half), 6 pointer, 7 record,
+    # 8 array: hkArray (8-byte item index, then count) or, with 0x20, a fixed C array of format >> 8 elements of the
+    # subtype. A format of 0 inherits the parent's (typedefs such as hkUint32 -> unsigned int). Pointers and arrays
+    # hold the index of the ITEM they point to; the item gives the element type, data offset and count; item flags:
+    # 0x10 = one object (pointer target), 0x20 = array contents.
+    def _resolved(self, ti: int) -> int:
+        while ti and self.types[ti].format == 0 and self.types[ti].parent and not self.types[ti].fields:
+            ti = self.types[ti].parent
+        return ti
+
+    def value(self, ti: int, pos: int, _memo: Optional[dict] = None):
+        """Decode the value of type `ti` at absolute blob position `pos` into Python data (records -> dict)."""
+        memo = {} if _memo is None else _memo
+        ti = self._resolved(ti)
+        t = self.types[ti]
+        f, b = t.format, self.blob
+        kind = f & 0x1F
+        if kind == 2:
+            return b[pos] != 0
+        if kind == 4:
+            width = {0x2000: 1, 0x4000: 2, 0x8000: 4, 0x10000: 8}.get(f & 0x1E000, self.size_of(ti) or 4)
+            return int.from_bytes(b[pos:pos + width], "little", signed=bool(f & 0x200))
+        if kind == 5:
+            return struct.unpack_from("<e" if self.size_of(ti) == 2 else "<f", b, pos)[0]
+        if kind in (3, 6):
+            v = self.item_value(struct.unpack_from("<Q", b, pos)[0], memo)
+            if kind == 3:
+                return bytes(v).split(b"\0")[0].decode("latin-1") if isinstance(v, list) else None
+            return v
+        if kind == 8:
+            if f & 0x20:
+                es = self.size_of(t.subtype)
+                return [self.value(t.subtype, pos + i * es, memo) for i in range(f >> 8)]
+            v = self.item_value(struct.unpack_from("<Q", b, pos)[0], memo)
+            return [] if v is None else v if isinstance(v, list) else [v]
+        if kind == 7:
+            return {fl.name: self.value(fl.type, pos + fl.offset, memo) for fl in self.all_fields(ti)
+                    if self.types[self._resolved(fl.type)].format & 0x1F}
+        return None
+
+    def item_value(self, k: int, _memo: Optional[dict] = None):
+        """Decode item `k` (1-based; 0 = null): one object for a pointer target (flag 0x10; records get its class
+        name as "$class"), else a list."""
+        memo = {} if _memo is None else _memo
+        if k <= 0 or k >= len(self.items):
+            return None
+        if k in memo:
+            return memo[k]
+        it = self.items[k]
+        memo[k] = None                                    # cycle guard
+        size = self.size_of(it.type)
+        vals = [self.value(it.type, self.data_start + it.offset + i * size, memo) for i in range(it.count)]
+        if (it.flags & 0x10) and vals:
+            v = vals[0]
+            if isinstance(v, dict):
+                v["$class"] = self.type_name(it.type)       # pointer targets are often subclasses: keep the name
+            memo[k] = v
+        else:
+            memo[k] = vals
+        return memo[k]
+
+    def root(self):
+        """Item 1 (hkRootLevelContainer) as {class name: object} for its named variants."""
+        r = self.item_value(1) or {}
+        return {nv["className"]: nv["variant"] for nv in r.get("namedVariants", [])}

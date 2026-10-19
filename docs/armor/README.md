@@ -15,6 +15,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 | Reference: a working community outfit | robes-of-oblivion-reference.md | verified from its files |
 | Starfield animation-system survey (graphs, descriptors, rigs, native behaviours) | `scripts/armor/sf_anim_survey.py` | synthetic test; plan: animation-port.md |
 | HDT-SMP / FSMP physics configs: features, chains, mesh links, extra bones | `scripts/armor/smp_survey.py` | synthetic test; findings: animation-port.md "SMP config survey" |
+| Starfield Havok cloth (BSClothExtraData, .hkx, BA2): bone-driving rigs, constraints, colliders | `scripts/armor/sf_cloth_survey.py` | synthetic test; findings: animation-port.md "Starfield cloth decoded" |
 
 ## Runs to do on the PC (each writes a report to paste back)
 1. `python -I scripts\skyrim_first_run.py ...` (terrain, objects, now also armor).

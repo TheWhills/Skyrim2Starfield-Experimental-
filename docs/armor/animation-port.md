@@ -411,3 +411,39 @@ Route B (SFSE solver) stays the fallback if cloth bones cannot be produced outsi
 Next: decode a Starfield NIF with BSClothExtraData with `fo4sf.hktagfile` (the payload should be a Havok tagfile;
 unverified) to list the hcl* classes, particles and constraints it holds; the converted mesh must keep its chain
 bones (`extra_bones` in the survey) under the mapped host bone.
+
+### Starfield cloth decoded (2026-10-19, `src/fo4sf/sfcloth.py`, `scripts/armor/sf_cloth_survey.py`)
+Owner uploads: OC Hairs (Nexus 14496), OC Agent outfit (14478), Eris Hairstyles (16118, inside its BA2). 59 cloth
+setups, all decoded with the new generic value reader in `fo4sf.hktagfile` (`Tagfile.root()`).
+* **verified:** BSClothExtraData = u32 size + Havok tagfile (TAG0, SDK 20190200); a loose .hkx beside the OC NIFs is
+  the same bytes. Root objects: hclClothData + hkaSkeleton.
+* **verified: every one of the 59 is bone-driving cloth** (hair, a dress and a jacket alike), the same operator
+  chain: skin the hidden sim mesh to the host / chain bones (hclObjectSpaceSkinPNOperator or
+  hclBoneSpaceSkinPNOperator) -> hclMoveParticlesOperator (pinned particles follow their skinned vertices) ->
+  hclSimulateOperator -> hclSimpleMeshBoneDeformOperator (each driven bone follows one sim triangle;
+  boneOffset = 64 x bone index, triangleOffset = 6 x triangle index). The visible mesh is plain skinning.
+* **verified:** the NIF holds no nodes for the extra bones: SkinAttach names them (bone refs -1) and the cloth's
+  hkaSkeleton is the human skeleton with the extra bones inserted under their host (OC ponytail: 36 bones under
+  C_Head, chains up to 17 deep; Eris: Hair_<strand>_<n> under C_Head; dress: 114 under C_Hips; jacket: 135 under
+  C_Chest). Supported hypothesis: the engine creates the extra bones from the cloth skeleton.
+* **verified:** Eris reuses one cloth rig for several styles (one identical payload in 20 NIFs = 5 hairstyles x
+  m/f x facebones): the visible mesh changes, the rig does not.
+* Constraint sets seen: StandardLink (59), StretchLink (59), BendStiffness (56), LocalRange (44), BonePlanes (24),
+  Volume (5). Colliders: convex geometry (head / torso, 55), capsules (biceps, thighs, calves, 46), spheres (8),
+  plane (1), each on a skeleton bone. Units metres, gravity -9.81 z, damping 0.8-0.96 per second.
+
+What an SMP hair / cloak conversion has to produce (plan; route A confirmed as the engine's own mechanism):
+1. Visible mesh skinned (SkinAttach names) to the host bone + the chain bones; chain bones renamed if needed.
+2. BSClothExtraData: hkaSkeleton = Starfield human skeleton + the SMP chain bones under the mapped host
+   (`chain_anchors` in smp_survey: NPC Head -> C_Head, NPC Spine2 -> C_Chest), and hclClothData with the operator
+   chain above. SMP -> Havok cloth: kinematic anchor -> pinned particles; each simulated bone -> a sim triangle
+   that drives it; generic-constraint links -> StandardLink / StretchLink; angular limits -> LocalRange or
+   BonePlanes (distance from the animated pose); angular stiffness -> BendStiffness; Virtual* body meshes ->
+   convex head / torso and limb capsules.
+Two ways in, cheapest first:
+* rig reuse: weight the converted hair onto an existing Starfield cloth rig (as Eris does) and copy that rig's
+  BSClothExtraData unchanged at conversion time from the user's own files. No cloth writer; a quick in-game test.
+* per-chain cloth: generate the sim ribbon and constraint sets from the SMP config and write the tagfile, using a
+  cloth NIF's TYPE section as the template at run time (as meshcollision does for collision).
+Next on the PC: `sf_cloth_survey.py --root "$SF\Data" --filter hair,clothes,outfit` to list vanilla cloth (which
+rigs exist, and a template).
