@@ -270,7 +270,6 @@ def main(argv=None):
         # clipLibrary (OSF 1.4+) plus one single-stage scene per clip: released OSF builds hide clipLibrary-only packs
         # unless "Show author details" is on (fixed after 1.5.0, per its CHANGELOG); scenes show in every build
         pack = {"schema": 1, "pack": a.osf, "clipRoot": f"OSF/Animations/{pack_id}", "folder": "Skyrim",
-                "unlisted": True,
                 "clipLibrary": [{"file": os.path.basename(r["af"]), "name": r["name"].replace("_", " ")}
                                 for r in done_rows],
                 "scenes": [{"id": f"{pack_id.lower()}/{r['name'].lower()}", "name": f"Skyrim: {r['name']}",
