@@ -13,6 +13,11 @@ the zip stays on the PC and is never committed: game files).
 
     python -I scripts\\armor\\sf_anim_survey.py --starfield-data "<Starfield>\\Data" --out C:\\Modding\\work\\sf_anim
 
+Mods instead of (or as well as) the game: --mod takes a mod folder (loose files and every .ba2 in it), a single .ba2 or
+a .zip, and is repeatable; each file is labelled with its source:
+
+    python -I scripts\\armor\\sf_anim_survey.py --mod "D:\\Downloads\\SomeAnimMod" --mod other.zip --out C:\\Modding\\work\\sf_anim_mods
+
 Known before this survey (docs/spikes/WP-doors-research.md, docs/handoff-archive): a DOOR binds a graph (ANAM, e.g.
 AnimTextData\\Tables\\Graphs\\SimpleOpenClose01.agx, which references SimpleOpenClose_Base01 with event / tag selectors
 Open, Close and variables AnimSpeed, OpenCloseFormState), a skeleton (BNAM, skeleton.rig) and an animation folder
@@ -31,7 +36,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 from fo4sf import ba2  # noqa: E402
 
-EXTS = (".af", ".afx", ".agx", ".rig", ".ffxanim")
+EXTS = (".af", ".afx", ".agx", ".rig", ".ffxanim", ".gltf", ".glb")      # glTF: Native Animation Framework mods
 KEYWORDS = {
     "cast / powers": r"cast|spell|power|starborn|magic|telekin|gravwave|antigrav",
     "bow / draw": r"\bbow|_bow|bowdraw|archery|crossbow",
@@ -66,6 +71,51 @@ def archives(data_dir):
     return out
 
 
+class _Loose:
+    """A folder or a .zip read like a Ba2: .names and .read(index)."""
+
+    def __init__(self, path):
+        self.path, self.names, self._src = path, [], []
+        if path.lower().endswith(".zip"):
+            self._zip = zipfile.ZipFile(path)
+            for n in self._zip.namelist():
+                if not n.endswith("/"):
+                    self.names.append(n)
+                    self._src.append(n)
+        else:
+            self._zip = None
+            for root, _dirs, files in os.walk(path):
+                for fn in files:
+                    full = os.path.join(root, fn)
+                    self.names.append(os.path.relpath(full, path))
+                    self._src.append(full)
+
+    def read(self, i):
+        if self._zip is not None:
+            return self._zip.read(self._src[i])
+        with open(self._src[i], "rb") as fh:
+            return fh.read()
+
+
+def mod_sources(path):
+    """[(label, reader)] for a mod folder (loose files + each .ba2 inside), a .ba2 or a .zip."""
+    out = []
+    low = path.lower()
+    if low.endswith(".ba2"):
+        return [(os.path.basename(path), ba2.Ba2(path))]
+    if low.endswith(".zip"):
+        return [(os.path.basename(path), _Loose(path))]
+    out.append((os.path.basename(os.path.normpath(path)) + " (loose)", _Loose(path)))
+    for root, _dirs, files in os.walk(path):
+        for fn in files:
+            if fn.lower().endswith(".ba2"):
+                try:
+                    out.append((fn, ba2.Ba2(os.path.join(root, fn))))
+                except Exception as e:
+                    print(f"  skipped {fn}: {e}")
+    return out
+
+
 def is_text(d: bytes) -> bool:
     if not d:
         return True
@@ -90,20 +140,29 @@ def afx_fields(d: bytes):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--starfield-data", required=True)
+    ap.add_argument("--starfield-data", help="the game's Data folder (its Starfield - *.ba2 archives)")
+    ap.add_argument("--mod", action="append", default=[],
+                    help="a mod folder, .ba2 or .zip to survey (repeatable); with --starfield-data, game files win")
     ap.add_argument("--out", required=True)
     ap.add_argument("--graph-filter", default=r"human|character|player|npc|base",
                     help="regex on .agx paths whose strings are printed in full")
     ap.add_argument("--max-graphs", type=int, default=40, help="most graphs printed / zipped")
     ap.add_argument("--max-samples", type=int, default=60, help="most .afx descriptors zipped")
     a = ap.parse_args(argv)
+    if not a.starfield_data and not a.mod:
+        ap.error("give --starfield-data and / or --mod")
     os.makedirs(a.out, exist_ok=True)
     gx = re.compile(a.graph_filter, re.I)
     where = {}                                              # normalised path -> (archive name, Ba2, index, name)
     per_arc = defaultdict(Counter)
-    for fn, arc in archives(a.starfield_data):
+    sources = archives(a.starfield_data) if a.starfield_data else []
+    for m in a.mod:
+        sources += mod_sources(m)
+    for fn, arc in sources:
         for i, n in enumerate(arc.names):
             p = norm(n)
+            if p.startswith("data/"):                       # mod zips often wrap everything in Data\
+                p = p[5:]
             ext = os.path.splitext(p)[1]
             if ext in EXTS:
                 per_arc[fn][ext] += 1

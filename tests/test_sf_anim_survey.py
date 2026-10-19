@@ -48,6 +48,28 @@ class SfAnimSurveyTests(unittest.TestCase):
             self.assertIn("starfield/meshes/actors/human/characterassets/skeleton.rig", names)
             self.assertNotIn("starfield/animtextdata/tables/graphs/door01.agx", names)
 
+    def test_mod_folder_and_zip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            mod = os.path.join(tmp, "IdleMod", "Data", "meshes", "actors", "human", "animations", "idles")
+            os.makedirs(mod)
+            with open(os.path.join(mod, "lean.af"), "wb") as f:
+                f.write(b"af")
+            with open(os.path.join(mod, "lean.afx"), "wb") as f:
+                f.write(b"<root><tag>LeanWall</tag><filename>lean.af</filename></root>")
+            zp = os.path.join(tmp, "naf_pack.zip")
+            with zipfile.ZipFile(zp, "w") as z:
+                z.writestr("Data/NAF/dance01.glb", b"glTF")
+                z.writestr("Data/readme.txt", b"hi")
+            out = os.path.join(tmp, "out")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(S.main(["--mod", os.path.join(tmp, "IdleMod"), "--mod", zp, "--out", out]), 0)
+            rep = open(os.path.join(out, "report.txt"), encoding="utf-8").read()
+            self.assertIn("3 animation-system files", rep)
+            self.assertIn("IdleMod (loose): .af 1, .afx 1", rep)
+            self.assertIn("naf_pack.zip: .glb 1", rep)
+            self.assertIn("LeanWall 1", rep)
+            self.assertIn("  2  meshes/actors/human/animations", rep.replace("     2", "  2"))
+
 
 if __name__ == "__main__":
     unittest.main()
