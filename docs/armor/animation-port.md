@@ -356,3 +356,21 @@ movement type are the candidate scaffold for dragon flight.
   skeletons), applied to vanilla NPC_ records: a new creature body on an existing creature skeleton and graph works.
   That is the scaffold route for the first Skyrim creature test.
 * CALUMI.Motion (Windows build, owner upload): to open translated .agx files on the PC as a validity check.
+
+## Physics for hair / capes / clothes (FSMP-style), planning note (2026-10-19)
+Owner question: keep Skyrim HDT-SMP / FSMP physics for ported hair and armour; Starfield's own physics looks less
+fluid. What exists (Nexus pages, not verified in files): Starfield has native Havok cloth in NIFs
+(BSClothExtraData); Nexus 14491 is a Blender add-on exporting it through the official art tools (FBXImporter /
+MeshConverter forks), used by physics hair ports (Nexus 14496 "Hairs and wigs with physics", 18427 BDO hairs);
+authors call it experimental and setups hard. No SMP-like SFSE plugin was found.
+Routes:
+* A. translate SMP XML (bones, constraints, collision shapes, per-vertex shapes) into native BSClothExtraData:
+  no runtime plugin, engine-supported, but needs the Havok cloth authoring path (art tools) and may stay less fluid.
+* B. an SFSE physics plugin reading the SMP XML at run time (own solver or a permissively licensed library), writing
+  bone transforms every frame: closest to FSMP, but C++ hooks into Starfield's skeleton update, built blind here and
+  compiled by the owner; reimplement from the XML format and observed behaviour, not from FSMP / HDT-SMP code.
+* C. first step either way: bone-chain physics (springs on hair / cape / skirt bone chains) covers most of the
+  "flowy" look and is the smallest piece; per-vertex / per-triangle shapes come later.
+Prerequisites in this plan: armour / hair meshes keep their extra physics bones when converted (skinned to bones the
+mesh carries, not only skeletonmap's human bones), and a survey of real SMP XML configs (how many use bone chains
+only vs per-vertex shapes) decides A vs B.
