@@ -273,7 +273,7 @@ def main(argv=None):
                 "clipLibrary": [{"file": os.path.basename(r["af"]), "name": r["name"].replace("_", " ")}
                                 for r in done_rows],
                 "scenes": [{"id": f"{pack_id.lower()}/{r['name'].lower()}", "name": f"Skyrim: {r['name']}",
-                            "tags": ["skyrim"],
+                            "tags": ["skyrim"], "hideApparel": False,     # OSF strips actors by default
                             "stages": [{"name": r["name"], "loops": 0,
                                         "clips": [{"file": os.path.basename(r["af"]),
                                                    "sec": round(max(r["frames"] - 1, 1) / 30.0, 3)}]}]}
