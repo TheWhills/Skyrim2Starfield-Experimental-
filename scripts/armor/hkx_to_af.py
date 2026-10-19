@@ -14,6 +14,12 @@ Sources (each either a file or read from the game's archives):
                     --own-rig writes a rig built from the skeleton NIF instead
 Writes <out>\\<clip>.af / .afx / .events.json and report.json (per clip: frames, keys, bytes, read-back error).
 
+--replace "<clip>::<vanilla .afx>" (repeatable): replace a vanilla clip in place. The clip is written under the vanilla
+path and file name (out\meshes\actors\...\Idle.af + .afx; copy out\meshes into Starfield's Data as loose files), and
+its .afx is the vanilla descriptor fitted to the new clip (af_writer.retime_descriptor: tag, flags, payloads kept,
+frames scaled, HitFrame / footsteps taken from the Skyrim clip). The vanilla .afx is a file, or a path read from the
+game's archives (--starfield-data). Reusing the vanilla path should keep the AnimTextData caches valid (unverified).
+
 --osf PACK: write the clips as an OSF Animation content pack instead (Nexus 17457, github.com/ozooma10/osf-animation;
 plays .af / .glb clips on actors from an in-game browser, F10): <out>\\OSF\\Animations\\<PACK>\\*.af plus
 <out>\\OSF\\<pack>.osf.json (a "clipLibrary" catalog, per OSF's docs/GETTING_STARTED.md). Copy <out>\\OSF into
@@ -60,6 +66,24 @@ def starfield_find(data_dir, rx, prefixes=("starfield - meshes", "starfield - an
     return None, None
 
 
+def vanilla_file(path, starfield_data):
+    """(bytes, Data-relative path with forward slashes, lower case) of a vanilla file: a file on disk (its path from
+    'meshes/' on is the Data path) or a path read from the game's archives."""
+    p = path.replace("\\", "/")
+    low = p.lower()
+    rel = low[low.index("meshes/"):] if "meshes/" in low else low.lstrip("/")
+    if os.path.isfile(path):
+        with open(path, "rb") as fh:
+            return fh.read(), rel
+    if not starfield_data:
+        raise SystemExit(f"not a file and no --starfield-data to look in: {path}")
+    _n, data = starfield_find(starfield_data, re.compile("^" + re.escape(rel) + "$", re.I),
+                              ("starfield - animations", "starfield - meshes", "shatteredspace", "sfbgs"))
+    if data is None:
+        raise SystemExit(f"not in the game's archives: {rel}")
+    return data, rel
+
+
 def compare(rb, res, sf_index):
     """Largest read-back error over every frame (sign-aligned nlerp between keys)."""
     def at(keys, f, quat):
@@ -99,6 +123,8 @@ def main(argv=None):
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--no-foot-plant", action="store_true", help="skip the foot-planting IK pass")
     ap.add_argument("--osf", metavar="PACK", help="write an OSF Animation content pack named PACK (see above)")
+    ap.add_argument("--replace", action="append", default=[], metavar="CLIP::VANILLA_AFX",
+                    help="replace a vanilla clip in place (see above); repeatable")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -144,15 +170,27 @@ def main(argv=None):
         pack_id = re.sub(r"[^A-Za-z0-9_]+", "", a.osf) or "SkyrimPort"
         clip_dir = os.path.join(out, "OSF", "Animations", pack_id)
         os.makedirs(clip_dir, exist_ok=True)
-    clips = list(a.clip)
+    clips = [(c, None) for c in a.clip]
+    for r in a.replace:
+        if "::" not in r:
+            sys.exit(f"--replace wants CLIP::VANILLA_AFX, got {r}")
+        clip, vafx = r.split("::", 1)
+        clips.append((clip, vafx))
     if a.clip_dir:
         for d, _ds, fns in os.walk(a.clip_dir):
-            clips += [os.path.join(d, f) for f in sorted(fns) if f.lower().endswith(".hkx")]
+            clips += [(os.path.join(d, f), None) for f in sorted(fns) if f.lower().endswith(".hkx")]
     report = []
-    for c in clips:
+    for c, vafx in clips:
         name = os.path.splitext(os.path.basename(c.replace("\\", "/")))[0]
         row = {"clip": c, "name": name}
+        target_dir, like, file_name = clip_dir, None, None
         try:
+            if vafx:
+                like, rel = vanilla_file(vafx, a.starfield_data)
+                fn_m = re.search(rb"<filename>\s*([^<]+?)\s*</filename>", like)
+                file_name = os.path.splitext((fn_m.group(1).decode() if fn_m else os.path.basename(rel)))[0]
+                target_dir = os.path.join(out, *os.path.dirname(rel).split("/"))
+                row["replaces"] = f"{os.path.dirname(rel)}/{file_name}.af"
             data = read_any(c, sky)
             try:
                 clip = skyrimhkx.decode_clip(data, sk.names)
@@ -171,8 +209,11 @@ def main(argv=None):
                 out_t, out_q = retarget.rehome(sf, res["t"], res["q"], game_rig.names, game_rig.parents,
                                                game_rig.t, game_rig.q)
                 out_rig = game_rig
-            w = af_writer.write(a.calumi, clip_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
-                                out_t, out_q, tag=a.tag or name, rig_path=rig_path, events=clip["annotations"])
+            w = af_writer.write(a.calumi, target_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
+                                out_t, out_q, tag=a.tag or name, rig_path=rig_path, events=clip["annotations"],
+                                like_afx=like, file_name=file_name)
+            if w.get("retime"):
+                row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
                        foot_lowest_m=chk["foot_lowest_m"], events=len(clip["annotations"]))
             if not a.no_verify:

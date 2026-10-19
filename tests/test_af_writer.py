@@ -49,6 +49,28 @@ class AfWriterTests(unittest.TestCase):
             AF.write("nolib", os.path.join(ROOT, "tmp_af"), "x", ["Root"], [-1], [[0, 0, 0]], [[0, 0, 0, 1]],
                      np.zeros((1, 1, 3)), np.tile([0, 0, 0, 1.0], (1, 1, 1)))
 
+    def test_retime_vanilla_descriptor(self):
+        vanilla = (b"<root>\r\n\t<is_state>0</is_state>\r\n\t<tag>MeleeAttack01</tag>\r\n\t<filename>MeleeAttack01.af"
+                   b"</filename>\r\n\t<rampout>9</rampout>\r\n\t<events>\r\n"
+                   b"\t\t<event><frame>10</frame><name>HitFrame</name><payload></payload></event>\r\n"
+                   b"\t\t<event><frame>4</frame><name>CameraShake</name><payload>0.8,0.1</payload></event>\r\n"
+                   b"\t</events>\r\n\t<variables>\r\n\t\t<variable><name>bNoHeadTrack</name><start>0</start>"
+                   b"<end>30</end></variable>\r\n\t</variables>\r\n</root>\r\n")
+        out, rep = AF.retime_descriptor(vanilla, 60, "MeleeAttack01.af", own_events=[(42, "HitFrame", "")])
+        self.assertEqual((rep["old_last"], rep["old_last_estimated"], rep["scale"]), (30, True, 2.0))
+        self.assertEqual(rep["events_from_clip"], ["HitFrame"])
+        root = ET.fromstring(out)
+        frames = {e.findtext("name"): int(e.findtext("frame")) for e in root.iter("event")}
+        self.assertEqual(frames, {"HitFrame": 42, "CameraShake": 8})          # ours / scaled
+        v = root.find("variables/variable")
+        self.assertEqual((v.findtext("start"), v.findtext("end")), ("0", "60"))
+        self.assertEqual((root.findtext("tag"), root.findtext("rampout")), ("MeleeAttack01", "9"))   # kept
+        self.assertIn(b"\r\n", out)
+        self.assertNotIn(b"\r\r", out)
+        out2, rep2 = AF.retime_descriptor(vanilla, 15, "X.af", old_last=60)    # known vanilla length: shorter clip
+        self.assertEqual(ET.fromstring(out2).find("variables/variable").findtext("end"), "8")
+        self.assertEqual(ET.fromstring(out2).findtext("filename"), "X.af")
+
     @unittest.skipUnless(os.environ.get("CALUMI_LIB"), "set CALUMI_LIB to a CALUMI build to run the round trip")
     def test_round_trip_large_rotations(self):
         angles = [0, 60, 120, 150, 179, -170]

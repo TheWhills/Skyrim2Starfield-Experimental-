@@ -38,8 +38,14 @@ class SfAnimSurveyTests(unittest.TestCase):
                 "meshes\\clutter\\bucket.nif": b"not animation"})
             out = os.path.join(tmp, "out")
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(S.main(["--starfield-data", sf, "--out", out, "--list", "animations/powers"]), 0)
-            rep = open(os.path.join(out, "report.txt"), encoding="utf-8").read()
+                self.assertEqual(S.main(["--starfield-data", sf, "--out", out, "--list", "animations/powers",
+                                         "--extract", r"powers/cast_start\.afx$"]), 0)
+            ex = os.path.join(out, "extract", "meshes", "actors", "human", "animations", "powers")
+            self.assertEqual(os.listdir(ex), ["cast_start.afx"])
+            with open(os.path.join(ex, "cast_start.afx"), "rb") as fh:
+                self.assertIn(b"<tag>PowerCast</tag>", fh.read())
+            with open(os.path.join(out, "report.txt"), encoding="utf-8") as fh:
+                rep = fh.read()
             with open(os.path.join(out, "listing.txt"), encoding="utf-8") as fh:
                 listing = fh.read()
             self.assertIn("meshes/actors/human/animations/powers/\n", listing)
@@ -74,7 +80,8 @@ class SfAnimSurveyTests(unittest.TestCase):
             out = os.path.join(tmp, "out")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(S.main(["--mod", os.path.join(tmp, "IdleMod"), "--mod", zp, "--out", out]), 0)
-            rep = open(os.path.join(out, "report.txt"), encoding="utf-8").read()
+            with open(os.path.join(out, "report.txt"), encoding="utf-8") as fh:
+                rep = fh.read()
             self.assertIn("3 animation-system files", rep)
             self.assertIn("IdleMod (loose): .af 1, .afx 1", rep)
             self.assertIn("naf_pack.zip: .glb 1", rep)

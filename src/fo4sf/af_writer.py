@@ -20,7 +20,7 @@ import math
 import os
 import pathlib
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -99,6 +99,48 @@ def descriptor(tag: str, filename: str, is_state: bool = False, events=(), varia
     return ET.tostring(root, encoding="utf-8")
 
 
+def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Optional[int] = None,
+                      own_events=()) -> Tuple[bytes, Dict]:
+    """A vanilla .afx fitted to a replacement clip: every <frame>, <start> and <end> (events, variables, audio...)
+    scaled from the vanilla clip's last frame to ours (old_last, or when unknown the descriptor's largest frame, which
+    is exact for the usual whole-clip variables); <filename> set; everything else (tag, is_state, rampout, flags,
+    payloads, prefixes) kept. Events our clip carries itself (own_events: (frame, name, payload), e.g. HitFrame from
+    the Skyrim annotations) replace the vanilla ones of the same name, in order, when the counts match. Returns
+    (bytes, report)."""
+    text = vanilla.decode("utf-8-sig", "replace")
+    root = ET.fromstring(text)
+    marks = [e for e in root.iter() if e.tag in ("frame", "start", "end") and (e.text or "").strip().lstrip("-").isdigit()]
+    est = old_last is None
+    if est:
+        old_last = max([int(e.text) for e in marks] or [new_last])
+    scale = (new_last / old_last) if old_last else 1.0
+    for e in marks:
+        v = int(e.text)
+        e.text = str(new_last if v >= old_last else max(0, min(new_last, int(round(v * scale)))))
+    fn = root.find("filename")
+    if fn is None:
+        fn = ET.SubElement(root, "filename")
+    fn.text = filename
+    replaced = []
+    own = {}
+    for f, n, _p in own_events:
+        own.setdefault(n, []).append(f)
+    by_name = {}
+    for ev in root.iter("event"):
+        by_name.setdefault(ev.findtext("name"), []).append(ev)
+    for n, frames in own.items():
+        evs = by_name.get(n, [])
+        if evs and len(evs) == len(frames):
+            for ev, f in zip(evs, sorted(frames)):
+                ev.find("frame").text = str(int(f))
+            replaced.append(n)
+    out = ET.tostring(root, encoding="utf-8")
+    if b"\r\n" in vanilla:                         # the shipped descriptors use CRLF (the parser drops the CR)
+        out = out.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+    return out, {"old_last": old_last, "old_last_estimated": est, "scale": round(scale, 4),
+                                                 "retimed": len(marks), "events_from_clip": replaced}
+
+
 def _keys_needed(values: np.ndarray, tol: float) -> List[int]:
     """Frames to key so linear interpolation between kept keys stays within tol of every frame (greedy, keeps the
     first and last frame). values: (F, D)."""
@@ -120,7 +162,7 @@ def _keys_needed(values: np.ndarray, tol: float) -> List[int]:
 def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: List[int], rest_t, rest_q,
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
           tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
-          variables=()) -> Dict:
+          variables=(), like_afx: Optional[bytes] = None, like_last: Optional[int] = None, file_name: Optional[str] = None) -> Dict:
     """Write <out>/<name>.af (+ skeleton.rig unless rig_path, + <name>.afx, + <name>.events.json). Translations in
     metres, quaternions (x, y, z, w). Returns {"af", "rig", "keys", "frames"}."""
     out = pathlib.Path(out_dir).resolve()
@@ -200,7 +242,7 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             finally:
                 if blk:
                     L.fn("DeleteAnimationBlockC", [p], b)(blk)
-        af = out / f"{name}.af"
+        af = out / f"{file_name or name}.af"
         if rig_path is None:
             L.require(L.fn("SaveAnimationToSFBGSFormatDirectC", [p, c.c_wchar_p, p, p], b)(anim, str(af), rig, L.error),
                       "save animation")
@@ -208,11 +250,18 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             L.require(L.fn("SaveAnimationToSFBGSFormatWithExistingRigDirectC", [p, c.c_wchar_p, c.c_wchar_p, p], b)(
                 anim, str(af), str(rig_path), L.error), "save animation")
         mapped, unmapped = map_events(events, fps)
-        (out / f"{name}.afx").write_bytes(descriptor(tag or name, af.name, is_state, mapped, variables))
-        (out / f"{name}.events.json").write_text(json.dumps({"in_afx": mapped, "not_mapped": unmapped}, indent=1))
+        retime = None
+        if like_afx is not None:                    # replacing a vanilla clip: its own descriptor, fitted to ours
+            afx, retime = retime_descriptor(like_afx, F - 1, af.name, like_last, mapped)
+        else:
+            afx = descriptor(tag or name, af.name, is_state, mapped, variables)
+        (out / f"{af.stem}.afx").write_bytes(afx)
+        if like_afx is None:                        # a replacement goes into the game's folders: no side files there
+            (out / f"{af.stem}.events.json").write_text(json.dumps({"in_afx": mapped, "not_mapped": unmapped},
+                                                                   indent=1))
         return {"af": str(af), "rig": str(rig_path or rig_file), "keys": keys, "frames": F, "bones": B,
                 "events_in_afx": len(mapped), "events_not_mapped": len(unmapped),
-                "dropped_unnamed": dropped}
+                "dropped_unnamed": dropped, "retime": retime}
     finally:
         if anim:
             L.fn("DeleteAnimationC", [p], b)(anim)

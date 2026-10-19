@@ -177,6 +177,9 @@ def main(argv=None):
     ap.add_argument("--list", metavar="REGEX",
                     help="also write listing.txt: every .af / .afx whose path matches, with each descriptor's tag, "
                          "is_state, rampout and events (exact vanilla clip names to override or to copy)")
+    ap.add_argument("--extract", metavar="REGEX",
+                    help="also copy every animation-system file whose path matches into <out>\\extract\\<its path> "
+                         "(vanilla .af / .afx / .rig to compare with or to fit a replacement to)")
     a = ap.parse_args(argv)
     if not a.starfield_data and not a.mod:
         ap.error("give --starfield-data and / or --mod")
@@ -306,6 +309,16 @@ def main(argv=None):
         w(f"\n[{label}] {len(hits):,}")
         for p in hits[:25]:
             w(f"  {p}")
+    if a.extract:
+        ex, n_ex = re.compile(a.extract, re.I), 0
+        for p, (fn, arc, i, n) in sorted(where.items()):
+            if ex.search(p):
+                dst = os.path.join(a.out, "extract", *p.split("/"))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "wb") as fh:
+                    fh.write(arc.read(i))
+                n_ex += 1
+        print(f"extracted {n_ex} files into {os.path.join(a.out, 'extract')}")
     if a.list:
         lx = re.compile(a.list, re.I)
         listing = listing_lines(where, lx)
