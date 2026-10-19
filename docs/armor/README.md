@@ -12,6 +12,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 | Skeleton / body / animation sample fetch (one zip to upload) | `scripts/armor/fetch_skeletons.py` | synthetic + smoke test on a real Starfield-format archive |
 | .af round-trip survey through CALUMI | `scripts/armor/af_roundtrip_survey.py` | fake-backend tests; see af-format-status.md |
 | Reference: a working community outfit | robes-of-oblivion-reference.md | verified from its files |
+| Starfield animation-system survey (graphs, descriptors, rigs, native behaviours) | `scripts/armor/sf_anim_survey.py` | synthetic test; plan: animation-port.md |
 
 ## Runs to do on the PC (each writes a report to paste back)
 1. `python -I scripts\skyrim_first_run.py ...` (terrain, objects, now also armor).
