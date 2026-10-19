@@ -105,6 +105,41 @@ class Rig:
         return self.fk(self.t, self.q)
 
 
+def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
+    """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
+    the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones
+    under the limb, Weapon under C_Chest). Bones are matched by name, ignoring case (NIF WEAPON = rig Weapon); a bone
+    the source lacks keeps its rest local transform under its (moving) parent. Returns local (t, q) shaped
+    (F, len(names), 3 / 4). Parents must precede children."""
+    wt, wq = src.fk(np.asarray(lt, float), np.asarray(lq, float))
+    F = wt.shape[0]
+    low = {n.lower(): i for i, n in enumerate(src.names)}
+    rest_t, rest_q = np.asarray(rest_t, float), np.asarray(rest_q, float)
+    D = len(names)
+    ot, oq = np.empty((F, D, 3)), np.empty((F, D, 4))
+    gt, gq = np.empty((F, D, 3)), np.empty((F, D, 4))
+    for i, (n, p) in enumerate(zip(names, parents)):
+        if p >= i:
+            raise ValueError("parents must precede children")
+        j = low.get(n.lower())
+        if j is not None:
+            gt[:, i], gq[:, i] = wt[:, j], wq[:, j]
+            if p < 0:
+                ot[:, i], oq[:, i] = gt[:, i], gq[:, i]
+            else:
+                inv = qinv(gq[:, p])
+                oq[:, i] = qmul(inv, gq[:, i])
+                ot[:, i] = qrot(inv, gt[:, i] - gt[:, p])
+        else:
+            ot[:, i], oq[:, i] = rest_t[i], rest_q[i]
+            if p < 0:
+                gt[:, i], gq[:, i] = ot[:, i], oq[:, i]
+            else:
+                gq[:, i] = qmul(gq[:, p], oq[:, i])
+                gt[:, i] = gt[:, p] + qrot(gq[:, p], ot[:, i])
+    return ot, oq
+
+
 def _topological(parents):
     done, order = set(), []
 

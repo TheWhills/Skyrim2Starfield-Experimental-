@@ -7,9 +7,11 @@ in native_door.py (verified by the door export): AddBoneToSkeletonRigC(rig, qx, 
 animated, error); Create{Rotation,Translation,Scalar}EntryC(frame u16, values: rotation x y z w f32, translation
 f64 x 3, scale f32); one anim block per rig bone, index = the bone's index in the rig.
 
-The rig written here is built from a skeleton NIF (BodySlide's or the game's); the in-game test should save against
-the game's own human skeleton.rig instead (SaveAnimationToSFBGSFormatWithExistingRigDirectC, `rig_path=`), so the clip
-indexes bones exactly as vanilla clips do. Supported hypothesis until a clip plays in game: the .afx descriptor schema
+The rig written here is built from a skeleton NIF (BodySlide's or the game's); the in-game test saves against the
+game's own human skeleton.rig instead (SaveAnimationToSFBGSFormatWithExistingRigDirectC, `rig_path=`), with the bones
+listed in that rig's order and hierarchy (load_rig + retarget.rehome; verified 2026-10-19 on the vanilla rig from the
+owner's survey: 97 bones, Root first, Weapon under C_Chest, C_Waist absent from the NIF; read-back error 6e-4 rotation,
+0.24 mm translation), so the clip indexes bones exactly as vanilla clips do. Supported hypothesis until a clip plays in game: the .afx descriptor schema
 for actor clips (taken from the door descriptors: is_state, tag, filename).
 """
 import ctypes as c
@@ -216,6 +218,40 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             L.fn("DeleteAnimationC", [p], b)(anim)
         if rig:
             L.fn("DeleteSkeletonRigC", [p], b)(rig)
+        L.close()
+
+
+def load_rig(lib_path: str, rig_path: str) -> Dict:
+    """A Starfield .rig as {"names", "parents", "t" (B, 3), "q" (B, 4) local rest, "animated"} via CALUMI
+    (LoadSFBGSSkeletonRigFromFileC). The vanilla human rig (2026-10-19): 97 bones, 82 animated, Root first, order and
+    parents unlike the skeleton NIF's."""
+    L = Calumi(lib_path)
+    p = L.p
+    rig = None
+    try:
+        rig = L.require(L.fn("LoadSFBGSSkeletonRigFromFileC", [c.c_wchar_p, p], p)(str(rig_path), L.error), "load rig")
+        n = L.fn("GetSkeletonRigBoneCountC", [p], c.c_size_t)(rig)
+        animated = L.fn("GetSkeletonRigAnimatedBoneCountC", [p], c.c_size_t)(rig)
+        get = L.fn("GetSkeletonBoneC", [p, c.c_int, p], p)
+        name = L.fn("GetSkeletonBoneNameC", [p], c.c_char_p)
+        parent = L.fn("GetSkeletonBoneParentIndexC", [p], c.c_int)
+        rot = L.fn("GetSkeletonBoneRotationC", [p, c.c_bool], p)
+        pos = L.fn("GetSkeletonBonePositionC", [p, c.c_bool], p)
+        qget = [L.fn(f"GetQuaternion{a}", [p], c.c_float) for a in "XYZW"]
+        vget = [L.fn(f"GetVector3{a}", [p], c.c_float) for a in "XYZ"]     # bone positions are float Vector3
+        out = {"names": [], "parents": [], "t": [], "q": [], "animated": int(animated)}
+        for i in range(n):
+            bone = L.require(get(rig, i, L.error), f"bone {i}")
+            out["names"].append((name(bone) or b"").decode("utf-8", "replace"))
+            out["parents"].append(int(parent(bone)))
+            qv, tv = rot(bone, False), pos(bone, False)
+            out["q"].append([float(g(qv)) for g in qget])
+            out["t"].append([float(g(tv)) for g in vget])
+        out["t"], out["q"] = np.array(out["t"]), np.array(out["q"])
+        return out
+    finally:
+        if rig:
+            L.fn("DeleteSkeletonRigC", [p], c.c_bool)(rig)
         L.close()
 
 

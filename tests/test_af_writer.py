@@ -64,6 +64,10 @@ class AfWriterTests(unittest.TestCase):
                          [[0, 0, 0], [0, 0, 1], [0, 0, 0]], [[0, 0, 0, 1]] * 3, t, q, tolerance=0.0)
             self.assertEqual((w["bones"], w["dropped_unnamed"]), (2, 1))   # the unnamed leaf is dropped
             rb = AF.read_back(os.environ["CALUMI_LIB"], w["af"], w["rig"])
+            rig = AF.load_rig(os.environ["CALUMI_LIB"], w["rig"])           # the rig as the converter reads it
+        self.assertEqual((rig["names"], rig["parents"]), (["Root", "Bone"], [-1, 0]))
+        self.assertTrue(np.allclose(rig["t"][1], [0, 0, 1], atol=1e-5))
+        self.assertTrue(np.allclose(np.abs(rig["q"][1]), [0, 0, 0, 1], atol=1e-5))
         for f, v in rb["rotations"]["Bone"]:
             v = np.array(v)
             self.assertLess(min(np.max(np.abs(v - q[f, 1])), np.max(np.abs(v + q[f, 1]))), 1e-3, (f, v))

@@ -139,6 +139,31 @@ def afx_fields(d: bytes):
     return elems, tags, files
 
 
+def listing_lines(where, rx):
+    """Folder by folder: each .afx (tag, is_state, rampout, event names) and each .af (size, whether described)."""
+    by_dir = defaultdict(dict)
+    for p, (fn, arc, i, n) in where.items():
+        if p.endswith((".af", ".afx")) and rx.search(p):
+            by_dir[os.path.dirname(p)][os.path.basename(p)] = (fn, arc, i, n)
+    out = []
+    for d in sorted(by_dir):
+        files = by_dir[d]
+        out.append(f"{d}/")
+        for name in sorted(files):
+            fn, arc, i, n = files[name]
+            if name.endswith(".afx"):
+                t = arc.read(i).decode("utf-8", "replace")
+                field = lambda k: (re.findall(rf"<{k}>(.*?)</{k}>", t, re.S) or [""])[0].strip()  # noqa: E731
+                evs = sorted(set(v.strip() for v in re.findall(r"<name>(.*?)</name>", t, re.S)))
+                af = field("filename")
+                out.append(f"  {name}: tag {field('tag')!r}, is_state {field('is_state') or '?'}, rampout "
+                           f"{field('rampout') or '-'}, file {af!r}{'' if not af or af.lower() in files else ' (elsewhere)'}"
+                           f"; events {evs[:12]}")
+            elif name[:-3] + ".afx" not in files:
+                out.append(f"  {name}: no descriptor beside it")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield-data", help="the game's Data folder (its Starfield - *.ba2 archives)")
@@ -149,6 +174,9 @@ def main(argv=None):
                     help="regex on .agx paths whose strings are printed in full")
     ap.add_argument("--max-graphs", type=int, default=40, help="most graphs printed / zipped")
     ap.add_argument("--max-samples", type=int, default=60, help="most .afx descriptors zipped")
+    ap.add_argument("--list", metavar="REGEX",
+                    help="also write listing.txt: every .af / .afx whose path matches, with each descriptor's tag, "
+                         "is_state, rampout and events (exact vanilla clip names to override or to copy)")
     a = ap.parse_args(argv)
     if not a.starfield_data and not a.mod:
         ap.error("give --starfield-data and / or --mod")
@@ -278,6 +306,12 @@ def main(argv=None):
         w(f"\n[{label}] {len(hits):,}")
         for p in hits[:25]:
             w(f"  {p}")
+    if a.list:
+        lx = re.compile(a.list, re.I)
+        listing = listing_lines(where, lx)
+        with open(os.path.join(a.out, "listing.txt"), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(listing) + "\n")
+        print(f"listing.txt: {sum(1 for x in listing if x.startswith('  '))} clips under /{a.list}/")
     rep = os.path.join(a.out, "report.txt")
     with open(rep, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")

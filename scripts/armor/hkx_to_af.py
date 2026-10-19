@@ -130,6 +130,15 @@ def main(argv=None):
                 print(f"Starfield rig: {name} (saved against it)")
         if rig_path is None:
             print("no game rig found: writing our own (--own-rig); the in-game test needs the game's rig")
+    game_rig = None
+    if rig_path is not None:                     # clips index the game rig's bones, in its order and hierarchy
+        g = af_writer.load_rig(a.calumi, rig_path)
+        game_rig = retarget.Rig(g["names"], g["parents"], g["t"], g["q"])
+        if game_rig.names != g["names"]:
+            sys.exit("the game rig does not list parents before children")
+        missing = [n for n in game_rig.names if n.lower() not in {x.lower() for x in sf.names}]
+        print(f"game rig: {len(game_rig.names)} bones ({g['animated']} animated); kept at rest (not in the skeleton "
+              f"NIF): {missing}")
     clip_dir = out
     if a.osf:
         pack_id = re.sub(r"[^A-Za-z0-9_]+", "", a.osf) or "SkyrimPort"
@@ -157,18 +166,24 @@ def main(argv=None):
             if not a.no_foot_plant:
                 res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)
-            w = af_writer.write(a.calumi, clip_dir, name, sf.names, sf.parents, sf.t, sf.q, res["t"], res["q"],
-                                tag=a.tag or name, rig_path=rig_path, events=clip["annotations"])
+            out_rig, out_t, out_q = sf, res["t"], res["q"]
+            if game_rig is not None:
+                out_t, out_q = retarget.rehome(sf, res["t"], res["q"], game_rig.names, game_rig.parents,
+                                               game_rig.t, game_rig.q)
+                out_rig = game_rig
+            w = af_writer.write(a.calumi, clip_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
+                                out_t, out_q, tag=a.tag or name, rig_path=rig_path, events=clip["annotations"])
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
                        foot_lowest_m=chk["foot_lowest_m"], events=len(clip["annotations"]))
             if not a.no_verify:
                 rb = af_writer.read_back(a.calumi, w["af"], w["rig"])
-                missing = [n for n in rb["bones"] if n not in sf.index]
+                missing = [n for n in rb["bones"] if n not in out_rig.index]
                 row["readback_bones"] = len(rb["bones"])
                 if missing:
                     row["readback_unknown_bones"] = missing[:10]
                 else:
-                    row["readback_max_rotation_err"], row["readback_max_translation_err_m"] = compare(rb, res, sf.index)
+                    row["readback_max_rotation_err"], row["readback_max_translation_err_m"] = compare(
+                        rb, {"frames": res["frames"], "t": out_t, "q": out_q}, out_rig.index)
         except Exception as e:                               # noqa: BLE001 - reported per clip
             row["error"] = f"{type(e).__name__}: {e}"
         report.append(row)

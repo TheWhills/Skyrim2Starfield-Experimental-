@@ -212,6 +212,43 @@ Not known yet. What is known:
   animation keywords on weapons, full weapon records and HumanRace's animation fields; with sf_anim_survey.py (the
   .afx tags in each weapon folder) that settles layer (1).
 
+### 2026-10-19: owner's surveys of the installed game (sf_anim_survey, weapon_anim_survey, hkx_survey)
+**Starfield (verified from the owner's report + 38 vanilla graphs, 60 descriptors, 4 rigs it zipped):**
+* 39,398 animation-system files: 19,358 .af, 19,303 .afx, 390 .rig, 347 .agx (all 347 text graphs readable).
+* .agx format settled: a state machine's default state is `<default_state>True</default_state>`, the first line of its
+  `<node>`, unindented (75 machines; not always node 0); Start Selection Method Default / Sync (iSync* variable) /
+  Variable; conditions use `=`, `!=`, `!greaterthan!`, `!greaterthan!=`, `!lessthan!`, `!lessthan!=`, `!ampersand!`,
+  `|` and parentheses; vanilla nodes without flags have no `<flags>`; flags seen: Animation Driven, Allow Rotation,
+  Turn Animation, Is Attack Not Ready, Equip Not OK, Is Busy, Disable Foot IK, Block POV Switch. agx_write now writes
+  all of this. Node types in the 38: ANIMATION 163, GRAPH_REF 100, SWITCH 85, ASSIGN_VARIABLE 71, STATE_MACHINE 60,
+  BLEND_TREE 48, MERGE 37, BLEND 25, ANIMATION_IMPACT_SELECTOR 25 (directional hit / death picks), then SET_ORIENT,
+  DYNAMIC_ANIMATION, PHYSICS_CONTACT_LISTENER, BONE_CONSTRAINT, PAIRED_ANIMATION, TWO_BONE_IK, FOOT_IK, RAGDOLL_GET_UP...
+* Human_Root.agx is a blend tree (deaths, paired kills, foot IK, ActorStateController, a SWAP_GRAPH node); NPC_Melee /
+  Player_Melee / NPC_Gun / Player_Gun are the weapon graphs the race's subgraph data swaps in (supported: the swap
+  node + SGNM).
+* Melee: NPC_MeleeAttacks is one machine: events MeleeAttack01..05, MeleeAttackPower01 / 02, MeleeAttackSprintStart ->
+  clips tagged the same (MeleeAttackSprint for the sprint one); MeleeActions: BlockStart / BlockStop (tag
+  MeleeBlock_Out), Equip / Unequip, ThrowGrenade / ThrowMine, and casting: **CastSelfStart / CastTargetStart -> tags
+  CastSelf / CastTarget** (also in GunActions, 1stPerson_MeleeActions, creature graphs): Starfield already has a
+  self / target cast slot. Tags are altered by switches: Prefix Relaxed / Ready / Sneak / Alert (iSyncRelaxReadySneak),
+  Gravity / ZeroGravity (iSyncGravity), Swimming; Suffix Idle / Walk / Run (iSyncIdleWalkRun).
+* Subgraph data (HumanRace, 158 entries): one-handed melee = target keyword **AnimOneHanded -> NPC_Melee.agx, folders
+  Actors\Human\Animations\Melee > melee\common > common**; unarmed per archetype (macho, angry, female...); AnimSword
+  is on 2 weapons, WeaponTypeMelee1H on 11. No bow / draw clips anywhere (0 hits).
+* Vanilla human rig (meshes\actors\human\characterassets\skeleton.rig): 97 bones, 82 animated, Root first; same rest
+  pose as the skeleton NIF for every body bone; Weapon sits under C_Chest; C_Waist exists only in the rig.
+  hkx_to_af now saves clips in that rig's order and hierarchy (retarget.rehome); two Skyrim clips converted against it
+  read back within 6e-4 (rotation) / 0.24 mm.
+**Skyrim:** hkx_survey decoded all 1,593 clips in its first 2,000 files (threecomp40 only; 1 XML file skipped); annotation
+events: SoundPlay, FootLeft / FootRight, preHitFrame, weaponSwing, HitFrame, arrowAttach / arrowRelease,
+MLh_ / MRh_SpellFire_Event, weaponDraw / weaponSheathe ...
+**Consequence:** a Skyrim one-handed weapon needs no new graph: convert its clips under Starfield's tags (attack ->
+MeleeAttack01..05, power attack -> MeleeAttackPower01 / 02, sprint attack -> MeleeAttackSprint, block -> the
+MeleeBlock tags, equip / unequip, Ready_ / Sneak_ variants), put them in our own folder, and give the WEAP a keyword
+with a HumanRace subgraph entry naming NPC_Melee / Player_Melee and our folder first (the Alternate Recoil method).
+Spells map onto CastSelf / CastTarget the same way. New graphs (the translator) are only for what Starfield lacks:
+bow draw / hold / release, horses, two-handed and dual wield sets if their timing differs.
+
 ### 2026-10-19: what SW SFBM Vanilla Blocking Fix (Nexus 16022, owner upload) shows (verified from its files)
 * **`.agx` graphs are plain XML text** (Bethesda graph-editor export): nodes typed NT_ANIMATION_NODE (TagName, State
   Variable, Speed Multiplier = WeaponSpeedMult, crop frames, mirror), NT_SWITCH_NODE (variable, Tag Alteration

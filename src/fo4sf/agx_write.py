@@ -1,7 +1,8 @@
 """Write Starfield .agx animation graphs (the graph-editor XML read by fo4sf.agx), from a small model:
 
     graph = {"name": "Data\\\\Meshes\\\\AnimTextData\\\\Tables\\\\Graphs\\\\X.agx",
-             "start_variable": "", "nodes": [node, ...], "links": [(from_index, to_index, link_props), ...]}
+             "start_variable": "", "start_method": "Default" | "Sync" | "Variable", "default": 0,
+             "nodes": [node, ...], "links": [(from_index, to_index, link_props), ...]}
     node  = {"kind": "anim", "tag": "Idle", "flags": [...], "props": {...}}               NT_ANIMATION_NODE
           | {"kind": "empty"}                                                             NT_ANIMATION_NODE, TagName None
           | {"kind": "sm", "name": "Locomotion", "graph": graph (nested, no "name")}      NT_STATE_MACHINE_EMBEDDED
@@ -20,8 +21,12 @@ node_type, noninstanced, flags, name, pos / expanded pos, use_color_2, user_id, 
 transition INTO a state is a <link> on the target's input naming the source node index and one of the source's output
 slots), its outputs, and a property sheet of (Property, Value) rows with value types (0 int / variable, 1 float /
 variable, 2 string, 3 bool). A state machine is a <graph> whose nodes are its states; its own sheet sets the start
-selection. Unverified: how the default state is marked when Start Selection Method is Default (none of the shipped
-nodes carries a marker): the writer puts the start state first.
+selection.
+Verified on vanilla graphs (owner's sf_anim_survey samples, 38 Starfield graphs, 2026-10-19): a state machine's default
+state carries `<default_state>True</default_state>` as the first line of its <node>, unindented (75 machines, never
+more than one, not always the first node); Start Selection Method is Default (0) / Sync (1, with an iSync* variable) /
+Variable (2); vanilla nodes without flags have no <flags> element (the writer omits it too); flag names seen: Animation
+Driven, Allow Rotation, Turn Animation, Is Attack Not Ready, Equip Not OK, Is Busy, Disable Foot IK, Block POV Switch.
 """
 import uuid
 from typing import Dict, List
@@ -33,7 +38,8 @@ ANIM_ROWS = [("TagName", 2, ""), ("Sync System", 2, ""), ("Sync Slave", 3, "Fals
              ("Process Inactive Events", 3, "True"), ("Variable Control", 1, ""), ("Sync Only Transition Out", 3, "False")]
 SM_ROWS = [("State Machine Name", 2, ""), ("Sync Only Transition Out", 3, "False")]
 REF_ROWS = [("Graph Ref", 2, ""), ("Wrapped Graph", 3, "False")]
-GRAPH_ROWS = [("Start Selection Method", 2, "Default", 0), ("Start Selection Variable", 0, ""),
+START_METHODS = ["Default", "Sync", "Variable"]
+GRAPH_ROWS = [("Start Selection Method", 2, "Default"), ("Start Selection Variable", 0, ""),
               ("Maintain Sync Selection Variable When Exiting", 3, "False"), ("Update While Inactive", 3, "False")]
 LINK_ROWS = [("Event", 2, ""), ("Comment", 2, ""), ("Condition", 2, ""), ("Blend Time", 1, "0.2"), ("Priority", 0, "0"),
              ("Allow Self Transition", 3, "False"), ("Do Not Follow Sync Group", 3, "False"),
@@ -96,11 +102,16 @@ def _graph_body(g: Dict, ids: _Ids, ind: str) -> List[str]:
         if 0 in consumed:
             raise ValueError("a blend tree's node 0 is its output and must not feed another node")
     lines = [f"{ind}<Link_Style>1</Link_Style>"]
+    default = None if g.get("type") == "blendtree" else g.get("default", 0)
+    if default is not None and nodes and not 0 <= default < len(nodes):
+        raise ValueError(f"default state {default} outside the graph")
     for i, n in enumerate(nodes):
         kind = n["kind"]
         flags = "".join(f"<flag>{_esc(f)}</flag>" for f in n.get("flags", []))
-        lines += [f"{ind}<node>", f"{ind}\t<node_type>{NODE_TYPES[kind]}</node_type>",
-                  f"{ind}\t<noninstanced>False</noninstanced>"]
+        lines.append(f"{ind}<node>")
+        if i == default:
+            lines.append("<default_state>True</default_state>")           # unindented, as in the shipped files
+        lines += [f"{ind}\t<node_type>{NODE_TYPES[kind]}</node_type>", f"{ind}\t<noninstanced>False</noninstanced>"]
         if kind == "blend":
             curves = n.get("curves") or [[] for _ in n.get("inputs", [])]
             lines.append(f"{ind}\t<divisions>0</divisions>")
@@ -109,7 +120,7 @@ def _graph_body(g: Dict, ids: _Ids, ind: str) -> List[str]:
                 for r, w in pts:
                     lines.append(f"{ind}\t\t<point><Range>{r:g}</Range><Weight>{w:g}</Weight></point>")
                 lines.append(f"{ind}\t</blendInput>")
-        else:
+        elif flags:
             lines.append(f"{ind}\t<flags>{flags}</flags>")
         lines += [f"{ind}\t<name>{NODE_NAMES[kind]}</name>",
                   f"{ind}\t<pos_x>{200 + 220 * (i % 6)}</pos_x>", f"{ind}\t<pos_y>{150 + 160 * (i // 6)}</pos_y>",
@@ -172,8 +183,10 @@ def _graph_body(g: Dict, ids: _Ids, ind: str) -> List[str]:
         lines += _sheet(BLENDTREE_GRAPH_ROWS, {}, ind)
         return lines
     sv = g.get("start_variable", "")
-    lines += _sheet(GRAPH_ROWS, {"Start Selection Method": "Variable" if sv else "Default",
-                                 "Start Selection Variable": sv}, ind)
+    method = g.get("start_method") or ("Variable" if sv else "Default")
+    rows = [r if r[0] != "Start Selection Method" else (r[0], r[1], method, START_METHODS.index(method))
+            for r in GRAPH_ROWS]
+    lines += _sheet(rows, {"Start Selection Variable": sv}, ind)
     return lines
 
 

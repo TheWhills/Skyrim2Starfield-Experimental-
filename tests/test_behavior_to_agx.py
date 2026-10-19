@@ -17,6 +17,7 @@ class BehaviorToAgxTests(unittest.TestCase):
                          "(staggerDirection !lessthan! .25) | (staggerDirection !greaterthan! .75)")
         self.assertEqual(T.condition("a >= 1 && b == 0"), "a !greaterthan!= 1 !ampersand! b = 0")
         self.assertEqual(T.condition(None), "")
+        self.assertEqual(T.condition("Speed <= 0.05 && x != 1"), "Speed !lessthan!= 0.05 !ampersand! x != 1")
 
     def test_translate_states_clips_and_transition(self):
         data = graph()
@@ -92,6 +93,30 @@ class BehaviorToAgxTests(unittest.TestCase):
         self.assertEqual(len(inner.findall("node")), 2)
         with self.assertRaises(ValueError):
             agx_write.write({"name": "Y.agx", "nodes": [{"kind": "empty"}], "links": [(0, 3, {})]})
+
+    def test_default_state_flags_and_start_method(self):
+        g = {"name": "X.agx", "default": 1, "start_method": "Sync", "start_variable": "iSyncIdleWalkRun",
+             "nodes": [{"kind": "anim", "tag": "A"}, {"kind": "anim", "tag": "B", "flags": ["Animation Driven"]}],
+             "links": [], }
+        out = agx_write.write(g).decode()
+        self.assertIn("<node>\r\n<default_state>True</default_state>\r\n\t<node_type>NT_ANIMATION_NODE", out)
+        self.assertEqual(out.count("<default_state>"), 1)
+        root = ET.fromstring(out)
+        a, b = root.findall("node")
+        self.assertIsNone(a.find("default_state"))
+        self.assertEqual(b.findtext("default_state"), "True")
+        self.assertIsNone(a.find("flags"))                                   # vanilla omits empty flags
+        self.assertEqual(b.find("flags").findtext("flag"), "Animation Driven")
+        sheet = root.findall("property_sheet")[-1]
+        rows = {r.findall("prop")[0].findtext("value"): r.findall("prop")[1] for r in sheet.findall("row")}
+        self.assertEqual((rows["Start Selection Method"].findtext("value"),
+                          rows["Start Selection Method"].findtext("listindex")), ("Sync", "1"))
+        self.assertEqual(rows["Start Selection Variable"].findtext("value"), "iSyncIdleWalkRun")
+        nested = {"name": "Y.agx", "nodes": [{"kind": "blendtree", "name": "T", "graph": {
+            "nodes": [{"kind": "anim", "tag": "Out"}], "links": []}}], "links": []}
+        self.assertEqual(agx_write.write(nested).decode().count("<default_state>"), 1)   # root only, not the tree
+        with self.assertRaises(ValueError):
+            agx_write.write({"name": "Z.agx", "default": 4, "nodes": [{"kind": "empty"}], "links": []})
 
 
 if __name__ == "__main__":

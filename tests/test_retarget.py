@@ -116,6 +116,32 @@ class RetargetTests(unittest.TestCase):
         got = np.array(R.mat_to_quat(m))
         self.assertTrue(np.allclose(got, q, atol=1e-9) or np.allclose(got, -q, atol=1e-9))
 
+    def test_rehome_into_another_hierarchy_keeps_world_pose(self):
+        # source: Root -> COM -> Hips -> Thigh, WEAPON under Hips; target (like the game rig): Root first, Weapon
+        # (other case) parented to COM, an extra Waist bone the source lacks, Thigh under Hips
+        src = R.Rig(["Root", "COM", "C_Hips", "R_Thigh", "WEAPON"], [-1, 0, 1, 2, 2],
+                    [(0, 0, 0), (0, 0, 1), (0, 0, 0.1), (0.1, 0, 0), (0.3, 0.2, 0)], [I, I, qaxis((0, 0, 1), 90), I, I])
+        F = 3
+        lt = np.repeat(src.t[None], F, 0)
+        lq = np.repeat(src.q[None], F, 0)
+        for f in range(F):
+            lq[f, 3] = qaxis((1, 0, 0), 20 * f)                 # the thigh swings
+            lt[f, 1] = (0, 0.05 * f, 1)                          # COM moves
+        names, parents = ["Root", "COM", "C_Waist", "C_Hips", "R_Thigh", "Weapon"], [-1, 0, 1, 1, 3, 1]
+        rest_t = np.array([(0, 0, 0), (0, 0, 1), (0, 0, 0.2), (0, 0, 0.1), (0.1, 0, 0), (0, 0, 0)])
+        rest_q = np.array([I, I, qaxis((0, 1, 0), 30), I, I, I])
+        ot, oq = R.rehome(src, lt, lq, names, parents, rest_t, rest_q)
+        self.assertEqual(ot.shape, (F, 6, 3))
+        wt, wq = src.fk(lt, lq)
+        dst = R.Rig(names, parents, rest_t, rest_q)
+        dt, dq = dst.fk(ot, oq)
+        for j_src, j_dst in ((1, 1), (2, 3), (3, 4), (4, 5)):      # shared bones keep their world pose
+            self.assertTrue(np.allclose(dt[:, j_dst], wt[:, j_src], atol=1e-9))
+            self.assertTrue(np.allclose(np.abs(np.sum(dq[:, j_dst] * wq[:, j_src], -1)), 1, atol=1e-9))
+        self.assertTrue(np.allclose(ot[:, 2], rest_t[2]) and np.allclose(oq[:, 2], rest_q[2]))   # rig-only: rest
+        with self.assertRaises(ValueError):
+            R.rehome(src, lt, lq, ["A", "B"], [1, -1], rest_t[:2], rest_q[:2])
+
 
 if __name__ == "__main__":
     unittest.main()

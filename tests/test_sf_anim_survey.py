@@ -38,8 +38,14 @@ class SfAnimSurveyTests(unittest.TestCase):
                 "meshes\\clutter\\bucket.nif": b"not animation"})
             out = os.path.join(tmp, "out")
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(S.main(["--starfield-data", sf, "--out", out]), 0)
+                self.assertEqual(S.main(["--starfield-data", sf, "--out", out, "--list", "animations/powers"]), 0)
             rep = open(os.path.join(out, "report.txt"), encoding="utf-8").read()
+            with open(os.path.join(out, "listing.txt"), encoding="utf-8") as fh:
+                listing = fh.read()
+            self.assertIn("meshes/actors/human/animations/powers/\n", listing)
+            self.assertIn("  cast_start.afx: tag 'PowerCast', is_state ?, rampout -, file 'cast_start.af'; events []",
+                          listing)
+            self.assertNotIn("cast_start.af: no descriptor", listing)
             self.assertIn("6 animation-system files", rep)
             self.assertIn("link events (1, graphs using each): BowDrawStart 1", rep)
             self.assertIn("Prefix:iSyncRelaxReadySneak:Relaxed/Sneak x1", rep)

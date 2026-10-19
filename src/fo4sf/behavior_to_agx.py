@@ -20,16 +20,16 @@ Mapping (both are nested state machines whose transitions fire on events, with c
   transitions (per state and wildcard) -> links into the target node: Event (event name), Condition (expression,
      rewritten in the .agx spelling), Blend Time (hkbBlendingTransitionEffect duration @80, 0.2 s when 0 / absent);
      a wildcard transition becomes a link from every other state (no wildcard node is known in .agx)
-  start state -> first node (how .agx marks a default state is unverified)
+  start state -> first node, marked <default_state> (the marker verified on vanilla graphs 2026-10-19)
   hkbBehaviorReferenceGenerator -> NT_GRAPH_REF naming the referenced behaviour (QuadrupedBehavior)
   a state machine / blend / selector used from more than one place -> its own graph (file), referenced by name with
      NT_GRAPH_REF where it is used (.agx has no in-file instancing; copying it everywhere blew the dragon graph up
      from 66 to 742 machines). A blend tree can be a whole graph: Player_Melee's root is one.
 Not translated yet (reported): blend-weight variables that are not bound, modifiers (look-at, foot IK, ragdoll,
 timers, expressions), clip triggers (they belong in the clip's .afx), nested-state transitions.
-Supported hypotheses until a translated graph runs in game: the event / variable names (Skyrim's are kept; the
-engine <-> graph interface map comes from the Starfield survey), the condition spelling (`!greaterthan!`,
-`!ampersand!` and `|` seen in shipped graphs; `!lessthan!` assumed by analogy).
+Condition spelling verified on vanilla graphs (2026-10-19): `=`, `!=`, `!greaterthan!`, `!greaterthan!=`,
+`!lessthan!`, `!lessthan!=`, `!ampersand!`, `|`, parentheses. Supported hypothesis until a translated graph runs in
+game: the event / variable names (Skyrim's are kept; docs/armor/animation-port.md maps them to Starfield's).
 """
 import re
 from collections import Counter
