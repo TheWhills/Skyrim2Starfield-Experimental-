@@ -111,3 +111,14 @@ binary, how states / transitions / selectors / variables are stored) and how the
   retargeter carries rotation deltas against each skeleton's own rest pose, never positions).
 * Next: the retargeter (neutral clip on Skyrim rest -> Starfield local rotations), then writing `.af` (CALUMI; a Linux
   build of it is half done in scratch, which would let the whole hkx -> af chain be tested here).
+
+**2026-10-19, Skyrim behaviour inventory** ( on the 276 vanilla behaviour /
+character / skeleton files Pandora ships as templates, GPL repo, read outside this repo). Pandora's copies carry 8
+extra leading bytes per object (pointers land on the object start, fields sit 8 bytes later), so they are not the
+game's own layout: the inventory reads strings through pointer fixups, independent of offsets. Per creature folder
+(graphs, state machines, states, clip generators, synchronized (paired) clips, blends, distinct animation files):
+
+Human ("character"): 35 graphs, 5,269 states, 4,975 clips over 2,178 animation files, 435 paired clips (killmoves,
+mount / dismount). Horse: 66 states, 73 animations, events HorseEnter / HorseExit / HorseLocomotion / HorseDismount;
+mounting is a paired clip with the rider (sharedkillmoves/human&horse/paired_mount.hkx). These are the sizes of the
+behaviour each Starfield creature graph must cover.
