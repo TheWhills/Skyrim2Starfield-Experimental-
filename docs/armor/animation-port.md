@@ -445,5 +445,9 @@ Two ways in, cheapest first:
   BSClothExtraData unchanged at conversion time from the user's own files. No cloth writer; a quick in-game test.
 * per-chain cloth: generate the sim ribbon and constraint sets from the SMP config and write the tagfile, using a
   cloth NIF's TYPE section as the template at run time (as meshcollision does for collision).
-Next on the PC: `sf_cloth_survey.py --root "$SF\Data" --filter hair,clothes,outfit` to list vanilla cloth (which
-rigs exist, and a template).
+**Vanilla (owner run 2026-10-19, `--filter hair,clothes,outfit`): 394 cloth setups, 0 errors, all bone-driving**
+(404 hclSimpleMeshBoneDeformOperator). Vanilla hairs carry their own rigs (bob: 12 bones under C_Head, 29
+particles; choppy_bob: 72 bones; coily_mohawk: 2; the child ponytail: 5 in one chain), and so do suits, capes
+(Varuun administrator cape: 138 bones on C_Chest / L_Clavicle), banners, scarves and helmets. Classes beyond the mods:
+hclCopyVerticesOperator (241), hclCompressibleLinkConstraintSetMx (52), hclVolumeConstraint (6),
+hclTaperedCapsuleShape colliders (108). So vanilla hairs are rig-reuse candidates and writer templates.

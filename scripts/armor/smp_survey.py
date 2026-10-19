@@ -19,6 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
+from fo4sf import bsa as bsamod  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 from fo4sf import skeletonmap as SM  # noqa: E402
 from fo4sf import skyrimnif, skyrimskin  # noqa: E402
@@ -53,9 +54,39 @@ def default_skeleton():
         "AnimObjectR", "TailBone01"}
 
 
-def skeleton_names(path):
-    with open(path, "rb") as fh:
-        n = nifmod.parse(fh.read())
+SKELETON = "meshes\\actors\\character\\character assets\\skeleton.nif"
+
+
+def _from_archives(data_dir, rel):
+    """A Data-relative file, loose or from the folder's .bsa archives (vanilla skeleton.nif lives in a BSA)."""
+    try:
+        return bsamod.SkyrimArchives(data_dir).mesh(rel)
+    except (OSError, bsamod.BsaError):
+        return None
+
+
+def load_skeleton(path, roots):
+    """Bone names of a skeleton NIF: the given file if it exists; else the same Data-relative path (or the default
+    character skeleton) looked up loose or in the BSAs of a Data folder (the path's own or a --root)."""
+    data = None
+    if path and os.path.isfile(path):
+        with open(path, "rb") as fh:
+            data = fh.read()
+    else:
+        rel, dirs = SKELETON, list(roots)
+        if path:
+            low = path.replace("/", "\\").lower()
+            if "\\meshes\\" in low:
+                k = low.index("\\meshes\\")
+                rel, dirs = low[k + 1:], [path[:k]] + dirs
+        for d in dirs:
+            if os.path.isdir(d):
+                data = _from_archives(d, rel)
+                if data:
+                    break
+    if not data:
+        return None
+    n = nifmod.parse(data)
     return {skyrimnif._name(n, n.blocks[i]).decode("latin-1") for i in range(len(n.blocks))
             if n.type_of(i).endswith("Node")}
 
@@ -153,10 +184,17 @@ def survey(roots, skeleton):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", action="append", required=True)
-    ap.add_argument("--skeleton", help="Skyrim skeleton.nif (default: the bone names in skeletonmap)")
+    ap.add_argument("--skeleton", help="Skyrim skeleton.nif, loose or inside the Data folder's BSAs (default: the "
+                    "character skeleton found under a --root, else the bone names in skeletonmap)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    skeleton = skeleton_names(a.skeleton) if a.skeleton else default_skeleton()
+    skeleton = load_skeleton(a.skeleton, a.root)
+    if skeleton is None:
+        print(f"skeleton {'not found: ' + a.skeleton if a.skeleton else 'not found under the roots'}; "
+              "using skeletonmap's bone names")
+        skeleton = default_skeleton()
+    else:
+        print(f"skeleton: {len(skeleton)} nodes")
     r = survey(find_roots(a.root), skeleton)
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "smp_survey.json"), "w", encoding="utf-8") as fh:

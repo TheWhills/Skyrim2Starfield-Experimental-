@@ -170,6 +170,23 @@ class NifAndSurveyTests(unittest.TestCase):
         self.assertEqual(r["shapes_named_but_missing"], {"HairMesh": 1, "VirtualHead": 1})
         self.assertEqual(r["needs"], {"bone_chains": 1, "per_vertex_shape": 1, "per_triangle_shape": 1})
 
+    def test_skeleton_from_bsa_when_not_loose(self):
+        try:
+            from fo4sf import bsa
+            import lz4.frame  # noqa: F401  (bsa.build needs it)
+        except ImportError:
+            self.skipTest("lz4 not installed")
+        with tempfile.TemporaryDirectory() as d:
+            data = os.path.join(d, "Data")
+            os.makedirs(data)
+            with open(os.path.join(data, "Skyrim - Meshes0.bsa"), "wb") as fh:
+                fh.write(bsa.build({V.SKELETON: synthetic_nif(b"x.xml")}, compress=False))
+            missing = os.path.join(data, "meshes", "actors", "character", "character assets", "skeleton.nif")
+            want = {"Scene Root", "NPC Head [Head]", "Tail 1"}
+            self.assertEqual(V.load_skeleton(missing, []), want)          # the path's own Data folder
+            self.assertEqual(V.load_skeleton(None, [data]), want)          # default path under a --root
+            self.assertIsNone(V.load_skeleton(None, [d]))                  # nothing there
+
 
 if __name__ == "__main__":
     unittest.main()
