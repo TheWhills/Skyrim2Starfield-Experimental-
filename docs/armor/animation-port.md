@@ -211,3 +211,26 @@ Not known yet. What is known:
 * `scripts/armor/weapon_anim_survey.py` finds the subgraph records by content (record type not assumed), the
   animation keywords on weapons, full weapon records and HumanRace's animation fields; with sf_anim_survey.py (the
   .afx tags in each weapon folder) that settles layer (1).
+
+### 2026-10-19: what SW SFBM Vanilla Blocking Fix (Nexus 16022, owner upload) shows (verified from its files)
+* **`.agx` graphs are plain XML text** (Bethesda graph-editor export): nodes typed NT_ANIMATION_NODE (TagName, State
+  Variable, Speed Multiplier = WeaponSpeedMult, crop frames, mirror), NT_SWITCH_NODE (variable, Tag Alteration
+  Prefix / Suffix), NT_BLEND_NODE, NT_GRAPH_REF (another graph by name), state machines / blend trees, bone constraints,
+  a stagger meter; links carry Event, Condition (text expressions such as `bDontAllowBlock=0`,
+  `Speed !greaterthan! 1.0 !ampersand! bFreeMovement !greaterthan! 0`), blend time, transition type. The mod ships edited
+  copies of four vanilla graphs (Player_Melee, MeleeActions, MeleeAttacks, HitReactions) as loose files: graph edits
+  are loose-file overrides, and a patcher is an XML merge. Reader: `src/fo4sf/agx.py`.
+* Player_Melee is assembled from 14 referenced graphs (MeleeActions, MeleeAttacks, Jumping, Ladder, Mantling, GravDash,
+  Stagger, Biped_IdleLocomotion, ...); variants are switches with tag alterations: Gravity / ZeroGravity, Relaxed /
+  Ready / Sneak (prefix), swimming (iSyncSwimState: Starfield has a swim state), hit direction (suffix).
+* Variants keep the base tag in their `.afx` and carry the prefix in the file name: Sneak_MeleeAttack_A.af and
+  ZeroG_MeleeAttack_A.af sit beside MeleeAttack_A.af, all tagged MeleeAttack_A.
+* Folders per weapon: melee\onehanded\player\{,knife\,sword\,sword\twohandblock\}; the mod overrides the same tags at
+  several levels (supported: most specific folder first, from the equipped weapon's subgraph data).
+* MeleeActions already has **CastSelf / CastTarget** animation nodes (events CastSelfStart / CastTargetStart),
+  ThrowGrenade / ThrowMine, Equip / Unequip, and **melee blocking** (BlockStart / BlockStop -> MeleeBlock_Into / _Idle
+  (is_state 1, the loop) / _Out / _HitReaction): hooks for Skyrim casting and blocking exist in vanilla.
+* `.afx` events per frame use Skyrim's names: PreHitFrame, WeaponSwing, HitFrame, FootLeft, FootRight (plus
+  AttackStateNextAttack, AttackEnd, AssignVariable with payloads, CameraShake), and variable windows (bDontAllowBlock,
+  bDontAllowAttack, bFreeMovement, bCanComboAttack, bAllowFinisher, bNoLeftHandIK ...). af_writer now writes the
+  mapped Skyrim annotations into the .afx (others stay in <clip>.events.json); rampout = blend-out frames.

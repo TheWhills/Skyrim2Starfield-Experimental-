@@ -34,6 +34,16 @@ class AfWriterTests(unittest.TestCase):
         self.assertEqual((r.find("tag").text, r.find("filename").text, r.find("is_state").text),
                          ("IdleBook", "idlebook.af", "0"))
 
+    def test_events_mapped_into_descriptor(self):
+        mapped, rest = AF.map_events([{"time": 0.3, "text": "preHitFrame"}, {"time": 0.5, "text": "HitFrame"},
+                                      {"time": 0.0, "text": "SoundPlay.WPNBowNockSD"}], 30.0)
+        self.assertEqual(mapped, [(9, "PreHitFrame", ""), (15, "HitFrame", "")])
+        self.assertEqual([r["text"] for r in rest], ["SoundPlay.WPNBowNockSD"])
+        from fo4sf import agx
+        d = agx.read_descriptor(AF.descriptor("MeleeAttack_A", "a.af", False, mapped, [("bDontAllowBlock", 0, 30)], 6))
+        self.assertEqual((d["events"], d["variables"], d["rampout"]),
+                         ([(9, "PreHitFrame", ""), (15, "HitFrame", "")], [("bDontAllowBlock", 0, 30)], 6))
+
     def test_refuses_output_inside_repo(self):
         with self.assertRaises(ValueError):
             AF.write("nolib", os.path.join(ROOT, "tmp_af"), "x", ["Root"], [-1], [[0, 0, 0]], [[0, 0, 0, 1]],

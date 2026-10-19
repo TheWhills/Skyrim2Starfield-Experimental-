@@ -51,11 +51,49 @@ class Calumi:
             self.error = None
 
 
-def descriptor(tag: str, filename: str, is_state: bool = False) -> bytes:
+# Skyrim annotation event -> Starfield .afx event name, for the names both games use (Starfield names as in the melee
+# descriptors of the SW SFBM mod, Nexus 16022: PreHitFrame, WeaponSwing, HitFrame, FootLeft, FootRight). Matching is
+# case-insensitive on the Skyrim side; others stay in <clip>.events.json until their Starfield counterpart is known.
+EVENT_MAP = {"hitframe": "HitFrame", "prehitframe": "PreHitFrame", "weaponswing": "WeaponSwing",
+             "footleft": "FootLeft", "footright": "FootRight", "attackstop": "AttackEnd"}
+
+
+def map_events(annotations, fps: float):
+    """(mapped [(frame, name, payload)], unmapped [annotation]) from skyrimhkx annotations ({"time", "text"})."""
+    mapped, unmapped = [], []
+    for a in annotations or []:
+        name = EVENT_MAP.get(a["text"].strip().lower())
+        if name:
+            mapped.append((int(round(a["time"] * fps)), name, ""))
+        else:
+            unmapped.append(a)
+    return sorted(mapped), unmapped
+
+
+def descriptor(tag: str, filename: str, is_state: bool = False, events=(), variables=(), rampout=None) -> bytes:
+    """An .afx in the shipped layout: is_state, tag, filename, rampout, flags, events (frame, name, payload),
+    variables (name, start frame, end frame)."""
     root = ET.Element("root")
     ET.SubElement(root, "is_state").text = "1" if is_state else "0"
     ET.SubElement(root, "tag").text = tag
     ET.SubElement(root, "filename").text = filename
+    if rampout is not None:
+        ET.SubElement(root, "rampout").text = str(int(rampout))
+    ET.SubElement(root, "flags").text = ""
+    if events:
+        ev = ET.SubElement(root, "events")
+        for frame, name, payload in events:
+            e = ET.SubElement(ev, "event")
+            ET.SubElement(e, "frame").text = str(int(frame))
+            ET.SubElement(e, "name").text = name
+            ET.SubElement(e, "payload").text = payload or ""
+    if variables:
+        vs = ET.SubElement(root, "variables")
+        for name, start, end in variables:
+            v = ET.SubElement(vs, "variable")
+            ET.SubElement(v, "name").text = name
+            ET.SubElement(v, "start").text = str(int(start))
+            ET.SubElement(v, "end").text = str(int(end))
     return ET.tostring(root, encoding="utf-8")
 
 
@@ -79,7 +117,8 @@ def _keys_needed(values: np.ndarray, tol: float) -> List[int]:
 
 def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: List[int], rest_t, rest_q,
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
-          tolerance: float = 1e-4, events: Optional[list] = None) -> Dict:
+          tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
+          variables=()) -> Dict:
     """Write <out>/<name>.af (+ skeleton.rig unless rig_path, + <name>.afx, + <name>.events.json). Translations in
     metres, quaternions (x, y, z, w). Returns {"af", "rig", "keys", "frames"}."""
     out = pathlib.Path(out_dir).resolve()
@@ -166,10 +205,11 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
         else:
             L.require(L.fn("SaveAnimationToSFBGSFormatWithExistingRigDirectC", [p, c.c_wchar_p, c.c_wchar_p, p], b)(
                 anim, str(af), str(rig_path), L.error), "save animation")
-        (out / f"{name}.afx").write_bytes(descriptor(tag or name, af.name))
-        (out / f"{name}.events.json").write_text(json.dumps({"runtime_events_encoded": False, "events": events or []},
-                                                            indent=1))
+        mapped, unmapped = map_events(events, fps)
+        (out / f"{name}.afx").write_bytes(descriptor(tag or name, af.name, is_state, mapped, variables))
+        (out / f"{name}.events.json").write_text(json.dumps({"in_afx": mapped, "not_mapped": unmapped}, indent=1))
         return {"af": str(af), "rig": str(rig_path or rig_file), "keys": keys, "frames": F, "bones": B,
+                "events_in_afx": len(mapped), "events_not_mapped": len(unmapped),
                 "dropped_unnamed": dropped}
     finally:
         if anim:
