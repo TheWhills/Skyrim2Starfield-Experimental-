@@ -374,3 +374,40 @@ Routes:
 Prerequisites in this plan: armour / hair meshes keep their extra physics bones when converted (skinned to bones the
 mesh carries, not only skeletonmap's human bones), and a survey of real SMP XML configs (how many use bone chains
 only vs per-vertex shapes) decides A vs B.
+
+### SMP config survey (2026-10-19, `scripts/armor/smp_survey.py`, `src/fo4sf/smpconfig.py`)
+Run on owner uploads KS Hairdos SMP (Nexus SSE 31300) and Cloaks of Skyrim Retextured HDT-SMP; format notes from
+the files and from FSMP 4.1.1's schema `FSMPV/hdtSMP64.xsd` (MIT, DaymareOn). No FSMP code read (GPL).
+* **verified (files):** a worn NIF names its config in an NiStringExtraData "HDT Skinned Mesh Physics Object" (value
+  = Data-relative path, sometimes with a `Data\` prefix). 100 configs, 675 NIF -> config links, none missing.
+* **verified:** 99 of 100 configs are bone chains: kinematic anchor bones the mesh carries (`Zoella Flyaways L 1`,
+  `CB 01 1`) parented to one skeleton bone (hair: NPC Head -> Starfield C_Head, 503 links; cloaks: NPC Spine2 ->
+  C_Chest, 1158), then 2-7 simulated bones each (max 38 per config, 689 total), linked only by
+  `generic-constraint` (6-DOF spring: small angular limits, e.g. +-0.1..0.5 rad; angular stiffness 0 in 55 configs,
+  1-500 in the rest). No loops / nets, no stiffspring or conetwist, no motors, no bone primitive shapes, no
+  patterns. 2 configs have a simulated bone outside any constraint.
+* **verified:** collision is mesh-based: per-vertex-shape on the hair mesh itself (94 configs) against
+  per-triangle-shape "Virtual*" meshes (VirtualHead, VirtualBody, VirtualGround ...; 99 configs). In most hair NIFs
+  those Virtual* meshes are absent (VirtualHead named but missing in 459 links); KS ships them in a separate
+  VirtualCollision NIF / config, and body mods supply their own (supported hypothesis: SMP matches shapes across
+  meshes on one skeleton by tag).
+* Numbers may use comma decimals ("0,1"); the schema says the runtime accepts both.
+* unresolved: whether an unnamed `*-default` redefinition replaces or merges into the previous one (the reader
+  replaces); how a bone with no constraint behaves.
+
+Consequence for the routes: SMP content here is exactly "C" (bone chains hanging off one skeleton bone) plus
+coarse body collision. Starfield's cloth is particle based, and the add-on page (Nexus 14491) says "Cloth Bones
+naturally drive part of the mesh that is weighted to them", i.e. Havok cloth particles can drive bones. So route A
+becomes a direct mapping (supported hypothesis until a Starfield cloth NIF is decoded):
+| SMP | Havok cloth in BSClothExtraData |
+|---|---|
+| kinematic anchor bone (mass 0) | fixed particle skinned to the animated bone |
+| simulated bone (mass > 0) | simulated particle, mass; bone transform read back from particles |
+| generic-constraint bodyA-bodyB | stand (distance) link; angular limits / stiffness -> bend link or local-range constraint toward the animated pose |
+| bone linear / angular damping | particle damping |
+| per-triangle Virtual* body shapes | capsules / spheres on body bones (head, spine, arms, legs) |
+| per-vertex hair shape | particle radius |
+Route B (SFSE solver) stays the fallback if cloth bones cannot be produced outside the art tools or feel too stiff.
+Next: decode a Starfield NIF with BSClothExtraData with `fo4sf.hktagfile` (the payload should be a Havok tagfile;
+unverified) to list the hcl* classes, particles and constraints it holds; the converted mesh must keep its chain
+bones (`extra_bones` in the survey) under the mapped host bone.
