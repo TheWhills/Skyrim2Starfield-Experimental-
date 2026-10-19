@@ -194,3 +194,20 @@ Findings:
 * First in-game test path (no graph work): `hkx_to_af.py --osf "Skyrim Port"` writes an OSF Animation content pack
   (clips + a `clipLibrary` catalog, OSF docs/GETTING_STARTED.md), played from OSF's in-game browser on the player or an
   NPC. OSF decodes .af through CALUMI itself, so this tests our clips on a real Starfield actor.
+
+## Weapons: how will a converted bow play its animations? (2026-10-19, open)
+Not known yet. What is known:
+* Alternate Recoil Animations (Nexus 16838) changed weapon animations by editing "about 400 subgraph data records" in
+  xEdit and notes that "weapons using custom animation sets" need patching: Starfield has subgraph data records and
+  per-weapon animation sets (**supported**, from the mod page).
+* Fallout 4, the same engine line, picks weapon animations through a race's subgraph data: actor keywords + weapon
+  keywords (Anims* on the WEAP) -> the folders the behaviour graph plays clips from. New weapon types there needed a new
+  keyword + subgraph entries + clips, no graph edits (**supported hypothesis** for Starfield).
+* Plan for a bow, in three layers: (1) selection: a WEAP with a bow animation keyword and subgraph data pointing at a
+  folder of converted Skyrim bow clips, saved under the tags (`.afx`) of the Starfield weapon type it borrows; (2)
+  states: first version maps Skyrim draw -> Starfield aim / ready, release -> fire, nock -> reload (no graph edits);
+  true hold-to-draw with draw-time damage needs new graph states (the patcher) or SFSE; (3) gameplay: AMMO / PROJ
+  records for arrows (gravity-arc projectile, pickup), WEAP stats.
+* `scripts/armor/weapon_anim_survey.py` finds the subgraph records by content (record type not assumed), the
+  animation keywords on weapons, full weapon records and HumanRace's animation fields; with sf_anim_survey.py (the
+  .afx tags in each weapon folder) that settles layer (1).
