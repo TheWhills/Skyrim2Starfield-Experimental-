@@ -227,6 +227,8 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
     grips = {low[k]: (sf.index[h], np.array(t, float), np.array(q, float) / np.linalg.norm(q))
              for k, (h, t, q) in M.GRIP.items() if k in low and h in sf.index}
     targets = {low[k]: sf.index[h] for k, h in M.HAND_TARGETS.items() if k in low and h in sf.index}
+    weapon_axes = {low[k]: (sk.index[src], np.array(q, float) / np.linalg.norm(q))
+                   for k, (src, q) in M.WEAPON_AXES.items() if k in low and src in sk.index}
     # COM movement scale: leg length (thigh joint -> ankle, both legs), so a crouch bends the knees as far as in
     # Skyrim and the feet stay on the ground (hip height overshoots: Starfield's thigh joint sits 11 cm below C_Hips)
     def leg(rig, rt, thigh, foot):
@@ -251,6 +253,9 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
         if i in grips and grips[i][0] < i:                             # weapon held as in vanilla clips
             h, gt, gq = grips[i]
             target_q = qmul(wq[:, h, :], np.broadcast_to(gq, (F, 4)))
+            if i in weapon_axes:                                      # blade aimed and turned as in Skyrim
+                src, aq = weapon_axes[i]
+                target_q = qmul(wq_sk[:, src, :], np.broadcast_to(aq, (F, 4)))
             target_t = wt[:, h, :] + qrot(wq[:, h, :], np.broadcast_to(gt, (F, 3)))
             dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
         elif i in targets and targets[i] < i:                          # IK targets on their hands

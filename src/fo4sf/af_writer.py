@@ -57,7 +57,9 @@ class Calumi:
 # descriptors of the SW SFBM mod, Nexus 16022: PreHitFrame, WeaponSwing, HitFrame, FootLeft, FootRight). Matching is
 # case-insensitive on the Skyrim side; others stay in <clip>.events.json until their Starfield counterpart is known.
 EVENT_MAP = {"hitframe": "HitFrame", "prehitframe": "PreHitFrame", "weaponswing": "WeaponSwing",
-             "footleft": "FootLeft", "footright": "FootRight", "attackstop": "AttackEnd"}
+             "footleft": "FootLeft", "footright": "FootRight", "attackstop": "AttackEnd",
+             # equip / unequip (Starfield names from the vanilla one-handed Equip / Unequip descriptors, 2026-10-19)
+             "weapondraw": "WeaponDraw", "weaponsheathe": "WeaponSheathe"}
 
 
 def map_events(annotations, fps: float):

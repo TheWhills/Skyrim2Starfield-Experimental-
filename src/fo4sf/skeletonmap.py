@@ -96,6 +96,12 @@ NOT_ANIMATED = ("Camera", "Camera Control", "Camera Control FP", "CamTargetParen
 GRIP: Dict[str, Tuple[str, Tuple[float, float, float], Tuple[float, float, float, float]]] = {
     "weapon": ("R_Wrist", (0.068, 0.011, -0.038), (0.499, 0.375, 0.519, -0.583)),
 }
+# Weapon orientation taken from Skyrim's weapon node instead of the grip: Starfield weapon models run along the
+# Weapon bone's +Z, Skyrim's along +Y (supported: the vanilla sword hit frame swings the bone's +Z forward-left, the
+# Skyrim ready idle holds +Y forward-up; measured on our retarget the other axes map x_sf = -z_sk, y_sf = -x_sk, within
+# 20 deg of the vanilla grip). SF Weapon world = Skyrim Weapon world * WEAPON_AXES, so the blade points and faces
+# exactly as in Skyrim while the hilt stays where vanilla puts it in the fist (GRIP offset).
+WEAPON_AXES: Dict[str, Tuple[str, Tuple[float, float, float, float]]] = {"weapon": ("Weapon", (0.5, -0.5, -0.5, -0.5))}
 # IK targets kept on the hands they belong to (the IK pass then changes nothing)
 HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}
 # Skyrim bones with several mapped children: the child whose direction aligns the bone (see retarget)

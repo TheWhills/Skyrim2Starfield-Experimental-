@@ -190,6 +190,20 @@ class RetargetTests(unittest.TestCase):
         across = wt[0, sf.index["R_Pinky"]] - wt[0, sf.index["R_Index"]]
         self.assertTrue(np.allclose(across / np.linalg.norm(across), [1, 0, 0], atol=1e-9))
 
+    def test_weapon_orientation_follows_skyrim_weapon_node(self):
+        names = ["NPC Root [Root]", "NPC R Forearm [RLar]", "NPC R Hand [RHnd]", "Weapon"]
+        q_w = qaxis((1, 0, 0), 35)
+        sk = R.Rig(names, [-1, 0, 1, 2], [(0, 0, 0), (0, 0, 60), (20, 0, 0), (5, 0, 0)], [I, I, I, q_w])
+        sf = R.Rig(["Root", "R_Forearm", "R_Wrist", "Weapon"], [-1, 0, 1, 0],
+                   [(0, 0, 0), (0, 0, 0.9), (0.3, 0, 0), (0, 0.5, 1.2)], [I, I, I, I])
+        c = {"frames": 1, "fps": 30.0, "bones": names,
+             "tracks": [[(tuple(sk.t[i]), tuple(sk.q[i]), (1, 1, 1))] for i in range(4)]}
+        res = R.retarget(c, sk, sf)
+        _wt, wq = sf.fk(res["t"], res["q"])
+        blade_sf = R.qrot(wq[0, sf.index["Weapon"]], np.array([0, 0, 1.0]))   # Starfield blade axis +Z
+        blade_sk = R.qrot(np.array(q_w), np.array([0, 1.0, 0]))               # Skyrim blade axis +Y
+        self.assertTrue(np.allclose(blade_sf, blade_sk, atol=1e-6))
+
 
 if __name__ == "__main__":
     unittest.main()

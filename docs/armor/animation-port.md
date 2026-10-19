@@ -260,6 +260,17 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner: body "pops" during the first swing (not in TFC), sword not where Skyrim has it
+* Blade axes (supported): Starfield melee weapons run along the Weapon bone's +Z (the vanilla sword MeleeAttack_A hit
+  frame swings +Z forward-left), Skyrim's along +Y (1hm_idle holds +Y forward-up). With the grip, our blade already
+  pointed within 8 deg of Skyrim's but was turned ~20 deg about itself; the Weapon bone now takes Skyrim's orientation
+  (skeletonmap.WEAPON_AXES: x_sf = -z_sk, y_sf = -x_sk, z_sf = y_sk), the hilt staying at the vanilla grip point.
+* The pop: supported hypothesis that it is the jump between Starfield's own ready stance / block idle and the Skyrim
+  attack's first and last poses (both played on the same weapon), maybe plus the attack's Allow Rotation turning the
+  body to the camera (which TFC would not do). The pack now also replaces the one-handed Ready_Idle (1hm_idle),
+  MeleeBlock_Idle (1hm_blockidle), Equip and Unequip (1hm_equip / 1hm_unequip; Skyrim weaponDraw / weaponSheathe
+  annotations mapped to WeaponDraw / WeaponSheathe) for player and NPC, so attacks start and end from Skyrim's stance.
+
 ### 2026-10-19: attacks in game look stiff, sword not in the fist (owner) -> limbs aligned, vanilla grip
 **Owner, in game:** attacks play with a normal camera, but the arms look rigid and the weapon does not line up with
 the hand. Measured causes: (1) the two rest poses' limbs differ (upper arms 16 deg, clavicles 37, finger joints 11-46,

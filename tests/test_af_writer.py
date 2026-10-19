@@ -39,6 +39,8 @@ class AfWriterTests(unittest.TestCase):
                                       {"time": 0.0, "text": "SoundPlay.WPNBowNockSD"}], 30.0)
         self.assertEqual(mapped, [(9, "PreHitFrame", ""), (15, "HitFrame", "")])
         self.assertEqual([r["text"] for r in rest], ["SoundPlay.WPNBowNockSD"])
+        draw, _ = AF.map_events([{"time": 0.57, "text": "weaponDraw"}, {"time": 1.0, "text": "weaponSheathe"}], 30.0)
+        self.assertEqual(draw, [(17, "WeaponDraw", ""), (30, "WeaponSheathe", "")])
         from fo4sf import agx
         d = agx.read_descriptor(AF.descriptor("MeleeAttack_A", "a.af", False, mapped, [("bDontAllowBlock", 0, 30)], 6))
         self.assertEqual((d["events"], d["variables"], d["rampout"]),
