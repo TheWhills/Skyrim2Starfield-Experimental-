@@ -268,3 +268,11 @@ For us, by creature class:
   modded behaviours too, but Bethesda modifiers without a Starfield node (BSTweener, BSLimbIK, ...) need substitutes.
 * dragons: flight needs engine support for flying actors (Skyrim's engine has a fly movement type and flight AI);
   whether Starfield has any flying creature and movement type is unverified and is the first thing to check.
+
+**2026-10-19, foot planting** (`retarget.plant_feet`, on by default in hkx_to_af.py, `--no-foot-plant` to skip): a
+two-bone IK per leg puts each Starfield ankle as far above its rest height as Skyrim's ankle is above its own (scaled
+by the leg-length ratio); ankle x / y, knee bend plane and foot world rotation are kept. On the 7 real clips the foot
+contact gap went from up to -0.052 m (sneak attack intro) to at most -0.006 m; ankles reach their targets within
+0.0004 m; leg segments now differ from Skyrim's directions by 2-5.5 deg (the re-bent knees), arms unchanged.
+Owner note: Starfield has many flying creatures (bird-like aliens), none as complex as dragons; a flier's graph and
+movement type are the candidate scaffold for dragon flight.

@@ -240,6 +240,79 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
             "world_t": wt, "height_scale": scale}
 
 
+def _from_to(a, b):
+    """(F, 4) quaternions turning vectors a onto b (F, 3)."""
+    a = a / np.linalg.norm(a, axis=-1, keepdims=True)
+    b = b / np.linalg.norm(b, axis=-1, keepdims=True)
+    c = np.cross(a, b)
+    d = np.sum(a * b, axis=-1, keepdims=True)
+    q = np.concatenate([c, 1.0 + d], axis=-1)
+    flip = (d[..., 0] < -0.999999)                                     # opposite: any perpendicular axis
+    if np.any(flip):
+        perp = np.cross(a[flip], np.array([1.0, 0.0, 0.0]))
+        small = np.linalg.norm(perp, axis=-1) < 1e-6
+        perp[small] = np.cross(a[flip][small], np.array([0.0, 1.0, 0.0]))
+        q[flip] = np.concatenate([perp, np.zeros((perp.shape[0], 1))], axis=-1)
+    return q / np.linalg.norm(q, axis=-1, keepdims=True)
+
+
+LEGS = [("NPC L Foot [Lft ]", "L_Thigh", "L_Calf", "L_Foot"), ("NPC R Foot [Rft ]", "R_Thigh", "R_Calf", "R_Foot")]
+
+
+def plant_feet(clip: dict, sk: Rig, sf: Rig, res: dict, unit: float = SKYRIM_M_PER_UNIT) -> Dict:
+    """Foot planting: a two-bone IK per leg so each Starfield ankle sits as far above (or below) its own rest height as
+    Skyrim's ankle does above its rest height, scaled like the COM (leg-length ratio); ankle x / y stay where the
+    retarget put them, the knee keeps its bend plane, the foot keeps its world rotation. Returns res with "t", "q",
+    "world_t" updated and "feet_planted": the largest ankle correction (m)."""
+    lt, lq = skyrim_locals(clip, sk)
+    wt_sk, _ = sk.fk(lt, lq)
+    rt_sk, _ = sk.rest_world()
+    rt_sf, _ = sf.rest_world()
+    out_q = res["q"].copy()
+    wt, wq = sf.fk(res["t"], out_q)
+    scale = res.get("height_scale", 1.0)
+    moved = 0.0
+    for skf, th, ca, fo in LEGS:
+        if not all(n in sf.index for n in (th, ca, fo)) or skf not in sk.index:
+            continue
+        i0, i1, i2, s = sf.index[th], sf.index[ca], sf.index[fo], sk.index[skf]
+        A, B, C = wt[:, i0], wt[:, i1], wt[:, i2]
+        T = C.copy()
+        T[:, 2] = rt_sf[i2, 2] + (wt_sk[:, s, 2] - rt_sk[s, 2]) * unit * scale
+        moved = max(moved, float(np.max(np.abs(T[:, 2] - C[:, 2]))))
+        l1 = np.linalg.norm(B - A, axis=-1)
+        l2 = np.linalg.norm(C - B, axis=-1)
+        AT = T - A
+        d = np.clip(np.linalg.norm(AT, axis=-1), np.abs(l1 - l2) + 1e-6, l1 + l2 - 1e-6)
+        u = AT / np.linalg.norm(AT, axis=-1, keepdims=True)
+        v = (B - A) - np.sum((B - A) * u, axis=-1, keepdims=True) * u          # knee direction off the A-T line
+        vn = np.linalg.norm(v, axis=-1, keepdims=True)
+        v = np.where(vn > 1e-9, v / np.where(vn > 1e-9, vn, 1.0), np.array([0.0, 1.0, 0.0]))
+        cos_a = np.clip((l1 ** 2 + d ** 2 - l2 ** 2) / (2 * l1 * d), -1, 1)
+        Bn = A + l1[:, None] * (cos_a[:, None] * u + np.sqrt(1 - cos_a ** 2)[:, None] * v)
+        Tn = A + d[:, None] * u
+        q1 = _from_to(B - A, Bn - A)
+        thigh_w = qmul(q1, wq[:, i0])
+        calf_vec = qrot(q1, C - B)
+        q2 = _from_to(calf_vec, Tn - Bn)
+        calf_w = qmul(q2, qmul(q1, wq[:, i1]))
+        foot_w = wq[:, i2]                                                    # keep the foot's world rotation
+        p0 = sf.parents[i0]
+        parent_w = wq[:, p0] if p0 >= 0 else np.tile([0.0, 0.0, 0.0, 1.0], (len(A), 1))
+        out_q[:, i0] = qmul(qinv(parent_w), thigh_w)
+        # the calf / foot may hang off helper bones in between; walk up the actual parents
+        def world_of(i, thigh_w=thigh_w, calf_w=calf_w):
+            return {i0: thigh_w, i1: calf_w}.get(i)
+        pc = sf.parents[i1]
+        out_q[:, i1] = qmul(qinv(world_of(pc) if world_of(pc) is not None else wq[:, pc]), calf_w)
+        pf = sf.parents[i2]
+        out_q[:, i2] = qmul(qinv(world_of(pf) if world_of(pf) is not None else wq[:, pf]), foot_w)
+        wt, wq = sf.fk(res["t"], out_q)
+    res = dict(res)
+    res["q"], res["world_t"], res["feet_planted"] = out_q, wt, round(moved, 4)
+    return res
+
+
 def check(clip: dict, sk: Rig, sf: Rig, res: dict, unit: float = SKYRIM_M_PER_UNIT) -> Dict:
     """Numbers that tell a good retarget from a broken one:
     segment_angle_change_deg: per mapped limb segment, how far the angle between the Skyrim and Starfield segment

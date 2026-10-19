@@ -97,6 +97,7 @@ def main(argv=None):
     ap.add_argument("--own-rig", action="store_true", help="write a rig from the skeleton NIF instead of the game's")
     ap.add_argument("--tag", help="the .afx tag (default: the clip's file name)")
     ap.add_argument("--no-verify", action="store_true")
+    ap.add_argument("--no-foot-plant", action="store_true", help="skip the foot-planting IK pass")
     ap.add_argument("--osf", metavar="PACK", help="write an OSF Animation content pack named PACK (see above)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
@@ -153,6 +154,8 @@ def main(argv=None):
                     continue
                 raise
             res = retarget.retarget(clip, sk, sf)
+            if not a.no_foot_plant:
+                res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)
             w = af_writer.write(a.calumi, clip_dir, name, sf.names, sf.parents, sf.t, sf.q, res["t"], res["q"],
                                 tag=a.tag or name, rig_path=rig_path, events=clip["annotations"])

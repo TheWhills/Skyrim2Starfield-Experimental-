@@ -89,6 +89,23 @@ class RetargetTests(unittest.TestCase):
             np.testing.assert_allclose(np.abs(lq[self.sf.index[name]]), np.abs(half), atol=1e-6)
         np.testing.assert_allclose(lq[self.sf.index["C_Chest"]], I, atol=1e-6)   # chest: no extra turn
 
+    def test_plant_feet_lifts_a_sunk_ankle_by_bending_the_knee(self):
+        c = clip([{}])
+        res = R.retarget(c, self.sk, self.sf)
+        res["t"] = res["t"].copy()
+        res["t"][0, self.sf.index["COM"], 2] -= 0.05                    # Starfield hips 5 cm lower than Skyrim's
+        res["world_t"], _ = self.sf.fk(res["t"], res["q"])
+        foot = self.sf.index["L_Foot"]
+        self.assertAlmostEqual(res["world_t"][0, foot, 2], 0.2 - 0.05, places=6)
+        out = R.plant_feet(c, self.sk, self.sf, res)
+        w = out["world_t"][0]
+        self.assertAlmostEqual(w[foot, 2], 0.2, places=6)              # back at its rest height (Skyrim's foot never moved)
+        th, ca = self.sf.index["L_Thigh"], self.sf.index["L_Calf"]
+        self.assertAlmostEqual(np.linalg.norm(w[ca] - w[th]), 0.4, places=6)   # bone lengths kept
+        self.assertAlmostEqual(np.linalg.norm(w[foot] - w[ca]), 0.4, places=6)
+        self.assertGreater(w[ca, 1], 0.0)                              # straight leg: the knee bends forward
+        self.assertAlmostEqual(out["feet_planted"], 0.05, places=4)
+
     def test_mat_to_quat_roundtrip(self):
         ax = np.array([0.267, 0.535, 0.802])
         q = np.array(qaxis(tuple(ax / np.linalg.norm(ax)), 73))
