@@ -488,3 +488,8 @@ particles; choppy_bob: 72 bones; coily_mohawk: 2; the child ponytail: 5 in one c
 (Varuun administrator cape: 138 bones on C_Chest / L_Clavicle), banners, scarves and helmets. Classes beyond the mods:
 hclCopyVerticesOperator (241), hclCompressibleLinkConstraintSetMx (52), hclVolumeConstraint (6),
 hclTaperedCapsuleShape colliders (108). So vanilla hairs are rig-reuse candidates and writer templates.
+Vanilla hair rigs (female variants, 20): tousled_bob 76 bones / depth 7, choppy_bob and short_loc 72 / 7, messy_bob 49,
+back_buzz 46, receding_wizard 44, messy_mullet 39, shaggy 36, straight_bob 28, viking_braids 28, unkempt 27,
+hollywood_curls 22, cropped_bang 19, bob 12, whitney_curls 12, child ponytail_hairmesh 5 (one chain, 12 particles: the
+smallest writer template), hairspray_bob 4, spiked 3, coily_mohawk 2, top_bun 2. The long, layered rigs use BonePlanes +
+LocalRange (pose-keeping, like SMP's angular limits) besides links and bend stiffness.
