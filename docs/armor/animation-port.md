@@ -249,6 +249,27 @@ with a HumanRace subgraph entry naming NPC_Melee / Player_Melee and our folder f
 Spells map onto CastSelf / CastTarget the same way. New graphs (the translator) are only for what Starfield lacks:
 bow draw / hold / release, horses, two-handed and dual wield sets if their timing differs.
 
+### 2026-10-19: vanilla .af clips compared with ours (owner extracted chair Idle, sword attacks, rigs)
+* **verified: .af keys are relative to the rig's rest pose.** Decoded with CALUMI and composed as local = rest * key
+  (rotation), rest + key (translation), the vanilla chair Idle is a seated human (hips 0.67 m, ankles 0.12 m, head 1.24
+  m, knees forward) and the sword MeleeAttack_A a standing one (hips 0.96 m); read as absolute locals the hips land
+  below the floor, and key * rest bends the knees backwards. CALUMI stores and returns keys as given, so our writer
+  converted nothing: every clip written before this (incl. the first OSF test pack) carried absolute locals and would
+  play rest-on-rest in game. af_writer.write now stores rest-relative keys (rest_relative); read_back composes them back
+  (absolute=True). Our Skyrim chair idle, decoded the game's way, sits at hips 0.662 m vs vanilla 0.671 m, ankles
+  0.113 vs 0.126 m, head 1.231 vs 1.243 m: the retarget lands on Starfield's seat height.
+* **verified:** vanilla clips declare only the rig's 82 Default-type bones in their header (0x2A: u16 version 5, bone
+  count, frame count, index-atlas count); the 15 Twist bones (listed last in the rig) are procedural. CALUMI sizes the
+  table from the whole rig it saves against (97), so hkx_to_af now saves against a copy holding the 82 animated bones
+  (af_writer.rig_prefix: names, parents, rest, rig-package keys, mannequin flag and translation precision copied) and
+  writes no twist tracks. Read-back against the full game rig: 6e-4 rotation, 0.25 mm translation.
+* The header also carries a translation: 1.85 m forward on the player's MeleeAttack_A, zero on the chair Idle: the
+  clip's root motion (supported hypothesis; root motion is still an open item for us).
+* Male and female human rigs list the same 97 bones; rest positions differ by up to 2 cm: female clips are converted
+  against the female rig and BodySlide's female skeleton.
+* Furniture: `--align-com` moves a replacement clip horizontally so its mean COM sits on the vanilla clip's (the
+  Skyrim chair idle sat 9 / 13 cm further forward than the male / female vanilla idles).
+
 ### 2026-10-19: what SW SFBM Vanilla Blocking Fix (Nexus 16022, owner upload) shows (verified from its files)
 * **`.agx` graphs are plain XML text** (Bethesda graph-editor export): nodes typed NT_ANIMATION_NODE (TagName, State
   Variable, Speed Multiplier = WeaponSpeedMult, crop frames, mirror), NT_SWITCH_NODE (variable, Tag Alteration

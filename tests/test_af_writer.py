@@ -49,6 +49,18 @@ class AfWriterTests(unittest.TestCase):
             AF.write("nolib", os.path.join(ROOT, "tmp_af"), "x", ["Root"], [-1], [[0, 0, 0]], [[0, 0, 0, 1]],
                      np.zeros((1, 1, 3)), np.tile([0, 0, 0, 1.0], (1, 1, 1)))
 
+    def test_keys_are_relative_to_rest(self):
+        rest_q = np.array([qa((0, 0, 1), 90), [0, 0, 0, 1.0]])
+        rest_t = np.array([[0, 0, 1.0], [0.5, 0, 0]])
+        key_q = np.array([[qa((1, 0, 0), 30), qa((0, 1, 0), -20)]])
+        key_t = np.array([[[0, 0.1, -0.4], [0, 0, 0]]])
+        loc_t, loc_q = AF.from_rest_relative(rest_t, rest_q, key_t, key_q)
+        self.assertTrue(np.allclose(loc_t[0, 0], [0, 0.1, 0.6]))
+        back_q, back_t = AF.rest_relative(rest_t, rest_q, loc_t, loc_q)
+        self.assertTrue(np.allclose(back_q, key_q) and np.allclose(back_t, key_t))
+        rest_only, _ = AF.rest_relative(rest_t, rest_q, rest_t[None], rest_q[None])   # rest pose -> identity keys
+        self.assertTrue(np.allclose(np.abs(rest_only[..., 3]), 1))
+
     def test_retime_vanilla_descriptor(self):
         vanilla = (b"<root>\r\n\t<is_state>0</is_state>\r\n\t<tag>MeleeAttack01</tag>\r\n\t<filename>MeleeAttack01.af"
                    b"</filename>\r\n\t<rampout>9</rampout>\r\n\t<events>\r\n"

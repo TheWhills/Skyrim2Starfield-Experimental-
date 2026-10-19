@@ -159,6 +159,29 @@ def _keys_needed(values: np.ndarray, tol: float) -> List[int]:
     return keep
 
 
+def _qmul(a, b):
+    ax, ay, az, aw = np.moveaxis(a, -1, 0)
+    bx, by, bz, bw = np.moveaxis(b, -1, 0)
+    return np.stack([aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+                     aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz], axis=-1)
+
+
+def rest_relative(rest_t, rest_q, clip_t, clip_q):
+    """Local (t, q) per frame -> the values an .af stores: rotation key = rest_q^-1 * q, translation key = t - rest_t.
+    The engine plays local = rest * key, rest + key (verified 2026-10-19: decoding the vanilla chair Idle and sword
+    MeleeAttack_A that way gives a seated / standing human, hips 0.67 / 0.96 m, ankles 0.12 m above the floor, knees
+    forward; read as absolute locals the same keys put the hips below the floor; key * rest bends the knees backwards).
+    Returns (q_keys, t_keys)."""
+    rest_t, rest_q = np.asarray(rest_t, float), np.asarray(rest_q, float)
+    inv = rest_q * np.array([-1.0, -1.0, -1.0, 1.0])
+    return _qmul(np.broadcast_to(inv, np.shape(clip_q)), np.asarray(clip_q, float)), np.asarray(clip_t, float) - rest_t
+
+
+def from_rest_relative(rest_t, rest_q, key_t, key_q):
+    """Inverse of rest_relative: stored keys -> local (t, q)."""
+    return np.asarray(rest_t, float) + np.asarray(key_t, float), _qmul(np.asarray(rest_q, float), np.asarray(key_q, float))
+
+
 def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: List[int], rest_t, rest_q,
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
           tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
@@ -190,6 +213,8 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
     for i, p in enumerate(parents):
         if p >= i:
             raise ValueError("parents must precede children")
+    # .af keys are relative to the rig's rest pose (verified 2026-10-19 on vanilla clips: see rest_relative)
+    clip_q, clip_t = rest_relative(rest_t, rest_q, clip_t, clip_q)
     L = Calumi(lib_path)
     p, b = L.p, L.b
     rig = anim = None
@@ -271,9 +296,10 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
 
 
 def load_rig(lib_path: str, rig_path: str) -> Dict:
-    """A Starfield .rig as {"names", "parents", "t" (B, 3), "q" (B, 4) local rest, "animated"} via CALUMI
-    (LoadSFBGSSkeletonRigFromFileC). The vanilla human rig (2026-10-19): 97 bones, 82 animated, Root first, order and
-    parents unlike the skeleton NIF's."""
+    """A Starfield .rig as {"names", "parents", "t" (B, 3), "q" (B, 4) local rest, "types", "animated"} via CALUMI
+    (LoadSFBGSSkeletonRigFromFileC). The vanilla human rig (2026-10-19): 97 bones, Root first, order and parents
+    unlike the skeleton NIF's; 82 of type Default (the animated ones, listed first) and 15 Twist bones last, which the
+    engine drives itself: vanilla clips (chair Idle, sword MeleeAttack_A) declare 82 bones in their header."""
     L = Calumi(lib_path)
     p = L.p
     rig = None
@@ -288,11 +314,13 @@ def load_rig(lib_path: str, rig_path: str) -> Dict:
         pos = L.fn("GetSkeletonBonePositionC", [p, c.c_bool], p)
         qget = [L.fn(f"GetQuaternion{a}", [p], c.c_float) for a in "XYZW"]
         vget = [L.fn(f"GetVector3{a}", [p], c.c_float) for a in "XYZ"]     # bone positions are float Vector3
-        out = {"names": [], "parents": [], "t": [], "q": [], "animated": int(animated)}
+        btype = L.fn("GetBoneTypeAsStringC", [p], c.c_char_p)
+        out = {"names": [], "parents": [], "t": [], "q": [], "types": [], "animated": int(animated)}
         for i in range(n):
             bone = L.require(get(rig, i, L.error), f"bone {i}")
             out["names"].append((name(bone) or b"").decode("utf-8", "replace"))
             out["parents"].append(int(parent(bone)))
+            out["types"].append((btype(bone) or b"").decode())
             qv, tv = rot(bone, False), pos(bone, False)
             out["q"].append([float(g(qv)) for g in qget])
             out["t"].append([float(g(tv)) for g in vget])
@@ -304,9 +332,75 @@ def load_rig(lib_path: str, rig_path: str) -> Dict:
         L.close()
 
 
-def read_back(lib_path: str, af_path: str, rig_path: str) -> Dict:
+def rig_prefix(lib_path: str, rig_path: str, count: int, out_path: str) -> str:
+    """Write a copy of a game rig holding only its first `count` bones (same names, parents, rest pose, rig-package
+    bone keys, mannequin flag and translation precision) and return its path. CALUMI sizes a clip's bone table from
+    the rig it is saved against (all 97 bones of the vanilla human rig) while vanilla clips declare only the 82 animated
+    ones; saving against this prefix gives the vanilla header (the indexes of the kept bones are unchanged)."""
+    L = Calumi(lib_path)
+    p, b = L.p, L.b
+    src = dst = None
+    try:
+        src = L.require(L.fn("LoadSFBGSSkeletonRigFromFileC", [c.c_wchar_p, p], p)(str(rig_path), L.error), "load rig")
+        n = L.fn("GetSkeletonRigBoneCountC", [p], c.c_size_t)(src)
+        if not 0 < count <= n:
+            raise ValueError(f"rig has {n} bones, asked for {count}")
+        get = L.fn("GetSkeletonBoneC", [p, c.c_int, p], p)
+        name = L.fn("GetSkeletonBoneNameC", [p], c.c_char_p)
+        parent = L.fn("GetSkeletonBoneParentIndexC", [p], c.c_int)
+        rot = L.fn("GetSkeletonBoneRotationC", [p, c.c_bool], p)
+        pos = L.fn("GetSkeletonBonePositionC", [p, c.c_bool], p)
+        qget = [L.fn(f"GetQuaternion{a}", [p], c.c_float) for a in "XYZW"]
+        vget = [L.fn(f"GetVector3{a}", [p], c.c_float) for a in "XYZ"]
+        key_of = L.fn("SFBGSRigPackage_GetBoneKeyC", [p, c.c_char_p], c.c_uint8)
+        mapped = L.fn("SFBGSRigPackage_BoneIsMappedC", [p, c.c_char_p], b)
+        rig_name = L.fn("GetSkeletonRigNameC", [p], c.c_char_p)(src) or b"rig"
+        dst = L.require(L.fn("CreateSkeletonRigC", [c.c_char_p], p)(rig_name), "create rig")
+        L.require(L.fn("SFBGSRigPackage_AddPackageToSkeletonRigC", [p, p, b], b)(dst, L.error, True), "rig package")
+        add = L.fn("AddBoneToSkeletonRigC", [p] + [c.c_float] * 7 + [c.c_char_p, c.c_int, b, p], b)
+        add_key = L.fn("SFBGSRigPackage_AddBoneNameToMapC", [p, c.c_uint8, c.c_char_p, p, b], b)
+        for i in range(count):
+            bone = L.require(get(src, i, L.error), f"bone {i}")
+            nm = name(bone)
+            q, t = rot(bone, False), pos(bone, False)
+            L.require(add(dst, *(g(q) for g in qget), *(g(t) for g in vget), nm, int(parent(bone)), True, L.error),
+                      f"bone {nm}")
+            if mapped(src, nm):
+                L.require(add_key(dst, key_of(src, nm), nm, L.error, True), f"key {nm}")
+        L.fn("SFBGSRigPackage_SetMannequinC", [p, b], b)(dst, L.fn("SFBGSRigPackage_IsMannequinC", [p], b)(src))
+        hi = L.fn("SFBGSRigPackage_GetHighPrecisionValueC", [p], c.c_float)(src)
+        lo = L.fn("SFBGSRigPackage_GetLowPrecisionValueC", [p], c.c_float)(src)
+        L.fn("SFBGSRigPackage_SetPrecisionToCustomC", [p, c.c_float, c.c_float], None)(dst, lo, hi)
+        L.require(L.fn("SaveSkeletonRigToSFBGSFormatDirectC", [p, c.c_wchar_p, p], b)(dst, str(out_path), L.error),
+                  "save rig")
+        return str(out_path)
+    finally:
+        for r in (src, dst):
+            if r:
+                L.fn("DeleteSkeletonRigC", [p], b)(r)
+        L.close()
+
+
+def read_back(lib_path: str, af_path: str, rig_path: str, absolute: bool = True) -> Dict:
     """{"bones": [names], "frames", "rotations": {bone: [(frame, (x, y, z, w))]}, "translations": {...}} as CALUMI
-    reads the written files back (LoadAnimationSceneFromSFBGSFormatC on the .rig + .af)."""
+    reads the written files back (LoadAnimationSceneFromSFBGSFormatC on the .rig + .af). absolute: local transforms
+    (the stored rest-relative keys composed with the rig's rest pose); else the stored keys as they are."""
+    out = _read_keys(lib_path, af_path, rig_path)
+    if absolute:
+        rig = load_rig(lib_path, rig_path)
+        idx = {n: i for i, n in enumerate(rig["names"])}
+        for n in out["bones"]:
+            i = idx.get(n)
+            if i is None:
+                continue
+            out["rotations"][n] = [(f, tuple(float(x) for x in _qmul(rig["q"][i], np.array(v))))
+                                   for f, v in out["rotations"][n]]
+            out["translations"][n] = [(f, tuple(float(x) for x in rig["t"][i] + np.array(v)))
+                                      for f, v in out["translations"][n]]
+    return out
+
+
+def _read_keys(lib_path: str, af_path: str, rig_path: str) -> Dict:
     L = Calumi(lib_path)
     p, b = L.p, L.b
     try:

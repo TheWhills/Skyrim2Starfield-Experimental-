@@ -84,6 +84,21 @@ def vanilla_file(path, starfield_data):
     return data, rel
 
 
+def com_shift(lib, rig_path, game_rig, vafx, starfield_data, lt, lq, out):
+    """Horizontal (x, y) offset that moves our clip's mean COM onto the vanilla clip's (COM hangs off Root at the
+    origin, so its world position is its local translation)."""
+    vaf = re.sub(r"\.afx$", ".af", vafx, flags=re.I)
+    data, rel = vanilla_file(vaf, starfield_data)
+    tmp = os.path.join(out, "_vanilla_" + os.path.basename(rel))
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    rb = af_writer.read_back(lib, tmp, rig_path)                 # absolute locals
+    keys = rb["translations"].get("COM") or [(0, tuple(game_rig.t[game_rig.index["COM"]]))]
+    vanilla = np.mean([v for _f, v in keys], axis=0)
+    ours = np.mean(lt[:, game_rig.index["COM"]], axis=0)
+    return (vanilla - ours)[:2]
+
+
 def compare(rb, res, sf_index):
     """Largest read-back error over every frame (sign-aligned nlerp between keys)."""
     def at(keys, f, quat):
@@ -125,6 +140,9 @@ def main(argv=None):
     ap.add_argument("--osf", metavar="PACK", help="write an OSF Animation content pack named PACK (see above)")
     ap.add_argument("--replace", action="append", default=[], metavar="CLIP::VANILLA_AFX",
                     help="replace a vanilla clip in place (see above); repeatable")
+    ap.add_argument("--align-com", action="store_true",
+                    help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
+                         "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -165,6 +183,14 @@ def main(argv=None):
         missing = [n for n in game_rig.names if n.lower() not in {x.lower() for x in sf.names}]
         print(f"game rig: {len(game_rig.names)} bones ({g['animated']} animated); kept at rest (not in the skeleton "
               f"NIF): {missing}")
+        # vanilla clips animate only the rig's Default-type bones (the twist bones, listed last, are procedural)
+        animated = [i for i, t in enumerate(g["types"]) if t == "Default"]
+        if animated != list(range(len(animated))):
+            sys.exit("the game rig's animated bones are not listed first")
+        n_anim = len(animated)
+        save_rig = rig_path
+        if n_anim < len(g["names"]):             # save against the animated prefix: the vanilla header bone count
+            save_rig = af_writer.rig_prefix(a.calumi, rig_path, n_anim, os.path.join(out, "_animated_bones.rig"))
     clip_dir = out
     if a.osf:
         pack_id = re.sub(r"[^A-Za-z0-9_]+", "", a.osf) or "SkyrimPort"
@@ -208,16 +234,24 @@ def main(argv=None):
             if game_rig is not None:
                 out_t, out_q = retarget.rehome(sf, res["t"], res["q"], game_rig.names, game_rig.parents,
                                                game_rig.t, game_rig.q)
-                out_rig = game_rig
+                out_t, out_q = out_t[:, :n_anim], out_q[:, :n_anim]
+                out_rig = retarget.Rig(game_rig.names[:n_anim], game_rig.parents[:n_anim], game_rig.t[:n_anim],
+                                       game_rig.q[:n_anim])
+                if vafx and a.align_com:
+                    shift = com_shift(a.calumi, rig_path, game_rig, vafx, a.starfield_data, out_t, out_q, out)
+                    out_t = out_t.copy()
+                    out_t[:, game_rig.index["COM"], :2] += shift
+                    row["com_shift_m"] = [round(float(x), 3) for x in shift]
             w = af_writer.write(a.calumi, target_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
-                                out_t, out_q, tag=a.tag or name, rig_path=rig_path, events=clip["annotations"],
+                                out_t, out_q, tag=a.tag or name, rig_path=save_rig if game_rig is not None
+                                else rig_path, events=clip["annotations"],
                                 like_afx=like, file_name=file_name)
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
                        foot_lowest_m=chk["foot_lowest_m"], events=len(clip["annotations"]))
             if not a.no_verify:
-                rb = af_writer.read_back(a.calumi, w["af"], w["rig"])
+                rb = af_writer.read_back(a.calumi, w["af"], rig_path or w["rig"])     # the game's full rig
                 missing = [n for n in rb["bones"] if n not in out_rig.index]
                 row["readback_bones"] = len(rb["bones"])
                 if missing:
