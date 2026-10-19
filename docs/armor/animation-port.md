@@ -276,3 +276,29 @@ contact gap went from up to -0.052 m (sneak attack intro) to at most -0.006 m; a
 0.0004 m; leg segments now differ from Skyrim's directions by 2-5.5 deg (the re-bent knees), arms unchanged.
 Owner note: Starfield has many flying creatures (bird-like aliens), none as complex as dragons; a flier's graph and
 movement type are the candidate scaffold for dragon flight.
+
+**2026-10-19, Skyrim behaviour graphs read, first translation to .agx** (offline, Pandora's vanilla templates):
+* `src/fo4sf/skyrimbehavior.py` reads hkbBehaviorGraph files: state machines, states, transitions (event, target,
+  condition expression, effect), clips (animation path, speed, crop), blends, variable bindings (member -> variable,
+  e.g. BSSpeedSamplerModifier goalSpeed = Speed), events / variables. Field offsets worked out from the data (pointer
+  fixups say which field points at what); self-checks: on all 114 vanilla behaviour files, 3,212 state machines /
+  8,836 states / 7,470 transitions / 8,865 clips, **0 failures** (every transition targets a state of its own machine,
+  every event id in range, every clip an .hkx). Pandora's copies carry 8 extra bytes per object (detected per file).
+  `scripts/armor/behavior_dump.py` writes a readable tree + JSON per graph.
+* The .agx state-machine form (from the SFBM graphs): a state machine is a <graph> whose nodes are its states
+  (NT_ANIMATION_NODE with TagName, TagName None = empty state, NT_STATE_MACHINE_EMBEDDED with a nested <graph>); a
+  transition is a <link> on the target's input naming the source node and one of its output slots, with Event,
+  Condition, Blend Time, Priority, Transition Type; the graph's sheet sets the start selection (Default / Variable).
+  Node flags are state behaviours (Animation Driven, Blocking, Block POV Switch, Is Attack Not Ready, ...).
+  How the default state is marked is not visible in the shipped files (unverified; the writer puts it first).
+* `src/fo4sf/agx_write.py` writes that form; `src/fo4sf/behavior_to_agx.py` translates a Skyrim state machine:
+  states / nested machines / clips / transitions / conditions (Skyrim `<`, `>`, `&&`, `||` -> `!lessthan!`,
+  `!greaterthan!`, `!ampersand!`, `|`; `!lessthan!` by analogy) / blend times (hkbBlendingTransitionEffect duration
+  @80; 0.2 s default); wildcard transitions become links from every other state. Prototype runs: horse DefaultBehavior
+  (20 states, 24 transitions, 8 machines, all carried; 3 blend states left empty), horse root (mount / dismount /
+  swim / ragdoll states, 34 transitions), dragon BHR_Flight and BHR_Hover (all states and transitions; the cruise
+  flap / glide / feather and hover turns sit inside blends). Not translated yet: blends and their variables,
+  modifiers (look-at, foot IK, ragdoll, timers, expressions), clip triggers, nested-state transitions.
+* Dragon graph shape (behavior_dump): master -> ground / take-off / flight (cruise: feather, flap, glide) / hover /
+  nine landing kinds (default, vertical, injured, hasty, crash, perches), shouts layered on a neck machine; engine
+  events TakeOff, HoverStart, FlyStop*, FlightCruising ...; variables Pitch, Speed, TargetSpeed, TurnDelta, ...
