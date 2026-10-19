@@ -92,3 +92,22 @@ binary, how states / transitions / selectors / variables are stored) and how the
 * sfport (Nexus 18458, FO4 -> Starfield outfit porter, Python): same armor problem from FO4; method (driver bones,
   torso landmark fit, per-limb rotate + stretch, body fit, skin pieces, morphs) is the reference for the armor step.
   **No license file: learn from it, do not copy its code here.**
+
+## Progress
+**2026-10-19 (owner away; real files from PyNifly's GPL test set, used outside the repo, never committed):**
+* `skyrimhkx.describe` read 17 real files (SE 64-bit and LE 32-bit: human clips, troll attack, human / troll / skeever
+  skeletons) with no implausible values: the member offsets in the module, marked unverified, are **verified**
+  (`Layout`, now 32- and 64-bit). Two XML-format `.hkx` files are not read (binary only).
+* `hkxspline.decode` (new, written here) decodes every spline-compressed clip: translations agree with PyNifly's
+  decoder within 1e-4; rotations within 0.002 (0.007 at one block boundary). Against the uncompressed reference pose
+  in skeleton.hkx ours is closer (median 0.00045 vs 0.0013; a quarter of resting bones exact): PyNifly's threecomp40
+  offset is about 2 quantization steps off (worth reporting upstream). All 1,044 track-blocks seen use threecomp40;
+  threecomp48 / polar32 / threecomp24 / straight16 untested (48 implemented, the others raise).
+* Block boundaries follow Havok's lookup (block = time / block duration): frame 255 comes from block 1.
+* `skeletonmap` (new): 66 one-to-one bones, Skyrim Spine1 split over C_Spine1 + C_Spine2, 25 derived Starfield
+  bones, WEAPON / WeaponLeft / hand IK solved in world space, 19 rest-only nodes, 30 Skyrim bones unmapped with reasons
+  (skirt chains, sheath / magic nodes, root-motion helpers). bone_map_report.py on BodySlide's reference skeletons:
+  no missing names either side; rest joints median 0.074 m apart, max 0.20 m (clavicle: defined differently, so the
+  retargeter carries rotation deltas against each skeleton's own rest pose, never positions).
+* Next: the retargeter (neutral clip on Skyrim rest -> Starfield local rotations), then writing `.af` (CALUMI; a Linux
+  build of it is half done in scratch, which would let the whole hkx -> af chain be tested here).

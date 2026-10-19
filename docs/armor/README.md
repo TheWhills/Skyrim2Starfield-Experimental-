@@ -7,7 +7,8 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 | Armor inventory (ARMO / ARMA: slots, armor type, worn / 1st-person / world models, races, weight slider) | `src/fo4sf/skyrimarmor.py` | layouts from xEdit wbDefinitionsTES5 (weight slider "Enabled" = DNAM bit 0x02); synthetic tests |
 | Skinned (worn) Skyrim SE mesh reader: bones, bind transforms, per-vertex weights, body-part partitions | `src/fo4sf/skyrimskin.py` | layouts from niftools nif.xml; partition-palette bone indices **supported hypothesis**; synthetic tests |
 | First-run report: armor step (inventory + parse of up to 400 worn meshes, bone names used, body parts, >80-bone shapes) | `scripts/skyrim_first_run.py` | the real-data check of both readers |
-| Skyrim .hkx describe (skeletons, animations, bindings, annotation events; no track decoding) | `src/fo4sf/skyrimhkx.py` | container **supported** (hkxpack notes); 64-bit member offsets **unverified** |
+| Skyrim .hkx describe + track decoding (skeletons, animations, bindings, annotation events; spline tracks -> per-frame transforms), SE 64-bit and LE 32-bit | `src/fo4sf/skyrimhkx.py`, `src/fo4sf/hkxspline.py` | **verified** 2026-10-19 on 17 real files (PyNifly's test set: SE + LE humans, troll, skeever); threecomp40 rotations; threecomp48 unverified |
+| Skyrim -> Starfield bone table (map / split / derived / world-solved / rest / unmapped, with reasons) | `src/fo4sf/skeletonmap.py`, `scripts/armor/bone_map_report.py` | covers both real skeletons completely; rest joints median 7.4 cm apart |
 | .hkx survey over the owner's BSAs | `scripts/armor/hkx_survey.py` | reports implausible values per file = wrong offsets |
 | Skeleton / body / animation sample fetch (one zip to upload) | `scripts/armor/fetch_skeletons.py` | synthetic + smoke test on a real Starfield-format archive |
 | .af round-trip survey through CALUMI | `scripts/armor/af_roundtrip_survey.py` | fake-backend tests; see af-format-status.md |

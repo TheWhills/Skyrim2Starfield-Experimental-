@@ -1,4 +1,4 @@
-"""Minimal reader for Havok binary packfiles, 64-bit little-endian: 2014 ("hk_2014.1.0-r1", the `bhkPhysicsSystem`
+"""Minimal reader for Havok binary packfiles, little-endian, 64-bit (and 32-bit: Skyrim LE .hkx, ptr_size 4): 2014 ("hk_2014.1.0-r1", the `bhkPhysicsSystem`
 payload in Fallout 4 NIFs; file version 11, 64-byte section headers) and 2010 ("hk_2010.2.0-r1", Skyrim SE .hkx
 animations and skeletons; file version 8, 48-byte section headers). Enough to locate objects by class and follow their array / pointer fields; no class
 reflection is used (the layouts we need are decoded by hand in fo4collision.py).
@@ -36,8 +36,9 @@ class Packfile:
             raise PackfileError("not a Havok packfile")
         self.data = data
         version, = struct.unpack_from("<i", data, 12)
-        if data[16] != 8:
-            raise PackfileError("only 64-bit packfiles are supported")
+        self.ptr_size = data[16]
+        if self.ptr_size not in (4, 8):
+            raise PackfileError(f"pointer size {self.ptr_size}: not a 32- or 64-bit packfile")
         nsec, = struct.unpack_from("<i", data, 20)
         self.version = data[40:56].split(b"\0")[0].decode("latin-1")
         hdr = 64                                             # section headers start after the 64-byte file header
@@ -91,6 +92,6 @@ class Packfile:
         return None
 
     def array(self, off: int) -> Tuple[Optional[int], int]:
-        """(data offset, element count) of the hkArray stored at `off` (pointer 8, size 4, capacity|flags 4)."""
-        size, = self.unpack("<i", off + 8)
+        """(data offset, element count) of the hkArray stored at `off` (pointer, size i32, capacity|flags i32)."""
+        size, = self.unpack("<i", off + self.ptr_size)
         return self.pointer(off), size

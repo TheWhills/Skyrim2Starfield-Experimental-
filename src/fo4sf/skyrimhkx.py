@@ -33,7 +33,7 @@ are read; describe() reports implausible values in "checks" so a wrong offset sh
 import struct
 from typing import Optional
 
-from . import hkpackfile
+from . import hkpackfile, hkxspline
 
 ANIMATION_TYPES = {0: "unknown", 1: "interleaved", 2: "delta_compressed", 3: "wavelet_compressed", 4: "mirrored",
                    5: "spline_compressed"}
@@ -43,6 +43,28 @@ ANIMATION_CLASSES = ("hkaSplineCompressedAnimation", "hkaInterleavedUncompressed
 
 class HkxError(ValueError):
     pass
+
+
+class Layout:
+    """Member offsets for 64-bit (Skyrim SE) or 32-bit (Skyrim LE) packfiles. Verified 2026-10-19 on real SE and LE
+    files (PyNifly's test set): describe() reads plausible skeletons, durations, frame times and annotations.
+    R = hkReferencedObject size, P = pointer, A = hkArray (pointer + size + capacity)."""
+
+    def __init__(self, ptr_size: int):
+        P = self.P = ptr_size
+        R = self.R = 16 if P == 8 else 8
+        A = self.A = P + 8
+        self.container = [R + k * A for k in range(5)]                 # skeletons, animations, bindings, ...
+        self.sk_name, self.sk_parents, self.sk_bones, self.sk_pose = R, R + P, R + P + A, R + P + 2 * A
+        self.bone_size = 2 * P                                           # name pointer + bool, padded
+        self.an_type, self.an_motion, self.an_annot = R, R + 16, R + 16 + P
+        self.an_base = R + 16 + P + A                                    # hkaAnimation size (56 / 40)
+        self.track_size, self.annot_size = P + A, 2 * P if P == 8 else 8
+        b = self.an_base
+        self.sp_counts = b                                               # 4 x i32 + 3 x f32
+        first = (b + 28 + P - 1) // P * P
+        self.sp_block_offsets, self.sp_data = first, first + 4 * A
+        self.bi_skel, self.bi_anim, self.bi_tracks = R, R + P, R + 2 * P
 
 
 def _str(pf, at) -> Optional[str]:
@@ -56,24 +78,18 @@ def _str(pf, at) -> Optional[str]:
     return pf.data[a:end].decode("latin-1") if end >= 0 else None
 
 
-def _ptr_array(pf, at):
-    off, n = pf.array(at)
-    if off is None or n <= 0:
-        return []
-    return [pf.pointer(off + 8 * k) for k in range(n)]
-
-
 def _class_of(pf):
     return {o: c for o, c in pf.objects()}
 
 
-def skeleton(pf, o) -> dict:
-    name = _str(pf, o + 16)
-    poff, np_ = pf.array(o + 24)
+def skeleton(pf, o, L: "Layout" = None) -> dict:
+    L = L or Layout(pf.ptr_size)
+    name = _str(pf, o + L.sk_name)
+    poff, np_ = pf.array(o + L.sk_parents)
     parents = list(pf.unpack(f"<{np_}h", poff)) if poff is not None and np_ > 0 else []
-    boff, nb = pf.array(o + 40)
-    bones = [_str(pf, boff + 16 * k) for k in range(nb)] if boff is not None else []
-    roff, nr = pf.array(o + 56)
+    boff, nb = pf.array(o + L.sk_bones)
+    bones = [_str(pf, boff + L.bone_size * k) for k in range(nb)] if boff is not None else []
+    roff, nr = pf.array(o + L.sk_pose)
     pose = []
     if roff is not None:
         for k in range(nr):
@@ -82,47 +98,89 @@ def skeleton(pf, o) -> dict:
     return {"name": name, "bones": bones, "parents": parents, "reference_pose": pose}
 
 
-def animation(pf, o, cls) -> dict:
-    typ, duration, ntr, nfl = pf.unpack("<ifii", o + 16)
+def animation(pf, o, cls, L: "Layout" = None) -> dict:
+    L = L or Layout(pf.ptr_size)
+    typ, duration, ntr, nfl = pf.unpack("<ifii", o + L.an_type)
     out = {"class": cls, "type": ANIMATION_TYPES.get(typ, typ), "duration": duration, "transform_tracks": ntr,
-           "float_tracks": nfl, "has_extracted_motion": pf.pointer(o + 32) is not None, "annotations": []}
-    aoff, na = pf.array(o + 40)
+           "float_tracks": nfl, "has_extracted_motion": pf.pointer(o + L.an_motion) is not None, "annotations": []}
+    aoff, na = pf.array(o + L.an_annot)
     for k in range(max(na, 0) if aoff is not None else 0):
-        t = aoff + 24 * k
+        t = aoff + L.track_size * k
         track = _str(pf, t)
-        eoff, ne = pf.array(t + 8)
+        eoff, ne = pf.array(t + L.P)
         for j in range(max(ne, 0) if eoff is not None else 0):
-            time, = pf.unpack("<f", eoff + 16 * j)
-            text = _str(pf, eoff + 16 * j + 8)
+            time, = pf.unpack("<f", eoff + L.annot_size * j)
+            text = _str(pf, eoff + L.annot_size * j + (L.annot_size - L.P))
             if text:
                 out["annotations"].append({"track": track, "time": round(time, 4), "text": text})
     if cls == "hkaSplineCompressedAnimation":
-        nfr, nbl, maxf, mq, bdur, binv, fdur = pf.unpack("<iiiifff", o + 56)
-        _d, ndata = pf.array(o + 152)
+        nfr, nbl, maxf, mq, bdur, binv, fdur = pf.unpack("<iiiifff", o + L.sp_counts)
+        _d, ndata = pf.array(o + L.sp_data)
         out.update(frames=nfr, blocks=nbl, max_frames_per_block=maxf, mask_and_quantization_size=mq,
                    block_duration=bdur, frame_duration=fdur, data_bytes=ndata)
     return out
 
 
-def binding(pf, o) -> dict:
-    toff, nt = pf.array(o + 32)
+def binding(pf, o, L: "Layout" = None) -> dict:
+    L = L or Layout(pf.ptr_size)
+    toff, nt = pf.array(o + L.bi_tracks)
     tracks = list(pf.unpack(f"<{nt}h", toff)) if toff is not None and nt > 0 else []
-    return {"skeleton": _str(pf, o + 16), "animation_object": pf.pointer(o + 24), "track_to_bone": tracks}
+    return {"skeleton": _str(pf, o + L.bi_skel), "animation_object": pf.pointer(o + L.bi_anim), "track_to_bone": tracks}
+
+
+def _open(data: bytes):
+    if data[:8] != hkpackfile.MAGIC:
+        raise HkxError("not a Havok binary packfile (XML .hkx files need converting to binary first)")
+    version, = struct.unpack_from("<i", data, 12)
+    if version != 8:
+        raise HkxError(f"packfile version {version}; Skyrim uses 8 (hk_2010.2.0-r1)")
+    try:
+        return hkpackfile.Packfile(data)
+    except (hkpackfile.PackfileError, struct.error, IndexError, ValueError) as e:
+        raise HkxError(f"{type(e).__name__}: {e}") from e
+
+
+def decode_clip(data: bytes, skeleton_bones=None) -> dict:
+    """The first spline-compressed animation in a .hkx as a neutral clip:
+    {"fps", "duration", "frames": n, "bones": [name per track] (from the binding's track -> bone map and
+    skeleton_bones, else "track<i>"), "tracks": [[(t, q (x, y, z, w), s) per frame] per track], "annotations",
+    "rotation_encodings"}. Translations are in Havok units as stored (Skyrim: game units / 70 per metre = 1/0.0142875)."""
+    pf = _open(data)
+    L = Layout(pf.ptr_size)
+    cls = _class_of(pf)
+    anims = [o for o, c in sorted(cls.items()) if c == "hkaSplineCompressedAnimation"]
+    if not anims:
+        raise HkxError("no hkaSplineCompressedAnimation (" + ", ".join(sorted(set(cls.values()))) + ")")
+    o = anims[0]
+    info = animation(pf, o, "hkaSplineCompressedAnimation", L)
+    boff, nb = pf.array(o + L.sp_block_offsets)
+    blocks = list(pf.unpack(f"<{nb}I", boff)) if boff is not None and nb > 0 else []
+    doff, nd = pf.array(o + L.sp_data)
+    raw = pf.raw(doff, nd)
+    stats = {}
+    frames = hkxspline.decode(raw, blocks, info["transform_tracks"], info["float_tracks"], info["frames"],
+                              info["max_frames_per_block"], stats)
+    track_to_bone = []
+    for bo, c in cls.items():
+        if c == "hkaAnimationBinding":
+            b = binding(pf, bo, L)
+            if b["animation_object"] == o:
+                track_to_bone = b["track_to_bone"]
+    n = info["transform_tracks"]
+    idx = track_to_bone if len(track_to_bone) == n else list(range(n))      # empty map = track i drives bone i
+    names = [(skeleton_bones[i] if skeleton_bones and 0 <= i < len(skeleton_bones) else f"track{i}") for i in idx]
+    return {"fps": round(1.0 / info["frame_duration"], 3) if info["frame_duration"] else None,
+            "duration": info["duration"], "frames": info["frames"], "bones": names, "bone_indices": idx,
+            "tracks": [[fr[t] for fr in frames] for t in range(n)], "annotations": info["annotations"],
+            "rotation_encodings": stats.get("rotation_encodings", {}), "pointer_size": pf.ptr_size}
 
 
 def describe(data: bytes) -> dict:
     """Everything describable in one .hkx: {"havok": version, "classes": {...}, "skeletons": [...],
     "animations": [...], "bindings": [...], "checks": [...]}; checks lists anything implausible (a hint that an
     offset above is wrong for real files)."""
-    if data[:8] != hkpackfile.MAGIC:
-        raise HkxError("not a Havok binary packfile (XML .hkx files need converting to binary first)")
-    version, = struct.unpack_from("<i", data, 12)
-    if version != 8:
-        raise HkxError(f"packfile version {version}; Skyrim SE uses 8 (hk_2010.2.0-r1)")
-    try:
-        pf = hkpackfile.Packfile(data)
-    except (hkpackfile.PackfileError, struct.error, IndexError, ValueError) as e:
-        raise HkxError(f"{type(e).__name__}: {e}") from e
+    pf = _open(data)
+    L = Layout(pf.ptr_size)
     cls = _class_of(pf)
     counts = {}
     for c in cls.values():
@@ -131,13 +189,13 @@ def describe(data: bytes) -> dict:
     by_obj = {}
     for o, c in sorted(cls.items()):
         if c == "hkaSkeleton":
-            out["skeletons"].append(skeleton(pf, o))
+            out["skeletons"].append(skeleton(pf, o, L))
         elif c in ANIMATION_CLASSES:
-            a = animation(pf, o, c)
+            a = animation(pf, o, c, L)
             by_obj[o] = len(out["animations"])
             out["animations"].append(a)
         elif c == "hkaAnimationBinding":
-            out["bindings"].append(binding(pf, o))
+            out["bindings"].append(binding(pf, o, L))
     for b in out["bindings"]:
         b["animation"] = by_obj.get(b.pop("animation_object"))
     for sk in out["skeletons"]:

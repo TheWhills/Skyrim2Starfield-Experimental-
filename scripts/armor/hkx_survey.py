@@ -4,7 +4,8 @@ reader's object offsets, and a first look at what the animation converter will f
     python -I scripts\\armor\\hkx_survey.py --skyrim-data "<Skyrim Special Edition>\\Data" --out C:\\Modding\\work\\hkx
         [--limit 2000] [--filter "character/animations"]
 
-Reads every .hkx in the BSAs (and loose files under meshes\\) in load order, sorted by path, up to --limit (spread
+Also decodes every spline-compressed animation's tracks (hkxspline) and reports failures and rotation encodings.
+--skyrim-data may also be an animation mod's folder (loose files, its BSAs). Reads every .hkx in the BSAs (and loose files under meshes\\) in load order, sorted by path, up to --limit (spread
 over the whole list). Writes report.txt (send it) and report.json. Nothing is written into the game folder.
 """
 import argparse
@@ -35,6 +36,7 @@ def hkx_names(src, data_dir):
 def survey(src, names):
     res = {"files": len(names), "missing": 0, "failed": 0, "with_checks": 0}
     kinds, types, errors, checks, events, bones = (collections.Counter() for _ in range(6))
+    decoded, decode_errors, encodings = collections.Counter(), collections.Counter(), collections.Counter()
     durations, examples, skeletons = [], [], []
     for n in names:
         data = src._read(bsa.norm(n))
@@ -56,6 +58,14 @@ def survey(src, names):
             kinds["animation"] += 1
         else:
             kinds["other (behavior, character, project...)"] += 1
+        if any(a["class"] == "hkaSplineCompressedAnimation" for a in d["animations"]):
+            try:                                     # the track decoder (hkxspline) on every spline animation
+                c = skyrimhkx.decode_clip(data)
+                decoded["ok"] += 1
+                encodings.update(c["rotation_encodings"])
+            except Exception as e:                   # noqa: BLE001 - every failure is a finding
+                decoded["failed"] += 1
+                decode_errors[re.sub(r"\d+", "#", f"{type(e).__name__}: {e}")[:100]] += 1
         for a in d["animations"]:
             types[f"{a['class']} / {a['type']}"] += 1
             durations.append(a["duration"])
@@ -70,7 +80,8 @@ def survey(src, names):
                checks=dict(checks.most_common(12)), check_examples=examples,
                duration_s={"median": durations[len(durations) // 2] if durations else None,
                            "max": durations[-1] if durations else None},
-               annotation_events=dict(events.most_common(40)), skeletons=skeletons[:20],
+               annotation_events=dict(events.most_common(40)), decoded=dict(decoded),
+               decode_errors=dict(decode_errors.most_common(12)), rotation_encodings=dict(encodings), skeletons=skeletons[:20],
                skeleton_bones=list(bones))
     return res
 
@@ -80,9 +91,12 @@ def report_text(r):
          f"{r['files']} files: {r['kinds']}; missing {r['missing']}, failed {r['failed']}, "
          f"with implausible values {r['with_checks']}",
          f"animation types: {r['animation_types']}", f"durations (s): {r['duration_s']}",
+         f"track decoding: {r.get('decoded')}; rotation encodings (tracks x blocks): {r.get('rotation_encodings')}",
          f"skeletons: {r['skeletons'][:8]}", f"annotation events (top): {r['annotation_events']}"]
     if r["errors"]:
         L += ["errors:"] + [f"  x{n}: {e}" for e, n in r["errors"].items()]
+    if r.get("decode_errors"):
+        L += ["decode errors:"] + [f"  x{n}: {e}" for e, n in r["decode_errors"].items()]
     if r["checks"]:
         L += ["implausible values (an offset in skyrimhkx is probably wrong):"] + \
              [f"  x{n}: {c}" for c, n in r["checks"].items()] + [f"  e.g. {e}" for e in r["check_examples"][:3]]
@@ -92,7 +106,8 @@ def report_text(r):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                  allow_abbrev=False)
-    ap.add_argument("--skyrim-data", required=True)
+    ap.add_argument("--skyrim-data", required=True,
+                    help="Skyrim's Data folder, or any folder of loose .hkx files (a mod: its meshes\\ folder is read)")
     ap.add_argument("--out", required=True, help="output folder OUTSIDE the repository")
     ap.add_argument("--limit", type=int, default=2000)
     ap.add_argument("--filter", default="", help="regex on the path (forward slashes, lower case)")
