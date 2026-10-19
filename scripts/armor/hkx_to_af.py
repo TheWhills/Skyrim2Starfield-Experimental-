@@ -20,7 +20,7 @@ its .afx is the vanilla descriptor fitted to the new clip (af_writer.retime_desc
 frames scaled, HitFrame / footsteps taken from the Skyrim clip). The vanilla .afx is a file, or a path read from the
 game's archives (--starfield-data). Reusing the vanilla path should keep the AnimTextData caches valid (unverified).
 
---osf PACK: write the clips as an OSF Animation content pack instead (Nexus 17457, github.com/ozooma10/osf-animation;
+--osf PACK: write the clips as an OSF Animation content pack instead (a clipLibrary and one looping scene per clip) (Nexus 17457, github.com/ozooma10/osf-animation;
 plays .af / .glb clips on actors from an in-game browser, F10): <out>\\OSF\\Animations\\<PACK>\\*.af plus
 <out>\\OSF\\<pack>.osf.json (a "clipLibrary" catalog, per OSF's docs/GETTING_STARTED.md). Copy <out>\\OSF into
 Starfield's Data folder, then in game: cgf "OSF.ReloadPacks", F10, pick the clip, play it on the player or an NPC.
@@ -267,9 +267,18 @@ def main(argv=None):
         json.dump(report, fh, indent=1)
     if a.osf:
         done_rows = [r for r in report if "af" in r]
+        # clipLibrary (OSF 1.4+) plus one single-stage scene per clip: released OSF builds hide clipLibrary-only packs
+        # unless "Show author details" is on (fixed after 1.5.0, per its CHANGELOG); scenes show in every build
         pack = {"schema": 1, "pack": a.osf, "clipRoot": f"OSF/Animations/{pack_id}", "folder": "Skyrim",
+                "unlisted": True,
                 "clipLibrary": [{"file": os.path.basename(r["af"]), "name": r["name"].replace("_", " ")}
-                                for r in done_rows]}
+                                for r in done_rows],
+                "scenes": [{"id": f"{pack_id.lower()}/{r['name'].lower()}", "name": f"Skyrim: {r['name']}",
+                            "tags": ["skyrim"],
+                            "stages": [{"name": r["name"], "loops": 0,
+                                        "clips": [{"file": os.path.basename(r["af"]),
+                                                   "sec": round(max(r["frames"] - 1, 1) / 30.0, 3)}]}]}
+                           for r in done_rows]}
         pj = os.path.join(out, "OSF", f"{pack_id.lower()}.osf.json")
         with open(pj, "w", encoding="utf-8") as fh:
             json.dump(pack, fh, indent=1)
