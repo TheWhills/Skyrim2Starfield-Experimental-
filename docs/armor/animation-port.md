@@ -328,3 +328,31 @@ movement type are the candidate scaffold for dragon flight.
   references NonCombatIdle and ForwardLocomotion). CLI: scripts/armor/behavior_to_agx.py.
 * Still not translated: modifiers (look-at, foot IK, ragdoll, timers, expressions, event-driven), pose matching,
   cyclic blend transitions, clip triggers. Unverified in game: everything about how the engine loads these.
+
+### 2026-10-19: Alternate Recoil Animations (Nexus 16838) and CP's Menagerie (Nexus 7783), owner uploads (verified from their files)
+* **How a weapon gets its animations (layer 1 of the bow plan): RACE subgraph data.** The mod's plugin carries a full
+  HumanRace (ARA_HumanRace) with 400 entries: SAKD actor keywords, STKD target (weapon) keywords, SGNM graph
+  (1stPerson_Gun.agx, 1stPerson_Gun_ZeroG_Wrapping.agx), SAPT animation folders MOST SPECIFIC FIRST (the mod's
+  `_AlternateRecoilAnimations\Rifle\Medium\Rank0`, then gun\gripcompact\grendel, gun\gripcompact, gun\common, common),
+  SRAF 01 00 01 00 (every entry). STKD comes before SGNM in some entries, after the SAPT list in others; SRAF ends each
+  entry. The race also names, per sex, skeleton (ANAM), rig (NAM5), root graph (NAM6 Human_Root.agx) and default
+  folder (DNAM actors\human\animations\common). Reader / writer: `src/fo4sf/subgraph.py`; weapon_anim_survey.py now
+  lists every HumanRace entry with keyword names. A bow = a WEAP keyword + an entry with it in STKD, a graph, and its
+  own folder first in SAPT.
+* Weapon clip folders: _1stperson\animations\gun\<grip type>\<weapon>\ (gripextendedlow\dreambeam, grippistol\
+  solstice ...); clips override vanilla files at the same path; .afx where the tag needs one (FireAutoPush).
+* **Animation caches (AnimTextData), the Starfield counterpart of Skyrim's animationdata**: the Terran Armada archive
+  ships 2,760 files in meshes\animtextdata\{animationfiledata, animationoffsets, animationstancedata,
+  dynamicidledata}\<64-bit number>.txt (909 sets; the same number in each family) plus
+  animationoffsets\persistantsubgraphinfoandoffsetdata.txt (a list of the set files). AnimationFileData: "3", "1",
+  the number, a count, then the resolved clip (and graph) paths; AnimationOffsets "V5": per graph, tag -> clip path,
+  binary root-motion keys and foot events (FootLeft / FootRight); AnimationStanceData: bone transforms
+  (AnimationTransformedBoneArray); DynamicIdleData "Version 1": idle clip list. Adding folders / clips means these
+  caches change (the mod regenerated 909 sets, creatures included). The number is unidentified: paired sets
+  (1stPerson_Gun vs its ZeroG wrapping) differ by exactly 1,429,745,511 every time (suggests a sum of per-part
+  hashes); FNV-1 / FNV-1a / CRC-64 (three polynomials) sums over graph + folders, raw or lower case: no match.
+  Unresolved: how to generate them ourselves (the Creation Kit presumably regenerates them).
+* CP's Menagerie: no race or animation records; ARMA skins (new .nif) on vanilla creature races (ashta-style
+  skeletons), applied to vanilla NPC_ records: a new creature body on an existing creature skeleton and graph works.
+  That is the scaffold route for the first Skyrim creature test.
+* CALUMI.Motion (Windows build, owner upload): to open translated .agx files on the PC as a validity check.

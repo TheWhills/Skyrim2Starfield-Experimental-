@@ -28,7 +28,11 @@ class WeaponAnimSurveyTests(unittest.TestCase):
                 grup(b"SGDA", 0, [rec(b"SGDA", 0x30, [(b"EDID", z("SubgraphRifle")),
                                                       (b"SGPT", z("Actors\\Human\\Animations\\Rifle\\"))])]) + \
                 grup(b"RACE", 0, [rec(b"RACE", 0x40, [(b"EDID", z("HumanRace")),
-                                                      (b"SAPT", z("Actors\\Human\\Animations\\Base\\"))])])
+                                                      (b"NAM6", z("AnimTextData\\Tables\\Graphs\\Human_Root.agx")),
+                                                      (b"SGNM", z("AnimTextData\\Tables\\Graphs\\1stPerson_Gun.agx")),
+                                                      (b"SAPT", z("Actors\\Human\\Animations\\Base\\")),
+                                                      (b"STKD", struct.pack("<I", 0x10)),
+                                                      (b"SRAF", bytes([1, 0, 1, 0]))])])
             open(esm, "wb").write(data)
             out = os.path.join(d, "out")
             import contextlib
@@ -43,6 +47,8 @@ class WeaponAnimSurveyTests(unittest.TestCase):
             self.assertIn("AnimsBowUnused", rep.split("on no weapon")[1])
             self.assertIn("-> AnimsGripRifle, WeaponTypeRifle", rep)       # weapon keywords resolved
             self.assertIn("RACE 00000040 HumanRace", rep)
+            self.assertIn("NAM6: AnimTextData\\Tables\\Graphs\\Human_Root.agx", rep)
+            self.assertIn("target ['AnimsGripRifle'] -> 1stPerson_Gun.agx | Actors\\Human\\Animations\\Base\\", rep)
 
 
 if __name__ == "__main__":

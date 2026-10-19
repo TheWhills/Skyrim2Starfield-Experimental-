@@ -14,7 +14,8 @@ The survey does not assume record layouts. It writes report.txt with:
   3. the keywords whose EditorID looks animation-related (Anims*, *Anim*, *Grip*, *Archetype*, *Subgraph*), and how
      many WEAP records carry each
   4. a full subrecord dump of a few weapons: a melee weapon, a rifle, a pistol, a heavy weapon (or --weapon)
-  5. the subrecord field list of HumanRace
+  5. HumanRace: skeleton / rig / root graph / default folder, and every subgraph entry (actor + weapon keywords ->
+     graph and animation folders, most specific first; fo4sf.subgraph)
 
     python -I scripts\\armor\\weapon_anim_survey.py --esm "<Starfield>\\Data\\Starfield.esm" --out C:\\Modding\\work\\weapon_anims
 """
@@ -29,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from fo4sf import fo4land  # noqa: E402
+from fo4sf import fo4land, subgraph  # noqa: E402
 
 ANIM_TEXT = re.compile(rb"animations\\|animations/|\.agx|\.afx|subgraph|AnimTextData|\\Anims", re.I)
 ANIM_KEYWORD = re.compile(r"^Anims|Anim(Type|Arch|Flavor|Grip|Set)|Grip|Archetype|Subgraph|WeaponType|AnimFace", re.I)
@@ -141,9 +142,15 @@ def main(argv=None):
         for fid, edid, fs in races:
             w(f"  RACE {fid:08X} {edid}: {len(fs)} subrecords; types: " +
               ", ".join(f"{s.decode('latin-1')}x{n}" for s, n in collections.Counter(s for s, _ in fs).items()))
-            subg = [(s, d) for s, d in fs if ANIM_TEXT.search(d)]
-            w(f"    {len(subg)} subrecords with animation-path text; first 30:")
-            dump(subg[:30], w, kw_names, n=60)
+            for s in (b"ANAM", b"NAM5", b"NAM6", b"DNAM"):
+                w(f"    {s.decode()}: " + ", ".join(text_of(d) or d.hex() for t, d in fs if t == s))
+            entries = subgraph.parse(fs)
+            sm = subgraph.summary(entries, kw_names)
+            w(f"    subgraph entries: {sm['entries']}; per graph: {sm['graphs']}")
+            for e in entries:                               # every entry, keywords resolved: the weapon -> folder map
+                w(f"      actor {[kw_names.get(k, f'{k:08X}') for k in e['actor_keywords']]} "
+                  f"target {[kw_names.get(k, f'{k:08X}') for k in e['target_keywords']]} -> "
+                  f"{(e['graph'] or '?').split(chr(92))[-1]} | {' > '.join(e['paths'])}")
     rep = os.path.join(a.out, "report.txt")
     with open(rep, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
