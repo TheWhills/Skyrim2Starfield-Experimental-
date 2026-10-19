@@ -200,8 +200,13 @@ def skyrim_locals(clip: dict, sk: Rig):
     return lt, lq
 
 
-def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> Dict:
-    """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf."""
+def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False) -> Dict:
+    """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf.
+
+    The weapon always sits in the fist at the vanilla grip (skeletonmap.GRIP). weapon_in_hand: also turn the gripping
+    hand so that, held that way, the weapon points and faces as Skyrim's weapon node does (skeletonmap.WEAPON_AXES);
+    the hand then differs from Skyrim's by a fixed ~20-30 deg, the blade not at all. Off, the hand follows Skyrim's
+    hand and the blade differs by that angle instead."""
     lt, lq = skyrim_locals(clip, sk)
     wt_sk, wq_sk = sk.fk(lt, lq)
     rt_sk, rq_sk = sk.rest_world()
@@ -229,6 +234,11 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
     targets = {low[k]: sf.index[h] for k, h in M.HAND_TARGETS.items() if k in low and h in sf.index}
     weapon_axes = {low[k]: (sk.index[src], np.array(q, float) / np.linalg.norm(q))
                    for k, (src, q) in M.WEAPON_AXES.items() if k in low and src in sk.index}
+    hand_follow = {}                                                   # gripping hand -> (Skyrim weapon, axes, grip q)
+    if weapon_in_hand:
+        for i, (h, _gt, gq) in grips.items():
+            if i in weapon_axes and h < i:
+                hand_follow[h] = (weapon_axes[i][0], weapon_axes[i][1], gq)
     # COM movement scale: leg length (thigh joint -> ankle, both legs), so a crouch bends the knees as far as in
     # Skyrim and the feet stay on the ground (hip height overshoots: Starfield's thigh joint sits 11 cm below C_Hips)
     def leg(rig, rt, thigh, foot):
@@ -253,9 +263,6 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
         if i in grips and grips[i][0] < i:                             # weapon held as in vanilla clips
             h, gt, gq = grips[i]
             target_q = qmul(wq[:, h, :], np.broadcast_to(gq, (F, 4)))
-            if i in weapon_axes:                                      # blade aimed and turned as in Skyrim
-                src, aq = weapon_axes[i]
-                target_q = qmul(wq_sk[:, src, :], np.broadcast_to(aq, (F, 4)))
             target_t = wt[:, h, :] + qrot(wq[:, h, :], np.broadcast_to(gt, (F, 3)))
             dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
         elif i in targets and targets[i] < i:                          # IK targets on their hands
@@ -282,6 +289,10 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
             dsf[:, i, :] = d
         else:
             dsf[:, i, :] = pd
+        if i in hand_follow:                                           # hand turned so the grip aims the blade
+            src, aq, gq = hand_follow[i]
+            target_q = qmul(qmul(wq_sk[:, src, :], np.broadcast_to(aq, (F, 4))), np.broadcast_to(qinv(gq), (F, 4)))
+            dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
         name = sf.names[i]
         if name in ("COM", "Root") and name in M.MAP.values():
             src = sk.index[[a for a, b in M.MAP.items() if b == name][0]]
@@ -295,6 +306,19 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
         wt[:, i, :] = pw_t + qrot(pw_q, out_t[:, i, :])
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
             "world_t": wt, "height_scale": scale}
+
+
+def blade_peak(rig: "Rig", t, q, bone: str = "Weapon", tip=(0.0, 0.0, 0.6)) -> Optional[int]:
+    """Frame where the weapon tip moves fastest (k: between frames k and k + 1), or None without the bone. On the
+    vanilla one-handed attacks this is the HitFrame within 1 frame in 39 of 41 clips, 2-3 frames in the other two
+    (verified 2026-10-19; Starfield blades run along Weapon +Z), so it stands in for the hit frame Skyrim keeps in
+    its behaviour graph rather than in the clip."""
+    if bone not in rig.index or len(t) < 2:
+        return None
+    wt, wq = rig.fk(np.asarray(t, float), np.asarray(q, float))
+    i = rig.index[bone]
+    tips = wt[:, i] + qrot(wq[:, i], np.broadcast_to(np.asarray(tip, float), (len(wt), 3)))
+    return int(np.argmax(np.linalg.norm(np.diff(tips, axis=0), axis=1)))
 
 
 def rest_alignment(sk: "Rig", sf: "Rig", rt_sk=None, rt_sf=None, unit: float = SKYRIM_M_PER_UNIT) -> Dict[int, np.ndarray]:

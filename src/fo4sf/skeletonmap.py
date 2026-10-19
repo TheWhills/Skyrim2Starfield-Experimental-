@@ -99,8 +99,9 @@ GRIP: Dict[str, Tuple[str, Tuple[float, float, float], Tuple[float, float, float
 # Weapon orientation taken from Skyrim's weapon node instead of the grip: Starfield weapon models run along the
 # Weapon bone's +Z, Skyrim's along +Y (supported: the vanilla sword hit frame swings the bone's +Z forward-left, the
 # Skyrim ready idle holds +Y forward-up; measured on our retarget the other axes map x_sf = -z_sk, y_sf = -x_sk, within
-# 20 deg of the vanilla grip). SF Weapon world = Skyrim Weapon world * WEAPON_AXES, so the blade points and faces
-# exactly as in Skyrim while the hilt stays where vanilla puts it in the fist (GRIP offset).
+# 20 deg of the vanilla grip). With retarget(weapon_in_hand=True) the gripping hand is turned so that hand * GRIP =
+# Skyrim Weapon world * WEAPON_AXES: the blade points and faces exactly as in Skyrim and stays in the fist. (Setting the
+# weapon itself to that orientation, 2026-10-19, turned the hilt ~22 deg out of the fist in game.)
 WEAPON_AXES: Dict[str, Tuple[str, Tuple[float, float, float, float]]] = {"weapon": ("Weapon", (0.5, -0.5, -0.5, -0.5))}
 # IK targets kept on the hands they belong to (the IK pass then changes nothing)
 HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}

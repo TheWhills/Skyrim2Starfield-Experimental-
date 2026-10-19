@@ -159,6 +159,9 @@ def main(argv=None):
     ap.add_argument("--osf", metavar="PACK", help="write an OSF Animation content pack named PACK (see above)")
     ap.add_argument("--replace", action="append", default=[], metavar="CLIP::VANILLA_AFX",
                     help="replace a vanilla clip in place (see above); repeatable")
+    ap.add_argument("--weapon-in-hand", action="store_true",
+                    help="turn the right hand so the weapon, held in the vanilla grip, points as Skyrim's does "
+                         "(melee clips; otherwise the hand follows Skyrim's and the blade is ~20-30 deg off)")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -248,7 +251,7 @@ def main(argv=None):
                     report.append(row)
                     continue
                 raise
-            res = retarget.retarget(clip, sk, sf)
+            res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand)
             if not a.no_foot_plant:
                 res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)
@@ -264,11 +267,12 @@ def main(argv=None):
                     out_t = out_t.copy()
                     out_t[:, game_rig.index["COM"], :2] += shift
                     row["com_shift_m"] = [round(float(x), 3) for x in shift]
+            hit = retarget.blade_peak(out_rig, out_t, out_q) if vafx else None     # used if vanilla has HitFrame
             w = af_writer.write(a.calumi, target_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
                                 out_t, out_q, tag=a.tag or name, rig_path=save_rig if game_rig is not None
                                 else rig_path, events=clip["annotations"],
                                 like_afx=like, like_last=like_last, file_name=file_name,
-                                omit=skeletonmap.NOT_ANIMATED if game_rig is not None else ())
+                                omit=skeletonmap.NOT_ANIMATED if game_rig is not None else (), hit_frame=hit)
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],

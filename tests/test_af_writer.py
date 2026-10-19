@@ -75,7 +75,7 @@ class AfWriterTests(unittest.TestCase):
         self.assertEqual(rep["events_from_clip"], ["HitFrame"])
         root = ET.fromstring(out)
         frames = {e.findtext("name"): int(e.findtext("frame")) for e in root.iter("event")}
-        self.assertEqual(frames, {"HitFrame": 42, "CameraShake": 8})          # ours / scaled
+        self.assertEqual(frames, {"HitFrame": 42, "CameraShake": 17})         # ours / anchored on our hit (4 * 42 / 10)
         v = root.find("variables/variable")
         self.assertEqual((v.findtext("start"), v.findtext("end")), ("0", "60"))
         self.assertEqual((root.findtext("tag"), root.findtext("rampout")), ("MeleeAttack01", "9"))   # kept
@@ -85,6 +85,30 @@ class AfWriterTests(unittest.TestCase):
         out2, rep2 = AF.retime_descriptor(vanilla, 15, "X.af", old_last=60)    # known vanilla length: shorter clip
         self.assertEqual(ET.fromstring(out2).find("variables/variable").findtext("end"), "8")
         self.assertEqual(ET.fromstring(out2).findtext("filename"), "X.af")
+
+    def test_retime_anchored_on_the_hit(self):
+        vanilla = (b"<root><filename>A.af</filename><events>"
+                   b"<event><frame>10</frame><name>PreHitFrame</name><payload></payload></event>"
+                   b"<event><frame>15</frame><name>HitFrame</name><payload></payload></event>"
+                   b"<event><frame>15</frame><name>CameraShake</name><payload>0.85</payload></event>"
+                   b"<event><frame>35</frame><name>AttackStateNextAttack</name><payload></payload></event>"
+                   b"</events><variables><variable><name>bFreeMovement</name><start>40</start><end>55</end>"
+                   b"</variable></variables></root>")
+        out, rep = AF.retime_descriptor(vanilla, 38, "A.af", old_last=55, hit_frame=13)
+        self.assertEqual(rep["hit_anchor"], (15, 13))
+        root = ET.fromstring(out)
+        fr = [(e.findtext("name"), int(e.findtext("frame"))) for e in root.iter("event")]
+        # before the hit: 13/15 of the vanilla frame; after: the rest mapped onto 13..38
+        self.assertEqual(fr, [("PreHitFrame", 9), ("HitFrame", 13), ("CameraShake", 13),
+                              ("AttackStateNextAttack", 26)])            # 13 + 20 * 25 / 40
+        v = root.find("variables/variable")
+        self.assertEqual((v.findtext("start"), v.findtext("end")), ("29", "38"))                          # 13 + 25 * 25 / 40
+        _o, plain = AF.retime_descriptor(vanilla.replace(b"HitFrame</name>", b"Other</name>"), 38, "A.af",
+                                         old_last=55, hit_frame=13)
+        self.assertIsNone(plain["hit_anchor"])                     # no vanilla HitFrame: plain scaling
+        _o, own = AF.retime_descriptor(vanilla, 38, "A.af", old_last=55, own_events=[(20, "HitFrame", "")],
+                                       hit_frame=13)
+        self.assertEqual(own["hit_anchor"], (15, 20))               # the clip's own HitFrame wins
 
     @unittest.skipUnless(os.environ.get("CALUMI_LIB"), "set CALUMI_LIB to a CALUMI build to run the round trip")
     def test_omitted_bones_get_no_track(self):

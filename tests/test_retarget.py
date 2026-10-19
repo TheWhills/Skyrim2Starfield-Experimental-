@@ -9,6 +9,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 from fo4sf import retarget as R  # noqa: E402
+from fo4sf import skeletonmap as M  # noqa: E402
 
 I = (0.0, 0.0, 0.0, 1.0)
 
@@ -190,7 +191,7 @@ class RetargetTests(unittest.TestCase):
         across = wt[0, sf.index["R_Pinky"]] - wt[0, sf.index["R_Index"]]
         self.assertTrue(np.allclose(across / np.linalg.norm(across), [1, 0, 0], atol=1e-9))
 
-    def test_weapon_orientation_follows_skyrim_weapon_node(self):
+    def test_weapon_stays_in_fist_and_hand_turns_to_aim_it(self):
         names = ["NPC Root [Root]", "NPC R Forearm [RLar]", "NPC R Hand [RHnd]", "Weapon"]
         q_w = qaxis((1, 0, 0), 35)
         sk = R.Rig(names, [-1, 0, 1, 2], [(0, 0, 0), (0, 0, 60), (20, 0, 0), (5, 0, 0)], [I, I, I, q_w])
@@ -198,12 +199,26 @@ class RetargetTests(unittest.TestCase):
                    [(0, 0, 0), (0, 0, 0.9), (0.3, 0, 0), (0, 0.5, 1.2)], [I, I, I, I])
         c = {"frames": 1, "fps": 30.0, "bones": names,
              "tracks": [[(tuple(sk.t[i]), tuple(sk.q[i]), (1, 1, 1))] for i in range(4)]}
-        res = R.retarget(c, sk, sf)
-        _wt, wq = sf.fk(res["t"], res["q"])
-        blade_sf = R.qrot(wq[0, sf.index["Weapon"]], np.array([0, 0, 1.0]))   # Starfield blade axis +Z
+        _h, gt, gq = M.GRIP["weapon"]
+        gq = np.array(gq) / np.linalg.norm(gq)
         blade_sk = R.qrot(np.array(q_w), np.array([0, 1.0, 0]))               # Skyrim blade axis +Y
-        self.assertTrue(np.allclose(blade_sf, blade_sk, atol=1e-6))
+        for in_hand in (False, True):
+            res = R.retarget(c, sk, sf, weapon_in_hand=in_hand)
+            wt, wq = sf.fk(res["t"], res["q"])
+            w, h = sf.index["Weapon"], sf.index["R_Wrist"]
+            rel = R.qmul(R.qinv(wq[0, h]), wq[0, w])                           # always the vanilla grip: in the fist
+            self.assertAlmostEqual(abs(float(np.dot(rel, gq))), 1.0, places=6)
+            self.assertTrue(np.allclose(R.qrot(R.qinv(wq[0, h]), wt[0, w] - wt[0, h]), gt, atol=1e-6))
+            blade_sf = R.qrot(wq[0, w], np.array([0, 0, 1.0]))                # Starfield blade axis +Z
+            self.assertEqual(np.allclose(blade_sf, blade_sk, atol=1e-6), in_hand)   # aimed as in Skyrim when asked
 
+    def test_blade_peak_is_fastest_tip_frame(self):
+        rig = R.Rig(["Root", "Weapon"], [-1, 0], [(0, 0, 0), (0, 0, 1)], [I, I])
+        angles = [0, 5, 10, 15, 60, 70, 72, 73]                       # the big swing is between frames 3 and 4
+        q = np.array([[I, qaxis((1, 0, 0), a)] for a in angles], float)
+        t = np.tile(rig.t, (len(angles), 1, 1))
+        self.assertEqual(R.blade_peak(rig, t, q), 3)
+        self.assertIsNone(R.blade_peak(R.Rig(["Root"], [-1], [(0, 0, 0)], [I]), t[:, :1], q[:, :1]))
 
 if __name__ == "__main__":
     unittest.main()

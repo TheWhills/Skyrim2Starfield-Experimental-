@@ -102,13 +102,16 @@ def descriptor(tag: str, filename: str, is_state: bool = False, events=(), varia
 
 
 def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Optional[int] = None,
-                      own_events=()) -> Tuple[bytes, Dict]:
+                      own_events=(), hit_frame: Optional[int] = None) -> Tuple[bytes, Dict]:
     """A vanilla .afx fitted to a replacement clip: every <frame>, <start> and <end> (events, variables, audio...)
     scaled from the vanilla clip's last frame to ours (old_last, or when unknown the descriptor's largest frame, which
     is exact for the usual whole-clip variables); <filename> set; everything else (tag, is_state, rampout, flags,
     payloads, prefixes) kept. Events our clip carries itself (own_events: (frame, name, payload), e.g. HitFrame from
-    the Skyrim annotations) replace the vanilla ones of the same name, in order, when the counts match. Returns
-    (bytes, report)."""
+    the Skyrim annotations) replace the vanilla ones of the same name, in order, when the counts match.
+    hit_frame (our clip's hit, e.g. retarget.blade_peak; a HitFrame in own_events wins): when the vanilla descriptor
+    has a HitFrame, the scaling is piecewise linear through (vanilla HitFrame -> hit_frame), so PreHitFrame,
+    WeaponSwing, CameraShake, the swing sounds and the windows around them keep their distance to the hit instead of
+    landing mid wind-up. Returns (bytes, report)."""
     text = vanilla.decode("utf-8-sig", "replace")
     root = ET.fromstring(text)
     marks = [e for e in root.iter() if e.tag in ("frame", "start", "end") and (e.text or "").strip().lstrip("-").isdigit()]
@@ -116,9 +119,23 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
     if est:
         old_last = max([int(e.text) for e in marks] or [new_last])
     scale = (new_last / old_last) if old_last else 1.0
+    own_hits = sorted(f for f, n, _p in own_events if n == "HitFrame")
+    if own_hits:
+        hit_frame = int(own_hits[0])
+    v_hits = [int(ev.findtext("frame")) for ev in root.iter("event")
+              if ev.findtext("name") == "HitFrame" and (ev.findtext("frame") or "").strip().isdigit()]
+    anchor = None
+    if hit_frame is not None and v_hits and 0 < min(v_hits) < old_last and 0 < hit_frame < new_last:
+        anchor = (min(v_hits), int(hit_frame))
+
+    def warp(v):
+        if anchor is None:
+            return v * scale
+        (a, b) = anchor
+        return v * b / a if v <= a else b + (v - a) * (new_last - b) / (old_last - a)
     for e in marks:
         v = int(e.text)
-        e.text = str(new_last if v >= old_last else max(0, min(new_last, int(round(v * scale)))))
+        e.text = str(new_last if v >= old_last else max(0, min(new_last, int(round(warp(v))))))
     fn = root.find("filename")
     if fn is None:
         fn = ET.SubElement(root, "filename")
@@ -140,7 +157,8 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
     if b"\r\n" in vanilla:                         # the shipped descriptors use CRLF (the parser drops the CR)
         out = out.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     return out, {"old_last": old_last, "old_last_estimated": est, "scale": round(scale, 4),
-                                                 "retimed": len(marks), "events_from_clip": replaced}
+                                                 "retimed": len(marks), "events_from_clip": replaced,
+                                                 "hit_anchor": anchor}
 
 
 def _keys_needed(values: np.ndarray, tol: float) -> List[int]:
@@ -188,10 +206,10 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
           tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
           variables=(), like_afx: Optional[bytes] = None, like_last: Optional[int] = None, file_name: Optional[str] = None,
-          omit=()) -> Dict:
+          omit=(), hit_frame: Optional[int] = None) -> Dict:
     """Write <out>/<name>.af (+ skeleton.rig unless rig_path, + <name>.afx, + <name>.events.json). Translations in
     metres, quaternions (x, y, z, w). Bones named in `omit` get no track (the game keeps driving them, e.g.
-    skeletonmap.NOT_ANIMATED). Returns {"af", "rig", "keys", "frames"}."""
+    skeletonmap.NOT_ANIMATED). hit_frame: see retime_descriptor. Returns {"af", "rig", "keys", "frames"}."""
     out = pathlib.Path(out_dir).resolve()
     repo = pathlib.Path(__file__).resolve().parents[2]
     if out == repo or repo in out.parents:
@@ -284,7 +302,7 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
         mapped, unmapped = map_events(events, fps)
         retime = None
         if like_afx is not None:                    # replacing a vanilla clip: its own descriptor, fitted to ours
-            afx, retime = retime_descriptor(like_afx, F - 1, af.name, like_last, mapped)
+            afx, retime = retime_descriptor(like_afx, F - 1, af.name, like_last, mapped, hit_frame)
         else:
             afx = descriptor(tag or name, af.name, is_state, mapped, variables)
         (out / f"{af.stem}.afx").write_bytes(afx)

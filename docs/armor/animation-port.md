@@ -260,6 +260,21 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner: pop still there, about halfway through the swing, never in TFC; sword still not lined up
+* Sword (verified on our output): setting the Weapon bone to Skyrim's orientation turned it a constant 22 deg (30 in the
+  block idle) away from the vanilla grip, about its own origin, so the hilt sat beside the fist. Now the weapon always
+  sits in the vanilla grip and, with hkx_to_af --weapon-in-hand, the right hand is turned instead so the held blade
+  points and faces as Skyrim's does (hand within 0.1 deg of the grip on every frame).
+* Pop (supported hypothesis): the clip data cannot depend on the camera, but the hit events can. Our HitFrame /
+  CameraShake were vanilla's frames scaled by length, and landed at frame 10 of the sword attack, exactly when the
+  Skyrim wind-up pauses (weapon 0.2 m/s) - 4 frames before the real swing (tip peak at frame 13-14). A camera shake
+  at the dead point reads as the body hitching, and TFC has no camera shake. Verified on 41 vanilla one-handed
+  attacks: HitFrame = the frame of fastest blade-tip travel (within 1 frame in 39, 2-3 in two), PreHitFrame 5 frames
+  before. retarget.blade_peak finds that frame in our clip and retime_descriptor now scales piecewise through
+  (vanilla HitFrame -> ours), so PreHitFrame, WeaponSwing, CameraShake, swing sounds and windows keep their distance
+  to the hit. The source does have a fast whole-body snap at frames 12-14 (COM turns 37 deg in one frame, in the
+  decoded Skyrim data too); that is Skyrim's own motion, not a conversion error.
+
 ### 2026-10-19: owner: body "pops" during the first swing (not in TFC), sword not where Skyrim has it
 * Blade axes (supported): Starfield melee weapons run along the Weapon bone's +Z (the vanilla sword MeleeAttack_A hit
   frame swings +Z forward-left), Skyrim's along +Y (1hm_idle holds +Y forward-up). With the grip, our blade already
