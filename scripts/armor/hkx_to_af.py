@@ -15,7 +15,7 @@ Sources (each either a file or read from the game's archives):
 Writes <out>\\<clip>.af / .afx / .events.json and report.json (per clip: frames, keys, bytes, read-back error).
 
 --replace "<clip>::<vanilla .afx>" (repeatable): replace a vanilla clip in place. The clip is written under the vanilla
-path and file name (out\meshes\actors\...\Idle.af + .afx; copy out\meshes into Starfield's Data as loose files), and
+path and file name (out\\meshes\\actors\\...\\Idle.af + .afx; copy out\\meshes into Starfield's Data as loose files), and
 its .afx is the vanilla descriptor fitted to the new clip (af_writer.retime_descriptor: tag, flags, payloads kept,
 frames scaled, HitFrame / footsteps taken from the Skyrim clip). The vanilla .afx is a file, or a path read from the
 game's archives (--starfield-data). Reusing the vanilla path should keep the AnimTextData caches valid (unverified).
@@ -82,6 +82,25 @@ def vanilla_file(path, starfield_data):
     if data is None:
         raise SystemExit(f"not in the game's archives: {rel}")
     return data, rel
+
+
+def vanilla_last_frame(lib, rig_path, vafx, starfield_data, out):
+    """The vanilla clip's last frame (its .af beside the .afx, read through CALUMI), so the descriptor is scaled
+    exactly rather than from its largest marker; None when the .af or a rig is not at hand."""
+    if not rig_path:
+        return None
+    vaf = re.sub(r"\.afx$", ".af", vafx, flags=re.I)
+    try:
+        data, rel = vanilla_file(vaf, starfield_data)
+    except SystemExit:
+        return None
+    tmp = os.path.join(out, "_vanilla_" + os.path.basename(rel))
+    with open(tmp, "wb") as fh:
+        fh.write(data)
+    try:
+        return int(af_writer.read_back(lib, tmp, rig_path, absolute=False)["frames"]) - 1
+    except af_writer.CalumiError:
+        return None
 
 
 def com_shift(lib, rig_path, game_rig, vafx, starfield_data, lt, lq, out):
@@ -209,7 +228,7 @@ def main(argv=None):
     for c, vafx in clips:
         name = os.path.splitext(os.path.basename(c.replace("\\", "/")))[0]
         row = {"clip": c, "name": name}
-        target_dir, like, file_name = clip_dir, None, None
+        target_dir, like, file_name, like_last = clip_dir, None, None, None
         try:
             if vafx:
                 like, rel = vanilla_file(vafx, a.starfield_data)
@@ -217,6 +236,9 @@ def main(argv=None):
                 file_name = os.path.splitext((fn_m.group(1).decode() if fn_m else os.path.basename(rel)))[0]
                 target_dir = os.path.join(out, *os.path.dirname(rel).split("/"))
                 row["replaces"] = f"{os.path.dirname(rel)}/{file_name}.af"
+                like_last = vanilla_last_frame(a.calumi, rig_path, vafx, a.starfield_data, out)
+                if like_last is not None:
+                    row["vanilla_frames"] = like_last + 1
             data = read_any(c, sky)
             try:
                 clip = skyrimhkx.decode_clip(data, sk.names)
@@ -245,7 +267,7 @@ def main(argv=None):
             w = af_writer.write(a.calumi, target_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
                                 out_t, out_q, tag=a.tag or name, rig_path=save_rig if game_rig is not None
                                 else rig_path, events=clip["annotations"],
-                                like_afx=like, file_name=file_name)
+                                like_afx=like, like_last=like_last, file_name=file_name)
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],

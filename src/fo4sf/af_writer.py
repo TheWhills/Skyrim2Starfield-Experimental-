@@ -96,7 +96,7 @@ def descriptor(tag: str, filename: str, is_state: bool = False, events=(), varia
             ET.SubElement(v, "name").text = name
             ET.SubElement(v, "start").text = str(int(start))
             ET.SubElement(v, "end").text = str(int(end))
-    return ET.tostring(root, encoding="utf-8")
+    return ET.tostring(root, encoding="utf-8", short_empty_elements=False)
 
 
 def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Optional[int] = None,
@@ -134,7 +134,7 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
             for ev, f in zip(evs, sorted(frames)):
                 ev.find("frame").text = str(int(f))
             replaced.append(n)
-    out = ET.tostring(root, encoding="utf-8")
+    out = ET.tostring(root, encoding="utf-8", short_empty_elements=False)
     if b"\r\n" in vanilla:                         # the shipped descriptors use CRLF (the parser drops the CR)
         out = out.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     return out, {"old_last": old_last, "old_last_estimated": est, "scale": round(scale, 4),

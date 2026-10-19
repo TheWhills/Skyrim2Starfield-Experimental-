@@ -249,6 +249,17 @@ with a HumanRace subgraph entry naming NPC_Melee / Player_Melee and our folder f
 Spells map onto CastSelf / CastTarget the same way. New graphs (the translator) are only for what Starfield lacks:
 bow draw / hold / release, horses, two-handed and dual wield sets if their timing differs.
 
+### 2026-10-19: first sword-attack replacement pack (built, not yet seen in game)
+Skyrim 1hm_attackright / left / power / sneak attacks -> the player's sword set (melee\onehanded\player\sword:
+MeleeAttack_A/B/C, MeleeAttackPower_A, Sneak_*) and the NPC sword set (melee\onehanded\sword: MeleeAttack01-04,
+MeleeAttackPower01/02). Each keeps its vanilla .afx (combo window AttackStateNextAttack, HitFrame, PreHitFrame,
+WeaponSwing, camera shake, foley, bDontAllow* / bCanComboAttack / bFreeMovement windows), scaled from the vanilla clip's
+exact length (read from its .af) to Skyrim's (40 vs 51-79 frames). The Skyrim attack .hkx files carry no annotation
+events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so the hit timing here is proportional
+(supported hypothesis that it lands near the swing; reading the triggers from 1hm_behavior.hkx is the precise fix).
+No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
+self-closing empty elements, as shipped.
+
 ### 2026-10-19: first Skyrim clip playing in Starfield (owner, in game)
 **Verified in game:** Skyrim's chair_idlearmscrossedvar1, converted by hkx_to_af against the vanilla human rig (rest-
 relative keys, 82 animated bones), played on the player through OSF Animation (scene "Skyrim: chair idlearmscrossedvar

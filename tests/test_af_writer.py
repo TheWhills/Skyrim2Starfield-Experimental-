@@ -79,6 +79,7 @@ class AfWriterTests(unittest.TestCase):
         self.assertEqual((root.findtext("tag"), root.findtext("rampout")), ("MeleeAttack01", "9"))   # kept
         self.assertIn(b"\r\n", out)
         self.assertNotIn(b"\r\r", out)
+        self.assertIn(b"<payload></payload>", out)                # as shipped: no self-closing empty elements
         out2, rep2 = AF.retime_descriptor(vanilla, 15, "X.af", old_last=60)    # known vanilla length: shorter clip
         self.assertEqual(ET.fromstring(out2).find("variables/variable").findtext("end"), "8")
         self.assertEqual(ET.fromstring(out2).findtext("filename"), "X.af")
