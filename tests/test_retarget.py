@@ -142,6 +142,54 @@ class RetargetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             R.rehome(src, lt, lq, ["A", "B"], [1, -1], rest_t[:2], rest_q[:2])
 
+    def test_rest_directions_are_aligned_to_skyrim(self):
+        sk = R.Rig(["NPC Root [Root]", "NPC L Calf [LClf]", "NPC L Foot [Lft ]"], [-1, 0, 1],
+                   [(0, 0, 0), (0, 0, 35), (0, 0, -30)], [I, I, I])           # Skyrim shin straight down
+        tilt = math.radians(20)
+        sf = R.Rig(["Root", "L_Calf", "L_Foot"], [-1, 0, 1],
+                   [(0, 0, 0), (0, 0, 0.5), (0, 0.42 * math.sin(tilt), -0.42 * math.cos(tilt))], [I, I, I])
+        c = {"frames": 1, "fps": 30.0, "bones": sk.names,
+             "tracks": [[(tuple(sk.t[i]), tuple(sk.q[i]), (1, 1, 1))] for i in range(3)]}
+        res = R.retarget(c, sk, sf)
+        wt, _wq = sf.fk(res["t"], res["q"])
+        shin = wt[0, 2] - wt[0, 1]
+        self.assertTrue(np.allclose(shin / np.linalg.norm(shin), [0, 0, -1], atol=1e-9))   # points like Skyrim's
+        self.assertAlmostEqual(float(np.linalg.norm(shin)), 0.42, places=9)             # Starfield's length
+
+    def test_weapon_held_with_the_vanilla_grip(self):
+        names = ["NPC Root [Root]", "NPC R Forearm [RLar]", "NPC R Hand [RHnd]", "WEAPON"]
+        sk = R.Rig(names, [-1, 0, 1, 2], [(0, 0, 0), (0, 0, 60), (20, 0, 0), (5, 0, 0)], [I, I, I, I])
+        sf = R.Rig(["Root", "R_Forearm", "R_Wrist", "Weapon", "R_HandIk"], [-1, 0, 1, 0, 3],
+                   [(0, 0, 0), (0, 0, 0.9), (0.3, 0, 0), (0, 0.5, 1.2), (0, 0, 0)], [I, I, I, I, I])
+        q_arm = qaxis((0, 0, 1), 50)
+        c = {"frames": 1, "fps": 30.0, "bones": names,
+             "tracks": [[(tuple(sk.t[i]), q_arm if i == 1 else tuple(sk.q[i]), (1, 1, 1))] for i in range(4)]}
+        res = R.retarget(c, sk, sf)
+        wt, wq = sf.fk(res["t"], res["q"])
+        wr, wp, ik = sf.index["R_Wrist"], sf.index["Weapon"], sf.index["R_HandIk"]
+        _h, gt, gq = R.M.GRIP["weapon"]
+        gq = np.array(gq) / np.linalg.norm(gq)
+        inv = R.qinv(wq[0, wr])
+        self.assertTrue(np.allclose(R.qrot(inv, wt[0, wp] - wt[0, wr]), gt, atol=1e-9))
+        rel = R.qmul(inv, wq[0, wp])
+        self.assertTrue(np.allclose(rel, gq, atol=1e-6) or np.allclose(rel, -np.array(gq), atol=1e-6))
+        self.assertTrue(np.allclose(wt[0, ik], wt[0, wr], atol=1e-9))           # IK target on the hand
+
+    def test_hand_roll_is_aligned_by_the_knuckles(self):
+        sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "NPC R Finger20 [RF20]", "NPC R Finger10 [RF10]",
+                    "NPC R Finger40 [RF40]"]
+        sk = R.Rig(sk_names, [-1, 0, 1, 1, 1], [(0, 0, 0), (0, 0, 70), (0, 7, 0), (-2, 6, 0), (2, 6, 0)], [I] * 5)
+        r = math.radians(30)                                                # knuckle line rolled 30 deg about y
+        sf = R.Rig(["Root", "R_Wrist", "R_Middle", "R_Index", "R_Pinky"], [-1, 0, 1, 1, 1],
+                   [(0, 0, 0), (0, 0, 1.0), (0, 0.1, 0), (-0.03 * math.cos(r), 0.09, 0.03 * math.sin(r)),
+                    (0.03 * math.cos(r), 0.09, -0.03 * math.sin(r))], [I] * 5)
+        c = {"frames": 1, "fps": 30.0, "bones": sk_names,
+             "tracks": [[(tuple(sk.t[i]), tuple(sk.q[i]), (1, 1, 1))] for i in range(5)]}
+        res = R.retarget(c, sk, sf)
+        wt, _ = sf.fk(res["t"], res["q"])
+        across = wt[0, sf.index["R_Pinky"]] - wt[0, sf.index["R_Index"]]
+        self.assertTrue(np.allclose(across / np.linalg.norm(across), [1, 0, 0], atol=1e-9))
+
 
 if __name__ == "__main__":
     unittest.main()

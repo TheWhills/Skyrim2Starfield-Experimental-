@@ -5,7 +5,10 @@ world rotation (the delta D = W(f) * W_rest^-1) is applied to the mapped Starfie
 local rotations follow from the parents. Bone lengths stay Starfield's (local translations = Starfield rest), so
 proportions never stretch; only COM / Root move, by the Skyrim COM's offset from rest scaled by the leg-length ratio.
 The two rest poses face the same way (both A-poses, +Y forward, +Z up, left = -X; verified on BodySlide's reference
-skeletons), so world deltas transfer directly.
+skeletons), but their limbs do not point the same way (upper arms 16 deg, fingers up to 46 deg apart, hands rolled 13.5
+deg): each driven bone's Starfield rest is first swung onto the Skyrim bone's rest direction (rest_alignment; hands also
+rolled by the knuckle line), so limbs point exactly where Skyrim's do (verified on 1hm_attackright: arm, forearm, hand,
+finger directions within 0.02 deg every frame). The weapon is held with the vanilla Starfield grip (skeletonmap.GRIP).
 
 Conventions (verified 2026-10-19): quaternions (x, y, z, w); world = parent_world * local (t rotated by the parent);
 Skyrim .hkx reference pose FK reproduces the Skyrim .nif skeleton's joints within 4e-5 units; .nif rotation matrices,
@@ -219,6 +222,11 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
             if b in sf.index:
                 drive[sf.index[b]] = [("split", sk.index[a], acc)]
     world_src = {sf.index[b]: sk.index[a] for b, a in M.WORLD.items() if b in sf.index and a in sk.index}
+    align = rest_alignment(sk, sf, rt_sk, rt_sf)                       # Starfield bone -> world swing onto Skyrim's rest
+    low = {n.lower(): i for i, n in enumerate(sf.names)}
+    grips = {low[k]: (sf.index[h], np.array(t, float), np.array(q, float) / np.linalg.norm(q))
+             for k, (h, t, q) in M.GRIP.items() if k in low and h in sf.index}
+    targets = {low[k]: sf.index[h] for k, h in M.HAND_TARGETS.items() if k in low and h in sf.index}
     # COM movement scale: leg length (thigh joint -> ankle, both legs), so a crouch bends the knees as far as in
     # Skyrim and the feet stay on the ground (hip height overshoots: Starfield's thigh joint sits 11 cm below C_Hips)
     def leg(rig, rt, thigh, foot):
@@ -240,9 +248,18 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
         pd = dsf[:, p, :] if p >= 0 else np.tile([0.0, 0.0, 0.0, 1.0], (F, 1))
         rule = drive.get(i)
         target_q, target_t = None, None
-        if rule and rule[0][0] == "full":
+        if i in grips and grips[i][0] < i:                             # weapon held as in vanilla clips
+            h, gt, gq = grips[i]
+            target_q = qmul(wq[:, h, :], np.broadcast_to(gq, (F, 4)))
+            target_t = wt[:, h, :] + qrot(wq[:, h, :], np.broadcast_to(gt, (F, 3)))
+            dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
+        elif i in targets and targets[i] < i:                          # IK targets on their hands
+            h = targets[i]
+            target_q, target_t = wq[:, h, :], wt[:, h, :]
+            dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
+        elif rule and rule[0][0] == "full":
             d = delta[:, rule[0][1], :]
-            target_q = qmul(d, rq_sf[i][None])
+            target_q = qmul(d, qmul(align.get(i, np.array([0.0, 0.0, 0.0, 1.0])), rq_sf[i])[None])
             dsf[:, i, :] = d
         elif rule and rule[0][0] == "split":
             _k, src, w = rule[0]
@@ -273,6 +290,55 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT) -> D
         wt[:, i, :] = pw_t + qrot(pw_q, out_t[:, i, :])
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
             "world_t": wt, "height_scale": scale}
+
+
+def rest_alignment(sk: "Rig", sf: "Rig", rt_sk=None, rt_sf=None, unit: float = SKYRIM_M_PER_UNIT) -> Dict[int, np.ndarray]:
+    """Per driven Starfield bone, the world rotation (swing only) that turns its rest direction (to its mapped child)
+    onto the Skyrim bone's rest direction. The two rest poses differ more than first assumed (measured 2026-10-19 on
+    BodySlide's skeletons: upper arms 16 deg, clavicles 37 deg, finger joints 11-46 deg), so plain world deltas left
+    arms and fingers consistently off (owner, in game: stiff arms, sword not in the fist); with the swing applied to
+    the Starfield rest the bone points where the Skyrim bone points. Bones with several mapped children use
+    skeletonmap.DIRECTION_CHILD; the trunk (NO_ALIGN) stays as it is."""
+    if rt_sk is None:
+        rt_sk, _ = sk.rest_world()
+    if rt_sf is None:
+        rt_sf, _ = sf.rest_world()
+    out = {}
+    for a, b in M.MAP.items():
+        if a in M.NO_ALIGN or a not in sk.index or b not in sf.index:
+            continue
+        c = M.DIRECTION_CHILD.get(a)
+        if c is None:
+            kids = [n for n in sk.names if sk.parents[sk.index[n]] == sk.index[a] and M.MAP.get(n) in sf.index]
+            if len(kids) != 1:
+                continue
+            c = kids[0]
+        if c not in sk.index or M.MAP.get(c) not in sf.index:
+            continue
+        v_sk = rt_sk[sk.index[c]] - rt_sk[sk.index[a]]
+        v_sf = rt_sf[sf.index[M.MAP[c]]] - rt_sf[sf.index[b]]
+        if np.linalg.norm(v_sk) < 1e-9 or np.linalg.norm(v_sf) < 1e-9:
+            continue
+        swing = _from_to(v_sf[None], v_sk[None])[0]
+        ref = M.ROLL_REF.get(a)
+        if ref and all(r in sk.index and M.MAP.get(r) in sf.index for r in ref):
+            axis = v_sk / np.linalg.norm(v_sk)
+            u_sk = rt_sk[sk.index[ref[1]]] - rt_sk[sk.index[ref[0]]]
+            u_sf = qrot(swing, rt_sf[sf.index[M.MAP[ref[1]]]] - rt_sf[sf.index[M.MAP[ref[0]]]])
+            u_sk, u_sf = u_sk - axis * np.dot(u_sk, axis), u_sf - axis * np.dot(u_sf, axis)
+            if np.linalg.norm(u_sk) > 1e-9 and np.linalg.norm(u_sf) > 1e-9:
+                twist = _from_to(u_sf[None], u_sk[None])[0]           # both lie in the plane normal to the axis
+                swing = qmul(twist, swing)
+        out[sf.index[b]] = swing
+    # leaves (finger tips, toes) take their parent's swing, so a corrected curl carries on to the tip
+    for a, b in M.MAP.items():
+        if a in M.NO_ALIGN or a not in sk.index or b not in sf.index or sf.index[b] in out:
+            continue
+        pa = sk.parents[sk.index[a]]
+        pb = M.MAP.get(sk.names[pa]) if pa >= 0 else None
+        if pb in sf.index and sf.index[pb] in out:
+            out[sf.index[b]] = out[sf.index[pb]]
+    return out
 
 
 def _from_to(a, b):

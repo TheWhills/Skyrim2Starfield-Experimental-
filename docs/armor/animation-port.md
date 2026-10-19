@@ -260,6 +260,17 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: attacks in game look stiff, sword not in the fist (owner) -> limbs aligned, vanilla grip
+**Owner, in game:** attacks play with a normal camera, but the arms look rigid and the weapon does not line up with
+the hand. Measured causes: (1) the two rest poses' limbs differ (upper arms 16 deg, clavicles 37, finger joints 11-46,
+hand roll 13.5), and world-delta retargeting carried those offsets into every frame: Skyrim's arm moved, but from a
+pose 16 deg off, fingers curled wrong round the hilt; (2) the Weapon bone was placed from Skyrim's WEAPON offset, 16 deg
+and 1.7 cm away from where vanilla Starfield holds it. Fixes: retarget.rest_alignment swings each driven Starfield
+bone's rest onto the Skyrim bone's rest direction (hands also rolled by the knuckle line; finger tips inherit); arms,
+forearms, hands and fingers now point within 0.02 deg of Skyrim's through 1hm_attackright (knuckle line 3 deg, from
+proportions). skeletonmap.GRIP puts Weapon in R_Wrist's frame at the offset every vanilla one-handed clip uses
+(verified identical in the sword and generic MeleeAttack_A), and the hand IK targets on the hands.
+
 ### 2026-10-19: sword pack in game: attacks play, camera tipped over (owner) -> camera bones left out
 **Verified in game:** with the sword pack, attacking in third person played our clip but threw the camera into a tilted
 view at floor level. Cause (verified from the vanilla clips): vanilla human clips never carry tracks for the camera

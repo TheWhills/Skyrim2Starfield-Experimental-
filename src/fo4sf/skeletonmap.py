@@ -89,6 +89,28 @@ NOT_ANIMATED = ("Camera", "Camera Control", "Camera Control FP", "CamTargetParen
                 "AnimObjectA", "AnimObjectB", "AnimObjectC", "AnimObjectD", "L_AnimObject1", "L_AnimObject2",
                 "L_AnimObject3", "R_AnimObject1", "R_AnimObject2", "R_AnimObject3", "L_Arm", "R_Arm", "C_Waist", "Root")
 
+# Weapon grip, copied from vanilla Starfield clips (verified 2026-10-19: in the player's sword and generic one-handed
+# MeleeAttack_A the Weapon bone sits rigidly in R_Wrist's frame at this offset (metres) / rotation (x, y, z, w) on every
+# frame; R_HandIk coincides with R_Wrist). Converted clips place Weapon the same way, so a Starfield weapon sits in the
+# hand as in vanilla (Skyrim's WEAPON offset put the blade ~16 degrees off and 1.7 cm out of the fist).
+GRIP: Dict[str, Tuple[str, Tuple[float, float, float], Tuple[float, float, float, float]]] = {
+    "weapon": ("R_Wrist", (0.068, 0.011, -0.038), (0.499, 0.375, 0.519, -0.583)),
+}
+# IK targets kept on the hands they belong to (the IK pass then changes nothing)
+HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}
+# Skyrim bones with several mapped children: the child whose direction aligns the bone (see retarget)
+DIRECTION_CHILD: Dict[str, str] = {}
+for _s in "LR":
+    DIRECTION_CHILD.update({f"NPC {_s} Hand [{_s}Hnd]": f"NPC {_s} Finger20 [{_s}F20]",
+                            f"NPC {_s} UpperArm [{_s}Uar]": f"NPC {_s} Forearm [{_s}Lar]",
+                            f"NPC {_s} Forearm [{_s}Lar]": f"NPC {_s} Hand [{_s}Hnd]"})
+# Bones whose roll (twist about their direction) is aligned too, by a second pair of Skyrim joints: the hands, by the
+# line across the knuckles (index -> pinky base), 13.5 degrees apart in the two rest poses
+ROLL_REF: Dict[str, Tuple[str, str]] = {f"NPC {_s} Hand [{_s}Hnd]": (f"NPC {_s} Finger10 [{_s}F10]",
+                                                                    f"NPC {_s} Finger40 [{_s}F40]") for _s in "LR"}
+NO_ALIGN = ("NPC Root [Root]", "NPC COM [COM ]", "NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]",
+            "NPC Spine2 [Spn2]", "NPC Neck [Neck]", "NPC Head [Head]")
+
 WORLD: Dict[str, str] = {"WEAPON": "Weapon", "WeaponLeft": "Shield",
                          "R_HandIk": "NPC R Hand [RHnd]", "L_HandIk": "NPC L Hand [LHnd]"}
 
