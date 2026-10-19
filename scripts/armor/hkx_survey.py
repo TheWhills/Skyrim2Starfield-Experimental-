@@ -111,6 +111,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="output folder OUTSIDE the repository")
     ap.add_argument("--limit", type=int, default=2000)
     ap.add_argument("--filter", default="", help="regex on the path (forward slashes, lower case)")
+    ap.add_argument("--extract", action="store_true",
+                    help="copy every file matching --filter (no --limit sampling) into <out>\\extract\\<path> "
+                         "instead of surveying (clips to convert elsewhere)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -121,6 +124,21 @@ def main(argv=None):
     if a.filter:
         rx = re.compile(a.filter, re.I)
         names = [n for n in names if rx.search(n.replace("\\", "/"))]
+    if a.extract:
+        if not a.filter:
+            sys.exit("--extract needs --filter")
+        n_ok = 0
+        for n in names:
+            data = src._read(n)
+            if data is None:
+                continue
+            dst = os.path.join(out, "extract", *n.replace("/", "\\").split("\\"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with open(dst, "wb") as fh:
+                fh.write(data)
+            n_ok += 1
+        print(f"extracted {n_ok} of {len(names)} files into {os.path.join(out, 'extract')}")
+        return 0
     if a.limit and len(names) > a.limit:
         step = len(names) / a.limit
         names = [names[int(i * step)] for i in range(a.limit)]

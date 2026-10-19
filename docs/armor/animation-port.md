@@ -249,6 +249,14 @@ with a HumanRace subgraph entry naming NPC_Melee / Player_Melee and our folder f
 Spells map onto CastSelf / CastTarget the same way. New graphs (the translator) are only for what Starfield lacks:
 bow draw / hold / release, horses, two-handed and dual wield sets if their timing differs.
 
+### 2026-10-19: first Skyrim clip playing in Starfield (owner, in game)
+**Verified in game:** Skyrim's chair_idlearmscrossedvar1, converted by hkx_to_af against the vanilla human rig (rest-
+relative keys, 82 animated bones), played on the player through OSF Animation (scene "Skyrim: chair idlearmscrossedvar
+1", screenshot): a correct seated pose on thin air: arms crossed over the chest, knees bent at seat height, feet flat
+on the ground, head tilted down as in Skyrim; no twisted limbs. So decode -> retarget -> rest-relative .af works
+end to end. OSF notes: its released build hides clipLibrary-only packs (unless Show author details), so packs also list
+one looping scene per clip, without `unlisted`.
+
 ### 2026-10-19: vanilla .af clips compared with ours (owner extracted chair Idle, sword attacks, rigs)
 * **verified: .af keys are relative to the rig's rest pose.** Decoded with CALUMI and composed as local = rest * key
   (rotation), rest + key (translation), the vanilla chair Idle is a seated human (hips 0.67 m, ankles 0.12 m, head 1.24
