@@ -108,6 +108,28 @@ class Rig:
         return self.fk(self.t, self.q)
 
 
+def hold_rest_rotation(rig: "Rig", lt, lq, bones=()):
+    """Locals in which the named bones keep their rest rotation relative to the root (character space) on every frame;
+    every bone's world position and every other bone's world rotation are unchanged (their locals absorb the turn),
+    so the pose looks the same. See skeletonmap.HOLD_REST_ROTATION."""
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float)
+    hold = [rig.index[b] for b in bones if b in rig.index and rig.parents[rig.index[b]] >= 0]
+    if not hold:
+        return lt, lq
+    wt, wq = rig.fk(lt, lq)
+    rt, rq = rig.rest_world()
+    root = next(i for i, p in enumerate(rig.parents) if p < 0)
+    for i in hold:
+        wq[:, i] = qmul(wq[:, root], np.broadcast_to(qmul(qinv(rq[root]), rq[i]), wq[:, root].shape))
+    out_t, out_q = lt.copy(), lq.copy()
+    for i, p in enumerate(rig.parents):
+        if p >= 0:
+            inv = qinv(wq[:, p])
+            out_q[:, i] = qmul(inv, wq[:, i])
+            out_t[:, i] = qrot(inv, wt[:, i] - wt[:, p])
+    return out_t, out_q
+
+
 def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
     """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
     the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones

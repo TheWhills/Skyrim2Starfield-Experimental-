@@ -81,6 +81,14 @@ REST = ("", "HumanExportRoot", "CharacterBumper", "CharacterController", "Camera
         "CamTargetParent", "CameraTarget", "Eye_Target", "L_Eye", "R_Eye", "C_BackPack", "C_BackPackHose",
         "AnimObjectC", "AnimObjectD", "L_AnimObject2", "L_AnimObject3", "R_AnimObject2", "R_AnimObject3")
 
+# Bones vanilla human clips keep at their rest rotation in character space, letting the bones below carry the turn
+# (verified 2026-10-19: within 0.7 deg on every frame of the vanilla one-handed ready idle, attacks and the chair idle).
+# DirectAt (under C_Chest) is the "Source Bone" of the melee graph's Dual Direct At node, which turns chest and head
+# toward the camera's aim by the angle between DirectAt and the aim: a DirectAt that turns with the chest (up to 100 deg
+# in a Skyrim swing) makes that node fight the swing, and only while the camera aims (not in TFC). COM: the same
+# convention (the body turn lives in C_Hips / C_Spine); its child C_Waist, never animated, then stays put too.
+HOLD_REST_ROTATION = ("COM", "DirectAt")
+
 # Bones vanilla human clips never animate (verified 2026-10-19 on the vanilla chair Idle and sword attacks: their tracks
 # are absent): the game drives the cameras, prop slots, eye target and helpers itself. A converted clip must leave them
 # out too: a track on Camera / Camera Control tilts the third-person camera into the floor (owner, in game). Root is

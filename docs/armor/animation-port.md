@@ -260,6 +260,16 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner: still pops mid swing, never in TFC (sword now in the fist) -> DirectAt and COM held
+* The camera-shake timing was not it. Verified on vanilla clips (ready idle, attacks, chair idle): COM and DirectAt keep
+  their rest rotation in character space on every frame (within 0.7 deg); the turn lives in C_Hips / C_Spine. Ours
+  turned DirectAt with the chest, up to 100 deg in the sword attack. DirectAt is the Source Bone of NPC_Melee's
+  "Dual Direct At" node (aim / look vectors, heading delta, Lag Degrees 20, Disable Heading Min/Max with 10 deg
+  hysteresis), which turns chest and head toward the camera's aim: fed a DirectAt swinging 100 deg it fights the swing
+  and switches on and off across the heading limits - and TFC gives it no aim (supported hypothesis for the pop).
+* retarget.hold_rest_rotation re-expresses the clip so skeletonmap.HOLD_REST_ROTATION (COM, DirectAt) stay at rest
+  rotation with the pose unchanged (positions and other rotations identical); C_Waist, never animated, follows.
+
 ### 2026-10-19: owner: pop still there, about halfway through the swing, never in TFC; sword still not lined up
 * Sword (verified on our output): setting the Weapon bone to Skyrim's orientation turned it a constant 22 deg (30 in the
   block idle) away from the vanilla grip, about its own origin, so the hilt sat beside the fist. Now the weapon always

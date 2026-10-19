@@ -262,6 +262,7 @@ def main(argv=None):
                 out_t, out_q = out_t[:, :n_anim], out_q[:, :n_anim]
                 out_rig = retarget.Rig(game_rig.names[:n_anim], game_rig.parents[:n_anim], game_rig.t[:n_anim],
                                        game_rig.q[:n_anim])
+                out_t, out_q = retarget.hold_rest_rotation(out_rig, out_t, out_q, skeletonmap.HOLD_REST_ROTATION)
                 if vafx and a.align_com:
                     shift = com_shift(a.calumi, rig_path, game_rig, vafx, a.starfield_data, out_t, out_q, out)
                     out_t = out_t.copy()

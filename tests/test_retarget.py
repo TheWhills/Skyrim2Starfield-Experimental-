@@ -219,6 +219,26 @@ class RetargetTests(unittest.TestCase):
         t = np.tile(rig.t, (len(angles), 1, 1))
         self.assertEqual(R.blade_peak(rig, t, q), 3)
         self.assertIsNone(R.blade_peak(R.Rig(["Root"], [-1], [(0, 0, 0)], [I]), t[:, :1], q[:, :1]))
+    def test_hold_rest_rotation_keeps_pose(self):
+        rig = R.Rig(["Root", "COM", "Spine", "Chest", "DirectAt"], [-1, 0, 1, 2, 3],
+                    [(0, 0, 0), (0, 0, 1), (0, 0.1, 0.2), (0, 0, 0.3), (0, 0.05, 0)],
+                    [I, qaxis((0, 1, 0), 90), I, qaxis((1, 0, 0), 10), qaxis((0, 0, 1), -20)])
+        F = 3
+        lt = np.tile(rig.t, (F, 1, 1))
+        lq = np.tile(rig.q, (F, 1, 1))
+        for f in range(F):                                             # the body turns, a lot, at COM and chest
+            lq[f, 1] = R.qmul(qaxis((0, 0, 1), 40 * f), rig.q[1])
+            lq[f, 3] = R.qmul(qaxis((0, 0, 1), 30 * f), rig.q[3])
+        wt0, wq0 = rig.fk(lt, lq)
+        t2, q2 = R.hold_rest_rotation(rig, lt, lq, ("COM", "DirectAt", "Missing"))
+        wt, wq = rig.fk(t2, q2)
+        _rt, rq = rig.rest_world()
+        self.assertTrue(np.allclose(wt, wt0, atol=1e-9))              # every position unchanged
+        for i in (1, 4):                                               # held bones at rest rotation
+            self.assertTrue(np.allclose(np.abs(np.sum(wq[:, i] * rq[i], -1)), 1, atol=1e-9))
+        for i in (2, 3):                                               # the others keep their world rotation
+            self.assertTrue(np.allclose(np.abs(np.sum(wq[:, i] * wq0[:, i], -1)), 1, atol=1e-9))
+
 
 if __name__ == "__main__":
     unittest.main()
