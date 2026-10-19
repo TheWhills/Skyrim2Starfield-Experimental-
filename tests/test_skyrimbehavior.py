@@ -91,7 +91,8 @@ class SkyrimBehaviorTests(unittest.TestCase):
         import behavior_dump as D
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "test.hkx")
-            open(p, "wb").write(graph())
+            with open(p, "wb") as fh:
+                fh.write(graph())
             D.dump(p, d)
             with open(os.path.join(d, "test.txt"), encoding="utf-8") as fh:
                 txt = fh.read()

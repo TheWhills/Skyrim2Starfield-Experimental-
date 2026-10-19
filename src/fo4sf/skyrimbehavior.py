@@ -24,6 +24,7 @@ from hkRootLevelContainer's first pointer). Fields not listed here are not read.
     flags u8 @115
   hkbBlenderGenerator: blendParameter f32 @76, children (ptr array) @96;  hkbBlenderGeneratorChild: generator @48,
     weight f32 @64
+  hkbBehaviorReferenceGenerator: behaviorName char* @72 (e.g. Behaviors\\QuadrupedBehavior.hkx)
   hkbVariableBindingSet: bindings (40-byte records: memberPath char* @0, variableIndex i32 @28, bindingType i8 @33)
 Every other object is kept generically: its class, name (when it is an hkbNode) and the objects it points to, in
 field order, so the whole tree can be walked.
@@ -179,6 +180,8 @@ def read(data: bytes) -> Dict:
                      speed=speed, mode=r.u("<B", o, 114)[0])
         elif c == "hkbBlenderGenerator":
             n.update(blend_parameter=r.u("<f", o, 76)[0], blend_children=[x for x in r.ptr_array(o, 96) if x])
+        elif c == "hkbBehaviorReferenceGenerator":
+            n.update(behavior=r.string(o, 72))
         elif c == "hkbBlenderGeneratorChild":
             n.update(generator=r.p(o, 48), weight=r.u("<f", o, 64)[0])
         nodes[o] = n

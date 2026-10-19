@@ -302,3 +302,29 @@ movement type are the candidate scaffold for dragon flight.
 * Dragon graph shape (behavior_dump): master -> ground / take-off / flight (cruise: feather, flap, glide) / hover /
   nine landing kinds (default, vertical, injured, hasty, crash, perches), shouts layered on a neck machine; engine
   events TakeOff, HoverStart, FlyStop*, FlightCruising ...; variables Pitch, Speed, TargetSpeed, TurnDelta, ...
+
+**2026-10-19, blends translated; CALUMI Motion** (offline):
+* CALUMI.Motion (github.com/Calaverah/CALUMI.Motion, LGPL, Nexus 16181: a visual .agx editor; read for format
+  knowledge only) lists 60 Starfield graph node types. Skyrim classes with a Starfield counterpart: blender ->
+  NT_BLEND_NODE, cyclic / locomotion blends -> NT_LOCOMOTION_BLEND, manual selector -> NT_SWITCH_NODE, synchronized
+  (paired) clips -> NT_PAIRED_ANIMATION, look-at -> NT_DIRECT_AT / NT_DUAL_DIRECT_AT, foot IK -> NT_FOOT_IK /
+  NT_MULTI_FOOT_IK, ragdoll drive / get-up -> NT_RAGDOLL_DRIVE / NT_RAGDOLL_GET_UP, timer -> NT_TIMER_EVENT,
+  every-N-events -> NT_EVERY_N_EVENTS_MODIFIER, state tagging -> NT_ASSIGN_ISTATE; also NT_CURVED_PATH_BLENDER,
+  NT_TWO_BONE_IK, NT_RANDOM_ANIMATION_NODE, NT_EVALUATE_CONDITION_VARIABLE (supported: names; semantics unverified).
+* Blend format (shipped files + CALUMI.Motion): NT_BLEND_NODE has <divisions> and one <blendInput> per input
+  (`<point><Range>r</Range><Weight>w</Weight></point>` rows; empty in the shipped graphs), named inputs fed by data
+  links (no property sheet), output "Out"; rows Name, Variable Name, Variable Type (Standard 0 / Parametric 1 /
+  Layer 2), Sync Variable, Input Lock Time, Range Min / Max, Wrap To Range, Max Blend Time, Normalize Weights, Only
+  Highest Weight Active. NT_SWITCH_NODE: Variable Type (Event 0 / Variable 1 / Event and Variable 2), Tag Alteration
+  (Do Nothing 0 / Prefix 1 / Suffix 2). A blend tree (NT_BLEND_TREE_EMBEDDED, or a whole graph like Player_Melee) is a
+  data-flow graph whose node 0 is its output (the only node nothing consumes, in all three shipped trees). Graphs carry
+  a second sheet listing their states' names (supported: the names a start / sync variable selects by).
+* Translator: Skyrim blenders -> blend trees (variable = the one bound to blendParameter, one triangle curve per
+  child = the blender's linear interpolation), selectors -> switches on the bound variable, behaviour references ->
+  NT_GRAPH_REF, anything used from more than one place -> its own graph file + NT_GRAPH_REF (no in-file instancing;
+  copying blew the dragon up to 742 machines). Results: dragon -> 61 graphs, 1.5 MB, 218 states / 66 machines (= the
+  source), 217 clip states, 29 blends, 6 switches, 77 shared-part refs, 2 pose-matching states left empty, 118
+  modifiers not translated; horse -> 13 graphs; wolf -> a reference to QuadrupedBehavior (16 graphs, which itself
+  references NonCombatIdle and ForwardLocomotion). CLI: scripts/armor/behavior_to_agx.py.
+* Still not translated: modifiers (look-at, foot IK, ragdoll, timers, expressions, event-driven), pose matching,
+  cyclic blend transitions, clip triggers. Unverified in game: everything about how the engine loads these.

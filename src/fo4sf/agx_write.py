@@ -6,7 +6,14 @@
           | {"kind": "empty"}                                                             NT_ANIMATION_NODE, TagName None
           | {"kind": "sm", "name": "Locomotion", "graph": graph (nested, no "name")}      NT_STATE_MACHINE_EMBEDDED
           | {"kind": "ref", "graph_ref": "Jumping"}                                       NT_GRAPH_REF
-    link_props: {"event", "condition", "blend" (s), "priority", "type" ("Smooth")}
+          | {"kind": "blendtree", "name": "...", "graph": {"type": "blendtree", "nodes", "links"}}
+                                                    NT_BLEND_TREE_EMBEDDED: a data-flow graph whose node 0 is its output
+          | {"kind": "blend", "name", "variable", "variable_type": "Standard", "range": (min, max),
+             "inputs": [names], "curves": [[(range, weight), ...] per input] or None}           NT_BLEND_NODE
+          | {"kind": "switch", "name", "variable", "variable_type": "Variable", "inputs": [case names],
+             "tag_alteration": "Do Nothing"}                                                    NT_SWITCH_NODE
+    link_props (state machine transitions): {"event", "condition", "blend" (s), "priority", "type" ("Smooth")}
+    link_props (data links inside a blend tree): {"data": True, "input": index of the target's input}
 
 Layout as in the shipped files (SW SFBM mod, Nexus 16022; verified by reading them): CRLF, tab indents; every node has
 node_type, noninstanced, flags, name, pos / expanded pos, use_color_2, user_id, collapsed, guid, its inputs (a
@@ -31,9 +38,17 @@ GRAPH_ROWS = [("Start Selection Method", 2, "Default", 0), ("Start Selection Var
 LINK_ROWS = [("Event", 2, ""), ("Comment", 2, ""), ("Condition", 2, ""), ("Blend Time", 1, "0.2"), ("Priority", 0, "0"),
              ("Allow Self Transition", 3, "False"), ("Do Not Follow Sync Group", 3, "False"),
              ("Transition Type", 2, "Smooth", 0)]
+BLENDTREE_ROWS = [("Blend Tree Name", 2, ""), ("Sync Only Transition Out", 3, "False")]
+BLENDTREE_GRAPH_ROWS = [("Blend Tree Name", 2, "")]
+# dropdown list orders (CALUMI.Motion's definitions; they match the list indexes in the shipped files)
+BLEND_VARIABLE_TYPES = ["Standard", "Parametric", "Layer"]
+SWITCH_VARIABLE_TYPES = ["Event", "Variable", "Event and Variable"]
+TAG_ALTERATIONS = ["Do Nothing", "Prefix", "Suffix"]
 NODE_TYPES = {"anim": "NT_ANIMATION_NODE", "empty": "NT_ANIMATION_NODE", "sm": "NT_STATE_MACHINE_EMBEDDED",
-              "ref": "NT_GRAPH_REF"}
-NODE_NAMES = {"anim": "Animation", "empty": "Animation", "sm": "State Machine Embedded", "ref": "Graph Ref"}
+              "ref": "NT_GRAPH_REF", "blendtree": "NT_BLEND_TREE_EMBEDDED", "blend": "NT_BLEND_NODE",
+              "switch": "NT_SWITCH_NODE"}
+NODE_NAMES = {"anim": "Animation", "empty": "Animation", "sm": "State Machine Embedded", "ref": "Graph Ref",
+              "blendtree": "Blend Tree Embedded", "blend": "Blend", "switch": "Switch"}
 
 
 def _esc(s) -> str:
@@ -76,29 +91,49 @@ def _graph_body(g: Dict, ids: _Ids, ind: str) -> List[str]:
         slot = len(outs[a])
         outs[a].append(ids.next())
         incoming[b].append((a, slot, props))
+    if g.get("type") == "blendtree":
+        consumed = {a for a, _b, _p in links}
+        if 0 in consumed:
+            raise ValueError("a blend tree's node 0 is its output and must not feed another node")
     lines = [f"{ind}<Link_Style>1</Link_Style>"]
     for i, n in enumerate(nodes):
         kind = n["kind"]
         flags = "".join(f"<flag>{_esc(f)}</flag>" for f in n.get("flags", []))
         lines += [f"{ind}<node>", f"{ind}\t<node_type>{NODE_TYPES[kind]}</node_type>",
-                  f"{ind}\t<noninstanced>False</noninstanced>", f"{ind}\t<flags>{flags}</flags>",
-                  f"{ind}\t<name>{NODE_NAMES[kind]}</name>",
+                  f"{ind}\t<noninstanced>False</noninstanced>"]
+        if kind == "blend":
+            curves = n.get("curves") or [[] for _ in n.get("inputs", [])]
+            lines.append(f"{ind}\t<divisions>0</divisions>")
+            for pts in curves:
+                lines.append(f"{ind}\t<blendInput>")
+                for r, w in pts:
+                    lines.append(f"{ind}\t\t<point><Range>{r:g}</Range><Weight>{w:g}</Weight></point>")
+                lines.append(f"{ind}\t</blendInput>")
+        else:
+            lines.append(f"{ind}\t<flags>{flags}</flags>")
+        lines += [f"{ind}\t<name>{NODE_NAMES[kind]}</name>",
                   f"{ind}\t<pos_x>{200 + 220 * (i % 6)}</pos_x>", f"{ind}\t<pos_y>{150 + 160 * (i // 6)}</pos_y>",
                   f"{ind}\t<expanded_pos_x>{200 + 220 * (i % 6)}</expanded_pos_x>",
                   f"{ind}\t<expanded_pos_y>{150 + 160 * (i // 6)}</expanded_pos_y>",
                   f"{ind}\t<use_color_2>False</use_color_2>", f"{ind}\t<user_id>{i}</user_id>",
                   f"{ind}\t<collapsed>True</collapsed>", f"{ind}\t<guid>{ids.guid()}</guid>"]
-        lines.append(f"{ind}\t<input> <name></name> <id>{ids.next()}</id> <idx>0</idx>")
-        for a, slot, props in incoming[i]:
-            vals = {"Event": props.get("event", ""), "Condition": props.get("condition", ""),
-                    "Blend Time": f"{props.get('blend', 0.2):g}", "Priority": str(props.get("priority", 0)),
-                    "Transition Type": props.get("type", "Smooth"), "Comment": props.get("comment", "")}
-            lines += ["", f"{ind}\t\t<link>", f"{ind}\t\t\t<node>{a}</node> <output>{slot}</output> <hidden>False</hidden>"]
-            lines += _sheet(LINK_ROWS, vals, ind + "\t")
-            lines.append(f"{ind}\t\t</link>")
-        lines.append(" </input>")
-        for slot, oid in enumerate(outs[i]):
-            lines += [f"{ind}\t<output> <name></name> <id>{oid}</id> <idx>{slot}</idx>", " </output>"]
+        in_names = n.get("inputs") or [""]
+        for k, iname in enumerate(in_names):
+            lines.append(f"{ind}\t<input> <name>{_esc(iname)}</name> <id>{ids.next()}</id> <idx>{k}</idx>")
+            for a, slot, props in incoming[i]:
+                if props.get("input", 0) != k:
+                    continue
+                lines += ["", f"{ind}\t\t<link>", f"{ind}\t\t\t<node>{a}</node> <output>{slot}</output> <hidden>False</hidden>"]
+                if not props.get("data"):
+                    vals = {"Event": props.get("event", ""), "Condition": props.get("condition", ""),
+                            "Blend Time": f"{props.get('blend', 0.2):g}", "Priority": str(props.get("priority", 0)),
+                            "Transition Type": props.get("type", "Smooth"), "Comment": props.get("comment", "")}
+                    lines += _sheet(LINK_ROWS, vals, ind + "\t")
+                lines.append(f"{ind}\t\t</link>")
+            lines.append(" </input>")
+        out_name = "Out" if kind in ("blend", "switch") else ""
+        for slot, oid in enumerate(outs[i] or ([ids.next()] if kind in ("blend", "switch") else [])):
+            lines += [f"{ind}\t<output> <name>{out_name}</name> <id>{oid}</id> <idx>{slot}</idx>", " </output>"]
         if kind in ("anim", "empty"):
             vals = dict(n.get("props", {}))
             vals["TagName"] = n.get("tag") or "None" if kind == "anim" else "None"
@@ -110,7 +145,32 @@ def _graph_body(g: Dict, ids: _Ids, ind: str) -> List[str]:
             lines.append(f"{ind}\t</graph>")
         elif kind == "ref":
             lines += _sheet(REF_ROWS, {"Graph Ref": n.get("graph_ref", "")}, ind + "\t")
+        elif kind == "blendtree":
+            lines += _sheet(BLENDTREE_ROWS, {"Blend Tree Name": n.get("name", "")}, ind + "\t")
+            sub = dict(n["graph"], type="blendtree")
+            lines.append(f"{ind}\t<graph>")
+            lines += _graph_body(sub, ids, ind + "\t\t")
+            lines.append(f"{ind}\t</graph>")
+        elif kind == "blend":
+            vt = n.get("variable_type", "Standard")
+            lo, hi = n.get("range", (0.0, 1.0))
+            rows = [("Name", 2, ""), ("Variable Name", 1, ""), ("Variable Type", 2, vt, BLEND_VARIABLE_TYPES.index(vt)),
+                    ("Sync Variable", 0, ""), ("Input Lock Time", 1, "-1"), ("Range Min", 1, "0"), ("Range Max", 1, "1"),
+                    ("Wrap To Range", 3, "False"), ("Max Blend Time", 1, "0"), ("Normalize Weights", 3, "False"),
+                    ("Only Highest Weight Active", 3, "False")]
+            lines += _sheet(rows, {"Name": n.get("name", ""), "Variable Name": n.get("variable", ""),
+                                   "Range Min": f"{lo:g}", "Range Max": f"{hi:g}"}, ind + "\t")
+        elif kind == "switch":
+            vt = n.get("variable_type", "Variable")
+            ta = n.get("tag_alteration", "Do Nothing")
+            rows = [("Name", 2, ""), ("Variable Name", 0, ""), ("Variable Type", 2, vt, SWITCH_VARIABLE_TYPES.index(vt)),
+                    ("Max Blend Time", 1, "0"), ("Randomize If Invalid", 3, "False"),
+                    ("Tag Alteration", 2, ta, TAG_ALTERATIONS.index(ta))]
+            lines += _sheet(rows, {"Name": n.get("name", ""), "Variable Name": n.get("variable", "")}, ind + "\t")
         lines.append(f"{ind}</node>")
+    if g.get("type") == "blendtree":
+        lines += _sheet(BLENDTREE_GRAPH_ROWS, {}, ind)
+        return lines
     sv = g.get("start_variable", "")
     lines += _sheet(GRAPH_ROWS, {"Start Selection Method": "Variable" if sv else "Default",
                                  "Start Selection Variable": sv}, ind)
