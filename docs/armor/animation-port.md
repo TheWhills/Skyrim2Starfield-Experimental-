@@ -112,12 +112,51 @@ binary, how states / transitions / selectors / variables are stored) and how the
 * Next: the retargeter (neutral clip on Skyrim rest -> Starfield local rotations), then writing `.af` (CALUMI; a Linux
   build of it is half done in scratch, which would let the whole hkx -> af chain be tested here).
 
-**2026-10-19, Skyrim behaviour inventory** ( on the 276 vanilla behaviour /
+**2026-10-19, Skyrim behaviour inventory** (`scripts/armor/behavior_inventory.py` on the 276 vanilla behaviour /
 character / skeleton files Pandora ships as templates, GPL repo, read outside this repo). Pandora's copies carry 8
 extra leading bytes per object (pointers land on the object start, fields sit 8 bytes later), so they are not the
 game's own layout: the inventory reads strings through pointer fixups, independent of offsets. Per creature folder
 (graphs, state machines, states, clip generators, synchronized (paired) clips, blends, distinct animation files):
-
+```
+creature                 graphs   SMs states  clips  sync blends  anims
+ambient                       2    22     76     65     0      3     41
+atronachflame                 1    24     57     45     0      8     49
+atronachfrost                 1    18     49     59     0     19     39
+atronachstorm                 1    16     44     38     0     11     29
+bear                          4    27     77     74     5     16     46
+canine                        9    81    252    222     6     49    126
+character                    35  1963   5269   4975   435   1014   2178
+chaurus                       1    18     66     66     0      9     57
+cow                           6    29     84     80     0     24     46
+deer                          4    25     70     59     0     19     33
+dlc01                         2    37    110    120     8     16    109
+dlc02                        12   203    549    617    18    127    382
+dragon                        1    66    218    214     9     29    189
+dragonpriest                  1    36    109    117     0     18    120
+draugr                        1    79    232    414     6    120    226
+dwarvenspherecenturion        1    36     81    132     0     40     94
+dwarvenspider                 1    12     46     44     0     10     37
+dwarvensteamcenturion         1    24     68     80     4     16     52
+falmer                        1    67    191    190     6     57    136
+frostbitespider               1    14     52     53     4      6     49
+giant                         1    42     98    124     5     33     75
+goat                          4    27     80     62     0     15     43
+hagraven                      1    21     61     96     4     24     88
+horker                        4    32     88     75     0     13     47
+horse                         1    20     66     65     4     11     73
+icewraith                     1    11     31     24     0      2     20
+mammoth                       4    26     72     59     0     11     51
+mudcrab                       1    19     55     56     0      9     46
+sabrecat                      4    36    112     91     6     17     71
+skeever                       4    24     64     50     0     10     41
+slaughterfish                 1    13     31     27     0      7     34
+spriggan                      1    21     65     92     4     22    121
+troll                         1    24     90    116     5     22     81
+vampirelord                   1    44    125    116     3     56    104
+werewolfbeast                 1    67    147    200     5     53    146
+wisp                          1    22     61     47     0      5     42
+witchlight                    1     6     15     11     0      1     10
+```
 Human ("character"): 35 graphs, 5,269 states, 4,975 clips over 2,178 animation files, 435 paired clips (killmoves,
 mount / dismount). Horse: 66 states, 73 animations, events HorseEnter / HorseExit / HorseLocomotion / HorseDismount;
 mounting is a paired clip with the rider (sharedkillmoves/human&horse/paired_mount.hkx). These are the sizes of the
