@@ -253,6 +253,20 @@ class RetargetTests(unittest.TestCase):
         self.assertTrue(np.allclose(wt[:, c], wt0[:, c]))             # its child stays where it was
         self.assertTrue(np.allclose(np.delete(wt, a, 1), np.delete(wt0, a, 1)))
 
+    def test_ease_out_settles_on_last_pose(self):
+        F = 12
+        lt = np.zeros((F, 1, 3))
+        lt[:, 0, 0] = np.linspace(0, 1.1, F)                           # constant speed to the very end
+        lq = np.tile([0, 0, 0, 1.0], (F, 1, 1))
+        lq[:, 0] = [qaxis((0, 0, 1), a) for a in np.linspace(0, 55, F)]
+        t2, q2 = R.ease_out(lt, lq, 6)
+        x = t2[:, 0, 0]
+        self.assertTrue(np.allclose(x[:6], lt[:6, 0, 0]) and np.isclose(x[-1], 1.1))   # start and last pose kept
+        self.assertTrue(np.all(np.diff(x) > 0))                                         # still moving forward
+        self.assertLess(x[-1] - x[-2], 0.35 * 0.1)                                      # last step: a third of before
+        self.assertTrue(np.allclose(np.linalg.norm(q2, axis=-1), 1))
+        self.assertTrue(np.allclose(R.ease_out(lt, lq, 0)[0], lt))
+
 
 if __name__ == "__main__":
     unittest.main()

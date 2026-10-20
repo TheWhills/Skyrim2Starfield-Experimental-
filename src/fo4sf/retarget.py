@@ -351,6 +351,29 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
             "world_t": wt, "height_scale": scale}
 
 
+def ease_out(lt, lq, frames: int):
+    """The last `frames` frames re-timed so the clip comes to rest on its last pose instead of stopping dead: frame
+    F-1-n+k shows the pose at time (F-1-n) + n*h(k/n), h(u) = u + u^2 - u^3 (speed unchanged where the tail starts,
+    zero at the last frame; same first and last pose, same length). Skyrim attacks end mid-step (1hm_attackright's left
+    foot moves 11 cm in its last frame); Skyrim's behaviour hides that, a Starfield clip end shows it as a foot that
+    slides back and stops dead."""
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float)
+    F = lt.shape[0]
+    n = min(int(frames), F - 1)
+    if n < 2:
+        return lt, lq
+    out_t, out_q = lt.copy(), lq.copy()
+    a = F - 1 - n
+    for k in range(1, n):
+        u = k / n
+        s = a + n * (u + u * u - u ** 3)
+        i = min(int(np.floor(s)), F - 2)
+        w = s - i
+        out_t[a + k] = lt[i] * (1 - w) + lt[i + 1] * w
+        out_q[a + k] = qslerp(lq[i], lq[i + 1], w)
+    return out_t, out_q
+
+
 def blade_peak(rig: "Rig", t, q, bone: str = "Weapon", tip=(0.0, 0.0, 0.6)) -> Optional[int]:
     """Frame where the weapon tip moves fastest (k: between frames k and k + 1), or None without the bone. On the
     vanilla one-handed attacks this is the HitFrame within 1 frame in 39 of 41 clips, 2-3 frames in the other two

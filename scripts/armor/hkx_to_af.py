@@ -163,6 +163,9 @@ def main(argv=None):
                     help="melee clips: turn the right hand so the weapon, held in the vanilla grip, points as Skyrim's "
                          "does (otherwise the hand follows Skyrim's and the blade is ~20-30 deg off), and animate "
                          "R_AnimObject3 on the weapon as vanilla combat clips do")
+    ap.add_argument("--ease-out", type=int, default=0, metavar="FRAMES",
+                    help="with --replace, for attacks (the vanilla descriptor has a HitFrame): re-time the last FRAMES "
+                         "frames so the clip settles on its last pose (Skyrim attacks end mid-step)")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -266,6 +269,9 @@ def main(argv=None):
                 out_t, out_q = out_t[:, :n_anim], out_q[:, :n_anim]
                 out_rig = retarget.Rig(game_rig.names[:n_anim], game_rig.parents[:n_anim], game_rig.t[:n_anim],
                                        game_rig.q[:n_anim])
+                if vafx and a.ease_out and b"<name>HitFrame</name>" in like:
+                    out_t, out_q = retarget.ease_out(out_t, out_q, a.ease_out)
+                    row["eased_frames"] = a.ease_out
                 out_t, out_q = retarget.hold_rest_rotation(out_rig, out_t, out_q, skeletonmap.HOLD_REST_ROTATION)
                 if a.weapon_in_hand:
                     out_t, out_q = retarget.copy_world(out_rig, out_t, out_q, skeletonmap.WEAPON_FOLLOWERS)

@@ -260,6 +260,18 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner: grip right in combat; left leg slides back with a jolt; only three hits, then it stops
+* Root motion: not wanted - the goal is Skyrim's combat, and Skyrim's standing attacks stay in place (owner).
+* Leg (verified on the data): every attack starts and ends exactly on the ready idle's foot positions, but Skyrim's
+  1hm_attackright itself ends mid-step - its left foot moves 11 cm in the last frame (1hm_attackleft 1 cm) - so the
+  foot slides home and stops dead when the clip ends. hkx_to_af --ease-out 8 re-times the last 8 frames of attack
+  replacements (vanilla descriptor has a HitFrame) so the clip settles: last-frame step 10 cm -> 2.4 cm, same poses.
+* Combo: the player's attacks live in MeleeAttacks.agx (vanilla: 6 nodes, an embedded "MeleeAttackCombo" state
+  machine, events MeleeAttackStart / MeleeAttackPowerStart / MeleeAttackSprintStart / ActionInterrupt). Supported
+  hypothesis: the combo machine chains A -> B -> C on MeleeAttackStart with no transition out of C, so a fourth press
+  does nothing until C ends; Skyrim alternates right / left for as long as attack is pressed. Plan: a replacement graph
+  with C -> B added (B is Skyrim's left swing, C its right), needs the vanilla file (owner extract pending).
+
 ### 2026-10-19: owner: pop largely fixed; weapon right when drawn, "all weird" once in combat / attacking
 * Verified on vanilla clips: every one-handed combat clip (attacks, ready / block idles, equip / unequip, jumps, casts)
   animates R_AnimObject3 (under R_Wrist) exactly on the Weapon bone (within 1 mm / 0.4 deg); relaxed and furniture
