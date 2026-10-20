@@ -239,6 +239,20 @@ class RetargetTests(unittest.TestCase):
         for i in (2, 3):                                               # the others keep their world rotation
             self.assertTrue(np.allclose(np.abs(np.sum(wq[:, i] * wq0[:, i], -1)), 1, atol=1e-9))
 
+    def test_copy_world_puts_follower_on_weapon(self):
+        rig = R.Rig(["Root", "Chest", "Weapon", "R_Wrist", "R_AnimObject3", "Child"], [-1, 0, 1, 0, 3, 4],
+                    [(0, 0, 0), (0, 0, 1), (0.2, 0.3, 0), (0.4, 0, 1), (0, 0, 0), (0, 0, 0.1)],
+                    [I, I, qaxis((1, 0, 0), 50), qaxis((0, 1, 0), 30), I, I])
+        lt, lq = np.tile(rig.t, (2, 1, 1)), np.tile(rig.q, (2, 1, 1))
+        lq[1, 2] = qaxis((0, 0, 1), 70)
+        wt0, wq0 = rig.fk(lt, lq)
+        t2, q2 = R.copy_world(rig, lt, lq, {"R_AnimObject3": "Weapon", "Absent": "Weapon"})
+        wt, wq = rig.fk(t2, q2)
+        a, w, c = rig.index["R_AnimObject3"], rig.index["Weapon"], rig.index["Child"]
+        self.assertTrue(np.allclose(wt[:, a], wt[:, w]) and np.allclose(np.abs(np.sum(wq[:, a] * wq[:, w], -1)), 1))
+        self.assertTrue(np.allclose(wt[:, c], wt0[:, c]))             # its child stays where it was
+        self.assertTrue(np.allclose(np.delete(wt, a, 1), np.delete(wt0, a, 1)))
+
 
 if __name__ == "__main__":
     unittest.main()

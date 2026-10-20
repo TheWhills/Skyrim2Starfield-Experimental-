@@ -89,6 +89,13 @@ REST = ("", "HumanExportRoot", "CharacterBumper", "CharacterController", "Camera
 # convention (the body turn lives in C_Hips / C_Spine); its child C_Waist, never animated, then stays put too.
 HOLD_REST_ROTATION = ("COM", "DirectAt")
 
+# Bones vanilla melee clips set to another bone's world transform. R_AnimObject3 (under R_Wrist) equals the Weapon bone
+# (within 1 mm / 0.4 deg) on every frame of every vanilla one-handed combat clip checked: attacks, ready and block idles,
+# equip / unequip, jumps, casts (verified 2026-10-19; relaxed and furniture clips do not). Left at rest the weapon sat
+# on the wrist bone once in combat (owner: aligned when drawn, "all weird" once attacking). Applied to clips converted
+# with hkx_to_af --weapon-in-hand, which then also give R_AnimObject3 a track.
+WEAPON_FOLLOWERS: Dict[str, str] = {"R_AnimObject3": "Weapon"}
+
 # Bones vanilla human clips never animate (verified 2026-10-19 on the vanilla chair Idle and sword attacks: their tracks
 # are absent): the game drives the cameras, prop slots, eye target and helpers itself. A converted clip must leave them
 # out too: a track on Camera / Camera Control tilts the third-person camera into the floor (owner, in game). Root is

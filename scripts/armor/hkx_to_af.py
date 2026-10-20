@@ -160,8 +160,9 @@ def main(argv=None):
     ap.add_argument("--replace", action="append", default=[], metavar="CLIP::VANILLA_AFX",
                     help="replace a vanilla clip in place (see above); repeatable")
     ap.add_argument("--weapon-in-hand", action="store_true",
-                    help="turn the right hand so the weapon, held in the vanilla grip, points as Skyrim's does "
-                         "(melee clips; otherwise the hand follows Skyrim's and the blade is ~20-30 deg off)")
+                    help="melee clips: turn the right hand so the weapon, held in the vanilla grip, points as Skyrim's "
+                         "does (otherwise the hand follows Skyrim's and the blade is ~20-30 deg off), and animate "
+                         "R_AnimObject3 on the weapon as vanilla combat clips do")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -227,6 +228,9 @@ def main(argv=None):
     if a.clip_dir:
         for d, _ds, fns in os.walk(a.clip_dir):
             clips += [(os.path.join(d, f), None) for f in sorted(fns) if f.lower().endswith(".hkx")]
+    omit = tuple(skeletonmap.NOT_ANIMATED)
+    if a.weapon_in_hand:                       # melee clips: these follow the weapon, as in vanilla combat clips
+        omit = tuple(b for b in omit if b not in skeletonmap.WEAPON_FOLLOWERS)
     report = []
     for c, vafx in clips:
         name = os.path.splitext(os.path.basename(c.replace("\\", "/")))[0]
@@ -263,6 +267,8 @@ def main(argv=None):
                 out_rig = retarget.Rig(game_rig.names[:n_anim], game_rig.parents[:n_anim], game_rig.t[:n_anim],
                                        game_rig.q[:n_anim])
                 out_t, out_q = retarget.hold_rest_rotation(out_rig, out_t, out_q, skeletonmap.HOLD_REST_ROTATION)
+                if a.weapon_in_hand:
+                    out_t, out_q = retarget.copy_world(out_rig, out_t, out_q, skeletonmap.WEAPON_FOLLOWERS)
                 if vafx and a.align_com:
                     shift = com_shift(a.calumi, rig_path, game_rig, vafx, a.starfield_data, out_t, out_q, out)
                     out_t = out_t.copy()
@@ -273,7 +279,7 @@ def main(argv=None):
                                 out_t, out_q, tag=a.tag or name, rig_path=save_rig if game_rig is not None
                                 else rig_path, events=clip["annotations"],
                                 like_afx=like, like_last=like_last, file_name=file_name,
-                                omit=skeletonmap.NOT_ANIMATED if game_rig is not None else (), hit_frame=hit)
+                                omit=omit if game_rig is not None else (), hit_frame=hit)
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],

@@ -130,6 +130,27 @@ def hold_rest_rotation(rig: "Rig", lt, lq, bones=()):
     return out_t, out_q
 
 
+def copy_world(rig: "Rig", lt, lq, pairs) -> tuple:
+    """Locals in which each bone of pairs {bone: source} has the source's world transform on every frame; the bone's
+    children keep their world transforms. See skeletonmap.WEAPON_FOLLOWERS."""
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float)
+    todo = [(rig.index[b], rig.index[s]) for b, s in pairs.items() if b in rig.index and s in rig.index
+            and rig.parents[rig.index[b]] >= 0]
+    if not todo:
+        return lt, lq
+    wt, wq = rig.fk(lt, lq)
+    for b, s in todo:
+        wt[:, b], wq[:, b] = wt[:, s], wq[:, s]
+    out_t, out_q = lt.copy(), lq.copy()
+    changed = {b for b, _s in todo}
+    for i, p in enumerate(rig.parents):
+        if p >= 0 and (i in changed or p in changed):
+            inv = qinv(wq[:, p])
+            out_q[:, i] = qmul(inv, wq[:, i])
+            out_t[:, i] = qrot(inv, wt[:, i] - wt[:, p])
+    return out_t, out_q
+
+
 def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
     """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
     the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones
