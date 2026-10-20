@@ -285,6 +285,10 @@ self-closing empty elements, as shipped.
   Rotation flag, no aim / rotation windows, bNoHeadTrack throughout. Supported hypothesis: ending the game's attack
   state at once is what frees the movement input. combo_loop.py --attack-end-at-start (experiment) adds AttackEnd at
   frame 0 and holds bDontAllowAttack to each swing's AttackStateNextAttack frame; test pack pending.
+* Owner, --attack-end-at-start: the latch now ends after a few swings, but combat still feels locked: the combo
+  stays in whatever mode it started in (moving or standing). Parked here: what holds movement during a swing is the
+  game's code (attack state, movement input), and graph / descriptor edits only nudge it. Next options: settle on a
+  build and move on, or a native (SFSE) look at the player's attack-movement code.
 
 ### 2026-10-19: owner, --upper-body: moving off mid-combo is instant, but only sometimes and only straight ahead
 * Biped_IdleLocomotion (read): the Locomotion machine leaves its idle "None" for StandToWalk / StandToRun start
