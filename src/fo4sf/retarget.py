@@ -228,6 +228,30 @@ def rig_from_nif(data: bytes, node_types=("NiNode", "BSFadeNode", "BSLeafAnimNod
 
 
 # ------------------------------------------------------------------------------------------------- retarget
+def resample(clip: dict, fps: float = 30.0) -> dict:
+    """The clip at `fps` (Starfield clips play at 30; Skyrim packs also ship 60 fps clips, e.g. BFCO_Attack1: 105
+    frames over 1.75 s), same duration: translations / scales linear, rotations slerp. Annotations keep their times."""
+    F = int(clip["frames"])
+    src_fps = clip.get("fps")
+    dur = float(clip.get("duration") or 0.0) or ((F - 1) / src_fps if src_fps else 0.0)
+    if F < 2 or not dur or (src_fps and abs(src_fps - fps) < 0.01):
+        return clip
+    n = int(round(dur * fps)) + 1
+    u = np.clip(np.arange(n) / fps / dur * (F - 1), 0, F - 1)
+    i0 = np.minimum(np.floor(u).astype(int), F - 2)
+    w = (u - i0)[:, None]
+    tracks = []
+    for tr in clip["tracks"]:
+        t = np.array([f[0] for f in tr], float)
+        q = np.array([f[1] for f in tr], float)
+        sc = np.array([f[2] for f in tr], float).reshape(F, -1)
+        tn = t[i0] * (1 - w) + t[i0 + 1] * w
+        qn = qslerp(q[i0], q[i0 + 1], w)
+        sn = sc[i0] * (1 - w) + sc[i0 + 1] * w
+        tracks.append([(tuple(tn[k]), tuple(qn[k]), tuple(sn[k])) for k in range(n)])
+    return dict(clip, tracks=tracks, frames=n, fps=float(fps), resampled_from=src_fps)
+
+
 def skyrim_locals(clip: dict, sk: Rig):
     """(F, B, 3) / (F, B, 4) Skyrim local transforms: rest everywhere, clip tracks where the clip has them."""
     F = clip["frames"]

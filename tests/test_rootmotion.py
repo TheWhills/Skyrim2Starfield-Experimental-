@@ -1,0 +1,75 @@
+"""fo4sf.rootmotion and retarget.resample on synthetic data (no game or mod files)."""
+import math
+import os
+import struct
+import sys
+import tempfile
+import unittest
+
+import numpy as np
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+from fo4sf import retarget as R  # noqa: E402
+from fo4sf import rootmotion as M  # noqa: E402
+
+
+class RootMotionTests(unittest.TestCase):
+    def test_sparse_keys_interpolate_and_hold(self):
+        ann = [{"time": 0.0, "text": "animmotion 0 0 0"}, {"time": 0.9, "text": "animmotion 0 333.4 0"},
+               {"time": 0.5, "text": "HitFrame"}]
+        m = M.from_annotations(ann, 31, 30.0)                      # 0 .. 1.0 s
+        self.assertAlmostEqual(m["t"][27, 1], 333.4)               # 0.9 s
+        self.assertAlmostEqual(m["t"][30, 1], 333.4)               # held after the last key
+        self.assertAlmostEqual(m["t"][9, 1], 333.4 * 0.3 / 0.9)    # linear in between
+        self.assertTrue(np.allclose(m["yaw"], 0))
+
+    def test_dense_keys_implicit_zero_and_rotation(self):
+        ann = [{"time": (k + 1) / 60, "text": f"animmotion 1.0 {k + 1}.0 0.0"} for k in range(60)]
+        ann += [{"time": 0.5, "text": "animrotation 90"}, {"time": 1.0, "text": "animrotation 90"}]
+        m = M.from_annotations(ann, 31, 30.0)
+        self.assertTrue(np.allclose(m["t"][0], 0))                 # implicit zero at the start
+        self.assertAlmostEqual(m["t"][15, 1], 30.0)                # 0.5 s = key 30
+        self.assertAlmostEqual(m["yaw"][15], 90.0)
+        self.assertAlmostEqual(m["yaw"][5], 30.0)                  # 0 -> 90 over 0.5 s
+        t, q = M.root_track(m, 0.0142875, scale=2.0)
+        self.assertAlmostEqual(t[15, 1], 30.0 * 0.0142875 * 2.0)
+        self.assertAlmostEqual(M.yaw_degrees(q[15]), 90.0, places=4)
+        fwd = R.qrot(q[15], np.array([0, 1.0, 0]))                 # +90 = counter-clockwise: forward turns to -X
+        self.assertTrue(np.allclose(fwd, [-1, 0, 0], atol=1e-9))
+        self.assertTrue(M.moves(t, q))
+        self.assertFalse(M.moves(np.zeros((3, 3)), np.tile([0, 0, 0, 1.0], (3, 1))))
+        self.assertIsNone(M.from_annotations([{"time": 0, "text": "HitFrame"}], 3, 30.0))
+        self.assertTrue(M.is_motion_annotation("AnimMotion 0 1 0") and not M.is_motion_annotation("HitFrame"))
+
+    def test_header_patch(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "x.af")
+            with open(p, "wb") as fh:
+                fh.write(struct.pack("<Q", 0x1234) + struct.pack("<4f", 1, 0, 0, 0) + struct.pack("<3f", 0, 0, 0)
+                         + b"\xaa" * 28)
+            q = (0.0, 0.0, math.sin(math.radians(30)), math.cos(math.radians(30)))
+            M.patch_header(p, (0.1, 1.85, 0.0), q)
+            with open(p, "rb") as fh:
+                data = fh.read()
+        self.assertEqual(struct.unpack_from("<Q", data, 0)[0], 0x1234)        # magic untouched
+        rq, rt = M.read_header(data)
+        self.assertTrue(np.allclose(rq, q, atol=1e-6) and np.allclose(rt, (0.1, 1.85, 0.0), atol=1e-6))
+        self.assertEqual(struct.unpack_from("<f", data, 8)[0], np.float32(q[3]))   # stored w first
+        self.assertEqual(data[36:], b"\xaa" * 28)                                 # the rest untouched
+
+    def test_resample_to_30(self):
+        F = 7                                                                      # 60 fps, 0.1 s
+        ang = np.linspace(0, 60, F)
+        tr = [((k * 1.0, 0, 0), (0, 0, math.sin(math.radians(a / 2)), math.cos(math.radians(a / 2))), (1, 1, 1))
+              for k, a in enumerate(ang)]
+        clip = {"frames": F, "fps": 60.0, "duration": 0.1, "tracks": [tr], "bones": ["b"], "annotations": []}
+        r = R.resample(clip, 30.0)
+        self.assertEqual((r["frames"], r["fps"], r["resampled_from"]), (4, 30.0, 60.0))
+        self.assertTrue(np.allclose([f[0][0] for f in r["tracks"][0]], [0, 2, 4, 6]))
+        self.assertAlmostEqual(M.yaw_degrees(r["tracks"][0][1][1]), 20.0, places=5)
+        self.assertIs(R.resample(dict(clip, fps=30.0), 30.0)["tracks"], clip["tracks"])   # already 30: unchanged
+
+
+if __name__ == "__main__":
+    unittest.main()

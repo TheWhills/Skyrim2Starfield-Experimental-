@@ -318,6 +318,24 @@ self-closing empty elements, as shipped.
   is what holds a standing swing now that it is layered. combo_loop.py --free-movement (needs --actions-graph,
   experiment) opens it over all of A / B / C; test pack pending.
 
+### 2026-10-19: root motion (step 1 of the BFCO plan)
+* Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
+  MeleeAttack_A: Root translation 0 -> (0, 1.847, 0) m over 41 keys; turning clips key Root rotation too), and the
+  header repeats its end: rotation f32 w, x, y, z at byte 8 = last Root rotation, translation f32 x, y, z at byte 24 =
+  last Root translation (582 / 582 clips with a header translation, 156 / 156 with a header rotation). Clips without
+  motion leave Root out and the header at identity.
+* Skyrim packs (verified on BFCO's clips): `animmotion X Y Z` = displacement from the clip's start in game units at
+  that time (dense per-frame keys or sparse linear ones), `animrotation A` = accumulated yaw in degrees (all 0 in
+  BFCO's clips: sign **unresolved**, taken as counter-clockwise from above). Their NPC Root track is static. Many pack
+  clips are 60 fps (BFCO_Attack1: 105 frames / 1.75 s); the converter played frames 1:1 before, i.e. at half speed.
+* fo4sf.rootmotion reads the annotations, builds the Root track (metres, leg-length scale like the COM) and patches
+  the header; retarget.resample brings clips to 30 fps first; hkx_to_af writes Root (and drops it from the omitted
+  bones) only for clips that move, and keeps animmotion / animrotation out of the descriptors (--no-root-motion off).
+  Skyrim's own vanilla clips keep their motion in animationdatasinglefile instead (not read yet).
+* Test pack (work/build_bfco.sh): BFCO's 1hm-sword-base Attack1 / 2 / 4, PowerAttackA (5.2 m dash) and SprintAttack
+  (4.4 m) on the player's MeleeAttack_A / B / C, MeleeAttackPower_A and MeleeAttackSprint, vanilla graphs (full body,
+  three-hit combo); read back: header and Root keys laid out like vanilla's. In-game check pending.
+
 ### 2026-10-19: target is BFCO (Attack Behavior Framework, Nexus SE 117052) - commit-based combat, full body
 * Owner: the goal is to port BFCO (most modded Skyrim combat builds on it) or something its animation packs work with.
 * BFCO, read for format only (nothing copied): the SKSE plugins (BFCO.dll, BFCO_Functions.dll) and Nemesis patches

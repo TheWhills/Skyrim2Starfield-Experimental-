@@ -37,11 +37,14 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 import numpy as np  # noqa: E402
 
-from fo4sf import af_writer, ba2, bsa, retarget, skeletonmap, skyrimhkx  # noqa: E402
+from fo4sf import af_writer, ba2, bsa, retarget, rootmotion, skeletonmap, skyrimhkx  # noqa: E402
 
 SKY_SKELETON = r"meshes\actors\character\character assets\skeleton.hkx"
 SF_SKELETON_RX = re.compile(r"meshes/actors/human/characterassets/skeleton\.nif$", re.I)
 SF_RIG_RX = re.compile(r"actors/human/.*characterassets/skeleton\.rig$", re.I)
+
+
+FPS = 30.0                                     # Starfield clip rate
 
 
 def read_any(path, skyrim=None):
@@ -166,6 +169,8 @@ def main(argv=None):
     ap.add_argument("--ease-out", type=int, default=0, metavar="FRAMES",
                     help="with --replace, for attacks (the vanilla descriptor has a HitFrame): re-time the last FRAMES "
                          "frames so the clip settles on its last pose (Skyrim attacks end mid-step)")
+    ap.add_argument("--no-root-motion", action="store_true",
+                    help="ignore animmotion / animrotation annotations (root motion of animation packs such as BFCO)")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -258,17 +263,33 @@ def main(argv=None):
                     report.append(row)
                     continue
                 raise
+            if clip.get("fps") and abs(clip["fps"] - FPS) > 0.01:
+                row["resampled_from_fps"] = clip["fps"]
+                clip = retarget.resample(clip, FPS)                   # Starfield clips play at 30 fps
+            motion = None if a.no_root_motion else rootmotion.from_annotations(clip["annotations"], clip["frames"], FPS)
+            events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
             res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand)
             if not a.no_foot_plant:
                 res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)
             out_rig, out_t, out_q = sf, res["t"], res["q"]
+            root_end = None
             if game_rig is not None:
                 out_t, out_q = retarget.rehome(sf, res["t"], res["q"], game_rig.names, game_rig.parents,
                                                game_rig.t, game_rig.q)
                 out_t, out_q = out_t[:, :n_anim], out_q[:, :n_anim]
                 out_rig = retarget.Rig(game_rig.names[:n_anim], game_rig.parents[:n_anim], game_rig.t[:n_anim],
                                        game_rig.q[:n_anim])
+                if motion is not None and "Root" in out_rig.index:
+                    mt, mq = rootmotion.root_track(motion, retarget.SKYRIM_M_PER_UNIT, res.get("height_scale", 1.0))
+                    if rootmotion.moves(mt, mq):
+                        ri = out_rig.index["Root"]
+                        out_t, out_q = out_t.copy(), out_q.copy()
+                        out_t[:, ri] = out_rig.t[ri] + mt
+                        out_q[:, ri] = retarget.qmul(mq, np.broadcast_to(out_rig.q[ri], mq.shape))
+                        root_end = (mt[-1], mq[-1])
+                        row["root_motion_m"] = [round(float(x), 3) for x in mt[-1]]
+                        row["root_yaw_deg"] = round(rootmotion.yaw_degrees(mq[-1]), 2)
                 if vafx and a.ease_out and b"<name>HitFrame</name>" in like:
                     out_t, out_q = retarget.ease_out(out_t, out_q, a.ease_out)
                     row["eased_frames"] = a.ease_out
@@ -283,13 +304,16 @@ def main(argv=None):
             hit = retarget.blade_peak(out_rig, out_t, out_q) if vafx else None     # used if vanilla has HitFrame
             w = af_writer.write(a.calumi, target_dir, name, out_rig.names, out_rig.parents, out_rig.t, out_rig.q,
                                 out_t, out_q, tag=a.tag or name, rig_path=save_rig if game_rig is not None
-                                else rig_path, events=clip["annotations"],
+                                else rig_path, events=events,
                                 like_afx=like, like_last=like_last, file_name=file_name,
-                                omit=omit if game_rig is not None else (), hit_frame=hit)
+                                omit=(tuple(b for b in omit if not (root_end is not None and b == "Root")) if game_rig is not None
+                                      else ()), hit_frame=hit)
+            if game_rig is not None and root_end is not None:            # the header repeats where Root ends
+                rootmotion.patch_header(w["af"], *root_end)
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],
-                       foot_lowest_m=chk["foot_lowest_m"], events=len(clip["annotations"]))
+                       foot_lowest_m=chk["foot_lowest_m"], events=len(events))
             if not a.no_verify:
                 rb = af_writer.read_back(a.calumi, w["af"], rig_path or w["rig"])     # the game's full rig
                 missing = [n for n in rb["bones"] if n not in out_rig.index]
