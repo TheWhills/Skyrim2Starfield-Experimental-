@@ -263,8 +263,8 @@ self-closing empty elements, as shipped.
 ### 2026-10-19: owner: pop largely fixed; weapon right when drawn, "all weird" once in combat / attacking
 * Verified on vanilla clips: every one-handed combat clip (attacks, ready / block idles, equip / unequip, jumps, casts)
   animates R_AnimObject3 (under R_Wrist) exactly on the Weapon bone (within 1 mm / 0.4 deg); relaxed and furniture
-  clips do not. We left it out (NOT_ANIMATED), so it sat on the wrist bone. Supported hypothesis: in combat the game
-  holds the weapon on R_AnimObject3. hkx_to_af --weapon-in-hand now gives it a track equal to the Weapon bone
+  clips do not. We left it out (NOT_ANIMATED), so it sat on the wrist bone. In combat the game holds the weapon on
+  R_AnimObject3 (verified in game by the owner: with the track, the sword sits correctly while attacking). hkx_to_af --weapon-in-hand now gives it a track equal to the Weapon bone
   (skeletonmap.WEAPON_FOLLOWERS, retarget.copy_world). Our attack now animates the same bones as vanilla's except Root
   (root motion, still open). WeaponLeft is inconsistent in vanilla (on L_Wrist in some combat clips, in a left grip in
   others) and was left alone.
