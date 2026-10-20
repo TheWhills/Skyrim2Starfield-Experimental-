@@ -333,6 +333,12 @@ self-closing empty elements, as shipped.
   on MeleeAttackStart. That custom tags are found in the weapon's folder is a supported hypothesis (descriptors are
   how clips are discovered); the test pack will tell. The graph is shared by every melee type, so weapon types
   without BFCO_AttackN clips lose their combo for now.
+* Owner, in game: power attacks play, a regular attack does nothing - so the BFCO_Attack1 state finds no clip
+  (supported hypothesis: the game does not discover clips under a tag / path it does not already know, e.g. it lists
+  animations from its archives rather than the loose folder). Diagnostic pack (work/build_bfco3.sh, bfco_combo.py
+  --tag K=NAME): attacks 1-3 on the vanilla MeleeAttack_A / B / C files, 4 as a new file under the known tag
+  MeleeAttack_D (used in the knife / unarmed folders), 5 as a new file under BFCO_Attack5. The number of distinct
+  swings before the chain stalls tells which naming works.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword

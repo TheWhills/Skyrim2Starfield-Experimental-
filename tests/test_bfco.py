@@ -92,6 +92,11 @@ class BfcoTests(unittest.TestCase):
         i1, i2 = agx_edit.state(g2, "BFCO_Attack1"), agx_edit.state(g2, "BFCO_Attack2")
         self.assertIn((i2, i1, "MeleeAttackStart", ""), agx_edit.transitions(g2))
         self.assertEqual(agx_edit.state(g2, "MeleeAttack_C"), 0)        # left as it was, unreachable
+        named, added = bfco_combo.build(raw, {1: 2, 2: 3, 3: 4, 4: 1}, {1: "MeleeAttack_A", 4: "MeleeAttack_D"})
+        g3 = agx_edit.machine(agx_edit.load(named), "MeleeAttackCombo")
+        a, d = agx_edit.state(g3, "MeleeAttack_A"), agx_edit.state(g3, "MeleeAttack_D")
+        self.assertIn((d, a, "MeleeAttackStart", ""), agx_edit.transitions(g3))
+        self.assertIn("MeleeAttack_D -> MeleeAttack_A", added)
 
 
 if __name__ == "__main__":
