@@ -1031,3 +1031,22 @@ Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
 * **Unresolved, to test in game:** whether the game sends MeleeAttackPowerStart while a combo attack plays (vanilla
   descriptors carry bDontAllowPowerAttack windows, which suggests it does; vanilla has no transition from the combo
   to a power attack).
+
+## 2026-10-20: iron weapon test pack (one Skyrim weapon of each type)
+Owner request: real Skyrim weapons to test the movesets with. `scripts/armor/weapon_test_pack.py` (also step 6 of
+pc_checklist.ps1 when texconv is found) builds an MO2 mod on the PC:
+* the iron set (dagger, sword, war axe, mace, greatsword, battleaxe, warhammer; `skyrimweapon.IRON_SET`), model path
+  and stats read from Skyrim.esm (fallback: the vanilla paths);
+* models converted by the Skyrim object converter (`SkyrimConverter(shape_hook=skyrimweapon.weapon_shapes)`):
+  geometry rotated by WEAPON_AXES^-1 (Skyrim +Y blade -> Starfield +Z) and shifted so Skyrim's hand point on the
+  weapon (skeleton rest: (7.16, 0, -2.43) units in the Weapon frame) lands on Starfield's wrist point of the vanilla
+  grip; scabbard shapes (under a node named Scb) left out (supported hypothesis on the name). Verified on a synthetic
+  sword: blade along +Z, hand point onto the wrist point exactly, scabbard dropped;
+* `S2SWeapons.esm` (`fo4sf.sfplugin`, a minimal master writer: HEDR version and form version copied from the
+  installed Starfield.esm): one copy of a vanilla one-handed melee WEAP per weapon (keyword AnimSword first, then
+  WeaponTypeMelee1H), new EditorID, text name "<name> (Skyrim)", MODL = the converted model, DESC dropped; everything
+  else (stats, sounds, keywords) is the template's for now;
+* `S2SWeapons - Main.ba2` / `- Textures.ba2` with Archive2 when the Creation Kit is installed, else loose files.
+**Unresolved, to see in game:** whether Starfield melee weapons take their visible model from WEAP MODL (the report
+lists the template's subrecords and model to check); the grip in game; dual wield's left blade (needs a Starfield
+skinned-mesh writer: not in this pack).

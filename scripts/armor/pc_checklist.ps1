@@ -7,12 +7,14 @@
 #   git pull
 #   powershell -ExecutionPolicy Bypass -File scripts\armor\pc_checklist.ps1
 #
-# Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Out.
+# Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Out, -Texconv.
+# Also builds the iron weapon test mod (step 6) into the Desktop folder "S2S Iron Weapons" when texconv is found.
 param(
     [string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
-    [string]$Out = (Join-Path (Join-Path $env:USERPROFILE "Desktop") "s2s_checklist")
+    [string]$Out = (Join-Path (Join-Path $env:USERPROFILE "Desktop") "s2s_checklist"),
+    [string]$Texconv = "C:\Modding\tools\xedit\Edit Scripts\texconv.exe"
 )
 $ErrorActionPreference = "Continue"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
@@ -57,6 +59,19 @@ python -I (Join-Path $Repo "scripts/armor/sf_animcache_survey.py") --starfield-d
 Say "== 4. vanilla Skyrim: motion data, behaviours, two-handed / dual / shield clips"
 $skyOut = Join-Path $Out "skyrim_anims"
 python -I (Join-Path $Repo "scripts/armor/skyrim_anim_extract.py") --skyrim-data $SKY --out $skyOut 2>&1 | ForEach-Object { Say $_ }
+
+Say "== 6. iron weapon test mod (one Skyrim weapon of each type)"
+if (-not (Test-Path $Texconv)) {
+    $found = Get-ChildItem -Path "C:\Modding" -Filter "texconv*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { $Texconv = $found.FullName }
+}
+if (Test-Path $Texconv) {
+    $wpn = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Iron Weapons"
+    python -I (Join-Path $Repo "scripts/armor/weapon_test_pack.py") --skyrim-data $SKY --starfield $SF --texconv $Texconv --out $wpn 2>&1 | ForEach-Object { Say $_ }
+    Copy-Item (Join-Path $wpn "weapon_test_pack.json") $Out -ErrorAction SilentlyContinue
+} else {
+    Say "texconv.exe not found (give -Texconv <path>): weapon test mod skipped"
+}
 
 Say "== 5. zips"
 $desk = Join-Path $env:USERPROFILE "Desktop"

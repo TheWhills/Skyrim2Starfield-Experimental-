@@ -140,6 +140,11 @@ SUPPORT_HAND_SKYRIM = "NPC L Hand [LHnd]"
 # from the second (Nordic: 2-9 units on the grip; the greatsword's power attack 3 lets go, up to 74)
 SUPPORT_ON_GRIP_UNITS = (10.0, 16.0)
 SUPPORT_ARM = ("L_Biceps", "L_Forearm", "L_Wrist")
+# Where Skyrim's right hand (wrist joint) sits in the Weapon node's frame, game units: skeleton.hkx's rest Weapon node
+# (child of NPC R Hand: t (0, -2.4345, 7.1592), q (-0.5, -0.5, 0.5, -0.5)) inverted. Clips animate Weapon within about
+# 1 cm of it (Nordic: (7.01, -0.85, -3.26); vanilla 1hm: (7.16, 0, -2.43)). Used to put converted weapon models' handles
+# into the Starfield fist (skyrimweapon).
+SKYRIM_HAND_IN_WEAPON: Tuple[float, float, float] = (7.1592, 0.0, -2.4345)
 # IK targets kept on the hands they belong to (the IK pass then changes nothing)
 HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}
 # Skyrim bones with several mapped children: the child whose direction aligns the bone (see retarget)

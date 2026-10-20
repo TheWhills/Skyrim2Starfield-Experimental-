@@ -193,9 +193,12 @@ class SkyrimConverter(pipeline.Converter):
     """pipeline.Converter with a Skyrim source (bsa.SkyrimArchives) and Skyrim materials / geometry / collision."""
 
     def __init__(self, src, staging, texconv_exe, content_resources, collision_template=None, prefix="skyrim",
-                 max_texture=None):
+                 max_texture=None, shape_hook=None):
         super().__init__(src, staging, texconv_exe, content_resources, collision_template, prefix=prefix,
                          no_collision_pattern="", max_texture=max_texture)
+        # shape_hook(nif, shapes, report) -> shapes: change the geometry before conversion (skyrimweapon.weapon_shapes
+        # moves weapons into Starfield's WEAPON frame and drops scabbards)
+        self.shape_hook = shape_hook
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None) -> Optional[str]:
@@ -259,6 +262,9 @@ class SkyrimConverter(pipeline.Converter):
                 raise FileNotFoundError("mesh not in the Skyrim archives or loose files")
             src = nifmod.parse(raw)
             shapes = skyrimnif.trishapes(src)
+            hook_report = {}
+            if self.shape_hook is not None:
+                shapes = self.shape_hook(src, shapes, hook_report)
             if not shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
@@ -286,7 +292,7 @@ class SkyrimConverter(pipeline.Converter):
                        collision="skyrim" if self.collision_template is not None else None,
                        collision_report=report, skipped_effect_shapes=sum(1 for m in mats if m is None),
                        fallback_materials=sum(1 for m in mats if m == self.neutral),
-                       double_sided_shapes=doubled, double_sided_too_big=too_big)
+                       double_sided_shapes=doubled, double_sided_too_big=too_big, **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"
