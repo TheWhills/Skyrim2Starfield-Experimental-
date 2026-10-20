@@ -100,6 +100,9 @@ def apply(afx: bytes, m: Dict, last: int, fps: float = 30.0) -> bytes:
     """The descriptor with the BFCO windows and AttackStateNextAttack at the window's start (when there is one)."""
     for name, (a, b) in windows(m, last, fps).items():
         afx = af_writer.set_variable_window(afx, name, a, b)
+    # BFCO has no finisher; a vanilla B template's bAllowFinisher makes the game send MeleeAttackFinisherStart and
+    # end the combo after C (owner, in game: the chain stopped after three swings until this was dropped)
+    afx, _gone = af_writer.drop_variables(afx, {"bAllowFinisher"})
     if m["win"] is not None:
         afx = af_writer.set_event_frame(afx, "AttackStateNextAttack", max(0, min(last, int(round(m["win"] * fps)))))
     return afx

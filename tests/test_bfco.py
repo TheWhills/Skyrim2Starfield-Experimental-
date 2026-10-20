@@ -62,6 +62,9 @@ class BfcoTests(unittest.TestCase):
         self.assertIn(b"<tag>BFCO_Attack3</tag>", out)
         self.assertIn(b"<filename>BFCO_Attack3.af</filename>", out)
         self.assertNotIn(b"\r\r", out)
+        fin = AFX.replace(b"</variables>", b"\t<variable><name>bAllowFinisher</name><start>15</start><end>48</end>"
+                                           b"</variable>\r\n\t</variables>")
+        self.assertNotIn(b"bAllowFinisher", bfco.apply(fin, bfco.markers(ATTACK1), 52))
         added = af_writer.set_event_frame(AFX.replace(b"AttackStateNextAttack", b"Other"), "AttackStateNextAttack", 9)
         self.assertEqual(af_writer.event_frame(added, "AttackStateNextAttack"), 9)
 

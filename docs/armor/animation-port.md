@@ -353,6 +353,12 @@ self-closing empty elements, as shipped.
   vanilla path and changes only the tag): attack 4 on the existing Sneak_MeleeAttack_B path, graph and file both
   saying Sneak_MeleeAttack_B; attack 5 on the existing Sneak_MeleeAttack_C path retagged BFCO_Attack5 - plays only
   if lookups use the <tag> inside the descriptor.
+* Owner: still 3 swings, then back to idle. Found on review: both diagnostics used the vanilla MeleeAttack_B
+  descriptor as attack 2's template, which keeps bAllowFinisher (15-48): a press there sends
+  MeleeAttackFinisherStart (B -> C), and after the finisher the game starts no further combo attack - the same stop
+  combo_loop.py avoided by dropping bAllowFinisher (v8 looped endlessly). So "3 swings" said nothing about the files.
+  fo4sf.bfco.apply now drops bAllowFinisher. Diagnostic 3 (work/build_bfco4.sh): attack 4 on the existing
+  Sneak_MeleeAttack_B path (file and tag), attack 5 a NEW file MeleeAttack_D.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
