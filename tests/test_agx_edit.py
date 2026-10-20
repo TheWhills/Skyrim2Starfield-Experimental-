@@ -144,6 +144,25 @@ class AgxEditTests(unittest.TestCase):
         self.assertTrue(agx_edit.add_flag(cast, "Is Busy"))
         self.assertEqual([f.text for f in cast.find("flags")], ["Block POV Switch", "Is Busy"])
         self.assertIn(b"<flags><flag>Force Copy Bone Weights</flag></flags>", raw)
+        self.assertTrue(agx_edit.remove_flag(cast, "Block POV Switch"))
+        self.assertTrue(agx_edit.remove_flag(cast, "Is Busy"))
+        self.assertIsNone(cast.find("flags"))                                          # emptied: removed
+        self.assertFalse(agx_edit.remove_flag(cast, "Is Busy"))
+        piv = agx_edit.load(combo_graph())
+        cnode = agx_edit.machine(piv, None).findall("node")[0]
+        agx_edit.add_flag(cnode, "Should Pivot to Camera")
+        raw, _ = combo_loop.layer_combo(actions_graph(), cnode, upper_body=True, no_pivot=True)
+        self.assertNotIn(b"Should Pivot to Camera", raw)
+        a = AFX % (b"MeleeAttack_A", b"MeleeAttack_A", 4, 14, var(b"bAlignWithAimAssistTarget", 0, 23) +
+                   var(b"bCanComboAttack", 6, 18))
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "MeleeAttack_A.afx"), "wb") as fh:
+                fh.write(a)
+            combo_loop.fix_descriptors(d, no_pivot=True)
+            with open(os.path.join(d, "MeleeAttack_A.afx"), "rb") as fh:
+                out = fh.read()
+        self.assertNotIn(b"bAlignWithAimAssistTarget", out)
+        self.assertIn(b"bCanComboAttack", out)
 
     def test_combo_loop_script(self):
         with tempfile.TemporaryDirectory() as d:

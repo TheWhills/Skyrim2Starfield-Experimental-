@@ -260,6 +260,16 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner, --upper-body: moving off mid-combo is instant, but only sometimes and only straight ahead
+* Biped_IdleLocomotion (read): the Locomotion machine leaves its idle "None" for StandToWalk / StandToRun start
+  clips on CurrentSpeed / Speed thresholds and for Biped_Locomotion at CurrentSpeed >= 0.1; the start clips turn the
+  body with the move (Set Orient "Turn Animation Modify Translation", active on bPlayerMoveStartActive). The idle /
+  locomotion switch itself is iSyncIdleLocomotion, set by the game.
+* Supported hypothesis: the swing's facing controls fight that turn - "Should Pivot to Camera" on the combo and on A,
+  bAlignWithAimAssistTarget early and DisableAllowRotation late in each swing - so only a straight start (no turn)
+  gets through, and only outside those windows. combo_loop.py --no-pivot (experiment) clears the flags on the
+  layered copy and drops the two windows. Cost if it helps: swings no longer snap toward the camera / aim target.
+
 ### 2026-10-19: owner, --free-movement: standing combos start moving, but slowly (inch, walk, jog, run) or not at all
 * Graphs read (owner extract): BoneWeights picks UpperBody / Spine / ZeroG masks; Player_Melee's Copy Bone Weights
   takes them only through its "Walking, Turning" and "Jumping" inputs (control variable BoneWeightsAction, set by

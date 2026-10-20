@@ -39,6 +39,13 @@ nodes, StandToWalk / StandToRun on CurrentSpeed vs Speed) barely accelerates und
 over. Forcing the mask keeps the legs on locomotion always: instant movement, but a standing swing loses Skyrim's
 leg work (the step-in).
 
+--no-pivot (with --actions-graph; EXPERIMENT): owner, with --free-movement --upper-body: moving off mid-combo is
+instant but only sometimes ("if you time it right") and only straight ahead. Supported hypothesis: the swing's
+facing controls fight Starfield's move-start, which turns the body with the start clip (Set Orient "Turn Animation
+Modify Translation", bPlayerMoveStartActive): the combo machine and MeleeAttack_A carry "Should Pivot to Camera",
+and each swing holds bAlignWithAimAssistTarget early and DisableAllowRotation late. This clears the pivot flags on
+the layered copy and drops those two windows from A / B / C.
+
     python -I scripts\\armor\\combo_loop.py --graph <extract>\\meleeattacks.agx [--actions-graph <extract>\\meleeactions.agx]
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
@@ -84,7 +91,7 @@ def loop_graph(raw: bytes, layered: bool = False):
     return agx_edit.dump(root, raw), combo_node, added
 
 
-def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False):
+def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False, no_pivot: bool = False):
     """MeleeActions with the combo state added as a layered action (see the module docstring)."""
     root = agx_edit.load(actions_raw)
     top = agx_edit.machine(root, None)
@@ -94,6 +101,11 @@ def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False):
     k = agx_edit.clone_state(combo_node, top)
     if upper_body:
         agx_edit.add_flag(top.findall("node")[k], "Force Copy Bone Weights")
+    if no_pivot:
+        node = top.findall("node")[k]
+        agx_edit.remove_flag(node, "Should Pivot to Camera")
+        for st in node.find("graph").findall("node"):
+            agx_edit.remove_flag(st, "Should Pivot to Camera")
     agx_edit.add_transition(root, top, k, k, "MeleeAttackStart", blend=0.15)      # from any state, as vanilla
     agx_edit.add_transition(root, top, k, idle, "", blend=0.3)                     # back to idle when it ends
     return agx_edit.dump(root, actions_raw), [f"{MACHINE} added as action {k} (any state -> it on MeleeAttackStart, "
@@ -105,7 +117,10 @@ def last_frame(afx: bytes) -> int:
     return max([int(x) for x in re.findall(rb"<(?:frame|start|end)>(\d+)<", afx)] or [0])
 
 
-def fix_descriptors(folder: str, free_movement: bool = False):
+PIVOT_WINDOWS = {"bAlignWithAimAssistTarget", "DisableAllowRotation"}
+
+
+def fix_descriptors(folder: str, free_movement: bool = False, no_pivot: bool = False):
     names = {f.lower(): f for f in os.listdir(folder)}
     a, b, c = (names.get(f"meleeattack_{x}.afx") for x in "abc")
     done = []
@@ -124,6 +139,14 @@ def fix_descriptors(folder: str, free_movement: bool = False):
             fh.write(data)
         if dropped:
             done.append(f"{b}: dropped {', '.join(dropped)}")
+    for f in ((a, b, c) if no_pivot else ()):
+        if f:
+            p = os.path.join(folder, f)
+            with open(p, "rb") as fh:
+                data, dropped = af_writer.drop_variables(fh.read(), PIVOT_WINDOWS)
+            with open(p, "wb") as fh:
+                fh.write(data)
+            done.append(f"{f}: dropped {', '.join(dropped) or 'nothing'}")
     for f in ((a, b, c) if free_movement else ()):
         if f:
             p = os.path.join(folder, f)
@@ -151,9 +174,10 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="pack root (Data layout) for the edited graphs")
     ap.add_argument("--free-movement", action="store_true", help="experiment, see above (needs --actions-graph)")
     ap.add_argument("--upper-body", action="store_true", help="experiment, see above (needs --actions-graph)")
+    ap.add_argument("--no-pivot", action="store_true", help="experiment, see above (needs --actions-graph)")
     a = ap.parse_args(argv)
-    if a.upper_body and not a.actions_graph:
-        sys.exit("--upper-body needs --actions-graph")
+    if (a.upper_body or a.no_pivot) and not a.actions_graph:
+        sys.exit("--upper-body / --no-pivot need --actions-graph")
     if a.free_movement and not a.actions_graph:
         sys.exit("--free-movement needs --actions-graph (a full-body swing never moves, whatever bFreeMovement says)")
     out = os.path.abspath(a.out)
@@ -164,10 +188,10 @@ def main(argv=None):
     print(f"graph: {_write(out, GRAPH_REL, data)}; {added or 'nothing changed (already looping)'}")
     if a.actions_graph:
         with open(a.actions_graph, "rb") as fh:
-            data, rep = layer_combo(fh.read(), combo, a.upper_body)
+            data, rep = layer_combo(fh.read(), combo, a.upper_body, a.no_pivot)
         print(f"graph: {_write(out, ACTIONS_REL, data)}; {rep}")
     for folder in a.clips:
-        print(f"{folder}: {fix_descriptors(folder, a.free_movement) or 'no A / B / C descriptors'}")
+        print(f"{folder}: {fix_descriptors(folder, a.free_movement, a.no_pivot) or 'no A / B / C descriptors'}")
     return 0
 
 

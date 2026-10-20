@@ -141,6 +141,17 @@ def add_flag(node: ET.Element, flag: str) -> bool:
     return True
 
 
+def remove_flag(node: ET.Element, flag: str) -> bool:
+    """Remove a state flag; False if it was not set. An emptied <flags> is removed (vanilla writes none then)."""
+    flags = node.find("flags")
+    hit = [f for f in (flags.findall("flag") if flags is not None else []) if f.text == flag]
+    for f in hit:
+        flags.remove(f)
+    if flags is not None and not flags.findall("flag"):
+        node.remove(flags)
+    return bool(hit)
+
+
 def set_condition(graph: ET.Element, src: int, dst: int, condition: str, old: Optional[str] = None) -> int:
     """Set the Condition of the transitions src -> dst (0-based states of `graph`; only those whose condition is `old`
     when given); returns how many changed."""
