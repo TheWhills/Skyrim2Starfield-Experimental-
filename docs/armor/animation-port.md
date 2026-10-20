@@ -365,6 +365,14 @@ self-closing empty elements, as shipped.
   prefix switches) or the copied states? Diagnostic 4 (work/build_bfco5.sh): copies 4 and 5 play the vanilla tags
   MeleeAttack_A / MeleeAttack_B (known to work) - if the 4th swing is attack 1's motion, copies work and the lookup is
   the limit. Copies now also get file-wide unique user_ids.
+* Owner, diagnostic 4: every press attacks, no reset; some swings repeat (as routed). So copied states WORK, and the
+  limit is the clip lookup.
+* Verified on the vanilla descriptors: a clip is keyed by (<prefix>, <tag>), not by its file name -
+  sneak_meleeattack_b.afx says <tag>MeleeAttack_B</tag> <prefix>Sneak</prefix> (zero-g: <prefix>ZeroG</prefix>;
+  furniture flavours: Analyze, Bored, ...). That explains diagnostic 3: its file was keyed (Sneak,
+  Sneak_MeleeAttack_B), which nothing asks for. A NEW file (BFCO_Attack1, the very first state) was not found.
+  Diagnostic 5 (work/build_bfco6.sh): existing sneak paths re-keyed with the prefix removed - attack 4 as
+  (-, MeleeAttack_D), attack 5 as (-, BFCO_Attack5). If 5 swings play, any tag works on a reused path.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword

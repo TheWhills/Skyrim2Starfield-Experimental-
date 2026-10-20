@@ -58,6 +58,13 @@ class BfcoTests(unittest.TestCase):
         self.assertIn(b"<name>bFreeMovement</name><start>34</start><end>52</end>", out)
         self.assertIn(b"<frame>17</frame><name>AttackStateNextAttack</name>", out)
         self.assertIn(b"<payload>X=1</payload>", out)                     # template kept
+        sneak = AFX.replace(b"<filename>MeleeAttack_A.af</filename>",
+                            b"<filename>Sneak_MeleeAttack_B.af</filename>\r\n\t<prefix>Sneak</prefix>")
+        un = af_writer.set_tag(sneak, "MeleeAttack_D", "Sneak_MeleeAttack_B.af", prefix=None)
+        self.assertNotIn(b"<prefix>", un)
+        self.assertIn(b"<filename>Sneak_MeleeAttack_B.af</filename>\r\n\t<events>", un)
+        self.assertIn(b"<prefix>Zg</prefix>", af_writer.set_tag(un, "MeleeAttack_D", "x.af", prefix="Zg"))
+        self.assertIn(b"<prefix>Sneak</prefix>", af_writer.set_tag(sneak, "T", "x.af"))       # kept by default
         out = af_writer.set_tag(out, "BFCO_Attack3", "BFCO_Attack3.af")
         self.assertIn(b"<tag>BFCO_Attack3</tag>", out)
         self.assertIn(b"<filename>BFCO_Attack3.af</filename>", out)

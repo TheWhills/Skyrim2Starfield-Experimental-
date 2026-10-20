@@ -230,14 +230,32 @@ def set_event_frame(afx: bytes, name: str, frame: int) -> bytes:
     return _afx_out(root, afx)
 
 
-def set_tag(afx: bytes, tag: str, filename: str) -> bytes:
-    """The descriptor with another <tag> and <filename> (a clip added under its own tag)."""
+def set_tag(afx: bytes, tag: str, filename: str, prefix: Optional[str] = "keep") -> bytes:
+    """The descriptor with another <tag> and <filename>; prefix None removes <prefix>, a string sets it, "keep"
+    leaves it. Verified 2026-10-19 on vanilla descriptors: a clip is found by (<prefix>, <tag>) - the sneak / zero-g
+    variants say <tag>MeleeAttack_B</tag> <prefix>Sneak</prefix> - not by its file name."""
     root = ET.fromstring(afx.decode("utf-8-sig"))
     for name, val in (("tag", tag), ("filename", filename)):
         el = root.find(name)
         if el is None:
             el = ET.SubElement(root, name)
         el.text = val
+    if prefix != "keep":
+        el = root.find("prefix")
+        if prefix is None and el is not None:
+            kids = list(root)
+            i = kids.index(el)
+            if i > 0:
+                kids[i - 1].tail = el.tail
+            root.remove(el)
+        elif prefix is not None:
+            if el is None:
+                el = ET.Element("prefix")
+                fn = root.find("filename")
+                i = list(root).index(fn) + 1
+                el.tail = fn.tail
+                root.insert(i, el)
+            el.text = prefix
     return _afx_out(root, afx)
 
 

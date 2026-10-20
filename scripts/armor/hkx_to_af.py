@@ -21,8 +21,9 @@ frames scaled, HitFrame / footsteps taken from the Skyrim clip). The vanilla .af
 game's archives (--starfield-data). Reusing the vanilla path should keep the AnimTextData caches valid (unverified).
 "<clip>::<vanilla .afx>::<NAME>" adds the clip beside that vanilla one under its own file name and <tag> NAME instead
 (e.g. BFCO_Attack4 for a graph that plays tag BFCO_Attack4), the vanilla descriptor serving as the template.
-"<clip>::<vanilla .afx>::tag:<NAME>" keeps the vanilla path and file name and only changes the <tag> (owner, in game,
-2026-10-19: a NEW loose file is not found, even under a known tag - only paths the game's archives already hold).
+"<clip>::<vanilla .afx>::tag:<NAME>" keeps the vanilla path and file name, sets <tag> NAME and removes <prefix>
+(clips are found by (<prefix>, <tag>), verified on the vanilla sneak / zero-g descriptors; owner, in game 2026-10-19:
+a new loose file under a new tag is not found - so existing paths are reused under new keys).
 
 --bfco: attack clips carrying BFCO / MCO markers (BFCO_NextWinStart, BFCO_DIY_recovery, ...) get their descriptor's
 attack windows from those markers (fo4sf.bfco: bCanComboAttack, bDontAllowAttack / PowerAttack, bFreeMovement,
@@ -326,8 +327,10 @@ def main(argv=None):
                 with open(afx_path, "rb") as fh:
                     afx = fh.read()
                 if new_name:
-                    afx = af_writer.set_tag(afx, new_name[4:] if new_name.startswith("tag:") else new_name,
-                                            os.path.basename(w["af"]))
+                    if new_name.startswith("tag:"):
+                        afx = af_writer.set_tag(afx, new_name[4:], os.path.basename(w["af"]), prefix=None)
+                    else:
+                        afx = af_writer.set_tag(afx, new_name, os.path.basename(w["af"]))
                 marks = bfco.markers(events) if a.bfco else None
                 if marks and bfco.is_attack(marks):
                     afx = bfco.apply(afx, marks, w["frames"] - 1, FPS)
