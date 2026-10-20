@@ -153,5 +153,33 @@ class AfWriterTests(unittest.TestCase):
             self.assertLess(min(np.max(np.abs(v - q[f, 1])), np.max(np.abs(v + q[f, 1]))), 1e-3, (f, v))
 
 
+class PluginEventTests(unittest.TestCase):
+    ANN = [{"time": 0.5, "text": "PIE.@SGVI|MCO_nextattack|2"}, {"time": 0.2, "text": "MCO_WinOpen"},
+           {"time": 0.3, "text": "HitFrame.$ES_Strikefly"}, {"time": 0.1, "text": "SoundPlay.WPNSwing"},
+           {"time": 0.4, "text": "TKDR_IframeDuration"}, {"time": 0.6, "text": "animmotion 0 10 0"},
+           {"time": 0.7, "text": "Collision_AttackStart"}, {"time": 0.8, "text": "weaponSwing"}]
+
+    def test_skyrim_split(self):
+        ev = AF.plugin_events(self.ANN, 30.0)
+        self.assertEqual(ev, [(6, "MCO_WinOpen", ""), (9, "HitFrame", "$ES_Strikefly"),
+                              (12, "TKDR_IframeDuration", ""), (15, "PIE", "@SGVI|MCO_nextattack|2"),
+                              (21, "Collision_AttackStart", "")])
+
+    def test_host(self):
+        ev = AF.plugin_events(self.ANN, 30.0, host="S2S")
+        self.assertEqual([n for _f, n, _p in ev], ["S2S"] * 5)
+        self.assertIn((15, "S2S", "PIE.@SGVI|MCO_nextattack|2"), ev)
+
+    def test_events_land_in_the_descriptor(self):
+        afx = AF.descriptor("Attack", "a.af", events=[(3, "HitFrame", "")])
+        for frame, name, payload in AF.plugin_events(self.ANN, 30.0):
+            afx = AF.add_event(afx, frame, name, payload)
+        root = ET.fromstring(afx)
+        got = [(int(e.findtext("frame")), e.findtext("name"), e.findtext("payload") or "") for e in root.iter("event")]
+        self.assertEqual(got[0], (3, "HitFrame", ""))
+        self.assertIn((15, "PIE", "@SGVI|MCO_nextattack|2"), got)
+        self.assertEqual([f for f, _n, _p in got], sorted(f for f, _n, _p in got))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1099,3 +1099,21 @@ skinned-mesh writer: not in this pack).
   [--motion-behaviors <behaviors folder>]` applies it to clips that have no animmotion annotations of their own
   (explicit `--motion` still wins; BFCO-style annotated clips are left alone). The PC checklist's step 4 already extracts
   the vanilla file and behaviours this needs.
+
+## LoreRim neutral-stance packs; routing read where the window opens (2026-10-20)
+* 11 test packs from LoreRim MCO Animations (scratch, delivered as SkyrimMelee_LoreRim_weapon_types.zip): the folders
+  without a Stances perk condition for sword (9011000), sword + shield (9011200), dagger (9021000), war axe (9031000),
+  mace (9041000), greatsword (9051000), battleaxe / warhammer (9061000), dual sword / dagger / war axe / mace (9011100,
+  9021100, 9031100, 9041100); `--bfco` (attack speeds baked in), `--two-hand-grip` / `--left-weapon` as the Nordic
+  packs. 4-7 attacks per chain, 1-4 power attacks slotted; all clips convert (read-back rotation error <= 0.0066).
+  LoreRim ships each attack twice (BFCO_AttackN and mco_attackN, byte-identical: checked on two pairs).
+* **Fix (bfco.markers):** routing is the value in effect when the window opens. LoreRim dual sword sets
+  `MCO_nextattack 2` at 0.6 s, opens the window at 0.67 s and resets it to 1 at 1.33 s (a late press restarts the
+  combo); the last value used to win, so the pack looped attack 1. Now 1 -> 2 -> 3 -> 4 -> 1; the later value is
+  reported as `late_reset`. Only 2 of LoreRim's folders (6 of 782 attacks) and none of Nordic's are affected.
+* **Plugin events in clips (graph-side prep):** `hkx_to_af --plugin-events [HOST]` writes the annotations the combat
+  plugin reads (MCO / BFCO windows, `PIE.@...` / `.$...` commands, TKDR_, TDM_, Collision_) into the .afx events,
+  as Skyrim splits them (event "PIE", payload "@SGVI|...") or all under one HOST event (the plugin's
+  `sPluginEventHost`). Whether the graph passes event names it does not know to the plugin is **unresolved**: the
+  first plugin run's `anim event:` log answers it, and HOST is the fallback (e.g. a vanilla event such as
+  `AssignVariable`, which vanilla clips already carry with payloads).

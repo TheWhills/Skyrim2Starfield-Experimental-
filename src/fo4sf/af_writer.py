@@ -20,6 +20,7 @@ import json
 import math
 import os
 import pathlib
+import re
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple
 
@@ -73,6 +74,34 @@ def map_events(annotations, fps: float):
         else:
             unmapped.append(a)
     return sorted(mapped), unmapped
+
+
+# Skyrim annotations the combat plugin reads (native/combat: s2s::combat::Controller::on_anim_event): MCO / BFCO
+# windows and routing, TK Dodge, TDM / Precision phases, and Payload Interpreter commands ("Host.@INSTR|..." /
+# "Host.$name"). Written as .afx events only on request (plugin_events): whether the game passes event names its graph
+# does not know to the player's event sink is unresolved (sfse/README.md, first run).
+PLUGIN_EVENT = re.compile(r"^(MCO_|BFCO_|TKDR_|TDM_|Collision_|SCAR_ComboStart)", re.I)
+PAYLOAD_EVENT = re.compile(r"^[^.@$\s]+\.[@$]")
+
+
+def plugin_events(annotations, fps: float, host: Optional[str] = None):
+    """[(frame, name, payload)] for the plugin-relevant annotations. Without host, Skyrim's own split: "PIE.@SGVI|a|1"
+    -> name "PIE", payload "@SGVI|a|1"; "MCO_WinOpen" -> name, empty payload. With host, every one becomes an event
+    called host carrying the whole annotation as its payload (the plugin's sPluginEventHost)."""
+    out = []
+    for a in annotations or []:
+        text = a["text"].strip()
+        if not (PLUGIN_EVENT.match(text) or PAYLOAD_EVENT.match(text)):
+            continue
+        frame = int(round(a["time"] * fps))
+        if host:
+            out.append((frame, host, text))
+        elif PAYLOAD_EVENT.match(text):
+            name, _, payload = text.partition(".")
+            out.append((frame, name, payload))
+        else:
+            out.append((frame, text, ""))
+    return sorted(out)
 
 
 def descriptor(tag: str, filename: str, is_state: bool = False, events=(), variables=(), rampout=None) -> bytes:
@@ -337,10 +366,12 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
           tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
           variables=(), like_afx: Optional[bytes] = None, like_last: Optional[int] = None, file_name: Optional[str] = None,
-          omit=(), hit_frame: Optional[int] = None) -> Dict:
+          omit=(), hit_frame: Optional[int] = None, plugin_event_host=None) -> Dict:
     """Write <out>/<name>.af (+ skeleton.rig unless rig_path, + <name>.afx, + <name>.events.json). Translations in
     metres, quaternions (x, y, z, w). Bones named in `omit` get no track (the game keeps driving them, e.g.
-    skeletonmap.NOT_ANIMATED). hit_frame: see retime_descriptor. Returns {"af", "rig", "keys", "frames"}."""
+    skeletonmap.NOT_ANIMATED). hit_frame: see retime_descriptor. plugin_event_host: None = no plugin events, "" =
+    plugin events in Skyrim's split, a name = all under that host (plugin_events). Returns {"af", "rig", "keys",
+    "frames"}."""
     out = pathlib.Path(out_dir).resolve()
     repo = pathlib.Path(__file__).resolve().parents[2]
     if out == repo or repo in out.parents:
@@ -436,12 +467,17 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             afx, retime = retime_descriptor(like_afx, F - 1, af.name, like_last, mapped, hit_frame)
         else:
             afx = descriptor(tag or name, af.name, is_state, mapped, variables)
+        extra = []
+        if plugin_event_host is not None:
+            extra = plugin_events(unmapped, fps, plugin_event_host or None)
+            for frame, ev_name, payload in extra:
+                afx = add_event(afx, min(frame, F - 1), ev_name, payload)
         (out / f"{af.stem}.afx").write_bytes(afx)
         if like_afx is None:                        # a replacement goes into the game's folders: no side files there
             (out / f"{af.stem}.events.json").write_text(json.dumps({"in_afx": mapped, "not_mapped": unmapped},
                                                                    indent=1))
         return {"af": str(af), "rig": str(rig_path or rig_file), "keys": keys, "frames": F, "bones": B,
-                "events_in_afx": len(mapped), "events_not_mapped": len(unmapped),
+                "events_in_afx": len(mapped), "events_not_mapped": len(unmapped), "plugin_events": len(extra),
                 "dropped_unnamed": dropped, "retime": retime, "omitted": sorted(skip & set(bones))}
     finally:
         if anim:

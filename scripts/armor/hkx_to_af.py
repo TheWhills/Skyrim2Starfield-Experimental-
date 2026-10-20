@@ -228,6 +228,10 @@ def main(argv=None):
     ap.add_argument("--motion-behaviors", metavar="DIR",
                     help="folder of the project's behaviour .hkx files (clip generator -> animation file); without it "
                          "a clip generator's name is taken as the clip's file name")
+    ap.add_argument("--plugin-events", nargs="?", const="", default=None, metavar="HOST",
+                    help="write the annotations the combat plugin reads (MCO / BFCO windows, PIE.@ commands, TKDR_, "
+                         "TDM_, Collision_) into the .afx events; with HOST, all as events named HOST carrying the "
+                         "Skyrim annotation as payload (the plugin's sPluginEventHost)")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -400,7 +404,7 @@ def main(argv=None):
                                 else rig_path, events=events,
                                 like_afx=like, like_last=like_last, file_name=file_name,
                                 omit=(tuple(b for b in omit if not (root_end is not None and b == "Root")) if game_rig is not None
-                                      else ()), hit_frame=hit)
+                                      else ()), hit_frame=hit, plugin_event_host=a.plugin_events)
             if game_rig is not None and root_end is not None:            # the header repeats where Root ends
                 rootmotion.patch_header(w["af"], *root_end)
             afx_path = os.path.splitext(w["af"])[0] + ".afx"

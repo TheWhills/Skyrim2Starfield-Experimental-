@@ -53,6 +53,8 @@ def markers(annotations) -> Dict:
     out = {"next_attack": None, "next_power": None, "win": None, "power_win": None, "win_close": None,
            "power_win_close": None, "recovery": None, "hits": [], "speed": None}
 
+    sets = {"next_attack": [], "next_power": []}      # (time, value) of every routing assignment
+
     def first(key, t):
         if out[key] is None or t < out[key]:
             out[key] = t
@@ -64,7 +66,8 @@ def markers(annotations) -> Dict:
             instr, (var, val) = pl[0], pl[1][:2]
             try:
                 if instr == "SGVI" and var.lower() in ("mco_nextattack", "mco_nextpowerattack"):
-                    out["next_attack" if var.lower() == "mco_nextattack" else "next_power"] = int(float(val))
+                    sets["next_attack" if var.lower() == "mco_nextattack" else "next_power"].append(
+                        (t, int(float(val))))
                 elif instr == "SGVF" and var in SPEED_VARIABLES:
                     out["speed"] = float(val)
             except ValueError:
@@ -72,11 +75,11 @@ def markers(annotations) -> Dict:
             continue
         m = NEXT_ATTACK.match(text)
         if m:
-            out["next_attack"] = int(m.group(1))
+            sets["next_attack"].append((t, int(m.group(1))))
             continue
         m = NEXT_POWER.match(text)
         if m:
-            out["next_power"] = int(m.group(1))
+            sets["next_power"].append((t, int(m.group(1))))
             continue
         if low in WIN_OPEN:
             first("win", t)
@@ -93,6 +96,22 @@ def markers(annotations) -> Dict:
         if low in POWER_WIN_CLOSE and out["power_win"] is not None and t > out["power_win"]:
             out["power_win_close"] = t if out["power_win_close"] is None else min(out["power_win_close"], t)
     out["hits"].sort()
+    # Routing: the value in effect when the window opens. MCO packs often reset it later in the window (LoreRim dual
+    # sword: nextattack 2 at 0.6 s, window 0.67-1.98 s, nextattack 1 at 1.33 s: a late press restarts the combo); the
+    # graph has one successor per attack, so the early value wins and the later one is reported ("late_reset").
+    for key, win in (("next_attack", out["win"]), ("next_power", out["power_win"] if out["power_win"] is not None
+                                                     else out["win"])):
+        vals = sorted(sets[key], key=lambda tv: tv[0])
+        if not vals:
+            continue
+        if win is None:
+            out[key] = vals[-1][1]
+            continue
+        before = [v for t, v in vals if t <= win + 1e-6]
+        out[key] = before[-1] if before else vals[0][1]
+        later = [v for t, v in vals if t > win + 1e-6 and v != out[key]]
+        if later:
+            out.setdefault("late_reset", {})[key] = later[-1]
     return out
 
 

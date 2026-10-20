@@ -96,6 +96,23 @@ class BfcoTests(unittest.TestCase):
         pw = {k: {"next_power": n} for k, n in ((1, 2), (2, 3), (3, 1))}
         self.assertEqual(bfco.chain(pw, "next_power"), {1: 2, 2: 3, 3: 1})
 
+    def test_routing_value_when_the_window_opens(self):
+        # LoreRim dual sword: nextattack 2 before the window, reset to 1 late in it (annotations not in time order)
+        ann = [{"time": 0.667, "text": "MCO_WinOpen"}, {"time": 0.667, "text": "MCO_PowerWinOpen"},
+               {"time": 0.6, "text": "PIE.@SGVI|MCO_nextattack|2"}, {"time": 0.6, "text": "PIE.@SGVI|MCO_nextpowerattack|2"},
+               {"time": 1.333, "text": "PIE.@SGVI|MCO_nextattack|1"}, {"time": 1.983, "text": "MCO_WinClose"}]
+        m = bfco.markers(ann)
+        self.assertEqual((m["next_attack"], m["next_power"]), (2, 2))
+        self.assertEqual(m["late_reset"], {"next_attack": 1})
+        # set only after the window opened: the first value counts
+        m = bfco.markers([{"time": 0.5, "text": "MCO_WinOpen"}, {"time": 0.7, "text": "PIE.@SGVI|MCO_nextattack|3"},
+                          {"time": 0.9, "text": "PIE.@SGVI|MCO_nextattack|1"}])
+        self.assertEqual(m["next_attack"], 3)
+        # no window: the last assignment, as before
+        m = bfco.markers([{"time": 0.1, "text": "BFCO_NextIsAttack2"}, {"time": 0.2, "text": "BFCO_NextIsAttack4"}])
+        self.assertEqual(m["next_attack"], 4)
+        self.assertNotIn("late_reset", m)
+
     def test_routes_over_normal_and_power_attacks(self):
         attacks = {1: {"next_attack": 2, "next_power": 2}, 2: {"next_attack": 1, "next_power": 9},
                    3: {"next_attack": 1, "next_power": 1}}                       # 3: only a power attack leads here
