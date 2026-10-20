@@ -18,7 +18,7 @@
 
 Layout as in the shipped files (SW SFBM mod, Nexus 16022; verified by reading them): CRLF, tab indents; every node has
 node_type, noninstanced, flags, name, pos / expanded pos, use_color_2, user_id, collapsed, guid, its inputs (a
-transition INTO a state is a <link> on the target's input naming the source node index and one of the source's output
+transition INTO a state is a <link> on the target's input naming the source node and one of the source's output
 slots), its outputs, and a property sheet of (Property, Value) rows with value types (0 int / variable, 1 float /
 variable, 2 string, 3 bool). A state machine is a <graph> whose nodes are its states; its own sheet sets the start
 selection.
@@ -27,6 +27,9 @@ state carries `<default_state>True</default_state>` as the first line of its <no
 more than one, not always the first node); Start Selection Method is Default (0) / Sync (1, with an iSync* variable) /
 Variable (2); vanilla nodes without flags have no <flags> element (the writer omits it too); flag names seen: Animation
 Driven, Allow Rotation, Turn Animation, Is Attack Not Ready, Equip Not OK, Is Busy, Disable Foot IK, Block POV Switch.
+A link's <node> is the source's 1-BASED index among its sibling nodes (verified 2026-10-19 on 42 vanilla graphs: all 362
+state-machine transitions name an existing source with a free output slot that way, one transition per slot; 0-based
+fails on a third of them; user_id is unrelated). Graphs written before this fix pointed every link one node too low.
 """
 import uuid
 from typing import Dict, List
@@ -134,7 +137,8 @@ def _graph_body(g: Dict, ids: _Ids, ind: str) -> List[str]:
             for a, slot, props in incoming[i]:
                 if props.get("input", 0) != k:
                     continue
-                lines += ["", f"{ind}\t\t<link>", f"{ind}\t\t\t<node>{a}</node> <output>{slot}</output> <hidden>False</hidden>"]
+                lines += ["", f"{ind}\t\t<link>",                       # source = 1-based index among siblings
+                          f"{ind}\t\t\t<node>{a + 1}</node> <output>{slot}</output> <hidden>False</hidden>"]
                 if not props.get("data"):
                     vals = {"Event": props.get("event", ""), "Condition": props.get("condition", ""),
                             "Blend Time": f"{props.get('blend', 0.2):g}", "Priority": str(props.get("priority", 0)),

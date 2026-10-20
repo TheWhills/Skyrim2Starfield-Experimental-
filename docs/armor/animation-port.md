@@ -260,6 +260,27 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: vanilla MeleeAttacks.agx (owner extract): endless combo; the leg is Skyrim's own recovery
+* Graph links (verified on 42 vanilla graphs): a <link>'s <node> is the source's 1-BASED index among its siblings
+  (all 362 state-machine transitions resolve to a real source with a free output slot that way; 0-based fails on a
+  third). agx_write wrote 0-based and is fixed (every link in graphs written before pointed one node too low). One
+  link per <input>, socket <id>s unique per node. fo4sf.agx_edit edits a shipped graph in place, byte-identical
+  elsewhere (ElementTree round trip verified on MeleeAttacks.agx / Player_Melee.agx).
+* Combo (verified): MeleeAttackCombo is None -> A, A -> B on MeleeAttackStart, B -> C on MeleeAttackFinisherStart, and
+  nothing out of C. Descriptors: A and B open bCanComboAttack, B also bAllowFinisher (frames 15-48), C has no combo
+  window and bDontAllowAttack over 50 of its 51-60 frames. scripts/armor/combo_loop.py adds C -> B and B -> C on
+  MeleeAttackStart, gives our C (Skyrim's right swing, like A) A's timing and drops bAllowFinisher from B: right,
+  left, right, left ... for as long as attack is pressed; Starfield's finisher is dropped (Skyrim has none). The
+  graph is shared by every melee weapon type; unarmed keeps its finisher (its descriptors are untouched).
+* Skyrim's own timing (verified, 1hm_behavior.hkx clip triggers, hkbClipTrigger = localTime f32 @0, event id @8,
+  relativeToEnd u8 @24, 32 bytes): 1HM_AttackRight preHitFrame 0.233 s, weaponSwing 0.333, HitFrame 0.367,
+  AttackWinStart 0.867 - AttackWinEnd 1.267 (the combo window), attackStop at the end; the third-person clip starts
+  at startTime = attackIntroLength (0.333 default). Not used yet (our hit stays on the blade peak, frames 13-14).
+* Leg (verified on the data): the hips turn back 75 deg over frames 22-31 while the left foot stays planted 50 cm
+  out, then the foot travels home in the last 8 frames lifted only 5 cm - identical in the Skyrim file. In Skyrim a
+  follow-up attack (AttackWin 0.87-1.27 s) cuts that recovery; with the endless combo it shows only after the last
+  swing. Changing it would mean editing Skyrim's motion (owner's call).
+
 ### 2026-10-19: owner: grip right in combat; left leg slides back with a jolt; only three hits, then it stops
 * Root motion: not wanted - the goal is Skyrim's combat, and Skyrim's standing attacks stay in place (owner).
 * Leg (verified on the data): every attack starts and ends exactly on the ready idle's foot positions, but Skyrim's

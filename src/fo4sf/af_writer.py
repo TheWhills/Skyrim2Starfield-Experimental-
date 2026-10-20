@@ -15,6 +15,7 @@ owner's survey: 97 bones, Root first, Weapon under C_Chest, C_Waist absent from 
 for actor clips (taken from the door descriptors: is_state, tag, filename).
 """
 import ctypes as c
+import copy
 import json
 import math
 import os
@@ -159,6 +160,45 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
     return out, {"old_last": old_last, "old_last_estimated": est, "scale": round(scale, 4),
                                                  "retimed": len(marks), "events_from_clip": replaced,
                                                  "hit_anchor": anchor}
+
+
+def _afx_out(root, like: bytes) -> bytes:
+    out = ET.tostring(root, encoding="utf-8", short_empty_elements=False)
+    if b"\r\n" in like:
+        out = out.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+    return out
+
+
+def copy_timing(src: bytes, dst: bytes) -> bytes:
+    """dst's descriptor with src's timing: rampout, flags, events, audios and variables taken from src; tag, filename
+    and is_state kept. For two vanilla slots that now play the same clip (e.g. combo A and C both Skyrim's right
+    swing), so the second gets the first's hit and combo windows."""
+    s_root, d_root = ET.fromstring(src.decode("utf-8-sig")), ET.fromstring(dst.decode("utf-8-sig"))
+    for name in ("rampout", "flags", "events", "audios", "variables"):
+        old, new = d_root.find(name), s_root.find(name)
+        at = list(d_root).index(old) if old is not None else None
+        if old is not None:
+            d_root.remove(old)
+        if new is not None:
+            el = copy.deepcopy(new)
+            if at is None:                         # keep the shipped element order: after the last kept sibling
+                order = ["is_state", "tag", "filename", "rampout", "flags", "events", "audios", "variables"]
+                prev = [c for c in d_root if c.tag in order[:order.index(name)]]
+                at = list(d_root).index(prev[-1]) + 1 if prev else len(d_root)
+            d_root.insert(at, el)
+    return _afx_out(d_root, dst)
+
+
+def drop_variables(afx: bytes, names) -> Tuple[bytes, List[str]]:
+    """The descriptor without the named <variable> windows (e.g. bAllowFinisher); returns (bytes, dropped names)."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    dropped = []
+    vs = root.find("variables")
+    for v in list(vs) if vs is not None else []:
+        if v.findtext("name") in names:
+            vs.remove(v)
+            dropped.append(v.findtext("name"))
+    return _afx_out(root, afx), dropped
 
 
 def _keys_needed(values: np.ndarray, tol: float) -> List[int]:

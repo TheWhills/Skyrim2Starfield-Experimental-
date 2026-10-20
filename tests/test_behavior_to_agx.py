@@ -33,7 +33,7 @@ class BehaviorToAgxTests(unittest.TestCase):
         self.assertEqual((s["tags"], s["events"]), (["IdleClip", "WalkClip"], ["moveStart"]))
         walk = ET.fromstring(out.decode()).findall("node")[1]
         link = walk.find("input").find("link")
-        self.assertEqual((link.findtext("node"), link.findtext("output")), ("0", "0"))
+        self.assertEqual((link.findtext("node"), link.findtext("output")), ("1", "0"))   # 1-based: from node 0
 
     def test_blend_selector_shared_and_behavior_reference(self):
         # a hand-made graph model (the shape skyrimbehavior.read returns)

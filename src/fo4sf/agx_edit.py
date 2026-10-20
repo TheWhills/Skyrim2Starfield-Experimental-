@@ -1,0 +1,145 @@
+"""Edit a shipped Starfield .agx graph in place (read-modify-write), keeping every byte not changed.
+
+The graph-editor XML round-trips through ElementTree byte for byte (verified 2026-10-19 on the vanilla MeleeAttacks.agx
+and Player_Melee.agx: identical once CRLF line ends and the newline after </root> are put back, with
+short_empty_elements=False). Format facts used here (see agx_write): a state machine is a <graph> whose <node>s are
+its states; a transition INTO a state is a <link> inside one of the target's <input>s, naming the source as its 1-based
+index among the sibling nodes plus one of the source's <output> slots. Seen on 42 vanilla graphs: one link per <input>
+at most (a state has one input per incoming transition, sometimes with spare empty ones), one transition per output
+slot, and <id>s unique within a node (inputs and outputs together), not across the file.
+"""
+import copy
+import xml.etree.ElementTree as ET
+from typing import List, Optional
+
+
+class AgxEditError(ValueError):
+    pass
+
+
+def load(raw: bytes) -> ET.Element:
+    return ET.fromstring(raw)
+
+
+def dump(root: ET.Element, like: bytes = b"\r\n") -> bytes:
+    out = ET.tostring(root, encoding="utf-8", short_empty_elements=False)
+    if b"\r\n" in like:
+        out = out.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        return out + b"\r\n"
+    return out + b"\n"
+
+
+def _rows(n: ET.Element) -> dict:
+    out = {}
+    for sh in n.findall("property_sheet"):
+        for r in sh.findall("row"):
+            p = r.findall("prop")
+            if len(p) >= 2:
+                out.setdefault(p[0].findtext("value"), p[1].findtext("value"))
+    return out
+
+
+def machine(root: ET.Element, name: Optional[str] = None) -> ET.Element:
+    """The node list holder of a state machine: the file's top level (name None) or the <graph> of the embedded
+    state machine called `name` (searched depth first)."""
+    if name is None:
+        return root
+    stack = [root]
+    while stack:
+        g = stack.pop()
+        for n in g.findall("node"):
+            sub = n.find("graph")
+            if sub is None:
+                continue
+            if _rows(n).get("State Machine Name") == name:
+                return sub
+            stack.append(sub)
+    raise AgxEditError(f"no state machine {name!r}")
+
+
+def state(graph: ET.Element, tag: str) -> int:
+    """0-based index of the state whose TagName (or State Machine Name) is `tag`; exactly one must match."""
+    hits = [i for i, n in enumerate(graph.findall("node"))
+            if tag in (_rows(n).get("TagName"), _rows(n).get("State Machine Name"))]
+    if len(hits) != 1:
+        raise AgxEditError(f"state {tag!r}: {len(hits)} matches")
+    return hits[0]
+
+
+def transitions(graph: ET.Element) -> List[tuple]:
+    """[(source index, target index, event, condition)] of one machine."""
+    out = []
+    for t, n in enumerate(graph.findall("node")):
+        for inp in n.findall("input"):
+            for link in inp.findall("link"):
+                r = _rows(link)
+                out.append((int(link.findtext("node")) - 1, t, r.get("Event") or "", r.get("Condition") or ""))
+    return out
+
+
+def _next_socket_id(node: ET.Element) -> int:
+    ids = [int(x.findtext("id")) for tag in ("input", "output") for x in node.findall(tag)
+           if (x.findtext("id") or "").strip().lstrip("-").isdigit()]
+    return max(ids or [0]) + 1
+
+
+def add_transition(root: ET.Element, graph: ET.Element, src: int, dst: int, event: str, blend: float = 0.15,
+                   condition: str = "", template: Optional[ET.Element] = None) -> bool:
+    """Add a transition src -> dst (0-based state indices in `graph`) on `event`; False when one with the same event
+    and condition already exists. The new link copies `template` (a <link>; default: the first transition link in the
+    file) and sets its Event / Condition / Blend Time; the source gets a new output slot."""
+    if any(s == src and d == dst and e == event and c == condition for s, d, e, c in transitions(graph)):
+        return False
+    nodes = graph.findall("node")
+    if not (0 <= src < len(nodes) and 0 <= dst < len(nodes)):
+        raise AgxEditError(f"transition {src}->{dst} outside the machine")
+    if template is None:
+        template = next((l for l in root.iter("link") if l.find("property_sheet") is not None), None)
+        if template is None:
+            raise AgxEditError("no transition in the file to copy the link layout from")
+    s_node, d_node = nodes[src], nodes[dst]
+    outs = s_node.findall("output")
+    if outs:
+        new_out = copy.deepcopy(outs[-1])
+        at = list(s_node).index(outs[-1]) + 1
+    else:                                             # the shipped layout: <output> <name></name> <id/> <idx/> </output>
+        new_out = ET.Element("output")
+        new_out.text = " "
+        for tag, tail in (("name", " "), ("id", " "), ("idx", "\n ")):
+            ET.SubElement(new_out, tag).tail = tail
+        anchor = (s_node.findall("input") or [s_node.find("guid")])[-1]
+        if anchor is None:
+            raise AgxEditError("source state has no place for an output")
+        new_out.tail = anchor.tail
+        at = list(s_node).index(anchor) + 1
+    new_out.find("id").text = str(_next_socket_id(s_node))
+    new_out.find("idx").text = str(len(outs))
+    s_node.insert(at, new_out)
+    link = copy.deepcopy(template)
+    link.find("node").text = str(src + 1)
+    link.find("output").text = str(len(outs))
+    for r in link.iter("row"):
+        p = r.findall("prop")
+        key = p[0].findtext("value") if p else None
+        if key == "Event":
+            p[1].find("value").text = event
+        elif key == "Condition":
+            p[1].find("value").text = condition
+        elif key == "Blend Time":
+            p[1].find("value").text = f"{blend:g}"
+    ins = d_node.findall("input")
+    free = next((i for i in ins if not i.findall("link")), None)
+    if free is None:                                  # a new input, laid out like an existing one
+        like = next((i for i in ins if i.findall("link")), None)
+        if like is None:
+            raise AgxEditError("target state has no input to copy the layout from")
+        free = copy.deepcopy(like)
+        for old in free.findall("link"):
+            free.remove(old)
+        free.find("id").text = str(_next_socket_id(d_node))
+        free.find("idx").text = str(len(ins))
+        d_node.insert(list(d_node).index(ins[-1]) + 1, free)
+        free.find("idx").tail = like.find("idx").tail
+    link.tail = template.tail
+    free.append(link)
+    return True
