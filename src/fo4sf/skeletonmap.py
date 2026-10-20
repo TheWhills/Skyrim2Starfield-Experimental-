@@ -145,6 +145,9 @@ SUPPORT_ARM = ("L_Biceps", "L_Forearm", "L_Wrist")
 # 1 cm of it (Nordic: (7.01, -0.85, -3.26); vanilla 1hm: (7.16, 0, -2.43)). Used to put converted weapon models' handles
 # into the Starfield fist (skyrimweapon).
 SKYRIM_HAND_IN_WEAPON: Tuple[float, float, float] = (7.1592, 0.0, -2.4345)
+# The same for the left hand in the Shield node's frame (skeleton.hkx rest Shield, child of NPC L Hand: t (0, -2.4345,
+# 7.1592), q (0.5792, -0.5792, 0.4056, 0.4056)), where Skyrim draws left-hand weapons
+SKYRIM_HAND_IN_SHIELD: Tuple[float, float, float] = (-7.5601, 0.0, 0.1609)
 # IK targets kept on the hands they belong to (the IK pass then changes nothing)
 HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}
 # Skyrim bones with several mapped children: the child whose direction aligns the bone (see retarget)

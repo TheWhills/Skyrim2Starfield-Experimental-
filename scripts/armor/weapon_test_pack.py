@@ -82,6 +82,61 @@ def weapon_record(template, index: int, edid: str, name: str, model: str):
     return (typ, header, new, sfplugin.new_form_id(index))
 
 
+APPAREL_TEMPLATE = r"^Clothes_Nightwear_01$"    # a vanilla outfit community mods copy successfully (robes reference)
+MODEL_SIGS = (b"MOD2", b"MOD3", b"MOD4", b"MOD5")   # ARMA male / female worn, male / female first person
+
+
+def form_refs(subs, ids) -> list:
+    """[(sig, byte offset)] of every 4-byte-aligned u32 in subs that is one of ids."""
+    import struct
+    out = []
+    for s, d in subs:
+        for o in range(0, len(d) - 3, 4):
+            if struct.unpack_from("<I", d, o)[0] in ids:
+                out.append((s, o))
+    return out
+
+
+def replace_refs(subs, old: int, new: int):
+    import struct
+    out = []
+    for s, d in subs:
+        b = bytearray(d)
+        for o in range(0, len(b) - 3, 4):
+            if struct.unpack_from("<I", b, o)[0] == old:
+                struct.pack_into("<I", b, o, new)
+        out.append((s, bytes(b)))
+    return out
+
+
+def pick_apparel(armo, arma, edid_rx=APPAREL_TEMPLATE):
+    """(ARMO record, ARMA record it uses): the first ARMO whose EditorID matches, with the first ARMA it references."""
+    import struct
+    rx = re.compile(edid_rx, re.I)
+    by_fid = {r[3]: r for r in arma}
+    for r in armo:
+        if rx.search(sfplugin.edid(r[2])):
+            for s, d in r[2]:
+                for o in range(0, len(d) - 3, 4):
+                    v = struct.unpack_from("<I", d, o)[0]
+                    if v in by_fid:
+                        return r, by_fid[v]
+    raise SystemExit(f"no ARMO matching {edid_rx} with an ARMA")
+
+
+def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str):
+    """(ARMA, ARMO) copies: the ARMA's worn and first-person models -> the left blade, the ARMO named and pointing at
+    the new ARMA."""
+    ta, ha, sa, fa = arma_t
+    new_arma = sfplugin.new_form_id(first_index)
+    m = sfplugin.zs(model)
+    sa2 = sfplugin.edit(sa, {b"EDID": sfplugin.zs(edid + "_AA"), **{k: m for k in MODEL_SIGS if any(s == k for s, _ in sa)}})
+    to, ho, so, _fo = armo_t
+    so2 = replace_refs(sfplugin.edit(so, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name)}, drop=(b"DESC",)),
+                       fa, new_arma)
+    return (ta, ha, sa2, new_arma), (to, ho, so2, sfplugin.new_form_id(first_index + 1))
+
+
 def pack(staging: str, out: str, starfield: str, archive2: str = None) -> dict:
     """BA2 archives with Archive2 when present (as deploy_starfield), else the files loose in the mod folder."""
     tool = archive2 or os.path.join(starfield, "Tools", "Archive2", "Archive2.exe")
@@ -112,6 +167,10 @@ def main(argv=None):
     ap.add_argument("--archive2", help="default: <Starfield>/Tools/Archive2/Archive2.exe")
     ap.add_argument("--template", help="EditorID regex of the vanilla weapon to copy (default: by keyword)")
     ap.add_argument("--only", help="comma list of keys from the iron set (dagger,sword,waraxe,mace,greatsword,...)")
+    ap.add_argument("--left-blade", default="sword",
+                    help="iron weapon also made as a worn left-hand blade for dual wield ('' = none)")
+    ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
+                    help="EditorID regex of the vanilla outfit whose ARMO / ARMA the left blade copies")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -135,7 +194,7 @@ def main(argv=None):
                                          shape_hook=skyrimweapon.weapon_shapes)
     report = {"weapons": [], "plugin": PLUGIN}
     info = sfplugin.header_info(esm)
-    sf = sfplugin.records(esm, [b"WEAP", b"KYWD"])
+    sf = sfplugin.records(esm, [b"WEAP", b"KYWD"] + ([b"ARMO", b"ARMA"] if a.left_blade else []))
     kw_names = {fid: sfplugin.edid(s) for t, _h, s, fid in sf if t == b"KYWD"}
     weaps = [r for r in sf if r[0] == b"WEAP"]
     template, why = pick_template(weaps, kw_names, edid_rx=a.template)
@@ -159,6 +218,25 @@ def main(argv=None):
         report["weapons"].append(row)
     if not recs:
         sys.exit("no weapon converted: " + json.dumps(report["weapons"], indent=1))
+    lw = next((w for w in weapons if a.left_blade and w["key"] == a.left_blade), None)
+    if lw is not None:
+        conv.shape_hook = skyrimweapon.left_weapon_shapes
+        res = conv.convert_nif("meshes\\" + re.sub(r"^meshes[\\/]", "", lw["model"].replace("/", "\\"), flags=re.I),
+                               skin_bone="WeaponLeft", out_suffix="_left")
+        row = {"key": lw["key"] + "_left", "ok": res["ok"], "reason": res.get("reason")}
+        if res["ok"]:
+            armo_t, arma_t = pick_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"],
+                                          a.apparel_template)
+            model = res["out_name"].replace("/", "\\") + ".nif"
+            edid = "S2S_" + lw["edid"] + "_Left"
+            name = lw["name"] + " (Skyrim, left hand)"
+            aa, ao = left_blade_records(armo_t, arma_t, len(recs), edid, name, model)
+            recs += [aa, ao]
+            row.update(starfield_model=model, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}", editor_id=edid, name=name,
+                       test_with_pack="dual_" + lw["pack"].replace("1h_", ""), worn=True,
+                       apparel_template={"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2]),
+                                         "arma_subrecords": [f"{x.decode('latin-1')}:{len(d)}" for x, d in arma_t[2]]})
+        report["weapons"].append(row)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))
     report["packing"] = pack(staging, out, a.starfield, a.archive2)
@@ -174,6 +252,10 @@ def main(argv=None):
             lines.append(f"  {r['name']:<24} ..{r['form_id_in_plugin'][-3:]}          {r['test_with_pack']}")
         else:
             lines.append(f"  {r['key']}: not converted ({r['reason']})")
+    if any(r.get("worn") for r in report["weapons"]):
+        lines += ["", "The left-hand blade is worn (equip it like clothing) next to the same weapon in the right hand,",
+                  "with a dual-wield Nordic pack. It copies a vanilla outfit's records, so it replaces your outfit",
+                  "while worn (a test shortcut)."]
     lines += ["", f"Copied from the vanilla weapon {report['template']['edid']} ({report['template']['why']}): stats,",
               "sounds and keywords are that weapon's for now; only the model and name change."]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:

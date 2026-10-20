@@ -72,6 +72,34 @@ def weapon_frame() -> Tuple[tuple, tuple]:
     return rot, tuple(wrist_sf[i] - moved[i] for i in range(3))
 
 
+def left_weapon_frame() -> Tuple[tuple, tuple]:
+    """As weapon_frame, for a weapon in the left hand, into the frame of Starfield's WeaponLeft bone and in metres
+    there (worn models are skinned to WeaponLeft with an identity bind, so their vertices are bone-local): Skyrim draws
+    left-hand weapons in its Shield node's frame; WeaponLeft = Shield * LEFT_WEAPON_AXES (the clips converted with
+    --left-weapon), held at LEFT_GRIP (the mirrored right grip). Returns (rotation row-major, translation in Skyrim
+    units: skyrimconvert scales by UNIT afterwards)."""
+    a = _norm(M.LEFT_WEAPON_AXES["weaponleft"][1])
+    ai = _qinv(a)
+    cols = [_qrot(ai, e) for e in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))]
+    rot = tuple(cols[c][r] for r in range(3) for c in range(3))
+    _h, gt, gq = M.LEFT_GRIP["weaponleft"]
+    wrist_sf = _qrot(_qinv(_norm(gq)), gt)
+    wrist_sf = tuple(-c / UNIT for c in wrist_sf)
+    hand_sk = M.SKYRIM_HAND_IN_SHIELD
+    moved = tuple(sum(rot[3 * r + c] * hand_sk[c] for c in range(3)) for r in range(3))
+    return rot, tuple(wrist_sf[i] - moved[i] for i in range(3))
+
+
+def left_weapon_shapes(n: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], report: Optional[dict] = None):
+    """The drawn-weapon shapes (scabbard left out) in WeaponLeft's frame: the left blade of a dual-wield pair."""
+    scb = scabbard_blocks(n)
+    kept = [s for s in shapes if s.block not in scb and not SCABBARD.match(s.name or b"")]
+    if report is not None:
+        report["scabbard_shapes_dropped"] = len(shapes) - len(kept)
+    rot, trans = left_weapon_frame()
+    return [to_weapon_frame(s, rot, trans) for s in kept]
+
+
 def _matmul(a, b):
     return tuple(sum(a[3 * r + k] * b[3 * k + c] for k in range(3)) for r in range(3) for c in range(3))
 

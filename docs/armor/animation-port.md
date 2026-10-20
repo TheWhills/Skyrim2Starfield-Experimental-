@@ -1050,3 +1050,22 @@ pc_checklist.ps1 when texconv is found) builds an MO2 mod on the PC:
 **Unresolved, to see in game:** whether Starfield melee weapons take their visible model from WEAP MODL (the report
 lists the template's subrecords and model to check); the grip in game; dual wield's left blade (needs a Starfield
 skinned-mesh writer: not in this pack).
+
+## 2026-10-20: skinned NIF writer and the dual-wield left blade
+* `sfnif.build_skinned_nif` / `parse_skin`: worn NIFs with the block layout of the community outfit that works in game
+  (robes-of-oblivion-reference.md): BSGeometry with skin -> BSSkin::Instance (root 0, its BoneData, one empty bone ref
+  per bone, no scales), SkinAttach "SkinBMP" (bone names), BSSkin::BoneData (68 bytes per bone), BSXFlags 0x10000,
+  zero sphere + FLT_MAX box; meshes external with (bone, u16 weight) pairs. The reader agrees with the robe files.
+* **Bind convention (verified on the robe):** its binds are inverse(bone rest world) composed with the geometry node's
+  transform (rotation = s x W^T with the robe's odd 1.2243 node scale, translation = W^T (t_node - T_bone)): the
+  engine draws a vertex at bone_world * bind * vertex and ignores the node transform. So a rigid part can use an
+  identity bind with bone-local vertices, independent of the skeleton's rest pose: done for the left blade.
+* `skyrimconvert.convert_nif(skin_bone=...)`: rigid one-bone worn models (4 weights per vertex, (0, 65535) first).
+* `skyrimweapon.left_weapon_frame`: Skyrim draws left weapons in its Shield frame; the model goes into WeaponLeft's
+  frame (LEFT_WEAPON_AXES, LEFT_GRIP; Skyrim's left hand at (-7.56, 0, 0.16) units in the Shield frame from the
+  skeleton): hand point onto the Starfield wrist point and blade along +Z, as the right weapon (tested).
+* `weapon_test_pack.py --left-blade sword` (default): the iron sword again as `longsword_left.nif` skinned to
+  WeaponLeft, worn through ARMO / ARMA copies of vanilla `Clothes_Nightwear_01` (the outfit the robe mod copied;
+  worn and first-person models -> the left blade). Test shortcut: it occupies the outfit's slot.
+  **Unresolved:** a slot that does not replace the outfit; whether the first-person skeleton has WeaponLeft; the left
+  blade stays where the WeaponLeft bone is when sheathed (no sheath position yet).

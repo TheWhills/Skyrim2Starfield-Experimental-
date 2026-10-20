@@ -160,6 +160,84 @@ def build_static_nif(node_name: bytes, shapes: List[StaticShape], bs_version: in
     return f
 
 
+@dataclass
+class SkinnedShape:
+    name: bytes
+    mesh_path: bytes        # b"<20 hex>\\<20 hex>"; the .mesh carries the bone weights (indices into `bones`)
+    indices_size: int
+    num_verts: int
+    material_path: str
+    bones: List[bytes]      # Starfield bone NAMES (SkinAttach "SkinBMP"): the skeleton is not in the file
+    # per bone (bounding sphere centre xyz + radius in bone space, rotation row-major 9, translation 3, scale):
+    # the skin-to-bone bind; a vertex is drawn at bone_world * bind * vertex
+    binds: List[Tuple[Tuple[float, ...], Tuple[float, ...], Tuple[float, ...], float]]
+
+
+FLT_MAX = 3.4028234663852886e38
+
+
+def build_skinned_nif(node_name: bytes, shapes: List[SkinnedShape], bs_version: int = 173) -> nifmod.NifFile:
+    """A worn (skinned) NIF with the blocks of the working community outfit read in
+    docs/armor/robes-of-oblivion-reference.md (verified layout there, one shape): NiNode root (extra: BSXFlags 0x10000;
+    children: the geometries), BSXFlags, then per shape BSGeometry (extra: MaterialID, SkinAttach; skin ->
+    BSSkin::Instance; zero bounding sphere and FLT_MAX box: skinned shapes are culled by their bones),
+    BSLightingShaderProperty, NiIntegerExtraData "MaterialID", SkinAttach "SkinBMP" (bone names),
+    BSSkin::Instance (skeleton root 0, its BoneData, one empty bone ref per bone, no scales), BSSkin::BoneData
+    (68 bytes per bone). Meshes are external (.mesh under geometries/), as vanilla and this repo's static props."""
+    f = nifmod.NifFile(endian=1, user_version=12, bs_version=bs_version, author=b"\x00", unknown_int=0,
+                       export_script=b"\x00", sf_data=b"\x7a\x00")
+    ident = struct.pack("<3f9ff", 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0)
+    if not shapes:
+        raise ValueError("no shape")
+    for sh in shapes:
+        if not sh.bones or len(sh.binds) != len(sh.bones):
+            raise ValueError("a skinned shape needs one bind per bone")
+    geo = [2 + 6 * i for i in range(len(shapes))]
+    f.add_block("NiNode", struct.pack("<iIiiI", f.string_index(node_name), 1, 1, -1, 0xE) + ident
+                + struct.pack("<iI", -1, len(geo)) + struct.pack(f"<{len(geo)}i", *geo))
+    f.add_block("BSXFlags", struct.pack("<iI", f.string_index(b"BSX"), 0x10000))
+    for sh, base in zip(shapes, geo):
+        nb = len(sh.bones)
+        g = BSGeometry(name_idx=f.string_index(sh.name), extra_refs=[base + 2, base + 3], sphere=(0.0, 0.0, 0.0, 0.0),
+                       box=(FLT_MAX,) * 6, skin=base + 4, shader=base + 1,
+                       meshes=[MeshRef(sh.indices_size, sh.num_verts, 0x40, sh.mesh_path), None, None, None])
+        f.add_block("BSGeometry", build_bsgeometry(g))
+        f.add_block("BSLightingShaderProperty",
+                    struct.pack("<iIi", f.string_index(sh.material_path.encode("latin-1")), 0, -1))
+        f.add_block("NiIntegerExtraData", struct.pack("<iI", f.string_index(b"MaterialID"),
+                                                      material_id(sh.material_path)))
+        f.add_block("SkinAttach", struct.pack("<iI", f.string_index(b"SkinBMP"), nb)
+                    + b"".join(struct.pack("<I", len(b)) + b for b in sh.bones))
+        f.add_block("BSSkin::Instance", struct.pack("<iiI", 0, base + 5, nb) + struct.pack(f"<{nb}i", *([-1] * nb))
+                    + struct.pack("<I", 0))
+        f.add_block("BSSkin::BoneData", struct.pack("<I", nb) + b"".join(
+            struct.pack("<4f9f3ff", *sphere, *rot, *trans, scale) for sphere, rot, trans, scale in sh.binds))
+    f.footer = struct.pack("<II", 1, 0)
+    return f
+
+
+def parse_skin(n: nifmod.NifFile) -> dict:
+    """{"bones": [names], "binds": [(sphere, rot, trans, scale)], "instance": (root, data, n)} of a skinned NIF."""
+    out = {}
+    for i, b in enumerate(n.blocks):
+        t = n.type_of(i)
+        if t == "SkinAttach":
+            cnt, = struct.unpack_from("<I", b, 4)
+            p, names = 8, []
+            for _ in range(cnt):
+                ln, = struct.unpack_from("<I", b, p)
+                names.append(b[p + 4:p + 4 + ln])
+                p += 4 + ln
+            out["bones"] = names
+        elif t == "BSSkin::Instance":
+            out["instance"] = struct.unpack_from("<iiI", b, 0)
+        elif t == "BSSkin::BoneData":
+            cnt, = struct.unpack_from("<I", b, 0)
+            out["binds"] = [(v[:4], v[4:13], v[13:16], v[16]) for v in
+                            (struct.unpack_from("<17f", b, 4 + 68 * k) for k in range(cnt))]
+    return out
+
+
 # Vanilla hinged door used as the animation template (DOOR 0AA24A AK_Ext_Bld_WallA_DoorA_01_Alt02). Its skeleton.rig stores
 # the bind pose of these nodes, so a converted door must use the same node names and the same hinge position.
 DOOR_TEMPLATE = {

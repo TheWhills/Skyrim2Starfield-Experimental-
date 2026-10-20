@@ -60,6 +60,14 @@ def starfield_esm(path):
             (b"WEAP", wp, [(b"EDID", b"Melee_Sword\0"), (b"FULL", struct.pack("<I", 1234)),
                            (b"DESC", struct.pack("<I", 99)), (b"KWDA", struct.pack("<2I", 0x000A0002, 0x000A0001)),
                            (b"MODL", b"Weapons\\Sword\\Sword.nif\0"), (b"DNAM", b"\x01" * 16)], 0x000B0002)]
+    ar = struct.pack("<4sIII", b"ARMA", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+    ao = struct.pack("<4sIII", b"ARMO", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+    recs += [(b"ARMA", ar, [(b"EDID", b"AA_Nightwear_01\0"), (b"BO64", struct.pack("<Q", 1 << 3)),
+                            (b"MOD2", b"Clothes\\Nightwear_M.nif\0"), (b"MOD3", b"Clothes\\Nightwear_F.nif\0"),
+                            (b"MOD4", b"Clothes\\Nightwear_M_1st.nif\0"), (b"RNAM", struct.pack("<I", 0x347D))],
+              0x000C0001),
+             (b"ARMO", ao, [(b"EDID", b"Clothes_Nightwear_01\0"), (b"FULL", struct.pack("<I", 77)),
+                            (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x000C0001))], 0x000C0002)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
@@ -90,6 +98,41 @@ class WeaponFrameTests(unittest.TestCase):
         self.assertEqual([s.name for s in out], [b"IronSword"])
         rot, trans = W.weapon_frame()
         self.assertTrue(np.allclose(out[0].translation, trans))                 # the blade node sat at the origin
+
+
+class LeftBladeTests(unittest.TestCase):
+    def test_left_frame_hand_onto_wrist_and_blade_along_z(self):
+        rot, trans = W.left_weapon_frame()
+        apply = lambda p: np.array([sum(rot[3 * r + c] * p[c] for c in range(3)) + trans[r] for r in range(3)])  # noqa
+        _h, gt, gq = M.LEFT_GRIP["weaponleft"]
+        gq = np.array(gq) / np.linalg.norm(gq)
+        wrist = -R.qrot(R.qinv(gq), np.array(gt)) / W.UNIT
+        self.assertTrue(np.allclose(apply(M.SKYRIM_HAND_IN_SHIELD), wrist, atol=1e-6))
+        tip = apply((0, 60, 0)) - apply((0, 0, 0))                                  # Shield +Y: the blade
+        self.assertTrue(np.allclose(tip / np.linalg.norm(tip), [0, 0, 1], atol=1e-3))   # +Z, as the right blade
+
+    def test_skinned_nif_layout(self):
+        sh = sfnif.SkinnedShape(b"Blade", b"a" * 20 + b"\\" + b"b" * 20, 6, 4, "materials\\s2s\\x.mat", [b"WeaponLeft"],
+                                [((0.1, 0.0, 0.3, 0.5), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])
+        f = sfnif.build_skinned_nif(b"Root", [sh, sh])
+        raw = nif.serialize(f)
+        n = nif.parse(raw)
+        self.assertEqual(nif.serialize(n), raw)                                    # round trip
+        types = [n.type_of(i) for i in range(len(n.blocks))]
+        self.assertEqual(types[:8], ["NiNode", "BSXFlags", "BSGeometry", "BSLightingShaderProperty",
+                                     "NiIntegerExtraData", "SkinAttach", "BSSkin::Instance", "BSSkin::BoneData"])
+        self.assertEqual(len(types), 14)                                           # 2 + 6 per shape
+        g = sfnif.parse_bsgeometry(n.blocks[2])
+        self.assertEqual((g.skin, g.shader, g.extra_refs), (6, 3, [4, 5]))
+        self.assertEqual(g.box, (sfnif.FLT_MAX,) * 6)
+        sk = sfnif.parse_skin(n)
+        self.assertEqual(sk["bones"], [b"WeaponLeft"])
+        self.assertEqual(sk["instance"][:3], (0, 13, 1))                          # the last shape's BoneData
+        self.assertEqual(struct.unpack_from("<i", n.blocks[6], 12)[0], -1)          # one empty bone ref per bone
+        self.assertEqual(struct.unpack_from("<iI", n.blocks[1], 0)[1], 0x10000)     # BSXFlags as vanilla bodies
+        self.assertAlmostEqual(sk["binds"][0][0][3], 0.5)
+        with self.assertRaises(ValueError):
+            sfnif.build_skinned_nif(b"R", [sfnif.SkinnedShape(b"x", b"p", 3, 3, "m", [b"A"], [])])
 
 
 class PluginTests(unittest.TestCase):
@@ -152,7 +195,20 @@ class PackTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             rep = json.load(open(os.path.join(out, "weapon_test_pack.json")))
             ok = [w for w in rep["weapons"] if w["ok"]]
-            self.assertEqual([w["key"] for w in ok], ["sword"])                    # only the sword is in the archive
+            self.assertEqual([w["key"] for w in ok], ["sword", "sword_left"])     # only the sword is in the archive
+            left = ok[1]
+            self.assertEqual(left["apparel_template"]["armo"], "Clothes_Nightwear_01")
+            ln = nif.parse(open(os.path.join(out, "meshes", "s2s", "weapons", "iron", "longsword_left.nif"), "rb").read())
+            self.assertEqual(sfnif.parse_skin(ln)["bones"], [b"WeaponLeft"])
+            recs = {sfplugin.edid(r[2]): r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"),
+                                                                     [b"ARMO", b"ARMA"])}
+            aa, ao = recs["S2S_IronSword_Left_AA"], recs["S2S_IronSword_Left"]
+            aas = dict(aa[2])
+            for k in (b"MOD2", b"MOD3", b"MOD4"):
+                self.assertEqual(aas[k], b"s2s\\weapons\\iron\\longsword_left.nif\0")
+            self.assertEqual(dict(ao[2])[b"MODL"], struct.pack("<I", aa[3]))        # the ARMO wears the new ARMA
+            self.assertEqual(dict(ao[2])[b"FULL"], b"Iron Sword (Skyrim, left hand)\0")
+            self.assertEqual(aas[b"RNAM"], struct.pack("<I", 0x347D))               # race etc. kept
             sword = ok[0]
             self.assertEqual(sword["skyrim"]["damage"], 7)                         # read from Skyrim.esm
             self.assertEqual(sword["scabbard_shapes_dropped"], 1)
@@ -163,6 +219,8 @@ class PackTests(unittest.TestCase):
             geo = [sfnif.parse_bsgeometry(n.blocks[i]) for i in range(len(n.blocks)) if n.type_of(i) == "BSGeometry"]
             self.assertEqual(len(geo), 1)                                          # blade only
             (wid,) = [w for w in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"WEAP"])]
+            mesh_left = [r for r in rep["weapons"] if r["key"] == "sword_left"][0]["starfield_model"]
+            self.assertTrue(mesh_left.endswith("longsword_left.nif"))
             self.assertEqual(sfplugin.edid(wid[2]), "S2S_IronSword")
             self.assertTrue(os.path.isfile(os.path.join(out, "README.txt")))
             self.assertFalse(os.path.exists(os.path.join(out, "_staging")))

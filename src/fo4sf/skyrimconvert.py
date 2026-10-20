@@ -189,6 +189,39 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
     return files
 
 
+def convert_skinned_sse(shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list, bone: str,
+                        report: dict) -> Dict[str, bytes]:
+    """A worn NIF in which every vertex rides one Starfield bone (rigid skinning, e.g. a weapon held by a bone):
+    shapes must already be in that bone's local frame; the bind is identity (drawn at bone_world * vertex), so the
+    result does not depend on the skeleton's rest pose."""
+    files, skinned = {}, []
+    lo, hi = [float("inf")] * 3, [float("-inf")] * 3
+    for i, s in enumerate(shapes):
+        if material_paths[i] is None:
+            continue
+        m = convert_static.shape_to_mesh(s, UNIT)
+        m.weights_per_vertex = 4
+        m.weights = [(0, 65535), (0, 0), (0, 0), (0, 0)] * len(m.positions)
+        data = sfmesh.serialize(m)
+        d, f = convert_static.mesh_file_path(data)
+        files[f"geometries/{d}/{f}.mesh"] = data
+        pts = [sfmesh.decode_position(p, m.scale) for p in m.positions]
+        for p in pts:
+            for a in range(3):
+                lo[a], hi[a] = min(lo[a], p[a]), max(hi[a], p[a])
+        (cx, cy, cz, r), _box = sfnif.bounds_from_points(pts)
+        skinned.append(sfnif.SkinnedShape(s.name or f"Shape{i}".encode(), f"{d}\\{f}".encode(), len(m.triangles) * 3,
+                                          len(m.positions), material_paths[i], [bone.encode()],
+                                          [((cx, cy, cz, r), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)]))
+    if not skinned:
+        raise nifmod.NifError("no shape left after skipping effect shaders")
+    report["render_bounds_m"] = [[round(v, 3) for v in lo], [round(v, 3) for v in hi]]
+    report["skinned_to"] = bone
+    out = sfnif.build_skinned_nif(out_name.rsplit("/", 1)[-1].encode(), skinned)
+    files[f"meshes/{out_name}.nif"] = nifmod.serialize(out)
+    return files
+
+
 class SkyrimConverter(pipeline.Converter):
     """pipeline.Converter with a Skyrim source (bsa.SkyrimArchives) and Skyrim materials / geometry / collision."""
 
@@ -254,7 +287,9 @@ class SkyrimConverter(pipeline.Converter):
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral
 
-    def convert_nif(self, nif_name: str) -> dict:
+    def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
+        """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
+        the bone's frame) instead of a static model; out_suffix is appended to the output name."""
         res = {"nif": nif_name, "ok": False}
         try:
             raw = self.src.mesh(nif_name)
@@ -279,10 +314,13 @@ class SkyrimConverter(pipeline.Converter):
                     else:
                         shapes[i], doubled = d, doubled + 1
             rel = re.sub(r"^meshes[\\/]", "", nif_name.replace("\\", "/"), flags=re.I)
-            out_name = f"{self.prefix}/{os.path.splitext(rel)[0].lower()}"
+            out_name = f"{self.prefix}/{os.path.splitext(rel)[0].lower()}{out_suffix}"
             report = {}
-            files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
-                                       landscape=bool(LANDSCAPE_RE.search(nif_name)))
+            if skin_bone:
+                files = convert_skinned_sse(shapes, out_name, mats, skin_bone, report)
+            else:
+                files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
+                                           landscape=bool(LANDSCAPE_RE.search(nif_name)))
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)
