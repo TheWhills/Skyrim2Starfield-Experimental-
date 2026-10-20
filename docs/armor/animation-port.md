@@ -270,6 +270,9 @@ self-closing empty elements, as shipped.
   moving, but with a slow ramp. --free-movement --upper-body: instant start, but only straight and with lucky timing;
   standing swings lose the leg work. Moving off in the middle of a standing swing is decided by the game's movement
   code, not by anything in the graphs read so far.
+* Owner, --free-movement --upper-body: the same latch - while attacks continue, the player keeps moving in the last
+  pushed direction after the stick is released (a new direction re-latches), instead of swinging in place. Both
+  experiments are out; v9 (plain layered combo) is the candidate baseline, pending the same release check on it.
 
 ### 2026-10-19: owner, --upper-body: moving off mid-combo is instant, but only sometimes and only straight ahead
 * Biped_IdleLocomotion (read): the Locomotion machine leaves its idle "None" for StandToWalk / StandToRun start
