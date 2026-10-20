@@ -27,9 +27,19 @@ def tag(k: int, tags=None) -> str:
     return (tags or {}).get(k) or f"BFCO_Attack{k}"
 
 
-def build(raw: bytes, routing: dict, tags=None):
+POWER_EVENT = "MeleeAttackPowerStart"          # vanilla: None / PowerB -> MeleeAttackPower_A on this event
+POWER_TOP = "MeleeAttackPower_A"
+
+
+def build(raw: bytes, routing: dict, tags=None, power=None):
     """(graph bytes, report) for routing {k: next k} over attacks 1..N; tags {k: clip tag} overrides the default
-    BFCO_Attack<k> (e.g. the vanilla MeleeAttack_A for attack 1)."""
+    BFCO_Attack<k> (e.g. the vanilla MeleeAttack_A for attack 1).
+    power (optional, MCO / BFCO power routing): {"tags": {p: clip tag}, "attack_power": {k: p},
+    "power_attack": {p: k}, "power_power": {p: p'}}: every power attack p with a tag becomes a state inside the combo
+    machine (a copy of attack 2's state), entered from normal attacks and other power attacks on
+    MeleeAttackPowerStart and leaving to the next normal attack on MeleeAttackStart; targets without a tag go to the
+    first tagged power attack. The top-level vanilla power attack (the power attack from standing) also gets
+    MeleeAttackStart -> the combo, so a normal press after it continues the chain."""
     root = agx_edit.load(raw)
     g = agx_edit.machine(root, MACHINE)
     nodes = g.findall("node")
@@ -51,7 +61,56 @@ def build(raw: bytes, routing: dict, tags=None):
     for k, n in sorted(routing.items()):
         if agx_edit.add_transition(root, g, idx[k], idx[n], "MeleeAttackStart", blend=0.15, template=tpl):
             added.append(f"{tag(k, tags)} -> {tag(n, tags)}")
+    if power and power.get("tags"):
+        ptags = power["tags"]
+        first = min(ptags)
+        pidx = {}
+        for p in sorted(ptags):
+            i = agx_edit.clone_state(b_node, g, root)
+            agx_edit.set_tag(g.findall("node")[i], ptags[p])
+            pidx[p] = i
+        to_p = lambda p: p if p in pidx else first                     # noqa: E731
+        to_a = lambda k: k if k in idx else min(idx)                   # noqa: E731
+        for k, p in sorted(power.get("attack_power", {}).items()):
+            if k in idx and agx_edit.add_transition(root, g, idx[k], pidx[to_p(p)], POWER_EVENT, blend=0.15,
+                                                    template=tpl):
+                added.append(f"{tag(k, tags)} =power=> {ptags[to_p(p)]}")
+        for p, k in sorted(power.get("power_attack", {}).items()):
+            if p in pidx and agx_edit.add_transition(root, g, pidx[p], idx[to_a(k)], "MeleeAttackStart", blend=0.15,
+                                                     template=tpl):
+                added.append(f"{ptags[p]} -> {tag(to_a(k), tags)}")
+        for p, q in sorted(power.get("power_power", {}).items()):
+            if p in pidx and agx_edit.add_transition(root, g, pidx[p], pidx[to_p(q)], POWER_EVENT, blend=0.15,
+                                                     template=tpl):
+                added.append(f"{ptags[p]} =power=> {ptags[to_p(q)]}")
+        try:                                                            # top level: standing power attack -> combo
+            top_power = agx_edit.state(root, POWER_TOP)
+            combo = agx_edit.state(root, MACHINE)
+        except agx_edit.AgxEditError:
+            top_power = combo = None
+        if top_power is not None and agx_edit.add_transition(root, root, top_power, combo, "MeleeAttackStart",
+                                                             blend=0.15):
+            added.append(f"{POWER_TOP} -> {MACHINE}")
     return agx_edit.dump(root, raw), added
+
+
+def _marks(folder: str, files: dict) -> dict:
+    marks = {}
+    for k, fn in files.items():
+        with open(os.path.join(folder, fn), "rb") as fh:
+            try:
+                d = skyrimhkx.describe(fh.read())
+            except skyrimhkx.HkxError:
+                d = {}
+        anns = d["animations"][0]["annotations"] if d.get("animations") else []
+        marks[k] = bfco.markers(anns)
+    return marks
+
+
+def routes_of(folder: str) -> dict:
+    """bfco.routes over the folder's normal and power attacks (see there)."""
+    g = bfco.attack_files(sorted(os.listdir(folder)))
+    return bfco.routes(_marks(folder, g["attack"]), _marks(folder, g["power"]))
 
 
 def routing_of(folder: str) -> dict:
@@ -80,21 +139,28 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="pack root (Data layout)")
     ap.add_argument("--tag", action="append", default=[], metavar="K=NAME",
                     help="clip tag for attack K instead of BFCO_AttackK (repeatable)")
+    ap.add_argument("--power-tag", action="append", default=[], metavar="P=NAME",
+                    help="clip tag of power attack P; given ones get states and the power routing (repeatable)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
-    routing = routing_of(a.moveset)
+    routing = routes_of(a.moveset)["attack"] if a.power_tag else routing_of(a.moveset)
     if not routing:
         sys.exit("no BFCO_AttackN / mco_attackN clips in the moveset")
-    tags = {}
-    for t in a.tag:
-        k, _, name = t.partition("=")
+    tags, ptags = {}, {}
+    for spec, into in [(t, tags) for t in a.tag] + [(t, ptags) for t in a.power_tag]:
+        k, _, name = spec.partition("=")
         if not (k.isdigit() and name):
-            sys.exit(f"--tag wants K=NAME, got {t}")
-        tags[int(k)] = name
+            sys.exit(f"--tag / --power-tag want K=NAME, got {spec}")
+        into[int(k)] = name
+    power = None
+    if ptags:
+        r = routes_of(a.moveset)
+        power = {"tags": ptags, "attack_power": r["attack_power"], "power_attack": r["power_attack"],
+                 "power_power": r["power_power"]}
     with open(a.graph, "rb") as fh:
-        data, added = build(fh.read(), routing, tags)
+        data, added = build(fh.read(), routing, tags, power)
     dst = os.path.join(out, *GRAPH_REL)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, "wb") as fh:

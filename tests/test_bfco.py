@@ -96,6 +96,42 @@ class BfcoTests(unittest.TestCase):
         pw = {k: {"next_power": n} for k, n in ((1, 2), (2, 3), (3, 1))}
         self.assertEqual(bfco.chain(pw, "next_power"), {1: 2, 2: 3, 3: 1})
 
+    def test_routes_over_normal_and_power_attacks(self):
+        attacks = {1: {"next_attack": 2, "next_power": 2}, 2: {"next_attack": 1, "next_power": 9},
+                   3: {"next_attack": 1, "next_power": 1}}                       # 3: only a power attack leads here
+        powers = {1: {"next_attack": 1, "next_power": 2}, 2: {"next_attack": 3, "next_power": 1},
+                  3: {"next_attack": 1, "next_power": 1}}                         # power 3: nothing leads here
+        r = bfco.routes(attacks, powers)
+        self.assertEqual(r["attack"], {1: 2, 2: 1, 3: 1})
+        self.assertEqual(r["attack_power"], {1: 2, 2: 1, 3: 1})                  # unknown power 9 -> the first
+        self.assertEqual(r["power_attack"], {1: 1, 2: 3})
+        self.assertEqual(r["powers"], [1, 2])
+        self.assertEqual(bfco.routes(attacks, {})["powers"], [])
+        none = {1: {"next_attack": None, "next_power": None}, 2: {"next_attack": None, "next_power": None}}
+        self.assertEqual(bfco.routes(none, {1: {}})["attack_power"], {})          # no power routing at all
+
+    def test_power_states_in_the_combo_graph(self):
+        raw = combo_graph()
+        power = {"tags": {1: "MeleeAttackPower_A", 2: "MeleeAttack_E"}, "attack_power": {1: 2, 2: 1, 3: 7},
+                 "power_attack": {1: 1, 2: 3}, "power_power": {1: 2, 2: 1}}
+        out, added = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, power)
+        root = agx_edit.load(out)
+        g = agx_edit.machine(root, "MeleeAttackCombo")
+        t = agx_edit.transitions(g)
+        a = {k: agx_edit.state(g, f"BFCO_Attack{k}") for k in (1, 2, 3)}
+        p1, p2 = agx_edit.state(g, "MeleeAttackPower_A"), agx_edit.state(g, "MeleeAttack_E")
+        self.assertIn((a[1], p2, "MeleeAttackPowerStart", ""), t)
+        self.assertIn((a[3], p1, "MeleeAttackPowerStart", ""), t)                  # untagged power 7 -> first
+        self.assertIn((p2, a[3], "MeleeAttackStart", ""), t)
+        self.assertIn((p1, p2, "MeleeAttackPowerStart", ""), t)
+        self.assertIn((p2, p1, "MeleeAttackPowerStart", ""), t)
+        nodes = g.findall("node")
+        for n in nodes:                                                   # one transition per output slot
+            for link in agx_edit._links_into(n):
+                src = nodes[int(link.findtext("node")) - 1]
+                self.assertLess(int(link.findtext("output")), len(src.findall("output")))
+        self.assertIn("BFCO_Attack1 =power=> MeleeAttack_E", added)
+
     def test_chain_and_files(self):
         marks = {k: {"next_attack": n} for k, n in ((1, 2), (2, 3), (3, 9), (4, None))}
         self.assertEqual(bfco.chain(marks), {1: 2, 2: 3, 3: 1, 4: 1})    # unknown / missing -> back to 1

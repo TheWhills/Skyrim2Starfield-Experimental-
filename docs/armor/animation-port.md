@@ -1016,3 +1016,18 @@ Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
   (10.6 deg off before); the left hand turns 25.5 deg from Skyrim's, as the right does (21.6). LEFT_WEAPON_AXES keeps
   the blade's roll as the mirrored right weapon's, because following Shield's own roll would twist the wrist ~150 deg.
   The left blade itself is still to make: an apparel mesh skinned to WeaponLeft (dual-wield plan above).
+
+## 2026-10-20: power-attack routing (MCO / BFCO) in the combo graph
+* `bfco.routes`: the whole routing over normal and power attacks (normal -> next normal / next power, power -> next
+  normal / next power), restricted to what is reachable from attack 1 and power attack 1 (both chains together).
+* `bfco_pack`: normal attacks first, then power attacks: the first on vanilla meleeattackpower_a (MeleeAttackPower_A,
+  also the standing power attack), the others on the spare hosts left, as many as every planned folder can hold (one
+  planning run over all folders: separate runs gave the shared graph different budgets); the rest fall back to the
+  first. Nordic 1H: power attacks 1-3 slotted (MeleeAttackPower_A, MeleeAttack01, MeleeAttack02), 4-5 fall back
+  (player/sword has 4 spare hosts, 2 used by attacks 4-5).
+* `bfco_combo.build(power=...)`: each slotted power attack is a state inside MeleeAttackCombo (copy of attack 2's
+  state); normal k -> its next power attack and power -> power on MeleeAttackPowerStart, power -> next normal on
+  MeleeAttackStart; top level MeleeAttackPower_A -> MeleeAttackCombo on MeleeAttackStart.
+* **Unresolved, to test in game:** whether the game sends MeleeAttackPowerStart while a combo attack plays (vanilla
+  descriptors carry bDontAllowPowerAttack windows, which suggests it does; vanilla has no transition from the combo
+  to a power attack).

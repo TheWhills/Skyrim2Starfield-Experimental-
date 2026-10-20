@@ -150,6 +150,53 @@ def chain(attacks: Dict[int, Dict], key: str = "next_attack") -> Dict[int, int]:
     return out
 
 
+def cross(marks: Dict[int, Dict], key: str, targets) -> Dict[int, int]:
+    """{k: target} for routing from one group into another (normal attack -> next power attack, power -> next normal):
+    marks[k][key] when it names one of `targets`, else the first target. Empty when no clip routes this way."""
+    targets = sorted(targets)
+    if not targets or not any(m.get(key) is not None for m in marks.values()):
+        return {}
+    return {k: (m.get(key) if m.get(key) in targets else targets[0]) for k, m in marks.items()}
+
+
+def routes(attacks: Dict[int, Dict], powers: Dict[int, Dict]) -> Dict[str, Dict[int, int]]:
+    """The whole MCO / BFCO routing over normal attacks and power attacks, restricted to what the player can reach
+    from a first normal attack and a first power attack (attack 1 and power attack 1 when present):
+    {"attack": k -> next normal, "attack_power": k -> next power, "power_attack": p -> next normal,
+     "power_power": p -> next power}."""
+    a = chain(attacks, "next_attack") if attacks else {}
+    pp = chain(powers, "next_power") if powers and any(m.get("next_power") is not None for m in powers.values()) else {}
+    ap = cross(attacks, "next_power", powers) if powers else {}
+    pa = cross(powers, "next_attack", attacks) if attacks and powers else {}
+    seen_a, seen_p = set(), set()
+    todo = []
+    if a:
+        todo.append(("a", 1 if 1 in a else min(a)))
+    if powers:
+        todo.append(("p", 1 if 1 in powers else min(powers)))
+    while todo:
+        kind, k = todo.pop()
+        seen = seen_a if kind == "a" else seen_p
+        if k in seen:
+            continue
+        seen.add(k)
+        if kind == "a":
+            if k in a:
+                todo.append(("a", a[k]))
+            if k in ap:
+                todo.append(("p", ap[k]))
+        else:
+            if k in pa:
+                todo.append(("a", pa[k]))
+            if k in pp:
+                todo.append(("p", pp[k]))
+    return {"attack": {k: v for k, v in a.items() if k in seen_a},
+            "attack_power": {k: v for k, v in ap.items() if k in seen_a},
+            "power_attack": {k: v for k, v in pa.items() if k in seen_p},
+            "power_power": {k: v for k, v in pp.items() if k in seen_p},
+            "powers": sorted(seen_p)}
+
+
 def reachable(routing: Dict[int, int], start: int = 1) -> List[int]:
     """The attacks a chain actually plays from `start`, in order of first visit."""
     seen, k = [], start
