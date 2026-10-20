@@ -46,6 +46,13 @@ Modify Translation", bPlayerMoveStartActive): the combo machine and MeleeAttack_
 and each swing holds bAlignWithAimAssistTarget early and DisableAllowRotation late. This clears the pivot flags on
 the layered copy and drops those two windows from A / B / C.
 
+--no-attack-events (with --actions-graph; EXPERIMENT): owner, in game: with the plain layered combo (and every
+variant above) the player keeps moving in the last pushed direction for as long as attacks continue, even with the
+stick released. Vanilla's combo states send AttackStart on enter and AttackStop on exit (Enter / Exit Events); the
+SFBM mod's layered A / B / C send neither (read 2026-10-19), and vanilla's own layered MeleeAttackInAir_A sends
+AttackStart only. Supported hypothesis: AttackStart puts the game's movement into its attacking mode, which holds the
+last input. This removes both events from the layered copy's states.
+
     python -I scripts\\armor\\combo_loop.py --graph <extract>\\meleeattacks.agx [--actions-graph <extract>\\meleeactions.agx]
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
@@ -91,7 +98,8 @@ def loop_graph(raw: bytes, layered: bool = False):
     return agx_edit.dump(root, raw), combo_node, added
 
 
-def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False, no_pivot: bool = False):
+def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False, no_pivot: bool = False,
+                no_attack_events: bool = False):
     """MeleeActions with the combo state added as a layered action (see the module docstring)."""
     root = agx_edit.load(actions_raw)
     top = agx_edit.machine(root, None)
@@ -101,6 +109,9 @@ def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False, no_piv
     k = agx_edit.clone_state(combo_node, top)
     if upper_body:
         agx_edit.add_flag(top.findall("node")[k], "Force Copy Bone Weights")
+    if no_attack_events:
+        for st in top.findall("node")[k].find("graph").findall("node"):
+            agx_edit.remove_state_events(st, {"AttackStart", "AttackStop"})
     if no_pivot:
         node = top.findall("node")[k]
         agx_edit.remove_flag(node, "Should Pivot to Camera")
@@ -175,9 +186,10 @@ def main(argv=None):
     ap.add_argument("--free-movement", action="store_true", help="experiment, see above (needs --actions-graph)")
     ap.add_argument("--upper-body", action="store_true", help="experiment, see above (needs --actions-graph)")
     ap.add_argument("--no-pivot", action="store_true", help="experiment, see above (needs --actions-graph)")
+    ap.add_argument("--no-attack-events", action="store_true", help="experiment, see above (needs --actions-graph)")
     a = ap.parse_args(argv)
-    if (a.upper_body or a.no_pivot) and not a.actions_graph:
-        sys.exit("--upper-body / --no-pivot need --actions-graph")
+    if (a.upper_body or a.no_pivot or a.no_attack_events) and not a.actions_graph:
+        sys.exit("--upper-body / --no-pivot / --no-attack-events need --actions-graph")
     if a.free_movement and not a.actions_graph:
         sys.exit("--free-movement needs --actions-graph (a full-body swing never moves, whatever bFreeMovement says)")
     out = os.path.abspath(a.out)
@@ -188,7 +200,7 @@ def main(argv=None):
     print(f"graph: {_write(out, GRAPH_REL, data)}; {added or 'nothing changed (already looping)'}")
     if a.actions_graph:
         with open(a.actions_graph, "rb") as fh:
-            data, rep = layer_combo(fh.read(), combo, a.upper_body, a.no_pivot)
+            data, rep = layer_combo(fh.read(), combo, a.upper_body, a.no_pivot, a.no_attack_events)
         print(f"graph: {_write(out, ACTIONS_REL, data)}; {rep}")
     for folder in a.clips:
         print(f"{folder}: {fix_descriptors(folder, a.free_movement, a.no_pivot) or 'no A / B / C descriptors'}")

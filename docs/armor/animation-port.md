@@ -273,6 +273,12 @@ self-closing empty elements, as shipped.
 * Owner, --free-movement --upper-body: the same latch - while attacks continue, the player keeps moving in the last
   pushed direction after the stick is released (a new direction re-latches), instead of swinging in place. Both
   experiments are out; v9 (plain layered combo) is the candidate baseline, pending the same release check on it.
+* Owner: v9 latches too - keep attacking and you keep moving in the last pushed direction (a new direction
+  re-latches, from walking pace). So the layered approach itself does it. Read 2026-10-19: vanilla combo states send
+  AttackStart on enter and AttackStop on exit; the SFBM mod's layered A / B / C send neither, and vanilla's own
+  layered MeleeAttackInAir_A sends only AttackStart. Supported hypothesis: AttackStart switches the game's movement
+  into its attacking mode, which holds the last input. combo_loop.py --no-attack-events (experiment) removes both
+  from the layered copy; test pack pending. Risk: anything else the game hangs on AttackStart (hit setup, stamina).
 
 ### 2026-10-19: owner, --upper-body: moving off mid-combo is instant, but only sometimes and only straight ahead
 * Biped_IdleLocomotion (read): the Locomotion machine leaves its idle "None" for StandToWalk / StandToRun start

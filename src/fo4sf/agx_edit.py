@@ -152,6 +152,27 @@ def remove_flag(node: ET.Element, flag: str) -> bool:
     return bool(hit)
 
 
+def remove_state_events(node: ET.Element, names) -> List[str]:
+    """Remove the named events from a state's Enter Events / Exit Events sheets (rows of '', Non Instanced, event,
+    payload); returns "enter:Name" / "exit:Name" for each removed row."""
+    gone = []
+    for sh in node.findall("property_sheet"):
+        heads = [c.findtext("header") for c in sh.findall("column")]
+        kind = "enter" if "Enter Events" in heads else "exit" if "Exit Events" in heads else None
+        if kind is None:
+            continue
+        for row in sh.findall("row"):
+            p = row.findall("prop")
+            if len(p) >= 3 and p[2].findtext("value") in names:
+                sh.remove(row)
+                gone.append(f"{kind}:{p[2].findtext('value')}")
+        rows = sh.findall("row")
+        cols = sh.findall("column")
+        if not rows and cols:                          # an empty sheet ends right after its last column, as shipped
+            cols[-1].tail = sh.find("num_columns").tail[:-1] if sh.find("num_columns").tail else "\n\t"
+    return gone
+
+
 def set_condition(graph: ET.Element, src: int, dst: int, condition: str, old: Optional[str] = None) -> int:
     """Set the Condition of the transitions src -> dst (0-based states of `graph`; only those whose condition is `old`
     when given); returns how many changed."""

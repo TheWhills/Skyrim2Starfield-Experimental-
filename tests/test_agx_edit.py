@@ -164,6 +164,23 @@ class AgxEditTests(unittest.TestCase):
         self.assertNotIn(b"bAlignWithAimAssistTarget", out)
         self.assertIn(b"bCanComboAttack", out)
 
+    def test_remove_state_events(self):
+        raw = (b"<root>\r\n<node>\r\n\t<node_type>NT_ANIMATION_NODE</node_type>\r\n\t<property_sheet>\r\n"
+               b"\t\t<num_columns>4</num_columns>\r\n\t\t<column> <header></header> <types>2</types> </column>\r\n"
+               b"\t\t<column> <header>Enter Events</header> <types>2</types> </column>\r\n"
+               b"\t\t<row>\r\n\t\t\t<prop> <type>2</type> <value></value> </prop>\r\n"
+               b"\t\t\t<prop> <type>3</type> <value>True</value> </prop>\r\n"
+               b"\t\t\t<prop> <type>2</type> <value>AttackStart</value> </prop>\r\n"
+               b"\t\t\t<prop> <type>2</type> <value></value> </prop>\r\n\t\t</row>\r\n\t</property_sheet>\r\n"
+               b"</node>\r\n</root>")
+        root = agx_edit.load(raw)
+        node = root.find("node")
+        self.assertEqual(agx_edit.remove_state_events(node, {"AttackStart", "AttackStop"}), ["enter:AttackStart"])
+        out = agx_edit.dump(root, raw)
+        self.assertNotIn(b"AttackStart", out)
+        self.assertIn(b"<header>Enter Events</header> <types>2</types> </column>\r\n\t</property_sheet>", out)
+        self.assertEqual(agx_edit.remove_state_events(node, {"AttackStart"}), [])
+
     def test_combo_loop_script(self):
         with tempfile.TemporaryDirectory() as d:
             graph = os.path.join(d, "meleeattacks.agx")
