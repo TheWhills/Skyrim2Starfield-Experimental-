@@ -944,7 +944,8 @@ to be worked out.
 Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
 * **LoreRim - MCO Animations:** 4,009 clips in 242 DAR / OAR folders, about 85 movesets (sword, dagger, war axe, mace,
   greatsword, battleaxe, warhammer, katana 1H / 2H, rapier, spear, pike, halberd, quarterstaff, scythe, claw, fists,
-  with shield / dual-wield variants; most in Novice / Apprentice / Expert tiers gated by HasPerk, 75 folders). DAR
+  with shield / dual-wield variants; most in Novice / Apprentice / Adept / Expert versions: these are **stances**, not
+  skill tiers (corrected below: HasPerk on the Stances mod's perks, 75 folders)). DAR
   conditions: IsEquippedRightHasKeyword 323, IsEquippedLeftType 232, IsEquippedRightType 191, IsActorBase 130,
   HasMagicEffect 84, HasPerk 75, IsInFaction 31 ... Clips: 3,628 with animmotion, 375 at 60 fps; files
   BFCO_ / mco_ attackN (up to 10), powerattackN, powerattackloop / outro (charged), sprintattack, sprintpowerattack,
@@ -966,3 +967,24 @@ Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
   the payloads (SVGF ignored); hkx_to_af --bfco bakes the attack speed into the clip (retarget.play_speed); packs slot
   only attacks the chain reaches (bfco.reachable). Nordic 1H rebuilt: attack 6 (never played by Nordic) dropped, attack
   5 at 0.9 speed (62 frames instead of 56).
+
+## Stances and directional attacks: dTry's Key Utils + Stances - Dynamic Weapon Movesets (2026-10-20, owner uploads)
+* **Key Utils (SKSE, DtryKeyUtil.dll + Keytrace.esp, verified from its configs):** maps a key (DX scan code), a user
+  event or a held movement direction to a spell; movement trace keeps Keytrace's ForwardMGEF 0x801 / Left 0x802 /
+  Backward 0x803 / Right 0x804 on the player while that direction is held (optionally only under True Directional
+  Movement's target lock).
+* **Stances (Papyrus + Key Utils config):** arrow keys (200 up = high, 203 left = mid, 208 down = low, 205 right =
+  neutral; T + direction as an all-in-one key) cast a switch spell whose effect script adds one stance perk
+  (stances_highstance_perk 0x42518, mid 0x42519, low 0x4251A; neutral = none), removes the others, plays a draw sound,
+  casts an icon effect, and sends blockStart / blockStop so the animation replacer re-picks clips.
+* **LoreRim uses both (verified on its conditions):** tier names are stances: Novice = neutral (no perk, 21 folders),
+  Apprentice = low (22), Adept = mid (23), Expert = high (20). Keytrace effects pick directional power attacks
+  (e.g. backward held + power attack -> a dedicated BFCO_PowerAttack1 for sword / dagger, with or without shield,
+  when TDM's directional mode is off or its target lock is on).
+* **Starfield mapping (supported hypotheses, to test):** a stance = an actor keyword whose HumanRace subgraph entry
+  lists that stance's folder first (Starfield already picks unarmed sets by actor keyword: same tags, no graph edit,
+  no extra slots; needs the new-folder route, and whether the swap re-applies while the weapon is drawn is
+  unresolved: Stances itself has to poke the graph). Directional attacks: Biped_IdleLocomotion has a `Direction`
+  graph variable (with Speed), so a condition in MeleeAttacks could pick the backward power attack natively; it is
+  the movement direction, not the key, so a standing start may read 0 speed. Keys -> stance: the plugin's input
+  layer (key -> action table, as Key Utils), since Papyrus cannot read keys.
