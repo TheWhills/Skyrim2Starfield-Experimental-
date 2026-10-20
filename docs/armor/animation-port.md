@@ -849,3 +849,33 @@ back_buzz 46, receding_wizard 44, messy_mullet 39, shaggy 36, straight_bob 28, v
 hollywood_curls 22, cropped_bang 19, bob 12, whitney_curls 12, child ponytail_hairmesh 5 (one chain, 12 particles: the
 smallest writer template), hairspray_bob 4, spiked 3, coily_mohawk 2, top_bun 2. The long, layered rigs use BonePlanes +
 LocalRange (pose-keeping, like SMP's angular limits) besides links and bend stiffness.
+
+## New weapon types (two-handed, dagger / axe / mace) and dual wield: plan (2026-10-20)
+Owner: most Skyrim weapon types (greatsword, battleaxe, warhammer...) do not exist in Starfield, and dual wield has
+to be worked out.
+* **Starfield has one-handed melee only** (verified on the owner's files: animation folders melee\onehanded\{knife,
+  sword, player\...} and melee\unarmed; HumanRace subgraph: AnimOneHanded -> NPC_Melee / Player_Melee). Nothing in the
+  melee graphs is weapon-specific beyond clip tags, so a greatsword can run on Player_Melee with its own clips
+  (supported hypothesis).
+* **Why new files and tags were not found (supported hypothesis):** the AnimTextData caches
+  (animationfiledata / animationoffsets: per graph + folder set, tag -> resolved clip path), see the Alternate Recoil
+  notes above. Fallout 4's Creation Kit regenerates them from the command line:
+  `CreationKit.exe -GenerateAnimInfo:<ESM> <Data> <Output> [--speed] [--stance]` (falloutck.uesp.net/wiki/Subgraphs).
+  **Unresolved: whether Starfield's Creation Kit has the same switch** (first PC check). If it does: one keyword per
+  Skyrim weapon type, a HumanRace subgraph entry each (subgraph.py), its own folder, regenerated caches; the 7-11 attack
+  slot limit goes away too (new tags).
+* Skyrim types -> Nordic Combat Animations folders (DAR conditions read 2026-10-20): 1H sword 40100, dagger 40200,
+  war axe 40300, mace 40400, greatsword 40500, battleaxe / warhammer 40600 (Skyrim type 6 covers both); dual: same
+  type pairs 40150 / 40250 / 40350 / 40450, mixed 40090. The packs carry attacks and power attacks only: two-handed
+  stance clips (idle, walk / run, block, equip, sprint) come from vanilla Skyrim.
+* **Measured 2026-10-20** (Nordic 40500 and 40150 converted with the current pipeline, scratch only):
+  - greatsword: the left wrist drifts 3-6 cm (std, per axis) in the weapon's frame over a swing: the support hand
+    slides on the grip (Starfield arm proportions). Fix planned: solve the left arm so the hand keeps its Skyrim
+    offset from the weapon.
+  - dual: WeaponLeft stays at its rest offset from L_Wrist (8.5 cm every frame); nothing turns the left hand to match
+    Skyrim's Shield (left weapon) node the way weapon_in_hand does for the right. Fix planned: the right-hand handling
+    mirrored (WeaponLeft from Shield, L_AnimObject3 as the left follower: hypothesis by symmetry with R_AnimObject3).
+* **Dual wield routes:** Starfield has no left-hand weapon slot. A (no plugin): the WEAP is the right blade, the left
+  blade is an apparel piece skinned 100 % to WeaponLeft (the bone is in the vanilla rig, verified), equipped with the
+  weapon; attack = Skyrim's dual combo, power attack = dual power attack, aim stays block. B (SFSE): a real left-hand
+  melee slot with its own stats and input. A first.
