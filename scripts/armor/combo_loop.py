@@ -13,6 +13,12 @@ This writes:
     are both Skyrim's right swing): C takes A's timing (hit, combo window, attack locks), B loses bAllowFinisher.
 Starfield's finisher is dropped on purpose: Skyrim has none.
 
+--move-while-attacking (EXPERIMENT, needs the in-game check): Skyrim lets you walk while swinging; Starfield plays its
+combo attacks full body (Player_Melee.agx: a Switch that leaves locomotion for MeleeAttacks) and leaves the combo for
+locomotion ("None", condition Speed > 1.0 and bFreeMovement) only inside each clip's late bFreeMovement window. This
+opens bFreeMovement over the whole of A / B / C and makes that leave-on-moving transition from the combo impossible
+(condition bFreeMovement > 1), to find out whether the game then lets the player move during a swing.
+
     python -I scripts\\armor\\combo_loop.py --graph <extract>\\meshes\\animtextdata\\tables\\graphs\\meleeattacks.agx
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
@@ -32,7 +38,7 @@ MACHINE = "MeleeAttackCombo"
 LOOP = (("MeleeAttack_C", "MeleeAttack_B"), ("MeleeAttack_B", "MeleeAttack_C"))
 
 
-def loop_graph(raw: bytes):
+def loop_graph(raw: bytes, free_move: bool = False):
     root = agx_edit.load(raw)
     g = agx_edit.machine(root, MACHINE)
     tpl = None
@@ -44,10 +50,28 @@ def loop_graph(raw: bytes):
         if agx_edit.add_transition(root, g, agx_edit.state(g, s), agx_edit.state(g, d), "MeleeAttackStart",
                                    blend=0.15, template=tpl):
             added.append(f"{s} -> {d}")
+    if free_move:
+        added.append(f"combo no longer left on moving ({free_move_graph(root)} transition)")
     return agx_edit.dump(root, raw), added
 
 
-def fix_descriptors(folder: str):
+def free_move_graph(root):
+    """The combo no longer leaves for locomotion when the player moves (see --move-while-attacking)."""
+    top = agx_edit.machine(root, None)
+    combo = agx_edit.state(top, MACHINE)
+    return sum(agx_edit.set_condition(top, combo, d, "bFreeMovement !greaterthan! 1", old=CANCEL)
+               for d in range(len(top.findall("node"))))
+
+
+CANCEL = "Speed !greaterthan! 1.0 !ampersand! bFreeMovement !greaterthan! 0"
+
+
+def last_frame(afx: bytes) -> int:
+    import re
+    return max([int(x) for x in re.findall(rb"<(?:frame|start|end)>(\d+)<", afx)] or [0])
+
+
+def fix_descriptors(folder: str, free_move: bool = False):
     names = {f.lower(): f for f in os.listdir(folder)}
     a, b, c = (names.get(f"meleeattack_{x}.afx") for x in "abc")
     done = []
@@ -66,6 +90,16 @@ def fix_descriptors(folder: str):
             fh.write(data)
         if dropped:
             done.append(f"{b}: dropped {', '.join(dropped)}")
+    if free_move:
+        for f in (a, b, c):
+            if not f:
+                continue
+            p = os.path.join(folder, f)
+            with open(p, "rb") as fh:
+                data = fh.read()
+            with open(p, "wb") as fh:
+                fh.write(af_writer.set_variable_window(data, "bFreeMovement", 0, last_frame(data)))
+            done.append(f"{f}: bFreeMovement over the whole clip")
     return done
 
 
@@ -74,19 +108,20 @@ def main(argv=None):
     ap.add_argument("--graph", required=True, help="the vanilla MeleeAttacks.agx")
     ap.add_argument("--clips", action="append", default=[], help="folder with MeleeAttack_A/B/C.afx (repeatable)")
     ap.add_argument("--out", required=True, help="pack root (Data layout) for the edited graph")
+    ap.add_argument("--move-while-attacking", action="store_true", help="experiment, see above")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
     with open(a.graph, "rb") as fh:
-        data, added = loop_graph(fh.read())
+        data, added = loop_graph(fh.read(), a.move_while_attacking)
     dst = os.path.join(out, *GRAPH_REL)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, "wb") as fh:
         fh.write(data)
     print(f"graph: {dst}; added {added or 'nothing (already looping)'}")
     for folder in a.clips:
-        print(f"{folder}: {fix_descriptors(folder) or 'no A / B / C descriptors'}")
+        print(f"{folder}: {fix_descriptors(folder, a.move_while_attacking) or 'no A / B / C descriptors'}")
     return 0
 
 

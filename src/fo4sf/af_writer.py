@@ -201,6 +201,25 @@ def drop_variables(afx: bytes, names) -> Tuple[bytes, List[str]]:
     return _afx_out(root, afx), dropped
 
 
+def set_variable_window(afx: bytes, name: str, start: int, end: int) -> bytes:
+    """The descriptor with variable window `name` set to start..end (added when missing)."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    vs = root.find("variables")
+    if vs is None:
+        vs = ET.SubElement(root, "variables")
+    v = next((x for x in vs.findall("variable") if x.findtext("name") == name), None)
+    if v is None:
+        prev = vs.findall("variable")
+        v = ET.SubElement(vs, "variable")
+        for tag in ("name", "start", "end"):
+            ET.SubElement(v, tag)
+        v.find("name").text = name
+        if prev:
+            v.tail, prev[-1].tail = prev[-1].tail, prev[0].tail
+    v.find("start").text, v.find("end").text = str(int(start)), str(int(end))
+    return _afx_out(root, afx)
+
+
 def _keys_needed(values: np.ndarray, tol: float) -> List[int]:
     """Frames to key so linear interpolation between kept keys stays within tol of every frame (greedy, keeps the
     first and last frame). values: (F, D)."""

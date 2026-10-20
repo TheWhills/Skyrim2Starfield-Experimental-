@@ -260,6 +260,23 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner: endless combo works; next, moving / directional attacks as in Skyrim
+* Starfield (verified, Player_Melee.agx root blend tree): locomotion (Biped_IdleLocomotion) is the base; MeleeActions
+  (block, cast, equip) are LAYERED over it through Copy Bone Weights (BoneWeights graph); MeleeAttacks is reached by
+  a Switch "Idle" / "Attacking" (Attacking on the attack events, back to Idle on AttackEnd / ActionInterrupt /
+  BlockStart / JumpStart), i.e. attacks are FULL BODY, locomotion off. MeleeAttacks leaves a combo / power / sprint
+  attack for "None" on Speed > 1.0 and bFreeMovement, and bFreeMovement is only open late in each clip.
+* Skyrim (verified, 1hm_behavior.hkx): each attack is a blend by Direction (BSCyclicBlendTransitionGenerator) of
+  forward / right / backward / left blends by SpeedDamped of standing / walk / run clips (1HM_AttackRight,
+  1HM_WalkFwdAttackRight, 1HM_RunFwdAttackRight, ... right and left swings each); power attacks pick
+  1HM_AttackPowerFwd / Left / Right / Bwd (and ForwardSprint) by direction. All those clips are in the owner's
+  extract (sky1h).
+* Open question for the game: does the player move during a swing if bFreeMovement is open? combo_loop.py
+  --move-while-attacking (experiment) opens it over all of A / B / C and makes the combo -> None-on-moving
+  transition impossible. If the player then moves (gliding on the standing clip), the plan is a per-swing blend by
+  direction and speed of Skyrim's walk / run attack clips; if not, directional attacks need root motion from the
+  clips instead.
+
 ### 2026-10-19: vanilla MeleeAttacks.agx (owner extract): endless combo; the leg is Skyrim's own recovery
 * Graph links (verified on 42 vanilla graphs): a <link>'s <node> is the source's 1-BASED index among its siblings
   (all 362 state-machine transitions resolve to a real source with a free output slot that way; 0-based fails on a

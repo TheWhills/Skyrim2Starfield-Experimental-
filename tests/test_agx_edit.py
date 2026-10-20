@@ -20,8 +20,9 @@ def combo_graph() -> bytes:
                                                                                 "blend": 0.15}),
                     (1, 0, {"event": "MeleeAttackFinisherStart", "blend": 0.15})]}
     g = {"name": "Data\\Meshes\\AnimTextData\\Tables\\Graphs\\MeleeAttacks.agx", "default": 1,
-         "nodes": [{"kind": "sm", "name": "MeleeAttackCombo", "graph": sm}, {"kind": "empty"}],
-         "links": [(1, 0, {"event": "MeleeAttackStart"}), (0, 1, {"blend": 0.3})]}
+         "nodes": [{"kind": "sm", "name": "MeleeAttackCombo", "graph": sm}, {"kind": "empty"}, {"kind": "empty"}],
+         "links": [(1, 0, {"event": "MeleeAttackStart"}), (0, 1, {"blend": 0.3}),
+                   (0, 2, {"condition": combo_loop.CANCEL, "blend": 0.2})]}
     return agx_write.write(g)
 
 
@@ -87,6 +88,20 @@ class AgxEditTests(unittest.TestCase):
         self.assertNotIn(b"bAllowFinisher", out)
         self.assertIn(b"bCanComboAttack", out)
 
+    def test_condition_and_variable_window(self):
+        root = agx_edit.load(combo_graph())
+        top = agx_edit.machine(root, None)
+        self.assertEqual(agx_edit.set_condition(top, 0, 2, "X", old="something else"), 0)
+        self.assertEqual(agx_edit.set_condition(top, 0, 2, "X", old=combo_loop.CANCEL), 1)
+        self.assertIn((0, 2, "", "X"), agx_edit.transitions(top))
+        a = AFX % (b"MeleeAttack_A", b"MeleeAttack_A", 4, 14, var(b"bFreeMovement", 29, 38))
+        out = af_writer.set_variable_window(a, "bFreeMovement", 0, 38)
+        self.assertIn(b"<name>bFreeMovement</name><start>0</start><end>38</end>", out)
+        out = af_writer.set_variable_window(a, "bNew", 3, 7)
+        self.assertIn(b"<name>bNew</name><start>3</start><end>7</end>", out)
+        self.assertIn(b"<start>29</start>", out)
+        self.assertEqual(combo_loop.last_frame(a), 38)
+
     def test_combo_loop_script(self):
         with tempfile.TemporaryDirectory() as d:
             graph = os.path.join(d, "meleeattacks.agx")
@@ -100,10 +115,11 @@ class AgxEditTests(unittest.TestCase):
                 with open(os.path.join(clips, name.decode() + ".afx"), "wb") as fh:
                     fh.write(AFX % (name, name, 6, hit, vs))
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(combo_loop.main(["--graph", graph, "--clips", clips,
+                self.assertEqual(combo_loop.main(["--graph", graph, "--clips", clips, "--move-while-attacking",
                                                   "--out", os.path.join(d, "pack")]), 0)
             with open(os.path.join(d, "pack", *combo_loop.GRAPH_REL), "rb") as fh:
-                g = agx_edit.machine(agx_edit.load(fh.read()), "MeleeAttackCombo")
+                root = agx_edit.load(fh.read())
+                g = agx_edit.machine(root, "MeleeAttackCombo")
             with open(os.path.join(clips, "MeleeAttack_C.afx"), "rb") as fh:
                 c = fh.read()
             with open(os.path.join(clips, "MeleeAttack_B.afx"), "rb") as fh:
@@ -115,6 +131,8 @@ class AgxEditTests(unittest.TestCase):
         self.assertIn(b"bCanComboAttack", c)
         self.assertNotIn(b"bDontAllowAttack</name><start>0</start><end>50", c)
         self.assertNotIn(b"bAllowFinisher", b)
+        self.assertIn(b"<name>bFreeMovement</name><start>0</start>", c)       # experiment: free movement throughout
+        self.assertIn((0, 2, "", "bFreeMovement !greaterthan! 1"), agx_edit.transitions(agx_edit.machine(root)))
 
 
 if __name__ == "__main__":

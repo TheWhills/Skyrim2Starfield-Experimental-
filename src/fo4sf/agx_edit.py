@@ -77,6 +77,21 @@ def transitions(graph: ET.Element) -> List[tuple]:
     return out
 
 
+def set_condition(graph: ET.Element, src: int, dst: int, condition: str, old: Optional[str] = None) -> int:
+    """Set the Condition of the transitions src -> dst (0-based states of `graph`; only those whose condition is `old`
+    when given); returns how many changed."""
+    n = 0
+    for link in graph.findall("node")[dst].iter("link"):
+        if int(link.findtext("node")) - 1 != src:
+            continue
+        for r in link.iter("row"):
+            p = r.findall("prop")
+            if p and p[0].findtext("value") == "Condition" and (old is None or (p[1].findtext("value") or "") == old):
+                p[1].find("value").text = condition
+                n += 1
+    return n
+
+
 def _next_socket_id(node: ET.Element) -> int:
     ids = [int(x.findtext("id")) for tag in ("input", "output") for x in node.findall(tag)
            if (x.findtext("id") or "").strip().lstrip("-").isdigit()]
