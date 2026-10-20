@@ -175,6 +175,11 @@ def main(argv=None):
                     help="melee clips: turn the right hand so the weapon, held in the vanilla grip, points as Skyrim's "
                          "does (otherwise the hand follows Skyrim's and the blade is ~20-30 deg off), and animate "
                          "R_AnimObject3 on the weapon as vanilla combat clips do")
+    ap.add_argument("--left-weapon", action="store_true",
+                    help="dual wield: hold a weapon in the left fist (mirror of the right grip) and, with "
+                         "--weapon-in-hand, turn the left hand so it points as Skyrim's left weapon does")
+    ap.add_argument("--two-hand-grip", action="store_true",
+                    help="two-handed weapons: keep the left hand where Skyrim has it on the weapon (IK on the left arm)")
     ap.add_argument("--ease-out", type=int, default=0, metavar="FRAMES",
                     help="with --replace, for attacks (the vanilla descriptor has a HitFrame): re-time the last FRAMES "
                          "frames so the clip settles on its last pose (Skyrim attacks end mid-step)")
@@ -304,7 +309,10 @@ def main(argv=None):
                 row["motion_data"] = True
             motion = None if a.no_root_motion else rootmotion.from_annotations(clip["annotations"], clip["frames"], FPS)
             events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
-            res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand)
+            res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand, left_weapon=a.left_weapon,
+                                    two_hand_grip=a.two_hand_grip)
+            if res.get("two_hand_grip"):
+                row["two_hand_grip"] = res["two_hand_grip"]
             if not a.no_foot_plant:
                 res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)

@@ -1001,3 +1001,18 @@ Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
   target first (as Stances shows its icon), HUD work later. Expose the lock as a graph variable / keyword so the
   movesets' TDM conditions (LoreRim: 19 folders) port.
 * Order: after the plugin core (input table, payload commands, i-frames, dodge).
+
+## 2026-10-20: left hand for dual wield and two-handed weapons (converter)
+* **Two-handed grip (`hkx_to_af --two-hand-grip`, retarget.two_bone_ik):** the left wrist is put where Skyrim has the
+  left hand in the weapon's frame (Skyrim Weapon frame -> Starfield WEAPON frame through WEAPON_AXES), every frame, by
+  two-bone IK on L_Biceps / L_Forearm with the elbow kept in its bend plane and the hand's world rotation kept.
+  Nordic greatsword (40500), verified on the written clips: the left wrist was 9-10 cm off on average (up to 14 cm)
+  and drifted 2.8 / 5.7 / 4.1 cm (std per axis) on the handle; now 1.0 / 0.9 / 1.9 cm, the same as Skyrim's own
+  (0.9 / 1.9 / 1.0 cm), IK error 0.
+* **Dual wield (`--left-weapon`, with `--weapon-in-hand`):** Skyrim hangs the left weapon rigidly off the Shield node
+  (verified: fixed in the left hand on every frame). WeaponLeft is held at the mirror image of the right grip
+  (skeletonmap.LEFT_GRIP, retarget.mirror_grip; exact at rest) and the left hand is turned so the left blade points
+  along Skyrim's (Shield +Y). Nordic dual sword (40150): left blade within 0.7-1.1 deg of Skyrim's on every frame
+  (10.6 deg off before); the left hand turns 25.5 deg from Skyrim's, as the right does (21.6). LEFT_WEAPON_AXES keeps
+  the blade's roll as the mirrored right weapon's, because following Shield's own roll would twist the wrist ~150 deg.
+  The left blade itself is still to make: an apparel mesh skinned to WeaponLeft (dual-wield plan above).

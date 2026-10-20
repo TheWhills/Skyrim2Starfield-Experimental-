@@ -118,6 +118,22 @@ GRIP: Dict[str, Tuple[str, Tuple[float, float, float], Tuple[float, float, float
 # Skyrim Weapon world * WEAPON_AXES: the blade points and faces exactly as in Skyrim and stays in the fist. (Setting the
 # weapon itself to that orientation, 2026-10-19, turned the hilt ~22 deg out of the fist in game.)
 WEAPON_AXES: Dict[str, Tuple[str, Tuple[float, float, float, float]]] = {"weapon": ("Weapon", (0.5, -0.5, -0.5, -0.5))}
+# Dual wield (retarget(left_weapon=True)): Skyrim hangs the left weapon rigidly off the Shield node (verified 2026-10-20
+# on Nordic Combat Animations' dual-sword clips: Shield is fixed in the left hand on every frame, as Weapon is in the
+# right). LEFT_GRIP is the right grip mirrored onto L_Wrist (retarget.mirror_grip against the Starfield skeleton NIF's
+# rest wrists; the two wrists' local axes are not mirror images, the fixed turn is taken out): at rest the left weapon
+# is the exact mirror of the right. LEFT_WEAPON_AXES makes the left weapon Skyrim's Shield frame turned about the blade
+# so that, at rest, it is the mirror of the right weapon (Shield's +Y, the blade, already is the mirrored Weapon +Y;
+# its other axes are rolled about 150 deg, which would twist the left wrist that far if followed).
+LEFT_GRIP: Dict[str, Tuple[str, Tuple[float, float, float], Tuple[float, float, float, float]]] = {
+    "weaponleft": ("L_Wrist", (0.068, -0.011, -0.038), (-0.3752, -0.4993, 0.5833, -0.5193)),
+}
+LEFT_WEAPON_AXES: Dict[str, Tuple[str, Tuple[float, float, float, float]]] = {
+    "weaponleft": ("Shield", (0.5792, 0.4057, 0.4055, -0.5793)),
+}
+# Two-handed grip (retarget(two_hand_grip=True)): the support hand's Skyrim bone and the Starfield arm the IK turns
+SUPPORT_HAND_SKYRIM = "NPC L Hand [LHnd]"
+SUPPORT_ARM = ("L_Biceps", "L_Forearm", "L_Wrist")
 # IK targets kept on the hands they belong to (the IK pass then changes nothing)
 HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}
 # Skyrim bones with several mapped children: the child whose direction aligns the bone (see retarget)

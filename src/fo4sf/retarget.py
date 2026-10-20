@@ -151,6 +151,83 @@ def copy_world(rig: "Rig", lt, lq, pairs) -> tuple:
     return out_t, out_q
 
 
+def qmirror_x(q):
+    """The rotation S R S for S = diag(-1, 1, 1): the same turn seen in a mirror across the YZ plane (left <-> right)."""
+    return np.asarray(q, float) * np.array([1.0, -1.0, -1.0, 1.0])
+
+
+def mirror_grip(t, q, right_rest_q, left_rest_q):
+    """A grip (offset t, rotation q in the right hand's frame) mirrored onto the left hand: the left hand holds its
+    object as the mirror image of the right hand's. The two hands' rest frames need not be mirror images of each other
+    (Starfield's wrists are not: their local axes differ by a fixed turn F, L_rest = mirror(R_rest) * F, which is
+    taken out). Returns (t, q) in the left hand's frame."""
+    F = qmul(qinv(qmirror_x(right_rest_q)), np.asarray(left_rest_q, float))
+    t_l = qrot(qinv(F), np.array(t, float) * np.array([-1.0, 1.0, 1.0]))
+    q_l = qmul(qinv(F), qmirror_x(q))
+    return t_l, q_l / np.linalg.norm(q_l)
+
+
+def _rotation_between(a, b):
+    """(F, 4) shortest rotations taking direction a onto direction b (both (F, 3))."""
+    a = a / np.linalg.norm(a, axis=-1, keepdims=True)
+    b = b / np.linalg.norm(b, axis=-1, keepdims=True)
+    c = np.cross(a, b)
+    d = np.sum(a * b, axis=-1, keepdims=True)
+    q = np.concatenate([c, 1.0 + d], axis=-1)
+    flip = (1.0 + d[..., 0]) < 1e-8                           # opposite: any axis perpendicular to a
+    if np.any(flip):
+        perp = np.cross(a[flip], np.array([1.0, 0.0, 0.0]))
+        small = np.linalg.norm(perp, axis=-1) < 1e-6
+        perp[small] = np.cross(a[flip][small], np.array([0.0, 1.0, 0.0]))
+        q[flip] = np.concatenate([perp, np.zeros((perp.shape[0], 1))], axis=-1)
+    return q / np.linalg.norm(q, axis=-1, keepdims=True)
+
+
+def two_bone_ik(rig: "Rig", lt, lq, upper: str, lower: str, end: str, target):
+    """Locals in which `end` (the wrist) reaches the world positions `target` (F, 3) by turning `upper` (upper arm)
+    and `lower` (forearm), elbow kept in its current bend plane, the end bone's world rotation unchanged (the hand
+    keeps its orientation) and every other bone untouched. Targets out of reach are approached as far as the arm goes.
+    Returns (lt, lq, per-frame distance left in metres)."""
+    lt, lq = np.asarray(lt, float).copy(), np.asarray(lq, float).copy()
+    iu, il, ie = rig.index[upper], rig.index[lower], rig.index[end]
+    wt, wq = rig.fk(lt, lq)
+    a, b, c = wt[:, iu], wt[:, il], wt[:, ie]
+    T = np.asarray(target, float)
+    l1 = np.linalg.norm(b - a, axis=-1)
+    l2 = np.linalg.norm(c - b, axis=-1)
+    at = T - a
+    d_raw = np.linalg.norm(at, axis=-1)
+    d = np.clip(d_raw, np.abs(l1 - l2) + 1e-6, l1 + l2 - 1e-6)
+    u = at / np.maximum(d_raw, 1e-9)[:, None]
+    ab = b - a
+    perp = ab - np.sum(ab * u, axis=-1, keepdims=True) * u          # keep the elbow on its side of the reach line
+    pn = np.linalg.norm(perp, axis=-1)
+    weak = pn < 1e-6
+    if np.any(weak):
+        alt = np.cross(u[weak], np.array([0.0, 0.0, 1.0]))
+        perp[weak] = alt
+        pn[weak] = np.linalg.norm(alt, axis=-1)
+    perp = perp / np.maximum(pn, 1e-9)[:, None]
+    x = (l1 ** 2 - l2 ** 2 + d ** 2) / (2 * d)
+    h = np.sqrt(np.maximum(l1 ** 2 - x ** 2, 0.0))
+    b_new = a + u * x[:, None] + perp * h[:, None]
+    r1 = _rotation_between(b - a, b_new - a)
+    q_upper = qmul(r1, wq[:, iu])
+    c1 = a + qrot(r1, c - a)
+    reach = a + u * d[:, None]
+    r2 = _rotation_between(c1 - b_new, reach - b_new)
+    q_lower = qmul(r2, qmul(r1, wq[:, il]))
+    pu, pl = rig.parents[iu], rig.parents[il]
+    pw_q = wq[:, pu] if pu >= 0 else np.tile([0.0, 0.0, 0.0, 1.0], (len(T), 1))
+    lq[:, iu] = qmul(qinv(pw_q), q_upper)
+    lq[:, il] = qmul(qinv(q_upper), q_lower) if pl == iu else qmul(qinv(rig.fk(lt, lq)[1][:, pl]), q_lower)
+    wt2, wq2 = rig.fk(lt, lq)
+    pe = rig.parents[ie]
+    lq[:, ie] = qmul(qinv(wq2[:, pe]), wq[:, ie])                    # the hand keeps its world rotation
+    wt3, _ = rig.fk(lt, lq)
+    return lt, lq, np.linalg.norm(wt3[:, ie] - T, axis=-1)
+
+
 def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
     """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
     the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones
@@ -279,13 +356,20 @@ def skyrim_locals(clip: dict, sk: Rig):
     return lt, lq
 
 
-def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False) -> Dict:
+def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False,
+             left_weapon: bool = False, two_hand_grip: bool = False) -> Dict:
     """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf.
 
     The weapon always sits in the fist at the vanilla grip (skeletonmap.GRIP). weapon_in_hand: also turn the gripping
     hand so that, held that way, the weapon points and faces as Skyrim's weapon node does (skeletonmap.WEAPON_AXES);
     the hand then differs from Skyrim's by a fixed ~20-30 deg, the blade not at all. Off, the hand follows Skyrim's
-    hand and the blade differs by that angle instead."""
+    hand and the blade differs by that angle instead.
+    left_weapon (dual wield): WeaponLeft is held in the left fist at the mirror image of the right grip
+    (skeletonmap.LEFT_GRIP) and, with weapon_in_hand, the left hand is turned so the left blade points as Skyrim's
+    (the left weapon hangs rigidly off Skyrim's Shield node). Off, WeaponLeft keeps the WORLD rule.
+    two_hand_grip (greatswords, battleaxes, warhammers): the left wrist is put back where Skyrim has it relative to
+    the weapon on every frame (two-bone IK on the left arm), so the support hand stays on the handle; Starfield's arm
+    proportions otherwise let it slide 3-6 cm (measured 2026-10-20 on Nordic Combat Animations' greatsword set)."""
     lt, lq = skyrim_locals(clip, sk)
     wt_sk, wq_sk = sk.fk(lt, lq)
     rt_sk, rq_sk = sk.rest_world()
@@ -308,11 +392,16 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
     world_src = {sf.index[b]: sk.index[a] for b, a in M.WORLD.items() if b in sf.index and a in sk.index}
     align = rest_alignment(sk, sf, rt_sk, rt_sf)                       # Starfield bone -> world swing onto Skyrim's rest
     low = {n.lower(): i for i, n in enumerate(sf.names)}
+    grip_table = dict(M.GRIP)
+    axes_table = dict(M.WEAPON_AXES)
+    if left_weapon:
+        grip_table.update(M.LEFT_GRIP)
+        axes_table.update(M.LEFT_WEAPON_AXES)
     grips = {low[k]: (sf.index[h], np.array(t, float), np.array(q, float) / np.linalg.norm(q))
-             for k, (h, t, q) in M.GRIP.items() if k in low and h in sf.index}
+             for k, (h, t, q) in grip_table.items() if k in low and h in sf.index}
     targets = {low[k]: sf.index[h] for k, h in M.HAND_TARGETS.items() if k in low and h in sf.index}
     weapon_axes = {low[k]: (sk.index[src], np.array(q, float) / np.linalg.norm(q))
-                   for k, (src, q) in M.WEAPON_AXES.items() if k in low and src in sk.index}
+                   for k, (src, q) in axes_table.items() if k in low and src in sk.index}
     hand_follow = {}                                                   # gripping hand -> (Skyrim weapon, axes, grip q)
     if weapon_in_hand:
         for i, (h, _gt, gq) in grips.items():
@@ -383,8 +472,31 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
             out_t[:, i, :] = qrot(qinv(pw_q), target_t - pw_t)
         wq[:, i, :] = qmul(pw_q, out_q[:, i, :])
         wt[:, i, :] = pw_t + qrot(pw_q, out_t[:, i, :])
+    grip_report = None
+    if two_hand_grip:
+        out_t, out_q, wt, grip_report = _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes)
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
-            "world_t": wt, "height_scale": scale}
+            "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report}
+
+
+def _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes):
+    """Two-hand grip: the left wrist at Skyrim's left-hand offset from the weapon, in the weapon's frame (Skyrim
+    Weapon frame -> Starfield WEAPON frame through skeletonmap.WEAPON_AXES), reached by two-bone IK on the left arm."""
+    names = M.SUPPORT_ARM
+    wi = low.get("weapon")
+    hk, wk = sk.index.get(M.SUPPORT_HAND_SKYRIM), sk.index.get("Weapon")
+    if wi is None or hk is None or wk is None or any(n not in sf.index for n in names):
+        return out_t, out_q, sf.fk(out_t, out_q)[0], None
+    _src, axes = weapon_axes.get(wi, (None, np.array([0.0, 0.0, 0.0, 1.0])))
+    rel = qrot(qinv(wq_sk[:, wk]), wt_sk[:, hk] - wt_sk[:, wk]) * unit          # Skyrim weapon frame, metres
+    rel = qrot(np.broadcast_to(qinv(axes), rel.shape[:-1] + (4,)), rel)         # Starfield weapon frame
+    wt, wq = sf.fk(out_t, out_q)
+    target = wt[:, wi] + qrot(wq[:, wi], rel)
+    before = np.linalg.norm(wt[:, sf.index[names[2]]] - target, axis=-1)
+    out_t, out_q, left = two_bone_ik(sf, out_t, out_q, *names, target)
+    wt, _ = sf.fk(out_t, out_q)
+    return out_t, out_q, wt, {"before_m": round(float(np.max(before)), 4), "mean_before_m": round(float(np.mean(before)), 4),
+                              "after_m": round(float(np.max(left)), 4)}
 
 
 def ease_out(lt, lq, frames: int):

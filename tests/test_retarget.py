@@ -176,6 +176,97 @@ class RetargetTests(unittest.TestCase):
         self.assertTrue(np.allclose(rel, gq, atol=1e-6) or np.allclose(rel, -np.array(gq), atol=1e-6))
         self.assertTrue(np.allclose(wt[0, ik], wt[0, wr], atol=1e-9))           # IK target on the hand
 
+    def test_mirror_grip_is_the_mirror_image(self):
+        rng = np.random.default_rng(3)
+        def rq():
+            v = rng.normal(size=4)
+            return v / np.linalg.norm(v)
+        right_rest, left_rest, gq = rq(), rq(), rq()          # wrists whose axes are NOT mirror images
+        gt = np.array([0.07, 0.01, -0.04])
+        tl, ql = R.mirror_grip(gt, gq, right_rest, left_rest)
+        # the same arm pose seen in a mirror: left wrist world = mirror(right wrist world) * (rest correction)
+        pose = rq()
+        rw = R.qmul(pose, right_rest)
+        lw = R.qmul(R.qmirror_x(pose), left_rest)
+        w_right = R.qmul(rw, gq)
+        w_left = R.qmul(lw, ql)
+        self.assertAlmostEqual(abs(float(np.dot(R.qmirror_x(w_right), w_left))), 1.0, places=9)
+        off_r = R.qrot(rw, gt)
+        off_l = R.qrot(lw, tl)
+        self.assertTrue(np.allclose(off_r * [-1, 1, 1], off_l, atol=1e-12))
+        h, t, q = M.LEFT_GRIP["weaponleft"]
+        self.assertEqual(h, "L_Wrist")
+        self.assertEqual(M.LEFT_WEAPON_AXES["weaponleft"][0], "Shield")
+
+    def test_left_weapon_follows_skyrims_shield_node(self):
+        names = ["NPC Root [Root]", "NPC L Hand [LHnd]", "Shield"]
+        sk = R.Rig(names, [-1, 0, 1], [(0, 0, 0), (-30, 0, 70), (0, -2, 7)], [I, I, qaxis((1, 0, 0), 35)])
+        sf = R.Rig(["Root", "L_Wrist", "WeaponLeft"], [-1, 0, 0], [(0, 0, 0), (-0.45, 0, 1.0), (-0.47, 0.07, 0.95)],
+                   [I, qaxis((0, 1, 0), 20), I])
+        q_hand = qaxis((0, 0, 1), 70)
+        clip = {"frames": 1, "fps": 30.0, "bones": names,
+                "tracks": [[(tuple(sk.t[i]), q_hand if i == 1 else tuple(sk.q[i]), (1, 1, 1))] for i in range(3)]}
+        _wt_sk, wq_sk = sk.fk(*R.skyrim_locals(clip, sk))
+        res = R.retarget(clip, sk, sf, weapon_in_hand=True, left_weapon=True)
+        wt, wq = sf.fk(res["t"], res["q"])
+        a = np.array(M.LEFT_WEAPON_AXES["weaponleft"][1], float)
+        want = R.qmul(wq_sk[0, 2], a / np.linalg.norm(a))
+        self.assertAlmostEqual(abs(float(np.dot(want, wq[0, 2]))), 1.0, places=6)      # blade as Skyrim's
+        h, gt, gq = M.LEFT_GRIP["weaponleft"]
+        rel = R.qmul(R.qinv(wq[0, 1]), wq[0, 2])
+        gq = np.array(gq) / np.linalg.norm(gq)
+        self.assertAlmostEqual(abs(float(np.dot(rel, gq))), 1.0, places=6)              # in the fist
+        self.assertTrue(np.allclose(R.qrot(R.qinv(wq[0, 1]), wt[0, 2] - wt[0, 1]), gt, atol=1e-9))
+        off = R.retarget(clip, sk, sf, weapon_in_hand=True)                              # off: WORLD rule as before
+        wq_off = sf.fk(off["t"], off["q"])[1]
+        self.assertLess(abs(float(np.dot(want, wq_off[0, 2]))), 0.9999)
+
+    def test_two_bone_ik_reaches_and_keeps_the_hand(self):
+        names = ["Root", "L_Biceps", "L_Forearm", "L_Wrist", "L_Index"]
+        rig = R.Rig(names, [-1, 0, 1, 2, 3], [(0, 0, 1.4), (-0.3, 0, 0), (-0.28, 0, 0), (-0.25, 0, 0), (-0.08, 0, 0)],
+                    [I, qaxis((0, 0, 1), 10), qaxis((0, 0, 1), 30), qaxis((1, 0, 0), 20), I])
+        F = 3
+        lt = np.repeat(rig.t[None], F, 0)
+        lq = np.repeat(rig.q[None], F, 0)
+        wt, wq = rig.fk(lt, lq)
+        sh = wt[:, rig.index["L_Biceps"]]
+        target = sh + np.array([[-0.2, 0.25, -0.1], [-0.3, 0.1, 0.05], [-2.0, 0.0, 0.0]])   # last: out of reach
+        lt2, lq2, left = R.two_bone_ik(rig, lt, lq, "L_Biceps", "L_Forearm", "L_Wrist", target)
+        wt2, wq2 = rig.fk(lt2, lq2)
+        self.assertTrue(np.all(left[:2] < 1e-6))
+        self.assertAlmostEqual(left[2], 2.0 - 0.53, places=4)                 # as far as the arm reaches
+        for f in range(F):                                                     # the hand keeps its world rotation
+            self.assertAlmostEqual(abs(float(np.dot(wq2[f, 3], wq[f, 3]))), 1.0, places=9)
+        bone = lambda w, a, b: np.linalg.norm(w[:, rig.index[a]] - w[:, rig.index[b]], axis=-1)   # noqa: E731
+        self.assertTrue(np.allclose(bone(wt2, "L_Biceps", "L_Forearm"), 0.28))  # lengths kept
+        self.assertTrue(np.allclose(bone(wt2, "L_Forearm", "L_Wrist"), 0.25))
+        self.assertTrue(np.allclose(lt2, lt) and np.allclose(lq2[:, 0], lq[:, 0]))   # nothing else moved
+
+    def test_two_hand_grip_puts_the_support_hand_back_on_the_weapon(self):
+        sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "Weapon", "NPC L UpperArm [LUar]",
+                    "NPC L Forearm [LLar]", "NPC L Hand [LHnd]"]
+        sk = R.Rig(sk_names, [-1, 0, 1, 0, 3, 4],
+                   [(0, 0, 0), (-45, 5, 95), (2, 0, 5), (-15, 0, 100), (-18, 0, 0), (-16, 0, 0)], [I] * 6)
+        sf = R.Rig(["Root", "R_Wrist", "Weapon", "L_Biceps", "L_Forearm", "L_Wrist"], [-1, 0, 0, 0, 3, 4],
+                   [(0, 0, 0), (-0.6, 0.1, 1.4), (0.3, 0.4, 1.2), (-0.2, 0, 1.45), (-0.27, 0, 0), (-0.24, 0, 0)],
+                   [I] * 6)
+        # Skyrim: the left hand next to the weapon node (about 8 units away); the right hand holds the weapon
+        bend = qaxis((0, 1, 0), -10)
+        clip = {"frames": 2, "fps": 30.0, "bones": sk_names,
+                "tracks": [[(tuple(sk.t[i]), bend if i in (3, 4) else tuple(sk.q[i]), (1, 1, 1))] * 2
+                           for i in range(6)]}
+        res = R.retarget(clip, sk, sf, two_hand_grip=True)
+        lt, lq = sk.fk(*R.skyrim_locals(clip, sk))
+        rel_sk = R.qrot(R.qinv(lq[0, 2]), lt[0, 5] - lt[0, 2]) * R.SKYRIM_M_PER_UNIT
+        axes = np.array(M.WEAPON_AXES["weapon"][1], float)
+        want = R.qrot(R.qinv(axes / np.linalg.norm(axes)), rel_sk)
+        wt, wq = sf.fk(res["t"], res["q"])
+        got = R.qrot(R.qinv(wq[0, 2]), wt[0, 5] - wt[0, 2])
+        self.assertLess(res["two_hand_grip"]["after_m"], 1e-6)                  # reachable: exactly there
+        self.assertGreater(res["two_hand_grip"]["before_m"], 0.05)              # and it was off before
+        self.assertTrue(np.allclose(got, want, atol=1e-6))
+        self.assertIsNone(R.retarget(clip, sk, sf)["two_hand_grip"])
+
     def test_hand_roll_is_aligned_by_the_knuckles(self):
         sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "NPC R Finger20 [RF20]", "NPC R Finger10 [RF10]",
                     "NPC R Finger40 [RF40]"]
