@@ -18,11 +18,13 @@ class RootMotionTests(unittest.TestCase):
     def test_sparse_keys_interpolate_and_hold(self):
         ann = [{"time": 0.0, "text": "animmotion 0 0 0"}, {"time": 0.9, "text": "animmotion 0 333.4 0"},
                {"time": 0.5, "text": "HitFrame"}]
-        m = M.from_annotations(ann, 31, 30.0)                      # 0 .. 1.0 s
-        self.assertAlmostEqual(m["t"][27, 1], 333.4)               # 0.9 s
-        self.assertAlmostEqual(m["t"][30, 1], 333.4)               # held after the last key
-        self.assertAlmostEqual(m["t"][9, 1], 333.4 * 0.3 / 0.9)    # linear in between
+        m = M.from_annotations(ann, 28, 30.0)                      # 0 .. 0.9 s: the last key is the clip's end
+        self.assertAlmostEqual(m["t"][27, 1], 333.4)
+        self.assertAlmostEqual(m["t"][9, 1], 333.4 * 0.3 / 0.9)    # two keys: a straight line (BFCO_JumpAttack)
         self.assertTrue(np.allclose(m["yaw"], 0))
+        longer = M.from_annotations(ann, 31, 30.0)["t"][:, 1]       # clip goes on: eased into the hold
+        self.assertAlmostEqual(longer[27], 333.4)
+        self.assertTrue(np.allclose(longer[27:], 333.4) and np.all(np.diff(longer) >= -1e-9))
 
     def test_dense_keys_implicit_zero_and_rotation(self):
         ann = [{"time": (k + 1) / 60, "text": f"animmotion 1.0 {k + 1}.0 0.0"} for k in range(60)]
@@ -31,7 +33,7 @@ class RootMotionTests(unittest.TestCase):
         self.assertTrue(np.allclose(m["t"][0], 0))                 # implicit zero at the start
         self.assertAlmostEqual(m["t"][15, 1], 30.0)                # 0.5 s = key 30
         self.assertAlmostEqual(m["yaw"][15], 90.0)
-        self.assertAlmostEqual(m["yaw"][5], 30.0)                  # 0 -> 90 over 0.5 s
+        self.assertTrue(0 < m["yaw"][5] < 90 and np.all(np.diff(m["yaw"]) >= -1e-9))   # 0 -> 90, no overshoot
         t, q = M.root_track(m, 0.0142875, scale=2.0)
         self.assertAlmostEqual(t[15, 1], 30.0 * 0.0142875 * 2.0)
         self.assertAlmostEqual(M.yaw_degrees(q[15]), 90.0, places=4)
@@ -41,6 +43,31 @@ class RootMotionTests(unittest.TestCase):
         self.assertFalse(M.moves(np.zeros((3, 3)), np.tile([0, 0, 0, 1.0], (3, 1))))
         self.assertIsNone(M.from_annotations([{"time": 0, "text": "HitFrame"}], 3, 30.0))
         self.assertTrue(M.is_motion_annotation("AnimMotion 0 1 0") and not M.is_motion_annotation("HitFrame"))
+
+    def test_sparse_keys_keep_speed_continuous(self):
+        # a Nordic-style attack: still, lunge in two steps, hold, a slow drift, hold (keys in game units)
+        keys = [(0.17, 0), (0.33, 50), (0.47, 160), (1.0, 160), (1.67, 200), (1.83, 200)]
+        ann = [{"time": t, "text": f"animmotion 0 {y} 0"} for t, y in keys]
+        m = M.from_annotations(ann, 56, 30.0)
+        y = m["t"][:, 1]
+        for t, v in keys:                                                      # passes through every key
+            if abs(t * 30 - round(t * 30)) < 1e-6:
+                self.assertAlmostEqual(y[int(round(t * 30))], v, places=6)
+        v = np.diff(y)
+        self.assertTrue(np.all(v >= -1e-9))                                    # never goes backwards
+        self.assertTrue(np.allclose(y[15:30], 160, atol=1e-6))                 # the hold (0.47-1.0 s) stays a hold
+        self.assertLess(np.max(np.abs(np.diff(v))), 0.6 * np.max(v))           # no jump in speed frame to frame
+        lin = np.interp(np.arange(56) / 30.0, [0] + [k[0] for k in keys], [0] + [k[1] for k in keys])
+        self.assertGreater(np.max(np.abs(np.diff(np.diff(lin)))), np.max(np.abs(np.diff(v))))   # smoother than linear
+
+    def test_motion_comes_to_rest_after_the_last_key(self):
+        ann = [{"time": 0.0, "text": "animmotion 0 0 0"}, {"time": 0.2, "text": "animmotion 0 40 0"},
+               {"time": 0.43, "text": "animmotion 0 100 0"}]               # last key mid-clip, still moving fast
+        y = M.from_annotations(ann, 30, 30.0)["t"][:, 1]
+        v = np.diff(y)
+        k = int(0.43 * 30)
+        self.assertLess(v[k], 0.35 * np.max(v))                            # slowing into the key, not cut off
+        self.assertTrue(np.allclose(y[14:], 100, atol=1e-6))
 
     def test_header_patch(self):
         with tempfile.TemporaryDirectory() as d:

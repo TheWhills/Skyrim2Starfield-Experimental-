@@ -387,6 +387,12 @@ self-closing empty elements, as shipped.
   animmotion, no routing markers: MCO chains them in order. fo4sf.bfco reads mco_ names and chains in order when no
   clip routes (BFCO_NextIsAttackN). Test pack: 40100's six attacks (6th under MeleeAttack01, not yet verified in
   game) and mco_powerattack1.
+* Owner, in game: the Nordic pack works (all six attacks), but looks less smooth than in Skyrim. Measured: its
+  clips carry a handful of animmotion keys (mco_attack1: 6 over 1.83 s), and linear interpolation made the root
+  speed jump from one frame to the next (0 -> 2.4 -> 5.9 -> 0 m/s), and stop dead at a last key that is not the clip's
+  end. fo4sf.rootmotion now interpolates with a monotone cubic (PCHIP: through every key, no overshoot, holds stay
+  holds, continuous speed) and eases into a hold after the last key; two keys spanning the clip stay a straight line.
+  Largest frame-to-frame speed change in the pack's attacks now 0.6-4 m/s (was up to 5.9).
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword

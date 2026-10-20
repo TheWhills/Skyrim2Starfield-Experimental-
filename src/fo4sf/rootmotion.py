@@ -31,15 +31,51 @@ def is_motion_annotation(text: str) -> bool:
     return bool(MOTION.match(text or "") or ROTATION.match(text or ""))
 
 
+def _pchip(x: np.ndarray, y: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """Monotone cubic (Fritsch-Carlson / PCHIP) through (x, y), evaluated at t; constant outside [x0, xn]. Passes
+    through every key, never overshoots between them (a hold stays a hold), and keeps the speed continuous."""
+    n = len(x)
+    if n == 1:
+        return np.full_like(t, y[0], dtype=float)
+    h = np.diff(x)
+    d = np.diff(y) / h
+    m = np.zeros(n)
+    if n == 2:
+        m[:] = d[0]
+    else:
+        for i in range(1, n - 1):
+            if d[i - 1] * d[i] > 0:
+                w1, w2 = 2 * h[i] + h[i - 1], h[i] + 2 * h[i - 1]
+                m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i])
+        for i, dd, nb, hm, hn in ((0, d[0], d[1], h[0], h[1]), (n - 1, d[-1], d[-2], h[-1], h[-2])):
+            v = ((2 * hm + hn) * dd - hm * nb) / (hm + hn)
+            if np.sign(v) != np.sign(dd):
+                v = 0.0
+            elif np.sign(dd) != np.sign(nb) and abs(v) > abs(3 * dd):
+                v = 3 * dd
+            m[i] = v
+    tc = np.clip(t, x[0], x[-1])
+    k = np.clip(np.searchsorted(x, tc, side="right") - 1, 0, n - 2)
+    u = (tc - x[k]) / h[k]
+    h00, h10, h01, h11 = 2 * u**3 - 3 * u**2 + 1, u**3 - 2 * u**2 + u, -2 * u**3 + 3 * u**2, u**3 - u**2
+    return h00 * y[k] + h10 * h[k] * m[k] + h01 * y[k + 1] + h11 * h[k] * m[k + 1]
+
+
 def _track(keys: List[Tuple[float, np.ndarray]], times: np.ndarray, dim: int) -> np.ndarray:
-    """Linear interpolation of (time, value) keys at `times`; an implicit zero at time 0 when the first key is later;
-    the last value holds after the last key."""
+    """The keys interpolated at `times`; an implicit zero at time 0 when the first key is later; the last value
+    holds after the last key. Monotone cubic (PCHIP) between keys: pack clips often carry a handful of keys per
+    attack (Nordic Combat Animations' mco_attack1: 6 over 1.83 s), and linear interpolation made the root speed jump
+    (0 -> 2.4 -> 5.9 -> 0 m/s from one frame to the next; owner: "less smooth than in Skyrim")."""
     keys = sorted(keys, key=lambda k: k[0])
     if not keys or keys[0][0] > 1e-6:
         keys = [(0.0, np.zeros(dim))] + keys
     kt = np.array([k[0] for k in keys])
     kv = np.array([k[1] for k in keys]).reshape(len(keys), dim)
-    return np.stack([np.interp(times, kt, kv[:, d]) for d in range(dim)], axis=1)
+    idx = [i for i in range(len(kt)) if i == len(kt) - 1 or kt[i + 1] - kt[i] > 1e-9]   # same time: later wins
+    kt, kv = kt[idx], kv[idx]
+    if len(times) and kt[-1] < times[-1] - 1e-6:          # the motion holds after the last key: end it at rest
+        kt, kv = np.r_[kt, times[-1]], np.vstack([kv, kv[-1:]])
+    return np.stack([_pchip(kt, kv[:, d], times) for d in range(dim)], axis=1)
 
 
 def from_annotations(annotations, frames: int, fps: float) -> Optional[Dict]:
