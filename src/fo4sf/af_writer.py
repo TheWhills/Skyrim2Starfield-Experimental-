@@ -106,8 +106,9 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
                       own_events=(), hit_frame: Optional[int] = None) -> Tuple[bytes, Dict]:
     """A vanilla .afx fitted to a replacement clip: every <frame>, <start> and <end> (events, variables, audio...)
     scaled from the vanilla clip's last frame to ours (old_last, or when unknown the descriptor's largest frame, which
-    is exact for the usual whole-clip variables); <filename> set; everything else (tag, is_state, rampout, flags,
-    payloads, prefixes) kept. Events our clip carries itself (own_events: (frame, name, payload), e.g. HitFrame from
+    is exact for the usual whole-clip variables); <filename> set; <rampout> (the blend-out, in frames) scaled down with
+    a shorter clip and never past its last frame (vanilla SlideFromSprint: 29 of 51 frames; kept at 29 on a 27-frame
+    dodge, the whole clip would blend out); everything else (tag, is_state, flags, payloads, prefixes) kept. Events our clip carries itself (own_events: (frame, name, payload), e.g. HitFrame from
     the Skyrim annotations) replace the vanilla ones of the same name, in order, when the counts match.
     hit_frame (our clip's hit, e.g. retarget.blade_peak; a HitFrame in own_events wins): when the vanilla descriptor
     has a HitFrame, the scaling is piecewise linear through (vanilla HitFrame -> hit_frame), so PreHitFrame,
@@ -137,6 +138,10 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
     for e in marks:
         v = int(e.text)
         e.text = str(new_last if v >= old_last else max(0, min(new_last, int(round(warp(v))))))
+    ramp = root.find("rampout")
+    if ramp is not None and (ramp.text or "").strip().isdigit():
+        r = int(ramp.text)
+        ramp.text = str(max(0, min(new_last, int(round(r * min(1.0, scale))))))
     fn = root.find("filename")
     if fn is None:
         fn = ET.SubElement(root, "filename")

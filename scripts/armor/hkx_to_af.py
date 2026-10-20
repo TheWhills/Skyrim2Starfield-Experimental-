@@ -181,6 +181,9 @@ def main(argv=None):
     ap.add_argument("--bfco", action="store_true", help="descriptor windows from BFCO / MCO markers (see above)")
     ap.add_argument("--no-root-motion", action="store_true",
                     help="ignore animmotion / animrotation annotations (root motion of animation packs such as BFCO)")
+    ap.add_argument("--motion", action="append", default=[], metavar="CLIP=FILE:ID",
+                    help="root motion for clip CLIP (file stem) from motion block ID of an animationdatasinglefile-style "
+                         "text (Skyrim keeps vanilla and older packs' motion there, not in the clip); repeatable")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -189,6 +192,17 @@ def main(argv=None):
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
     os.makedirs(out, exist_ok=True)
+    motion_data = {}
+    for spec in a.motion:
+        stem, _, src = spec.partition("=")
+        path, _, ident = src.rpartition(":")
+        if not (stem and path and ident):
+            sys.exit(f"--motion {spec}: expected CLIP=FILE:ID")
+        with open(path, encoding="latin-1") as fh:
+            blocks = rootmotion.parse_motion_data(fh.read())
+        if ident not in blocks:
+            sys.exit(f"--motion {spec}: no motion block {ident} in {path}")
+        motion_data[stem.lower()] = blocks[ident]
     sky = bsa.SkyrimArchives(a.skyrim_data) if a.skyrim_data else None
     sk_desc = skyrimhkx.describe(read_any(a.skyrim_skeleton or SKY_SKELETON, sky))
     sk = retarget.rig_from_hkx_skeleton(next(s for s in sk_desc["skeletons"] if len(s["bones"]) > 20))
@@ -278,6 +292,11 @@ def main(argv=None):
             if clip.get("fps") and abs(clip["fps"] - FPS) > 0.01:
                 row["resampled_from_fps"] = clip["fps"]
                 clip = retarget.resample(clip, FPS)                   # Starfield clips play at 30 fps
+            if name.lower() in motion_data:
+                clip = dict(clip, annotations=[e for e in clip["annotations"]
+                                               if not rootmotion.is_motion_annotation(e.get("text", ""))]
+                            + rootmotion.motion_annotations(motion_data[name.lower()]))
+                row["motion_data"] = True
             motion = None if a.no_root_motion else rootmotion.from_annotations(clip["annotations"], clip["frames"], FPS)
             events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
             res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand)

@@ -900,3 +900,26 @@ to be worked out.
   supported hypothesis, and a script would likely be one hit late; SFSE otherwise); guard break = Starfield's own
   stagger clips replaced (supported hypothesis: a blocked power attack staggers).
 * Test pack built (scratch): DBH "Sword NA Base" recoil as MeleeBlock_HitReaction (31 frames, pushes back 1.13 m).
+
+## Dodges: TK Dodge (RE, For RE, 1st-person 8-way, RE Addon) -> Starfield (2026-10-20, owner uploads, format only)
+* **Skyrim side (verified from the files):** an SKSE plugin (TK_Dodge_RE.dll) reads the dodge key, picks the direction
+  from movement input (4 ways; standing still -> `defaultDodgeEvent`, TKDodgeBack), checks / spends stamina and sends
+  the graph event TKDodgeForward / Back / Left / Right; a Nemesis patch adds the dodge states to 1hm_behavior and
+  magicbehavior (both views) with variables bIsDodging, bInIframe, bIframeActive, iStep / iStepSelector and clip
+  events TKDR_DodgeStart / End, TKDR_IframeDuration / IframeEnd; the plugin makes the player ignore hits while
+  i-frames run (iFrameDuration 0.3 s) and can cancel attacks into a dodge. The 1st-person 8-way pack picks diagonals
+  with OAR on Keytrace.esp's key-held magic effects; the RE Addon adds an MCM and stamina-cost actor values.
+* **Root motion of these (and of vanilla Skyrim clips) is not in the .hkx**: it is in animationdatasinglefile
+  motion blocks (TKDodgeForward -> id 1656: 0.867 s, 409 units = 5.4 m on our scale; Back 300 u, Left / Right
+  252 u). `rootmotion.parse_motion_data` + `hkx_to_af --motion CLIP=FILE:ID` read them (vanilla Skyrim attacks
+  converted so far had none applied: their power-attack lunges live there too).
+* **Starfield side (verified on the vanilla files):** no player dodge state or clip in the 233 graphs / 970 descriptors
+  here. The nearest built-in evasive move is the slide: SlideStart -> SlideFromSprint (Biped_IdleLocomotion), with a
+  melee player clip (melee\onehanded\player\SlideFromSprint, 51 frames, bIsSliding 0-25). Descriptor flags / variables
+  include nothing that grants invulnerability (disableCollision exists, on jump traversal: collision, not damage).
+* So: the clips and their motion convert (done); triggering needs input -> a graph event, which vanilla Papyrus cannot
+  do (no key events): SFSE plugin (the same one as the input buffer / charged attacks), which would also own the
+  i-frames. Without a plugin only existing triggers can be borrowed (the slide: forward only, from a sprint).
+* retime_descriptor now scales <rampout> (blend-out frames) down with a shorter clip and clamps it to the last frame
+  (the 29-frame slide blend-out on a 27-frame dodge would have blended the whole clip).
+* Test pack built (scratch): StepDodgeForward with its motion as the melee player SlideFromSprint (27 frames, 5.4 m).

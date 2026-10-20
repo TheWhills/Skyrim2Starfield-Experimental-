@@ -85,6 +85,12 @@ class AfWriterTests(unittest.TestCase):
         out2, rep2 = AF.retime_descriptor(vanilla, 15, "X.af", old_last=60)    # known vanilla length: shorter clip
         self.assertEqual(ET.fromstring(out2).find("variables/variable").findtext("end"), "8")
         self.assertEqual(ET.fromstring(out2).findtext("filename"), "X.af")
+        self.assertEqual(ET.fromstring(out2).findtext("rampout"), "2")             # blend-out scaled with it (9 / 4)
+        slide = b"<root><filename>S.af</filename><rampout>29</rampout></root>"
+        out3, _ = AF.retime_descriptor(slide, 26, "S.af", old_last=50)
+        self.assertEqual(ET.fromstring(out3).findtext("rampout"), "15")             # 29 * 26 / 50
+        out4, _ = AF.retime_descriptor(slide, 10, "S.af", old_last=10)
+        self.assertEqual(ET.fromstring(out4).findtext("rampout"), "10")             # never past the last frame
 
     def test_retime_anchored_on_the_hit(self):
         vanilla = (b"<root><filename>A.af</filename><events>"

@@ -69,6 +69,22 @@ class RootMotionTests(unittest.TestCase):
         self.assertLess(v[k], 0.35 * np.max(v))                            # slowing into the key, not cut off
         self.assertTrue(np.allclose(y[14:], 100, atol=1e-6))
 
+    def test_motion_data_blocks(self):
+        text = ("TKDodgeForward\n1656\n1\n0\n0\n0\n\n"            # a clip entry (name, id, ...): not motion
+                "1656\n0.8\n3\n0.1 0 -38.0 0\n0.4 0 -200 0\n0.8 0 -300.0 0\n1\n0.8 0 0 0.7071068 0.7071068\n\n"
+                "1657\n0.7\n2\n0.06667 -23.0 0 0\n0.7 -251.7 0 0\n1\n0.7 0 0 0 1\n")
+        b = M.parse_motion_data(text)
+        self.assertEqual(sorted(b), ["1656", "1657"])
+        self.assertEqual(b["1656"]["duration"], 0.8)
+        self.assertEqual(b["1656"]["translations"][-1], (0.8, 0.0, -300.0, 0.0))
+        self.assertEqual(len(b["1657"]["translations"]), 2)
+        ann = M.motion_annotations(b["1656"])
+        m = M.from_annotations(ann, 25, 30.0)
+        self.assertAlmostEqual(m["t"][24, 1], -300.0)                       # 0.8 s: the last key
+        self.assertAlmostEqual(m["yaw"][24], 90.0, places=4)                  # +90 about Z: counter-clockwise
+        self.assertTrue(np.all(np.diff(m["t"][:, 1]) <= 1e-9))               # backwards all the way
+        self.assertEqual(M.parse_motion_data("1656\n0.8\n2\n0.1 0 1 0\n"), {})   # cut short: not a block
+
     def test_header_patch(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "x.af")

@@ -14,6 +14,13 @@ Starfield side (verified 2026-10-19 on the owner's vanilla clips, 966 .af): the 
 the .af header repeats where it ends: header rotation (f32 w, x, y, z at byte 8) = the last Root rotation and header
 translation (f32 x, y, z at byte 24) = the last Root translation, in all 582 clips with a header translation and all
 156 with a header rotation checked. Clips without motion leave Root out and the header at identity / zero.
+
+Skyrim's own clips (vanilla, and older packs such as TK Dodge) keep their motion outside the clip, in
+animationdatasinglefile.txt (and Nemesis patches of it): per motion id, the clip's duration, translation keys
+`time x y z` (cumulative, game units) and rotation keys `time x y z w` (cumulative quaternion). Verified 2026-10-20 on
+TK Dodge For RE (nexusmods.com/skyrimspecialedition/mods/15309, read for the format only): TKDodgeForward -> id 1656,
+0.867 s, 9 keys to Y = 409.3, one rotation key at the end; its .hkx itself has no motion. parse_motion_data reads those
+blocks and motion_annotations turns one into animmotion / animrotation annotations, so the path above handles both.
 """
 import math
 import re
@@ -93,6 +100,60 @@ def from_annotations(annotations, frames: int, fps: float) -> Optional[Dict]:
         return None
     times = np.arange(frames) / float(fps)
     return {"t": _track(mot, times, 3), "yaw": _track(rot, times, 1)[:, 0]}
+
+
+def _floats(line: str, n: int):
+    parts = line.split()
+    if len(parts) != n:
+        return None
+    try:
+        return [float(p) for p in parts]
+    except ValueError:
+        return None
+
+
+def parse_motion_data(text: str) -> Dict[str, Dict]:
+    """{motion id: {"duration", "translations": [(t, x, y, z)], "rotations": [(t, x, y, z, w)]}} from the motion
+    blocks of an animationdatasinglefile-style text: an id line, the duration, a key count and that many `t x y z`
+    lines, a key count and that many `t x y z w` lines. Lines that do not start such a block are skipped (the project
+    and clip sections of the full file)."""
+    lines = [ln.strip() for ln in text.splitlines()]
+    out, i = {}, 0
+    while i + 2 < len(lines):
+        ident, dur, cnt = lines[i], _floats(lines[i + 1], 1), lines[i + 2]
+        if ident and " " not in ident and dur is not None and "." in lines[i + 1] and cnt.isdigit():
+            n, j, tr, ok = int(cnt), i + 3, [], True
+            for _ in range(n):
+                v = _floats(lines[j], 4) if j < len(lines) else None
+                if v is None:
+                    ok = False
+                    break
+                tr.append(tuple(v))
+                j += 1
+            if ok and j < len(lines) and lines[j].isdigit():
+                m, j, rot = int(lines[j]), j + 1, []
+                for _ in range(m):
+                    v = _floats(lines[j], 5) if j < len(lines) else None
+                    if v is None:
+                        ok = False
+                        break
+                    rot.append(tuple(v))
+                    j += 1
+                if ok and ident not in out:
+                    out[ident] = {"duration": dur[0], "translations": tr, "rotations": rot}
+                    i = j
+                    continue
+        i += 1
+    return out
+
+
+def motion_annotations(block: Dict) -> List[Dict]:
+    """A motion block as animmotion / animrotation annotations (rotation: the turn about +Z in degrees, positive =
+    counter-clockwise, the right-handed sense of the stored quaternion)."""
+    ann = [{"time": t, "text": f"animmotion {x} {y} {z}"} for t, x, y, z in block.get("translations", [])]
+    for t, x, y, z, w in block.get("rotations", []):
+        ann.append({"time": t, "text": f"animrotation {math.degrees(2 * math.atan2(z, w))}"})
+    return ann
 
 
 def root_track(motion: Dict, metres_per_unit: float, scale: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
