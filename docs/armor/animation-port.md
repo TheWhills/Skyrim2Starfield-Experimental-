@@ -988,3 +988,16 @@ Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
   graph variable (with Speed), so a condition in MeleeAttacks could pick the backward power attack natively; it is
   the movement direction, not the key, so a standing start may read 0 speed. Keys -> stance: the plugin's input
   layer (key -> action table, as Key Utils), since Papyrus cannot read keys.
+
+## Lock-on (True Directional Movement style), owner wants it eventually (2026-10-20, planning)
+* TDM (Nexus 51614, source github.com/ersh1/TrueDirectionalMovement, no licence stated on the page: design reference
+  only): directional movement (the body turns to the movement direction), target lock (face the target, camera yaw /
+  pitch with an offset, switch by mouse / scroll / stick, auto-next on death, a "relaxed" free-camera mode, several
+  target points per actor), head tracking, a TrueHUD reticle, projectile aim help (predictive / homing).
+* Starfield hooks to try first (supported hypotheses): vanilla melee descriptors set `bAlignWithAimAssistTarget`
+  (50 clips), so attacks already turn to the aim-assist target: a lock could feed that target instead of new
+  rotation code; weapon-drawn third person already strafes facing the camera, so the lock is mostly camera control
+  toward the target (OSF Animation drives the camera from SFSE: possible). Reticle: an effect / art object on the
+  target first (as Stances shows its icon), HUD work later. Expose the lock as a graph variable / keyword so the
+  movesets' TDM conditions (LoreRim: 19 folders) port.
+* Order: after the plugin core (input table, payload commands, i-frames, dodge).
