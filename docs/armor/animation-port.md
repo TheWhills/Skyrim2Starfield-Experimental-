@@ -344,6 +344,15 @@ self-closing empty elements, as shipped.
   22) - after the clip, i.e. as a fresh attack 1. fo4sf.bfco now ends the window at BFCO's NextWinStart and opens
   it at max(0.2 s, NextWinStart - 0.6 s) (vanilla opens at frame 6). Diagnostic pack rebuilt; the tag question is
   still open.
+* Owner, rebuilt diagnostic: the combo works but stops after 3 swings, so attack 4 (a NEW loose file
+  player\sword\MeleeAttack_D.af / .afx under the known tag MeleeAttack_D) is not found. Verified on the vanilla
+  descriptors: the sneak / zero-g variants keep the base tag inside (sneak_meleeattack_b.afx: <tag>MeleeAttack_B</tag>),
+  so the graph's tag-prefix switches (RelaxReadySneakSwitch "Sneak", Gravity "ZeroG") must find clips by FILE NAME
+  (prefix + tag), and the files it can find appear to be the ones the archives list (supported hypothesis: loose files
+  only override existing paths). Diagnostic 2 (work/build_bfco4.sh; hkx_to_af --replace ...::tag:NAME keeps the
+  vanilla path and changes only the tag): attack 4 on the existing Sneak_MeleeAttack_B path, graph and file both
+  saying Sneak_MeleeAttack_B; attack 5 on the existing Sneak_MeleeAttack_C path retagged BFCO_Attack5 - plays only
+  if lookups use the <tag> inside the descriptor.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
