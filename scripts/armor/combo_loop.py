@@ -25,6 +25,11 @@ This writes:
     are both Skyrim's right swing): C takes A's timing (hit, combo window, attack locks), B loses bAllowFinisher.
 Starfield's finisher is dropped on purpose: Skyrim has none. Power and sprint attacks stay full body.
 
+--free-movement (with --actions-graph; EXPERIMENT): bFreeMovement open over all of A / B / C. Owner, in game, with the
+layered combo: attacking while moving keeps moving (and turning), but a swing started standing still holds the player
+until it ends - vanilla opens bFreeMovement only late in each clip, so this tests whether that window is what holds
+him (Skyrim lets you start moving during any swing).
+
     python -I scripts\\armor\\combo_loop.py --graph <extract>\\meleeattacks.agx [--actions-graph <extract>\\meleeactions.agx]
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
@@ -84,7 +89,12 @@ def layer_combo(actions_raw: bytes, combo_node):
                                               f"-> {IDLE_STATE} at its end)"]
 
 
-def fix_descriptors(folder: str):
+def last_frame(afx: bytes) -> int:
+    import re
+    return max([int(x) for x in re.findall(rb"<(?:frame|start|end)>(\d+)<", afx)] or [0])
+
+
+def fix_descriptors(folder: str, free_movement: bool = False):
     names = {f.lower(): f for f in os.listdir(folder)}
     a, b, c = (names.get(f"meleeattack_{x}.afx") for x in "abc")
     done = []
@@ -103,6 +113,14 @@ def fix_descriptors(folder: str):
             fh.write(data)
         if dropped:
             done.append(f"{b}: dropped {', '.join(dropped)}")
+    for f in ((a, b, c) if free_movement else ()):
+        if f:
+            p = os.path.join(folder, f)
+            with open(p, "rb") as fh:
+                data = fh.read()
+            with open(p, "wb") as fh:
+                fh.write(af_writer.set_variable_window(data, "bFreeMovement", 0, last_frame(data)))
+            done.append(f"{f}: bFreeMovement over the whole clip")
     return done
 
 
@@ -120,7 +138,10 @@ def main(argv=None):
     ap.add_argument("--actions-graph", help="the vanilla MeleeActions.agx: also layer the combo over walking")
     ap.add_argument("--clips", action="append", default=[], help="folder with MeleeAttack_A/B/C.afx (repeatable)")
     ap.add_argument("--out", required=True, help="pack root (Data layout) for the edited graphs")
+    ap.add_argument("--free-movement", action="store_true", help="experiment, see above (needs --actions-graph)")
     a = ap.parse_args(argv)
+    if a.free_movement and not a.actions_graph:
+        sys.exit("--free-movement needs --actions-graph (a full-body swing never moves, whatever bFreeMovement says)")
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
@@ -132,7 +153,7 @@ def main(argv=None):
             data, rep = layer_combo(fh.read(), combo)
         print(f"graph: {_write(out, ACTIONS_REL, data)}; {rep}")
     for folder in a.clips:
-        print(f"{folder}: {fix_descriptors(folder) or 'no A / B / C descriptors'}")
+        print(f"{folder}: {fix_descriptors(folder, a.free_movement) or 'no A / B / C descriptors'}")
     return 0
 
 

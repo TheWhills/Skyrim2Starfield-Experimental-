@@ -260,6 +260,13 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner, layered combo: moving swings move and steer; standing swings stay standing until the end
+* Verified in game (owner): attacking while moving keeps the player moving and lets him change direction during the
+  swing; attacking from a standstill plays the whole Skyrim swing (legs included) but holds him in place for the
+  combo. Skyrim lets you start moving during any swing. Supported hypothesis: the late vanilla bFreeMovement window
+  is what holds a standing swing now that it is layered. combo_loop.py --free-movement (needs --actions-graph,
+  experiment) opens it over all of A / B / C; test pack pending.
+
 ### 2026-10-19: owner: with bFreeMovement open the player still stops until the swing ends -> layered combo
 * Result of the --move-while-attacking experiment (owner, in game): no movement during a full-body swing, whatever
   bFreeMovement says. The experiment switch is removed.

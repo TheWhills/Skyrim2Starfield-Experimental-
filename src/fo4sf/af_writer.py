@@ -215,7 +215,7 @@ def set_variable_window(afx: bytes, name: str, start: int, end: int) -> bytes:
             ET.SubElement(v, tag)
         v.find("name").text = name
         if prev:
-            v.tail, prev[-1].tail = prev[-1].tail, prev[0].tail
+            v.tail, prev[-1].tail = prev[-1].tail, vs.text
     v.find("start").text, v.find("end").text = str(int(start)), str(int(end))
     return _afx_out(root, afx)
 
