@@ -16,6 +16,9 @@ The survey does not assume record layouts. It writes report.txt with:
   4. a full subrecord dump of a few weapons: a melee weapon, a rifle, a pistol, a heavy weapon (or --weapon)
   5. HumanRace: skeleton / rig / root graph / default folder, and every subgraph entry (actor + weapon keywords ->
      graph and animation folders, most specific first; fo4sf.subgraph)
+  6. melee aim assist models (MAAM; CommonLibSF's BGSMeleeAimAssistModel: cone angles, steering speed, snap
+     multipliers, max distance, enabled): every record's fields as floats, and which WEAP fields point at them
+     (docs/armor/lock-on-design.md: the built-in "magnetism" a lock-on can build on)
 
     python -I scripts\\armor\\weapon_anim_survey.py --esm "<Starfield>\\Data\\Starfield.esm" --out C:\\Modding\\work\\weapon_anims
 """
@@ -67,6 +70,22 @@ def dump(fs, w, names=None, n=80):
           + (f"   '{t}'" if t else "") + extra)
 
 
+def maam_users(p, weapons, maam_ids):
+    """Which WEAP subrecords hold a MAAM FormID (any 4-byte-aligned u32): {"fields": Counter("SIG@offset"),
+    "by_model": {maam fid: [weapon EditorIDs]}}."""
+    out = {"fields": collections.Counter(), "by_model": collections.defaultdict(list)}
+    if not maam_ids:
+        return out
+    for fid, edid, off in weapons:
+        for s, d in fields(p, off):
+            for o in range(0, len(d) - 3, 4):
+                v = struct.unpack_from("<I", d, o)[0]
+                if v in maam_ids:
+                    out["fields"][f"{s.decode('latin-1')}@{o}"] += 1
+                    out["by_model"][v].append(edid)
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--esm", required=True)
@@ -82,7 +101,7 @@ def main(argv=None):
     edids = collections.defaultdict(list)
     anim_hits = collections.Counter()
     anim_samples = collections.defaultdict(list)
-    kw_names, weapons, races = {}, [], []
+    kw_names, weapons, races, maam = {}, [], [], []
     kw_use = collections.Counter()
     with fo4land.Plugin(a.esm) as p:
         for typ, off, _flags, fid in walk(p, p.body, len(p.buf)):
@@ -99,6 +118,8 @@ def main(argv=None):
                 kw_names[fid] = edid
             elif t == "WEAP":
                 weapons.append((fid, edid, off))
+            elif t == "MAAM":
+                maam.append((fid, edid, fs))
             elif t == "RACE" and edid.lower() == "humanrace":
                 races.append((fid, edid, fs))
             if t in ("WRLD", "CELL", "REFR", "NAVM", "LAND", "ACHR"):
@@ -151,6 +172,20 @@ def main(argv=None):
                 w(f"      actor {[kw_names.get(k, f'{k:08X}') for k in e['actor_keywords']]} "
                   f"target {[kw_names.get(k, f'{k:08X}') for k in e['target_keywords']]} -> "
                   f"{(e['graph'] or '?').split(chr(92))[-1]} | {' > '.join(e['paths'])}")
+        w(f"\n6. melee aim assist models (MAAM): {len(maam)}")
+        for fid, edid, fs in maam:
+            w(f"  MAAM {fid:08X} {edid}")
+            for sig, d in fs:
+                if sig == b"EDID":
+                    continue
+                fl = struct.unpack(f"<{len(d) // 4}f", d[:len(d) // 4 * 4]) if len(d) >= 4 else ()
+                w(f"    {sig.decode('latin-1')} {len(d)} B: {d.hex(' ')[:120]}"
+                  + (f" | floats {[round(x, 4) for x in fl[:12]]}" if fl else ""))
+        users = maam_users(p, weapons, {fid for fid, _e, _f in maam})
+        w(f"  WEAP fields referencing a MAAM (field: weapons): {dict(users['fields'])}")
+        for m_fid, names in sorted(users["by_model"].items()):
+            w(f"    {m_fid:08X} {next((e for f, e, _ in maam if f == m_fid), '?')}: {len(names)} weapons, e.g. "
+              + ", ".join(names[:12]))
     rep = os.path.join(a.out, "report.txt")
     with open(rep, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
