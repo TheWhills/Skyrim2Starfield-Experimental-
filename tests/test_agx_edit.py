@@ -164,6 +164,23 @@ class AgxEditTests(unittest.TestCase):
         self.assertNotIn(b"bAlignWithAimAssistTarget", out)
         self.assertIn(b"bCanComboAttack", out)
 
+    def test_attack_end_at_start(self):
+        a = AFX % (b"MeleeAttack_A", b"MeleeAttack_A", 4, 14, var(b"bDontAllowAttack", 0, 6))
+        a = af_writer.add_event(a, 18, "AttackStateNextAttack")
+        self.assertEqual(af_writer.event_frame(a, "AttackStateNextAttack"), 18)
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "MeleeAttack_A.afx"), "wb") as fh:
+                fh.write(a)
+            combo_loop.fix_descriptors(d, attack_end=True)
+            combo_loop.fix_descriptors(d, attack_end=True)                 # idempotent: one AttackEnd
+            with open(os.path.join(d, "MeleeAttack_A.afx"), "rb") as fh:
+                out = fh.read()
+        self.assertEqual(out.count(b"<name>AttackEnd</name>"), 1)
+        self.assertEqual(af_writer.event_frame(out, "AttackEnd"), 0)
+        self.assertLess(out.index(b"AttackEnd"), out.index(b"HitFrame"))      # frame order kept
+        self.assertIn(b"<name>bDontAllowAttack</name><start>0</start><end>18</end>", out)
+        self.assertNotIn(b"\r\r", out)
+
     def test_remove_state_events(self):
         raw = (b"<root>\r\n<node>\r\n\t<node_type>NT_ANIMATION_NODE</node_type>\r\n\t<property_sheet>\r\n"
                b"\t\t<num_columns>4</num_columns>\r\n\t\t<column> <header></header> <types>2</types> </column>\r\n"

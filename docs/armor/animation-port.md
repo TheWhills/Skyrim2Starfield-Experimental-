@@ -279,6 +279,12 @@ self-closing empty elements, as shipped.
   layered MeleeAttackInAir_A sends only AttackStart. Supported hypothesis: AttackStart switches the game's movement
   into its attacking mode, which holds the last input. combo_loop.py --no-attack-events (experiment) removes both
   from the layered copy; test pack pending. Risk: anything else the game hangs on AttackStart (hit setup, stamina).
+* Owner: --no-attack-events latches the same. The SFBM mod's descriptors (read) differ more: AttackEnd at frame 0 of
+  every layered swing (vanilla's end-of-attack event: Player_Melee's Switch returns to Idle on it, MeleeAttacks'
+  None sends it on enter), attacks locked by bDontAllowAttack (0-25) instead of a bCanComboAttack window, no Allow
+  Rotation flag, no aim / rotation windows, bNoHeadTrack throughout. Supported hypothesis: ending the game's attack
+  state at once is what frees the movement input. combo_loop.py --attack-end-at-start (experiment) adds AttackEnd at
+  frame 0 and holds bDontAllowAttack to each swing's AttackStateNextAttack frame; test pack pending.
 
 ### 2026-10-19: owner, --upper-body: moving off mid-combo is instant, but only sometimes and only straight ahead
 * Biped_IdleLocomotion (read): the Locomotion machine leaves its idle "None" for StandToWalk / StandToRun start

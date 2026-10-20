@@ -53,6 +53,14 @@ SFBM mod's layered A / B / C send neither (read 2026-10-19), and vanilla's own l
 AttackStart only. Supported hypothesis: AttackStart puts the game's movement into its attacking mode, which holds the
 last input. This removes both events from the layered copy's states.
 
+--attack-end-at-start (with --actions-graph; EXPERIMENT): owner, in game: --no-attack-events did not stop the latch.
+The SFBM mod's layered swings (read 2026-10-19) send AttackEnd at frame 0 of every swing - the event vanilla uses to
+end an attack (Player_Melee's Switch goes back to Idle on it; MeleeAttacks' None state sends it on enter) - lock
+attacks with bDontAllowAttack instead of opening bCanComboAttack, and carry no Allow Rotation flag. Supported
+hypothesis: ending the game's attack state at once frees movement input. This adds AttackEnd at frame 0 to A / B / C
+and holds bDontAllowAttack until each swing's AttackStateNextAttack frame (presses before it are ignored, not
+queued); implies --no-attack-events.
+
     python -I scripts\\armor\\combo_loop.py --graph <extract>\\meleeattacks.agx [--actions-graph <extract>\\meleeactions.agx]
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
@@ -131,7 +139,7 @@ def last_frame(afx: bytes) -> int:
 PIVOT_WINDOWS = {"bAlignWithAimAssistTarget", "DisableAllowRotation"}
 
 
-def fix_descriptors(folder: str, free_movement: bool = False, no_pivot: bool = False):
+def fix_descriptors(folder: str, free_movement: bool = False, no_pivot: bool = False, attack_end: bool = False):
     names = {f.lower(): f for f in os.listdir(folder)}
     a, b, c = (names.get(f"meleeattack_{x}.afx") for x in "abc")
     done = []
@@ -150,6 +158,19 @@ def fix_descriptors(folder: str, free_movement: bool = False, no_pivot: bool = F
             fh.write(data)
         if dropped:
             done.append(f"{b}: dropped {', '.join(dropped)}")
+    for f in ((a, b, c) if attack_end else ()):
+        if f:
+            p = os.path.join(folder, f)
+            with open(p, "rb") as fh:
+                data = fh.read()
+            nxt = af_writer.event_frame(data, "AttackStateNextAttack")
+            if af_writer.event_frame(data, "AttackEnd") is None:
+                data = af_writer.add_event(data, 0, "AttackEnd")
+            if nxt is not None:
+                data = af_writer.set_variable_window(data, "bDontAllowAttack", 0, nxt)
+            with open(p, "wb") as fh:
+                fh.write(data)
+            done.append(f"{f}: AttackEnd at 0, attacks locked to {nxt}")
     for f in ((a, b, c) if no_pivot else ()):
         if f:
             p = os.path.join(folder, f)
@@ -187,7 +208,9 @@ def main(argv=None):
     ap.add_argument("--upper-body", action="store_true", help="experiment, see above (needs --actions-graph)")
     ap.add_argument("--no-pivot", action="store_true", help="experiment, see above (needs --actions-graph)")
     ap.add_argument("--no-attack-events", action="store_true", help="experiment, see above (needs --actions-graph)")
+    ap.add_argument("--attack-end-at-start", action="store_true", help="experiment, see above (needs --actions-graph)")
     a = ap.parse_args(argv)
+    a.no_attack_events = a.no_attack_events or a.attack_end_at_start
     if (a.upper_body or a.no_pivot or a.no_attack_events) and not a.actions_graph:
         sys.exit("--upper-body / --no-pivot / --no-attack-events need --actions-graph")
     if a.free_movement and not a.actions_graph:
@@ -203,7 +226,7 @@ def main(argv=None):
             data, rep = layer_combo(fh.read(), combo, a.upper_body, a.no_pivot, a.no_attack_events)
         print(f"graph: {_write(out, ACTIONS_REL, data)}; {rep}")
     for folder in a.clips:
-        print(f"{folder}: {fix_descriptors(folder, a.free_movement, a.no_pivot) or 'no A / B / C descriptors'}")
+        print(f"{folder}: {fix_descriptors(folder, a.free_movement, a.no_pivot, a.attack_end_at_start) or 'no A / B / C descriptors'}")
     return 0
 
 

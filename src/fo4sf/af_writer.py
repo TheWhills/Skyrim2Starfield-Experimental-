@@ -201,6 +201,34 @@ def drop_variables(afx: bytes, names) -> Tuple[bytes, List[str]]:
     return _afx_out(root, afx), dropped
 
 
+def add_event(afx: bytes, frame: int, name: str, payload: str = "") -> bytes:
+    """The descriptor with one more <event> (kept in frame order; same layout as the shipped events)."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    evs = root.find("events")
+    if evs is None:
+        evs = ET.SubElement(root, "events")
+    ev = ET.Element("event")
+    for tag, val in (("frame", str(int(frame))), ("name", name), ("payload", payload)):
+        ET.SubElement(ev, tag).text = val
+    kids = evs.findall("event")
+    at = next((i for i, e in enumerate(kids) if int(e.findtext("frame") or 0) > frame), len(kids))
+    if kids:
+        ev.tail = kids[0].tail if at < len(kids) else kids[-1].tail
+        if at == len(kids):
+            kids[-1].tail = kids[0].tail if len(kids) > 1 else evs.text
+    evs.insert(at, ev)
+    return _afx_out(root, afx)
+
+
+def event_frame(afx: bytes, name: str) -> Optional[int]:
+    """Frame of the first <event> called `name`, or None."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    for e in root.iter("event"):
+        if e.findtext("name") == name and (e.findtext("frame") or "").strip().isdigit():
+            return int(e.findtext("frame"))
+    return None
+
+
 def set_variable_window(afx: bytes, name: str, start: int, end: int) -> bytes:
     """The descriptor with variable window `name` set to start..end (added when missing)."""
     root = ET.fromstring(afx.decode("utf-8-sig"))
