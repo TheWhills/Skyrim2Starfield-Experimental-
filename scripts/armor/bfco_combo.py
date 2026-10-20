@@ -77,7 +77,7 @@ def main(argv=None):
         sys.exit("--out must be outside the repository")
     routing = routing_of(a.moveset)
     if not routing:
-        sys.exit("no BFCO_AttackN clips in the moveset")
+        sys.exit("no BFCO_AttackN / mco_attackN clips in the moveset")
     tags = {}
     for t in a.tag:
         k, _, name = t.partition("=")

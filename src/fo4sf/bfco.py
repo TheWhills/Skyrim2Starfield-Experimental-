@@ -109,21 +109,28 @@ def apply(afx: bytes, m: Dict, last: int, fps: float = 30.0) -> bytes:
 
 
 def chain(attacks: Dict[int, Dict]) -> Dict[int, int]:
-    """Normal-attack routing {k: next k} from the markers of attacks 1..N; a missing or unknown target goes back to 1."""
+    """Normal-attack routing {k: next k} from the markers of attacks 1..N. With BFCO routing (BFCO_NextIsAttackN on
+    any attack), a missing or unknown target goes back to 1; without any (MCO movesets: mco_attack1..N, chained in
+    order), k -> k + 1 and the last back to 1."""
+    routed = any(m.get("next_attack") is not None for m in attacks.values())
+    first = 1 if 1 in attacks else min(attacks)
     out = {}
     for k, m in attacks.items():
         n = m.get("next_attack")
-        out[k] = n if n in attacks else (1 if 1 in attacks else min(attacks))
+        if not routed:
+            n = k + 1
+        out[k] = n if n in attacks else first
     return out
 
 
 def attack_files(names: List[str]) -> Dict[str, Dict[int, str]]:
-    """Group a moveset folder's clips: {"attack": {N: file}, "power": {N: file}, "other": {stem: file}}."""
+    """Group a moveset folder's clips: {"attack": {N: file}, "power": {N: file}, "other": {stem: file}}; BFCO
+    (BFCO_AttackN / BFCO_PowerAttackN) and MCO / DAR (mco_attackN / mco_powerattackN) names."""
     out = {"attack": {}, "power": {}, "other": {}}
     for n in names:
         stem = n.rsplit(".", 1)[0]
-        m = re.match(r"^BFCO_Attack(\d+)$", stem, re.I)
-        p = re.match(r"^BFCO_PowerAttack(\d+)$", stem, re.I)
+        m = re.match(r"^(?:BFCO|MCO)_Attack(\d+)$", stem, re.I)
+        p = re.match(r"^(?:BFCO|MCO)_PowerAttack(\d+)$", stem, re.I)
         if m:
             out["attack"][int(m.group(1))] = n
         elif p:

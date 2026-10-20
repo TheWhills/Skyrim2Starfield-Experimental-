@@ -381,6 +381,12 @@ self-closing empty elements, as shipped.
   fall back to the moveset's clips. fo4sf.animslots allocates the slots; scripts/armor/bfco_pack.py builds a whole
   pack from a BFCO moveset folder (attacks 1-3 on MeleeAttack_A-C, 4.. on re-keyed hosts, power / sprint, combo
   graph). Truly open-ended packs (more attacks than spare hosts, new tags) would need an SFSE plugin.
+* MCO / DAR movesets (owner's Nordic Combat Animations for Player, Nexus SE 72966, read for the format): DAR condition
+  folders (_CustomConditions/<n>/_conditions.txt: IsEquippedRightType etc.; 40100 = one-handed sword alone) holding
+  mco_attack1..N / mco_powerattack1..N with MCO_WinOpen / Close, MCO_PowerWinOpen / Close, MCO_Recovery and
+  animmotion, no routing markers: MCO chains them in order. fo4sf.bfco reads mco_ names and chains in order when no
+  clip routes (BFCO_NextIsAttackN). Test pack: 40100's six attacks (6th under MeleeAttack01, not yet verified in
+  game) and mco_powerattack1.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword

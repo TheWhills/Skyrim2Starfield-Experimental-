@@ -1,4 +1,4 @@
-"""Build a Starfield pack from a BFCO moveset folder (docs/armor/animation-port.md, "BFCO plan"): every attack with
+"""Build a Starfield pack from a BFCO or MCO / DAR moveset folder (BFCO_AttackN or mco_attackN clips) (docs/armor/animation-port.md, "BFCO plan"): every attack with
 its root motion and BFCO windows, the moveset's routing as the player's combo, its power and sprint attacks.
 
 Attacks 1-3 replace the folder's vanilla MeleeAttack_A / B / C; attacks 4.. reuse existing descriptor paths re-keyed
@@ -57,7 +57,7 @@ def plan(moveset: str, folders, anims: str, starfield_data=None, power=None, spr
     grouped = bfco.attack_files(names)
     n = len(grouped["attack"])
     if not n or sorted(grouped["attack"]) != list(range(1, n + 1)):
-        raise SystemExit(f"attacks must be BFCO_Attack1..N without gaps, found {sorted(grouped['attack'])}")
+        raise SystemExit(f"attacks must be BFCO_Attack1..N / mco_attack1..N without gaps, found {sorted(grouped['attack'])}")
     replace, tags, report = [], {}, {}
     for folder in folders:
         stems = [s for s in animslots.HOSTS + [c for c, _t in animslots.COMBO]

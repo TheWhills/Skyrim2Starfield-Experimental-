@@ -78,6 +78,11 @@ class BfcoTests(unittest.TestCase):
     def test_chain_and_files(self):
         marks = {k: {"next_attack": n} for k, n in ((1, 2), (2, 3), (3, 9), (4, None))}
         self.assertEqual(bfco.chain(marks), {1: 2, 2: 3, 3: 1, 4: 1})    # unknown / missing -> back to 1
+        mco = {k: {"next_attack": None} for k in (1, 2, 3)}
+        self.assertEqual(bfco.chain(mco), {1: 2, 2: 3, 3: 1})            # MCO: in order, last back to 1
+        g = bfco.attack_files(["mco_attack1.hkx", "mco_attack2.hkx", "mco_powerattack1.hkx"])
+        self.assertEqual((g["attack"], g["power"]), ({1: "mco_attack1.hkx", 2: "mco_attack2.hkx"},
+                                                     {1: "mco_powerattack1.hkx"}))
         f = bfco.attack_files(["BFCO_Attack1.HKX", "BFCO_Attack10.hkx", "BFCO_PowerAttack2.hkx",
                                "BFCO_SprintAttack.hkx", "config.json"])
         self.assertEqual(f["attack"], {1: "BFCO_Attack1.HKX", 10: "BFCO_Attack10.hkx"})
