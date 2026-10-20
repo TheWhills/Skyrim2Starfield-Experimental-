@@ -879,3 +879,24 @@ to be worked out.
   blade is an apparel piece skinned 100 % to WeaponLeft (the bone is in the vanilla rig, verified), equipped with the
   weapon; attack = Skyrim's dual combo, power attack = dual power attack, aim stays block. B (SFSE): a real left-hand
   melee slot with its own stats and input. A first.
+
+## Block hits: Maxsu Block Overhaul / Dynamic Block Hit -> Starfield (2026-10-20, owner uploads, read for format only)
+* **Skyrim side (verified from the files):** Maxsu Block Overhaul (V0.24a, Nemesis patch + maxsuBlockHit_behavior)
+  hooks 1hm_behavior event 47 `blockHitStart` (vanilla: a small additive twitch) and sends it to its own block-hit
+  state that plays Maxsu_WeaponBlockHit / Maxsu_ShieldBlockHit on the upper body, plus a guard-break state on
+  `Maxsu_GuardBreakStart` (weapon / shield, 4 variants each); clip events Maxsu_BlockHitWinOpen / WinClose. Dynamic
+  Block Hit swaps those clips through Open Animation Replacer: 122 folders, 121 distinct clips, by weapon type (Sword
+  = 1H, 2hw, Dual Wield, Shield, Javelin, Pike / Spear / Quarterstaff, Unarmed Claw) x hit kind (NA normal attack, PA
+  power attack, ST "Groggy" when health or stamina < 30 %) x Random 1-6; its plugin marks power-attack hits with a
+  perk entry that applies a spell (MGEF _SD_BlockHit_PA, the PA folders' condition).
+* **Starfield side (verified on the vanilla graphs):** MeleeActions already has the hook: `BlockHitStart` ->
+  state MeleeBlock_HitReaction (tag MeleeBlock_HitReaction, flags Animation Driven + Blocking) inside the block
+  machine (MeleeBlock_Into / Idle / HitReaction); one clip, no variants. Stagger clips exist per size and direction
+  (StaggerBackward{Small,Medium,Large}[_Left/_Right], StaggerForward*, StaggerLeft / Right, ZeroG_*); the player graph
+  has cHitReactionDir / cHitReactionBodyPart.
+* So: the recoil itself is a clip swap (no graph edit); variants = a small machine in place of the one state
+  (rotating on each BlockHitStart; random selection not seen in Starfield graphs); per weapon type = the weapon
+  folders; power-attack / groggy kinds need a variable the graph can read (Papyrus SetAnimationVariable* from OnHit:
+  supported hypothesis, and a script would likely be one hit late; SFSE otherwise); guard break = Starfield's own
+  stagger clips replaced (supported hypothesis: a blocked power attack staggers).
+* Test pack built (scratch): DBH "Sword NA Base" recoil as MeleeBlock_HitReaction (31 frames, pushes back 1.13 m).
