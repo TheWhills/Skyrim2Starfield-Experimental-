@@ -339,6 +339,11 @@ self-closing empty elements, as shipped.
   --tag K=NAME): attacks 1-3 on the vanilla MeleeAttack_A / B / C files, 4 as a new file under the known tag
   MeleeAttack_D (used in the knife / unarmed folders), 5 as a new file under BFCO_Attack5. The number of distinct
   swings before the chain stalls tells which naming works.
+* Owner, diagnostic pack: every press replays attack 1. Cause (supported): our bCanComboAttack stayed open to the
+  clip's end, and the queued attack fires where the window ENDS (vanilla sword A: window 6-22, AttackStateNextAttack
+  22) - after the clip, i.e. as a fresh attack 1. fo4sf.bfco now ends the window at BFCO's NextWinStart and opens
+  it at max(0.2 s, NextWinStart - 0.6 s) (vanilla opens at frame 6). Diagnostic pack rebuilt; the tag question is
+  still open.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword

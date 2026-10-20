@@ -78,12 +78,15 @@ def windows(m: Dict, last: int, fps: float = 30.0) -> Dict[str, tuple]:
     f = lambda t: max(0, min(last, int(round(t * fps))))        # noqa: E731
     out = {}
     if m["win"] is not None:
-        # presses are taken (queued) from the first hit on and the queued attack starts at the window, as vanilla
-        # opens bCanComboAttack well before AttackStateNextAttack (sword A: 6-22, next attack at 22)
-        early = [h for h in m["hits"] if h < m["win"]]
-        buffer = early[0] if early else m["win"]
+        # Vanilla (sword A): bCanComboAttack 6-22 and AttackStateNextAttack at 22 - presses inside the window queue,
+        # and the queued attack starts where the window ENDS. Owner, in game, 2026-10-19: a window left open to the
+        # clip's end replayed attack 1 on every press (the queue fired only after the clip, as a fresh attack). So
+        # the window ends at BFCO's NextWinStart. Presses queue from 0.2 s in (vanilla: frame 6) or 0.6 s before
+        # the window, whichever is later - a window from the hit was only 3 frames wide. A press after
+        # NextWinStart starts the chain again, unlike BFCO's late window (to EndLoop).
+        buffer = min(m["win"], max(0.2, m["win"] - 0.6))
         out["bDontAllowAttack"] = (0, f(buffer))
-        out["bCanComboAttack"] = (f(buffer), f(m["win_close"]) if m["win_close"] is not None else last)
+        out["bCanComboAttack"] = (f(buffer), f(m["win"]))
     else:                                                       # no follow-up: attacks stay locked to the end
         out["bDontAllowAttack"] = (0, last)
     out["bDontAllowPowerAttack"] = (0, f(m["power_win"]) if m["power_win"] is not None else last)

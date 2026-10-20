@@ -36,14 +36,16 @@ class BfcoTests(unittest.TestCase):
         self.assertAlmostEqual(m["recovery"], 1.1333)
         self.assertTrue(bfco.is_attack(m))
         w = bfco.windows(m, 52)
-        self.assertEqual(w["bDontAllowAttack"], (0, 14))                # presses buffered from the hit (0.4833 s)
-        self.assertEqual(w["bCanComboAttack"], (14, 52))                # to the end: no close marker
+        self.assertEqual(w["bDontAllowAttack"], (0, 6))                 # presses queue from 0.2 s, as vanilla
+        self.assertEqual(w["bCanComboAttack"], (6, 17))                 # ends where the next attack starts
         self.assertEqual(w["bDontAllowPowerAttack"], (0, 17))
         self.assertEqual(w["bFreeMovement"], (34, 52))
         self.assertEqual(w["DisableAllowRotation"], (34, 52))
         mco = bfco.markers(MCO)
         self.assertEqual((mco["win"], mco["win_close"], mco["recovery"]), (1.0, 1.67, 2.0))
-        self.assertEqual(bfco.windows(mco, 75)["bCanComboAttack"], (18, 50))
+        self.assertEqual(bfco.windows(mco, 75)["bCanComboAttack"], (12, 30))     # 0.6 s before a late window
+        early = bfco.windows(bfco.markers([{"time": 0.1, "text": "BFCO_NextWinStart"}]), 60)
+        self.assertEqual(early["bCanComboAttack"], (3, 3))                       # never past the window
         self.assertFalse(bfco.is_attack(bfco.markers([{"time": 0.1, "text": "HitFrame"}])))
         self.assertEqual(bfco.markers([{"time": 1, "text": "BFCO_DIY_Rcovery"}])["recovery"], 1.0)   # typo spelling
         lone = bfco.windows(bfco.markers([{"time": 0, "text": "BFCO_NextIsAttack1"}]), 40)
@@ -51,8 +53,8 @@ class BfcoTests(unittest.TestCase):
 
     def test_apply_to_descriptor(self):
         out = bfco.apply(AFX, bfco.markers(ATTACK1), 52)
-        self.assertIn(b"<name>bDontAllowAttack</name><start>0</start><end>14</end>", out)
-        self.assertIn(b"<name>bCanComboAttack</name><start>14</start><end>52</end>", out)
+        self.assertIn(b"<name>bDontAllowAttack</name><start>0</start><end>6</end>", out)
+        self.assertIn(b"<name>bCanComboAttack</name><start>6</start><end>17</end>", out)
         self.assertIn(b"<name>bFreeMovement</name><start>34</start><end>52</end>", out)
         self.assertIn(b"<frame>17</frame><name>AttackStateNextAttack</name>", out)
         self.assertIn(b"<payload>X=1</payload>", out)                     # template kept
