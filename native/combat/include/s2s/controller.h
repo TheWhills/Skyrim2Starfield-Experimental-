@@ -61,6 +61,9 @@ struct ControllerConfig {
     // name of the host event that carries the whole Skyrim annotation in its payload (if the graph drops unknown
     // event names: unresolved, see the spec).
     std::string plugin_event_host;
+    // Graph events sent after a stance change (Skyrim's Stances sends blockStart / blockStop so the animation set is
+    // picked again; whether Starfield needs this is unresolved). Empty = none.
+    std::vector<std::string> stance_refresh_events;
 };
 
 // "key = value" lines of one INI section (keys lower-cased; ';' / '#' comments; later lines win).

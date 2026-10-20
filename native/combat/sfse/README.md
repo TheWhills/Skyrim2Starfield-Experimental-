@@ -13,7 +13,7 @@ Spec: `docs/armor/combat-plugin-spec.md`.
 | Player animation events | replaces ProcessEvent of the player's BSTEventSink<BSAnimationGraphEvent> (+0x50) | event layout (holder, tag, payload) unverified |
 | Send graph events | `NotifyAnimationGraphImpl` (CommonLibSF) | mapped; result logged at debug level |
 | Set graph variables (Payload Interpreter SGVB / SGVI / SGVF, int / bool / float bindings) | Papyrus `ObjectReference.SetAnimationVariable*` through the VM (queued: a frame or two late) | native names unverified |
-| Stances | Papyrus `AddKeyword` / `RemoveKeyword` with keywords looked up by EditorID | unverified; animation set re-evaluation while drawn unresolved |
+| Stances | arrow keys -> Papyrus `AddKeyword` / `RemoveKeyword` on S2SStances.esm's keywords (scripts/armor/stance_plugin.py, checklist step 8); every press clears the other stance keywords (they persist in saves); optional `sStanceRefreshEvents` | unverified; animation set re-evaluation while drawn unresolved |
 | I-frames | `Actor.SetGhost` while the controller's i-frames run (until a hit hook exists) | unverified |
 | Dodge cost | optional actor value (`sStaminaActorValue`) | owner decision |
 | Lock-on | not wired (camera not mapped); logs the key presses | later |

@@ -94,10 +94,15 @@ def edit(subs, replace: Dict[bytes, bytes], drop: Iterable[bytes] = (), add_afte
     return out
 
 
+def subrecord_bytes(sig: bytes, data: bytes) -> bytes:
+    """One field; over 64 KiB as XXXX (u32 size) followed by the field with size 0, as the games write it."""
+    if len(data) > 0xFFFF:
+        return b"XXXX" + struct.pack("<HI", 4, len(data)) + sig + struct.pack("<H", 0) + data
+    return sig + struct.pack("<H", len(data)) + data
+
+
 def record_bytes(typ: bytes, header: bytes, subs, fid: int) -> bytes:
-    data = b"".join(s + struct.pack("<H", len(d)) + d for s, d in subs)
-    if any(len(d) > 0xFFFF for _s, d in subs):
-        raise ValueError("subrecord over 64 KiB (XXXX records not supported here)")
+    data = b"".join(subrecord_bytes(s, d) for s, d in subs)
     _t, _size, flags, _fid = REC.unpack_from(header, 0)
     return struct.pack("<4sIII", typ, len(data), flags & ~COMPRESSED, fid) + header[16:24] + data
 
@@ -119,7 +124,7 @@ def build(recs: List[Tuple[bytes, bytes, list, int]], info: Dict, author: str = 
     tes4_subs = [(b"HEDR", struct.pack("<fII", info["hedr_version"], len(recs), next_id)), (b"CNAM", zs(author))]
     for m in masters:
         tes4_subs += [(b"MAST", zs(m)), (b"DATA", bytes(8))]
-    data = b"".join(s + struct.pack("<H", len(d)) + d for s, d in tes4_subs)
+    data = b"".join(subrecord_bytes(s, d) for s, d in tes4_subs)
     tes4 = struct.pack("<4sIII", b"TES4", len(data), MASTER, 0) + bytes(4) + struct.pack("<HH", info["form_version"], 0)
     return tes4 + data + b"".join(group_bytes(t, r) for t, r in by_type.items())
 

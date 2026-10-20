@@ -1131,3 +1131,24 @@ skinned-mesh writer: not in this pack).
   attack (MeleeAttacks is a separate graph; its states may hold the actions layer).
 * Not done yet: block-hit variants (one MeleeBlock_HitReaction clip in vanilla; variants need the plugin's hit-type
   variable and a selector state).
+
+## Stances, LoreRim style (2026-10-20, built away from the PC)
+* **S2SStances.esm** (`scripts/armor/stance_plugin.py`, PC checklist step 8, needs Starfield.esm): three actor
+  keywords S2S_StanceHigh / Mid / Low (new records) and a HumanRace override where every third-person melee
+  animation entry gets, per stance, a copy with the stance keyword added to its actor keywords and the stance folder
+  (`actors\human\animations\melee\s2s_stances\<stance>`) first in its folders; copies placed before the originals.
+  Fields over 64 KiB are written as XXXX (sfplugin), so the big race record round-trips. Tested on a synthetic
+  Starfield.esm.
+* **Keys** (S2SCombat.ini, now on by default): Up = high (LoreRim Expert), Left = mid (Adept), Down = low
+  (Apprentice), Right = neutral (Novice, no keyword). Each press removes every other stance keyword (Papyrus-added
+  keywords persist in saves, so the plugin's memory alone could be stale). `sStanceRefreshEvents` (e.g.
+  `BlockStart, BlockStop`, what Skyrim's Stances sends) is sent after a change if the set only switches on re-draw.
+* **Stance packs** (`scripts/armor/stance_pack.py`): one combo graph serves every stance, so the slots form a ring of
+  N attacks (the longest chain that fits); each stance fills it with its own chain from attack 1 (a shorter chain
+  repeats; where the ring closes differently from the chain it is reported as "wrap"). Neutral goes to the vanilla
+  folders as a normal pack, the others into their stance folders under the same files / tags.
+  Built: LoreRim sword (9011000 / 9012000 / 9013000 / 9014000): ring of 6; high plays 1-6 exactly, neutral / low
+  1 2 3 4 5 2 (their chain continues 3, the ring goes to 1), mid 1-5 then 1. Delivered as
+  SkyrimMelee_LoreRim_sword_stances.zip (scratch).
+* **Unresolved, answered by the test:** whether a keyword-matched entry wins over the plain one, whether the new
+  folder is found without the Creation Kit cache rebuild, and whether the set switches while the weapon is drawn.

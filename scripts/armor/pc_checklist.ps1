@@ -9,7 +9,8 @@
 #
 # Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Out, -Texconv.
 # Also builds the iron weapon test mod (step 6) into the Desktop folder "S2S Iron Weapons" when texconv is found, and
-# the combat plugin (step 7) into the Desktop folder "S2S Combat Plugin" when xmake and Visual Studio's tools are found.
+# the combat plugin (step 7) into the Desktop folder "S2S Combat Plugin" when xmake and Visual Studio's tools are found,
+# and S2SStances.esm (step 8, arrow-key stances) into that same folder.
 param(
     [string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
@@ -111,6 +112,11 @@ if ($xmake -and (Test-Path (Join-Path $plug "xmake.lua"))) {
 } else {
     Say "xmake not found (winget install xmake; needs Visual Studio 2022 Build Tools): plugin build skipped"
 }
+
+Say "== 8. stances plugin (S2SStances.esm: stance keywords + HumanRace animation entries)"
+$stmod = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Combat Plugin"
+python -I (Join-Path $Repo "scripts/armor/stance_plugin.py") --starfield $SF --out $stmod 2>&1 | ForEach-Object { Say $_ }
+Copy-Item (Join-Path $stmod "stance_plugin.json") $Out -ErrorAction SilentlyContinue
 
 Say "== 5. zips"
 $desk = Join-Path $env:USERPROFILE "Desktop"

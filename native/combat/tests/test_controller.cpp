@@ -197,6 +197,7 @@ static void key_bindings() {
         "[Keys]\n"
         "high = 200|keyword|StanceHigh\n"
         "low = 208|keyword|StanceLow\n"
+        "neutral = 205|keyword\n"
         "taunt = 20|event|Taunt\n"
         "speed = 21|float|MCO_AttackSpeed=1.2\n"
         "flag = 22|bool|bFlag=5\n"
@@ -206,13 +207,17 @@ static void key_bindings() {
         "odd = 24|teleport\n");
     Controller ctl({}, binds);
     PlayerState s;
-    auto cs = ctl.on_key(200, true, 0.0, s);
-    CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::AddKeyword && cs[0].name == "StanceHigh");
+    auto cs = ctl.on_key(200, true, 0.0, s);                              // high: the others out, high in
+    CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[0].name == "StanceLow" &&
+          cs[1].kind == Command::Kind::AddKeyword && cs[1].name == "StanceHigh" && ctl.stance() == "StanceHigh");
     cs = ctl.on_key(208, true, 0.1, s);                                   // switching stance: old out, new in
     CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[0].name == "StanceHigh" &&
           cs[1].kind == Command::Kind::AddKeyword && cs[1].name == "StanceLow");
     cs = ctl.on_key(208, true, 0.2, s);                                   // same key again: back to no stance
-    CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::RemoveKeyword && ctl.stance().empty());
+    CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[1].kind == Command::Kind::RemoveKeyword &&
+          ctl.stance().empty());
+    cs = ctl.on_key(205, true, 0.25, s);                                  // neutral: every stance keyword removed
+    CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[1].kind == Command::Kind::RemoveKeyword);
     CHECK(ctl.on_key(200, false, 0.3, s).empty());                        // releases do nothing
     cs = ctl.on_key(20, true, 0.4, s);
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::SendEvent && cs[0].name == "Taunt");
@@ -228,6 +233,21 @@ static void key_bindings() {
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::SwitchTarget && cs[0].dx == -1 && cs[0].dy == 0);
     cs = ctl.on_key(24, true, 0.4, s);
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::Log);
+}
+
+static void stance_refresh() {
+    ControllerConfig cfg = parse_config("[Combat]\nsStanceRefreshEvents = BlockStart, BlockStop\n");
+    CHECK(cfg.stance_refresh_events.size() == 2 && cfg.stance_refresh_events[1] == "BlockStop");
+    Controller ctl(cfg, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nneutral = 205|keyword\n"));
+    PlayerState s;
+    auto cs = ctl.on_key(200, true, 0.0, s);
+    CHECK(cs.size() == 3 && cs[0].kind == Command::Kind::AddKeyword && cs[1].kind == Command::Kind::SendEvent &&
+          cs[1].name == "BlockStart" && cs[2].name == "BlockStop");
+    cs = ctl.on_key(205, true, 0.1, s);                                   // right arrow: back to neutral
+    CHECK(cs.size() == 3 && cs[0].kind == Command::Kind::RemoveKeyword && cs[0].name == "S2S_StanceHigh");
+    CHECK(ctl.stance().empty());
+    cs = ctl.on_key(205, true, 0.2, s);                                   // still neutral: keywords cleared again,
+    CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::RemoveKeyword);  // no refresh (nothing changed)
 }
 
 static void key_codes() {
@@ -255,13 +275,17 @@ static void sample_ini() {
     CHECK(c.dodge.idle_direction == Direction::Back && !c.dodge.eight_way && c.dodge.stamina_cost == 0.0f);
     CHECK(c.attack_event == "MeleeAttackStart" && c.power_event == "MeleeAttackPowerStart");
     CHECK(c.plugin_event_host.empty());
-    CHECK(parse_bindings(buf.str(), "Keys").empty());               // stance examples are commented out
+    auto keys = parse_bindings(buf.str(), "Keys");                   // the arrow-key stances
+    CHECK(keys.size() == 4 && keys[0].key == 200 && keys[0].argument == "S2S_StanceHigh" && keys[3].key == 205 &&
+          keys[3].argument.empty());
+    CHECK(c.stance_refresh_events.empty());
     auto plugin = ini_section(buf.str(), "Plugin");
     CHECK(plugin["benabled"] == "1" && plugin["ilogkeys"] == "40" && plugin["sstaminaactorvalue"].empty());
 }
 
 int main() {
     key_codes();
+    stance_refresh();
     sample_ini();
     settings();
     payload_commands();
