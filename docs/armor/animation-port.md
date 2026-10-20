@@ -393,6 +393,12 @@ self-closing empty elements, as shipped.
   end. fo4sf.rootmotion now interpolates with a monotone cubic (PCHIP: through every key, no overshoot, holds stay
   holds, continuous speed) and eases into a hold after the last key; two keys spanning the clip stay a straight line.
   Largest frame-to-frame speed change in the pack's attacks now 0.6-4 m/s (was up to 5.9).
+* Owner suspects the 30 fps conversion. Facts: the Nordic clips are 30 fps at the source (no resampling happened;
+  BFCO's base clips are ~59.4 fps and were resampled). The .af format has no frame-rate field (CALUMI's reader and
+  writer: header = magic, root rotation / translation, flags, version, bone and frame counts) and our 30 fps clips
+  play at the right speed in game, so the engine runs .af clips at 30 keys per second. A remaining difference that
+  is real but not ours to change: Skyrim evaluates its spline-compressed tracks as smooth curves at render rate,
+  Starfield (supported hypothesis) interpolates between 30 Hz keys. Unresolved whether that is what the owner sees.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
