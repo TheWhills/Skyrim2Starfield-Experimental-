@@ -923,3 +923,19 @@ to be worked out.
 * retime_descriptor now scales <rampout> (blend-out frames) down with a shorter clip and clamps it to the last frame
   (the 29-frame slide blend-out on a 27-frame dodge would have blended the whole clip).
 * Test pack built (scratch): StepDodgeForward with its motion as the melee player SlideFromSprint (27 frames, 5.4 m).
+
+## Combat SFSE plugin: scope and references (2026-10-20, planning)
+* **Payload Interpreter annotations in the movesets (verified, strings of the owner's copies):** Nordic Combat
+  Animations' clips carry `PIE.@SGVI|MCO_nextattack|N` (99), `PIE.@SGVI|MCO_nextpowerattack|N` (102),
+  `PIE.@SGVF|MCO_AttackSpeed|0.9-0.95` (97), `PIE.@CAMSHAKE|...` (84+), `@SGVI|MCO_nextdodge` (2); BFCO: 2
+  `@SGVF|BFCO_AttackSpeed`. So Nordic's routing is explicit (bfco.chain assumed in-order for MCO sets) and every attack
+  has a speed multiplier the converter ignores so far (unresolved: part of "less smooth"?). Syntax (Payload
+  Interpreter, MIT, github.com/D7ry/PayloadInterpreter): `event.@INSTR|arg|arg`, PIE = a do-nothing host event.
+* Vanilla Starfield descriptors already carry `AssignVariable` events with `X=1` payloads (44 seen): a native way to
+  set graph variables from a clip (supported hypothesis: may cover @SGVI / @SGVF without a plugin).
+* IFrame Generator RE (source github.com/max-su-2019/MaxsuIFrame): its Nexus permissions forbid conversion to other
+  games: design reference only, no port.
+* Plugin library: CommonLibSF moved to libxse/commonlibsf (the Starfield-Reverse-Engineering repo archived
+  2025-09-16): GPL-3.0-or-later with a modding exception and a GPL linking exception; XMake / CMake, MSVC or clang-cl,
+  C++23. Starfield SFSE references that drive animation: OSF Animation (github.com/ozooma10/osf-animation), NAF
+  (github.com/Deweh/NativeAnimationFrameworkSF), SAF (Nexus 16124).
