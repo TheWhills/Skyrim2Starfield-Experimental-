@@ -260,6 +260,17 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner, --no-pivot: worse - no moving off from a standing combo, and a forward run keeps going after release
+* Result (owner, in game): with the pivot flags and the bAlignWithAimAssistTarget / DisableAllowRotation windows gone,
+  a standing combo never starts moving, and attacking while running forward keeps the player running after the stick
+  is released. So those controls take part in Starfield's movement control during a swing; --no-pivot is a dead end
+  (kept only as a recorded experiment, not for packs).
+* Where it stands: plain layered combo (v9): moving swings move and steer, standing swings are Skyrim's whole swing
+  and hold the player until the combo ends - consistent and predictable. --free-movement: standing combos can start
+  moving, but with a slow ramp. --free-movement --upper-body: instant start, but only straight and with lucky timing;
+  standing swings lose the leg work. Moving off in the middle of a standing swing is decided by the game's movement
+  code, not by anything in the graphs read so far.
+
 ### 2026-10-19: owner, --upper-body: moving off mid-combo is instant, but only sometimes and only straight ahead
 * Biped_IdleLocomotion (read): the Locomotion machine leaves its idle "None" for StandToWalk / StandToRun start
   clips on CurrentSpeed / Speed thresholds and for Biped_Locomotion at CurrentSpeed >= 0.1; the start clips turn the
