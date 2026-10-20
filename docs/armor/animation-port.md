@@ -318,6 +318,29 @@ self-closing empty elements, as shipped.
   is what holds a standing swing now that it is layered. combo_loop.py --free-movement (needs --actions-graph,
   experiment) opens it over all of A / B / C; test pack pending.
 
+### 2026-10-19: target is BFCO (Attack Behavior Framework, Nexus SE 117052) - commit-based combat, full body
+* Owner: the goal is to port BFCO (most modded Skyrim combat builds on it) or something its animation packs work with.
+* BFCO, read for format only (nothing copied): the SKSE plugins (BFCO.dll, BFCO_Functions.dll) and Nemesis patches
+  read input and route attacks; four behaviour variables (BDI json: BFCO_ComboLocked, BFCO_LastAttack,
+  BFCO_NextNormal, BFCO_NextPower); attacks are full body and animation driven (bAnimationDriven in its patches).
+* Verified on the 202 clips it ships (our decoder): everything an attack needs is in the clip's own annotations -
+  root motion as `animmotion x y z` (11,502) and `animrotation` (10,791) keys, combo windows BFCO_NextWinStart /
+  BFCO_NextPowerWinStart (MCO_WinOpen / Close, MCO_PowerWinOpen / Close in MCO-era packs), routing
+  BFCO_NextIsAttackN / BFCO_NextIsPowerAttackN, recovery (movement cancel) BFCO_DIY_recovery / MCO_Recovery, loop end
+  BFCO_DIY_EndLoop, plus HitFrame / weaponSwing / preHitFrame, Precision collision and camera-shake annotations.
+* Consequence (decision): BFCO-style combat does not walk while swinging - movement comes from the clip's root motion
+  and the player cancels into locomotion once recovery opens. That maps onto Starfield's FULL-BODY attack path
+  (MeleeAttacks): bCanComboAttack = next-attack window, the None-on-moving transition (Speed > 1 and bFreeMovement) =
+  recovery cancel, Allow Rotation / DisableAllowRotation = rotation windows, Root track + header translation = root
+  motion (vanilla attacks use both). The layered walk-while-swinging work above is a vanilla-Skyrim nicety that BFCO
+  does not use; it stays an option (--actions-graph), not the base. Movement locking is not a blocker for BFCO.
+* Plan: (1) root motion from animmotion / animrotation (and Skyrim's animationdatasinglefile motion data for vanilla
+  clips) into the Root track and .af header; (2) annotation -> descriptor mapping (windows -> bCanComboAttack /
+  power window / bFreeMovement / rotation windows, routing -> graph); (3) a generated MeleeAttacks combo machine with
+  N attacks, power, sprint and jump attacks from a pack's clip set; (4) per-weapon-type folders in place of OAR
+  conditions; (5) later, an SFSE plugin for what Starfield's own input code cannot do (held / charged attacks,
+  input buffering, BFCO_ComboLocked-style state).
+
 ### 2026-10-19: owner: with bFreeMovement open the player still stops until the swing ends -> layered combo
 * Result of the --move-while-attacking experiment (owner, in game): no movement during a full-body swing, whatever
   bFreeMovement says. The experiment switch is removed.
