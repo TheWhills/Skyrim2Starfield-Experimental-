@@ -373,6 +373,14 @@ self-closing empty elements, as shipped.
   Sneak_MeleeAttack_B), which nothing asks for. A NEW file (BFCO_Attack1, the very first state) was not found.
   Diagnostic 5 (work/build_bfco6.sh): existing sneak paths re-keyed with the prefix removed - attack 4 as
   (-, MeleeAttack_D), attack 5 as (-, BFCO_Attack5). If 5 swings play, any tag works on a reused path.
+* Owner, diagnostic 5: attacks 1-4 play, the 5th returns to idle. Verified: an EXISTING path re-keyed under a tag
+  the game already uses (MeleeAttack_D, a knife / unarmed tag) plays; the same under a new string (BFCO_Attack5)
+  does not. So no plugin is needed for normal movesets: extra attacks go on existing descriptor paths (the player's
+  sneak / zero-g attack variants) under known tags (vanilla: MeleeAttack_D / _E, MeleeAttack01-04,
+  MeleeAttackPower01 / 02 - only _D verified in game). Cost: the sneak / zero-g attack variants of that folder now
+  fall back to the moveset's clips. fo4sf.animslots allocates the slots; scripts/armor/bfco_pack.py builds a whole
+  pack from a BFCO moveset folder (attacks 1-3 on MeleeAttack_A-C, 4.. on re-keyed hosts, power / sprint, combo
+  graph). Truly open-ended packs (more attacks than spare hosts, new tags) would need an SFSE plugin.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
