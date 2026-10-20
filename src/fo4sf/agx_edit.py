@@ -101,10 +101,11 @@ def set_event(graph: ET.Element, src: int, dst: int, event: str, old: str) -> in
     return n
 
 
-def clone_state(node: ET.Element, graph: ET.Element) -> int:
+def clone_state(node: ET.Element, graph: ET.Element, root: Optional[ET.Element] = None) -> int:
     """Append a deep copy of `node` (a state from any graph, e.g. a whole embedded state machine) to `graph`'s states,
     without its own incoming links and output slots (they named states of its old machine; the copy's inner graph is
-    kept as is), with a fresh guid and a user_id unused among its new siblings. Returns its index."""
+    kept as is), with a fresh guid and a user_id unused among its new siblings (in the whole file when `root` is given:
+    vanilla user_ids repeat across machines, but a copy should not add a clash). Returns its index."""
     new = copy.deepcopy(node)
     for inp in new.findall("input"):
         for link in inp.findall("link"):
@@ -115,7 +116,8 @@ def clone_state(node: ET.Element, graph: ET.Element) -> int:
     if new.find("guid") is not None:
         new.find("guid").text = str(uuid.uuid4())
     sibs = graph.findall("node")
-    used = [int(n.findtext("user_id")) for n in sibs if (n.findtext("user_id") or "").strip().isdigit()]
+    pool = root.iter("node") if root is not None else sibs     # with root: unique in the whole file
+    used = [int(n.findtext("user_id")) for n in pool if (n.findtext("user_id") or "").strip().isdigit()]
     if new.find("user_id") is not None:
         new.find("user_id").text = str(max(used or [0]) + 1)
     kids = list(graph)

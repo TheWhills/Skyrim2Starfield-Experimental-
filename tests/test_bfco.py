@@ -92,6 +92,11 @@ class BfcoTests(unittest.TestCase):
             for link in agx_edit._links_into(n):
                 src = nodes[int(link.findtext("node")) - 1]
                 self.assertLess(int(link.findtext("output")), len(src.findall("output")))
+        whole = agx_edit.load(out)
+        uids = [n.findtext("user_id") for n in whole.iter("node")]
+        for k in (4, 5):                                                  # copies get file-wide unique user_ids
+            uid = nodes[idx[k]].findtext("user_id")
+            self.assertEqual(uids.count(uid), 1, (k, uid))
         two, _ = bfco_combo.build(raw, {1: 2, 2: 1})                      # a two-attack set
         g2 = agx_edit.machine(agx_edit.load(two), "MeleeAttackCombo")
         i1, i2 = agx_edit.state(g2, "BFCO_Attack1"), agx_edit.state(g2, "BFCO_Attack2")

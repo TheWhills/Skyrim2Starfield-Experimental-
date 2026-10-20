@@ -42,7 +42,7 @@ def build(raw: bytes, routing: dict, tags=None):
     b_node = nodes[idx[2] if 2 in idx else agx_edit.state(g, VANILLA[1])]
     for k in sorted(routing):
         if k not in idx:
-            i = agx_edit.clone_state(b_node, g)
+            i = agx_edit.clone_state(b_node, g, root)
             agx_edit.set_tag(g.findall("node")[i], tag(k, tags))
             idx[k] = i
     tpl = next(iter(agx_edit._links_into(g.findall("node")[idx[2]])), None) if 2 in idx else None

@@ -359,6 +359,12 @@ self-closing empty elements, as shipped.
   combo_loop.py avoided by dropping bAllowFinisher (v8 looped endlessly). So "3 swings" said nothing about the files.
   fo4sf.bfco.apply now drops bAllowFinisher. Diagnostic 3 (work/build_bfco4.sh): attack 4 on the existing
   Sneak_MeleeAttack_B path (file and tag), attack 5 a NEW file MeleeAttack_D.
+* Owner, diagnostic 3: the 4th press sends the player back to idle - the transition fires, but the state finds no
+  clip (or the copied state does not run). Both a literal existing file name (Sneak_MeleeAttack_B) and a new file
+  under MeleeAttack_D fail. Open: is it the clip lookup (only tags the game already resolves, e.g. through its own
+  prefix switches) or the copied states? Diagnostic 4 (work/build_bfco5.sh): copies 4 and 5 play the vanilla tags
+  MeleeAttack_A / MeleeAttack_B (known to work) - if the 4th swing is attack 1's motion, copies work and the lookup is
+  the limit. Copies now also get file-wide unique user_ids.
 
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
