@@ -75,6 +75,27 @@ class BfcoTests(unittest.TestCase):
         added = af_writer.set_event_frame(AFX.replace(b"AttackStateNextAttack", b"Other"), "AttackStateNextAttack", 9)
         self.assertEqual(af_writer.event_frame(added, "AttackStateNextAttack"), 9)
 
+    def test_mco_payload_routing_and_speed(self):
+        nordic = [{"time": 0.06, "text": "PIE.@SGVF|MCO_AttackSpeed|0.9"},
+                  {"time": 0.06, "text": "PIE.@SGVI|MCO_nextattack|1"},
+                  {"time": 0.06, "text": "PIE.@SGVI|MCO_nextpowerattack|4"}, {"time": 0.5, "text": "HitFrame"},
+                  {"time": 1.17, "text": "MCO_WinOpen"}, {"time": 1.33, "text": "MCO_WinClose"},
+                  {"time": 0.2, "text": "HitFrame.@CAMSHAKE|1|0.1"}]
+        m = bfco.markers(nordic)
+        self.assertEqual((m["next_attack"], m["next_power"], m["speed"]), (1, 4, 0.9))
+        self.assertEqual(m["hits"], [0.5])                                  # a payload on HitFrame is not a hit
+        self.assertTrue(bfco.is_attack(m))
+        typo = bfco.markers([{"time": 0.06, "text": "PIE.@SVGF|MCO_AttackSpeed|1.1"}])
+        self.assertIsNone(typo["speed"])                                    # misspelt: Payload Interpreter ignores it
+        self.assertEqual(bfco.payload("PIE.@SGVI|MCO_nextattack|2"), ("SGVI", ["MCO_nextattack", "2"]))
+        self.assertIsNone(bfco.payload("HitFrame"))
+        # Nordic 1H: 1 -> 2 -> 3 -> 4 -> 5 -> 1, attack 6 -> 5 but nothing leads to 6
+        marks = {k: {"next_attack": n} for k, n in ((1, 2), (2, 3), (3, 4), (4, 5), (5, 1), (6, 5))}
+        r = bfco.chain(marks)
+        self.assertEqual(bfco.reachable(r), [1, 2, 3, 4, 5])
+        pw = {k: {"next_power": n} for k, n in ((1, 2), (2, 3), (3, 1))}
+        self.assertEqual(bfco.chain(pw, "next_power"), {1: 2, 2: 3, 3: 1})
+
     def test_chain_and_files(self):
         marks = {k: {"next_attack": n} for k, n in ((1, 2), (2, 3), (3, 9), (4, None))}
         self.assertEqual(bfco.chain(marks), {1: 2, 2: 3, 3: 1, 4: 1})    # unknown / missing -> back to 1
@@ -114,6 +135,13 @@ class BfcoTests(unittest.TestCase):
         i1, i2 = agx_edit.state(g2, "BFCO_Attack1"), agx_edit.state(g2, "BFCO_Attack2")
         self.assertIn((i2, i1, "MeleeAttackStart", ""), agx_edit.transitions(g2))
         self.assertEqual(agx_edit.state(g2, "MeleeAttack_C"), 0)        # left as it was, unreachable
+        gap, _ = bfco_combo.build(raw, {1: 2, 2: 4, 4: 5, 5: 1})                # attack 3 unreachable: no slot
+        g4 = agx_edit.machine(agx_edit.load(gap), "MeleeAttackCombo")
+        self.assertEqual(agx_edit.state(g4, "BFCO_Attack4"), agx_edit.state(g, "BFCO_Attack3"))   # on vanilla C
+        with self.assertRaises(agx_edit.AgxEditError):
+            agx_edit.state(g4, "BFCO_Attack3")
+        self.assertIn((agx_edit.state(g4, "BFCO_Attack5"), agx_edit.state(g4, "BFCO_Attack1"), "MeleeAttackStart",
+                       ""), agx_edit.transitions(g4))
         named, added = bfco_combo.build(raw, {1: 2, 2: 3, 3: 4, 4: 1}, {1: "MeleeAttack_A", 4: "MeleeAttack_D"})
         g3 = agx_edit.machine(agx_edit.load(named), "MeleeAttackCombo")
         a, d = agx_edit.state(g3, "MeleeAttack_A"), agx_edit.state(g3, "MeleeAttack_D")

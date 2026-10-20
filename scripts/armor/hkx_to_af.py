@@ -289,6 +289,11 @@ def main(argv=None):
                     report.append(row)
                     continue
                 raise
+            if a.bfco:                                                # MCO_AttackSpeed baked into the clip
+                spd = bfco.markers(clip["annotations"]).get("speed")
+                if spd and spd > 0 and abs(spd - 1.0) > 1e-6:
+                    clip = retarget.play_speed(clip, spd)
+                    row["attack_speed"] = spd
             if clip.get("fps") and abs(clip["fps"] - FPS) > 0.01:
                 row["resampled_from_fps"] = clip["fps"]
                 clip = retarget.resample(clip, FPS)                   # Starfield clips play at 30 fps

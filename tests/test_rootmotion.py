@@ -101,6 +101,20 @@ class RootMotionTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<f", data, 8)[0], np.float32(q[3]))   # stored w first
         self.assertEqual(data[36:], b"\xaa" * 28)                                 # the rest untouched
 
+    def test_play_speed(self):
+        F = 31                                                                     # 1 s at 30 fps
+        tr = [((k * 1.0, 0, 0), (0, 0, 0, 1.0), (1, 1, 1)) for k in range(F)]
+        clip = {"frames": F, "fps": 30.0, "duration": 1.0, "tracks": [tr], "bones": ["b"],
+                "annotations": [{"time": 0.5, "text": "HitFrame"}]}
+        slow = R.play_speed(clip, 0.8)
+        self.assertAlmostEqual(slow["duration"], 1.25)
+        self.assertAlmostEqual(slow["annotations"][0]["time"], 0.625)
+        r = R.resample(slow, 30.0)
+        self.assertEqual(r["frames"], 39)                                          # 1.25 s at 30 fps
+        self.assertAlmostEqual(r["tracks"][0][-1][0][0], 30.0)                     # same motion, just slower
+        self.assertAlmostEqual(r["tracks"][0][24][0][0], 24 * 0.8, places=6)
+        self.assertIs(R.play_speed(clip, 1.0), clip)
+
     def test_resample_to_30(self):
         F = 7                                                                      # 60 fps, 0.1 s
         ang = np.linspace(0, 60, F)

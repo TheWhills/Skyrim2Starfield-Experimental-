@@ -228,6 +228,18 @@ def rig_from_nif(data: bytes, node_types=("NiNode", "BSFadeNode", "BSLeafAnimNod
 
 
 # ------------------------------------------------------------------------------------------------- retarget
+def play_speed(clip: dict, speed: float) -> dict:
+    """The clip as played at `speed` (MCO_AttackSpeed 0.9 = 10 % slower): the same keys at fps * speed, duration and
+    annotation times / speed. resample() then brings it to 30 fps."""
+    if not speed or abs(speed - 1.0) < 1e-6:
+        return clip
+    fps = float(clip.get("fps") or 30.0)
+    F = int(clip["frames"])
+    dur = float(clip.get("duration") or 0.0) or (F - 1) / fps
+    ann = [dict(a, time=float(a.get("time", 0.0)) / speed) for a in clip.get("annotations") or []]
+    return dict(clip, fps=fps * speed, duration=dur / speed, annotations=ann, play_speed=speed)
+
+
 def resample(clip: dict, fps: float = 30.0) -> dict:
     """The clip at `fps` (Starfield clips play at 30; Skyrim packs also ship 60 fps clips, e.g. BFCO_Attack1: 105
     frames over 1.75 s), same duration: translations / scales linear, rotations slerp. Annotations keep their times."""

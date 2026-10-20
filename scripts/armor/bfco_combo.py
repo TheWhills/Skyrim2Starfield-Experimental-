@@ -34,18 +34,19 @@ def build(raw: bytes, routing: dict, tags=None):
     g = agx_edit.machine(root, MACHINE)
     nodes = g.findall("node")
     idx = {}
-    for k, vt in enumerate(VANILLA, 1):
+    keys = sorted(routing)                     # attack numbers may have gaps (unreachable attacks left out)
+    for vt, k in zip(VANILLA, keys):
         i = agx_edit.state(g, vt)
-        if k <= len(routing):
-            agx_edit.set_tag(nodes[i], tag(k, tags))
-            idx[k] = i
-    b_node = nodes[idx[2] if 2 in idx else agx_edit.state(g, VANILLA[1])]
+        agx_edit.set_tag(nodes[i], tag(k, tags))
+        idx[k] = i
+    second = keys[1] if len(keys) > 1 else None
+    b_node = nodes[idx[second] if second is not None else agx_edit.state(g, VANILLA[1])]
     for k in sorted(routing):
         if k not in idx:
             i = agx_edit.clone_state(b_node, g, root)
             agx_edit.set_tag(g.findall("node")[i], tag(k, tags))
             idx[k] = i
-    tpl = next(iter(agx_edit._links_into(g.findall("node")[idx[2]])), None) if 2 in idx else None
+    tpl = next(iter(agx_edit._links_into(g.findall("node")[idx[second]])), None) if second is not None else None
     added = []
     for k, n in sorted(routing.items()):
         if agx_edit.add_transition(root, g, idx[k], idx[n], "MeleeAttackStart", blend=0.15, template=tpl):
@@ -54,14 +55,22 @@ def build(raw: bytes, routing: dict, tags=None):
 
 
 def routing_of(folder: str) -> dict:
+    """{k: next k} over the attacks the moveset actually plays from attack 1 (MCO_nextattack / BFCO_NextIsAttack
+    routing, else in order); attacks no chain reaches are left out (Nordic's 1H attack 6)."""
     files = bfco.attack_files(sorted(os.listdir(folder)))["attack"]
     marks = {}
     for k, fn in files.items():
         with open(os.path.join(folder, fn), "rb") as fh:
-            d = skyrimhkx.describe(fh.read())
+            try:
+                d = skyrimhkx.describe(fh.read())
+            except skyrimhkx.HkxError:                      # unreadable here: no routing from it (the converter
+                d = {}                                      # reports the clip itself)
         anns = d["animations"][0]["annotations"] if d.get("animations") else []
         marks[k] = bfco.markers(anns)
-    return bfco.chain(marks)
+    if not marks:
+        return {}
+    r = bfco.chain(marks)
+    return {k: r[k] for k in bfco.reachable(r, 1 if 1 in r else min(r))}
 
 
 def main(argv=None):

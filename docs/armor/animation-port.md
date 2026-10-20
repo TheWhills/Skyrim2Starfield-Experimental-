@@ -939,3 +939,30 @@ to be worked out.
   2025-09-16): GPL-3.0-or-later with a modding exception and a GPL linking exception; XMake / CMake, MSVC or clang-cl,
   C++23. Starfield SFSE references that drive animation: OSF Animation (github.com/ozooma10/osf-animation), NAF
   (github.com/Deweh/NativeAnimationFrameworkSF), SAF (Nexus 16124).
+
+## LoreRim MCO Animations and SpellSword Moveset: what the movesets use (2026-10-20, owner uploads, format only)
+Survey (scratch tool: every clip's annotations via skyrimhkx.describe):
+* **LoreRim - MCO Animations:** 4,009 clips in 242 DAR / OAR folders, about 85 movesets (sword, dagger, war axe, mace,
+  greatsword, battleaxe, warhammer, katana 1H / 2H, rapier, spear, pike, halberd, quarterstaff, scythe, claw, fists,
+  with shield / dual-wield variants; most in Novice / Apprentice / Expert tiers gated by HasPerk, 75 folders). DAR
+  conditions: IsEquippedRightHasKeyword 323, IsEquippedLeftType 232, IsEquippedRightType 191, IsActorBase 130,
+  HasMagicEffect 84, HasPerk 75, IsInFaction 31 ... Clips: 3,628 with animmotion, 375 at 60 fps; files
+  BFCO_ / mco_ attackN (up to 10), powerattackN, powerattackloop / outro (charged), sprintattack, sprintpowerattack,
+  idles / locomotion / block / bash for some styles.
+  Annotations: MCO windows (WinOpen / Close, PowerWinOpen / Close, Recovery; MCO_TransitionOpen / Close 24;
+  MCO_ChargedAttack 44); Payload Interpreter SGVI 6,265 (MCO_nextattack / nextpowerattack), SGVF 1,053 + the typo
+  SVGF 1,269 (MCO_AttackSpeed 0.7-1.5), CAMSHAKE 507, CAST 10 (DD_FighterBuffs.esp), custom `$` instructions whose
+  definitions are not in the pack ($ChargeN, $Parry_start / stop, $katanaN_Iframe, $ES_Paralysis / Strikefly /
+  HeavyParalysis / Repulse / Unbalance, $Dust, $SmashDownFog ...); Precision hitboxes (Collision_Add / Remove
+  .Node(WEAPON|SHIELD|bone)|ID|Scale|DamageMult, Collision_AttackStart / End: ~2,000); SCAR NPC AI
+  (SCAR_ComboStart 899, SCAR_ActionData{json: idle, distance, angle, chance, type} ~1,600); MeleeTrace_*; TDM_AttackStart.
+* **Routing is a graph, normal and power interleaved** (each clip: next normal N, next power M); e.g. LoreRim
+  Sword Shield Novice: attack 6 -> 3, attack 7 / 8 -> 8 (a repeat), power 7 / 10 -> attack 1.
+* **SpellSword Moveset:** 89 clips in 8 OAR folders, sword right + spell or staff left (locomotion, idles, spell
+  pre-charge poses, equip); almost no clip annotations: state switching is event -> spell -> magic effect -> OAR
+  condition (Dynamic Animation Casting toml, Behavior Data Injector events EquipIdle / IdleEnd / IdleNon). Starfield
+  counterpart: the melee graph's CastSelf / CastTarget slot (left-hand casting with a melee weapon, see above).
+* **Converter changes (this entry):** bfco.markers reads MCO_nextattack / nextpowerattack and MCO_AttackSpeed from
+  the payloads (SVGF ignored); hkx_to_af --bfco bakes the attack speed into the clip (retarget.play_speed); packs slot
+  only attacks the chain reaches (bfco.reachable). Nordic 1H rebuilt: attack 6 (never played by Nordic) dropped, attack
+  5 at 0.9 speed (62 frames instead of 56).

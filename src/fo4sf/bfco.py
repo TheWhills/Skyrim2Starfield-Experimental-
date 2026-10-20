@@ -10,6 +10,12 @@ copied), all inside each attack clip's annotations (times in seconds):
   BFCO_DIY_recovery (also spelled BFCO_DIY_Rcovery), MCO_Recovery
                                                         recovery: moving now cancels the attack
   HitFrame / preHitFrame / weaponSwing (+ weaponLeftSwing) as in vanilla Skyrim.
+MCO / DAR movesets route through Payload Interpreter instructions instead (verified 2026-10-20 on the owner's Nordic
+Combat Animations and LoreRim MCO packs, read for the format only): `PIE.@SGVI|MCO_nextattack|N` and
+`PIE.@SGVI|MCO_nextpowerattack|N` at 0.06 s (the next normal / power attack; a graph, not an order: Nordic's 1H set
+goes 1 -> 2 -> 3 -> 4 -> 5 -> 1 and never plays its attack 6) and `PIE.@SGVF|MCO_AttackSpeed|S` (the attack's playback
+speed, 0.7 - 1.5 seen). Payload Interpreter instructions are case sensitive and unknown ones do nothing, so the
+misspelt `@SVGF|MCO_AttackSpeed|...` in 1,270 LoreRim clips is taken as not setting the speed (supported hypothesis).
 
 Starfield equivalents (verified on the vanilla player one-handed descriptors, see combo_loop.py): bCanComboAttack is
 the next-attack window, bDontAllowAttack / bDontAllowPowerAttack lock attacks before it, AttackStateNextAttack marks
@@ -24,6 +30,8 @@ from . import af_writer
 
 NEXT_ATTACK = re.compile(r"^BFCO_NextIsAttack(\d+)$", re.I)
 NEXT_POWER = re.compile(r"^BFCO_NextIsPowerAttack(\d+)$", re.I)
+PAYLOAD = re.compile(r"^[^@]*?\.@(\w+)((?:\|[^|]*)*)$")
+SPEED_VARIABLES = ("MCO_AttackSpeed", "BFCO_AttackSpeed")
 WIN_OPEN = ("bfco_nextwinstart", "mco_winopen")
 POWER_WIN_OPEN = ("bfco_nextpowerwinstart", "mco_powerwinopen")
 WIN_CLOSE = ("bfco_diy_endloop", "mco_winclose")
@@ -31,11 +39,19 @@ POWER_WIN_CLOSE = ("bfco_diy_endloop", "mco_powerwinclose")
 RECOVERY = ("bfco_diy_recovery", "bfco_diy_rcovery", "mco_recovery")
 
 
+def payload(text: str):
+    """(instruction, [args]) of a Payload Interpreter annotation such as `PIE.@SGVI|MCO_nextattack|2`, else None."""
+    m = PAYLOAD.match((text or "").strip())
+    if not m:
+        return None
+    return m.group(1), [x.strip() for x in m.group(2).split("|")[1:]]
+
+
 def markers(annotations) -> Dict:
     """The BFCO / MCO markers of one clip: {"next_attack", "next_power" (int or None), "win", "power_win",
-    "win_close", "power_win_close", "recovery", "hits" (times)}."""
+    "win_close", "power_win_close", "recovery", "hits" (times), "speed" (float or None)}."""
     out = {"next_attack": None, "next_power": None, "win": None, "power_win": None, "win_close": None,
-           "power_win_close": None, "recovery": None, "hits": []}
+           "power_win_close": None, "recovery": None, "hits": [], "speed": None}
 
     def first(key, t):
         if out[key] is None or t < out[key]:
@@ -43,6 +59,17 @@ def markers(annotations) -> Dict:
     for a in annotations or []:
         text, t = (a.get("text") or "").strip(), float(a.get("time", 0.0))
         low = text.lower()
+        pl = payload(text)
+        if pl and len(pl[1]) >= 2:
+            instr, (var, val) = pl[0], pl[1][:2]
+            try:
+                if instr == "SGVI" and var.lower() in ("mco_nextattack", "mco_nextpowerattack"):
+                    out["next_attack" if var.lower() == "mco_nextattack" else "next_power"] = int(float(val))
+                elif instr == "SGVF" and var in SPEED_VARIABLES:
+                    out["speed"] = float(val)
+            except ValueError:
+                pass
+            continue
         m = NEXT_ATTACK.match(text)
         if m:
             out["next_attack"] = int(m.group(1))
@@ -108,19 +135,28 @@ def apply(afx: bytes, m: Dict, last: int, fps: float = 30.0) -> bytes:
     return afx
 
 
-def chain(attacks: Dict[int, Dict]) -> Dict[int, int]:
-    """Normal-attack routing {k: next k} from the markers of attacks 1..N. With BFCO routing (BFCO_NextIsAttackN on
-    any attack), a missing or unknown target goes back to 1; without any (MCO movesets: mco_attack1..N, chained in
-    order), k -> k + 1 and the last back to 1."""
-    routed = any(m.get("next_attack") is not None for m in attacks.values())
+def chain(attacks: Dict[int, Dict], key: str = "next_attack") -> Dict[int, int]:
+    """Routing {k: next k} from the markers of clips 1..N (key "next_attack" for the next normal attack, "next_power"
+    for the next power attack). With routing on any clip (BFCO_NextIsAttackN, MCO_nextattack payloads), a missing or
+    unknown target goes back to 1; without any (older MCO sets), k -> k + 1 and the last back to 1."""
+    routed = any(m.get(key) is not None for m in attacks.values())
     first = 1 if 1 in attacks else min(attacks)
     out = {}
     for k, m in attacks.items():
-        n = m.get("next_attack")
+        n = m.get(key)
         if not routed:
             n = k + 1
         out[k] = n if n in attacks else first
     return out
+
+
+def reachable(routing: Dict[int, int], start: int = 1) -> List[int]:
+    """The attacks a chain actually plays from `start`, in order of first visit."""
+    seen, k = [], start
+    while k in routing and k not in seen:
+        seen.append(k)
+        k = routing[k]
+    return seen
 
 
 def attack_files(names: List[str]) -> Dict[str, Dict[int, str]]:

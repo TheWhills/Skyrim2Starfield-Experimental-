@@ -58,11 +58,12 @@ def plan(moveset: str, folders, anims: str, starfield_data=None, power=None, spr
     n = len(grouped["attack"])
     if not n or sorted(grouped["attack"]) != list(range(1, n + 1)):
         raise SystemExit(f"attacks must be BFCO_Attack1..N / mco_attack1..N without gaps, found {sorted(grouped['attack'])}")
+    keys = sorted(bfco_combo.routing_of(moveset))           # only the attacks the chain plays get a slot
     replace, tags, report = [], {}, {}
     for folder in folders:
         stems = [s for s in animslots.HOSTS + [c for c, _t in animslots.COMBO]
                  if exists(anim_path(anims, folder, s), starfield_data)]
-        slots = animslots.allocate(n, stems)
+        slots = {keys[j - 1]: v for j, v in animslots.allocate(len(keys), stems).items()}
         for k, (stem, tag, rekey) in slots.items():
             clip = os.path.join(moveset, grouped["attack"][k])
             spec = f"{clip}::{anim_path(anims, folder, stem)}"
