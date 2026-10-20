@@ -110,7 +110,7 @@ AttackPhase AttackPhaseTracker::on_event(std::string_view e) {
                           "TDM_AttackEnd", "Collision_AttackEnd"})) {
         phase_ = AttackPhase::End;
     } else if (any_of(e, {"attackStop", "TDM_AttackStop", "MCO_WinClose", "MCO_PowerWinClose", "BFCO_DIY_EndLoop",
-                          "MCO_TransitionClose", "AttackStop"})) {
+                          "MCO_TransitionClose", "AttackStop", "AttackEnd"})) {   // AttackEnd: Starfield's name
         phase_ = AttackPhase::None;
     }
     return phase_;

@@ -1,0 +1,3 @@
+[submodule "native/combat/sfse/lib/commonlibsf"]
+	path = native/combat/sfse/lib/commonlibsf
+	url = https://github.com/libxse/commonlibsf.git

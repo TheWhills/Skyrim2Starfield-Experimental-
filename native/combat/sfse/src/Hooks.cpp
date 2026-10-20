@@ -1,0 +1,124 @@
+#include "Hooks.h"
+
+#include "Game.h"
+#include "Plugin.h"
+
+#include "s2s/controller.h"
+
+namespace s2s::sfse::hooks {
+namespace {
+
+// ------------------------------------------------------------------------------------------------ input
+// UI's BSInputEventReceiver::PerformInputProcessing sees every input event once per frame (supported: OSF Animation
+// hooks the same function for its scene controls). The hook only watches: events still reach the game unchanged.
+// The vtable is read from the live UI object (its BSInputEventReceiver base, UI + 0x10 in CommonLibSF's layout), so
+// no vtable index from the Address Library is needed.
+using PerformInputProcessing_t = void(RE::BSInputEventReceiver*, const RE::InputEvent*);
+PerformInputProcessing_t* g_input_original = nullptr;
+
+// ThumbstickEvent is not mapped in CommonLibSF. Layout (supported: OSF Animation's in-game notes): IDEvent idCode at
+// +0x30 = 0x0B left stick / 0x0C right stick, then x / y floats at +0x38 / +0x3C (-1..1).
+// UNVERIFIED: y > 0 is "forward" (XInput convention). The key log shows it on the first run.
+constexpr std::ptrdiff_t kStickId = 0x30, kStickX = 0x38, kStickY = 0x3C;
+constexpr std::int32_t kLeftStick = 0x0B;
+
+std::uint32_t KeyCode(const RE::ButtonEvent* e) {
+    const auto id = static_cast<std::uint32_t>(e->idCode);
+    switch (e->deviceType) {
+        case RE::InputEvent::DeviceType::kKeyboard: return combat::key_from_vk(id);
+        case RE::InputEvent::DeviceType::kMouse: return combat::key_from_mouse(id);
+        case RE::InputEvent::DeviceType::kGamepad: {
+            const auto code = SFSE::InputMap::GamepadMaskToKeycode(id);
+            return code < SFSE::InputMap::kMaxMacros ? code : 0;
+        }
+        default: return 0;
+    }
+}
+
+void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEvent* a_head) {
+    auto& plugin = Plugin::Get();
+    for (auto* e = a_head; e; e = e->next) {
+        if (e->eventType == RE::InputEvent::EventType::kButton) {
+            const auto* b = static_cast<const RE::ButtonEvent*>(e);
+            // Skyrim's convention (IsDown: value != 0 and held 0; IsUp: value 0 and held != 0). UNVERIFIED for
+            // Starfield: the key log on the first run shows value / held for presses and releases.
+            const bool down = b->value != 0.0f && b->heldDownSecs == 0.0f;
+            const bool up = b->value == 0.0f && b->heldDownSecs != 0.0f;
+            if (!down && !up) continue;          // held repeats
+            if (b->deviceType == RE::InputEvent::DeviceType::kMouse && (b->idCode == 0x800 || b->idCode == 0x900) &&
+                !down)
+                continue;                        // the wheel sends a zero "release" after each notch
+            const auto user = std::string_view(b->strUserEvent);
+            plugin.OnButton(KeyCode(b), down, user, static_cast<std::uint32_t>(b->deviceType), b->idCode, b->value,
+                            b->heldDownSecs);
+        } else if (e->eventType == RE::InputEvent::EventType::kThumbstick) {
+            const auto* bytes = reinterpret_cast<const std::byte*>(e);
+            if (*reinterpret_cast<const std::int32_t*>(bytes + kStickId) == kLeftStick)
+                plugin.OnStick(*reinterpret_cast<const float*>(bytes + kStickX),
+                               *reinterpret_cast<const float*>(bytes + kStickY));
+        }
+    }
+    // UNVERIFIED: this runs every frame, also without input (the tick depends on it). If the log shows buffered
+    // attacks or i-frames that never end, move Tick to a per-frame hook (e.g. the player's update).
+    plugin.Tick();
+    g_input_original(a_this, a_head);
+}
+
+// ------------------------------------------------------------------------------------------------ animation events
+// The player is a BSTEventSink<BSAnimationGraphEvent> (TESObjectREFR base at +0x50 in CommonLibSF's layout); its graph
+// calls ProcessEvent (vtable slot 1) for every clip / graph event. Patching that vtable from the live player object
+// affects only the player's class. BSAnimationGraphEvent is not mapped in CommonLibSF.
+// UNVERIFIED: the layout below is Skyrim's and Fallout 4's (holder, tag, payload). The first run logs the first events
+// ("anim event: 'tag' payload '...'"): readable names such as HitFrame / weaponSwing / FootLeft confirm it.
+struct GraphEventView {
+    const RE::TESObjectREFR* holder;
+    RE::BSFixedString tag;
+    RE::BSFixedString payload;
+};
+
+using Sink = RE::BSTEventSink<RE::BSAnimationGraphEvent>;
+using ProcessEvent_t = RE::BSEventNotifyControl(Sink*, const RE::BSAnimationGraphEvent&,
+                                                RE::BSTEventSource<RE::BSAnimationGraphEvent>*);
+ProcessEvent_t* g_event_original = nullptr;
+constexpr std::ptrdiff_t kAnimSinkOffset = 0x50;
+
+std::string_view View(const RE::BSFixedString& s) {
+    const char* p = s.c_str();
+    return p ? std::string_view(p) : std::string_view();
+}
+
+RE::BSEventNotifyControl ProcessEvent(Sink* a_this, const RE::BSAnimationGraphEvent& a_event,
+                                      RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_source) {
+    const auto& view = reinterpret_cast<const GraphEventView&>(a_event);
+    Plugin::Get().OnAnimEvent(View(view.tag), View(view.payload));
+    return g_event_original(a_this, a_event, a_source);
+}
+
+}  // namespace
+
+bool Install() {
+    static bool installed = false;
+    if (installed) return true;
+
+    auto* ui = RE::UI::GetSingleton();
+    auto* player = game::Player();
+    if (!ui || !player) {
+        REX::ERROR("hooks: UI {} / player {} not ready", static_cast<void*>(ui), static_cast<void*>(player));
+        return false;
+    }
+
+    auto* receiver = static_cast<RE::BSInputEventReceiver*>(ui);
+    REL::Relocation<std::uintptr_t> input_vtbl{*reinterpret_cast<std::uintptr_t*>(receiver)};
+    g_input_original = reinterpret_cast<PerformInputProcessing_t*>(input_vtbl.write_vfunc(1, &PerformInputProcessing));
+
+    auto* sink = reinterpret_cast<Sink*>(reinterpret_cast<std::uintptr_t>(player) + kAnimSinkOffset);
+    REL::Relocation<std::uintptr_t> sink_vtbl{*reinterpret_cast<std::uintptr_t*>(sink)};
+    g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
+
+    installed = true;
+    REX::INFO("hooks installed: input receiver vtable {:X}, player animation sink vtable {:X}", input_vtbl.address(),
+              sink_vtbl.address());
+    return true;
+}
+
+}  // namespace s2s::sfse::hooks

@@ -8,7 +8,8 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\armor\pc_checklist.ps1
 #
 # Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Out, -Texconv.
-# Also builds the iron weapon test mod (step 6) into the Desktop folder "S2S Iron Weapons" when texconv is found.
+# Also builds the iron weapon test mod (step 6) into the Desktop folder "S2S Iron Weapons" when texconv is found, and
+# the combat plugin (step 7) into the Desktop folder "S2S Combat Plugin" when xmake and Visual Studio's tools are found.
 param(
     [string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
@@ -50,6 +51,19 @@ if (Test-Path $ck) {
     Say "CreationKit.exe not found (free Steam tool: 'Starfield: Creation Kit')"
 }
 
+Say "== 1b. Starfield.exe: Papyrus functions the combat plugin calls (native/combat/sfse/README.md)"
+$exe = Join-Path $SF "Starfield.exe"
+if (Test-Path $exe) {
+    $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
+    foreach ($fn in @("SetAnimationVariableBool", "SetAnimationVariableInt", "SetAnimationVariableFloat",
+                      "GetAnimationVariableFloat", "SendAnimationEvent", "AddKeyword", "RemoveKeyword", "SetGhost")) {
+        Say ("{0}: {1}" -f $fn, $(if ($text.Contains($fn)) { "present" } else { "NOT FOUND" }))
+    }
+    $text = $null
+} else {
+    Say "Starfield.exe not found"
+}
+
 Say "== 2. Starfield.esm: weapon animation keywords, HumanRace animation sets, melee aim assist"
 python -I (Join-Path $Repo "scripts/armor/weapon_anim_survey.py") --esm (Join-Path $SF "Data\Starfield.esm") --out (Join-Path $Out "weapon_anims") 2>&1 | ForEach-Object { Say $_ }
 
@@ -71,6 +85,31 @@ if (Test-Path $Texconv) {
     Copy-Item (Join-Path $wpn "weapon_test_pack.json") $Out -ErrorAction SilentlyContinue
 } else {
     Say "texconv.exe not found (give -Texconv <path>): weapon test mod skipped"
+}
+
+Say "== 7. combat plugin (SFSE) build"
+$xmake = Get-Command xmake -ErrorAction SilentlyContinue
+$plug = Join-Path $Repo "native\combat\sfse"
+if ($xmake -and (Test-Path (Join-Path $plug "xmake.lua"))) {
+    git -C $Repo submodule update --init --recursive 2>&1 | ForEach-Object { Say $_ }
+    Push-Location $plug
+    $blog = Join-Path $Out "plugin_build.log"
+    & xmake f -m releasedbg -y *> $blog
+    & xmake -y *>> $blog
+    $ok = $LASTEXITCODE -eq 0
+    Pop-Location
+    Say ("plugin build: " + $(if ($ok) { "ok" } else { "FAILED (plugin_build.log is in the report)" }))
+    $dll = Get-ChildItem -Path (Join-Path $plug "build") -Filter "S2SCombat.dll" -Recurse -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($dll) {
+        $mod = Join-Path (Join-Path (Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Combat Plugin") "SFSE") "Plugins"
+        New-Item -ItemType Directory -Force -Path $mod | Out-Null
+        Copy-Item $dll.FullName $mod
+        Copy-Item (Join-Path $plug "S2SCombat.ini") $mod
+        Say "plugin mod folder: $mod (add to MO2 as a mod; first-run notes in native\combat\sfse\README.md)"
+    }
+} else {
+    Say "xmake not found (winget install xmake; needs Visual Studio 2022 Build Tools): plugin build skipped"
 }
 
 Say "== 5. zips"

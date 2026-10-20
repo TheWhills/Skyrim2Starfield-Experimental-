@@ -91,3 +91,20 @@ exception) and is built on the owner's PC with Visual Studio's tools: Microsoft'
 cloud workspace, so no Windows cross-build here (checked 2026-10-20). Behaviour is written from the mods' data formats
 and documented behaviour only; no code from TDM (GPL), IFrame Generator (no-port permission) or other mods is used.
 Alternatives: Papyrus (cannot read keys, runs late), one plugin per feature (more hooks fighting each other).
+
+## 2026-10-20 Combat SFSE plugin, game side: thin glue over a tested controller
+`native/combat/sfse` (xmake, CommonLibSF as a git submodule pinned to the commit the draft was checked against) only
+translates: input events and the player's animation-graph events go into `s2s::combat::Controller` (core, tested
+anywhere), its commands come back out and run on the main thread through SFSE's task interface. Choices:
+* Hooks patch the vtables read from the live objects (UI's input receiver; the player's
+  BSTEventSink<BSAnimationGraphEvent> at +0x50) at kPostDataLoad, instead of Address Library vtable indices (the
+  VTABLE id arrays are not in declaration order; the live object has the right one by construction).
+* Graph variables are set through Papyrus (`ObjectReference.SetAnimationVariable*`, dispatched by the VM, a frame or
+  two late): CommonLibSF maps no setter and the Fallout 4 lineage has non-virtual ones whose Starfield addresses are
+  unknown. Replace with the native setter once found. Keywords (stances) and the interim i-frames (`Actor.SetGhost`)
+  use Papyrus for the same reason.
+* Unverified details (event layout, press / release convention, stick axis, per-frame tick) are logged on the first
+  run rather than guessed silently (sfse/README.md lists what each log line answers).
+* `scripts/guard.py` skips paths registered in .gitmodules: submodule files are not part of this repo's history
+  (CommonLibSF's generated ID headers exceed the size limit).
+Alternatives: Address Library vtable indices (index order unknown); a Papyrus-only plugin (cannot read keys).

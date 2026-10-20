@@ -1,7 +1,9 @@
 """Fail if the repo contains game data or machine-specific paths.
 
 Run before every commit (CI runs it too):  python scripts/guard.py
-Walks the working tree, so it also catches untracked files you're about to `git add`.
+Walks the working tree, so it also catches untracked files you're about to `git add`. Git submodules (third-party
+libraries such as CommonLibSF, listed in .gitmodules) are skipped: their files are not part of this repo's history,
+only the pinned commit is.
 """
 import os
 import re
@@ -20,13 +22,26 @@ LOCAL_PATH = re.compile(r"[A-Za-z]:[\\/]Users[\\/][^\\/\s\"']+|/Users/[^/\s\"']+
 ALLOWED_PATH_WORDS = {"<user>", "<you>", "%USERNAME%", "$HOME", "username"}
 
 
-def main():
+def submodule_paths(root=ROOT):
+    """Paths (relative, "/"-separated) of the submodules listed in root/.gitmodules."""
+    try:
+        with open(os.path.join(root, ".gitmodules"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return set()
+    return {m.strip().strip("/") for m in re.findall(r"^\s*path\s*=\s*(.+)$", text, re.M)}
+
+
+def main(root=ROOT):
     problems = []
-    for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+    skip = submodule_paths(root)
+    for dirpath, dirnames, filenames in os.walk(root):
+        here = os.path.relpath(dirpath, root).replace("\\", "/")
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS
+                       and (d if here == "." else f"{here}/{d}") not in skip]
         for fn in filenames:
             path = os.path.join(dirpath, fn)
-            rel = os.path.relpath(path, ROOT).replace("\\", "/")
+            rel = os.path.relpath(path, root).replace("\\", "/")
             ext = os.path.splitext(fn)[1].lower()
             if ext in BANNED_EXT:
                 problems.append(f"{rel}: banned file type {ext} (game data / binaries are never committed)")

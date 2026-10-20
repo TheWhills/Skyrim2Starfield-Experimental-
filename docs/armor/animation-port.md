@@ -1069,3 +1069,15 @@ skinned-mesh writer: not in this pack).
   worn and first-person models -> the left blade). Test shortcut: it occupies the outfit's slot.
   **Unresolved:** a slot that does not replace the outfit; whether the first-person skeleton has WeaponLeft; the left
   blade stays where the WeaponLeft bone is when sheathed (no sheath position yet).
+
+## Combat plugin: game side, first draft (2026-10-20, away from the PC)
+* `native/combat/include/s2s/controller.h`: the plugin's decision logic as a game-independent controller, tested here
+  (MCO input buffer with the window rules, TK Dodge direction / i-frames / dodge end from TKDR events or the i-frames,
+  Payload Interpreter variable commands, Key Utils / Stances bindings as one exclusive keyword group, INI parsing,
+  Starfield key codes -> Key Utils codes). `AttackEnd` (the name our converter gives Skyrim's attackStop) now ends the
+  attack phase.
+* `native/combat/sfse`: SFSE glue (input receiver hook, player animation-event sink, NotifyAnimationGraph, Papyrus for
+  variables / keywords / ghost), sample `S2SCombat.ini`, build and first-run notes. **Unverified** until the PC: it
+  builds with MSVC, the hooks fire, the animation-event layout, the Papyrus names (pc_checklist step 1b lists them).
+* Converted clips do not carry the MCO / PIE / TKDR annotations yet (they stay in `<clip>.events.json`); writing them
+  into the .afx (and whether the graph passes unknown event names to the sink) is the graph-side prep item.
