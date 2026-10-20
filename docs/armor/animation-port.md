@@ -1117,3 +1117,17 @@ skinned-mesh writer: not in this pack).
   `sPluginEventHost`). Whether the graph passes event names it does not know to the plugin is **unresolved**: the
   first plugin run's `anim event:` log answers it, and HOST is the fallback (e.g. a vanilla event such as
   `AssignVariable`, which vanilla clips already carry with payloads).
+
+## Dodge states in the melee graph (2026-10-20, graph-side prep)
+* `scripts/armor/dodge_graph.py` adds one state per dodge direction to the top machine of MeleeActions.agx, built
+  like the vanilla actions there: a copy of MeleeBlock_Out (a plain clip state), entered from any state on
+  TKDodge<Direction> (the plugin's event), `Send Event On End = TKDR_DodgeEnd` (the plugin's dodge end), leaving
+  to IdleTimer without an event; 4-way or `--eight-way`; clip tags per direction (`--tag Back=...`). Tested on a
+  synthetic graph; applied to the vanilla graph (states 12-15, vanilla links unchanged).
+* Test pack (scratch, SkyrimDodge_plugin_test.zip): the graph + TK Dodge's four step dodges as new clips in
+  melee/onehanded/player (StepDodge*, motion from TK's motion blocks 1656-1659: 5.4 / 3.9 / 3.3 / 3.3 m). With the
+  plugin it answers three open questions at once: new event names in a graph, new clip tags without the cache
+  rebuild, and whether the graph's end-of-clip events reach the plugin. **Unresolved** besides: dodging out of an
+  attack (MeleeAttacks is a separate graph; its states may hold the actions layer).
+* Not done yet: block-hit variants (one MeleeBlock_HitReaction clip in vanilla; variants need the plugin's hit-type
+  variable and a selector state).

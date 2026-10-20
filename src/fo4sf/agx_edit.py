@@ -137,6 +137,16 @@ def set_tag(node: ET.Element, tag: str) -> bool:
     return False
 
 
+def set_row(node: ET.Element, key: str, value: str) -> bool:
+    """Set the value of the state's own property row `key` (e.g. "Send Event On End"); False if it has none."""
+    for r in node.findall("property_sheet/row"):
+        p = r.findall("prop")
+        if len(p) >= 2 and p[0].findtext("value") == key:
+            p[1].find("value").text = value
+            return True
+    return False
+
+
 def add_flag(node: ET.Element, flag: str) -> bool:
     """Add a state flag (e.g. "Force Copy Bone Weights"); False if already set. Vanilla keeps <flags> right after
     <noninstanced> and writes them on one line (<flags><flag>A</flag><flag>B</flag></flags>)."""
