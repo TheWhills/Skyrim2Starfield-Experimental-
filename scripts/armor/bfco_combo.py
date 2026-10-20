@@ -154,6 +154,9 @@ def main(argv=None):
         if not (k.isdigit() and name):
             sys.exit(f"--tag / --power-tag want K=NAME, got {spec}")
         into[int(k)] = name
+    if tags:                                   # attacks without a slot are left out: their incoming edges go to 1
+        first = min(tags)
+        routing = {k: (n if n in tags else first) for k, n in routing.items() if k in tags}
     power = None
     if ptags:
         r = routes_of(a.moveset)

@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.20)
+project(s2s_combat_core LANGUAGES CXX)
+
+# The game-independent core of the combat SFSE plugin (docs/armor/combat-plugin-spec.md). The SFSE plugin itself
+# (CommonLibSF, Windows only) links this library; this file builds the library and its tests on any platform.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(s2s_combat STATIC src/combat.cpp)
+target_include_directories(s2s_combat PUBLIC include)
+if(MSVC)
+    target_compile_options(s2s_combat PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(s2s_combat PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+enable_testing()
+add_executable(test_combat tests/test_combat.cpp)
+target_link_libraries(test_combat PRIVATE s2s_combat)
+add_test(NAME combat_core COMMAND test_combat)

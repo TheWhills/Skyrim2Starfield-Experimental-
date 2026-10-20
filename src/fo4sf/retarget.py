@@ -407,6 +407,27 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
         for i, (h, _gt, gq) in grips.items():
             if i in weapon_axes and h < i:
                 hand_follow[h] = (weapon_axes[i][0], weapon_axes[i][1], gq)
+    # Hand-overs: some Skyrim clips move the weapon node out of its hand (Nordic's battleaxe power attacks swing the
+    # axe with the left hand alone: the Weapon node leaves the right hand by 1.4 m). There the weapon follows Skyrim's
+    # weapon node from the nearer Starfield hand instead of the grip, and the hand that let go stops aiming it.
+    sk_of = {b: a for a, b in M.MAP.items()}
+    sk_hands = [sk.index[n] for n in (M.SUPPORT_HAND_SKYRIM, "NPC R Hand [RHnd]") if n in sk.index]
+    sf_hand_of = {sk.index[a]: sf.index[b] for a, b in M.MAP.items() if a in sk.index and b in sf.index}
+    handover = {}                                                      # weapon -> (weight (F,), Skyrim weapon)
+    hk_of_weapon = {}                                                  # weapon -> its Skyrim hand
+    for i, (h, _gt, _gq) in grips.items():
+        src = weapon_axes.get(i, (None,))[0]
+        hk = sk.index.get(sk_of.get(sf.names[h], ""))
+        if src is None or hk is None:
+            continue
+        rel_now = qrot(qinv(wq_sk[:, hk]), wt_sk[:, src] - wt_sk[:, hk])
+        rel_rest = qrot(qinv(rq_sk[hk]), rt_sk[src] - rt_sk[hk])
+        dev = np.linalg.norm(rel_now - rel_rest[None], axis=-1)
+        u = np.clip((dev - M.HANDOVER_UNITS[0]) / (M.HANDOVER_UNITS[1] - M.HANDOVER_UNITS[0]), 0.0, 1.0)
+        w = u * u * (3 - 2 * u)
+        if np.any(w > 0):
+            handover[i] = (w, src)
+            hk_of_weapon[i] = hk
     # COM movement scale: leg length (thigh joint -> ankle, both legs), so a crouch bends the knees as far as in
     # Skyrim and the feet stay on the ground (hip height overshoots: Starfield's thigh joint sits 11 cm below C_Hips)
     def leg(rig, rt, thigh, foot):
@@ -432,6 +453,17 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
             h, gt, gq = grips[i]
             target_q = qmul(wq[:, h, :], np.broadcast_to(gq, (F, 4)))
             target_t = wt[:, h, :] + qrot(wq[:, h, :], np.broadcast_to(gt, (F, 3)))
+            if i in handover:                                          # weapon out of its hand in Skyrim
+                w, src = handover[i]
+                dist = np.stack([np.linalg.norm(wt_sk[:, src] - wt_sk[:, k], axis=-1) for k in sk_hands], axis=1)
+                near = np.array(sk_hands)[np.argmin(dist, axis=1)]
+                anchor_sf = np.array([a if a < i else h for a in (sf_hand_of.get(k, h) for k in near)])
+                near = np.where(anchor_sf == h, hk_of_weapon[i], near)     # (hands placed after the weapon: own)
+                free_t = wt[np.arange(F), anchor_sf] + (wt_sk[:, src] - wt_sk[np.arange(F), near]) * unit
+                aq = weapon_axes[i][1]
+                free_q = qmul(wq_sk[:, src, :], np.broadcast_to(aq, (F, 4)))
+                target_t = target_t + (free_t - target_t) * w[:, None]
+                target_q = np.stack([qslerp(target_q[f], free_q[f], float(w[f])) for f in range(F)])
             dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
         elif i in targets and targets[i] < i:                          # IK targets on their hands
             h = targets[i]
@@ -459,7 +491,11 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
             dsf[:, i, :] = pd
         if i in hand_follow:                                           # hand turned so the grip aims the blade
             src, aq, gq = hand_follow[i]
-            target_q = qmul(qmul(wq_sk[:, src, :], np.broadcast_to(aq, (F, 4))), np.broadcast_to(qinv(gq), (F, 4)))
+            follow = qmul(qmul(wq_sk[:, src, :], np.broadcast_to(aq, (F, 4))), np.broadcast_to(qinv(gq), (F, 4)))
+            w = next((hw for wi, (hw, _s) in handover.items() if grips[wi][0] == i), None)
+            if w is not None and target_q is not None:                 # the hand let go: back to Skyrim's hand
+                follow = np.stack([qslerp(follow[f], target_q[f], float(w[f])) for f in range(F)])
+            target_q = follow
             dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
         name = sf.names[i]
         if name in ("COM", "Root") and name in M.MAP.values():
@@ -488,15 +524,24 @@ def _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes):
     if wi is None or hk is None or wk is None or any(n not in sf.index for n in names):
         return out_t, out_q, sf.fk(out_t, out_q)[0], None
     _src, axes = weapon_axes.get(wi, (None, np.array([0.0, 0.0, 0.0, 1.0])))
-    rel = qrot(qinv(wq_sk[:, wk]), wt_sk[:, hk] - wt_sk[:, wk]) * unit          # Skyrim weapon frame, metres
-    rel = qrot(np.broadcast_to(qinv(axes), rel.shape[:-1] + (4,)), rel)         # Starfield weapon frame
+    rel_u = qrot(qinv(wq_sk[:, wk]), wt_sk[:, hk] - wt_sk[:, wk])              # Skyrim weapon frame, units
+    off_axis = np.sqrt(rel_u[:, 0] ** 2 + rel_u[:, 2] ** 2)                    # from the haft (+Y)
+    lo, hi = M.SUPPORT_ON_GRIP_UNITS
+    u = np.clip((hi - off_axis) / (hi - lo), 0.0, 1.0)
+    w = u * u * (3 - 2 * u)                                                     # 1 on the grip, 0 once let go
+    rel = qrot(np.broadcast_to(qinv(axes), rel_u.shape[:-1] + (4,)), rel_u * unit)   # Starfield weapon frame, m
     wt, wq = sf.fk(out_t, out_q)
-    target = wt[:, wi] + qrot(wq[:, wi], rel)
-    before = np.linalg.norm(wt[:, sf.index[names[2]]] - target, axis=-1)
+    ideal = wt[:, wi] + qrot(wq[:, wi], rel)
+    end = wt[:, sf.index[names[2]]]
+    before = np.linalg.norm(end - ideal, axis=-1)
+    target = end + (ideal - end) * w[:, None]
     out_t, out_q, left = two_bone_ik(sf, out_t, out_q, *names, target)
     wt, _ = sf.fk(out_t, out_q)
-    return out_t, out_q, wt, {"before_m": round(float(np.max(before)), 4), "mean_before_m": round(float(np.mean(before)), 4),
-                              "after_m": round(float(np.max(left)), 4)}
+    on = w > 0.999
+    return out_t, out_q, wt, {"before_m": round(float(np.max(before[on])) if on.any() else 0.0, 4),
+                              "mean_before_m": round(float(np.mean(before[on])) if on.any() else 0.0, 4),
+                              "after_m": round(float(np.max(left[on])) if on.any() else 0.0, 4),
+                              "released_frames": int(np.sum(w < 0.001))}
 
 
 def ease_out(lt, lq, frames: int):

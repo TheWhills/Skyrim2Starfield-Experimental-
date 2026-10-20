@@ -131,8 +131,14 @@ LEFT_GRIP: Dict[str, Tuple[str, Tuple[float, float, float], Tuple[float, float, 
 LEFT_WEAPON_AXES: Dict[str, Tuple[str, Tuple[float, float, float, float]]] = {
     "weaponleft": ("Shield", (0.5792, 0.4057, 0.4055, -0.5793)),
 }
+# Hand-over (retarget): a Skyrim weapon node more than the first value (game units) away from where it sits in its hand
+# starts to follow Skyrim's weapon node instead of the grip, fully past the second (Nordic battleaxe power attacks).
+HANDOVER_UNITS = (3.0, 8.0)
 # Two-handed grip (retarget(two_hand_grip=True)): the support hand's Skyrim bone and the Starfield arm the IK turns
 SUPPORT_HAND_SKYRIM = "NPC L Hand [LHnd]"
+# the support hand counts as on the haft up to the first distance (game units, from the weapon's +Y axis) and as let go
+# from the second (Nordic: 2-9 units on the grip; the greatsword's power attack 3 lets go, up to 74)
+SUPPORT_ON_GRIP_UNITS = (10.0, 16.0)
 SUPPORT_ARM = ("L_Biceps", "L_Forearm", "L_Wrist")
 # IK targets kept on the hands they belong to (the IK pass then changes nothing)
 HAND_TARGETS: Dict[str, str] = {"r_handik": "R_Wrist", "l_handik": "L_Wrist"}

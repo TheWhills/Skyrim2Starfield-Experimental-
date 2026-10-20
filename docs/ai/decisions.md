@@ -80,3 +80,14 @@ any window. Deterministic guards: refuses if the agent was active in the last 10
 was woken in the last 30 min (their usage comes from the owner's plans); every attempt is logged (wakes.jsonl).
 Alternatives: keystrokes into the agents' terminals (focus stealing, wrong-window risk); GitHub comments only (agents
 don't poll while idle).
+
+## 2026-10-20 Combat SFSE plugin: game-independent core in C++ under native/combat
+The combat features Skyrim modding gets from SKSE plugins (Payload Interpreter commands, MCO / BFCO input buffer
+and charged attacks, TK Dodge, i-frames, TDM lock-on, Key Utils / Stances key table) need an SFSE plugin in
+Starfield. Its logic lives in `native/combat` as plain C++20 with no game types (MIT, like the repo), tested on any
+platform (tests/test_native_combat.py builds and runs it); the SFSE glue (input hooks, animation-graph event sink,
+camera, damage) will link it with CommonLibSF (libxse; GPL-3.0-or-later with a modding exception and a GPL linking
+exception) and is built on the owner's PC with Visual Studio's tools: Microsoft's downloads are blocked from the
+cloud workspace, so no Windows cross-build here (checked 2026-10-20). Behaviour is written from the mods' data formats
+and documented behaviour only; no code from TDM (GPL), IFrame Generator (no-port permission) or other mods is used.
+Alternatives: Papyrus (cannot read keys, runs late), one plugin per feature (more hooks fighting each other).

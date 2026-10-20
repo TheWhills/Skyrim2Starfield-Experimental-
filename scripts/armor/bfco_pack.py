@@ -67,6 +67,18 @@ def plan(moveset: str, folders, anims: str, starfield_data=None, power=None, spr
     powers = r["powers"] if routed_power else []
     stems_of = {f: [s for s in animslots.HOSTS + [c for c, _t in animslots.COMBO]
                     if exists(anim_path(anims, f, s), starfield_data)] for f in folders}
+    chain = r["attack"] if routed_power else bfco_combo.routing_of(moveset)
+    order = bfco.reachable(chain, 1 if 1 in chain else min(chain)) if chain else []
+    order += [k for k in keys if k not in order]                # reachable only through power attacks
+    cap = len(keys)
+    while cap > 1:                                              # more attacks than slots: keep the chain's first ones
+        try:
+            for f in folders:
+                animslots.allocate(cap, stems_of[f])
+            break
+        except animslots.SlotError:
+            cap -= 1
+    keys = sorted(order[:cap])
     base = max(len(keys), len(animslots.COMBO))
     extra = max(0, len(powers) - 1)
     while extra > 0:                                       # as many extra power slots as every folder can hold

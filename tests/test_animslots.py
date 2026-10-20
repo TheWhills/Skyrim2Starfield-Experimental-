@@ -72,6 +72,27 @@ class SlotTests(unittest.TestCase):
                             for r in replace))
         self.assertFalse(any("mco_powerattack3.hkx" in r for r in replace))         # no room: falls back to power 1
 
+    def test_plan_keeps_the_first_attacks_of_a_chain_too_long_for_the_slots(self):
+        with tempfile.TemporaryDirectory() as d:
+            moveset = os.path.join(d, "moveset")
+            os.makedirs(moveset)
+            for n in ["mco_attack%d.hkx" % k for k in range(1, 7)]:
+                open(os.path.join(moveset, n), "wb").close()
+            folder = os.path.join(d, "x", "meshes", "actors", "human", "animations", "melee", "w")
+            os.makedirs(folder)
+            for stem in ("meleeattack_a", "meleeattack_b", "meleeattack_c", "sneak_meleeattack_a"):
+                open(os.path.join(folder, stem + ".afx"), "wb").close()
+            routes = {"attack": {1: 5, 5: 2, 2: 6, 6: 3, 3: 4, 4: 1}, "attack_power": {}, "power_attack": {},
+                      "power_power": {}, "powers": []}
+            orig = bfco_pack.bfco_combo.routes_of, bfco_pack.bfco_combo.routing_of
+            bfco_pack.bfco_combo.routes_of = lambda folder: routes
+            bfco_pack.bfco_combo.routing_of = lambda folder: routes["attack"]
+            try:
+                replace, tags, report, ptags = bfco_pack.plan(moveset, ["melee/w"], os.path.join(d, "x"))
+            finally:
+                bfco_pack.bfco_combo.routes_of, bfco_pack.bfco_combo.routing_of = orig
+        self.assertEqual(sorted(tags), [1, 2, 5, 6])                                 # chain order 1 5 2 6, 4 slots
+
 
 if __name__ == "__main__":
     unittest.main()
