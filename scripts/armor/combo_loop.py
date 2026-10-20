@@ -30,6 +30,15 @@ layered combo: attacking while moving keeps moving (and turning), but a swing st
 until it ends - vanilla opens bFreeMovement only late in each clip, so this tests whether that window is what holds
 him (Skyrim lets you start moving during any swing).
 
+--upper-body (with --actions-graph; EXPERIMENT): flag the layered combo "Force Copy Bone Weights", as vanilla flags
+Equip / Unequip. Owner, in game, with --free-movement: a combo started standing does start moving, but slowly
+(inching, then walk, jog, run over several swings) and sometimes not at all. Supported hypothesis: Player_Melee's
+Copy Bone Weights uses the BoneWeights masks only while walking / turning / jumping (its inputs), so a standing swing
+is layered full body - legs and root included - and Starfield's momentum locomotion (Biped_IdleLocomotion: Momentum
+nodes, StandToWalk / StandToRun on CurrentSpeed vs Speed) barely accelerates under it until the walking mask takes
+over. Forcing the mask keeps the legs on locomotion always: instant movement, but a standing swing loses Skyrim's
+leg work (the step-in).
+
     python -I scripts\\armor\\combo_loop.py --graph <extract>\\meleeattacks.agx [--actions-graph <extract>\\meleeactions.agx]
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
@@ -75,7 +84,7 @@ def loop_graph(raw: bytes, layered: bool = False):
     return agx_edit.dump(root, raw), combo_node, added
 
 
-def layer_combo(actions_raw: bytes, combo_node):
+def layer_combo(actions_raw: bytes, combo_node, upper_body: bool = False):
     """MeleeActions with the combo state added as a layered action (see the module docstring)."""
     root = agx_edit.load(actions_raw)
     top = agx_edit.machine(root, None)
@@ -83,6 +92,8 @@ def layer_combo(actions_raw: bytes, combo_node):
     if MACHINE in [agx_edit._rows(n).get("State Machine Name") for n in top.findall("node")]:
         raise agx_edit.AgxEditError(f"{MACHINE} is already in this MeleeActions")
     k = agx_edit.clone_state(combo_node, top)
+    if upper_body:
+        agx_edit.add_flag(top.findall("node")[k], "Force Copy Bone Weights")
     agx_edit.add_transition(root, top, k, k, "MeleeAttackStart", blend=0.15)      # from any state, as vanilla
     agx_edit.add_transition(root, top, k, idle, "", blend=0.3)                     # back to idle when it ends
     return agx_edit.dump(root, actions_raw), [f"{MACHINE} added as action {k} (any state -> it on MeleeAttackStart, "
@@ -139,7 +150,10 @@ def main(argv=None):
     ap.add_argument("--clips", action="append", default=[], help="folder with MeleeAttack_A/B/C.afx (repeatable)")
     ap.add_argument("--out", required=True, help="pack root (Data layout) for the edited graphs")
     ap.add_argument("--free-movement", action="store_true", help="experiment, see above (needs --actions-graph)")
+    ap.add_argument("--upper-body", action="store_true", help="experiment, see above (needs --actions-graph)")
     a = ap.parse_args(argv)
+    if a.upper_body and not a.actions_graph:
+        sys.exit("--upper-body needs --actions-graph")
     if a.free_movement and not a.actions_graph:
         sys.exit("--free-movement needs --actions-graph (a full-body swing never moves, whatever bFreeMovement says)")
     out = os.path.abspath(a.out)
@@ -150,7 +164,7 @@ def main(argv=None):
     print(f"graph: {_write(out, GRAPH_REL, data)}; {added or 'nothing changed (already looping)'}")
     if a.actions_graph:
         with open(a.actions_graph, "rb") as fh:
-            data, rep = layer_combo(fh.read(), combo)
+            data, rep = layer_combo(fh.read(), combo, a.upper_body)
         print(f"graph: {_write(out, ACTIONS_REL, data)}; {rep}")
     for folder in a.clips:
         print(f"{folder}: {fix_descriptors(folder, a.free_movement) or 'no A / B / C descriptors'}")

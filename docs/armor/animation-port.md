@@ -260,6 +260,17 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner, --free-movement: standing combos start moving, but slowly (inch, walk, jog, run) or not at all
+* Graphs read (owner extract): BoneWeights picks UpperBody / Spine / ZeroG masks; Player_Melee's Copy Bone Weights
+  takes them only through its "Walking, Turning" and "Jumping" inputs (control variable BoneWeightsAction, set by
+  no graph: the game); Biped_IdleLocomotion is momentum-driven (Momentum Move Stop / Switchback nodes; StandToWalk /
+  StandToRun entered on CurrentSpeed vs Speed thresholds). Supported hypothesis: a swing started standing is layered
+  full body (legs and root from the swing), so locomotion barely accelerates until the walking mask takes over -
+  the ramp the owner sees. Vanilla flags Equip / Unequip "Force Copy Bone Weights" (mask even when standing).
+* combo_loop.py --upper-body (experiment) sets that flag on the layered combo: legs always from locomotion (instant
+  movement), at the cost of Skyrim's step-in on standing swings. Test pack pending; the faithful alternative is a
+  per-swing choice (full body when the stick is idle at the swing's start, masked when it is not).
+
 ### 2026-10-19: owner, layered combo: moving swings move and steer; standing swings stay standing until the end
 * Verified in game (owner): attacking while moving keeps the player moving and lets him change direction during the
   swing; attacking from a standstill plays the whole Skyrim swing (legs included) but holds him in place for the

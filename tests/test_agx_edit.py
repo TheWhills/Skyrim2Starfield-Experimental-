@@ -132,6 +132,19 @@ class AgxEditTests(unittest.TestCase):
         self.assertNotEqual(node.findtext("guid"), top.findall("node")[0].findtext("guid"))
         self.assertEqual(len(agx_edit.transitions(agx_edit.machine(act, "MeleeAttackCombo"))), 3)
 
+    def test_flag_and_upper_body_layer(self):
+        root = agx_edit.load(combo_graph())
+        combo = agx_edit.machine(root, None).findall("node")[0]
+        raw, rep = combo_loop.layer_combo(actions_graph(), combo, upper_body=True)
+        top = agx_edit.machine(agx_edit.load(raw))
+        node = top.findall("node")[agx_edit.state(top, "MeleeAttackCombo")]
+        self.assertEqual([f.text for f in node.find("flags")], ["Force Copy Bone Weights"])
+        self.assertFalse(agx_edit.add_flag(node, "Force Copy Bone Weights"))           # once only
+        cast = top.findall("node")[0]
+        self.assertTrue(agx_edit.add_flag(cast, "Is Busy"))
+        self.assertEqual([f.text for f in cast.find("flags")], ["Block POV Switch", "Is Busy"])
+        self.assertIn(b"<flags><flag>Force Copy Bone Weights</flag></flags>", raw)
+
     def test_combo_loop_script(self):
         with tempfile.TemporaryDirectory() as d:
             graph = os.path.join(d, "meleeattacks.agx")

@@ -125,6 +125,22 @@ def clone_state(node: ET.Element, graph: ET.Element) -> int:
     return len(sibs)
 
 
+def add_flag(node: ET.Element, flag: str) -> bool:
+    """Add a state flag (e.g. "Force Copy Bone Weights"); False if already set. Vanilla keeps <flags> right after
+    <noninstanced> and writes them on one line (<flags><flag>A</flag><flag>B</flag></flags>)."""
+    flags = node.find("flags")
+    if flags is None:
+        flags = ET.Element("flags")
+        ni = node.find("noninstanced")
+        at = list(node).index(ni) + 1 if ni is not None else 0
+        flags.tail = ni.tail if ni is not None else "\n\t"
+        node.insert(at, flags)
+    if flag in [f.text for f in flags.findall("flag")]:
+        return False
+    ET.SubElement(flags, "flag").text = flag
+    return True
+
+
 def set_condition(graph: ET.Element, src: int, dst: int, condition: str, old: Optional[str] = None) -> int:
     """Set the Condition of the transitions src -> dst (0-based states of `graph`; only those whose condition is `old`
     when given); returns how many changed."""
