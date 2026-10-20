@@ -46,7 +46,8 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 import numpy as np  # noqa: E402
 
-from fo4sf import af_writer, ba2, bfco, bsa, retarget, rootmotion, skeletonmap, skyrimhkx  # noqa: E402
+from fo4sf import (af_writer, animdata, ba2, bfco, bsa, retarget, rootmotion, skeletonmap,  # noqa: E402
+                   skyrimbehavior, skyrimhkx)
 
 SKY_SKELETON = r"meshes\actors\character\character assets\skeleton.hkx"
 SF_SKELETON_RX = re.compile(r"meshes/actors/human/characterassets/skeleton\.nif$", re.I)
@@ -153,6 +154,35 @@ def compare(rb, res, sf_index):
     return round(float(mq), 5), round(mt, 6)
 
 
+def load_motion_data(paths, project, behaviors_dir=None):
+    """({clip stem: motion block}, report) from animationdatasinglefile texts / fragment folders (animdata)."""
+    sources = []
+    for path in paths:
+        if os.path.isdir(path):
+            sources.append(animdata.read_fragments(path))
+        else:
+            with open(path, encoding="latin-1") as fh:
+                sources.append(animdata.parse(fh.read()))
+    merged = animdata.merge(*sources)
+    proj = next((p for k, p in merged.items() if k.lower() == project.lower()), None)
+    if proj is None:
+        sys.exit(f"--motion-project {project}: not in --motion-data (projects: {', '.join(sorted(merged)[:12])} ...)")
+    generators = {}
+    if behaviors_dir:
+        behaviors = []
+        for root, _dirs, files in os.walk(behaviors_dir):
+            for fn in files:
+                if fn.lower().endswith(".hkx"):
+                    with open(os.path.join(root, fn), "rb") as fh:
+                        try:
+                            behaviors.append(skyrimbehavior.read(fh.read()))
+                        except Exception as e:                      # characters / skeletons are not behaviours
+                            print(f"  {fn}: not read as a behaviour ({e})")
+        generators = animdata.clip_generators(behaviors)
+    report = {}
+    return animdata.clip_motion(proj, generators, report), report
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--calumi", required=True, help="CALUMI.Animation.dll (Windows) or libcalumi.so (Linux build)")
@@ -189,6 +219,15 @@ def main(argv=None):
     ap.add_argument("--motion", action="append", default=[], metavar="CLIP=FILE:ID",
                     help="root motion for clip CLIP (file stem) from motion block ID of an animationdatasinglefile-style "
                          "text (Skyrim keeps vanilla and older packs' motion there, not in the clip); repeatable")
+    ap.add_argument("--motion-data", action="append", default=[], metavar="PATH",
+                    help="automatic root motion: Skyrim's animationdatasinglefile.txt, or a Nemesis / Pandora "
+                         "'animationdatasinglefile' fragment folder (later ones override earlier ones); clips without "
+                         "motion annotations of their own get the motion of the clip generators that play them")
+    ap.add_argument("--motion-project", default="DefaultMale",
+                    help="behaviour project of --motion-data (DefaultMale / DefaultFemale: third person, FirstPerson)")
+    ap.add_argument("--motion-behaviors", metavar="DIR",
+                    help="folder of the project's behaviour .hkx files (clip generator -> animation file); without it "
+                         "a clip generator's name is taken as the clip's file name")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -208,6 +247,12 @@ def main(argv=None):
         if ident not in blocks:
             sys.exit(f"--motion {spec}: no motion block {ident} in {path}")
         motion_data[stem.lower()] = blocks[ident]
+    auto_motion, auto_report = {}, {}
+    if a.motion_data:
+        auto_motion, auto_report = load_motion_data(a.motion_data, a.motion_project, a.motion_behaviors)
+        print(f"motion data: {len(auto_motion)} clips with motion in {a.motion_project} "
+              f"({auto_report.get('by_behavior', 0)} generators mapped by behaviour, {auto_report.get('by_name', 0)} "
+              f"by name)")
     sky = bsa.SkyrimArchives(a.skyrim_data) if a.skyrim_data else None
     sk_desc = skyrimhkx.describe(read_any(a.skyrim_skeleton or SKY_SKELETON, sky))
     sk = retarget.rig_from_hkx_skeleton(next(s for s in sk_desc["skeletons"] if len(s["bones"]) > 20))
@@ -294,6 +339,15 @@ def main(argv=None):
                     report.append(row)
                     continue
                 raise
+            if name.lower() in motion_data:                           # explicit --motion
+                clip = dict(clip, annotations=[e for e in clip["annotations"]
+                                               if not rootmotion.is_motion_annotation(e.get("text", ""))]
+                            + rootmotion.motion_annotations(motion_data[name.lower()]))
+                row["motion_data"] = True
+            elif name.lower() in auto_motion and not any(rootmotion.is_motion_annotation(e.get("text", ""))
+                                                         for e in clip["annotations"]):
+                clip = dict(clip, annotations=clip["annotations"] + rootmotion.motion_annotations(auto_motion[name.lower()]))
+                row["motion_data"] = "auto"
             if a.bfco:                                                # MCO_AttackSpeed baked into the clip
                 spd = bfco.markers(clip["annotations"]).get("speed")
                 if spd and spd > 0 and abs(spd - 1.0) > 1e-6:
@@ -302,11 +356,6 @@ def main(argv=None):
             if clip.get("fps") and abs(clip["fps"] - FPS) > 0.01:
                 row["resampled_from_fps"] = clip["fps"]
                 clip = retarget.resample(clip, FPS)                   # Starfield clips play at 30 fps
-            if name.lower() in motion_data:
-                clip = dict(clip, annotations=[e for e in clip["annotations"]
-                                               if not rootmotion.is_motion_annotation(e.get("text", ""))]
-                            + rootmotion.motion_annotations(motion_data[name.lower()]))
-                row["motion_data"] = True
             motion = None if a.no_root_motion else rootmotion.from_annotations(clip["annotations"], clip["frames"], FPS)
             events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
             res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand, left_weapon=a.left_weapon,
@@ -388,6 +437,10 @@ def main(argv=None):
         print({k: v for k, v in row.items() if k not in ("clip", "af")})
     with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)
+    if a.motion_data:
+        with open(os.path.join(out, "motion_data.json"), "w", encoding="utf-8") as fh:
+            json.dump(dict(auto_report, project=a.motion_project, clips_with_motion=len(auto_motion),
+                           applied=sorted(r["name"] for r in report if r.get("motion_data") == "auto")), fh, indent=1)
     if a.osf:
         done_rows = [r for r in report if "af" in r]
         # clipLibrary (OSF 1.4+) plus one single-stage scene per clip: released OSF builds hide clipLibrary-only packs

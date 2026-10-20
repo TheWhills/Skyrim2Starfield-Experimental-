@@ -1081,3 +1081,21 @@ skinned-mesh writer: not in this pack).
   builds with MSVC, the hooks fire, the animation-event layout, the Papyrus names (pc_checklist step 1b lists them).
 * Converted clips do not carry the MCO / PIE / TKDR annotations yet (they stay in `<clip>.events.json`); writing them
   into the .afx (and whether the graph passes unknown event names to the sink) is the graph-side prep item.
+
+## Automatic root motion from animationdatasinglefile (2026-10-20)
+* `src/fo4sf/animdata.py` reads the whole file by its structure (verified by walking TK Dodge For RE's full copy:
+  429 projects, 171,765 lines, ends exactly at the last line; 10 object projects are listed twice): per project the
+  behaviour files, the clip blocks (clip generator name, motion id, speed, crop, events) and the motion blocks. Nemesis /
+  Pandora fragment folders (`animationdatasinglefile\<Project>~n\`) are read too, patch markup applied (`MOD_CODE ...
+  OPEN` / `ORIGINAL` / `CLOSE`; patched blocks keep stale key counts, so keys are taken by shape).
+* Motion follows the clip generator, so a clip file gets it through the generators that play it: behaviour
+  hkbClipGenerator name -> animation file (`--motion-behaviors DIR`), else the generator's name taken as the file name.
+  Verified on TK's 1hm_behavior: TKDodgeForward plays `SneakRun_ForwardRoll.hkx` (5.85 m), not TK's StepDodgeForward
+  (OAR-style replacement files keep needing the explicit `--motion`); vanilla 1hm attacks: normal swings carry no motion,
+  power attacks do (fwd 6.9 m, left / right ~2 m, sprint power 8.9 m on a 70 units / m reading); converted end to end, 1hm_attackpowerfwd gets a 6.4 m root offset in its .af, 1hm_attackright none. Generators of one
+  file can disagree (vanilla DodgeRight vs TKDodgeRight both play DodgeRight.hkx): the most common id wins, the rest is
+  listed in `motion_data.json`.
+* `hkx_to_af --motion-data <animationdatasinglefile.txt or fragment folder> [--motion-project DefaultMale]
+  [--motion-behaviors <behaviors folder>]` applies it to clips that have no animmotion annotations of their own
+  (explicit `--motion` still wins; BFCO-style annotated clips are left alone). The PC checklist's step 4 already extracts
+  the vanilla file and behaviours this needs.
