@@ -220,6 +220,27 @@ def add_event(afx: bytes, frame: int, name: str, payload: str = "") -> bytes:
     return _afx_out(root, afx)
 
 
+def set_event_frame(afx: bytes, name: str, frame: int) -> bytes:
+    """The descriptor with the first <event> called `name` moved to `frame` (added when missing)."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    ev = next((e for e in root.iter("event") if e.findtext("name") == name), None)
+    if ev is None:
+        return add_event(afx, frame, name)
+    ev.find("frame").text = str(int(frame))
+    return _afx_out(root, afx)
+
+
+def set_tag(afx: bytes, tag: str, filename: str) -> bytes:
+    """The descriptor with another <tag> and <filename> (a clip added under its own tag)."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    for name, val in (("tag", tag), ("filename", filename)):
+        el = root.find(name)
+        if el is None:
+            el = ET.SubElement(root, name)
+        el.text = val
+    return _afx_out(root, afx)
+
+
 def event_frame(afx: bytes, name: str) -> Optional[int]:
     """Frame of the first <event> called `name`, or None."""
     root = ET.fromstring(afx.decode("utf-8-sig"))

@@ -125,6 +125,16 @@ def clone_state(node: ET.Element, graph: ET.Element) -> int:
     return len(sibs)
 
 
+def set_tag(node: ET.Element, tag: str) -> bool:
+    """Set an animation state's TagName (the clip tag it plays); False if it has none."""
+    for r in node.findall("property_sheet/row"):
+        p = r.findall("prop")
+        if len(p) >= 2 and p[0].findtext("value") == "TagName":
+            p[1].find("value").text = tag
+            return True
+    return False
+
+
 def add_flag(node: ET.Element, flag: str) -> bool:
     """Add a state flag (e.g. "Force Copy Bone Weights"); False if already set. Vanilla keeps <flags> right after
     <noninstanced> and writes them on one line (<flags><flag>A</flag><flag>B</flag></flags>)."""

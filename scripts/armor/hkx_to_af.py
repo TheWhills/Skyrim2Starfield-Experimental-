@@ -19,6 +19,12 @@ path and file name (out\\meshes\\actors\\...\\Idle.af + .afx; copy out\\meshes i
 its .afx is the vanilla descriptor fitted to the new clip (af_writer.retime_descriptor: tag, flags, payloads kept,
 frames scaled, HitFrame / footsteps taken from the Skyrim clip). The vanilla .afx is a file, or a path read from the
 game's archives (--starfield-data). Reusing the vanilla path should keep the AnimTextData caches valid (unverified).
+"<clip>::<vanilla .afx>::<NAME>" adds the clip beside that vanilla one under its own file name and <tag> NAME instead
+(e.g. BFCO_Attack4 for a graph that plays tag BFCO_Attack4), the vanilla descriptor serving as the template.
+
+--bfco: attack clips carrying BFCO / MCO markers (BFCO_NextWinStart, BFCO_DIY_recovery, ...) get their descriptor's
+attack windows from those markers (fo4sf.bfco: bCanComboAttack, bDontAllowAttack / PowerAttack, bFreeMovement,
+AttackStateNextAttack).
 
 --osf PACK: write the clips as an OSF Animation content pack instead (a clipLibrary and one looping scene per clip) (Nexus 17457, github.com/ozooma10/osf-animation;
 plays .af / .glb clips on actors from an in-game browser, F10): <out>\\OSF\\Animations\\<PACK>\\*.af plus
@@ -37,7 +43,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 import numpy as np  # noqa: E402
 
-from fo4sf import af_writer, ba2, bsa, retarget, rootmotion, skeletonmap, skyrimhkx  # noqa: E402
+from fo4sf import af_writer, ba2, bfco, bsa, retarget, rootmotion, skeletonmap, skyrimhkx  # noqa: E402
 
 SKY_SKELETON = r"meshes\actors\character\character assets\skeleton.hkx"
 SF_SKELETON_RX = re.compile(r"meshes/actors/human/characterassets/skeleton\.nif$", re.I)
@@ -169,6 +175,7 @@ def main(argv=None):
     ap.add_argument("--ease-out", type=int, default=0, metavar="FRAMES",
                     help="with --replace, for attacks (the vanilla descriptor has a HitFrame): re-time the last FRAMES "
                          "frames so the clip settles on its last pose (Skyrim attacks end mid-step)")
+    ap.add_argument("--bfco", action="store_true", help="descriptor windows from BFCO / MCO markers (see above)")
     ap.add_argument("--no-root-motion", action="store_true",
                     help="ignore animmotion / animrotation annotations (root motion of animation packs such as BFCO)")
     ap.add_argument("--align-com", action="store_true",
@@ -227,20 +234,20 @@ def main(argv=None):
         pack_id = re.sub(r"[^A-Za-z0-9_]+", "", a.osf) or "SkyrimPort"
         clip_dir = os.path.join(out, "OSF", "Animations", pack_id)
         os.makedirs(clip_dir, exist_ok=True)
-    clips = [(c, None) for c in a.clip]
+    clips = [(c, None, None) for c in a.clip]
     for r in a.replace:
-        if "::" not in r:
-            sys.exit(f"--replace wants CLIP::VANILLA_AFX, got {r}")
-        clip, vafx = r.split("::", 1)
-        clips.append((clip, vafx))
+        parts = r.split("::")
+        if len(parts) not in (2, 3) or not all(parts):
+            sys.exit(f"--replace wants CLIP::VANILLA_AFX[::NAME], got {r}")
+        clips.append((parts[0], parts[1], parts[2] if len(parts) == 3 else None))
     if a.clip_dir:
         for d, _ds, fns in os.walk(a.clip_dir):
-            clips += [(os.path.join(d, f), None) for f in sorted(fns) if f.lower().endswith(".hkx")]
+            clips += [(os.path.join(d, f), None, None) for f in sorted(fns) if f.lower().endswith(".hkx")]
     omit = tuple(skeletonmap.NOT_ANIMATED)
     if a.weapon_in_hand:                       # melee clips: these follow the weapon, as in vanilla combat clips
         omit = tuple(b for b in omit if b not in skeletonmap.WEAPON_FOLLOWERS)
     report = []
-    for c, vafx in clips:
+    for c, vafx, new_name in clips:
         name = os.path.splitext(os.path.basename(c.replace("\\", "/")))[0]
         row = {"clip": c, "name": name}
         target_dir, like, file_name, like_last = clip_dir, None, None, None
@@ -249,6 +256,8 @@ def main(argv=None):
                 like, rel = vanilla_file(vafx, a.starfield_data)
                 fn_m = re.search(rb"<filename>\s*([^<]+?)\s*</filename>", like)
                 file_name = os.path.splitext((fn_m.group(1).decode() if fn_m else os.path.basename(rel)))[0]
+                if new_name:
+                    file_name = new_name
                 target_dir = os.path.join(out, *os.path.dirname(rel).split("/"))
                 row["replaces"] = f"{os.path.dirname(rel)}/{file_name}.af"
                 like_last = vanilla_last_frame(a.calumi, rig_path, vafx, a.starfield_data, out)
@@ -310,6 +319,18 @@ def main(argv=None):
                                       else ()), hit_frame=hit)
             if game_rig is not None and root_end is not None:            # the header repeats where Root ends
                 rootmotion.patch_header(w["af"], *root_end)
+            afx_path = os.path.splitext(w["af"])[0] + ".afx"
+            if (new_name or a.bfco) and os.path.isfile(afx_path):
+                with open(afx_path, "rb") as fh:
+                    afx = fh.read()
+                if new_name:
+                    afx = af_writer.set_tag(afx, new_name, os.path.basename(w["af"]))
+                marks = bfco.markers(events) if a.bfco else None
+                if marks and bfco.is_attack(marks):
+                    afx = bfco.apply(afx, marks, w["frames"] - 1, FPS)
+                    row["bfco"] = {k: v for k, v in marks.items() if v not in (None, [])}
+                with open(afx_path, "wb") as fh:
+                    fh.write(afx)
             if w.get("retime"):
                 row["afx_retime"] = w["retime"]
             row.update(frames=w["frames"], keys=w["keys"], bytes=os.path.getsize(w["af"]), af=w["af"],

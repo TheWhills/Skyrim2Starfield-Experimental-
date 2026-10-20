@@ -318,6 +318,22 @@ self-closing empty elements, as shipped.
   is what holds a standing swing now that it is layered. combo_loop.py --free-movement (needs --actions-graph,
   experiment) opens it over all of A / B / C; test pack pending.
 
+### 2026-10-19: BFCO windows and routing (steps 2 and 3)
+* BFCO markers (read on its 1hm / 2hm / h2h base movesets): BFCO_NextIsAttackN / NextIsPowerAttackN at 0 s route the
+  next press (1hm-sword-base: 1 -> 2 -> 3 -> 4 -> 5 -> 2, endless), BFCO_NextWinStart / NextPowerWinStart open the next
+  attack, BFCO_DIY_EndLoop (or MCO_WinClose) closes it, BFCO_DIY_recovery (also "Rcovery"; MCO_Recovery) is where
+  moving cancels; MCO-era clips carry MCO_WinOpen / Close and MCO_PowerWinOpen / Close alongside.
+* fo4sf.bfco maps them onto the vanilla descriptor (template: the player's MeleeAttack_A): bDontAllowAttack until the
+  first hit, bCanComboAttack from it to the window close (presses queue as in vanilla, where bCanComboAttack opens
+  long before AttackStateNextAttack), AttackStateNextAttack at the BFCO window, bDontAllowPowerAttack until the power
+  window, bFreeMovement and DisableAllowRotation from recovery to the end (supported hypothesis until tested).
+* hkx_to_af --replace CLIP::VANILLA_AFX::NAME writes a clip under its own file name and tag (BFCO_Attack4 ...);
+  --bfco applies the windows. scripts/armor/bfco_combo.py retags the vanilla combo machine's A / B / C as
+  BFCO_Attack1-3, adds attacks 4..N as copies of B (enter / exit events and settings kept) and wires the BFCO routing
+  on MeleeAttackStart. That custom tags are found in the weapon's folder is a supported hypothesis (descriptors are
+  how clips are discovered); the test pack will tell. The graph is shared by every melee type, so weapon types
+  without BFCO_AttackN clips lose their combo for now.
+
 ### 2026-10-19: root motion (step 1 of the BFCO plan)
 * Starfield (verified on the owner's 966 vanilla .af): root motion is the Root bone's own track (vanilla sword
   MeleeAttack_A: Root translation 0 -> (0, 1.847, 0) m over 41 keys; turning clips key Root rotation too), and the
@@ -334,7 +350,9 @@ self-closing empty elements, as shipped.
   Skyrim's own vanilla clips keep their motion in animationdatasinglefile instead (not read yet).
 * Test pack (work/build_bfco.sh): BFCO's 1hm-sword-base Attack1 / 2 / 4, PowerAttackA (5.2 m dash) and SprintAttack
   (4.4 m) on the player's MeleeAttack_A / B / C, MeleeAttackPower_A and MeleeAttackSprint, vanilla graphs (full body,
-  three-hit combo); read back: header and Root keys laid out like vanilla's. In-game check pending.
+  three-hit combo); read back: header and Root keys laid out like vanilla's.
+* Verified in game (owner): every swing carries the player forward, the power attack dashes about 5 m, the sprint
+  attack lunges, hits land, no clipping through walls.
 
 ### 2026-10-19: target is BFCO (Attack Behavior Framework, Nexus SE 117052) - commit-based combat, full body
 * Owner: the goal is to port BFCO (most modded Skyrim combat builds on it) or something its animation packs work with.
