@@ -260,6 +260,23 @@ events: Skyrim keeps HitFrame & co. in its behaviour graphs' clip triggers, so t
 No root motion yet (vanilla attacks step forward via the header translation). Descriptors are now written without
 self-closing empty elements, as shipped.
 
+### 2026-10-19: owner: with bFreeMovement open the player still stops until the swing ends -> layered combo
+* Result of the --move-while-attacking experiment (owner, in game): no movement during a full-body swing, whatever
+  bFreeMovement says. The experiment switch is removed.
+* The owner's SW SFBM mod (Nexus 16022) does let you move: read for the mechanism only (nothing copied), its
+  MeleeActions.agx plays MeleeAttack_A / B / C (and Power_A) inside MeleeActions, the graph Player_Melee layers over
+  locomotion, and its MeleeAttacks enters the full-body combo only on MeleeAttackStartInAir.
+* Graph semantics (supported by every vanilla link): a link whose 1-based source is the target itself is an
+  any-state transition - vanilla enters each MeleeActions action that way and returns to IdleTimer with event-less
+  links (clip end); MeleeAttacks enters its combo the same way.
+* combo_loop.py --actions-graph builds that from the vanilla files: a copy of the (looping) MeleeAttackCombo machine
+  becomes action 12 of MeleeActions (any state -> it on MeleeAttackStart, -> IdleTimer at its end), and the vanilla
+  full-body combo's entry event is renamed to MeleeAttackStartFullBody (never sent). Expected: legs from Starfield's
+  locomotion while moving, the whole Skyrim swing when standing (Copy Bone Weights decides; to be seen in game).
+  Power and sprint attacks stay full body; Skyrim's directional power attacks are next.
+* Fixed on the way: agx_edit.set_event / set_condition matched links inside an embedded machine too (iter over the
+  whole subtree); they now touch only the state's own incoming links.
+
 ### 2026-10-19: owner: endless combo works; next, moving / directional attacks as in Skyrim
 * Starfield (verified, Player_Melee.agx root blend tree): locomotion (Biped_IdleLocomotion) is the base; MeleeActions
   (block, cast, equip) are LAYERED over it through Copy Bone Weights (BoneWeights graph); MeleeAttacks is reached by

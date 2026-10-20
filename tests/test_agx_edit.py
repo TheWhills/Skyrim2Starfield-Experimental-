@@ -21,8 +21,20 @@ def combo_graph() -> bytes:
                     (1, 0, {"event": "MeleeAttackFinisherStart", "blend": 0.15})]}
     g = {"name": "Data\\Meshes\\AnimTextData\\Tables\\Graphs\\MeleeAttacks.agx", "default": 1,
          "nodes": [{"kind": "sm", "name": "MeleeAttackCombo", "graph": sm}, {"kind": "empty"}, {"kind": "empty"}],
-         "links": [(1, 0, {"event": "MeleeAttackStart"}), (0, 1, {"blend": 0.3}),
-                   (0, 2, {"condition": combo_loop.CANCEL, "blend": 0.2})]}
+         "links": [(0, 0, {"event": "MeleeAttackStart"}), (0, 1, {"blend": 0.3}),     # any state -> combo, as vanilla
+                   (0, 2, {"condition": CANCEL, "blend": 0.2})]}
+    return agx_write.write(g)
+
+
+CANCEL = "Speed !greaterthan! 1.0 !ampersand! bFreeMovement !greaterthan! 0"
+
+
+def actions_graph() -> bytes:
+    idle = {"nodes": [{"kind": "empty"}], "links": []}
+    g = {"name": "Data\\Meshes\\AnimTextData\\Tables\\Graphs\\MeleeActions.agx", "default": 1,
+         "nodes": [{"kind": "anim", "tag": "CastSelf", "flags": ["Block POV Switch"]},
+                   {"kind": "sm", "name": "IdleTimer", "graph": idle}],
+         "links": [(0, 0, {"event": "CastSelfStart", "blend": 0}), (0, 1, {"blend": 0.3})]}
     return agx_write.write(g)
 
 
@@ -92,7 +104,7 @@ class AgxEditTests(unittest.TestCase):
         root = agx_edit.load(combo_graph())
         top = agx_edit.machine(root, None)
         self.assertEqual(agx_edit.set_condition(top, 0, 2, "X", old="something else"), 0)
-        self.assertEqual(agx_edit.set_condition(top, 0, 2, "X", old=combo_loop.CANCEL), 1)
+        self.assertEqual(agx_edit.set_condition(top, 0, 2, "X", old=CANCEL), 1)
         self.assertIn((0, 2, "", "X"), agx_edit.transitions(top))
         a = AFX % (b"MeleeAttack_A", b"MeleeAttack_A", 4, 14, var(b"bFreeMovement", 29, 38))
         out = af_writer.set_variable_window(a, "bFreeMovement", 0, 38)
@@ -100,13 +112,33 @@ class AgxEditTests(unittest.TestCase):
         out = af_writer.set_variable_window(a, "bNew", 3, 7)
         self.assertIn(b"<name>bNew</name><start>3</start><end>7</end>", out)
         self.assertIn(b"<start>29</start>", out)
-        self.assertEqual(combo_loop.last_frame(a), 38)
+
+    def test_set_event_and_clone_state_stay_on_their_level(self):
+        root = agx_edit.load(combo_graph())
+        top = agx_edit.machine(root, None)
+        self.assertEqual(agx_edit.set_event(top, 0, 0, "Renamed", old="MeleeAttackStart"), 1)   # only the self-link
+        inner = agx_edit.machine(root, "MeleeAttackCombo")
+        self.assertIn((3, 2, "MeleeAttackStart", ""), agx_edit.transitions(inner))            # inner None -> A kept
+        act = agx_edit.load(actions_graph())
+        atop = agx_edit.machine(act, None)
+        k = agx_edit.clone_state(top.findall("node")[0], atop)
+        node = atop.findall("node")[k]
+        self.assertEqual(k, 2)
+        self.assertEqual(node.findall("output"), [])
+        self.assertTrue(all(not i.findall("link") for i in node.findall("input")))
+        uids = [n.findtext("user_id") for n in atop.findall("node")]
+        self.assertEqual(len(uids), len(set(uids)))
+        self.assertNotEqual(node.findtext("guid"), top.findall("node")[0].findtext("guid"))
+        self.assertEqual(len(agx_edit.transitions(agx_edit.machine(act, "MeleeAttackCombo"))), 3)
 
     def test_combo_loop_script(self):
         with tempfile.TemporaryDirectory() as d:
             graph = os.path.join(d, "meleeattacks.agx")
             with open(graph, "wb") as fh:
                 fh.write(combo_graph())
+            actions = os.path.join(d, "meleeactions.agx")
+            with open(actions, "wb") as fh:
+                fh.write(actions_graph())
             clips = os.path.join(d, "pack", "meshes", "actors", "human", "animations", "melee", "onehanded", "player")
             os.makedirs(clips)
             for name, hit, vs in ((b"MeleeAttack_A", 14, var(b"bCanComboAttack", 6, 18)),
@@ -115,11 +147,13 @@ class AgxEditTests(unittest.TestCase):
                 with open(os.path.join(clips, name.decode() + ".afx"), "wb") as fh:
                     fh.write(AFX % (name, name, 6, hit, vs))
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(combo_loop.main(["--graph", graph, "--clips", clips, "--move-while-attacking",
+                self.assertEqual(combo_loop.main(["--graph", graph, "--clips", clips, "--actions-graph", actions,
                                                   "--out", os.path.join(d, "pack")]), 0)
             with open(os.path.join(d, "pack", *combo_loop.GRAPH_REL), "rb") as fh:
                 root = agx_edit.load(fh.read())
                 g = agx_edit.machine(root, "MeleeAttackCombo")
+            with open(os.path.join(d, "pack", *combo_loop.ACTIONS_REL), "rb") as fh:
+                act = agx_edit.load(fh.read())
             with open(os.path.join(clips, "MeleeAttack_C.afx"), "rb") as fh:
                 c = fh.read()
             with open(os.path.join(clips, "MeleeAttack_B.afx"), "rb") as fh:
@@ -131,8 +165,17 @@ class AgxEditTests(unittest.TestCase):
         self.assertIn(b"bCanComboAttack", c)
         self.assertNotIn(b"bDontAllowAttack</name><start>0</start><end>50", c)
         self.assertNotIn(b"bAllowFinisher", b)
-        self.assertIn(b"<name>bFreeMovement</name><start>0</start>", c)       # experiment: free movement throughout
-        self.assertIn((0, 2, "", "bFreeMovement !greaterthan! 1"), agx_edit.transitions(agx_edit.machine(root)))
+        top_t = agx_edit.transitions(agx_edit.machine(root))
+        self.assertIn((0, 0, combo_loop.UNUSED_EVENT, ""), top_t)          # full-body combo no longer entered
+        self.assertNotIn((0, 0, "MeleeAttackStart", ""), top_t)
+        a_top = agx_edit.machine(act)
+        k = agx_edit.state(a_top, "MeleeAttackCombo")
+        idle = agx_edit.state(a_top, "IdleTimer")
+        self.assertIn((k, k, "MeleeAttackStart", ""), agx_edit.transitions(a_top))   # layered: any state -> combo
+        self.assertIn((k, idle, "", ""), agx_edit.transitions(a_top))                 # back to idle at its end
+        inner = agx_edit.transitions(agx_edit.machine(act, "MeleeAttackCombo"))
+        self.assertIn((0, 1, "MeleeAttackStart", ""), inner)                          # the looping copy
+        self.assertIn((3, 2, "MeleeAttackStart", ""), inner)                          # None -> A untouched
 
 
 if __name__ == "__main__":

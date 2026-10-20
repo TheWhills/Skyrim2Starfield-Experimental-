@@ -1,25 +1,31 @@
-"""Make the player's melee combo keep going, as in Skyrim (right, left, right, left ... while attack is pressed),
-instead of Starfield's three hits (docs/armor/animation-port.md, "only three hits").
+"""Make the player's melee combo work as in Skyrim: right, left, right, left ... for as long as attack is pressed, and
+(with --actions-graph) while walking or running, instead of Starfield's three standing hits
+(docs/armor/animation-port.md, "only three hits" and "moving attacks").
 
-Vanilla (verified 2026-10-19 on the owner's MeleeAttacks.agx and the player one-handed descriptors): the embedded state
-machine MeleeAttackCombo goes None -> MeleeAttack_A -> MeleeAttack_B on MeleeAttackStart and B -> C on
-MeleeAttackFinisherStart; nothing leaves C. A and B open a bCanComboAttack window, B also bAllowFinisher (so the game
-sends the finisher event); C has no combo window and bDontAllowAttack over almost all of it.
+Vanilla (verified 2026-10-19 on the owner's MeleeAttacks.agx, MeleeActions.agx, Player_Melee.agx and the player
+one-handed descriptors):
+  * MeleeAttacks: the embedded state machine MeleeAttackCombo, entered from any state on MeleeAttackStart, goes
+    None -> MeleeAttack_A -> MeleeAttack_B on MeleeAttackStart and B -> C on MeleeAttackFinisherStart; nothing leaves C.
+    A and B open a bCanComboAttack window, B also bAllowFinisher (so the game sends the finisher event); C has no combo
+    window and bDontAllowAttack over almost all of it.
+  * Player_Melee plays MeleeAttacks FULL BODY (a Switch away from locomotion) but layers MeleeActions (block, casts,
+    equip) over locomotion through Copy Bone Weights. With the swing in MeleeAttacks the player stops until it ends,
+    even with bFreeMovement open over the whole swing (owner, in game: the --move-while-attacking experiment of
+    2026-10-19, since removed).
 
 This writes:
-  * <out>/meshes/animtextdata/tables/graphs/meleeattacks.agx: the vanilla graph plus C -> B and B -> C on
-    MeleeAttackStart (byte-identical otherwise);
+  * <out>/.../graphs/meleeattacks.agx: the vanilla graph plus C -> B and B -> C on MeleeAttackStart; with
+    --actions-graph its combo is no longer entered on MeleeAttackStart (event renamed to MeleeAttackStartFullBody,
+    which nothing sends);
+  * with --actions-graph, <out>/.../graphs/meleeactions.agx: the vanilla MeleeActions plus a copy of that (looping)
+    combo machine as one more action, entered from any state on MeleeAttackStart and left for IdleTimer when it ends,
+    so the swing is layered over walking like a block or a cast (the approach of the SW SFBM mod, Nexus 16022, which
+    the owner pointed to; built here from the vanilla files, nothing copied from the mod);
   * in each --clips folder holding our MeleeAttack_A / _B / _C descriptors (the Skyrim replacements, where A and C
     are both Skyrim's right swing): C takes A's timing (hit, combo window, attack locks), B loses bAllowFinisher.
-Starfield's finisher is dropped on purpose: Skyrim has none.
+Starfield's finisher is dropped on purpose: Skyrim has none. Power and sprint attacks stay full body.
 
---move-while-attacking (EXPERIMENT, needs the in-game check): Skyrim lets you walk while swinging; Starfield plays its
-combo attacks full body (Player_Melee.agx: a Switch that leaves locomotion for MeleeAttacks) and leaves the combo for
-locomotion ("None", condition Speed > 1.0 and bFreeMovement) only inside each clip's late bFreeMovement window. This
-opens bFreeMovement over the whole of A / B / C and makes that leave-on-moving transition from the combo impossible
-(condition bFreeMovement > 1), to find out whether the game then lets the player move during a swing.
-
-    python -I scripts\\armor\\combo_loop.py --graph <extract>\\meshes\\animtextdata\\tables\\graphs\\meleeattacks.agx
+    python -I scripts\\armor\\combo_loop.py --graph <extract>\\meleeattacks.agx [--actions-graph <extract>\\meleeactions.agx]
         --clips <pack>\\meshes\\actors\\human\\animations\\melee\\onehanded\\player [--clips ...\\player\\sword ...]
         --out <pack>
 """
@@ -33,45 +39,52 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 from fo4sf import af_writer, agx_edit  # noqa: E402
 
-GRAPH_REL = ("meshes", "animtextdata", "tables", "graphs", "meleeattacks.agx")
+GRAPHS = ("meshes", "animtextdata", "tables", "graphs")
+GRAPH_REL = GRAPHS + ("meleeattacks.agx",)
+ACTIONS_REL = GRAPHS + ("meleeactions.agx",)
 MACHINE = "MeleeAttackCombo"
 LOOP = (("MeleeAttack_C", "MeleeAttack_B"), ("MeleeAttack_B", "MeleeAttack_C"))
+UNUSED_EVENT = "MeleeAttackStartFullBody"
+IDLE_STATE = "IdleTimer"
 
 
-def loop_graph(raw: bytes, free_move: bool = False):
+def loop_graph(raw: bytes, layered: bool = False):
+    """(edited MeleeAttacks bytes, the looping combo state <node>, report lines)."""
     root = agx_edit.load(raw)
     g = agx_edit.machine(root, MACHINE)
     tpl = None
     b = agx_edit.state(g, "MeleeAttack_B")
-    for link in g.findall("node")[b].iter("link"):              # the vanilla A -> B link: same blend and layout
+    for link in agx_edit._links_into(g.findall("node")[b]):     # the vanilla A -> B link: same blend and layout
         tpl = link
     added = []
     for s, d in LOOP:
         if agx_edit.add_transition(root, g, agx_edit.state(g, s), agx_edit.state(g, d), "MeleeAttackStart",
                                    blend=0.15, template=tpl):
             added.append(f"{s} -> {d}")
-    if free_move:
-        added.append(f"combo no longer left on moving ({free_move_graph(root)} transition)")
-    return agx_edit.dump(root, raw), added
-
-
-def free_move_graph(root):
-    """The combo no longer leaves for locomotion when the player moves (see --move-while-attacking)."""
     top = agx_edit.machine(root, None)
-    combo = agx_edit.state(top, MACHINE)
-    return sum(agx_edit.set_condition(top, combo, d, "bFreeMovement !greaterthan! 1", old=CANCEL)
-               for d in range(len(top.findall("node"))))
+    k = agx_edit.state(top, MACHINE)
+    combo_node = top.findall("node")[k]
+    if layered:
+        n = agx_edit.set_event(top, k, k, UNUSED_EVENT, old="MeleeAttackStart")
+        added.append(f"full-body combo no longer entered on MeleeAttackStart ({n} transition)")
+    return agx_edit.dump(root, raw), combo_node, added
 
 
-CANCEL = "Speed !greaterthan! 1.0 !ampersand! bFreeMovement !greaterthan! 0"
+def layer_combo(actions_raw: bytes, combo_node):
+    """MeleeActions with the combo state added as a layered action (see the module docstring)."""
+    root = agx_edit.load(actions_raw)
+    top = agx_edit.machine(root, None)
+    idle = agx_edit.state(top, IDLE_STATE)
+    if MACHINE in [agx_edit._rows(n).get("State Machine Name") for n in top.findall("node")]:
+        raise agx_edit.AgxEditError(f"{MACHINE} is already in this MeleeActions")
+    k = agx_edit.clone_state(combo_node, top)
+    agx_edit.add_transition(root, top, k, k, "MeleeAttackStart", blend=0.15)      # from any state, as vanilla
+    agx_edit.add_transition(root, top, k, idle, "", blend=0.3)                     # back to idle when it ends
+    return agx_edit.dump(root, actions_raw), [f"{MACHINE} added as action {k} (any state -> it on MeleeAttackStart, "
+                                              f"-> {IDLE_STATE} at its end)"]
 
 
-def last_frame(afx: bytes) -> int:
-    import re
-    return max([int(x) for x in re.findall(rb"<(?:frame|start|end)>(\d+)<", afx)] or [0])
-
-
-def fix_descriptors(folder: str, free_move: bool = False):
+def fix_descriptors(folder: str):
     names = {f.lower(): f for f in os.listdir(folder)}
     a, b, c = (names.get(f"meleeattack_{x}.afx") for x in "abc")
     done = []
@@ -90,38 +103,36 @@ def fix_descriptors(folder: str, free_move: bool = False):
             fh.write(data)
         if dropped:
             done.append(f"{b}: dropped {', '.join(dropped)}")
-    if free_move:
-        for f in (a, b, c):
-            if not f:
-                continue
-            p = os.path.join(folder, f)
-            with open(p, "rb") as fh:
-                data = fh.read()
-            with open(p, "wb") as fh:
-                fh.write(af_writer.set_variable_window(data, "bFreeMovement", 0, last_frame(data)))
-            done.append(f"{f}: bFreeMovement over the whole clip")
     return done
+
+
+def _write(out, rel, data):
+    dst = os.path.join(out, *rel)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    with open(dst, "wb") as fh:
+        fh.write(data)
+    return dst
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--graph", required=True, help="the vanilla MeleeAttacks.agx")
+    ap.add_argument("--actions-graph", help="the vanilla MeleeActions.agx: also layer the combo over walking")
     ap.add_argument("--clips", action="append", default=[], help="folder with MeleeAttack_A/B/C.afx (repeatable)")
-    ap.add_argument("--out", required=True, help="pack root (Data layout) for the edited graph")
-    ap.add_argument("--move-while-attacking", action="store_true", help="experiment, see above")
+    ap.add_argument("--out", required=True, help="pack root (Data layout) for the edited graphs")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
     with open(a.graph, "rb") as fh:
-        data, added = loop_graph(fh.read(), a.move_while_attacking)
-    dst = os.path.join(out, *GRAPH_REL)
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    with open(dst, "wb") as fh:
-        fh.write(data)
-    print(f"graph: {dst}; added {added or 'nothing (already looping)'}")
+        data, combo, added = loop_graph(fh.read(), layered=bool(a.actions_graph))
+    print(f"graph: {_write(out, GRAPH_REL, data)}; {added or 'nothing changed (already looping)'}")
+    if a.actions_graph:
+        with open(a.actions_graph, "rb") as fh:
+            data, rep = layer_combo(fh.read(), combo)
+        print(f"graph: {_write(out, ACTIONS_REL, data)}; {rep}")
     for folder in a.clips:
-        print(f"{folder}: {fix_descriptors(folder, a.move_while_attacking) or 'no A / B / C descriptors'}")
+        print(f"{folder}: {fix_descriptors(folder) or 'no A / B / C descriptors'}")
     return 0
 
 

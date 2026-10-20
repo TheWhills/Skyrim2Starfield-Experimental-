@@ -6,9 +6,14 @@ short_empty_elements=False). Format facts used here (see agx_write): a state mac
 its states; a transition INTO a state is a <link> inside one of the target's <input>s, naming the source as its 1-based
 index among the sibling nodes plus one of the source's <output> slots. Seen on 42 vanilla graphs: one link per <input>
 at most (a state has one input per incoming transition, sometimes with spare empty ones), one transition per output
-slot, and <id>s unique within a node (inputs and outputs together), not across the file.
+slot, and <id>s unique within a node (inputs and outputs together), not across the file. A link whose source is the
+target itself is an any-state ("wildcard") transition: vanilla enters every action of MeleeActions that way
+(CastSelf <- CastSelf on CastSelfStart, ...) and leaves to the idle state with event-less links from each action
+(verified on MeleeActions.agx / MeleeAttacks.agx: read as 1-based indices, every link is then either such a
+self-link on a start event or a plausible state-to-state edge).
 """
 import copy
+import uuid
 import xml.etree.ElementTree as ET
 from typing import List, Optional
 
@@ -77,11 +82,54 @@ def transitions(graph: ET.Element) -> List[tuple]:
     return out
 
 
+def _links_into(node: ET.Element) -> List[ET.Element]:
+    """The node's own incoming links (not those inside an embedded machine it holds)."""
+    return [link for inp in node.findall("input") for link in inp.findall("link")]
+
+
+def set_event(graph: ET.Element, src: int, dst: int, event: str, old: str) -> int:
+    """Set the Event of the transitions src -> dst whose event is `old`; returns how many changed."""
+    n = 0
+    for link in _links_into(graph.findall("node")[dst]):
+        if int(link.findtext("node")) - 1 != src:
+            continue
+        for r in link.iter("row"):
+            p = r.findall("prop")
+            if p and p[0].findtext("value") == "Event" and (p[1].findtext("value") or "") == old:
+                p[1].find("value").text = event
+                n += 1
+    return n
+
+
+def clone_state(node: ET.Element, graph: ET.Element) -> int:
+    """Append a deep copy of `node` (a state from any graph, e.g. a whole embedded state machine) to `graph`'s states,
+    without its own incoming links and output slots (they named states of its old machine; the copy's inner graph is
+    kept as is), with a fresh guid and a user_id unused among its new siblings. Returns its index."""
+    new = copy.deepcopy(node)
+    for inp in new.findall("input"):
+        for link in inp.findall("link"):
+            inp.remove(link)
+        inp.find("idx").tail = "\n "
+    for out in new.findall("output"):
+        new.remove(out)
+    if new.find("guid") is not None:
+        new.find("guid").text = str(uuid.uuid4())
+    sibs = graph.findall("node")
+    used = [int(n.findtext("user_id")) for n in sibs if (n.findtext("user_id") or "").strip().isdigit()]
+    if new.find("user_id") is not None:
+        new.find("user_id").text = str(max(used or [0]) + 1)
+    kids = list(graph)
+    at = kids.index(sibs[-1]) + 1 if sibs else len(kids)
+    new.tail = sibs[-1].tail if sibs else "\n"
+    graph.insert(at, new)
+    return len(sibs)
+
+
 def set_condition(graph: ET.Element, src: int, dst: int, condition: str, old: Optional[str] = None) -> int:
     """Set the Condition of the transitions src -> dst (0-based states of `graph`; only those whose condition is `old`
     when given); returns how many changed."""
     n = 0
-    for link in graph.findall("node")[dst].iter("link"):
+    for link in _links_into(graph.findall("node")[dst]):
         if int(link.findtext("node")) - 1 != src:
             continue
         for r in link.iter("row"):
