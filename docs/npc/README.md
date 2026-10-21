@@ -49,7 +49,10 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
 
 ## First run (checklist step 9): what to look at
 `Desktop\S2S Face Test`: `faces.json` and `S2SFaceTest.esm` (one test NPC per fitted Skyrim NPC, a vanilla NPC of the
-same sex with its face dials replaced). In game: `help S2SFace 4` lists them; `player.placeatme <id>`.
+same sex with its face dials replaced; a plain one without scripts or companion data is preferred, `--template-npc`
+picks one; scripts / affinity data are stripped from the copies). In game: `help S2SFace 4` lists them with their
+full FormIDs; `player.placeatme <id>`. Only the face shape changes: hair, beard, skin tone and clothes are the
+template's until hair / colour mapping exists.
 * faces.json: `race_dials.also_slider_ids` close to `count` (dial index = slider ID), `pivots_on_head` close to
   `face_bones`, per NPC `rms_after` well below `rms_before`.
 * In game: do Lydia (HousecarlWhiterun), Balgruuf, Ulfric ... look like themselves? If every face is exaggerated or

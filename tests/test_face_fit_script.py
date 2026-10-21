@@ -40,7 +40,9 @@ def starfield_esm(path):
            (b"MRSV", bytes(20)), (b"FMSI", struct.pack("<I", 41)), (b"FMRS", struct.pack("<f", 0.9)),
            (b"FMRI", struct.pack("<I", 2)), (b"FMRG", b"Nose\0"), (b"FMRS", struct.pack("<f", 0.5)),
            (b"ATTX", b"\0"), (b"HCOL", b"Brown\0")]
-    recs = [(b"RACE", h(b"RACE"), race, 0x3CDB), (b"NPC_", h(b"NPC_"), tpl, 0x10001)]
+    quest = [(b"EDID", b"QuestGuyM\0"), (b"VMAD", b"script"), (b"QSTA", struct.pack("<I", 5))] + tpl[1:]
+    recs = [(b"RACE", h(b"RACE"), race, 0x3CDB), (b"NPC_", h(b"NPC_"), quest, 0x10000),
+            (b"NPC_", h(b"NPC_"), tpl, 0x10001)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
@@ -105,6 +107,8 @@ class FaceFitScriptTests(unittest.TestCase):
                 self.assertLess(sigs.index(b"FMSI"), sigs.index(b"ATTX"))
                 self.assertEqual(dict(subs)[b"FULL"], b"HousecarlWhiterun (S2S)\0")
                 self.assertIn("console", rows["HousecarlWhiterun"]["test_npc"])
+                self.assertEqual(rows["HousecarlWhiterun"]["test_npc"]["template"], "SettlerM01")   # the plain one
+                self.assertNotIn(b"VMAD", sigs)
         finally:
             (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head,
              S.bsa.SkyrimArchives) = saved

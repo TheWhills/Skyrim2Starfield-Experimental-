@@ -100,15 +100,29 @@ def with_face(subs, values):
     return kept[:first] + face_subrecords(values) + kept[first:]
 
 
-def pick_template(npc_recs, race_fid, female):
+# Data a test copy must not carry: scripts (VMAD) and companion affinity hooks (QSTA quest, BNAM dialogue)
+STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT")
+
+
+def pick_template(npc_recs, race_fid, female, edid=None):
+    """A vanilla human NPC of the sex to copy: `edid` when given; else one with face dials and no template, preferring
+    plain ones (no scripts, no affinity data: a generic NPC rather than a quest character)."""
+    best = None
     for t, h, subs, fid in npc_recs:
+        if edid is not None:
+            if sfplugin.edid(subs).lower() == edid.lower():
+                return t, h, subs, fid
+            continue
         sigs = {s for s, _d in subs}
         acbs = next((bytes(d) for s, d in subs if s == b"ACBS"), b"")
         is_f = bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1)
         rnam = next((struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"RNAM"), None)
         if rnam == race_fid and is_f == female and b"FMSI" in sigs and b"TPLT" not in sigs:
-            return t, h, subs, fid
-    return None
+            plain = not (sigs & {b"VMAD", b"QSTA", b"BNAM"})
+            if plain:
+                return t, h, subs, fid
+            best = best or (t, h, subs, fid)
+    return best
 
 
 def main(argv=None):
@@ -123,6 +137,8 @@ def main(argv=None):
     ap.add_argument("--head-nif", action="append", default=[], help="head NIF instead of the game's (male, female)")
     ap.add_argument("--pos-unit", type=float, default=0.01, help="metres per regions-file position unit")
     ap.add_argument("--test-plugin", action="store_true")
+    ap.add_argument("--template-npc", action="append", default=[],
+                    help="Starfield NPC EditorID the test NPCs copy (male, then female); default: a plain one")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -204,14 +220,15 @@ def main(argv=None):
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
-            tpl = pick_template(npc_recs, human, row["female"])
+            want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
+            tpl = pick_template(npc_recs, human, row["female"], want)
             if tpl is None:
                 row["test_npc"] = "no vanilla template NPC of this sex"
                 continue
             fid = sfplugin.new_form_id(len(recs))
             subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}),
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
-                                  b"FULL": sfplugin.zs(f"{row['edid']} (S2S)")}, drop=(b"SHRT",))
+                                  b"FULL": sfplugin.zs(f"{row['edid']} (S2S)")}, drop=STRIP)
             recs.append((b"NPC_", tpl[1], subs, fid))
             row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]),
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
