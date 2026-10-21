@@ -54,6 +54,23 @@ def build():
     return tes4 + stat + doors + cells + world
 
 
+def lighting_esm():
+    """A lighting template (ambient 60,50,40, directional 200,180,150) and three cells using it: one inherits its
+    ambient (own XCLL ambient 0,0,0), one sets its own colours, one has no XCLL at all."""
+    from test_skyrim_interior import xcll
+    tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.71, 0, 0x800))])
+    lgtm = grup(b"LGTM", 0, [rec(b"LGTM", 0x5000, [(b"EDID", z("MorthalInteriorLT")),
+                                                     (b"DATA", bytes([60, 50, 40, 0, 200, 180, 150, 0]) + bytes(84))])])
+    ltmp = (b"LTMP", struct.pack("<I", 0x5000))
+    inherit = interior(0x6000, "DarkHouse", [ref(0x6001, WALL, (0, 0, 0))], extra=[xcll((0, 0, 0)), ltmp])  # 0x1 set
+    own = xcll((90, 70, 50))
+    own = (own[0], own[1][:-4] + struct.pack("<I", 0))                       # inherits nothing
+    mine = interior(0x6100, "OwnLight", [ref(0x6101, WALL, (0, 0, 0))], extra=[own, ltmp])
+    bare = interior(0x6200, "TemplateOnly", [ref(0x6201, WALL, (0, 0, 0))], extra=[ltmp])
+    stat = grup(b"STAT", 0, [rec(b"STAT", WALL, [(b"EDID", z("Wall")), (b"MODL", z("Wall.nif"))])])
+    return tes4 + stat + lgtm + grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, inherit + mine + bare)])])
+
+
 class BatchTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -89,6 +106,22 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(skyriminterior.pick_cells(src, find="^Riverwood", limit=2), ["RiverwoodCrypt", "RiverwoodHouse"])
             with self.assertRaises(KeyError):
                 skyriminterior.pick_cells(src, names=["Nowhere"])
+
+    def test_lighting_template_colours(self):
+        path = os.path.join(self.tmp.name, "Lit.esm")
+        with open(path, "wb") as f:
+            f.write(lighting_esm())
+        with fo4land.Plugin(path) as p:
+            src = self.source(p)
+            dark, own, bare = (src.export(n)["lighting"] for n in ("DarkHouse", "OwnLight", "TemplateOnly"))
+        self.assertEqual((dark["ambient"], dark["directional"]), ([60, 50, 40], [200, 150, 100]))
+        self.assertEqual(dark["from_template"], ["ambient"])                 # only the ambient is inherited
+        self.assertEqual(own["ambient"], [90, 70, 50])
+        self.assertNotIn("from_template", own)
+        self.assertEqual((bare["ambient"], bare["directional"]), ([60, 50, 40], [200, 180, 150]))
+        self.assertEqual(bare["template"], "005000:Skyrim.esm")
+        # the one-cell path gives the same
+        self.assertEqual(skyriminterior.export_interior(path, "DarkHouse")["lighting"], dark)
 
     def test_linked_pairs(self):
         with fo4land.Plugin(self.esm) as p:

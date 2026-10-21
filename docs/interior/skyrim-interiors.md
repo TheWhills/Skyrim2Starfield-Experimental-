@@ -138,3 +138,16 @@ load door, each with at least 30 placed records (`batch --smallest-linked-pair`,
 navmesh_defaults.json from step 10, converts, checks, and runs PluginSpike when .NET is installed. It does **not**
 install. `interior_test.txt` in the report has the install and uninstall commands and the in-game steps: an NPC
 walking through the inn, and the door test between the pair.
+
+### First batch run on the PC (2026-10-21)
+- Both C# builds compiled on the first try: the combat plugin (one C4267 size_t warning in Game.cpp) and PluginSpike,
+  with navmeshes, load doors and source_map.json. `FO4Port.esm`: 3 cells, 3 navmeshes (379 / 80 / 68 triangles, door links
+  all kept), 2 load doors linked, 0 lost. Door test pair found: MorthalAlvasHouse <-> MorthalAlvasHouseCellar.
+- Navmesh survey (300 vanilla interior navmeshes): vertex u32 = 1 (26,301) or 0 (8,776); triangle byte 0 (206 are 2);
+  tail (12, 8) in 296 of 300. Triangle height: min 1.8, most common 1.8, median 4.63, max FLT_MAX (no ceiling), median
+  2.45 on door triangles. **Supported:** the height is the clear space above the triangle in metres (1.8 = a
+  human's minimum). We write the median 4.63 everywhere: right for ordinary rooms, too high under low ceilings.
+  Measuring it from collision would be the proper fix if NPCs try to walk under things.
+- MorthalAlvasHouse's ambient came out 0,0,0: its XCLL inherits the ambient from its lighting template (flag 0x1), and
+  the cell's own field is unused. `Source.cell_lighting` now takes inherited ambient / directional colours (and both,
+  for a cell with a template and no XCLL) from the Skyrim LGTM.

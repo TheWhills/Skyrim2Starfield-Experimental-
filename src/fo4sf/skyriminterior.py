@@ -218,6 +218,38 @@ class Source:
                 self.cells.setdefault(_edid(fields).lower(), (fid, fields, rng))
                 self.names[fid] = _edid(fields)
         self._doors = None
+        self._templates = None
+
+    def lighting_templates(self) -> dict:
+        """{LGTM fid: {"ambient", "directional"}} (LGTM DATA starts with the ambient and directional colours; xEdit
+        wbDefinitionsTES5)."""
+        if self._templates is None:
+            self._templates = {}
+            rng = self.p.top_group(b"LGTM")
+            for typ, off, flags, fid in (fo4land.iter_items(self.p.buf, *rng) if rng else ()):
+                if typ == "GRUP" or flags & skyrimrefs.DELETED:
+                    continue
+                for sig, d in fo4land.iter_subrecords(fo4land.record_data(self.p.buf, off)):
+                    if sig == b"DATA" and len(d) >= 8:
+                        self._templates[fid] = {"ambient": _rgb(d, 0), "directional": _rgb(d, 4)}
+        return self._templates
+
+    def cell_lighting(self, fields) -> dict:
+        """cell_lighting, with the colours the cell takes from its lighting template filled in: an XCLL inherit flag
+        (0x1 ambient, 0x2 directional) means the cell's own colour field is unused (owner's MorthalAlvasHouse: ambient
+        0,0,0 written, house dark); a cell with a template and no XCLL takes both. Listed in "from_template"."""
+        lt = cell_lighting(fields, self.plugin_name)
+        ltmp = next((struct.unpack_from("<I", d)[0] for sig, d in fields if sig == b"LTMP" and len(d) >= 4), 0)
+        tpl = self.lighting_templates().get(ltmp) if ltmp else None
+        if not tpl:
+            return lt
+        lt = dict(lt or {})
+        inherits = lt.get("inherits")
+        for bit, key in ((0x1, "ambient"), (0x2, "directional")):
+            if key not in lt or (inherits is not None and inherits & bit):
+                lt[key] = list(tpl[key])
+                lt.setdefault("from_template", []).append(key)
+        return lt
 
     def doors(self) -> dict:
         """{door fid: (cell fid, or None for a worldspace door, (dest fid, pos, rot, flags))} of every persistent
@@ -369,7 +401,7 @@ class Source:
             else:
                 arrival = None
         return {"schema_version": 2, "cell": name, "cell_formkey": skyrimrefs.formkey(cfid, plugin_name),
-                "interior": True, "source": plugin_name, "lighting": cell_lighting(fields, plugin_name), "refs": refs,
+                "interior": True, "source": plugin_name, "lighting": self.cell_lighting(fields), "refs": refs,
                 "deferred_refs": deferred, "arrival": arrival,
                 "load_doors": [e["formkey"] for _f, e in doors if "teleport_destination" in e],
                 "navmeshes": navmeshes, "unreadable_navmeshes": bad_navmeshes}
