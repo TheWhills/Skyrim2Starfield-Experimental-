@@ -1,6 +1,7 @@
 #include "Plugin.h"
 
 #include "Game.h"
+#include "Lock.h"
 
 namespace s2s::sfse {
 namespace {
@@ -63,6 +64,25 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.log_hits = to_int(plugin, "iloghits", settings_.log_hits);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
+
+    const auto lk = combat::ini_section(ini, "Lock");
+    LockSettings ls;
+    auto f = [&](const char* key, float& out) {
+        if (auto it = lk.find(key); it != lk.end()) {
+            try { out = std::stof(it->second); } catch (...) { REX::WARN("[Lock] {} = {}: not a number", key, it->second); }
+        }
+    };
+    f("fmaxdistance", ls.max_distance);
+    f("ftargetheight", ls.target_height);
+    f("feyeheight", ls.eye_height);
+    f("fyawrate", ls.yaw_rate);
+    f("fpitchrate", ls.pitch_rate);
+    f("fpitchsign", ls.pitch_sign);
+    ls.steer_pitch = to_int(lk, "bsteerpitch", 1) != 0;
+    ls.hostile_only = to_int(lk, "bhostileonly", 1) != 0;
+    ls.log_targets = to_int(lk, "ilogtargets", ls.log_targets);
+    if (auto it = lk.find("slockvariable"); it != lk.end()) ls.lock_variable = it->second;
+    Lock::Get().Configure(ls);
 
     std::scoped_lock l(lock_);
     controller_ = combat::Controller(cfg, bindings);
@@ -175,6 +195,7 @@ void Plugin::Tick() {
         invulnerable = controller_.invulnerable(now);
     }
     Run(std::move(cmds));
+    Lock::Get().Update();                                    // main thread (the input hook)
     if (settings_.ghost_during_iframes && invulnerable != ghost_) {
         ghost_ = invulnerable;
         SFSE::GetTaskInterface()->AddTask([g = ghost_]() { game::SetGhost(g); });
@@ -200,11 +221,8 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     if (!stamina.empty()) game::DamageActorValue(stamina, c.amount);
                     break;
                 case K::Log: REX::INFO("{}", c.name); break;
-                case K::ToggleLock:
-                case K::SwitchTarget:
-                    // TODO (lock-on-design.md): needs the third-person camera mapped; the core LockOn is ready.
-                    REX::INFO("{}: lock-on is not wired to the game yet", kind_name(c.kind));
-                    break;
+                case K::ToggleLock: Lock::Get().Toggle(); break;
+                case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); break;
             }
         }
     });

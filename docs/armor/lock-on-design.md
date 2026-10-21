@@ -98,3 +98,18 @@ Order: the plugin core first (input table, payload commands, i-frames, dodge), t
 Open questions (to test in game): does Starfield's aim assist accept a target we choose; is the weapon-drawn
 third-person body already turned by the camera (so a camera lock alone turns the player); what MAAM values vanilla
 melee weapons use.
+
+## Game side, first draft (2026-10-21)
+* No mapping exists for the third-person camera's yaw / pitch (CommonLibSF; OSF Animation's fork maps only the
+  zoom of ThirdPersonState and drives its own free-fly state for scenes). So the lock steers the **player's angle**
+  (OBJ_REFR `data.angle`: z heading, x pitch), as Skyrim / Fallout 4 lock-on mods do on PlayerCharacter; with a
+  weapon drawn the third-person camera stays behind the player (supported hypothesis, first-run check).
+* Core additions (tested): `aim_angles` / `look_forward` (Bethesda convention: yaw 0 = +Y, clockwise; pitch > 0 =
+  down), `steer` (fraction of the gap per frame at TDM's rates, shortest way round, pitch clamp), `view_offset`
+  (yaw / pitch offset from the view: the "screen" position switching uses without a projection).
+* Glue (`sfse/src/Lock.cpp`): candidates from ProcessLists::highActorHandles (alive, hostile to the player),
+  aim point = feet + fTargetHeight; toggled by the `lock` binding (middle mouse, right stick click), switched by
+  `switch_*` bindings; graph bool TDM_TargetLock while locked.
+* Open: units (metres assumed: the log prints the lock distance), pitch sign (`fPitchSign`), line of sight (a ray
+  cast; until then every nearby actor counts as seen), mouse look fighting the lock (consume look input while locked),
+  a target marker.

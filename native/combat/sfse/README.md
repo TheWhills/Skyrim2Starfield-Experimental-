@@ -18,7 +18,7 @@ Spec: `docs/armor/combat-plugin-spec.md`.
 | Block-hit types | on a hit while `iWantBlock` (the melee graph's own block variable) is set: `iS2SBlockHitType` = 0 normal / 1 power | variable set; no graph variants use it yet |
 | I-frames | `Actor.SetGhost` while the controller's i-frames run (until a hit hook exists) | unverified |
 | Dodge cost | optional actor value (`sStaminaActorValue`) | owner decision |
-| Lock-on | not wired (camera not mapped); logs the key presses | later |
+| Lock-on | middle mouse / right stick click; targets from the high-process actor list (alive, hostile, within `fMaxDistance`), chosen and switched by the core; each frame the player's angle (OBJ_REFR angle z / x) is steered toward the target and the third-person camera follows it; graph bool `TDM_TargetLock` | angle convention, units (metres?) and "camera follows heading" unverified; no line-of-sight test yet; mouse look still adds on top |
 
 Everything the game side does runs on the main thread through SFSE's task interface; animation events (which may come
 from animation threads) only feed the controller under a lock.
@@ -49,6 +49,9 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\S2SCombat.log`.
 5. `hit on player:` lines: let an enemy hit you a few times, blocking and not, and once during a dodge. The attack
    event names show whether normal and power attacks can be told apart; a hit "during i-frames" means the interim
    ghost does not stop hits.
-6. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
-7. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
+6. Lock-on: draw a weapon near an enemy, click the middle mouse button. `lock-on: target ...` and a distance line
+   (should read like metres); the view should swing to the enemy and follow it. If it tilts away vertically, set
+   `fPitchSign = -1`; if it turns the wrong way sideways or not at all, send the log.
+7. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
+8. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
    taken by the graph` at debug level is the expected answer today).

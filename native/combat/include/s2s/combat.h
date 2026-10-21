@@ -150,6 +150,23 @@ private:
     int last_switch_dx_ = 0, last_switch_dy_ = 0;
 };
 
+// Aiming the player at a lock-on target (the game side writes the player's angle each frame; with a weapon drawn the
+// third-person camera follows the player's heading). Angles in radians, in the Bethesda reference convention
+// (Skyrim / Fallout 4 OBJ_REFR angle; Starfield keeps the struct, the signs are a supported hypothesis the first run
+// checks): yaw (angle.z) 0 = facing +Y, growing clockwise seen from above (+X at +pi/2); pitch (angle.x) > 0 = looking
+// down.
+struct Angles { float pitch = 0, yaw = 0; };
+float wrap_pi(float a);                                  // into (-pi, pi]
+Angles aim_angles(Vec3 from, Vec3 to);
+Vec3 look_forward(Angles a);                             // unit vector the angles look along
+// Moves `cur` toward `want` (shortest way round for yaw): each axis closes the fraction min(1, rate * dt) of its gap
+// (rates per second; TDM's camera yaw 8 / pitch 2 are the defaults). Pitch is clamped to +-max_pitch.
+Angles steer(Angles cur, Angles want, float dt, float yaw_rate = 8.0f, float pitch_rate = 2.0f,
+             float max_pitch = 1.2f);
+// Where `to` sits relative to the view from `from` looking along `look`: x = yaw offset (right +), y = pitch offset
+// (up +), radians. Used as the "screen" position for target switching when no projection is available.
+void view_offset(Angles look, Vec3 from, Vec3 to, float& x, float& y);
+
 // ------------------------------------------------------------------------------------------------ input table
 // "key -> action" configuration (Key Utils / Stances style): lines "Name = key|action|argument" in an INI section.
 // Actions: "event" (send a graph event), "int" / "bool" / "float" (set a graph variable), "keyword" (toggle an

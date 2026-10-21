@@ -210,6 +210,43 @@ bool can_dodge(float stamina, bool staggered, AttackPhase phase, const DodgeConf
     return true;
 }
 
+// ------------------------------------------------------------------------------------------------ aiming
+float wrap_pi(float a) {
+    constexpr float two_pi = 6.28318530717958647692f, pi = 3.14159265358979323846f;
+    a = std::fmod(a + pi, two_pi);
+    if (a <= 0) a += two_pi;
+    return a - pi;
+}
+
+Angles aim_angles(Vec3 from, Vec3 to) {
+    Vec3 d = sub(to, from);
+    float horiz = length2d(d);
+    Angles out;
+    out.yaw = std::atan2(d.x, d.y);                     // 0 along +Y, +X at +pi/2 (clockwise from above)
+    out.pitch = -std::atan2(d.z, horiz);                // above = negative (looking up)
+    return out;
+}
+
+Vec3 look_forward(Angles a) {
+    float c = std::cos(a.pitch);
+    return {std::sin(a.yaw) * c, std::cos(a.yaw) * c, -std::sin(a.pitch)};
+}
+
+Angles steer(Angles cur, Angles want, float dt, float yaw_rate, float pitch_rate, float max_pitch) {
+    float ky = std::min(1.0f, std::max(0.0f, yaw_rate * dt));
+    float kp = std::min(1.0f, std::max(0.0f, pitch_rate * dt));
+    Angles out;
+    out.yaw = wrap_pi(cur.yaw + wrap_pi(want.yaw - cur.yaw) * ky);
+    out.pitch = std::clamp(cur.pitch + (want.pitch - cur.pitch) * kp, -max_pitch, max_pitch);
+    return out;
+}
+
+void view_offset(Angles look, Vec3 from, Vec3 to, float& x, float& y) {
+    Angles a = aim_angles(from, to);
+    x = wrap_pi(a.yaw - look.yaw);
+    y = -(a.pitch - look.pitch);
+}
+
 // ------------------------------------------------------------------------------------------------ lock-on
 bool LockOn::valid(const Candidate& c, Vec3 player, float distance_scale) const {
     if (!c.alive || !c.visible || !c.line_of_sight) return false;

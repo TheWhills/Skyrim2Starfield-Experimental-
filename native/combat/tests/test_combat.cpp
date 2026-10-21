@@ -157,7 +157,34 @@ static void bindings() {
     CHECK(b.size() == 3 && b[2].key == 0x102);
 }
 
+static bool near(float a, float b, float eps = 1e-4f) { return std::fabs(a - b) < eps; }
+
+static void aiming() {
+    const float pi = 3.14159265f;
+    Vec3 o{0, 0, 0};
+    auto a = aim_angles(o, {0, 10, 0});
+    CHECK(near(a.yaw, 0) && near(a.pitch, 0));
+    CHECK(near(aim_angles(o, {10, 0, 0}).yaw, pi / 2));             // +X: clockwise quarter turn
+    CHECK(near(aim_angles(o, {-10, 0, 0}).yaw, -pi / 2));
+    CHECK(aim_angles(o, {0, 10, 10}).pitch < 0);                     // above: looking up = negative pitch
+    auto f = look_forward(aim_angles({1, 2, 3}, {4, 6, 3}));
+    CHECK(near(f.x, 0.6f) && near(f.y, 0.8f) && near(f.z, 0));
+    CHECK(near(wrap_pi(3 * pi), pi, 1e-3f) && near(wrap_pi(-pi / 2 - 2 * pi), -pi / 2, 1e-3f));
+    // steering across the +-pi seam goes the short way
+    Angles cur{0, pi - 0.1f}, want{0, -pi + 0.1f};
+    auto s = steer(cur, want, 0.05f, 10.0f);                         // half the gap (0.2 rad) per step
+    CHECK(near(std::fabs(wrap_pi(s.yaw - cur.yaw)), 0.1f, 1e-3f));
+    CHECK(near(steer(cur, want, 1.0f, 8.0f).yaw, want.yaw, 1e-3f)); // a long frame snaps, never overshoots
+    CHECK(near(steer({0, 0}, {-3.0f, 0}, 1.0f, 8.0f, 2.0f, 1.2f).pitch, -1.2f));   // clamped pitch
+    float x = 0, y = 0;
+    view_offset({0, 0}, o, {10, 10, 0}, x, y);                       // ahead and to the right
+    CHECK(x > 0 && near(y, 0));
+    view_offset({0, 0}, o, {0, 10, 5}, x, y);                        // ahead and above
+    CHECK(near(x, 0) && y > 0);
+}
+
 int main() {
+    aiming();
     payloads();
     attack_phase();
     input_buffer();
