@@ -130,3 +130,11 @@ counts would have written a broken grid. `cell.json` now carries `grid_raw` (eac
 then its triangles; `skyrimnavmesh.grid_shorts`, tested against our own serializer) and `tail_int32`, and PluginSpike
 copies them as they are. Still unverified until a build: the compile itself, and whether a DOOR without an animation
 graph loads.
+
+### PC checklist step 11 (2026-10-21)
+`scripts/armor/pc_checklist.ps1` step 11 builds a batch in the Desktop folder "S2S Interiors":
+`RiverwoodSleepingGiantInn` (its only load door leads outside), plus the smallest pair of rooms Skyrim joins by a
+load door, each with at least 30 placed records (`batch --smallest-linked-pair`, `Source.linked_pairs`). It uses
+navmesh_defaults.json from step 10, converts, checks, and runs PluginSpike when .NET is installed. It does **not**
+install. `interior_test.txt` in the report has the install and uninstall commands and the in-game steps: an NPC
+walking through the inn, and the door test between the pair.

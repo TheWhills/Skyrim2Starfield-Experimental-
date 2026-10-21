@@ -90,6 +90,17 @@ class BatchTests(unittest.TestCase):
             with self.assertRaises(KeyError):
                 skyriminterior.pick_cells(src, names=["Nowhere"])
 
+    def test_linked_pairs(self):
+        with fo4land.Plugin(self.esm) as p:
+            src = self.source(p)
+            self.assertEqual(src.ref_count(INN), 4)                         # wall, two doors, the actor (not navmeshes)
+            self.assertEqual(src.linked_pairs(min_refs=1),
+                             [("RiverwoodCrypt", "RiverwoodInnCellar", 5), ("RiverwoodInn", "RiverwoodInnCellar", 7)])
+            self.assertEqual(src.linked_pairs(min_refs=3), [("RiverwoodInn", "RiverwoodInnCellar", 7)])
+            self.assertEqual(src.linked_pairs(), [])                         # default: real rooms only
+            self.assertEqual(skyriminterior.pick_cells(src, names=["RiverwoodHouse"], smallest_pair=True),
+                             ["RiverwoodHouse"])
+
     def test_export_marks_destination_cells(self):
         with fo4land.Plugin(self.esm) as p:
             exp = self.source(p).export("RiverwoodInn")

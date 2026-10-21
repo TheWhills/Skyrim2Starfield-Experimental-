@@ -10,7 +10,8 @@
 # Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Out, -Texconv.
 # Also builds the iron weapon test mod (step 6) into the Desktop folder "S2S Iron Weapons" when texconv is found, and
 # the combat plugin (step 7) into the Desktop folder "S2S Combat Plugin" when xmake and Visual Studio's tools are found,
-# and S2SStances.esm (step 8, arrow-key stances) into that same folder.
+# and S2SStances.esm (step 8, arrow-key stances) into that same folder, and converted Skyrim interiors (step 11) into
+# "S2S Interiors" (built, not installed: interior_test.txt in the report says how to install and what to try).
 param(
     [string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
@@ -138,6 +139,67 @@ Copy-Item (Join-Path $faceOut "faces.json") $Out -ErrorAction SilentlyContinue
 
 Say "== 10. vanilla Starfield navmeshes: values for the fields Skyrim's navmeshes lack (navmesh_defaults.json)"
 Invoke-S2SPython -I (Join-Path $Repo "scripts/interior/navmesh_survey.py") --esm (Join-Path $SF "Data\Starfield.esm") --out (Join-Path $Out "navmesh") 2>&1 | ForEach-Object { Say $_ }
+
+Say "== 11. interiors: Sleeping Giant Inn + the smallest pair of rooms Skyrim links by a load door (navmesh, doors)"
+# Builds FO4Port.esm + the converted models in the Desktop folder "S2S Interiors" (work\convert). Does NOT install: the
+# install / uninstall commands and the in-game test list are written to interior_test.txt in the report.
+$intWork = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Interiors"
+$mi = Join-Path $Repo "scripts/interior/make_skyrim_interior.py"
+$navDefaults = Join-Path (Join-Path $Out "navmesh") "navmesh_defaults.json"
+$batchArgs = @("batch", "--skyrim", (Join-Path $SKY "Skyrim.esm"), "--cells", "RiverwoodSleepingGiantInn",
+               "--smallest-linked-pair", "--work", $intWork)
+if (Test-Path $navDefaults) { $batchArgs += @("--navmesh-defaults", $navDefaults) } else { Say "no navmesh_defaults.json (step 10): Starfield-only navmesh fields left at zero" }
+Invoke-S2SPython -I $mi @batchArgs 2>&1 | ForEach-Object { Say $_ }
+$cr = Join-Path $SF "Tools\ContentResources.zip"
+if (-not (Test-Path (Join-Path $intWork "batch.json"))) {
+    Say "batch export failed: interiors skipped"
+} elseif (-not (Test-Path $cr)) {
+    Say "ContentResources.zip not found ($cr; installed with the Creation Kit): interior conversion skipped"
+} elseif (-not (Test-Path $Texconv)) {
+    Say "texconv.exe not found (give -Texconv <path>): interior conversion skipped"
+} else {
+    $clog = Join-Path $Out "interior_convert.log"
+    Invoke-S2SPython -I (Join-Path $Repo "scripts/terrain/make_skyrim_objects.py") convert --work $intWork --skyrim-data $SKY `
+        --content-resources $cr --texconv $Texconv --starfield-data (Join-Path $SF "Data") --resume *> $clog
+    Say ("interior conversion: " + (Get-Content $clog -Tail 1))
+    Invoke-S2SPython -I $mi check --work $intWork 2>&1 | ForEach-Object { Say $_ }
+    Copy-Item (Join-Path $intWork "batch.json"), (Join-Path $intWork "check.json") $Out -ErrorAction SilentlyContinue
+    $staging = Join-Path $intWork "convert"
+    $dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not (Test-Path (Join-Path $staging "manifest.json"))) {
+        Say "no manifest.json (conversion failed, see interior_convert.log): FO4Port.esm not built"
+    } elseif ($dotnet) {
+        $env:STARFIELD_DATA = Join-Path $SF "Data"
+        $plog = Join-Path $Out "pluginspike.log"
+        & dotnet run --project (Join-Path $Repo "dotnet\PluginSpike") -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $intWork "cells.txt")) *> $plog
+        Say ("PluginSpike: " + $(if ($LASTEXITCODE -eq 0) { "ok, " + (Get-Content $plog -Tail 1) } else { "FAILED (pluginspike.log is in the report: compile errors name the Mutagen property)" }))
+    } else {
+        Say "dotnet not found (winget install Microsoft.DotNet.SDK.9): FO4Port.esm not built"
+    }
+    $batch = Get-Content (Join-Path $intWork "batch.json") -Raw | ConvertFrom-Json
+    $linked = @($batch.cells | Where-Object { $_.linked_doors -gt 0 } | ForEach-Object cell)
+    $deployed = Test-Path (Join-Path $SF "Data\FO4Port.deploy.json")
+    @(
+        "Interior test (S2S Interiors). Starfield closed while installing. Uninstall afterwards.",
+        $(if ($deployed) { "0. an earlier FO4Port test is installed: uninstall it first (command at the end)" } else { "" }),
+        "install:   python -I scripts\deploy_starfield.py install --staging `"$staging`" --starfield `"$SF`"",
+        "",
+        "1. coc FO4Port_RiverwoodSleepingGiantInn",
+        "   - lights / textures as last time; walk to the stairs and the counter",
+        "   - navmesh: spawn a human NPC (console: help `"<name>`" 4 lists NPC base IDs; player.placeatme <id> 1),",
+        "     select it in the console and try  pathtoreference player 1  -> it should walk to you around tables and up",
+        "     the stairs. If the console rejects that command: make the NPC hostile and see whether it reaches you",
+        "     around furniture or runs into walls / stops at the stairs",
+        $(if ($linked.Count -ge 2) {
+            "2. door test: coc FO4Port_$($linked[0]); activate the door to $($linked[1]): load screen, then you arrive there?`n" +
+            "   - and back again. If the door does nothing: note it (fallback LOADDOOR_TEMPLATE, docs/interior/skyrim-interiors.md)"
+        } else { "2. door test: no linked pair of rooms in this batch (see batch.json): skipped" }),
+        "3. send back: s2s_checklist_report.zip (has batch.json, check.json, pluginspike.log) + what happened in 1 and 2",
+        "",
+        "uninstall: python -I scripts\deploy_starfield.py uninstall --starfield `"$SF`""
+    ) | Where-Object { $_ -ne $null } | Set-Content (Join-Path $Out "interior_test.txt")
+    Say "in-game test list: $(Join-Path $Out 'interior_test.txt')"
+}
 
 Say "== 5. zips"
 $desk = Join-Path $env:USERPROFILE "Desktop"

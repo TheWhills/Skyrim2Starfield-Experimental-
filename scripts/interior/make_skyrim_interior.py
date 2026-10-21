@@ -136,7 +136,12 @@ def cmd_batch(a):
     with fo4land.Plugin(a.skyrim) as p:
         src = skyriminterior.Source(p, navmesh_defaults=nav_defaults)
         try:
-            picked = skyriminterior.pick_cells(src, names, a.find, a.connected_from or "", a.depth, a.limit)
+            picked = skyriminterior.pick_cells(src, names, a.find, a.connected_from or "", a.depth, a.limit,
+                                               a.smallest_linked_pair)
+            if a.smallest_linked_pair:
+                pairs = src.linked_pairs()
+                print("door test pair: " + (f"{pairs[0][0]} <-> {pairs[0][1]} ({pairs[0][2]} placed records)"
+                                            if pairs else "none found"))
         except KeyError as e:
             sys.exit(str(e))
         if not picked:
@@ -248,6 +253,8 @@ def parser():
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")
     ap.add_argument("--depth", type=int, default=1, help="batch with --connected-from: doors to follow (default 1)")
     ap.add_argument("--limit", type=int, default=0, help="batch: at most this many cells (0: all)")
+    ap.add_argument("--smallest-linked-pair", action="store_true",
+                    help="batch: also the two smallest rooms Skyrim joins by a load door (a cheap door test)")
     ap.add_argument("--max", type=int, default=200, help="list: rows to print")
     return ap
 

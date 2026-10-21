@@ -272,6 +272,31 @@ class Source:
             frontier = nxt
         return [self.names[c] for c in seen]
 
+    def ref_count(self, cfid: int) -> int:
+        """Placed records in an interior cell (cheap: headers only)."""
+        rng = next((r for f, _x, r in self.cells.values() if f == cfid), None)
+        return sum(1 for _ in _children(self.p, rng)) if rng else 0
+
+    def linked_pairs(self, min_refs: int = 30) -> list:
+        """[(cell A, cell B, total placed records)] of interior cells joined by a load door both ways, each with at
+        least `min_refs` placed records (a real room, not a stub), smallest first: the cheapest door test."""
+        doors = self.doors()
+        pairs = set()
+        for fid, (cfid, x) in doors.items():
+            there = doors.get(x[0])
+            if cfid is not None and there and there[0] is not None and there[0] != cfid and there[1][0] == fid:
+                pairs.add(tuple(sorted((cfid, there[0]))))
+        counts = {}
+        out = []
+        for a, b in pairs:
+            for c in (a, b):
+                if c not in counts:
+                    counts[c] = self.ref_count(c)
+            if counts[a] >= min_refs and counts[b] >= min_refs:
+                x, y = sorted((self.names[a], self.names[b]), key=str.lower)
+                out.append((x, y, counts[a] + counts[b]))
+        return sorted(out, key=lambda t: (t[2], t[0].lower()))
+
     def export(self, edid: str) -> dict:
         """Schema-v2 export of one interior cell (by EditorID, case-insensitive): refs (with type / model / transform),
         deferred_refs (actors, placed hazards, unknown bases), "arrival" {pos, rot, source}, per-door teleport links
@@ -356,9 +381,10 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm", navmes
         return Source(p, plugin_name, navmesh_defaults).export(edid)
 
 
-def pick_cells(src: Source, names=(), find="", connected_from="", depth=1, limit=0) -> list:
+def pick_cells(src: Source, names=(), find="", connected_from="", depth=1, limit=0, smallest_pair=False) -> list:
     """The batch's interior EditorIDs, in order, without repeats: `names`, then cells whose EditorID matches the regex
-    `find`, then the cells `depth` load doors from `connected_from`. Unknown names raise KeyError. `limit` > 0 caps."""
+    `find`, then the cells `depth` load doors from `connected_from`, then (`smallest_pair`) the smallest two rooms
+    Skyrim joins by a load door (linked_pairs). Unknown names raise KeyError. `limit` > 0 caps."""
     out, seen = [], set()
 
     def add(n):
@@ -378,6 +404,11 @@ def pick_cells(src: Source, names=(), find="", connected_from="", depth=1, limit
     if connected_from:
         for n in src.connected(connected_from, depth):
             add(n)
+    if smallest_pair:
+        pairs = src.linked_pairs()
+        if pairs:
+            add(pairs[0][0])
+            add(pairs[0][1])
     return out[:limit] if limit > 0 else out
 
 
