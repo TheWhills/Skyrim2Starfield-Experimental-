@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts", "interior"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 from fo4sf import skyriminterior  # noqa: E402
 from test_fo4land import grup, rec  # noqa: E402
+import test_skyrimnavmesh  # noqa: E402
 
 PERSISTENT = 0x400
 WALL, COC, TORCH, DOOR_B, NPC_B = 0x100, 0x32, 0x110, 0x120, 0x130
@@ -59,7 +60,9 @@ def build():
         ref(0x2004, TORCH, (160.0, 50.0, 200.0), extra=[(b"XRDS", struct.pack("<f", 800.0))]),
         ref(0x2006, TORCH, (400.0, 50.0, 200.0), extra=[(b"XRDS", struct.pack("<f", 9.68))]),   # not a radius
         ref(INN_DOOR, DOOR_B, (0.0, 0.0, 0.0), flags=PERSISTENT, extra=[xtel(OUT_DOOR, (5000.0, 6000.0, 700.0))]),
-        rec(b"ACHR", 0x2005, [(b"NAME", struct.pack("<I", NPC_B)), (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))])],
+        rec(b"ACHR", 0x2005, [(b"NAME", struct.pack("<I", NPC_B)), (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))]),
+        rec(b"NAVM", 0x2007, [(b"NVNM", test_skyrimnavmesh.skyrim_nvnm(cell=INN))]),
+        rec(b"NAVM", 0x2008, [(b"NVNM", b"\x0c\x00\x00\x00broken")])],
         extra=[xcll((90, 70, 50)), (b"LTMP", struct.pack("<I", 0x5000))])
     house = interior(HOUSE, "TestHouse", [ref(0x2101, WALL, (0.0, 0.0, 0.0)), ref(0x2102, COC, (10.0, 20.0, 30.0))])
     empty = interior(EMPTY, "EmptyRoom", [])
@@ -82,6 +85,26 @@ class InteriorTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_navmeshes_exported(self):
+        exp = skyriminterior.export_interior(self.esm, "SleepingGiantInn")
+        self.assertEqual([n["formkey"] for n in exp["navmeshes"]], ["002007:Skyrim.esm"])
+        nav = exp["navmeshes"][0]
+        self.assertEqual(nav["problems"], [])
+        g = nav["geometry"]
+        self.assertEqual(g["version"], 17)
+        self.assertEqual(g["parent"], {"cell": "002000:Skyrim.esm"})
+        self.assertEqual(g["door_links"][0]["door"], "01B2C3:Skyrim.esm")
+        self.assertEqual(g["edge_links"][0]["edge"], 1)
+        self.assertEqual(len(g["vertices"]), 4)
+        self.assertEqual([b["formkey"] for b in exp["unreadable_navmeshes"]], ["002008:Skyrim.esm"])
+        cell = skyriminterior.plugin_cell(exp, exp["refs"])
+        geo = cell["navmeshes"][0]["geometry"]
+        self.assertEqual(geo["triangles"][1]["flags"], 0x40)              # its link leaves the cell: cut
+        self.assertEqual((geo["edge_links"], geo["dropped"]["edge_links"]), ([], 1))
+        self.assertEqual(cell["cell_formkey"], "002000:Skyrim.esm")
+        json.dumps(cell)                                                   # the writer reads it as JSON
+        self.assertEqual(skyriminterior.export_interior(self.esm, "TestHouse")["navmeshes"], [])
 
     def test_list(self):
         cells = {c["edid"]: c for c in skyriminterior.list_interiors(self.esm)}

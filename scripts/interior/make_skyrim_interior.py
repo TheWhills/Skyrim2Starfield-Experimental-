@@ -85,7 +85,8 @@ def write_lighting(work, cell, a):
 def cmd_export(a):
     work = outside_repo(a.work)
     os.makedirs(work, exist_ok=True)
-    exp = skyriminterior.export_interior(a.skyrim, a.cell)
+    nav_defaults = load(a.navmesh_defaults) if a.navmesh_defaults else None
+    exp = skyriminterior.export_interior(a.skyrim, a.cell, navmesh_defaults=nav_defaults)
     sub, skipped = exterior.select(exp, skyrimrefs.CONVERT_TYPES)
     by_model = {}
     for r in sub["refs"]:
@@ -164,6 +165,8 @@ def parser():
     ap.add_argument("--work", help="work folder OUTSIDE the repo")
     ap.add_argument("--lighting-template", help="export: Starfield LGTM FormID hex for the cell (default 006658)")
     ap.add_argument("--light-merge-m", type=float, help="export: merge lights closer than this many metres (default 1)")
+    ap.add_argument("--navmesh-defaults", help="export: navmesh_defaults.json from navmesh_survey.py (values of the "
+                                               "Starfield-only navmesh fields; default: zeros)")
     ap.add_argument("--find", default="", help="list: regex on the EditorID")
     ap.add_argument("--max", type=int, default=200, help="list: rows to print")
     return ap

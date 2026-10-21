@@ -229,6 +229,89 @@ void SkyrimAmbient(Cell cell, string src4, JsonElement sl, FormKey templateKey)
     Console.WriteLine($"  cell lighting: template {templateKey} values + Skyrim ambient {amb} x{scale}");
 }
 
+// ---- navmeshes ----------------------------------------------------------------------------------------------------------
+// cell.json "navmeshes": Skyrim navmeshes already translated to Starfield's layout (src/fo4sf/skyrimnavmesh.py: version 17,
+// Skyrim units, Skyrim form keys, links leaving the cell cut). Here: positions / grid to metres, the parent = this cell,
+// edge links -> this cell's new navmeshes, door links -> the converted door references (a door that was not placed loses
+// its link; the triangles stay). Mutagen's typed Starfield NavmeshGeometry; property names as in Mutagen's current
+// source (PluginSpike pins 0.55.0-alpha.67: if a name differs, the compiler says which).
+string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<string, FormKey> placedBySource)
+{
+    if (!root.TryGetProperty("navmeshes", out var navs) || navs.ValueKind != JsonValueKind.Array) return "";
+    var keys = new Dictionary<string, FormKey>();
+    foreach (var n in navs.EnumerateArray())
+        keys[n.GetProperty("formkey").GetString()!] = Id($"NAVM:{cellName}:{n.GetProperty("formkey").GetString()}");
+    int written = 0, triangles = 0, doorsKept = 0, doorsLost = 0;
+    foreach (var n in navs.EnumerateArray())
+    {
+        var src = n.GetProperty("formkey").GetString()!;
+        var g = n.GetProperty("geometry");
+        var geo = new NavmeshGeometry
+        {
+            NavmeshVersion = 17,
+            CrcHash = 0xA5E9A03C,                                                      // PathingCell
+            Parent = new CellNavmeshParent { Parent = new FormLink<ICellGetter>(cell.FormKey) },
+        };
+        foreach (var v in g.GetProperty("vertices").EnumerateArray())
+            geo.Vertices.Add(new NavmeshVertex
+            {
+                Point = new P3Float(v[0].GetSingle() / UnitsPerMetre, v[1].GetSingle() / UnitsPerMetre, v[2].GetSingle() / UnitsPerMetre),
+                Unknown = v[3].GetInt32(),
+            });
+        foreach (var t in g.GetProperty("triangles").EnumerateArray())
+        {
+            var tv = t.GetProperty("v"); var te = t.GetProperty("e");
+            geo.Triangles.Add(new NavmeshTriangle
+            {
+                Vertices = new P3Int16(unchecked((short)tv[0].GetUInt16()), unchecked((short)tv[1].GetUInt16()), unchecked((short)tv[2].GetUInt16())),
+                EdgeLink_0_1 = unchecked((short)te[0].GetUInt16()),
+                EdgeLink_1_2 = unchecked((short)te[1].GetUInt16()),
+                EdgeLink_2_0 = unchecked((short)te[2].GetUInt16()),
+                Height = t.GetProperty("height").GetSingle(),
+                Unknown = t.GetProperty("unknown").GetByte(),
+                Flags = (NavmeshTriangle.Flag)t.GetProperty("flags").GetInt32(),
+                CoverFlags = t.GetProperty("cover").GetUInt16(),
+            });
+            triangles++;
+        }
+        foreach (var l in g.GetProperty("edge_links").EnumerateArray())
+            geo.EdgeLinks.Add(new EdgeLink
+            {
+                Unknown = l.GetProperty("type").GetInt32(),
+                Mesh = new FormLink<INavigationMeshGetter>(keys[l.GetProperty("navmesh").GetString()!]),
+                TriangleIndex = l.GetProperty("triangle").GetInt16(),
+                Unknown2 = (sbyte)l.GetProperty("edge").GetInt32(),
+            });
+        foreach (var d in g.GetProperty("door_links").EnumerateArray())
+        {
+            var door = d.GetProperty("door").GetString() ?? "";
+            if (!placedBySource.TryGetValue(door, out var doorKey)) { doorsLost++; continue; }
+            geo.DoorTriangles.Add(new DoorTriangle
+            {
+                TriangleBeforeDoor = d.GetProperty("triangle").GetInt16(),
+                Unknown = unchecked((int)0xE48B73F3),                                      // PathingDoor
+                Door = new FormLink<IPlacedObjectGetter>(doorKey),
+            });
+            doorsKept++;
+        }
+        var grid = g.GetProperty("grid");
+        geo.GridSize = grid.GetProperty("divisor").GetUInt32();
+        var size = grid.GetProperty("size"); var b = grid.GetProperty("bounds");
+        geo.GridMaxDistance = new P2Float(size[0].GetSingle() / UnitsPerMetre, size[1].GetSingle() / UnitsPerMetre);
+        geo.GridMin = new P3Float(b[0].GetSingle() / UnitsPerMetre, b[1].GetSingle() / UnitsPerMetre, b[2].GetSingle() / UnitsPerMetre);
+        geo.GridMax = new P3Float(b[3].GetSingle() / UnitsPerMetre, b[4].GetSingle() / UnitsPerMetre, b[5].GetSingle() / UnitsPerMetre);
+        foreach (var c in grid.GetProperty("cells").EnumerateArray())
+        {
+            var arr = new NavmeshGridArray();
+            foreach (var tri in c.EnumerateArray()) arr.GridCell.Add(tri.GetInt16());
+            geo.GridArrays.Add(arr);
+        }
+        cell.NavigationMeshes.Add(new NavigationMesh(keys[src], release) { NavmeshGeometry = geo });
+        written++;
+    }
+    return written == 0 ? "" : $"; navmeshes {written} ({triangles} triangles, door links {doorsKept} kept / {doorsLost} to doors not placed)";
+}
+
 // ---- cells ------------------------------------------------------------------------------------------------------------
 P3Float Pos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre, p[1].GetSingle() / UnitsPerMetre, p[2].GetSingle() / UnitsPerMetre);
 P3Float Rot(JsonElement o) => new(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle());
@@ -253,6 +336,7 @@ foreach (var cellPath in args.Skip(2))
         && Setting(src4, "CELL_AMBIENT", "template") == "skyrim")
         SkyrimAmbient(cell, src4, skyLighting, new FormKey(sfEsm, Convert.ToUInt32(ltHex, 16)));
     var lit = new List<P3Float>();
+    var placedBySource = new Dictionary<string, FormKey>();               // Skyrim / FO4 ref -> its new reference
     int lights = 0, placed = 0, skipped = 0, disabled = 0;
     foreach (var r in root.GetProperty("refs").EnumerateArray())
     {
@@ -297,14 +381,16 @@ foreach (var cellPath in args.Skip(2))
             disabled++;
         }
         cell.Temporary.Add(obj);
+        placedBySource[src] = obj.FormKey;
     }
+    var navNote = WriteNavmeshes(cell, cellName, root, placedBySource);
     var cid = cell.FormKey.ID;
     var block = new CellBlock { BlockNumber = (int)(cid % 10), GroupType = GroupTypeEnum.InteriorCellBlock };
     var sub = new CellSubBlock { BlockNumber = (int)((cid / 10) % 10), GroupType = GroupTypeEnum.InteriorCellSubBlock };
     sub.Cells.Add(cell);
     block.SubBlocks.Add(sub);
     mod.Cells.Records.Add(block);
-    Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}");
+    Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}{navNote}");
 }
 
 // ---- door test cell (FO4PORT_DOORTEST=<door editor id>) ------------------------------------------------------------------

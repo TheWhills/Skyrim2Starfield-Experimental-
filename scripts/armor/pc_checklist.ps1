@@ -136,6 +136,9 @@ $faceOut = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Face Test"
 Invoke-S2SPython -I (Join-Path $Repo "scripts/npc/face_fit.py") --skyrim-data $SKY --starfield $SF --out $faceOut --test-plugin 2>&1 | ForEach-Object { Say $_ }
 Copy-Item (Join-Path $faceOut "faces.json") $Out -ErrorAction SilentlyContinue
 
+Say "== 10. vanilla Starfield navmeshes: values for the fields Skyrim's navmeshes lack (navmesh_defaults.json)"
+Invoke-S2SPython -I (Join-Path $Repo "scripts/interior/navmesh_survey.py") --esm (Join-Path $SF "Data\Starfield.esm") --out (Join-Path $Out "navmesh") 2>&1 | ForEach-Object { Say $_ }
+
 Say "== 5. zips"
 $desk = Join-Path $env:USERPROFILE "Desktop"
 $rep = Join-Path $desk "s2s_checklist_report.zip"

@@ -77,3 +77,24 @@ tested on the inn with template 006658, Skyrim ambient (45, 48, 48) and 4x lumen
 
 `export` now writes `LIGHTING_TEMPLATE` 006658, `IMAGE_SPACE` 1C6C37, `CELL_AMBIENT` skyrim, `LIGHT_POWER` 4,
 `LIGHT_MERGE_M` 1 for every Skyrim interior (values already in `lighting.json` still win).
+
+## Navmesh (2026-10-21): Skyrim's own navmeshes, translated
+NPC schedules need navmesh in every cell they use. Skyrim's navmeshes are hand-made per cell and carry the door links
+AI paths through; the format changed little (`src/fo4sf/skyrimnavmesh.py` has both layouts, from xEdit's
+wbDefinitionsTES5 / wbDefinitionsSF1 and Mutagen's Starfield NavmeshGeometry, format only):
+* Skyrim NVNM v12 -> Starfield v17: vertices gain a u32, triangles gain a height (f32) and a byte (16 -> 21 bytes),
+  edges become u16, edge links gain the edge they leave by (derived from the triangle whose flagged edge points at
+  the link), cover is redesigned and waypoints are new (both start empty; Skyrim's cover-triangle list is dropped and
+  counted), two u16 after the grid. Triangle flag bits are the same in both games (Mutagen's Starfield enum).
+* `export` puts each cell's navmeshes in `cell.json` ("navmeshes": Starfield-layout data, Skyrim units, Skyrim form
+  keys). Edge links to navmeshes outside the cell are cut cleanly (edge opened, flag cleared, links renumbered) until
+  neighbouring cells are converted together.
+* PluginSpike writes them as typed Mutagen `NavigationMesh` records in the cell: positions and grid / 70, parent =
+  the new cell, edge links -> the cell's new navmeshes, door links -> the converted door references (`placedBySource`;
+  a door that was not placed loses its link). **Not compiled yet** (no .NET packages in the cloud workspace).
+* Starfield-only fields (vertex u32, triangle height and byte, the trailing pair): `navmesh_survey.py` (checklist
+  step 10) reads vanilla interior navmeshes and writes `navmesh_defaults.json`; `export --navmesh-defaults` uses it.
+  **Unresolved** until then: what the triangle height means (clearance? then a wrong value could block NPCs).
+* First test: Sleeping Giant Inn again, with its navmesh; `tcai` / `tdetect` off, a spawned NPC told to walk
+  (`<npc>.pathtoreference player 1`) should cross the room and use the stairs. If NPCs do not move, regenerate the
+  cell's navmesh in the Creation Kit as the fallback and compare.

@@ -134,6 +134,38 @@ def _children(p, rng):
             yield typ, flags, fid, gtype == 8, fo4land.record_data(p.buf, roff)
 
 
+def _navmeshes(p, rng, plugin_name="Skyrim.esm", defaults=None):
+    """The cell's navmeshes (NAVM records in its children groups) as Starfield-ready data (skyrimnavmesh.to_starfield,
+    Skyrim units) with FormIDs as form keys: parent cell, linked navmeshes and doors stay Skyrim's for the writer to
+    map. Navmeshes that do not read are reported, not raised."""
+    from . import skyrimnavmesh
+    out, bad = [], []
+    for item in fo4land.iter_items(p.buf, *rng):
+        if item[0] != "GRUP" or item[4] not in (8, 9):
+            continue
+        for typ, roff, flags, fid in fo4land.iter_items(p.buf, item[1] + 24, item[2]):
+            if typ != b"NAVM" or flags & skyrimrefs.DELETED:
+                continue
+            fields = skyrimnavmesh.navm_fields(fo4land.iter_subrecords(fo4land.record_data(p.buf, roff)))
+            key = skyrimrefs.formkey(fid, plugin_name)
+            try:
+                nm = skyrimnavmesh.parse_skyrim(fields["nvnm"] or b"")
+            except skyrimnavmesh.NavmeshError as e:
+                bad.append({"formkey": key, "reason": str(e)})
+                continue
+            sf = skyrimnavmesh.to_starfield(nm, defaults)
+            fk = lambda f: skyrimrefs.formkey(f, plugin_name) if f else None     # noqa: E731
+            sf["parent"] = {"cell": fk(nm["parent"]["cell"])} if "cell" in nm["parent"] else \
+                {"world": fk(nm["parent"]["world"]), "grid": list(nm["parent"]["grid"])}
+            for l in sf["edge_links"]:
+                l["navmesh"] = fk(l["navmesh"])
+            for d in sf["door_links"]:
+                d["door"] = fk(d["door"])
+            out.append({"formkey": key, "record_flags": flags, "problems": skyrimnavmesh.check(nm),
+                        "geometry": sf})
+    return out, bad
+
+
 def list_interiors(esm: str) -> list:
     """[{edid, form_id, refs, lights, doors, actors, coc}] of every interior cell, sorted by EditorID."""
     out = []
@@ -189,7 +221,7 @@ def _arrivals_into(p, door_fids):
     return found
 
 
-def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dict:
+def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm", navmesh_defaults=None) -> dict:
     """Schema-v2 export of one interior cell (by EditorID, case-insensitive): refs (with type / model / transform),
     deferred_refs (actors, placed hazards, unknown bases), "arrival" {pos, rot, source} and per-door teleport links."""
     with fo4land.Plugin(esm) as p:
@@ -248,6 +280,7 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dic
                     doors.append((fid, entry))
                 if bedid == COC_MARKER:
                     cocs.append(entry)
+        navmeshes, bad_navmeshes = _navmeshes(p, rng, plugin_name, navmesh_defaults) if rng else ([], [])
         if cocs:
             arrival = {"pos": cocs[0]["pos"], "rot": cocs[0]["rot"], "source": "COCMarkerHeading in the cell"}
         else:
@@ -263,7 +296,8 @@ def export_interior(esm: str, edid: str, plugin_name: str = "Skyrim.esm") -> dic
                 arrival = None
     return {"schema_version": 2, "cell": name, "cell_formkey": skyrimrefs.formkey(cfid, plugin_name),
             "interior": True, "source": plugin_name, "lighting": cell_lighting(fields, plugin_name), "refs": refs, "deferred_refs": deferred, "arrival": arrival,
-            "load_doors": [e["formkey"] for _f, e in doors if "teleport_destination" in e]}
+            "load_doors": [e["formkey"] for _f, e in doors if "teleport_destination" in e],
+            "navmeshes": navmeshes, "unreadable_navmeshes": bad_navmeshes}
 
 
 def plugin_cell(export: dict, selected_refs: list) -> dict:
@@ -284,7 +318,13 @@ def plugin_cell(export: dict, selected_refs: list) -> dict:
         z_up = [arr["pos"][0], arr["pos"][1], arr["pos"][2] + 10.0]     # 10 units up: spawn above the floor, not in it
         refs.append({"formkey": "ARRIVAL:" + export["cell"], "type": "Static", "base_editor_id": COC_MARKER,
                      "model": "", "pos": z_up, "rot": arr["rot"], "scale": 1.0, "disabled": 0})
-    out = {"schema_version": 2, "cell": export["cell"], "refs": refs}
+    out = {"schema_version": 2, "cell": export["cell"], "cell_formkey": export.get("cell_formkey"), "refs": refs}
+    if export.get("navmeshes"):
+        # edge links to navmeshes outside this cell cannot be written yet (no target): cut cleanly
+        from . import skyrimnavmesh
+        here = {n["formkey"] for n in export["navmeshes"]}
+        out["navmeshes"] = [{"formkey": n["formkey"], "geometry": skyrimnavmesh.cut_links(n["geometry"], here)}
+                            for n in export["navmeshes"]]
     if export.get("lighting"):
         out["skyrim_lighting"] = export["lighting"]
     return out
