@@ -304,8 +304,27 @@ static void menus() {
     CHECK(!custom.blocked());
 }
 
+static void hits() {
+    CHECK(hit_kind("MeleeAttackPowerStart") == HitKind::Power && hit_kind("attackPowerStartForward") == HitKind::Power);
+    CHECK(hit_kind("MeleeAttackStart") == HitKind::Normal && hit_kind("  ") == HitKind::Unknown);
+    Controller ctl;
+    auto cs = ctl.on_hit(HitKind::Power, true, 1.0);
+    CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::SetVariable && cs[0].variable.name == "iS2SBlockHitType" &&
+          cs[0].variable.value == 1.0);
+    cs = ctl.on_hit(HitKind::Normal, true, 1.0);
+    CHECK(cs.size() == 1 && cs[0].variable.value == 0.0);
+    CHECK(ctl.on_hit(HitKind::Power, false, 1.0).empty());             // not blocking: nothing to pick
+    PlayerState s;
+    ctl.on_key(56, true, 2.0, s);                                        // dodge: i-frames 2.0 - 2.3
+    cs = ctl.on_hit(HitKind::Normal, false, 2.1);
+    CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::Log);
+    auto off = parse_config("[Combat]\nsBlockHitVariable =\n");
+    CHECK(off.block_hit_variable.empty() && Controller(off).on_hit(HitKind::Power, true, 0).empty());
+}
+
 int main() {
     key_codes();
+    hits();
     menus();
     stance_refresh();
     sample_ini();

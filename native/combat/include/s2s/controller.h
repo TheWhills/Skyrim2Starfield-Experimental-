@@ -64,7 +64,15 @@ struct ControllerConfig {
     // Graph events sent after a stance change (Skyrim's Stances sends blockStart / blockStop so the animation set is
     // picked again; whether Starfield needs this is unresolved). Empty = none.
     std::vector<std::string> stance_refresh_events;
+    // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
+    // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
+    std::string block_hit_variable = "iS2SBlockHitType";
 };
+
+// What hit the player: from the attack data's event name (Starfield: MeleeAttackPowerStart for power attacks,
+// supported hypothesis; the plugin logs the names it sees).
+enum class HitKind : std::uint8_t { Unknown, Normal, Power };
+HitKind hit_kind(std::string_view attack_event);
 
 // "key = value" lines of one INI section (keys lower-cased; ';' / '#' comments; later lines win).
 std::map<std::string, std::string> ini_section(std::string_view ini, std::string_view section);
@@ -103,6 +111,8 @@ public:
     std::vector<Command> on_key(std::uint32_t key, bool down, double t, const PlayerState& s);
     // An animation-graph event of the player (tag and payload as the engine delivers them).
     std::vector<Command> on_anim_event(std::string_view tag, std::string_view payload, double t);
+    // The player was hit (after the game handled it: TESHitEvent). blocking: the player held block.
+    std::vector<Command> on_hit(HitKind kind, bool blocking, double t);
     // Once per frame.
     std::vector<Command> tick(double t, const PlayerState& s);
 

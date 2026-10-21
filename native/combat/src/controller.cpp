@@ -212,6 +212,7 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         } else if (k == "sattackevent") c.attack_event = v;
         else if (k == "spowerattackevent") c.power_event = v;
         else if (k == "spluginevent" || k == "splugineventhost") c.plugin_event_host = v;
+        else if (k == "sblockhitvariable") c.block_hit_variable = v;
         else if (k == "sstancerefreshevents") {
             c.stance_refresh_events.clear();
             std::size_t start = 0;
@@ -373,6 +374,23 @@ std::vector<Command> Controller::on_anim_event(std::string_view tag, std::string
         } else {
             out.push_back(log("payload not handled yet: " + text));   // CAMSHAKE, CAST, $custom, ...
         }
+    }
+    return out;
+}
+
+HitKind hit_kind(std::string_view attack_event) {
+    if (trim(attack_event).empty()) return HitKind::Unknown;
+    return lower(attack_event).find("power") != std::string::npos ? HitKind::Power : HitKind::Normal;
+}
+
+std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t) {
+    std::vector<Command> out;
+    if (iframes_.invulnerable(t))
+        out.push_back(log("hit during i-frames (the interim ghost did not stop it: a damage hook is needed)"));
+    if (blocking && !cfg_.block_hit_variable.empty()) {
+        Command c{Command::Kind::SetVariable};
+        c.variable = {VariableSet::Type::Int, cfg_.block_hit_variable, kind == HitKind::Power ? 1.0 : 0.0};
+        out.push_back(c);
     }
     return out;
 }

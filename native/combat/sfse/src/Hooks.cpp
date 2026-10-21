@@ -113,6 +113,57 @@ RE::BSEventNotifyControl ProcessEvent(Sink* a_this, const RE::BSAnimationGraphEv
     return g_event_original(a_this, a_event, a_source);
 }
 
+// ------------------------------------------------------------------------------------------------ hits
+// Reads memory only after VirtualQuery says it is committed and readable: used for layouts CommonLibSF does not map.
+bool Readable(const void* a_ptr, std::size_t a_len) {
+    if (!a_ptr) return false;
+    REX::W32::MEMORY_BASIC_INFORMATION mbi{};
+    if (!REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi)) || mbi.state != REX::W32::MEM_COMMIT) return false;
+    if (mbi.protect & (REX::W32::PAGE_NOACCESS | 0x100u)) return false;            // no access / guard page
+    const auto ok = mbi.protect & (REX::W32::PAGE_READONLY | REX::W32::PAGE_READWRITE | REX::W32::PAGE_WRITECOPY |
+                                   REX::W32::PAGE_EXECUTE_READ | REX::W32::PAGE_EXECUTE_READWRITE | 0x80u);
+    const auto end = reinterpret_cast<std::uintptr_t>(mbi.baseAddress) + mbi.regionSize;
+    return ok && reinterpret_cast<std::uintptr_t>(a_ptr) + a_len <= end;
+}
+
+// A BSFixedString at a_addr, or "" when anything on the way is not readable or not printable text.
+std::string SafeFixedString(std::uintptr_t a_addr) {
+    const auto* fs = reinterpret_cast<const RE::BSFixedString*>(a_addr);
+    if (!Readable(fs, sizeof(void*))) return {};
+    const auto* entry = *reinterpret_cast<void* const*>(fs);
+    if (!entry || !Readable(entry, 0x20)) return {};
+    const char* text = fs->c_str();
+    std::string out;
+    for (std::size_t i = 0; i < 96; ++i) {
+        if (!Readable(text + i, 1)) return {};
+        const char ch = text[i];
+        if (ch == '\0') return out;
+        if (ch < 0x20 || ch > 0x7E) return {};
+        out.push_back(ch);
+    }
+    return {};
+}
+
+// BGSAttackData is not mapped in CommonLibSF. Fallout 4's layout (NiRefObject 0x10, then BSFixedString event) is the
+// UNVERIFIED guess: the attack event name (MeleeAttackStart / MeleeAttackPowerStart ...) tells normal from power
+// attacks. Read with SafeFixedString, so a wrong guess only logs an empty name.
+constexpr std::ptrdiff_t kAttackDataEvent = 0x10;
+
+class HitSink : public RE::BSTEventSink<RE::TESHitEvent> {
+public:
+    RE::BSEventNotifyControl ProcessEvent(const RE::TESHitEvent& a_event,
+                                          RE::BSTEventSource<RE::TESHitEvent>*) override {
+        auto* player = game::Player();
+        if (!player || a_event.target.get() != player) return RE::BSEventNotifyControl::kContinue;
+        const auto attack = a_event.hitData.attackData;
+        const std::string event = attack ? SafeFixedString(static_cast<std::uintptr_t>(attack) + kAttackDataEvent) : "";
+        const auto* cause = a_event.cause.get();
+        Plugin::Get().OnHit(event, cause ? cause->GetFormID() : 0, a_event.sourceFormID);
+        return RE::BSEventNotifyControl::kContinue;
+    }
+};
+HitSink g_hit_sink;
+
 // Menu open / close (CommonLibSF maps MenuOpenCloseEvent: name, opening): input gating in Plugin::OnButton.
 class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
 public:
@@ -146,6 +197,8 @@ bool Install() {
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
 
     ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
+    if (auto* hits = RE::TESHitEvent::GetEventSource()) hits->RegisterSink(&g_hit_sink);
+    else REX::WARN("no TESHitEvent source: hit handling off");
 
     installed = true;
     REX::INFO("hooks installed: input receiver vtable {:X}, player animation sink vtable {:X}", input_vtbl.address(),

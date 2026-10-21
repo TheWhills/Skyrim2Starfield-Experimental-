@@ -14,6 +14,8 @@ Spec: `docs/armor/combat-plugin-spec.md`.
 | Send graph events | `NotifyAnimationGraphImpl` (CommonLibSF) | mapped; result logged at debug level |
 | Set graph variables (Payload Interpreter SGVB / SGVI / SGVF, int / bool / float bindings) | Papyrus `ObjectReference.SetAnimationVariable*` through the VM (queued: a frame or two late) | native names unverified |
 | Stances | arrow keys -> Papyrus `AddKeyword` / `RemoveKeyword` on S2SStances.esm's keywords (scripts/armor/stance_plugin.py, checklist step 8); every press clears the other stance keywords (they persist in saves); optional `sStanceRefreshEvents` | unverified; animation set re-evaluation while drawn unresolved |
+| Hits on the player | TESHitEvent sink (mapped in CommonLibSF; after the game handled the hit, so it cannot cancel damage); attack event name read from the attack data with memory checks (Fallout 4 layout guess) | event mapped; attack-data layout unverified |
+| Block-hit types | on a hit while `iWantBlock` (the melee graph's own block variable) is set: `iS2SBlockHitType` = 0 normal / 1 power | variable set; no graph variants use it yet |
 | I-frames | `Actor.SetGhost` while the controller's i-frames run (until a hit hook exists) | unverified |
 | Dodge cost | optional actor value (`sStaminaActorValue`) | owner decision |
 | Lock-on | not wired (camera not mapped); logs the key presses | later |
@@ -44,6 +46,9 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\S2SCombat.log`.
 4. `anim event:` lines: draw a melee weapon and swing. Readable names (WeaponDraw, PreHitFrame, WeaponSwing,
    HitFrame, AttackEnd, FootLeft ...) confirm the event layout; garbage or a crash on the first swing means the layout
    guess is wrong: set `iLogAnimEvents = 0` and `bEnabled = 0`, report the log.
-5. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
-6. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
+5. `hit on player:` lines: let an enemy hit you a few times, blocking and not, and once during a dodge. The attack
+   event names show whether normal and power attacks can be told apart; a hit "during i-frames" means the interim
+   ghost does not stop hits.
+6. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
+7. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
    taken by the graph` at debug level is the expected answer today).

@@ -60,6 +60,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.ghost_during_iframes = to_int(plugin, "bghostduringiframes", 1) != 0;
     if (auto it = plugin.find("sstaminaactorvalue"); it != plugin.end()) settings_.stamina_value = it->second;
     settings_.log_menus = to_int(plugin, "ilogmenus", settings_.log_menus);
+    settings_.log_hits = to_int(plugin, "iloghits", settings_.log_hits);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -117,6 +118,31 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
+}
+
+void Plugin::OnHit(std::string_view attack_event, std::uint32_t aggressor, std::uint32_t weapon) {
+    if (!settings_.enabled) return;
+    // Blocking: the melee graph's own variable for a held block (MeleeActions: BlockStart needs iWantBlock = 1).
+    std::int32_t want_block = 0;
+    auto* player = game::Player();
+    const bool read = player && player->GetGraphVariableImplInt(RE::BSFixedString("iWantBlock"), want_block);
+    const auto kind = combat::hit_kind(attack_event);
+    const double now = game::Now();
+    std::vector<combat::Command> cmds;
+    bool invulnerable = false;
+    {
+        std::scoped_lock l(lock_);
+        invulnerable = controller_.invulnerable(now);
+        cmds = controller_.on_hit(kind, want_block != 0, now);
+    }
+    if (logged_hits_ < settings_.log_hits) {
+        ++logged_hits_;
+        REX::INFO("hit on player: attacker {:08X} weapon {:08X} attack event '{}' ({}) blocking {}{} i-frames {}",
+                  aggressor, weapon, attack_event,
+                  kind == combat::HitKind::Power ? "power" : kind == combat::HitKind::Normal ? "normal" : "unknown",
+                  want_block, read ? "" : " (iWantBlock not readable)", invulnerable ? "on" : "off");
+    }
+    Run(std::move(cmds));
 }
 
 void Plugin::DisableAnimEvents(std::string_view why) {
