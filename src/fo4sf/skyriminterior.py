@@ -436,8 +436,12 @@ def plugin_cell(export: dict, selected_refs: list, batch_navmeshes=None) -> dict
         # edge links to navmeshes outside this cell cannot be written yet (no target): cut cleanly
         from . import skyrimnavmesh
         here = set(batch_navmeshes or ()) | {n["formkey"] for n in export["navmeshes"]}
-        out["navmeshes"] = [{"formkey": n["formkey"], "geometry": skyrimnavmesh.cut_links(n["geometry"], here)}
-                            for n in export["navmeshes"]]
+        out["navmeshes"] = []
+        for n in export["navmeshes"]:
+            geo = skyrimnavmesh.cut_links(n["geometry"], here)
+            # what PluginSpike copies into Mutagen as is (its grid is a flat Int16 run, see grid_shorts)
+            geo["grid_raw"], geo["tail_int32"] = skyrimnavmesh.grid_shorts(geo), skyrimnavmesh.tail_int32(geo)
+            out["navmeshes"].append({"formkey": n["formkey"], "geometry": geo})
     if export.get("lighting"):
         out["skyrim_lighting"] = export["lighting"]
     return out

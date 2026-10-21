@@ -238,8 +238,8 @@ void SkyrimAmbient(Cell cell, string src4, JsonElement sl, FormKey templateKey)
 // cell.json "navmeshes": Skyrim navmeshes already translated to Starfield's layout (src/fo4sf/skyrimnavmesh.py: version 17,
 // Skyrim units, Skyrim form keys, links leaving the cell cut). Here: positions / grid to metres, the parent = this cell,
 // edge links -> this cell's new navmeshes, door links -> the converted door references (a door that was not placed loses
-// its link; the triangles stay). Mutagen's typed Starfield NavmeshGeometry; property names as in Mutagen's current
-// source (PluginSpike pins 0.55.0-alpha.67: if a name differs, the compiler says which).
+// its link; the triangles stay). Mutagen's Starfield NavmeshGeometry: names and layout checked against Mutagen's dev source
+// (Oct 2026; alpha.67 has no tag): NavmeshGeometry.xml / NavmeshTriangle.cs / TeleportDestination.cs / Door.xml.
 string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<string, FormKey> placedBySource)
 {
     if (!root.TryGetProperty("navmeshes", out var navs) || navs.ValueKind != JsonValueKind.Array) return "";
@@ -265,7 +265,7 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
             geo.Vertices.Add(new NavmeshVertex
             {
                 Point = new P3Float(v[0].GetSingle() / UnitsPerMetre, v[1].GetSingle() / UnitsPerMetre, v[2].GetSingle() / UnitsPerMetre),
-                Unknown = v[3].GetInt32(),
+                Unknown = unchecked((int)v[3].GetUInt32()),
             });
         foreach (var t in g.GetProperty("triangles").EnumerateArray())
         {
@@ -309,12 +309,12 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
         geo.GridMaxDistance = new P2Float(size[0].GetSingle() / UnitsPerMetre, size[1].GetSingle() / UnitsPerMetre);
         geo.GridMin = new P3Float(b[0].GetSingle() / UnitsPerMetre, b[1].GetSingle() / UnitsPerMetre, b[2].GetSingle() / UnitsPerMetre);
         geo.GridMax = new P3Float(b[3].GetSingle() / UnitsPerMetre, b[4].GetSingle() / UnitsPerMetre, b[5].GetSingle() / UnitsPerMetre);
-        foreach (var c in grid.GetProperty("cells").EnumerateArray())
-        {
-            var arr = new NavmeshGridArray();
-            foreach (var tri in c.EnumerateArray()) arr.GridCell.Add(tri.GetInt16());
-            geo.GridArrays.Add(arr);
-        }
+        // Mutagen's Starfield GridArrays is not per cell: one flat Int16 run (each cell's u32 count as two Int16, then its
+        // triangles) read to the end, then Int32 Unknown3. cell.json carries that run ("grid_raw", skyrimnavmesh.grid_shorts).
+        var gridRun = new NavmeshGridArray();
+        foreach (var x in g.GetProperty("grid_raw").EnumerateArray()) gridRun.GridCell.Add(x.GetInt16());
+        geo.GridArrays.Add(gridRun);
+        geo.Unknown3 = g.GetProperty("tail_int32").GetInt32();
         cell.NavigationMeshes.Add(new NavigationMesh(keys[src], release) { NavmeshGeometry = geo });
         written++;
     }
@@ -339,7 +339,8 @@ FormKey LoadDoorBase(string source, FormKey fallback)
         if (!SfCache().TryResolve<IDoorGetter>(new FormKey(sfEsm, Convert.ToUInt32(tplHex, 16)), out var tpl))
             throw new InvalidOperationException($"LOADDOOR_TEMPLATE {tplHex} is not a DOOR in Starfield.esm");
         rec = (Door)tpl.Duplicate(Id("LOADDOOR:" + it.editorId));
-        rec.Components.RemoveAll(c => c is AnimationGraphComponent);
+        for (int i = rec.Components.Count - 1; i >= 0; i--)
+            if (rec.Components[i] is AnimationGraphComponent) rec.Components.RemoveAt(i);
     }
     else rec = new Door(Id("LOADDOOR:" + it.editorId), release) { Name = "Door", SoundLevel = SoundLevel.Normal };
     rec.EditorID = "LD_" + it.editorId;

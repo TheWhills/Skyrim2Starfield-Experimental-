@@ -191,6 +191,28 @@ def serialize_starfield(sf: Dict, scale: float = 1.0, form_map=None) -> bytes:
     return b"".join(out)
 
 
+def grid_shorts(sf: Dict) -> List[int]:
+    """The grid cells as Mutagen's Starfield NavmeshGeometry holds them (0.55 dev source, NavmeshGridArray): not typed
+    per cell but one flat run of Int16 read to the end of the subrecord. Each cell = its u32 triangle count as two
+    Int16 (low, high) + its triangle indices. The trailing pair (`tail`) is Mutagen's separate Int32 Unknown3."""
+    out = []
+    for c in sf["grid"]["cells"]:
+        n = len(c)
+        out += [_s16(n & 0xFFFF), _s16(n >> 16)] + [int(t) for t in c]
+    return out
+
+
+def _s16(v: int) -> int:
+    return v - 0x10000 if v >= 0x8000 else v
+
+
+def tail_int32(sf: Dict) -> int:
+    """`tail` (two u16) as Mutagen's signed Int32 Unknown3."""
+    lo, hi = sf["tail"]
+    v = (hi << 16) | lo
+    return v - (1 << 32) if v >= 1 << 31 else v
+
+
 def parse_starfield(data: bytes) -> Dict:
     """NVNM v17 -> dict (for checks and for surveying vanilla Starfield navmeshes)."""
     r = _R(bytes(data))

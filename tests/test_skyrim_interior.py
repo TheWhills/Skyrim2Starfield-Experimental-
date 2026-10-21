@@ -103,6 +103,8 @@ class InteriorTests(unittest.TestCase):
         self.assertEqual(geo["triangles"][1]["flags"], 0x40)              # its link leaves the cell: cut
         self.assertEqual((geo["edge_links"], geo["dropped"]["edge_links"]), ([], 1))
         self.assertEqual(cell["cell_formkey"], "002000:Skyrim.esm")
+        self.assertEqual(geo["grid_raw"][:4], [1, 0, 0, 2])                # flat Int16 run for Mutagen: count, tris
+        self.assertEqual(geo["tail_int32"], 0)
         json.dumps(cell)                                                   # the writer reads it as JSON
         self.assertEqual(skyriminterior.export_interior(self.esm, "TestHouse")["navmeshes"], [])
 

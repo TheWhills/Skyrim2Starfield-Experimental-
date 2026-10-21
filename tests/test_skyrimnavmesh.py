@@ -96,6 +96,18 @@ class NavmeshTests(unittest.TestCase):
         back = N.parse_starfield(N.serialize_starfield(cut))
         self.assertEqual(len(back["edge_links"]), 1)
 
+    def test_grid_shorts_are_the_serialized_grid(self):
+        """Mutagen writes GridArrays as bare Int16s then Unknown3: those must be exactly our bytes after the bounds."""
+        sf = N.to_starfield(N.parse_skyrim(skyrim_nvnm()), {"tail": (3, 0x8001)})
+        sf["grid"]["cells"][3] = [1, 1, 1]                                   # a few triangles
+        raw = N.grid_shorts(sf)
+        expect = struct.pack(f"<{len(raw)}h", *raw) + struct.pack("<i", N.tail_int32(sf))
+        data = N.serialize_starfield(sf)
+        self.assertTrue(data.endswith(expect))
+        self.assertEqual(raw[:3], [1, 0, 0])                                 # cell 0: count 1 (low, high), triangle 0
+        self.assertEqual(N.tail_int32(sf), struct.unpack("<i", struct.pack("<HH", 3, 0x8001))[0])
+        self.assertEqual(N.parse_starfield(data)["grid"]["cells"], sf["grid"]["cells"])
+
     def test_exterior_parent(self):
         data = struct.pack("<III", 12, N.PATHING_CELL, 0x3C) + struct.pack("<hh", -3, 5) + skyrim_nvnm()[16:]
         nm = N.parse_skyrim(data)

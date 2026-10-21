@@ -117,7 +117,16 @@ work folder that converts and builds as one plugin:
 * `<out>\source_map.json` (PluginSpike): Skyrim form key of every placed reference, cell and navmesh -> new FormKey.
   NPC placement, furniture and packages (next) look Skyrim targets up here.
 
-**Unresolved until the PC:** Mutagen alpha.67 names (`TeleportDestination`, `Cell.Persistent`, `Door.Components`), and
-whether a DOOR without an animation graph activates and loads in Starfield (if not: `LOADDOOR_TEMPLATE` with a vanilla
+**Unresolved until the PC:** whether a DOOR without an animation graph activates and loads in Starfield (if not: `LOADDOOR_TEMPLATE` with a vanilla
 load door). Test: batch `--connected-from RiverwoodSleepingGiantInn --depth 1`, `coc` into the inn, use a door that
 leads to another converted interior.
+
+### Checked against Mutagen's source (2026-10-21)
+The C# names for navmeshes, teleports, load doors and the cell's persistent list match Mutagen's Starfield
+definitions. Those files are identical at tag 0.54.4 and on the dev branch (Oct 2026), so also in the pinned
+0.55.0-alpha.67, which has no tag of its own. One real bug found and fixed: Mutagen does not type the navmesh grid per
+cell. `GridArrays` is one flat run of Int16 values read to the end, then an `Int32 Unknown3`. A list per cell without
+counts would have written a broken grid. `cell.json` now carries `grid_raw` (each cell's u32 count as two Int16 values,
+then its triangles; `skyrimnavmesh.grid_shorts`, tested against our own serializer) and `tail_int32`, and PluginSpike
+copies them as they are. Still unverified until a build: the compile itself, and whether a DOOR without an animation
+graph loads.
