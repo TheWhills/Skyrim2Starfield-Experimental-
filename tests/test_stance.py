@@ -82,6 +82,16 @@ class StancePluginTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 SP.build(esm)
 
+    def test_entry_race_field_kept(self):
+        subs = [(b"SADD", struct.pack("<I", 0x3CDB))] + entry([PLAYER], [MELEE1H], "G.agx", ["actors\\human\\animations\\melee"])
+        e = subgraph.parse(subs)
+        self.assertEqual(len(e), 1)
+        self.assertEqual(e[0]["race"], 0x3CDB)
+        self.assertEqual(subgraph.build(e[0])[0], (b"SADD", struct.pack("<I", 0x3CDB)))
+        out, _rep = SP.race_with_stances(subs, {"High": 0x01000800})
+        copies = subgraph.parse(out)
+        self.assertEqual([c["race"] for c in copies], [0x3CDB, 0x3CDB])
+
     def test_xxxx_round_trip(self):
         raw = sfplugin.subrecord_bytes(b"BIGD", b"x" * 70000) + sfplugin.subrecord_bytes(b"EDID", b"A\0")
         self.assertEqual(list(fo4land.iter_subrecords(raw)), [(b"BIGD", b"x" * 70000), (b"EDID", b"A\0")])

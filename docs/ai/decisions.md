@@ -108,3 +108,12 @@ anywhere), its commands come back out and run on the main thread through SFSE's 
 * `scripts/guard.py` skips paths registered in .gitmodules: submodule files are not part of this repo's history
   (CommonLibSF's generated ID headers exceed the size limit).
 Alternatives: Address Library vtable indices (index order unknown); a Papyrus-only plugin (cannot read keys).
+
+## 2026-10-21 NPC faces: fit Starfield face dials to Skyrim's baked FaceGen heads
+Converted NPCs get Starfield face dial values solved by bounded least squares so the Starfield head (skinned to its
+face bones) matches each NPC's baked Skyrim FaceGen head, carried across through a one-off alignment of the two base
+heads (docs/npc/README.md). No per-NPC hand work, no new meshes per NPC, faces stay editable in Starfield's chargen.
+Vanilla slider files by default; a face-bone mod's (More Sliders) as an option, since it would make every converted
+NPC depend on that mod. Alternatives: translating Skyrim's 19 NAM9 morph values directly (they describe offsets from a
+race head Starfield does not have, and miss the race head and preset shapes baked into FaceGen); shipping each NPC's
+Skyrim head mesh (thousands of meshes, no chargen, Starfield's head shaders and morphs lost).

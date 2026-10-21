@@ -15,7 +15,9 @@ folder first in SAPT (supported: the mechanism; unverified: what SRAF's bits mea
 import struct
 from typing import Dict, List, Tuple
 
-FIELDS = (b"SAKD", b"STKD", b"SGNM", b"SAPT", b"SRAF")
+# SADD (race, optional) opens an entry when present; SRAF (role u16: 0 MT, 1 Weapon, 2 Furniture ...; perspective
+# u16: 0 third, 1 first person; xEdit wbDefinitionsSF1) closes it.
+FIELDS = (b"SADD", b"SAKD", b"STKD", b"SGNM", b"SAPT", b"SRAF")
 
 
 def parse(subs: List[Tuple[bytes, bytes]]) -> List[Dict]:
@@ -26,9 +28,12 @@ def parse(subs: List[Tuple[bytes, bytes]]) -> List[Dict]:
         if sig not in FIELDS:
             continue
         if cur is None:
-            cur = {"actor_keywords": [], "target_keywords": [], "graph": None, "paths": [], "flags": None}
+            cur = {"race": None, "actor_keywords": [], "target_keywords": [], "graph": None, "paths": [],
+                   "flags": None}
         d = bytes(d)
-        if sig == b"SAKD":
+        if sig == b"SADD":
+            cur["race"] = struct.unpack("<I", d[:4])[0]
+        elif sig == b"SAKD":
             cur["actor_keywords"].append(struct.unpack("<I", d[:4])[0])
         elif sig == b"STKD":
             cur["target_keywords"].append(struct.unpack("<I", d[:4])[0])
@@ -46,8 +51,9 @@ def parse(subs: List[Tuple[bytes, bytes]]) -> List[Dict]:
 
 
 def build(entry: Dict) -> List[Tuple[bytes, bytes]]:
-    """Subrecords for one entry, in the majority order seen (SAKD, SGNM, SAPT..., STKD, SRAF)."""
-    out = [(b"SAKD", struct.pack("<I", k)) for k in entry.get("actor_keywords", [])]
+    """Subrecords for one entry, in the majority order seen ([SADD], SAKD, SGNM, SAPT..., STKD, SRAF)."""
+    out = [(b"SADD", struct.pack("<I", entry["race"]))] if entry.get("race") is not None else []
+    out += [(b"SAKD", struct.pack("<I", k)) for k in entry.get("actor_keywords", [])]
     out.append((b"SGNM", entry["graph"].encode("latin-1") + b"\0"))
     out += [(b"SAPT", p.encode("latin-1") + b"\0") for p in entry["paths"]]
     out += [(b"STKD", struct.pack("<I", k)) for k in entry.get("target_keywords", [])]

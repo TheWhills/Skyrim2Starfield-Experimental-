@@ -11,8 +11,8 @@ struct Settings {
     int log_events = 300;           // first N animation events of the player written to the log (tag, payload)
     bool ghost_during_iframes = true;   // Actor.SetGhost while i-frames run (until a hit hook exists)
     std::string stamina_value;      // actor value EditorID the dodge cost uses ("" = no cost)
-    int log_menus = 60;
-    int log_hits = 30;              // first N hits on the player written to the log (attacker, weapon, attack event)             // first N menu open / close events written to the log (to check the menu names)
+    int log_menus = 60;             // first N menu open / close events written to the log (to check the menu names)
+    int log_hits = 30;              // first N hits on the player written to the log (attacker, weapon, attack event)
 };
 
 class Plugin {

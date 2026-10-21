@@ -131,6 +131,11 @@ $stmod = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Combat Plugin"
 Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/stance_plugin.py") --starfield $SF --out $stmod 2>&1 | ForEach-Object { Say $_ }
 Copy-Item (Join-Path $stmod "stance_plugin.json") $Out -ErrorAction SilentlyContinue
 
+Say "== 9. face fit: Skyrim NPC faces -> Starfield face dials, with a test plugin (S2SFaceTest.esm)"
+$faceOut = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Face Test"
+Invoke-S2SPython -I (Join-Path $Repo "scripts/npc/face_fit.py") --skyrim-data $SKY --starfield $SF --out $faceOut --test-plugin 2>&1 | ForEach-Object { Say $_ }
+Copy-Item (Join-Path $faceOut "faces.json") $Out -ErrorAction SilentlyContinue
+
 Say "== 5. zips"
 $desk = Join-Path $env:USERPROFILE "Desktop"
 $rep = Join-Path $desk "s2s_checklist_report.zip"
