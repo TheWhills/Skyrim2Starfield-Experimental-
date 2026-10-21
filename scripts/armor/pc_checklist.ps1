@@ -26,7 +26,20 @@ function Say($t) { Write-Host $t; Add-Content -Path $log -Value $t }
 Set-Location $Repo
 
 Say "== 0. environment"
-Say ("python: " + (python --version 2>&1))
+# "python" on Windows can be the Microsoft Store placeholder; fall back to the py launcher.
+$PyExe = "python"; $PyPre = @()
+$pv = "$(& python --version 2>&1)"
+if ($pv -notmatch "^Python 3") {
+    $launcher = Get-Command py -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($launcher) { $PyExe = $launcher.Source; $PyPre = @("-3"); $pv = "$(& $PyExe -3 --version 2>&1)" }
+}
+# (named so it cannot shadow the "py" launcher itself)
+function Invoke-S2SPython { & $PyExe @PyPre @args }
+Say ("python: $PyExe $pv")
+if ($pv -notmatch "^Python 3") { Say "Python 3 not found: install it from python.org (tick 'Add to PATH'), then run this again" }
+$np = "$(Invoke-S2SPython -c "import numpy; print(numpy.__version__)" 2>&1)"
+Say ("numpy: " + $np)
+if ($np -notmatch "^\d") { Say "numpy missing: run  $PyExe $PyPre -m pip install numpy  then run this again (steps 4-6 need it)" }
 Say ("repo commit: " + (git log -1 --format="%h %s" 2>&1))
 foreach ($f in @("Starfield.exe", "sfse_loader.exe", "CreationKit.exe")) {
     $p = Join-Path $SF $f
@@ -66,14 +79,14 @@ if (Test-Path $exe) {
 }
 
 Say "== 2. Starfield.esm: weapon animation keywords, HumanRace animation sets, melee aim assist"
-python -I (Join-Path $Repo "scripts/armor/weapon_anim_survey.py") --esm (Join-Path $SF "Data\Starfield.esm") --out (Join-Path $Out "weapon_anims") 2>&1 | ForEach-Object { Say $_ }
+Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/weapon_anim_survey.py") --esm (Join-Path $SF "Data\Starfield.esm") --out (Join-Path $Out "weapon_anims") 2>&1 | ForEach-Object { Say $_ }
 
 Say "== 3. Starfield animation caches (animtextdata) for the melee sets"
-python -I (Join-Path $Repo "scripts/armor/sf_animcache_survey.py") --starfield-data (Join-Path $SF "Data") --out (Join-Path $Out "animcache") 2>&1 | ForEach-Object { Say $_ }
+Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/sf_animcache_survey.py") --starfield-data (Join-Path $SF "Data") --out (Join-Path $Out "animcache") 2>&1 | ForEach-Object { Say $_ }
 
 Say "== 4. vanilla Skyrim: motion data, behaviours, two-handed / dual / shield clips"
 $skyOut = Join-Path $Out "skyrim_anims"
-python -I (Join-Path $Repo "scripts/armor/skyrim_anim_extract.py") --skyrim-data $SKY --out $skyOut 2>&1 | ForEach-Object { Say $_ }
+Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/skyrim_anim_extract.py") --skyrim-data $SKY --out $skyOut 2>&1 | ForEach-Object { Say $_ }
 
 Say "== 6. iron weapon test mod (one Skyrim weapon of each type)"
 if (-not (Test-Path $Texconv)) {
@@ -82,7 +95,7 @@ if (-not (Test-Path $Texconv)) {
 }
 if (Test-Path $Texconv) {
     $wpn = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Iron Weapons"
-    python -I (Join-Path $Repo "scripts/armor/weapon_test_pack.py") --skyrim-data $SKY --starfield $SF --texconv $Texconv --out $wpn 2>&1 | ForEach-Object { Say $_ }
+    Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/weapon_test_pack.py") --skyrim-data $SKY --starfield $SF --texconv $Texconv --out $wpn 2>&1 | ForEach-Object { Say $_ }
     Copy-Item (Join-Path $wpn "weapon_test_pack.json") $Out -ErrorAction SilentlyContinue
 } else {
     Say "texconv.exe not found (give -Texconv <path>): weapon test mod skipped"
@@ -115,7 +128,7 @@ if ($xmake -and (Test-Path (Join-Path $plug "xmake.lua"))) {
 
 Say "== 8. stances plugin (S2SStances.esm: stance keywords + HumanRace animation entries)"
 $stmod = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Combat Plugin"
-python -I (Join-Path $Repo "scripts/armor/stance_plugin.py") --starfield $SF --out $stmod 2>&1 | ForEach-Object { Say $_ }
+Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/stance_plugin.py") --starfield $SF --out $stmod 2>&1 | ForEach-Object { Say $_ }
 Copy-Item (Join-Path $stmod "stance_plugin.json") $Out -ErrorAction SilentlyContinue
 
 Say "== 5. zips"
