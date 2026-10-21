@@ -117,3 +117,10 @@ Vanilla slider files by default; a face-bone mod's (More Sliders) as an option, 
 NPC depend on that mod. Alternatives: translating Skyrim's 19 NAM9 morph values directly (they describe offsets from a
 race head Starfield does not have, and miss the race head and preset shapes baked into FaceGen); shipping each NPC's
 Skyrim head mesh (thousands of meshes, no chargen, Starfield's head shaders and morphs lost).
+
+## 2026-10-21: interiors are built in batches into one plugin, with a source map
+Skyrim interiors are converted many at a time (`make_skyrim_interior.py batch`) into one PluginSpike run: one model
+conversion, stable FormIDs as before, load doors linked only when both ends are in the batch, navmesh links kept inside
+the batch. PluginSpike writes `source_map.json` (Skyrim form key -> new FormKey) as the single lookup for later steps
+(NPCs, furniture, packages, locations) instead of each step re-deriving the formids.json keys. Load doors get their own
+DOOR base per model (no animation graph) rather than reusing the static, because XTEL needs a door base.

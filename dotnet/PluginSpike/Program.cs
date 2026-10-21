@@ -1,5 +1,5 @@
 // Plugin writer for converted assets (S2 -> WP-08 / WP-10).
-//   dotnet run -- <output dir> <manifest.json> [cell.json ...]
+//   dotnet run -- <output dir> <manifest.json> [cell.json ... | @cells.txt (one cell.json path per line)]
 // Creates FO4Port.esm with one STAT per converted item and, for each cell export from dotnet/Fo4Export, an interior cell
 // "FO4Port_<cell>" holding every reference whose model was converted, placed at the Fallout 4 position / 70 (metres), same rotation
 // (radians) and scale. Initially-disabled FO4 references stay initially disabled.
@@ -7,6 +7,9 @@
 // FormIDs are STABLE: <output dir>/formids.json maps an identity key to its FormID and is reused on every run, so adding or
 // removing assets never renumbers existing records (saves and cross-references keep working). Keys:
 //   STAT:<editor id>   CELL:<cell name>   REFR:<cell name>:<source FO4 FormKey>   (lights and COC markers use their source ref)
+//   LOADDOOR:<editor id> (a converted model used by a linked load door)   NAVM:<cell name>:<source navmesh>
+// <output dir>/source_map.json: source form key (Skyrim / FO4 reference, cell, navmesh) -> new FormKey, for the later steps
+// (NPCs, packages, furniture) that refer to the source game's records.
 using System.Text.Json;
 using System.Globalization;
 using Mutagen.Bethesda.Plugins;
@@ -33,6 +36,7 @@ var ids = File.Exists(mapPath)
     : new Dictionary<string, uint>();
 var next = ids.Count == 0 ? FirstId : ids.Values.Max() + 1;
 var usedThisRun = new HashSet<string>();
+var sourceMap = new SortedDictionary<string, string>();      // source form key -> new FormKey (source_map.json)
 FormKey Id(string key)
 {
     if (!usedThisRun.Add(key)) throw new InvalidOperationException($"duplicate identity key {key}");
@@ -50,6 +54,7 @@ foreach (var it in manifestDoc.RootElement.GetProperty("items").EnumerateArray()
 // source FO4 model -> (base record, origin offset in metres). Hinged doors become DOOR records animated by a vanilla door's
 // graph / skeleton / animations; their NIF origin sits at a different point, so references are shifted by origin_offset.
 var bySource = new Dictionary<string, (FormKey key, P3Float offset)>(StringComparer.OrdinalIgnoreCase);
+var itemBySource = items.ToDictionary(i => i.source.Replace('/', '\\'), i => i, StringComparer.OrdinalIgnoreCase);
 int doors = 0;
 foreach (var (editorId, model, source, door) in items)
 {
@@ -240,7 +245,11 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
     if (!root.TryGetProperty("navmeshes", out var navs) || navs.ValueKind != JsonValueKind.Array) return "";
     var keys = new Dictionary<string, FormKey>();
     foreach (var n in navs.EnumerateArray())
-        keys[n.GetProperty("formkey").GetString()!] = Id($"NAVM:{cellName}:{n.GetProperty("formkey").GetString()}");
+    {
+        var nk = n.GetProperty("formkey").GetString()!;
+        keys[nk] = Id($"NAVM:{cellName}:{nk}");
+        sourceMap[nk] = keys[nk].ToString();
+    }
     int written = 0, triangles = 0, doorsKept = 0, doorsLost = 0;
     foreach (var n in navs.EnumerateArray())
     {
@@ -312,11 +321,44 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
     return written == 0 ? "" : $"; navmeshes {written} ({triangles} triangles, door links {doorsKept} kept / {doorsLost} to doors not placed)";
 }
 
+// ---- load doors -------------------------------------------------------------------------------------------------------
+// cell.json refs with "teleport" {door, cell, pos, rot, flags} (make_skyrim_interior.py batch: Skyrim load doors whose
+// destination door is in another cell of the batch). Their base must be a DOOR, so a converted static model used by a load
+// door also gets a DOOR record (no animation graph: Skyrim load doors do not open, they load). LOADDOOR_TEMPLATE=<hex>:
+// copy that vanilla Starfield DOOR instead (sounds, keywords) with the model swapped and its animation graph removed.
+// The teleport itself is set after every cell is placed (the destination may come later), as XTEL: destination door,
+// position / 70, rotation, flags. Mutagen's Starfield TeleportDestination as in its Skyrim one; unverified until built.
+var loadDoorBases = new Dictionary<string, FormKey>(StringComparer.OrdinalIgnoreCase);
+FormKey LoadDoorBase(string source, FormKey fallback)
+{
+    if (loadDoorBases.TryGetValue(source, out var have)) return have;
+    if (!itemBySource.TryGetValue(source, out var it) || it.door != null) return loadDoorBases[source] = fallback;  // rigged: already a DOOR
+    Door rec;
+    if (Environment.GetEnvironmentVariable("LOADDOOR_TEMPLATE") is string tplHex)
+    {
+        if (!SfCache().TryResolve<IDoorGetter>(new FormKey(sfEsm, Convert.ToUInt32(tplHex, 16)), out var tpl))
+            throw new InvalidOperationException($"LOADDOOR_TEMPLATE {tplHex} is not a DOOR in Starfield.esm");
+        rec = (Door)tpl.Duplicate(Id("LOADDOOR:" + it.editorId));
+        rec.Components.RemoveAll(c => c is AnimationGraphComponent);
+    }
+    else rec = new Door(Id("LOADDOOR:" + it.editorId), release) { Name = "Door", SoundLevel = SoundLevel.Normal };
+    rec.EditorID = "LD_" + it.editorId;
+    rec.Model = new Model { File = it.model };
+    mod.Doors.Add(rec);
+    return loadDoorBases[source] = rec.FormKey;
+}
+var placedAll = new Dictionary<string, PlacedObject>();                     // every placed reference by source form key
+var pendingTeleports = new List<(PlacedObject obj, JsonElement teleport)>();
+
 // ---- cells ------------------------------------------------------------------------------------------------------------
+static bool tele0(JsonElement r) => r.TryGetProperty("teleport", out var t) && t.ValueKind == JsonValueKind.Object;
 P3Float Pos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre, p[1].GetSingle() / UnitsPerMetre, p[2].GetSingle() / UnitsPerMetre);
 P3Float Rot(JsonElement o) => new(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle());
 
-foreach (var cellPath in args.Skip(2))
+var cellPaths = args.Skip(2).SelectMany(a => a.StartsWith('@')
+    ? File.ReadAllLines(a[1..]).Select(l => l.Trim()).Where(l => l.Length > 0)
+    : new[] { a }).ToList();
+foreach (var cellPath in cellPaths)
 {
     using var cdoc = JsonDocument.Parse(File.ReadAllText(cellPath));
     var root = cdoc.RootElement;
@@ -361,7 +403,10 @@ foreach (var cellPath in args.Skip(2))
         }
         else
         {
-            if (model.Length == 0 || !bySource.TryGetValue("meshes\\" + model.TrimStart('\\'), out var bas)) { skipped++; continue; }
+            var srcModel = "meshes\\" + model.TrimStart('\\');
+            if (model.Length == 0 || !bySource.TryGetValue(srcModel, out var bas)) { skipped++; continue; }
+            var tele = r.TryGetProperty("teleport", out var tj) && tj.ValueKind == JsonValueKind.Object;
+            if (tele) bas = (LoadDoorBase(srcModel, bas.key), bas.offset);
             var scale = r.GetProperty("scale").GetSingle();
             var rot = Rot(r.GetProperty("rot"));
             var pos = Pos(r.GetProperty("pos"));
@@ -373,6 +418,7 @@ foreach (var cellPath in args.Skip(2))
                 Rotation = rot,
             };
             if (Math.Abs(scale - 1f) > 1e-4) obj.Scale = scale;
+            if (tele) pendingTeleports.Add((obj, tj.Clone()));
             placed++;
         }
         if (r.TryGetProperty("disabled", out var dis) && dis.GetInt32() != 0)
@@ -380,9 +426,13 @@ foreach (var cellPath in args.Skip(2))
             obj.MajorRecordFlagsRaw |= 0x800;                                              // Initially Disabled, as in FO4
             disabled++;
         }
-        cell.Temporary.Add(obj);
+        if (tele0(r)) cell.Persistent.Add(obj); else cell.Temporary.Add(obj);   // load doors are persistent, as in Skyrim
         placedBySource[src] = obj.FormKey;
+        placedAll[src] = obj;
+        sourceMap[src] = obj.FormKey.ToString();
     }
+    if (root.TryGetProperty("cell_formkey", out var cfk) && cfk.ValueKind == JsonValueKind.String)
+        sourceMap[cfk.GetString()!] = cell.FormKey.ToString();
     var navNote = WriteNavmeshes(cell, cellName, root, placedBySource);
     var cid = cell.FormKey.ID;
     var block = new CellBlock { BlockNumber = (int)(cid % 10), GroupType = GroupTypeEnum.InteriorCellBlock };
@@ -392,6 +442,22 @@ foreach (var cellPath in args.Skip(2))
     mod.Cells.Records.Add(block);
     Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}{navNote}");
 }
+
+int teleLinked = 0, teleLost = 0;
+foreach (var (obj, t) in pendingTeleports)
+{
+    if (!placedAll.TryGetValue(t.GetProperty("door").GetString()!, out var dest)) { teleLost++; continue; }   // its model failed
+    obj.TeleportDestination = new TeleportDestination
+    {
+        Door = new FormLink<IPlacedObjectGetter>(dest.FormKey),
+        Position = Pos(t.GetProperty("pos")),
+        Rotation = Rot(t.GetProperty("rot")),
+        Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
+    };
+    teleLinked++;
+}
+if (pendingTeleports.Count > 0)
+    Console.WriteLine($"load doors: {teleLinked} linked, {teleLost} lost (destination door not placed); {loadDoorBases.Count} door models");
 
 // ---- door test cell (FO4PORT_DOORTEST=<door editor id>) ------------------------------------------------------------------
 // One 8x8 m vanilla platform, the converted door at the origin (facing +X like an FO4 door with no rotation), the vanilla
@@ -432,4 +498,5 @@ mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfDa
     .Write();
 File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value),
     new JsonSerializerOptions { WriteIndented = true }));
-Console.WriteLine($"wrote {path} ({new FileInfo(path).Length:N0} bytes); {ids.Count} stable FormIDs in {mapPath}");
+File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));
+Console.WriteLine($"wrote {path} ({new FileInfo(path).Length:N0} bytes); {ids.Count} stable FormIDs in {mapPath}; source_map.json");

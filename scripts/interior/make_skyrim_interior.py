@@ -3,6 +3,9 @@ converter as the exterior objects and the upstream plugin writer (dotnet/PluginS
 
     list    interior cells with reference / light / door / actor counts and whether Skyrim has a coc marker in them
     export  one cell -> <work>/export.json, convert_input.json (models), cell.json (what PluginSpike places), interior.json
+    batch   many cells into one work folder (one conversion, one plugin): --cells A,B --find REGEX --connected-from CELL
+            --depth N; load doors between cells of the batch are linked -> exports/, cells/<cell>.json, cells.txt,
+            convert_input.json (every model once), batch.json
     check   after the conversion: which placed models converted, which failed, the PluginSpike command to run
 
 Windows, from the repo:
@@ -14,6 +17,9 @@ Windows, from the repo:
         --texconv "<xEdit>\\Edit Scripts\\texconv.exe" --starfield-data "<Starfield>\\Data" --resume
     python -I scripts\\interior\\make_skyrim_interior.py check --work C:\\Modding\\work\\int_sleepinggiant
 then the PluginSpike command `check` prints (cell "FO4Port_<cell>" in FO4Port.esm: the writer's existing name).
+A whole town's interiors, linked to each other (doors to the outside stay scenery until the exterior is linked):
+    python -I scripts\\interior\\make_skyrim_interior.py batch --skyrim "<Skyrim SE>\\Data\\Skyrim.esm" ^
+        --find "^Riverwood" --work C:\\Modding\\work\\int_riverwood
 """
 import argparse
 import json
@@ -25,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from fo4sf import exterior, skyriminterior, skyrimrefs  # noqa: E402
+from fo4sf import exterior, fo4land, skyriminterior, skyrimrefs  # noqa: E402
 
 
 def save(path, obj):
@@ -121,15 +127,56 @@ def cmd_export(a):
     return 0
 
 
-def cmd_check(a):
+def cmd_batch(a):
     work = outside_repo(a.work)
-    cell = load(os.path.join(work, "cell.json"))
-    man_path = os.path.join(work, "convert", "manifest.json")
-    if not os.path.exists(man_path):
-        sys.exit(f"{man_path} missing: run make_skyrim_objects.py convert --work {work} first")
-    man = load(man_path)
-    have = {i["source"].lower() for i in man["items"]}
-    failed = {f["nif"].lower(): f["reason"] for f in man["failures"]}
+    os.makedirs(os.path.join(work, "exports"), exist_ok=True)
+    os.makedirs(os.path.join(work, "cells"), exist_ok=True)
+    nav_defaults = load(a.navmesh_defaults) if a.navmesh_defaults else None
+    names = [n.strip() for n in (a.cells or "").split(",") if n.strip()]
+    with fo4land.Plugin(a.skyrim) as p:
+        src = skyriminterior.Source(p, navmesh_defaults=nav_defaults)
+        try:
+            picked = skyriminterior.pick_cells(src, names, a.find, a.connected_from or "", a.depth, a.limit)
+        except KeyError as e:
+            sys.exit(str(e))
+        if not picked:
+            sys.exit("no interior cell matches (--cells / --find / --connected-from)")
+        exports = [src.export(n) for n in picked]
+    doors = skyriminterior.link_load_doors(exports)
+    batch_nav = {n["formkey"] for e in exports for n in e["navmeshes"]}
+    by_model, rows, cell_files = {}, [], []
+    for e in exports:
+        sub, skipped = exterior.select(e, skyrimrefs.CONVERT_TYPES)
+        for r in sub["refs"]:
+            by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
+                                                                  "formkey": r["formkey"]})
+        cell = skyriminterior.plugin_cell(e, sub["refs"], batch_nav)
+        save(os.path.join(work, "exports", e["cell"] + ".json"), e)
+        path = os.path.join(work, "cells", e["cell"] + ".json")
+        save(path, cell)
+        cell_files.append(path)
+        write_lighting(work, e["cell"], a)
+        rows.append({"cell": e["cell"], "to_convert": len(sub["refs"]), "skipped": len(skipped),
+                     "actors": sum(1 for d in e["deferred_refs"] if d["reason"].startswith("placed actor")),
+                     "navmeshes": len(e["navmeshes"]), "unreadable_navmeshes": len(e["unreadable_navmeshes"]),
+                     "linked_doors": sum(1 for r in cell["refs"] if "teleport" in r),
+                     "arrival": (e["arrival"] or {}).get("source")})
+    models = [by_model[k] for k in sorted(by_model)]
+    save(os.path.join(work, "convert_input.json"), {"schema_version": 2, "cell": "batch", "refs": models})
+    with open(os.path.join(work, "cells.txt"), "w", encoding="utf-8") as f:
+        f.write("\n".join(cell_files) + "\n")
+    rep = {"cells": rows, "models": len(models), "load_doors": doors}
+    save(os.path.join(work, "batch.json"), rep)
+    for r in rows:
+        print(f"  {r['cell'][:40]:40} {r['to_convert']:>5} refs  {r['navmeshes']} navmesh  "
+              f"{r['linked_doors']} linked doors  {r['actors']} actors (not yet)")
+    print(f"{len(rows)} cells, {len(models)} models to convert; load doors linked {doors['linked']}, "
+          f"not linked {doors['unlinked'] or 0}")
+    print(f"next: make_skyrim_objects.py convert --work {work} ..., then check --work {work}")
+    return 0
+
+
+def check_cell(work, cell, have, failed):
     placed = [r for r in cell["refs"] if r["model"] and r["type"] != "Light"]
     ok = [r for r in placed if exterior.source_key(r["model"]) in have]
     bad = [r for r in placed if exterior.source_key(r["model"]) not in have]
@@ -138,20 +185,49 @@ def cmd_check(a):
         why = failed.get(exterior.source_key(r["model"]), "not converted (run convert, or it was skipped)")
         key = re.sub(r"\d+", "#", why)[:80]
         reasons[key] = reasons.get(key, 0) + 1
+    doors = [r for r in cell["refs"] if "teleport" in r]
+    return {"cell": cell["cell"], "placed_refs": len(placed), "converted_refs": len(ok), "missing_refs": len(bad),
+            "missing_reasons": reasons, "lights": sum(1 for r in cell["refs"] if r["type"] == "Light"),
+            "coc_marker": any(r["base_editor_id"] == skyriminterior.COC_MARKER for r in cell["refs"]),
+            "linked_doors": len(doors),
+            "linked_doors_not_converted": sum(1 for r in doors if exterior.source_key(r["model"]) not in have)}
+
+
+def cmd_check(a):
+    work = outside_repo(a.work)
+    batch = os.path.exists(os.path.join(work, "batch.json"))
+    cell_args = ("@" + os.path.join(work, "cells.txt")) if batch else os.path.join(work, "cell.json")
+    cells = ([load(os.path.join(work, "cells", r["cell"] + ".json")) for r in load(os.path.join(work, "batch.json"))["cells"]]
+             if batch else [load(os.path.join(work, "cell.json"))])
+    man_path = os.path.join(work, "convert", "manifest.json")
+    if not os.path.exists(man_path):
+        sys.exit(f"{man_path} missing: run make_skyrim_objects.py convert --work {work} first")
+    man = load(man_path)
+    have = {i["source"].lower() for i in man["items"]}
+    failed = {f["nif"].lower(): f["reason"] for f in man["failures"]}
+    reps = [check_cell(work, c, have, failed) for c in cells]
     files_missing = [i["model"] for i in man["items"]
                      if not os.path.exists(os.path.join(work, "convert", "meshes", *i["model"].split("\\")))]
-    coc = any(r["base_editor_id"] == skyriminterior.COC_MARKER for r in cell["refs"])
-    rep = {"cell": cell["cell"], "placed_refs": len(placed), "converted_refs": len(ok), "missing_refs": len(bad),
-           "missing_reasons": reasons, "lights": sum(1 for r in cell["refs"] if r["type"] == "Light"),
-           "coc_marker": coc, "manifest_models_without_nif": files_missing[:10]}
+    if batch:
+        rep = {"cells": reps, "manifest_models_without_nif": files_missing[:10]}
+        for r in reps:
+            print(f"  {r['cell'][:40]:40} {r['converted_refs']:>5}/{r['placed_refs']:<5} converted  "
+                  f"coc {'yes' if r['coc_marker'] else 'NO'}  doors {r['linked_doors']}"
+                  + (f" ({r['linked_doors_not_converted']} not converted: no teleport)"
+                     if r["linked_doors_not_converted"] else ""))
+    else:
+        rep = dict(reps[0], manifest_models_without_nif=files_missing[:10])
+        print(json.dumps(rep, indent=1))
     save(os.path.join(work, "check.json"), rep)
-    print(json.dumps(rep, indent=1))
+    ok = any(r["converted_refs"] for r in reps)
+    coc = reps[0]["coc_marker"]                     # the cell `coc` goes to; the others are reached by doors too
+    first = reps[0]["cell"]
     staging = os.path.join(work, "convert")
     print("\nnext (needs the .NET 9 SDK; Starfield closed; PowerShell):\n"
           f"  $env:STARFIELD_DATA = \"<Starfield>\\Data\"\n"
-          f"  dotnet run --project dotnet\\PluginSpike -- \"{staging}\" \"{man_path}\" \"{os.path.join(work, 'cell.json')}\"\n"
+          f"  dotnet run --project dotnet\\PluginSpike -- \"{staging}\" \"{man_path}\" \"{cell_args}\"\n"
           f"  python -I scripts\\deploy_starfield.py install --staging \"{staging}\" --starfield \"<Starfield>\"\n"
-          f"in game, console: coc FO4Port_{cell['cell']}\n"
+          f"in game, console: coc FO4Port_{first}\n"
           f"afterwards: python -I scripts\\deploy_starfield.py uninstall --starfield \"<Starfield>\"")
     return 0 if ok and coc and not files_missing else 1
 
@@ -159,7 +235,7 @@ def cmd_check(a):
 def parser():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                  allow_abbrev=False)
-    ap.add_argument("cmd", choices=("list", "export", "check"))
+    ap.add_argument("cmd", choices=("list", "export", "batch", "check"))
     ap.add_argument("--skyrim", help="Skyrim.esm (read-only)")
     ap.add_argument("--cell", help="export: interior cell EditorID (from list)")
     ap.add_argument("--work", help="work folder OUTSIDE the repo")
@@ -167,18 +243,23 @@ def parser():
     ap.add_argument("--light-merge-m", type=float, help="export: merge lights closer than this many metres (default 1)")
     ap.add_argument("--navmesh-defaults", help="export: navmesh_defaults.json from navmesh_survey.py (values of the "
                                                "Starfield-only navmesh fields; default: zeros)")
-    ap.add_argument("--find", default="", help="list: regex on the EditorID")
+    ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
+    ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
+    ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")
+    ap.add_argument("--depth", type=int, default=1, help="batch with --connected-from: doors to follow (default 1)")
+    ap.add_argument("--limit", type=int, default=0, help="batch: at most this many cells (0: all)")
     ap.add_argument("--max", type=int, default=200, help="list: rows to print")
     return ap
 
 
 def main(argv=None):
     a = parser().parse_args(argv)
-    need = {"list": ("skyrim",), "export": ("skyrim", "cell", "work"), "check": ("work",)}[a.cmd]
+    need = {"list": ("skyrim",), "export": ("skyrim", "cell", "work"), "batch": ("skyrim", "work"),
+            "check": ("work",)}[a.cmd]
     missing = [n for n in need if not getattr(a, n)]
     if missing:
         sys.exit(f"{a.cmd} needs --" + ", --".join(missing))
-    return {"list": cmd_list, "export": cmd_export, "check": cmd_check}[a.cmd](a)
+    return {"list": cmd_list, "export": cmd_export, "batch": cmd_batch, "check": cmd_check}[a.cmd](a)
 
 
 if __name__ == "__main__":

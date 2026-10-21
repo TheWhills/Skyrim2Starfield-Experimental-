@@ -56,7 +56,7 @@ compiler in the cloud workspace (nuget blocked): first build on the owner's PC.
   effect shaders. The flames (`Flames:0/1`, effect shader on `FXFireAtlas04.dds`), the glow and the particle sparks
   are effect shaders, so the fire is logs + ash only until effects are translated (a Starfield fire FX placed at the
   same spot is the likely route). Candles have no flame shapes of their own (their flames are separate effects).
-- **Doors do nothing:** expected, load doors are scenery until door linking.
+- **Doors do nothing:** expected, load doors are scenery until door linking (now: `batch`, below).
 
 Owner's first run with translated lights (Test A): it built and set every field (no light notes), but the inn got
 darker. Two of my mistakes: several light references carry an XRDS of ~10 units, which became a 0.14 m light with a
@@ -98,3 +98,26 @@ wbDefinitionsTES5 / wbDefinitionsSF1 and Mutagen's Starfield NavmeshGeometry, fo
 * First test: Sleeping Giant Inn again, with its navmesh; `tcai` / `tdetect` off, a spawned NPC told to walk
   (`<npc>.pathtoreference player 1`) should cross the room and use the stairs. If NPCs do not move, regenerate the
   cell's navmesh in the Creation Kit as the fallback and compare.
+
+## Many interiors at once, load doors linked (2026-10-21)
+`make_skyrim_interior.py batch` reads Skyrim.esm once for any number of cells (`skyriminterior.Source`) and writes one
+work folder that converts and builds as one plugin:
+* Cells: `--cells A,B`, `--find REGEX` (e.g. `^Riverwood`), `--connected-from CELL --depth N` (the interiors behind its
+  load doors, N doors deep; doors to the worldspace end a path), `--limit`.
+* Output: `exports/<cell>.json`, `cells/<cell>.json`, `cells.txt` (PluginSpike takes `@cells.txt`), one
+  `convert_input.json` with every model once (one `make_skyrim_objects.py convert` for the whole batch), per-cell
+  entries in `convert/lighting.json`, `batch.json` (per-cell counts, door links). `check --work` reports per cell.
+* Load doors: every persistent reference with an XTEL is indexed once (worldspace and interiors). A door whose
+  destination door is placed in another cell of the batch gets `"teleport"`; PluginSpike gives its converted model a
+  DOOR record (`LOADDOOR:<editor id>`, no animation graph; `LOADDOOR_TEMPLATE=<hex>` copies a vanilla Starfield door
+  instead), places it persistent, and after all cells sets XTEL (destination reference, landing point / 70, rotation,
+  flags). A destination whose model failed to convert leaves the door as scenery (counted). Doors to the worldspace
+  stay scenery until interiors and the Tamriel overlay are built together.
+* Navmesh edge links are kept when the target navmesh is anywhere in the batch.
+* `<out>\source_map.json` (PluginSpike): Skyrim form key of every placed reference, cell and navmesh -> new FormKey.
+  NPC placement, furniture and packages (next) look Skyrim targets up here.
+
+**Unresolved until the PC:** Mutagen alpha.67 names (`TeleportDestination`, `Cell.Persistent`, `Door.Components`), and
+whether a DOOR without an animation graph activates and loads in Starfield (if not: `LOADDOOR_TEMPLATE` with a vanilla
+load door). Test: batch `--connected-from RiverwoodSleepingGiantInn --depth 1`, `coc` into the inn, use a door that
+leads to another converted interior.
