@@ -283,8 +283,30 @@ static void sample_ini() {
     CHECK(plugin["benabled"] == "1" && plugin["ilogkeys"] == "40" && plugin["sstaminaactorvalue"].empty());
 }
 
+static void menus() {
+    MenuGate gate;
+    CHECK(!gate.blocked());
+    gate.on_menu("HUDMenu", true);                      // always-open HUD: still gameplay
+    CHECK(!gate.blocked());
+    gate.on_menu("InventoryMenu", true);
+    CHECK(gate.blocked());
+    gate.on_menu("inventorymenu", false);               // names compare without case
+    CHECK(!gate.blocked() && gate.open().size() == 1);
+    gate.on_menu("Console", true);
+    gate.on_menu("Console", true);                      // repeated open: counted once
+    gate.on_menu("Console", false);
+    CHECK(!gate.blocked());
+    MenuGate custom(MenuGate::parse_list(" FooMenu , BarMenu,"));
+    custom.on_menu("BarMenu", true);
+    CHECK(custom.blocked());
+    custom.on_menu("Console", true);                    // not in the custom list
+    custom.on_menu("BarMenu", false);
+    CHECK(!custom.blocked());
+}
+
 int main() {
     key_codes();
+    menus();
     stance_refresh();
     sample_ini();
     settings();

@@ -87,12 +87,42 @@ std::string_view View(const RE::BSFixedString& s) {
     return p ? std::string_view(p) : std::string_view();
 }
 
+// Layout self-check: the first field must be the event's holder, i.e. the player whose sink this is. If it is not,
+// the layout guess is wrong and reading the strings could crash: event reading is switched off (logged) instead.
+std::atomic_int g_layout_checked{0};   // 0 unknown, 1 ok, -1 wrong
+
 RE::BSEventNotifyControl ProcessEvent(Sink* a_this, const RE::BSAnimationGraphEvent& a_event,
                                       RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_source) {
     const auto& view = reinterpret_cast<const GraphEventView&>(a_event);
-    Plugin::Get().OnAnimEvent(View(view.tag), View(view.payload));
+    const auto* self = reinterpret_cast<const RE::TESObjectREFR*>(reinterpret_cast<std::uintptr_t>(a_this) -
+                                                                  kAnimSinkOffset);
+    // the holder may be stored as the player or as its IAnimationGraphManagerHolder base (+0x60): both count
+    const auto* as_holder = reinterpret_cast<const void*>(
+        static_cast<const RE::IAnimationGraphManagerHolder*>(self));
+    const bool is_self = view.holder == self || reinterpret_cast<const void*>(view.holder) == as_holder;
+    if (g_layout_checked.load() == 0) {
+        g_layout_checked = is_self ? 1 : -1;
+        if (g_layout_checked == -1)
+            Plugin::Get().DisableAnimEvents("event holder is not the player: BSAnimationGraphEvent layout differs "
+                                            "from Skyrim's (send the log)");
+        else
+            REX::INFO("animation event layout check passed (holder = player)");
+    }
+    if (g_layout_checked == 1 && is_self)
+        Plugin::Get().OnAnimEvent(View(view.tag), View(view.payload));
     return g_event_original(a_this, a_event, a_source);
 }
+
+// Menu open / close (CommonLibSF maps MenuOpenCloseEvent: name, opening): input gating in Plugin::OnButton.
+class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
+public:
+    RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent& a_event,
+                                          RE::BSTEventSource<RE::MenuOpenCloseEvent>*) override {
+        Plugin::Get().OnMenu(View(a_event.menuName), a_event.opening);
+        return RE::BSEventNotifyControl::kContinue;
+    }
+};
+MenuSink g_menu_sink;
 
 }  // namespace
 
@@ -114,6 +144,8 @@ bool Install() {
     auto* sink = reinterpret_cast<Sink*>(reinterpret_cast<std::uintptr_t>(player) + kAnimSinkOffset);
     REL::Relocation<std::uintptr_t> sink_vtbl{*reinterpret_cast<std::uintptr_t*>(sink)};
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
+
+    ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
 
     installed = true;
     REX::INFO("hooks installed: input receiver vtable {:X}, player animation sink vtable {:X}", input_vtbl.address(),

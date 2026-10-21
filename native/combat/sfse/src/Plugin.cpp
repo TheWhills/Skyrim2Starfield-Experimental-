@@ -59,6 +59,9 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.log_events = to_int(plugin, "iloganimevents", settings_.log_events);
     settings_.ghost_during_iframes = to_int(plugin, "bghostduringiframes", 1) != 0;
     if (auto it = plugin.find("sstaminaactorvalue"); it != plugin.end()) settings_.stamina_value = it->second;
+    settings_.log_menus = to_int(plugin, "ilogmenus", settings_.log_menus);
+    if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
+        menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
     std::scoped_lock l(lock_);
     controller_ = combat::Controller(cfg, bindings);
@@ -88,6 +91,12 @@ void Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
                   key, down ? "down" : "up", value, held, user_event);
     }
     if (key == 0) return;
+    // Presses only count in gameplay: a save loaded (the player is in a cell) and no menu that takes the keys open.
+    // Releases always go through, so a key held into a menu is not left "down".
+    if (down) {
+        auto* player = game::Player();
+        if (!player || !player->parentCell || menus_.blocked()) return;
+    }
     auto state = State();
     std::vector<combat::Command> cmds;
     {
@@ -102,8 +111,20 @@ void Plugin::OnStick(float x, float y) {
     stick_y_ = y;
 }
 
+void Plugin::OnMenu(std::string_view name, bool opening) {
+    if (logged_menus_ < settings_.log_menus) {
+        ++logged_menus_;
+        REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
+    }
+    menus_.on_menu(name, opening);
+}
+
+void Plugin::DisableAnimEvents(std::string_view why) {
+    if (anim_events_.exchange(false)) REX::ERROR("animation events switched off: {}", why);
+}
+
 void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
-    if (!settings_.enabled) return;
+    if (!settings_.enabled || !anim_events_) return;
     std::vector<combat::Command> cmds;
     {
         std::scoped_lock l(lock_);

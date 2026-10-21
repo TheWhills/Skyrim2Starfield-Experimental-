@@ -11,6 +11,7 @@ struct Settings {
     int log_events = 300;           // first N animation events of the player written to the log (tag, payload)
     bool ghost_during_iframes = true;   // Actor.SetGhost while i-frames run (until a hit hook exists)
     std::string stamina_value;      // actor value EditorID the dodge cost uses ("" = no cost)
+    int log_menus = 60;             // first N menu open / close events written to the log (to check the menu names)
 };
 
 class Plugin {
@@ -25,7 +26,10 @@ public:
                   std::int32_t id_code, float value, float held);
     void OnStick(float x, float y);
     void OnAnimEvent(std::string_view tag, std::string_view payload);
+    void OnMenu(std::string_view name, bool opening);
     void Tick();
+    // Animation events stop being read (the layout check in Hooks.cpp failed): logged once.
+    void DisableAnimEvents(std::string_view why);
 
 private:
     void Run(std::vector<combat::Command> commands);     // carried out on the main thread
@@ -33,7 +37,10 @@ private:
 
     std::mutex lock_;
     combat::Controller controller_;
+    combat::MenuGate menus_;
     Settings settings_;
+    std::atomic_bool anim_events_ = true;
+    int logged_menus_ = 0;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;
     int logged_input_ = 0, logged_events_ = 0;
     bool ghost_ = false;

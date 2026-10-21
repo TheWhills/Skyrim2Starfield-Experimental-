@@ -116,6 +116,39 @@ std::uint32_t key_from_mouse(std::uint32_t id) {
     return 0;
 }
 
+// ------------------------------------------------------------------------------------------------ menus
+MenuGate::MenuGate()
+    : blocking_({"Console", "PauseMenu", "MainMenu", "LoadingMenu", "InventoryMenu", "DataMenu", "ContainerMenu",
+                 "BarterMenu", "DialogueMenu", "FavoritesMenu", "PowersMenu", "SkillsMenu", "StatusMenu",
+                 "GalaxyStarMapMenu", "BSMissionMenu", "PhotoModeMenu", "CharGenMenu", "LooksMenu", "WorkshopMenu",
+                 "SpaceshipEditorMenu", "ShipCrewMenu", "CraftingMenu", "ResearchMenu", "PickpocketMenu",
+                 "MessageBoxMenu", "SleepWaitMenu", "TextInputMenu", "BookMenu"}) {}
+
+void MenuGate::on_menu(std::string_view name, bool opening) {
+    auto it = std::find_if(open_.begin(), open_.end(), [&](const std::string& m) { return is(m, name); });
+    if (opening && it == open_.end()) open_.emplace_back(name);
+    if (!opening && it != open_.end()) open_.erase(it);
+}
+
+bool MenuGate::blocked() const {
+    return std::any_of(open_.begin(), open_.end(), [&](const std::string& m) {
+        return std::any_of(blocking_.begin(), blocking_.end(), [&](const std::string& b) { return is(b, m); });
+    });
+}
+
+std::vector<std::string> MenuGate::parse_list(std::string_view text) {
+    std::vector<std::string> out;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        auto end = text.find(',', start);
+        if (end == std::string_view::npos) end = text.size();
+        auto name = trim(text.substr(start, end - start));
+        if (!name.empty()) out.emplace_back(name);
+        start = end + 1;
+    }
+    return out;
+}
+
 // ------------------------------------------------------------------------------------------------ settings
 std::map<std::string, std::string> ini_section(std::string_view ini, std::string_view section) {
     std::map<std::string, std::string> out;

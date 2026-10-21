@@ -37,9 +37,13 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\S2SCombat.log`.
 2. `key:` lines: press and release W, Alt, left mouse, an arrow key, and a gamepad button. Check that each press logs
    `down` and each release `up` once, the codes (17, 56, 256, 200, 266+), and note the `user event` names (Starfield's
    input names: useful later).
-3. `anim event:` lines: draw a melee weapon and swing. Readable names (WeaponDraw, PreHitFrame, WeaponSwing,
+3. `animation event layout check passed` (or `animation events switched off: ...`, which means the event layout
+   guess is wrong: the plugin stops reading events instead of crashing; send the log).
+   `menu:` lines: open the inventory, the console and the pause menu once; key presses are ignored while those are
+   open (the names checked are in `sBlockingMenus`; the log shows Starfield's real names to correct the list).
+4. `anim event:` lines: draw a melee weapon and swing. Readable names (WeaponDraw, PreHitFrame, WeaponSwing,
    HitFrame, AttackEnd, FootLeft ...) confirm the event layout; garbage or a crash on the first swing means the layout
    guess is wrong: set `iLogAnimEvents = 0` and `bEnabled = 0`, report the log.
-4. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
-5. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
+5. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
+6. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
    taken by the graph` at debug level is the expected answer today).

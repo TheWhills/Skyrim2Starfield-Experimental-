@@ -71,6 +71,23 @@ std::map<std::string, std::string> ini_section(std::string_view ini, std::string
 // ControllerConfig from the [Combat] section; unknown keys and unreadable values are reported in `problems`.
 ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* problems = nullptr);
 
+// Menus that take the keyboard (inventory, console, pause ...): while one is open, key presses are not gameplay (the
+// arrow keys scroll a list, Alt is typed into the console). Fed from the game's menu open / close events. Names are
+// Starfield's menu names (Console, PauseMenu, InventoryMenu: OSF Animation and CommonLibSF use these; the rest are
+// supported guesses, and the plugin logs every menu name it sees so the list can be corrected).
+class MenuGate {
+public:
+    MenuGate();
+    explicit MenuGate(std::vector<std::string> blocking) : blocking_(std::move(blocking)) {}
+    void on_menu(std::string_view name, bool opening);
+    bool blocked() const;                       // a blocking menu is open
+    const std::vector<std::string>& open() const { return open_; }
+    // "A, B, C" -> {"A", "B", "C"}
+    static std::vector<std::string> parse_list(std::string_view text);
+private:
+    std::vector<std::string> blocking_, open_;
+};
+
 // Per-frame game state the controller needs.
 struct PlayerState {
     float stamina = 1e9f;      // current stamina-like value (unlimited when not configured)
