@@ -197,8 +197,15 @@ bool Install() {
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
 
     ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
-    if (auto* hits = RE::TESHitEvent::GetEventSource()) hits->RegisterSink(&g_hit_sink);
-    else REX::WARN("no TESHitEvent source: hit handling off");
+    // CommonLibSF (9d090c4, its latest as of 2026-10-21) has no Address Library ID for this on Starfield 1.16: ID 0, and
+    // calling it stops the game with "Failed to find offset for Address Library ID ... Invalid ID: 0" (owner's first run).
+    if constexpr (RE::ID::TESHitEvent::GetEventSource.id() != 0) {
+        if (auto* hits = RE::TESHitEvent::GetEventSource()) hits->RegisterSink(&g_hit_sink);
+        else REX::WARN("no TESHitEvent source: hit handling off");
+    } else {
+        REX::WARN("hit events: TESHitEvent::GetEventSource is not mapped for this game version in CommonLibSF (ID 0): "
+                  "hit handling off; the player's own animation events (logged) show hits instead");
+    }
 
     installed = true;
     REX::INFO("hooks installed: input receiver vtable {:X}, player animation sink vtable {:X}", input_vtbl.address(),

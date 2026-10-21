@@ -35,7 +35,18 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         c.id = actor->GetFormID();
         c.position = V(actor->data.location, s_.target_height);
         c.alive = !actor->IsDead();
-        c.hostile = actor->IsHostileToActor(player);
+        // Actor::IsHostileToActor has no Address Library ID for Starfield 1.16 in CommonLibSF (ID 0: calling it stops
+        // the game). Until it does, every living actor counts as hostile (bHostileOnly has no effect), logged once.
+        if constexpr (RE::ID::Actor::IsHostileToActor.id() != 0) {
+            c.hostile = actor->IsHostileToActor(player);
+        } else {
+            static bool told = false;
+            if (!told) {
+                told = true;
+                REX::WARN("lock-on: IsHostileToActor not mapped for this game version (ID 0): any living actor can be locked");
+            }
+            c.hostile = true;
+        }
         // TODO (PC): line of sight (a ray cast) and visibility; until then every high-process actor counts as seen.
         view_offset(look, eye, c.position, c.screen_x, c.screen_y);
         c.on_screen = std::fabs(c.screen_x) < 1.0f && std::fabs(c.screen_y) < 0.8f;
