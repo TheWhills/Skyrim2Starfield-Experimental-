@@ -66,6 +66,9 @@ struct ControllerConfig {
     // Graph events sent after a stance change (Skyrim's Stances sends blockStart / blockStop so the animation set is
     // picked again; whether Starfield needs this is unresolved). Empty = none.
     std::vector<std::string> stance_refresh_events;
+    // Pressing the active stance's key again goes back to neutral (LoreRim / Stances' toggle). Off by default: in the
+    // owner's first stance test, quick double presses left every redraw in neutral.
+    bool stance_repeat_neutral = false;
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
     // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
     std::string block_hit_variable = "iS2SBlockHitType";

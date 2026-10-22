@@ -276,6 +276,10 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         else if (k == "spowerattackevent") c.power_event = v;
         else if (k == "spluginevent" || k == "splugineventhost") c.plugin_event_host = v;
         else if (k == "sblockhitvariable") c.block_hit_variable = v;
+        else if (k == "bstancerepeatneutral") {
+            ok = v == "0" || v == "1";
+            if (ok) c.stance_repeat_neutral = v == "1";
+        }
         else if (k == "sstancerefreshevents") {
             c.stance_refresh_events.clear();
             std::size_t start = 0;
@@ -368,11 +372,13 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
                 out.push_back(log("binding " + b.name + ": argument must be Name=Value"));
             }
         } else if (is(b.action, "keyword")) {
-            // Stances: the keyword bindings form one exclusive group; pressing the active stance again, or a binding
-            // without a keyword (LoreRim's right arrow), goes back to the neutral stance (no keyword). Every press
+            // Stances: the keyword bindings form one exclusive group; a binding without a keyword (LoreRim's right
+            // arrow) goes back to the neutral stance (no keyword), and so does pressing the active stance again when
+            // bStanceRepeatNeutral = 1 (otherwise a repeat keeps the stance). Every press
             // removes all the group's other keywords, not only the one remembered here: a keyword added by Papyrus
             // stays on the player in the save, and a loaded save may carry another stance than this session saw.
-            std::string target = (b.argument.empty() || is(stance_, b.argument)) ? std::string() : b.argument;
+            const bool back = b.argument.empty() || (cfg_.stance_repeat_neutral && is(stance_, b.argument));
+            std::string target = back ? std::string() : b.argument;
             std::vector<std::string> group;
             for (const auto& other : bindings_)
                 if (is(other.action, "keyword") && !other.argument.empty() && !is(other.argument, target) &&

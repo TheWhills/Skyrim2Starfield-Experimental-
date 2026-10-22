@@ -214,9 +214,9 @@ static void key_bindings() {
     cs = ctl.on_key(208, true, 0.1, s);                                   // switching stance: old out, new in
     CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[0].name == "StanceHigh" &&
           cs[1].kind == Command::Kind::AddKeyword && cs[1].name == "StanceLow");
-    cs = ctl.on_key(208, true, 0.2, s);                                   // same key again: back to no stance
-    CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[1].kind == Command::Kind::RemoveKeyword &&
-          ctl.stance().empty());
+    cs = ctl.on_key(208, true, 0.2, s);                                   // same key again: the stance stays
+    CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[1].kind == Command::Kind::AddKeyword &&
+          cs[1].name == "StanceLow" && ctl.stance() == "StanceLow");
     cs = ctl.on_key(205, true, 0.25, s);                                  // neutral: every stance keyword removed
     CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[1].kind == Command::Kind::RemoveKeyword);
     CHECK(ctl.on_key(200, false, 0.3, s).empty());                        // releases do nothing
@@ -234,6 +234,18 @@ static void key_bindings() {
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::SwitchTarget && cs[0].dx == -1 && cs[0].dy == 0);
     cs = ctl.on_key(24, true, 0.4, s);
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::Log);
+}
+
+static void stance_repeat_neutral() {
+    ControllerConfig cfg = parse_config("[Combat]\nbStanceRepeatNeutral = 1\n");
+    CHECK(cfg.stance_repeat_neutral);
+    Controller ctl(cfg, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nlow = 208|keyword|S2S_StanceLow\n"));
+    PlayerState s;
+    ctl.on_key(208, true, 0.0, s);
+    auto cs = ctl.on_key(208, true, 0.1, s);                              // LoreRim's toggle: same key, back to none
+    CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[1].kind == Command::Kind::RemoveKeyword &&
+          ctl.stance().empty());
+    CHECK(!parse_config("[Combat]\n").stance_repeat_neutral);
 }
 
 static void stance_refresh() {
@@ -279,7 +291,7 @@ static void sample_ini() {
     auto keys = parse_bindings(buf.str(), "Keys");                   // the arrow-key stances
     CHECK(keys.size() == 6 && keys[0].key == 200 && keys[0].argument == "S2S_StanceHigh" && keys[3].key == 205 &&
           keys[3].argument.empty());
-    CHECK(keys.size() == 6 && keys[4].key == 258 && keys[4].action == "lock" && keys[5].key == 273);   // MMB, R3
+    CHECK(keys.size() == 6 && keys[4].key == 260 && keys[4].action == "lock" && keys[5].key == 273);   // MMB, R3
     auto lock = ini_section(buf.str(), "Lock");
     CHECK(lock["fmaxdistance"] == "28.0" && lock["slockvariable"] == "TDM_TargetLock");
     CHECK(c.stance_refresh_events.empty());
@@ -395,6 +407,7 @@ int main() {
     hits();
     menus();
     stance_refresh();
+    stance_repeat_neutral();
     sample_ini();
     settings();
     payload_commands();
