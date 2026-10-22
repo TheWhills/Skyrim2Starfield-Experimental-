@@ -37,6 +37,19 @@ bool CallOnPlayer(const char* script, const char* function, Args... args) {
 
 }  // namespace
 
+// Reads memory only after VirtualQuery says it is committed and readable: for layouts CommonLibSF may not match on the
+// running game version. A system call per check: fine for rare paths (a key press), not per frame.
+bool Readable(const void* a_ptr, std::size_t a_len) {
+    if (!a_ptr) return false;
+    REX::W32::MEMORY_BASIC_INFORMATION mbi{};
+    if (!REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi)) || mbi.state != REX::W32::MEM_COMMIT) return false;
+    if (mbi.protect & (REX::W32::PAGE_NOACCESS | 0x100u)) return false;            // no access / guard page
+    const auto ok = mbi.protect & (REX::W32::PAGE_READONLY | REX::W32::PAGE_READWRITE | REX::W32::PAGE_WRITECOPY |
+                                   REX::W32::PAGE_EXECUTE_READ | REX::W32::PAGE_EXECUTE_READWRITE | 0x80u);
+    const auto end = reinterpret_cast<std::uintptr_t>(mbi.baseAddress) + mbi.regionSize;
+    return ok && reinterpret_cast<std::uintptr_t>(a_ptr) + a_len <= end;
+}
+
 double Now() {
     using clock = std::chrono::steady_clock;
     static const auto start = clock::now();

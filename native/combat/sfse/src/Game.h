@@ -6,7 +6,8 @@
 
 namespace s2s::sfse::game {
 
-double Now();                                    // seconds, steady clock
+double Now();
+bool Readable(const void* ptr, std::size_t bytes);   // committed, readable memory (VirtualQuery)                                    // seconds, steady clock
 RE::PlayerCharacter* Player();
 
 // Must run on the main thread (Plugin queues them through SFSE's task interface).

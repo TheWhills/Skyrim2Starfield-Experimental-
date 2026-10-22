@@ -94,17 +94,7 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
 }
 
 // ------------------------------------------------------------------------------------------------ safe reads
-// Reads memory only after VirtualQuery says it is committed and readable: used for layouts CommonLibSF does not map.
-bool Readable(const void* a_ptr, std::size_t a_len) {
-    if (!a_ptr) return false;
-    REX::W32::MEMORY_BASIC_INFORMATION mbi{};
-    if (!REX::W32::VirtualQuery(a_ptr, &mbi, sizeof(mbi)) || mbi.state != REX::W32::MEM_COMMIT) return false;
-    if (mbi.protect & (REX::W32::PAGE_NOACCESS | 0x100u)) return false;            // no access / guard page
-    const auto ok = mbi.protect & (REX::W32::PAGE_READONLY | REX::W32::PAGE_READWRITE | REX::W32::PAGE_WRITECOPY |
-                                   REX::W32::PAGE_EXECUTE_READ | REX::W32::PAGE_EXECUTE_READWRITE | 0x80u);
-    const auto end = reinterpret_cast<std::uintptr_t>(mbi.baseAddress) + mbi.regionSize;
-    return ok && reinterpret_cast<std::uintptr_t>(a_ptr) + a_len <= end;
-}
+bool Readable(const void* a_ptr, std::size_t a_len) { return game::Readable(a_ptr, a_len); }
 
 // The BSFixedString at a_addr: nullopt when anything on the way is unreadable or not printable text, "" for an empty
 // string (null entry).

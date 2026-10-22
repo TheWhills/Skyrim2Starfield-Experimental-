@@ -60,25 +60,55 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
             add(actor.get());
         }
     }
-    // 2. fallback: the actors placed in the player's own cell (interiors: the whole room; exteriors: one cell only)
+    // 2. fallback: the actors placed in the player's own cell (interiors: the whole room; exteriors: one cell only).
+    //    Owner's fifth run: ForEachReference crashed the game (TESObjectCELL's layout on 1.16 is not CommonLibSF's, like
+    //    ProcessLists'). Now read without the cell lock and with every step checked; a list that does not look like one
+    //    switches the fallback off (logged once).
     int from_cell = 0;
-    if (out.empty() && player->parentCell) {
-        player->parentCell->ForEachReference([&](const RE::NiPointer<RE::TESObjectREFR>& ref) {
-            if (ref && ref->IsActor() && !ref->IsDisabled() && !ref->IsDeleted()) {
-                add(static_cast<RE::Actor*>(ref.get()));
+    std::string cell_note = "not needed";
+    if (out.empty() && player->parentCell && !cell_list_bad_) {
+        const auto& refs = player->parentCell->references;
+        const auto* data = refs.data();
+        const auto n = refs.size(), cap = refs.capacity();
+        const bool plausible = game::Readable(&refs, sizeof(refs)) && n <= cap && cap < 400000 &&
+                               (n == 0 || game::Readable(data, std::size_t(n) * sizeof(void*)));
+        if (!plausible) {
+            cell_list_bad_ = true;
+            cell_note = std::format("does not look like a list (size {}, capacity {}): fallback off", n, cap);
+        } else {
+            std::vector<RE::TESObjectREFR*> snapshot;
+            for (std::uint32_t i = 0; i < n; ++i) snapshot.push_back(data[i].get());
+            int unreadable = 0;
+            for (auto* ref : snapshot) {
+                if (!ref || !game::Readable(ref, sizeof(RE::TESObjectREFR))) {
+                    ++unreadable;
+                    continue;
+                }
+                if (!ref->IsActor() || ref->IsDisabled() || ref->IsDeleted()) continue;
+                if (!game::Readable(ref, sizeof(RE::Actor))) {
+                    ++unreadable;
+                    continue;
+                }
+                add(static_cast<RE::Actor*>(ref));
                 ++from_cell;
             }
-            return RE::BSContainer::ForEachResult::kContinue;
-        });
+            cell_note = std::format("{} references, {} unreadable, {} actors", n, unreadable, from_cell);
+            if (n > 0 && unreadable * 2 > static_cast<int>(n)) {
+                cell_list_bad_ = true;
+                out.clear();
+                cell_note += ": mostly unreadable, fallback off";
+            }
+        }
     }
-    if (!diagnosed_) {
+    if (!diagnosed_ || cell_list_bad_ != cell_bad_logged_) {
         diagnosed_ = true;
+        cell_bad_logged_ = cell_list_bad_;
         REX::INFO("lock-on lists: ProcessLists {} (numberHighActors {}, high {}, low {}, middle-high {}, middle-low {}); "
-                  "actors in the player's cell {}",
+                  "player's cell: {}",
                   lists ? "found" : "missing", lists ? lists->numberHighActors : -1,
                   lists ? lists->highActorHandles.size() : 0, lists ? lists->lowActorHandles.size() : 0,
                   lists ? lists->middleHighActorHandles.size() : 0, lists ? lists->middleLowActorHandles.size() : 0,
-                  from_cell);
+                  cell_note);
     }
     return out;
 }
