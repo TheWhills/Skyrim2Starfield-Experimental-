@@ -149,6 +149,38 @@ std::vector<std::string> MenuGate::parse_list(std::string_view text) {
     return out;
 }
 
+// ------------------------------------------------------------------------------------------------ layout probe
+LayoutProbe::State LayoutProbe::feed(const std::vector<Slot>& slots) {
+    if (state_ != State::Probing) return state_;
+    ++seen_;
+    int tag = -1, payload = -1, holder = -1;
+    for (int i = 0; i < static_cast<int>(slots.size()); ++i) {
+        if (slots[i] == Slot::Self && holder < 0) holder = i;
+        if (tag < 0 && slots[i] == Slot::Text) {
+            tag = i;
+        } else if (tag >= 0 && payload < 0 && (slots[i] == Slot::Text || slots[i] == Slot::EmptyText)) {
+            payload = i;
+        }
+    }
+    if (tag >= 0 && streak_ > 0 && tag == tag_ && payload == payload_) {
+        ++streak_;
+    } else if (tag >= 0) {
+        tag_ = tag;
+        payload_ = payload;
+        streak_ = 1;
+    } else {
+        streak_ = 0;
+    }
+    if (holder >= 0) holder_ = holder;
+    if (streak_ >= needed_) {
+        state_ = State::Found;
+    } else if (seen_ >= give_up_) {
+        state_ = State::Failed;
+        tag_ = payload_ = -1;
+    }
+    return state_;
+}
+
 // ------------------------------------------------------------------------------------------------ settings
 std::map<std::string, std::string> ini_section(std::string_view ini, std::string_view section) {
     std::map<std::string, std::string> out;

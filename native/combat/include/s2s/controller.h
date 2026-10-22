@@ -96,6 +96,25 @@ private:
     std::vector<std::string> blocking_, open_;
 };
 
+// Finds where an engine event keeps its strings when the layout is not known (Starfield's BSAnimationGraphEvent:
+// Skyrim's holder / tag / payload order did not hold on the owner's first run). The game side classifies the first
+// slots (8-byte fields) of each event; the probe settles on the first readable name as the tag and the next string
+// slot (possibly empty) as the payload once `needed` events in a row agree, or gives up after `give_up` events.
+class LayoutProbe {
+public:
+    enum class Slot { Other, Self, Text, EmptyText };   // Self: points at the object whose sink got the event
+    enum class State { Probing, Found, Failed };
+    explicit LayoutProbe(int needed = 3, int give_up = 40) : needed_(needed), give_up_(give_up) {}
+    State feed(const std::vector<Slot>& slots);
+    State state() const { return state_; }
+    int tag() const { return tag_; }                // slot index, -1 until found
+    int payload() const { return payload_; }        // slot index, -1 when the events carry no payload slot
+    int holder() const { return holder_; }          // first Self slot seen with the found layout, -1 if none
+private:
+    int needed_, give_up_, seen_ = 0, streak_ = 0, tag_ = -1, payload_ = -1, holder_ = -1;
+    State state_ = State::Probing;
+};
+
 // Per-frame game state the controller needs.
 struct PlayerState {
     float stamina = 1e9f;      // current stamina-like value (unlimited when not configured)

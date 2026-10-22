@@ -10,7 +10,7 @@ Spec: `docs/armor/combat-plugin-spec.md`.
 |---|---|---|
 | Key / button input | hooks UI's input receiver (`PerformInputProcessing`, vtable read from the live UI object); keyboard VK -> scan code, mouse, gamepad (SFSE InputMap) | hook point supported (OSF Animation uses it); press / release convention unverified |
 | Left stick | ThumbstickEvent raw layout (+0x30 id, +0x38 x, +0x3C y) | supported (OSF's in-game notes); sign of y unverified |
-| Player animation events | replaces ProcessEvent of the player's BSTEventSink<BSAnimationGraphEvent> (+0x50) | event layout (holder, tag, payload) unverified |
+| Player animation events | replaces ProcessEvent of the player's BSTEventSink<BSAnimationGraphEvent> (+0x50) | hook works (owner's first run); Skyrim's layout (holder, tag, payload) did **not** hold. Now found at run time: the first events' 8 slots are classified with memory checks and logged (`anim probe:`), `combat::LayoutProbe` (tested) settles on the tag / payload slots, logged as `animation event layout found` |
 | Send graph events | `NotifyAnimationGraphImpl` (CommonLibSF) | mapped; result logged at debug level |
 | Set graph variables (Payload Interpreter SGVB / SGVI / SGVF, int / bool / float bindings) | Papyrus `ObjectReference.SetAnimationVariable*` through the VM (queued: a frame or two late) | native names unverified |
 | Stances | arrow keys -> Papyrus `AddKeyword` / `RemoveKeyword` on S2SStances.esm's keywords (scripts/armor/stance_plugin.py, checklist step 8); every press clears the other stance keywords (they persist in saves); optional `sStanceRefreshEvents` | unverified; animation set re-evaluation while drawn unresolved |
@@ -39,8 +39,8 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\S2SCombat.log`.
 2. `key:` lines: press and release W, Alt, left mouse, an arrow key, and a gamepad button. Check that each press logs
    `down` and each release `up` once, the codes (17, 56, 256, 200, 266+), and note the `user event` names (Starfield's
    input names: useful later).
-3. `animation event layout check passed` (or `animation events switched off: ...`, which means the event layout
-   guess is wrong: the plugin stops reading events instead of crashing; send the log).
+3. `anim probe:` lines, then `animation event layout found: tag +.., payload ..` (or `animation events switched
+   off: ...` when no slot held a readable name: the plugin stops reading events instead of crashing; send the log).
    `menu:` lines: open the inventory, the console and the pause menu once; key presses are ignored while those are
    open (the names checked are in `sBlockingMenus`; the log shows Starfield's real names to correct the list).
 4. `anim event:` lines: draw a melee weapon and swing. Readable names (WeaponDraw, PreHitFrame, WeaponSwing,

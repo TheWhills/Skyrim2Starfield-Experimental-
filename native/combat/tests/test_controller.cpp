@@ -325,6 +325,35 @@ static void hits() {
     CHECK(off.block_hit_variable.empty() && Controller(off).on_hit(HitKind::Power, true, 0).empty());
 }
 
+static void test_layout_probe() {
+    using S = LayoutProbe::Slot;
+    // Starfield-like guess: payload, tag, holder (names made up for the test)
+    LayoutProbe p(3, 10);
+    const std::vector<S> ev = {S::Other, S::Text, S::EmptyText, S::Self, S::Other};
+    CHECK(p.feed(ev) == LayoutProbe::State::Probing);
+    CHECK(p.feed(ev) == LayoutProbe::State::Probing);
+    CHECK(p.feed(ev) == LayoutProbe::State::Found);
+    CHECK(p.tag() == 1 && p.payload() == 2 && p.holder() == 3);
+    CHECK(p.feed({S::Other}) == LayoutProbe::State::Found);            // settled: later events change nothing
+    // a disagreeing event restarts the streak; an event without any text breaks it
+    LayoutProbe q(2, 10);
+    q.feed({S::Text, S::Text});
+    q.feed({S::Other, S::Text, S::Text});
+    CHECK(q.state() == LayoutProbe::State::Probing && q.tag() == 1);
+    q.feed({S::Other, S::Other});
+    q.feed({S::Other, S::Text, S::Text});
+    CHECK(q.state() == LayoutProbe::State::Probing);
+    CHECK(q.feed({S::Other, S::Text, S::Text}) == LayoutProbe::State::Found && q.tag() == 1 && q.payload() == 2);
+    // no payload slot at all
+    LayoutProbe r(2, 10);
+    r.feed({S::Self, S::Text});
+    CHECK(r.feed({S::Self, S::Text}) == LayoutProbe::State::Found && r.payload() == -1 && r.holder() == 0);
+    // nothing readable: gives up
+    LayoutProbe f(2, 4);
+    for (int i = 0; i < 3; ++i) CHECK(f.feed({S::Other, S::Other}) == LayoutProbe::State::Probing);
+    CHECK(f.feed({S::Other}) == LayoutProbe::State::Failed && f.tag() == -1);
+}
+
 int main() {
     key_codes();
     hits();
@@ -336,6 +365,7 @@ int main() {
     windows_and_buffer();
     dodging();
     key_bindings();
+    test_layout_probe();
     if (failures == 0) std::printf("all controller tests passed\n");
     return failures;
 }

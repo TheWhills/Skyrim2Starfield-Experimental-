@@ -6,8 +6,10 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <fstream>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
