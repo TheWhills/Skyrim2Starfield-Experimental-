@@ -48,6 +48,9 @@ private:
     std::atomic_bool anim_events_ = true;
     int logged_menus_ = 0, logged_hits_ = 0;
     std::atomic_int logged_commands_ = 0;
+    std::vector<std::string> keyword_check_;     // keywords set last: checked on the player half a second later
+    double keyword_check_due_ = -1.0;
+    int keyword_checks_logged_ = 0;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;
     int logged_input_ = 0, logged_events_ = 0;
     bool ghost_ = false;

@@ -26,11 +26,9 @@ void Lock::Configure(const LockSettings& s) {
 std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 eye) {
     std::vector<combat::Candidate> out;
     auto* player = game::Player();
-    auto* lists = RE::ProcessLists::GetSingleton();
-    if (!player || !lists) return out;
-    for (const auto& handle : lists->highActorHandles) {
-        auto actor = handle.get();
-        if (!actor || actor.get() == player) continue;
+    if (!player) return out;
+    auto add = [&](RE::Actor* actor) {
+        if (!actor || actor == player) return;
         combat::Candidate c;
         c.id = actor->GetFormID();
         c.position = V(actor->data.location, s_.target_height);
@@ -47,11 +45,40 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
             }
             c.hostile = true;
         }
-        // TODO (PC): line of sight (a ray cast) and visibility; until then every high-process actor counts as seen.
+        // TODO (PC): line of sight (a ray cast) and visibility; until then every actor counts as seen.
         view_offset(look, eye, c.position, c.screen_x, c.screen_y);
         c.on_screen = std::fabs(c.screen_x) < 1.0f && std::fabs(c.screen_y) < 0.8f;
         c.under_crosshair = std::fabs(c.screen_x) < 0.05f && std::fabs(c.screen_y) < 0.08f;
         out.push_back(c);
+    };
+    // 1. the high-process actor list (CommonLibSF: ProcessLists +0x58). Owner's run 2026-10-21: always empty, so the
+    //    layout may differ on 1.16; the counts are logged once below.
+    auto* lists = RE::ProcessLists::GetSingleton();
+    if (lists) {
+        for (const auto& handle : lists->highActorHandles) {
+            auto actor = handle.get();
+            add(actor.get());
+        }
+    }
+    // 2. fallback: the actors placed in the player's own cell (interiors: the whole room; exteriors: one cell only)
+    int from_cell = 0;
+    if (out.empty() && player->parentCell) {
+        player->parentCell->ForEachReference([&](const RE::NiPointer<RE::TESObjectREFR>& ref) {
+            if (ref && ref->IsActor() && !ref->IsDisabled() && !ref->IsDeleted()) {
+                add(static_cast<RE::Actor*>(ref.get()));
+                ++from_cell;
+            }
+            return RE::BSContainer::ForEachResult::kContinue;
+        });
+    }
+    if (!diagnosed_) {
+        diagnosed_ = true;
+        REX::INFO("lock-on lists: ProcessLists {} (numberHighActors {}, high {}, low {}, middle-high {}, middle-low {}); "
+                  "actors in the player's cell {}",
+                  lists ? "found" : "missing", lists ? lists->numberHighActors : -1,
+                  lists ? lists->highActorHandles.size() : 0, lists ? lists->lowActorHandles.size() : 0,
+                  lists ? lists->middleHighActorHandles.size() : 0, lists ? lists->middleLowActorHandles.size() : 0,
+                  from_cell);
     }
     return out;
 }

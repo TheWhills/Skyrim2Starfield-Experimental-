@@ -199,6 +199,19 @@ void Plugin::Tick() {
     }
     Run(std::move(cmds));
     Lock::Get().Update();                                    // main thread (the input hook)
+    if (keyword_check_due_ >= 0.0 && now >= keyword_check_due_) {
+        keyword_check_due_ = -1.0;
+        if (keyword_checks_logged_ < 20) {
+            ++keyword_checks_logged_;
+            std::string line;
+            for (const auto& k : keyword_check_) {
+                const int has = game::HasKeyword(k);
+                line += std::format(" {} {}", k, has < 0 ? "(not found)" : has ? "yes" : "no");
+            }
+            REX::INFO("keywords on the player:{}", line);
+        }
+        keyword_check_.clear();
+    }
     if (settings_.ghost_during_iframes && invulnerable != ghost_) {
         ghost_ = invulnerable;
         SFSE::GetTaskInterface()->AddTask([g = ghost_]() { game::SetGhost(g); });
@@ -221,8 +234,13 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = game::SetVariable(c.variable) ? std::format("{} = {} dispatched", c.variable.name, c.variable.value)
                                                            : std::format("{}: not dispatched", c.variable.name);
                     break;
-                case K::AddKeyword: result = game::SetKeyword(c.name, true) ? "dispatched" : "failed"; break;
-                case K::RemoveKeyword: result = game::SetKeyword(c.name, false) ? "dispatched" : "failed"; break;
+                case K::AddKeyword:
+                case K::RemoveKeyword:
+                    result = game::SetKeyword(c.name, c.kind == K::AddKeyword) ? "dispatched" : "failed";
+                    if (std::find(keyword_check_.begin(), keyword_check_.end(), c.name) == keyword_check_.end())
+                        keyword_check_.push_back(c.name);
+                    keyword_check_due_ = game::Now() + 0.5;     // the VM runs the call within a frame or two
+                    break;
                 case K::SpendStamina:
                     if (!stamina.empty()) game::DamageActorValue(stamina, c.amount);
                     result = stamina.empty() ? "no stamina value set" : std::format("{}", c.amount);

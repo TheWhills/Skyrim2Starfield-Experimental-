@@ -82,6 +82,13 @@ bool SetKeyword(std::string_view editor_id, bool add) {
     return CallOnPlayer("ObjectReference", add ? "AddKeyword" : "RemoveKeyword", keyword);
 }
 
+int HasKeyword(std::string_view editor_id) {
+    auto* player = Player();
+    auto* keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(RE::BSFixedString(std::string(editor_id).c_str()));
+    if (!player || !keyword) return -1;
+    return player->HasKeyword(keyword) ? 1 : 0;
+}
+
 bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
 
 float ActorValue(std::string_view editor_id) {

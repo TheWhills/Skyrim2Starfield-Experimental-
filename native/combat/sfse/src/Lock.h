@@ -39,6 +39,7 @@ private:
     std::optional<std::uint32_t> locked_;
     double last_ = -1.0;
     int logged_ = 0;
+    bool diagnosed_ = false;
 };
 
 }  // namespace s2s::sfse

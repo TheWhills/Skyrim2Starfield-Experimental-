@@ -3,6 +3,7 @@
 #include "RE/Starfield.h"
 #include "SFSE/SFSE.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
