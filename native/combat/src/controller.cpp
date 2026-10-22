@@ -149,6 +149,37 @@ std::vector<std::string> MenuGate::parse_list(std::string_view text) {
     return out;
 }
 
+// ------------------------------------------------------------------------------------------------ pool strings
+std::optional<std::string> pool_string_at(std::uintptr_t a_addr,
+                                          const std::function<bool(const void*, std::size_t)>& readable) {
+    // BSStringPool::Entry (CommonLibSF, 0x18 bytes): +0x08 length or, when flags (+0x14) has kExternal (0x2), a pointer
+    // to the entry that holds the text (+0x08). The text follows the leaf entry. CommonLibSF's c_str() follows that
+    // chain without checks; on a slot that is not a string it can walk into unmapped memory (owner's second run: the
+    // game crashed while loading). Every hop is checked here instead, at most 8.
+    if (!readable(reinterpret_cast<const void*>(a_addr), sizeof(void*))) return std::nullopt;
+    auto entry = *reinterpret_cast<const std::uintptr_t*>(a_addr);
+    if (!entry) return std::string();
+    for (int hop = 0;; ++hop) {
+        if (hop >= 8 || !readable(reinterpret_cast<const void*>(entry), 0x18)) return std::nullopt;
+        const auto flags = *reinterpret_cast<const std::uint8_t*>(entry + 0x14);
+        if (!(flags & 0x2)) break;
+        entry = *reinterpret_cast<const std::uintptr_t*>(entry + 0x08);
+        if (!entry) return std::nullopt;
+    }
+    const auto length = *reinterpret_cast<const std::uint32_t*>(entry + 0x08);
+    if (length > 256) return std::nullopt;
+    const char* text = reinterpret_cast<const char*>(entry + 0x18);
+    if (!readable(text, length + 1)) return std::nullopt;
+    std::string out;
+    for (std::uint32_t i = 0; i < length; ++i) {
+        const char ch = text[i];
+        if (ch < 0x20 || ch > 0x7E) return std::nullopt;
+        out.push_back(ch);
+    }
+    if (text[length] != '\0') return std::nullopt;
+    return out;
+}
+
 // ------------------------------------------------------------------------------------------------ layout probe
 LayoutProbe::State LayoutProbe::feed(const std::vector<Slot>& slots) {
     if (state_ != State::Probing) return state_;

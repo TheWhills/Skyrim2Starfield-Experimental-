@@ -80,21 +80,7 @@ bool Readable(const void* a_ptr, std::size_t a_len) {
 // The BSFixedString at a_addr: nullopt when anything on the way is unreadable or not printable text, "" for an empty
 // string (null entry).
 std::optional<std::string> SafeText(std::uintptr_t a_addr) {
-    const auto* fs = reinterpret_cast<const RE::BSFixedString*>(a_addr);
-    if (!Readable(fs, sizeof(void*))) return std::nullopt;
-    const auto* entry = *reinterpret_cast<void* const*>(fs);
-    if (!entry) return std::string();
-    if (!Readable(entry, 0x20)) return std::nullopt;
-    const char* text = fs->c_str();
-    std::string out;
-    for (std::size_t i = 0; i < 96; ++i) {
-        if (!Readable(text + i, 1)) return std::nullopt;
-        const char ch = text[i];
-        if (ch == '\0') return out;
-        if (ch < 0x20 || ch > 0x7E) return std::nullopt;
-        out.push_back(ch);
-    }
-    return std::nullopt;
+    return combat::pool_string_at(a_addr, [](const void* p, std::size_t n) { return Readable(p, n); });
 }
 
 // A BSFixedString at a_addr, or "" when anything on the way is not readable or not printable text.
@@ -180,10 +166,12 @@ RE::BSEventNotifyControl ProcessEvent(Sink* a_this, const RE::BSAnimationGraphEv
         const auto* as_holder = static_cast<const void*>(static_cast<const RE::IAnimationGraphManagerHolder*>(self));
         Probe(ev, self, as_holder);
     } else if (state == 1) {
-        const auto tag = View(*reinterpret_cast<const RE::BSFixedString*>(ev + g_tag_off.load()));
+        // still read with checks: a slot that held strings in the probe may hold something else in a later event
+        const auto tag = SafeText(ev + static_cast<std::uintptr_t>(g_tag_off.load()));
         const auto poff = g_payload_off.load();
-        const auto payload = poff < 0 ? std::string_view() : View(*reinterpret_cast<const RE::BSFixedString*>(ev + poff));
-        Plugin::Get().OnAnimEvent(tag, payload);
+        const auto payload = poff < 0 ? std::optional<std::string>(std::string())
+                                      : SafeText(ev + static_cast<std::uintptr_t>(poff));
+        if (tag && !tag->empty()) Plugin::Get().OnAnimEvent(*tag, payload.value_or(std::string()));
     }
     return g_event_original(a_this, a_event, a_source);
 }

@@ -1,4 +1,5 @@
 // Tests for the controller (keys + animation events -> game commands). Same mini harness as test_combat.cpp.
+#include <cstring>
 #include "s2s/controller.h"
 
 #include <cstdio>
@@ -354,6 +355,41 @@ static void test_layout_probe() {
     CHECK(f.feed({S::Other}) == LayoutProbe::State::Failed && f.tag() == -1);
 }
 
+namespace {
+struct alignas(8) PoolEntry {
+    std::uintptr_t left = 0, right_or_len = 0;
+    std::uint32_t ref = 0;
+    std::uint8_t flags = 0, pad[3] = {};
+    char text[32] = {};
+};
+}  // namespace
+
+static void test_pool_strings() {
+    auto readable = [](const void* p, std::size_t) { return reinterpret_cast<std::uintptr_t>(p) > 0x10000; };
+    PoolEntry leaf, ext, loop, bad, bin;
+    leaf.right_or_len = 11;
+    std::memcpy(leaf.text, "weaponSwing", 12);
+    ext.flags = 2;
+    ext.right_or_len = reinterpret_cast<std::uintptr_t>(&leaf);          // external: the text is in another entry
+    loop.flags = 2;
+    loop.right_or_len = reinterpret_cast<std::uintptr_t>(&loop);         // a cycle
+    bad.flags = 2;
+    bad.right_or_len = 0x1234;                                           // into unmapped memory
+    bin.right_or_len = 3;
+    std::memcpy(bin.text, "\x01\x02\x03", 4);
+    const std::uintptr_t slots[6] = {reinterpret_cast<std::uintptr_t>(&leaf), reinterpret_cast<std::uintptr_t>(&ext),
+                                     reinterpret_cast<std::uintptr_t>(&loop), reinterpret_cast<std::uintptr_t>(&bad), 0,
+                                     reinterpret_cast<std::uintptr_t>(&bin)};
+    auto at = [&](int i) { return pool_string_at(reinterpret_cast<std::uintptr_t>(&slots[i]), readable); };
+    CHECK(at(0) && *at(0) == "weaponSwing");
+    CHECK(at(1) && *at(1) == "weaponSwing");
+    CHECK(!at(2));
+    CHECK(!at(3));
+    CHECK(at(4) && at(4)->empty());
+    CHECK(!at(5));
+    CHECK(!pool_string_at(0x20, readable));                             // the slot itself unreadable
+}
+
 int main() {
     key_codes();
     hits();
@@ -366,6 +402,7 @@ int main() {
     dodging();
     key_bindings();
     test_layout_probe();
+    test_pool_strings();
     if (failures == 0) std::printf("all controller tests passed\n");
     return failures;
 }

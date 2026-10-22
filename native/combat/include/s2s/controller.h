@@ -13,6 +13,8 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -114,6 +116,12 @@ private:
     int needed_, give_up_, seen_ = 0, streak_ = 0, tag_ = -1, payload_ = -1, holder_ = -1;
     State state_ = State::Probing;
 };
+
+// The text of the BSFixedString stored at `slot` (an engine string-pool pointer), reading memory only where
+// `readable(ptr, bytes)` allows: nullopt when it is not a string (unreadable, a chain longer than 8 hops or a loop,
+// over 256 characters, non-printable), "" for a null pointer (an empty string).
+std::optional<std::string> pool_string_at(std::uintptr_t slot,
+                                          const std::function<bool(const void*, std::size_t)>& readable);
 
 // Per-frame game state the controller needs.
 struct PlayerState {
