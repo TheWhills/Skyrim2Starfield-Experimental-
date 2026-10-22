@@ -55,3 +55,23 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\S2SCombat.log`.
 7. With a converted moveset whose clips carry MCO / PIE events: `variable` / `payload not handled yet` lines.
 8. Alt while standing: `dodge` sends TKDodgeBack (nothing visible until the graph has dodge states: `send ... not
    taken by the graph` at debug level is the expected answer today).
+
+## Owner's runs (2026-10-21)
+**Verified in game (Starfield 1.16.244, CommonLibSF 9d090c4):**
+- Loads with the two unmapped calls guarded (hit events, IsHostileToActor); both hooks install.
+- Input: press and release both seen (`value 1 / held 0` down, `value 0 / held > 0` up) for keyboard and mouse;
+  codes as expected (W 17, arrows 200 / 203 / 205 / 208, left mouse 256, wheel 265). Alt (56) logs down only, never up.
+  Starfield user events seen: Forward, Sprint, Sneak, Melee, PrimaryAttack, QuickInventory, Console, Accept, Cancel,
+  Up / Down (in menus), ZoomOut.
+- Menu names: MainMenu, LoadingMenu, FaderMenu, HUDMenu, HUDMessagesMenu, Console, CursorMenu, MessageBoxMenu,
+  DataMenu, InventoryMenu: all blocking ones are already in the default list; CursorMenu is not blocking.
+- **BSAnimationGraphEvent in Starfield: tag at +0x08, payload at +0x10** (BSFixedStrings). +0x00 is not the holder
+  (a value such as 100000001 or a pointer that is not the player). One probe line showed two events back to back,
+  0x20 apart, so the event is probably 0x20 bytes, with +0x18 an id-like value (80000457).
+- Player graph events seen with the LoreRim sword pack: BeginWeaponDraw, weaponDraw, BeginWeaponSheathe, weaponSheathe,
+  UnequipComplete, ReevaluateGraphState, RelaxedStart, FootLeft / FootRight, SoundPlay (payload: sound name),
+  IdleFlavor, JiggleEvaluate, StartMotionDriven, StartAnimationDriven, StartAllowRotation, AttackStart, preHitFrame,
+  weaponSwing, HitFrame, CameraShake (payload "0.85,0.1,0.2"), AttackStateNextAttack, MeleeAttackStart, attackStop,
+  AttackEnd (payload a time, "0.193").
+- The MCO-style buffer works: a click during an attack logs `attack buffered`, then the next attack starts at
+  AttackStateNextAttack (MeleeAttackStart, AttackStart). Holding the attack logs the charged-hold message.
