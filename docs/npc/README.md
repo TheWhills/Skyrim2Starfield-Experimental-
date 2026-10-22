@@ -48,7 +48,7 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
   closer likeness, at the cost of every converted NPC needing that mod. Default: vanilla files.
 
 ## First run (checklist step 9): what to look at
-`Desktop\S2S Face Test`: `faces.json` and `S2SFaceTest.esm` (one test NPC per fitted Skyrim NPC, a vanilla NPC of the
+`C:\Modding\work\s2s\mods\S2S Face Test` (checklist -Work; the Desktop until 2026-10-22): `faces.json` and `S2SFaceTest.esm` (one test NPC per fitted Skyrim NPC, a vanilla NPC of the
 same sex with its face dials replaced; a plain one without scripts or companion data is preferred, `--template-npc`
 picks one; scripts / affinity data are stripped from the copies). In game: `help S2SFace 4` lists them with their
 full FormIDs; `player.placeatme <id>`. Only the face shape changes: hair, beard, skin tone and clothes are the

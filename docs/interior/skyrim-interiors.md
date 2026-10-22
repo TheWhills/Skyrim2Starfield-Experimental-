@@ -132,7 +132,7 @@ copies them as they are. Still unverified until a build: the compile itself, and
 graph loads.
 
 ### PC checklist step 11 (2026-10-21)
-`scripts/armor/pc_checklist.ps1` step 11 builds a batch in the Desktop folder "S2S Interiors":
+`scripts/armor/pc_checklist.ps1` step 11 builds a batch in `<work>\interiors` (default `C:\Modding\work\s2s\interiors`; the Desktop until 2026-10-22):
 `RiverwoodSleepingGiantInn` (its only load door leads outside), plus the smallest pair of rooms Skyrim joins by a
 load door, each with at least 30 placed records (`batch --smallest-linked-pair`, `Source.linked_pairs`). It uses
 navmesh_defaults.json from step 10, converts, checks, and runs PluginSpike when .NET is installed. It does **not**

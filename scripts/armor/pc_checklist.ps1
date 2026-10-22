@@ -1,26 +1,33 @@
 # One-shot PC checklist for the Skyrim -> Starfield combat port (docs/armor/animation-port.md, lock-on-design.md).
-# Read-only on both games. Writes two zips to the Desktop:
+# Read-only on both games. Everything goes to one work folder (-Work, default C:\Modding\work\s2s):
 #   s2s_checklist_report.zip  - text reports (send this)
 #   s2s_skyrim_anims.zip      - vanilla Skyrim animation files the port needs (send privately; game files)
+#   checklist\                - the reports before zipping
+#   mods\<name>               - test mods to add to MO2
+#   interiors\                - the converted interior batch (step 11)
 #
 #   cd <your clone of the repo>
 #   git pull
 #   powershell -ExecutionPolicy Bypass -File scripts\armor\pc_checklist.ps1
 #
-# Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Out, -Texconv.
-# Also builds the iron weapon test mod (step 6) into the Desktop folder "S2S Iron Weapons" when texconv is found, and
-# the combat plugin (step 7) into the Desktop folder "S2S Combat Plugin" when xmake and Visual Studio's tools are found,
-# and S2SStances.esm (step 8, arrow-key stances) into that same folder, and converted Skyrim interiors (step 11) into
-# "S2S Interiors" (built, not installed: interior_test.txt in the report says how to install and what to try).
+# Override any path: -Repo, -SF (Starfield install folder), -SKY (Skyrim SE Data folder), -Work, -Out, -Texconv.
+# Also builds the iron weapon test mod (step 6) into mods\S2S Iron Weapons when texconv is found, the combat plugin
+# (step 7) into mods\S2S Combat Plugin when xmake and Visual Studio's tools are found, S2SStances.esm (step 8,
+# arrow-key stances) into that same folder, the face test (step 9) into mods\S2S Face Test, and converted Skyrim
+# interiors (step 11) into interiors\ (built, not installed: interior_test.txt in the report says how to install and
+# what to try).
 param(
     [string]$Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
-    [string]$Out = (Join-Path (Join-Path $env:USERPROFILE "Desktop") "s2s_checklist"),
+    [string]$Work = "C:\Modding\work\s2s",
+    [string]$Out = "",
     [string]$Texconv = "C:\Modding\tools\xedit\Edit Scripts\texconv.exe"
 )
 $ErrorActionPreference = "Continue"
-New-Item -ItemType Directory -Force -Path $Out | Out-Null
+if (-not $Out) { $Out = Join-Path $Work "checklist" }
+$Mods = Join-Path $Work "mods"
+New-Item -ItemType Directory -Force -Path $Out, $Mods | Out-Null
 $log = Join-Path $Out "checklist.log"
 function Say($t) { Write-Host $t; Add-Content -Path $log -Value $t }
 "" | Set-Content $log
@@ -95,7 +102,7 @@ if (-not (Test-Path $Texconv)) {
     if ($found) { $Texconv = $found.FullName }
 }
 if (Test-Path $Texconv) {
-    $wpn = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Iron Weapons"
+    $wpn = Join-Path $Mods "S2S Iron Weapons"
     Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/weapon_test_pack.py") --skyrim-data $SKY --starfield $SF --texconv $Texconv --out $wpn 2>&1 | ForEach-Object { Say $_ }
     Copy-Item (Join-Path $wpn "weapon_test_pack.json") $Out -ErrorAction SilentlyContinue
 } else {
@@ -117,7 +124,7 @@ if ($xmake -and (Test-Path (Join-Path $plug "xmake.lua"))) {
     $dll = Get-ChildItem -Path (Join-Path $plug "build") -Filter "S2SCombat.dll" -Recurse -ErrorAction SilentlyContinue |
         Select-Object -First 1
     if ($dll) {
-        $mod = Join-Path (Join-Path (Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Combat Plugin") "SFSE") "Plugins"
+        $mod = Join-Path (Join-Path (Join-Path $Mods "S2S Combat Plugin") "SFSE") "Plugins"
         New-Item -ItemType Directory -Force -Path $mod | Out-Null
         Copy-Item $dll.FullName $mod
         Copy-Item (Join-Path $plug "S2SCombat.ini") $mod
@@ -128,12 +135,12 @@ if ($xmake -and (Test-Path (Join-Path $plug "xmake.lua"))) {
 }
 
 Say "== 8. stances plugin (S2SStances.esm: stance keywords + HumanRace animation entries)"
-$stmod = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Combat Plugin"
+$stmod = Join-Path $Mods "S2S Combat Plugin"
 Invoke-S2SPython -I (Join-Path $Repo "scripts/armor/stance_plugin.py") --starfield $SF --out $stmod 2>&1 | ForEach-Object { Say $_ }
 Copy-Item (Join-Path $stmod "stance_plugin.json") $Out -ErrorAction SilentlyContinue
 
 Say "== 9. face fit: Skyrim NPC faces -> Starfield face dials, with a test plugin (S2SFaceTest.esm)"
-$faceOut = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Face Test"
+$faceOut = Join-Path $Mods "S2S Face Test"
 Invoke-S2SPython -I (Join-Path $Repo "scripts/npc/face_fit.py") --skyrim-data $SKY --starfield $SF --out $faceOut --test-plugin 2>&1 | ForEach-Object { Say $_ }
 Copy-Item (Join-Path $faceOut "faces.json") $Out -ErrorAction SilentlyContinue
 
@@ -144,9 +151,9 @@ Say "== 12. vanilla Starfield collision meshes: the tree format native Skyrim co
 Invoke-S2SPython -I (Join-Path $Repo "scripts/tools/cms_survey.py") --starfield-data (Join-Path $SF "Data") --out (Join-Path $Out "cms") 2>&1 | ForEach-Object { Say $_ }
 
 Say "== 11. interiors: Sleeping Giant Inn + the smallest pair of rooms Skyrim links by a load door (navmesh, doors)"
-# Builds FO4Port.esm + the converted models in the Desktop folder "S2S Interiors" (work\convert). Does NOT install: the
+# Builds FO4Port.esm + the converted models in <Work>\interiors (interiors\convert). Does NOT install: the
 # install / uninstall commands and the in-game test list are written to interior_test.txt in the report.
-$intWork = Join-Path (Join-Path $env:USERPROFILE "Desktop") "S2S Interiors"
+$intWork = Join-Path $Work "interiors"
 $mi = Join-Path $Repo "scripts/interior/make_skyrim_interior.py"
 $navDefaults = Join-Path (Join-Path $Out "navmesh") "navmesh_defaults.json"
 $batchArgs = @("batch", "--skyrim", (Join-Path $SKY "Skyrim.esm"), "--cells", "RiverwoodSleepingGiantInn",
@@ -183,7 +190,7 @@ if (-not (Test-Path (Join-Path $intWork "batch.json"))) {
     $linked = @($batch.cells | Where-Object { $_.linked_doors -gt 0 } | ForEach-Object cell)
     $deployed = Test-Path (Join-Path $SF "Data\FO4Port.deploy.json")
     @(
-        "Interior test (S2S Interiors). Starfield closed while installing. Uninstall afterwards.",
+        "Interior test ($intWork). Starfield closed while installing. Uninstall afterwards.",
         $(if ($deployed) { "0. an earlier FO4Port test is installed: uninstall it first (command at the end)" } else { "" }),
         "install:   python -I scripts\deploy_starfield.py install --staging `"$staging`" --starfield `"$SF`"",
         "",
@@ -205,9 +212,8 @@ if (-not (Test-Path (Join-Path $intWork "batch.json"))) {
 }
 
 Say "== 5. zips"
-$desk = Join-Path $env:USERPROFILE "Desktop"
-$rep = Join-Path $desk "s2s_checklist_report.zip"
-$sky = Join-Path $desk "s2s_skyrim_anims.zip"
+$rep = Join-Path $Work "s2s_checklist_report.zip"
+$sky = Join-Path $Work "s2s_skyrim_anims.zip"
 Remove-Item $rep, $sky -ErrorAction SilentlyContinue
 $items = Get-ChildItem $Out | Where-Object { $_.Name -ne "skyrim_anims" } | ForEach-Object FullName
 Compress-Archive -Path $items -DestinationPath $rep
