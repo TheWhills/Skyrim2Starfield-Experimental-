@@ -9,16 +9,16 @@ namespace {
 // AddKeyword / RemoveKeyword, Actor.SetGhost: Fallout 4 has all of them). pc_checklist.ps1 step 1 lists which of these
 // strings Starfield.exe contains; the plugin log shows "dispatch failed" when a call is refused.
 template <class... Args>
-void CallOnPlayer(const char* script, const char* function, Args... args) {
+bool CallOnPlayer(const char* script, const char* function, Args... args) {
     auto* player = Player();
     auto* game = RE::GameVM::GetSingleton();
     auto* vm = game ? game->GetVM() : nullptr;
-    if (!player || !vm) return;
+    if (!player || !vm) return false;
     const auto handle = vm->GetObjectHandlePolicy().GetHandleForObject(RE::BSScript::GetVMTypeID<RE::Actor>(),
                                                                        static_cast<RE::Actor*>(player));
     if (!handle) {
         REX::WARN("{}.{}: no script handle for the player", script, function);
-        return;
+        return false;
     }
     auto pack = [=](RE::BSScrapArray<RE::BSScript::Variable>& out) {
         out.clear();
@@ -30,7 +30,9 @@ void CallOnPlayer(const char* script, const char* function, Args... args) {
     if (!vm->DispatchMethodCall(handle, RE::BSFixedString(script), RE::BSFixedString(function), pack,
                                 RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>(), 0)) {
         REX::WARN("{}.{}: dispatch failed", script, function);
+        return false;
     }
+    return true;
 }
 
 }  // namespace
@@ -56,33 +58,31 @@ bool GetVariable(std::string_view name, float& out) {
     return player && player->GetGraphVariableImplFloat(RE::BSFixedString(std::string(name).c_str()), out);
 }
 
-void SetVariable(const combat::VariableSet& v) {
+bool SetVariable(const combat::VariableSet& v) {
     const std::string name = v.name;
     switch (v.type) {
         case combat::VariableSet::Type::Bool:
-            CallOnPlayer("ObjectReference", "SetAnimationVariableBool", RE::BSFixedString(name.c_str()), v.value != 0.0);
-            break;
+            return CallOnPlayer("ObjectReference", "SetAnimationVariableBool", RE::BSFixedString(name.c_str()), v.value != 0.0);
         case combat::VariableSet::Type::Int:
-            CallOnPlayer("ObjectReference", "SetAnimationVariableInt", RE::BSFixedString(name.c_str()),
+            return CallOnPlayer("ObjectReference", "SetAnimationVariableInt", RE::BSFixedString(name.c_str()),
                          static_cast<std::int32_t>(v.value));
-            break;
         case combat::VariableSet::Type::Float:
-            CallOnPlayer("ObjectReference", "SetAnimationVariableFloat", RE::BSFixedString(name.c_str()),
+            return CallOnPlayer("ObjectReference", "SetAnimationVariableFloat", RE::BSFixedString(name.c_str()),
                          static_cast<float>(v.value));
-            break;
     }
+    return false;
 }
 
-void SetKeyword(std::string_view editor_id, bool add) {
+bool SetKeyword(std::string_view editor_id, bool add) {
     auto* keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(RE::BSFixedString(std::string(editor_id).c_str()));
     if (!keyword) {
-        REX::WARN("keyword {} not found (is the plugin that adds it loaded?)", editor_id);
-        return;
+        REX::WARN("keyword {} not found by EditorID (is the plugin that adds it loaded?)", editor_id);
+        return false;
     }
-    CallOnPlayer("ObjectReference", add ? "AddKeyword" : "RemoveKeyword", keyword);
+    return CallOnPlayer("ObjectReference", add ? "AddKeyword" : "RemoveKeyword", keyword);
 }
 
-void SetGhost(bool ghost) { CallOnPlayer("Actor", "SetGhost", ghost); }
+bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
 
 float ActorValue(std::string_view editor_id) {
     auto* player = Player();

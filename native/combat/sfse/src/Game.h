@@ -12,9 +12,9 @@ RE::PlayerCharacter* Player();
 // Must run on the main thread (Plugin queues them through SFSE's task interface).
 bool SendEvent(std::string_view name);           // player's animation graph
 bool GetVariable(std::string_view name, float& out);
-void SetVariable(const combat::VariableSet& v);  // Papyrus ObjectReference.SetAnimationVariable* (queued by the VM)
-void SetKeyword(std::string_view editor_id, bool add);
-void SetGhost(bool ghost);
+bool SetVariable(const combat::VariableSet& v);  // false: not dispatched. Papyrus ObjectReference.SetAnimationVariable* (queued by the VM)
+bool SetKeyword(std::string_view editor_id, bool add);   // false: keyword not found / not dispatched
+bool SetGhost(bool ghost);
 float ActorValue(std::string_view editor_id);    // < 0 when the value is not found
 void DamageActorValue(std::string_view editor_id, float amount);
 

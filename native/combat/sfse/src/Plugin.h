@@ -13,6 +13,9 @@ struct Settings {
     std::string stamina_value;      // actor value EditorID the dodge cost uses ("" = no cost)
     int log_menus = 60;             // first N menu open / close events written to the log (to check the menu names)
     int log_hits = 30;              // first N hits on the player written to the log (attacker, weapon, attack event)
+    int log_commands = 60;          // first N actions carried out (event sent, keyword set, lock) with their result
+    int perf_seconds = 60;          // for this long after loading, the plugin's own time per frame / event every 10 s
+    bool probe_layout = false;      // find BSAnimationGraphEvent's layout again (after a game update moved it)
 };
 
 class Plugin {
@@ -44,6 +47,7 @@ private:
     Settings settings_;
     std::atomic_bool anim_events_ = true;
     int logged_menus_ = 0, logged_hits_ = 0;
+    std::atomic_int logged_commands_ = 0;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;
     int logged_input_ = 0, logged_events_ = 0;
     bool ghost_ = false;

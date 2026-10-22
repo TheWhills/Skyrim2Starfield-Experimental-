@@ -62,6 +62,9 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     if (auto it = plugin.find("sstaminaactorvalue"); it != plugin.end()) settings_.stamina_value = it->second;
     settings_.log_menus = to_int(plugin, "ilogmenus", settings_.log_menus);
     settings_.log_hits = to_int(plugin, "iloghits", settings_.log_hits);
+    settings_.log_commands = to_int(plugin, "ilogcommands", settings_.log_commands);
+    settings_.perf_seconds = to_int(plugin, "iperfseconds", settings_.perf_seconds);
+    settings_.probe_layout = to_int(plugin, "bprobeeventlayout", 0) != 0;
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -205,25 +208,31 @@ void Plugin::Tick() {
 void Plugin::Run(std::vector<combat::Command> commands) {
     if (commands.empty()) return;
     const std::string stamina = settings_.stamina_value;
-    SFSE::GetTaskInterface()->AddTask([cmds = std::move(commands), stamina]() {
+    const int limit = settings_.log_commands;
+    SFSE::GetTaskInterface()->AddTask([this, cmds = std::move(commands), stamina, limit]() {
         using K = combat::Command::Kind;
         for (const auto& c : cmds) {
+            std::string result;
             switch (c.kind) {
-                case K::SendEvent: {
-                    bool ok = game::SendEvent(c.name);
-                    REX::DEBUG("send {}: {}", c.name, ok ? "taken" : "not taken by the graph");
+                case K::SendEvent:
+                    result = game::SendEvent(c.name) ? "taken by the graph" : "not taken by the graph";
                     break;
-                }
-                case K::SetVariable: game::SetVariable(c.variable); break;
-                case K::AddKeyword: game::SetKeyword(c.name, true); break;
-                case K::RemoveKeyword: game::SetKeyword(c.name, false); break;
+                case K::SetVariable:
+                    result = game::SetVariable(c.variable) ? std::format("{} = {} dispatched", c.variable.name, c.variable.value)
+                                                           : std::format("{}: not dispatched", c.variable.name);
+                    break;
+                case K::AddKeyword: result = game::SetKeyword(c.name, true) ? "dispatched" : "failed"; break;
+                case K::RemoveKeyword: result = game::SetKeyword(c.name, false) ? "dispatched" : "failed"; break;
                 case K::SpendStamina:
                     if (!stamina.empty()) game::DamageActorValue(stamina, c.amount);
+                    result = stamina.empty() ? "no stamina value set" : std::format("{}", c.amount);
                     break;
-                case K::Log: REX::INFO("{}", c.name); break;
-                case K::ToggleLock: Lock::Get().Toggle(); break;
-                case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); break;
+                case K::Log: REX::INFO("{}", c.name); continue;
+                case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
+                case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
             }
+            if (logged_commands_.fetch_add(1) < limit)
+                REX::INFO("command: {} {} -> {}", kind_name(c.kind), c.name, result);
         }
     });
 }

@@ -8,6 +8,27 @@
 namespace s2s::sfse::hooks {
 namespace {
 
+// ------------------------------------------------------------------------------------------------ timing
+// The plugin's own time, to tell its share of a stutter: per frame (input + tick) and per animation event. Reported
+// every 10 s for iPerfSeconds after the hooks are installed.
+struct Perf {
+    std::atomic<std::uint64_t> n{0}, total_us{0}, max_us{0};
+    void add(std::chrono::steady_clock::time_point t0) {
+        const auto us = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+        ++n;
+        total_us += us;
+        auto m = max_us.load();
+        while (us > m && !max_us.compare_exchange_weak(m, us)) {}
+    }
+    std::string take() {
+        const auto count = n.exchange(0), total = total_us.exchange(0), mx = max_us.exchange(0);
+        return std::format("{} calls, avg {} us, max {} us", count, count ? total / count : 0, mx);
+    }
+};
+Perf g_perf_frame, g_perf_event;
+std::chrono::steady_clock::time_point g_perf_start, g_perf_last;
+
 // ------------------------------------------------------------------------------------------------ input
 // UI's BSInputEventReceiver::PerformInputProcessing sees every input event once per frame (supported: OSF Animation
 // hooks the same function for its scene controls). The hook only watches: events still reach the game unchanged.
@@ -37,6 +58,7 @@ std::uint32_t KeyCode(const RE::ButtonEvent* e) {
 
 void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEvent* a_head) {
     auto& plugin = Plugin::Get();
+    const auto t0 = std::chrono::steady_clock::now();
     for (auto* e = a_head; e; e = e->next) {
         if (e->eventType == RE::InputEvent::EventType::kButton) {
             const auto* b = static_cast<const RE::ButtonEvent*>(e);
@@ -61,6 +83,13 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
     // UNVERIFIED: this runs every frame, also without input (the tick depends on it). If the log shows buffered
     // attacks or i-frames that never end, move Tick to a per-frame hook (e.g. the player's update).
     plugin.Tick();
+    g_perf_frame.add(t0);
+    const auto limit = std::chrono::seconds(plugin.settings().perf_seconds);
+    if (t0 - g_perf_start < limit + std::chrono::seconds(1) && t0 - g_perf_last >= std::chrono::seconds(10)) {
+        g_perf_last = t0;
+        REX::INFO("timing (the plugin's own work): per frame {}; per animation event {}", g_perf_frame.take(),
+                  g_perf_event.take());
+    }
     g_input_original(a_this, a_head);
 }
 
@@ -166,12 +195,14 @@ RE::BSEventNotifyControl ProcessEvent(Sink* a_this, const RE::BSAnimationGraphEv
         const auto* as_holder = static_cast<const void*>(static_cast<const RE::IAnimationGraphManagerHolder*>(self));
         Probe(ev, self, as_holder);
     } else if (state == 1) {
-        // still read with checks: a slot that held strings in the probe may hold something else in a later event
-        const auto tag = SafeText(ev + static_cast<std::uintptr_t>(g_tag_off.load()));
+        // Plain reads: both slots held real strings in every event of the owner's runs. The checked reads (VirtualQuery
+        // on the animation threads, several per event) were the likely cause of the stutter in the second run.
+        const auto t0 = std::chrono::steady_clock::now();
+        const auto tag = View(*reinterpret_cast<const RE::BSFixedString*>(ev + g_tag_off.load()));
         const auto poff = g_payload_off.load();
-        const auto payload = poff < 0 ? std::optional<std::string>(std::string())
-                                      : SafeText(ev + static_cast<std::uintptr_t>(poff));
-        if (tag && !tag->empty()) Plugin::Get().OnAnimEvent(*tag, payload.value_or(std::string()));
+        const auto payload = poff < 0 ? std::string_view() : View(*reinterpret_cast<const RE::BSFixedString*>(ev + poff));
+        if (!tag.empty()) Plugin::Get().OnAnimEvent(tag, payload);
+        g_perf_event.add(t0);
     }
     return g_event_original(a_this, a_event, a_source);
 }
@@ -238,6 +269,15 @@ bool Install() {
     } else {
         REX::WARN("hit events: TESHitEvent::GetEventSource is not mapped for this game version in CommonLibSF (ID 0): "
                   "hit handling off; the player's own animation events (logged) show hits instead");
+    }
+
+    g_perf_start = g_perf_last = std::chrono::steady_clock::now();
+    if (!Plugin::Get().settings().probe_layout) {
+        // Starfield 1.16.244 (owner's run 2026-10-21): tag +0x08, payload +0x10
+        g_tag_off = 0x08;
+        g_payload_off = 0x10;
+        g_state = 1;
+        REX::INFO("animation events: Starfield 1.16 layout (tag +08, payload +10); bProbeEventLayout = 1 to probe again");
     }
 
     installed = true;
