@@ -174,3 +174,28 @@ door, not on it.
   the CK treats bound-less objects as zero-sized; tes4skyrim sets OBND from every converted mesh).
 - To confirm on the real meshes: `convert\manifest.json` holds each model's collision report (render vs collision
   bounds, boxes, voxel cell, bodies and layers).
+
+## Native collision for Skyrim models (2026-10-22, offline; in-game check pending)
+Fix for the stairs / door analysis above: Skyrim's own collision becomes native Starfield collision, as the FO4 path
+does (verified in game there), instead of boxes.
+* `src/fo4sf/cmsencode.py` builds a Havok compressed mesh (the hkcdStaticMeshTree inside hknpCompressedMeshShape) from
+  triangles: spatial sections (at most 120 primitives, 250 vertex slots), 11/11/10-bit packed vertices, 21/21/22-bit
+  shared vertices at section seams, data runs, and the two compressed AABB trees. The format was read off 34 FO4
+  compressed meshes (50 sections, 5,449 triangles): every tree walks and every triangle sits in its leaf box with the
+  codec as documented in the module (child box = parent box moved in by h^2 / 226 and l^2 / 226 of its span; 4-byte
+  section nodes with odd data = internal, 5-byte top nodes with 0x80 = internal; section leafIndex = its top-tree node).
+* Checks: the encoder's own strict check (tree shape, every triangle inside its leaf box with float32 decoding, sections
+  inside their top-tree leaves); fo4collision's decoder reads the encoding back identically; the 34 FO4 meshes re-encoded
+  from their triangles pass and come back within 6.6 mm (11-bit packing). Tests: `tests/test_cmsencode.py`.
+* `meshcollision.mesh_body` writes it through the unchanged FO4 writer (`_emit_mesh`, via `cmsencode.Fo4View`), one
+  Starfield body per Skyrim body, **with the Skyrim body's layer** (stair helpers stay stair helpers). Bodies on non-solid
+  layers (trigger, portal, non-collidable, sound / AI volumes, picks: `NON_SOLID_LAYERS`) get no body; the box path now
+  leaves them out too (before, every body was merged into one triangle soup, so a trigger volume became boxes).
+* `make_skyrim_objects.py convert` uses it whenever `--starfield-data` is given (template: Bethesda's multi-shape test
+  NIF, as the FO4 path); `--box-collision` keeps the old boxes. A model whose native collision fails falls back to boxes
+  with the reason (`collision_report.native_error`, `manifest.json` "native_collision_errors"). The converter's cache key
+  changes, so `--resume` reconverts everything once.
+* Checklist step 12 (`scripts/tools/cms_survey.py`) walks vanilla Starfield compressed meshes with the same tree reader:
+  it should report 0 problems (so far the format is verified on FO4 files only).
+**Unresolved until the PC:** the first game load with these bodies (template / writer as for FO4, so expected to work);
+whether Alva's stairs and door are fixed. Exterior objects converted with `--starfield-data` get native collision too.

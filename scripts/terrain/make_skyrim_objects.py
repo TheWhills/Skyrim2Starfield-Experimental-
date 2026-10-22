@@ -169,6 +169,22 @@ def box_template_nif(a) -> bytes:
     sys.exit(f"{BOX_TEMPLATE_NIF} not found in {a.starfield_data}\\Starfield - Meshes*.ba2; pass --collision-template")
 
 
+def mesh_template(a):
+    """Vanilla Starfield multi-shape physics blob for native Skyrim collision (meshcollision.UNIVERSAL_TEMPLATE_NIF from
+    the Starfield archives), or None: no --starfield-data, or --box-collision."""
+    if getattr(a, "box_collision", False) or not getattr(a, "starfield_data", None):
+        return None
+    from fo4sf import ba2, meshcollision
+    for fn in sorted(os.listdir(a.starfield_data)):
+        if fn.lower().startswith("starfield - meshes") and fn.lower().endswith(".ba2"):
+            arc = ba2.Ba2(os.path.join(a.starfield_data, fn))
+            i = arc.find(meshcollision.UNIVERSAL_TEMPLATE_NIF)
+            if i is not None:
+                return meshcollision.template_from_nif(arc.read(i))
+    print(f"{meshcollision.UNIVERSAL_TEMPLATE_NIF} not found in the Starfield archives: box collision")
+    return None
+
+
 def checkpoint_signature(a):
     from fo4sf import checkpoints
     from pathlib import Path
@@ -178,6 +194,8 @@ def checkpoint_signature(a):
             "content": {str(p.resolve()): checkpoints.digest(p) for p in
                         [*code, Path(a.texconv), Path(a.content_resources)]},
             "box_template": hashlib.sha256(box_template_nif(a)).hexdigest(),
+            "collision": "boxes" if (getattr(a, "box_collision", False) or not getattr(a, "starfield_data", None))
+            else "native",
             "max_texture": a.max_texture or None}
 
 
@@ -190,6 +208,9 @@ def cmd_convert(a):
     os.makedirs(staging, exist_ok=True)
     src = bsa.SkyrimArchives(a.skyrim_data)
     template = convert_static.collision_template_from_nif(box_template_nif(a))
+    sf_mesh = mesh_template(a)
+    print("collision: " + ("native Starfield meshes from Skyrim's own collision (boxes as fallback)" if sf_mesh
+                           else "boxes"))
     cache = checkpoints.Checkpoints(staging, checkpoint_signature(a), prefix=ASSET_PREFIX) if a.resume else None
     ids_path = os.path.join(staging, "editorids.json")
     ids = load(ids_path) if os.path.exists(ids_path) else {}
@@ -203,7 +224,8 @@ def cmd_convert(a):
         else:
             if conv is None:
                 conv = skyrimconvert.SkyrimConverter(src, staging, a.texconv, a.content_resources, template,
-                                                     prefix=ASSET_PREFIX, max_texture=a.max_texture)
+                                                     prefix=ASSET_PREFIX, max_texture=a.max_texture,
+                                                     sf_mesh_template=sf_mesh)
             r = conv.convert_nif(name)
             if cache:
                 try:
@@ -229,18 +251,25 @@ def cmd_convert(a):
     for f in failures:
         r = re.sub(r"\d+", "#", f["reason"])[:80]
         reasons[r] = reasons.get(r, 0) + 1
-    coll = {}
+    coll, native_errors = {}, {}
     for i in items:
         c = i["collision_report"]
         k = c.get("method") if c.get("source") == "skyrim-boxes" else c.get("source", "none")
+        if c.get("native_error"):                  # native mesh failed: boxes instead (reason kept per model too)
+            k = f"{k} (native failed)"
+            r = re.sub(r"\d+", "#", c["native_error"])[:100]
+            native_errors[r] = native_errors.get(r, 0) + 1
         coll[k] = coll.get(k, 0) + 1
     save(ids_path, ids)
     manifest = {"items": items, "failures": failures, "material_fallbacks": conv.material_errors if conv else {},
-                "stats": stats, "collision": coll, "failure_reasons": reasons, "seconds": round(time.time() - t0, 1)}
+                "stats": stats, "collision": coll, "native_collision_errors": native_errors,
+                "failure_reasons": reasons, "seconds": round(time.time() - t0, 1)}
     save(os.path.join(staging, "manifest.json"), manifest, indent=1)
     print(json.dumps({"converted": len(items), **stats, "collision": coll, "seconds": manifest["seconds"]}))
     for r, n in sorted(reasons.items(), key=lambda kv: -kv[1])[:10]:
         print(f"  FAIL x{n}: {r}")
+    for r, n in sorted(native_errors.items(), key=lambda kv: -kv[1])[:10]:
+        print(f"  native collision failed x{n} (boxes used): {r}")
     return 0
 
 
@@ -826,6 +855,8 @@ def main(argv=None):
     ap.add_argument("--content-resources", help="convert: Starfield Tools\\ContentResources.zip (material templates)")
     ap.add_argument("--texconv", help="convert: texconv.exe")
     ap.add_argument("--collision-template", help="convert: a vanilla Starfield NIF with one box body (as convert_batch)")
+    ap.add_argument("--box-collision", action="store_true",
+                    help="convert: approximate collision with boxes instead of native meshes (the pre-2026-10-22 path)")
     ap.add_argument("--starfield-data", help="convert: Starfield Data folder, to read the box template from its archives "
                                              "instead of --collision-template")
     ap.add_argument("--max-texture", default="", help="convert: texture caps, e.g. 1024 or color=1024,normal=512")

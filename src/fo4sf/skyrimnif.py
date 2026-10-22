@@ -513,18 +513,13 @@ BODY_TRANSFORM_MODES = ("all", "t_only", "none", "body_only")
 BODY_TRANSFORM_DEFAULT = "t_only"
 
 
-def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None,
-                        body_transform: str = BODY_TRANSFORM_DEFAULT):
-    """(points, triangles) of every rigid body's collision in the NIF's root frame, in GAME units; empty when the
-    model has no collision. Unsupported shape types go to report['unsupported'] (the model then keeps what decoded).
-
-    body_transform: how a body's own stored translation / rotation (bytes 52 / 68) combines with its node's world
-    transform. "t_only" (default, VERIFIED on the owner's Skyrim SE 2026-10-15): applied on bhkRigidBodyT only, then
-    the node. "all" (tes4skyrim's reading, plain bodies too) put 285 of 2,473 surveyed vanilla models' collision off
-    the visible mesh; "t_only" fixes 284 (the last is a collision-only wall piece). "all", "none" and "body_only"
-    stay for the first-run survey, which re-measures this on every run."""
+def collision_bodies(n: nifmod.NifFile, report: Optional[dict] = None,
+                     body_transform: str = BODY_TRANSFORM_DEFAULT):
+    """[(layer, points, triangles)] per rigid body, points in the NIF's root frame in GAME units (see
+    collision_triangles for body_transform). layer = the body's Havok layer (bhkWorldObject filter byte 4: 1 static,
+    2 animstatic, 12 trigger, 15 non-collidable, 31 stair helper ... as Skyrim's COLL list)."""
     world = nifmod.world_transforms(n)
-    points, tris, bad, bodies = [], [], [], 0
+    out, bad = [], []
     for i in range(len(n.blocks)):
         if n.type_of(i) not in ("bhkCollisionObject", "bhkSPCollisionObject", "bhkBlendCollisionObject"):
             continue
@@ -545,20 +540,42 @@ def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None,
         tr, rot, scale = world(target) if 0 <= target < len(n.blocks) else ((0.0, 0.0, 0.0), IDENT, 1.0)
         if body_transform == "body_only":
             tr, rot, scale = (0.0, 0.0, 0.0), IDENT, 1.0
+        layer = blk[4] if len(blk) > 4 else None
         if report is not None:
             report.setdefault("body_list", []).append({
-                "class": n.type_of(body), "layer": blk[4] if len(blk) > 4 else None,
+                "class": n.type_of(body), "layer": layer,
                 "translation": [round(c * HAVOK_SCALE, 1) for c in t], "rotated": m != IDENT,
                 "node_translation": [round(c, 1) for c in tr]})
+        points = [_apply(tuple(scale * r for r in rot), tr, tuple(c * HAVOK_SCALE for c in x)) for x in v]
+        out.append((layer, points, list(f)))
+    if report is not None and bad:
+        report["unsupported"] = sorted(set(bad))
+    return out
+
+
+def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None,
+                        body_transform: str = BODY_TRANSFORM_DEFAULT, skip_layers=()):
+    """(points, triangles) of every rigid body's collision in the NIF's root frame, in GAME units; empty when the
+    model has no collision. Unsupported shape types go to report['unsupported'] (the model then keeps what decoded).
+    skip_layers: Havok layers left out (non-solid bodies: triggers, portals ...), counted in report['skipped_layers'].
+
+    body_transform: how a body's own stored translation / rotation (bytes 52 / 68) combines with its node's world
+    transform. "t_only" (default, VERIFIED on the owner's Skyrim SE 2026-10-15): applied on bhkRigidBodyT only, then
+    the node. "all" (tes4skyrim's reading, plain bodies too) put 285 of 2,473 surveyed vanilla models' collision off
+    the visible mesh; "t_only" fixes 284 (the last is a collision-only wall piece). "all", "none" and "body_only"
+    stay for the first-run survey, which re-measures this on every run."""
+    points, tris, bodies, skipped = [], [], 0, {}
+    for layer, v, f in collision_bodies(n, report, body_transform):
+        if layer in skip_layers:
+            skipped[layer] = skipped.get(layer, 0) + 1
+            continue
         base = len(points)
-        for x in v:
-            g = tuple(c * HAVOK_SCALE for c in x)
-            points.append(_apply(tuple(scale * r for r in rot), tr, g))
+        points += v
         tris += [(a + base, b_ + base, c + base) for a, b_, c in f]
         bodies += 1
     if report is not None:
         report["skyrim_bodies"] = bodies
         report["skyrim_collision_triangles"] = len(tris)
-        if bad:
-            report["unsupported"] = sorted(set(bad))
+        if skipped:
+            report["skipped_layers"] = {str(k): v for k, v in sorted(skipped.items())}
     return points, tris

@@ -8,8 +8,10 @@ writer verified in game (sfcollision.box_blob).
 What is Skyrim's: geometry (skyrimnif.trishapes: BS 100 BSTriShape, NiTriShape / NiTriStrips), materials named by
 BSShaderTextureSet (diffuse + normal; Skyrim keeps specular in the normal map's alpha and has no smoothness map, so
 roughness is the converter's uniform "fairly rough"), NiAlphaProperty test / blend (foliage cutouts, decals), and
-collision: Skyrim's own Havok collision decoded to triangles (skyrimnif.collision_triangles) and rebuilt as Starfield
-boxes (sfcollision.mesh_boxes: thin boxes behind flat surfaces + voxel boxes for the rest). A model Skyrim gives no
+collision: Skyrim's own Havok collision decoded to triangles (skyrimnif.collision_bodies) and, with a Starfield mesh
+template, encoded as native Starfield compressed-mesh bodies, one per Skyrim body with its layer (cmsencode,
+meshcollision.mesh_body; 2026-10-22); otherwise, or if that fails, rebuilt as Starfield boxes (sfcollision.mesh_boxes:
+thin boxes behind flat surfaces + voxel boxes for the rest, which put ledges on ramps: docs/interior/skyrim-interiors.md). A model Skyrim gives no
 collision gets none (grass, small plants, cobwebs: the player walks through them in Skyrim too). Boxes are an
 approximation of curved rock and tree collision, not Starfield's native mesh shape (see docs/terrain/skyrim-objects.md).
 """
@@ -120,9 +122,36 @@ def column_boxes(points, triangles, max_boxes=None, cell=None, report=None):
         cell *= 1.25
 
 
+def native_collision(src: nifmod.NifFile, sf_mesh_template: bytes, report: dict) -> list:
+    """The model's own Skyrim collision as native Starfield bodies: one compressed-mesh body per Skyrim rigid body, same
+    triangles (metres, root frame), same Havok layer (stair helpers stay stair helpers). Non-solid bodies (triggers,
+    portals, AI / sound volumes) get none. Raises on anything it cannot encode (the caller falls back to boxes)."""
+    from . import meshcollision
+    bodies = skyrimnif.collision_bodies(src, report)
+    blobs, skipped, n_tris = [], {}, 0
+    for layer, pts, tris in bodies:
+        if layer in meshcollision.NON_SOLID_LAYERS:
+            skipped[str(layer)] = skipped.get(str(layer), 0) + 1
+            continue
+        if not tris:
+            continue
+        m = [(x * UNIT, y * UNIT, z * UNIT) for x, y, z in pts]
+        blobs.append(meshcollision.mesh_body(m, tris, sf_mesh_template, layer))
+        n_tris += len(tris)
+    report["source"] = "skyrim-native" if blobs else "skyrim-none"
+    report["bodies"] = len(blobs)
+    report["layers"] = sorted({str(l) for l, _p, t in bodies if t and l not in meshcollision.NON_SOLID_LAYERS})
+    report["skyrim_collision_triangles"] = n_tris
+    if skipped:
+        report["skipped_layers"] = skipped
+    return blobs
+
+
 def collision_boxes(src: nifmod.NifFile, template: bytes, report: dict, landscape: bool = False) -> list:
-    """Starfield single-box physics blobs approximating the model's own Skyrim collision (metres), or []."""
-    pts, tris = skyrimnif.collision_triangles(src, report)
+    """Starfield single-box physics blobs approximating the model's own Skyrim collision (metres), or []. Non-solid
+    bodies (meshcollision.NON_SOLID_LAYERS) are left out: a trigger volume made into boxes is an invisible wall."""
+    from . import meshcollision
+    pts, tris = skyrimnif.collision_triangles(src, report, skip_layers=tuple(meshcollision.NON_SOLID_LAYERS))
     if not tris:
         report["source"] = "skyrim-none"
         return []
@@ -159,7 +188,11 @@ def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
 
 
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
-                       collision_template: Optional[bytes], report: dict, landscape: bool = False) -> Dict[str, bytes]:
+                       collision_template: Optional[bytes], report: dict, landscape: bool = False,
+                       sf_mesh_template: Optional[bytes] = None) -> Dict[str, bytes]:
+    """sf_mesh_template (a vanilla Starfield multi-shape physics blob, meshcollision.UNIVERSAL_TEMPLATE_NIF): Skyrim's
+    own collision becomes native Starfield mesh bodies (native_collision); boxes are the fallback, with the reason in
+    report["native_error"]."""
     files, static_shapes, all_pts = {}, [], []
     for i, s in enumerate(shapes):
         if material_paths[i] is None:                 # effect shader / refraction / skipped shape
@@ -178,7 +211,21 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
     lo = [min(p[a] for p in all_pts) for a in range(3)]
     hi = [max(p[a] for p in all_pts) for a in range(3)]
     report["render_bounds_m"] = [[round(v, 3) for v in lo], [round(v, 3) for v in hi]]
-    blobs = collision_boxes(src, collision_template, report, landscape) if collision_template is not None else []
+    blobs = None
+    if sf_mesh_template is not None:
+        try:
+            blobs = native_collision(src, sf_mesh_template, report)
+        except Exception as e:                       # noqa: BLE001  (fallback by design, reason recorded)
+            report["native_error"] = f"{type(e).__name__}: {e}"
+            for k in ("source", "bodies", "layers", "skipped_layers"):
+                report.pop(k, None)
+    if blobs is None:
+        blobs = collision_boxes(src, collision_template, report, landscape) if collision_template is not None else []
+    if report.get("source") == "skyrim-native" and "collision_bounds_m" not in report:
+        pts = [p for _l, v, _t in skyrimnif.collision_bodies(src) for p in v]
+        if pts:
+            report["collision_bounds_m"] = [[round(min(p[a] for p in pts) * UNIT, 3) for a in range(3)],
+                                            [round(max(p[a] for p in pts) * UNIT, 3) for a in range(3)]]
     if "collision_bounds_m" in report:               # sanity on real data: collision should overlap the visible model
         cl, ch = report["collision_bounds_m"]
         overlap = all(cl[a] <= hi[a] + 0.5 and ch[a] >= lo[a] - 0.5 for a in range(3))
@@ -226,12 +273,13 @@ class SkyrimConverter(pipeline.Converter):
     """pipeline.Converter with a Skyrim source (bsa.SkyrimArchives) and Skyrim materials / geometry / collision."""
 
     def __init__(self, src, staging, texconv_exe, content_resources, collision_template=None, prefix="skyrim",
-                 max_texture=None, shape_hook=None):
+                 max_texture=None, shape_hook=None, sf_mesh_template=None):
         super().__init__(src, staging, texconv_exe, content_resources, collision_template, prefix=prefix,
                          no_collision_pattern="", max_texture=max_texture)
         # shape_hook(nif, shapes, report) -> shapes: change the geometry before conversion (skyrimweapon.weapon_shapes
         # moves weapons into Starfield's WEAPON frame and drops scabbards)
         self.shape_hook = shape_hook
+        self.sf_mesh_template = sf_mesh_template      # native Skyrim collision (convert_static_sse); None = boxes
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None) -> Optional[str]:
@@ -320,7 +368,8 @@ class SkyrimConverter(pipeline.Converter):
                 files = convert_skinned_sse(shapes, out_name, mats, skin_bone, report)
             else:
                 files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
-                                           landscape=bool(LANDSCAPE_RE.search(nif_name)))
+                                           landscape=bool(LANDSCAPE_RE.search(nif_name)),
+                                           sf_mesh_template=self.sf_mesh_template)
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)

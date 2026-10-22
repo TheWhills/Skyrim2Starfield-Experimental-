@@ -861,6 +861,50 @@ def convert_bodies(fo4_blob: bytes, template_blob: bytes, select: Optional[List[
     return out
 
 
+# Skyrim / FO4 / Starfield share the classic layer indices (COLL lists; Starfield differs at 37 and 43). Bodies on these
+# layers are not solid to the player (triggers, portals, sound and AI volumes, picks) and become no Starfield body.
+NON_SOLID_LAYERS = {11: "water", 12: "trigger", 15: "non-collidable", 18: "portal",
+                    21: "acoustic space", 22: "actor zone", 23: "projectile zone", 24: "gas trap", 34: "avoid box",
+                    36: "camera sphere", 37: "door detection", 38: "cone projectile", 39: "camera pick",
+                    40: "item pick", 41: "line of sight", 42: "path pick", 43: "custom pick 1", 44: "custom pick 2",
+                    45: "spell explosion", 46: "dropping pick"}
+
+
+def mesh_body(points, triangles, template_blob: bytes, layer: Optional[int] = None) -> bytes:
+    """A native Starfield single-body physics blob holding these triangles (metres, the body's node space) as a
+    compressed mesh (cmsencode), written by the same code as FO4 meshes (_emit_mesh through cmsencode.Fo4View).
+    layer: the collision layer (low 7 bits of collisionFilterInfo; None = the template body's)."""
+    from . import cmsencode
+    enc = cmsencode.encode(points, triangles)
+    problems = cmsencode.check(enc, eps=0.0)
+    if problems:
+        raise ValueError("compressed mesh failed its check: " + problems[0])
+    view = cmsencode.Fo4View(enc)
+    t = _Tmpl(template_blob)
+    T_PSD, T_BODY = t.type("hknpPhysicsSystemData"), t.type("hknpPhysicsSystemData::bodyCinfoWithAttachment")
+    T_MAT = t.type("hknpMaterial")
+    type_sec = next(template_blob[s_ - 8:e] for tag, s_, e in hktagfile.sections(template_blob, 8, len(template_blob))
+                    if tag == "TYPE")
+    sdk = next(template_blob[s_:e] for tag, s_, e in hktagfile.sections(template_blob, 8, len(template_blob)) if tag == "SDKV")
+    w = _Writer()
+    i_psd = w.add(T_PSD, 0x10, t.item_bytes("hknpPhysicsSystemData"), 1)
+    i_mat = w.add(T_MAT, 0x20, t.item_bytes("hknpMaterial", count=1), 1)
+    body = bytearray(t.item_bytes("hknpPhysicsSystemData::bodyCinfoWithAttachment", count=1))
+    struct.pack_into("<H", body, t.field(T_BODY, "materialId").offset, 0)
+    struct.pack_into("<4f", body, t.field(T_BODY, "position").offset, 0.0, 0.0, 0.0, 0.0)
+    struct.pack_into("<4f", body, t.field(T_BODY, "orientation").offset, 0.0, 0.0, 0.0, 1.0)
+    if layer is not None:
+        off = t.field(T_BODY, "collisionFilterInfo").offset
+        filt, = struct.unpack_from("<I", body, off)
+        struct.pack_into("<I", body, off, (filt & ~0x7F) | (layer & 0x7F))
+    i_body = w.add(T_BODY, 0x20, body, 1)
+    w.ptr(t.field(T_PSD, "materials").type, i_psd, t.field(T_PSD, "materials").offset, i_mat)
+    w.ptr(t.field(T_PSD, "bodyCinfos").type, i_psd, t.field(T_PSD, "bodyCinfos").offset, i_body)
+    i_shape = _emit_mesh(w, t, view, 0, (0.0, 0.0, 0.0))
+    w.ptr(t.field(T_BODY, "shape").type, i_body, t.field(T_BODY, "shape").offset, i_shape)
+    return w.build(sdk, type_sec)
+
+
 IDENTITY3 = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
 # hknpDynamicCompoundShape (FO4 2014; layout as in Codex's fo4_compounds.py, cross-checked with PyNifly): instances
 # hkArray @96, 128 bytes each: rotation as three column vectors @0/16/32, translation @48, scale @64, child shape @80
@@ -906,3 +950,92 @@ def _shape_parts(p, classes, shape, R, tr, depth=0):
             parts += _shape_parts(p, classes, child, R2, t2, depth + 1)
         return parts
     raise hkpackfile.PackfileError(f"unsupported shape {cls}")
+
+
+# ---- survey of vanilla Starfield compressed meshes (tree format check for cmsencode) -------------------------------
+def survey_sf_meshes(sf_blob: bytes) -> List[dict]:
+    """Per hknpCompressedMeshShapeData in a Starfield tagfile: sections, tree sizes and the problems cmsencode's reading
+    of the format finds (tree shape, triangles outside their leaf boxes, sections outside their top-tree leaves, leaf
+    indices). Starfield section fields as _convert_section writes them. Empty problems on vanilla files = the encoder's
+    format reading holds for Starfield, not only for FO4."""
+    from . import cmsencode
+    tf = hktagfile.Tagfile(sf_blob)
+    b, D = tf.blob, tf.data_start
+    T_DATA = _type(tf, "hknpCompressedMeshShapeData")
+    T_TREE = _type(tf, "hknpCompressedMeshShapeTree")
+    ptr_items = {}
+    for _, offs in tf.patches:
+        for o in offs:
+            ptr_items[D + o] = tf.items[struct.unpack_from("<Q", b, D + o)[0]]
+    out = []
+    for it in tf.items[1:]:
+        if it.type != T_DATA:
+            continue
+        tree = D + it.offset + _field(tf, T_DATA, "meshTree").offset
+
+        def arr(name):
+            a = ptr_items.get(tree + _field(tf, T_TREE, name).offset)
+            return (D + a.offset, a.count) if a else (0, 0)
+        dom = (struct.unpack_from("<3f", b, tree + 16), struct.unpack_from("<3f", b, tree + 32))
+        nodes_at, nn = arr("nodes")
+        sec_at, ns = arr("sections")
+        prim_at, _ = arr("primitives")
+        sidx_at, _ = arr("sharedVerticesIndex")
+        pack_at, _ = arr("packedVertices")
+        shar_at, nsh = arr("sharedVertices")
+        span = tuple(dom[1][a] - dom[0][a] for a in range(3))
+        shared = []
+        for k in range(nsh):
+            v, = struct.unpack_from("<Q", b, shar_at + 8 * k)
+            q = (v & 0x1FFFFF, (v >> 21) & 0x1FFFFF, v >> 42)
+            shared.append(tuple(dom[0][a] + q[a] * span[a] / cmsencode.SHARED_LEVELS[a] for a in range(3)))
+        rep = {"sections": ns, "top_nodes": nn, "triangles": 0, "max_prims": 0, "problems": []}
+        try:
+            top = dict(cmsencode.walk(b[nodes_at:nodes_at + 5 * nn], 5, dom))
+        except ValueError as e:
+            rep["problems"].append(f"top tree: {e}")
+            out.append(rep)
+            continue
+        if sorted(top) != list(range(ns)):
+            rep["problems"].append("top-tree leaves are not the sections")
+        for s in range(ns):
+            so = sec_at + 96 * s
+            sdom = (struct.unpack_from("<3f", b, so + 16), struct.unpack_from("<3f", b, so + 32))
+            off, sc = struct.unpack_from("<3f", b, so + 48), struct.unpack_from("<3f", b, so + 60)
+            first_packed, first_shared, first_prim, _run = struct.unpack_from("<4I", b, so + 72)
+            npacked, nprim = b[so + 88], b[so + 89]
+            leaf, = struct.unpack_from("<H", b, so + 92)
+            rep["max_prims"] = max(rep["max_prims"], nprim)
+            if s in top and any(top[s][0][a] > sdom[0][a] + 1e-5 or top[s][1][a] < sdom[1][a] - 1e-5 for a in range(3)):
+                rep["problems"].append(f"section {s} outside its top-tree leaf")
+            if not (0 <= leaf < nn) or b[nodes_at + 5 * leaf + 3] & 0x80:
+                rep["problems"].append(f"section {s} leaf index {leaf} is not a leaf")
+            snodes = ptr_items.get(so)
+            if snodes is None:
+                rep["problems"].append(f"section {s} has no node array")
+                continue
+            try:
+                leaves = dict(cmsencode.walk(b[D + snodes.offset:D + snodes.offset + 4 * snodes.count], 4, sdom))
+            except ValueError as e:
+                rep["problems"].append(f"section {s} tree: {e}")
+                continue
+
+            def vert(i):
+                if i < npacked:
+                    v, = struct.unpack_from("<I", b, pack_at + 4 * (first_packed + i))
+                    q = (v & 0x7FF, (v >> 11) & 0x7FF, v >> 22)
+                    return tuple(off[a] + q[a] * sc[a] for a in range(3))
+                j, = struct.unpack_from("<H", b, sidx_at + 2 * (first_shared + i - npacked))
+                return shared[j]
+            for k in range(nprim):
+                i0, i1, i2, i3 = b[prim_at + 4 * (first_prim + k):prim_at + 4 * (first_prim + k) + 4]
+                pts = [vert(i0), vert(i1), vert(i2)] + ([vert(i3)] if i3 != i2 else [])
+                rep["triangles"] += 1 if i3 == i2 else 2
+                box = leaves.get(k)
+                if box is None:
+                    rep["problems"].append(f"section {s} primitive {k} has no leaf")
+                elif any(min(p[a] for p in pts) < box[0][a] - 1e-5 or max(p[a] for p in pts) > box[1][a] + 1e-5
+                         for a in range(3)):
+                    rep["problems"].append(f"section {s} primitive {k} outside its leaf box")
+        out.append(rep)
+    return out

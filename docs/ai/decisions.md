@@ -124,3 +124,10 @@ conversion, stable FormIDs as before, load doors linked only when both ends are 
 the batch. PluginSpike writes `source_map.json` (Skyrim form key -> new FormKey) as the single lookup for later steps
 (NPCs, furniture, packages, locations) instead of each step re-deriving the formids.json keys. Load doors get their own
 DOOR base per model (no animation graph) rather than reusing the static, because XTEL needs a door base.
+
+## 2026-10-22: Skyrim collision becomes native Starfield compressed meshes
+Skyrim models no longer get box approximations of their collision by default: the decoded Skyrim triangles are encoded
+as Havok compressed meshes (`cmsencode`, format measured on FO4 files) and written by the FO4 path's writer, one body per
+Skyrim body with its collision layer. Reason: boxes cannot represent ramps (voxel ledges up to ~0.47 m blocked Alva's
+cellar stairs in the analysis), activation rays hit collision so approximations move door prompts, and the FO4 path
+proved native collision in game. Boxes remain as `--box-collision` and as the per-model fallback.
