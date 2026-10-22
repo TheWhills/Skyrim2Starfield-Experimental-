@@ -151,3 +151,26 @@ walking through the inn, and the door test between the pair.
 - MorthalAlvasHouse's ambient came out 0,0,0: its XCLL inherits the ambient from its lighting template (flag 0x1), and
   the cell's own field is unused. `Source.cell_lighting` now takes inherited ambient / directional colours (and both,
   for a cell with a template and no XCLL) from the Skyrim LGTM.
+
+## Alva's House: blocked stairs and an offset door prompt (analysis 2026-10-22)
+Owner's report: the player stops at the head of the cellar stairs; the door's activate prompt shows a little past the
+door, not on it.
+- **Activation is a precise ray against the collision shape** (tes4skyrim's finding for Skyrim, `docs/commentary/
+  asset_convert_collision.md` "Activation pick region"; Starfield is assumed to work the same). A prompt past the door
+  means the door's collision is not where its visible mesh is.
+- **Our Skyrim collision is an approximation:** the decoded Skyrim triangles (transforms verified on 2,473 models) are
+  rebuilt as thin boxes behind faces within ~23 degrees of an axis, plus axis-aligned voxel boxes (0.2 m, coarsened to
+  ~0.45 m when over 96 boxes) for everything else. Skyrim stair collision is often a ramp (tes4skyrim's census of vanilla
+  stairs: stepped with stairs material, or a ramp), and a 30-45 degree ramp is all voxels.
+- **Measured on a synthetic stairwell** (2 m drop over 3 m, landing above, plus sloped detail elsewhere using the voxel
+  budget): boxes stand up to 0.47 m above the ramp and up to 0.27 m above the upper floor at the stair head, depending
+  on where the floor falls in the voxel grid. Supported (not verified on the real mesh): that ledge is what stops the
+  player.
+- The FO4 path solved the same problem with native collision: FO4's authored compressed-mesh collision copied into
+  Starfield's hknpCompressedMeshShape (`meshcollision`), **verified in game** (Prydwen stairs climbed, a Rexford door
+  walked through). The Skyrim path never got it because Skyrim's Havok 2010 collision cannot be copied; it needs a
+  Starfield compressed mesh built from triangles (sections, quantised vertices, AABB trees, SIMD tree).
+- Also missing on interiors: object bounds (OBND) on PluginSpike's statics and load doors (the exterior path learned
+  the CK treats bound-less objects as zero-sized; tes4skyrim sets OBND from every converted mesh).
+- To confirm on the real meshes: `convert\manifest.json` holds each model's collision report (render vs collision
+  bounds, boxes, voxel cell, bodies and layers).
