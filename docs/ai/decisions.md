@@ -232,3 +232,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - Change (v10): the dodge clips in s2s_stances\common are named Sneak_MeleeAttack_A / _B / _C / Sneak_MeleeAttackPower_A
   (descriptor tags S2S_Dodge*). Sneak variants, not plain graph tags, so AnimationOffsets (tag -> first folder holding
   that file name) cannot point the standing attacks at a dodge in the neutral entries. No esm change from v9.
+- Owner's run (v10): s2s_stances\common is in AnimationFileData (verified), every dodge event taken, but each dodge
+  state still ended after 0.1 s (AttackEnd 0.000), in the stance the save had and in Mid. Supported: clips are found
+  by file name, first listed folder wins, and every stance folder already holds Sneak_MeleeAttack_* hosts of its own.
+- v11 (diagnostic): Forward / Back / Left use the zero-g stagger names (only in onehanded\player, after the shared
+  folder); Right keeps Sneak_MeleeAttackPower_A. Expected if right: W / S / A dodge in every stance, D only in neutral.
+  If all four still end at 0.1 s, the dodge states themselves (graph) are at fault, not the clip lookup.

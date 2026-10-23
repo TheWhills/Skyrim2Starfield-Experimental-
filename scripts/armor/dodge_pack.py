@@ -42,11 +42,13 @@ FOLDER = "melee/s2s_stances/" + stance_plugin.COMMON
 # File names the Creation Kit lists: it does not scan a folder but looks for the clip names it knows (the graph's tags
 # and their Sneak_ / ZeroG_ variants: the s2s_stances caches list MeleeAttack_A and sneak_meleeattack_a, in the
 # vanilla file names' case), so a new name such as S2S_DodgeBack.af is never listed (owner's run 2026-10-23, v9).
-# Sneak variants, not the plain tags: AnimationOffsets maps a graph tag to the first folder holding its file name, and
-# the shared folder comes first in the neutral entries. The descriptor's own tag (S2S_Dodge<Direction>) is what the
-# dodge states play.
-FILES = {"Forward": "Sneak_MeleeAttack_A", "Back": "Sneak_MeleeAttack_B", "Left": "Sneak_MeleeAttack_C",
-         "Right": "Sneak_MeleeAttackPower_A"}
+# Not names any folder before the shared one already holds: owner's run 2026-10-23 (v10, Sneak_MeleeAttack_* names)
+# showed the dodge clips still not found in a stance, where the stance folder, searched first, holds Sneak_MeleeAttack_*
+# hosts of its own (supported: a clip file is found by name, first folder wins). The zero-g staggers exist only in
+# onehanded\player, after the shared folder (their zero-g stagger is what the dodges shadow). Right keeps a sneak name
+# on purpose for this run: in a stance it should still fail, in neutral (shared folder first) work.
+FILES = {"Forward": "ZeroG_StaggerForwardMedium", "Back": "ZeroG_StaggerBackwardMedium",
+         "Left": "ZeroG_StaggerBackwardSmall", "Right": "Sneak_MeleeAttackPower_A"}
 
 
 def dodge_descriptor(afx: bytes, filename: str = None) -> bytes:
