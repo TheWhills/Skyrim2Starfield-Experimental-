@@ -16,6 +16,8 @@ bool GetVariable(std::string_view name, float& out);
 bool SetVariable(const combat::VariableSet& v);  // false: not dispatched. Papyrus ObjectReference.SetAnimationVariable* (queued by the VM)
 bool SetKeyword(std::string_view editor_id, bool add);   // false: keyword not found / not dispatched
 bool SetGhost(bool ghost);
+// Unequips and equips the player's weapon again (Papyrus, asynchronous); report(text) runs on the VM thread when done.
+bool ReequipWeapon(std::function<void(const std::string&)> report = {});
 int HasKeyword(std::string_view editor_id);     // 1 / 0, -1 when the keyword is not found
 float ActorValue(std::string_view editor_id);    // < 0 when the value is not found
 void DamageActorValue(std::string_view editor_id, float amount);

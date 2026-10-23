@@ -37,6 +37,7 @@ struct Command {
         SpendStamina,    // amount: actor value to damage (only when the game side has a stamina value configured)
         ToggleLock,      // lock-on on / off
         SwitchTarget,    // dx / dy: screen direction
+        ReequipWeapon,   // unequip and equip the player's weapon again (makes the game pick the stance's animation set)
         Log,             // name: text for the plugin log (unknown payload instructions, ...)
     };
     Command(Kind k, std::string n = {}) : kind(k), name(std::move(n)) {}
@@ -69,6 +70,11 @@ struct ControllerConfig {
     // Pressing the active stance's key again goes back to neutral (LoreRim / Stances' toggle). Off by default: in the
     // owner's first stance test, quick double presses left every redraw in neutral.
     bool stance_repeat_neutral = false;
+    // Re-equip the weapon after a stance change, once the stance keys have been quiet for stance_reequip_delay
+    // seconds: Starfield picks the weapon's animation set at equip time (owner, 2026-10-23: the stance clips showed
+    // only after a reload or a re-equip, not after a redraw). Quick presses (up, up, left) give one re-equip.
+    bool stance_reequip = true;
+    double stance_reequip_delay = 0.25;
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
     // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
     std::string block_hit_variable = "iS2SBlockHitType";
@@ -170,6 +176,7 @@ private:
     static constexpr double dodge_timeout = 3.0;
     std::array<bool, 4> move_held_{};
     std::string stance_;        // keyword of the active stance binding ("" = none)
+    double reequip_due_ = -1.0; // when to re-equip after a stance change (< 0: none pending)
 };
 
 }  // namespace s2s::combat

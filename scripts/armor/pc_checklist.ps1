@@ -78,7 +78,8 @@ $exe = Join-Path $SF "Starfield.exe"
 if (Test-Path $exe) {
     $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
     foreach ($fn in @("SetAnimationVariableBool", "SetAnimationVariableInt", "SetAnimationVariableFloat",
-                      "GetAnimationVariableFloat", "SendAnimationEvent", "AddKeyword", "RemoveKeyword", "SetGhost")) {
+                      "GetAnimationVariableFloat", "SendAnimationEvent", "AddKeyword", "RemoveKeyword", "SetGhost",
+                      "GetEquippedWeapon", "EquipItem", "UnequipItem")) {
         Say ("{0}: {1}" -f $fn, $(if ($text.Contains($fn)) { "present" } else { "NOT FOUND" }))
     }
     $text = $null

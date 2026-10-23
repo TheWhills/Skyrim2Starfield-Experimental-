@@ -402,8 +402,42 @@ static void test_pool_strings() {
     CHECK(!pool_string_at(0x20, readable));                             // the slot itself unreadable
 }
 
+// Starfield picks the weapon's animation set at equip time: a stance change re-equips once the keys are quiet.
+static void stance_reequip() {
+    Controller ctl({}, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nlow = 208|keyword|S2S_StanceLow\n"
+                                      "neutral = 205|keyword\n"));
+    PlayerState s;
+    auto reequips = [&](double t) {
+        int n = 0;
+        for (const auto& c : ctl.tick(t, s)) n += c.kind == Command::Kind::ReequipWeapon;
+        return n;
+    };
+    ctl.on_key(200, true, 0.0, s);
+    CHECK(reequips(0.1) == 0);                                            // not before the delay
+    ctl.on_key(208, true, 0.2, s);                                        // another press moves it on
+    CHECK(reequips(0.4) == 0);
+    CHECK(reequips(0.46) == 1);                                           // 0.25 s after the last change: once
+    CHECK(reequips(1.0) == 0);
+    ctl.on_key(208, true, 1.1, s);                                        // same stance again: nothing to re-pick
+    CHECK(reequips(2.0) == 0);
+    ctl.on_key(205, true, 2.1, s);                                        // back to neutral is a change too
+    CHECK(reequips(2.4) == 1);
+    ControllerConfig off = parse_config("[Combat]\nbStanceReequip = 0\nfStanceReequipDelay = 0.5\n");
+    CHECK(!off.stance_reequip && off.stance_reequip_delay == 0.5);
+    Controller quiet(off, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\n"));
+    quiet.on_key(200, true, 0.0, s);
+    bool any = false;
+    for (const auto& c : quiet.tick(5.0, s)) any |= c.kind == Command::Kind::ReequipWeapon;
+    CHECK(!any);
+    std::vector<std::string> problems;
+    parse_config("[Combat]\nfStanceReequipDelay = -1\nbStanceReequip = yes\n", &problems);
+    CHECK(problems.size() == 2);
+    CHECK(parse_config("[Combat]\n").stance_reequip);
+}
+
 int main() {
     key_codes();
+    stance_reequip();
     hits();
     menus();
     stance_refresh();

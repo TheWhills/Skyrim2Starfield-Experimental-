@@ -8,8 +8,23 @@ namespace {
 // UNVERIFIED: the native names exist in Starfield's Papyrus (ObjectReference.SetAnimationVariableBool / Int / Float,
 // AddKeyword / RemoveKeyword, Actor.SetGhost: Fallout 4 has all of them). pc_checklist.ps1 step 1 lists which of these
 // strings Starfield.exe contains; the plugin log shows "dispatch failed" when a call is refused.
-template <class... Args>
-bool CallOnPlayer(const char* script, const char* function, Args... args) {
+// Receives a Papyrus call's return value (on the VM's thread).
+class Callback final : public RE::BSScript::IStackCallbackFunctor {
+public:
+    explicit Callback(std::function<void(const RE::BSScript::Variable&)> fn) : fn_(std::move(fn)) {}
+    void CallQueued() override {}
+    void CallCanceled() override {}
+    void StartMultiDispatch() override {}
+    void EndMultiDispatch() override {}
+    void operator()(RE::BSScript::Variable result) override { if (fn_) fn_(result); }
+private:
+    std::function<void(const RE::BSScript::Variable&)> fn_;
+};
+
+using Packer = std::function<void(RE::BSScrapArray<RE::BSScript::Variable>&)>;
+
+bool Dispatch(const char* script, const char* function, Packer pack,
+              std::function<void(const RE::BSScript::Variable&)> on_result = {}) {
     auto* player = Player();
     auto* game = RE::GameVM::GetSingleton();
     auto* vm = game ? game->GetVM() : nullptr;
@@ -20,19 +35,27 @@ bool CallOnPlayer(const char* script, const char* function, Args... args) {
         REX::WARN("{}.{}: no script handle for the player", script, function);
         return false;
     }
-    auto pack = [=](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+    auto args = [pack = std::move(pack)](RE::BSScrapArray<RE::BSScript::Variable>& out) {
         out.clear();
-        out.resize(sizeof...(Args));
-        std::size_t i = 0;
-        ((RE::BSScript::PackVariable(out[i++], args)), ...);
+        pack(out);
         return true;
     };
-    if (!vm->DispatchMethodCall(handle, RE::BSFixedString(script), RE::BSFixedString(function), pack,
-                                RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>(), 0)) {
+    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb;
+    if (on_result) cb = RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor>(new Callback(std::move(on_result)));
+    if (!vm->DispatchMethodCall(handle, RE::BSFixedString(script), RE::BSFixedString(function), args, cb, 0)) {
         REX::WARN("{}.{}: dispatch failed", script, function);
         return false;
     }
     return true;
+}
+
+template <class... Args>
+bool CallOnPlayer(const char* script, const char* function, Args... args) {
+    return Dispatch(script, function, [=](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+        out.resize(sizeof...(Args));
+        std::size_t i = 0;
+        ((RE::BSScript::PackVariable(out[i++], args)), ...);
+    });
 }
 
 }  // namespace
@@ -103,6 +126,36 @@ int HasKeyword(std::string_view editor_id) {
 }
 
 bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
+
+// Papyrus Actor.GetEquippedWeapon(0) -> UnequipItem(weapon, false, true) -> EquipItem(weapon, false, true), each step
+// in the previous one's return callback so they run in order. The weapon value is passed back as the VM returned it
+// (no unpacking to a game type). Starfield picks the weapon's animation set at equip time (owner, 2026-10-23).
+// UNVERIFIED: the three names in Starfield's Papyrus (Fallout 4 has them with these signatures); checklist step 1b.
+bool ReequipWeapon(std::function<void(const std::string&)> report) {
+    return Dispatch("Actor", "GetEquippedWeapon",
+        [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(0));
+        },
+        [report](const RE::BSScript::Variable& weapon) {
+            if (!weapon.is<RE::BSScript::Object>() || !RE::BSScript::get<RE::BSScript::Object>(weapon)) {
+                if (report) report("no weapon equipped");
+                return;
+            }
+            auto item = std::make_shared<RE::BSScript::Variable>(weapon);
+            auto args = [item](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                out.resize(3);
+                out[0] = *item;
+                RE::BSScript::PackVariable(out[1], false);
+                RE::BSScript::PackVariable(out[2], true);          // silent
+            };
+            const bool ok = Dispatch("Actor", "UnequipItem", args, [args, report](const RE::BSScript::Variable&) {
+                const bool again = Dispatch("Actor", "EquipItem", args);
+                if (report) report(again ? "weapon re-equipped" : "EquipItem not dispatched");
+            });
+            if (!ok && report) report("UnequipItem not dispatched");
+        });
+}
 
 float ActorValue(std::string_view editor_id) {
     auto* player = Player();

@@ -280,6 +280,14 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
             ok = v == "0" || v == "1";
             if (ok) c.stance_repeat_neutral = v == "1";
         }
+        else if (k == "bstancereequip") {
+            ok = v == "0" || v == "1";
+            if (ok) c.stance_reequip = v == "1";
+        }
+        else if (k == "fstancereequipdelay") {
+            if ((ok = read_double(v, d) && d >= 0.0))
+                c.stance_reequip_delay = d;
+        }
         else if (k == "sstancerefreshevents") {
             c.stance_refresh_events.clear();
             std::size_t start = 0;
@@ -386,8 +394,10 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
                     group.push_back(other.argument);
             for (const auto& g : group) out.push_back({Command::Kind::RemoveKeyword, g});
             if (!target.empty()) out.push_back({Command::Kind::AddKeyword, target});
-            if (!is(stance_, target))
+            if (!is(stance_, target)) {
                 for (const auto& ev : cfg_.stance_refresh_events) out.push_back(event(ev));
+                if (cfg_.stance_reequip) reequip_due_ = t + cfg_.stance_reequip_delay;
+            }
             stance_ = target;
         } else if (is(b.action, "dodge")) {
             if (key != cfg_.dodge_key) dodge(t, s, out);
@@ -472,6 +482,10 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
     // cannot block dodging for longer than dodge_timeout.
     if (dodging_ && ((!dodge_events_ && !iframes_.invulnerable(t)) || t - dodge_at_ > dodge_timeout))
         dodging_ = dodge_events_ = false;
+    if (reequip_due_ >= 0.0 && t >= reequip_due_) {
+        reequip_due_ = -1.0;
+        out.push_back({Command::Kind::ReequipWeapon});
+    }
     (void)s;                                // stamina regeneration etc. stay with the game
     return out;
 }
