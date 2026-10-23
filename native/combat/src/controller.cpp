@@ -357,6 +357,11 @@ void Controller::fire_buffered(double t, std::vector<Command>& out) {
 
 std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, const PlayerState& s) {
     std::vector<Command> out;
+    consumed_last_ = false;
+    if (cfg_.power_key && key == cfg_.power_key && !down && power_key_consumed_) {
+        power_key_consumed_ = false;            // the release of a press the game never saw
+        consumed_last_ = true;
+    }
     for (std::size_t i = 0; i < move_held_.size(); ++i)
         if (key == cfg_.move_keys[i]) move_held_[i] = down;
 
@@ -380,8 +385,10 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
     }
     if (key == cfg_.dodge_key && down) dodge(t, s, out);
     // Starfield's power attack key during a combo: the game itself only starts a power attack from standing
-    if (cfg_.power_key && key == cfg_.power_key && down && cfg_.power_in_combo && phase_.phase() != AttackPhase::None)
+    if (cfg_.power_key && key == cfg_.power_key && down && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
         out.push_back(event(cfg_.power_event));
+        consumed_last_ = power_key_consumed_ = true;
+    }
 
     if (!down) return out;
     for (const auto& b : bindings_) {

@@ -108,28 +108,31 @@ combat::PlayerState Plugin::State() {
     return s;
 }
 
-void Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event, std::uint32_t device,
+bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event, std::uint32_t device,
                       std::int32_t id_code, float value, float held) {
-    if (!settings_.enabled) return;
+    if (!settings_.enabled) return false;
     if (logged_input_ < settings_.log_input) {
         ++logged_input_;
         REX::INFO("key: device {} id 0x{:X} -> code {} {} (value {}, held {:.2f}) user event '{}'", device, id_code,
                   key, down ? "down" : "up", value, held, user_event);
     }
-    if (key == 0) return;
+    if (key == 0) return false;
     // Presses only count in gameplay: a save loaded (the player is in a cell) and no menu that takes the keys open.
     // Releases always go through, so a key held into a menu is not left "down".
     if (down) {
         auto* player = game::Player();
-        if (!player || !player->parentCell || menus_.blocked()) return;
+        if (!player || !player->parentCell || menus_.blocked()) return false;
     }
     auto state = State();
     std::vector<combat::Command> cmds;
+    bool consumed = false;
     {
         std::scoped_lock l(lock_);
         cmds = controller_.on_key(key, down, game::Now(), state);
+        consumed = controller_.last_key_consumed();
     }
     Run(std::move(cmds));
+    return consumed;
 }
 
 void Plugin::OnStick(float x, float y) {

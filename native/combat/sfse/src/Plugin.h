@@ -26,7 +26,8 @@ public:
     const Settings& settings() const { return settings_; }
 
     // Game callbacks (Hooks.cpp). Input and tick come on the main thread; animation events may not.
-    void OnButton(std::uint32_t key, bool down, std::string_view user_event, std::uint32_t device,
+    // true: hide this key event from the game (Controller::last_key_consumed)
+    bool OnButton(std::uint32_t key, bool down, std::string_view user_event, std::uint32_t device,
                   std::int32_t id_code, float value, float held);
     void OnStick(float x, float y);
     void OnAnimEvent(std::string_view tag, std::string_view payload);

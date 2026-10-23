@@ -466,7 +466,14 @@ static void power_in_combo() {
     cs = v.on_key(47, true, 1.1, s);                                      // (first() points into cs: keep it)
     e = first(cs, Command::Kind::SendEvent);
     CHECK(e && e->name == "MeleeAttackPowerStart");
-    CHECK(v.on_key(47, false, 1.2, s).empty());                            // release: nothing
+    CHECK(v.last_key_consumed());                                          // the game must not see it
+    CHECK(v.on_key(47, false, 1.2, s).empty());                            // release: nothing sent,
+    CHECK(v.last_key_consumed());                                          // and hidden too
+    v.on_anim_event("AttackEnd", "", 2.0);
+    v.on_key(47, true, 3.0, s);                                            // standing: the game's
+    CHECK(!v.last_key_consumed());
+    v.on_key(47, false, 3.1, s);
+    CHECK(!v.last_key_consumed());
     CHECK(parse_config("[Combat]\nuPowerAttackKey = 33\n").power_key == 33);
 }
 

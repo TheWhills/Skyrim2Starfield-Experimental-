@@ -156,6 +156,10 @@ public:
 
     // A key / button went down or up (t: seconds on any steady clock).
     std::vector<Command> on_key(std::uint32_t key, bool down, double t, const PlayerState& s);
+    // Whether the key event just passed to on_key should be hidden from the game: the power attack key pressed during a
+    // combo (and its release), which the plugin turns into the combo's power attack; the game would also queue its
+    // standing power attack and play it afterwards (owner, 2026-10-23).
+    bool last_key_consumed() const { return consumed_last_; }
     // An animation-graph event of the player (tag and payload as the engine delivers them).
     std::vector<Command> on_anim_event(std::string_view tag, std::string_view payload, double t);
     // The player was hit (after the game handled it: TESHitEvent). blocking: the player held block.
@@ -187,6 +191,7 @@ private:
     static constexpr double dodge_timeout = 3.0;
     std::array<bool, 4> move_held_{};
     std::string stance_;        // keyword of the active stance binding ("" = none)
+    bool consumed_last_ = false, power_key_consumed_ = false;
     double reequip_due_ = -1.0; // when to unequip after a stance change (< 0: none pending)
     double equip_due_ = -1.0;   // when to equip again at the latest (< 0: not waiting for an unequip)
 };

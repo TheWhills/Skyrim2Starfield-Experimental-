@@ -71,8 +71,15 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
                 !down)
                 continue;                        // the wheel sends a zero "release" after each notch
             const auto user = std::string_view(b->strUserEvent);
-            plugin.OnButton(KeyCode(b), down, user, static_cast<std::uint32_t>(b->deviceType), b->idCode, b->value,
-                            b->heldDownSecs);
+            if (plugin.OnButton(KeyCode(b), down, user, static_cast<std::uint32_t>(b->deviceType), b->idCode, b->value,
+                                b->heldDownSecs)) {
+                // Hidden from the game: value 0 and held 0 is neither a press nor a release (the power attack key
+                // mid-combo, which the plugin turned into the combo's power attack; owner 2026-10-23: the game also
+                // queued its standing power attack). Supported hypothesis: the game reads presses the same way.
+                auto* m = const_cast<RE::ButtonEvent*>(b);
+                m->value = 0.0f;
+                m->heldDownSecs = 0.0f;
+            }
         } else if (e->eventType == RE::InputEvent::EventType::kThumbstick) {
             const auto* bytes = reinterpret_cast<const std::byte*>(e);
             if (*reinterpret_cast<const std::int32_t*>(bytes + kStickId) == kLeftStick)
