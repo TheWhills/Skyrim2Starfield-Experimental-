@@ -1174,3 +1174,10 @@ skinned-mesh writer: not in this pack).
 * The CK output also holds cut-down GeneratedSubgraphData (creature tables with only a header) and a
   PersistantSubgraphInfoAndOffsetData.txt listing only the regenerated sets: kept out of the loose-file mod for now
   so they do not shadow the vanilla ones (unresolved whether the game needs our index file to find the new sets).
+* **Verified (owner, 2026-10-23): stances change the sword attacks in game.** Working setup: S2SStances.esm with
+  the 48 entries cloned from the generated table's player one-handed Weapon rows, clips flat in
+  s2s_stances\<stance>, CK `-GenerateAnimInfo:S2SStances.esm` run through MO2, its AnimationFileData +
+  AnimationOffsets as loose files (GeneratedSubgraphData and PersistantSubgraphInfoAndOffsetData.txt left out). The CK
+  output then had 48 sets naming the stance clips with the vanilla sword folders (the vanilla MeleeAttack_A etc.
+  replaced by the stance ones). Limitation: a stance change shows only after a save / reload, so the subgraph is picked
+  when the graph is built; next: find what re-picks it in play (re-equip, redraw) and do that from the plugin.
