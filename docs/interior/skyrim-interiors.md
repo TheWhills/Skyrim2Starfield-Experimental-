@@ -209,7 +209,9 @@ whether Alva's stairs and door are fixed. Exterior objects converted with `--sta
   are persistent; XTEL is 36 bytes (the last 4 always 0), its position is the landing spot by the destination door
   (median 0.21 m from it), as in Skyrim; 576 / 619 also carry XNDP (navmesh + triangle by the door, for AI) and every
   DOOR base has OBND. Ours have neither yet.
-- Supported (implemented, in-game check pending): going up the stairs the character "runs into each step".
+- Verified (owner, 2026-10-23: "stairs seem smooth now"; Alva's House, ramps on layer 31): going up the stairs the
+  character "ran into each step" before ramps. The run found 3 flights in 2 models (FarmIntWBasementEnt01,
+  FarmBWallEntrance05).
   `stairramp.py` finds flights of 3+ steps in the collision and native collision adds a ramp body through the nosings
   on layer 31 (stair helper: only actors collide). `--stair-ramp-layer 1` puts it on the static layer if 31 does not
   work in Starfield, `0` turns it off. The manifest lists the models that got ramps (`stair_ramps`).

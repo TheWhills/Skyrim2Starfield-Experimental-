@@ -137,4 +137,4 @@ Starfield's character controller does not climb Skyrim's step collision smoothly
 Instead of editing the steps, native collision adds a separate ramp body through the step nosings on the stair-helper
 layer (31), as Bethesda does in their own content: actors walk a slope, items and projectiles still meet the steps.
 Found geometrically (flat narrow parallel treads, consistent rise / run, 3+ steps); models that already have stair
-helpers keep only theirs. The layer is an option because layer 31's behaviour in Starfield is not yet verified.
+helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the layer stays an option.
