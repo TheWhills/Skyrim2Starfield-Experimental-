@@ -49,6 +49,17 @@ def stance_folder(stance: str) -> str:
     return f"{STANCE_ROOT}\\{stance.lower()}"
 
 
+# Clips every stance (and the neutral one) shares, new files only: the Creation Kit's AnimationFileData lists loose files
+# in folders the archives do not hold (s2s_stances\<stance>: listed) but not new files in vanilla folders (owner's
+# run 2026-10-23: dodges in onehanded\player were missing). Each stance entry lists it after its stance folder, and a
+# neutral copy of every player weapon row (no stance keyword, inserted before the vanilla entries) puts it first.
+COMMON = "common"
+
+
+def common_folder() -> str:
+    return f"{STANCE_ROOT}\\{COMMON}"
+
+
 def is_melee_entry(entry, first_person: bool = False) -> bool:
     paths = [p.lower().replace("/", "\\") for p in entry["paths"]]
     if any("_1stperson" in p for p in paths) and not first_person:
@@ -81,15 +92,17 @@ def player_weapon_rows(rows, target="AnimOneHanded") -> list:
             and "animarchetypeplayer" in low(r["actor"]) and target.lower() in low(r["target"])]
 
 
-def race_with_stances(subs, keywords: dict, first_person: bool = False, table_rows=None, keyword_ids=None):
+def race_with_stances(subs, keywords: dict, first_person: bool = False, table_rows=None, keyword_ids=None,
+                      common: bool = True):
     """(new subrecords, report): the race's subrecords with, before its first animation entry, the stance entries.
     table_rows (player_weapon_rows of the generated table) + keyword_ids {EditorID lower: FormID}: one entry per row
     and stance (stance keyword added, stance folder first, role Weapon / third person). Otherwise one copy of every
-    melee esm entry per stance (the first version)."""
+    melee esm entry per stance (the first version). common (table rows only): the shared folder (common_folder) after
+    each stance folder, and one neutral copy of every row with it first."""
     entries = subgraph.parse(subs)
     if table_rows:
         ids = keyword_ids or {}
-        added, unresolved, used = [], set(), 0
+        added, unresolved, used, neutral = [], set(), 0, []
         for r in table_rows:
             names = r["actor"] + r["target"]
             missing = [n for n in names if n.lower() not in ids]
@@ -97,17 +110,25 @@ def race_with_stances(subs, keywords: dict, first_person: bool = False, table_ro
                 unresolved.update(missing)
                 continue
             used += 1
+            shared = [common_folder()] if common else []
             for stance, kw in keywords.items():
                 added += subgraph.build({"actor_keywords": [ids[n.lower()] for n in r["actor"]] + [kw],
                                          "target_keywords": [ids[n.lower()] for n in r["target"]],
-                                         "graph": r["graph"], "paths": [stance_folder(stance)] + r["paths"],
+                                         "graph": r["graph"], "paths": [stance_folder(stance)] + shared + r["paths"],
                                          "flags": WEAPON_THIRD_PERSON})
+            if common:
+                neutral.append({"actor_keywords": [ids[n.lower()] for n in r["actor"]],
+                                "target_keywords": [ids[n.lower()] for n in r["target"]],
+                                "graph": r["graph"], "paths": shared + r["paths"], "flags": WEAPON_THIRD_PERSON})
         if not used:
             raise SystemExit(f"no table row with known keywords (unresolved: {sorted(unresolved)})")
+        for e in neutral:                                   # after every stance entry: those carry one keyword more
+            added += subgraph.build(e)
         at = next(i for i, (s_, _d) in enumerate(subs) if s_ in subgraph.FIELDS)
         return list(subs[:at]) + added + list(subs[at:]), {
             "source": "generated table weapon rows", "entries": len(entries), "melee_entries": used,
-            "added_entries": used * len(keywords), "unresolved_keywords": sorted(unresolved),
+            "added_entries": used * len(keywords) + len(neutral), "neutral_entries": len(neutral),
+            "common_folder": common_folder() if common else None, "unresolved_keywords": sorted(unresolved),
             "melee_graphs": sorted({r["graph"] for r in table_rows}),
             "melee_first_folders": sorted({r["paths"][0] for r in table_rows if r["paths"]})}
     melee = [e for e in entries if is_melee_entry(e, first_person)]
@@ -126,7 +147,7 @@ def race_with_stances(subs, keywords: dict, first_person: bool = False, table_ro
                  "melee_first_folders": sorted({e["paths"][0] for e in melee if e["paths"]})}
 
 
-def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text=None):
+def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text=None, common: bool = True):
     """(plugin bytes, report) from Starfield.esm (+ the generated HumanRace table text, read from the archives)."""
     info = sfplugin.header_info(esm_path)
     recs = sfplugin.records(esm_path, [b"KYWD", b"RACE"])
@@ -143,7 +164,8 @@ def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text
         # a keyword copied from the game's first one: EditorID replaced, display name dropped (it is localized)
         subs = sfplugin.edit(kywd[2], {b"EDID": sfplugin.zs(keyword_edid(stance))}, drop=(b"FULL", b"DESC"))
         out.append((b"KYWD", kywd[1], subs, fid))
-    race_subs, rep = race_with_stances(race[2], keywords, first_person, table_rows=rows, keyword_ids=keyword_ids)
+    race_subs, rep = race_with_stances(race[2], keywords, first_person, table_rows=rows, keyword_ids=keyword_ids,
+                                       common=common)
     out.append((b"RACE", race[1], race_subs, race[3]))
     rep["keywords"] = {keyword_edid(s): f"{fid:08X}" for s, fid in keywords.items()}
     rep["folders"] = {s: stance_folder(s) for s in stances}
@@ -175,6 +197,8 @@ def main(argv=None):
     ap.add_argument("--first-person", action="store_true", help="first-person melee entries too (esm fallback only)")
     ap.add_argument("--table", help="a GeneratedSubgraphData humanrace.txt to use instead of the one in the archives")
     ap.add_argument("--no-table", action="store_true", help="copy the esm's melee entries (the first version)")
+    ap.add_argument("--no-common", action="store_true",
+                    help="no shared s2s_stances\\common folder (and no neutral entries)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -191,7 +215,7 @@ def main(argv=None):
             table = read_table(os.path.dirname(esm))
             if table is None:
                 print(f"{GENERATED_TABLE} not found in the archives: falling back to the esm's melee entries")
-    data, rep = build(esm, first_person=a.first_person, table_text=table)
+    data, rep = build(esm, first_person=a.first_person, table_text=table, common=not a.no_common)
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(data)
@@ -199,6 +223,9 @@ def main(argv=None):
         json.dump(rep, fh, indent=1)
     print(f"{PLUGIN}: {len(rep['keywords'])} keywords, {rep['added_entries']} animation entries added to HumanRace "
           f"({rep['melee_entries']} {rep['source']} x {len(rep['keywords'])} stances)")
+    if rep.get("common_folder"):
+        print(f"  shared folder {rep['common_folder']}: after each stance folder, and first in "
+              f"{rep['neutral_entries']} neutral entries")
     if rep.get("unresolved_keywords"):
         print(f"  rows skipped, keywords not in Starfield.esm: {', '.join(rep['unresolved_keywords'])}")
     for f in rep["melee_first_folders"]:

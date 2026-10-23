@@ -126,18 +126,28 @@ class StanceTableTests(unittest.TestCase):
         out, rep = SP.race_with_stances(subs, {"High": 0x01000800, "Low": 0x01000802}, table_rows=rows,
                                         keyword_ids=ids)
         self.assertEqual(rep["source"], "generated table weapon rows")
-        self.assertEqual((rep["melee_entries"], rep["added_entries"]), (1, 2))   # the Female row: keyword unknown here
+        self.assertEqual((rep["melee_entries"], rep["added_entries"]), (1, 3))   # the Female row: keyword unknown here
+        self.assertEqual(rep["neutral_entries"], 1)
         self.assertEqual(rep["unresolved_keywords"], ["Female"])
         ents = subgraph.parse(out)
         high = ents[0]
         self.assertEqual(high["actor_keywords"], [PLAYER, 0x01000800])
         self.assertEqual(high["target_keywords"], [MELEE1H, 0x000A0020])
         self.assertEqual(high["graph"], "AnimTextData\\Tables\\Graphs\\Player_Melee.agx")
-        self.assertEqual(high["paths"], [SP.stance_folder("High"), "actors\\human\\animations\\melee\\onehanded\\player\\sword",
+        self.assertEqual(high["paths"], [SP.stance_folder("High"), SP.common_folder(),
+                                         "actors\\human\\animations\\melee\\onehanded\\player\\sword",
                                          "actors\\human\\animations\\melee\\onehanded\\player"])
         self.assertEqual(high["flags"], "01 00 00 00")                          # role Weapon, third person
         self.assertEqual(ents[1]["actor_keywords"], [PLAYER, 0x01000802])
-        self.assertEqual(ents[2]["graph"], "Gun.agx")                           # the race's own entry kept, after
+        neutral = ents[2]                                                     # shared folder first, no stance keyword
+        self.assertEqual(neutral["actor_keywords"], [PLAYER])
+        self.assertEqual(neutral["paths"][0], "actors\\human\\animations\\melee\\s2s_stances\\common")
+        self.assertEqual(neutral["paths"][1:], high["paths"][2:])
+        self.assertEqual(ents[3]["graph"], "Gun.agx")                           # the race's own entry kept, after
+        out2, rep2 = SP.race_with_stances(subs, {"High": 0x01000800}, table_rows=rows, keyword_ids=ids, common=False)
+        self.assertEqual((rep2["added_entries"], rep2["neutral_entries"]), (1, 0))
+        self.assertEqual(subgraph.parse(out2)[0]["paths"][0:2], [SP.stance_folder("High"),
+                                                                 "actors\\human\\animations\\melee\\onehanded\\player\\sword"])
 
     def test_build_with_a_table_whose_keywords_are_missing_stops(self):
         with tempfile.TemporaryDirectory() as d:

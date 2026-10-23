@@ -217,3 +217,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   hosted tags play in game, so a new tag needs its file listed, not an offsets entry.
 - Change (pack v8): the dodge clips take existing vanilla paths in onehanded\player (Sneak_ThrowGrenade / ThrowMine /
   CastSelf / CastTarget, retagged S2S_Dodge*), already in the caches; no CK rerun needed for them.
+- Owner's run (v8, sneak throw / cast hosts): every dodge event "taken by the graph" (verified: the NPC attack event
+  names work for the player), but each dodge state ended 0.1 s later with AttackEnd 0.000 and the player glitched:
+  the clip was not found (supported: sneak-prefixed vanilla files in onehanded\player are not in the stance entries'
+  AnimationFileData, while the moved sneak hosts in the s2s_stances folders are).
+- Change (v9): S2SStances.esm gets a shared folder actors\...\melee\s2s_stances\common, listed after each stance folder
+  and first in one neutral copy of every player weapon row (no stance keyword, after the stance entries, before the
+  vanilla ones; ordering against the vanilla rows unverified). The dodges are new clips there. Needs the esm rebuilt
+  and the CK GenerateAnimInfo run. Status: unresolved until the owner's run.
