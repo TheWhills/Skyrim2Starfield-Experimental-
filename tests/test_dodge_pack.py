@@ -43,6 +43,9 @@ class DodgePackTests(unittest.TestCase):
         self.assertIn("<flag>Allow Rotation</flag>", out)
         self.assertNotIn("Slide", out.replace("S2S_Dodge", ""))
         self.assertNotIn("bIsSliding", out)
+        self.assertIn("<filename>Sneak_MeleeAttack_B.af</filename>", P.dodge_descriptor(SLIDE, "Sneak_MeleeAttack_B.af").decode())
+        self.assertEqual(sorted(P.FILES), sorted(P.CLIPS))
+        self.assertTrue(all(f.startswith("Sneak_") for f in P.FILES.values()))      # never a plain graph tag
 
     def test_full_body_dodge_states(self):
         data, rep = D.build_attacks(attacks_graph())

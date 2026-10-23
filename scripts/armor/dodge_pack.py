@@ -2,8 +2,9 @@
 
 Converts the four step dodges (StepDodgeForward / Back / Left / Right.hkx) with their root motion from TK Dodge's
 animationdatasinglefile (motion ids, default TK Dodge RE's 1656 / 1657 / 1658 / 1659 = forward 5.4 m, back 3.9 m,
-left / right 3.3 m) as new clips S2S_Dodge<Direction> in the shared stance folder (melee\\s2s_stances\\common,
-listed by S2SStances.esm for every stance and the neutral one), with a dodge's descriptor (dodge_descriptor: no attack, slide, throw or hit events; "Allow
+left / right 3.3 m) as clips tagged S2S_Dodge<Direction> in the shared stance folder (melee\\s2s_stances\\common,
+listed by S2SStances.esm for every stance and the neutral one; file names the Creation Kit knows: FILES), with a
+dodge's descriptor (dodge_descriptor: no attack, slide, throw or hit events; "Allow
 Rotation" as every attack whose root motion plays), and
 adds the dodge states to the pack's MeleeAttacks.agx and the attack switch of Player_Melee.agx (dodge_graph,
 --attacks-graph). Needs S2SStances.esm with the shared folder and the Creation Kit's GenerateAnimInfo run.
@@ -38,15 +39,23 @@ TEMPLATE_FOLDER, TEMPLATE = "melee/onehanded/player", "slidefromsprint"
 # AnimationFileData; the s2s_stances folders did). S2SStances.esm lists the shared folder for every stance and for the
 # neutral one.
 FOLDER = "melee/s2s_stances/" + stance_plugin.COMMON
+# File names the Creation Kit lists: it does not scan a folder but looks for the clip names it knows (the graph's tags
+# and their Sneak_ / ZeroG_ variants: the s2s_stances caches list MeleeAttack_A and sneak_meleeattack_a, in the
+# vanilla file names' case), so a new name such as S2S_DodgeBack.af is never listed (owner's run 2026-10-23, v9).
+# Sneak variants, not the plain tags: AnimationOffsets maps a graph tag to the first folder holding its file name, and
+# the shared folder comes first in the neutral entries. The descriptor's own tag (S2S_Dodge<Direction>) is what the
+# dodge states play.
+FILES = {"Forward": "Sneak_MeleeAttack_A", "Back": "Sneak_MeleeAttack_B", "Left": "Sneak_MeleeAttack_C",
+         "Right": "Sneak_MeleeAttackPower_A"}
 
 
-def dodge_descriptor(afx: bytes) -> bytes:
+def dodge_descriptor(afx: bytes, filename: str = None) -> bytes:
     """The converted clip's descriptor made a dodge's: tag, filename and rampout kept; flags "Allow Rotation" (zero-g
     hosts without it did not play root motion, owner 2026-10-23); no events, audios or variables (the slide template's
     Slide event and bIsSliding window are not a dodge's)."""
     root = ET.fromstring(afx.decode("utf-8-sig"))
     ramp = root.findtext("rampout")
-    out = af_writer.descriptor(root.findtext("tag") or "", root.findtext("filename") or "",
+    out = af_writer.descriptor(root.findtext("tag") or "", filename or root.findtext("filename") or "",
                                rampout=int(ramp) if (ramp or "").strip().isdigit() else None)
     return out.replace(b"<flags></flags>", b"<flags><flag>Allow Rotation</flag></flags>")
 
@@ -100,9 +109,10 @@ def main(argv=None):
                     continue
                 with open(os.path.join(src, fn), "rb") as fh:
                     data = fh.read()
+                name = FILES[d] + ext
                 if ext == ".afx":
-                    data = dodge_descriptor(data)
-                with open(os.path.join(folder, fn), "wb") as fh:
+                    data = dodge_descriptor(data, FILES[d] + ".af")
+                with open(os.path.join(folder, name), "wb") as fh:
                     fh.write(data)
         if os.path.isfile(os.path.join(tmp, "report.json")):
             shutil.copy(os.path.join(tmp, "report.json"), os.path.join(pack, "dodge_report.json"))

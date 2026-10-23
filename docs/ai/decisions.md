@@ -225,3 +225,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   and first in one neutral copy of every player weapon row (no stance keyword, after the stance entries, before the
   vanilla ones; ordering against the vanilla rows unverified). The dodges are new clips there. Needs the esm rebuilt
   and the CK GenerateAnimInfo run. Status: unresolved until the owner's run.
+- Owner's run (v9, esm rebuilt, fresh CK run with 236 AnimationFileData files): still no S2S_Dodge in AnimationFileData.
+  Supported: the CK does not scan folders; it probes each folder for clip names it knows (the graph's tags and their
+  Sneak_ / ZeroG_ variants; an earlier cache lists s2s_stances\mid\MeleeAttack_A.af and sneak_meleeattack_a.af in
+  the vanilla names' case, never a name of ours), which also explains every earlier "new file not found".
+- Change (v10): the dodge clips in s2s_stances\common are named Sneak_MeleeAttack_A / _B / _C / Sneak_MeleeAttackPower_A
+  (descriptor tags S2S_Dodge*). Sneak variants, not plain graph tags, so AnimationOffsets (tag -> first folder holding
+  that file name) cannot point the standing attacks at a dodge in the neutral entries. No esm change from v9.
