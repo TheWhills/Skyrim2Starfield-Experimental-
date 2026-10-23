@@ -238,3 +238,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - v11 (diagnostic): Forward / Back / Left use the zero-g stagger names (only in onehanded\player, after the shared
   folder); Right keeps Sneak_MeleeAttackPower_A. Expected if right: W / S / A dodge in every stance, D only in neutral.
   If all four still end at 0.1 s, the dodge states themselves (graph) are at fault, not the clip lookup.
+- Owner's run (v11): every dodge (W / A / S / D, neutral and a stance) still ended at 0.1 s; and the neutral combo power
+  attacks went wrong. Two causes found in the log: (1) the queued-power cancel took a real combo power attack whose
+  AttackStart came 0.15 s after the plugin's send (window was 0.15 s): window now 0.5 s (kOwnSendWindow, synthetic
+  test); (2) v11's Sneak_MeleeAttackPower_A in the shared folder (first in the neutral entries) shadows the neutral
+  power host of the same name: names must be unique across the folder list (dodge_pack.names, three zero-g names).
+- The dodge failing with unshadowed names too points away from the clip names. v12 (diagnostic): Forward plays the
+  pool tag MeleeAttack_D, Back the standing power MeleeAttackPower_A (both play in combos), Left / Right the converted
+  dodges. If Forward / Back also end at 0.1 s, the dodge states (graph) are at fault.

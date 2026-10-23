@@ -571,6 +571,14 @@ static void queued_power_cancel() {
     a.on_anim_event("AttackStart", "", 6.0);                               // past fQueuedPowerWindow
     CHECK(!sent(a.tick(6.1, s), "ActionInterrupt"));
 
+    Controller late;                                                       // our own attack starting 0.15 s late
+    late.on_anim_event("preHitFrame", "", 1.0);
+    late.on_key(47, true, 1.0, s);
+    late.on_anim_event("AttackStart", "", 1.16);
+    CHECK(!sent(late.tick(1.3, s), "ActionInterrupt"));
+    late.on_anim_event("AttackStart", "", 2.5);                            // the queued one, later
+    CHECK(sent(late.tick(2.6, s), "ActionInterrupt"));
+
     Controller b;                                                          // a standing V press clears the queue
     b.on_anim_event("preHitFrame", "", 1.0);
     b.on_key(47, true, 1.1, s);

@@ -11,6 +11,11 @@
 namespace s2s::combat {
 namespace {
 
+// An AttackStart this soon after an event the plugin sent is that event's attack. Owner's log 2026-10-23: a combo
+// power attack's AttackStart came 0.15 s after the send (two presses in a row) and 0.15 s was the window, so it was
+// cancelled as a queued standing one; the game's queued attack comes a second or more after the press.
+constexpr double kOwnSendWindow = 0.5;
+
 std::string_view trim(std::string_view s) {
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
@@ -563,7 +568,7 @@ std::vector<Command> Controller::on_anim_event(std::string_view tag, std::string
     if (cfg_.cancel_queued_power && queued_powers_ > 0 && is(tag, "AttackStart")) {
         if (t > queued_until_) {
             queued_powers_ = 0;
-        } else if (t - last_send_at_ > 0.15 && cancel_check_at_ < 0.0) {
+        } else if (t - last_send_at_ > kOwnSendWindow && cancel_check_at_ < 0.0) {
             cancel_candidate_at_ = t;
             cancel_check_at_ = t + 0.05;
         }
@@ -627,7 +632,8 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
     }
     if (cancel_check_at_ >= 0.0 && t >= cancel_check_at_) {
         cancel_check_at_ = -1.0;
-        if (last_attack_press_at_ < cancel_candidate_at_ - 0.25 && last_send_at_ < cancel_candidate_at_ - 0.15) {
+        if (last_attack_press_at_ < cancel_candidate_at_ - 0.25 &&
+            last_send_at_ < cancel_candidate_at_ - kOwnSendWindow) {
             out.push_back(event(cfg_.cancel_event));
             out.push_back(log("queued standing power attack cancelled (the game's, from a mid-combo power key press)"));
             --queued_powers_;

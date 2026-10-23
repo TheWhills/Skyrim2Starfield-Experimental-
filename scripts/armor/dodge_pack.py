@@ -3,7 +3,7 @@
 Converts the four step dodges (StepDodgeForward / Back / Left / Right.hkx) with their root motion from TK Dodge's
 animationdatasinglefile (motion ids, default TK Dodge RE's 1656 / 1657 / 1658 / 1659 = forward 5.4 m, back 3.9 m,
 left / right 3.3 m) as clips tagged S2S_Dodge<Direction> in the shared stance folder (melee\\s2s_stances\\common,
-listed by S2SStances.esm for every stance and the neutral one; file names the Creation Kit knows: FILES), with a
+listed by S2SStances.esm for every stance and the neutral one; file names the Creation Kit knows: NAMES), with a
 dodge's descriptor (dodge_descriptor: no attack, slide, throw or hit events; "Allow
 Rotation" as every attack whose root motion plays), and
 adds the dodge states to the pack's MeleeAttacks.agx and the attack switch of Player_Melee.agx (dodge_graph,
@@ -42,13 +42,21 @@ FOLDER = "melee/s2s_stances/" + stance_plugin.COMMON
 # File names the Creation Kit lists: it does not scan a folder but looks for the clip names it knows (the graph's tags
 # and their Sneak_ / ZeroG_ variants: the s2s_stances caches list MeleeAttack_A and sneak_meleeattack_a, in the
 # vanilla file names' case), so a new name such as S2S_DodgeBack.af is never listed (owner's run 2026-10-23, v9).
-# Not names any folder before the shared one already holds: owner's run 2026-10-23 (v10, Sneak_MeleeAttack_* names)
-# showed the dodge clips still not found in a stance, where the stance folder, searched first, holds Sneak_MeleeAttack_*
-# hosts of its own (supported: a clip file is found by name, first folder wins). The zero-g staggers exist only in
-# onehanded\player, after the shared folder (their zero-g stagger is what the dodges shadow). Right keeps a sneak name
-# on purpose for this run: in a stance it should still fail, in neutral (shared folder first) work.
-FILES = {"Forward": "ZeroG_StaggerForwardMedium", "Back": "ZeroG_StaggerBackwardMedium",
-         "Left": "ZeroG_StaggerBackwardSmall", "Right": "Sneak_MeleeAttackPower_A"}
+# Not names any folder before the shared one already holds (a clip file seems to be found by name, first folder wins:
+# owner's run 2026-10-23, v11, a sneak name in the shared folder broke the neutral combo power attack hosted on the
+# same name in onehanded\player\sword). The zero-g staggers exist only in onehanded\player, after the shared folder;
+# the dodges shadow the player's zero-g stagger with a melee weapon.
+# Only three such names are known so far: at most three directions get converted clips (names() hands them out).
+NAMES = ("ZeroG_StaggerForwardMedium", "ZeroG_StaggerBackwardMedium", "ZeroG_StaggerBackwardSmall")
+
+
+def names(directions) -> dict:
+    """{direction: file stem} for the directions that get converted clips, from NAMES in order."""
+    directions = list(directions)
+    if len(directions) > len(NAMES):
+        raise SystemExit(f"only {len(NAMES)} file names for converted dodges ({', '.join(NAMES)}); give the others "
+                         "an existing tag with --tag")
+    return dict(zip(directions, NAMES))
 
 
 def dodge_descriptor(afx: bytes, filename: str = None) -> bytes:
@@ -85,7 +93,12 @@ def main(argv=None):
     ap.add_argument("--anims", required=True, help="vanilla animations (for the descriptor template)")
     ap.add_argument("--player-graph", required=True, help="the vanilla Player_Melee.agx")
     ap.add_argument("--starfield-data")
+    ap.add_argument("--tag", action="append", default=[], metavar="DIRECTION=TAG",
+                    help="play an existing clip tag for a direction instead of its converted dodge (diagnostics)")
     a, rest = ap.parse_known_args(argv)
+    given = dict(t.split("=", 1) for t in a.tag)
+    if any(d not in CLIPS for d in given):
+        sys.exit(f"--tag wants DIRECTION=TAG with DIRECTION one of {', '.join(CLIPS)}")
     pack = os.path.abspath(a.pack)
     if pack.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--pack must be outside the repository")
@@ -93,16 +106,21 @@ def main(argv=None):
     template = bfco_pack.anim_path(a.anims, TEMPLATE_FOLDER, TEMPLATE)
     specs, motions = [], []
     for d, clip in CLIPS.items():
+        if d in given:
+            continue
         path = find_clip(a.tk, clip)
         specs += ["--replace", f"{path}::{template}::S2S_Dodge{d}"]
         motions += ["--motion", f"{os.path.splitext(clip)[0]}={motion}:{MOTION_IDS[d]}"]
     base = ["--weapon-in-hand"] + (["--starfield-data", a.starfield_data] if a.starfield_data else [])
+    files = names(d for d in CLIPS if d not in given)
     folder = os.path.join(pack, *bfco_pack.ANIMS.split("/"), *FOLDER.split("/"))
     os.makedirs(folder, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:              # the pack's own report.json stays
         rc = hkx_to_af.main(rest + ["--out", tmp] + base + specs + motions)
         src = os.path.join(tmp, *bfco_pack.ANIMS.split("/"), *TEMPLATE_FOLDER.split("/"))
         for d in CLIPS:
+            if d in given:
+                continue
             for ext in (".af", ".afx"):
                 fn = f"S2S_Dodge{d}{ext}"
                 if not os.path.isfile(os.path.join(src, fn)):
@@ -111,15 +129,16 @@ def main(argv=None):
                     continue
                 with open(os.path.join(src, fn), "rb") as fh:
                     data = fh.read()
-                name = FILES[d] + ext
+                name = files[d] + ext
                 if ext == ".afx":
-                    data = dodge_descriptor(data, FILES[d] + ".af")
+                    data = dodge_descriptor(data, files[d] + ".af")
                 with open(os.path.join(folder, name), "wb") as fh:
                     fh.write(data)
         if os.path.isfile(os.path.join(tmp, "report.json")):
             shutil.copy(os.path.join(tmp, "report.json"), os.path.join(pack, "dodge_report.json"))
     graph = os.path.join(pack, *dodge_graph.ATTACKS_REL)
-    rc |= dodge_graph.main(["--attacks-graph", graph, "--player-graph", a.player_graph, "--out", pack])
+    rc |= dodge_graph.main(["--attacks-graph", graph, "--player-graph", a.player_graph, "--out", pack]
+                           + [x for d, t in given.items() for x in ("--tag", f"{d}={t}")])
     return rc
 
 

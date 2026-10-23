@@ -44,8 +44,11 @@ class DodgePackTests(unittest.TestCase):
         self.assertNotIn("Slide", out.replace("S2S_Dodge", ""))
         self.assertNotIn("bIsSliding", out)
         self.assertIn("<filename>Sneak_MeleeAttack_B.af</filename>", P.dodge_descriptor(SLIDE, "Sneak_MeleeAttack_B.af").decode())
-        self.assertEqual(sorted(P.FILES), sorted(P.CLIPS))
-        self.assertTrue(all(f.startswith(("Sneak_", "ZeroG_")) for f in P.FILES.values()))   # never a plain graph tag
+        n = P.names(["Left", "Right"])
+        self.assertEqual(n, {"Left": P.NAMES[0], "Right": P.NAMES[1]})
+        self.assertEqual(len(set(P.names(["Forward", "Back", "Left"]).values())), 3)      # unique names
+        with self.assertRaises(SystemExit):
+            P.names(list(P.CLIPS))                                                     # four: not enough names
 
     def test_full_body_dodge_states(self):
         data, rep = D.build_attacks(attacks_graph())
