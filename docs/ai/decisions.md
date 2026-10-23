@@ -180,3 +180,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   top-level MeleeAttackPower_A -> idle and MeleeAttackCombo -> idle on ActionInterrupt (an event the graph already
   knows: idle -> idle). A standing V press clears the count. Status: unresolved until the owner's run; expect a few
   frames of the queued attack before it blends out.
+- Owner, same day (stance pack v5): verified - the extra standing power attack after a combo no longer plays.
+
+## 2026-10-23 — Hosted power attacks lacked root motion: zero-g host flags
+- Owner: in a power -> power chain the third / fourth power attack sometimes does not step forward. Their clips do
+  carry root motion (report: 0.9-2.0 m); their hosts are the zero-g descriptors (ZeroG_MeleeAttackPower_A / _A / _B /
+  _C -> tags MeleeAttack03 / 04 / MeleeAttackPower01 / 02), flagged "Motion Driven" (only zero-g descriptors carry
+  it) or nothing, while every working attack (standing A / B / C, sneak hosts) is flagged "Allow Rotation".
+- Change: hkx_to_af's "tag:" retag (every reused host) applies af_writer.ground_flags: "Motion Driven" off, "Allow
+  Rotation" on, other flags kept. Status: supported hypothesis, unresolved until the owner's run (pack v6).

@@ -23,7 +23,9 @@ game's archives (--starfield-data). Reusing the vanilla path should keep the Ani
 (e.g. BFCO_Attack4 for a graph that plays tag BFCO_Attack4), the vanilla descriptor serving as the template.
 "<clip>::<vanilla .afx>::tag:<NAME>" keeps the vanilla path and file name, sets <tag> NAME and removes <prefix>
 (clips are found by (<prefix>, <tag>), verified on the vanilla sneak / zero-g descriptors; owner, in game 2026-10-19:
-a new loose file under a new tag is not found - so existing paths are reused under new keys).
+a new loose file under a new tag is not found - so existing paths are reused under new keys). Such a host's flags are
+made a standing attack's (af_writer.ground_flags: zero-g "Motion Driven" off, "Allow Rotation" on; root motion did not
+play on zero-g hosts, owner 2026-10-23).
 
 --bfco: attack clips carrying BFCO / MCO markers (BFCO_NextWinStart, BFCO_DIY_recovery, ...) get their descriptor's
 attack windows from those markers (fo4sf.bfco: bCanComboAttack, bDontAllowAttack / PowerAttack, bFreeMovement,
@@ -414,6 +416,7 @@ def main(argv=None):
                 if new_name:
                     if new_name.startswith("tag:"):
                         afx = af_writer.set_tag(afx, new_name[4:], os.path.basename(w["af"]), prefix=None)
+                        afx = af_writer.ground_flags(afx)       # a sneak / zero-g host now plays a standing attack
                     else:
                         afx = af_writer.set_tag(afx, new_name, os.path.basename(w["af"]))
                 marks = bfco.markers(events) if a.bfco else None

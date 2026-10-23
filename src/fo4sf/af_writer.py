@@ -293,6 +293,45 @@ def set_tag(afx: bytes, tag: str, filename: str, prefix: Optional[str] = "keep")
     return _afx_out(root, afx)
 
 
+GROUND_FLAGS = ("Allow Rotation",)
+ZERO_G_FLAGS = ("Motion Driven",)
+
+
+def ground_flags(afx: bytes) -> bytes:
+    """A zero-g descriptor reused as a host for a standing attack: its zero-g flag ("Motion Driven": only the vanilla
+    ZeroG_ descriptors carry it) removed and "Allow Rotation" (every standing melee attack's flag) added. Owner, in
+    game 2026-10-23: power attacks on zero-g hosts (ZeroG_MeleeAttackPower_A / _A / _B / _C, flags "Motion Driven" or
+    none) did not step forward although their clips carry root motion; the sneak hosts (Allow Rotation) did.
+    Other flags (Disable Foot IK, Animation Driven) are kept; a descriptor without zero-g flags is returned as is
+    apart from the added Allow Rotation."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    flags = root.find("flags")
+    if flags is None:
+        flags = ET.Element("flags")
+        order = ["is_state", "tag", "filename", "rampout"]
+        prev = [c for c in root if c.tag in order]
+        at = list(root).index(prev[-1]) + 1 if prev else 0
+        flags.tail = prev[-1].tail if prev else "\n\t"
+        root.insert(at, flags)
+    have = [f for f in flags.findall("flag")]
+    for f in have:
+        if (f.text or "") in ZERO_G_FLAGS:
+            flags.remove(f)
+    names = [f.text for f in flags.findall("flag")]
+    indent = (root.text or "\n\t")
+    for g in GROUND_FLAGS:
+        if g not in names:
+            el = ET.SubElement(flags, "flag")
+            el.text = g
+    kids = flags.findall("flag")
+    if kids:
+        flags.text = indent + "\t"
+        for k in kids:
+            k.tail = indent + "\t"
+        kids[-1].tail = indent
+    return _afx_out(root, afx)
+
+
 def event_frame(afx: bytes, name: str) -> Optional[int]:
     """Frame of the first <event> called `name`, or None."""
     root = ET.fromstring(afx.decode("utf-8-sig"))

@@ -181,5 +181,36 @@ class PluginEventTests(unittest.TestCase):
         self.assertEqual([f for f, _n, _p in got], sorted(f for f, _n, _p in got))
 
 
+class GroundFlagTests(unittest.TestCase):
+    """Zero-g hosts reused for standing attacks (owner 2026-10-23: no root motion on them)."""
+    ZG = (b"<root>\r\n\t<is_state>0</is_state>\r\n\t<tag>MeleeAttack03</tag>\r\n\t<filename>ZeroG_X.af</filename>\r\n"
+          b"\t<rampout>9</rampout>\r\n\t<flags>\r\n\t\t<flag>Motion Driven</flag>\r\n\t</flags>\r\n"
+          b"\t<events>\r\n\t</events>\r\n</root>")
+
+    def flags(self, afx):
+        import xml.etree.ElementTree as ET
+        return [f.text for f in ET.fromstring(afx.decode()).iter("flag")]
+
+    def test_zero_g_flag_swapped(self):
+        from fo4sf import af_writer
+        out = af_writer.ground_flags(self.ZG)
+        self.assertEqual(self.flags(out), ["Allow Rotation"])
+        self.assertIn(b"\r\n", out)
+        self.assertIn(b"<tag>MeleeAttack03</tag>", out)
+
+    def test_no_flags_and_kept_flags(self):
+        from fo4sf import af_writer
+        none = self.ZG.replace(b"\t\t<flag>Motion Driven</flag>\r\n", b"")
+        self.assertEqual(self.flags(af_writer.ground_flags(none)), ["Allow Rotation"])
+        missing = self.ZG.replace(b"\t<flags>\r\n\t\t<flag>Motion Driven</flag>\r\n\t</flags>\r\n", b"")
+        out = af_writer.ground_flags(missing)
+        self.assertEqual(self.flags(out), ["Allow Rotation"])
+        self.assertLess(out.index(b"<rampout>"), out.index(b"<flags>"))
+        power = self.ZG.replace(b"Motion Driven", b"Disable Foot IK")
+        self.assertEqual(self.flags(af_writer.ground_flags(power)), ["Disable Foot IK", "Allow Rotation"])
+        standing = self.ZG.replace(b"Motion Driven", b"Allow Rotation")
+        self.assertEqual(self.flags(af_writer.ground_flags(standing)), ["Allow Rotation"])
+
+
 if __name__ == "__main__":
     unittest.main()
