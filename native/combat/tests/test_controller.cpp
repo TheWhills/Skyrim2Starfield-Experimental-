@@ -305,9 +305,10 @@ static void sample_ini() {
     CHECK(c.attack_event == "MeleeAttackStart" && c.power_event == "MeleeAttackPowerStart");
     CHECK(c.plugin_event_host.empty());
     auto keys = parse_bindings(buf.str(), "Keys");                   // the arrow-key stances
-    CHECK(keys.size() == 6 && keys[0].key == 200 && keys[0].argument == "S2S_StanceHigh" && keys[3].key == 205 &&
+    CHECK(keys.size() == 7 && keys[0].key == 200 && keys[0].argument == "S2S_StanceHigh" && keys[3].key == 205 &&
           keys[3].argument.empty());
-    CHECK(keys.size() == 6 && keys[4].key == 260 && keys[4].action == "lock" && keys[5].key == 273);   // MMB, R3
+    CHECK(keys.size() == 7 && keys[4].key == 260 && keys[4].action == "lock" && keys[5].key == 58 &&
+          keys[5].action == "lock" && keys[6].key == 273);                                  // mouse 4, Caps Lock, R3
     auto lock = ini_section(buf.str(), "Lock");
     CHECK(lock["fmaxdistance"] == "28.0" && lock["slockvariable"] == "TDM_TargetLock");
     CHECK(c.stance_refresh_events.empty());
@@ -595,7 +596,32 @@ static void queued_power_cancel() {
     CHECK(!sent(off.tick(2.1, s), "ActionInterrupt"));
 }
 
+// A fake engine object: an unrelated array at +0x10 (u32 values, no actors), the actor handles at +0x40 in
+// CommonLibSF's {size, capacity, data} layout, and another actor array at +0x60 laid out {data, capacity, size}.
+static void handle_arrays() {
+    alignas(8) static unsigned char obj[0x100] = {};
+    static std::uint32_t junk[4] = {1, 2, 3, 4}, actors[5] = {0x100, 0x101, 0x999, 0x102, 0}, more[2] = {0x200, 0x201};
+    auto put32 = [&](std::size_t at, std::uint32_t v) { std::memcpy(obj + at, &v, 4); };
+    auto put64 = [&](std::size_t at, const void* p) { auto v = reinterpret_cast<std::uintptr_t>(p); std::memcpy(obj + at, &v, 8); };
+    put32(0x10, 4); put32(0x14, 4); put64(0x18, junk);
+    put32(0x40, 5); put32(0x44, 8); put64(0x48, actors);
+    put64(0x60, more); put32(0x68, 2); put32(0x6C, 2);
+    put32(0x80, 9); put32(0x84, 3); put64(0x88, actors);                   // size > capacity: not an array
+    auto readable = [](const void* p, std::size_t) { return p != nullptr; };
+    auto is_actor = [](std::uint32_t h) { return (h >= 0x100 && h <= 0x102) || h == 0x200 || h == 0x201; };
+    const auto base = reinterpret_cast<std::uintptr_t>(obj);
+    auto found = scan_handle_arrays(base, sizeof(obj), readable, is_actor);
+    CHECK(found.size() == 2);
+    CHECK(found[0].offset == 0x40 && !found[0].data_first && found[0].size == 5 && found[0].actors == 3);
+    CHECK(found[1].offset == 0x60 && found[1].data_first && found[1].actors == 2);
+    auto hs = read_handle_array(base, found[0], readable);
+    CHECK(hs.size() == 5 && hs[2] == 0x999);
+    put32(0x40, 0);                                                        // emptied: no longer an array
+    CHECK(read_handle_array(base, found[0], readable).empty());
+}
+
 int main() {
+    handle_arrays();
     queued_power_cancel();
     rtti_vtables();
     key_codes();

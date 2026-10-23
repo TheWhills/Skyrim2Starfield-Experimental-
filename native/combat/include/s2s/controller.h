@@ -173,6 +173,24 @@ struct RttiVtable {
 std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vtables, std::string_view base,
                                            const std::function<bool(const void*, std::size_t)>& readable);
 
+// Arrays of actor handles inside an engine object whose layout is not known (Starfield's ProcessLists: CommonLibSF's
+// highActorHandles at +0x58 was always empty on 1.16, owner's runs). Every 8-byte aligned offset in [0, span) is read
+// as a BSTArray in either layout - {u32 size, u32 capacity, T* data} (CommonLibSF's) or {T* data, u32 capacity, u32 size}
+// - and kept when it is plausible (size <= capacity <= 16384, data readable) and holds at least one handle that
+// `is_actor(handle)` accepts. Sorted by that count, most first. Memory is read only where `readable` allows.
+struct HandleArray {
+    std::ptrdiff_t offset = 0;
+    bool data_first = false;        // {data, capacity, size} instead of {size, capacity, data}
+    std::uint32_t size = 0;
+    int actors = 0;
+};
+std::vector<HandleArray> scan_handle_arrays(std::uintptr_t base, std::size_t span,
+                                            const std::function<bool(const void*, std::size_t)>& readable,
+                                            const std::function<bool(std::uint32_t)>& is_actor);
+// The handles of the array found by scan_handle_arrays (same reading rules); empty when it no longer looks valid.
+std::vector<std::uint32_t> read_handle_array(std::uintptr_t base, const HandleArray& a,
+                                             const std::function<bool(const void*, std::size_t)>& readable);
+
 // Per-frame game state the controller needs.
 struct PlayerState {
     float stamina = 1e9f;      // current stamina-like value (unlimited when not configured)

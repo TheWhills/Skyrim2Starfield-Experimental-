@@ -262,3 +262,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   names in s2s_stances\common (NAMES; a stance FileData lists each once, in a vanilla folder after the shared one).
 - Owner's run (v14): all four dodges play (verified). The left one (tag FireAuto) repeated until something else took
   over (no AttackEnd): the game loops that tag. v15: Left on MeleeAttackBash (player / NPC gun bash tag).
+- Owner, v15: all four dodges work (verified).
+
+## 2026-10-23 — Lock-on: find the actor array in ProcessLists at run time
+- CommonLibSF's ProcessLists::highActorHandles (+0x58) was always empty on 1.16 (owner's runs); its handle resolution
+  (BSPointerHandleManagerInterface::GetSmartPointer, ID 35638) is mapped.
+- Change: core scan_handle_arrays / read_handle_array (synthetic test) read every 8-byte offset of the object as a
+  BSTArray in either layout and keep the plausible ones whose handles resolve to actors; Lock.cpp uses the array with
+  the most actors (re-scan at most every 2 s while none), logs the arrays found ("lock-on: actor arrays in
+  ProcessLists: ..."), then the player's-cell fallback as before. Caps Lock (58) added as a keyboard lock key.
+- Unverified: whether the steering (writing the player's angle) turns the player and camera. Status: owner's run.

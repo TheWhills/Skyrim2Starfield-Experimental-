@@ -156,6 +156,57 @@ std::vector<std::string> MenuGate::parse_list(std::string_view text) {
 }
 
 // ------------------------------------------------------------------------------------------------ pool strings
+namespace {
+bool array_at(std::uintptr_t at, bool data_first, const std::function<bool(const void*, std::size_t)>& readable,
+              std::uintptr_t& data, std::uint32_t& size) {
+    if (!readable(reinterpret_cast<const void*>(at), 16)) return false;
+    std::uint32_t cap = 0;
+    if (data_first) {
+        std::memcpy(&data, reinterpret_cast<const void*>(at), 8);
+        std::memcpy(&cap, reinterpret_cast<const void*>(at + 8), 4);
+        std::memcpy(&size, reinterpret_cast<const void*>(at + 12), 4);
+    } else {
+        std::memcpy(&size, reinterpret_cast<const void*>(at), 4);
+        std::memcpy(&cap, reinterpret_cast<const void*>(at + 4), 4);
+        std::memcpy(&data, reinterpret_cast<const void*>(at + 8), 8);
+    }
+    return data && size && size <= cap && cap <= 16384 && readable(reinterpret_cast<const void*>(data), size * 4);
+}
+}  // namespace
+
+std::vector<HandleArray> scan_handle_arrays(std::uintptr_t base, std::size_t span,
+                                            const std::function<bool(const void*, std::size_t)>& readable,
+                                            const std::function<bool(std::uint32_t)>& is_actor) {
+    std::vector<HandleArray> out;
+    for (std::size_t off = 0; off + 16 <= span; off += 8) {
+        for (bool data_first : {false, true}) {
+            std::uintptr_t data = 0;
+            std::uint32_t size = 0;
+            if (!array_at(base + off, data_first, readable, data, size)) continue;
+            int actors = 0;
+            for (std::uint32_t i = 0; i < size && i < 256; ++i) {
+                std::uint32_t h = 0;
+                std::memcpy(&h, reinterpret_cast<const void*>(data + 4 * i), 4);
+                if (h && is_actor(h)) ++actors;
+            }
+            if (actors) out.push_back({static_cast<std::ptrdiff_t>(off), data_first, size, actors});
+        }
+    }
+    std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.actors > b.actors; });
+    return out;
+}
+
+std::vector<std::uint32_t> read_handle_array(std::uintptr_t base, const HandleArray& a,
+                                             const std::function<bool(const void*, std::size_t)>& readable) {
+    std::vector<std::uint32_t> out;
+    std::uintptr_t data = 0;
+    std::uint32_t size = 0;
+    if (!array_at(base + static_cast<std::uintptr_t>(a.offset), a.data_first, readable, data, size)) return out;
+    out.resize(size);
+    std::memcpy(out.data(), reinterpret_cast<const void*>(data), size * 4);
+    return out;
+}
+
 std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vtables, std::string_view base,
                                            const std::function<bool(const void*, std::size_t)>& readable) {
     auto u32 = [&](std::uintptr_t a, std::uint32_t& out) {

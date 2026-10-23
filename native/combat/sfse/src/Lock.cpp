@@ -51,14 +51,46 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         c.under_crosshair = std::fabs(c.screen_x) < 0.05f && std::fabs(c.screen_y) < 0.08f;
         out.push_back(c);
     };
-    // 1. the high-process actor list (CommonLibSF: ProcessLists +0x58). Owner's run 2026-10-21: always empty, so the
-    //    layout may differ on 1.16; the counts are logged once below.
+    // 1. the high-process actor array. CommonLibSF's ProcessLists +0x58 was always empty on 1.16 (owner's runs), so the
+    //    array is looked for at run time: every plausible handle array in the object, the one with the most actors wins
+    //    (re-scanned at most every 2 s while nothing is found). Handles resolve through BSPointerHandleManager (mapped).
     auto* lists = RE::ProcessLists::GetSingleton();
-    if (lists) {
-        for (const auto& handle : lists->highActorHandles) {
-            auto actor = handle.get();
-            add(actor.get());
+    auto readable = [](const void* p, std::size_t n) { return game::Readable(p, n); };
+    auto resolve = [&](std::uint32_t raw) -> RE::Actor* {
+        RE::BSPointerHandle<RE::Actor> h;
+        static_assert(sizeof(h) == sizeof(raw));
+        std::memcpy(&h, &raw, sizeof(raw));
+        auto ptr = h.get();
+        auto* a = ptr.get();
+        if (!a || !game::Readable(a, sizeof(RE::Actor))) return nullptr;
+        return static_cast<RE::TESObjectREFR*>(a)->IsActor() ? a : nullptr;
+    };
+    const auto base = reinterpret_cast<std::uintptr_t>(lists);
+    if (lists && game::Readable(lists, 0x300)) {
+        std::vector<std::uint32_t> handles;
+        if (actors_at_) handles = combat::read_handle_array(base, *actors_at_, readable);
+        if (handles.empty() && game::Now() >= next_scan_) {
+            next_scan_ = game::Now() + 2.0;
+            auto found = combat::scan_handle_arrays(base, 0x300, readable, [&](std::uint32_t raw) {
+                auto* a = resolve(raw);
+                return a && a != player;
+            });
+            if (scans_logged_ < 5) {
+                ++scans_logged_;
+                std::string list;
+                for (std::size_t i = 0; i < found.size() && i < 4; ++i)
+                    list += std::format(" +{:03X}{} size {} actors {};", found[i].offset,
+                                        found[i].data_first ? " (data first)" : "", found[i].size, found[i].actors);
+                REX::INFO("lock-on: actor arrays in ProcessLists:{}", list.empty() ? std::string(" none found") : list);
+            }
+            actors_at_.reset();
+            if (!found.empty()) {
+                actors_at_ = found.front();
+                handles = combat::read_handle_array(base, *actors_at_, readable);
+            }
         }
+        for (auto raw : handles)
+            if (auto* a = resolve(raw)) add(a);
     }
     // 2. fallback: the actors placed in the player's own cell (interiors: the whole room; exteriors: one cell only).
     //    Owner's fifth run: ForEachReference crashed the game (TESObjectCELL's layout on 1.16 is not CommonLibSF's, like
@@ -103,11 +135,9 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
     if (!diagnosed_ || cell_list_bad_ != cell_bad_logged_) {
         diagnosed_ = true;
         cell_bad_logged_ = cell_list_bad_;
-        REX::INFO("lock-on lists: ProcessLists {} (numberHighActors {}, high {}, low {}, middle-high {}, middle-low {}); "
-                  "player's cell: {}",
-                  lists ? "found" : "missing", lists ? lists->numberHighActors : -1,
-                  lists ? lists->highActorHandles.size() : 0, lists ? lists->lowActorHandles.size() : 0,
-                  lists ? lists->middleHighActorHandles.size() : 0, lists ? lists->middleLowActorHandles.size() : 0,
+        REX::INFO("lock-on lists: ProcessLists {} (actor array {}), {} candidates; player's cell: {}",
+                  lists ? "found" : "missing",
+                  actors_at_ ? std::format("+{:03X}", actors_at_->offset) : std::string("not found"), out.size(),
                   cell_note);
     }
     return out;
