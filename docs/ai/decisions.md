@@ -189,3 +189,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   it) or nothing, while every working attack (standing A / B / C, sneak hosts) is flagged "Allow Rotation".
 - Change: hkx_to_af's "tag:" retag (every reused host) applies af_writer.ground_flags: "Motion Driven" off, "Allow
   Rotation" on, other flags kept. Verified in game (owner, pack v6): every power attack in a chain steps forward.
+- Owner's log (pack v6, 15:41): every mid-combo V "taken by the graph"; 3 queued standing power attacks cancelled,
+  each "ActionInterrupt -> taken by the graph" (verified). Stance re-equip still logs "unequip ...: refused" from
+  ActorEquipManager::UnequipObject while the stance applies and the equip reports done (return value meaning
+  unresolved, behaviour verified). The first-click attack-start burst of the S2S_ComboPower run did not recur (one
+  AttackStart / AttackEnd 0.000 pair only).
