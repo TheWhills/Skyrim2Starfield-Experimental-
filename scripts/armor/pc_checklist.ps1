@@ -175,6 +175,7 @@ if (-not (Test-Path (Join-Path $intWork "batch.json"))) {
     Invoke-S2SPython -I (Join-Path $Repo "scripts/terrain/make_skyrim_objects.py") convert --work $intWork --skyrim-data $SKY `
         --content-resources $cr --texconv $Texconv --starfield-data (Join-Path $SF "Data") --resume *> $clog
     Say ("interior conversion: " + (Get-Content $clog -Tail 1))
+    Get-Content $clog | Where-Object { $_ -match '^(stair ramps:|\{"converted")' } | ForEach-Object { Say ("  " + $_) }
     Invoke-S2SPython -I $mi check --work $intWork 2>&1 | ForEach-Object { Say $_ }
     Copy-Item (Join-Path $intWork "batch.json"), (Join-Path $intWork "check.json") $Out -ErrorAction SilentlyContinue
     $staging = Join-Path $intWork "convert"
