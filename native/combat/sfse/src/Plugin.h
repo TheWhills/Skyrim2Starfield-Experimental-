@@ -29,6 +29,10 @@ public:
     // true: hide this key event from the game (Controller::last_key_consumed)
     bool OnButton(std::uint32_t key, bool down, std::string_view user_event, std::uint32_t device,
                   std::int32_t id_code, float value, float held);
+    // true: a press of `key` now must not reach the game's own controls (Controller::hides_power_press), in gameplay only
+    bool HidesPowerPress(std::uint32_t key);
+    std::uint32_t PowerKey() const { return controller_.config().power_key; }
+    void NoteHiddenKey();                   // logged (first iLogCommands): an event kept from the game's controls
     void OnStick(float x, float y);
     void OnAnimEvent(std::string_view tag, std::string_view payload);
     void OnMenu(std::string_view name, bool opening);
@@ -53,7 +57,7 @@ private:
     double keyword_check_due_ = -1.0;
     int keyword_checks_logged_ = 0;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;
-    int logged_input_ = 0, logged_events_ = 0;
+    int logged_input_ = 0, logged_events_ = 0, logged_hidden_ = 0;
     bool ghost_ = false;
 };
 

@@ -71,15 +71,10 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
                 !down)
                 continue;                        // the wheel sends a zero "release" after each notch
             const auto user = std::string_view(b->strUserEvent);
-            if (plugin.OnButton(KeyCode(b), down, user, static_cast<std::uint32_t>(b->deviceType), b->idCode, b->value,
-                                b->heldDownSecs)) {
-                // Hidden from the game: value 0 and held 0 is neither a press nor a release (the power attack key
-                // mid-combo, which the plugin turned into the combo's power attack; owner 2026-10-23: the game also
-                // queued its standing power attack). Supported hypothesis: the game reads presses the same way.
-                auto* m = const_cast<RE::ButtonEvent*>(b);
-                m->value = 0.0f;
-                m->heldDownSecs = 0.0f;
-            }
+            // The return value (hide this key) is acted on in ControlsInput below: UI is not where the game's
+            // controls read the key (owner 2026-10-23: zeroing the event here did not stop the queued power attack).
+            plugin.OnButton(KeyCode(b), down, user, static_cast<std::uint32_t>(b->deviceType), b->idCode, b->value,
+                            b->heldDownSecs);
         } else if (e->eventType == RE::InputEvent::EventType::kThumbstick) {
             const auto* bytes = reinterpret_cast<const std::byte*>(e);
             if (*reinterpret_cast<const std::int32_t*>(bytes + kStickId) == kLeftStick)
@@ -98,6 +93,68 @@ void PerformInputProcessing(RE::BSInputEventReceiver* a_this, const RE::InputEve
                   g_perf_event.take());
     }
     g_input_original(a_this, a_head);
+}
+
+// ------------------------------------------------------------------------------------------------ player controls
+// PlayerControls::Manager is the game's own gameplay input receiver (attacks, movement); like UI it is a
+// BSInputEventReceiver and gets the frame's events through PerformInputProcessing (slot 1). Its vtables come from the
+// Address Library (RE::VTABLE::PlayerControls__Manager, 9 for its bases); which one is the BSInputEventReceiver base
+// is read from the class's RTTI at run time, so a wrong guess is logged instead of patched.
+// The power attack key pressed during a combo (Controller::hides_power_press), its repeats and its release are
+// unlinked from the list this receiver gets, and linked back right after: the game's controls never see the press, so
+// they do not queue the standing power attack; UI and everyone else still get every event.
+// Supported, not verified: Fallout 4's PlayerControls is a BSInputEventReceiver that reads attacks this way.
+PerformInputProcessing_t* g_controls_original = nullptr;
+bool g_hiding_power_key = false;                  // a press was hidden: hide its repeats and release too
+
+bool HideFromControls(Plugin& plugin, const RE::InputEvent* e) {
+    if (e->eventType != RE::InputEvent::EventType::kButton) return false;
+    const auto* b = static_cast<const RE::ButtonEvent*>(e);
+    const auto key = KeyCode(b);
+    if (key == 0 || key != plugin.PowerKey()) return false;
+    const bool down = b->value != 0.0f && b->heldDownSecs == 0.0f;
+    if (down) g_hiding_power_key = plugin.HidesPowerPress(key);
+    const bool hide = g_hiding_power_key;
+    if (b->value == 0.0f) g_hiding_power_key = false;          // released
+    return hide;
+}
+
+void ControlsInput(RE::BSInputEventReceiver* a_this, const RE::InputEvent* a_head) {
+    auto& plugin = Plugin::Get();
+    const RE::InputEvent* head = a_head;
+    std::vector<std::pair<RE::InputEvent*, RE::InputEvent*>> relink;     // (event, its original next)
+    RE::InputEvent* prev = nullptr;
+    for (auto* e = a_head; e; e = e->next) {
+        if (HideFromControls(plugin, e)) {
+            if (prev) {
+                relink.emplace_back(prev, prev->next);
+                prev->next = e->next;
+            } else {
+                head = e->next;
+            }
+            plugin.NoteHiddenKey();
+        } else {
+            prev = const_cast<RE::InputEvent*>(e);
+        }
+    }
+    g_controls_original(a_this, head);
+    for (auto it = relink.rbegin(); it != relink.rend(); ++it) it->first->next = it->second;
+}
+
+void InstallControls() {
+    std::vector<std::uintptr_t> vtables;
+    for (const auto& id : RE::VTABLE::PlayerControls__Manager) vtables.push_back(id.address());
+    auto found = combat::rtti_base_vtable(vtables, ".?AVBSInputEventReceiver@@",
+                                          [](const void* p, std::size_t n) { return game::Readable(p, n); });
+    if (!found) {
+        REX::WARN("player controls: no BSInputEventReceiver vtable found in PlayerControls::Manager's RTTI: the power "
+                  "attack key mid-combo still reaches the game (it may play its standing power attack afterwards)");
+        return;
+    }
+    REL::Relocation<std::uintptr_t> vtbl{found->vtable};
+    g_controls_original = reinterpret_cast<PerformInputProcessing_t*>(vtbl.write_vfunc(1, &ControlsInput));
+    REX::INFO("player controls: input receiver hooked ({} vtable {} of {}, {:X})", found->complete_class, found->index,
+              vtables.size(), found->vtable);
 }
 
 // ------------------------------------------------------------------------------------------------ safe reads
@@ -256,6 +313,8 @@ bool Install() {
     auto* sink = reinterpret_cast<Sink*>(reinterpret_cast<std::uintptr_t>(player) + kAnimSinkOffset);
     REL::Relocation<std::uintptr_t> sink_vtbl{*reinterpret_cast<std::uintptr_t*>(sink)};
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
+
+    InstallControls();
 
     ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
     // CommonLibSF (9d090c4, its latest as of 2026-10-21) has no Address Library ID for this on Starfield 1.16: ID 0, and

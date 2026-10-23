@@ -469,7 +469,9 @@ static void power_in_combo() {
     CHECK(v.last_key_consumed());                                          // the game must not see it
     CHECK(v.on_key(47, false, 1.2, s).empty());                            // release: nothing sent,
     CHECK(v.last_key_consumed());                                          // and hidden too
+    CHECK(v.hides_power_press(47) && !v.hides_power_press(256));          // the game's controls must not see it
     v.on_anim_event("AttackEnd", "", 2.0);
+    CHECK(!v.hides_power_press(47));                                       // standing: the game's own
     v.on_key(47, true, 3.0, s);                                            // standing: the game's
     CHECK(!v.last_key_consumed());
     v.on_key(47, false, 3.1, s);
@@ -477,7 +479,52 @@ static void power_in_combo() {
     CHECK(parse_config("[Combat]\nuPowerAttackKey = 33\n").power_key == 33);
 }
 
+// A fake image laid out like MSVC x64 RTTI: class Manager : Sink (offset 0), BSInputEventReceiver (offset 0x10).
+static void rtti_vtables() {
+    alignas(8) static unsigned char img[0x400] = {};
+    const auto base = reinterpret_cast<std::uintptr_t>(img);
+    auto put32 = [&](std::size_t at, std::uint32_t v) { std::memcpy(img + at, &v, 4); };
+    auto put64 = [&](std::size_t at, std::uintptr_t v) { std::memcpy(img + at, &v, 8); };
+    auto name = [&](std::size_t td, const char* n) { std::memcpy(img + td + 0x10, n, std::strlen(n) + 1); };
+    name(0x100, ".?AVManager@PlayerControls@@");
+    name(0x140, ".?AVSink@@");
+    name(0x180, ".?AVBSInputEventReceiver@@");
+    // hierarchy at 0x1C0: 3 bases, array at 0x1D0
+    put32(0x1C0 + 8, 3);
+    put32(0x1C0 + 0x0C, 0x1D0);
+    const std::uint32_t tds[3] = {0x100, 0x140, 0x180}, mds[3] = {0, 0, 0x10};
+    for (int i = 0; i < 3; ++i) {
+        const std::size_t bcd = 0x200 + 0x20 * i;
+        put32(0x1D0 + 4 * i, static_cast<std::uint32_t>(bcd));
+        put32(bcd, tds[i]);
+        put32(bcd + 8, mds[i]);
+        put32(bcd + 0x0C, 0xFFFFFFFFu);
+    }
+    // two complete object locators (offset 0 and 0x10) and their vtables
+    const std::size_t cols[2] = {0x280, 0x2A0}, vts[2] = {0x300, 0x340};
+    for (int i = 0; i < 2; ++i) {
+        put32(cols[i], 1);
+        put32(cols[i] + 4, i ? 0x10 : 0);
+        put32(cols[i] + 0x0C, 0x100);
+        put32(cols[i] + 0x10, 0x1C0);
+        put32(cols[i] + 0x14, static_cast<std::uint32_t>(cols[i]));
+        put64(vts[i] - 8, base + cols[i]);
+    }
+    auto inside = [&](const void* p, std::size_t n) {
+        const auto a = reinterpret_cast<std::uintptr_t>(p);
+        return a >= base && a + n <= base + sizeof(img);
+    };
+    auto r = rtti_base_vtable({base + vts[0], base + vts[1]}, ".?AVBSInputEventReceiver@@", inside);
+    CHECK(r && r->index == 1 && r->vtable == base + vts[1] && r->complete_class == ".?AVManager@PlayerControls@@");
+    r = rtti_base_vtable({base + vts[1], base + vts[0]}, ".?AVSink@@", inside);       // any order
+    CHECK(r && r->index == 1);
+    CHECK(!rtti_base_vtable({base + vts[0]}, ".?AVOther@@", inside));                 // not a base
+    CHECK(!rtti_base_vtable({base + 0x10}, ".?AVSink@@", inside));                    // no locator there
+    CHECK(!rtti_base_vtable({base + vts[0]}, ".?AVSink@@", [](const void*, std::size_t) { return false; }));
+}
+
 int main() {
+    rtti_vtables();
     key_codes();
     power_in_combo();
     stance_reequip();

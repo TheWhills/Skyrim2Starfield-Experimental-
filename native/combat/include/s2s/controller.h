@@ -143,6 +143,18 @@ private:
 std::optional<std::string> pool_string_at(std::uintptr_t slot,
                                           const std::function<bool(const void*, std::size_t)>& readable);
 
+// MSVC x64 RTTI: which of a class's vtables belongs to its base class `base` (a type-descriptor name such as
+// ".?AVBSInputEventReceiver@@"). Each vtable's slot -1 points at its Complete Object Locator (signature 1, +0x04 the
+// subobject offset, +0x0C type descriptor RVA, +0x10 class hierarchy RVA, +0x14 its own RVA); the hierarchy lists the
+// base classes with their offsets (mdisp). Memory is read only where `readable` allows.
+struct RttiVtable {
+    std::size_t index = 0;          // into the vtables given
+    std::uintptr_t vtable = 0;
+    std::string complete_class;     // the most-derived class's type name (for the log)
+};
+std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vtables, std::string_view base,
+                                           const std::function<bool(const void*, std::size_t)>& readable);
+
 // Per-frame game state the controller needs.
 struct PlayerState {
     float stamina = 1e9f;      // current stamina-like value (unlimited when not configured)
@@ -160,6 +172,12 @@ public:
     // combo (and its release), which the plugin turns into the combo's power attack; the game would also queue its
     // standing power attack and play it afterwards (owner, 2026-10-23).
     bool last_key_consumed() const { return consumed_last_; }
+    // Whether a press of `key` now should never reach the game's own controls: the power attack key while an attack
+    // runs and bPowerInCombo is on. The plugin sends the combo's power attack itself; the game queued its standing
+    // power attack from the same press and played it after the combo one (owner, 2026-10-23).
+    bool hides_power_press(std::uint32_t key) const {
+        return cfg_.power_key && key == cfg_.power_key && cfg_.power_in_combo && phase_.phase() != AttackPhase::None;
+    }
     // An animation-graph event of the player (tag and payload as the engine delivers them).
     std::vector<Command> on_anim_event(std::string_view tag, std::string_view payload, double t);
     // The player was hit (after the game handled it: TESHitEvent). blocking: the player held block.

@@ -6,6 +6,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 
 namespace s2s::combat {
 namespace {
@@ -150,6 +151,58 @@ std::vector<std::string> MenuGate::parse_list(std::string_view text) {
 }
 
 // ------------------------------------------------------------------------------------------------ pool strings
+std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vtables, std::string_view base,
+                                           const std::function<bool(const void*, std::size_t)>& readable) {
+    auto u32 = [&](std::uintptr_t a, std::uint32_t& out) {
+        if (!readable(reinterpret_cast<const void*>(a), 4)) return false;
+        std::memcpy(&out, reinterpret_cast<const void*>(a), 4);
+        return true;
+    };
+    auto name_at = [&](std::uintptr_t td) -> std::string {      // TypeDescriptor: name at +0x10
+        std::string out;
+        for (std::uintptr_t a = td + 0x10; out.size() < 256; ++a) {
+            if (!readable(reinterpret_cast<const void*>(a), 1)) return std::string();
+            const char ch = *reinterpret_cast<const char*>(a);
+            if (!ch) return out;
+            out.push_back(ch);
+        }
+        return std::string();
+    };
+    struct Col { std::uintptr_t image; std::uint32_t offset; std::uintptr_t td, chd; };
+    auto col_of = [&](std::uintptr_t vt) -> std::optional<Col> {
+        if (!vt || !readable(reinterpret_cast<const void*>(vt - 8), 8)) return std::nullopt;
+        std::uintptr_t col = 0;
+        std::memcpy(&col, reinterpret_cast<const void*>(vt - 8), 8);
+        std::uint32_t sig = 0, off = 0, td = 0, chd = 0, self = 0;
+        if (!u32(col, sig) || !u32(col + 4, off) || !u32(col + 0x0C, td) || !u32(col + 0x10, chd) ||
+            !u32(col + 0x14, self) || sig != 1 || self == 0 || self > col)
+            return std::nullopt;
+        const std::uintptr_t image = col - self;
+        return Col{image, off, image + td, image + chd};
+    };
+    std::optional<std::uint32_t> mdisp;
+    std::string complete;
+    for (auto vt : vtables) {
+        auto c = col_of(vt);
+        if (!c) continue;
+        complete = name_at(c->td);
+        std::uint32_t count = 0, array = 0;
+        if (!u32(c->chd + 8, count) || !u32(c->chd + 0x0C, array) || count > 256) return std::nullopt;
+        for (std::uint32_t i = 0; i < count && !mdisp; ++i) {
+            std::uint32_t bcd = 0, td = 0, md = 0, pd = 0;
+            if (!u32(c->image + array + 4 * i, bcd) || !u32(c->image + bcd, td) || !u32(c->image + bcd + 8, md) ||
+                !u32(c->image + bcd + 0x0C, pd))
+                return std::nullopt;
+            if (pd == 0xFFFFFFFFu && name_at(c->image + td) == base) mdisp = md;    // a non-virtual base
+        }
+        break;
+    }
+    if (!mdisp) return std::nullopt;
+    for (std::size_t i = 0; i < vtables.size(); ++i)
+        if (auto c = col_of(vtables[i]); c && c->offset == *mdisp) return RttiVtable{i, vtables[i], complete};
+    return std::nullopt;
+}
+
 std::optional<std::string> pool_string_at(std::uintptr_t a_addr,
                                           const std::function<bool(const void*, std::size_t)>& readable) {
     // BSStringPool::Entry (CommonLibSF, 0x18 bytes): +0x08 length or, when flags (+0x14) has kExternal (0x2), a pointer

@@ -108,6 +108,21 @@ combat::PlayerState Plugin::State() {
     return s;
 }
 
+bool Plugin::HidesPowerPress(std::uint32_t key) {
+    if (!settings_.enabled || key == 0) return false;
+    auto* player = game::Player();
+    if (!player || !player->parentCell || menus_.blocked()) return false;
+    std::scoped_lock l(lock_);
+    return controller_.hides_power_press(key);
+}
+
+void Plugin::NoteHiddenKey() {
+    if (logged_hidden_ < settings_.log_commands) {
+        ++logged_hidden_;
+        REX::INFO("power attack key kept from the game's controls (combo power attack sent by the plugin)");
+    }
+}
+
 bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event, std::uint32_t device,
                       std::int32_t id_code, float value, float held) {
     if (!settings_.enabled) return false;

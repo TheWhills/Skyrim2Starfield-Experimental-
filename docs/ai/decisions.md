@@ -138,3 +138,17 @@ Instead of editing the steps, native collision adds a separate ramp body through
 layer (31), as Bethesda does in their own content: actors walk a slope, items and projectiles still meet the steps.
 Found geometrically (flat narrow parallel treads, consistent rise / run, 3+ steps); models that already have stair
 helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the layer stays an option.
+
+## 2026-10-23 — Combo power attack: keep the key from the game's controls (PlayerControls::Manager)
+- Owner: after the correct combo power attack the game still played its standing power attack (MeleeAttackPower_A).
+  Zeroing the V ButtonEvent in UI's PerformInputProcessing did not stop it (verified, owner's run): UI is not where the
+  gameplay controls read attacks.
+- Now the plugin also hooks PlayerControls::Manager's BSInputEventReceiver::PerformInputProcessing (slot 1). The 9
+  vtables come from CommonLibSF's Address Library IDs (RE::VTABLE::PlayerControls__Manager); which one is the
+  BSInputEventReceiver base is read from MSVC RTTI at run time (core `rtti_base_vtable`, synthetic test), so a wrong
+  guess logs a warning and patches nothing.
+- The power key press while an attack runs (`Controller::hides_power_press`), its repeats and its release are unlinked
+  from that receiver's event list for the call and linked back after: the shared events are no longer mutated (the UI
+  zeroing is removed), UI and other receivers still see them.
+- Status: supported (Fallout 4's PlayerControls is a BSInputEventReceiver), unresolved until the owner's run. Log lines:
+  "player controls: input receiver hooked ..." and "power attack key kept from the game's controls".
