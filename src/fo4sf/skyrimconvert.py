@@ -122,10 +122,15 @@ def column_boxes(points, triangles, max_boxes=None, cell=None, report=None):
         cell *= 1.25
 
 
-def native_collision(src: nifmod.NifFile, sf_mesh_template: bytes, report: dict) -> list:
+STAIR_HELPER_LAYER = 31               # Skyrim / FO4 / Starfield STAIRHELPER: only the character controller collides
+
+
+def native_collision(src: nifmod.NifFile, sf_mesh_template: bytes, report: dict,
+                     stair_layer: Optional[int] = STAIR_HELPER_LAYER) -> list:
     """The model's own Skyrim collision as native Starfield bodies: one compressed-mesh body per Skyrim rigid body, same
     triangles (metres, root frame), same Havok layer (stair helpers stay stair helpers). Non-solid bodies (triggers,
-    portals, AI / sound volumes) get none. Raises on anything it cannot encode (the caller falls back to boxes)."""
+    portals, AI / sound volumes) get none. Stair flights get an extra ramp body on `stair_layer` (None: no ramps).
+    Raises on anything it cannot encode (the caller falls back to boxes)."""
     from . import meshcollision
     bodies = skyrimnif.collision_bodies(src, report)
     blobs, skipped, n_tris = [], {}, 0
@@ -138,6 +143,20 @@ def native_collision(src: nifmod.NifFile, sf_mesh_template: bytes, report: dict)
         m = [(x * UNIT, y * UNIT, z * UNIT) for x, y, z in pts]
         blobs.append(meshcollision.mesh_body(m, tris, sf_mesh_template, layer))
         n_tris += len(tris)
+    if stair_layer is not None and blobs and STAIR_HELPER_LAYER not in {l for l, _p, t in bodies if t}:
+        # Starfield's character controller does not glide over Skyrim's step collision: add a stair-helper ramp body
+        # over each flight (src/fo4sf/stairramp.py). Models with their own stair helpers keep those only.
+        from . import stairramp
+        solid_p, solid_t = [], []
+        for layer, pts, tris in bodies:
+            if tris and layer not in meshcollision.NON_SOLID_LAYERS:
+                base = len(solid_p)
+                solid_p += [(x * UNIT, y * UNIT, z * UNIT) for x, y, z in pts]
+                solid_t += [(a + base, b + base, c + base) for a, b, c in tris]
+        rp, rt, ramps = stairramp.stair_ramps(solid_p, solid_t)
+        if rt:
+            blobs.append(meshcollision.mesh_body(rp, rt, sf_mesh_template, stair_layer))
+            report["stair_ramps"] = ramps
     report["source"] = "skyrim-native" if blobs else "skyrim-none"
     report["bodies"] = len(blobs)
     report["layers"] = sorted({str(l) for l, _p, t in bodies if t and l not in meshcollision.NON_SOLID_LAYERS})
@@ -189,10 +208,11 @@ def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
 
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
                        collision_template: Optional[bytes], report: dict, landscape: bool = False,
-                       sf_mesh_template: Optional[bytes] = None) -> Dict[str, bytes]:
+                       sf_mesh_template: Optional[bytes] = None,
+                       stair_layer: Optional[int] = STAIR_HELPER_LAYER) -> Dict[str, bytes]:
     """sf_mesh_template (a vanilla Starfield multi-shape physics blob, meshcollision.UNIVERSAL_TEMPLATE_NIF): Skyrim's
-    own collision becomes native Starfield mesh bodies (native_collision); boxes are the fallback, with the reason in
-    report["native_error"]."""
+    own collision becomes native Starfield mesh bodies (native_collision, with stair ramps on stair_layer); boxes are
+    the fallback, with the reason in report["native_error"]."""
     files, static_shapes, all_pts = {}, [], []
     for i, s in enumerate(shapes):
         if material_paths[i] is None:                 # effect shader / refraction / skipped shape
@@ -214,10 +234,10 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
     blobs = None
     if sf_mesh_template is not None:
         try:
-            blobs = native_collision(src, sf_mesh_template, report)
+            blobs = native_collision(src, sf_mesh_template, report, stair_layer=stair_layer)
         except Exception as e:                       # noqa: BLE001  (fallback by design, reason recorded)
             report["native_error"] = f"{type(e).__name__}: {e}"
-            for k in ("source", "bodies", "layers", "skipped_layers"):
+            for k in ("source", "bodies", "layers", "skipped_layers", "stair_ramps"):
                 report.pop(k, None)
     if blobs is None:
         blobs = collision_boxes(src, collision_template, report, landscape) if collision_template is not None else []
@@ -273,13 +293,14 @@ class SkyrimConverter(pipeline.Converter):
     """pipeline.Converter with a Skyrim source (bsa.SkyrimArchives) and Skyrim materials / geometry / collision."""
 
     def __init__(self, src, staging, texconv_exe, content_resources, collision_template=None, prefix="skyrim",
-                 max_texture=None, shape_hook=None, sf_mesh_template=None):
+                 max_texture=None, shape_hook=None, sf_mesh_template=None, stair_layer=STAIR_HELPER_LAYER):
         super().__init__(src, staging, texconv_exe, content_resources, collision_template, prefix=prefix,
                          no_collision_pattern="", max_texture=max_texture)
         # shape_hook(nif, shapes, report) -> shapes: change the geometry before conversion (skyrimweapon.weapon_shapes
         # moves weapons into Starfield's WEAPON frame and drops scabbards)
         self.shape_hook = shape_hook
         self.sf_mesh_template = sf_mesh_template      # native Skyrim collision (convert_static_sse); None = boxes
+        self.stair_layer = stair_layer                # layer of the stair ramps added to native collision; None = none
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None) -> Optional[str]:
@@ -369,7 +390,8 @@ class SkyrimConverter(pipeline.Converter):
             else:
                 files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
                                            landscape=bool(LANDSCAPE_RE.search(nif_name)),
-                                           sf_mesh_template=self.sf_mesh_template)
+                                           sf_mesh_template=self.sf_mesh_template,
+                                           stair_layer=self.stair_layer)
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)

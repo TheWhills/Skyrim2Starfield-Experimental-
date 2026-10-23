@@ -199,3 +199,17 @@ does (verified in game there), instead of boxes.
   it should report 0 problems (so far the format is verified on FO4 files only).
 **Unresolved until the PC:** the first game load with these bodies (template / writer as for FO4, so expected to work);
 whether Alva's stairs and door are fixed. Exterior objects converted with `--starfield-data` get native collision too.
+
+## Native collision and load doors in game (owner, 2026-10-23)
+- Verified: with native collision the character walks down Alva's cellar stairs and the door prompt sits on the door
+  (159 of 176 models native, 0 fallbacks; the other 17 have no Skyrim collision).
+- Verified: load doors need the record's Persistent flag (0x400), not just the cell's persistent group. Without it a door
+  worked once, then lost its prompt until a reload and the return trip landed at the wrong end. After the fix both
+  directions work. `scripts/interior/door_survey.py` (checklist step 13) on Starfield.esm: all 619 vanilla load doors
+  are persistent; XTEL is 36 bytes (the last 4 always 0), its position is the landing spot by the destination door
+  (median 0.21 m from it), as in Skyrim; 576 / 619 also carry XNDP (navmesh + triangle by the door, for AI) and every
+  DOOR base has OBND. Ours have neither yet.
+- Supported (implemented, in-game check pending): going up the stairs the character "runs into each step".
+  `stairramp.py` finds flights of 3+ steps in the collision and native collision adds a ramp body through the nosings
+  on layer 31 (stair helper: only actors collide). `--stair-ramp-layer 1` puts it on the static layer if 31 does not
+  work in Starfield, `0` turns it off. The manifest lists the models that got ramps (`stair_ramps`).

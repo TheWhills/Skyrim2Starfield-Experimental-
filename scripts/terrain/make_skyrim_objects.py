@@ -196,7 +196,14 @@ def checkpoint_signature(a):
             "box_template": hashlib.sha256(box_template_nif(a)).hexdigest(),
             "collision": "boxes" if (getattr(a, "box_collision", False) or not getattr(a, "starfield_data", None))
             else "native",
+            "stair_layer": stair_layer(a),
             "max_texture": a.max_texture or None}
+
+
+def stair_layer(a):
+    """Collision layer of the stair ramps native collision adds (--stair-ramp-layer; 0 = no ramps)."""
+    v = getattr(a, "stair_ramp_layer", 31)
+    return None if not v else int(v)
 
 
 def cmd_convert(a):
@@ -225,7 +232,7 @@ def cmd_convert(a):
             if conv is None:
                 conv = skyrimconvert.SkyrimConverter(src, staging, a.texconv, a.content_resources, template,
                                                      prefix=ASSET_PREFIX, max_texture=a.max_texture,
-                                                     sf_mesh_template=sf_mesh)
+                                                     sf_mesh_template=sf_mesh, stair_layer=stair_layer(a))
             r = conv.convert_nif(name)
             if cache:
                 try:
@@ -260,12 +267,18 @@ def cmd_convert(a):
             r = re.sub(r"\d+", "#", c["native_error"])[:100]
             native_errors[r] = native_errors.get(r, 0) + 1
         coll[k] = coll.get(k, 0) + 1
+    ramps = {i["editor_id"]: i["collision_report"]["stair_ramps"] for i in items
+             if i["collision_report"].get("stair_ramps")}
     save(ids_path, ids)
     manifest = {"items": items, "failures": failures, "material_fallbacks": conv.material_errors if conv else {},
                 "stats": stats, "collision": coll, "native_collision_errors": native_errors,
+                "stair_ramps": ramps,
                 "failure_reasons": reasons, "seconds": round(time.time() - t0, 1)}
     save(os.path.join(staging, "manifest.json"), manifest, indent=1)
     print(json.dumps({"converted": len(items), **stats, "collision": coll, "seconds": manifest["seconds"]}))
+    if ramps:
+        print(f"stair ramps: {sum(len(v) for v in ramps.values())} flights in {len(ramps)} models "
+              f"({', '.join(sorted(ramps)[:8])}{' ...' if len(ramps) > 8 else ''})")
     for r, n in sorted(reasons.items(), key=lambda kv: -kv[1])[:10]:
         print(f"  FAIL x{n}: {r}")
     for r, n in sorted(native_errors.items(), key=lambda kv: -kv[1])[:10]:
@@ -855,6 +868,9 @@ def main(argv=None):
     ap.add_argument("--content-resources", help="convert: Starfield Tools\\ContentResources.zip (material templates)")
     ap.add_argument("--texconv", help="convert: texconv.exe")
     ap.add_argument("--collision-template", help="convert: a vanilla Starfield NIF with one box body (as convert_batch)")
+    ap.add_argument("--stair-ramp-layer", type=int, default=31,
+                    help="convert: collision layer of the invisible ramps added over stair steps (31 = stair helper, "
+                         "only the player / actors collide; 1 = static, everything collides; 0 = no ramps)")
     ap.add_argument("--box-collision", action="store_true",
                     help="convert: approximate collision with boxes instead of native meshes (the pre-2026-10-22 path)")
     ap.add_argument("--starfield-data", help="convert: Starfield Data folder, to read the box template from its archives "

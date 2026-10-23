@@ -138,7 +138,7 @@ class NativeWiringTests(unittest.TestCase):
         calls = []
         orig = skyrimconvert.native_collision
         try:
-            def boom(src, tmpl, report):
+            def boom(src, tmpl, report, **kw):
                 calls.append(tmpl)
                 raise ValueError("template without hknpCompressedMeshShape")
             skyrimconvert.native_collision = boom

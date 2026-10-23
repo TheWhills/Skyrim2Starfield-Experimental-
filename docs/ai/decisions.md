@@ -131,3 +131,10 @@ as Havok compressed meshes (`cmsencode`, format measured on FO4 files) and writt
 Skyrim body with its collision layer. Reason: boxes cannot represent ramps (voxel ledges up to ~0.47 m blocked Alva's
 cellar stairs in the analysis), activation rays hit collision so approximations move door prompts, and the FO4 path
 proved native collision in game. Boxes remain as `--box-collision` and as the per-model fallback.
+
+## 2026-10-23: stair-helper ramps over Skyrim step collision
+Starfield's character controller does not climb Skyrim's step collision smoothly (owner: "runs into each step").
+Instead of editing the steps, native collision adds a separate ramp body through the step nosings on the stair-helper
+layer (31), as Bethesda does in their own content: actors walk a slope, items and projectiles still meet the steps.
+Found geometrically (flat narrow parallel treads, consistent rise / run, 3+ steps); models that already have stair
+helpers keep only theirs. The layer is an option because layer 31's behaviour in Starfield is not yet verified.
