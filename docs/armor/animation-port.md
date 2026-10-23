@@ -1181,3 +1181,9 @@ skinned-mesh writer: not in this pack).
   output then had 48 sets naming the stance clips with the vanilla sword folders (the vanilla MeleeAttack_A etc.
   replaced by the stance ones). Limitation: a stance change shows only after a save / reload, so the subgraph is picked
   when the graph is built; next: find what re-picks it in play (re-equip, redraw) and do that from the plugin.
+* **Verified (owner, 2026-10-23): stance changes apply in play, no reload.** The combat plugin re-equips the weapon
+  0.25 s after the last stance key: Papyrus Actor.GetEquippedWeapon(0) for the weapon (FormID = low 32 bits of its VM
+  handle), then ActorEquipManager::UnequipObject / EquipObject on the base form (as the console's unequipitem /
+  equipitem), the equip on UnequipComplete or after 0.5 s. Papyrus UnequipItem / EquipItem returned but did nothing;
+  a redraw does not re-pick the set. Limitation: the base form is re-equipped without its instance data (weapon mods
+  on a modded vanilla weapon may be lost; the converted Skyrim weapons have none).
