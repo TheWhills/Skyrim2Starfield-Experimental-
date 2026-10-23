@@ -188,4 +188,4 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   _C -> tags MeleeAttack03 / 04 / MeleeAttackPower01 / 02), flagged "Motion Driven" (only zero-g descriptors carry
   it) or nothing, while every working attack (standing A / B / C, sneak hosts) is flagged "Allow Rotation".
 - Change: hkx_to_af's "tag:" retag (every reused host) applies af_writer.ground_flags: "Motion Driven" off, "Allow
-  Rotation" on, other flags kept. Status: supported hypothesis, unresolved until the owner's run (pack v6).
+  Rotation" on, other flags kept. Verified in game (owner, pack v6): every power attack in a chain steps forward.
