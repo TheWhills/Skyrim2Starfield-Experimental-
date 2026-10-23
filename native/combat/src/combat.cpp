@@ -257,6 +257,16 @@ Angles steer(Angles cur, Angles want, float dt, float yaw_rate, float pitch_rate
     return out;
 }
 
+bool hides_look_event(std::uint32_t event_type, std::int32_t stick_id) {
+    return event_type == 1 || (event_type == 4 && stick_id != 0x0B);
+}
+
+Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset) {
+    if (!camera || !std::isfinite(camera->x) || !std::isfinite(camera->y) || !std::isfinite(camera->z)) return player_eye;
+    const float dx = camera->x - player_eye.x, dy = camera->y - player_eye.y, dz = camera->z - player_eye.z;
+    return dx * dx + dy * dy + dz * dz <= max_offset * max_offset ? *camera : player_eye;
+}
+
 void view_offset(Angles look, Vec3 from, Vec3 to, float& x, float& y) {
     Angles a = aim_angles(from, to);
     x = wrap_pi(a.yaw - look.yaw);

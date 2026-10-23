@@ -185,6 +185,26 @@ static void aiming() {
 
 // The owner's camera probe (2026-10-23): ThirdPersonState +0x170 = (0.841, -0.067, -0.042, 0.536) with the camera
 // root's forward row (-0.899, 0.412, -0.151); later (0.979, -0.075, -0.014, 0.191) with (-0.377, 0.915, -0.144).
+static void lock_hold() {
+    // a hard lock is steer() with rates that reach the target in one frame
+    Angles cur{0.1f, 1.0f}, want{-0.2f, -2.5f};
+    auto n = steer(cur, want, 1.0f / 60, 1e6f, 1e6f);
+    CHECK(std::fabs(n.yaw - want.yaw) < 1e-4f && std::fabs(n.pitch - want.pitch) < 1e-4f);
+    // mouse moves and the right stick are hidden; buttons and the left stick are not
+    CHECK(hides_look_event(1, 0));
+    CHECK(hides_look_event(4, 0x0C));
+    CHECK(!hides_look_event(4, 0x0B));
+    CHECK(!hides_look_event(0, 0));
+    // aimed from the camera when it is near the player, from the eye otherwise
+    Vec3 eye{0, 0, 1.6f}, cam{-0.6f, -2.5f, 1.8f}, far{100, 0, 0};
+    auto o = aim_origin(eye, &cam);
+    CHECK(o.x == cam.x && o.y == cam.y);
+    o = aim_origin(eye, &far);
+    CHECK(o.x == eye.x);
+    o = aim_origin(eye, nullptr);
+    CHECK(o.z == eye.z);
+}
+
 static void camera_quaternion() {
     const float pi = 3.14159265f;
     auto a = camera_angles({0.841f, -0.067f, -0.042f, 0.536f});
@@ -204,6 +224,7 @@ static void camera_quaternion() {
 
 int main() {
     camera_quaternion();
+    lock_hold();
     aiming();
     payloads();
     attack_phase();

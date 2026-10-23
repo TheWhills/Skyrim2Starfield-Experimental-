@@ -2,6 +2,7 @@
 
 #include "Game.h"
 #include "Plugin.h"
+#include "Lock.h"
 
 #include "s2s/controller.h"
 
@@ -108,7 +109,17 @@ PerformInputProcessing_t* g_controls_original = nullptr;
 bool g_hiding_power_key = false;                  // a press was hidden: hide its repeats and release too
 
 bool HideFromControls(Plugin& plugin, const RE::InputEvent* e) {
-    if (e->eventType != RE::InputEvent::EventType::kButton) return false;
+    // While locked on, mouse look and the right stick are kept from the controls so they do not pull the camera off
+    // the target between the lock's writes (owner's run 2026-10-23: the view slid away and back). Supported, not
+    // verified: the controls' look handler turns the third-person camera, as Skyrim's LookHandler does.
+    if (e->eventType != RE::InputEvent::EventType::kButton) {
+        if (!Lock::Get().BlocksLook()) return false;
+        const auto type = static_cast<std::uint32_t>(e->eventType);
+        const auto stick = e->eventType == RE::InputEvent::EventType::kThumbstick
+                               ? *reinterpret_cast<const std::int32_t*>(reinterpret_cast<const std::byte*>(e) + kStickId)
+                               : 0;
+        return combat::hides_look_event(type, stick);
+    }
     const auto* b = static_cast<const RE::ButtonEvent*>(e);
     const auto key = KeyCode(b);
     if (key == 0 || key != plugin.PowerKey()) return false;
@@ -132,7 +143,7 @@ void ControlsInput(RE::BSInputEventReceiver* a_this, const RE::InputEvent* a_hea
             } else {
                 head = e->next;
             }
-            plugin.NoteHiddenKey();
+            if (e->eventType == RE::InputEvent::EventType::kButton) plugin.NoteHiddenKey();
         } else {
             prev = const_cast<RE::InputEvent*>(e);
         }

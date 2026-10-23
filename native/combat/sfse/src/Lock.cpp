@@ -341,7 +341,28 @@ void Lock::Update() {
         return;
     }
     const combat::Angles look = Look();
-    const auto eye = V(player->data.location, s_.eye_height);
+    auto eye = V(player->data.location, s_.eye_height);
+    if (s_.aim_from_camera) {
+        // The camera root's world position (NiAVObject world.translate, +0xB0 in CommonLibSF's layout). The crosshair
+        // is on the camera's forward ray, so aiming from the player's eye leaves it beside the target (owner's run
+        // 2026-10-23: "near the NPC, not on it"). Last frame's position; used only when within 10 m of the player.
+        std::optional<combat::Vec3> cam_pos;
+        auto* cam = RE::PlayerCamera::GetSingleton();
+        auto* root = cam ? cam->cameraRoot.get() : nullptr;
+        if (root && (root == camera_root_ || game::Readable(root, 0xBC))) {
+            camera_root_ = root;
+            const auto* t = reinterpret_cast<const float*>(reinterpret_cast<const std::byte*>(root) + 0xB0);
+            cam_pos = combat::Vec3{t[0], t[1], t[2]};
+        }
+        const auto from = combat::aim_origin(eye, cam_pos ? &*cam_pos : nullptr);
+        if (!origin_logged_ && cam_pos) {
+            origin_logged_ = true;
+            REX::INFO("lock-on: camera at ({:.2f}, {:.2f}, {:.2f}), player eye at ({:.2f}, {:.2f}, {:.2f}): aiming from the {}",
+                      cam_pos->x, cam_pos->y, cam_pos->z, eye.x, eye.y, eye.z,
+                      from.x == cam_pos->x ? "camera" : "player's eye (camera too far away)");
+        }
+        eye = from;
+    }
     // Validity (alive, in range, handle still good) every 0.25 s; between checks only the target's position is read
     // (owner's runs: ~1 ms per frame when everything was re-resolved and re-checked each frame).
     combat::Vec3 target_pos{};
@@ -381,7 +402,8 @@ void Lock::Update() {
         REX::INFO("camera write check: wrote yaw {:.1f} pitch {:.1f} deg last frame, now yaw {:.1f} pitch {:.1f} deg",
                   wrote_->yaw * 57.2958f, wrote_->pitch * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f);
     }
-    const auto next = combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
+    const auto next = s_.hard_lock ? combat::steer(look, want, dt, 1e6f, 1e6f)
+                                   : combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
     if (s_.steer_camera && !SetCameraAngles(next) && !camera_warned_) {
         camera_warned_ = true;
         REX::WARN("lock-on: the third-person camera's rotation is not available (not in third person, or the layout "

@@ -174,6 +174,14 @@ Angles steer(Angles cur, Angles want, float dt, float yaw_rate = 8.0f, float pit
 // (up +), radians. Used as the "screen" position for target switching when no projection is available.
 void view_offset(Angles look, Vec3 from, Vec3 to, float& x, float& y);
 
+// Input events the game's controls should not see while the lock holds the camera: mouse moves (InputEvent type 1)
+// and any stick but the left one (thumbstick type 4; the left stick, id 0x0B, still moves the player).
+bool hides_look_event(std::uint32_t event_type, std::int32_t stick_id);
+
+// Where the view is aimed from: the camera's own position when it is near the player (third person sits behind and
+// beside the player, and the crosshair is on the camera's ray), otherwise the player's eye.
+Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset = 10.0f);
+
 // ------------------------------------------------------------------------------------------------ input table
 // "key -> action" configuration (Key Utils / Stances style): lines "Name = key|action|argument" in an INI section.
 // Actions: "event" (send a graph event), "int" / "bool" / "float" (set a graph variable), "keyword" (toggle an

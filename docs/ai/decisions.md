@@ -299,3 +299,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   "camera write check" (what was written last frame vs what the camera holds now; 10 per lock) and the camera probe
   back on for 8 samples, over 0x400 bytes without the angle-size filter, to tell "the write is overwritten each frame"
   (then the real source is elsewhere) from "the write holds".
+- 2026-10-23 lock-on holds (verified partly: owner's run after the yaw-float write locked onto the NPC looked at, but
+  loosely: mouse moves pulled the view off and it slid back, and the crosshair sat beside the NPC). Changes:
+  bHardLock (default 1) sets the view to the target's angles every frame instead of easing at fYawRate/fPitchRate;
+  bBlockLook (default 1) hides mouse moves and the right stick from PlayerControls while locked (supported, not
+  verified: the controls' look handler is what turns the camera); bAimFromCamera (default 1) aims from the camera
+  root's world position (+0xB0) instead of the player's eye, since the crosshair is on the camera's ray. The target is
+  re-validated every 0.25 s, its position read each frame.

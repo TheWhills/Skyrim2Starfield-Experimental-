@@ -19,6 +19,9 @@ struct LockSettings {
     // Turn the player's heading toward the target. Off by default: owner, 2026-10-23 - the player turned but Starfield's
     // third-person camera did not follow (its own yaw / pitch are not mapped yet; see CameraProbe).
     bool steer_player = false;
+    bool hard_lock = true;          // hold the view on the target every frame (TDM-like) instead of easing toward it
+    bool block_look = true;         // mouse look and the right stick do not reach the game while locked
+    bool aim_from_camera = true;    // aim from the camera's position (where the crosshair ray starts)
     bool steer_camera = true;       // turn the third-person camera toward the target (ThirdPersonState rotation)
     int camera_samples = 0;         // while locked: camera rotation + third-person state floats, every 0.5 s, N times
     float pitch_sign = 1.0f;        // -1 if the first run shows the camera tilting the wrong way
@@ -35,6 +38,7 @@ public:
     void Switch(int dx, int dy);
     void Update();                  // once per frame
     bool active() const { return locked_.has_value(); }
+    bool BlocksLook() const { return locked_.has_value() && s_.block_look; }
 
 private:
     // every nearby actor (key presses), or with `only` just the actor behind that handle (each frame while locked:
@@ -69,6 +73,8 @@ private:
     std::optional<combat::Angles> wrote_;
     // the target itself between validations (every kRecheck s through its handle): position read each frame
     RE::NiPointer<RE::Actor> target_ref_;
+    const void* camera_root_ = nullptr;       // checked once readable; re-checked when the camera's root changes
+    bool origin_logged_ = false;
     double target_checked_at_ = -10.0;
     double next_write_check_ = 0.0;
     int write_checks_ = 0;
