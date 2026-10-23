@@ -55,6 +55,9 @@ struct ControllerConfig {
     double buffer_time = 0.35, power_hold = 0.30, charge_hold = 0.80;
     std::uint32_t attack_key = 256;                            // left mouse button
     std::uint32_t dodge_key = 56;                              // left Alt (TK Dodge's default)
+    // Starfield's own power attack key (the "Melee" control, V by default: a separate key, like BFCO's keyboard
+    // mode, not Skyrim's long hold). 0 = none.
+    std::uint32_t power_key = 47;
     std::array<std::uint32_t, 4> move_keys{17, 31, 30, 32};    // forward W, back S, left A, right D
     DodgeConfig dodge{false, Direction::Back, 0.15f, 0.0f, true};   // no stamina cost until a Starfield value is chosen
     double dodge_iframes = 0.3;                                // seconds of invulnerability from the dodge press
@@ -82,7 +85,7 @@ struct ControllerConfig {
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
     // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
     std::string block_hit_variable = "iS2SBlockHitType";
-    // A power attack (held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
+    // A power attack (power_key, or a held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
     // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
     // after the combo instead (owner, 2026-10-23); the stance packs add combo -> power states that need the event.
     bool power_in_combo = true;

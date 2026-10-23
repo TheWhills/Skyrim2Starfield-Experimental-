@@ -458,6 +458,16 @@ static void power_in_combo() {
     cs = ctl.on_key(256, false, 1.65, s);
     CHECK(count(cs, Command::Kind::SendEvent) == 0 && count(cs, Command::Kind::Log) == 1);
     CHECK(!parse_config("[Combat]\nbPowerInCombo = 0\n").power_in_combo);
+    // Starfield's power attack key (V = 47): the game's own when standing, ours during a combo
+    Controller v;
+    CHECK(v.config().power_key == 47);
+    CHECK(count(v.on_key(47, true, 0.0, s), Command::Kind::SendEvent) == 0);
+    v.on_anim_event("preHitFrame", "", 1.0);
+    cs = v.on_key(47, true, 1.1, s);                                      // (first() points into cs: keep it)
+    e = first(cs, Command::Kind::SendEvent);
+    CHECK(e && e->name == "MeleeAttackPowerStart");
+    CHECK(v.on_key(47, false, 1.2, s).empty());                            // release: nothing
+    CHECK(parse_config("[Combat]\nuPowerAttackKey = 33\n").power_key == 33);
 }
 
 int main() {

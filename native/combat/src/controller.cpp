@@ -252,6 +252,7 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         else if (k == "fchargehold") ok = read_double(v, c.charge_hold);
         else if (k == "uattackkey") ok = read_uint(v, c.attack_key);
         else if (k == "udodgekey") ok = read_uint(v, c.dodge_key);
+        else if (k == "upowerattackkey") ok = read_uint(v, c.power_key);
         else if (k == "umoveforwardkey") ok = read_uint(v, c.move_keys[0]);
         else if (k == "umovebackkey") ok = read_uint(v, c.move_keys[1]);
         else if (k == "umoveleftkey") ok = read_uint(v, c.move_keys[2]);
@@ -378,6 +379,9 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
         }
     }
     if (key == cfg_.dodge_key && down) dodge(t, s, out);
+    // Starfield's power attack key during a combo: the game itself only starts a power attack from standing
+    if (cfg_.power_key && key == cfg_.power_key && down && cfg_.power_in_combo && phase_.phase() != AttackPhase::None)
+        out.push_back(event(cfg_.power_event));
 
     if (!down) return out;
     for (const auto& b : bindings_) {
