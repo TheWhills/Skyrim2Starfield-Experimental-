@@ -20,7 +20,7 @@ struct LockSettings {
     // third-person camera did not follow (its own yaw / pitch are not mapped yet; see CameraProbe).
     bool steer_player = false;
     bool steer_camera = true;       // turn the third-person camera toward the target (ThirdPersonState rotation)
-    int camera_samples = 8;         // while locked: camera rotation + third-person state floats, every 0.5 s, N times
+    int camera_samples = 0;         // while locked: camera rotation + third-person state floats, every 0.5 s, N times
     float pitch_sign = 1.0f;        // -1 if the first run shows the camera tilting the wrong way
     bool hostile_only = true;
     std::string lock_variable = "TDM_TargetLock";   // graph bool for movesets' TDM conditions ("" = none)
@@ -67,6 +67,9 @@ private:
     double camera_checked_at_ = -10.0;
     // did the last write survive to the next frame? (logged every 0.5 s, 10 times per lock)
     std::optional<combat::Angles> wrote_;
+    // the target itself between validations (every kRecheck s through its handle): position read each frame
+    RE::NiPointer<RE::Actor> target_ref_;
+    double target_checked_at_ = -10.0;
     double next_write_check_ = 0.0;
     int write_checks_ = 0;
     bool camera_warned_ = false;

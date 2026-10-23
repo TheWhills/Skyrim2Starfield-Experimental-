@@ -73,7 +73,9 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
     constexpr std::uint32_t kMaxArray = 512;
     const auto base = reinterpret_cast<std::uintptr_t>(lists);
     if (only) {
-        if (auto* a = resolve(*only)) add(a);
+        auto* a = resolve(*only);
+        target_ref_ = RE::NiPointer<RE::Actor>(a);
+        if (a) add(a);
         return out;
     }
     if (lists && game::Readable(lists, 0x300)) {
@@ -276,6 +278,7 @@ void Lock::CameraProbe(double now, float player_yaw) {
 
 namespace {
 constexpr std::ptrdiff_t kThirdPersonRotation = 0x170;      // owner's camera probe, Starfield 1.16.244
+constexpr std::ptrdiff_t kCameraYaw0 = 0x22C;                // three copies of the camera's yaw (radians)
 
 }  // namespace
 
@@ -288,7 +291,7 @@ std::byte* Lock::ThirdPerson() {
         camera_state_ = nullptr;
         if (!game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) return nullptr;
         auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
-        if (!state || !game::Readable(state, kThirdPersonRotation + 16)) return nullptr;
+        if (!state || !game::Readable(state, kCameraYaw0 + 12)) return nullptr;
         if (*reinterpret_cast<std::uintptr_t*>(state) != RE::VTABLE::ThirdPersonState[0].address()) return nullptr;
         camera_state_ = state;
     }
@@ -310,6 +313,12 @@ bool Lock::SetCameraAngles(combat::Angles a) {
     if (!state) return false;
     const auto q = combat::camera_quat(a);
     std::memcpy(state + kThirdPersonRotation, &q, sizeof(q));
+    // The camera's yaw is kept as radians (clockwise from +Y, 0..2 pi) at +0x22C / +0x230 / +0x234 and the quaternion is
+    // rebuilt from it (owner's write-check run 2026-10-23: a quaternion written alone was replaced next frame; these
+    // three floats matched its yaw to 0.5 deg in every sample).
+    float yaw = std::fmod(a.yaw, 6.2831853f);
+    if (yaw < 0) yaw += 6.2831853f;
+    for (std::ptrdiff_t off : {kCameraYaw0, kCameraYaw0 + 4, kCameraYaw0 + 8}) std::memcpy(state + off, &yaw, 4);
     wrote_ = a;
     return true;
 }
@@ -333,27 +342,35 @@ void Lock::Update() {
     }
     const combat::Angles look = Look();
     const auto eye = V(player->data.location, s_.eye_height);
-    const auto h = handle_of_.find(*locked_);
-    if (h == handle_of_.end()) {
-        core_.release();
-        SetLocked(std::nullopt, "target has no handle");
-        return;
+    // Validity (alive, in range, handle still good) every 0.25 s; between checks only the target's position is read
+    // (owner's runs: ~1 ms per frame when everything was re-resolved and re-checked each frame).
+    combat::Vec3 target_pos{};
+    if (now - target_checked_at_ >= 0.25 || !target_ref_) {
+        target_checked_at_ = now;
+        const auto h = handle_of_.find(*locked_);
+        if (h == handle_of_.end()) {
+            core_.release();
+            SetLocked(std::nullopt, "target has no handle");
+            return;
+        }
+        auto cands = Gather(look, eye, h->second);
+        if (!core_.update(cands, eye, now)) {
+            target_ref_.reset();
+            SetLocked(std::nullopt, "target lost (dead, too far or gone)");
+            return;
+        }
+        if (core_.target() != locked_) SetLocked(core_.target(), "core");
+        const auto it = std::find_if(cands.begin(), cands.end(), [&](const auto& c) { return c.id == *locked_; });
+        if (it == cands.end() || !target_ref_) return;
     }
-    auto cands = Gather(look, eye, h->second);
-    if (!core_.update(cands, eye, now)) {
-        SetLocked(std::nullopt, "target lost (dead, too far or gone)");
-        return;
-    }
-    if (core_.target() != locked_) SetLocked(core_.target(), "core");
-    const auto it = std::find_if(cands.begin(), cands.end(), [&](const auto& c) { return c.id == *locked_; });
-    if (it == cands.end()) return;
-    auto want = combat::aim_angles(eye, it->position);
+    target_pos = V(target_ref_->data.location, s_.target_height);
+    const auto* it = &target_pos;
+    auto want = combat::aim_angles(eye, target_pos);
     if (now >= next_report_ && logged_ < s_.log_targets) {      // to check the steering on the first runs
         next_report_ = now + 2.0;
         ++logged_;
         REX::INFO("lock-on: following {:08X}: distance {:.1f}, yaw error {:.0f} deg, pitch error {:.0f} deg", *locked_,
-                  std::sqrt((it->position.x - eye.x) * (it->position.x - eye.x) +
-                            (it->position.y - eye.y) * (it->position.y - eye.y)),
+                  std::sqrt((it->x - eye.x) * (it->x - eye.x) + (it->y - eye.y) * (it->y - eye.y)),
                   combat::wrap_pi(want.yaw - look.yaw) * 57.2958f, (want.pitch - look.pitch) * 57.2958f);
     }
     if (!s_.steer_pitch) want.pitch = look.pitch;
