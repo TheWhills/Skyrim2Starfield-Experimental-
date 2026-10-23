@@ -62,7 +62,9 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         std::memcpy(&h, &raw, sizeof(raw));
         auto ptr = h.get();
         auto* a = ptr.get();
-        if (!a || !game::Readable(a, sizeof(RE::Actor))) return nullptr;
+        // the handle manager only hands out live objects; the memory check (a VirtualQuery) is for the scan, not for
+        // the per-frame target (owner's run: ~1 ms per frame in such checks)
+        if (!a || (!only && !game::Readable(a, sizeof(RE::Actor)))) return nullptr;
         return static_cast<RE::TESObjectREFR*>(a)->IsActor() ? a : nullptr;
     };
     // Owner's run 2026-10-23: four arrays - +070 with 1238 handles (every actor the game knows: resolving them all froze
@@ -165,7 +167,11 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
 
 void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
     const bool was = locked_.has_value();
-    if (id && !was) camera_last_.clear();                        // a full dump at the start of each lock
+    if (id && !was) {
+        camera_last_.clear();                                       // a full dump at the start of each lock
+        camera_logged_ = write_checks_ = 0;
+        wrote_.reset();
+    }
     locked_ = id;
     if (logged_ < s_.log_targets) {
         ++logged_;
@@ -251,13 +257,13 @@ void Lock::CameraProbe(double now, float player_yaw) {
     const bool is_third = vt && vt == RE::VTABLE::ThirdPersonState[0].address();
     const bool current = state && cam->currentState == state;
     std::string floats;
-    constexpr std::size_t kSpan = 0x200;
+    constexpr std::size_t kSpan = 0x400;
     if (state && game::Readable(state, kSpan)) {
         std::vector<float> now_f(kSpan / 4);
         std::memcpy(now_f.data(), state, kSpan);
         for (std::size_t i = 2; i < now_f.size(); ++i) {
             const float v = now_f[i];
-            if (!std::isfinite(v) || std::fabs(v) > 10.0f || (v != 0.0f && std::fabs(v) < 1e-4f)) continue;
+            if (!std::isfinite(v) || std::fabs(v) > 1e6f || (v != 0.0f && std::fabs(v) < 1e-4f)) continue;
             if (!camera_last_.empty() && std::fabs(camera_last_[i] - v) < 0.005f) continue;
             floats += std::format(" +{:03X}={:.3f}", i * 4, v);
         }
@@ -271,18 +277,26 @@ void Lock::CameraProbe(double now, float player_yaw) {
 namespace {
 constexpr std::ptrdiff_t kThirdPersonRotation = 0x170;      // owner's camera probe, Starfield 1.16.244
 
-std::byte* CurrentThirdPerson() {
-    auto* cam = RE::PlayerCamera::GetSingleton();
-    if (!cam || !game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) return nullptr;
-    auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
-    if (!state || cam->currentState != state || !game::Readable(state, kThirdPersonRotation + 16)) return nullptr;
-    if (*reinterpret_cast<std::uintptr_t*>(state) != RE::VTABLE::ThirdPersonState[0].address()) return nullptr;
-    return state;
-}
 }  // namespace
 
-std::optional<combat::Angles> Lock::CameraAngles() const {
-    auto* state = CurrentThirdPerson();
+std::byte* Lock::ThirdPerson() {
+    auto* cam = RE::PlayerCamera::GetSingleton();
+    if (!cam) return nullptr;
+    const double now = game::Now();
+    if (now - camera_checked_at_ > 1.0) {
+        camera_checked_at_ = now;
+        camera_state_ = nullptr;
+        if (!game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) return nullptr;
+        auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
+        if (!state || !game::Readable(state, kThirdPersonRotation + 16)) return nullptr;
+        if (*reinterpret_cast<std::uintptr_t*>(state) != RE::VTABLE::ThirdPersonState[0].address()) return nullptr;
+        camera_state_ = state;
+    }
+    return camera_state_ && cam->currentState == camera_state_ ? camera_state_ : nullptr;
+}
+
+std::optional<combat::Angles> Lock::CameraAngles() {
+    auto* state = ThirdPerson();
     if (!state) return std::nullopt;
     combat::Quat q;
     std::memcpy(&q, state + kThirdPersonRotation, sizeof(q));
@@ -291,15 +305,16 @@ std::optional<combat::Angles> Lock::CameraAngles() const {
     return combat::camera_angles(q);
 }
 
-bool Lock::SetCameraAngles(combat::Angles a) const {
-    auto* state = CurrentThirdPerson();
-    if (!state || !CameraAngles()) return false;
+bool Lock::SetCameraAngles(combat::Angles a) {
+    auto* state = ThirdPerson();
+    if (!state) return false;
     const auto q = combat::camera_quat(a);
     std::memcpy(state + kThirdPersonRotation, &q, sizeof(q));
+    wrote_ = a;
     return true;
 }
 
-combat::Angles Lock::Look() const {
+combat::Angles Lock::Look() {
     if (auto a = CameraAngles()) return *a;
     auto* player = game::Player();
     return player ? combat::Angles{player->data.angle.x * s_.pitch_sign, player->data.angle.z} : combat::Angles{};
@@ -343,6 +358,12 @@ void Lock::Update() {
     }
     if (!s_.steer_pitch) want.pitch = look.pitch;
     CameraProbe(now, player->data.angle.z);
+    if (wrote_ && now >= next_write_check_ && write_checks_ < 10) {    // look = this frame's camera, after the game ran
+        next_write_check_ = now + 0.5;
+        ++write_checks_;
+        REX::INFO("camera write check: wrote yaw {:.1f} pitch {:.1f} deg last frame, now yaw {:.1f} pitch {:.1f} deg",
+                  wrote_->yaw * 57.2958f, wrote_->pitch * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f);
+    }
     const auto next = combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
     if (s_.steer_camera && !SetCameraAngles(next) && !camera_warned_) {
         camera_warned_ = true;

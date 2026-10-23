@@ -293,3 +293,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   stayed behind (the camera turns on its own). Core camera_angles / camera_quat (tests from the logged values).
 - Change: while locked the plugin steers that quaternion toward the target (yaw rate 8, pitch rate 2, mouse adds on
   top); picking (crosshair, score) uses the camera's view; bSteerCamera = 1, bSteerPlayer = 0, probe off by default.
+- Owner's run (camera steering): FPS dropped and the camera did not stay on the target (yaw error 2-41 deg). Frame
+  time ~1.1 ms while locked: memory checks (VirtualQuery) on every frame. Change: ThirdPersonState checked at most once
+  a second, the per-frame target resolved without a memory check (handles only resolve to live objects). Diagnostic:
+  "camera write check" (what was written last frame vs what the camera holds now; 10 per lock) and the camera probe
+  back on for 8 samples, over 0x400 bytes without the angle-size filter, to tell "the write is overwritten each frame"
+  (then the real source is elsewhere) from "the write holds".
