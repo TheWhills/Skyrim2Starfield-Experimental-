@@ -95,8 +95,14 @@ def main(argv=None):
     ap.add_argument("--starfield-data")
     ap.add_argument("--tag", action="append", default=[], metavar="DIRECTION=TAG",
                     help="play an existing clip tag for a direction instead of its converted dodge (diagnostics)")
+    ap.add_argument("--clip-tag", action="append", default=[], metavar="DIRECTION=TAG",
+                    help="tag a converted dodge clip TAG instead of S2S_Dodge<Direction> (e.g. a tag name the game "
+                         "already has)")
     a, rest = ap.parse_known_args(argv)
     given = dict(t.split("=", 1) for t in a.tag)
+    clip_tags = dict(t.split("=", 1) for t in a.clip_tag)
+    if any(d not in CLIPS or d in given for d in clip_tags):
+        sys.exit("--clip-tag wants DIRECTION=TAG for a converted direction (not one given --tag)")
     if any(d not in CLIPS for d in given):
         sys.exit(f"--tag wants DIRECTION=TAG with DIRECTION one of {', '.join(CLIPS)}")
     pack = os.path.abspath(a.pack)
@@ -109,7 +115,7 @@ def main(argv=None):
         if d in given:
             continue
         path = find_clip(a.tk, clip)
-        specs += ["--replace", f"{path}::{template}::S2S_Dodge{d}"]
+        specs += ["--replace", f"{path}::{template}::{clip_tags.get(d) or f'S2S_Dodge{d}'}"]
         motions += ["--motion", f"{os.path.splitext(clip)[0]}={motion}:{MOTION_IDS[d]}"]
     base = ["--weapon-in-hand"] + (["--starfield-data", a.starfield_data] if a.starfield_data else [])
     files = names(d for d in CLIPS if d not in given)
@@ -122,7 +128,7 @@ def main(argv=None):
             if d in given:
                 continue
             for ext in (".af", ".afx"):
-                fn = f"S2S_Dodge{d}{ext}"
+                fn = f"{clip_tags.get(d) or f'S2S_Dodge{d}'}{ext}"
                 if not os.path.isfile(os.path.join(src, fn)):
                     print(f"{fn} was not written")
                     rc |= 1
@@ -138,7 +144,7 @@ def main(argv=None):
             shutil.copy(os.path.join(tmp, "report.json"), os.path.join(pack, "dodge_report.json"))
     graph = os.path.join(pack, *dodge_graph.ATTACKS_REL)
     rc |= dodge_graph.main(["--attacks-graph", graph, "--player-graph", a.player_graph, "--out", pack]
-                           + [x for d, t in given.items() for x in ("--tag", f"{d}={t}")])
+                           + [x for d, t in list(given.items()) + list(clip_tags.items()) for x in ("--tag", f"{d}={t}")])
     return rc
 
 

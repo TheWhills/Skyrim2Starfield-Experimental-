@@ -246,3 +246,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - The dodge failing with unshadowed names too points away from the clip names. v12 (diagnostic): Forward plays the
   pool tag MeleeAttack_D, Back the standing power MeleeAttackPower_A (both play in combos), Left / Right the converted
   dodges. If Forward / Back also end at 0.1 s, the dodge states (graph) are at fault.
+- Owner's run (v12): standing Alt (Back, playing MeleeAttackPower_A in the dodge state) plays the power attack in full
+  (verified): the dodge states, their events and the Player_Melee switch work; what fails is finding our clips.
+- Owner shared Dodge Framework SFSE (Nexus 16111, read for approach only): it moves the player from code (dodge speed,
+  duration, end speed) and plays existing idles by console (player.playidle Human_Root_Gravity_Off / On) - no new
+  animation files. A fallback if converted clips cannot be found.
+- Hypothesis now: clip tags, like events, must be names the game already knows (every working hosted tag is a vanilla
+  name: MeleeAttack_D / _E / 01-04 / Power01-02; every failing one ours: S2S_Dodge*). v13: Left's converted clip is
+  tagged MeleeAttack05 (vanilla NPC tag, unused by the packs), Right keeps S2S_DodgeRight as the control.
