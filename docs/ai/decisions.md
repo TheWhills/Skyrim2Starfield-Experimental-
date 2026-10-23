@@ -152,3 +152,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   zeroing is removed), UI and other receivers still see them.
 - Status: supported (Fallout 4's PlayerControls is a BSInputEventReceiver), unresolved until the owner's run. Log lines:
   "player controls: input receiver hooked ..." and "power attack key kept from the game's controls".
+
+## 2026-10-23 — Combo power attacks use a plugin-only graph event (S2S_ComboPower)
+- Owner's run with the PlayerControls hook: the hook went in ("PlayerControls::Manager vtable 6 of 9") and the V
+  press was kept from the game's controls on every mid-combo press (verified, log), yet the standing power attack
+  still started when the combo power attack's clip ended: an AttackStart with no key press and no plugin command,
+  1.4-1.7 s after the combo power started, with no AttackEnd in between.
+- The only graph path to that clip is top-level None -> MeleeAttackPower_A on MeleeAttackPowerStart, so the game
+  sends that event when the combo ends. Supported hypothesis: the game queues it because the plugin's own
+  MeleeAttackPowerStart reached the graph (not because of the key).
+- Change: the stance packs' combo -> power transitions now listen to S2S_ComboPower (bfco_combo power["event"],
+  stance_pack.power_routing), and the plugin sends sComboPowerEvent (default S2S_ComboPower) for mid-combo power
+  attacks. The game's own MeleeAttackPowerStart (standing V) is unchanged. Older packs: sComboPowerEvent =
+  MeleeAttackPowerStart. Status: unresolved until the owner's run.

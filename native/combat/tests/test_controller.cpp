@@ -452,7 +452,7 @@ static void power_in_combo() {
     ctl.on_key(256, true, 1.0, s);
     auto cs = ctl.on_key(256, false, 1.4, s);
     auto e = first(cs, Command::Kind::SendEvent);
-    CHECK(e && e->name == "MeleeAttackPowerStart" && cs.size() == 1);
+    CHECK(e && e->name == "S2S_ComboPower" && cs.size() == 1);
     CHECK(count(ctl.on_anim_event("BFCO_NextPowerWinStart", "", 1.5), Command::Kind::SendEvent) == 0);   // not again
     ctl.on_key(256, true, 1.6, s);                                        // a quick press still buffers
     cs = ctl.on_key(256, false, 1.65, s);
@@ -465,7 +465,7 @@ static void power_in_combo() {
     v.on_anim_event("preHitFrame", "", 1.0);
     cs = v.on_key(47, true, 1.1, s);                                      // (first() points into cs: keep it)
     e = first(cs, Command::Kind::SendEvent);
-    CHECK(e && e->name == "MeleeAttackPowerStart");
+    CHECK(e && e->name == "S2S_ComboPower");
     CHECK(v.last_key_consumed());                                          // the game must not see it
     CHECK(v.on_key(47, false, 1.2, s).empty());                            // release: nothing sent,
     CHECK(v.last_key_consumed());                                          // and hidden too
@@ -477,6 +477,8 @@ static void power_in_combo() {
     v.on_key(47, false, 3.1, s);
     CHECK(!v.last_key_consumed());
     CHECK(parse_config("[Combat]\nuPowerAttackKey = 33\n").power_key == 33);
+    CHECK(parse_config("[Combat]\nsComboPowerEvent = MeleeAttackPowerStart\n").combo_power_event ==
+          "MeleeAttackPowerStart");
 }
 
 // A fake image laid out like MSVC x64 RTTI: class Manager : Sink (offset 0), BSInputEventReceiver (offset 0x10).

@@ -136,7 +136,8 @@ def power_routing(n: int, pslots: dict) -> dict:
     """bfco_combo.build's power argument for the shared graph: ring slot j -> power slot j; slots without a power slot
     of their own -> a power state on the vanilla tag (MeleeAttackPower_A: each stance's power attack 1), so every
     slot has its own power transition and the vanilla combo -> power transition can be switched off (inner_only).
-    After power slot j a normal press goes to ring slot j + 1 and a power press to power slot j + 1 (wrapping)."""
+    After power slot j a normal press goes to ring slot j + 1 and a power press to power slot j + 1 (wrapping).
+    The combo's power transitions listen to S2S_ComboPower (the plugin's sComboPowerEvent), not the game's own event."""
     m = len(pslots)
     if not m:
         return None
@@ -148,7 +149,8 @@ def power_routing(n: int, pslots: dict) -> dict:
     k = len(tags)
     return {"tags": tags, "attack_power": attack_power,
             "power_attack": {p: (p if p <= m else n) % n + 1 for p in tags},
-            "power_power": {p: p % k + 1 for p in tags}, "inner_only": True}
+            "power_power": {p: p % k + 1 for p in tags}, "inner_only": True,
+            "event": bfco_combo.COMBO_POWER_EVENT}
 
 
 def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:

@@ -328,6 +328,7 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
                 }
         } else if (k == "sattackevent") c.attack_event = v;
         else if (k == "spowerattackevent") c.power_event = v;
+        else if (k == "scombopowerevent") c.combo_power_event = v;
         else if (k == "spluginevent" || k == "splugineventhost") c.plugin_event_host = v;
         else if (k == "sblockhitvariable") c.block_hit_variable = v;
         else if (k == "bstancerepeatneutral") {
@@ -425,7 +426,7 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
             AttackKind kind = buffer_.release(t);
             if (kind == AttackKind::Power && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
                 buffer_.clear();
-                out.push_back(event(cfg_.power_event));
+                out.push_back(event(cfg_.combo_power_event));
                 return out;
             }
             // The game handles a press itself when no attack runs or the matching window is open: only a press in
@@ -439,7 +440,7 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
     if (key == cfg_.dodge_key && down) dodge(t, s, out);
     // Starfield's power attack key during a combo: the game itself only starts a power attack from standing
     if (cfg_.power_key && key == cfg_.power_key && down && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
-        out.push_back(event(cfg_.power_event));
+        out.push_back(event(cfg_.combo_power_event));
         consumed_last_ = power_key_consumed_ = true;
     }
 

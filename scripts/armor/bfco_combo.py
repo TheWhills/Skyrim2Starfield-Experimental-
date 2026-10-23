@@ -30,6 +30,7 @@ def tag(k: int, tags=None) -> str:
 POWER_EVENT = "MeleeAttackPowerStart"          # vanilla: None / PowerB -> MeleeAttackPower_A on this event
 POWER_TOP = "MeleeAttackPower_A"
 OUTER_OFF = "S2S_ComboPowerInside"              # an event nothing sends
+COMBO_POWER_EVENT = "S2S_ComboPower"            # the plugin's mid-combo power attack (power["event"])
 
 
 def build(raw: bytes, routing: dict, tags=None, power=None):
@@ -41,6 +42,10 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
     MeleeAttackPowerStart and leaving to the next normal attack on MeleeAttackStart; targets without a tag go to the
     first tagged power attack. The top-level vanilla power attack (the power attack from standing) also gets
     MeleeAttackStart -> the combo, so a normal press after it continues the chain.
+    power["event"] (default MeleeAttackPowerStart): the event of the combo's own power transitions. The stance packs
+    use COMBO_POWER_EVENT, which only the plugin sends: with the game's own MeleeAttackPowerStart the game still played
+    its standing power attack when the combo ended, even with the key kept from its controls (owner, 2026-10-23:
+    the graph event itself seems to be what the game queues).
     power["inner_only"]: every combo state has its own power transition, so the vanilla top-level transition
     combo -> MeleeAttackPower_A on MeleeAttackPowerStart is switched off (its event renamed to OUTER_OFF): it caught
     the power press before the combo's own states (owner, 2026-10-23: every mid-combo power attack played
@@ -68,6 +73,7 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
             added.append(f"{tag(k, tags)} -> {tag(n, tags)}")
     if power and power.get("tags"):
         ptags = power["tags"]
+        pev = power.get("event") or POWER_EVENT
         first = min(ptags)
         pidx = {}
         for p in sorted(ptags):
@@ -77,7 +83,7 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
         to_p = lambda p: p if p in pidx else first                     # noqa: E731
         to_a = lambda k: k if k in idx else min(idx)                   # noqa: E731
         for k, p in sorted(power.get("attack_power", {}).items()):
-            if k in idx and agx_edit.add_transition(root, g, idx[k], pidx[to_p(p)], POWER_EVENT, blend=0.15,
+            if k in idx and agx_edit.add_transition(root, g, idx[k], pidx[to_p(p)], pev, blend=0.15,
                                                     template=tpl):
                 added.append(f"{tag(k, tags)} =power=> {ptags[to_p(p)]}")
         for p, k in sorted(power.get("power_attack", {}).items()):
@@ -85,7 +91,7 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
                                                      template=tpl):
                 added.append(f"{ptags[p]} -> {tag(to_a(k), tags)}")
         for p, q in sorted(power.get("power_power", {}).items()):
-            if p in pidx and agx_edit.add_transition(root, g, pidx[p], pidx[to_p(q)], POWER_EVENT, blend=0.15,
+            if p in pidx and agx_edit.add_transition(root, g, pidx[p], pidx[to_p(q)], pev, blend=0.15,
                                                      template=tpl):
                 added.append(f"{ptags[p]} =power=> {ptags[to_p(q)]}")
         try:                                                            # top level: standing power attack -> combo

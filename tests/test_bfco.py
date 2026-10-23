@@ -173,6 +173,12 @@ class BfcoTests(unittest.TestCase):
         self.assertNotIn((combo, tp, "MeleeAttackPowerStart", ""), top)
         self.assertIn((idle, tp, "MeleeAttackPowerStart", ""), top)                # standing: unchanged
         self.assertIn("MeleeAttackCombo =power=> MeleeAttackPower_A switched off (1)", added)
+        inner = agx_edit.transitions(agx_edit.machine(root, "MeleeAttackCombo"))
+        self.assertTrue(any(e == "MeleeAttackPowerStart" for _s, _t, e, _c in inner))     # default event
+        out3, _ = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, dict(power, event="S2S_ComboPower"))
+        inner3 = agx_edit.transitions(agx_edit.machine(agx_edit.load(out3), "MeleeAttackCombo"))
+        self.assertTrue(any(e == "S2S_ComboPower" for _s, _t, e, _c in inner3))
+        self.assertFalse(any(e == "MeleeAttackPowerStart" for _s, _t, e, _c in inner3))
         out2, _ = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, dict(power, inner_only=False))
         self.assertIn((combo, tp, "MeleeAttackPowerStart", ""), agx_edit.transitions(agx_edit.load(out2)))
 

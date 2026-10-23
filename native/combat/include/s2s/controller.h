@@ -64,6 +64,10 @@ struct ControllerConfig {
     double annotation_iframes = 0.3;                           // TKDR_IframeDuration without its own duration
     std::string attack_event = "MeleeAttackStart";             // Starfield melee graph events (verified names)
     std::string power_event = "MeleeAttackPowerStart";
+    // The power attack started mid-combo (power_in_combo): the stance packs' combo -> power transitions listen to this
+    // plugin-only event. With the game's own MeleeAttackPowerStart the game played its standing power attack again
+    // when the combo ended, even with the key kept from its controls (owner, 2026-10-23).
+    std::string combo_power_event = "S2S_ComboPower";
     // Clip events built for the plugin: "" = Skyrim's own split (event "PIE", payload "@SGVI|..."); otherwise the
     // name of the host event that carries the whole Skyrim annotation in its payload (if the graph drops unknown
     // event names: unresolved, see the spec).
