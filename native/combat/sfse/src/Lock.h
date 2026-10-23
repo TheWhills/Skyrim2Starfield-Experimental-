@@ -16,6 +16,10 @@ struct LockSettings {
     float eye_height = 1.6f;        // the player's look point above the feet
     float yaw_rate = 8.0f, pitch_rate = 2.0f;
     bool steer_pitch = true;
+    // Turn the player's heading toward the target. Off by default: owner, 2026-10-23 - the player turned but Starfield's
+    // third-person camera did not follow (its own yaw / pitch are not mapped yet; see CameraProbe).
+    bool steer_player = false;
+    int camera_samples = 8;         // while locked: camera rotation + third-person state floats, every 0.5 s, N times
     float pitch_sign = 1.0f;        // -1 if the first run shows the camera tilting the wrong way
     bool hostile_only = true;
     std::string lock_variable = "TDM_TargetLock";   // graph bool for movesets' TDM conditions ("" = none)
@@ -47,7 +51,10 @@ private:
     // The high-process actor array's place in ProcessLists, found at run time (combat::scan_handle_arrays).
     std::vector<combat::HandleArray> actors_at_;
     std::unordered_map<std::uint32_t, std::uint32_t> handle_of_;     // FormID -> actor handle, from the last full gather
-    double next_report_ = 0.0;
+    double next_report_ = 0.0, next_camera_ = 0.0;
+    int camera_logged_ = 0;
+    std::vector<float> camera_last_;
+    void CameraProbe(double now, float player_yaw);
     double next_scan_ = 0.0;
     int scans_logged_ = 0;
 };

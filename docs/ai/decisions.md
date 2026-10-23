@@ -282,3 +282,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   gather only on the lock / switch key (it records each actor's handle); while locked only the target's handle is
   resolved each frame. A "following" line every 2 s logs distance and yaw / pitch error, to check the steering (owner:
   the camera locks onto "something").
+- Owner: the player turns toward the target but the camera does not follow - Starfield's third-person camera keeps its
+  own rotation (supported; CommonLibSF maps PlayerCamera's states array but not ThirdPersonState's fields). Change:
+  bSteerPlayer (default 0) so the player no longer spins; a camera probe logs, every 0.5 s while locked (8 times), the
+  camera root's world rotation and the third-person state's angle-like floats that changed (state checked against
+  ThirdPersonState's vtable), to find the yaw / pitch field to steer. Unresolved until the owner's run.

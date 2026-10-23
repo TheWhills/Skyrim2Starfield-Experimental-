@@ -165,6 +165,7 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
 
 void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
     const bool was = locked_.has_value();
+    if (id && !was) camera_last_.clear();                        // a full dump at the start of each lock
     locked_ = id;
     if (logged_ < s_.log_targets) {
         ++logged_;
@@ -223,6 +224,50 @@ void Lock::Switch(int dx, int dy) {
     if (auto id = core_.switch_target(Gather(look, eye), eye, dx, dy, game::Now())) SetLocked(id, "switch");
 }
 
+// Finding Starfield's third-person camera rotation (not mapped in CommonLibSF): while locked, every 0.5 s, the camera
+// root's world rotation (TESCamera +0x08 -> NiAVObject world.rotate at +0x80, 3x3 floats) and the floats of
+// PlayerCamera::cameraStates[kThirdPerson] (checked against ThirdPersonState's vtable) that look like angles; after the
+// first dump only the ones that changed. The owner turns the camera with the mouse meanwhile; the field that follows
+// the camera's yaw is the one to steer.
+void Lock::CameraProbe(double now, float player_yaw) {
+    if (camera_logged_ >= s_.camera_samples || now < next_camera_) return;
+    next_camera_ = now + 0.5;
+    ++camera_logged_;
+    auto* cam = RE::PlayerCamera::GetSingleton();
+    if (!cam || !game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) {
+        REX::INFO("camera probe: no PlayerCamera");
+        return;
+    }
+    std::string rot = "unreadable";
+    auto* root = cam->cameraRoot.get();
+    if (root && game::Readable(root, 0xC0)) {
+        float m[12];
+        std::memcpy(m, reinterpret_cast<const std::byte*>(root) + 0x80, sizeof(m));
+        rot = std::format("[{:.3f} {:.3f} {:.3f} | {:.3f} {:.3f} {:.3f} | {:.3f} {:.3f} {:.3f} | {:.3f} {:.3f} {:.3f}]",
+                          m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11]);
+    }
+    auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
+    const auto vt = state && game::Readable(state, 8) ? *reinterpret_cast<std::uintptr_t*>(state) : 0;
+    const bool is_third = vt && vt == RE::VTABLE::ThirdPersonState[0].address();
+    const bool current = state && cam->currentState == state;
+    std::string floats;
+    constexpr std::size_t kSpan = 0x200;
+    if (state && game::Readable(state, kSpan)) {
+        std::vector<float> now_f(kSpan / 4);
+        std::memcpy(now_f.data(), state, kSpan);
+        for (std::size_t i = 2; i < now_f.size(); ++i) {
+            const float v = now_f[i];
+            if (!std::isfinite(v) || std::fabs(v) > 10.0f || (v != 0.0f && std::fabs(v) < 1e-4f)) continue;
+            if (!camera_last_.empty() && std::fabs(camera_last_[i] - v) < 0.005f) continue;
+            floats += std::format(" +{:03X}={:.3f}", i * 4, v);
+        }
+        camera_last_ = std::move(now_f);
+    }
+    REX::INFO("camera probe {}: player yaw {:.3f}; root rotation {}; third-person state {} ({}, {}):{}", camera_logged_,
+              player_yaw, rot, static_cast<void*>(state), is_third ? "ThirdPersonState vtable" : "vtable not matched",
+              current ? "current" : "not current", floats.empty() ? std::string(" no change") : floats);
+}
+
 void Lock::Update() {
     const double now = game::Now();
     const float dt = last_ < 0 ? 0.0f : static_cast<float>(std::min(0.1, now - last_));
@@ -260,6 +305,8 @@ void Lock::Update() {
                   combat::wrap_pi(want.yaw - look.yaw) * 57.2958f, (want.pitch - look.pitch) * 57.2958f);
     }
     if (!s_.steer_pitch) want.pitch = look.pitch;
+    CameraProbe(now, look.yaw);
+    if (!s_.steer_player) return;
     const auto next = combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
     // UNVERIFIED: writing the angle directly is enough for the player and the camera to turn (Skyrim's lock-on mods
     // do this on PlayerCharacter). Mouse look still adds on top; a lock that fights the mouse is expected for now.
