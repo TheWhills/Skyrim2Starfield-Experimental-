@@ -47,8 +47,11 @@ class DodgePackTests(unittest.TestCase):
         n = P.names(["Left", "Right"])
         self.assertEqual(n, {"Left": P.NAMES[0], "Right": P.NAMES[1]})
         self.assertEqual(len(set(P.names(["Forward", "Back", "Left"]).values())), 3)      # unique names
+        self.assertEqual(len(set(P.names(list(P.CLIPS)).values())), 4)
         with self.assertRaises(SystemExit):
-            P.names(list(P.CLIPS))                                                     # four: not enough names
+            P.names(list(P.CLIPS) + ["ForwardLeft"])                                   # five: not enough names
+        self.assertEqual(sorted(P.TAGS), sorted(P.CLIPS))
+        self.assertFalse(any(t.startswith("S2S") for t in P.TAGS.values()))           # game tag names only
 
     def test_full_body_dodge_states(self):
         data, rep = D.build_attacks(attacks_graph())

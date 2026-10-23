@@ -254,3 +254,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - Hypothesis now: clip tags, like events, must be names the game already knows (every working hosted tag is a vanilla
   name: MeleeAttack_D / _E / 01-04 / Power01-02; every failing one ours: S2S_Dodge*). v13: Left's converted clip is
   tagged MeleeAttack05 (vanilla NPC tag, unused by the packs), Right keeps S2S_DodgeRight as the control.
+- Owner's run (v13): Alt+A (converted left dodge, tag MeleeAttack05) played a dodge-like move; Alt+D (tag
+  S2S_DodgeRight) snapped back; standing Alt and Alt+W played the power attack (diagnostic tags). Verified: clip tags,
+  like graph events, must be names the game already has.
+- v14: all four dodges on vanilla human tags the player's melee graph never plays (TAGS: MeleeAttack05, FireSingle,
+  FireAuto, FireAutoPush - NPC melee / player gun tags from the CK's AnimationOffsets), files under four zero-g-only
+  names in s2s_stances\common (NAMES; a stance FileData lists each once, in a vanilla folder after the shared one).

@@ -2,7 +2,7 @@
 
 Converts the four step dodges (StepDodgeForward / Back / Left / Right.hkx) with their root motion from TK Dodge's
 animationdatasinglefile (motion ids, default TK Dodge RE's 1656 / 1657 / 1658 / 1659 = forward 5.4 m, back 3.9 m,
-left / right 3.3 m) as clips tagged S2S_Dodge<Direction> in the shared stance folder (melee\\s2s_stances\\common,
+left / right 3.3 m) as clips (vanilla tag names: TAGS) in the shared stance folder (melee\\s2s_stances\\common,
 listed by S2SStances.esm for every stance and the neutral one; file names the Creation Kit knows: NAMES), with a
 dodge's descriptor (dodge_descriptor: no attack, slide, throw or hit events; "Allow
 Rotation" as every attack whose root motion plays), and
@@ -46,8 +46,13 @@ FOLDER = "melee/s2s_stances/" + stance_plugin.COMMON
 # owner's run 2026-10-23, v11, a sneak name in the shared folder broke the neutral combo power attack hosted on the
 # same name in onehanded\player\sword). The zero-g staggers exist only in onehanded\player, after the shared folder;
 # the dodges shadow the player's zero-g stagger with a melee weapon.
-# Only three such names are known so far: at most three directions get converted clips (names() hands them out).
-NAMES = ("ZeroG_StaggerForwardMedium", "ZeroG_StaggerBackwardMedium", "ZeroG_StaggerBackwardSmall")
+# Four such names, all zero-g only (a stance FileData of the owner's lists each in one vanilla folder after the shared
+# one): the player's zero-g stagger and lean with a melee weapon are what the dodges shadow.
+NAMES = ("ZeroG_StaggerForwardMedium", "ZeroG_StaggerBackwardMedium", "ZeroG_StaggerBackwardSmall", "ZeroG_LeanRight")
+# Clip tags, like event names, must be names the game already has: owner's run 2026-10-23 (v13) - the left dodge tagged
+# MeleeAttack05 (vanilla NPC melee tag) played, the right one tagged S2S_DodgeRight snapped back. These are vanilla
+# human tags the player's melee graph never plays (NPC melee, player gun graph; read from the CK's AnimationOffsets).
+TAGS = {"Forward": "MeleeAttack05", "Back": "FireSingle", "Left": "FireAuto", "Right": "FireAutoPush"}
 
 
 def names(directions) -> dict:
@@ -96,8 +101,7 @@ def main(argv=None):
     ap.add_argument("--tag", action="append", default=[], metavar="DIRECTION=TAG",
                     help="play an existing clip tag for a direction instead of its converted dodge (diagnostics)")
     ap.add_argument("--clip-tag", action="append", default=[], metavar="DIRECTION=TAG",
-                    help="tag a converted dodge clip TAG instead of S2S_Dodge<Direction> (e.g. a tag name the game "
-                         "already has)")
+                    help="tag a converted dodge clip TAG instead of its TAGS entry (a tag name the game already has)")
     a, rest = ap.parse_known_args(argv)
     given = dict(t.split("=", 1) for t in a.tag)
     clip_tags = dict(t.split("=", 1) for t in a.clip_tag)
@@ -115,7 +119,7 @@ def main(argv=None):
         if d in given:
             continue
         path = find_clip(a.tk, clip)
-        specs += ["--replace", f"{path}::{template}::{clip_tags.get(d) or f'S2S_Dodge{d}'}"]
+        specs += ["--replace", f"{path}::{template}::{clip_tags.get(d) or TAGS[d]}"]
         motions += ["--motion", f"{os.path.splitext(clip)[0]}={motion}:{MOTION_IDS[d]}"]
     base = ["--weapon-in-hand"] + (["--starfield-data", a.starfield_data] if a.starfield_data else [])
     files = names(d for d in CLIPS if d not in given)
@@ -128,7 +132,7 @@ def main(argv=None):
             if d in given:
                 continue
             for ext in (".af", ".afx"):
-                fn = f"{clip_tags.get(d) or f'S2S_Dodge{d}'}{ext}"
+                fn = f"{clip_tags.get(d) or TAGS[d]}{ext}"
                 if not os.path.isfile(os.path.join(src, fn)):
                     print(f"{fn} was not written")
                     rc |= 1
@@ -144,7 +148,9 @@ def main(argv=None):
             shutil.copy(os.path.join(tmp, "report.json"), os.path.join(pack, "dodge_report.json"))
     graph = os.path.join(pack, *dodge_graph.ATTACKS_REL)
     rc |= dodge_graph.main(["--attacks-graph", graph, "--player-graph", a.player_graph, "--out", pack]
-                           + [x for d, t in list(given.items()) + list(clip_tags.items()) for x in ("--tag", f"{d}={t}")])
+                           + [x for d, t in list(given.items()) + [(d, clip_tags.get(d) or TAGS[d]) for d in CLIPS
+                                                                     if d not in given]
+                              for x in ("--tag", f"{d}={t}")])
     return rc
 
 
