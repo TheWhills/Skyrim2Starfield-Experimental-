@@ -65,30 +65,42 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         if (!a || !game::Readable(a, sizeof(RE::Actor))) return nullptr;
         return static_cast<RE::TESObjectREFR*>(a)->IsActor() ? a : nullptr;
     };
+    // Owner's run 2026-10-23: four arrays - +070 with 1238 handles (every actor the game knows: resolving them all froze
+    // the game for ~3 s per press) and +060 / +080 / +090 with 21-26 (the process levels near the player). Only arrays
+    // of at most kMaxArray handles are used, together, each handle once.
+    constexpr std::uint32_t kMaxArray = 512;
     const auto base = reinterpret_cast<std::uintptr_t>(lists);
     if (lists && game::Readable(lists, 0x300)) {
         std::vector<std::uint32_t> handles;
-        if (actors_at_) handles = combat::read_handle_array(base, *actors_at_, readable);
+        for (const auto& at : actors_at_) {
+            auto part = combat::read_handle_array(base, at, readable);
+            if (part.size() <= kMaxArray) handles.insert(handles.end(), part.begin(), part.end());
+        }
         if (handles.empty() && game::Now() >= next_scan_) {
             next_scan_ = game::Now() + 2.0;
             auto found = combat::scan_handle_arrays(base, 0x300, readable, [&](std::uint32_t raw) {
                 auto* a = resolve(raw);
                 return a && a != player;
             });
+            actors_at_.clear();
+            std::string list;
+            for (const auto& f : found) {
+                const bool use = f.size <= kMaxArray;
+                list += std::format(" +{:03X}{} size {} actors {}{};", f.offset, f.data_first ? " (data first)" : "",
+                                    f.size, f.actors, use ? "" : " (too big, not used)");
+                if (use) actors_at_.push_back(f);
+            }
             if (scans_logged_ < 5) {
                 ++scans_logged_;
-                std::string list;
-                for (std::size_t i = 0; i < found.size() && i < 4; ++i)
-                    list += std::format(" +{:03X}{} size {} actors {};", found[i].offset,
-                                        found[i].data_first ? " (data first)" : "", found[i].size, found[i].actors);
                 REX::INFO("lock-on: actor arrays in ProcessLists:{}", list.empty() ? std::string(" none found") : list);
             }
-            actors_at_.reset();
-            if (!found.empty()) {
-                actors_at_ = found.front();
-                handles = combat::read_handle_array(base, *actors_at_, readable);
+            for (const auto& at : actors_at_) {
+                auto part = combat::read_handle_array(base, at, readable);
+                handles.insert(handles.end(), part.begin(), part.end());
             }
         }
+        std::sort(handles.begin(), handles.end());
+        handles.erase(std::unique(handles.begin(), handles.end()), handles.end());
         for (auto raw : handles)
             if (auto* a = resolve(raw)) add(a);
     }
@@ -137,7 +149,7 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         cell_bad_logged_ = cell_list_bad_;
         REX::INFO("lock-on lists: ProcessLists {} (actor array {}), {} candidates; player's cell: {}",
                   lists ? "found" : "missing",
-                  actors_at_ ? std::format("+{:03X}", actors_at_->offset) : std::string("not found"), out.size(),
+                  actors_at_.empty() ? std::string("not found") : std::format("{} arrays", actors_at_.size()), out.size(),
                   cell_note);
     }
     return out;
@@ -170,7 +182,19 @@ void Lock::Toggle() {
     if (!id) {
         if (logged_ < s_.log_targets) {
             ++logged_;
-            REX::INFO("lock-on: no target among {} nearby actors (max distance {})", cands.size(), s_.max_distance);
+            // the nearest few, to check the distance units (fMaxDistance is taken as metres) and the screen test
+            std::vector<std::pair<float, const combat::Candidate*>> near;
+            for (const auto& c : cands)
+                near.emplace_back(std::sqrt((c.position.x - eye.x) * (c.position.x - eye.x) +
+                                            (c.position.y - eye.y) * (c.position.y - eye.y)), &c);
+            std::sort(near.begin(), near.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            std::string list;
+            for (std::size_t i = 0; i < near.size() && i < 4; ++i)
+                list += std::format(" {:08X} at {:.1f} (alive {}, screen {:.2f} / {:.2f});", near[i].second->id,
+                                    near[i].first, near[i].second->alive, near[i].second->screen_x,
+                                    near[i].second->screen_y);
+            REX::INFO("lock-on: no target among {} nearby actors (max distance {}); nearest:{}", cands.size(),
+                      s_.max_distance, list.empty() ? std::string(" none") : list);
         }
         return;
     }

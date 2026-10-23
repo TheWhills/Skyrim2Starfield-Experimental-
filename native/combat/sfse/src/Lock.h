@@ -42,7 +42,7 @@ private:
     int logged_ = 0;
     bool diagnosed_ = false, cell_list_bad_ = false, cell_bad_logged_ = false;
     // The high-process actor array's place in ProcessLists, found at run time (combat::scan_handle_arrays).
-    std::optional<combat::HandleArray> actors_at_;
+    std::vector<combat::HandleArray> actors_at_;
     double next_scan_ = 0.0;
     int scans_logged_ = 0;
 };

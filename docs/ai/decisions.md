@@ -272,3 +272,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the most actors (re-scan at most every 2 s while none), logs the arrays found ("lock-on: actor arrays in
   ProcessLists: ..."), then the player's-cell fallback as before. Caps Lock (58) added as a keyboard lock key.
 - Unverified: whether the steering (writing the player's angle) turns the player and camera. Status: owner's run.
+- Owner's run: four handle arrays found in ProcessLists - +070 (1238 handles: every actor; resolving them froze the game
+  ~3 s per press) and +060 / +080 / +090 (21-26, verified actors) - but "no target among 1238". Change: only arrays of
+  at most 512 handles are used, together and de-duplicated; the no-target line now lists the nearest four (distance,
+  alive, screen position) to settle the distance units (fMaxDistance 28 taken as metres) and the screen test. Caps
+  Lock dropped as lock key (it is Starfield's walk / run toggle, owner); a commented keyboard example instead.

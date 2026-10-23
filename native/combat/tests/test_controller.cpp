@@ -305,10 +305,9 @@ static void sample_ini() {
     CHECK(c.attack_event == "MeleeAttackStart" && c.power_event == "MeleeAttackPowerStart");
     CHECK(c.plugin_event_host.empty());
     auto keys = parse_bindings(buf.str(), "Keys");                   // the arrow-key stances
-    CHECK(keys.size() == 7 && keys[0].key == 200 && keys[0].argument == "S2S_StanceHigh" && keys[3].key == 205 &&
+    CHECK(keys.size() == 6 && keys[0].key == 200 && keys[0].argument == "S2S_StanceHigh" && keys[3].key == 205 &&
           keys[3].argument.empty());
-    CHECK(keys.size() == 7 && keys[4].key == 260 && keys[4].action == "lock" && keys[5].key == 58 &&
-          keys[5].action == "lock" && keys[6].key == 273);                                  // mouse 4, Caps Lock, R3
+    CHECK(keys.size() == 6 && keys[4].key == 260 && keys[4].action == "lock" && keys[5].key == 273);   // mouse 4, R3
     auto lock = ini_section(buf.str(), "Lock");
     CHECK(lock["fmaxdistance"] == "28.0" && lock["slockvariable"] == "TDM_TargetLock");
     CHECK(c.stance_refresh_events.empty());
