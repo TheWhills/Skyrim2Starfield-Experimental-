@@ -128,21 +128,25 @@ int HasKeyword(std::string_view editor_id) {
 bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
 
 namespace {
-std::mutex g_weapon_lock;
-std::shared_ptr<RE::BSScript::Variable> g_weapon;      // the weapon UnequipWeapon took off (as the VM returned it)
+std::atomic<std::uint32_t> g_weapon_id{0};   // FormID of the weapon UnequipWeapon took off (0: none)
 
-void PackItem(RE::BSScrapArray<RE::BSScript::Variable>& out, const RE::BSScript::Variable& item) {
-    out.resize(3);
-    out[0] = item;
-    RE::BSScript::PackVariable(out[1], false);
-    RE::BSScript::PackVariable(out[2], true);          // silent
+// Native equip / unequip through ActorEquipManager (mapped on 1.16: Singleton, EquipObject, UnequipObject,
+// BGSObjectInstance ctor), base form without instance data, as the console's equipitem / unequipitem do (owner,
+// 2026-10-23: those console commands re-pick the stance; Papyrus UnequipItem returned but changed nothing).
+bool EquipNative(std::uint32_t form_id, bool equip) {
+    auto* player = Player();
+    auto* mgr = RE::ActorEquipManager::GetSingleton();
+    auto* form = form_id ? RE::TESForm::LookupByID(form_id) : nullptr;
+    if (!player || !mgr || !form) return false;
+    RE::BGSObjectInstance item(form, nullptr);
+    return equip ? mgr->EquipObject(player, item, nullptr, false, false, true, true, false)
+                 : mgr->UnequipObject(player, item, nullptr, false, false, true, true, nullptr);
 }
 }  // namespace
 
-// Stance re-equip, in two steps the controller spaces out (unequip + equip sent together did nothing visible in the
-// owner's run): Papyrus Actor.GetEquippedWeapon(0) -> UnequipItem(weapon, false, true), remembering the weapon; then
-// EquipItem(weapon, false, true). The weapon value is passed back as the VM returned it (no unpacking to a game type).
-// Verified names (owner's run 2026-10-23: the calls dispatched and returned).
+// Stance re-equip, in two steps the controller spaces out: Papyrus Actor.GetEquippedWeapon(0) finds the weapon (its
+// VM handle carries the FormID in the low 32 bits), then the native unequip on the main thread; EquipWeapon equips
+// that FormID again.
 bool UnequipWeapon(std::function<void(const std::string&)> report) {
     return Dispatch("Actor", "GetEquippedWeapon",
         [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
@@ -150,35 +154,29 @@ bool UnequipWeapon(std::function<void(const std::string&)> report) {
             RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(0));
         },
         [report](const RE::BSScript::Variable& weapon) {
-            if (!weapon.is<RE::BSScript::Object>() || !RE::BSScript::get<RE::BSScript::Object>(weapon)) {
+            auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+            if (!obj) {
                 if (report) report("no weapon equipped");
                 return;
             }
-            auto item = std::make_shared<RE::BSScript::Variable>(weapon);
-            {
-                std::scoped_lock l(g_weapon_lock);
-                g_weapon = item;
-            }
-            const bool ok = Dispatch("Actor", "UnequipItem",
-                [item](RE::BSScrapArray<RE::BSScript::Variable>& out) { PackItem(out, *item); },
-                [report](const RE::BSScript::Variable&) { if (report) report("weapon unequipped"); });
-            if (!ok && report) report("UnequipItem not dispatched");
+            const auto id = static_cast<std::uint32_t>(obj->GetHandle() & 0xFFFFFFFFull);
+            g_weapon_id = id;
+            SFSE::GetTaskInterface()->AddTask([id, report]() {
+                const bool ok = EquipNative(id, false);
+                if (report) report(std::format("unequip {:08X}: {}", id, ok ? "done" : "refused"));
+            });
         });
 }
 
 bool EquipWeapon(std::function<void(const std::string&)> report) {
-    std::shared_ptr<RE::BSScript::Variable> item;
-    {
-        std::scoped_lock l(g_weapon_lock);
-        item = std::move(g_weapon);
-    }
-    if (!item) {
+    const auto id = g_weapon_id.exchange(0);
+    if (!id) {
         if (report) report("nothing to equip (no weapon was unequipped)");
         return false;
     }
-    return Dispatch("Actor", "EquipItem",
-        [item](RE::BSScrapArray<RE::BSScript::Variable>& out) { PackItem(out, *item); },
-        [report](const RE::BSScript::Variable&) { if (report) report("weapon equipped again"); });
+    const bool ok = EquipNative(id, true);         // already on the main thread (Plugin::Run's task)
+    if (report) report(std::format("equip {:08X}: {}", id, ok ? "done" : "refused"));
+    return ok;
 }
 
 float ActorValue(std::string_view editor_id) {
