@@ -402,36 +402,42 @@ static void test_pool_strings() {
     CHECK(!pool_string_at(0x20, readable));                             // the slot itself unreadable
 }
 
-// Starfield picks the weapon's animation set at equip time: a stance change re-equips once the keys are quiet.
+// Starfield picks the weapon's animation set at equip time: a stance change unequips once the keys are quiet and
+// equips again on UnequipComplete (or after fStanceReequipWait without it).
 static void stance_reequip() {
     Controller ctl({}, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nlow = 208|keyword|S2S_StanceLow\n"
                                       "neutral = 205|keyword\n"));
     PlayerState s;
-    auto reequips = [&](double t) {
+    auto count = [](const std::vector<Command>& cs, Command::Kind k) {
         int n = 0;
-        for (const auto& c : ctl.tick(t, s)) n += c.kind == Command::Kind::ReequipWeapon;
+        for (const auto& c : cs) n += c.kind == k;
         return n;
     };
+    using K = Command::Kind;
     ctl.on_key(200, true, 0.0, s);
-    CHECK(reequips(0.1) == 0);                                            // not before the delay
+    CHECK(count(ctl.tick(0.1, s), K::UnequipWeapon) == 0);                // not before the delay
     ctl.on_key(208, true, 0.2, s);                                        // another press moves it on
-    CHECK(reequips(0.4) == 0);
-    CHECK(reequips(0.46) == 1);                                           // 0.25 s after the last change: once
-    CHECK(reequips(1.0) == 0);
-    ctl.on_key(208, true, 1.1, s);                                        // same stance again: nothing to re-pick
-    CHECK(reequips(2.0) == 0);
-    ctl.on_key(205, true, 2.1, s);                                        // back to neutral is a change too
-    CHECK(reequips(2.4) == 1);
-    ControllerConfig off = parse_config("[Combat]\nbStanceReequip = 0\nfStanceReequipDelay = 0.5\n");
-    CHECK(!off.stance_reequip && off.stance_reequip_delay == 0.5);
+    CHECK(count(ctl.tick(0.4, s), K::UnequipWeapon) == 0);
+    CHECK(count(ctl.tick(0.46, s), K::UnequipWeapon) == 1);               // 0.25 s after the last change: once
+    CHECK(ctl.tick(0.5, s).empty());                                      // waiting for the unequip
+    CHECK(count(ctl.on_anim_event("UnequipComplete", "", 0.6), K::EquipWeapon) == 1);
+    CHECK(ctl.tick(1.5, s).empty());                                      // no second equip from the timeout
+    CHECK(ctl.on_anim_event("UnequipComplete", "", 1.6).empty());         // a later unequip is not ours
+    ctl.on_key(208, true, 1.7, s);                                        // same stance again: nothing to re-pick
+    CHECK(ctl.tick(3.0, s).empty());
+    ctl.on_key(205, true, 3.1, s);                                        // back to neutral is a change too
+    CHECK(count(ctl.tick(3.4, s), K::UnequipWeapon) == 1);
+    CHECK(ctl.tick(3.8, s).empty());
+    CHECK(count(ctl.tick(3.91, s), K::EquipWeapon) == 1);                 // no UnequipComplete: equip after 0.5 s
+    ControllerConfig off = parse_config("[Combat]\nbStanceReequip = 0\nfStanceReequipDelay = 0.5\n"
+                                        "fStanceReequipWait = 1.5\n");
+    CHECK(!off.stance_reequip && off.stance_reequip_delay == 0.5 && off.stance_reequip_wait == 1.5);
     Controller quiet(off, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\n"));
     quiet.on_key(200, true, 0.0, s);
-    bool any = false;
-    for (const auto& c : quiet.tick(5.0, s)) any |= c.kind == Command::Kind::ReequipWeapon;
-    CHECK(!any);
+    CHECK(quiet.tick(5.0, s).empty());
     std::vector<std::string> problems;
-    parse_config("[Combat]\nfStanceReequipDelay = -1\nbStanceReequip = yes\n", &problems);
-    CHECK(problems.size() == 2);
+    parse_config("[Combat]\nfStanceReequipDelay = -1\nbStanceReequip = yes\nfStanceReequipWait = x\n", &problems);
+    CHECK(problems.size() == 3);
     CHECK(parse_config("[Combat]\n").stance_reequip);
 }
 

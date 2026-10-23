@@ -27,7 +27,8 @@ const char* kind_name(combat::Command::Kind k) {
         case K::SpendStamina: return "stamina";
         case K::ToggleLock: return "lock";
         case K::SwitchTarget: return "switch";
-        case K::ReequipWeapon: return "re-equip weapon";
+        case K::UnequipWeapon: return "stance unequip";
+        case K::EquipWeapon: return "stance equip";
         case K::Log: return "log";
     }
     return "?";
@@ -249,9 +250,13 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 case K::Log: REX::INFO("{}", c.name); continue;
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
-                case K::ReequipWeapon:
-                    result = game::ReequipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
-                                 ? "dispatched (result in the stance re-equip line)" : "not dispatched";
+                case K::UnequipWeapon:
+                    result = game::UnequipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
+                                 ? "dispatched" : "not dispatched";
+                    break;
+                case K::EquipWeapon:
+                    result = game::EquipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
+                                 ? "dispatched" : "not dispatched";
                     break;
             }
             if (logged_commands_.fetch_add(1) < limit)

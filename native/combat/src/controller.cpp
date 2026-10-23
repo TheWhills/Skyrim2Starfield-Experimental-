@@ -284,6 +284,10 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
             ok = v == "0" || v == "1";
             if (ok) c.stance_reequip = v == "1";
         }
+        else if (k == "fstancereequipwait") {
+            if ((ok = read_double(v, d) && d >= 0.0))
+                c.stance_reequip_wait = d;
+        }
         else if (k == "fstancereequipdelay") {
             if ((ok = read_double(v, d) && d >= 0.0))
                 c.stance_reequip_delay = d;
@@ -417,6 +421,10 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
 
 std::vector<Command> Controller::on_anim_event(std::string_view tag, std::string_view payload, double t) {
     std::vector<Command> out;
+    if (equip_due_ >= 0.0 && is(tag, "UnequipComplete")) {         // the stance re-equip's unequip went through
+        equip_due_ = -1.0;
+        out.push_back({Command::Kind::EquipWeapon});
+    }
     // The Skyrim annotation this event stands for ("PIE.@SGVI|MCO_nextattack|2", "MCO_WinOpen", ...).
     std::string text;
     if (!cfg_.plugin_event_host.empty() && is(tag, cfg_.plugin_event_host)) text = std::string(payload);
@@ -482,9 +490,13 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
     // cannot block dodging for longer than dodge_timeout.
     if (dodging_ && ((!dodge_events_ && !iframes_.invulnerable(t)) || t - dodge_at_ > dodge_timeout))
         dodging_ = dodge_events_ = false;
-    if (reequip_due_ >= 0.0 && t >= reequip_due_) {
+    if (reequip_due_ >= 0.0 && t >= reequip_due_ && equip_due_ < 0.0) {
         reequip_due_ = -1.0;
-        out.push_back({Command::Kind::ReequipWeapon});
+        equip_due_ = t + cfg_.stance_reequip_wait;
+        out.push_back({Command::Kind::UnequipWeapon});
+    } else if (equip_due_ >= 0.0 && t >= equip_due_) {
+        equip_due_ = -1.0;
+        out.push_back({Command::Kind::EquipWeapon});
     }
     (void)s;                                // stamina regeneration etc. stay with the game
     return out;

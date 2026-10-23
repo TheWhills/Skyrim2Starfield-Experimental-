@@ -54,7 +54,7 @@ bool CallOnPlayer(const char* script, const char* function, Args... args) {
     return Dispatch(script, function, [=](RE::BSScrapArray<RE::BSScript::Variable>& out) {
         out.resize(sizeof...(Args));
         std::size_t i = 0;
-        ((RE::BSScript::PackVariable(out[i++], args)), ...);
+        ((RE::BSScript::PackVariable(out[static_cast<std::uint32_t>(i++)], args)), ...);
     });
 }
 
@@ -127,11 +127,23 @@ int HasKeyword(std::string_view editor_id) {
 
 bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
 
-// Papyrus Actor.GetEquippedWeapon(0) -> UnequipItem(weapon, false, true) -> EquipItem(weapon, false, true), each step
-// in the previous one's return callback so they run in order. The weapon value is passed back as the VM returned it
-// (no unpacking to a game type). Starfield picks the weapon's animation set at equip time (owner, 2026-10-23).
-// UNVERIFIED: the three names in Starfield's Papyrus (Fallout 4 has them with these signatures); checklist step 1b.
-bool ReequipWeapon(std::function<void(const std::string&)> report) {
+namespace {
+std::mutex g_weapon_lock;
+std::shared_ptr<RE::BSScript::Variable> g_weapon;      // the weapon UnequipWeapon took off (as the VM returned it)
+
+void PackItem(RE::BSScrapArray<RE::BSScript::Variable>& out, const RE::BSScript::Variable& item) {
+    out.resize(3);
+    out[0] = item;
+    RE::BSScript::PackVariable(out[1], false);
+    RE::BSScript::PackVariable(out[2], true);          // silent
+}
+}  // namespace
+
+// Stance re-equip, in two steps the controller spaces out (unequip + equip sent together did nothing visible in the
+// owner's run): Papyrus Actor.GetEquippedWeapon(0) -> UnequipItem(weapon, false, true), remembering the weapon; then
+// EquipItem(weapon, false, true). The weapon value is passed back as the VM returned it (no unpacking to a game type).
+// Verified names (owner's run 2026-10-23: the calls dispatched and returned).
+bool UnequipWeapon(std::function<void(const std::string&)> report) {
     return Dispatch("Actor", "GetEquippedWeapon",
         [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
             out.resize(1);
@@ -143,18 +155,30 @@ bool ReequipWeapon(std::function<void(const std::string&)> report) {
                 return;
             }
             auto item = std::make_shared<RE::BSScript::Variable>(weapon);
-            auto args = [item](RE::BSScrapArray<RE::BSScript::Variable>& out) {
-                out.resize(3);
-                out[0] = *item;
-                RE::BSScript::PackVariable(out[1], false);
-                RE::BSScript::PackVariable(out[2], true);          // silent
-            };
-            const bool ok = Dispatch("Actor", "UnequipItem", args, [args, report](const RE::BSScript::Variable&) {
-                const bool again = Dispatch("Actor", "EquipItem", args);
-                if (report) report(again ? "weapon re-equipped" : "EquipItem not dispatched");
-            });
+            {
+                std::scoped_lock l(g_weapon_lock);
+                g_weapon = item;
+            }
+            const bool ok = Dispatch("Actor", "UnequipItem",
+                [item](RE::BSScrapArray<RE::BSScript::Variable>& out) { PackItem(out, *item); },
+                [report](const RE::BSScript::Variable&) { if (report) report("weapon unequipped"); });
             if (!ok && report) report("UnequipItem not dispatched");
         });
+}
+
+bool EquipWeapon(std::function<void(const std::string&)> report) {
+    std::shared_ptr<RE::BSScript::Variable> item;
+    {
+        std::scoped_lock l(g_weapon_lock);
+        item = std::move(g_weapon);
+    }
+    if (!item) {
+        if (report) report("nothing to equip (no weapon was unequipped)");
+        return false;
+    }
+    return Dispatch("Actor", "EquipItem",
+        [item](RE::BSScrapArray<RE::BSScript::Variable>& out) { PackItem(out, *item); },
+        [report](const RE::BSScript::Variable&) { if (report) report("weapon equipped again"); });
 }
 
 float ActorValue(std::string_view editor_id) {
