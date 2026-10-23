@@ -67,7 +67,7 @@ struct ControllerConfig {
     // The power attack started mid-combo (power_in_combo): the stance packs' combo -> power transitions listen to this
     // plugin-only event. With the game's own MeleeAttackPowerStart the game played its standing power attack again
     // when the combo ended, even with the key kept from its controls (owner, 2026-10-23). S2S_ComboPower (a pack whose combo
-    // power transitions used it) was worse in game: the power attack came late and several played in a row (owner).
+    // power transitions used it) is not taken by the graph at all (owner's log; supported: only known event names).
     std::string combo_power_event = "MeleeAttackPowerStart";
     // Clip events built for the plugin: "" = Skyrim's own split (event "PIE", payload "@SGVI|..."); otherwise the
     // name of the host event that carries the whole Skyrim annotation in its payload (if the graph drops unknown
@@ -94,6 +94,14 @@ struct ControllerConfig {
     // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
     // after the combo instead (owner, 2026-10-23); the stance packs add combo -> power states that need the event.
     bool power_in_combo = true;
+    // The game queues its own standing power attack from a power key press it could not start mid-combo and plays it
+    // once the combo is over, even with the key kept from PlayerControls (owner's runs, 2026-10-23: one queued attack
+    // per press, an AttackStart with no attack press and nothing sent by the plugin). When such an AttackStart comes
+    // within queued_power_window seconds of the last mid-combo press (or of the last one cancelled), the plugin sends
+    // cancel_event (a top-level MeleeAttackPower_A / MeleeAttackCombo -> None transition the stance packs add).
+    bool cancel_queued_power = true;
+    double queued_power_window = 3.0;
+    std::string cancel_event = "ActionInterrupt";
 };
 
 // What hit the player: from the attack data's event name (Starfield: MeleeAttackPowerStart for power attacks,
@@ -216,6 +224,9 @@ private:
     std::string stance_;        // keyword of the active stance binding ("" = none)
     bool consumed_last_ = false, power_key_consumed_ = false;
     double reequip_due_ = -1.0; // when to unequip after a stance change (< 0: none pending)
+    int queued_powers_ = 0;     // power key presses the game may still play as standing power attacks
+    double queued_until_ = -1.0, last_send_at_ = -1.0, last_attack_press_at_ = -1.0;
+    double cancel_check_at_ = -1.0, cancel_candidate_at_ = -1.0;   // an AttackStart that may be a queued one
     double equip_due_ = -1.0;   // when to equip again at the latest (< 0: not waiting for an unequip)
 };
 

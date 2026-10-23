@@ -46,6 +46,9 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
     use COMBO_POWER_EVENT, which only the plugin sends: with the game's own MeleeAttackPowerStart the game still played
     its standing power attack when the combo ended, even with the key kept from its controls (owner, 2026-10-23:
     the graph event itself seems to be what the game queues).
+    power["cancel_event"] (optional): top-level MeleeAttackPower_A and the combo go back to idle on this event (the
+    plugin's bCancelQueuedPower sends ActionInterrupt when the game starts its own queued standing power attack after
+    a combo; owner's runs 2026-10-23).
     power["inner_only"]: every combo state has its own power transition, so the vanilla top-level transition
     combo -> MeleeAttackPower_A on MeleeAttackPowerStart is switched off (its event renamed to OUTER_OFF): it caught
     the power press before the combo's own states (owner, 2026-10-23: every mid-combo power attack played
@@ -102,6 +105,17 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
         if top_power is not None and agx_edit.add_transition(root, root, top_power, combo, "MeleeAttackStart",
                                                              blend=0.15):
             added.append(f"{POWER_TOP} -> {MACHINE}")
+        cancel = power.get("cancel_event")
+        if top_power is not None and cancel:
+            # The plugin cancels the game's queued standing power attack (bCancelQueuedPower): back to the idle state
+            # the standing power attack starts from (the source of idle -> MeleeAttackPower_A on POWER_EVENT).
+            idle = next((s for s, t, e, _c in agx_edit.transitions(root) if t == top_power and e == POWER_EVENT
+                         and s not in (combo, top_power)
+                         and agx_edit._rows(root.findall("node")[s]).get("TagName") in (None, "", "None")
+                         and not agx_edit._rows(root.findall("node")[s]).get("State Machine Name")), None)
+            for src, label in ((top_power, POWER_TOP), (combo, MACHINE)):
+                if idle is not None and agx_edit.add_transition(root, root, src, idle, cancel, blend=0.1):
+                    added.append(f"{label} -> idle on {cancel}")
         if top_power is not None and power.get("inner_only"):
             n_off = agx_edit.set_event(root, combo, top_power, OUTER_OFF, POWER_EVENT)
             added.append(f"{MACHINE} =power=> {POWER_TOP} switched off ({n_off})")

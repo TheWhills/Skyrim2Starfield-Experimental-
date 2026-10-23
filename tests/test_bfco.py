@@ -179,6 +179,12 @@ class BfcoTests(unittest.TestCase):
         inner3 = agx_edit.transitions(agx_edit.machine(agx_edit.load(out3), "MeleeAttackCombo"))
         self.assertTrue(any(e == "S2S_ComboPower" for _s, _t, e, _c in inner3))
         self.assertFalse(any(e == "MeleeAttackPowerStart" for _s, _t, e, _c in inner3))
+        out4, added4 = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, dict(power, cancel_event="ActionInterrupt"))
+        top4 = agx_edit.transitions(agx_edit.load(out4))
+        self.assertIn((tp, idle, "ActionInterrupt", ""), top4)                    # queued standing power -> idle
+        self.assertIn((combo, idle, "ActionInterrupt", ""), top4)
+        self.assertIn("MeleeAttackPower_A -> idle on ActionInterrupt", added4)
+        self.assertNotIn((tp, idle, "ActionInterrupt", ""), top)                  # only when asked
         out2, _ = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, dict(power, inner_only=False))
         self.assertIn((combo, tp, "MeleeAttackPowerStart", ""), agx_edit.transitions(agx_edit.load(out2)))
 

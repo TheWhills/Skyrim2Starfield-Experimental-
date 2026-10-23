@@ -329,6 +329,12 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         } else if (k == "sattackevent") c.attack_event = v;
         else if (k == "spowerattackevent") c.power_event = v;
         else if (k == "scombopowerevent") c.combo_power_event = v;
+        else if (k == "squeuedpowercancelevent") c.cancel_event = v;
+        else if (k == "fqueuedpowerwindow") ok = read_double(v, c.queued_power_window);
+        else if (k == "bcancelqueuedpower") {
+            ok = v == "0" || v == "1";
+            if (ok) c.cancel_queued_power = v == "1";
+        }
         else if (k == "spluginevent" || k == "splugineventhost") c.plugin_event_host = v;
         else if (k == "sblockhitvariable") c.block_hit_variable = v;
         else if (k == "bstancerepeatneutral") {
@@ -405,8 +411,10 @@ void Controller::dodge(double t, const PlayerState& s, std::vector<Command>& out
 }
 
 void Controller::fire_buffered(double t, std::vector<Command>& out) {
-    if (auto a = buffer_.take(t, power_open_, normal_open_))
+    if (auto a = buffer_.take(t, power_open_, normal_open_)) {
         out.push_back(event(a->kind == AttackKind::Normal ? cfg_.attack_event : cfg_.power_event));
+        last_send_at_ = t;
+    }
 }
 
 std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, const PlayerState& s) {
@@ -418,6 +426,7 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
     }
     for (std::size_t i = 0; i < move_held_.size(); ++i)
         if (key == cfg_.move_keys[i]) move_held_[i] = down;
+    if (key == cfg_.attack_key && down) last_attack_press_at_ = t;
 
     if (key == cfg_.attack_key && cfg_.buffer_attacks) {
         if (down) {
@@ -427,6 +436,7 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
             if (kind == AttackKind::Power && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
                 buffer_.clear();
                 out.push_back(event(cfg_.combo_power_event));
+                last_send_at_ = t;
                 return out;
             }
             // The game handles a press itself when no attack runs or the matching window is open: only a press in
@@ -442,6 +452,12 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
     if (cfg_.power_key && key == cfg_.power_key && down && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
         out.push_back(event(cfg_.combo_power_event));
         consumed_last_ = power_key_consumed_ = true;
+        last_send_at_ = t;
+        queued_powers_ = std::min(queued_powers_ + 1, 8);
+        queued_until_ = t + cfg_.queued_power_window;
+    } else if (cfg_.power_key && key == cfg_.power_key && down) {
+        queued_powers_ = 0;                     // a standing press is the game's own: nothing queued to cancel
+        cancel_check_at_ = -1.0;
     }
 
     if (!down) return out;
@@ -518,6 +534,17 @@ std::vector<Command> Controller::on_anim_event(std::string_view tag, std::string
     if (now == AttackPhase::None) normal_open_ = power_open_ = false;
     if (normal_open_ || power_open_) fire_buffered(t, out);
 
+    // A queued standing power attack starting: decided in tick() a moment later, since an attack press that started
+    // it reaches on_key a few milliseconds after its AttackStart (owner's logs).
+    if (cfg_.cancel_queued_power && queued_powers_ > 0 && is(tag, "AttackStart")) {
+        if (t > queued_until_) {
+            queued_powers_ = 0;
+        } else if (t - last_send_at_ > 0.15 && cancel_check_at_ < 0.0) {
+            cancel_candidate_at_ = t;
+            cancel_check_at_ = t + 0.05;
+        }
+    }
+
     if (is(name, "TKDR_DodgeStart")) {
         dodging_ = dodge_events_ = true;
         dodge_at_ = t;
@@ -571,6 +598,15 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
     } else if (equip_due_ >= 0.0 && t >= equip_due_) {
         equip_due_ = -1.0;
         out.push_back({Command::Kind::EquipWeapon});
+    }
+    if (cancel_check_at_ >= 0.0 && t >= cancel_check_at_) {
+        cancel_check_at_ = -1.0;
+        if (last_attack_press_at_ < cancel_candidate_at_ - 0.25 && last_send_at_ < cancel_candidate_at_ - 0.15) {
+            out.push_back(event(cfg_.cancel_event));
+            out.push_back(log("queued standing power attack cancelled (the game's, from a mid-combo power key press)"));
+            --queued_powers_;
+            queued_until_ = t + cfg_.queued_power_window;
+        }
     }
     (void)s;                                // stamina regeneration etc. stay with the game
     return out;

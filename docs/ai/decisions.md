@@ -167,3 +167,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   MeleeAttackPowerStart.
 - Owner, same day: worse (the power attack came late and several looped in a row). Reverted to MeleeAttackPowerStart
   in the packs and the plugin default; the event stays configurable (sComboPowerEvent, power["event"]).
+
+## 2026-10-23 — Cancel the game's queued standing power attack (bCancelQueuedPower)
+- Owner's log of the S2S_ComboPower run: every "S2S_ComboPower" was "not taken by the graph" (supported: Starfield
+  graphs only take event names they know), so mid-combo V did nothing; yet the game still started standing power
+  attacks later, one after another (AttackStart with no attack press and nothing sent by the plugin), with V kept
+  from PlayerControls::Manager. So the game learns of the V press some other way and queues one standing power attack
+  per refused press; the graph event was not the trigger (the earlier hypothesis is withdrawn).
+- Change: the plugin counts mid-combo V presses; an AttackStart within fQueuedPowerWindow (3 s) of the last such press
+  or cancel, not preceded by a plugin send (0.15 s) and with no attack press around it (checked 50 ms later: the
+  press logs a few ms after its AttackStart), gets sQueuedPowerCancelEvent (ActionInterrupt). The stance packs add
+  top-level MeleeAttackPower_A -> idle and MeleeAttackCombo -> idle on ActionInterrupt (an event the graph already
+  knows: idle -> idle). A standing V press clears the count. Status: unresolved until the owner's run; expect a few
+  frames of the queued attack before it blends out.

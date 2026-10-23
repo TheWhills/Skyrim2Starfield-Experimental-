@@ -525,7 +525,54 @@ static void rtti_vtables() {
     CHECK(!rtti_base_vtable({base + vts[0]}, ".?AVSink@@", [](const void*, std::size_t) { return false; }));
 }
 
+// Owner's logs (2026-10-23): after a mid-combo power press the game starts its own standing power attack once the
+// combo is over (AttackStart, no attack press, nothing sent): cancelled; attacks the player or plugin started are not.
+static void queued_power_cancel() {
+    Controller v;
+    PlayerState s;
+    auto sent = [](const std::vector<Command>& cs, const char* name) {
+        for (const auto& c : cs)
+            if (c.kind == Command::Kind::SendEvent && c.name == name) return true;
+        return false;
+    };
+    v.on_anim_event("preHitFrame", "", 9.0);                               // in a combo
+    v.on_key(47, true, 9.075, s);                                          // V: the combo power attack
+    v.on_key(47, false, 9.16, s);
+    v.on_anim_event("AttackStart", "", 9.078);                             // ours (sent 3 ms before)
+    CHECK(!sent(v.tick(9.2, s), "ActionInterrupt"));
+    v.on_anim_event("AttackStart", "", 10.743);                            // the game's queued one
+    CHECK(!sent(v.tick(10.76, s), "ActionInterrupt"));                     // decided 50 ms later
+    CHECK(sent(v.tick(10.80, s), "ActionInterrupt"));
+    v.on_anim_event("AttackStart", "", 12.0);                              // nothing left to cancel
+    CHECK(!sent(v.tick(12.1, s), "ActionInterrupt"));
+
+    Controller a;                                                          // a normal attack whose press logs late
+    a.on_anim_event("preHitFrame", "", 1.0);
+    a.on_key(47, true, 1.1, s);
+    a.on_anim_event("AttackStart", "", 2.000);
+    a.on_key(256, true, 2.004, s);
+    CHECK(!sent(a.tick(2.1, s), "ActionInterrupt"));
+    a.on_anim_event("AttackStart", "", 6.0);                               // past fQueuedPowerWindow
+    CHECK(!sent(a.tick(6.1, s), "ActionInterrupt"));
+
+    Controller b;                                                          // a standing V press clears the queue
+    b.on_anim_event("preHitFrame", "", 1.0);
+    b.on_key(47, true, 1.1, s);
+    b.on_anim_event("AttackEnd", "", 1.5);
+    b.on_key(47, true, 1.6, s);
+    b.on_anim_event("AttackStart", "", 1.62);
+    CHECK(!sent(b.tick(1.8, s), "ActionInterrupt"));
+
+    Controller off(parse_config("[Combat]\nbCancelQueuedPower = 0\nfQueuedPowerWindow = 5\n"));
+    CHECK(!off.config().cancel_queued_power && off.config().queued_power_window == 5.0);
+    off.on_anim_event("preHitFrame", "", 1.0);
+    off.on_key(47, true, 1.1, s);
+    off.on_anim_event("AttackStart", "", 2.0);
+    CHECK(!sent(off.tick(2.1, s), "ActionInterrupt"));
+}
+
 int main() {
+    queued_power_cancel();
     rtti_vtables();
     key_codes();
     power_in_combo();

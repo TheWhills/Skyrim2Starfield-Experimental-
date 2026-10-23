@@ -150,7 +150,7 @@ def power_routing(n: int, pslots: dict) -> dict:
     return {"tags": tags, "attack_power": attack_power,
             "power_attack": {p: (p if p <= m else n) % n + 1 for p in tags},
             "power_power": {p: p % k + 1 for p in tags}, "inner_only": True,
-            "event": bfco_combo.POWER_EVENT}
+            "event": bfco_combo.POWER_EVENT, "cancel_event": "ActionInterrupt"}
 
 
 def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:

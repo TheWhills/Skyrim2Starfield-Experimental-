@@ -209,6 +209,7 @@ class StancePackPlanTests(unittest.TestCase):
             self.assertEqual(r["power_power"], {1: 2, 2: 3, 3: 4, 4: 1})
             self.assertTrue(r["inner_only"])
             self.assertEqual(r["event"], "MeleeAttackPowerStart")
+            self.assertEqual(r["cancel_event"], "ActionInterrupt")
             r6 = PK.power_routing(6, {j: pslots[j] for j in (1, 2, 3, 4)})   # slots 5, 6 without a host
             self.assertEqual(r6["tags"][5], "MeleeAttackPower_A")
             self.assertEqual((r6["attack_power"][5], r6["attack_power"][6]), (5, 5))
