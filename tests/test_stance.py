@@ -97,6 +97,56 @@ class StancePluginTests(unittest.TestCase):
         self.assertEqual(list(fo4land.iter_subrecords(raw)), [(b"BIGD", b"x" * 70000), (b"EDID", b"A\0")])
 
 
+TABLE = ("Role\tPerspective\tActor Keyword(s)\tTarget Keyword(s)\tBehavior Path\tAnimation Path(s)\n"
+         "MT\t3rd\t\t\tAnimTextData\\Tables\\Graphs\\NPC_MT_Wrapping.agx\tactors\\human\\animations\\melee\\unarmed\n"
+         "Weapon\t3rd\tAnimArchetypePlayer\tAnimOneHanded, AnimSword\tAnimTextData\\Tables\\Graphs\\Player_Melee.agx\t"
+         "actors\\human\\animations\\melee\\onehanded\\player\\sword, actors\\human\\animations\\melee\\onehanded\\player\r\n"
+         "Weapon\t3rd\tAnimArchetypePlayer, Female\tAnimOneHanded\tAnimTextData\\Tables\\Graphs\\Player_Melee.agx\t"
+         "actors\\human\\animations\\melee\\onehanded\\player\\female\n"
+         "Weapon\t1st\tAnimArchetypePlayer\tAnimOneHanded\tAnimTextData\\Tables\\Graphs\\1stPerson_Melee.agx\tx\n"
+         "Weapon\t3rd\t\tAnimOneHanded, AnimSword\tAnimTextData\\Tables\\Graphs\\NPC_Melee.agx\ty\n"
+         "Weapon\t3rd\tAnimArchetypePlayer\tAnimGripRifle\tAnimTextData\\Tables\\Graphs\\Player_Gun.agx\tz\n")
+
+
+class StanceTableTests(unittest.TestCase):
+    """The player's weapon sets live in the game's generated HumanRace table, not the esm (owner's archives)."""
+
+    def test_parse_and_pick_player_one_handed_rows(self):
+        rows = SP.parse_table(TABLE)
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(rows[1]["target"], ["AnimOneHanded", "AnimSword"])
+        self.assertEqual(rows[1]["paths"][-1], "actors\\human\\animations\\melee\\onehanded\\player")   # \r stripped
+        picked = SP.player_weapon_rows(rows)
+        self.assertEqual([r["actor"] for r in picked], [["AnimArchetypePlayer"], ["AnimArchetypePlayer", "Female"]])
+
+    def test_entries_from_table_rows(self):
+        ids = {"animarchetypeplayer": PLAYER, "animonehanded": MELEE1H, "animsword": 0x000A0020}
+        subs = [(b"EDID", b"HumanRace\0")] + entry([PLAYER], [GUN], "Gun.agx", ["gun"])
+        rows = SP.player_weapon_rows(SP.parse_table(TABLE))
+        out, rep = SP.race_with_stances(subs, {"High": 0x01000800, "Low": 0x01000802}, table_rows=rows,
+                                        keyword_ids=ids)
+        self.assertEqual(rep["source"], "generated table weapon rows")
+        self.assertEqual((rep["melee_entries"], rep["added_entries"]), (1, 2))   # the Female row: keyword unknown here
+        self.assertEqual(rep["unresolved_keywords"], ["Female"])
+        ents = subgraph.parse(out)
+        high = ents[0]
+        self.assertEqual(high["actor_keywords"], [PLAYER, 0x01000800])
+        self.assertEqual(high["target_keywords"], [MELEE1H, 0x000A0020])
+        self.assertEqual(high["graph"], "AnimTextData\\Tables\\Graphs\\Player_Melee.agx")
+        self.assertEqual(high["paths"], [SP.stance_folder("High"), "actors\\human\\animations\\melee\\onehanded\\player\\sword",
+                                         "actors\\human\\animations\\melee\\onehanded\\player"])
+        self.assertEqual(high["flags"], "01 00 00 00")                          # role Weapon, third person
+        self.assertEqual(ents[1]["actor_keywords"], [PLAYER, 0x01000802])
+        self.assertEqual(ents[2]["graph"], "Gun.agx")                           # the race's own entry kept, after
+
+    def test_build_with_a_table_whose_keywords_are_missing_stops(self):
+        with tempfile.TemporaryDirectory() as d:
+            esm = os.path.join(d, "Starfield.esm")
+            starfield_esm(esm)
+            with self.assertRaises(SystemExit):
+                SP.build(esm, table_text=TABLE)
+
+
 @unittest.skipIf(PK is None, "numpy not installed")
 class StancePackPlanTests(unittest.TestCase):
     def test_unroll(self):
@@ -129,11 +179,8 @@ class StancePackPlanTests(unittest.TestCase):
             self.assertEqual(len(p["High"]["replace"]), 5 + 1)           # 5 attacks + the power attack
             self.assertTrue(all("::" in r for r in p["High"]["replace"]))
 
-    def test_stance_clips_keep_the_weapon_subpath(self):
-        """Stance clips go to s2s_stances/<stance>/onehanded/player/sword (the game adds the weapon subfolders under
-        each root folder; clips at the stance root lost to the vanilla sword folder in the owner's run)."""
-        self.assertEqual(PK.stance_subpath("melee/onehanded/player/sword"), ["onehanded", "player", "sword"])
-        self.assertEqual(PK.stance_subpath("Melee\\OneHanded\\Player"), ["OneHanded", "Player"])
+    def test_stance_clips_go_flat_into_the_stance_folder(self):
+        """The stance entries list s2s_stances/<stance> first; a subfolder below it is not searched (owner's run)."""
         with tempfile.TemporaryDirectory() as d:
             folder = "melee/onehanded/player/sword"
             src = os.path.join(d, "tmp", *PK.bfco_pack.ANIMS.split("/"), *folder.split("/"))
@@ -141,9 +188,8 @@ class StancePackPlanTests(unittest.TestCase):
             for fn in ("MeleeAttack_A.af", "MeleeAttack_A.afx", "notes.txt"):
                 open(os.path.join(src, fn), "w").close()
             self.assertEqual(PK._move_into_stance(os.path.join(d, "tmp"), folder, os.path.join(d, "out"), "High"), 2)
-            dst = os.path.join(d, "out", "meshes", *SP.stance_folder("High").split("\\"), "onehanded", "player", "sword")
+            dst = os.path.join(d, "out", "meshes", *SP.stance_folder("High").split("\\"))
             self.assertEqual(sorted(os.listdir(dst)), ["MeleeAttack_A.af", "MeleeAttack_A.afx"])
-
 
 if __name__ == "__main__":
     unittest.main()

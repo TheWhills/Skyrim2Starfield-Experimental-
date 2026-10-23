@@ -1158,11 +1158,19 @@ skinned-mesh writer: not in this pack).
   player; the Creation Kit's `-GenerateAnimInfo:S2SStances.esm <Data> <Out>` works on 1.16 and wrote 724 cache files,
   21 of them new sets naming the stance folders (7 clips each). Swings still identical in every stance, also after a
   save / reload (so not only a graph refresh question).
-* Cause (supported): no record names melee\onehanded\player; vanilla Player_Melee sets list melee/onehanded/player,
-  .../player/female, .../player/knife under the race entry's root Actors\Human\Animations\Melee, so the game adds the
-  weapon-type subfolders below each root itself. Our clips sat straight in s2s_stances\<stance>, where the more
-  specific vanilla onehanded\player\sword folder wins. `stance_pack.py` now writes them to
-  s2s_stances\<stance>\onehanded\player\sword (the vanilla folder's subpath below melee); caches regenerated after.
+* Tried and wrong: clips moved to s2s_stances\<stance>\onehanded\player\sword; the regenerated caches then named no
+  stance clip at all (the CK lists only files directly in a listed folder; it does not add weapon subfolders).
+* Found (verified, owner's archives): Starfield.esm names no melee\onehanded folder; the player's weapon sets are the
+  "Weapon" rows of the generated table meshes\animtextdata\generatedsubgraphdata\humanrace.txt (1,607 rows: 1,016
+  Weapon, 555 Furniture, 36 MT), e.g. AnimArchetypePlayer + AnimOneHanded, AnimSword -> Player_Melee.agx,
+  melee\onehanded\player\sword > ...\player > ...\sword > onehanded > melee\common > common; 16 player third-person
+  one-handed rows (sword / knife / two-hand block, female, zero-g). The first stance plugin copied the esm's generic
+  melee entries, which these rows always beat.
+* Now: `stance_plugin.py` reads that table from the archives and adds, per stance, an esm entry for each of the 16 rows
+  with the stance keyword added to its actor keywords, its weapon keywords and graph, the stance folder first, SRAF role
+  Weapon / third person (48 entries); clips back flat in s2s_stances\<stance>. Supported: an esm entry with these
+  keywords competes with the table rows and wins on the extra keyword; the CK builds its cache sets as it did for the
+  first entries.
 * The CK output also holds cut-down GeneratedSubgraphData (creature tables with only a header) and a
   PersistantSubgraphInfoAndOffsetData.txt listing only the regenerated sets: kept out of the loose-file mod for now
   so they do not shadow the vanilla ones (unresolved whether the game needs our index file to find the new sets).
