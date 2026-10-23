@@ -79,7 +79,7 @@ static void payload_commands() {
 }
 
 static void windows_and_buffer() {
-    Controller ctl;
+    Controller ctl(parse_config("[Combat]\nbPowerInCombo = 0\n"));      // MCO's power buffering (see power_in_combo)
     PlayerState s;
     // Not attacking: the game handles the press, nothing is buffered or sent.
     ctl.on_key(256, true, 0.0, s);
@@ -441,8 +441,28 @@ static void stance_reequip() {
     CHECK(parse_config("[Combat]\n").stance_reequip);
 }
 
+// A held attack during a combo sends the power event at once (vanilla Starfield never sends it mid-combo).
+static void power_in_combo() {
+    Controller ctl;
+    PlayerState s;
+    CHECK(ctl.config().power_in_combo);
+    ctl.on_key(256, true, 0.0, s);                                        // standing: the game's own power attack
+    CHECK(count(ctl.on_key(256, false, 0.5, s), Command::Kind::SendEvent) == 0);
+    ctl.on_anim_event("preHitFrame", "", 1.0);                            // in a combo
+    ctl.on_key(256, true, 1.0, s);
+    auto cs = ctl.on_key(256, false, 1.4, s);
+    auto e = first(cs, Command::Kind::SendEvent);
+    CHECK(e && e->name == "MeleeAttackPowerStart" && cs.size() == 1);
+    CHECK(count(ctl.on_anim_event("BFCO_NextPowerWinStart", "", 1.5), Command::Kind::SendEvent) == 0);   // not again
+    ctl.on_key(256, true, 1.6, s);                                        // a quick press still buffers
+    cs = ctl.on_key(256, false, 1.65, s);
+    CHECK(count(cs, Command::Kind::SendEvent) == 0 && count(cs, Command::Kind::Log) == 1);
+    CHECK(!parse_config("[Combat]\nbPowerInCombo = 0\n").power_in_combo);
+}
+
 int main() {
     key_codes();
+    power_in_combo();
     stance_reequip();
     hits();
     menus();

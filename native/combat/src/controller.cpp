@@ -280,6 +280,10 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
             ok = v == "0" || v == "1";
             if (ok) c.stance_repeat_neutral = v == "1";
         }
+        else if (k == "bpowerincombo") {
+            ok = v == "0" || v == "1";
+            if (ok) c.power_in_combo = v == "1";
+        }
         else if (k == "bstancereequip") {
             ok = v == "0" || v == "1";
             if (ok) c.stance_reequip = v == "1";
@@ -360,6 +364,11 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
             buffer_.press(t);
         } else {
             AttackKind kind = buffer_.release(t);
+            if (kind == AttackKind::Power && cfg_.power_in_combo && phase_.phase() != AttackPhase::None) {
+                buffer_.clear();
+                out.push_back(event(cfg_.power_event));
+                return out;
+            }
             // The game handles a press itself when no attack runs or the matching window is open: only a press in
             // a closed window during an attack is kept for the next window (MCO's input buffer).
             bool game_takes_it = phase_.phase() == AttackPhase::None ||

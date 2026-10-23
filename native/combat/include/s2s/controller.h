@@ -82,6 +82,10 @@ struct ControllerConfig {
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
     // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
     std::string block_hit_variable = "iS2SBlockHitType";
+    // A power attack (held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
+    // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
+    // after the combo instead (owner, 2026-10-23); the stance packs add combo -> power states that need the event.
+    bool power_in_combo = true;
 };
 
 // What hit the player: from the attack data's event name (Starfield: MeleeAttackPowerStart for power attacks,
