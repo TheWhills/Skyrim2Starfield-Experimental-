@@ -32,7 +32,10 @@ public:
     bool active() const { return locked_.has_value(); }
 
 private:
-    std::vector<combat::Candidate> Gather(combat::Angles look, combat::Vec3 eye);
+    // every nearby actor (key presses), or with `only` just the actor behind that handle (each frame while locked:
+    // owner's run 2026-10-23, gathering all ~76 actors every frame cost 5-36 ms per frame)
+    std::vector<combat::Candidate> Gather(combat::Angles look, combat::Vec3 eye,
+                                          std::optional<std::uint32_t> only = std::nullopt);
     void SetLocked(std::optional<std::uint32_t> id, const char* why);
 
     LockSettings s_;
@@ -43,6 +46,8 @@ private:
     bool diagnosed_ = false, cell_list_bad_ = false, cell_bad_logged_ = false;
     // The high-process actor array's place in ProcessLists, found at run time (combat::scan_handle_arrays).
     std::vector<combat::HandleArray> actors_at_;
+    std::unordered_map<std::uint32_t, std::uint32_t> handle_of_;     // FormID -> actor handle, from the last full gather
+    double next_report_ = 0.0;
     double next_scan_ = 0.0;
     int scans_logged_ = 0;
 };

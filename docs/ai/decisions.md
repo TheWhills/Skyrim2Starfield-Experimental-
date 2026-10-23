@@ -277,3 +277,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   at most 512 handles are used, together and de-duplicated; the no-target line now lists the nearest four (distance,
   alive, screen position) to settle the distance units (fMaxDistance 28 taken as metres) and the screen test. Caps
   Lock dropped as lock key (it is Starfield's walk / run toggle, owner); a commented keyboard example instead.
+- Owner's run: targets found and locked (NPCs at 3-26 m: distances read as metres look right, verified roughly by the
+  owner's play), but frame time went to 5-36 ms while locked: every frame gathered all ~76 actors. Change: a full
+  gather only on the lock / switch key (it records each actor's handle); while locked only the target's handle is
+  resolved each frame. A "following" line every 2 s logs distance and yaw / pitch error, to check the steering (owner:
+  the camera locks onto "something").

@@ -23,7 +23,7 @@ void Lock::Configure(const LockSettings& s) {
     locked_.reset();
 }
 
-std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 eye) {
+std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 eye, std::optional<std::uint32_t> only) {
     std::vector<combat::Candidate> out;
     auto* player = game::Player();
     if (!player) return out;
@@ -70,6 +70,10 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
     // of at most kMaxArray handles are used, together, each handle once.
     constexpr std::uint32_t kMaxArray = 512;
     const auto base = reinterpret_cast<std::uintptr_t>(lists);
+    if (only) {
+        if (auto* a = resolve(*only)) add(a);
+        return out;
+    }
     if (lists && game::Readable(lists, 0x300)) {
         std::vector<std::uint32_t> handles;
         for (const auto& at : actors_at_) {
@@ -101,8 +105,12 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         }
         std::sort(handles.begin(), handles.end());
         handles.erase(std::unique(handles.begin(), handles.end()), handles.end());
+        handle_of_.clear();
         for (auto raw : handles)
-            if (auto* a = resolve(raw)) add(a);
+            if (auto* a = resolve(raw)) {
+                handle_of_[a->GetFormID()] = raw;
+                add(a);
+            }
     }
     // 2. fallback: the actors placed in the player's own cell (interiors: the whole room; exteriors: one cell only).
     //    Owner's fifth run: ForEachReference crashed the game (TESObjectCELL's layout on 1.16 is not CommonLibSF's, like
@@ -228,7 +236,13 @@ void Lock::Update() {
     }
     const combat::Angles look{player->data.angle.x * s_.pitch_sign, player->data.angle.z};
     const auto eye = V(player->data.location, s_.eye_height);
-    auto cands = Gather(look, eye);
+    const auto h = handle_of_.find(*locked_);
+    if (h == handle_of_.end()) {
+        core_.release();
+        SetLocked(std::nullopt, "target has no handle");
+        return;
+    }
+    auto cands = Gather(look, eye, h->second);
     if (!core_.update(cands, eye, now)) {
         SetLocked(std::nullopt, "target lost (dead, too far or gone)");
         return;
@@ -237,6 +251,14 @@ void Lock::Update() {
     const auto it = std::find_if(cands.begin(), cands.end(), [&](const auto& c) { return c.id == *locked_; });
     if (it == cands.end()) return;
     auto want = combat::aim_angles(eye, it->position);
+    if (now >= next_report_ && logged_ < s_.log_targets) {      // to check the steering on the first runs
+        next_report_ = now + 2.0;
+        ++logged_;
+        REX::INFO("lock-on: following {:08X}: distance {:.1f}, yaw error {:.0f} deg, pitch error {:.0f} deg", *locked_,
+                  std::sqrt((it->position.x - eye.x) * (it->position.x - eye.x) +
+                            (it->position.y - eye.y) * (it->position.y - eye.y)),
+                  combat::wrap_pi(want.yaw - look.yaw) * 57.2958f, (want.pitch - look.pitch) * 57.2958f);
+    }
     if (!s_.steer_pitch) want.pitch = look.pitch;
     const auto next = combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
     // UNVERIFIED: writing the angle directly is enough for the player and the camera to turn (Skyrim's lock-on mods
