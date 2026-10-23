@@ -82,12 +82,14 @@ class AnimCacheTests(unittest.TestCase):
             r"meshes\animtextdata\animationoffsets\1234567890.txt": b"V5\n...",
             r"meshes\animtextdata\animationfiledata\5555555555.txt": b"3\n1\n5555555555\n1\nGun\\x.af\n",
             r"meshes\animtextdata\animationoffsets\persistantsubgraphinfoandoffsetdata.txt": b"list",
+            r"meshes\animtextdata\generatedsubgraphdata\humanrace.txt": b"Role\tPerspective\n",
             r"meshes\other.nif": b"x",
         }
         entries = [("Starfield - Animations.ba2", n, (lambda d=d: d)) for n, d in files.items()]
         with tempfile.TemporaryDirectory() as out:
             rep = C.survey(entries, out)
-            self.assertEqual(rep["families"], {"animationfiledata": 2, "animationoffsets": 2})
+            self.assertEqual(rep["families"], {"animationfiledata": 2, "animationoffsets": 2,
+                                               "generatedsubgraphdata": 1})
             self.assertEqual(len(rep["melee_sets"]), 1)
             s = rep["melee_sets"][0]
             self.assertEqual((s["set"], s["paths"]), ("1234567890", 3))
@@ -96,7 +98,8 @@ class AnimCacheTests(unittest.TestCase):
             self.assertEqual(sorted(rep["copied"]), sorted([
                 r"meshes\animtextdata\animationfiledata\1234567890.txt",
                 r"meshes\animtextdata\animationoffsets\1234567890.txt",
-                r"meshes\animtextdata\animationoffsets\persistantsubgraphinfoandoffsetdata.txt"]))
+                r"meshes\animtextdata\animationoffsets\persistantsubgraphinfoandoffsetdata.txt",
+                r"meshes\animtextdata\generatedsubgraphdata\humanrace.txt"]))      # race tables copied whole
             self.assertTrue(os.path.isfile(os.path.join(out, "samples", "meshes", "animtextdata",
                                                         "animationoffsets", "1234567890.txt")))
 

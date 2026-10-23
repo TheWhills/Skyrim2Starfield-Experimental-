@@ -8,7 +8,8 @@ Kit regenerates them. This survey records, from the installed game's archives:
   * every AnimationFileData file that mentions the human one-handed melee folders, with its header, the number of
     paths, the folders they sit in, and whether the clips we replace are listed (meleeattack_a ... meleeblock_*)
   * copies of those files, their AnimationOffsets / AnimationStanceData / DynamicIdleData siblings (same number) and
-    persistantsubgraphinfoandoffsetdata.txt into <out>\\samples, to work out the format offline
+    persistantsubgraphinfoandoffsetdata.txt and every GeneratedSubgraphData table into <out>\\samples, to work out the
+    format offline
 
     python -I scripts\\armor\\sf_animcache_survey.py --starfield-data "<Starfield>\\Data" --out <folder>
 Game files: keep the output outside the repository and do not share it publicly.
@@ -67,6 +68,12 @@ def survey(entries, out: str, max_samples: int = 40):
         num = set_number(name)
         if num:
             by_number[num].append(name)
+        if family(name) == "generatedsubgraphdata":
+            # the per-race subgraph tables (Role / Perspective / Actor + Target keywords / graph / folders): Starfield.esm
+            # names no melee\onehanded folder, so the sword folders the player melee sets list come from here
+            # (owner's find_in_plugin run, 2026-10-23); copied whole, they are small
+            other.append(name)
+            continue
         if family(name) != "animationfiledata" and "persistantsubgraph" not in name.lower():
             continue
         if "persistantsubgraph" in name.lower():
