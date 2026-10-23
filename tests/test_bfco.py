@@ -149,6 +149,33 @@ class BfcoTests(unittest.TestCase):
                 self.assertLess(int(link.findtext("output")), len(src.findall("output")))
         self.assertIn("BFCO_Attack1 =power=> MeleeAttack_E", added)
 
+    def test_inner_only_switches_off_the_vanilla_combo_power_transition(self):
+        """Vanilla MeleeAttacks.agx: combo -> MeleeAttackPower_A on MeleeAttackPowerStart one level up caught every
+        mid-combo power press (owner's run); with inner_only it never fires, the standing one still does."""
+        from fo4sf import agx_write
+        sm = {"nodes": [{"kind": "anim", "tag": "MeleeAttack_C"}, {"kind": "anim", "tag": "MeleeAttack_B"},
+                        {"kind": "anim", "tag": "MeleeAttack_A"}, {"kind": "empty"}], "default": 3,
+              "links": [(3, 2, {"event": "MeleeAttackStart"}), (2, 1, {"event": "MeleeAttackStart", "blend": 0.15})]}
+        raw = agx_write.write({"name": "Data\\Meshes\\AnimTextData\\Tables\\Graphs\\MeleeAttacks.agx", "default": 2,
+                               "nodes": [{"kind": "sm", "name": "MeleeAttackCombo", "graph": sm},
+                                         {"kind": "anim", "tag": "MeleeAttackPower_A"}, {"kind": "empty"}],
+                               "links": [(2, 0, {"event": "MeleeAttackStart"}),
+                                         (0, 1, {"event": "MeleeAttackPowerStart"}),
+                                         (2, 1, {"event": "MeleeAttackPowerStart"})]})
+        power = {"tags": {1: "MeleeAttack02", 2: "MeleeAttackPower_A"}, "attack_power": {1: 1, 2: 2, 3: 2},
+                 "power_attack": {1: 2, 2: 1}, "power_power": {1: 2, 2: 1}, "inner_only": True}
+        out, added = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, power)
+        root = agx_edit.load(out)
+        top = agx_edit.transitions(root)
+        combo, tp, idle = (agx_edit.state(root, "MeleeAttackCombo"), agx_edit.state(root, "MeleeAttackPower_A"),
+                           2)
+        self.assertIn((combo, tp, bfco_combo.OUTER_OFF, ""), top)
+        self.assertNotIn((combo, tp, "MeleeAttackPowerStart", ""), top)
+        self.assertIn((idle, tp, "MeleeAttackPowerStart", ""), top)                # standing: unchanged
+        self.assertIn("MeleeAttackCombo =power=> MeleeAttackPower_A switched off (1)", added)
+        out2, _ = bfco_combo.build(raw, {1: 2, 2: 3, 3: 1}, None, dict(power, inner_only=False))
+        self.assertIn((combo, tp, "MeleeAttackPowerStart", ""), agx_edit.transitions(agx_edit.load(out2)))
+
     def test_chain_and_files(self):
         marks = {k: {"next_attack": n} for k, n in ((1, 2), (2, 3), (3, 9), (4, None))}
         self.assertEqual(bfco.chain(marks), {1: 2, 2: 3, 3: 1, 4: 1})    # unknown / missing -> back to 1

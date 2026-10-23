@@ -29,6 +29,7 @@ def tag(k: int, tags=None) -> str:
 
 POWER_EVENT = "MeleeAttackPowerStart"          # vanilla: None / PowerB -> MeleeAttackPower_A on this event
 POWER_TOP = "MeleeAttackPower_A"
+OUTER_OFF = "S2S_ComboPowerInside"              # an event nothing sends
 
 
 def build(raw: bytes, routing: dict, tags=None, power=None):
@@ -39,7 +40,11 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
     machine (a copy of attack 2's state), entered from normal attacks and other power attacks on
     MeleeAttackPowerStart and leaving to the next normal attack on MeleeAttackStart; targets without a tag go to the
     first tagged power attack. The top-level vanilla power attack (the power attack from standing) also gets
-    MeleeAttackStart -> the combo, so a normal press after it continues the chain."""
+    MeleeAttackStart -> the combo, so a normal press after it continues the chain.
+    power["inner_only"]: every combo state has its own power transition, so the vanilla top-level transition
+    combo -> MeleeAttackPower_A on MeleeAttackPowerStart is switched off (its event renamed to OUTER_OFF): it caught
+    the power press before the combo's own states (owner, 2026-10-23: every mid-combo power attack played
+    MeleeAttackPower_A although the graph took the event)."""
     root = agx_edit.load(raw)
     g = agx_edit.machine(root, MACHINE)
     nodes = g.findall("node")
@@ -91,6 +96,9 @@ def build(raw: bytes, routing: dict, tags=None, power=None):
         if top_power is not None and agx_edit.add_transition(root, root, top_power, combo, "MeleeAttackStart",
                                                              blend=0.15):
             added.append(f"{POWER_TOP} -> {MACHINE}")
+        if top_power is not None and power.get("inner_only"):
+            n_off = agx_edit.set_event(root, combo, top_power, OUTER_OFF, POWER_EVENT)
+            added.append(f"{MACHINE} =power=> {POWER_TOP} switched off ({n_off})")
     return agx_edit.dump(root, raw), added
 
 

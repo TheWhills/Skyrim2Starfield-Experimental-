@@ -1195,3 +1195,11 @@ skinned-mesh writer: not in this pack).
   press goes to ring slot j + 1, a power press to power slot j + 1. Slot 6 and the standing power attack keep the
   vanilla MeleeAttackPower_A (each stance's power 1). Delivered as SkyrimMelee_LoreRim_sword_stances_v2.zip (scratch);
   stance folders now hold 12 clips each, so the CK cache must be rebuilt.
+* **Why every mid-combo power attack was the same (owner, 2026-10-23):** the plugin's MeleeAttackPowerStart was
+  "taken by the graph", yet each stance played one power attack: vanilla MeleeAttacks.agx has a TOP-LEVEL
+  transition MeleeAttackCombo -> MeleeAttackPower_A on MeleeAttackPowerStart (1-based links 5 / 4 / 1 = idle, combo,
+  sprint), which catches the press before the combo machine's own states. Now every ring slot has an inner power
+  transition (slots without a host -> an inner state on the vanilla MeleeAttackPower_A tag) and that outer
+  transition's event is renamed to S2S_ComboPowerInside (never sent); the standing power attack is unchanged.
+  BFCO does the same job differently: its power state machine's startStateId is bound to MCO_nextpowerattack, which
+  each normal clip sets (read for the approach only). Pack v3 (scratch).

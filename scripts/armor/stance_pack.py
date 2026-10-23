@@ -133,14 +133,22 @@ def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None):
 
 
 def power_routing(n: int, pslots: dict) -> dict:
-    """bfco_combo.build's power argument for the shared graph: ring slot j -> power slot j; after power slot j a
-    normal press goes to ring slot j + 1 and a power press to power slot j + 1 (wrapping)."""
+    """bfco_combo.build's power argument for the shared graph: ring slot j -> power slot j; slots without a power slot
+    of their own -> a power state on the vanilla tag (MeleeAttackPower_A: each stance's power attack 1), so every
+    slot has its own power transition and the vanilla combo -> power transition can be switched off (inner_only).
+    After power slot j a normal press goes to ring slot j + 1 and a power press to power slot j + 1 (wrapping)."""
     m = len(pslots)
     if not m:
         return None
-    return {"tags": {j: v[1] for j, v in pslots.items()}, "attack_power": {j: j for j in range(1, m + 1)},
-            "power_attack": {j: j % n + 1 for j in range(1, m + 1)},
-            "power_power": {j: j % m + 1 for j in range(1, m + 1)}}
+    tags = {j: v[1] for j, v in pslots.items()}
+    attack_power = {j: j for j in range(1, m + 1)}
+    if m < n:
+        tags[m + 1] = bfco_combo.POWER_TOP
+        attack_power.update({j: m + 1 for j in range(m + 1, n + 1)})
+    k = len(tags)
+    return {"tags": tags, "attack_power": attack_power,
+            "power_attack": {p: (p if p <= m else n) % n + 1 for p in tags},
+            "power_power": {p: p % k + 1 for p in tags}, "inner_only": True}
 
 
 def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:
