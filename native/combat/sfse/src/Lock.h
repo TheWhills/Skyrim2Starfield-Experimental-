@@ -19,7 +19,8 @@ struct LockSettings {
     // Turn the player's heading toward the target. Off by default: owner, 2026-10-23 - the player turned but Starfield's
     // third-person camera did not follow (its own yaw / pitch are not mapped yet; see CameraProbe).
     bool steer_player = false;
-    int camera_samples = 8;         // while locked: camera rotation + third-person state floats, every 0.5 s, N times
+    bool steer_camera = true;       // turn the third-person camera toward the target (ThirdPersonState rotation)
+    int camera_samples = 0;         // while locked: camera rotation + third-person state floats, every 0.5 s, N times
     float pitch_sign = 1.0f;        // -1 if the first run shows the camera tilting the wrong way
     bool hostile_only = true;
     std::string lock_variable = "TDM_TargetLock";   // graph bool for movesets' TDM conditions ("" = none)
@@ -55,6 +56,12 @@ private:
     int camera_logged_ = 0;
     std::vector<float> camera_last_;
     void CameraProbe(double now, float player_yaw);
+    // The third-person camera's rotation (ThirdPersonState +0x170, when that state is the current one and the value is
+    // a unit quaternion); nullopt otherwise. Look() falls back to the player's heading.
+    std::optional<combat::Angles> CameraAngles() const;
+    bool SetCameraAngles(combat::Angles a) const;
+    combat::Angles Look() const;
+    bool camera_warned_ = false;
     double next_scan_ = 0.0;
     int scans_logged_ = 0;
 };

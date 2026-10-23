@@ -159,6 +159,13 @@ struct Angles { float pitch = 0, yaw = 0; };
 float wrap_pi(float a);                                  // into (-pi, pi]
 Angles aim_angles(Vec3 from, Vec3 to);
 Vec3 look_forward(Angles a);                             // unit vector the angles look along
+// Starfield's third-person camera rotation: a quaternion (w, x, y, z) in ThirdPersonState (+0x170 on 1.16), the
+// camera's world rotation as yaw about Z then pitch about X: q = Rz(-yaw) * Rx(-pitch), yaw clockwise from +Y and pitch
+// positive looking down, as Angles. Read from the owner's camera-probe log 2026-10-23 (the yaw follows the camera root's
+// forward row to 0.1 deg over two samples 43 deg apart).
+struct Quat { float w = 1, x = 0, y = 0, z = 0; };
+Angles camera_angles(Quat q);
+Quat camera_quat(Angles a);
 // Moves `cur` toward `want` (shortest way round for yaw): each axis closes the fraction min(1, rate * dt) of its gap
 // (rates per second; TDM's camera yaw 8 / pitch 2 are the defaults). Pitch is clamped to +-max_pitch.
 Angles steer(Angles cur, Angles want, float dt, float yaw_rate = 8.0f, float pitch_rate = 2.0f,

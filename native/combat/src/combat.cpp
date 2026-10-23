@@ -232,6 +232,22 @@ Vec3 look_forward(Angles a) {
     return {std::sin(a.yaw) * c, std::cos(a.yaw) * c, -std::sin(a.pitch)};
 }
 
+Angles camera_angles(Quat q) {
+    // q = (ca cb, ca sb, sa sb, sa cb) with ca / sa = cos / sin (a / 2), a = -yaw, and cb / sb for b = -pitch
+    const float a = 2.0f * std::atan2(q.z, q.w);
+    const float ca = std::cos(a / 2), sa = std::sin(a / 2);
+    const float sb = std::fabs(ca) >= std::fabs(sa) ? q.x / ca : q.y / sa;
+    const float cb = std::fabs(ca) >= std::fabs(sa) ? q.w / ca : q.z / sa;
+    const float b = 2.0f * std::atan2(sb, cb);
+    return {wrap_pi(-b), wrap_pi(-a)};
+}
+
+Quat camera_quat(Angles ang) {
+    const float a = -ang.yaw, b = -ang.pitch;
+    const float ca = std::cos(a / 2), sa = std::sin(a / 2), cb = std::cos(b / 2), sb = std::sin(b / 2);
+    return {ca * cb, ca * sb, sa * sb, sa * cb};
+}
+
 Angles steer(Angles cur, Angles want, float dt, float yaw_rate, float pitch_rate, float max_pitch) {
     float ky = std::min(1.0f, std::max(0.0f, yaw_rate * dt));
     float kp = std::min(1.0f, std::max(0.0f, pitch_rate * dt));

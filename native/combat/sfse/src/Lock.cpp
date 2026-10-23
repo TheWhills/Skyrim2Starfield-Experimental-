@@ -184,7 +184,7 @@ void Lock::Toggle() {
         SetLocked(std::nullopt, "key");
         return;
     }
-    const combat::Angles look{player->data.angle.x * s_.pitch_sign, player->data.angle.z};
+    const combat::Angles look = Look();
     const auto eye = V(player->data.location, s_.eye_height);
     auto cands = Gather(look, eye);
     auto id = core_.acquire(cands, eye, combat::look_forward(look), combat::SelectMode::Combined);
@@ -219,7 +219,7 @@ void Lock::Toggle() {
 void Lock::Switch(int dx, int dy) {
     auto* player = game::Player();
     if (!player || !locked_) return;
-    const combat::Angles look{player->data.angle.x * s_.pitch_sign, player->data.angle.z};
+    const combat::Angles look = Look();
     const auto eye = V(player->data.location, s_.eye_height);
     if (auto id = core_.switch_target(Gather(look, eye), eye, dx, dy, game::Now())) SetLocked(id, "switch");
 }
@@ -268,6 +268,43 @@ void Lock::CameraProbe(double now, float player_yaw) {
               current ? "current" : "not current", floats.empty() ? std::string(" no change") : floats);
 }
 
+namespace {
+constexpr std::ptrdiff_t kThirdPersonRotation = 0x170;      // owner's camera probe, Starfield 1.16.244
+
+std::byte* CurrentThirdPerson() {
+    auto* cam = RE::PlayerCamera::GetSingleton();
+    if (!cam || !game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) return nullptr;
+    auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
+    if (!state || cam->currentState != state || !game::Readable(state, kThirdPersonRotation + 16)) return nullptr;
+    if (*reinterpret_cast<std::uintptr_t*>(state) != RE::VTABLE::ThirdPersonState[0].address()) return nullptr;
+    return state;
+}
+}  // namespace
+
+std::optional<combat::Angles> Lock::CameraAngles() const {
+    auto* state = CurrentThirdPerson();
+    if (!state) return std::nullopt;
+    combat::Quat q;
+    std::memcpy(&q, state + kThirdPersonRotation, sizeof(q));
+    const float n = q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z;
+    if (!std::isfinite(n) || std::fabs(n - 1.0f) > 0.05f) return std::nullopt;
+    return combat::camera_angles(q);
+}
+
+bool Lock::SetCameraAngles(combat::Angles a) const {
+    auto* state = CurrentThirdPerson();
+    if (!state || !CameraAngles()) return false;
+    const auto q = combat::camera_quat(a);
+    std::memcpy(state + kThirdPersonRotation, &q, sizeof(q));
+    return true;
+}
+
+combat::Angles Lock::Look() const {
+    if (auto a = CameraAngles()) return *a;
+    auto* player = game::Player();
+    return player ? combat::Angles{player->data.angle.x * s_.pitch_sign, player->data.angle.z} : combat::Angles{};
+}
+
 void Lock::Update() {
     const double now = game::Now();
     const float dt = last_ < 0 ? 0.0f : static_cast<float>(std::min(0.1, now - last_));
@@ -279,7 +316,7 @@ void Lock::Update() {
         SetLocked(std::nullopt, "no player in a cell");
         return;
     }
-    const combat::Angles look{player->data.angle.x * s_.pitch_sign, player->data.angle.z};
+    const combat::Angles look = Look();
     const auto eye = V(player->data.location, s_.eye_height);
     const auto h = handle_of_.find(*locked_);
     if (h == handle_of_.end()) {
@@ -305,9 +342,14 @@ void Lock::Update() {
                   combat::wrap_pi(want.yaw - look.yaw) * 57.2958f, (want.pitch - look.pitch) * 57.2958f);
     }
     if (!s_.steer_pitch) want.pitch = look.pitch;
-    CameraProbe(now, look.yaw);
-    if (!s_.steer_player) return;
+    CameraProbe(now, player->data.angle.z);
     const auto next = combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
+    if (s_.steer_camera && !SetCameraAngles(next) && !camera_warned_) {
+        camera_warned_ = true;
+        REX::WARN("lock-on: the third-person camera's rotation is not available (not in third person, or the layout "
+                  "changed): the camera is not steered");
+    }
+    if (!s_.steer_player) return;
     // UNVERIFIED: writing the angle directly is enough for the player and the camera to turn (Skyrim's lock-on mods
     // do this on PlayerCharacter). Mouse look still adds on top; a lock that fights the mouse is expected for now.
     player->data.angle.z = next.yaw;

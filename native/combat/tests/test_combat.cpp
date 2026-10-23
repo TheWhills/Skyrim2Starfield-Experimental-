@@ -183,7 +183,27 @@ static void aiming() {
     CHECK(near(x, 0) && y > 0);
 }
 
+// The owner's camera probe (2026-10-23): ThirdPersonState +0x170 = (0.841, -0.067, -0.042, 0.536) with the camera
+// root's forward row (-0.899, 0.412, -0.151); later (0.979, -0.075, -0.014, 0.191) with (-0.377, 0.915, -0.144).
+static void camera_quaternion() {
+    const float pi = 3.14159265f;
+    auto a = camera_angles({0.841f, -0.067f, -0.042f, 0.536f});
+    auto f = look_forward(a);
+    CHECK(near(f.x, -0.899f, 0.02f) && near(f.y, 0.412f, 0.02f) && near(f.z, -0.151f, 0.02f));
+    auto b = camera_angles({0.979f, -0.075f, -0.014f, 0.191f});
+    f = look_forward(b);
+    CHECK(near(f.x, -0.377f, 0.02f) && near(f.y, 0.915f, 0.02f) && near(f.z, -0.144f, 0.02f));
+    for (float yaw : {0.0f, 1.0f, -2.5f, 3.0f})                           // round trip
+        for (float pitch : {0.0f, 0.4f, -0.6f}) {
+            auto r = camera_angles(camera_quat({pitch, yaw}));
+            CHECK(near(wrap_pi(r.yaw - yaw), 0.0f, 1e-3f) && near(r.pitch, pitch, 1e-3f));
+        }
+    auto q = camera_quat({0.0f, pi / 2});                                 // facing +X: a quarter turn clockwise
+    CHECK(near(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z, 1.0f));
+}
+
 int main() {
+    camera_quaternion();
     aiming();
     payloads();
     attack_phase();

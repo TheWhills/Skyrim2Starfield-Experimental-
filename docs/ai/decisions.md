@@ -287,3 +287,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   bSteerPlayer (default 0) so the player no longer spins; a camera probe logs, every 0.5 s while locked (8 times), the
   camera root's world rotation and the third-person state's angle-like floats that changed (state checked against
   ThirdPersonState's vtable), to find the yaw / pitch field to steer. Unresolved until the owner's run.
+- Owner's camera-probe run: verified ThirdPersonState vtable and "current"; ThirdPersonState +0x170..+0x17C is a unit
+  quaternion (w, x, y, z) = Rz(-yaw) * Rx(-pitch) of the camera's world rotation: its yaw matches the camera root's
+  forward row (world.rotate row 1, 3x4 floats) to ~0.1 deg in two samples 43 deg apart, while the player's heading
+  stayed behind (the camera turns on its own). Core camera_angles / camera_quat (tests from the logged values).
+- Change: while locked the plugin steers that quaternion toward the target (yaw rate 8, pitch rate 2, mouse adds on
+  top); picking (crosshair, score) uses the camera's view; bSteerCamera = 1, bSteerPlayer = 0, probe off by default.

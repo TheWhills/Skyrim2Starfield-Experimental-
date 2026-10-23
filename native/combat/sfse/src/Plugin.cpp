@@ -85,6 +85,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     f("fpitchsign", ls.pitch_sign);
     ls.steer_pitch = to_int(lk, "bsteerpitch", 1) != 0;
     ls.steer_player = to_int(lk, "bsteerplayer", 0) != 0;
+    ls.steer_camera = to_int(lk, "bsteercamera", 1) != 0;
     ls.camera_samples = to_int(lk, "icamerasamples", ls.camera_samples);
     ls.hostile_only = to_int(lk, "bhostileonly", 1) != 0;
     ls.log_targets = to_int(lk, "ilogtargets", ls.log_targets);
