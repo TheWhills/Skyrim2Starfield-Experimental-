@@ -137,7 +137,7 @@ def power_routing(n: int, pslots: dict) -> dict:
     of their own -> a power state on the vanilla tag (MeleeAttackPower_A: each stance's power attack 1), so every
     slot has its own power transition and the vanilla combo -> power transition can be switched off (inner_only).
     After power slot j a normal press goes to ring slot j + 1 and a power press to power slot j + 1 (wrapping).
-    The combo's power transitions listen to S2S_ComboPower (the plugin's sComboPowerEvent), not the game's own event."""
+    The combo's power transitions listen to MeleeAttackPowerStart (S2S_ComboPower was worse in game, owner 2026-10-23)."""
     m = len(pslots)
     if not m:
         return None
@@ -150,7 +150,7 @@ def power_routing(n: int, pslots: dict) -> dict:
     return {"tags": tags, "attack_power": attack_power,
             "power_attack": {p: (p if p <= m else n) % n + 1 for p in tags},
             "power_power": {p: p % k + 1 for p in tags}, "inner_only": True,
-            "event": bfco_combo.COMBO_POWER_EVENT}
+            "event": bfco_combo.POWER_EVENT}
 
 
 def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:

@@ -164,4 +164,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - Change: the stance packs' combo -> power transitions now listen to S2S_ComboPower (bfco_combo power["event"],
   stance_pack.power_routing), and the plugin sends sComboPowerEvent (default S2S_ComboPower) for mid-combo power
   attacks. The game's own MeleeAttackPowerStart (standing V) is unchanged. Older packs: sComboPowerEvent =
-  MeleeAttackPowerStart. Status: unresolved until the owner's run.
+  MeleeAttackPowerStart.
+- Owner, same day: worse (the power attack came late and several looped in a row). Reverted to MeleeAttackPowerStart
+  in the packs and the plugin default; the event stays configurable (sComboPowerEvent, power["event"]).
