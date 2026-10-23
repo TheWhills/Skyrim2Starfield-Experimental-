@@ -210,3 +210,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   onehanded\player (needs the CK GenerateAnimInfo run; the CK reads tags from the graph). Plugin: sDodgeEvents
   (defaults to those events), dodge sends count as plugin sends for the queued-power cancel.
 - Status: unresolved until the owner's run. Open: whether NPC event names are known for the player's graph.
+- Owner's run (v7): the Creation Kit's AnimationFileData listed no S2S_Dodge*.af although v7 was the only enabled melee
+  pack and the run was fresh (verified, owner's checks). The same caches do list the new s2s_stances folders' files.
+  Supported: the CK lists loose files only for folders the archives do not already hold. Also verified on a cache of
+  the owner's: AnimationOffsets only lists the vanilla graph's tags (no MeleeAttack_D / 03 / Power01...), yet those
+  hosted tags play in game, so a new tag needs its file listed, not an offsets entry.
+- Change (pack v8): the dodge clips take existing vanilla paths in onehanded\player (Sneak_ThrowGrenade / ThrowMine /
+  CastSelf / CastTarget, retagged S2S_Dodge*), already in the caches; no CK rerun needed for them.

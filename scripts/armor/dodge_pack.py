@@ -2,10 +2,11 @@
 
 Converts the four step dodges (StepDodgeForward / Back / Left / Right.hkx) with their root motion from TK Dodge's
 animationdatasinglefile (motion ids, default TK Dodge RE's 1656 / 1657 / 1658 / 1659 = forward 5.4 m, back 3.9 m,
-left / right 3.3 m) into melee\\onehanded\\player as new clips tagged S2S_Dodge<Direction>, with a dodge's descriptor
-(dodge_descriptor: no attack, slide or hit events; "Allow Rotation" as every attack whose root motion plays), and
+left / right 3.3 m) into melee\\onehanded\\player on existing vanilla paths (HOSTS) retagged
+S2S_Dodge<Direction>, with a dodge's descriptor (dodge_descriptor: no attack, slide, throw or hit events; "Allow
+Rotation" as every attack whose root motion plays), and
 adds the dodge states to the pack's MeleeAttacks.agx and the attack switch of Player_Melee.agx (dodge_graph,
---attacks-graph). New clips need the Creation Kit's GenerateAnimInfo run like the stance folders.
+--attacks-graph). The host paths are already in the game's animation caches.
 
     python -I scripts\\armor\\dodge_pack.py --tk <TK Dodge folder with Meshes\\...> --pack <stance pack root>
         --anims <vanilla animations> --player-graph <vanilla player_melee.agx> <hkx_to_af options: --calumi ...>
@@ -31,7 +32,12 @@ CLIPS = {"Forward": "StepDodgeForward.hkx", "Back": "StepDodgeBack.hkx", "Left":
          "Right": "StepDodgeRight.hkx"}
 MOTION_IDS = {"Forward": 1656, "Back": 1657, "Left": 1658, "Right": 1659}
 FOLDER = "melee/onehanded/player"
-TEMPLATE = "slidefromsprint"
+# Existing vanilla paths that host the dodges (the Creation Kit lists only loose files in folders the game's archives do
+# not already have: owner's run 2026-10-23, new S2S_Dodge*.af in onehanded\player never reached AnimationFileData,
+# while the new s2s_stances folders did). Sneak variants of throws / casts with a melee weapon: rarely played, and
+# without them the game falls back to the standing throw / cast clip.
+HOSTS = {"Forward": "sneak_throwgrenade", "Back": "sneak_throwmine", "Left": "sneak_castself",
+         "Right": "sneak_casttarget"}
 
 
 def dodge_descriptor(afx: bytes) -> bytes:
@@ -73,11 +79,11 @@ def main(argv=None):
     if pack.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--pack must be outside the repository")
     motion = find_motion(a.tk)
-    template = bfco_pack.anim_path(a.anims, FOLDER, TEMPLATE)
     specs, motions = [], []
     for d, clip in CLIPS.items():
         path = find_clip(a.tk, clip)
-        specs += ["--replace", f"{path}::{template}::S2S_Dodge{d}"]
+        host = bfco_pack.anim_path(a.anims, FOLDER, HOSTS[d])
+        specs += ["--replace", f"{path}::{host}::tag:S2S_Dodge{d}"]
         motions += ["--motion", f"{os.path.splitext(clip)[0]}={motion}:{MOTION_IDS[d]}"]
     base = ["--weapon-in-hand"] + (["--starfield-data", a.starfield_data] if a.starfield_data else [])
     folder = os.path.join(pack, *bfco_pack.ANIMS.split("/"), *FOLDER.split("/"))
@@ -87,9 +93,10 @@ def main(argv=None):
         src = os.path.join(tmp, *bfco_pack.ANIMS.split("/"), *FOLDER.split("/"))
         for d in CLIPS:
             for ext in (".af", ".afx"):
-                fn = f"S2S_Dodge{d}{ext}"
-                if not os.path.isfile(os.path.join(src, fn)):
-                    print(f"{fn} was not written")
+                fn = next((f for f in (os.listdir(src) if os.path.isdir(src) else [])
+                           if f.lower() == HOSTS[d] + ext), None)
+                if fn is None:
+                    print(f"{HOSTS[d]}{ext} was not written")
                     rc |= 1
                     continue
                 with open(os.path.join(src, fn), "rb") as fh:
