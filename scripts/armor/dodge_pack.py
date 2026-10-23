@@ -52,7 +52,9 @@ NAMES = ("ZeroG_StaggerForwardMedium", "ZeroG_StaggerBackwardMedium", "ZeroG_Sta
 # Clip tags, like event names, must be names the game already has: owner's run 2026-10-23 (v13) - the left dodge tagged
 # MeleeAttack05 (vanilla NPC melee tag) played, the right one tagged S2S_DodgeRight snapped back. These are vanilla
 # human tags the player's melee graph never plays (NPC melee, player gun graph; read from the CK's AnimationOffsets).
-TAGS = {"Forward": "MeleeAttack05", "Back": "FireSingle", "Left": "FireAuto", "Right": "FireAutoPush"}
+# Not FireAuto: the game loops whatever plays under that tag (owner's run, v14: the left dodge repeated until another
+# action took over, no AttackEnd; FireSingle / FireAutoPush / MeleeAttack05 ended normally).
+TAGS = {"Forward": "MeleeAttack05", "Back": "FireSingle", "Left": "MeleeAttackBash", "Right": "FireAutoPush"}
 
 
 def names(directions) -> dict:

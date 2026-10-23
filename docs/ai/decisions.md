@@ -260,3 +260,5 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - v14: all four dodges on vanilla human tags the player's melee graph never plays (TAGS: MeleeAttack05, FireSingle,
   FireAuto, FireAutoPush - NPC melee / player gun tags from the CK's AnimationOffsets), files under four zero-g-only
   names in s2s_stances\common (NAMES; a stance FileData lists each once, in a vanilla folder after the shared one).
+- Owner's run (v14): all four dodges play (verified). The left one (tag FireAuto) repeated until something else took
+  over (no AttackEnd): the game loops that tag. v15: Left on MeleeAttackBash (player / NPC gun bash tag).
