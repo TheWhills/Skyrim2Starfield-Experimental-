@@ -1187,3 +1187,11 @@ skinned-mesh writer: not in this pack).
   equipitem), the equip on UnequipComplete or after 0.5 s. Papyrus UnequipItem / EquipItem returned but did nothing;
   a redraw does not re-pick the set. Limitation: the base form is re-equipped without its instance data (weapon mods
   on a modded vanilla weapon may be lost; the converted Skyrim weapons have none).
+* **Power attacks follow the combo (2026-10-23, built, in-game check pending).** Owner: only one power attack played;
+  BFCO / MCO pick the power attack by the normal attack before it (LoreRim sword high: after 1 power 2, after 2
+  power 3 ...; low: 1->2, 2->4, 3->3, 4->4, 5->5). `stance_pack.py` now gives ring slots 1-5 their own power state
+  (hosts left after the 6 normal slots: sneak / zero-g power and zero-g attack descriptors, power ones first, tags
+  MeleeAttack02-04, MeleeAttackPower01 / 02), each stance filling it from its routing; after power slot j a normal
+  press goes to ring slot j + 1, a power press to power slot j + 1. Slot 6 and the standing power attack keep the
+  vanilla MeleeAttackPower_A (each stance's power 1). Delivered as SkyrimMelee_LoreRim_sword_stances_v2.zip (scratch);
+  stance folders now hold 12 clips each, so the CK cache must be rebuilt.

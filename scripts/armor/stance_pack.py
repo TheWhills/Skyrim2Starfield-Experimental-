@@ -8,8 +8,12 @@ names and tags, so the stance's HumanRace entry finds its clips first and anythi
 One combo graph serves every stance, so the stances share its shape: N attack slots in a ring (slot 1 -> 2 -> ...
 -> N -> 1, N = the longest stance chain that fits the slots). Each stance fills the ring with its own chain followed
 from attack 1 (LoreRim sword high: 1 2 3 4 5 2 3 ...), so its order is kept except where the ring closes (reported as
-"wrap": the slot after N is attack 1 instead of the chain's next). Power attacks: each stance's power attack 1 on the
-vanilla power slot (no power chaining here).
+"wrap": the slot after N is attack 1 instead of the chain's next). Power attacks (BFCO / MCO: which power attack
+follows depends on the normal attack before it, e.g. LoreRim sword high: after attack 1 power 2, after 2 power 3):
+ring slot j gets its own power state (a host + pool tag, like the extra normal slots) that each stance fills with the
+power attack its routing gives after the attack it plays in slot j; slots without a free host fall back to the vanilla
+power attack (each stance's power attack 1, also the power attack from standing). After power slot j a normal press
+goes on to ring slot j + 1, another power press to power slot j + 1.
 
     python -I scripts\\armor\\stance_pack.py --stance Neutral=<folder> --stance Low=<folder> --stance Mid=<folder>
         --stance High=<folder> --anims <vanilla extract> --folder melee/onehanded/player/sword
@@ -63,13 +67,37 @@ def ring_slots(chains: dict, folders, anims: str, starfield_data=None, limit=Non
     raise SystemExit("no attack slots in the folders")
 
 
+def power_slots(n: int, folders, anims: str, starfield_data=None):
+    """{j: (host stem, tag, folder)} for power slots 1..m (m <= n): hosts the n normal slots left free, from the first
+    folder that has each (the player's sword folder has only the sneak variants, its parent folder also the zero-g
+    ones; a tag missing from the sword folder is found in the parent, as the vanilla folders are listed in order),
+    power descriptors first, tags from the pool after the ones the normal slots use."""
+    free, used_tags = [], 0
+    for f in folders:
+        have = [s for s in animslots.HOSTS if bfco_pack.exists(bfco_pack.anim_path(anims, f, s), starfield_data)]
+        used = {stem for stem, _t, rekey in animslots.allocate(n, have + [c for c, _t in animslots.COMBO]).values()
+                if rekey}
+        used_tags = max(used_tags, len(used))
+        for h in have:
+            if h not in used and all(h != x for x, _f in free):
+                free.append((h, f))
+    free.sort(key=lambda hf: "power" not in hf[0])
+    tags = animslots.TAG_POOL[used_tags:]
+    m = min(n, len(free), len(tags))
+    return {j: (free[j - 1][0], tags[j - 1], free[j - 1][1]) for j in range(1, m + 1)}
+
+
 def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None):
-    """{stance: {"sequence", "wrap", "replace": [hkx_to_af --replace specs], "folders"}}, N, tags {slot: tag}."""
+    """({stance: {"sequence", "wrap", "replace": [hkx_to_af --replace specs], "folders", "powers"}}, N, tags {slot: tag},
+    power {j: (host, tag, folder)}); "folders": the vanilla folders whose converted clips a stance moves into its
+    stance folder."""
     chains = {s: bfco_combo.routing_of(f) for s, f in stances.items()}
+    after = {s: bfco_combo.routes_of(f).get("attack_power", {}) for s, f in stances.items()}
     empty = [s for s, c in chains.items() if not c]
     if empty:
         raise SystemExit(f"no BFCO_AttackN / mco_attackN clips for {', '.join(empty)}")
     n, slots = ring_slots(chains, folders, anims, starfield_data, limit)
+    pslots = power_slots(n, folders, anims, starfield_data)
     out = {}
     for stance, folder in stances.items():
         names = sorted(os.listdir(folder))
@@ -89,10 +117,30 @@ def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None):
             s = bfco_pack.pick(names, "BFCO_SprintAttack") or bfco_pack.pick(names, "mco_sprintattack")
             if s and bfco_pack.exists(bfco_pack.anim_path(anims, f, "meleeattacksprint"), starfield_data):
                 replace.append(f"{os.path.join(folder, s)}::{bfco_pack.anim_path(anims, f, 'meleeattacksprint')}")
-        out[stance] = {"sequence": seq, "wrap": wrap, "replace": replace, "folders": use,
-                       "chain": chains[stance]}
+        powers, move = {}, list(use)
+        for j, (host, ptag, hf) in pslots.items():                  # the power attack after slot j's attack
+            q = after[stance].get(seq[j - 1], 1)
+            clip = grouped["power"].get(q) or grouped["power"].get(1)
+            if clip:
+                powers[j] = q
+                replace.append(f"{os.path.join(folder, clip)}::{bfco_pack.anim_path(anims, hf, host)}::tag:{ptag}")
+                if hf not in move:
+                    move.append(hf)
+        out[stance] = {"sequence": seq, "wrap": wrap, "replace": replace, "folders": move,
+                       "chain": chains[stance], "powers": powers}
     tags = {j: v[1] for j, v in slots[folders[0]].items()}
-    return out, n, tags
+    return out, n, tags, pslots
+
+
+def power_routing(n: int, pslots: dict) -> dict:
+    """bfco_combo.build's power argument for the shared graph: ring slot j -> power slot j; after power slot j a
+    normal press goes to ring slot j + 1 and a power press to power slot j + 1 (wrapping)."""
+    m = len(pslots)
+    if not m:
+        return None
+    return {"tags": {j: v[1] for j, v in pslots.items()}, "attack_power": {j: j for j in range(1, m + 1)},
+            "power_attack": {j: j % n + 1 for j in range(1, m + 1)},
+            "power_power": {j: j % m + 1 for j in range(1, m + 1)}}
 
 
 def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:
@@ -131,10 +179,13 @@ def main(argv=None):
         if name != NEUTRAL and name not in stance_plugin.STANCES or not os.path.isdir(folder):
             sys.exit(f"--stance wants NAME=FOLDER with NAME {NEUTRAL} or one of {stance_plugin.STANCES}; got {spec}")
         stances[name] = folder
-    p, n, tags = plan(stances, a.folder, a.anims, a.starfield_data, a.slots)
+    p, n, tags, pslots = plan(stances, a.folder, a.anims, a.starfield_data, a.slots)
     print(f"ring of {n} slots: " + ", ".join(f"{j}:{t}" for j, t in sorted(tags.items())))
+    print(f"power slots: " + (", ".join(f"after {j}: {t} (on {h})" for j, (h, t, _f) in sorted(pslots.items()))
+                              or "none (no free hosts): the vanilla power attack after every slot"))
     rc = 0
     for stance, st in p.items():
+        print(f"{stance}: powers after slots {st['powers']}")
         print(f"{stance}: chain {st['chain']} -> slots {st['sequence']}"
               + (f" (wrap: after {st['wrap']['after']} the chain goes to {st['wrap']['chain_next']}, the ring to "
                  f"{st['wrap']['ring_next']})" if st["wrap"] else ""))
@@ -145,10 +196,11 @@ def main(argv=None):
         else:
             with tempfile.TemporaryDirectory() as tmp:
                 rc |= hkx_to_af.main(rest + ["--out", tmp] + base + specs)
-                moved = _move_into_stance(tmp, st["folders"][0], out, stance)
+                moved = sum(_move_into_stance(tmp, f, out, stance) for f in st["folders"])
             print(f"{stance}: {moved} files in {stance_plugin.stance_folder(stance)}")
     with open(a.graph, "rb") as fh:
-        data, added = bfco_combo.build(fh.read(), {j: j % n + 1 for j in range(1, n + 1)}, tags)
+        data, added = bfco_combo.build(fh.read(), {j: j % n + 1 for j in range(1, n + 1)}, tags,
+                                       power_routing(n, pslots))
     dst = os.path.join(out, *bfco_combo.GRAPH_REL)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     with open(dst, "wb") as fh:

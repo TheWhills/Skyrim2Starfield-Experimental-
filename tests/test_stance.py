@@ -170,14 +170,44 @@ class StancePackPlanTests(unittest.TestCase):
                     open(os.path.join(m, f"mco_attack{k}.hkx"), "wb").close()  # unreadable: in-order chain
                 open(os.path.join(m, "mco_powerattack1.hkx"), "wb").close()
                 sets[name] = m
-            p, n, tags = PK.plan(sets, [folder], anims)
+            p, n, tags, pslots = PK.plan(sets, [folder], anims)
             self.assertEqual(n, 5)                                   # the longest chain, if the slots hold it
             self.assertEqual(len(tags), 5)
             self.assertEqual(p["High"]["sequence"], [1, 2, 3, 4, 5])
             self.assertIsNone(p["High"]["wrap"])
             self.assertEqual(p["Neutral"]["sequence"], [1, 2, 3, 1, 2])   # a shorter chain repeats around the ring
             self.assertEqual(len(p["High"]["replace"]), 5 + 1)           # 5 attacks + the power attack
+            self.assertEqual(pslots, {})                                 # no host left for power slots
             self.assertTrue(all("::" in r for r in p["High"]["replace"]))
+
+    def test_power_slots_follow_the_attack_before(self):
+        """BFCO / MCO: the power attack depends on the normal attack before it; each ring slot gets a power state
+        on the hosts left after the normal slots, filled per stance (here the routing is unreadable: power 1)."""
+        with tempfile.TemporaryDirectory() as d:
+            anims = os.path.join(d, "anims")
+            folder = "melee/onehanded/player/sword"
+            fdir = os.path.join(anims, *"meshes/actors/human/animations".split("/"), *folder.split("/"))
+            os.makedirs(fdir)
+            for stem in ["meleeattack_a", "meleeattack_b", "meleeattack_c", "meleeattackpower_a"] + PK.animslots.HOSTS:
+                open(os.path.join(fdir, stem + ".afx"), "w").close()
+            m = os.path.join(d, "High")
+            os.makedirs(m)
+            for k in range(1, 5):
+                open(os.path.join(m, f"mco_attack{k}.hkx"), "wb").close()
+            for k in (1, 2):
+                open(os.path.join(m, f"mco_powerattack{k}.hkx"), "wb").close()
+            p, n, tags, pslots = PK.plan({"High": m}, [folder], anims)
+            self.assertEqual(n, 4)
+            self.assertEqual(len(pslots), 4)                             # 1 host for slot 4, 4 left for powers
+            self.assertEqual(pslots[1], ("sneak_meleeattackpower_a", "MeleeAttack_E", folder))
+            self.assertEqual(p["High"]["powers"], {1: 1, 2: 1, 3: 1, 4: 1})
+            power_specs = [r for r in p["High"]["replace"] if "mco_powerattack1.hkx" in r and "::tag:" in r]
+            self.assertEqual(len(power_specs), 4)
+            r = PK.power_routing(n, pslots)
+            self.assertEqual(r["attack_power"], {1: 1, 2: 2, 3: 3, 4: 4})
+            self.assertEqual(r["power_attack"], {1: 2, 2: 3, 3: 4, 4: 1})
+            self.assertEqual(r["power_power"], {1: 2, 2: 3, 3: 4, 4: 1})
+            self.assertIsNone(PK.power_routing(n, {}))
 
     def test_stance_clips_go_flat_into_the_stance_folder(self):
         """The stance entries list s2s_stances/<stance> first; a subfolder below it is not searched (owner's run)."""
