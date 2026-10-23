@@ -99,6 +99,11 @@ struct ControllerConfig {
     // per press, an AttackStart with no attack press and nothing sent by the plugin). When such an AttackStart comes
     // within queued_power_window seconds of the last mid-combo press (or of the last one cancelled), the plugin sends
     // cancel_event (a top-level MeleeAttackPower_A / MeleeAttackCombo -> None transition the stance packs add).
+    // Graph event per dodge direction (Direction order: Forward, ForwardRight, Right, BackRight, Back, BackLeft, Left,
+    // ForwardLeft); "" = TKDodge<Direction>. Starfield graphs only take event names they already know (owner's logs
+    // 2026-10-23: TKDodgeBack and S2S_ComboPower "not taken by the graph"), so the stance packs' dodge states listen to
+    // the NPC melee attack events (npc_meleeattacks.agx), which the game does not send to the player.
+    std::array<std::string, 8> dodge_events{"MeleeAttack01", "", "MeleeAttack04", "", "MeleeAttack02", "", "MeleeAttack03", ""};
     bool cancel_queued_power = true;
     double queued_power_window = 3.0;
     std::string cancel_event = "ActionInterrupt";

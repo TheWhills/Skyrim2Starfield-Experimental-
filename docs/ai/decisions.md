@@ -194,3 +194,19 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   ActorEquipManager::UnequipObject while the stance applies and the equip reports done (return value meaning
   unresolved, behaviour verified). The first-click attack-start burst of the S2S_ComboPower run did not recur (one
   AttackStart / AttackEnd 0.000 pair only).
+
+## 2026-10-23 — Full-body dodges on known event names (stance pack v7)
+- TKDodgeBack was "not taken by the graph" (no dodge states installed; and new event names are refused anyway).
+- Vanilla graphs read for routing: Player_Melee's Switch over MeleeAttacks goes to "Attacking" on
+  MeleeAttackPowerStart / MeleeAttackSprintStart and back to "Idle" on AttackEnd / ActionInterrupt / BlockStart /
+  JumpStart (a Blend Node lists the same two events); MeleeEventControllers discards MeleeAttackPowerStart while
+  bDontAllowPowerAttack (likely why the game re-sends queued power attacks). MeleeActions is layered over locomotion,
+  so a dodge there would lose the legs while moving.
+- Change: dodge_graph --attacks-graph puts one dodge state per direction at the top of MeleeAttacks (copies of the
+  standing power attack, no weapon-speed multiplier), entered from idle / combo / attacks / dodges on NPC melee attack
+  events (MeleeAttack01 forward, 02 back, 03 left, 04 right: known names the game never sends to the player), back
+  to idle on clip end (AttackEnd ends the plugin's dodge too); Player_Melee's two attack lists learn those events.
+  dodge_pack.py converts TK Dodge RE's step dodges (root motion 5.4 / 3.9 / 3.3 / 3.3 m) as new clips S2S_Dodge* in
+  onehanded\player (needs the CK GenerateAnimInfo run; the CK reads tags from the graph). Plugin: sDodgeEvents
+  (defaults to those events), dodge sends count as plugin sends for the queued-power cancel.
+- Status: unresolved until the owner's run. Open: whether NPC event names are known for the player's graph.

@@ -357,6 +357,27 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
             if ((ok = read_double(v, d) && d >= 0.0))
                 c.stance_reequip_delay = d;
         }
+        else if (k == "sdodgeevents") {           // Forward=MeleeAttack01, Back=MeleeAttack02, ...
+            std::size_t start = 0;
+            while (ok && start <= v.size()) {
+                auto end = v.find(',', start);
+                if (end == std::string::npos) end = v.size();
+                auto item = trim(std::string_view(v).substr(start, end - start));
+                start = end + 1;
+                if (item.empty()) continue;
+                auto eq = item.find('=');
+                ok = eq != std::string_view::npos;
+                if (!ok) break;
+                auto dir = trim(item.substr(0, eq));
+                auto ev = trim(item.substr(eq + 1));
+                ok = false;
+                for (int i = 0; i < 8; ++i)
+                    if (is(dodge_event(static_cast<Direction>(i)), "TKDodge" + std::string(dir))) {
+                        c.dodge_events[static_cast<std::size_t>(i)] = std::string(ev);
+                        ok = true;
+                    }
+            }
+        }
         else if (k == "sstancerefreshevents") {
             c.stance_refresh_events.clear();
             std::size_t start = 0;
@@ -397,7 +418,10 @@ void Controller::dodge(double t, const PlayerState& s, std::vector<Command>& out
     }
     float x = 0, y = 0;
     movement(s, x, y);
-    out.push_back(event(std::string(dodge_event(dodge_direction(x, y, cfg_.dodge)))));
+    const Direction d = dodge_direction(x, y, cfg_.dodge);
+    const auto& named = cfg_.dodge_events[static_cast<std::size_t>(d)];
+    out.push_back(event(named.empty() ? std::string(dodge_event(d)) : named));
+    last_send_at_ = t;                      // the dodge's AttackStart is not a queued power attack
     if (cfg_.dodge.stamina_cost > 0) {
         Command c{Command::Kind::SpendStamina};
         c.amount = cfg_.dodge.stamina_cost;
@@ -550,6 +574,8 @@ std::vector<Command> Controller::on_anim_event(std::string_view tag, std::string
         dodge_at_ = t;
     } else if (is(name, "TKDR_DodgeEnd")) {
         dodging_ = dodge_events_ = false;
+    } else if (dodging_ && is(name, "AttackEnd") && t - dodge_at_ > 0.1) {
+        dodging_ = dodge_events_ = false;       // the stance packs' dodge states end like an attack (back to idle)
     }
     else if (is(name, "TKDR_IframeDuration")) iframes_.open(t, cfg_.annotation_iframes);
     else if (is(name, "TKDR_IframeEnd")) iframes_.close(t);

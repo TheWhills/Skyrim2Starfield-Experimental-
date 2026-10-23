@@ -147,7 +147,7 @@ static void dodging() {
     PlayerState s;
     auto cs = ctl.on_key(56, true, 0.0, s);                               // standing: back
     auto e = first(cs, Command::Kind::SendEvent);
-    CHECK(e && e->name == "TKDodgeBack");
+    CHECK(e && e->name == "MeleeAttack02");                               // known event names (see dodge_events)
     CHECK(ctl.dodging() && ctl.invulnerable(0.1) && !ctl.invulnerable(0.35));
     CHECK(count(cs, Command::Kind::SpendStamina) == 0);                   // no cost by default in Starfield
     cs = ctl.on_key(56, true, 0.1, s);                                    // no second dodge mid-dodge
@@ -158,7 +158,7 @@ static void dodging() {
     ctl.on_key(17, true, 1.0, s);                                         // W held: forward
     cs = ctl.on_key(56, true, 1.0, s);
     e = first(cs, Command::Kind::SendEvent);
-    CHECK(e && e->name == "TKDodgeForward");
+    CHECK(e && e->name == "MeleeAttack01");
     ctl.on_key(17, false, 1.1, s);
     ctl.on_anim_event("TKDR_DodgeStart", "", 1.05);                       // clip events: end comes from the clip
     ctl.tick(1.5, s);
@@ -169,7 +169,7 @@ static void dodging() {
     s.stick_x = 0.9f;                                                     // the stick wins over keys
     cs = ctl.on_key(56, true, 2.0, s);
     e = first(cs, Command::Kind::SendEvent);
-    CHECK(e && e->name == "TKDodgeRight");
+    CHECK(e && e->name == "MeleeAttack04");
     ctl.on_anim_event("TKDR_DodgeStart", "", 2.0);
     ctl.tick(5.5, s);                                                     // lost end event: timeout
     CHECK(!ctl.dodging());
@@ -185,6 +185,22 @@ static void dodging() {
     cs = tired.on_key(56, true, 0.0, low);
     auto st = first(cs, Command::Kind::SpendStamina);
     CHECK(st && st->amount == 20.0f);
+
+    // The stance packs' dodge states end like an attack: AttackEnd (not one left over from the attack it cancelled).
+    Controller ends;
+    ends.on_key(56, true, 10.0, PlayerState{});
+    ends.on_anim_event("AttackEnd", "", 10.05);
+    CHECK(ends.dodging());
+    ends.on_anim_event("AttackEnd", "", 10.25);
+    CHECK(!ends.dodging());
+    // sDodgeEvents; unlisted directions fall back to TKDodge<Direction>
+    Controller named(parse_config("[Combat]\nsDodgeEvents = Back=SlideStart, Left = \nbEightWayDodge = 0\n"));
+    PlayerState still;
+    cs = named.on_key(56, true, 0.0, still);                              // (first() points into cs)
+    e = first(cs, Command::Kind::SendEvent);
+    CHECK(e && e->name == "SlideStart");
+    CHECK(named.config().dodge_events[6].empty() && named.config().dodge_events[0] == "MeleeAttack01");
+    CHECK(parse_config("[Combat]\nsDodgeEvents = Up=X\n").dodge_events[0] == "MeleeAttack01");   // bad entry: ignored
 
     Controller iframes;                                                   // annotation i-frames
     iframes.on_anim_event("TKDR_IframeDuration", "", 5.0);
