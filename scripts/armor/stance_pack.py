@@ -95,11 +95,23 @@ def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None):
     return out, n, tags
 
 
+def stance_subpath(folder: str) -> list:
+    """The part of a vanilla player folder below melee (melee/onehanded/player/sword -> [onehanded, player, sword]).
+
+    The race entry names only the root (Actors\\Human\\Animations\\Melee); the game adds the weapon-type subfolders
+    under each root itself (vanilla Player_Melee sets list melee/onehanded/player, .../player/female, .../player/knife;
+    no record names them). Clips straight in the stance folder lost to the vanilla sword folder: owner's run 2026-10-23,
+    keywords set, caches rebuilt, same swings in every stance. So the stance folder mirrors that subpath."""
+    parts = [p for p in folder.replace("\\", "/").split("/") if p]
+    low = [p.lower() for p in parts]
+    return parts[low.index("melee") + 1:] if "melee" in low else parts
+
+
 def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:
     """Move the converted clips of `folder` (Data-relative under meshes/actors/human/animations) into the stance's
-    folder of the pack; returns how many files."""
+    folder of the pack, under the same subpath below melee; returns how many files."""
     src = os.path.join(tmp, *bfco_pack.ANIMS.split("/"), *folder.split("/"))
-    dst = os.path.join(out, "meshes", *stance_plugin.stance_folder(stance).split("\\"))
+    dst = os.path.join(out, "meshes", *stance_plugin.stance_folder(stance).split("\\"), *stance_subpath(folder))
     os.makedirs(dst, exist_ok=True)
     n = 0
     for fn in os.listdir(src) if os.path.isdir(src) else []:

@@ -129,6 +129,21 @@ class StancePackPlanTests(unittest.TestCase):
             self.assertEqual(len(p["High"]["replace"]), 5 + 1)           # 5 attacks + the power attack
             self.assertTrue(all("::" in r for r in p["High"]["replace"]))
 
+    def test_stance_clips_keep_the_weapon_subpath(self):
+        """Stance clips go to s2s_stances/<stance>/onehanded/player/sword (the game adds the weapon subfolders under
+        each root folder; clips at the stance root lost to the vanilla sword folder in the owner's run)."""
+        self.assertEqual(PK.stance_subpath("melee/onehanded/player/sword"), ["onehanded", "player", "sword"])
+        self.assertEqual(PK.stance_subpath("Melee\\OneHanded\\Player"), ["OneHanded", "Player"])
+        with tempfile.TemporaryDirectory() as d:
+            folder = "melee/onehanded/player/sword"
+            src = os.path.join(d, "tmp", *PK.bfco_pack.ANIMS.split("/"), *folder.split("/"))
+            os.makedirs(src)
+            for fn in ("MeleeAttack_A.af", "MeleeAttack_A.afx", "notes.txt"):
+                open(os.path.join(src, fn), "w").close()
+            self.assertEqual(PK._move_into_stance(os.path.join(d, "tmp"), folder, os.path.join(d, "out"), "High"), 2)
+            dst = os.path.join(d, "out", "meshes", *SP.stance_folder("High").split("\\"), "onehanded", "player", "sword")
+            self.assertEqual(sorted(os.listdir(dst)), ["MeleeAttack_A.af", "MeleeAttack_A.afx"])
+
 
 if __name__ == "__main__":
     unittest.main()

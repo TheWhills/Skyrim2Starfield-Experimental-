@@ -1152,3 +1152,17 @@ skinned-mesh writer: not in this pack).
   SkyrimMelee_LoreRim_sword_stances.zip (scratch).
 * **Unresolved, answered by the test:** whether a keyword-matched entry wins over the plain one, whether the new
   folder is found without the Creation Kit cache rebuild, and whether the set switches while the weapon is drawn.
+
+### 2026-10-23: stances in game: keywords work, clips not picked; stance folders now mirror the weapon subpath
+* Verified (owner's log): every arrow key adds / removes the right stance keyword and HasKeyword confirms it on the
+  player; the Creation Kit's `-GenerateAnimInfo:S2SStances.esm <Data> <Out>` works on 1.16 and wrote 724 cache files,
+  21 of them new sets naming the stance folders (7 clips each). Swings still identical in every stance, also after a
+  save / reload (so not only a graph refresh question).
+* Cause (supported): no record names melee\onehanded\player; vanilla Player_Melee sets list melee/onehanded/player,
+  .../player/female, .../player/knife under the race entry's root Actors\Human\Animations\Melee, so the game adds the
+  weapon-type subfolders below each root itself. Our clips sat straight in s2s_stances\<stance>, where the more
+  specific vanilla onehanded\player\sword folder wins. `stance_pack.py` now writes them to
+  s2s_stances\<stance>\onehanded\player\sword (the vanilla folder's subpath below melee); caches regenerated after.
+* The CK output also holds cut-down GeneratedSubgraphData (creature tables with only a header) and a
+  PersistantSubgraphInfoAndOffsetData.txt listing only the regenerated sets: kept out of the loose-file mod for now
+  so they do not shadow the vanilla ones (unresolved whether the game needs our index file to find the new sets).
