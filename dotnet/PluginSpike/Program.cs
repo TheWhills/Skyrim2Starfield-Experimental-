@@ -427,7 +427,10 @@ foreach (var cellPath in cellPaths)
             obj.MajorRecordFlagsRaw |= 0x800;                                              // Initially Disabled, as in FO4
             disabled++;
         }
-        if (tele0(r)) cell.Persistent.Add(obj); else cell.Temporary.Add(obj);   // load doors are persistent, as in Skyrim
+        // load doors are persistent, as in Skyrim: in the cell's persistent group AND with the record's Persistent flag
+        // (0x400). Mutagen sets the group only; the flag-less doors of the owner's Oct 2026 run teleported once, then lost
+        // their prompt until a reload and sent the return trip to the wrong end (scripts/interior/door_survey.py).
+        if (tele0(r)) { obj.MajorRecordFlagsRaw |= 0x400; cell.Persistent.Add(obj); } else cell.Temporary.Add(obj);
         placedBySource[src] = obj.FormKey;
         placedAll[src] = obj;
         sourceMap[src] = obj.FormKey.ToString();

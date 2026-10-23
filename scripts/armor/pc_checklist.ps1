@@ -150,6 +150,9 @@ Invoke-S2SPython -I (Join-Path $Repo "scripts/interior/navmesh_survey.py") --esm
 Say "== 12. vanilla Starfield collision meshes: the tree format native Skyrim collision writes (cms_survey.json)"
 Invoke-S2SPython -I (Join-Path $Repo "scripts/tools/cms_survey.py") --starfield-data (Join-Path $SF "Data") --out (Join-Path $Out "cms") 2>&1 | ForEach-Object { Say $_ }
 
+Say "== 13. vanilla Starfield load doors: what a working load door carries (door_survey.json)"
+Invoke-S2SPython -I (Join-Path $Repo "scripts/interior/door_survey.py") --esm (Join-Path $SF "Data\Starfield.esm") --out (Join-Path $Out "doors") 2>&1 | ForEach-Object { Say $_ }
+
 Say "== 11. interiors: Sleeping Giant Inn + the smallest pair of rooms Skyrim links by a load door (navmesh, doors)"
 # Builds FO4Port.esm + the converted models in <Work>\interiors (interiors\convert). Does NOT install: the
 # install / uninstall commands and the in-game test list are written to interior_test.txt in the report.
