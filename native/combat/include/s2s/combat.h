@@ -190,6 +190,16 @@ float pitch_input(float look_pitch, float want_pitch, float gain, float max_step
 
 // A new lock eases the view onto the target (TDM-like) before the hard hold takes over: the hold starts once the view
 // is within tolerance (radians) of the target on both axes, or max_time seconds after the lock started.
+// The value to write into the camera's yaw floats (radians, 0..2 pi): their current value moved by the step the lock
+// wants on the rendered view. The floats and the view's yaw (from the rotation quaternion) differ by ~0.55 deg
+// (owner's log 2026-10-25); steering the floats to the absolute angle left that offset as a pull of 0.55 deg per frame,
+// which stalled the ease-in ~3 deg short of the target when coming from the left.
+float camera_yaw_write(float current_float, float look_yaw, float next_yaw);
+
+// Whether the lock's target is dead: the actor's dead flag, or its health at or below zero when the health could be
+// read (the dead flag never set on 1.16 in the owner's run 2026-10-25: the lock stayed on the corpse and re-locked it).
+bool target_dead(bool dead_flag, std::optional<float> health);
+
 bool lock_acquired(Angles look, Angles want, float since_lock, float max_time = 0.6f, float tolerance = 0.035f);
 
 // Where the view is aimed from: the camera's own position when it is near the player (third person sits behind and

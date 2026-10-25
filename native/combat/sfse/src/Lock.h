@@ -66,7 +66,8 @@ private:
     // The third-person camera's rotation (ThirdPersonState +0x170, when that state is the current one and the value is
     // a unit quaternion); nullopt otherwise. Look() falls back to the player's heading.
     std::optional<combat::Angles> CameraAngles();
-    bool SetCameraAngles(combat::Angles a);
+    bool SetCameraAngles(combat::Angles a, combat::Angles look);
+    const RE::ActorValueInfo* HealthInfo();
     combat::Angles Look();
     // ThirdPersonState, memory-checked at most once a second (VirtualQuery per frame cost ~1 ms: owner's run)
     std::byte* ThirdPerson();
@@ -80,6 +81,10 @@ private:
     bool origin_logged_ = false;
     double locked_at_ = -10.0;                // when the current target was taken (easing in)
     bool acquired_ = false;
+    const RE::ActorValueInfo* health_info_ = nullptr;
+    bool health_looked_up_ = false;
+    std::optional<float> last_health_;
+    int health_logs_ = 0;
     const void* checked_cam_ = nullptr;
     double target_checked_at_ = -10.0;
     double next_write_check_ = 0.0;

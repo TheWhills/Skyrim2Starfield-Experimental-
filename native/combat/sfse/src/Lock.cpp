@@ -32,7 +32,16 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
         combat::Candidate c;
         c.id = actor->GetFormID();
         c.position = V(actor->data.location, s_.target_height);
-        c.alive = !actor->IsDead();
+        // Dead: the kDead bit (never set on 1.16, owner's run) or Health <= 0 (ActorValueOwner::GetActorValue, a
+        // virtual mapped in CommonLibSF; supported, not verified: the log prints the target's health on lock).
+        std::optional<float> health;
+        if (const auto* hp = HealthInfo()) health = static_cast<RE::ActorValueOwner*>(actor)->GetActorValue(*hp);
+        c.alive = !combat::target_dead(actor->IsDead(), health);
+        if (only && health && (!last_health_ || std::fabs(*last_health_ - *health) >= 1.0f) && health_logs_ < 20) {
+            ++health_logs_;
+            REX::INFO("lock-on: target {:08X} health {:.0f} (dead flag {})", actor->GetFormID(), *health, actor->IsDead());
+        }
+        if (only) last_health_ = health;
         // Actor::IsHostileToActor has no Address Library ID for Starfield 1.16 in CommonLibSF (ID 0: calling it stops
         // the game). Until it does, every living actor counts as hostile (bHostileOnly has no effect), logged once.
         if constexpr (RE::ID::Actor::IsHostileToActor.id() != 0) {
@@ -177,6 +186,7 @@ void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
     if (id && id != locked_) {                                      // a new target eases in again
         locked_at_ = game::Now();
         acquired_ = false;
+        last_health_.reset();
     }
     locked_ = id;
     if (id) REX::INFO("lock-on: target {:08X} ({})", *id, why);      // rare (key presses, deaths): always logged
@@ -283,6 +293,15 @@ constexpr std::ptrdiff_t kCameraYaw0 = 0x22C;                // three copies of 
 
 }  // namespace
 
+const RE::ActorValueInfo* Lock::HealthInfo() {
+    if (!health_looked_up_) {
+        health_looked_up_ = true;
+        health_info_ = RE::TESForm::LookupByEditorID<RE::ActorValueInfo>(RE::BSFixedString("Health"));
+        if (!health_info_) REX::WARN("lock-on: actor value 'Health' not found: dead targets are seen by the dead flag only");
+    }
+    return health_info_;
+}
+
 std::byte* Lock::ThirdPerson() {
     auto* cam = RE::PlayerCamera::GetSingleton();
     if (!cam) return nullptr;
@@ -315,16 +334,18 @@ std::optional<combat::Angles> Lock::CameraAngles() {
     return combat::camera_angles(q);
 }
 
-bool Lock::SetCameraAngles(combat::Angles a) {
+bool Lock::SetCameraAngles(combat::Angles a, combat::Angles look) {
     auto* state = ThirdPerson();
     if (!state) return false;
+    float current = 0;
+    std::memcpy(&current, state + kCameraYaw0, 4);
+    const float yaw = std::isfinite(current) ? combat::camera_yaw_write(current, look.yaw, a.yaw)
+                                             : combat::camera_yaw_write(look.yaw, look.yaw, a.yaw);
     const auto q = combat::camera_quat(a);
     std::memcpy(state + kThirdPersonRotation, &q, sizeof(q));
     // The camera's yaw is kept as radians (clockwise from +Y, 0..2 pi) at +0x22C / +0x230 / +0x234 and the quaternion is
     // rebuilt from it (owner's write-check run 2026-10-23: a quaternion written alone was replaced next frame; these
     // three floats matched its yaw to 0.5 deg in every sample).
-    float yaw = std::fmod(a.yaw, 6.2831853f);
-    if (yaw < 0) yaw += 6.2831853f;
     for (std::ptrdiff_t off : {kCameraYaw0, kCameraYaw0 + 4, kCameraYaw0 + 8}) std::memcpy(state + off, &yaw, 4);
     wrote_ = a;
     return true;
@@ -429,7 +450,7 @@ void Lock::Update() {
     const float pitch_step =
         combat::pitch_input(look.pitch, want.pitch, hold ? s_.pitch_gain : ease);
     next.pitch = look.pitch;
-    if (s_.steer_camera && !SetCameraAngles(next) && !camera_warned_) {
+    if (s_.steer_camera && !SetCameraAngles(next, look) && !camera_warned_) {
         camera_warned_ = true;
         REX::WARN("lock-on: the third-person camera's rotation is not available (not in third person, or the layout "
                   "changed): the camera is not steered");

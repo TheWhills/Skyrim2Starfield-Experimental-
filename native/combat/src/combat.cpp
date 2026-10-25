@@ -270,6 +270,15 @@ float pitch_input(float look_pitch, float want_pitch, float gain, float max_step
     return std::clamp(step, -max_step, max_step);
 }
 
+float camera_yaw_write(float current_float, float look_yaw, float next_yaw) {
+    float y = std::fmod(current_float + wrap_pi(next_yaw - look_yaw), 6.2831853f);
+    return y < 0 ? y + 6.2831853f : y;
+}
+
+bool target_dead(bool dead_flag, std::optional<float> health) {
+    return dead_flag || (health && *health <= 0.0f);
+}
+
 bool lock_acquired(Angles look, Angles want, float since_lock, float max_time, float tolerance) {
     if (since_lock >= max_time) return true;
     return std::fabs(wrap_pi(want.yaw - look.yaw)) <= tolerance && std::fabs(want.pitch - look.pitch) <= tolerance;

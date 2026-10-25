@@ -209,6 +209,24 @@ static void lock_hold() {
         for (int i = 0; i < 60; ++i) cam += pitch_input(cam, 0.05f, 0.5f);
         CHECK(std::fabs(cam - 0.05f) < 1e-3f);
     }
+    // the camera's yaw floats are moved by the wanted step, so their offset from the view does not stall the ease-in
+    {
+        const float offset = 0.0096f;                                    // floats - view, ~0.55 deg (owner's log)
+        float view = -1.20f, want = -0.98f;                              // 12.6 deg to the left of the target
+        int frames = 0;
+        while (std::fabs(want - view) > 0.035f && frames < 120) {
+            Angles next = steer({0.0f, view}, {0.0f, want}, 1.0f / 60, 10.0f, 10.0f);
+            float f = camera_yaw_write(view + offset + 6.2831853f, view, next.yaw);
+            view = wrap_pi(f - offset);                                  // the game rebuilds the view from the floats
+            ++frames;
+        }
+        CHECK(frames < 30);                                              // ~0.3 s at 60 fps, no stall
+        CHECK(std::fabs(camera_yaw_write(0.01f, 0.0f, -0.02f) - (6.2831853f - 0.01f)) < 1e-4f);   // wraps into 0..2 pi
+    }
+    CHECK(target_dead(true, std::nullopt));
+    CHECK(target_dead(false, 0.0f));
+    CHECK(!target_dead(false, 35.0f));
+    CHECK(!target_dead(false, std::nullopt));
     // a new lock eases in, then holds
     CHECK(!lock_acquired({0.0f, 0.0f}, {0.0f, 1.2f}, 0.1f));          // 69 deg off, just locked: still easing
     CHECK(lock_acquired({0.0f, 1.19f}, {0.0f, 1.2f}, 0.1f));          // within 2 deg: hold

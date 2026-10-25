@@ -320,3 +320,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   fAcquireRate (10 / s) until within 2 deg or fAcquireTime (0.6 s), then the hard hold takes over. Death already
   released the lock (core: !alive, checked every 0.25 s via Actor::IsDead's kDead bit, not verified on 1.16); the
   release now logs "target died" and lock / release lines are no longer capped by iLogTargets.
+- 2026-10-25 lock-on ease-in stall and corpses (owner's log): the camera's yaw floats sit ~0.55 deg off the view's yaw,
+  so writing the absolute angle pulled the view back 0.55 deg a frame; from the left the ease-in stalled ~3 deg short
+  until the 0.6 s limit snapped it ("half, pause, other half"). The floats are now moved by the wanted step instead.
+  Actor::IsDead (kDead bit) stayed false on a killed NPC (the lock held and re-locked the corpse): a target also counts
+  as dead at Health <= 0 (ActorValueOwner::GetActorValue, supported; its health is logged on lock and as it changes).
