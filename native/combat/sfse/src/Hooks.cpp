@@ -330,14 +330,26 @@ public:
             auto* c = a_event.cause.get();
             cause = c && c->IsActor() ? static_cast<RE::Actor*>(c) : nullptr;
         } else {
+            // 1.16's layout (combat::hit_handles): the hit data's aggressor / target handles
+            auto resolve = [](std::uint32_t raw) -> RE::Actor* {
+                if (raw == 0 || raw == 0xFFFFFFFFu) return nullptr;
+                RE::BSPointerHandle<RE::Actor> h;
+                std::memcpy(&h, &raw, 4);
+                auto ptr = h.get();
+                auto* a = ptr.get();
+                return a && static_cast<RE::TESObjectREFR*>(a)->IsActor() ? a : nullptr;
+            };
+            const auto hh = combat::hit_handles(&a_event);
+            target = resolve(hh.target);
+            cause = resolve(hh.aggressor);
+        }
+        if (!target && g_any_hits_logged < 6) {                       // the layout moved again: show the slots
             const auto slots = ActorSlots(&a_event, 0x140);
             std::vector<RE::Actor*> pointers;
             for (const auto& sl : slots)
                 if (!sl.handle && std::find(pointers.begin(), pointers.end(), sl.actor) == pointers.end())
                     pointers.push_back(sl.actor);
-            if (!pointers.empty()) target = pointers[0];
-            if (pointers.size() > 1) cause = pointers[1];
-            if (g_any_hits_logged < 6) {
+            {
                 ++g_any_hits_logged;
                 std::string list;
                 for (const auto& sl : slots)

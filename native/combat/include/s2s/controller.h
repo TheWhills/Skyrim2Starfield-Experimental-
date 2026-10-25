@@ -186,6 +186,13 @@ std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vt
 // Animation events worth logging after the general cap (block, hit, stagger, recoil reactions): tag or payload
 // mentions one of them, case-insensitive (BlockHitStart, StaggerStart, recoilStart, SoundPlay '...BlockUp3rd').
 bool is_combat_reaction_event(std::string_view tag, std::string_view payload);
+
+// TESHitEvent on Starfield 1.16 (owner's log 2026-10-25, verified both ways: an NPC hitting the player and the player
+// hitting it): the hit data's aggressor handle at +0x40 and its target handle at +0x48 (CommonLibSF: +0x40 / +0x44);
+// the event's own target / cause pointers (CommonLibSF +0xF0 / +0xF8) are null.
+struct HitHandles { std::uint32_t aggressor = 0, target = 0; };
+constexpr std::ptrdiff_t kHitAggressor = 0x40, kHitTarget = 0x48;
+HitHandles hit_handles(const void* event);
 std::string rtti_class_name(std::uintptr_t vtable, const std::function<bool(const void*, std::size_t)>& readable);
 
 // Arrays of actor handles inside an engine object whose layout is not known (Starfield's ProcessLists: CommonLibSF's

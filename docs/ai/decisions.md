@@ -350,3 +350,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Skyrim's is near-instant; block_pack.py ships MeleeActions with BlockStart blends 0.1 s / BlockStop 0.15 s, and
   hkx_to_af.py --fit makes MeleeBlock_Into Skyrim's block pose in 0.15 s (MeleeBlock_Out its ready idle in 0.2 s).
   The parry window counts from the block press (iWantBlock), not from the raise animation.
+- 2026-10-25 TESHitEvent 1.16 layout verified (owner's log, both directions): hit data aggressor handle +0x40, target
+  handle +0x48 (CommonLibSF +0x40 / +0x44); the event's target / cause pointers are null. The sink reads those handles
+  (combat::hit_handles); the slot dump stays as a fallback when they do not resolve. Parries never fired before this
+  (no hit on the player was recognised). Owner: hit while blocking -> "I stop blocking": the log shows the block-hit
+  state did play (StartAnimationDriven + its BlockUp sound right after each hit), so the Dynamic Block Hit recoil (arm
+  knocked out, 1.1 m push) reads as a broken guard. SkyrimBlock_fast_v2 uses Skyrim's own 1hm_blockhit (a flinch that
+  stays in guard, no push) as MeleeBlock_HitReaction instead.

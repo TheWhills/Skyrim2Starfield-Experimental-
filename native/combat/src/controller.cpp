@@ -233,6 +233,13 @@ std::vector<std::uint32_t> read_handle_array(std::uintptr_t base, const HandleAr
     return out;
 }
 
+HitHandles hit_handles(const void* event) {
+    HitHandles h;
+    std::memcpy(&h.aggressor, static_cast<const std::byte*>(event) + kHitAggressor, 4);
+    std::memcpy(&h.target, static_cast<const std::byte*>(event) + kHitTarget, 4);
+    return h;
+}
+
 bool is_combat_reaction_event(std::string_view tag, std::string_view payload) {
     auto has = [](std::string_view s, std::string_view w) {
         return std::search(s.begin(), s.end(), w.begin(), w.end(), [](char a, char b) {

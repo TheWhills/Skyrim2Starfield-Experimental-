@@ -431,6 +431,15 @@ static void class_names() {
     CHECK(is_combat_reaction_event("BlockHitStart", "") && is_combat_reaction_event("SoundPlay", "WPNHandHandBlockUp3rd"));
     CHECK(is_combat_reaction_event("staggerStart", "") && is_combat_reaction_event("recoilLargeStart", ""));
     CHECK(!is_combat_reaction_event("FootLeft", "") && !is_combat_reaction_event("SoundPlay", "FST_Foley_Walk"));
+    {   // the owner's log: an NPC's hit on the player, slot by slot
+        alignas(8) unsigned char ev[0x120] = {};
+        const std::uint32_t npc = 0x00A01D12, player = 0x00100014;
+        std::memcpy(ev + 0x40, &npc, 4);
+        std::memcpy(ev + 0x48, &player, 4);
+        std::memcpy(ev + 0x114, &player, 4);
+        auto h = hit_handles(ev);
+        CHECK(h.aggressor == npc && h.target == player);
+    }
 }
 
 static void vtable_objects() {
