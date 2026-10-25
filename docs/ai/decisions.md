@@ -325,3 +325,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   until the 0.6 s limit snapped it ("half, pause, other half"). The floats are now moved by the wanted step instead.
   Actor::IsDead (kDead bit) stayed false on a killed NPC (the lock held and re-locked the corpse): a target also counts
   as dead at Health <= 0 (ActorValueOwner::GetActorValue, supported; its health is logged on lock and as it changes).
+- 2026-10-25 lock-on: death release verified (owner: dead NPCs no longer locked; Health <= 0). Up / down ease-in still
+  looked abrupt or absent, so the ease-in is now a timed smoothstep curve (fAcquireTime 0.4 s, fAcquireRate removed)
+  from the view at lock time to the target, the same on both axes (TDM-like); pitch follows the curve through the look
+  input at fPitchGain. A frame-by-frame trace of the first three ease-ins shows view / curve / target / input.

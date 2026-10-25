@@ -279,6 +279,13 @@ bool target_dead(bool dead_flag, std::optional<float> health) {
     return dead_flag || (health && *health <= 0.0f);
 }
 
+Angles ease_toward(Angles start, Angles want, float t, float duration) {
+    if (duration <= 0.0f || t >= duration) return want;
+    float u = std::clamp(t / duration, 0.0f, 1.0f);
+    u = u * u * (3.0f - 2.0f * u);
+    return {start.pitch + (want.pitch - start.pitch) * u, wrap_pi(start.yaw + wrap_pi(want.yaw - start.yaw) * u)};
+}
+
 bool lock_acquired(Angles look, Angles want, float since_lock, float max_time, float tolerance) {
     if (since_lock >= max_time) return true;
     return std::fabs(wrap_pi(want.yaw - look.yaw)) <= tolerance && std::fabs(want.pitch - look.pitch) <= tolerance;

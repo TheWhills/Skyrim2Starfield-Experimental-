@@ -223,6 +223,25 @@ static void lock_hold() {
         CHECK(frames < 30);                                              // ~0.3 s at 60 fps, no stall
         CHECK(std::fabs(camera_yaw_write(0.01f, 0.0f, -0.02f) - (6.2831853f - 0.01f)) < 1e-4f);   // wraps into 0..2 pi
     }
+    {   // the timed ease: starts where the view was, ends on the target, half way at half time, both axes alike
+        Angles s{0.6f, 3.0f}, w{0.0f, -3.0f};                           // 34 deg above, across the +-pi seam
+        auto a = ease_toward(s, w, 0.0f, 0.4f);
+        CHECK(std::fabs(a.pitch - 0.6f) < 1e-5f && std::fabs(a.yaw - 3.0f) < 1e-5f);
+        a = ease_toward(s, w, 0.2f, 0.4f);
+        CHECK(std::fabs(a.pitch - 0.3f) < 1e-4f);
+        CHECK(std::fabs(std::fabs(a.yaw) - 3.1416f) < 1e-3f);           // half of the short way round is at pi
+        a = ease_toward(s, w, 0.5f, 0.4f);
+        CHECK(a.pitch == 0.0f && a.yaw == -3.0f);
+        // per-frame steps stay small: no jump on either axis at 60 fps
+        float worst = 0;
+        Angles prev = s;
+        for (int i = 1; i <= 24; ++i) {
+            auto b = ease_toward(s, w, i / 60.0f, 0.4f);
+            worst = std::max(worst, std::fabs(b.pitch - prev.pitch));
+            prev = b;
+        }
+        CHECK(worst < 0.04f);                                            // < 2.3 deg a frame for a 34 deg swing
+    }
     CHECK(target_dead(true, std::nullopt));
     CHECK(target_dead(false, 0.0f));
     CHECK(!target_dead(false, 35.0f));

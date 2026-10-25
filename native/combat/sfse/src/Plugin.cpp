@@ -83,7 +83,6 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     f("fyawrate", ls.yaw_rate);
     f("fpitchrate", ls.pitch_rate);
     f("fpitchgain", ls.pitch_gain);
-    f("facquirerate", ls.acquire_rate);
     f("facquiretime", ls.acquire_time);
     f("fpitchsign", ls.pitch_sign);
     ls.steer_pitch = to_int(lk, "bsteerpitch", 1) != 0;

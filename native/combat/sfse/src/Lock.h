@@ -20,8 +20,7 @@ struct LockSettings {
     // third-person camera did not follow (its own yaw / pitch are not mapped yet; see CameraProbe).
     bool steer_player = false;
     float pitch_gain = 0.5f;        // share of the up / down error fed to the camera each frame (hard lock)
-    float acquire_rate = 10.0f;     // a new lock eases the view onto the target at this rate (1 / s) ...
-    float acquire_time = 0.6f;      // ... then holds it (at most this many seconds of easing)
+    float acquire_time = 0.4f;      // a new lock swings the view onto the target over this many seconds, then holds it
     bool hard_lock = true;          // hold the view on the target every frame (TDM-like) instead of easing toward it
     bool block_look = true;         // mouse look and the right stick do not reach the game while locked
     bool aim_from_camera = true;    // aim from the camera's position (where the crosshair ray starts)
@@ -81,6 +80,8 @@ private:
     bool origin_logged_ = false;
     double locked_at_ = -10.0;                // when the current target was taken (easing in)
     bool acquired_ = false;
+    std::optional<combat::Angles> ease_from_;  // the view when the target was taken
+    int ease_traces_ = 0;
     const RE::ActorValueInfo* health_info_ = nullptr;
     bool health_looked_up_ = false;
     std::optional<float> last_health_;

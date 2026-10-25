@@ -200,6 +200,10 @@ float camera_yaw_write(float current_float, float look_yaw, float next_yaw);
 // read (the dead flag never set on 1.16 in the owner's run 2026-10-25: the lock stayed on the corpse and re-locked it).
 bool target_dead(bool dead_flag, std::optional<float> health);
 
+// The ease-in on a new lock as a timed curve (TDM-like): the view's angles at the lock's start moved toward the target's
+// current angles by smoothstep(t / duration) on both axes (yaw the short way round), the target itself from duration on.
+Angles ease_toward(Angles start, Angles want, float t, float duration);
+
 bool lock_acquired(Angles look, Angles want, float since_lock, float max_time = 0.6f, float tolerance = 0.035f);
 
 // Where the view is aimed from: the camera's own position when it is near the player (third person sits behind and

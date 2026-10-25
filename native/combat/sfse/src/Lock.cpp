@@ -186,6 +186,7 @@ void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
     if (id && id != locked_) {                                      // a new target eases in again
         locked_at_ = game::Now();
         acquired_ = false;
+        ease_from_.reset();
         last_health_.reset();
     }
     locked_ = id;
@@ -436,19 +437,29 @@ void Lock::Update() {
                   wrote_->yaw * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f, want.pitch * 57.2958f,
                   player->data.angle.x * 57.2958f);
     }
-    if (!acquired_ && combat::lock_acquired(look, want, static_cast<float>(now - locked_at_), s_.acquire_time)) {
+    // Ease-in (hard lock): a timed curve from where the view was when the target was taken to the target, the same on
+    // both axes; then the hold. Owner's run 2026-10-25: easing by a rate per frame looked abrupt on up / down.
+    const float since = static_cast<float>(now - locked_at_);
+    if (!ease_from_) ease_from_ = look;
+    if (!acquired_ && since >= s_.acquire_time) {
         acquired_ = true;
-        REX::INFO("lock-on: on target after {:.2f} s easing", now - locked_at_);
+        REX::INFO("lock-on: on target after {:.2f} s easing", since);
     }
     const bool hold = s_.hard_lock && acquired_;
-    const float ease = std::min(1.0f, (s_.hard_lock ? s_.acquire_rate : s_.pitch_rate) * dt);
-    auto next = hold ? combat::steer(look, want, dt, 1e6f, 1e6f)
-                     : combat::steer(look, want, dt, s_.hard_lock ? s_.acquire_rate : s_.yaw_rate,
-                                     s_.hard_lock ? s_.acquire_rate : s_.pitch_rate);
+    auto aim = s_.hard_lock && !hold ? combat::ease_toward(*ease_from_, want, since, s_.acquire_time) : want;
+    auto next = s_.hard_lock ? combat::steer(look, aim, dt, 1e6f, 1e6f)
+                             : combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
     // Up / down goes through the player's look input (below); the camera's own pitch is rebuilt by the game, so the
     // quaternion keeps this frame's pitch instead of fighting it.
-    const float pitch_step =
-        combat::pitch_input(look.pitch, want.pitch, hold ? s_.pitch_gain : ease);
+    const float pitch_step = combat::pitch_input(look.pitch, aim.pitch,
+                                                 s_.hard_lock ? s_.pitch_gain : std::min(1.0f, s_.pitch_rate * dt));
+    if (ease_traces_ < 3 && since <= s_.acquire_time + 0.2f) {          // frame by frame, first locks only
+        REX::INFO("lock-on ease {:.3f} s: pitch view {:.1f} curve {:.1f} target {:.1f} input {:.2f}; yaw view {:.1f} "
+                  "curve {:.1f} target {:.1f} (deg)", since, look.pitch * 57.2958f, aim.pitch * 57.2958f,
+                  want.pitch * 57.2958f, pitch_step * 57.2958f, look.yaw * 57.2958f, aim.yaw * 57.2958f,
+                  want.yaw * 57.2958f);
+        if (since > s_.acquire_time + 0.15f) ++ease_traces_;
+    }
     next.pitch = look.pitch;
     if (s_.steer_camera && !SetCameraAngles(next, look) && !camera_warned_) {
         camera_warned_ = true;
