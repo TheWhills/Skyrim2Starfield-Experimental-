@@ -310,3 +310,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   was at lock time. The camera's own yaw floats are written, but no pitch float was found in ThirdPersonState; the
   lock now also writes the player's pitch (angle.x) whenever it steers the camera (supported, not verified: Skyrim's
   third-person camera takes its pitch from the player). The write check logs the player's pitch to confirm.
+- 2026-10-25 lock-on pitch, second try (owner's log): the player's angle.x read back 0 every frame while the camera's
+  pitch climbed to its 79 deg limit, so in third person it is a per-frame look input the camera adds and the game
+  zeroes (supported). The lock now writes a capped share (fPitchGain 0.5) of the remaining up / down error there each
+  frame; the quaternion keeps the current pitch. ThirdPersonState / PlayerCamera memory checks run only when those
+  objects change (timing showed 14-24 ms frames while locked).

@@ -19,6 +19,7 @@ struct LockSettings {
     // Turn the player's heading toward the target. Off by default: owner, 2026-10-23 - the player turned but Starfield's
     // third-person camera did not follow (its own yaw / pitch are not mapped yet; see CameraProbe).
     bool steer_player = false;
+    float pitch_gain = 0.5f;        // share of the up / down error fed to the camera each frame (hard lock)
     bool hard_lock = true;          // hold the view on the target every frame (TDM-like) instead of easing toward it
     bool block_look = true;         // mouse look and the right stick do not reach the game while locked
     bool aim_from_camera = true;    // aim from the camera's position (where the crosshair ray starts)
@@ -75,6 +76,7 @@ private:
     RE::NiPointer<RE::Actor> target_ref_;
     const void* camera_root_ = nullptr;       // checked once readable; re-checked when the camera's root changes
     bool origin_logged_ = false;
+    const void* checked_cam_ = nullptr;
     double target_checked_at_ = -10.0;
     double next_write_check_ = 0.0;
     int write_checks_ = 0;

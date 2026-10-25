@@ -200,6 +200,15 @@ static void lock_hold() {
     CHECK(lock_writes_player_pitch(false, true, true));
     CHECK(!lock_writes_player_pitch(true, true, false));
     CHECK(!lock_writes_player_pitch(false, false, true));
+    // pitch is fed as a per-frame input: a share of the error, capped, zero when on target
+    CHECK(std::fabs(pitch_input(0.2f, 0.2f, 0.5f)) < 1e-6f);
+    CHECK(std::fabs(pitch_input(1.0f, 0.2f, 0.5f) + 0.35f) < 1e-6f);        // capped
+    CHECK(std::fabs(pitch_input(0.1f, 0.3f, 0.5f) - 0.1f) < 1e-6f);
+    {   // the camera adds the input each frame: it settles on the target instead of running to its limit
+        float cam = 1.38f;                                               // 79 deg, where the owner's run ended up
+        for (int i = 0; i < 60; ++i) cam += pitch_input(cam, 0.05f, 0.5f);
+        CHECK(std::fabs(cam - 0.05f) < 1e-3f);
+    }
     // aimed from the camera when it is near the player, from the eye otherwise
     Vec3 eye{0, 0, 1.6f}, cam{-0.6f, -2.5f, 1.8f}, far{100, 0, 0};
     auto o = aim_origin(eye, &cam);

@@ -286,11 +286,17 @@ std::byte* Lock::ThirdPerson() {
     auto* cam = RE::PlayerCamera::GetSingleton();
     if (!cam) return nullptr;
     const double now = game::Now();
-    if (now - camera_checked_at_ > 1.0) {
+    // Memory checks (VirtualQuery) only when the camera or its third-person state is a new object: the owner's timing
+    // lines showed 14-24 ms frames while locked when they ran every second.
+    if (cam != checked_cam_) {
+        if (!game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) return nullptr;
+        checked_cam_ = cam;
+        camera_state_ = nullptr;
+    }
+    auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
+    if (state != camera_state_ && now - camera_checked_at_ > 1.0) {
         camera_checked_at_ = now;
         camera_state_ = nullptr;
-        if (!game::Readable(cam, 0x188 + 8 * RE::CameraState::kTotal)) return nullptr;
-        auto* state = static_cast<std::byte*>(cam->cameraStates[RE::CameraState::kThirdPerson]);
         if (!state || !game::Readable(state, kCameraYaw0 + 12)) return nullptr;
         if (*reinterpret_cast<std::uintptr_t*>(state) != RE::VTABLE::ThirdPersonState[0].address()) return nullptr;
         camera_state_ = state;
@@ -399,13 +405,18 @@ void Lock::Update() {
     if (wrote_ && now >= next_write_check_ && write_checks_ < 10) {    // look = this frame's camera, after the game ran
         next_write_check_ = now + 0.5;
         ++write_checks_;
-        REX::INFO("camera write check: wrote yaw {:.1f} pitch {:.1f} deg last frame, now yaw {:.1f} pitch {:.1f} deg "
-                  "(player pitch {:.1f} deg)",
-                  wrote_->yaw * 57.2958f, wrote_->pitch * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f,
+        REX::INFO("camera write check: wrote yaw {:.1f} deg last frame, now yaw {:.1f}; pitch now {:.1f} deg, target "
+                  "{:.1f} deg (player look input {:.1f} deg)",
+                  wrote_->yaw * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f, want.pitch * 57.2958f,
                   player->data.angle.x * 57.2958f);
     }
-    const auto next = s_.hard_lock ? combat::steer(look, want, dt, 1e6f, 1e6f)
-                                   : combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
+    auto next = s_.hard_lock ? combat::steer(look, want, dt, 1e6f, 1e6f)
+                             : combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
+    // Up / down goes through the player's look input (below); the camera's own pitch is rebuilt by the game, so the
+    // quaternion keeps this frame's pitch instead of fighting it.
+    const float pitch_step =
+        combat::pitch_input(look.pitch, want.pitch, s_.hard_lock ? s_.pitch_gain : std::min(1.0f, s_.pitch_rate * dt));
+    next.pitch = look.pitch;
     if (s_.steer_camera && !SetCameraAngles(next) && !camera_warned_) {
         camera_warned_ = true;
         REX::WARN("lock-on: the third-person camera's rotation is not available (not in third person, or the layout "
@@ -414,7 +425,7 @@ void Lock::Update() {
     // Supported, not verified: the third-person camera's pitch is rebuilt from the player's pitch (Skyrim's is; no
     // pitch float changed in ThirdPersonState's first 0x400 bytes while the quaternion's pitch did, owner's probes).
     if (combat::lock_writes_player_pitch(s_.steer_camera, s_.steer_player, s_.steer_pitch))
-        player->data.angle.x = next.pitch * s_.pitch_sign;
+        player->data.angle.x = pitch_step * s_.pitch_sign;
     if (s_.steer_player) player->data.angle.z = next.yaw;
 }
 

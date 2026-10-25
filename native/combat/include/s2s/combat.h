@@ -183,6 +183,11 @@ bool hides_look_event(std::uint32_t event_type, std::int32_t stick_id);
 // when the lock started), so the pitch is written whenever the camera is steered, or the player is.
 bool lock_writes_player_pitch(bool steer_camera, bool steer_player, bool steer_pitch);
 
+// The player's angle.x in third person is a per-frame look input, not an angle: the camera adds it to its pitch and
+// the game zeroes it (owner's log 2026-10-25: written 4-31 deg each frame, read back 0, the camera ran to its 79 deg
+// limit). The lock writes the share of the remaining error it should close this frame, capped at max_step radians.
+float pitch_input(float look_pitch, float want_pitch, float gain, float max_step = 0.35f);
+
 // Where the view is aimed from: the camera's own position when it is near the player (third person sits behind and
 // beside the player, and the crosshair is on the camera's ray), otherwise the player's eye.
 Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset = 10.0f);

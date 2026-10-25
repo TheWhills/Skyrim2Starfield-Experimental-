@@ -265,6 +265,11 @@ bool lock_writes_player_pitch(bool steer_camera, bool steer_player, bool steer_p
     return steer_pitch && (steer_camera || steer_player);
 }
 
+float pitch_input(float look_pitch, float want_pitch, float gain, float max_step) {
+    const float step = (want_pitch - look_pitch) * std::clamp(gain, 0.0f, 1.0f);
+    return std::clamp(step, -max_step, max_step);
+}
+
 Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset) {
     if (!camera || !std::isfinite(camera->x) || !std::isfinite(camera->y) || !std::isfinite(camera->z)) return player_eye;
     const float dx = camera->x - player_eye.x, dy = camera->y - player_eye.y, dz = camera->z - player_eye.z;
