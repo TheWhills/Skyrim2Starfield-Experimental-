@@ -270,6 +270,11 @@ float pitch_input(float look_pitch, float want_pitch, float gain, float max_step
     return std::clamp(step, -max_step, max_step);
 }
 
+bool lock_acquired(Angles look, Angles want, float since_lock, float max_time, float tolerance) {
+    if (since_lock >= max_time) return true;
+    return std::fabs(wrap_pi(want.yaw - look.yaw)) <= tolerance && std::fabs(want.pitch - look.pitch) <= tolerance;
+}
+
 Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset) {
     if (!camera || !std::isfinite(camera->x) || !std::isfinite(camera->y) || !std::isfinite(camera->z)) return player_eye;
     const float dx = camera->x - player_eye.x, dy = camera->y - player_eye.y, dz = camera->z - player_eye.z;

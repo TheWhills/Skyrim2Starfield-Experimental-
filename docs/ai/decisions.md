@@ -315,3 +315,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   zeroes (supported). The lock now writes a capped share (fPitchGain 0.5) of the remaining up / down error there each
   frame; the quaternion keeps the current pitch. ThirdPersonState / PlayerCamera memory checks run only when those
   objects change (timing showed 14-24 ms frames while locked).
+- 2026-10-25 lock-on verified on the owner's run: the view holds the NPC's centre on both axes (pitch through the
+  player's look input). Owner asked for TDM's smooth start and no lock on corpses: a new target now eases in at
+  fAcquireRate (10 / s) until within 2 deg or fAcquireTime (0.6 s), then the hard hold takes over. Death already
+  released the lock (core: !alive, checked every 0.25 s via Actor::IsDead's kDead bit, not verified on 1.16); the
+  release now logs "target died" and lock / release lines are no longer capped by iLogTargets.

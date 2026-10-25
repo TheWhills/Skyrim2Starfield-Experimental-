@@ -174,12 +174,13 @@ void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
         camera_logged_ = write_checks_ = 0;
         wrote_.reset();
     }
-    locked_ = id;
-    if (logged_ < s_.log_targets) {
-        ++logged_;
-        if (id) REX::INFO("lock-on: target {:08X} ({})", *id, why);
-        else REX::INFO("lock-on: released ({})", why);
+    if (id && id != locked_) {                                      // a new target eases in again
+        locked_at_ = game::Now();
+        acquired_ = false;
     }
+    locked_ = id;
+    if (id) REX::INFO("lock-on: target {:08X} ({})", *id, why);      // rare (key presses, deaths): always logged
+    else REX::INFO("lock-on: released ({})", why);
     if (was != locked_.has_value() && !s_.lock_variable.empty())
         game::SetVariable({combat::VariableSet::Type::Bool, s_.lock_variable, locked_ ? 1.0 : 0.0});
 }
@@ -381,9 +382,13 @@ void Lock::Update() {
             return;
         }
         auto cands = Gather(look, eye, h->second);
+        const auto self = std::find_if(cands.begin(), cands.end(), [&](const auto& c) { return c.id == *locked_; });
+        const bool died = self != cands.end() && !self->alive;
         if (!core_.update(cands, eye, now)) {
+            // A dead target always releases (core: !alive); checked every 0.25 s through Actor::IsDead (the kDead
+            // bit, CommonLibSF's layout, not verified on 1.16: a kill that does not log "target died" means it is not).
             target_ref_.reset();
-            SetLocked(std::nullopt, "target lost (dead, too far or gone)");
+            SetLocked(std::nullopt, died ? "target died" : self == cands.end() ? "target gone" : "target lost (too far)");
             return;
         }
         if (core_.target() != locked_) SetLocked(core_.target(), "core");
@@ -410,12 +415,19 @@ void Lock::Update() {
                   wrote_->yaw * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f, want.pitch * 57.2958f,
                   player->data.angle.x * 57.2958f);
     }
-    auto next = s_.hard_lock ? combat::steer(look, want, dt, 1e6f, 1e6f)
-                             : combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
+    if (!acquired_ && combat::lock_acquired(look, want, static_cast<float>(now - locked_at_), s_.acquire_time)) {
+        acquired_ = true;
+        REX::INFO("lock-on: on target after {:.2f} s easing", now - locked_at_);
+    }
+    const bool hold = s_.hard_lock && acquired_;
+    const float ease = std::min(1.0f, (s_.hard_lock ? s_.acquire_rate : s_.pitch_rate) * dt);
+    auto next = hold ? combat::steer(look, want, dt, 1e6f, 1e6f)
+                     : combat::steer(look, want, dt, s_.hard_lock ? s_.acquire_rate : s_.yaw_rate,
+                                     s_.hard_lock ? s_.acquire_rate : s_.pitch_rate);
     // Up / down goes through the player's look input (below); the camera's own pitch is rebuilt by the game, so the
     // quaternion keeps this frame's pitch instead of fighting it.
     const float pitch_step =
-        combat::pitch_input(look.pitch, want.pitch, s_.hard_lock ? s_.pitch_gain : std::min(1.0f, s_.pitch_rate * dt));
+        combat::pitch_input(look.pitch, want.pitch, hold ? s_.pitch_gain : ease);
     next.pitch = look.pitch;
     if (s_.steer_camera && !SetCameraAngles(next) && !camera_warned_) {
         camera_warned_ = true;

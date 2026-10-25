@@ -209,6 +209,21 @@ static void lock_hold() {
         for (int i = 0; i < 60; ++i) cam += pitch_input(cam, 0.05f, 0.5f);
         CHECK(std::fabs(cam - 0.05f) < 1e-3f);
     }
+    // a new lock eases in, then holds
+    CHECK(!lock_acquired({0.0f, 0.0f}, {0.0f, 1.2f}, 0.1f));          // 69 deg off, just locked: still easing
+    CHECK(lock_acquired({0.0f, 1.19f}, {0.0f, 1.2f}, 0.1f));          // within 2 deg: hold
+    CHECK(lock_acquired({0.0f, 0.0f}, {0.0f, 1.2f}, 0.7f));           // too long: hold anyway
+    CHECK(!lock_acquired({0.0f, 3.1f}, {0.3f, -3.1f}, 0.1f));         // yaw wraps, pitch still off
+    CHECK(lock_acquired({0.0f, 3.13f}, {0.0f, -3.13f}, 0.1f));        // across the +-pi seam
+    {   // easing at 10 / s reaches the hold within the time limit at 60 fps
+        Angles cur{0.0f, 0.0f}, want{0.1f, 1.2f};
+        float t = 0;
+        while (!lock_acquired(cur, want, t) && t < 1.0f) {
+            cur = steer(cur, want, 1.0f / 60, 10.0f, 10.0f);
+            t += 1.0f / 60;
+        }
+        CHECK(t < 0.6f);
+    }
     // aimed from the camera when it is near the player, from the eye otherwise
     Vec3 eye{0, 0, 1.6f}, cam{-0.6f, -2.5f, 1.8f}, far{100, 0, 0};
     auto o = aim_origin(eye, &cam);

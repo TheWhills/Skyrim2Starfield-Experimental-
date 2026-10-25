@@ -188,6 +188,10 @@ bool lock_writes_player_pitch(bool steer_camera, bool steer_player, bool steer_p
 // limit). The lock writes the share of the remaining error it should close this frame, capped at max_step radians.
 float pitch_input(float look_pitch, float want_pitch, float gain, float max_step = 0.35f);
 
+// A new lock eases the view onto the target (TDM-like) before the hard hold takes over: the hold starts once the view
+// is within tolerance (radians) of the target on both axes, or max_time seconds after the lock started.
+bool lock_acquired(Angles look, Angles want, float since_lock, float max_time = 0.6f, float tolerance = 0.035f);
+
 // Where the view is aimed from: the camera's own position when it is near the player (third person sits behind and
 // beside the player, and the crosshair is on the camera's ray), otherwise the player's eye.
 Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset = 10.0f);
