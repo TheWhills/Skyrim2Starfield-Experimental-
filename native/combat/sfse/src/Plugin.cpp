@@ -32,6 +32,7 @@ const char* kind_name(combat::Command::Kind k) {
         case K::Log: return "log";
         case K::RestoreHealth: return "restore health";
         case K::ActorEvents: return "actor events";
+        case K::Feedback: return "feedback";
     }
     return "?";
 }
@@ -112,11 +113,7 @@ combat::PlayerState Plugin::State() {
     s.stick_y = stick_y_;
     // Blocking: the melee graph's own variable for a held block (MeleeActions: BlockStart needs iWantBlock = 1); the
     // timed block (parry) window starts when it turns on.
-    if (auto* player = game::Player()) {
-        static const RE::BSFixedString want_block("iWantBlock");
-        std::int32_t v = 0;
-        if (player->GetGraphVariableImplInt(want_block, v)) s.blocking = v != 0;
-    }
+    s.blocking = Blocking();
     s.health = game::PlayerHealth();
     if (!settings_.stamina_value.empty()) {
         float v = game::ActorValue(settings_.stamina_value);
@@ -148,6 +145,13 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         ++logged_input_;
         REX::INFO("key: device {} id 0x{:X} -> code {} {} (value {}, held {:.2f}) user event '{}'", device, id_code,
                   key, down ? "down" : "up", value, held, user_event);
+    }
+    // The block key (the game's SecondaryAttack: right mouse with a melee weapon): the timed-block window starts on its
+    // press. The graph's own block variables come later (iWantBlock stayed 0 for the player in the owner's run: it is
+    // the AI's "block without an event" switch) or not at all.
+    if (user_event == "SecondaryAttack" || key == combat::key_from_mouse(1)) {
+        if (down && !block_key_) block_key_at_ = game::Now();
+        block_key_ = down;
     }
     if (key == 0) return false;
     // Presses only count in gameplay: a save loaded (the player is in a cell) and no menu that takes the keys open.
@@ -181,12 +185,34 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
     menus_.on_menu(name, opening);
 }
 
+// Blocking: the block key held, or the melee graph's block state (bIsBlocking: the State Variable of the block
+// states in MeleeActions) or its AI switch (iWantBlock). Changes go to the log (first 30) to check which one moves.
+bool Plugin::Blocking() {
+    bool graph = false, want = false;
+    if (auto* player = game::Player()) {
+        static const RE::BSFixedString is_blocking("bIsBlocking"), want_block("iWantBlock");
+        bool b = false;
+        std::int32_t w = 0;
+        if (player->GetGraphVariableImplBool(is_blocking, b)) graph = b;
+        if (player->GetGraphVariableImplInt(want_block, w)) want = w != 0;
+    }
+    // The key alone counts only while the guard is still coming up (0.4 s): the same key aims a gun, and a held
+    // block shows in bIsBlocking.
+    const bool key = block_key_ && game::Now() - block_key_at_ < 0.4;
+    const int sig = (key ? 1 : 0) | (graph ? 2 : 0) | (want ? 4 : 0);
+    if (sig != block_sig_ && block_logs_ < 30) {
+        ++block_logs_;
+        REX::INFO("block: key {} bIsBlocking {} iWantBlock {}", key, graph, want);
+    }
+    block_sig_ = sig;
+    return key || graph || want;
+}
+
 void Plugin::OnHit(std::string_view attack_event, std::uint32_t aggressor, std::uint32_t weapon) {
     if (!settings_.enabled) return;
     // Blocking: the melee graph's own variable for a held block (MeleeActions: BlockStart needs iWantBlock = 1).
-    std::int32_t want_block = 0;
-    auto* player = game::Player();
-    const bool read = player && player->GetGraphVariableImplInt(RE::BSFixedString("iWantBlock"), want_block);
+    const std::int32_t want_block = Blocking() ? 1 : 0;
+    const bool read = true;
     const auto kind = combat::hit_kind(attack_event);
     const double now = game::Now();
     std::vector<combat::Command> cmds;
@@ -292,6 +318,7 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = std::format("{:.0f}", c.amount);
                     break;
                 case K::ActorEvents: result = game::SendActorEvents(c.target, c.name); break;
+                case K::Feedback: result = game::Notify(c.name) ? "shown" : "not dispatched"; break;
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
                 case K::UnequipWeapon:

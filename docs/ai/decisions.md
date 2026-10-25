@@ -357,3 +357,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   state did play (StartAnimationDriven + its BlockUp sound right after each hit), so the Dynamic Block Hit recoil (arm
   knocked out, 1.1 m push) reads as a broken guard. SkyrimBlock_fast_v2 uses Skyrim's own 1hm_blockhit (a flinch that
   stays in guard, no push) as MeleeBlock_HitReaction instead.
+- 2026-10-25 block, third run: hits on the player now arrive (attacker and attack event read: MeleeAttack01-04,
+  MeleeAttackPower02), but every one logged "blocking 0": iWantBlock is the graph's AI switch ("Transition for AI
+  needing to Block without event"), not the player's block. Blocking is now the block key (SecondaryAttack / right
+  mouse, for the first 0.4 s: the guard coming up) or bIsBlocking (the State Variable of MeleeActions' block states) or
+  iWantBlock; changes are logged. The timed-block window starts on the key press. Owner's definition: a timed block
+  negates all damage (it does: the health is given back) - "parry" renamed timed block in the log and INI
+  (fTimedBlockWindow, fParryWindow still read); it also shows sTimedBlockMessage (Debug.Notification, supported) until
+  a spark effect exists (Simple Block Sparks' Skyrim particle NIFs do not carry over; a vanilla Starfield impact
+  effect is the likely route). Held-block hits give back fBlockReduction (0.6) of the damage.

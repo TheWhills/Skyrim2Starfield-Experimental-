@@ -38,6 +38,7 @@ public:
     void OnMenu(std::string_view name, bool opening);
     // The player was hit (TESHitEvent, after the game handled the hit).
     void OnHit(std::string_view attack_event, std::uint32_t aggressor, std::uint32_t weapon);
+    bool Blocking();
     void Tick();
     // Animation events stop being read (the layout check in Hooks.cpp failed): logged once.
     void DisableAnimEvents(std::string_view why);
@@ -58,6 +59,9 @@ private:
     int keyword_checks_logged_ = 0;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;
     int logged_input_ = 0, logged_events_ = 0, logged_hidden_ = 0, combat_logged_ = 0;
+    std::atomic<bool> block_key_{false};
+    std::atomic<double> block_key_at_{-10.0};
+    int block_sig_ = 0, block_logs_ = 0;
     bool ghost_ = false;
 };
 

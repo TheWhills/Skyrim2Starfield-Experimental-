@@ -193,6 +193,20 @@ float PlayerHealth() {
     return static_cast<RE::ActorValueOwner*>(player)->GetActorValue(*info);
 }
 
+bool Notify(std::string_view text) {
+    auto* game = RE::GameVM::GetSingleton();
+    auto* vm = game ? game->GetVM() : nullptr;
+    if (!vm) return false;
+    auto args = [msg = std::string(text)](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+        out.clear();
+        out.resize(1);
+        RE::BSScript::PackVariable(out[0], msg);
+        return true;
+    };
+    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb;
+    return vm->DispatchStaticCall(RE::BSFixedString("Debug"), RE::BSFixedString("Notification"), args, cb, 0);
+}
+
 std::string SendActorEvents(std::uint32_t form_id, std::string_view events) {
     auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
     if (!actor) return std::format("{:08X}: no such actor", form_id);

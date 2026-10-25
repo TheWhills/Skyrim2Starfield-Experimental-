@@ -459,7 +459,9 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         }
         else if (k == "spluginevent" || k == "splugineventhost") c.plugin_event_host = v;
         else if (k == "sblockhitvariable") c.block_hit_variable = v;
-        else if (k == "fparrywindow") ok = read_double(v, c.parry_window);
+        else if (k == "fparrywindow" || k == "ftimedblockwindow") ok = read_double(v, c.parry_window);
+        else if (k == "fblockreduction") ok = read_double(v, c.block_reduction);
+        else if (k == "stimedblockmessage") c.timed_block_message = v;
         else if (k == "sparryevents") c.parry_events = v;
         else if (k == "bparryrestorehealth") {
             ok = v == "0" || v == "1";
@@ -730,25 +732,33 @@ std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t, s
     if (iframes_.invulnerable(t))
         out.push_back(log("hit during i-frames (the interim ghost did not stop it: a damage hook is needed)"));
     const double since_block = t - block_up_at_;
+    float before = -1.0f;                             // the most health held just before the hit
+    for (const auto& [ht, h] : health_)
+        if (t - ht <= std::max(cfg_.parry_window, 0.2) + 0.05) before = std::max(before, h);
     if (blocking && cfg_.parry_window > 0.0 && !parried_ && since_block >= 0.0 && since_block <= cfg_.parry_window) {
         parried_ = true;
-        float before = -1.0f;                         // the most health held over the window: the hit's damage back
-        for (const auto& [ht, h] : health_)
-            if (t - ht <= cfg_.parry_window + 0.05) before = std::max(before, h);
-        std::string text = std::format("parry: block up {:.2f} s before the hit, attacker {:08X}", since_block, attacker);
+        std::string text = std::format("timed block: block pressed {:.2f} s before the hit, attacker {:08X}", since_block,
+                                       attacker);
         // The damage may land after the hit event: the next ticks give back whatever was lost (once, within 0.3 s).
         if (cfg_.parry_restore_health && before >= 0.0f) {
             giveback_to_ = before;
+            giveback_share_ = 1.0f;
             giveback_until_ = t + 0.3;
-            text += std::format(", health to stay at {:.0f}", before);
+            text += std::format(", health kept at {:.0f}", before);
         }
         if (attacker != 0 && !cfg_.parry_events.empty()) {
             Command c{Command::Kind::ActorEvents, cfg_.parry_events};
             c.target = attacker;
             out.push_back(c);
         }
+        if (!cfg_.timed_block_message.empty()) out.push_back({Command::Kind::Feedback, cfg_.timed_block_message});
         out.push_back(log(text));
-        return out;                                   // a parry is not a block hit: no recoil variant
+        return out;                                   // a timed block is not a block hit: no recoil variant
+    }
+    if (blocking && cfg_.block_reduction > 0.0 && before >= 0.0f) {
+        giveback_to_ = before;
+        giveback_share_ = static_cast<float>(std::min(cfg_.block_reduction, 1.0));
+        giveback_until_ = t + 0.3;
     }
     if (blocking && !cfg_.block_hit_variable.empty()) {
         Command c{Command::Kind::SetVariable};
@@ -770,9 +780,11 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
             giveback_until_ = -1.0;
         } else if (s.health >= 0.0f && s.health < giveback_to_ - 0.5f) {
             Command c{Command::Kind::RestoreHealth};
-            c.amount = giveback_to_ - s.health;
+            c.amount = (giveback_to_ - s.health) * giveback_share_;
             out.push_back(c);
-            out.push_back(log(std::format("parry: {:.0f} health given back", c.amount)));
+            out.push_back(log(std::format("{}: {:.0f} of {:.0f} health given back",
+                                          giveback_share_ >= 1.0f ? "timed block" : "block", c.amount,
+                                          giveback_to_ - s.health)));
             giveback_until_ = -1.0;
             health_.clear();                          // the give-back is not new health to remember as "before"
         }

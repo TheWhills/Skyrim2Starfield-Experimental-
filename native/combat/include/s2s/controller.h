@@ -43,6 +43,7 @@ struct Command {
         Log,             // name: text for the plugin log (unknown payload instructions, ...)
         RestoreHealth,   // amount: health given back to the player (a parried hit's damage)
         ActorEvents,     // name: comma-separated graph events for actor `target`, tried in order until one is taken
+        Feedback,        // name: on-screen message (timed block), with a short camera shake
     };
     Command(Kind k, std::string n = {}) : kind(k), name(std::move(n)) {}
     Kind kind;
@@ -94,12 +95,16 @@ struct ControllerConfig {
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
     // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
     std::string block_hit_variable = "iS2SBlockHitType";
-    // Timed block (parry): a hit taken while blocking, within parry_window seconds of the block going up, is a parry -
-    // the hit's damage is given back (the health the player had parry_window seconds before, at most) and the attacker
-    // gets parry_events (the first its graph takes). One parry per block press. 0 = off.
+    // Timed block: a hit taken while blocking, within parry_window seconds of the block key going down, does no damage
+    // (all of it is given back: the most health held over the window) and the attacker gets parry_events (the first
+    // its graph takes); timed_block_message shows on screen. One per block press. 0 = off.
     double parry_window = 0.25;
     bool parry_restore_health = true;
     std::string parry_events = "StaggerStart, recoilStart, recoilLargeStart";
+    std::string timed_block_message = "Timed block";
+    // Any other hit taken while blocking: this share of its damage is given back (Skyrim's block takes most of a hit;
+    // the game's own block reduction on 1.16 is not known). 0 = the game's damage as is.
+    double block_reduction = 0.6;
     // A power attack (power_key, or a held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
     // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
     // after the combo instead (owner, 2026-10-23); the stance packs add combo -> power states that need the event.
@@ -288,6 +293,7 @@ private:
     double block_up_at_ = -1e9;                   // when the block went up (tick saw iWantBlock turn on)
     std::deque<std::pair<double, float>> health_; // (t, health) over the last parry window, for the give-back
     float giveback_to_ = -1.0f;                   // a parry keeps health at this ...
+    float giveback_share_ = 1.0f;                 // ... giving back this share of what was lost
     double giveback_until_ = -1.0;                // ... until then (< 0: nothing pending)
 };
 

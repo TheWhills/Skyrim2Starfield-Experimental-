@@ -26,6 +26,7 @@ float PlayerHealth();                            // < 0 when not known (cached l
 // Graph events (comma separated) for the actor with this form ID, tried in order until its graph takes one; returns
 // what happened for the log.
 std::string SendActorEvents(std::uint32_t form_id, std::string_view events);
+bool Notify(std::string_view text);              // Debug.Notification (Papyrus, queued)
 void DamageActorValue(std::string_view editor_id, float amount);
 
 }  // namespace s2s::sfse::game
