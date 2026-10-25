@@ -10,6 +10,7 @@
 
 #include "s2s/combat.h"
 
+#include <deque>
 #include <array>
 #include <cstdint>
 #include <map>
@@ -40,6 +41,8 @@ struct Command {
         UnequipWeapon,   // unequip the player's weapon, remembering it (first half of a stance re-equip)
         EquipWeapon,     // equip the weapon UnequipWeapon took off (makes the game pick the stance's animation set)
         Log,             // name: text for the plugin log (unknown payload instructions, ...)
+        RestoreHealth,   // amount: health given back to the player (a parried hit's damage)
+        ActorEvents,     // name: comma-separated graph events for actor `target`, tried in order until one is taken
     };
     Command(Kind k, std::string n = {}) : kind(k), name(std::move(n)) {}
     Kind kind;
@@ -47,6 +50,7 @@ struct Command {
     VariableSet variable{VariableSet::Type::Int, "", 0.0};
     float amount = 0.0f;
     int dx = 0, dy = 0;
+    std::uint32_t target = 0;   // ActorEvents: the actor (form ID)
 };
 
 // Settings ([Combat] section of the plugin INI; defaults = the Skyrim mods' defaults, see the spec).
@@ -90,6 +94,12 @@ struct ControllerConfig {
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
     // NA / PA variants; the graph picks a block-hit clip by it once variant states exist). Empty = not set.
     std::string block_hit_variable = "iS2SBlockHitType";
+    // Timed block (parry): a hit taken while blocking, within parry_window seconds of the block going up, is a parry -
+    // the hit's damage is given back (the health the player had parry_window seconds before, at most) and the attacker
+    // gets parry_events (the first its graph takes). One parry per block press. 0 = off.
+    double parry_window = 0.25;
+    bool parry_restore_health = true;
+    std::string parry_events = "StaggerStart, recoilStart, recoilLargeStart";
     // A power attack (power_key, or a held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
     // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
     // after the combo instead (owner, 2026-10-23); the stance packs add combo -> power states that need the event.
@@ -191,10 +201,20 @@ std::vector<HandleArray> scan_handle_arrays(std::uintptr_t base, std::size_t spa
 std::vector<std::uint32_t> read_handle_array(std::uintptr_t base, const HandleArray& a,
                                              const std::function<bool(const void*, std::size_t)>& readable);
 
+// Objects of one class in a block of writable memory, found by their vtable: every 8-byte aligned word in
+// [begin, begin + bytes) equal to `vtable` whose next 16 bytes look like a BSTArray in either layout (size <= capacity
+// <= 4096; data readable or, for an empty array, anything). For event sources whose GetEventSource has no Address
+// Library ID on 1.16 (TESHitEvent): the source is a static object in the game's data, its vtable is mapped.
+// The block itself must be readable; other memory is read only where `readable` allows.
+std::vector<std::uintptr_t> find_vtable_objects(std::uintptr_t begin, std::size_t bytes, std::uintptr_t vtable,
+                                                const std::function<bool(const void*, std::size_t)>& readable);
+
 // Per-frame game state the controller needs.
 struct PlayerState {
     float stamina = 1e9f;      // current stamina-like value (unlimited when not configured)
     bool staggered = false;
+    bool blocking = false;     // the block is held (the melee graph's iWantBlock)
+    float health = -1.0f;      // current health (< 0: not known)
     float stick_x = 0.0f, stick_y = 0.0f;   // movement stick: x right, y forward, -1..1
 };
 
@@ -217,7 +237,8 @@ public:
     // An animation-graph event of the player (tag and payload as the engine delivers them).
     std::vector<Command> on_anim_event(std::string_view tag, std::string_view payload, double t);
     // The player was hit (after the game handled it: TESHitEvent). blocking: the player held block.
-    std::vector<Command> on_hit(HitKind kind, bool blocking, double t);
+    // attacker: the hitting actor's form ID (0: not known; a parry then gives health back without the stagger).
+    std::vector<Command> on_hit(HitKind kind, bool blocking, double t, std::uint32_t attacker = 0);
     // Once per frame.
     std::vector<Command> tick(double t, const PlayerState& s);
 
@@ -251,6 +272,11 @@ private:
     double queued_until_ = -1.0, last_send_at_ = -1.0, last_attack_press_at_ = -1.0;
     double cancel_check_at_ = -1.0, cancel_candidate_at_ = -1.0;   // an AttackStart that may be a queued one
     double equip_due_ = -1.0;   // when to equip again at the latest (< 0: not waiting for an unequip)
+    bool block_held_ = false, parried_ = false;   // parried_: this block press already parried once
+    double block_up_at_ = -1e9;                   // when the block went up (tick saw iWantBlock turn on)
+    std::deque<std::pair<double, float>> health_; // (t, health) over the last parry window, for the give-back
+    float giveback_to_ = -1.0f;                   // a parry keeps health at this ...
+    double giveback_until_ = -1.0;                // ... until then (< 0: nothing pending)
 };
 
 }  // namespace s2s::combat

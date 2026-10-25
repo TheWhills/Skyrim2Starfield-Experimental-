@@ -1,4 +1,5 @@
 // Tests for the controller (keys + animation events -> game commands). Same mini harness as test_combat.cpp.
+#include <cmath>
 #include <cstring>
 #include "s2s/controller.h"
 
@@ -352,6 +353,77 @@ static void hits() {
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::Log);
     auto off = parse_config("[Combat]\nsBlockHitVariable =\n");
     CHECK(off.block_hit_variable.empty() && Controller(off).on_hit(HitKind::Power, true, 0).empty());
+
+    {   // timed block: block up 0.15 s before the hit -> parry: attacker gets the parry events, the damage comes back
+        Controller p;
+        PlayerState st;
+        st.health = 200.0f;
+        p.tick(10.00, st);
+        st.blocking = true;
+        p.tick(10.05, st);                                                 // block goes up at 10.05
+        auto r = p.on_hit(HitKind::Normal, true, 10.20, 0x0025421A);
+        bool stagger = false, restore = false, recoil = false;
+        for (const auto& c : r) {
+            stagger |= c.kind == Command::Kind::ActorEvents && c.target == 0x0025421A && c.name.starts_with("StaggerStart");
+            restore |= c.kind == Command::Kind::RestoreHealth;
+            recoil |= c.kind == Command::Kind::SetVariable;
+        }
+        CHECK(stagger && !restore && !recoil);                             // health comes back on the next tick
+        st.health = 170.0f;                                                // the damage lands after the event
+        r = p.tick(10.22, st);
+        CHECK(r.size() == 2 && r[0].kind == Command::Kind::RestoreHealth && std::fabs(r[0].amount - 30.0f) < 1e-3f);
+        st.health = 200.0f;
+        CHECK(p.tick(10.24, st).empty());                                  // once
+        // a second hit on the same block press is a plain block hit
+        r = p.on_hit(HitKind::Power, true, 10.25, 0x0025421A);
+        CHECK(r.size() == 1 && r[0].kind == Command::Kind::SetVariable && r[0].variable.value == 1.0);
+        // block held too long before the hit: a block hit, no parry
+        st.blocking = false;
+        p.tick(11.0, st);
+        st.blocking = true;
+        p.tick(11.1, st);
+        r = p.on_hit(HitKind::Normal, true, 11.5, 0x0025421A);
+        CHECK(r.size() == 1 && r[0].kind == Command::Kind::SetVariable);
+        // re-pressed: a new window
+        st.blocking = false;
+        p.tick(11.6, st);
+        st.blocking = true;
+        p.tick(11.7, st);
+        r = p.on_hit(HitKind::Normal, true, 11.8, 0);                      // attacker unknown: no stagger, still a parry
+        CHECK(!r.empty() && r.back().kind == Command::Kind::Log && r.back().name.starts_with("parry"));
+        for (const auto& c : r) CHECK(c.kind != Command::Kind::ActorEvents);
+        // no damage after a parry: nothing to give back
+        st.health = 200.0f;
+        CHECK(p.tick(11.85, st).empty());
+        // off
+        auto cfg = parse_config("[Combat]\nfParryWindow = 0\nsParryEvents = recoilStart\nbParryRestoreHealth = 0\n");
+        CHECK(cfg.parry_window == 0.0 && cfg.parry_events == "recoilStart" && !cfg.parry_restore_health);
+        Controller q(cfg);
+        q.tick(1.0, st);
+        st.blocking = false;
+        q.tick(0.9, st);
+        st.blocking = true;
+        q.tick(1.0, st);
+        r = q.on_hit(HitKind::Normal, true, 1.05, 0x1);
+        CHECK(r.size() == 1 && r[0].kind == Command::Kind::SetVariable);
+    }
+}
+
+static void vtable_objects() {
+    alignas(8) std::uint64_t mem[16] = {};
+    const std::uint64_t vt = 0x7FF6DF000000ull;
+    std::uint64_t sinks[4] = {1, 2, 3, 4};
+    mem[2] = vt;                                         // a source with two sinks: {data, capacity 4, size 2}
+    mem[3] = reinterpret_cast<std::uint64_t>(sinks);
+    mem[4] = (2ull << 32) | 4u;
+    mem[7] = vt;                                         // an empty source
+    mem[10] = vt;                                        // the vtable value with garbage after it: not a source
+    mem[11] = 0x1234;
+    mem[12] = 0xFFFFFFFFFFFFFFFFull;
+    auto readable = [&](const void* p, std::size_t) { return p == static_cast<const void*>(sinks); };
+    auto found = find_vtable_objects(reinterpret_cast<std::uintptr_t>(mem), sizeof(mem), vt, readable);
+    CHECK(found.size() == 2 && found[0] == reinterpret_cast<std::uintptr_t>(&mem[2]) &&
+          found[1] == reinterpret_cast<std::uintptr_t>(&mem[7]));
 }
 
 static void test_layout_probe() {
@@ -627,6 +699,7 @@ int main() {
     power_in_combo();
     stance_reequip();
     hits();
+    vtable_objects();
     menus();
     stance_refresh();
     stance_repeat_neutral();

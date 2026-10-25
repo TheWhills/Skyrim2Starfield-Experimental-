@@ -22,6 +22,10 @@ bool UnequipWeapon(std::function<void(const std::string&)> report = {});
 bool EquipWeapon(std::function<void(const std::string&)> report = {});
 int HasKeyword(std::string_view editor_id);     // 1 / 0, -1 when the keyword is not found
 float ActorValue(std::string_view editor_id);    // < 0 when the value is not found
+float PlayerHealth();                            // < 0 when not known (cached lookup: called every frame)
+// Graph events (comma separated) for the actor with this form ID, tried in order until its graph takes one; returns
+// what happened for the log.
+std::string SendActorEvents(std::uint32_t form_id, std::string_view events);
 void DamageActorValue(std::string_view editor_id, float amount);
 
 }  // namespace s2s::sfse::game

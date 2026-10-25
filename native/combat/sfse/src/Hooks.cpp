@@ -278,11 +278,22 @@ RE::BSEventNotifyControl ProcessEvent(Sink* a_this, const RE::BSAnimationGraphEv
 // attacks. Read with SafeFixedString, so a wrong guess only logs an empty name.
 constexpr std::ptrdiff_t kAttackDataEvent = 0x10;
 
+int g_any_hits_logged = 0;
+
 class HitSink : public RE::BSTEventSink<RE::TESHitEvent> {
 public:
     RE::BSEventNotifyControl ProcessEvent(const RE::TESHitEvent& a_event,
                                           RE::BSTEventSource<RE::TESHitEvent>*) override {
         auto* player = game::Player();
+        // The first few hit events of any kind go to the log, to check the event's layout (target / cause at +F0 /
+        // +F8 in CommonLibSF; not verified on 1.16): the form IDs should be actors, the player's is 00000014.
+        if (g_any_hits_logged < 3) {
+            ++g_any_hits_logged;
+            const auto* t = a_event.target.get();
+            const auto* c = a_event.cause.get();
+            REX::INFO("hit event: target {:08X} cause {:08X} source {:08X}", t ? t->GetFormID() : 0,
+                      c ? c->GetFormID() : 0, a_event.sourceFormID);
+        }
         if (!player || a_event.target.get() != player) return RE::BSEventNotifyControl::kContinue;
         const auto attack = a_event.hitData.attackData;
         const std::string event = attack ? SafeFixedString(static_cast<std::uintptr_t>(attack) + kAttackDataEvent) : "";
@@ -292,6 +303,47 @@ public:
     }
 };
 HitSink g_hit_sink;
+
+// TESHitEvent::GetEventSource has no Address Library ID on 1.16, but the source's class vtable does
+// (RE::VTABLE::BSTEventSource_TESHitEvent_): the source is a static object in the game's writable data, so the image's
+// writable pages are searched for that vtable (once, at load; supported, not verified: the log names what was found).
+// Each object found gets the sink through BSTEventSource::RegisterSink (mapped).
+void RegisterHitSinkByVtable() {
+    const auto vtable = RE::VTABLE::BSTEventSource_TESHitEvent_[0].address();
+    const auto base = reinterpret_cast<std::uintptr_t>(REX::W32::GetModuleHandleW(nullptr));
+    std::vector<std::uintptr_t> found;
+    std::size_t scanned = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (std::uintptr_t at = base;;) {
+        REX::W32::MEMORY_BASIC_INFORMATION mbi{};
+        if (!REX::W32::VirtualQuery(reinterpret_cast<void*>(at), &mbi, sizeof(mbi))) break;
+        if (reinterpret_cast<std::uintptr_t>(mbi.allocationBase) != base) break;      // past the game's image
+        const auto start = reinterpret_cast<std::uintptr_t>(mbi.baseAddress);
+        const bool writable = mbi.state == REX::W32::MEM_COMMIT &&
+                              (mbi.protect & (REX::W32::PAGE_READWRITE | REX::W32::PAGE_WRITECOPY)) &&
+                              !(mbi.protect & (REX::W32::PAGE_NOACCESS | 0x100u));
+        if (writable) {
+            auto part = combat::find_vtable_objects(start, mbi.regionSize, vtable,
+                                                    [](const void* p, std::size_t n) { return game::Readable(p, n); });
+            found.insert(found.end(), part.begin(), part.end());
+            scanned += mbi.regionSize;
+        }
+        at = start + mbi.regionSize;
+    }
+    const auto ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    if (found.empty()) {
+        REX::WARN("hit events: no TESHitEvent source found ({} MB of the game's data searched in {:.0f} ms): hit "
+                  "handling (block hits, parries) off", scanned >> 20, ms);
+        return;
+    }
+    for (auto a : found) reinterpret_cast<RE::BSTEventSource<RE::TESHitEvent>*>(a)->RegisterSink(&g_hit_sink);
+    REX::INFO("hit events: {} TESHitEvent source(s) found by vtable at {} ({} MB searched in {:.0f} ms); sink registered",
+              found.size(), [&] {
+                  std::string s;
+                  for (auto a : found) s += std::format("{}+{:X}", s.empty() ? "" : ", ", a - base);
+                  return s;
+              }(), scanned >> 20, ms);
+}
 
 // Menu open / close (CommonLibSF maps MenuOpenCloseEvent: name, opening): input gating in Plugin::OnButton.
 class MenuSink : public RE::BSTEventSink<RE::MenuOpenCloseEvent> {
@@ -334,8 +386,7 @@ bool Install() {
         if (auto* hits = RE::TESHitEvent::GetEventSource()) hits->RegisterSink(&g_hit_sink);
         else REX::WARN("no TESHitEvent source: hit handling off");
     } else {
-        REX::WARN("hit events: TESHitEvent::GetEventSource is not mapped for this game version in CommonLibSF (ID 0): "
-                  "hit handling off; the player's own animation events (logged) show hits instead");
+        RegisterHitSinkByVtable();
     }
 
     g_perf_start = g_perf_last = std::chrono::steady_clock::now();

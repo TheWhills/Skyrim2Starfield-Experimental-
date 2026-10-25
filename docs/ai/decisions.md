@@ -332,3 +332,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-10-25 lock-on ease-in verified (owner: "working great"; trace: the view follows the 0.4 s curve within 0.4 deg
   on both axes, no overshoot, lands on the target and holds). Remaining cost: one ~17 ms frame on the lock key (the
   full actor gather), ~7 us per frame while locked.
+- 2026-10-25 blocking (owner: vanilla block works; wants timed block / parry and block-hit reactions). Hit events: the
+  TESHitEvent source has no GetEventSource ID on 1.16, but its class vtable is mapped, so the game image's writable
+  pages are searched once for objects with that vtable (find_vtable_objects; supported, logged) and the existing hit
+  sink is registered through BSTEventSource::RegisterSink (mapped). Parry (core, tested): a blocked hit within
+  fParryWindow (0.25 s) of the block going up (iWantBlock rising, polled per tick), once per press, gives back the
+  health lost (next ticks, within 0.3 s, up to the most health held over the window) and sends the attacker the first
+  of sParryEvents its graph takes (StaggerStart: Player_Melee's Stagger Meter listens to it; recoilStart /
+  recoilLargeStart are Skyrim's names; which one works is unverified, the log says). Block-hit recoil: the DBH clip
+  pack now also covers onehanded/player/ (the player's own folder holds a vanilla MeleeBlock_HitReaction).

@@ -186,6 +186,33 @@ float ActorValue(std::string_view editor_id) {
     return static_cast<RE::ActorValueOwner*>(player)->GetActorValue(*info);
 }
 
+float PlayerHealth() {
+    static const RE::ActorValueInfo* info = RE::TESForm::LookupByEditorID<RE::ActorValueInfo>(RE::BSFixedString("Health"));
+    auto* player = Player();
+    if (!player || !info) return -1.0f;
+    return static_cast<RE::ActorValueOwner*>(player)->GetActorValue(*info);
+}
+
+std::string SendActorEvents(std::uint32_t form_id, std::string_view events) {
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    if (!actor) return std::format("{:08X}: no such actor", form_id);
+    std::string tried;
+    std::size_t start = 0;
+    while (start <= events.size()) {
+        auto end = events.find(',', start);
+        if (end == std::string_view::npos) end = events.size();
+        auto name = events.substr(start, end - start);
+        while (!name.empty() && name.front() == ' ') name.remove_prefix(1);
+        while (!name.empty() && name.back() == ' ') name.remove_suffix(1);
+        start = end + 1;
+        if (name.empty()) continue;
+        if (actor->NotifyAnimationGraphImpl(RE::BSFixedString(std::string(name).c_str())))
+            return std::format("{:08X}: '{}' taken{}", form_id, name, tried.empty() ? "" : " (not taken: " + tried + ")");
+        tried += (tried.empty() ? "" : ", ") + std::string(name);
+    }
+    return std::format("{:08X}: none taken ({})", form_id, tried);
+}
+
 void DamageActorValue(std::string_view editor_id, float amount) {
     auto* player = Player();
     auto* info = RE::TESForm::LookupByEditorID<RE::ActorValueInfo>(RE::BSFixedString(std::string(editor_id).c_str()));

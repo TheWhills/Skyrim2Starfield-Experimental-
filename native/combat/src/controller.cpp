@@ -1,5 +1,6 @@
 // Implementation of include/s2s/controller.h.
 #include "s2s/controller.h"
+#include <format>
 
 #include <algorithm>
 #include <cctype>
@@ -193,6 +194,31 @@ std::vector<HandleArray> scan_handle_arrays(std::uintptr_t base, std::size_t spa
         }
     }
     std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.actors > b.actors; });
+    return out;
+}
+
+std::vector<std::uintptr_t> find_vtable_objects(std::uintptr_t begin, std::size_t bytes, std::uintptr_t vtable,
+                                                const std::function<bool(const void*, std::size_t)>& readable) {
+    std::vector<std::uintptr_t> out;
+    begin = (begin + 7) & ~std::uintptr_t{7};
+    for (std::uintptr_t a = begin; a + 24 <= begin + bytes; a += 8) {
+        std::uint64_t w = 0;
+        std::memcpy(&w, reinterpret_cast<const void*>(a), 8);
+        if (w != vtable) continue;
+        std::uint64_t p = 0;
+        std::uint32_t x = 0, y = 0;
+        bool plausible = false;
+        // {T* data, u32 capacity, u32 size} or {u32 size, u32 capacity, T* data}
+        for (bool data_first : {true, false}) {
+            std::memcpy(&p, reinterpret_cast<const void*>(a + (data_first ? 8 : 16)), 8);
+            std::memcpy(&x, reinterpret_cast<const void*>(a + (data_first ? 16 : 8)), 4);
+            std::memcpy(&y, reinterpret_cast<const void*>(a + (data_first ? 20 : 12)), 4);
+            const std::uint32_t capacity = data_first ? x : y, size = data_first ? y : x;
+            if (size > capacity || capacity > 4096) continue;
+            if (size == 0 || (p && readable(reinterpret_cast<const void*>(p), 8))) plausible = true;
+        }
+        if (plausible) out.push_back(a);
+    }
     return out;
 }
 
@@ -393,6 +419,12 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         }
         else if (k == "spluginevent" || k == "splugineventhost") c.plugin_event_host = v;
         else if (k == "sblockhitvariable") c.block_hit_variable = v;
+        else if (k == "fparrywindow") ok = read_double(v, c.parry_window);
+        else if (k == "sparryevents") c.parry_events = v;
+        else if (k == "bparryrestorehealth") {
+            ok = v == "0" || v == "1";
+            if (ok) c.parry_restore_health = v == "1";
+        }
         else if (k == "bstancerepeatneutral") {
             ok = v == "0" || v == "1";
             if (ok) c.stance_repeat_neutral = v == "1";
@@ -653,10 +685,31 @@ HitKind hit_kind(std::string_view attack_event) {
     return lower(attack_event).find("power") != std::string::npos ? HitKind::Power : HitKind::Normal;
 }
 
-std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t) {
+std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t, std::uint32_t attacker) {
     std::vector<Command> out;
     if (iframes_.invulnerable(t))
         out.push_back(log("hit during i-frames (the interim ghost did not stop it: a damage hook is needed)"));
+    const double since_block = t - block_up_at_;
+    if (blocking && cfg_.parry_window > 0.0 && !parried_ && since_block >= 0.0 && since_block <= cfg_.parry_window) {
+        parried_ = true;
+        float before = -1.0f;                         // the most health held over the window: the hit's damage back
+        for (const auto& [ht, h] : health_)
+            if (t - ht <= cfg_.parry_window + 0.05) before = std::max(before, h);
+        std::string text = std::format("parry: block up {:.2f} s before the hit, attacker {:08X}", since_block, attacker);
+        // The damage may land after the hit event: the next ticks give back whatever was lost (once, within 0.3 s).
+        if (cfg_.parry_restore_health && before >= 0.0f) {
+            giveback_to_ = before;
+            giveback_until_ = t + 0.3;
+            text += std::format(", health to stay at {:.0f}", before);
+        }
+        if (attacker != 0 && !cfg_.parry_events.empty()) {
+            Command c{Command::Kind::ActorEvents, cfg_.parry_events};
+            c.target = attacker;
+            out.push_back(c);
+        }
+        out.push_back(log(text));
+        return out;                                   // a parry is not a block hit: no recoil variant
+    }
     if (blocking && !cfg_.block_hit_variable.empty()) {
         Command c{Command::Kind::SetVariable};
         c.variable = {VariableSet::Type::Int, cfg_.block_hit_variable, kind == HitKind::Power ? 1.0 : 0.0};
@@ -667,6 +720,27 @@ std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t) {
 
 std::vector<Command> Controller::tick(double t, const PlayerState& s) {
     std::vector<Command> out;
+    if (s.blocking && !block_held_) {                 // the block went up: a new parry window
+        block_up_at_ = t;
+        parried_ = false;
+    }
+    block_held_ = s.blocking;
+    if (giveback_until_ >= 0.0) {
+        if (t > giveback_until_) {
+            giveback_until_ = -1.0;
+        } else if (s.health >= 0.0f && s.health < giveback_to_ - 0.5f) {
+            Command c{Command::Kind::RestoreHealth};
+            c.amount = giveback_to_ - s.health;
+            out.push_back(c);
+            out.push_back(log(std::format("parry: {:.0f} health given back", c.amount)));
+            giveback_until_ = -1.0;
+            health_.clear();                          // the give-back is not new health to remember as "before"
+        }
+    }
+    if (s.health >= 0.0f) {
+        health_.emplace_back(t, s.health);
+        while (!health_.empty() && t - health_.front().first > cfg_.parry_window + 0.1) health_.pop_front();
+    }
     if (cfg_.buffer_attacks && buffer_.charge_started(t))
         out.push_back(log("charged attack hold reached (no charged-attack states in the graph yet)"));
     // A dodge ends with TKDR_DodgeEnd; clips without TKDR events end it when the i-frames run out; a lost end event

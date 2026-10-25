@@ -30,6 +30,8 @@ const char* kind_name(combat::Command::Kind k) {
         case K::UnequipWeapon: return "stance unequip";
         case K::EquipWeapon: return "stance equip";
         case K::Log: return "log";
+        case K::RestoreHealth: return "restore health";
+        case K::ActorEvents: return "actor events";
     }
     return "?";
 }
@@ -108,6 +110,14 @@ combat::PlayerState Plugin::State() {
     combat::PlayerState s;
     s.stick_x = stick_x_;
     s.stick_y = stick_y_;
+    // Blocking: the melee graph's own variable for a held block (MeleeActions: BlockStart needs iWantBlock = 1); the
+    // timed block (parry) window starts when it turns on.
+    if (auto* player = game::Player()) {
+        static const RE::BSFixedString want_block("iWantBlock");
+        std::int32_t v = 0;
+        if (player->GetGraphVariableImplInt(want_block, v)) s.blocking = v != 0;
+    }
+    s.health = game::PlayerHealth();
     if (!settings_.stamina_value.empty()) {
         float v = game::ActorValue(settings_.stamina_value);
         if (v >= 0.0f) s.stamina = v;
@@ -184,7 +194,7 @@ void Plugin::OnHit(std::string_view attack_event, std::uint32_t aggressor, std::
     {
         std::scoped_lock l(lock_);
         invulnerable = controller_.invulnerable(now);
-        cmds = controller_.on_hit(kind, want_block != 0, now);
+        cmds = controller_.on_hit(kind, want_block != 0, now, aggressor);
     }
     if (logged_hits_ < settings_.log_hits) {
         ++logged_hits_;
@@ -274,6 +284,11 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = stamina.empty() ? "no stamina value set" : std::format("{}", c.amount);
                     break;
                 case K::Log: REX::INFO("{}", c.name); continue;
+                case K::RestoreHealth:
+                    game::DamageActorValue("Health", -c.amount);           // a negative damage gives it back
+                    result = std::format("{:.0f}", c.amount);
+                    break;
+                case K::ActorEvents: result = game::SendActorEvents(c.target, c.name); break;
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
                 case K::UnequipWeapon:
