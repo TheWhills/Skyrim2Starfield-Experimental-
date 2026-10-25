@@ -329,3 +329,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   looked abrupt or absent, so the ease-in is now a timed smoothstep curve (fAcquireTime 0.4 s, fAcquireRate removed)
   from the view at lock time to the target, the same on both axes (TDM-like); pitch follows the curve through the look
   input at fPitchGain. A frame-by-frame trace of the first three ease-ins shows view / curve / target / input.
+- 2026-10-25 lock-on ease-in verified (owner: "working great"; trace: the view follows the 0.4 s curve within 0.4 deg
+  on both axes, no overshoot, lands on the target and holds). Remaining cost: one ~17 ms frame on the lock key (the
+  full actor gather), ~7 us per frame while locked.
