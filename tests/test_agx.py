@@ -53,5 +53,24 @@ class AgxTests(unittest.TestCase):
         self.assertEqual(d["variables"], [("bDontAllowBlock", 0, 30)])
 
 
+class LinkBlendTests(unittest.TestCase):
+    def sheet(self, event, blend):
+        return ("\t<property_sheet>\r\n\t\t<row>\r\n\t\t\t<prop> <type>2</type> <value>Event</value> </prop>\r\n"
+                f"\t\t\t<prop> <type>2</type> <value>{event}</value> </prop>\r\n\t\t</row>\r\n\t\t<row>\r\n"
+                "\t\t\t<prop> <type>2</type> <value>Blend Time</value> </prop>\r\n"
+                f"\t\t\t<prop> <type>1</type> <value>{blend}</value> </prop>\r\n\t\t</row>\r\n\t</property_sheet>\r\n")
+
+    def test_only_that_event(self):
+        data = ("<root>\r\n" + self.sheet("BlockStart", "0.3") + self.sheet("BlockStop", "0.3")
+                + self.sheet("BlockStartX", "0.3") + "</root>\r\n").encode()
+        out, n = agx.set_link_blend(data, "BlockStart", 0.1)
+        self.assertEqual(n, 1)
+        self.assertEqual(out.decode().count("<value>0.1</value>"), 1)
+        self.assertEqual(out.decode().count("<value>0.3</value>"), 2)
+        self.assertEqual(len(out), len(data))                          # "0.3" -> "0.1": nothing else moved
+        self.assertIn(self.sheet("BlockStart", "0.1").encode(), out)
+        self.assertEqual(agx.set_link_blend(data, "Nope", 0.1), (data, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

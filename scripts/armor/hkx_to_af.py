@@ -185,6 +185,32 @@ def load_motion_data(paths, project, behaviors_dir=None):
     return animdata.clip_motion(proj, generators, report), report
 
 
+def parse_fit(specs):
+    """--fit NAME=SECONDS -> {name lower: seconds}; NAME is the written clip (the vanilla target, e.g. MeleeBlock_Into)
+    or the source clip's file name."""
+    out = {}
+    for spec in specs:
+        name, _, sec = spec.partition("=")
+        try:
+            secs = float(sec)
+        except ValueError:
+            secs = 0.0
+        if not name or secs <= 0:
+            raise ValueError(f"--fit wants NAME=SECONDS (> 0), got {spec}")
+        out[name.strip().lower()] = secs
+    return out
+
+
+def fit_clip(clip, seconds):
+    """The clip played fast or slow enough to last `seconds` (Skyrim blends into its block pose in ~0.1 s where
+    Starfield plays a 26-frame raise: the block clip played short stands in for the raise)."""
+    fps = float(clip.get("fps") or 30.0)
+    dur = float(clip.get("duration") or 0.0) or (int(clip["frames"]) - 1) / fps
+    if dur <= 0 or seconds <= 0:
+        return clip
+    return retarget.play_speed(clip, dur / seconds)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--calumi", required=True, help="CALUMI.Animation.dll (Windows) or libcalumi.so (Linux build)")
@@ -216,6 +242,8 @@ def main(argv=None):
                     help="with --replace, for attacks (the vanilla descriptor has a HitFrame): re-time the last FRAMES "
                          "frames so the clip settles on its last pose (Skyrim attacks end mid-step)")
     ap.add_argument("--bfco", action="store_true", help="descriptor windows from BFCO / MCO markers (see above)")
+    ap.add_argument("--fit", action="append", default=[], metavar="NAME=SECONDS",
+                    help="play the clip written as NAME (vanilla target or source clip name) in SECONDS")
     ap.add_argument("--no-root-motion", action="store_true",
                     help="ignore animmotion / animrotation annotations (root motion of animation packs such as BFCO)")
     ap.add_argument("--motion", action="append", default=[], metavar="CLIP=FILE:ID",
@@ -242,6 +270,10 @@ def main(argv=None):
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
     os.makedirs(out, exist_ok=True)
+    try:
+        fits = parse_fit(a.fit)
+    except ValueError as e:
+        sys.exit(str(e))
     motion_data = {}
     for spec in a.motion:
         stem, _, src = spec.partition("=")
@@ -359,6 +391,10 @@ def main(argv=None):
                 if spd and spd > 0 and abs(spd - 1.0) > 1e-6:
                     clip = retarget.play_speed(clip, spd)
                     row["attack_speed"] = spd
+            fit = fits.get((file_name or "").lower()) or fits.get(name.lower())
+            if fit:
+                clip = fit_clip(clip, fit)
+                row["fit_seconds"] = fit
             if clip.get("fps") and abs(clip["fps"] - FPS) > 0.01:
                 row["resampled_from_fps"] = clip["fps"]
                 clip = retarget.resample(clip, FPS)                   # Starfield clips play at 30 fps

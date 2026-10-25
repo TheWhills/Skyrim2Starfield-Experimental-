@@ -100,3 +100,27 @@ def read_descriptor(data: bytes) -> Dict:
                        for e in r.iter("event")],
             "variables": [(v.findtext("name"), num(v.findtext("start")), num(v.findtext("end")))
                           for v in r.iter("variable")]}
+
+
+def set_link_blend(data: bytes, event: str, blend: float):
+    """(graph bytes, count): every transition whose Event is `event` gets Blend Time `blend` (seconds); the rest of the
+    file is kept byte for byte (CRLF, tabs). A transition is a <link> property sheet with an Event row and a Blend Time
+    row (fo4sf.agx_write's layout, verified on the vanilla graphs)."""
+    import re
+    text = data.decode("latin-1")
+    count = 0
+
+    def fix(m):
+        nonlocal count
+        sheet = m.group(0)
+        if not re.search(r"<value>Event</value>\s*</prop>\s*<prop>\s*<type>\d+</type>\s*<value>" + re.escape(event)
+                         + r"</value>", sheet):
+            return sheet
+        new, n = re.subn(r"(<value>Blend Time</value>\s*</prop>\s*<prop>\s*<type>\d+</type>\s*<value>)[^<]*(</value>)",
+                         lambda b: b.group(1) + f"{blend:g}" + b.group(2), sheet, count=1)
+        count += n
+        return new
+
+    text = re.sub(r"<property_sheet>.*?</property_sheet>", fix, text, flags=re.S)
+    return text.encode("latin-1"), count
+

@@ -57,7 +57,7 @@ private:
     double keyword_check_due_ = -1.0;
     int keyword_checks_logged_ = 0;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;
-    int logged_input_ = 0, logged_events_ = 0, logged_hidden_ = 0;
+    int logged_input_ = 0, logged_events_ = 0, logged_hidden_ = 0, combat_logged_ = 0;
     bool ghost_ = false;
 };
 

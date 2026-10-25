@@ -218,6 +218,9 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
         if (logged_events_ < settings_.log_events) {
             ++logged_events_;
             REX::INFO("anim event: '{}' payload '{}'", tag, payload);
+        } else if (combat_logged_ < 300 && combat::is_combat_reaction_event(tag, payload)) {
+            ++combat_logged_;                         // block / hit / stagger events stay visible after the cap
+            REX::INFO("anim event: '{}' payload '{}'", tag, payload);
         }
         cmds = controller_.on_anim_event(tag, payload, game::Now());
     }

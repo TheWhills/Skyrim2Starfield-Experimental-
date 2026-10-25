@@ -280,24 +280,76 @@ constexpr std::ptrdiff_t kAttackDataEvent = 0x10;
 
 int g_any_hits_logged = 0;
 
+// The TESHitEvent layout is not CommonLibSF's on 1.16 (owner's run 2026-10-25: target / cause at +F0 / +F8 read null
+// on every event). Until it is known, each event's first 0x140 bytes are searched: 8-byte slots pointing at objects
+// whose RTTI class is an actor (Actor / PlayerCharacter), in order, and 4-byte slots that resolve as reference handles
+// to actors. The first actor found is taken as the target and the next as the attacker (CommonLibSF's order:
+// HitData's aggressor handle comes before its target handle, the event's target pointer before its cause), and the
+// first events are logged slot by slot to fix the layout.
+struct ActorSlot { std::ptrdiff_t offset; bool handle; RE::Actor* actor; };
+
+std::vector<ActorSlot> ActorSlots(const void* event, std::size_t span) {
+    std::vector<ActorSlot> out;
+    const auto base = reinterpret_cast<std::uintptr_t>(event);
+    if (!game::Readable(event, span)) return out;
+    auto readable = [](const void* p, std::size_t n) { return game::Readable(p, n); };
+    for (std::size_t off = 0; off + 8 <= span; off += 8) {
+        std::uintptr_t v = 0;
+        std::memcpy(&v, reinterpret_cast<const void*>(base + off), 8);
+        if (v < 0x10000 || (v & 7) || !game::Readable(reinterpret_cast<const void*>(v), 8)) continue;
+        std::uintptr_t vt = 0;
+        std::memcpy(&vt, reinterpret_cast<const void*>(v), 8);
+        const auto cls = combat::rtti_class_name(vt, readable);
+        if (cls == ".?AVActor@@" || cls == ".?AVPlayerCharacter@@")
+            out.push_back({static_cast<std::ptrdiff_t>(off), false, reinterpret_cast<RE::Actor*>(v)});
+    }
+    for (std::size_t off = 0; off + 4 <= span; off += 4) {
+        std::uint32_t raw = 0;
+        std::memcpy(&raw, reinterpret_cast<const void*>(base + off), 4);
+        if (raw == 0 || raw == 0xFFFFFFFFu) continue;
+        RE::BSPointerHandle<RE::Actor> h;
+        std::memcpy(&h, &raw, 4);
+        auto ptr = h.get();
+        auto* a = ptr.get();
+        if (a && static_cast<RE::TESObjectREFR*>(a)->IsActor())
+            out.push_back({static_cast<std::ptrdiff_t>(off), true, a});
+    }
+    return out;
+}
+
 class HitSink : public RE::BSTEventSink<RE::TESHitEvent> {
 public:
     RE::BSEventNotifyControl ProcessEvent(const RE::TESHitEvent& a_event,
                                           RE::BSTEventSource<RE::TESHitEvent>*) override {
         auto* player = game::Player();
-        // The first few hit events of any kind go to the log, to check the event's layout (target / cause at +F0 /
-        // +F8 in CommonLibSF; not verified on 1.16): the form IDs should be actors, the player's is 00000014.
-        if (g_any_hits_logged < 3) {
-            ++g_any_hits_logged;
-            const auto* t = a_event.target.get();
-            const auto* c = a_event.cause.get();
-            REX::INFO("hit event: target {:08X} cause {:08X} source {:08X}", t ? t->GetFormID() : 0,
-                      c ? c->GetFormID() : 0, a_event.sourceFormID);
+        if (!player) return RE::BSEventNotifyControl::kContinue;
+        RE::Actor* target = nullptr;
+        RE::Actor* cause = nullptr;
+        if (auto* t = a_event.target.get()) {                         // CommonLibSF's layout, if it ever matches
+            target = t->IsActor() ? static_cast<RE::Actor*>(t) : nullptr;
+            auto* c = a_event.cause.get();
+            cause = c && c->IsActor() ? static_cast<RE::Actor*>(c) : nullptr;
+        } else {
+            const auto slots = ActorSlots(&a_event, 0x140);
+            std::vector<RE::Actor*> pointers;
+            for (const auto& sl : slots)
+                if (!sl.handle && std::find(pointers.begin(), pointers.end(), sl.actor) == pointers.end())
+                    pointers.push_back(sl.actor);
+            if (!pointers.empty()) target = pointers[0];
+            if (pointers.size() > 1) cause = pointers[1];
+            if (g_any_hits_logged < 6) {
+                ++g_any_hits_logged;
+                std::string list;
+                for (const auto& sl : slots)
+                    list += std::format(" +{:03X}{}={:08X}{}", sl.offset, sl.handle ? "(handle)" : "",
+                                        sl.actor->GetFormID(), sl.actor == player ? "(player)" : "");
+                REX::INFO("hit event slots:{} -> target {:08X}, attacker {:08X}", list.empty() ? std::string(" none") : list,
+                          target ? target->GetFormID() : 0, cause ? cause->GetFormID() : 0);
+            }
         }
-        if (!player || a_event.target.get() != player) return RE::BSEventNotifyControl::kContinue;
+        if (target != player) return RE::BSEventNotifyControl::kContinue;
         const auto attack = a_event.hitData.attackData;
         const std::string event = attack ? SafeFixedString(static_cast<std::uintptr_t>(attack) + kAttackDataEvent) : "";
-        const auto* cause = a_event.cause.get();
         Plugin::Get().OnHit(event, cause ? cause->GetFormID() : 0, a_event.sourceFormID);
         return RE::BSEventNotifyControl::kContinue;
     }

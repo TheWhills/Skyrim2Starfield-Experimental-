@@ -409,6 +409,30 @@ static void hits() {
     }
 }
 
+static void class_names() {
+    // a fake image: COL at +0x100 (signature 1, type descriptor RVA 0x200, its own RVA 0x100), name at +0x210,
+    // vtable at +0x308 with the COL pointer in front of it
+    alignas(8) static unsigned char img[0x400] = {};
+    const auto base = reinterpret_cast<std::uintptr_t>(img);
+    auto put32 = [&](std::size_t at, std::uint32_t v) { std::memcpy(img + at, &v, 4); };
+    put32(0x100, 1);
+    put32(0x10C, 0x200);
+    put32(0x114, 0x100);
+    std::memcpy(img + 0x210, ".?AVActor@@", 12);
+    const std::uint64_t col = base + 0x100;
+    std::memcpy(img + 0x300, &col, 8);
+    auto all = [&](const void* p, std::size_t n) {
+        auto a = reinterpret_cast<std::uintptr_t>(p);
+        return a >= base && a + n <= base + sizeof(img);
+    };
+    CHECK(rtti_class_name(base + 0x308, all) == ".?AVActor@@");
+    CHECK(rtti_class_name(base + 0x300, all).empty());                 // no COL in front
+    CHECK(rtti_class_name(0, all).empty());
+    CHECK(is_combat_reaction_event("BlockHitStart", "") && is_combat_reaction_event("SoundPlay", "WPNHandHandBlockUp3rd"));
+    CHECK(is_combat_reaction_event("staggerStart", "") && is_combat_reaction_event("recoilLargeStart", ""));
+    CHECK(!is_combat_reaction_event("FootLeft", "") && !is_combat_reaction_event("SoundPlay", "FST_Foley_Walk"));
+}
+
 static void vtable_objects() {
     alignas(8) std::uint64_t mem[16] = {};
     const std::uint64_t vt = 0x7FF6DF000000ull;
@@ -700,6 +724,7 @@ int main() {
     stance_reequip();
     hits();
     vtable_objects();
+    class_names();
     menus();
     stance_refresh();
     stance_repeat_neutral();

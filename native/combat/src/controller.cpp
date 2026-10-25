@@ -233,6 +233,39 @@ std::vector<std::uint32_t> read_handle_array(std::uintptr_t base, const HandleAr
     return out;
 }
 
+bool is_combat_reaction_event(std::string_view tag, std::string_view payload) {
+    auto has = [](std::string_view s, std::string_view w) {
+        return std::search(s.begin(), s.end(), w.begin(), w.end(), [](char a, char b) {
+                   return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+               }) != s.end();
+    };
+    for (std::string_view w : {"block", "stagger", "recoil", "hitreaction", "hitframe", "parry"})
+        if (has(tag, w) || has(payload, w)) return true;
+    return false;
+}
+
+std::string rtti_class_name(std::uintptr_t vt, const std::function<bool(const void*, std::size_t)>& readable) {
+    auto u32 = [&](std::uintptr_t a, std::uint32_t& out) {
+        if (!readable(reinterpret_cast<const void*>(a), 4)) return false;
+        std::memcpy(&out, reinterpret_cast<const void*>(a), 4);
+        return true;
+    };
+    if (!vt || !readable(reinterpret_cast<const void*>(vt - 8), 8)) return {};
+    std::uintptr_t col = 0;
+    std::memcpy(&col, reinterpret_cast<const void*>(vt - 8), 8);
+    std::uint32_t sig = 0, td = 0, self = 0;
+    if (!u32(col, sig) || !u32(col + 0x0C, td) || !u32(col + 0x14, self) || sig != 1 || self == 0 || self > col)
+        return {};
+    std::string out;
+    for (std::uintptr_t a = col - self + td + 0x10; out.size() < 256; ++a) {
+        if (!readable(reinterpret_cast<const void*>(a), 1)) return {};
+        const char ch = *reinterpret_cast<const char*>(a);
+        if (!ch) return out;
+        out.push_back(ch);
+    }
+    return {};
+}
+
 std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vtables, std::string_view base,
                                            const std::function<bool(const void*, std::size_t)>& readable) {
     auto u32 = [&](std::uintptr_t a, std::uint32_t& out) {

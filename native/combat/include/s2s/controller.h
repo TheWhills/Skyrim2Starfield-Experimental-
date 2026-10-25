@@ -182,6 +182,11 @@ struct RttiVtable {
 };
 std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vtables, std::string_view base,
                                            const std::function<bool(const void*, std::size_t)>& readable);
+// The most-derived class name (".?AVActor@@") of the object whose vtable this is, "" when it has no readable RTTI.
+// Animation events worth logging after the general cap (block, hit, stagger, recoil reactions): tag or payload
+// mentions one of them, case-insensitive (BlockHitStart, StaggerStart, recoilStart, SoundPlay '...BlockUp3rd').
+bool is_combat_reaction_event(std::string_view tag, std::string_view payload);
+std::string rtti_class_name(std::uintptr_t vtable, const std::function<bool(const void*, std::size_t)>& readable);
 
 // Arrays of actor handles inside an engine object whose layout is not known (Starfield's ProcessLists: CommonLibSF's
 // highActorHandles at +0x58 was always empty on 1.16, owner's runs). Every 8-byte aligned offset in [0, span) is read

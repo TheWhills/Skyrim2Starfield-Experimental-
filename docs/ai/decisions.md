@@ -341,3 +341,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   of sParryEvents its graph takes (StaggerStart: Player_Melee's Stagger Meter listens to it; recoilStart /
   recoilLargeStart are Skyrim's names; which one works is unverified, the log says). Block-hit recoil: the DBH clip
   pack now also covers onehanded/player/ (the player's own folder holds a vanilla MeleeBlock_HitReaction).
+- 2026-10-25 block, owner's first run: the hit source was found by vtable (+5977F40, 45 MB in 9 ms) and events arrive,
+  but target / cause at CommonLibSF's +F0 / +F8 read null: the 1.16 layout differs. The sink now looks for actors in
+  each event (8-byte pointers whose RTTI class is Actor / PlayerCharacter, in order: first = target, next = attacker;
+  and 4-byte handles), logging the first six events slot by slot to fix the layout. Block / hit / stagger animation
+  events are logged past the general cap (is_combat_reaction_event) to see what a blocked hit does (owner: the guard
+  drops instead of recoiling). Owner: the block raise is slow (vanilla: 0.3 s blend + 26-frame MeleeBlock_Into) where
+  Skyrim's is near-instant; block_pack.py ships MeleeActions with BlockStart blends 0.1 s / BlockStop 0.15 s, and
+  hkx_to_af.py --fit makes MeleeBlock_Into Skyrim's block pose in 0.15 s (MeleeBlock_Out its ready idle in 0.2 s).
+  The parry window counts from the block press (iWantBlock), not from the raise animation.
