@@ -399,8 +399,10 @@ void Lock::Update() {
     if (wrote_ && now >= next_write_check_ && write_checks_ < 10) {    // look = this frame's camera, after the game ran
         next_write_check_ = now + 0.5;
         ++write_checks_;
-        REX::INFO("camera write check: wrote yaw {:.1f} pitch {:.1f} deg last frame, now yaw {:.1f} pitch {:.1f} deg",
-                  wrote_->yaw * 57.2958f, wrote_->pitch * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f);
+        REX::INFO("camera write check: wrote yaw {:.1f} pitch {:.1f} deg last frame, now yaw {:.1f} pitch {:.1f} deg "
+                  "(player pitch {:.1f} deg)",
+                  wrote_->yaw * 57.2958f, wrote_->pitch * 57.2958f, look.yaw * 57.2958f, look.pitch * 57.2958f,
+                  player->data.angle.x * 57.2958f);
     }
     const auto next = s_.hard_lock ? combat::steer(look, want, dt, 1e6f, 1e6f)
                                    : combat::steer(look, want, dt, s_.yaw_rate, s_.pitch_rate);
@@ -409,11 +411,11 @@ void Lock::Update() {
         REX::WARN("lock-on: the third-person camera's rotation is not available (not in third person, or the layout "
                   "changed): the camera is not steered");
     }
-    if (!s_.steer_player) return;
-    // UNVERIFIED: writing the angle directly is enough for the player and the camera to turn (Skyrim's lock-on mods
-    // do this on PlayerCharacter). Mouse look still adds on top; a lock that fights the mouse is expected for now.
-    player->data.angle.z = next.yaw;
-    if (s_.steer_pitch) player->data.angle.x = next.pitch * s_.pitch_sign;
+    // Supported, not verified: the third-person camera's pitch is rebuilt from the player's pitch (Skyrim's is; no
+    // pitch float changed in ThirdPersonState's first 0x400 bytes while the quaternion's pitch did, owner's probes).
+    if (combat::lock_writes_player_pitch(s_.steer_camera, s_.steer_player, s_.steer_pitch))
+        player->data.angle.x = next.pitch * s_.pitch_sign;
+    if (s_.steer_player) player->data.angle.z = next.yaw;
 }
 
 }  // namespace s2s::sfse

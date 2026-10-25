@@ -178,6 +178,11 @@ void view_offset(Angles look, Vec3 from, Vec3 to, float& x, float& y);
 // and any stick but the left one (thumbstick type 4; the left stick, id 0x0B, still moves the player).
 bool hides_look_event(std::uint32_t event_type, std::int32_t stick_id);
 
+// Whether the lock writes the player's pitch (actor angle.x). The third-person camera keeps its own yaw but takes its
+// up / down from the player's pitch (owner's run 2026-10-25: yaw followed the target, the height stayed where it was
+// when the lock started), so the pitch is written whenever the camera is steered, or the player is.
+bool lock_writes_player_pitch(bool steer_camera, bool steer_player, bool steer_pitch);
+
 // Where the view is aimed from: the camera's own position when it is near the player (third person sits behind and
 // beside the player, and the crosshair is on the camera's ray), otherwise the player's eye.
 Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset = 10.0f);

@@ -261,6 +261,10 @@ bool hides_look_event(std::uint32_t event_type, std::int32_t stick_id) {
     return event_type == 1 || (event_type == 4 && stick_id != 0x0B);
 }
 
+bool lock_writes_player_pitch(bool steer_camera, bool steer_player, bool steer_pitch) {
+    return steer_pitch && (steer_camera || steer_player);
+}
+
 Vec3 aim_origin(Vec3 player_eye, const Vec3* camera, float max_offset) {
     if (!camera || !std::isfinite(camera->x) || !std::isfinite(camera->y) || !std::isfinite(camera->z)) return player_eye;
     const float dx = camera->x - player_eye.x, dy = camera->y - player_eye.y, dz = camera->z - player_eye.z;

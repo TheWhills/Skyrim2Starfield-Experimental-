@@ -195,6 +195,11 @@ static void lock_hold() {
     CHECK(hides_look_event(4, 0x0C));
     CHECK(!hides_look_event(4, 0x0B));
     CHECK(!hides_look_event(0, 0));
+    // the player's pitch carries the camera's up / down
+    CHECK(lock_writes_player_pitch(true, false, true));
+    CHECK(lock_writes_player_pitch(false, true, true));
+    CHECK(!lock_writes_player_pitch(true, true, false));
+    CHECK(!lock_writes_player_pitch(false, false, true));
     // aimed from the camera when it is near the player, from the eye otherwise
     Vec3 eye{0, 0, 1.6f}, cam{-0.6f, -2.5f, 1.8f}, far{100, 0, 0};
     auto o = aim_origin(eye, &cam);

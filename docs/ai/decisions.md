@@ -306,3 +306,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   verified: the controls' look handler is what turns the camera); bAimFromCamera (default 1) aims from the camera
   root's world position (+0xB0) instead of the player's eye, since the crosshair is on the camera's ray. The target is
   re-validated every 0.25 s, its position read each frame.
+- 2026-10-25 lock-on pitch: owner's screenshots show the yaw held on the target but the view's height stayed where it
+  was at lock time. The camera's own yaw floats are written, but no pitch float was found in ThirdPersonState; the
+  lock now also writes the player's pitch (angle.x) whenever it steers the camera (supported, not verified: Skyrim's
+  third-person camera takes its pitch from the player). The write check logs the player's pitch to confirm.
