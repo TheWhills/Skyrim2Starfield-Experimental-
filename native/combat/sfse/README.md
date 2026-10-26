@@ -29,6 +29,7 @@ from animation threads) only feed the controller under a lock.
    to the commit the draft was checked against).
 3. `cd native\combat\sfse`, `xmake f -m releasedbg`, `xmake`. The DLL lands in `build\windows\x64\releasedbg\`.
 4. Mod folder for MO2: `SFSE\Plugins\S2SCombat.dll` + `SFSE\Plugins\S2SCombat.ini` (this folder's INI).
+5. Optional add-on: `SFSE\Plugins\S2SClash.dll` + `SFSE\Plugins\S2SClash.ini` (weapon clash; needs S2SCombat). Put it in its own MO2 mod to switch it on / off.
    Needs SFSE and Address Library for SFSE Plugins matching the game version (pc_checklist step 0 prints both).
 
 Compile errors are expected in a first MSVC build (the check here could not see MSVC-only issues); fix and note them.
