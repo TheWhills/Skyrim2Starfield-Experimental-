@@ -229,7 +229,9 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
             ++clash_presses_logged_;
             REX::INFO("weapon clash: key {} '{}' pressed (not the attack key {})", key, user_event, attack_key_);
         }
-        if (ClashHidesKey(key, user_event)) return true;
+        // No other plugin action during a clash: owner's run 2026-10-26, Alt mid-clash dodged out of it (6 m away,
+        // aborted). Releases still go through, so nothing is left held.
+        if (down) return ClashHidesKey(key, user_event);
     }
     auto state = State();
     std::vector<combat::Command> cmds;
@@ -268,10 +270,12 @@ bool Plugin::ClashDropsEvent(const RE::IAnimationGraphManagerHolder* holder, con
     if (!clash_active_ || !holder || !name || game::SendingOwnEvent()) return false;
     const bool player = holder == clash_player_graph_.load();
     if (!player && holder != clash_opponent_graph_.load()) return false;
-    if (!combat::matches_prefix(name, clash_blocked_)) return false;
-    if (clash_dropped_logged_.fetch_add(1) < 60)
-        REX::INFO("clash: kept '{}' from the {}", name, player ? "player" : "opponent");
-    return true;
+    const bool drop = combat::matches_prefix(name, clash_blocked_);
+    // every event the filter sees for the two (first 80): shows whether the game's own attacks / reactions come
+    // through this function at all (owner's run 2026-10-26: none was kept)
+    if (clash_dropped_logged_.fetch_add(1) < 80)
+        REX::INFO("clash: {} '{}' for the {}", drop ? "kept" : "passed", name, player ? "player" : "opponent");
+    return drop;
 }
 
 bool Plugin::ClashHidesKey(std::uint32_t key, std::string_view user_event) const {
@@ -412,12 +416,32 @@ void Plugin::Tick() {
                     game::FaceEachOther(clash_.opponent());
                 } else if (auto* me = game::Player()) {
                     if (!clash_heading_) clash_heading_ = me->data.angle.z;
-                    if (combat::heading_drifted(me->data.angle.z, *clash_heading_, 0.5f * 3.14159265f / 180.0f))
+                    if (combat::heading_drifted(me->data.angle.z, *clash_heading_, 0.5f * 3.14159265f / 180.0f)) {
                         me->data.angle.z = *clash_heading_;
+                        ++clash_corrections_;
+                    }
                 }
             }
             for (const auto& [who, name] : clash_zero_have_)
                 game::SetActorVariable(who, {combat::VariableSet::Type::Float, name, 0.0});
+            // why the feet move (owner, 2026-10-26: footsteps all through the clash): the graph's locomotion values
+            // and the heading corrections, every 0.5 s for the first clashes
+            if (now >= clash_trace_at_ && clash_traces_ < 40) {
+                clash_trace_at_ = now + 0.5;
+                ++clash_traces_;
+                std::string line;
+                for (auto* a : {static_cast<RE::Actor*>(game::Player()),
+                                RE::TESForm::LookupByID<RE::Actor>(clash_.opponent())}) {
+                    if (!a) continue;
+                    line += std::format(" {:08X} heading {:.1f}", a->GetFormID(), a->data.angle.z * 57.2958f);
+                    for (const auto& v : clash_zero_) {
+                        float f = 0.0f;
+                        if (a->GetGraphVariableImplFloat(RE::BSFixedString(v.c_str()), f)) line += std::format(" {} {:.2f}", v, f);
+                    }
+                    line += ";";
+                }
+                REX::INFO("clash trace:{} player heading corrections {}", line, clash_corrections_);
+            }
         }
     }
     Run(std::move(cmds));
@@ -501,6 +525,7 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     clash_player_graph_ = me ? static_cast<const RE::IAnimationGraphManagerHolder*>(me) : nullptr;
                     clash_opponent_graph_ = opp ? static_cast<const RE::IAnimationGraphManagerHolder*>(opp) : nullptr;
                     clash_begin_at_ = game::Now();
+                    clash_corrections_ = 0;
                     clash_heading_.reset();
                     clash_zero_have_.clear();
                     std::string zero;

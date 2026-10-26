@@ -461,3 +461,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Skyrim's names; only those the Starfield graph has, logged at clash begin) set to 0 on both every frame (Papyrus,
   queued); (3) facing: both turned for fSettleTime 0.5 s, then only the player's heading is held, corrected past 0.5
   deg. Supported, not verified: that Starfield's AI / hit reactions go through that function.
+- 2026-10-26 owner's log with the filter build: both vtables hooked; Speed / Direction / TurnDelta exist on both graphs
+  (SpeedSampled does not); no event was kept by the filter (unresolved: whether the game's own attacks / reactions go
+  through NotifyAnimationGraphImpl - the filter now logs every event it sees for the two); footsteps (FootLeft /
+  FootRight, walk foley) all through each clash; Alt mid-clash ran the plugin's dodge and walked out (aborted at 6 m).
+  During a clash no key reaches the controller now; a trace logs the locomotion values and heading corrections.

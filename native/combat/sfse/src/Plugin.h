@@ -95,7 +95,8 @@ private:
     std::atomic<const RE::IAnimationGraphManagerHolder*> clash_player_graph_{nullptr}, clash_opponent_graph_{nullptr};
     std::vector<std::string> clash_blocked_, clash_zero_;
     std::atomic_int clash_dropped_logged_{0};
-    double clash_begin_at_ = -1.0;
+    double clash_begin_at_ = -1.0, clash_trace_at_ = 0.0;
+    int clash_traces_ = 0, clash_corrections_ = 0;
     std::optional<float> clash_heading_;          // the player's heading held after the settle time
     std::vector<std::pair<std::uint32_t, std::string>> clash_zero_have_;   // (actor, variable) the graphs have           // the clash turned the lock-on on (released when it ends)
     std::uint32_t attack_key_ = 256, power_key_ = 0;
