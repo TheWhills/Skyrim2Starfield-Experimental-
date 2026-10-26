@@ -236,6 +236,22 @@ void Lock::Toggle() {
     SetLocked(id, "key");
 }
 
+bool Lock::Hold(std::uint32_t id) {
+    auto* player = game::Player();
+    if (!player || locked_ == id) return false;
+    Gather(Look(), V(player->data.location, s_.eye_height));     // the actors' handles (validated each 0.25 s)
+    core_.set_target(id);
+    SetLocked(id, "weapon clash");
+    return true;
+}
+
+void Lock::Release(const char* why) {
+    if (!locked_) return;
+    core_.release();
+    target_ref_.reset();
+    SetLocked(std::nullopt, why);
+}
+
 void Lock::Switch(int dx, int dy) {
     auto* player = game::Player();
     if (!player || !locked_) return;

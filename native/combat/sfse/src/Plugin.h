@@ -1,6 +1,7 @@
 // The plugin's state: settings, the controller, and the bridge from game callbacks to controller calls and back.
 #pragma once
 
+#include "s2s/clash.h"
 #include "s2s/controller.h"
 
 namespace s2s::sfse {
@@ -48,12 +49,20 @@ public:
     // The player was hit (TESHitEvent, after the game handled the hit).
     void OnHit(std::string_view attack_event, std::uint32_t aggressor, std::uint32_t weapon);
     bool Blocking(bool* graph_state = nullptr);
+    // The player hit another actor (TESHitEvent): bForceClashOnHit starts a clash with it.
+    void OnPlayerHit(std::uint32_t target);
+    // A weapon clash is running and this key must not reach the game's controls (attack, block, movement).
+    bool ClashHidesKey(std::uint32_t key, std::string_view user_event) const;
+    bool ClashHidesMovement() const { return clash_active_ && clash_block_movement_; }
     void Tick();
     // Animation events stop being read (the layout check in Hooks.cpp failed): logged once.
     void DisableAnimEvents(std::string_view why);
 
 private:
     void Run(std::vector<combat::Command> commands);     // carried out on the main thread
+    void PlayEffect(std::uint32_t toward, std::string& result);   // the sTimedBlockEffect list (timed block, clash sparks)
+    // A clash with `opponent` if it may start (enabled, cooldown, chance, the actor close and alive); logged.
+    std::vector<combat::Command> TryClash(std::uint32_t opponent, const char* why);
     combat::PlayerState State();
 
     std::mutex lock_;
@@ -75,6 +84,12 @@ private:
     int effect_preview_ = -1;
     std::string auto_effect_;
     bool ghost_ = false;
+    combat::Clash clash_;
+    std::atomic_bool clash_active_{false};
+    bool clash_block_movement_ = true;
+    bool clash_took_lock_ = false;           // the clash turned the lock-on on (released when it ends)
+    std::uint32_t attack_key_ = 256, power_key_ = 0;
+    std::array<std::uint32_t, 4> move_keys_{};
 };
 
 }  // namespace s2s::sfse

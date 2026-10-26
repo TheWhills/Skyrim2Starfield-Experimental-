@@ -34,6 +34,12 @@ const char* kind_name(combat::Command::Kind k) {
         case K::ActorEvents: return "actor events";
         case K::Feedback: return "feedback";
         case K::DeferKill: return "deferred kill";
+        case K::ClashBegin: return "clash begin";
+        case K::ClashEnd: return "clash end";
+        case K::Notify: return "message";
+        case K::Shake: return "shake";
+        case K::Spark: return "clash spark";
+        case K::ActorVariable: return "actor variable";
     }
     return "?";
 }
@@ -59,6 +65,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     auto cfg = combat::parse_config(ini, &problems);
     for (const auto& p : problems) REX::WARN("{}", p);
     auto bindings = combat::parse_bindings(ini, "Keys");
+    auto clash_cfg = combat::parse_clash_config(ini, &problems);
+    for (const auto& p : problems) if (p.starts_with("[Clash]")) REX::WARN("{}", p);
 
     const auto plugin = combat::ini_section(ini, "Plugin");
     settings_.enabled = to_int(plugin, "benabled", 1) != 0;
@@ -115,6 +123,14 @@ void Plugin::LoadSettings(const std::string& ini_path) {
 
     std::scoped_lock l(lock_);
     controller_ = combat::Controller(cfg, bindings);
+    clash_ = combat::Clash(clash_cfg);
+    clash_block_movement_ = clash_cfg.block_movement;
+    attack_key_ = cfg.attack_key;
+    power_key_ = cfg.power_key;
+    move_keys_ = cfg.move_keys;
+    REX::INFO("weapon clash: {} (on perfect block {}, {} s, difficulty {}, forced on hit {})",
+              clash_cfg.enabled ? "on" : "off", clash_cfg.on_perfect_block, clash_cfg.duration, clash_cfg.mode,
+              clash_cfg.force_on_hit);
     REX::INFO("settings: {} key bindings, attack key {}, dodge key {}, buffer {}, plugin event host '{}'",
               bindings.size(), cfg.attack_key, cfg.dodge_key, cfg.buffer_attacks ? "on" : "off",
               cfg.plugin_event_host);
@@ -189,6 +205,19 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         }
         return true;                                   // the preview keys do nothing else
     }
+    if (clash_active_) {
+        // the attack key pushes the clash meter; the other keys the clash holds back do nothing else meanwhile
+        if (key == attack_key_ || (power_key_ && key == power_key_)) {
+            std::vector<combat::Command> cmds;
+            {
+                std::scoped_lock l(lock_);
+                cmds = clash_.on_attack(down, game::Now());
+            }
+            Run(std::move(cmds));
+            return true;
+        }
+        if (ClashHidesKey(key, user_event)) return true;
+    }
     auto state = State();
     std::vector<combat::Command> cmds;
     bool consumed = false;
@@ -212,6 +241,47 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
+    if (opening && clash_active_ && menus_.blocked()) {
+        std::vector<combat::Command> cmds;
+        {
+            std::scoped_lock l(lock_);
+            cmds = clash_.abort(game::Now(), std::format("menu {} opened", name));
+        }
+        Run(std::move(cmds));
+    }
+}
+
+bool Plugin::ClashHidesKey(std::uint32_t key, std::string_view user_event) const {
+    if (!clash_active_ || key == 0) return false;
+    if (key == attack_key_ || (power_key_ && key == power_key_)) return true;
+    if (!clash_block_movement_) return false;
+    if (user_event == "SecondaryAttack" || key == combat::key_from_mouse(1)) return true;
+    return std::find(move_keys_.begin(), move_keys_.end(), key) != move_keys_.end();
+}
+
+std::vector<combat::Command> Plugin::TryClash(std::uint32_t opponent, const char* why) {
+    const double now = game::Now();
+    static std::uint32_t seed = 0x9E3779B9u;
+    seed = seed * 1664525u + 1013904223u;
+    const double roll = (seed >> 8) % 10000 / 100.0;
+    if (!clash_.can_start(now, roll)) return {};
+    const auto reason = game::ClashCheck(opponent, static_cast<float>(clash_.config().max_start_distance));
+    if (!reason.empty()) {
+        REX::INFO("weapon clash ({}) with {:08X} not started: {}", why, opponent, reason);
+        return {};
+    }
+    REX::INFO("weapon clash ({}) with {:08X}: started", why, opponent);
+    return clash_.start(opponent, now, roll);
+}
+
+void Plugin::OnPlayerHit(std::uint32_t target) {
+    if (!settings_.enabled || !clash_.config().force_on_hit || clash_active_) return;
+    std::vector<combat::Command> cmds;
+    {
+        std::scoped_lock l(lock_);
+        cmds = TryClash(target, "bForceClashOnHit");
+    }
+    Run(std::move(cmds));
 }
 
 // Blocking: the block key held, or the melee graph's block state (bIsBlocking: the State Variable of the block
@@ -251,6 +321,17 @@ void Plugin::OnHit(std::string_view attack_event, std::uint32_t aggressor, std::
         std::scoped_lock l(lock_);
         invulnerable = controller_.invulnerable(now);
         cmds = controller_.on_hit(kind, want_block != 0, now, aggressor);
+        // a perfect block starts a weapon clash instead of the attacker's parry stagger
+        if (clash_.config().on_perfect_block && !clash_.active()) {
+            auto without = cmds;
+            if (combat::take_perfect_block(without, aggressor)) {
+                auto start = TryClash(aggressor, "perfect block");
+                if (!start.empty()) {
+                    without.insert(without.end(), start.begin(), start.end());
+                    cmds = std::move(without);
+                }
+            }
+        }
     }
     if (logged_hits_ < settings_.log_hits) {
         ++logged_hits_;
@@ -293,6 +374,13 @@ void Plugin::Tick() {
         std::scoped_lock l(lock_);
         cmds = controller_.tick(now, state);
         invulnerable = controller_.invulnerable(now);
+        if (clash_.active()) {
+            // the opponent died, vanished or got pushed far away: no winner
+            const auto why = game::ClashCheck(clash_.opponent(), static_cast<float>(clash_.config().max_start_distance * 2.0));
+            auto more = why.empty() ? clash_.tick(now) : clash_.abort(now, "opponent " + why);
+            cmds.insert(cmds.end(), more.begin(), more.end());
+        }
+        if (clash_.active() && clash_.config().ghost_player) invulnerable = true;
     }
     Run(std::move(cmds));
     if (settings_.list_effect_forms && !effects_listed_) {
@@ -361,34 +449,46 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = game::DeferKill(c.amount != 0.0f) ? (c.amount != 0.0f ? "on" : "off") : "not dispatched";
                     break;
                 case K::Feedback: {
-                    std::string effect = settings_.timed_block_effect.empty() ? auto_effect_ : settings_.timed_block_effect;
                     result = c.name.empty() ? "no message" : (game::Notify(c.name) ? "message" : "message not dispatched");
-                    if (!effect.empty()) {
-                        // a comma-separated list: the first that plays wins (each tried with every aim)
-                        std::vector<std::string> list;
-                        std::size_t start = 0;
-                        while (start <= effect.size()) {
-                            auto end = effect.find(',', start);
-                            if (end == std::string::npos) end = effect.size();
-                            std::string one = effect.substr(start, end - start);
-                            while (!one.empty() && one.front() == ' ') one.erase(one.begin());
-                            while (!one.empty() && one.back() == ' ') one.pop_back();
-                            if (!one.empty()) list.push_back(one);
-                            start = end + 1;
-                        }
-                        if (!list.empty()) {
-                            const std::vector<std::string> rest(list.begin() + 1, list.end());
-                            result += "; effect " + game::PlayImpactToward(list[0], settings_.timed_block_effect_node,
-                                                                           c.target, false, rest);
-                        }
-                    }
-                    else
-                        result += "; no effect (none named, no spark set found)";
+                    PlayEffect(c.target, result);
                     if (settings_.timed_block_shake > 0.0f)
                         result += game::ShakeCamera(settings_.timed_block_shake, settings_.timed_block_shake_time)
                                       ? "; shake" : "; shake not dispatched";
                     break;
                 }
+                case K::ClashBegin: {
+                    const auto& cc = clash_.config();
+                    clash_active_ = true;
+                    if (cc.place_opponent) result += game::PlaceFacing(c.target, c.amount);
+                    if (cc.restrain_opponent)
+                        result += game::SetRestrained(c.target, true) ? "; restrained" : "; restrain not dispatched";
+                    if (cc.lock_camera) {
+                        clash_took_lock_ = Lock::Get().Hold(c.target);
+                        result += clash_took_lock_ ? "; lock-on taken" : "; lock-on already on it";
+                    }
+                    break;
+                }
+                case K::ClashEnd: {
+                    const auto& cc = clash_.config();
+                    clash_active_ = false;
+                    if (cc.restrain_opponent)
+                        result += game::SetRestrained(c.target, false) ? "released" : "release not dispatched";
+                    if (clash_took_lock_) {
+                        clash_took_lock_ = false;
+                        Lock::Get().Release("weapon clash over");
+                        result += "; lock-on released";
+                    }
+                    break;
+                }
+                case K::Notify: result = game::Notify(c.name) ? "dispatched" : "not dispatched"; break;
+                case K::Shake:
+                    result = game::ShakeCamera(c.amount, c.dx / 1000.0f) ? "dispatched" : "not dispatched";
+                    break;
+                case K::Spark: PlayEffect(c.target, result); break;
+                case K::ActorVariable:
+                    result = std::format("{:08X} {} = {}: {}", c.target, c.variable.name, c.variable.value,
+                                         game::SetActorVariable(c.target, c.variable) ? "dispatched" : "not dispatched");
+                    break;
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
                 case K::UnequipWeapon:
@@ -400,10 +500,35 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                                  ? "dispatched" : "not dispatched";
                     break;
             }
-            if (logged_commands_.fetch_add(1) < limit)
+            // the clash's per-press shakes, sparks and guard refreshes would fill the command log in one clash
+            const bool chatty = c.kind == K::Shake || c.kind == K::Spark;
+            if (!chatty && logged_commands_.fetch_add(1) < limit)
                 REX::INFO("command: {} {} -> {}", kind_name(c.kind), c.name, result);
         }
     });
+}
+
+void Plugin::PlayEffect(std::uint32_t toward, std::string& result) {
+    std::string effect = settings_.timed_block_effect.empty() ? auto_effect_ : settings_.timed_block_effect;
+    if (effect.empty()) {
+        result += "; no effect (none named, no spark set found)";
+        return;
+    }
+    // a comma-separated list: the first that plays wins (each tried with every aim)
+    std::vector<std::string> list;
+    std::size_t start = 0;
+    while (start <= effect.size()) {
+        auto end = effect.find(',', start);
+        if (end == std::string::npos) end = effect.size();
+        std::string one = effect.substr(start, end - start);
+        while (!one.empty() && one.front() == ' ') one.erase(one.begin());
+        while (!one.empty() && one.back() == ' ') one.pop_back();
+        if (!one.empty()) list.push_back(one);
+        start = end + 1;
+    }
+    if (list.empty()) return;
+    const std::vector<std::string> rest(list.begin() + 1, list.end());
+    result += "; effect " + game::PlayImpactToward(list[0], settings_.timed_block_effect_node, toward, false, rest);
 }
 
 }  // namespace s2s::sfse

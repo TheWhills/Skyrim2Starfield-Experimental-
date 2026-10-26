@@ -113,15 +113,19 @@ bool HideFromControls(Plugin& plugin, const RE::InputEvent* e) {
     // the target between the lock's writes (owner's run 2026-10-23: the view slid away and back). Supported, not
     // verified: the controls' look handler turns the third-person camera, as Skyrim's LookHandler does.
     if (e->eventType != RE::InputEvent::EventType::kButton) {
-        if (!Lock::Get().BlocksLook()) return false;
-        const auto type = static_cast<std::uint32_t>(e->eventType);
         const auto stick = e->eventType == RE::InputEvent::EventType::kThumbstick
                                ? *reinterpret_cast<const std::int32_t*>(reinterpret_cast<const std::byte*>(e) + kStickId)
                                : 0;
+        // a weapon clash holds both fighters in place: the left stick does not walk the player off
+        if (stick == kLeftStick && plugin.ClashHidesMovement()) return true;
+        if (!Lock::Get().BlocksLook()) return false;
+        const auto type = static_cast<std::uint32_t>(e->eventType);
         return combat::hides_look_event(type, stick);
     }
     const auto* b = static_cast<const RE::ButtonEvent*>(e);
     const auto key = KeyCode(b);
+    // presses and repeats only: a release always goes through, so nothing is left "down" after the clash
+    if (b->value != 0.0f && plugin.ClashHidesKey(key, std::string_view(b->strUserEvent))) return true;
     if (key == 0 || key != plugin.PowerKey()) return false;
     const bool down = b->value != 0.0f && b->heldDownSecs == 0.0f;
     if (down) g_hiding_power_key = plugin.HidesPowerPress(key);
@@ -359,7 +363,10 @@ public:
                           target ? target->GetFormID() : 0, cause ? cause->GetFormID() : 0);
             }
         }
-        if (target != player) return RE::BSEventNotifyControl::kContinue;
+        if (target != player) {
+            if (cause == player && target) Plugin::Get().OnPlayerHit(target->GetFormID());   // bForceClashOnHit
+            return RE::BSEventNotifyControl::kContinue;
+        }
         const auto attack = a_event.hitData.attackData;
         const std::string event = attack ? SafeFixedString(static_cast<std::uintptr_t>(attack) + kAttackDataEvent) : "";
         Plugin::Get().OnHit(event, cause ? cause->GetFormID() : 0, a_event.sourceFormID);

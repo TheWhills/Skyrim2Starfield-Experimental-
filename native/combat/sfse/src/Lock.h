@@ -38,6 +38,9 @@ public:
     void Configure(const LockSettings& s);
     void Toggle();
     void Switch(int dx, int dy);
+    // Lock onto this actor (a weapon clash): true when that changed the lock (it was off or on someone else).
+    bool Hold(std::uint32_t id);
+    void Release(const char* why);
     void Update();                  // once per frame
     bool active() const { return locked_.has_value(); }
     bool BlocksLook() const { return locked_.has_value() && s_.block_look; }

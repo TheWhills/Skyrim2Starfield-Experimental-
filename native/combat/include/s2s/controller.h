@@ -45,6 +45,13 @@ struct Command {
         ActorEvents,     // name: comma-separated graph events for actor `target`, tried in order until one is taken
         DeferKill,       // amount 1: Actor.StartDeferredKill on the player, 0: EndDeferredKill
         Feedback,        // timed block landed: name = on-screen message ("" none), target = attacker (sparks, shake)
+        // Weapon clash (s2s/clash.h):
+        ClashBegin,      // target = opponent: lock the camera on, hold them in place in front of the player
+        ClashEnd,        // target = opponent: release what ClashBegin did; name = outcome ("win", "lose", "draw", "abort")
+        Notify,          // name: on-screen message
+        Shake,           // amount: camera shake strength (dx = milliseconds)
+        Spark,           // target = opponent: one burst of the clash sparks between the two
+        ActorVariable,   // target's graph variable: variable (Int / Bool / Float)
     };
     Command(Kind k, std::string n = {}) : kind(k), name(std::move(n)) {}
     Kind kind;

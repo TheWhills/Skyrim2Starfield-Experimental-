@@ -416,3 +416,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-10-26 0x000A7C3D played (down toward the attacker / straight down; never toward the attacker's body) but the
   owner saw nothing - a dropped-blade physics impact. Default list now starts with projectile impact sets, which show
   sparks on metal: FXProjectileBullet (0x0000D02C), ArcWelder (0x000BA2E3), BulletWhiteHot (0x001E3EA5).
+- 2026-10-26 timed-block sparks at the impact point: Simple Block Sparks' mesh is a 593-byte pointer to Skyrim's own
+  addon node 52 (FXMetalSparkImpact01), spawned by its DLL at the contact point (a BSTempEffectParticle-style call).
+  Skyrim particle meshes do not run in Starfield, and Starfield's temp-effect spawn is not mapped in CommonLibSF:
+  parked until the owner finds a Starfield spark Art Object / Visual Effect / Addon Node (unresolved).
+- 2026-10-26 weapon clash (owner's request: port Cinematic Clash). Its source is GPL-3.0: read for behaviour only, no
+  code taken; s2s/clash.h is written from its INI and observed behaviour. Starfield has no weapon-on-weapon collision
+  (the Skyrim mod's trigger, via Precision / Maxsu Weapon Parry), so a clash starts on a perfect block instead of the
+  attacker's parry stagger (bOnPerfectBlock). First cut: meter + mash (difficulty presses / s), outcome staggers
+  (staggerMagnitude + StaggerStart / recoil events, Skyrim's names; Starfield's unresolved), the opponent placed in
+  front and restrained (Papyrus MoveTo / SetAngle / Actor.SetRestrained, FO4 signatures: supported), the lock-on held
+  on them, movement / block / attack kept from the game's controls, the player ghosted, ground sparks every 0.25 s,
+  messages instead of the on-screen meter. Not yet: HUD meter, camera presets, sounds, blade-distance solve / tilt,
+  skill influence, rumble, OAR-style conditions.

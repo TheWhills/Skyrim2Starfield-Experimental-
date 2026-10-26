@@ -40,4 +40,11 @@ bool DeferKill(bool on);                         // Actor.StartDeferredKill / En
 std::string ListSparkForms();
 void DamageActorValue(std::string_view editor_id, float amount);
 
+// Weapon clash (s2s/clash.h). ClashCheck: "" when the actor may clash (an actor, alive, within max_distance), else why
+// not. The rest are Papyrus calls on that actor (queued), returning whether they were dispatched / what happened.
+std::string ClashCheck(std::uint32_t form_id, float max_distance);
+std::string PlaceFacing(std::uint32_t form_id, float distance);
+bool SetRestrained(std::uint32_t form_id, bool on);
+bool SetActorVariable(std::uint32_t form_id, const combat::VariableSet& v);
+
 }  // namespace s2s::sfse::game

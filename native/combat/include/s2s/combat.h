@@ -142,6 +142,7 @@ public:
                                                double now);
     std::optional<std::uint32_t> target() const { return target_; }
     void release() { target_.reset(); }
+    void set_target(std::uint32_t id) { target_ = id; }   // a target picked elsewhere (a weapon clash's opponent)
 private:
     bool valid(const Candidate& c, Vec3 player, float distance_scale) const;
     LockOnConfig cfg_;

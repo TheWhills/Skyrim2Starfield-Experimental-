@@ -465,4 +465,75 @@ void DamageActorValue(std::string_view editor_id, float amount) {
     else CallOnPlayer("ObjectReference", "RestoreValue", info, -amount);
 }
 
+// ------------------------------------------------------------------------------------------------ weapon clash
+std::string ClashCheck(std::uint32_t form_id, float max_distance) {
+    auto* player = Player();
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    if (!player || !player->parentCell) return "no player in a cell";
+    if (!actor) return std::format("{:08X} is not an actor", form_id);
+    if (actor == player) return "the player";
+    if (actor->IsDead()) return "dead";
+    const auto& a = actor->data.location;
+    const auto& p = player->data.location;
+    const float d = std::sqrt((a.x - p.x) * (a.x - p.x) + (a.y - p.y) * (a.y - p.y) + (a.z - p.z) * (a.z - p.z));
+    if (d > max_distance) return std::format("too far ({:.1f} > {:.1f})", d, max_distance);
+    return {};
+}
+
+// The opponent in front of the player, facing them: ObjectReference.MoveTo(player, x, y, 0, false) with the offset
+// along the player's heading (angle.z: 0 = +Y, clockwise; the lock-on's convention), then SetAngle (degrees) turned
+// round. Papyrus, queued; FO4 signatures (supported, not verified on Starfield).
+std::string PlaceFacing(std::uint32_t form_id, float distance) {
+    auto* player = Player();
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    if (!player || !actor) return "no actor";
+    const float yaw = player->data.angle.z;
+    const float ox = std::sin(yaw) * distance, oy = std::cos(yaw) * distance;
+    constexpr float kPi = 3.14159265f;
+    float face = (yaw + kPi) * 180.0f / kPi;
+    while (face >= 360.0f) face -= 360.0f;
+    const bool moved = DispatchOn(actor, "ObjectReference", "MoveTo",
+                                  [player, ox, oy](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                                      out.resize(5);
+                                      RE::BSScript::PackVariable(out[0], static_cast<RE::TESObjectREFR*>(player));
+                                      RE::BSScript::PackVariable(out[1], ox);
+                                      RE::BSScript::PackVariable(out[2], oy);
+                                      RE::BSScript::PackVariable(out[3], 0.0f);
+                                      RE::BSScript::PackVariable(out[4], false);
+                                  });
+    const bool turned = DispatchOn(actor, "ObjectReference", "SetAngle",
+                                   [face](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                                       out.resize(3);
+                                       RE::BSScript::PackVariable(out[0], 0.0f);
+                                       RE::BSScript::PackVariable(out[1], 0.0f);
+                                       RE::BSScript::PackVariable(out[2], face);
+                                   });
+    return std::format("placed {:.2f} ahead ({}), facing {:.0f} deg ({})", distance, moved ? "dispatched" : "not dispatched",
+                       face, turned ? "dispatched" : "not dispatched");
+}
+
+bool SetRestrained(std::uint32_t form_id, bool on) {
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    return actor && DispatchOn(actor, "Actor", "SetRestrained", [on](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+               out.resize(1);
+               RE::BSScript::PackVariable(out[0], on);
+           });
+}
+
+bool SetActorVariable(std::uint32_t form_id, const combat::VariableSet& v) {
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    if (!actor) return false;
+    const std::string name = v.name;
+    const char* fn = v.type == combat::VariableSet::Type::Bool  ? "SetAnimationVariableBool"
+                     : v.type == combat::VariableSet::Type::Int ? "SetAnimationVariableInt"
+                                                                : "SetAnimationVariableFloat";
+    return DispatchOn(actor, "ObjectReference", fn, [name, v](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+        out.resize(2);
+        RE::BSScript::PackVariable(out[0], RE::BSFixedString(name.c_str()));
+        if (v.type == combat::VariableSet::Type::Bool) RE::BSScript::PackVariable(out[1], v.value != 0.0);
+        else if (v.type == combat::VariableSet::Type::Int) RE::BSScript::PackVariable(out[1], static_cast<std::int32_t>(v.value));
+        else RE::BSScript::PackVariable(out[1], static_cast<float>(v.value));
+    });
+}
+
 }  // namespace s2s::sfse::game
