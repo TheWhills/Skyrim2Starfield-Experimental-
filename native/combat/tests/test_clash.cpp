@@ -224,7 +224,7 @@ static void settings() {
         "[Combat]\nfDuration = 9\n"
         "[Clash]\n"
         "bEnabled = 0\nfDuration = 3 ; shorter\niMode = 2\nfHardPressesPerSecond = 6\n"
-        "sLoserEvents = recoilLargeStart\nfSparkInterval = 0\nbHoldToMash = 1\niMode2 = 1\nfPressGain = x\n",
+        "sLoserEvents = recoilLargeStart\nfSparkInterval = 0\nbHoldToMash = 1\niMode2 = 1\nfPressGain = x\nbFaceEachOther = 0\n",
         &problems);
     CHECK(!c.enabled);
     CHECK(c.duration == 3.0);
@@ -233,6 +233,7 @@ static void settings() {
     CHECK(c.loser_events == "recoilLargeStart");
     CHECK(c.spark_interval == 0.0);
     CHECK(c.hold_to_mash);
+    CHECK(!c.face_each_other);
     CHECK(c.press_gain == 0.09);
     CHECK(problems.size() == 2);
     Clash clash(c);

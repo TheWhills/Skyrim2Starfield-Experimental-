@@ -70,7 +70,8 @@ struct ClashConfig {
     // the player's left so both fighters show side-on); pitch held at this tilt (+ = looking down) rather than aimed.
     double camera_yaw = 35.0, camera_pitch = 8.0;
     bool block_movement = true;       // movement keys / stick and the block key do not reach the game while locked
-    bool ghost_player = true;         // the player takes no hits while locked (Actor.SetGhost)
+    bool ghost_player = true;
+    bool face_each_other = true;      // each frame, turn both to face each other (the camera is turned off them)         // the player takes no hits while locked (Actor.SetGhost)
     bool force_on_hit = false;        // testing: every melee hit the player lands on an actor starts a clash
 };
 

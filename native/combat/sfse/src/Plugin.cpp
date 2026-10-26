@@ -390,6 +390,7 @@ void Plugin::Tick() {
             cmds.insert(cmds.end(), more.begin(), more.end());
         }
         if (clash_.active() && clash_.config().ghost_player) invulnerable = true;
+        if (clash_.active() && clash_active_ && clash_.config().face_each_other) game::FaceEachOther(clash_.opponent());
     }
     Run(std::move(cmds));
     if (settings_.list_effect_forms && !effects_listed_) {

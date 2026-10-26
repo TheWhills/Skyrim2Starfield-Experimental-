@@ -89,6 +89,7 @@ ClashConfig parse_clash_config(std::string_view ini, std::vector<std::string>* p
         else if (k == "blockcamera") ok = read_bool(v, c.lock_camera);
         else if (k == "bblockmovement") ok = read_bool(v, c.block_movement);
         else if (k == "bghostplayer") ok = read_bool(v, c.ghost_player);
+        else if (k == "bfaceeachother") ok = read_bool(v, c.face_each_other);
         else if (k == "bforceclashonhit") ok = read_bool(v, c.force_on_hit);
         else ok = false;
         if (!ok && problems) problems->push_back("[Clash] " + k + " = " + v + ": not understood, default kept");

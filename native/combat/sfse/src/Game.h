@@ -45,6 +45,9 @@ void DamageActorValue(std::string_view editor_id, float amount);
 std::string ClashCheck(std::uint32_t form_id, float max_distance);
 std::string PlaceFacing(std::uint32_t form_id, float distance);
 bool SetRestrained(std::uint32_t form_id, bool on);
+// Turns the player and the actor to face each other (their headings, data.angle.z, written directly; main thread).
+// Owner's screenshots 2026-10-26: the player kept facing the camera's way, 35 deg off the opponent, blades not crossed.
+void FaceEachOther(std::uint32_t form_id);
 bool SetActorVariable(std::uint32_t form_id, const combat::VariableSet& v);
 
 }  // namespace s2s::sfse::game

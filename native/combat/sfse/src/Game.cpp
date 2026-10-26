@@ -527,6 +527,19 @@ std::string PlaceFacing(std::uint32_t form_id, float distance) {
                        face, turned ? "dispatched" : "not dispatched");
 }
 
+void FaceEachOther(std::uint32_t form_id) {
+    auto* player = Player();
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    if (!player || !actor) return;
+    const auto& p = player->data.location;
+    const auto& a = actor->data.location;
+    const float dx = a.x - p.x, dy = a.y - p.y;
+    if (dx * dx + dy * dy < 1e-6f) return;
+    const float yaw = std::atan2(dx, dy);                  // 0 = +Y, clockwise (the lock-on's convention)
+    player->data.angle.z = yaw;
+    actor->data.angle.z = combat::wrap_pi(yaw + 3.14159265f);
+}
+
 bool SetRestrained(std::uint32_t form_id, bool on) {
     auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
     return actor && DispatchOn(actor, "Actor", "SetRestrained", [on](RE::BSScrapArray<RE::BSScript::Variable>& out) {

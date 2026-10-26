@@ -441,3 +441,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   at an opponent 0.7 away runs away (the orbit camera rises as it tilts down, so the target sinks further below it;
   the normal lock at several metres converges). During a clash the pitch is now held at fCameraPitch (8 deg down) and
   only the yaw is aimed, from the player's eye, turned fCameraYaw off the opponent. FPS: fixed on the owner's side.
+- 2026-10-26 owner's clash screenshots with the fixed tilt: the camera is right (behind, side-on), both guards up, but
+  the two stand side by side, the player facing the camera's way (35 deg off the opponent), blades not crossing. While
+  a clash runs both headings (data.angle.z) are now written each frame to face each other (bFaceEachOther).
