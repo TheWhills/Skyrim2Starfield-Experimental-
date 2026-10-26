@@ -227,11 +227,14 @@ std::string SendActorEvents(std::uint32_t form_id, std::string_view events) {
     return std::format("{:08X}: none taken ({})", form_id, tried);
 }
 
+// Through Papyrus (ObjectReference.DamageValue / RestoreValue, queued by the VM), not ActorValueOwner::ModActorValue:
+// the owner's game crashed right after the first native call to it (2026-10-25, a held-block hit's give-back), and
+// CommonLibSF's two ModActorValue overloads (slots 06 / 07) are not verified on 1.16.
 void DamageActorValue(std::string_view editor_id, float amount) {
-    auto* player = Player();
     auto* info = RE::TESForm::LookupByEditorID<RE::ActorValueInfo>(RE::BSFixedString(std::string(editor_id).c_str()));
-    if (!player || !info) return;
-    static_cast<RE::ActorValueOwner*>(player)->ModActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, *info, -amount);
+    if (!info || amount == 0.0f) return;
+    if (amount > 0.0f) CallOnPlayer("ObjectReference", "DamageValue", info, amount);
+    else CallOnPlayer("ObjectReference", "RestoreValue", info, -amount);
 }
 
 }  // namespace s2s::sfse::game

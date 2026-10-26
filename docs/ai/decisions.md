@@ -366,3 +366,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (fTimedBlockWindow, fParryWindow still read); it also shows sTimedBlockMessage (Debug.Notification, supported) until
   a spark effect exists (Simple Block Sparks' Skyrim particle NIFs do not carry over; a vanilla Starfield impact
   effect is the likely route). Held-block hits give back fBlockReduction (0.6) of the damage.
+- 2026-10-25 crash on the first blocked hit (owner's log ends right after "iS2SBlockHitType = 1 dispatched"; blocking
+  was recognised for the first time: key, then bIsBlocking, both verified moving). Two first-time calls follow such a
+  hit: SetAnimationVariableInt for a variable the graph does not have (Papyrus) and the held-block give-back through
+  ActorValueOwner::ModActorValue (native vfunc, slots unverified on 1.16). Both removed from the path: the give-back
+  (and stamina damage) now go through Papyrus ObjectReference.RestoreValue / DamageValue, and sBlockHitVariable is
+  empty in the shipped INI until variants exist.
