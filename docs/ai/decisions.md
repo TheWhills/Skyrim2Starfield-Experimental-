@@ -448,3 +448,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   only play on the floor) and the opponent sometimes recoils before raising the guard. Clash sparks are off by default
   (fSparkInterval 0) until an in-air effect is found; during the grace time the opponent gets the interrupt + guard
   every 0.2 s (its own hit reaction can start after the clash's first guard event).
+- 2026-10-26 owner's clash log: mashing works (6-9 presses, wins), but every 0.2 s the interrupt + BlockStart was
+  taken again by both graphs (block-up sound each time): the block re-entered over and over - the opponent looking
+  mid-attack / recoiling, the player's feet shuffling. The guard is now a Guard command: the game side sends the
+  interrupt and the block only when that actor's bIsBlocking is off. The grace (0.6 s) now holds the meter for both
+  sides (presses during it were winning clashes in under a second).

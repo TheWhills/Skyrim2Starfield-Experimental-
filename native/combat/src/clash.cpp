@@ -118,15 +118,18 @@ bool Clash::can_start(double t, double roll) const {
 }
 
 void Clash::guard(std::vector<Command>& out, double t) {
-    if (!cfg_.guard_events.empty()) {
-        out.push_back(actor_events(opponent_, cfg_.guard_events));
-        out.emplace_back(Command::Kind::SendEvent, cfg_.guard_events.substr(0, cfg_.guard_events.find(',')));
-    }
-    // During the grace time the guard is sent more often, with the attack interrupt to the opponent first: the
-    // opponent's own hit reaction (recoil from the blocked / landed hit) can start just after the clash and keep the
-    // block out (owner's run 2026-10-26: the opponent recoiled before raising the guard).
+    if (!cfg_.guard_events.empty())
+        for (std::uint32_t who : {opponent_, std::uint32_t{0x14}}) {
+            Command g{Command::Kind::Guard, cfg_.guard_events};
+            g.target = who;
+            g.extra = cfg_.interrupt_events;
+            out.push_back(g);
+        }
+    // During the grace time the guard is checked more often: the opponent's own reaction to the hit (recoil, the rest
+    // of its attack) can start just after the clash and drop the guard (owner's run 2026-10-26). The game side skips
+    // whoever is already blocking, so a held guard is left alone.
     const bool early = t - started_ < cfg_.grace_time;
-    next_guard_ = t + (early ? std::min(cfg_.guard_interval, 0.2) : cfg_.guard_interval);
+    next_guard_ = t + (early ? std::min(cfg_.guard_interval, 0.1) : cfg_.guard_interval);
 }
 
 std::vector<Command> Clash::start(std::uint32_t opponent, double t, double roll) {
@@ -151,10 +154,6 @@ std::vector<Command> Clash::start(std::uint32_t opponent, double t, double roll)
         v.variable = {VariableSet::Type::Int, cfg_.guard_variable, 1.0};
         out.push_back(v);
     }
-    if (!cfg_.interrupt_events.empty()) {
-        out.push_back(actor_events(opponent, cfg_.interrupt_events));
-        out.push_back(actor_events(0x14, cfg_.interrupt_events));
-    }
     guard(out, t);
     if (cfg_.messages) {
         const auto& m = cfg_.hold_to_mash ? cfg_.start_message_hold : cfg_.start_message;
@@ -176,6 +175,7 @@ std::vector<Command> Clash::on_attack(bool down, double t) {
         return out;
     }
     if (!down) return out;
+    if (t - started_ < cfg_.grace_time) return out;   // the lock is still forming: the meter does not move yet
     ++presses_;
     out = tick(t);                               // the opponent's push up to now (may end the clash)
     if (!active_) return out;
@@ -216,11 +216,7 @@ std::vector<Command> Clash::tick(double t) {
         if (cfg_.messages && zone == -1 && !cfg_.losing_message.empty()) out.push_back(notify(cfg_.losing_message));
         zone_ = zone;
     }
-    if (t >= next_guard_) {
-        if (t - started_ < cfg_.grace_time && !cfg_.interrupt_events.empty())
-            out.push_back(actor_events(opponent_, cfg_.interrupt_events));
-        guard(out, t);
-    }
+    if (t >= next_guard_) guard(out, t);
     if (cfg_.spark_interval > 0.0 && t >= next_spark_) {
         Command s{Command::Kind::Spark};
         s.target = opponent_;

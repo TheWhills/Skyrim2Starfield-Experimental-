@@ -44,9 +44,11 @@ static void start_and_guard() {
     CHECK(begin && begin->target == 0x1234u && std::abs(begin->amount - 0.7f) < 1e-6f);
     const auto* var = first(out, Command::Kind::ActorVariable);
     CHECK(var && var->variable.name == "iWantBlock" && var->variable.value == 1.0);
-    CHECK(has_events_for(out, 0x1234));                     // the opponent's interrupt + guard
-    CHECK(has_events_for(out, 0x14));                       // the player's interrupt
-    CHECK(count(out, Command::Kind::SendEvent) == 1);       // the player's guard
+    CHECK(count(out, Command::Kind::Guard) == 2);           // both guards, each with the interrupt
+    for (const auto& g : out)
+        if (g.kind == Command::Kind::Guard) CHECK(g.name == "BlockStart" && g.extra == "ActionInterrupt" &&
+                                                  (g.target == 0x1234u || g.target == 0x14u));
+    CHECK(!has_events_for(out, 0x1234) && !has_events_for(out, 0x14));
     CHECK(count(out, Command::Kind::Notify) == 1);
     // a second start while running does nothing
     CHECK(c.start(0x5678, 10.1).empty());
@@ -118,6 +120,7 @@ static void draw_on_timeout() {
 static void timeout_favours_meter() {
     ClashConfig cfg;
     cfg.duration = 1.1;
+    cfg.grace_time = 0.0;
     cfg.timeout_resolution = 1;
     cfg.mode = 0;                           // easy: 3 / s
     Clash c(cfg);
@@ -185,11 +188,11 @@ static void sparks_and_guard_repeat() {
         t += 1.0 / 60.0;
         auto out = (i % 15 == 0) ? c.on_attack(true, t) : c.tick(t);
         sparks += count(out, Command::Kind::Spark);
-        guards += count(out, Command::Kind::SendEvent);
+        guards += count(out, Command::Kind::Guard);
     }
     CHECK(c.active());
     CHECK(sparks >= 4 && sparks <= 5);           // every 0.25 s
-    CHECK(guards >= 1 && guards <= 2);           // every 0.5 s
+    CHECK(guards >= 2 && guards <= 4);           // both, every 0.5 s
 }
 
 static void zone_messages() {
@@ -266,32 +269,30 @@ static void grace_time() {
     while (c.active() && t < 10.0) {
         t += 1.0 / 60.0;
         c.tick(t);
-        if (t < 0.99) CHECK(c.meter() == 0.5);
+        if (t < 0.59) CHECK(c.meter() == 0.5);
     }
     CHECK(c.last_outcome() == Clash::Outcome::Lose);
-    CHECK(t > 2.3 && t < 2.5);                   // 1 s grace + 1.39 s
+    CHECK(t > 1.9 && t < 2.1);                   // 0.6 s grace + 1.39 s
     c = Clash();
     c.start(0x1234, 0.0);
-    c.on_attack(true, 0.5);
+    c.on_attack(true, 0.3);                      // in the grace: ignored
+    CHECK(c.presses() == 0 && c.meter() == 0.5);
+    c.on_attack(true, 0.6);
     c.on_attack(true, 0.6);
     CHECK(c.presses() == 2);
     CHECK(std::abs(c.meter() - 0.68) < 1e-9);
 }
 
 static void early_guard_repeat() {
-    Clash c;                                      // 1 s grace: the guard every 0.2 s, with the interrupt
+    Clash c;                                      // 0.6 s grace: both guards checked every 0.1 s
     c.start(0x1234, 0.0);
-    int guards = 0, interrupts = 0;
+    int guards = 0;
     double t = 0.0;
-    for (int i = 0; i < 60; ++i) {
+    for (int i = 0; i < 36; ++i) {
         t += 1.0 / 60.0;
-        for (const auto& cmd : c.tick(t)) {
-            guards += cmd.kind == Command::Kind::SendEvent;
-            interrupts += cmd.kind == Command::Kind::ActorEvents && cmd.name == "ActionInterrupt";
-        }
+        guards += count(c.tick(t), Command::Kind::Guard);
     }
-    CHECK(guards >= 4 && guards <= 5);
-    CHECK(interrupts == guards);
+    CHECK(guards >= 10 && guards <= 12);
     CHECK(count(c.tick(t + 0.01), Command::Kind::Spark) == 0);   // sparks off by default
 }
 

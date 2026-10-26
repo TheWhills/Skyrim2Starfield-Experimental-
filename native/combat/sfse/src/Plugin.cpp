@@ -40,6 +40,7 @@ const char* kind_name(combat::Command::Kind k) {
         case K::Shake: return "shake";
         case K::Spark: return "clash spark";
         case K::ActorVariable: return "actor variable";
+        case K::Guard: return "guard";
     }
     return "?";
 }
@@ -162,6 +163,7 @@ bool Plugin::HidesPowerPress(std::uint32_t key) {
 }
 
 void Plugin::NoteHiddenKey() {
+    if (clash_active_) return;                    // a clash holds back attack / block / movement: logged as presses
     if (logged_hidden_ < settings_.log_commands) {
         ++logged_hidden_;
         REX::INFO("power attack key kept from the game's controls (combo power attack sent by the plugin)");
@@ -499,6 +501,10 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = game::ShakeCamera(c.amount, c.dx / 1000.0f) ? "dispatched" : "not dispatched";
                     break;
                 case K::Spark: PlayEffect(c.target, result); break;
+                case K::Guard:
+                    result = game::GuardActor(c.target, c.name, c.extra);
+                    if (result.empty()) continue;                // already blocking: nothing sent, nothing logged
+                    break;
                 case K::ActorVariable:
                     result = std::format("{:08X} {} = {}: {}", c.target, c.variable.name, c.variable.value,
                                          game::SetActorVariable(c.target, c.variable) ? "dispatched" : "not dispatched");

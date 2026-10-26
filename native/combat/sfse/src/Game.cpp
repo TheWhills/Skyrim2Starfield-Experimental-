@@ -540,6 +540,17 @@ void FaceEachOther(std::uint32_t form_id) {
     actor->data.angle.z = combat::wrap_pi(yaw + 3.14159265f);
 }
 
+std::string GuardActor(std::uint32_t form_id, std::string_view guard_events, std::string_view interrupt_events) {
+    auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
+    if (!actor) return std::format("{:08X}: no such actor", form_id);
+    static const RE::BSFixedString is_blocking("bIsBlocking");
+    bool blocking = false;
+    if (actor->GetGraphVariableImplBool(is_blocking, blocking) && blocking) return {};
+    std::string out;
+    if (!interrupt_events.empty()) out = "interrupt " + SendActorEvents(form_id, interrupt_events) + "; ";
+    return out + "guard " + SendActorEvents(form_id, guard_events);
+}
+
 bool SetRestrained(std::uint32_t form_id, bool on) {
     auto* actor = form_id ? RE::TESForm::LookupByID<RE::Actor>(form_id) : nullptr;
     return actor && DispatchOn(actor, "Actor", "SetRestrained", [on](RE::BSScrapArray<RE::BSScript::Variable>& out) {

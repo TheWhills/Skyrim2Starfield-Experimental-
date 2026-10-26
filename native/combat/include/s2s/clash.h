@@ -33,7 +33,9 @@ struct ClashConfig {
     int timeout_resolution = 0;        // 0: the timer running out is a draw; 1: the side the meter favours wins
     // Seconds at the start before the opponent pushes (the guard comes up, the camera swings round, the message
     // shows): owner's run 2026-10-26 lost every clash in 1.4 s before any press could land.
-    double grace_time = 1.0;
+    // Neither side moves the meter meanwhile: owner's run 2026-10-26 won every clash in under a second by mashing
+    // through a 1 s grace in which only the opponent was held back.
+    double grace_time = 0.6;
     double clash_distance = 0.7;       // owner: 1.0 looked a little far       // game units between the two while locked (the opponent is placed there)
     // Graph events, tried in order until the actor's graph takes one (comma-separated). Empty = none.
     // Sent once to both at the start, before the guard: an attack still running keeps the graph out of its block

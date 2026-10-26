@@ -48,6 +48,8 @@ bool SetRestrained(std::uint32_t form_id, bool on);
 // Turns the player and the actor to face each other (their headings, data.angle.z, written directly; main thread).
 // Owner's screenshots 2026-10-26: the player kept facing the camera's way, 35 deg off the opponent, blades not crossed.
 void FaceEachOther(std::uint32_t form_id);
+// Command::Kind::Guard: "" when the actor's guard is already up (bIsBlocking), else what was sent.
+std::string GuardActor(std::uint32_t form_id, std::string_view guard_events, std::string_view interrupt_events);
 bool SetActorVariable(std::uint32_t form_id, const combat::VariableSet& v);
 
 }  // namespace s2s::sfse::game

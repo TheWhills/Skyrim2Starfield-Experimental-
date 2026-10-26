@@ -52,6 +52,11 @@ struct Command {
         Shake,           // amount: camera shake strength (dx = milliseconds)
         Spark,           // target = opponent: one burst of the clash sparks between the two
         ActorVariable,   // target's graph variable: variable (Int / Bool / Float)
+        // Raise target's guard unless it is already up (its graph's bIsBlocking): first `extra` (an attack / reaction
+        // interrupt, comma-separated, first taken), then `name` (the block events, first taken). Re-sending the block
+        // to a guard that is already up re-entered the block every time (owner's run 2026-10-26: block-up sound every
+        // 0.2 s, the opponent twitching, the player's feet shuffling).
+        Guard,
     };
     Command(Kind k, std::string n = {}) : kind(k), name(std::move(n)) {}
     Kind kind;
@@ -60,6 +65,7 @@ struct Command {
     float amount = 0.0f;
     int dx = 0, dy = 0;
     std::uint32_t target = 0;   // ActorEvents: the actor (form ID)
+    std::string extra;          // Guard: the interrupt events
 };
 
 // Settings ([Combat] section of the plugin INI; defaults = the Skyrim mods' defaults, see the spec).
