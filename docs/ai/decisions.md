@@ -406,3 +406,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   appeared at the weapon on each timed block; the 1.5 s cleanup did not remove them, unresolved). Owner's SF1Edit list
   of Starfield.esm's impact data sets: 0x00258056 WPNMeleeBlockBladeSmallImpactSet is vanilla's blade-block impact;
   now the shipped default (alternatives noted in the INI).
+- 2026-10-26 timed-block effect 0x00258056 dispatched on every timed block, nothing visible (owner). The Papyrus
+  result of PlayImpactEffect is now logged and, when false (pick ray hit nothing / node not found), the next aim is
+  tried: toward the attacker from the node, down toward the attacker, straight down from the root.

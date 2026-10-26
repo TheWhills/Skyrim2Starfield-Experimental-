@@ -331,10 +331,46 @@ std::string PlayImpactToward(std::string_view editor_id, std::string_view node, 
         const float len = std::sqrt(dx * dx + dy * dy);
         if (len > 1e-3f) { dx /= len; dy /= len; } else { dx = 0.0f; dy = 1.0f; }
     }
-    if (down) { dx = 0.0f; dy = 0.0f; dz = -1.0f; }     // preview: onto the floor under the node
-    const bool ok = CallOnPlayer("ObjectReference", "PlayImpactEffect", set, RE::BSFixedString(std::string(node).c_str()),
-                                 dx, dy, dz, 5.0f, false, false);
-    return std::format("'{}' {}", editor_id, ok ? "dispatched" : "not dispatched");
+    // PlayImpactEffect returns false when its pick ray hits nothing (or the node is not found). Owner's run
+    // 2026-10-26: dispatched on every timed block, nothing seen: the result is now logged and, on false, the next
+    // aim is tried - toward the attacker, then down between the two, then straight down from the root node.
+    struct Aim { std::string node; float x, y, z, len; const char* what; };
+    auto aims = std::make_shared<std::vector<Aim>>();
+    if (down) {
+        aims->push_back({std::string(node), 0.0f, 0.0f, -1.0f, 10.0f, "down from the node"});
+    } else {
+        const float s = 0.6f;
+        aims->push_back({std::string(node), dx, dy, 0.0f, 5.0f, "toward the attacker"});
+        aims->push_back({std::string(node), dx * s, dy * s, -0.8f, 10.0f, "down toward the attacker"});
+    }
+    aims->push_back({std::string(), 0.0f, 0.0f, -1.0f, 10.0f, "straight down from the root"});
+    auto try_aim = std::make_shared<std::function<void(std::size_t)>>();
+    *try_aim = [set, aims, try_aim, id = std::string(editor_id)](std::size_t i) {
+        if (i >= aims->size()) return;
+        const auto a = (*aims)[i];
+        Dispatch("ObjectReference", "PlayImpactEffect",
+                 [set, a](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                     out.resize(8);
+                     RE::BSScript::PackVariable(out[0], set);
+                     RE::BSScript::PackVariable(out[1], RE::BSFixedString(a.node.c_str()));
+                     RE::BSScript::PackVariable(out[2], a.x);
+                     RE::BSScript::PackVariable(out[3], a.y);
+                     RE::BSScript::PackVariable(out[4], a.z);
+                     RE::BSScript::PackVariable(out[5], a.len);
+                     RE::BSScript::PackVariable(out[6], false);
+                     RE::BSScript::PackVariable(out[7], false);
+                 },
+                 [try_aim, a, i, id](const RE::BSScript::Variable& v) {
+                     const bool played = v.is<bool>() && RE::BSScript::get<bool>(v);
+                     static std::atomic<int> logged{0};
+                     if (logged.fetch_add(1) < 40)
+                         REX::INFO("effect '{}' {} (node '{}'): {}", id, a.what, a.node,
+                                   played ? "played" : (v.is<bool>() ? "returned false" : "no bool result"));
+                     if (!played) (*try_aim)(i + 1);
+                 });
+    };
+    (*try_aim)(0);
+    return std::format("'{}' dispatched (result in the 'effect' line)", editor_id);
 }
 
 std::vector<std::uint32_t> g_impact_ids;
