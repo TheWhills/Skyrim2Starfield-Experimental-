@@ -1,7 +1,7 @@
 // The plugin's state: settings, the controller, and the bridge from game callbacks to controller calls and back.
 #pragma once
 
-#include "s2s/clash.h"
+#include "ClashApi.h"
 #include "s2s/controller.h"
 
 namespace s2s::sfse {
@@ -49,23 +49,23 @@ public:
     // The player was hit (TESHitEvent, after the game handled the hit).
     void OnHit(std::string_view attack_event, std::uint32_t aggressor, std::uint32_t weapon);
     bool Blocking(bool* graph_state = nullptr);
-    // The player hit another actor (TESHitEvent): bForceClashOnHit starts a clash with it.
+    // The player hit another actor (TESHitEvent): passed to the clash add-on (bForceClashOnHit).
     void OnPlayerHit(std::uint32_t target);
-    // A weapon clash is running and this key must not reach the game's controls (attack, block, movement).
+    // The weapon clash add-on (S2SClash.dll, src/ClashApi.h): its callbacks once it registered, else none.
+    void RegisterClash(const api::ClashCallbacks* cb) { clash_ = cb; }
+    const api::ClashCallbacks* Clash() const { return clash_.load(); }
+    bool ClashActive() const { auto* c = clash_.load(); return c && c->active(); }
+    // A clash runs and this key press / the left stick must not reach the game's controls.
     bool ClashHidesKey(std::uint32_t key, std::string_view user_event) const;
-    bool ClashHidesMovement() const { return clash_active_ && clash_block_movement_; }
-    // A weapon clash runs and this graph event for one of the two fighters is in [Clash] sBlockedEvents (not one the
-    // plugin sends itself): the event is dropped (Hooks.cpp, any thread).
-    bool ClashDropsEvent(const RE::IAnimationGraphManagerHolder* holder, const char* name);
+    bool ClashHidesMovement() const { auto* c = clash_.load(); return c && c->hides_movement(); }
+    const combat::ControllerConfig& ControllerConfig() { return controller_.config(); }
+    void PlayEffect(std::uint32_t toward, std::string& result);   // the sTimedBlockEffect list (timed block, clash sparks)
     void Tick();
     // Animation events stop being read (the layout check in Hooks.cpp failed): logged once.
     void DisableAnimEvents(std::string_view why);
 
 private:
     void Run(std::vector<combat::Command> commands);     // carried out on the main thread
-    void PlayEffect(std::uint32_t toward, std::string& result);   // the sTimedBlockEffect list (timed block, clash sparks)
-    // A clash with `opponent` if it may start (enabled, cooldown, chance, the actor close and alive); logged.
-    std::vector<combat::Command> TryClash(std::uint32_t opponent, const char* why);
     combat::PlayerState State();
 
     std::mutex lock_;
@@ -87,20 +87,10 @@ private:
     int effect_preview_ = -1;
     std::string auto_effect_;
     bool ghost_ = false;
-    combat::Clash clash_;
-    std::atomic_bool clash_active_{false};
-    bool clash_block_movement_ = true;
-    bool clash_took_lock_ = false;
-    int clash_presses_logged_ = 0;
-    std::atomic<const RE::IAnimationGraphManagerHolder*> clash_player_graph_{nullptr}, clash_opponent_graph_{nullptr};
-    std::vector<std::string> clash_blocked_, clash_zero_;
-    std::atomic_int clash_dropped_logged_{0};
-    double clash_begin_at_ = -1.0, clash_trace_at_ = 0.0;
-    int clash_traces_ = 0, clash_corrections_ = 0;
-    std::optional<float> clash_heading_;          // the player's heading held after the settle time
-    std::vector<std::pair<std::uint32_t, std::string>> clash_zero_have_;   // (actor, variable) the graphs have           // the clash turned the lock-on on (released when it ends)
-    std::uint32_t attack_key_ = 256, power_key_ = 0;
-    std::array<std::uint32_t, 4> move_keys_{};
+    std::atomic<const api::ClashCallbacks*> clash_{nullptr};
 };
+
+// S2SCombat's side of src/ClashApi.h: sent to every plugin at SFSE's PostLoad (main.cpp).
+const api::CombatServices* Services();
 
 }  // namespace s2s::sfse

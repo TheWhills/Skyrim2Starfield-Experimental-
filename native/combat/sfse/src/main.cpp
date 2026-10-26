@@ -7,6 +7,12 @@ namespace {
 void OnMessage(SFSE::MessagingInterface::Message* a_msg) {
     if (!a_msg) return;
     switch (a_msg->type) {
+        case SFSE::MessagingInterface::kPostLoad:
+            // every plugin is loaded: hand the weapon clash add-on (S2SClash.dll) our services, if it is there
+            SFSE::GetMessagingInterface()->Dispatch(s2s::api::kMessage,
+                                                    const_cast<s2s::api::CombatServices*>(s2s::sfse::Services()),
+                                                    sizeof(s2s::api::CombatServices), nullptr);
+            break;
         case SFSE::MessagingInterface::kPostDataLoad:
             // The player and UI singletons exist once the game data is loaded (supported: SFSE plugins install
             // per-object hooks here). Retried at kPostPostDataLoad if not.

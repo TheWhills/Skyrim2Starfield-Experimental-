@@ -29,3 +29,17 @@ target("S2SCombat")
     add_headerfiles("src/**.h", "../include/s2s/*.h")
     add_includedirs("src", "../include")
     set_pcxxheader("src/pch.h")
+
+-- S2SClash: the weapon clash (Cinematic Clash style standoff) as an add-on to S2SCombat (src/ClashApi.h). Needs
+-- S2SCombat installed; S2SCombat works without it. Its own INI: S2SClash.ini.
+target("S2SClash")
+    add_rules("commonlibsf.plugin", {
+        name = "S2SClash",
+        author = "Skyrim2Starfield",
+        description = "Weapon clash standoffs for S2SCombat (perfect block -> locked blades, mash attack)"
+    })
+
+    add_files("clash/**.cpp", "src/Game.cpp", "../src/*.cpp")
+    add_headerfiles("clash/**.h", "src/Game.h", "src/ClashApi.h", "../include/s2s/*.h")
+    add_includedirs("clash", "src", "../include")
+    set_pcxxheader("src/pch.h")

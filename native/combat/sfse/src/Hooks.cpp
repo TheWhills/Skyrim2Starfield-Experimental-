@@ -172,52 +172,6 @@ void InstallControls() {
               vtables.size(), found->vtable);
 }
 
-// ------------------------------------------------------------------------------------------------ clash event filter
-// Every graph event an actor gets goes through IAnimationGraphManagerHolder::NotifyAnimationGraphImpl (vtable slot 1,
-// mapped in CommonLibSF): the AI's attacks, hit reactions, the block drop, walking / turning starts. During a weapon
-// clash, the two fighters' events that would play over the block are dropped (Plugin::ClashDropsEvent; the plugin's
-// own events pass). Actor and PlayerCharacter each have their own vtable for that base, found through RTTI.
-// Supported, not verified: Skyrim's Cinematic Clash filters the same function; whether Starfield's AI and hit
-// reactions go through it is what the log line "clash: kept ... from" shows.
-using Notify_t = bool(RE::IAnimationGraphManagerHolder*, const RE::BSFixedString&);
-Notify_t* g_notify_actor = nullptr;
-Notify_t* g_notify_player = nullptr;
-
-bool NotifyActor(RE::IAnimationGraphManagerHolder* a_this, const RE::BSFixedString& a_event) {
-    if (Plugin::Get().ClashDropsEvent(a_this, a_event.c_str())) return false;
-    return g_notify_actor(a_this, a_event);
-}
-
-bool NotifyPlayer(RE::IAnimationGraphManagerHolder* a_this, const RE::BSFixedString& a_event) {
-    if (Plugin::Get().ClashDropsEvent(a_this, a_event.c_str())) return false;
-    return g_notify_player(a_this, a_event);
-}
-
-void InstallGraphFilter() {
-    static std::uintptr_t first_vtable = 0;
-    auto hook = [](const auto& ids, const char* what, Notify_t* replacement, Notify_t*& original) {
-        std::vector<std::uintptr_t> vtables;
-        for (const auto& id : ids) vtables.push_back(id.address());
-        auto found = combat::rtti_base_vtable(vtables, ".?AVIAnimationGraphManagerHolder@@",
-                                              [](const void* p, std::size_t n) { return game::Readable(p, n); });
-        if (!found) {
-            REX::WARN("clash event filter: no IAnimationGraphManagerHolder vtable in {}'s RTTI: not installed", what);
-            return;
-        }
-        if (found->vtable == first_vtable) {                  // shared: hooking it twice would call itself
-            REX::WARN("clash event filter: {} shares the vtable already hooked", what);
-            return;
-        }
-        first_vtable = found->vtable;
-        REL::Relocation<std::uintptr_t> vtbl{found->vtable};
-        original = reinterpret_cast<Notify_t*>(vtbl.write_vfunc(1, replacement));
-        REX::INFO("clash event filter: {} hooked ({} vtable {} of {})", what, found->complete_class, found->index,
-                  vtables.size());
-    };
-    hook(RE::VTABLE::Actor, "Actor", &NotifyActor, g_notify_actor);
-    hook(RE::VTABLE::PlayerCharacter, "PlayerCharacter", &NotifyPlayer, g_notify_player);
-}
-
 // ------------------------------------------------------------------------------------------------ safe reads
 bool Readable(const void* a_ptr, std::size_t a_len) { return game::Readable(a_ptr, a_len); }
 
@@ -495,7 +449,6 @@ bool Install() {
     g_event_original = reinterpret_cast<ProcessEvent_t*>(sink_vtbl.write_vfunc(1, &ProcessEvent));
 
     InstallControls();
-    InstallGraphFilter();
 
     ui->RegisterSink<RE::MenuOpenCloseEvent>(&g_menu_sink);
     // CommonLibSF (9d090c4, its latest as of 2026-10-21) has no Address Library ID for this on Starfield 1.16: ID 0, and

@@ -2,6 +2,7 @@
 
 #include "Game.h"
 #include "Lock.h"
+#include "s2s/clash.h"
 
 namespace s2s::sfse {
 namespace {
@@ -66,8 +67,6 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     auto cfg = combat::parse_config(ini, &problems);
     for (const auto& p : problems) REX::WARN("{}", p);
     auto bindings = combat::parse_bindings(ini, "Keys");
-    auto clash_cfg = combat::parse_clash_config(ini, &problems);
-    for (const auto& p : problems) if (p.starts_with("[Clash]")) REX::WARN("{}", p);
 
     const auto plugin = combat::ini_section(ini, "Plugin");
     settings_.enabled = to_int(plugin, "benabled", 1) != 0;
@@ -124,16 +123,6 @@ void Plugin::LoadSettings(const std::string& ini_path) {
 
     std::scoped_lock l(lock_);
     controller_ = combat::Controller(cfg, bindings);
-    clash_ = combat::Clash(clash_cfg);
-    clash_block_movement_ = clash_cfg.block_movement;
-    clash_blocked_ = combat::MenuGate::parse_list(clash_cfg.blocked_events);
-    clash_zero_ = combat::MenuGate::parse_list(clash_cfg.zero_variables);
-    attack_key_ = cfg.attack_key;
-    power_key_ = cfg.power_key;
-    move_keys_ = cfg.move_keys;
-    REX::INFO("weapon clash: {} (on perfect block {}, {} s, difficulty {}, forced on hit {})",
-              clash_cfg.enabled ? "on" : "off", clash_cfg.on_perfect_block, clash_cfg.duration, clash_cfg.mode,
-              clash_cfg.force_on_hit);
     REX::INFO("settings: {} key bindings, attack key {}, dodge key {}, buffer {}, plugin event host '{}'",
               bindings.size(), cfg.attack_key, cfg.dodge_key, cfg.buffer_attacks ? "on" : "off",
               cfg.plugin_event_host);
@@ -165,7 +154,7 @@ bool Plugin::HidesPowerPress(std::uint32_t key) {
 }
 
 void Plugin::NoteHiddenKey() {
-    if (clash_active_) return;                    // a clash holds back attack / block / movement: logged as presses
+    if (ClashActive()) return;                    // a clash holds back attack / block / movement: logged by S2SClash
     if (logged_hidden_ < settings_.log_commands) {
         ++logged_hidden_;
         REX::INFO("power attack key kept from the game's controls (combo power attack sent by the plugin)");
@@ -209,30 +198,8 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         }
         return true;                                   // the preview keys do nothing else
     }
-    if (clash_active_) {
-        // the attack key pushes the clash meter; the other keys the clash holds back do nothing else meanwhile
-        if (key == attack_key_ || (power_key_ && key == power_key_) || user_event == "PrimaryAttack") {
-            std::vector<combat::Command> cmds;
-            {
-                std::scoped_lock l(lock_);
-                cmds = clash_.on_attack(down, game::Now());
-                if (down && clash_presses_logged_ < 80) {
-                    ++clash_presses_logged_;
-                    REX::INFO("weapon clash: attack press {} (key {}), meter {:.2f}", clash_.presses(), key,
-                              clash_.meter());
-                }
-            }
-            Run(std::move(cmds));
-            return true;
-        }
-        if (down && clash_presses_logged_ < 80) {
-            ++clash_presses_logged_;
-            REX::INFO("weapon clash: key {} '{}' pressed (not the attack key {})", key, user_event, attack_key_);
-        }
-        // No other plugin action during a clash: owner's run 2026-10-26, Alt mid-clash dodged out of it (6 m away,
-        // aborted). Releases still go through, so nothing is left held.
-        if (down) return ClashHidesKey(key, user_event);
-    }
+    // the weapon clash add-on takes the keys while a clash runs (the attack key pushes its meter)
+    if (auto* c = clash_.load(); c && c->on_button(key, down, std::string(user_event).c_str())) return true;
     auto state = State();
     std::vector<combat::Command> cmds;
     bool consumed = false;
@@ -256,59 +223,17 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
-    if (opening && clash_active_ && menus_.blocked()) {
-        std::vector<combat::Command> cmds;
-        {
-            std::scoped_lock l(lock_);
-            cmds = clash_.abort(game::Now(), std::format("menu {} opened", name));
-        }
-        Run(std::move(cmds));
-    }
-}
-
-bool Plugin::ClashDropsEvent(const RE::IAnimationGraphManagerHolder* holder, const char* name) {
-    if (!clash_active_ || !holder || !name || game::SendingOwnEvent()) return false;
-    const bool player = holder == clash_player_graph_.load();
-    if (!player && holder != clash_opponent_graph_.load()) return false;
-    const bool drop = combat::matches_prefix(name, clash_blocked_);
-    // every event the filter sees for the two (first 80): shows whether the game's own attacks / reactions come
-    // through this function at all (owner's run 2026-10-26: none was kept)
-    if (clash_dropped_logged_.fetch_add(1) < 80)
-        REX::INFO("clash: {} '{}' for the {}", drop ? "kept" : "passed", name, player ? "player" : "opponent");
-    return drop;
+    if (auto* c = clash_.load()) c->on_menu(std::string(name).c_str(), opening, menus_.blocked());
 }
 
 bool Plugin::ClashHidesKey(std::uint32_t key, std::string_view user_event) const {
-    if (!clash_active_ || key == 0) return false;
-    if (key == attack_key_ || (power_key_ && key == power_key_) || user_event == "PrimaryAttack") return true;
-    if (!clash_block_movement_) return false;
-    if (user_event == "SecondaryAttack" || key == combat::key_from_mouse(1)) return true;
-    return std::find(move_keys_.begin(), move_keys_.end(), key) != move_keys_.end();
-}
-
-std::vector<combat::Command> Plugin::TryClash(std::uint32_t opponent, const char* why) {
-    const double now = game::Now();
-    static std::uint32_t seed = 0x9E3779B9u;
-    seed = seed * 1664525u + 1013904223u;
-    const double roll = (seed >> 8) % 10000 / 100.0;
-    if (!clash_.can_start(now, roll)) return {};
-    const auto reason = game::ClashCheck(opponent, static_cast<float>(clash_.config().max_start_distance));
-    if (!reason.empty()) {
-        REX::INFO("weapon clash ({}) with {:08X} not started: {}", why, opponent, reason);
-        return {};
-    }
-    REX::INFO("weapon clash ({}) with {:08X}: started", why, opponent);
-    return clash_.start(opponent, now, roll);
+    auto* c = clash_.load();
+    return c && c->hides_key(key, std::string(user_event).c_str());
 }
 
 void Plugin::OnPlayerHit(std::uint32_t target) {
-    if (!settings_.enabled || !clash_.config().force_on_hit || clash_active_) return;
-    std::vector<combat::Command> cmds;
-    {
-        std::scoped_lock l(lock_);
-        cmds = TryClash(target, "bForceClashOnHit");
-    }
-    Run(std::move(cmds));
+    if (!settings_.enabled) return;
+    if (auto* c = clash_.load()) c->on_player_hit(target);
 }
 
 // Blocking: the block key held, or the melee graph's block state (bIsBlocking: the State Variable of the block
@@ -348,16 +273,10 @@ void Plugin::OnHit(std::string_view attack_event, std::uint32_t aggressor, std::
         std::scoped_lock l(lock_);
         invulnerable = controller_.invulnerable(now);
         cmds = controller_.on_hit(kind, want_block != 0, now, aggressor);
-        // a perfect block starts a weapon clash instead of the attacker's parry stagger
-        if (clash_.config().on_perfect_block && !clash_.active()) {
+        // a perfect block starts a weapon clash (the add-on) instead of the attacker's parry stagger
+        if (auto* c = clash_.load(); c && !c->active()) {
             auto without = cmds;
-            if (combat::take_perfect_block(without, aggressor)) {
-                auto start = TryClash(aggressor, "perfect block");
-                if (!start.empty()) {
-                    without.insert(without.end(), start.begin(), start.end());
-                    cmds = std::move(without);
-                }
-            }
+            if (combat::take_perfect_block(without, aggressor) && c->on_perfect_block(aggressor)) cmds = std::move(without);
         }
     }
     if (logged_hits_ < settings_.log_hits) {
@@ -401,48 +320,10 @@ void Plugin::Tick() {
         std::scoped_lock l(lock_);
         cmds = controller_.tick(now, state);
         invulnerable = controller_.invulnerable(now);
-        if (clash_.active()) {
-            // the opponent died, vanished or got pushed far away: no winner
-            const auto why = game::ClashCheck(clash_.opponent(), static_cast<float>(clash_.config().max_start_distance * 2.0));
-            auto more = why.empty() ? clash_.tick(now) : clash_.abort(now, "opponent " + why);
-            cmds.insert(cmds.end(), more.begin(), more.end());
-        }
-        if (clash_.active() && clash_.config().ghost_player) invulnerable = true;
-        if (clash_.active() && clash_active_) {
-            const auto& cc = clash_.config();
-            if (cc.face_each_other) {
-                // both turned during the settle time; then only the player's heading is held (drift > 0.5 deg)
-                if (now - clash_begin_at_ < cc.settle_time) {
-                    game::FaceEachOther(clash_.opponent());
-                } else if (auto* me = game::Player()) {
-                    if (!clash_heading_) clash_heading_ = me->data.angle.z;
-                    if (combat::heading_drifted(me->data.angle.z, *clash_heading_, 0.5f * 3.14159265f / 180.0f)) {
-                        me->data.angle.z = *clash_heading_;
-                        ++clash_corrections_;
-                    }
-                }
-            }
-            for (const auto& [who, name] : clash_zero_have_)
-                game::SetActorVariable(who, {combat::VariableSet::Type::Float, name, 0.0});
-            // why the feet move (owner, 2026-10-26: footsteps all through the clash): the graph's locomotion values
-            // and the heading corrections, every 0.5 s for the first clashes
-            if (now >= clash_trace_at_ && clash_traces_ < 40) {
-                clash_trace_at_ = now + 0.5;
-                ++clash_traces_;
-                std::string line;
-                for (auto* a : {static_cast<RE::Actor*>(game::Player()),
-                                RE::TESForm::LookupByID<RE::Actor>(clash_.opponent())}) {
-                    if (!a) continue;
-                    line += std::format(" {:08X} heading {:.1f}", a->GetFormID(), a->data.angle.z * 57.2958f);
-                    for (const auto& v : clash_zero_) {
-                        float f = 0.0f;
-                        if (a->GetGraphVariableImplFloat(RE::BSFixedString(v.c_str()), f)) line += std::format(" {} {:.2f}", v, f);
-                    }
-                    line += ";";
-                }
-                REX::INFO("clash trace:{} player heading corrections {}", line, clash_corrections_);
-            }
-        }
+    }
+    if (auto* c = clash_.load()) {
+        c->tick();
+        if (c->wants_ghost()) invulnerable = true;
     }
     Run(std::move(cmds));
     if (settings_.list_effect_forms && !effects_listed_) {
@@ -518,70 +399,14 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                                       ? "; shake" : "; shake not dispatched";
                     break;
                 }
-                case K::ClashBegin: {
-                    const auto& cc = clash_.config();
-                    auto* opp = RE::TESForm::LookupByID<RE::Actor>(c.target);
-                    auto* me = game::Player();
-                    clash_player_graph_ = me ? static_cast<const RE::IAnimationGraphManagerHolder*>(me) : nullptr;
-                    clash_opponent_graph_ = opp ? static_cast<const RE::IAnimationGraphManagerHolder*>(opp) : nullptr;
-                    clash_begin_at_ = game::Now();
-                    clash_corrections_ = 0;
-                    clash_heading_.reset();
-                    clash_zero_have_.clear();
-                    std::string zero;
-                    for (auto* a : {static_cast<RE::Actor*>(me), opp}) {
-                        if (!a) continue;
-                        for (const auto& v : clash_zero_) {
-                            float f = 0.0f;
-                            if (a->GetGraphVariableImplFloat(RE::BSFixedString(v.c_str()), f)) {
-                                clash_zero_have_.emplace_back(a->GetFormID(), v);
-                                zero += std::format(" {:08X}.{}", a->GetFormID(), v);
-                            }
-                        }
-                    }
-                    result = std::format("zeroed each frame:{}; ", zero.empty() ? std::string(" none (no such variables)") : zero);
-                    clash_active_ = true;
-                    if (cc.place_opponent) result += game::PlaceFacing(c.target, c.amount);
-                    if (cc.restrain_opponent)
-                        result += game::SetRestrained(c.target, true) ? "; restrained" : "; restrain not dispatched";
-                    if (cc.lock_camera) {
-                        constexpr float kDeg = 3.14159265f / 180.0f;
-                        clash_took_lock_ = Lock::Get().Hold(c.target, static_cast<float>(cc.camera_yaw) * kDeg,
-                                                            static_cast<float>(cc.camera_pitch) * kDeg);
-                        result += clash_took_lock_ ? "; lock-on taken" : "; lock-on already on it";
-                    }
-                    break;
-                }
-                case K::ClashEnd: {
-                    const auto& cc = clash_.config();
-                    clash_active_ = false;
-                    clash_player_graph_ = nullptr;
-                    clash_opponent_graph_ = nullptr;
-                    clash_heading_.reset();
-                    clash_zero_have_.clear();
-                    result = std::format("{} attack presses, meter {:.2f}; ", clash_.presses(), clash_.meter());
-                    Lock::Get().ClearOffset();
-                    if (cc.restrain_opponent)
-                        result += game::SetRestrained(c.target, false) ? "released" : "release not dispatched";
-                    if (clash_took_lock_) {
-                        clash_took_lock_ = false;
-                        Lock::Get().Release("weapon clash over");
-                        result += "; lock-on released";
-                    }
-                    break;
-                }
-                case K::Notify: result = game::Notify(c.name) ? "dispatched" : "not dispatched"; break;
+                case K::ClashBegin:
+                case K::ClashEnd:
+                case K::Notify:
                 case K::Shake:
-                    result = game::ShakeCamera(c.amount, c.dx / 1000.0f) ? "dispatched" : "not dispatched";
-                    break;
-                case K::Spark: PlayEffect(c.target, result); break;
+                case K::Spark:
                 case K::Guard:
-                    result = game::GuardActor(c.target, c.name, c.extra);
-                    if (result.empty()) continue;                // already blocking: nothing sent, nothing logged
-                    break;
                 case K::ActorVariable:
-                    result = std::format("{:08X} {} = {}: {}", c.target, c.variable.name, c.variable.value,
-                                         game::SetActorVariable(c.target, c.variable) ? "dispatched" : "not dispatched");
+                    result = "a clash command (S2SClash carries these out): ignored";
                     break;
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
@@ -623,6 +448,50 @@ void Plugin::PlayEffect(std::uint32_t toward, std::string& result) {
     if (list.empty()) return;
     const std::vector<std::string> rest(list.begin() + 1, list.end());
     result += "; effect " + game::PlayImpactToward(list[0], settings_.timed_block_effect_node, toward, false, rest);
+}
+
+// ---------------------------------------------------------------------------------------------- the clash add-on
+namespace {
+void SvcRegister(const api::ClashCallbacks* cb) {
+    if (!cb || cb->version != api::kVersion) {
+        REX::ERROR("S2SClash's callbacks are version {}, this S2SCombat needs {}: not used", cb ? cb->version : 0,
+                   api::kVersion);
+        return;
+    }
+    Plugin::Get().RegisterClash(cb);
+    REX::INFO("S2SClash registered: weapon clashes on");
+}
+bool SvcLockHold(std::uint32_t id, float yaw, float pitch, bool fixed) {
+    return Lock::Get().Hold(id, yaw, fixed ? std::optional<float>(pitch) : std::nullopt);
+}
+void SvcLockRelease(const char* why) { Lock::Get().Release(why ? why : "S2SClash"); }
+void SvcLockClearOffset() { Lock::Get().ClearOffset(); }
+void SvcPlayEffect(std::uint32_t toward) {
+    std::string ignored;
+    Plugin::Get().PlayEffect(toward, ignored);
+}
+std::uint32_t SvcAttackKey() { return Plugin::Get().ControllerConfig().attack_key; }
+std::uint32_t SvcPowerKey() { return Plugin::Get().ControllerConfig().power_key; }
+std::uint32_t SvcMoveKey(int i) {
+    const auto& k = Plugin::Get().ControllerConfig().move_keys;
+    return i >= 0 && i < 4 ? k[static_cast<std::size_t>(i)] : 0;
+}
+}  // namespace
+
+const api::CombatServices* Services() {
+    static const api::CombatServices services = [] {
+        api::CombatServices s;
+        s.register_clash = &SvcRegister;
+        s.lock_hold = &SvcLockHold;
+        s.lock_release = &SvcLockRelease;
+        s.lock_clear_offset = &SvcLockClearOffset;
+        s.play_effect = &SvcPlayEffect;
+        s.attack_key = &SvcAttackKey;
+        s.power_key = &SvcPowerKey;
+        s.move_key = &SvcMoveKey;
+        return s;
+    }();
+    return &services;
 }
 
 }  // namespace s2s::sfse

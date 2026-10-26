@@ -472,3 +472,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   NotifyAnimationGraphImpl (the filter stays, as a no-op in practice; verified by the log). Footsteps during clashes
   nearly gone: two in one clash, at the moment of the player's heading corrections (37 in the first 0.5 s after
   settling), none in the others; Speed / Direction / TurnDelta read 0 on the player throughout.
+- 2026-10-26 owner: the clash as its own plugin, an add-on to S2S Combat (owner's pick over standalone). S2SClash.dll
+  (sfse/clash, second xmake target; its own S2SClash.ini with the [Clash] section) gets S2SCombat's CombatServices
+  (lock-on hold / release, the spark effect, key codes) through an SFSE message at PostLoad (src/ClashApi.h, plain
+  function pointers, versioned) and registers ClashCallbacks; S2SCombat forwards perfect blocks (dropping the parry
+  stagger only when a clash starts), the player's hits, keys, menus and the tick, and keeps the player ghosted while
+  the add-on asks. Without S2SClash, S2SCombat behaves as before the clash work. The graph event filter moved into
+  S2SClash. Not built on the PC yet (syntax-checked here).

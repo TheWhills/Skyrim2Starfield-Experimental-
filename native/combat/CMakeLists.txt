@@ -24,5 +24,5 @@ target_compile_definitions(test_controller PRIVATE S2S_SAMPLE_INI="${CMAKE_CURRE
 add_test(NAME combat_controller COMMAND test_controller)
 add_executable(test_clash tests/test_clash.cpp)
 target_link_libraries(test_clash PRIVATE s2s_combat)
-target_compile_definitions(test_clash PRIVATE S2S_SAMPLE_INI="${CMAKE_CURRENT_SOURCE_DIR}/sfse/S2SCombat.ini")
+target_compile_definitions(test_clash PRIVATE S2S_SAMPLE_INI="${CMAKE_CURRENT_SOURCE_DIR}/sfse/S2SClash.ini")
 add_test(NAME combat_clash COMMAND test_clash)
