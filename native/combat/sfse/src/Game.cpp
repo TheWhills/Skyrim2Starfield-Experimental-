@@ -24,16 +24,18 @@ private:
 
 using Packer = std::function<void(RE::BSScrapArray<RE::BSScript::Variable>&)>;
 
-bool Dispatch(const char* script, const char* function, Packer pack,
-              std::function<void(const RE::BSScript::Variable&)> on_result = {}) {
-    auto* player = Player();
+bool DispatchOn(RE::TESObjectREFR* self, const char* script, const char* function, Packer pack,
+                std::function<void(const RE::BSScript::Variable&)> on_result = {}) {
     auto* game = RE::GameVM::GetSingleton();
     auto* vm = game ? game->GetVM() : nullptr;
-    if (!player || !vm) return false;
-    const auto handle = vm->GetObjectHandlePolicy().GetHandleForObject(RE::BSScript::GetVMTypeID<RE::Actor>(),
-                                                                       static_cast<RE::Actor*>(player));
+    if (!self || !vm) return false;
+    const auto handle = self->IsActor()
+                            ? vm->GetObjectHandlePolicy().GetHandleForObject(RE::BSScript::GetVMTypeID<RE::Actor>(),
+                                                                             static_cast<RE::Actor*>(self))
+                            : vm->GetObjectHandlePolicy().GetHandleForObject(RE::BSScript::GetVMTypeID<RE::TESObjectREFR>(),
+                                                                             self);
     if (!handle) {
-        REX::WARN("{}.{}: no script handle for the player", script, function);
+        REX::WARN("{}.{}: no script handle for {:08X}", script, function, self->GetFormID());
         return false;
     }
     auto args = [pack = std::move(pack)](RE::BSScrapArray<RE::BSScript::Variable>& out) {
@@ -48,6 +50,11 @@ bool Dispatch(const char* script, const char* function, Packer pack,
         return false;
     }
     return true;
+}
+
+bool Dispatch(const char* script, const char* function, Packer pack,
+              std::function<void(const RE::BSScript::Variable&)> on_result = {}) {
+    return DispatchOn(Player(), script, function, std::move(pack), std::move(on_result));
 }
 
 template <class... Args>
@@ -237,6 +244,70 @@ RE::BGSImpactDataSet* ImpactSet(std::string_view name) {
     return RE::TESForm::LookupByEditorID<RE::BGSImpactDataSet>(RE::BSFixedString(s.c_str()));
 }
 
+std::mutex g_spawned_lock;
+std::vector<std::pair<RE::NiPointer<RE::TESObjectREFR>, double>> g_spawned;     // effect objects to delete, and when
+
+// A placed object as the effect: owner's pick 0x000550C3 is a placed reference (form type REFR), so its base object
+// is placed at the player's node (ObjectReference.PlaceAtNode, FO4's signature; supported) and deleted 1.5 s later.
+std::string PlaceEffectObject(RE::TESForm* form, std::string_view node) {
+    RE::TESForm* base = form;
+    if (form->GetFormType() == RE::FormType::kREFR) {
+        auto b = static_cast<RE::TESObjectREFR*>(form)->GetBaseObject();
+        base = b.get();
+    }
+    if (!base) return "the reference has no base object";
+    const auto base_id = base->GetFormID();
+    const auto base_type = static_cast<int>(base->GetFormType());
+    const bool ok = Dispatch("ObjectReference", "PlaceAtNode",
+                             [node = std::string(node), base](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                                 out.resize(7);
+                                 RE::BSScript::PackVariable(out[0], RE::BSFixedString(node.c_str()));
+                                 RE::BSScript::PackVariable(out[1], base);
+                                 RE::BSScript::PackVariable(out[2], 1);
+                                 RE::BSScript::PackVariable(out[3], false);
+                                 RE::BSScript::PackVariable(out[4], false);
+                                 RE::BSScript::PackVariable(out[5], true);
+                                 RE::BSScript::PackVariable(out[6], false);
+                             },
+                             [](const RE::BSScript::Variable& v) {
+                                 auto* ref = RE::BSScript::UnpackVariable<RE::TESObjectREFR>(v);
+                                 if (!ref) return;
+                                 std::scoped_lock l(g_spawned_lock);
+                                 g_spawned.emplace_back(RE::NiPointer<RE::TESObjectREFR>(ref), Now() + 1.5);
+                             });
+    return std::format("base object {:08X} (form type {}) placed at node {}: {}", base_id, base_type, node,
+                       ok ? "dispatched" : "not dispatched");
+}
+
+void CleanupEffects() {
+    std::vector<RE::NiPointer<RE::TESObjectREFR>> due;
+    {
+        std::scoped_lock l(g_spawned_lock);
+        const double now = Now();
+        for (auto it = g_spawned.begin(); it != g_spawned.end();) {
+            if (now >= it->second) {
+                due.push_back(it->first);
+                it = g_spawned.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+    for (auto& r : due) {
+        if (!r) continue;
+        DispatchOn(r.get(), "ObjectReference", "Disable", [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], false);
+        });
+        DispatchOn(r.get(), "ObjectReference", "Delete", [](RE::BSScrapArray<RE::BSScript::Variable>& out) { out.clear(); });
+    }
+}
+
+bool DeferKill(bool on) {
+    return Dispatch("Actor", on ? "StartDeferredKill" : "EndDeferredKill",
+                    [](RE::BSScrapArray<RE::BSScript::Variable>& out) { out.clear(); });
+}
+
 std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down) {
     auto* set = ImpactSet(editor_id);
     if (!set) {
@@ -245,8 +316,8 @@ std::string PlayImpactToward(std::string_view editor_id, std::string_view node, 
         RE::TESForm* f = nullptr;
         if (!hex.empty() && hex.size() <= 8 && hex.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos)
             f = RE::TESForm::LookupByID(static_cast<std::uint32_t>(std::stoul(hex, nullptr, 16)));
-        return f ? std::format("'{}' is a form of type {} (not an impact data set, IPDS = {})", editor_id,
-                               static_cast<int>(f->GetFormType()), static_cast<int>(RE::FormType::kIPDS))
+        return f ? std::format("'{}' (form type {}, not an impact data set): {}", editor_id,
+                               static_cast<int>(f->GetFormType()), PlaceEffectObject(f, node))
                  : std::format("'{}': no impact data set by that form ID / EditorID (no form with that ID)", editor_id);
     }
     auto* player = Player();

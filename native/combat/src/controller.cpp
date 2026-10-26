@@ -474,6 +474,10 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         else if (k == "fparrywindow" || k == "ftimedblockwindow") ok = read_double(v, c.parry_window);
         else if (k == "fblockreduction") ok = read_double(v, c.block_reduction);
         else if (k == "sblockreraiseevent") c.block_reraise_event = v;
+        else if (k == "bdeferkillwhileblocking") {
+            ok = v == "0" || v == "1";
+            if (ok) c.defer_kill = v == "1";
+        }
         else if (k == "fblockreraisewindow") ok = read_double(v, c.block_reraise_window);
         else if (k == "stimedblockmessage") c.timed_block_message = v;
         else if (k == "fperfectblockwindow") ok = read_double(v, c.perfect_block_window);
@@ -797,6 +801,21 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
         parried_ = false;
     }
     block_held_ = s.blocking;
+    if (s.block_key || s.block_state) block_activity_at_ = t;
+    if (cfg_.defer_kill) {
+        if (!deferring_ && s.block_key) {
+            deferring_ = true;
+            Command c{Command::Kind::DeferKill};
+            c.amount = 1.0f;
+            out.push_back(c);
+        } else if (deferring_ && !s.block_key && !s.block_state && t - block_activity_at_ >= cfg_.defer_kill_tail &&
+                   giveback_until_ < 0.0) {
+            deferring_ = false;
+            Command c{Command::Kind::DeferKill};
+            c.amount = 0.0f;
+            out.push_back(c);
+        }
+    }
     if (!cfg_.block_reraise_event.empty() && s.block_key && !s.block_state && t - blocked_hit_at_ <= cfg_.block_reraise_window &&
         t - reraised_at_ >= 0.3) {
         reraised_at_ = t;

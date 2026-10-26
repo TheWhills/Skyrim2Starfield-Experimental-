@@ -396,3 +396,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   keys ([ / ], iEffectPrevKey / iEffectNextKey) plays each set onto the floor with its form ID on screen, to find the
   sparks by eye. The owner's run also verified timed and perfect blocks: 26 of 26 health back each time, StaggerStart
   only on the perfect ones (0.09-0.10 s).
+- 2026-10-26 owner's run: 14 timed blocks (9 perfect, incl. power attacks), all damage given back, but the player
+  died on a perfect timed block of a power attack at 70 health: the damage lands before the give-back. While blocking
+  the player is now in Papyrus' deferred kill state (Actor.StartDeferredKill / EndDeferredKill, FO4 names; supported),
+  ended 0.5 s after the guard is down and any give-back is done. The owner's effect pick 0x000550C3 is a placed
+  reference (form type 0x4A REFR), not an impact set: its base object is placed at the weapon node
+  (ObjectReference.PlaceAtNode) and disabled / deleted 1.5 s later; the log names the base object's form type.

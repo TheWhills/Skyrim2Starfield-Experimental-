@@ -33,6 +33,7 @@ const char* kind_name(combat::Command::Kind k) {
         case K::RestoreHealth: return "restore health";
         case K::ActorEvents: return "actor events";
         case K::Feedback: return "feedback";
+        case K::DeferKill: return "deferred kill";
     }
     return "?";
 }
@@ -302,6 +303,7 @@ void Plugin::Tick() {
             if (!best.empty()) auto_effect_ = best;
         }
     }
+    game::CleanupEffects();
     Lock::Get().Update();                                    // main thread (the input hook)
     if (keyword_check_due_ >= 0.0 && now >= keyword_check_due_) {
         keyword_check_due_ = -1.0;
@@ -355,6 +357,9 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = std::format("{:.0f}", c.amount);
                     break;
                 case K::ActorEvents: result = game::SendActorEvents(c.target, c.name); break;
+                case K::DeferKill:
+                    result = game::DeferKill(c.amount != 0.0f) ? (c.amount != 0.0f ? "on" : "off") : "not dispatched";
+                    break;
                 case K::Feedback: {
                     std::string effect = settings_.timed_block_effect.empty() ? auto_effect_ : settings_.timed_block_effect;
                     result = c.name.empty() ? "no message" : (game::Notify(c.name) ? "message" : "message not dispatched");

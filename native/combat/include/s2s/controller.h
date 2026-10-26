@@ -43,6 +43,7 @@ struct Command {
         Log,             // name: text for the plugin log (unknown payload instructions, ...)
         RestoreHealth,   // amount: health given back to the player (a parried hit's damage)
         ActorEvents,     // name: comma-separated graph events for actor `target`, tried in order until one is taken
+        DeferKill,       // amount 1: Actor.StartDeferredKill on the player, 0: EndDeferredKill
         Feedback,        // timed block landed: name = on-screen message ("" none), target = attacker (sparks, shake)
     };
     Command(Kind k, std::string n = {}) : kind(k), name(std::move(n)) {}
@@ -113,6 +114,12 @@ struct ControllerConfig {
     // held). While the block key stays down, block_reraise_event goes to the player's graph (every 0.3 s at most, for
     // block_reraise_window seconds after the hit) to bring the guard back up. Empty = off.
     std::string block_reraise_event = "BlockStart";
+    // The give-back comes after the damage, so a blocked hit bigger than the health left killed the player before it
+    // (owner's run 2026-10-26: died on a perfect timed block at 70 health). While blocking (from the key press until
+    // defer_kill_tail seconds after the guard is down and any give-back is done) the player is in Papyrus' deferred
+    // kill state: health may drop below zero without dying; ending it with health still at or below zero kills.
+    bool defer_kill = true;
+    double defer_kill_tail = 0.5;
     double block_reraise_window = 1.5;
     // A power attack (power_key, or a held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
     // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
@@ -312,6 +319,8 @@ private:
     float giveback_share_ = 1.0f;                 // ... giving back this share of what was lost
     double giveback_until_ = -1.0;                // ... until then (< 0: nothing pending)
     double blocked_hit_at_ = -1e9, reraised_at_ = -1e9;
+    bool deferring_ = false;
+    double block_activity_at_ = -1e9;             // last tick with the key down or the guard up
 };
 
 }  // namespace s2s::combat

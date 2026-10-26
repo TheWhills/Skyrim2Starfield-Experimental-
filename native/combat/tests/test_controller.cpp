@@ -433,6 +433,28 @@ static void hits() {
             b.block_key = true;
             CHECK(g.tick(22.5, b).empty());                                // long after the hit: no re-raise
         }
+        {   // deferred kill: on with the block key, off once the guard is down for 0.5 s and nothing is pending
+            Controller d;
+            PlayerState b;
+            b.health = 100.0f;
+            auto first = [](const std::vector<Command>& v, Command::Kind k) {
+                for (const auto& c : v) if (c.kind == k) return &c;
+                return static_cast<const Command*>(nullptr);
+            };
+            CHECK(!first(d.tick(30.0, b), Command::Kind::DeferKill));
+            b.block_key = b.blocking = true;
+            auto r1 = d.tick(30.1, b);
+            CHECK(first(r1, Command::Kind::DeferKill) && first(r1, Command::Kind::DeferKill)->amount == 1.0f);
+            CHECK(!first(d.tick(30.2, b), Command::Kind::DeferKill));          // once
+            b.block_key = false;
+            b.block_state = true;                                              // guard still up
+            CHECK(!first(d.tick(30.5, b), Command::Kind::DeferKill));
+            b.block_state = b.blocking = false;
+            CHECK(!first(d.tick(30.7, b), Command::Kind::DeferKill));          // within the tail
+            auto r2 = d.tick(31.1, b);
+            CHECK(first(r2, Command::Kind::DeferKill) && first(r2, Command::Kind::DeferKill)->amount == 0.0f);
+            CHECK(!first(d.tick(31.2, b), Command::Kind::DeferKill));
+        }
         // off
         auto cfg = parse_config("[Combat]\nfTimedBlockWindow = 0\nsParryEvents = recoilStart\nbParryRestoreHealth = 0\n"
                                 "fBlockReduction = 0\nsTimedBlockMessage =\n");
