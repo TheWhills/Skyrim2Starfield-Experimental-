@@ -1217,3 +1217,13 @@ skinned-mesh writer: not in this pack).
   The descriptor writer used to keep only the vanilla descriptor's one; it now adds the extra HitFrame / WeaponSwing
   (weaponLeftSwing -> WeaponSwing). Unresolved: whether Starfield's melee hits again on the second HitFrame; S2SCombat
   logs "player hit <target> at <t>" so a run shows one or two hits per swing (if one: plugin damage, phase 2).
+
+### The Creation Kit cache run, as done on the owner's PC (recorded 2026-10-26)
+```powershell
+Remove-Item -Recurse -Force "C:\Modding\work\s2s\animinfo" -ErrorAction SilentlyContinue
+# run the MO2 executable "CreationKit (1)" (-GenerateAnimInfo:S2SStances.esm, output C:\Modding\work\s2s\animinfo); wait for it to close
+$src = "C:\Modding\work\s2s\animinfo\Meshes\AnimTextData"
+$dst = "C:\Users\elija\AppData\Local\ModOrganizer\Starfield\mods\S2S AnimInfo\Meshes\AnimTextData"
+robocopy "$src\AnimationFileData" "$dst\AnimationFileData" /MIR
+robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubgraphInfoAndOffsetData.txt
+```
