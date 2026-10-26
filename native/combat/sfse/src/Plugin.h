@@ -73,7 +73,7 @@ private:
     combat::MenuGate menus_;
     Settings settings_;
     std::atomic_bool anim_events_ = true;
-    int logged_menus_ = 0, logged_hits_ = 0;
+    int logged_menus_ = 0, logged_hits_ = 0, logged_player_hits_ = 0;
     std::atomic_int logged_commands_ = 0;
     std::vector<std::string> keyword_check_;     // keywords set last: checked on the player half a second later
     double keyword_check_due_ = -1.0;
@@ -87,6 +87,11 @@ private:
     int effect_preview_ = -1;
     std::string auto_effect_;
     bool ghost_ = false;
+    // dual wield: the worn-keyword poll (every 0.5 s) and its last answer (-1 none yet, 0 / 1)
+    double dual_poll_at_ = 0.0;
+    std::atomic_int dual_worn_{-1};
+    int dual_applied_ = -1;
+    bool dual_missing_logged_ = false;
     std::atomic<const api::ClashCallbacks*> clash_{nullptr};
 };
 

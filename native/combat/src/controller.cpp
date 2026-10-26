@@ -494,6 +494,8 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
             ok = v == "0" || v == "1";
             if (ok) c.power_in_combo = v == "1";
         }
+        else if (k == "sdualwornkeyword") c.dual_worn_keyword = v;
+        else if (k == "sdualstancekeyword") c.dual_stance_keyword = v;
         else if (k == "bstancereequip") {
             ok = v == "0" || v == "1";
             if (ok) c.stance_reequip = v == "1";
@@ -652,20 +654,16 @@ std::vector<Command> Controller::on_key(std::uint32_t key, bool down, double t, 
             // bStanceRepeatNeutral = 1 (otherwise a repeat keeps the stance). Every press
             // removes all the group's other keywords, not only the one remembered here: a keyword added by Papyrus
             // stays on the player in the save, and a loaded save may carry another stance than this session saw.
-            const bool back = b.argument.empty() || (cfg_.stance_repeat_neutral && is(stance_, b.argument));
+            const std::string& current = dual_ ? before_dual_ : stance_;
+            const bool back = b.argument.empty() || (cfg_.stance_repeat_neutral && is(current, b.argument));
             std::string target = back ? std::string() : b.argument;
-            std::vector<std::string> group;
-            for (const auto& other : bindings_)
-                if (is(other.action, "keyword") && !other.argument.empty() && !is(other.argument, target) &&
-                    std::none_of(group.begin(), group.end(), [&](const std::string& g) { return is(g, other.argument); }))
-                    group.push_back(other.argument);
-            for (const auto& g : group) out.push_back({Command::Kind::RemoveKeyword, g});
-            if (!target.empty()) out.push_back({Command::Kind::AddKeyword, target});
-            if (!is(stance_, target)) {
-                for (const auto& ev : cfg_.stance_refresh_events) out.push_back(event(ev));
-                if (cfg_.stance_reequip) reequip_due_ = t + cfg_.stance_reequip_delay;
+            if (dual_) {
+                before_dual_ = target;           // the dual moveset stays while the left blade is worn
+                out.push_back(log("stance key while dual wielding: " + (target.empty() ? std::string("neutral") : target) +
+                                  " after the left blade comes off"));
+            } else {
+                switch_stance(target, t, out);
             }
-            stance_ = target;
         } else if (is(b.action, "dodge")) {
             if (key != cfg_.dodge_key) dodge(t, s, out);
         } else if (is(b.action, "lock")) {
@@ -790,6 +788,39 @@ std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t, s
         Command c{Command::Kind::SetVariable};
         c.variable = {VariableSet::Type::Int, cfg_.block_hit_variable, kind == HitKind::Power ? 1.0 : 0.0};
         out.push_back(c);
+    }
+    return out;
+}
+
+void Controller::switch_stance(const std::string& target, double t, std::vector<Command>& out) {
+    std::vector<std::string> group;
+    auto add = [&](const std::string& k) {
+        if (!k.empty() && !is(k, target) &&
+            std::none_of(group.begin(), group.end(), [&](const std::string& g) { return is(g, k); }))
+            group.push_back(k);
+    };
+    for (const auto& other : bindings_)
+        if (is(other.action, "keyword")) add(other.argument);
+    add(cfg_.dual_stance_keyword);
+    for (const auto& g : group) out.push_back({Command::Kind::RemoveKeyword, g});
+    if (!target.empty()) out.push_back({Command::Kind::AddKeyword, target});
+    if (!is(stance_, target)) {
+        for (const auto& ev : cfg_.stance_refresh_events) out.push_back(event(ev));
+        if (cfg_.stance_reequip) reequip_due_ = t + cfg_.stance_reequip_delay;
+    }
+    stance_ = target;
+}
+
+std::vector<Command> Controller::on_dual_worn(bool worn, double t) {
+    std::vector<Command> out;
+    if (cfg_.dual_stance_keyword.empty() || worn == dual_) return out;
+    if (worn) {
+        before_dual_ = stance_;
+        dual_ = true;
+        switch_stance(cfg_.dual_stance_keyword, t, out);
+    } else {
+        dual_ = false;
+        switch_stance(before_dual_, t, out);
     }
     return out;
 }

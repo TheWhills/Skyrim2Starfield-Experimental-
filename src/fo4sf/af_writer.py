@@ -60,8 +60,16 @@ class Calumi:
 # case-insensitive on the Skyrim side; others stay in <clip>.events.json until their Starfield counterpart is known.
 EVENT_MAP = {"hitframe": "HitFrame", "prehitframe": "PreHitFrame", "weaponswing": "WeaponSwing",
              "footleft": "FootLeft", "footright": "FootRight", "attackstop": "AttackEnd",
+             # dual wield: Skyrim's left blade swings with its own event before its own HitFrame (LoreRim dual clips:
+             # weaponSwing / weaponLeftSwing, two HitFrames); Starfield has one swing event name
+             "weaponleftswing": "WeaponSwing",
              # equip / unequip (Starfield names from the vanilla one-handed Equip / Unequip descriptors, 2026-10-19)
              "weapondraw": "WeaponDraw", "weaponsheathe": "WeaponSheathe"}
+
+
+# Events an attack may carry more than once (dual wield: a hit and a swing per blade): extra ones in our clip are added
+# to the descriptor instead of being dropped. Whether Starfield's melee hits again on a second HitFrame is unresolved.
+MULTI_EVENTS = ("HitFrame", "WeaponSwing")
 
 
 def map_events(annotations, fps: float):
@@ -182,17 +190,34 @@ def retime_descriptor(vanilla: bytes, new_last: int, filename: str, old_last: Op
     by_name = {}
     for ev in root.iter("event"):
         by_name.setdefault(ev.findtext("name"), []).append(ev)
+    added = []
     for n, frames in own.items():
         evs = by_name.get(n, [])
         if evs and len(evs) == len(frames):
             for ev, f in zip(evs, sorted(frames)):
                 ev.find("frame").text = str(int(f))
             replaced.append(n)
+        elif evs and n in MULTI_EVENTS and len(frames) > len(evs):
+            # more hits / swings than the vanilla descriptor (a dual-wield attack: one per blade): the vanilla ones
+            # take our first frames, copies of the last one the rest, placed right after it
+            frames = sorted(frames)
+            for ev, f in zip(evs, frames):
+                ev.find("frame").text = str(int(f))
+            last = evs[-1]
+            parent = next(p for p in root.iter() if last in list(p))
+            at = list(parent).index(last)
+            for k, f in enumerate(frames[len(evs):], 1):
+                clone = copy.deepcopy(last)
+                clone.find("frame").text = str(int(f))
+                parent.insert(at + k, clone)
+            replaced.append(n)
+            added.append(f"{n} x{len(frames) - len(evs)}")
     out = ET.tostring(root, encoding="utf-8", short_empty_elements=False)
     if b"\r\n" in vanilla:                         # the shipped descriptors use CRLF (the parser drops the CR)
         out = out.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
     return out, {"old_last": old_last, "old_last_estimated": est, "scale": round(scale, 4),
                                                  "retimed": len(marks), "events_from_clip": replaced,
+                                                 "events_added": added,
                                                  "hit_anchor": anchor}
 
 

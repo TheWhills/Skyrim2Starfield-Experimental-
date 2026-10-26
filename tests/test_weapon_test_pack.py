@@ -173,6 +173,29 @@ class PluginTests(unittest.TestCase):
                 P.pick_template(weaps, {}, prefer=("Nope",))
 
 
+class LeftBladeKeywordTests(unittest.TestCase):
+    def test_keyword_added_with_count(self):
+        subs = [(b"EDID", b"A\0"), (b"FULL", b"x\0"), (b"KSIZ", struct.pack("<I", 1)), (b"KWDA", struct.pack("<I", 5))]
+        out = P.with_keyword(subs, 9)
+        self.assertEqual(dict(out)[b"KWDA"], struct.pack("<2I", 5, 9))
+        self.assertEqual(dict(out)[b"KSIZ"], struct.pack("<I", 2))
+        self.assertEqual(P.with_keyword(out, 9), out)                          # already there
+        bare = P.with_keyword([(b"EDID", b"A\0"), (b"FULL", b"x\0"), (b"DATA", b"")], 7)
+        self.assertEqual([s for s, _ in bare], [b"EDID", b"FULL", b"KSIZ", b"KWDA", b"DATA"])
+        self.assertEqual(dict(bare)[b"KWDA"], struct.pack("<I", 7))
+        nosize = P.with_keyword([(b"EDID", b"A\0"), (b"KWDA", struct.pack("<I", 5))], 6)
+        self.assertEqual([s for s, _ in nosize], [b"EDID", b"KSIZ", b"KWDA"])
+
+    def test_left_blade_records_carry_the_keyword(self):
+        arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0"), (b"MOD2", b"old.nif\0")], 0x100)
+        armo = (b"ARMO", bytes(24), [(b"EDID", b"O\0"), (b"FULL", b"n\0"), (b"MODL", struct.pack("<I", 0x100))], 0x200)
+        aa, ao = P.left_blade_records(armo, arma, 1, "S2S_Left", "Left", "s2s\\left.nif", keyword=0x01000800)
+        self.assertEqual(sfplugin.keywords(ao[2]), [0x01000800])
+        self.assertEqual(dict(ao[2])[b"MODL"], struct.pack("<I", aa[3]))
+        _aa, ao2 = P.left_blade_records(armo, arma, 1, "S2S_Left", "Left", "s2s\\left.nif")
+        self.assertEqual(sfplugin.keywords(ao2[2]), [])
+
+
 class PackTests(unittest.TestCase):
     def test_end_to_end_on_synthetic_games(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(textures, "texconv", lambda *a, **k: None):

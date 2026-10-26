@@ -70,6 +70,19 @@ class StancePluginTests(unittest.TestCase):
             data1, rep1 = SP.build(esm, first_person=True)
             self.assertEqual(rep1["added_entries"], 6)
 
+    def test_dual_stance_keeps_the_three_stance_ids(self):
+        with tempfile.TemporaryDirectory() as d:
+            esm = os.path.join(d, "Starfield.esm")
+            starfield_esm(esm, big=True)
+            _data, rep3 = SP.build(esm)
+            _data, rep4 = SP.build(esm, stances=SP.STANCES_DUAL)
+            self.assertEqual(SP.STANCES_DUAL[-1], "Dual")
+            for k, v in rep3["keywords"].items():                              # saves keep their keywords
+                self.assertEqual(rep4["keywords"][k], v)
+            self.assertIn("S2S_StanceDual", rep4["keywords"])
+            self.assertEqual(rep4["folders"]["Dual"], "actors\\human\\animations\\melee\\s2s_stances\\dual")
+            self.assertEqual(rep4["added_entries"], 4)
+
     def test_no_melee_entries(self):
         with tempfile.TemporaryDirectory() as d:
             esm = os.path.join(d, "Starfield.esm")

@@ -63,6 +63,24 @@ class AfWriterTests(unittest.TestCase):
         rest_only, _ = AF.rest_relative(rest_t, rest_q, rest_t[None], rest_q[None])   # rest pose -> identity keys
         self.assertTrue(np.allclose(np.abs(rest_only[..., 3]), 1))
 
+    def test_retime_keeps_every_hit_of_a_dual_attack(self):
+        vanilla = (b"<root>\r\n\t<tag>MeleeAttack_A</tag>\r\n\t<filename>MeleeAttack_A.af</filename>\r\n\t<events>\r\n"
+                   b"\t\t<event><frame>13</frame><name>WeaponSwing</name><payload></payload></event>\r\n"
+                   b"\t\t<event><frame>15</frame><name>HitFrame</name><payload></payload></event>\r\n"
+                   b"\t\t<event><frame>20</frame><name>AttackStateNextAttack</name><payload></payload></event>\r\n"
+                   b"\t</events>\r\n</root>\r\n")
+        own = [(27, "WeaponSwing", ""), (28, "WeaponSwing", ""), (31, "HitFrame", ""), (33, "HitFrame", "")]
+        out, rep = AF.retime_descriptor(vanilla, 60, "A.af", old_last=40, own_events=own)
+        names = [(e.findtext("name"), int(e.findtext("frame"))) for e in ET.fromstring(out).iter("event")]
+        self.assertEqual([n for n in names if n[0] == "HitFrame"], [("HitFrame", 31), ("HitFrame", 33)])
+        self.assertEqual([n for n in names if n[0] == "WeaponSwing"], [("WeaponSwing", 27), ("WeaponSwing", 28)])
+        self.assertEqual(names[:4], [("WeaponSwing", 27), ("WeaponSwing", 28), ("HitFrame", 31), ("HitFrame", 33)])
+        self.assertEqual(names[4][0], "AttackStateNextAttack")                # copies right after the original
+        self.assertEqual(rep["events_added"], ["WeaponSwing x1", "HitFrame x1"])
+        self.assertIn(b"\r\n", out)
+        mapped, _ = AF.map_events([{"time": 0.5, "text": "weaponLeftSwing"}], 30)
+        self.assertEqual(mapped, [(15, "WeaponSwing", "")])
+
     def test_retime_vanilla_descriptor(self):
         vanilla = (b"<root>\r\n\t<is_state>0</is_state>\r\n\t<tag>MeleeAttack01</tag>\r\n\t<filename>MeleeAttack01.af"
                    b"</filename>\r\n\t<rampout>9</rampout>\r\n\t<events>\r\n"

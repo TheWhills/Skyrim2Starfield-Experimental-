@@ -233,6 +233,11 @@ bool Plugin::ClashHidesKey(std::uint32_t key, std::string_view user_event) const
 
 void Plugin::OnPlayerHit(std::uint32_t target) {
     if (!settings_.enabled) return;
+    // dual wield: whether the second blade's HitFrame lands as a second hit (two lines per dual swing) or not
+    if (logged_player_hits_ < settings_.log_hits * 2) {
+        ++logged_player_hits_;
+        REX::INFO("player hit {:08X} at {:.3f} s{}", target, game::Now(), controller_.dual() ? " (dual wielding)" : "");
+    }
     if (auto* c = clash_.load()) c->on_player_hit(target);
 }
 
@@ -324,6 +329,32 @@ void Plugin::Tick() {
     if (auto* c = clash_.load()) {
         c->tick();
         if (c->wants_ghost()) invulnerable = true;
+    }
+    // Dual wield: is the left blade (sDualWornKeyword) worn? Asked every 0.5 s; a change switches the stance group
+    // (the controller), the moveset following on the re-equip.
+    const auto& dual_kw = controller_.config().dual_worn_keyword;
+    if (!dual_kw.empty() && now >= dual_poll_at_) {
+        dual_poll_at_ = now + 0.5;
+        auto* player = game::Player();
+        if (player && player->parentCell && !menus_.blocked()) {
+            const int asked = game::WornHasKeyword(dual_kw, [this](bool worn) { dual_worn_ = worn ? 1 : 0; });
+            if (asked < 0 && !dual_missing_logged_) {
+                dual_missing_logged_ = true;
+                REX::INFO("dual wield: keyword {} not found (S2SWeapons.esm not loaded?): dual moveset switching off",
+                          dual_kw);
+            }
+        }
+    }
+    if (const int worn = dual_worn_.load(); worn >= 0 && worn != dual_applied_) {
+        dual_applied_ = worn;
+        std::vector<combat::Command> more;
+        {
+            std::scoped_lock l(lock_);
+            more = controller_.on_dual_worn(worn == 1, now);
+        }
+        if (!more.empty()) REX::INFO("dual wield: left blade {} -> stance {}", worn ? "worn" : "off",
+                                     worn ? controller_.config().dual_stance_keyword : "before");
+        cmds.insert(cmds.end(), more.begin(), more.end());
     }
     Run(std::move(cmds));
     if (settings_.list_effect_forms && !effects_listed_) {

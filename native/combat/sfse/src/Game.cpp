@@ -146,6 +146,20 @@ int HasKeyword(std::string_view editor_id) {
 
 bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
 
+int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {
+    auto* keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(RE::BSFixedString(std::string(editor_id).c_str()));
+    if (!keyword) return -1;
+    return Dispatch("Actor", "WornHasKeyword",
+                    [keyword](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                        out.resize(1);
+                        RE::BSScript::PackVariable(out[0], keyword);
+                    },
+                    [result](const RE::BSScript::Variable& v) {
+                        if (result) result(v.is<bool>() && RE::BSScript::get<bool>(v));
+                    })
+               ? 1 : 0;
+}
+
 namespace {
 std::atomic<std::uint32_t> g_weapon_id{0};   // FormID of the weapon UnequipWeapon took off (0: none)
 

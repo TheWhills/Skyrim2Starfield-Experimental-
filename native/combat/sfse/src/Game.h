@@ -24,6 +24,9 @@ bool SetGhost(bool ghost);
 bool UnequipWeapon(std::function<void(const std::string&)> report = {});
 bool EquipWeapon(std::function<void(const std::string&)> report = {});
 int HasKeyword(std::string_view editor_id);     // 1 / 0, -1 when the keyword is not found
+// Papyrus Actor.WornHasKeyword on the player (FO4 / Skyrim name; supported): result(worn) on the VM thread. -1 = no
+// keyword with that EditorID (the plugin that adds it is not loaded), 0 = not dispatched, 1 = asked.
+int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result);
 float ActorValue(std::string_view editor_id);    // < 0 when the value is not found
 float PlayerHealth();                            // < 0 when not known (cached lookup: called every frame)
 // Graph events (comma separated) for the actor with this form ID, tried in order until its graph takes one; returns

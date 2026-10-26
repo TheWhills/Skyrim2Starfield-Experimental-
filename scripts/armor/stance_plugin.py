@@ -36,6 +36,11 @@ from fo4sf import sfplugin, subgraph  # noqa: E402
 # Stances - Dynamic Weapon Movesets: up = high, left = mid, down = low, right = neutral (no keyword); LoreRim's tiers
 # Expert / Adept / Apprentice / Novice are these stances (verified on its DAR conditions).
 STANCES = ("High", "Mid", "Low")
+# Dual wield (LoreRim's dual movesets, docs/armor/animation-port.md "Dual wield"): one more stance whose keyword the
+# combat plugin sets while the left blade is worn (S2SCombat.ini sDualWornKeyword). Last, so the three stance
+# keywords keep their form IDs.
+DUAL = "Dual"
+STANCES_DUAL = STANCES + (DUAL,)
 STANCE_ROOT = "actors\\human\\animations\\melee\\s2s_stances"
 PLUGIN = "S2SStances.esm"
 RACE_EDID = "HumanRace"
@@ -197,6 +202,7 @@ def main(argv=None):
     ap.add_argument("--first-person", action="store_true", help="first-person melee entries too (esm fallback only)")
     ap.add_argument("--table", help="a GeneratedSubgraphData humanrace.txt to use instead of the one in the archives")
     ap.add_argument("--no-table", action="store_true", help="copy the esm's melee entries (the first version)")
+    ap.add_argument("--no-dual", action="store_true", help="no Dual stance (S2S_StanceDual, s2s_stances\\dual)")
     ap.add_argument("--no-common", action="store_true",
                     help="no shared s2s_stances\\common folder (and no neutral entries)")
     a = ap.parse_args(argv)
@@ -215,7 +221,8 @@ def main(argv=None):
             table = read_table(os.path.dirname(esm))
             if table is None:
                 print(f"{GENERATED_TABLE} not found in the archives: falling back to the esm's melee entries")
-    data, rep = build(esm, first_person=a.first_person, table_text=table, common=not a.no_common)
+    data, rep = build(esm, stances=STANCES if a.no_dual else STANCES_DUAL, first_person=a.first_person,
+                      table_text=table, common=not a.no_common)
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(data)

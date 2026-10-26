@@ -104,6 +104,11 @@ struct ControllerConfig {
     // The equip follows the game's UnequipComplete event, or stance_reequip_wait seconds after the unequip when that
     // event does not come (owner's run: unequip + equip sent together did nothing visible, no UnequipComplete).
     bool stance_reequip = true;
+    // Dual wield: while something carrying dual_worn_keyword is worn (the left blade, S2SWeapons.esm), the stance
+    // group is set to dual_stance_keyword (S2SStances.esm's Dual stance: LoreRim's dual moveset); taking it off goes
+    // back to the stance before. Stance keys while dual only choose that stance for later. Empty = off.
+    std::string dual_worn_keyword = "S2S_LeftBlade";
+    std::string dual_stance_keyword = "S2S_StanceDual";
     double stance_reequip_delay = 0.25;
     double stance_reequip_wait = 0.5;
     // Graph variable set when the player is hit while blocking: 0 normal attack, 1 power attack (Dynamic Block Hit's
@@ -287,6 +292,9 @@ public:
     bool hides_power_press(std::uint32_t key) const {
         return cfg_.power_key && key == cfg_.power_key && cfg_.power_in_combo && phase_.phase() != AttackPhase::None;
     }
+    // Whether the dual-wield worn keyword is on the player (polled by the game side): switches the stance on a change.
+    std::vector<Command> on_dual_worn(bool worn, double t);
+    bool dual() const { return dual_; }
     // An animation-graph event of the player (tag and payload as the engine delivers them).
     std::vector<Command> on_anim_event(std::string_view tag, std::string_view payload, double t);
     // The player was hit (after the game handled it: TESHitEvent). blocking: the player held block.
@@ -308,6 +316,8 @@ private:
     void dodge(double t, const PlayerState& s, std::vector<Command>& out);
     void fire_buffered(double t, std::vector<Command>& out);
     void movement(const PlayerState& s, float& x, float& y) const;
+    // the stance keyword group set to `target` ("" = neutral): the others removed, refresh / re-equip on a change
+    void switch_stance(const std::string& target, double t, std::vector<Command>& out);
 
     ControllerConfig cfg_;
     std::vector<Binding> bindings_;
@@ -319,6 +329,8 @@ private:
     static constexpr double dodge_timeout = 3.0;
     std::array<bool, 4> move_held_{};
     std::string stance_;        // keyword of the active stance binding ("" = none)
+    bool dual_ = false;         // the left blade is worn: stance_ is the dual keyword
+    std::string before_dual_;   // the stance to go back to (stance keys while dual change it)
     bool consumed_last_ = false, power_key_consumed_ = false;
     double reequip_due_ = -1.0; // when to unequip after a stance change (< 0: none pending)
     int queued_powers_ = 0;     // power key presses the game may still play as standing power attacks

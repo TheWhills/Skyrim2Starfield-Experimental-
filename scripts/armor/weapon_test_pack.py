@@ -124,9 +124,36 @@ def pick_apparel(armo, arma, edid_rx=APPAREL_TEMPLATE):
     raise SystemExit(f"no ARMO matching {edid_rx} with an ARMA")
 
 
-def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str):
+# Keyword on the left blade's ARMO: S2SCombat switches to the dual-wield moveset while something carrying it is worn
+# (S2SCombat.ini sDualWornKeyword; the Dual stance of S2SStances.esm).
+LEFT_BLADE_KEYWORD = "S2S_LeftBlade"
+
+
+def with_keyword(subs, kw: int):
+    """Subrecords with `kw` added to KWDA (KSIZ kept in step); KSIZ + KWDA after FULL (else EDID) when there are none."""
+    import struct
+    have = sfplugin.keywords(subs)
+    if kw in have:
+        return list(subs)
+    new = have + [kw]
+    kwda = struct.pack(f"<{len(new)}I", *new)
+    ksiz = struct.pack("<I", len(new))
+    if any(s == b"KWDA" for s, _ in subs):
+        out = [(s, kwda if s == b"KWDA" else ksiz if s == b"KSIZ" else d) for s, d in subs]
+        if not any(s == b"KSIZ" for s, _ in subs):
+            at = next(i for i, (s, _d) in enumerate(out) if s == b"KWDA")
+            out[at:at] = [(b"KSIZ", ksiz)]
+        return out
+    out = list(subs)
+    at = next((i + 1 for i, (s, _d) in enumerate(out) if s == b"FULL"),
+              next((i + 1 for i, (s, _d) in enumerate(out) if s == b"EDID"), 0))
+    out[at:at] = [(b"KSIZ", ksiz), (b"KWDA", kwda)]
+    return out
+
+
+def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str, keyword: int = None):
     """(ARMA, ARMO) copies: the ARMA's worn and first-person models -> the left blade, the ARMO named and pointing at
-    the new ARMA."""
+    the new ARMA (and carrying `keyword` when given)."""
     ta, ha, sa, fa = arma_t
     new_arma = sfplugin.new_form_id(first_index)
     m = sfplugin.zs(model)
@@ -134,6 +161,8 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
     to, ho, so, _fo = armo_t
     so2 = replace_refs(sfplugin.edit(so, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name)}, drop=(b"DESC",)),
                        fa, new_arma)
+    if keyword is not None:
+        so2 = with_keyword(so2, keyword)
     return (ta, ha, sa2, new_arma), (to, ho, so2, sfplugin.new_form_id(first_index + 1))
 
 
@@ -230,8 +259,13 @@ def main(argv=None):
             model = res["out_name"].replace("/", "\\") + ".nif"
             edid = "S2S_" + lw["edid"] + "_Left"
             name = lw["name"] + " (Skyrim, left hand)"
-            aa, ao = left_blade_records(armo_t, arma_t, len(recs), edid, name, model)
+            kywd_t = next(r for r in sf if r[0] == b"KYWD")
+            kw_fid = sfplugin.new_form_id(len(recs))
+            recs.append((b"KYWD", kywd_t[1], sfplugin.edit(kywd_t[2], {b"EDID": sfplugin.zs(LEFT_BLADE_KEYWORD)},
+                                                           drop=(b"FULL", b"DESC")), kw_fid))
+            aa, ao = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid)
             recs += [aa, ao]
+            row["keyword"] = {"edid": LEFT_BLADE_KEYWORD, "form_id_in_plugin": f"{kw_fid & 0xFFFFFF:06X}"}
             row.update(starfield_model=model, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}", editor_id=edid, name=name,
                        test_with_pack="dual_" + lw["pack"].replace("1h_", ""), worn=True,
                        apparel_template={"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2]),

@@ -223,7 +223,9 @@ static void key_bindings() {
         "lock = 0x102|lock\n"
         "left = 203|switch_left\n"
         "odd = 24|teleport\n");
-    Controller ctl({}, binds);
+    ControllerConfig nodual;
+    nodual.dual_stance_keyword.clear();                               // the dual keyword is tested in dual_wield()
+    Controller ctl(nodual, binds);
     PlayerState s;
     auto cs = ctl.on_key(200, true, 0.0, s);                              // high: the others out, high in
     CHECK(cs.size() == 2 && cs[0].kind == Command::Kind::RemoveKeyword && cs[0].name == "StanceLow" &&
@@ -253,8 +255,38 @@ static void key_bindings() {
     CHECK(cs.size() == 1 && cs[0].kind == Command::Kind::Log);
 }
 
+// Dual wield: the left blade worn switches the stance group to the dual keyword; off goes back to the stance before;
+// stance keys meanwhile only pick the stance for afterwards.
+static void dual_wield() {
+    auto cfg = parse_config("[Combat]\nsDualWornKeyword = S2S_LeftBlade\nsDualStanceKeyword = S2S_StanceDual\n"
+                            "bStanceReequip = 0\n");
+    CHECK(cfg.dual_worn_keyword == "S2S_LeftBlade" && cfg.dual_stance_keyword == "S2S_StanceDual");
+    Controller ctl(cfg, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nlow = 208|keyword|S2S_StanceLow\n"
+                                       "neutral = 205|keyword\n"));
+    PlayerState s;
+    auto cs = ctl.on_key(200, true, 0.0, s);                              // high; the dual keyword is cleared too
+    CHECK(count(cs, Command::Kind::RemoveKeyword) == 2 && first(cs, Command::Kind::AddKeyword)->name == "S2S_StanceHigh");
+    CHECK(ctl.on_dual_worn(false, 0.1).empty());                           // no change
+    cs = ctl.on_dual_worn(true, 0.2);
+    CHECK(ctl.dual() && ctl.stance() == "S2S_StanceDual");
+    CHECK(count(cs, Command::Kind::RemoveKeyword) == 2 && first(cs, Command::Kind::AddKeyword)->name == "S2S_StanceDual");
+    cs = ctl.on_key(208, true, 0.3, s);                                   // low while dual: remembered only
+    CHECK(count(cs, Command::Kind::AddKeyword) == 0 && count(cs, Command::Kind::RemoveKeyword) == 0 &&
+          count(cs, Command::Kind::Log) == 1 && ctl.stance() == "S2S_StanceDual");
+    CHECK(ctl.on_dual_worn(true, 0.35).empty());
+    cs = ctl.on_dual_worn(false, 0.4);                                    // off: the stance chosen meanwhile
+    CHECK(!ctl.dual() && ctl.stance() == "S2S_StanceLow" && first(cs, Command::Kind::AddKeyword)->name == "S2S_StanceLow");
+    ctl.on_key(205, true, 0.5, s);                                        // neutral, then dual on and off
+    ctl.on_dual_worn(true, 0.6);
+    cs = ctl.on_dual_worn(false, 0.7);
+    CHECK(ctl.stance().empty() && count(cs, Command::Kind::AddKeyword) == 0 && count(cs, Command::Kind::RemoveKeyword) == 3);
+    ControllerConfig off;
+    off.dual_stance_keyword.clear();
+    CHECK(Controller(off, {}).on_dual_worn(true, 0.0).empty());
+}
+
 static void stance_repeat_neutral() {
-    ControllerConfig cfg = parse_config("[Combat]\nbStanceRepeatNeutral = 1\n");
+    ControllerConfig cfg = parse_config("[Combat]\nbStanceRepeatNeutral = 1\nsDualStanceKeyword =\n");
     CHECK(cfg.stance_repeat_neutral);
     Controller ctl(cfg, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nlow = 208|keyword|S2S_StanceLow\n"));
     PlayerState s;
@@ -266,7 +298,7 @@ static void stance_repeat_neutral() {
 }
 
 static void stance_refresh() {
-    ControllerConfig cfg = parse_config("[Combat]\nsStanceRefreshEvents = BlockStart, BlockStop\n");
+    ControllerConfig cfg = parse_config("[Combat]\nsStanceRefreshEvents = BlockStart, BlockStop\nsDualStanceKeyword =\n");
     CHECK(cfg.stance_refresh_events.size() == 2 && cfg.stance_refresh_events[1] == "BlockStop");
     Controller ctl(cfg, parse_bindings("[Keys]\nhigh = 200|keyword|S2S_StanceHigh\nneutral = 205|keyword\n"));
     PlayerState s;
@@ -802,6 +834,7 @@ int main() {
     class_names();
     menus();
     stance_refresh();
+    dual_wield();
     stance_repeat_neutral();
     sample_ini();
     settings();
