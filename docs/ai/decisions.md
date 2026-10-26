@@ -378,3 +378,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   bIsBlocking turns off ~0.3 s after every blocked hit (timed or not) with the key still held - the 1.16 game or graph
   leaves the block states after the hit reaction. While the key stays down, the plugin now sends BlockStart again
   (sBlockReraiseEvent, every 0.3 s at most, for 1.5 s after the hit; supported: BlockStart is the graph's entry event).
+- 2026-10-25 timed-block sparks (owner: hard to tell when a timed block lands; asked for a Simple Block Sparks-like
+  effect). Simple Block Sparks' Skyrim particle NIFs do not carry over, so the plugin plays one of Starfield's own impact
+  effects: Papyrus ObjectReference.PlayImpactEffect(ImpactDataSet, node "Weapon", pick direction toward the attacker,
+  3 m) - supported, not verified (FO4's signature). Which ImpactDataSet: sTimedBlockEffect, or the best spark-named set
+  found once per session by looking up form IDs 1..0x3FFFFF (TESForm::LookupByID, GetFormEditorID; both logged with
+  the time taken, bListEffectForms = 0 skips it). Also Game.ShakeCamera(None, 0.4, 0.15) and the notification.

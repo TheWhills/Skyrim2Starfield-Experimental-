@@ -70,6 +70,16 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.log_commands = to_int(plugin, "ilogcommands", settings_.log_commands);
     settings_.perf_seconds = to_int(plugin, "iperfseconds", settings_.perf_seconds);
     settings_.probe_layout = to_int(plugin, "bprobeeventlayout", 0) != 0;
+    auto to_float = [&](const char* key, float& out) {
+        if (auto it = plugin.find(key); it != plugin.end() && !it->second.empty()) {
+            try { out = std::stof(it->second); } catch (...) { REX::WARN("[Plugin] {} = {}: not a number", key, it->second); }
+        }
+    };
+    if (auto it = plugin.find("stimedblockeffect"); it != plugin.end()) settings_.timed_block_effect = it->second;
+    if (auto it = plugin.find("stimedblockeffectnode"); it != plugin.end()) settings_.timed_block_effect_node = it->second;
+    to_float("ftimedblockshake", settings_.timed_block_shake);
+    to_float("ftimedblockshaketime", settings_.timed_block_shake_time);
+    settings_.list_effect_forms = to_int(plugin, "blisteffectforms", 1) != 0;
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -267,6 +277,14 @@ void Plugin::Tick() {
         invulnerable = controller_.invulnerable(now);
     }
     Run(std::move(cmds));
+    if (settings_.list_effect_forms && !effects_listed_) {
+        auto* player = game::Player();
+        if (player && player->parentCell) {
+            effects_listed_ = true;
+            auto best = game::ListSparkForms();
+            if (!best.empty()) auto_effect_ = best;
+        }
+    }
     Lock::Get().Update();                                    // main thread (the input hook)
     if (keyword_check_due_ >= 0.0 && now >= keyword_check_due_) {
         keyword_check_due_ = -1.0;
@@ -320,7 +338,18 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     result = std::format("{:.0f}", c.amount);
                     break;
                 case K::ActorEvents: result = game::SendActorEvents(c.target, c.name); break;
-                case K::Feedback: result = game::Notify(c.name) ? "shown" : "not dispatched"; break;
+                case K::Feedback: {
+                    std::string effect = settings_.timed_block_effect.empty() ? auto_effect_ : settings_.timed_block_effect;
+                    result = c.name.empty() ? "no message" : (game::Notify(c.name) ? "message" : "message not dispatched");
+                    if (!effect.empty())
+                        result += "; effect " + game::PlayImpactToward(effect, settings_.timed_block_effect_node, c.target);
+                    else
+                        result += "; no effect (none named, no spark set found)";
+                    if (settings_.timed_block_shake > 0.0f)
+                        result += game::ShakeCamera(settings_.timed_block_shake, settings_.timed_block_shake_time)
+                                      ? "; shake" : "; shake not dispatched";
+                    break;
+                }
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
                 case K::UnequipWeapon:

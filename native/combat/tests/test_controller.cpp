@@ -364,7 +364,7 @@ static void hits() {
         auto r = p.on_hit(HitKind::Normal, true, 10.20, 0x0025421A);
         bool stagger = false, restore = false, recoil = false, feedback = false;
         for (const auto& c : r) {
-            feedback |= c.kind == Command::Kind::Feedback && c.name == "Timed block";
+            feedback |= c.kind == Command::Kind::Feedback && c.name == "Timed block" && c.target == 0x0025421A;
             stagger |= c.kind == Command::Kind::ActorEvents && c.target == 0x0025421A && c.name.starts_with("StaggerStart");
             restore |= c.kind == Command::Kind::RestoreHealth;
             recoil |= c.kind == Command::Kind::SetVariable;
@@ -456,6 +456,9 @@ static void class_names() {
     CHECK(is_combat_reaction_event("BlockHitStart", "") && is_combat_reaction_event("SoundPlay", "WPNHandHandBlockUp3rd"));
     CHECK(is_combat_reaction_event("staggerStart", "") && is_combat_reaction_event("recoilLargeStart", ""));
     CHECK(!is_combat_reaction_event("FootLeft", "") && !is_combat_reaction_event("SoundPlay", "FST_Foley_Walk"));
+    CHECK(spark_score("ImpactMetalHeavy") == 0);
+    CHECK(spark_score("WPNImpactMeleeBladeVsMetalSparks") > spark_score("SparksElectricLarge"));
+    CHECK(spark_score("sparks") == 1);
     {   // the owner's log: an NPC's hit on the player, slot by slot
         alignas(8) unsigned char ev[0x120] = {};
         const std::uint32_t npc = 0x00A01D12, player = 0x00100014;

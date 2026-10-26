@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "s2s/controller.h"
 
 namespace s2s::sfse::game {
 namespace {
@@ -205,6 +206,76 @@ bool Notify(std::string_view text) {
     };
     RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb;
     return vm->DispatchStaticCall(RE::BSFixedString("Debug"), RE::BSFixedString("Notification"), args, cb, 0);
+}
+
+bool ShakeCamera(float strength, float seconds) {
+    auto* game = RE::GameVM::GetSingleton();
+    auto* vm = game ? game->GetVM() : nullptr;
+    if (!vm) return false;
+    auto args = [strength, seconds](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+        out.clear();
+        out.resize(3);                                  // [0] stays None: the shake is not tied to a source
+        RE::BSScript::PackVariable(out[1], strength);
+        RE::BSScript::PackVariable(out[2], seconds);
+        return true;
+    };
+    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb;
+    return vm->DispatchStaticCall(RE::BSFixedString("Game"), RE::BSFixedString("ShakeCamera"), args, cb, 0);
+}
+
+std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward) {
+    auto* set = RE::TESForm::LookupByEditorID<RE::BGSImpactDataSet>(RE::BSFixedString(std::string(editor_id).c_str()));
+    if (!set) return std::format("'{}': no impact data set by that EditorID", editor_id);
+    auto* player = Player();
+    if (!player) return "no player";
+    // the pick ray: from the node toward the attacker's chest height (owner's NPCs: within 1-3 m), else ahead
+    float dx = 0.0f, dy = 1.0f, dz = 0.0f;
+    if (auto* a = toward ? RE::TESForm::LookupByID<RE::Actor>(toward) : nullptr) {
+        dx = a->data.location.x - player->data.location.x;
+        dy = a->data.location.y - player->data.location.y;
+        dz = 0.0f;
+        const float len = std::sqrt(dx * dx + dy * dy);
+        if (len > 1e-3f) { dx /= len; dy /= len; } else { dx = 0.0f; dy = 1.0f; }
+    }
+    const bool ok = CallOnPlayer("ObjectReference", "PlayImpactEffect", set, RE::BSFixedString(std::string(node).c_str()),
+                                 dx, dy, dz, 3.0f, false, false);
+    return std::format("'{}' {}", editor_id, ok ? "dispatched" : "not dispatched");
+}
+
+std::string ListSparkForms() {
+    // Form IDs of the master files' first 4M records, looked up one by one (once; the log gives the time). Starfield
+    // keeps EditorIDs for these record types (LookupByEditorID works for actor values and keywords).
+    const auto t0 = std::chrono::steady_clock::now();
+    REX::INFO("effects: listing spark-like impact sets and explosions (once per session; bListEffectForms = 0 to skip)");
+    std::vector<std::pair<int, std::string>> sets;
+    std::vector<std::string> explosions;
+    int n_sets = 0, n_expl = 0;
+    for (std::uint32_t id = 1; id < 0x00400000u; ++id) {
+        auto* f = RE::TESForm::LookupByID(id);
+        if (!f) continue;
+        const auto type = f->GetFormType();
+        if (type != RE::FormType::kIPDS && type != RE::FormType::kEXPL) continue;
+        const char* ed = f->GetFormEditorID();
+        const std::string name = ed ? ed : "";
+        if (type == RE::FormType::kIPDS) {
+            ++n_sets;
+            if (int sc = combat::spark_score(name)) sets.emplace_back(sc, name);
+        } else {
+            ++n_expl;
+            if (combat::spark_score(name)) explosions.push_back(name);
+        }
+    }
+    std::stable_sort(sets.begin(), sets.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::string list;
+    for (std::size_t i = 0; i < sets.size() && i < 40; ++i) list += " " + sets[i].second;
+    std::string elist;
+    for (std::size_t i = 0; i < explosions.size() && i < 20; ++i) elist += " " + explosions[i];
+    const auto ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    REX::INFO("effects: {} impact data sets ({} with 'spark':{}), {} explosions (spark-like:{}) in {:.0f} ms", n_sets,
+              sets.size(), list.empty() ? std::string(" none") : list, n_expl, elist.empty() ? std::string(" none") : elist,
+              ms);
+    if (!sets.empty()) REX::INFO("effects: timed-block sparks will use '{}' (sTimedBlockEffect names another)", sets[0].second);
+    return sets.empty() ? std::string() : sets[0].second;
 }
 
 std::string SendActorEvents(std::uint32_t form_id, std::string_view events) {

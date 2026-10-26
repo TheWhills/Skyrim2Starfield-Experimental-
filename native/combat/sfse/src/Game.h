@@ -27,6 +27,13 @@ float PlayerHealth();                            // < 0 when not known (cached l
 // what happened for the log.
 std::string SendActorEvents(std::uint32_t form_id, std::string_view events);
 bool Notify(std::string_view text);              // Debug.Notification (Papyrus, queued)
+bool ShakeCamera(float strength, float seconds); // Game.ShakeCamera(None, ...) (Papyrus, queued)
+// ObjectReference.PlayImpactEffect on the player: the ImpactDataSet `editor_id` from `node`, picked toward the actor
+// `toward` (form ID; 0 = straight ahead). Returns what happened, for the log.
+std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward);
+// Once: logs the impact data sets / explosions whose EditorID looks like sparks (combat::spark_score) and returns the
+// best impact set's EditorID ("" if none).
+std::string ListSparkForms();
 void DamageActorValue(std::string_view editor_id, float amount);
 
 }  // namespace s2s::sfse::game

@@ -16,6 +16,12 @@ struct Settings {
     int log_commands = 60;          // first N actions carried out (event sent, keyword set, lock) with their result
     int perf_seconds = 60;          // for this long after loading, the plugin's own time per frame / event every 10 s
     bool probe_layout = false;      // find BSAnimationGraphEvent's layout again (after a game update moved it)
+    // Timed-block feedback: an impact effect (ImpactDataSet EditorID; "" = the best spark set found by the list),
+    // played from this node of the player toward the attacker, and a camera shake (strength, seconds; 0 = none).
+    std::string timed_block_effect;
+    std::string timed_block_effect_node = "Weapon";
+    float timed_block_shake = 0.4f, timed_block_shake_time = 0.15f;
+    bool list_effect_forms = true;  // once per session: log the spark-like impact sets / explosions the game has
 };
 
 class Plugin {
@@ -62,6 +68,8 @@ private:
     std::atomic<bool> block_key_{false};
     std::atomic<double> block_key_at_{-10.0};
     int block_sig_ = 0, block_logs_ = 0;
+    bool effects_listed_ = false;
+    std::string auto_effect_;
     bool ghost_ = false;
 };
 

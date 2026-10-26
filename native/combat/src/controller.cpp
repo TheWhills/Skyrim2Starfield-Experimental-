@@ -240,6 +240,17 @@ HitHandles hit_handles(const void* event) {
     return h;
 }
 
+int spark_score(std::string_view id) {
+    const std::string s = lower(id);
+    if (s.find("spark") == std::string::npos) return 0;
+    int score = 1;
+    for (const char* w : {"metal", "melee", "blade", "block", "weapon", "sword"})
+        if (s.find(w) != std::string::npos) score += 2;
+    for (const char* w : {"fire", "electric", "laser", "energy", "large", "explosion"})
+        if (s.find(w) != std::string::npos) score -= 1;
+    return std::max(score, 1);
+}
+
 bool is_combat_reaction_event(std::string_view tag, std::string_view payload) {
     auto has = [](std::string_view s, std::string_view w) {
         return std::search(s.begin(), s.end(), w.begin(), w.end(), [](char a, char b) {
@@ -754,7 +765,11 @@ std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t, s
             c.target = attacker;
             out.push_back(c);
         }
-        if (!cfg_.timed_block_message.empty()) out.push_back({Command::Kind::Feedback, cfg_.timed_block_message});
+        {                                             // message / sparks / shake on the plugin side (empty text: none)
+            Command c{Command::Kind::Feedback, cfg_.timed_block_message};
+            c.target = attacker;
+            out.push_back(c);
+        }
         out.push_back(log(text));
         return out;                                   // a timed block is not a block hit: no recoil variant
     }
