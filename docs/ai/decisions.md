@@ -413,3 +413,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   straight down onto the floor (owner's log) - likely no entries for those materials. sTimedBlockEffect is now a list;
   each set is tried with each aim until one returns true (logged). Default: PHYWeaponMetalBlade1Hand, WPNMeleeImpact
   BladeMedium, PHYMetalGenericMedium, then the block set.
+- 2026-10-26 0x000A7C3D played (down toward the attacker / straight down; never toward the attacker's body) but the
+  owner saw nothing - a dropped-blade physics impact. Default list now starts with projectile impact sets, which show
+  sparks on metal: FXProjectileBullet (0x0000D02C), ArcWelder (0x000BA2E3), BulletWhiteHot (0x001E3EA5).
