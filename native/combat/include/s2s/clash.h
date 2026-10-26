@@ -52,7 +52,7 @@ struct ClashConfig {
     // staggerMagnitude; whether Starfield's graph reads it is unresolved). Empty = not set.
     std::string stagger_variable = "staggerMagnitude";
     double loser_magnitude = 1.0, draw_magnitude = 0.25;
-    std::string end_events = "BlockStop";                            // the player's graph, when the clash is over
+    std::string end_events = "BlockStop";                            // both graphs, when the clash is over
     // Feedback (no on-screen meter yet: the messages say how it is going).
     bool messages = true;
     std::string start_message = "Weapon clash! Mash attack!";

@@ -271,7 +271,12 @@ std::vector<Command> Clash::finish(Outcome o, double t) {
     Command end{Command::Kind::ClashEnd, name};
     end.target = opponent_;
     out.push_back(end);
-    if (!cfg_.end_events.empty()) out.emplace_back(Command::Kind::SendEvent, cfg_.end_events);
+    if (!cfg_.end_events.empty()) {
+        out.emplace_back(Command::Kind::SendEvent, cfg_.end_events);
+        // the opponent too: an opponent that won got no reaction event and stayed in the block pose
+        // (owner's run 2026-10-26)
+        out.push_back(actor_events(opponent_, cfg_.end_events));
+    }
     // the player is form 0x14 for ActorEvents
     constexpr std::uint32_t player = 0x14;
     auto magnitude = [&](std::uint32_t who, double m) {

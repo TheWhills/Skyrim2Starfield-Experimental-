@@ -172,7 +172,14 @@ static void abort_releases() {
     CHECK(end && end->name == "abort");
     const auto* var = first(out, Command::Kind::ActorVariable);
     CHECK(var && var->variable.value == 0.0);
-    CHECK(!has_events_for(out, 0x14) && !has_events_for(out, 0x1234));   // no staggers
+    CHECK(!has_events_for(out, 0x14));                      // no staggers
+    int opp = 0;
+    for (const auto& e : out)
+        if (e.kind == Command::Kind::ActorEvents && e.target == 0x1234u) {
+            ++opp;
+            CHECK(e.name == "BlockStop");                   // only the guard dropped
+        }
+    CHECK(opp == 1);
     CHECK(c.abort(0.6, "again").empty());
 }
 

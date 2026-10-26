@@ -466,3 +466,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   through NotifyAnimationGraphImpl - the filter now logs every event it sees for the two); footsteps (FootLeft /
   FootRight, walk foley) all through each clash; Alt mid-clash ran the plugin's dodge and walked out (aborted at 6 m).
   During a clash no key reaches the controller now; a trace logs the locomotion values and heading corrections.
+- 2026-10-26 owner: the opponent stayed in the block pose after a clash (it won: no reaction event, and only the
+  player got BlockStop). sEndEvents now goes to both. Same log: the filter saw only PositionChange / RelaxedStart for
+  the opponent and nothing from the game for the player - the game's own attacks / reactions mostly do not go through
+  NotifyAnimationGraphImpl (the filter stays, as a no-op in practice; verified by the log). Footsteps during clashes
+  nearly gone: two in one clash, at the moment of the player's heading corrections (37 in the first 0.5 s after
+  settling), none in the others; Speed / Direction / TurnDelta read 0 on the player throughout.
