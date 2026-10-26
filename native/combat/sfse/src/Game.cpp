@@ -89,11 +89,22 @@ double Now() {
 
 RE::PlayerCharacter* Player() { return RE::PlayerCharacter::GetSingleton(); }
 
+namespace {
+thread_local bool g_own_event = false;      // a graph event the plugin itself is sending (the clash filter lets it pass)
+struct OwnEvent {
+    OwnEvent() { g_own_event = true; }
+    ~OwnEvent() { g_own_event = false; }
+};
+}  // namespace
+
+bool SendingOwnEvent() { return g_own_event; }
+
 bool SendEvent(std::string_view name) {
     auto* player = Player();
     if (!player) return false;
     // IAnimationGraphManagerHolder::NotifyAnimationGraphImpl (vtable slot 1, mapped in CommonLibSF). Returns false
     // when the graph has no transition for the event in its current state.
+    OwnEvent own;
     return player->NotifyAnimationGraphImpl(RE::BSFixedString(std::string(name).c_str()));
 }
 
@@ -463,7 +474,12 @@ std::string SendActorEvents(std::uint32_t form_id, std::string_view events) {
         while (!name.empty() && name.back() == ' ') name.remove_suffix(1);
         start = end + 1;
         if (name.empty()) continue;
-        if (actor->NotifyAnimationGraphImpl(RE::BSFixedString(std::string(name).c_str())))
+        bool taken = false;
+        {
+            OwnEvent own;
+            taken = actor->NotifyAnimationGraphImpl(RE::BSFixedString(std::string(name).c_str()));
+        }
+        if (taken)
             return std::format("{:08X}: '{}' taken{}", form_id, name, tried.empty() ? "" : " (not taken: " + tried + ")");
         tried += (tried.empty() ? "" : ", ") + std::string(name);
     }

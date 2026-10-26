@@ -54,6 +54,9 @@ public:
     // A weapon clash is running and this key must not reach the game's controls (attack, block, movement).
     bool ClashHidesKey(std::uint32_t key, std::string_view user_event) const;
     bool ClashHidesMovement() const { return clash_active_ && clash_block_movement_; }
+    // A weapon clash runs and this graph event for one of the two fighters is in [Clash] sBlockedEvents (not one the
+    // plugin sends itself): the event is dropped (Hooks.cpp, any thread).
+    bool ClashDropsEvent(const RE::IAnimationGraphManagerHolder* holder, const char* name);
     void Tick();
     // Animation events stop being read (the layout check in Hooks.cpp failed): logged once.
     void DisableAnimEvents(std::string_view why);
@@ -88,7 +91,13 @@ private:
     std::atomic_bool clash_active_{false};
     bool clash_block_movement_ = true;
     bool clash_took_lock_ = false;
-    int clash_presses_logged_ = 0;           // the clash turned the lock-on on (released when it ends)
+    int clash_presses_logged_ = 0;
+    std::atomic<const RE::IAnimationGraphManagerHolder*> clash_player_graph_{nullptr}, clash_opponent_graph_{nullptr};
+    std::vector<std::string> clash_blocked_, clash_zero_;
+    std::atomic_int clash_dropped_logged_{0};
+    double clash_begin_at_ = -1.0;
+    std::optional<float> clash_heading_;          // the player's heading held after the settle time
+    std::vector<std::pair<std::uint32_t, std::string>> clash_zero_have_;   // (actor, variable) the graphs have           // the clash turned the lock-on on (released when it ends)
     std::uint32_t attack_key_ = 256, power_key_ = 0;
     std::array<std::uint32_t, 4> move_keys_{};
 };

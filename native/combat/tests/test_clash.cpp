@@ -296,7 +296,30 @@ static void early_guard_repeat() {
     CHECK(count(c.tick(t + 0.01), Command::Kind::Spark) == 0);   // sparks off by default
 }
 
+static void event_filter_and_heading() {
+    ClashConfig c;
+    const auto prefixes = MenuGate::parse_list(c.blocked_events);
+    CHECK(matches_prefix("MeleeAttack02", prefixes));
+    CHECK(matches_prefix("recoilStart", prefixes));
+    CHECK(matches_prefix("staggerStart", prefixes));          // any case
+    CHECK(matches_prefix("BlockStop", prefixes) && matches_prefix("blockStopInstant", prefixes));
+    CHECK(matches_prefix("turnLeft", prefixes));
+    CHECK(!matches_prefix("BlockStart", prefixes));
+    CHECK(!matches_prefix("ActionInterrupt", prefixes));
+    CHECK(!matches_prefix("staggerStop", prefixes) && !matches_prefix("recoilStop", prefixes));
+    CHECK(!matches_prefix("MeleeAttackStop", prefixes));
+    CHECK(!matches_prefix("SoundPlay", prefixes));
+    CHECK(!matches_prefix("Melee", prefixes));                // shorter than every prefix
+    CHECK(!matches_prefix("anything", {}));
+    const float deg = 3.14159265f / 180.0f;
+    CHECK(!heading_drifted(1.0f, 1.0f + 0.3f * deg, 0.5f * deg));
+    CHECK(heading_drifted(1.0f, 1.0f + 0.7f * deg, 0.5f * deg));
+    CHECK(!heading_drifted(3.14f, -3.14f, 0.5f * deg));        // across the wrap: 0.18 deg apart
+    CHECK(c.settle_time == 0.5 && c.zero_variables == "Speed, SpeedSampled, Direction, TurnDelta");
+}
+
 int main() {
+    event_filter_and_heading();
     early_guard_repeat();
     grace_time();
     start_and_guard();

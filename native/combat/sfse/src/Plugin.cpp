@@ -126,6 +126,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     controller_ = combat::Controller(cfg, bindings);
     clash_ = combat::Clash(clash_cfg);
     clash_block_movement_ = clash_cfg.block_movement;
+    clash_blocked_ = combat::MenuGate::parse_list(clash_cfg.blocked_events);
+    clash_zero_ = combat::MenuGate::parse_list(clash_cfg.zero_variables);
     attack_key_ = cfg.attack_key;
     power_key_ = cfg.power_key;
     move_keys_ = cfg.move_keys;
@@ -262,6 +264,16 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
     }
 }
 
+bool Plugin::ClashDropsEvent(const RE::IAnimationGraphManagerHolder* holder, const char* name) {
+    if (!clash_active_ || !holder || !name || game::SendingOwnEvent()) return false;
+    const bool player = holder == clash_player_graph_.load();
+    if (!player && holder != clash_opponent_graph_.load()) return false;
+    if (!combat::matches_prefix(name, clash_blocked_)) return false;
+    if (clash_dropped_logged_.fetch_add(1) < 60)
+        REX::INFO("clash: kept '{}' from the {}", name, player ? "player" : "opponent");
+    return true;
+}
+
 bool Plugin::ClashHidesKey(std::uint32_t key, std::string_view user_event) const {
     if (!clash_active_ || key == 0) return false;
     if (key == attack_key_ || (power_key_ && key == power_key_) || user_event == "PrimaryAttack") return true;
@@ -392,7 +404,21 @@ void Plugin::Tick() {
             cmds.insert(cmds.end(), more.begin(), more.end());
         }
         if (clash_.active() && clash_.config().ghost_player) invulnerable = true;
-        if (clash_.active() && clash_active_ && clash_.config().face_each_other) game::FaceEachOther(clash_.opponent());
+        if (clash_.active() && clash_active_) {
+            const auto& cc = clash_.config();
+            if (cc.face_each_other) {
+                // both turned during the settle time; then only the player's heading is held (drift > 0.5 deg)
+                if (now - clash_begin_at_ < cc.settle_time) {
+                    game::FaceEachOther(clash_.opponent());
+                } else if (auto* me = game::Player()) {
+                    if (!clash_heading_) clash_heading_ = me->data.angle.z;
+                    if (combat::heading_drifted(me->data.angle.z, *clash_heading_, 0.5f * 3.14159265f / 180.0f))
+                        me->data.angle.z = *clash_heading_;
+                }
+            }
+            for (const auto& [who, name] : clash_zero_have_)
+                game::SetActorVariable(who, {combat::VariableSet::Type::Float, name, 0.0});
+        }
     }
     Run(std::move(cmds));
     if (settings_.list_effect_forms && !effects_listed_) {
@@ -470,6 +496,25 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 }
                 case K::ClashBegin: {
                     const auto& cc = clash_.config();
+                    auto* opp = RE::TESForm::LookupByID<RE::Actor>(c.target);
+                    auto* me = game::Player();
+                    clash_player_graph_ = me ? static_cast<const RE::IAnimationGraphManagerHolder*>(me) : nullptr;
+                    clash_opponent_graph_ = opp ? static_cast<const RE::IAnimationGraphManagerHolder*>(opp) : nullptr;
+                    clash_begin_at_ = game::Now();
+                    clash_heading_.reset();
+                    clash_zero_have_.clear();
+                    std::string zero;
+                    for (auto* a : {static_cast<RE::Actor*>(me), opp}) {
+                        if (!a) continue;
+                        for (const auto& v : clash_zero_) {
+                            float f = 0.0f;
+                            if (a->GetGraphVariableImplFloat(RE::BSFixedString(v.c_str()), f)) {
+                                clash_zero_have_.emplace_back(a->GetFormID(), v);
+                                zero += std::format(" {:08X}.{}", a->GetFormID(), v);
+                            }
+                        }
+                    }
+                    result = std::format("zeroed each frame:{}; ", zero.empty() ? std::string(" none (no such variables)") : zero);
                     clash_active_ = true;
                     if (cc.place_opponent) result += game::PlaceFacing(c.target, c.amount);
                     if (cc.restrain_opponent)
@@ -485,6 +530,10 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 case K::ClashEnd: {
                     const auto& cc = clash_.config();
                     clash_active_ = false;
+                    clash_player_graph_ = nullptr;
+                    clash_opponent_graph_ = nullptr;
+                    clash_heading_.reset();
+                    clash_zero_have_.clear();
                     result = std::format("{} attack presses, meter {:.2f}; ", clash_.presses(), clash_.meter());
                     Lock::Get().ClearOffset();
                     if (cc.restrain_opponent)

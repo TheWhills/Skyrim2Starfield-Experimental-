@@ -10,6 +10,7 @@
 // (s2s/controller.h Command) it returns. Tested in tests/test_clash.cpp.
 #pragma once
 
+#include "s2s/combat.h"
 #include "s2s/controller.h"
 
 #include <cstdint>
@@ -75,7 +76,22 @@ struct ClashConfig {
     double camera_yaw = 35.0, camera_pitch = 8.0;
     bool block_movement = true;       // movement keys / stick and the block key do not reach the game while locked
     bool ghost_player = true;
-    bool face_each_other = true;      // each frame, turn both to face each other (the camera is turned off them)         // the player takes no hits while locked (Actor.SetGhost)
+    // Facing (Cinematic Clash's way): both are turned to face each other for settle_time seconds; after that only the
+    // player's heading is held, put back when it drifts more than 0.5 deg (with a weapon drawn the game keeps turning
+    // the player toward the camera, which the clash shot turns off the opponent). Writing every frame made turning
+    // steps (owner, 2026-10-26: feet still moving).
+    bool face_each_other = true;
+    double settle_time = 0.5;
+    // Animation graph events kept from both fighters for the whole clash (case-insensitive name prefixes): the game's
+    // own attacks, hit reactions, block drop, walking and turning would play over the block (owner, 2026-10-26: the
+    // opponent mid-attack / recoiling). The plugin's own events always pass. Empty = none kept.
+    std::string blocked_events = "MeleeAttackStart, MeleeAttackPowerStart, MeleeAttack0, attackStart, attackPowerStart, "
+                                 "attackRelease, bashStart, recoilStart, recoilLargeStart, StaggerStart, BlockStop, "
+                                 "blockHitStart, moveStart, turnLeft, turnRight, turnStart, SprintStart, JumpStart, "
+                                 "JumpStanding, JumpDirectional, IdleForceDefaultState, weaponSheathe, WeapUnequip, Unequip";
+    // Float graph variables set to 0 on both every frame (locomotion inputs: the graph reads the turning / placing as
+    // walking and blends a step into the block). Only the ones the graph has are set (checked once per clash).
+    std::string zero_variables = "Speed, SpeedSampled, Direction, TurnDelta";         // the player takes no hits while locked (Actor.SetGhost)
     bool force_on_hit = false;        // testing: every melee hit the player lands on an actor starts a clash
 };
 
@@ -86,6 +102,12 @@ ClashConfig parse_clash_config(std::string_view ini, std::vector<std::string>* p
 // `attacker` (the clash replaces the attacker's stagger) and returns whether there were any - i.e. whether the hit
 // was a perfect block from a known attacker.
 bool take_perfect_block(std::vector<Command>& cmds, std::uint32_t attacker);
+
+// Whether an animation event name starts with one of the prefixes (case-insensitive; ClashConfig::blocked_events
+// split with MenuGate::parse_list).
+bool matches_prefix(std::string_view name, const std::vector<std::string>& prefixes);
+// Whether a heading (radians) is more than `tolerance` off the held one, the shortest way round.
+bool heading_drifted(float current, float held, float tolerance);
 
 class Clash {
 public:

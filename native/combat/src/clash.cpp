@@ -1,6 +1,8 @@
 #include "s2s/clash.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <cstdlib>
 
 namespace s2s::combat {
@@ -90,11 +92,31 @@ ClashConfig parse_clash_config(std::string_view ini, std::vector<std::string>* p
         else if (k == "bblockmovement") ok = read_bool(v, c.block_movement);
         else if (k == "bghostplayer") ok = read_bool(v, c.ghost_player);
         else if (k == "bfaceeachother") ok = read_bool(v, c.face_each_other);
+        else if (k == "fsettletime") ok = read_double(v, c.settle_time);
+        else if (k == "sblockedevents") c.blocked_events = v;
+        else if (k == "szerovariables") c.zero_variables = v;
         else if (k == "bforceclashonhit") ok = read_bool(v, c.force_on_hit);
         else ok = false;
         if (!ok && problems) problems->push_back("[Clash] " + k + " = " + v + ": not understood, default kept");
     }
     return c;
+}
+
+bool matches_prefix(std::string_view name, const std::vector<std::string>& prefixes) {
+    for (const auto& p : prefixes) {
+        if (p.empty() || name.size() < p.size()) continue;
+        bool same = true;
+        for (std::size_t i = 0; i < p.size() && same; ++i) {
+            const auto a = static_cast<unsigned char>(name[i]), b = static_cast<unsigned char>(p[i]);
+            same = std::tolower(a) == std::tolower(b);
+        }
+        if (same) return true;
+    }
+    return false;
+}
+
+bool heading_drifted(float current, float held, float tolerance) {
+    return std::fabs(wrap_pi(current - held)) > tolerance;
 }
 
 bool take_perfect_block(std::vector<Command>& cmds, std::uint32_t attacker) {

@@ -453,3 +453,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   mid-attack / recoiling, the player's feet shuffling. The guard is now a Guard command: the game side sends the
   interrupt and the block only when that actor's bIsBlocking is off. The grace (0.6 s) now holds the meter for both
   sides (presses during it were winning clashes in under a second).
+- 2026-10-26 owner asked what differs from Cinematic Clash (source read for behaviour; GPL, nothing copied). Added its
+  three techniques that answer the open issues, written independently: (1) a graph event filter - Actor's and
+  PlayerCharacter's IAnimationGraphManagerHolder::NotifyAnimationGraphImpl (slot 1, vtables found through RTTI) drop
+  the two fighters' attack / reaction / block-drop / walk / turn events (sBlockedEvents) while a clash runs, the
+  plugin's own sends pass (thread-local flag); (2) the locomotion floats (Speed, SpeedSampled, Direction, TurnDelta -
+  Skyrim's names; only those the Starfield graph has, logged at clash begin) set to 0 on both every frame (Papyrus,
+  queued); (3) facing: both turned for fSettleTime 0.5 s, then only the player's heading is held, corrected past 0.5
+  deg. Supported, not verified: that Starfield's AI / hit reactions go through that function.

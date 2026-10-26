@@ -9,6 +9,9 @@ namespace s2s::sfse::game {
 double Now();
 bool Readable(const void* ptr, std::size_t bytes);   // committed, readable memory (VirtualQuery)                                    // seconds, steady clock
 RE::PlayerCharacter* Player();
+// True while the plugin itself sends a graph event on this thread (SendEvent / SendActorEvents): the clash's event
+// filter (Hooks.cpp) lets those through.
+bool SendingOwnEvent();
 
 // Must run on the main thread (Plugin queues them through SFSE's task interface).
 bool SendEvent(std::string_view name);           // player's animation graph
