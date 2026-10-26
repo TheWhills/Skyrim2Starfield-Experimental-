@@ -105,6 +105,11 @@ struct ControllerConfig {
     // Any other hit taken while blocking: this share of its damage is given back (Skyrim's block takes most of a hit;
     // the game's own block reduction on 1.16 is not known). 0 = the game's damage as is.
     double block_reduction = 0.6;
+    // A blocked hit drops the guard on 1.16 (owner's runs: bIsBlocking off ~0.3 s after each blocked hit, key still
+    // held). While the block key stays down, block_reraise_event goes to the player's graph (every 0.3 s at most, for
+    // block_reraise_window seconds after the hit) to bring the guard back up. Empty = off.
+    std::string block_reraise_event = "BlockStart";
+    double block_reraise_window = 1.5;
     // A power attack (power_key, or a held attack key) during a combo: send power_event to the graph at once. Vanilla Starfield has
     // no combo -> power transition, so the game does not send it mid-combo and played the standing power attack
     // after the combo instead (owner, 2026-10-23); the stance packs add combo -> power states that need the event.
@@ -230,7 +235,9 @@ std::vector<std::uintptr_t> find_vtable_objects(std::uintptr_t begin, std::size_
 struct PlayerState {
     float stamina = 1e9f;      // current stamina-like value (unlimited when not configured)
     bool staggered = false;
-    bool blocking = false;     // the block is held (the melee graph's iWantBlock)
+    bool blocking = false;     // blocking (the block key while the guard comes up, or the graph's block state)
+    bool block_key = false;    // the block key is physically down
+    bool block_state = false;  // the graph is in its block states (bIsBlocking)
     float health = -1.0f;      // current health (< 0: not known)
     float stick_x = 0.0f, stick_y = 0.0f;   // movement stick: x right, y forward, -1..1
 };
@@ -295,6 +302,7 @@ private:
     float giveback_to_ = -1.0f;                   // a parry keeps health at this ...
     float giveback_share_ = 1.0f;                 // ... giving back this share of what was lost
     double giveback_until_ = -1.0;                // ... until then (< 0: nothing pending)
+    double blocked_hit_at_ = -1e9, reraised_at_ = -1e9;
 };
 
 }  // namespace s2s::combat

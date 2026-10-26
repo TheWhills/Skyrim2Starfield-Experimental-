@@ -400,6 +400,24 @@ static void hits() {
         for (const auto& c : r) CHECK(c.kind != Command::Kind::ActorEvents);
         // no damage after a timed block: nothing to give back
         CHECK(p.tick(11.85, st).empty());
+        // the guard drops after a blocked hit while the key is held: BlockStart again, at most every 0.3 s
+        {
+            Controller g;
+            PlayerState b;
+            b.health = 100.0f;
+            b.blocking = b.block_key = b.block_state = true;
+            g.tick(20.0, b);
+            g.on_hit(HitKind::Normal, true, 20.5, 0x1);
+            b.block_state = false;                                         // the graph left the block states
+            auto ev = g.tick(20.8, b);
+            CHECK(!ev.empty() && ev[0].kind == Command::Kind::SendEvent && ev[0].name == "BlockStart");
+            CHECK(g.tick(20.9, b).empty());                                // not again within 0.3 s
+            CHECK(!g.tick(21.15, b).empty());
+            b.block_key = false;                                           // let go: no re-raise
+            CHECK(g.tick(21.5, b).empty());
+            b.block_key = true;
+            CHECK(g.tick(22.5, b).empty());                                // long after the hit: no re-raise
+        }
         // off
         auto cfg = parse_config("[Combat]\nfTimedBlockWindow = 0\nsParryEvents = recoilStart\nbParryRestoreHealth = 0\n"
                                 "fBlockReduction = 0\nsTimedBlockMessage =\n");

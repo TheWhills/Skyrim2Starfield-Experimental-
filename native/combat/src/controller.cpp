@@ -461,6 +461,8 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         else if (k == "sblockhitvariable") c.block_hit_variable = v;
         else if (k == "fparrywindow" || k == "ftimedblockwindow") ok = read_double(v, c.parry_window);
         else if (k == "fblockreduction") ok = read_double(v, c.block_reduction);
+        else if (k == "sblockreraiseevent") c.block_reraise_event = v;
+        else if (k == "fblockreraisewindow") ok = read_double(v, c.block_reraise_window);
         else if (k == "stimedblockmessage") c.timed_block_message = v;
         else if (k == "sparryevents") c.parry_events = v;
         else if (k == "bparryrestorehealth") {
@@ -732,6 +734,7 @@ std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t, s
     if (iframes_.invulnerable(t))
         out.push_back(log("hit during i-frames (the interim ghost did not stop it: a damage hook is needed)"));
     const double since_block = t - block_up_at_;
+    if (blocking) blocked_hit_at_ = t;
     float before = -1.0f;                             // the most health held just before the hit
     for (const auto& [ht, h] : health_)
         if (t - ht <= std::max(cfg_.parry_window, 0.2) + 0.05) before = std::max(before, h);
@@ -775,6 +778,12 @@ std::vector<Command> Controller::tick(double t, const PlayerState& s) {
         parried_ = false;
     }
     block_held_ = s.blocking;
+    if (!cfg_.block_reraise_event.empty() && s.block_key && !s.block_state && t - blocked_hit_at_ <= cfg_.block_reraise_window &&
+        t - reraised_at_ >= 0.3) {
+        reraised_at_ = t;
+        out.push_back(event(cfg_.block_reraise_event));
+        out.push_back(log("block: guard dropped after a blocked hit with the key held - raised again"));
+    }
     if (giveback_until_ >= 0.0) {
         if (t > giveback_until_) {
             giveback_until_ = -1.0;

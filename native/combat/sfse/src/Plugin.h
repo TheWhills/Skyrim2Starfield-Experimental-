@@ -38,7 +38,7 @@ public:
     void OnMenu(std::string_view name, bool opening);
     // The player was hit (TESHitEvent, after the game handled the hit).
     void OnHit(std::string_view attack_event, std::uint32_t aggressor, std::uint32_t weapon);
-    bool Blocking();
+    bool Blocking(bool* graph_state = nullptr);
     void Tick();
     // Animation events stop being read (the layout check in Hooks.cpp failed): logged once.
     void DisableAnimEvents(std::string_view why);

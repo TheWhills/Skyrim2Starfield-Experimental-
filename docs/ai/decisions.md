@@ -372,3 +372,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   ActorValueOwner::ModActorValue (native vfunc, slots unverified on 1.16). Both removed from the path: the give-back
   (and stamina damage) now go through Papyrus ObjectReference.RestoreValue / DamageValue, and sBlockHitVariable is
   empty in the shipped INI until variants exist.
+- 2026-10-25 timed block verified (owner's log: four timed blocks 0.17-0.24 s after the press, 21 of 21 health given
+  back each time, the attacker's graph took StaggerStart - the "recoil" the owner saw; held-block hits gave back 13 of
+  21). The damage still lands for a frame before the give-back (no mapped damage hook). Guard drop verified in the log:
+  bIsBlocking turns off ~0.3 s after every blocked hit (timed or not) with the key still held - the 1.16 game or graph
+  leaves the block states after the hit reaction. While the key stays down, the plugin now sends BlockStart again
+  (sBlockReraiseEvent, every 0.3 s at most, for 1.5 s after the hit; supported: BlockStart is the graph's entry event).

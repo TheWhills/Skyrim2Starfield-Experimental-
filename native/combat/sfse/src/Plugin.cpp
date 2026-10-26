@@ -113,7 +113,8 @@ combat::PlayerState Plugin::State() {
     s.stick_y = stick_y_;
     // Blocking: the melee graph's own variable for a held block (MeleeActions: BlockStart needs iWantBlock = 1); the
     // timed block (parry) window starts when it turns on.
-    s.blocking = Blocking();
+    s.blocking = Blocking(&s.block_state);
+    s.block_key = block_key_;
     s.health = game::PlayerHealth();
     if (!settings_.stamina_value.empty()) {
         float v = game::ActorValue(settings_.stamina_value);
@@ -187,7 +188,7 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
 
 // Blocking: the block key held, or the melee graph's block state (bIsBlocking: the State Variable of the block
 // states in MeleeActions) or its AI switch (iWantBlock). Changes go to the log (first 30) to check which one moves.
-bool Plugin::Blocking() {
+bool Plugin::Blocking(bool* graph_state) {
     bool graph = false, want = false;
     if (auto* player = game::Player()) {
         static const RE::BSFixedString is_blocking("bIsBlocking"), want_block("iWantBlock");
@@ -205,6 +206,7 @@ bool Plugin::Blocking() {
         REX::INFO("block: key {} bIsBlocking {} iWantBlock {}", key, graph, want);
     }
     block_sig_ = sig;
+    if (graph_state) *graph_state = graph;
     return key || graph || want;
 }
 
