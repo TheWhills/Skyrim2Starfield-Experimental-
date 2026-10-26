@@ -66,9 +66,9 @@ struct ClashConfig {
     bool place_opponent = true;       // move the opponent to clash_distance in front of the player, facing them
     bool restrain_opponent = true;    // Actor.SetRestrained on the opponent while locked (no attacks, no walking off)
     bool lock_camera = true;          // lock-on to the opponent for the clash (released after unless it was on before)
-    // The lock-on's view turned this far off the opponent while locked (degrees; yaw + = the camera swings round to the
-    // player's left so both fighters show side-on, pitch + = looks further down). 0 / 0 = straight at them.
-    double camera_yaw = 35.0, camera_pitch = 5.0;
+    // The lock-on's view while locked (degrees): yaw turned this far off the opponent (+ = the camera swings round to
+    // the player's left so both fighters show side-on); pitch held at this tilt (+ = looking down) rather than aimed.
+    double camera_yaw = 35.0, camera_pitch = 8.0;
     bool block_movement = true;       // movement keys / stick and the block key do not reach the game while locked
     bool ghost_player = true;         // the player takes no hits while locked (Actor.SetGhost)
     bool force_on_hit = false;        // testing: every melee hit the player lands on an actor starts a clash

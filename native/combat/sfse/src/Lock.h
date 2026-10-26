@@ -39,9 +39,12 @@ public:
     void Toggle();
     void Switch(int dx, int dy);
     // Lock onto this actor (a weapon clash): true when that changed the lock (it was off or on someone else).
-    // `offset` (radians) turns the view off the target while it holds (a clash's side-on shot); ClearOffset ends it.
-    bool Hold(std::uint32_t id, combat::Angles offset = {});
-    void ClearOffset() { view_offset_ = {}; }
+    // A weapon clash's shot: the view's yaw turned `yaw_offset` (radians) off the opponent, the pitch held at `pitch`
+    // (radians, + down) instead of aimed, from the player's eye. Owner's run 2026-10-26: aiming the pitch from the
+    // camera at an opponent 0.7 away ran away to a top-down view (the orbit camera rises as it tilts down, so the
+    // target sinks further below it). ClearOffset ends it.
+    bool Hold(std::uint32_t id, float yaw_offset = 0.0f, std::optional<float> pitch = std::nullopt);
+    void ClearOffset() { view_offset_ = {}; fixed_pitch_.reset(); }
     void Release(const char* why);
     void Update();                  // once per frame
     bool active() const { return locked_.has_value(); }
@@ -90,6 +93,7 @@ private:
     const RE::ActorValueInfo* health_info_ = nullptr;
     bool health_looked_up_ = false;
     combat::Angles view_offset_{};
+    std::optional<float> fixed_pitch_;
     std::optional<float> last_health_;
     int health_logs_ = 0;
     const void* checked_cam_ = nullptr;

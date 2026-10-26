@@ -177,7 +177,7 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
 }
 
 void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
-    if (!id) view_offset_ = {};
+    if (!id) ClearOffset();
     const bool was = locked_.has_value();
     if (id && !was) {
         camera_last_.clear();                                       // a full dump at the start of each lock
@@ -237,11 +237,12 @@ void Lock::Toggle() {
     SetLocked(id, "key");
 }
 
-bool Lock::Hold(std::uint32_t id, combat::Angles offset) {
+bool Lock::Hold(std::uint32_t id, float yaw_offset, std::optional<float> pitch) {
     auto* player = game::Player();
     if (!player) return false;
-    if (view_offset_.yaw != offset.yaw || view_offset_.pitch != offset.pitch) {
-        view_offset_ = offset;
+    if (view_offset_.yaw != yaw_offset || fixed_pitch_ != pitch) {
+        view_offset_ = {0.0f, yaw_offset};
+        fixed_pitch_ = pitch;
         locked_at_ = game::Now();                                   // ease into the new view
         acquired_ = false;
         ease_from_.reset();
@@ -254,7 +255,7 @@ bool Lock::Hold(std::uint32_t id, combat::Angles offset) {
 }
 
 void Lock::Release(const char* why) {
-    view_offset_ = {};
+    ClearOffset();
     if (!locked_) return;
     core_.release();
     target_ref_.reset();
@@ -396,7 +397,7 @@ void Lock::Update() {
     }
     const combat::Angles look = Look();
     auto eye = V(player->data.location, s_.eye_height);
-    if (s_.aim_from_camera) {
+    if (s_.aim_from_camera && !fixed_pitch_) {
         // The camera root's world position (NiAVObject world.translate, +0xB0 in CommonLibSF's layout). The crosshair
         // is on the camera's forward ray, so aiming from the player's eye leaves it beside the target (owner's run
         // 2026-10-23: "near the NPC, not on it"). Last frame's position; used only when within 10 m of the player.
@@ -446,7 +447,7 @@ void Lock::Update() {
     const auto* it = &target_pos;
     auto want = combat::aim_angles(eye, target_pos);
     want.yaw = combat::wrap_pi(want.yaw + view_offset_.yaw);
-    want.pitch += view_offset_.pitch;
+    if (fixed_pitch_) want.pitch = *fixed_pitch_;
     if (now >= next_report_ && logged_ < s_.log_targets) {      // to check the steering on the first runs
         next_report_ = now + 2.0;
         ++logged_;

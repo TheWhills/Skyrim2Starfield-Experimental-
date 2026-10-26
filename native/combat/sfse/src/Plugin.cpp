@@ -473,9 +473,8 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                         result += game::SetRestrained(c.target, true) ? "; restrained" : "; restrain not dispatched";
                     if (cc.lock_camera) {
                         constexpr float kDeg = 3.14159265f / 180.0f;
-                        clash_took_lock_ = Lock::Get().Hold(
-                            c.target, combat::Angles{static_cast<float>(cc.camera_pitch) * kDeg,
-                                                     static_cast<float>(cc.camera_yaw) * kDeg});
+                        clash_took_lock_ = Lock::Get().Hold(c.target, static_cast<float>(cc.camera_yaw) * kDeg,
+                                                            static_cast<float>(cc.camera_pitch) * kDeg);
                         result += clash_took_lock_ ? "; lock-on taken" : "; lock-on already on it";
                     }
                     break;

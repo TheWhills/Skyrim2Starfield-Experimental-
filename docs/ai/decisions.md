@@ -437,3 +437,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   frame and no effect object was placed in that session; the drop is likely objects left in the save by the earlier
   placement tests (the 1.5 s cleanup never removed them): the placed reference is now also found through the VM
   object's handle, and placements are logged (supported, not verified).
+- 2026-10-26 owner's clash screenshots: the camera ended up straight overhead. Aiming the lock's pitch from the camera
+  at an opponent 0.7 away runs away (the orbit camera rises as it tilts down, so the target sinks further below it;
+  the normal lock at several metres converges). During a clash the pitch is now held at fCameraPitch (8 deg down) and
+  only the yaw is aimed, from the player's eye, turned fCameraYaw off the opponent. FPS: fixed on the owner's side.
