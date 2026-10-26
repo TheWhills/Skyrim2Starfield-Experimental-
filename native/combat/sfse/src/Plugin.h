@@ -22,6 +22,9 @@ struct Settings {
     std::string timed_block_effect_node = "Weapon";
     float timed_block_shake = 0.4f, timed_block_shake_time = 0.15f;
     bool list_effect_forms = true;  // once per session: log the spark-like impact sets / explosions the game has
+    // Preview: each press plays the next impact data set onto the floor and shows its form ID (to find the sparks for
+    // sTimedBlockEffect by eye); the other key goes back one. 0 = off. Key codes as in [Keys].
+    std::uint32_t effect_next_key = 0, effect_prev_key = 0;
 };
 
 class Plugin {
@@ -69,6 +72,7 @@ private:
     std::atomic<double> block_key_at_{-10.0};
     int block_sig_ = 0, block_logs_ = 0;
     bool effects_listed_ = false;
+    int effect_preview_ = -1;
     std::string auto_effect_;
     bool ghost_ = false;
 };

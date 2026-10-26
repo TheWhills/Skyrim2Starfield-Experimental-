@@ -30,7 +30,8 @@ bool Notify(std::string_view text);              // Debug.Notification (Papyrus,
 bool ShakeCamera(float strength, float seconds); // Game.ShakeCamera(None, ...) (Papyrus, queued)
 // ObjectReference.PlayImpactEffect on the player: the ImpactDataSet `editor_id` from `node`, picked toward the actor
 // `toward` (form ID; 0 = straight ahead). Returns what happened, for the log.
-std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward);
+std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down = false);
+const std::vector<std::uint32_t>& ImpactSetIds();   // every impact data set's form ID (after ListSparkForms)
 // Once: logs the impact data sets / explosions whose EditorID looks like sparks (combat::spark_score) and returns the
 // best impact set's EditorID ("" if none).
 std::string ListSparkForms();

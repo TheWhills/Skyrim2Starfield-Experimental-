@@ -391,3 +391,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   perfect block sends sParryEvents; every timed block negates and shows the feedback. The owner's log: timed blocks lost
   no health at all (nothing to give back). Spark search: 275 impact data sets, none with "spark" in the EditorID; the
   scorer now also takes "metal", and all impact-set names are logged to pick one by hand.
+- 2026-10-26 sparks: the game keeps no EditorIDs for impact data sets at run time (owner's log: 275 sets, every
+  GetFormEditorID empty), so they cannot be picked by name. sTimedBlockEffect now takes a form ID, and a preview pair of
+  keys ([ / ], iEffectPrevKey / iEffectNextKey) plays each set onto the floor with its form ID on screen, to find the
+  sparks by eye. The owner's run also verified timed and perfect blocks: 26 of 26 health back each time, StaggerStart
+  only on the perfect ones (0.09-0.10 s).

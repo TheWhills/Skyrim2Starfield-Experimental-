@@ -223,9 +223,23 @@ bool ShakeCamera(float strength, float seconds) {
     return vm->DispatchStaticCall(RE::BSFixedString("Game"), RE::BSFixedString("ShakeCamera"), args, cb, 0);
 }
 
-std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward) {
-    auto* set = RE::TESForm::LookupByEditorID<RE::BGSImpactDataSet>(RE::BSFixedString(std::string(editor_id).c_str()));
-    if (!set) return std::format("'{}': no impact data set by that EditorID", editor_id);
+// An impact data set by EditorID or by form ID ("0x00137372" / "00137372"): Starfield keeps no EditorIDs for these at
+// run time (owner's log 2026-10-26: all 275 sets nameless), so the INI and the preview key use form IDs.
+RE::BGSImpactDataSet* ImpactSet(std::string_view name) {
+    std::string s(name);
+    while (!s.empty() && s.back() == ' ') s.pop_back();
+    if (s.empty()) return nullptr;
+    std::string hex = s.starts_with("0x") || s.starts_with("0X") ? s.substr(2) : s;
+    if (!hex.empty() && hex.size() <= 8 && hex.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos) {
+        if (auto* f = RE::TESForm::LookupByID(static_cast<std::uint32_t>(std::stoul(hex, nullptr, 16))))
+            if (f->GetFormType() == RE::FormType::kIPDS) return static_cast<RE::BGSImpactDataSet*>(f);
+    }
+    return RE::TESForm::LookupByEditorID<RE::BGSImpactDataSet>(RE::BSFixedString(s.c_str()));
+}
+
+std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down) {
+    auto* set = ImpactSet(editor_id);
+    if (!set) return std::format("'{}': no impact data set by that form ID / EditorID", editor_id);
     auto* player = Player();
     if (!player) return "no player";
     // the pick ray: from the node toward the attacker's chest height (owner's NPCs: within 1-3 m), else ahead
@@ -237,10 +251,14 @@ std::string PlayImpactToward(std::string_view editor_id, std::string_view node, 
         const float len = std::sqrt(dx * dx + dy * dy);
         if (len > 1e-3f) { dx /= len; dy /= len; } else { dx = 0.0f; dy = 1.0f; }
     }
+    if (down) { dx = 0.0f; dy = 0.0f; dz = -1.0f; }     // preview: onto the floor under the node
     const bool ok = CallOnPlayer("ObjectReference", "PlayImpactEffect", set, RE::BSFixedString(std::string(node).c_str()),
-                                 dx, dy, dz, 3.0f, false, false);
+                                 dx, dy, dz, 5.0f, false, false);
     return std::format("'{}' {}", editor_id, ok ? "dispatched" : "not dispatched");
 }
+
+std::vector<std::uint32_t> g_impact_ids;
+const std::vector<std::uint32_t>& ImpactSetIds() { return g_impact_ids; }
 
 std::string ListSparkForms() {
     // Form IDs of the master files' first 4M records, looked up one by one (once; the log gives the time). Starfield
@@ -249,6 +267,7 @@ std::string ListSparkForms() {
     REX::INFO("effects: listing spark-like impact sets and explosions (once per session; bListEffectForms = 0 to skip)");
     std::vector<std::pair<int, std::string>> sets;
     std::vector<std::string> explosions, all_sets;
+    g_impact_ids.clear();
     int n_sets = 0, n_expl = 0;
     for (std::uint32_t id = 1; id < 0x00400000u; ++id) {
         auto* f = RE::TESForm::LookupByID(id);
@@ -260,6 +279,7 @@ std::string ListSparkForms() {
         if (type == RE::FormType::kIPDS) {
             ++n_sets;
             all_sets.push_back(name.empty() ? std::format("[{:08X}]", id) : name);
+            g_impact_ids.push_back(id);
             if (int sc = combat::spark_score(name)) sets.emplace_back(sc, name);
         } else {
             ++n_expl;

@@ -80,6 +80,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     to_float("ftimedblockshake", settings_.timed_block_shake);
     to_float("ftimedblockshaketime", settings_.timed_block_shake_time);
     settings_.list_effect_forms = to_int(plugin, "blisteffectforms", 1) != 0;
+    settings_.effect_next_key = static_cast<std::uint32_t>(to_int(plugin, "ieffectnextkey", 0));
+    settings_.effect_prev_key = static_cast<std::uint32_t>(to_int(plugin, "ieffectprevkey", 0));
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -170,6 +172,21 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
     if (down) {
         auto* player = game::Player();
         if (!player || !player->parentCell || menus_.blocked()) return false;
+    }
+    if (down && (key == settings_.effect_next_key || key == settings_.effect_prev_key)) {
+        const auto& ids = game::ImpactSetIds();
+        if (!ids.empty()) {
+            const int n = static_cast<int>(ids.size());
+            effect_preview_ = key == settings_.effect_next_key ? (effect_preview_ + 1) % n : (effect_preview_ + n - 1) % n;
+            const auto id = std::format("{:08X}", ids[effect_preview_]);
+            const auto node = settings_.timed_block_effect_node;
+            SFSE::GetTaskInterface()->AddTask([id, node, i = effect_preview_, n]() {
+                const auto r = game::PlayImpactToward(id, node, 0, true);
+                game::Notify(std::format("Impact {}/{}: 0x{}", i + 1, n, id));
+                REX::INFO("effect preview {}/{}: 0x{} -> {}", i + 1, n, id, r);
+            });
+        }
+        return true;                                   // the preview keys do nothing else
     }
     auto state = State();
     std::vector<combat::Command> cmds;
