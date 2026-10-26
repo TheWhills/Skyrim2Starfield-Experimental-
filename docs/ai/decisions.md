@@ -409,3 +409,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-10-26 timed-block effect 0x00258056 dispatched on every timed block, nothing visible (owner). The Papyrus
   result of PlayImpactEffect is now logged and, when false (pick ray hit nothing / node not found), the next aim is
   tried: toward the attacker from the node, down toward the attacker, straight down from the root.
+- 2026-10-26 0x00258056 (WPNMeleeBlockBladeSmallImpactSet): PlayImpactEffect returned false for every aim, even
+  straight down onto the floor (owner's log) - likely no entries for those materials. sTimedBlockEffect is now a list;
+  each set is tried with each aim until one returns true (logged). Default: PHYWeaponMetalBlade1Hand, WPNMeleeImpact
+  BladeMedium, PHYMetalGenericMedium, then the block set.

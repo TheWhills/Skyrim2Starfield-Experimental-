@@ -308,7 +308,8 @@ bool DeferKill(bool on) {
                     [](RE::BSScrapArray<RE::BSScript::Variable>& out) { out.clear(); });
 }
 
-std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down) {
+std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down,
+                             const std::vector<std::string>& extra_sets) {
     auto* set = ImpactSet(editor_id);
     if (!set) {
         std::string hex(editor_id);
@@ -344,10 +345,23 @@ std::string PlayImpactToward(std::string_view editor_id, std::string_view node, 
         aims->push_back({std::string(node), dx * s, dy * s, -0.8f, 10.0f, "down toward the attacker"});
     }
     aims->push_back({std::string(), 0.0f, 0.0f, -1.0f, 10.0f, "straight down from the root"});
+    // Every listed set is tried with every aim until one plays (owner's run 2026-10-26: the blade-block set returned
+    // false for every aim, even straight down onto a metal floor - it likely holds only weapon-vs-weapon entries).
+    auto sets = std::make_shared<std::vector<std::pair<RE::BGSImpactDataSet*, std::string>>>();
+    sets->emplace_back(set, std::string(editor_id));
+    for (const auto& extra : extra_sets)
+        if (auto* s2 = ImpactSet(extra)) sets->emplace_back(s2, extra);
     auto try_aim = std::make_shared<std::function<void(std::size_t)>>();
-    *try_aim = [set, aims, try_aim, id = std::string(editor_id)](std::size_t i) {
-        if (i >= aims->size()) return;
-        const auto a = (*aims)[i];
+    const std::size_t n_aims = aims->size();
+    *try_aim = [sets, aims, try_aim, n_aims](std::size_t k) {
+        if (k >= n_aims * sets->size()) {
+            REX::INFO("effect: none of the {} impact sets played with any aim", sets->size());
+            return;
+        }
+        auto* set = (*sets)[k / n_aims].first;
+        const auto id = (*sets)[k / n_aims].second;
+        const std::size_t i = k;
+        const auto a = (*aims)[k % n_aims];
         Dispatch("ObjectReference", "PlayImpactEffect",
                  [set, a](RE::BSScrapArray<RE::BSScript::Variable>& out) {
                      out.resize(8);
@@ -363,7 +377,7 @@ std::string PlayImpactToward(std::string_view editor_id, std::string_view node, 
                  [try_aim, a, i, id](const RE::BSScript::Variable& v) {
                      const bool played = v.is<bool>() && RE::BSScript::get<bool>(v);
                      static std::atomic<int> logged{0};
-                     if (logged.fetch_add(1) < 40)
+                     if (logged.fetch_add(1) < 150)
                          REX::INFO("effect '{}' {} (node '{}'): {}", id, a.what, a.node,
                                    played ? "played" : (v.is<bool>() ? "returned false" : "no bool result"));
                      if (!played) (*try_aim)(i + 1);

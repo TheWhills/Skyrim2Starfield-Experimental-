@@ -363,8 +363,25 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 case K::Feedback: {
                     std::string effect = settings_.timed_block_effect.empty() ? auto_effect_ : settings_.timed_block_effect;
                     result = c.name.empty() ? "no message" : (game::Notify(c.name) ? "message" : "message not dispatched");
-                    if (!effect.empty())
-                        result += "; effect " + game::PlayImpactToward(effect, settings_.timed_block_effect_node, c.target);
+                    if (!effect.empty()) {
+                        // a comma-separated list: the first that plays wins (each tried with every aim)
+                        std::vector<std::string> list;
+                        std::size_t start = 0;
+                        while (start <= effect.size()) {
+                            auto end = effect.find(',', start);
+                            if (end == std::string::npos) end = effect.size();
+                            std::string one = effect.substr(start, end - start);
+                            while (!one.empty() && one.front() == ' ') one.erase(one.begin());
+                            while (!one.empty() && one.back() == ' ') one.pop_back();
+                            if (!one.empty()) list.push_back(one);
+                            start = end + 1;
+                        }
+                        if (!list.empty()) {
+                            const std::vector<std::string> rest(list.begin() + 1, list.end());
+                            result += "; effect " + game::PlayImpactToward(list[0], settings_.timed_block_effect_node,
+                                                                           c.target, false, rest);
+                        }
+                    }
                     else
                         result += "; no effect (none named, no spark set found)";
                     if (settings_.timed_block_shake > 0.0f)

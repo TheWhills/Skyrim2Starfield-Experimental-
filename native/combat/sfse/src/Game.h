@@ -30,7 +30,8 @@ bool Notify(std::string_view text);              // Debug.Notification (Papyrus,
 bool ShakeCamera(float strength, float seconds); // Game.ShakeCamera(None, ...) (Papyrus, queued)
 // ObjectReference.PlayImpactEffect on the player: the ImpactDataSet `editor_id` from `node`, picked toward the actor
 // `toward` (form ID; 0 = straight ahead). Returns what happened, for the log.
-std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down = false);
+std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down = false,
+                             const std::vector<std::string>& extra_sets = {});
 const std::vector<std::uint32_t>& ImpactSetIds();
 void CleanupEffects();                           // deletes placed effect objects whose time is up (each tick)
 bool DeferKill(bool on);                         // Actor.StartDeferredKill / EndDeferredKill on the player (Papyrus)   // every impact data set's form ID (after ListSparkForms)
