@@ -177,6 +177,7 @@ std::vector<combat::Candidate> Lock::Gather(combat::Angles look, combat::Vec3 ey
 }
 
 void Lock::SetLocked(std::optional<std::uint32_t> id, const char* why) {
+    if (!id) view_offset_ = {};
     const bool was = locked_.has_value();
     if (id && !was) {
         camera_last_.clear();                                       // a full dump at the start of each lock
@@ -236,9 +237,16 @@ void Lock::Toggle() {
     SetLocked(id, "key");
 }
 
-bool Lock::Hold(std::uint32_t id) {
+bool Lock::Hold(std::uint32_t id, combat::Angles offset) {
     auto* player = game::Player();
-    if (!player || locked_ == id) return false;
+    if (!player) return false;
+    if (view_offset_.yaw != offset.yaw || view_offset_.pitch != offset.pitch) {
+        view_offset_ = offset;
+        locked_at_ = game::Now();                                   // ease into the new view
+        acquired_ = false;
+        ease_from_.reset();
+    }
+    if (locked_ == id) return false;
     Gather(Look(), V(player->data.location, s_.eye_height));     // the actors' handles (validated each 0.25 s)
     core_.set_target(id);
     SetLocked(id, "weapon clash");
@@ -246,6 +254,7 @@ bool Lock::Hold(std::uint32_t id) {
 }
 
 void Lock::Release(const char* why) {
+    view_offset_ = {};
     if (!locked_) return;
     core_.release();
     target_ref_.reset();
@@ -436,6 +445,8 @@ void Lock::Update() {
     target_pos = V(target_ref_->data.location, s_.target_height);
     const auto* it = &target_pos;
     auto want = combat::aim_angles(eye, target_pos);
+    want.yaw = combat::wrap_pi(want.yaw + view_offset_.yaw);
+    want.pitch += view_offset_.pitch;
     if (now >= next_report_ && logged_ < s_.log_targets) {      // to check the steering on the first runs
         next_report_ = now + 2.0;
         ++logged_;

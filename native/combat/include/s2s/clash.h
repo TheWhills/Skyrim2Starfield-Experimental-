@@ -31,7 +31,10 @@ struct ClashConfig {
     double presses_per_second[3] = {3.0, 4.0, 5.0};   // the opponent's push, as the press rate that holds the meter still
     bool hold_to_mash = false;         // a held attack button counts as presses at the difficulty's rate
     int timeout_resolution = 0;        // 0: the timer running out is a draw; 1: the side the meter favours wins
-    double clash_distance = 1.0;       // game units between the two while locked (the opponent is placed there)
+    // Seconds at the start before the opponent pushes (the guard comes up, the camera swings round, the message
+    // shows): owner's run 2026-10-26 lost every clash in 1.4 s before any press could land.
+    double grace_time = 1.0;
+    double clash_distance = 0.7;       // owner: 1.0 looked a little far       // game units between the two while locked (the opponent is placed there)
     // Graph events, tried in order until the actor's graph takes one (comma-separated). Empty = none.
     // Sent once to both at the start, before the guard: an attack still running keeps the graph out of its block
     // states (Cinematic Clash interrupts it the same way in Skyrim; Starfield names: the plugin's cancel event).
@@ -63,6 +66,9 @@ struct ClashConfig {
     bool place_opponent = true;       // move the opponent to clash_distance in front of the player, facing them
     bool restrain_opponent = true;    // Actor.SetRestrained on the opponent while locked (no attacks, no walking off)
     bool lock_camera = true;          // lock-on to the opponent for the clash (released after unless it was on before)
+    // The lock-on's view turned this far off the opponent while locked (degrees; yaw + = the camera swings round to the
+    // player's left so both fighters show side-on, pitch + = looks further down). 0 / 0 = straight at them.
+    double camera_yaw = 35.0, camera_pitch = 5.0;
     bool block_movement = true;       // movement keys / stick and the block key do not reach the game while locked
     bool ghost_player = true;         // the player takes no hits while locked (Actor.SetGhost)
     bool force_on_hit = false;        // testing: every melee hit the player lands on an actor starts a clash
@@ -96,6 +102,7 @@ public:
     bool active() const { return active_; }
     std::uint32_t opponent() const { return opponent_; }
     double meter() const { return meter_; }
+    int presses() const { return presses_; }   // attack presses counted in the running / last clash
     Outcome last_outcome() const { return outcome_; }
     // the opponent's push per second
     double push_rate() const;
@@ -109,7 +116,7 @@ private:
     std::uint32_t opponent_ = 0;
     double meter_ = 0.5, started_ = 0.0, last_tick_ = 0.0, ended_ = -1e9;
     double next_guard_ = 0.0, next_spark_ = 0.0;
-    int zone_ = 0;     // -1 losing (meter < 0.25), 0 middle, 1 winning (> 0.75): messages on entering a zone
+    int zone_ = 0, presses_ = 0;     // -1 losing (meter < 0.25), 0 middle, 1 winning (> 0.75): messages on entering a zone
     Outcome outcome_ = Outcome::None;
 };
 

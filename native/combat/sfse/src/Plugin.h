@@ -87,7 +87,8 @@ private:
     combat::Clash clash_;
     std::atomic_bool clash_active_{false};
     bool clash_block_movement_ = true;
-    bool clash_took_lock_ = false;           // the clash turned the lock-on on (released when it ends)
+    bool clash_took_lock_ = false;
+    int clash_presses_logged_ = 0;           // the clash turned the lock-on on (released when it ends)
     std::uint32_t attack_key_ = 256, power_key_ = 0;
     std::array<std::uint32_t, 4> move_keys_{};
 };

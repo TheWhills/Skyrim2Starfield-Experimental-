@@ -56,6 +56,9 @@ ClashConfig parse_clash_config(std::string_view ini, std::vector<std::string>* p
             if (ok) c.timeout_resolution = static_cast<int>(d);
         }
         else if (k == "fclashdistance") ok = read_double(v, c.clash_distance);
+        else if (k == "fgracetime") ok = read_double(v, c.grace_time);
+        else if (k == "fcamerayaw") ok = read_double(v, c.camera_yaw);
+        else if (k == "fcamerapitch") ok = read_double(v, c.camera_pitch);
         else if (k == "sguardevents") c.guard_events = v;
         else if (k == "sinterruptevents") c.interrupt_events = v;
         else if (k == "sstaggervariable") c.stagger_variable = v;
@@ -131,6 +134,7 @@ std::vector<Command> Clash::start(std::uint32_t opponent, double t, double roll)
     started_ = last_tick_ = t;
     next_spark_ = t;
     zone_ = 0;
+    presses_ = 0;
     outcome_ = Outcome::None;
     Command begin{Command::Kind::ClashBegin};
     begin.target = opponent;
@@ -167,6 +171,7 @@ std::vector<Command> Clash::on_attack(bool down, double t) {
         return out;
     }
     if (!down) return out;
+    ++presses_;
     out = tick(t);                               // the opponent's push up to now (may end the clash)
     if (!active_) return out;
     if (cfg_.shake_on_press && cfg_.shake_strength > 0.0f) {
@@ -186,7 +191,9 @@ std::vector<Command> Clash::on_attack(bool down, double t) {
 std::vector<Command> Clash::tick(double t) {
     std::vector<Command> out;
     if (!active_) return out;
-    const double dt = std::max(0.0, t - last_tick_);
+    // the push starts after the grace time
+    const double from = std::max(last_tick_, started_ + cfg_.grace_time);
+    const double dt = std::max(0.0, t - from);
     last_tick_ = t;
     meter_ -= push_rate() * dt;
     if (cfg_.hold_to_mash && held_) meter_ += push_rate() * dt;     // a hold exactly matches an equal opponent

@@ -429,3 +429,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   on them, movement / block / attack kept from the game's controls, the player ghosted, ground sparks every 0.25 s,
   messages instead of the on-screen meter. Not yet: HUD meter, camera presets, sounds, blade-distance solve / tilt,
   skill influence, rumble, OAR-style conditions.
+- 2026-10-26 first clash run (owner's log): clashes start (perfect block and forced), opponent placed / restrained,
+  guard taken, lock-on held; every clash lost in ~1.4 s with no attack press logged, the camera only looked at the
+  opponent, the gap looked a little far. Now: fGraceTime 1 s before the opponent pushes, fClashDistance 0.7, the lock
+  view turned fCameraYaw 35 / fCameraPitch 5 deg off the opponent for a side-on shot (eased in), attack also by user
+  event PrimaryAttack, every key during a clash logged with the meter. FPS: the plugin's own time stayed ~10 us per
+  frame and no effect object was placed in that session; the drop is likely objects left in the save by the earlier
+  placement tests (the 1.5 s cleanup never removed them): the placed reference is now also found through the VM
+  object's handle, and placements are logged (supported, not verified).

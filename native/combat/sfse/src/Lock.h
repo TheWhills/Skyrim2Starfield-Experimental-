@@ -39,7 +39,9 @@ public:
     void Toggle();
     void Switch(int dx, int dy);
     // Lock onto this actor (a weapon clash): true when that changed the lock (it was off or on someone else).
-    bool Hold(std::uint32_t id);
+    // `offset` (radians) turns the view off the target while it holds (a clash's side-on shot); ClearOffset ends it.
+    bool Hold(std::uint32_t id, combat::Angles offset = {});
+    void ClearOffset() { view_offset_ = {}; }
     void Release(const char* why);
     void Update();                  // once per frame
     bool active() const { return locked_.has_value(); }
@@ -87,6 +89,7 @@ private:
     int ease_traces_ = 0;
     const RE::ActorValueInfo* health_info_ = nullptr;
     bool health_looked_up_ = false;
+    combat::Angles view_offset_{};
     std::optional<float> last_health_;
     int health_logs_ = 0;
     const void* checked_cam_ = nullptr;

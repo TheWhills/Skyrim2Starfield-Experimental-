@@ -41,7 +41,7 @@ static void start_and_guard() {
     CHECK(c.opponent() == 0x1234u);
     CHECK(std::abs(c.meter() - 0.5) < 1e-9);
     const auto* begin = first(out, Command::Kind::ClashBegin);
-    CHECK(begin && begin->target == 0x1234u && std::abs(begin->amount - 1.0f) < 1e-6f);
+    CHECK(begin && begin->target == 0x1234u && std::abs(begin->amount - 0.7f) < 1e-6f);
     const auto* var = first(out, Command::Kind::ActorVariable);
     CHECK(var && var->variable.name == "iWantBlock" && var->variable.value == 1.0);
     CHECK(has_events_for(out, 0x1234));                     // the opponent's interrupt + guard
@@ -80,7 +80,9 @@ static void win_by_mashing() {
 }
 
 static void lose_when_idle() {
-    Clash c;
+    ClashConfig no_grace;
+    no_grace.grace_time = 0.0;
+    Clash c(no_grace);
     c.start(0x1234, 0.0);
     std::vector<Command> last;
     double t = 0.0;
@@ -178,7 +180,7 @@ static void sparks_and_guard_repeat() {
     double t = 0.0;
     for (int i = 0; i < 60; ++i) {               // one second, mashing enough to stay in
         t += 1.0 / 60.0;
-        auto out = (i % 10 == 0) ? c.on_attack(true, t) : c.tick(t);
+        auto out = (i % 15 == 0) ? c.on_attack(true, t) : c.tick(t);
         sparks += count(out, Command::Kind::Spark);
         guards += count(out, Command::Kind::SendEvent);
     }
@@ -253,7 +255,27 @@ static void sample_ini() {
 }
 #endif
 
+static void grace_time() {
+    Clash c;                                     // 1 s grace by default
+    c.start(0x1234, 0.0);
+    double t = 0.0;
+    while (c.active() && t < 10.0) {
+        t += 1.0 / 60.0;
+        c.tick(t);
+        if (t < 0.99) CHECK(c.meter() == 0.5);
+    }
+    CHECK(c.last_outcome() == Clash::Outcome::Lose);
+    CHECK(t > 2.3 && t < 2.5);                   // 1 s grace + 1.39 s
+    c = Clash();
+    c.start(0x1234, 0.0);
+    c.on_attack(true, 0.5);
+    c.on_attack(true, 0.6);
+    CHECK(c.presses() == 2);
+    CHECK(std::abs(c.meter() - 0.68) < 1e-9);
+}
+
 int main() {
+    grace_time();
     start_and_guard();
     win_by_mashing();
     lose_when_idle();

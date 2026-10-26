@@ -207,14 +207,23 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
     }
     if (clash_active_) {
         // the attack key pushes the clash meter; the other keys the clash holds back do nothing else meanwhile
-        if (key == attack_key_ || (power_key_ && key == power_key_)) {
+        if (key == attack_key_ || (power_key_ && key == power_key_) || user_event == "PrimaryAttack") {
             std::vector<combat::Command> cmds;
             {
                 std::scoped_lock l(lock_);
                 cmds = clash_.on_attack(down, game::Now());
+                if (down && clash_presses_logged_ < 80) {
+                    ++clash_presses_logged_;
+                    REX::INFO("weapon clash: attack press {} (key {}), meter {:.2f}", clash_.presses(), key,
+                              clash_.meter());
+                }
             }
             Run(std::move(cmds));
             return true;
+        }
+        if (down && clash_presses_logged_ < 80) {
+            ++clash_presses_logged_;
+            REX::INFO("weapon clash: key {} '{}' pressed (not the attack key {})", key, user_event, attack_key_);
         }
         if (ClashHidesKey(key, user_event)) return true;
     }
@@ -253,7 +262,7 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
 
 bool Plugin::ClashHidesKey(std::uint32_t key, std::string_view user_event) const {
     if (!clash_active_ || key == 0) return false;
-    if (key == attack_key_ || (power_key_ && key == power_key_)) return true;
+    if (key == attack_key_ || (power_key_ && key == power_key_) || user_event == "PrimaryAttack") return true;
     if (!clash_block_movement_) return false;
     if (user_event == "SecondaryAttack" || key == combat::key_from_mouse(1)) return true;
     return std::find(move_keys_.begin(), move_keys_.end(), key) != move_keys_.end();
@@ -463,7 +472,10 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                     if (cc.restrain_opponent)
                         result += game::SetRestrained(c.target, true) ? "; restrained" : "; restrain not dispatched";
                     if (cc.lock_camera) {
-                        clash_took_lock_ = Lock::Get().Hold(c.target);
+                        constexpr float kDeg = 3.14159265f / 180.0f;
+                        clash_took_lock_ = Lock::Get().Hold(
+                            c.target, combat::Angles{static_cast<float>(cc.camera_pitch) * kDeg,
+                                                     static_cast<float>(cc.camera_yaw) * kDeg});
                         result += clash_took_lock_ ? "; lock-on taken" : "; lock-on already on it";
                     }
                     break;
@@ -471,6 +483,8 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 case K::ClashEnd: {
                     const auto& cc = clash_.config();
                     clash_active_ = false;
+                    result = std::format("{} attack presses, meter {:.2f}; ", clash_.presses(), clash_.meter());
+                    Lock::Get().ClearOffset();
                     if (cc.restrain_opponent)
                         result += game::SetRestrained(c.target, false) ? "released" : "release not dispatched";
                     if (clash_took_lock_) {

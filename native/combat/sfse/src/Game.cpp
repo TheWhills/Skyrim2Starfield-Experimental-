@@ -270,7 +270,22 @@ std::string PlaceEffectObject(RE::TESForm* form, std::string_view node) {
                                  RE::BSScript::PackVariable(out[6], false);
                              },
                              [](const RE::BSScript::Variable& v) {
-                                 auto* ref = RE::BSScript::UnpackVariable<RE::TESObjectREFR>(v);
+                                 // The placed reference, to delete later. Owner's run 2026-10-26: the beer cans stayed,
+                                 // so UnpackVariable likely gave nothing; the VM object's handle carries the FormID in
+                                 // its low 32 bits (as GetEquippedWeapon's result does), tried when it does not.
+                                 RE::TESObjectREFR* ref = RE::BSScript::UnpackVariable<RE::TESObjectREFR>(v);
+                                 std::uint32_t id = ref ? ref->GetFormID() : 0;
+                                 if (!ref && v.is<RE::BSScript::Object>())
+                                     if (auto obj = RE::BSScript::get<RE::BSScript::Object>(v)) {
+                                         id = static_cast<std::uint32_t>(obj->GetHandle() & 0xFFFFFFFFull);
+                                         ref = id ? RE::TESForm::LookupByID<RE::TESObjectREFR>(id) : nullptr;
+                                     }
+                                 static int logged = 0;
+                                 if (logged < 10) {
+                                     ++logged;
+                                     REX::INFO("effect object placed: {} ({:08X})", ref ? "will be deleted in 1.5 s"
+                                                                                      : "reference not found, cannot delete", id);
+                                 }
                                  if (!ref) return;
                                  std::scoped_lock l(g_spawned_lock);
                                  g_spawned.emplace_back(RE::NiPointer<RE::TESObjectREFR>(ref), Now() + 1.5);
