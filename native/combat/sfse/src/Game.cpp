@@ -239,7 +239,16 @@ RE::BGSImpactDataSet* ImpactSet(std::string_view name) {
 
 std::string PlayImpactToward(std::string_view editor_id, std::string_view node, std::uint32_t toward, bool down) {
     auto* set = ImpactSet(editor_id);
-    if (!set) return std::format("'{}': no impact data set by that form ID / EditorID", editor_id);
+    if (!set) {
+        std::string hex(editor_id);
+        if (hex.starts_with("0x") || hex.starts_with("0X")) hex = hex.substr(2);
+        RE::TESForm* f = nullptr;
+        if (!hex.empty() && hex.size() <= 8 && hex.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos)
+            f = RE::TESForm::LookupByID(static_cast<std::uint32_t>(std::stoul(hex, nullptr, 16)));
+        return f ? std::format("'{}' is a form of type {} (not an impact data set, IPDS = {})", editor_id,
+                               static_cast<int>(f->GetFormType()), static_cast<int>(RE::FormType::kIPDS))
+                 : std::format("'{}': no impact data set by that form ID / EditorID (no form with that ID)", editor_id);
+    }
     auto* player = Player();
     if (!player) return "no player";
     // the pick ray: from the node toward the attacker's chest height (owner's NPCs: within 1-3 m), else ahead
