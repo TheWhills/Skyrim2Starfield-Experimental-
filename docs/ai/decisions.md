@@ -384,3 +384,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   3 m) - supported, not verified (FO4's signature). Which ImpactDataSet: sTimedBlockEffect, or the best spark-named set
   found once per session by looking up form IDs 1..0x3FFFFF (TESForm::LookupByID, GetFormEditorID; both logged with
   the time taken, bListEffectForms = 0 skips it). Also Game.ShakeCamera(None, 0.4, 0.15) and the notification.
+- 2026-10-25 owner: on a timed block the attacker recoils, but Skyrim's timed block "zeros out damage and creates an
+  effect". Vanilla Skyrim has no timed block; it comes from mods - Valhalla Combat (dTry, Nexus 64741: timed block
+  ~0.3 s after raising the guard negates melee damage and deals stun damage; perfect block ~0.15 s also restores stamina
+  and staggers / recoils the attacker; spark effects credited). Split the same way: fPerfectBlockWindow 0.12 s - only a
+  perfect block sends sParryEvents; every timed block negates and shows the feedback. The owner's log: timed blocks lost
+  no health at all (nothing to give back). Spark search: 275 impact data sets, none with "spark" in the EditorID; the
+  scorer now also takes "metal", and all impact-set names are logged to pick one by hand.

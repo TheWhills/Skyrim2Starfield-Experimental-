@@ -361,7 +361,7 @@ static void hits() {
         p.tick(10.00, st);
         st.blocking = true;
         p.tick(10.05, st);                                                 // block goes up at 10.05
-        auto r = p.on_hit(HitKind::Normal, true, 10.20, 0x0025421A);
+        auto r = p.on_hit(HitKind::Normal, true, 10.15, 0x0025421A);      // 0.10 s after the press: perfect
         bool stagger = false, restore = false, recoil = false, feedback = false;
         for (const auto& c : r) {
             feedback |= c.kind == Command::Kind::Feedback && c.name == "Timed block" && c.target == 0x0025421A;
@@ -371,10 +371,10 @@ static void hits() {
         }
         CHECK(stagger && !restore && !recoil && feedback);                 // health comes back on the next tick
         st.health = 170.0f;                                                // the damage lands after the event
-        r = p.tick(10.22, st);
+        r = p.tick(10.17, st);
         CHECK(r.size() == 2 && r[0].kind == Command::Kind::RestoreHealth && std::fabs(r[0].amount - 30.0f) < 1e-3f);
         st.health = 200.0f;
-        CHECK(p.tick(10.24, st).empty());                                  // once
+        CHECK(p.tick(10.19, st).empty());                                  // once
         // a second hit on the same block press is a plain block hit
         r = p.on_hit(HitKind::Power, true, 10.25, 0x0025421A);
         CHECK(r.size() == 1 && r[0].kind == Command::Kind::SetVariable && r[0].variable.value == 1.0);
@@ -395,8 +395,23 @@ static void hits() {
         p.tick(11.6, st);
         st.blocking = true;
         p.tick(11.7, st);
+        {   // timed but not perfect (0.2 s): no stagger, still the negation and the feedback
+            Controller q2;
+            PlayerState z;
+            z.health = 50.0f;
+            q2.tick(1.0, z);
+            z.blocking = true;
+            q2.tick(1.1, z);
+            auto rr = q2.on_hit(HitKind::Normal, true, 1.3, 0x7);
+            bool stag = false, fb = false;
+            for (const auto& c : rr) {
+                stag |= c.kind == Command::Kind::ActorEvents;
+                fb |= c.kind == Command::Kind::Feedback;
+            }
+            CHECK(!stag && fb && rr.back().name.starts_with("timed block"));
+        }
         r = p.on_hit(HitKind::Normal, true, 11.8, 0);                      // attacker unknown: no stagger, still a parry
-        CHECK(!r.empty() && r.back().kind == Command::Kind::Log && r.back().name.starts_with("timed block"));
+        CHECK(!r.empty() && r.back().kind == Command::Kind::Log && r.back().name.find("timed block") != std::string::npos);
         for (const auto& c : r) CHECK(c.kind != Command::Kind::ActorEvents);
         // no damage after a timed block: nothing to give back
         CHECK(p.tick(11.85, st).empty());
@@ -456,9 +471,10 @@ static void class_names() {
     CHECK(is_combat_reaction_event("BlockHitStart", "") && is_combat_reaction_event("SoundPlay", "WPNHandHandBlockUp3rd"));
     CHECK(is_combat_reaction_event("staggerStart", "") && is_combat_reaction_event("recoilLargeStart", ""));
     CHECK(!is_combat_reaction_event("FootLeft", "") && !is_combat_reaction_event("SoundPlay", "FST_Foley_Walk"));
-    CHECK(spark_score("ImpactMetalHeavy") == 0);
+    CHECK(spark_score("ImpactConcreteHeavy") == 0);
     CHECK(spark_score("WPNImpactMeleeBladeVsMetalSparks") > spark_score("SparksElectricLarge"));
-    CHECK(spark_score("sparks") == 1);
+    CHECK(spark_score("MeleeBladeMetal") > spark_score("ImpactMetalHeavy") && spark_score("ImpactMetalHeavy") > 0);
+    CHECK(spark_score("sparks") == 3);
     {   // the owner's log: an NPC's hit on the player, slot by slot
         alignas(8) unsigned char ev[0x120] = {};
         const std::uint32_t npc = 0x00A01D12, player = 0x00100014;

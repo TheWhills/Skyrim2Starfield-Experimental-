@@ -248,7 +248,7 @@ std::string ListSparkForms() {
     const auto t0 = std::chrono::steady_clock::now();
     REX::INFO("effects: listing spark-like impact sets and explosions (once per session; bListEffectForms = 0 to skip)");
     std::vector<std::pair<int, std::string>> sets;
-    std::vector<std::string> explosions;
+    std::vector<std::string> explosions, all_sets;
     int n_sets = 0, n_expl = 0;
     for (std::uint32_t id = 1; id < 0x00400000u; ++id) {
         auto* f = RE::TESForm::LookupByID(id);
@@ -259,6 +259,7 @@ std::string ListSparkForms() {
         const std::string name = ed ? ed : "";
         if (type == RE::FormType::kIPDS) {
             ++n_sets;
+            all_sets.push_back(name.empty() ? std::format("[{:08X}]", id) : name);
             if (int sc = combat::spark_score(name)) sets.emplace_back(sc, name);
         } else {
             ++n_expl;
@@ -274,6 +275,12 @@ std::string ListSparkForms() {
     REX::INFO("effects: {} impact data sets ({} with 'spark':{}), {} explosions (spark-like:{}) in {:.0f} ms", n_sets,
               sets.size(), list.empty() ? std::string(" none") : list, n_expl, elist.empty() ? std::string(" none") : elist,
               ms);
+    // every impact data set by name (or form ID when it has no EditorID), 40 per line: to pick sTimedBlockEffect by hand
+    for (std::size_t i = 0; i < all_sets.size(); i += 40) {
+        std::string line;
+        for (std::size_t j = i; j < all_sets.size() && j < i + 40; ++j) line += " " + all_sets[j];
+        REX::INFO("effects: impact data sets {}-{}:{}", i + 1, std::min(all_sets.size(), i + 40), line);
+    }
     if (!sets.empty()) REX::INFO("effects: timed-block sparks will use '{}' (sTimedBlockEffect names another)", sets[0].second);
     return sets.empty() ? std::string() : sets[0].second;
 }

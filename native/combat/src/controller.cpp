@@ -242,9 +242,10 @@ HitHandles hit_handles(const void* event) {
 
 int spark_score(std::string_view id) {
     const std::string s = lower(id);
-    if (s.find("spark") == std::string::npos) return 0;
-    int score = 1;
-    for (const char* w : {"metal", "melee", "blade", "block", "weapon", "sword"})
+    const bool spark = s.find("spark") != std::string::npos, metal = s.find("metal") != std::string::npos;
+    if (!spark && !metal) return 0;
+    int score = spark ? 3 : 1;
+    for (const char* w : {"melee", "blade", "block", "weapon", "sword", "metal"})
         if (s.find(w) != std::string::npos) score += 2;
     for (const char* w : {"fire", "electric", "laser", "energy", "large", "explosion"})
         if (s.find(w) != std::string::npos) score -= 1;
@@ -475,6 +476,7 @@ ControllerConfig parse_config(std::string_view ini, std::vector<std::string>* pr
         else if (k == "sblockreraiseevent") c.block_reraise_event = v;
         else if (k == "fblockreraisewindow") ok = read_double(v, c.block_reraise_window);
         else if (k == "stimedblockmessage") c.timed_block_message = v;
+        else if (k == "fperfectblockwindow") ok = read_double(v, c.perfect_block_window);
         else if (k == "sparryevents") c.parry_events = v;
         else if (k == "bparryrestorehealth") {
             ok = v == "0" || v == "1";
@@ -760,7 +762,9 @@ std::vector<Command> Controller::on_hit(HitKind kind, bool blocking, double t, s
             giveback_until_ = t + 0.3;
             text += std::format(", health kept at {:.0f}", before);
         }
-        if (attacker != 0 && !cfg_.parry_events.empty()) {
+        const bool perfect = cfg_.perfect_block_window <= 0.0 || since_block <= cfg_.perfect_block_window;
+        if (perfect) text = "perfect " + text;
+        if (perfect && attacker != 0 && !cfg_.parry_events.empty()) {
             Command c{Command::Kind::ActorEvents, cfg_.parry_events};
             c.target = attacker;
             out.push_back(c);

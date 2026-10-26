@@ -102,6 +102,10 @@ struct ControllerConfig {
     bool parry_restore_health = true;
     std::string parry_events = "StaggerStart, recoilStart, recoilLargeStart";
     std::string timed_block_message = "Timed block";
+    // Valhalla Combat's split (its defaults: timed 0.3 s, perfect 0.15 s): a timed block negates the damage and shows
+    // the feedback; only a perfect block (pressed within perfect_block_window seconds) also sends parry_events to the
+    // attacker (owner: the attacker recoiling on every timed block was not what Skyrim did). 0 = every timed block.
+    double perfect_block_window = 0.12;
     // Any other hit taken while blocking: this share of its damage is given back (Skyrim's block takes most of a hit;
     // the game's own block reduction on 1.16 is not known). 0 = the game's damage as is.
     double block_reduction = 0.6;
@@ -198,7 +202,8 @@ std::optional<RttiVtable> rtti_base_vtable(const std::vector<std::uintptr_t>& vt
 bool is_combat_reaction_event(std::string_view tag, std::string_view payload);
 
 // Spark-like effect forms by EditorID (impact data sets for the timed-block sparks): a score for picking one when the
-// INI names none - 0 = not a candidate; "spark" is required, metal / melee / blade / block / weapon add to it.
+// INI names none - 0 = not a candidate; "spark" or "metal" is required (none of the owner's 275 sets had "spark"),
+// melee / blade / block / weapon / sword / metal add to it.
 int spark_score(std::string_view editor_id);
 
 // TESHitEvent on Starfield 1.16 (owner's log 2026-10-25, verified both ways: an NPC hitting the player and the player
