@@ -122,7 +122,11 @@ void Clash::guard(std::vector<Command>& out, double t) {
         out.push_back(actor_events(opponent_, cfg_.guard_events));
         out.emplace_back(Command::Kind::SendEvent, cfg_.guard_events.substr(0, cfg_.guard_events.find(',')));
     }
-    next_guard_ = t + cfg_.guard_interval;
+    // During the grace time the guard is sent more often, with the attack interrupt to the opponent first: the
+    // opponent's own hit reaction (recoil from the blocked / landed hit) can start just after the clash and keep the
+    // block out (owner's run 2026-10-26: the opponent recoiled before raising the guard).
+    const bool early = t - started_ < cfg_.grace_time;
+    next_guard_ = t + (early ? std::min(cfg_.guard_interval, 0.2) : cfg_.guard_interval);
 }
 
 std::vector<Command> Clash::start(std::uint32_t opponent, double t, double roll) {
@@ -212,7 +216,11 @@ std::vector<Command> Clash::tick(double t) {
         if (cfg_.messages && zone == -1 && !cfg_.losing_message.empty()) out.push_back(notify(cfg_.losing_message));
         zone_ = zone;
     }
-    if (t >= next_guard_) guard(out, t);
+    if (t >= next_guard_) {
+        if (t - started_ < cfg_.grace_time && !cfg_.interrupt_events.empty())
+            out.push_back(actor_events(opponent_, cfg_.interrupt_events));
+        guard(out, t);
+    }
     if (cfg_.spark_interval > 0.0 && t >= next_spark_) {
         Command s{Command::Kind::Spark};
         s.target = opponent_;

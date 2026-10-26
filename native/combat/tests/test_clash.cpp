@@ -174,7 +174,10 @@ static void abort_releases() {
 }
 
 static void sparks_and_guard_repeat() {
-    Clash c;
+    ClashConfig sc;
+    sc.spark_interval = 0.25;
+    sc.grace_time = 0.0;
+    Clash c(sc);
     c.start(0x1234, 0.0);
     int sparks = 0, guards = 0;
     double t = 0.0;
@@ -275,7 +278,25 @@ static void grace_time() {
     CHECK(std::abs(c.meter() - 0.68) < 1e-9);
 }
 
+static void early_guard_repeat() {
+    Clash c;                                      // 1 s grace: the guard every 0.2 s, with the interrupt
+    c.start(0x1234, 0.0);
+    int guards = 0, interrupts = 0;
+    double t = 0.0;
+    for (int i = 0; i < 60; ++i) {
+        t += 1.0 / 60.0;
+        for (const auto& cmd : c.tick(t)) {
+            guards += cmd.kind == Command::Kind::SendEvent;
+            interrupts += cmd.kind == Command::Kind::ActorEvents && cmd.name == "ActionInterrupt";
+        }
+    }
+    CHECK(guards >= 4 && guards <= 5);
+    CHECK(interrupts == guards);
+    CHECK(count(c.tick(t + 0.01), Command::Kind::Spark) == 0);   // sparks off by default
+}
+
 int main() {
+    early_guard_repeat();
     grace_time();
     start_and_guard();
     win_by_mashing();

@@ -444,3 +444,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-10-26 owner's clash screenshots with the fixed tilt: the camera is right (behind, side-on), both guards up, but
   the two stand side by side, the player facing the camera's way (35 deg off the opponent), blades not crossing. While
   a clash runs both headings (data.angle.z) are now written each frame to face each other (bFaceEachOther).
+- 2026-10-26 owner: facing each other now works; an effect plays at the player's feet (the clash sparks: impact sets
+  only play on the floor) and the opponent sometimes recoils before raising the guard. Clash sparks are off by default
+  (fSparkInterval 0) until an in-air effect is found; during the grace time the opponent gets the interrupt + guard
+  every 0.2 s (its own hit reaction can start after the clash's first guard event).

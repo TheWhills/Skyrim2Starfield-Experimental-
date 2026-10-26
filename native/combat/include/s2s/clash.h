@@ -61,7 +61,9 @@ struct ClashConfig {
     std::string losing_message = "Losing ground...";                 // the meter crossing 0.25 toward the opponent
     bool shake_on_press = true;
     float shake_strength = 0.12f;
-    double spark_interval = 0.25;                                    // seconds between spark bursts (0 = none)
+    // Seconds between spark bursts (0 = none). Off by default: the impact sets only play on the floor, at the player's
+    // feet (owner, 2026-10-26), until an effect that shows in the air is found.
+    double spark_interval = 0.0;
     // Game side (carried out by the plugin for ClashBegin / ClashEnd):
     bool place_opponent = true;       // move the opponent to clash_distance in front of the player, facing them
     bool restrain_opponent = true;    // Actor.SetRestrained on the opponent while locked (no attacks, no walking off)
