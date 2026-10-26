@@ -402,3 +402,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   ended 0.5 s after the guard is down and any give-back is done. The owner's effect pick 0x000550C3 is a placed
   reference (form type 0x4A REFR), not an impact set: its base object is placed at the weapon node
   (ObjectReference.PlaceAtNode) and disabled / deleted 1.5 s later; the log names the base object's form type.
+- 2026-10-26 timed-block sparks: the owner's pick 0x000550C3 was a beer can reference (the placement path works: a can
+  appeared at the weapon on each timed block; the 1.5 s cleanup did not remove them, unresolved). Owner's SF1Edit list
+  of Starfield.esm's impact data sets: 0x00258056 WPNMeleeBlockBladeSmallImpactSet is vanilla's blade-block impact;
+  now the shipped default (alternatives noted in the INI).
