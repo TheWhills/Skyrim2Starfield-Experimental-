@@ -1203,3 +1203,17 @@ skinned-mesh writer: not in this pack).
   transition's event is renamed to S2S_ComboPowerInside (never sent); the standing power attack is unchanged.
   BFCO does the same job differently: its power state machine's startStateId is bound to MCO_nextpowerattack, which
   each normal clip sets (read for the approach only). Pack v3 (scratch).
+
+## 2026-10-26: dual wield, first build (owner: looks + plugin damage, LoreRim dual movesets)
+* **Moveset:** a fifth stance, Dual (`stance_plugin.STANCES_DUAL`, keyword S2S_StanceDual, last so High / Mid / Low
+  keep their form IDs; clips in `s2s_stances\dual`). `stance_pack.py --stance Dual=<LoreRim 9011100>` with
+  `--left-weapon --weapon-in-hand --bfco`: same ring of 6 and power slots as the sword stances (v15's graph serves it);
+  dual chain 1-4 (slots 1 2 3 4 1 2), every dual power attack is LoreRim's one. LoreRim also has dual Low / Mid / High
+  (9012100 / 9013100 / 9014100): later.
+* **Switching:** the left blade's ARMO (weapon_test_pack) carries a new keyword S2S_LeftBlade; S2SCombat asks Papyrus
+  Actor.WornHasKeyword every 0.5 s (supported name) and, while worn, sets the stance group to S2S_StanceDual (with the
+  stance re-equip); off returns to the stance before. Stance keys while dual pick the stance for later.
+* **Two hits:** LoreRim dual clips carry two HitFrames per attack (one after weaponSwing, one after weaponLeftSwing).
+  The descriptor writer used to keep only the vanilla descriptor's one; it now adds the extra HitFrame / WeaponSwing
+  (weaponLeftSwing -> WeaponSwing). Unresolved: whether Starfield's melee hits again on the second HitFrame; S2SCombat
+  logs "player hit <target> at <t>" so a run shows one or two hits per swing (if one: plugin damage, phase 2).

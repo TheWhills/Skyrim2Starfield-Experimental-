@@ -479,3 +479,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   stagger only when a clash starts), the player's hits, keys, menus and the tick, and keeps the player ghosted while
   the add-on asks. Without S2SClash, S2SCombat behaves as before the clash work. The graph event filter moved into
   S2SClash. Not built on the PC yet (syntax-checked here).
+- 2026-10-26 dual wield (owner: looks + plugin damage, from LoreRim's dual packs; clash tabled): Dual stance in
+  S2SStances.esm, S2S_LeftBlade keyword on the left-blade ARMO, S2SCombat switches the stance while it is worn, the
+  converter keeps both HitFrames of a dual attack. Built here: s2s_stances\dual from LoreRim 9011100 (ring of 6, as
+  v15). Next: the owner's run (moveset switch, left blade, one or two hits per swing), then plugin damage if needed.

@@ -171,7 +171,7 @@ def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stance", action="append", required=True, metavar="NAME=FOLDER",
-                    help=f"a moveset per stance: {NEUTRAL} (vanilla folders) and any of {', '.join(stance_plugin.STANCES)}")
+                    help=f"a moveset per stance: {NEUTRAL} (vanilla folders) and any of {', '.join(stance_plugin.STANCES_DUAL)}")
     ap.add_argument("--anims", required=True)
     ap.add_argument("--folder", action="append", required=True, help="vanilla player folders, most specific first")
     ap.add_argument("--graph", required=True, help="the vanilla MeleeAttacks.agx")
@@ -186,8 +186,8 @@ def main(argv=None):
     for spec in a.stance:
         name, _, folder = spec.partition("=")
         name = name.strip().capitalize()
-        if name != NEUTRAL and name not in stance_plugin.STANCES or not os.path.isdir(folder):
-            sys.exit(f"--stance wants NAME=FOLDER with NAME {NEUTRAL} or one of {stance_plugin.STANCES}; got {spec}")
+        if name != NEUTRAL and name not in stance_plugin.STANCES_DUAL or not os.path.isdir(folder):
+            sys.exit(f"--stance wants NAME=FOLDER with NAME {NEUTRAL} or one of {stance_plugin.STANCES_DUAL}; got {spec}")
         stances[name] = folder
     p, n, tags, pslots = plan(stances, a.folder, a.anims, a.starfield_data, a.slots)
     print(f"ring of {n} slots: " + ", ".join(f"{j}:{t}" for j, t in sorted(tags.items())))
