@@ -91,6 +91,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.list_effect_forms = to_int(plugin, "blisteffectforms", 1) != 0;
     settings_.effect_next_key = static_cast<std::uint32_t>(to_int(plugin, "ieffectnextkey", 0));
     settings_.effect_prev_key = static_cast<std::uint32_t>(to_int(plugin, "ieffectprevkey", 0));
+    if (auto it = plugin.find("sleftbladenode"); it != plugin.end()) settings_.left_blade_node = it->second;
+    settings_.hide_left_sheathed = to_int(plugin, "bhideleftbladesheathed", 1) != 0;
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -338,6 +340,7 @@ void Plugin::Tick() {
         auto* player = game::Player();
         if (player && player->parentCell && !menus_.blocked()) {
             const int asked = game::WornHasKeyword(dual_kw, [this](bool worn) { dual_worn_ = worn ? 1 : 0; });
+            if (dual_applied_ == 1) game::IsWeaponDrawn([this](bool d) { weapon_drawn_ = d ? 1 : 0; });
             if (asked < 0 && !dual_missing_logged_) {
                 dual_missing_logged_ = true;
                 REX::INFO("dual wield: keyword {} not found (S2SWeapons.esm not loaded?): dual moveset switching off",
@@ -354,7 +357,28 @@ void Plugin::Tick() {
         }
         if (!more.empty()) REX::INFO("dual wield: left blade {} -> stance {}", worn ? "worn" : "off",
                                      worn ? controller_.config().dual_stance_keyword : "before");
+        left_hidden_ = -1;
+        if (worn && dumps_ < 3) {                     // where the blade sits in the player's 3D (and if it is there)
+            ++dumps_;
+            REX::INFO("dual wield: player 3D (looking for '{}'):{}", settings_.left_blade_node, game::DumpPlayer3D(500));
+        }
         cmds.insert(cmds.end(), more.begin(), more.end());
+    }
+    // the worn left blade drawn only with the weapon (re-applied every poll: the game may rebuild the 3D)
+    if (settings_.hide_left_sheathed && !settings_.left_blade_node.empty() && dual_applied_ == 1 &&
+        now >= hide_at_) {
+        hide_at_ = now + 0.25;
+        const int drawn = weapon_drawn_.load();
+        if (drawn >= 0) {
+            const bool hide = drawn == 0;
+            const int n = game::SetPlayerNodesHidden(settings_.left_blade_node, hide);
+            if ((hide ? 1 : 0) != left_hidden_ && hide_logs_ < 20) {
+                ++hide_logs_;
+                REX::INFO("dual wield: left blade {} ({} node(s) named '*{}*')", hide ? "hidden (sheathed)" : "shown (drawn)",
+                          n, settings_.left_blade_node);
+            }
+            left_hidden_ = hide ? 1 : 0;
+        }
     }
     Run(std::move(cmds));
     if (settings_.list_effect_forms && !effects_listed_) {

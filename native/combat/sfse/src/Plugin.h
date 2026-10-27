@@ -26,6 +26,10 @@ struct Settings {
     // Preview: each press plays the next impact data set onto the floor and shows its form ID (to find the sparks for
     // sTimedBlockEffect by eye); the other key goes back one. 0 = off. Key codes as in [Keys].
     std::uint32_t effect_next_key = 0, effect_prev_key = 0;
+    // Dual wield: the left blade's node in the player's 3D (name part, any case) is hidden while the weapon is
+    // sheathed (the worn blade is always drawn otherwise). Empty / 0 = off.
+    std::string left_blade_node = "longsword_left";
+    bool hide_left_sheathed = true;
 };
 
 class Plugin {
@@ -92,6 +96,9 @@ private:
     std::atomic_int dual_worn_{-1};
     int dual_applied_ = -1;
     bool dual_missing_logged_ = false;
+    std::atomic_int weapon_drawn_{-1};            // Papyrus IsWeaponDrawn, polled with the dual check
+    int left_hidden_ = -1, dumps_ = 0, hide_logs_ = 0;
+    double hide_at_ = 0.0;
     std::atomic<const api::ClashCallbacks*> clash_{nullptr};
 };
 

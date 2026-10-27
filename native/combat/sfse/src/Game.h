@@ -27,6 +27,14 @@ int HasKeyword(std::string_view editor_id);     // 1 / 0, -1 when the keyword is
 // Papyrus Actor.WornHasKeyword on the player (FO4 / Skyrim name; supported): result(worn) on the VM thread. -1 = no
 // keyword with that EditorID (the plugin that adds it is not loaded), 0 = not dispatched, 1 = asked.
 int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result);
+// Papyrus Actor.IsWeaponDrawn on the player (supported name): result(drawn) on the VM thread.
+bool IsWeaponDrawn(std::function<void(bool)> result);
+// The player's 3D (loadedData's data3D; CommonLibSF layout, memory-checked): every node's name under it, one per line
+// ("<depth spaces><name> flags <hex>"), at most max_nodes. For finding the left blade's node.
+std::string DumpPlayer3D(int max_nodes);
+// Nodes of the player's 3D whose name contains `part` (any case): their hidden bit (NiAVObject flags +0x118, bit 0, as
+// Skyrim's AppCulled; supported) set or cleared. Returns how many matched (-1: no 3D).
+int SetPlayerNodesHidden(std::string_view part, bool hidden);
 float ActorValue(std::string_view editor_id);    // < 0 when the value is not found
 float PlayerHealth();                            // < 0 when not known (cached lookup: called every frame)
 // Graph events (comma separated) for the actor with this form ID, tried in order until its graph takes one; returns

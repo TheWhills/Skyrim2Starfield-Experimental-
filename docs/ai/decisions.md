@@ -494,3 +494,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   is now carried to the bones under it that follow Skyrim's world deltas (fingers keep their pose in the hand; the
   right fingers shift slightly too). Rebuilt: left finger roots 15-33 deg, as the right. Delivered as
   SkyrimMelee_LoreRim_dual_stance_v2.zip. Next (owner's go): the left weapon drawn by the plugin instead of apparel.
+- 2026-10-26 left weapon drawn by the plugin (any melee in the left hand): CommonLibSF on 1.16 maps NiNode
+  AddChild / RemoveChild / GetObjectByName and a reference's loadedData->data3D, but no model loader (BSModelDB is RTTI
+  only) and no clone: loading an arbitrary weapon model at run time needs reverse engineering (unresolved). Meanwhile
+  the worn blade stays, and S2SCombat hides its node (sLeftBladeNode, NiAVObject flags +0x118 bit 0: supported, from
+  Skyrim's AppCulled) while Papyrus IsWeaponDrawn says sheathed, and logs the player's 3D tree when the blade goes on
+  (also answers whether the spacesuit removes the blade's node or only hides it).

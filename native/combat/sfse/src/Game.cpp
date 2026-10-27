@@ -146,6 +146,75 @@ int HasKeyword(std::string_view editor_id) {
 
 bool SetGhost(bool ghost) { return CallOnPlayer("Actor", "SetGhost", ghost); }
 
+bool IsWeaponDrawn(std::function<void(bool)> result) {
+    return Dispatch("Actor", "IsWeaponDrawn", [](RE::BSScrapArray<RE::BSScript::Variable>& out) { out.clear(); },
+                    [result](const RE::BSScript::Variable& v) {
+                        if (result) result(v.is<bool>() && RE::BSScript::get<bool>(v));
+                    });
+}
+
+namespace {
+RE::NiAVObject* Player3D() {
+    auto* p = Player();
+    if (!p || !Readable(&p->loadedData, 16)) return nullptr;
+    auto g = p->loadedData.LockRead();
+    const RE::LOADED_REF_DATA* d = *g;
+    if (!d || !Readable(d, 0x10)) return nullptr;
+    auto* o = d->data3D.get();
+    return o && Readable(o, 0x120) ? o : nullptr;
+}
+
+// depth-first over NiNode children (CommonLibSF's NiNode::children), every pointer memory-checked
+template <class F>
+void Walk(RE::NiAVObject* o, int depth, int& budget, F&& f) {
+    if (!o || budget <= 0 || depth > 64 || !Readable(o, 0x150)) return;
+    --budget;
+    f(o, depth);
+    auto* n = o->GetAsNiNode();
+    if (!n) return;
+    const auto size = n->children.size();
+    if (size == 0 || size > 1024) return;
+    auto* data = n->children.data();
+    if (!Readable(data, size * sizeof(void*))) return;
+    for (std::uint32_t i = 0; i < size; ++i) Walk(data[i].get(), depth + 1, budget, f);
+}
+
+bool NameHas(const RE::NiAVObject* o, std::string_view part) {
+    const char* name = o->name.c_str();
+    if (!name || part.empty()) return false;
+    std::string_view n(name);
+    auto low = [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
+    return std::search(n.begin(), n.end(), part.begin(), part.end(),
+                       [&](char a, char b) { return low(a) == low(b); }) != n.end();
+}
+}  // namespace
+
+std::string DumpPlayer3D(int max_nodes) {
+    auto* root = Player3D();
+    if (!root) return "no player 3D";
+    std::string out;
+    int budget = max_nodes;
+    Walk(root, 0, budget, [&](RE::NiAVObject* o, int depth) {
+        const char* name = o->name.c_str();
+        out += std::format("\n{}{} flags {:X}", std::string(static_cast<std::size_t>(depth), ' '), name ? name : "",
+                           o->flags);
+    });
+    return out;
+}
+
+int SetPlayerNodesHidden(std::string_view part, bool hidden) {
+    auto* root = Player3D();
+    if (!root) return -1;
+    int count = 0, budget = 2000;
+    Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+        if (!NameHas(o, part)) return;
+        ++count;
+        if (hidden) o->flags |= 1ull;
+        else o->flags &= ~1ull;
+    });
+    return count;
+}
+
 int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {
     auto* keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(RE::BSFixedString(std::string(editor_id).c_str()));
     if (!keyword) return -1;
