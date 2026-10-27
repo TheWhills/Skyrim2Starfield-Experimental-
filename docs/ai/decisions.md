@@ -650,3 +650,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-10-27 owner: with ArmorTypeApparelOrNakedBody + ArmorTypeSpacesuitShowAlways the left blade shows with and
   without a spacesuit, the body stays visible and O2 / CO2 stays normal on draw (verified). This is the default
   (--left-layers both). Lightsaber left hands (--left-hand-mod) built with it; their grip / moveset not yet reported.
+- 2026-10-27 owner chose AI-assisted reverse engineering for the any-weapon left hand: ReVa (Ghidra extension with
+  an MCP server, Claude Code as client) on the owner's PC. Setup and the first-session brief in
+  docs/re/ghidra-ai-setup.md (targets: the NiObject clone virtual, NiNode attach, and what the equip path calls after
+  attaching a weapon so it is drawn).
