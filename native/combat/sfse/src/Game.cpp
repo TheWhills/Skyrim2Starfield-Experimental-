@@ -1,4 +1,6 @@
 #include "Game.h"
+
+#include <set>
 #include "s2s/controller.h"
 
 namespace s2s::sfse::game {
@@ -282,6 +284,86 @@ std::string DumpPlayer3D(int max_nodes) {
         out += std::format("\n{}{} flags {:X}", std::string(static_cast<std::size_t>(depth), ' '), name ? name : "",
                            o->flags);
     });
+    return out;
+}
+
+namespace {
+std::string Floats(const std::byte* at, std::ptrdiff_t from, std::ptrdiff_t to) {
+    std::string out;
+    for (std::ptrdiff_t off = from; off < to; off += 16) {
+        if (!Readable(at + off, 16)) continue;
+        float f[4];
+        std::memcpy(f, at + off, 16);
+        out += std::format("\n    {:+05X}: {:12.4f} {:12.4f} {:12.4f} {:12.4f}", off, f[0], f[1], f[2], f[3]);
+    }
+    return out;
+}
+}  // namespace
+
+std::string DumpBoneSearch() {
+    auto* root = Player3D();
+    if (!root || g_children.offset < 0) return " (no player 3D / child list)";
+    RE::NiAVObject* rig = nullptr;
+    RE::NiAVObject* weapon = nullptr;
+    int budget = 64;
+    Walk(root, 0, budget, [&](RE::NiAVObject* o, int depth) {
+        if (depth != 1) return;
+        const char* n = o->name.c_str();
+        const std::string_view name(n ? n : "");
+        if (name.find("rigRoot") != std::string_view::npos) rig = o;
+        if (name == "Longsword") weapon = o;
+    });
+    std::string out;
+    auto* player = Player();
+    if (player)
+        out += std::format("\n  player at {:.2f} {:.2f} {:.2f}", player->data.location.x, player->data.location.y,
+                           player->data.location.z);
+    if (weapon)
+        out += "\n  weapon node 'Longsword' (local +40, world +80):" +
+               Floats(reinterpret_cast<const std::byte*>(weapon), 0x40, 0xC0);
+    if (!rig) return out + "\n  no rigRoot under the root";
+    out += "\n  rigRoot memory:" + NodeMemory(rig);
+    // the skeleton's bones are not child nodes (the walk lists none under rigRoot): look for where their names are
+    // kept. Pooled strings: every "L_Wrist" BSFixedString holds the same pointer, so search for that value.
+    const char* names[] = {"L_Wrist", "R_Wrist", "WEAPON", "COM", "Root"};
+    std::uint64_t want[5];
+    std::vector<RE::BSFixedString> keep;
+    for (int i = 0; i < 5; ++i) {
+        keep.emplace_back(names[i]);
+        std::memcpy(&want[i], &keep.back(), 8);
+    }
+    out += std::format("\n  name values: L_Wrist {:X} R_Wrist {:X} WEAPON {:X}", want[0], want[1], want[2]);
+    std::set<std::uintptr_t> seen;
+    std::size_t scanned = 0;
+    int hits = 0;
+    const std::byte* first_lwrist = nullptr;
+    std::function<void(const std::byte*, std::size_t, const std::string&, int)> scan =
+        [&](const std::byte* base, std::size_t len, const std::string& path, int depth) {
+            if (!seen.insert(reinterpret_cast<std::uintptr_t>(base)).second || scanned > (32u << 20)) return;
+            REX::W32::MEMORY_BASIC_INFORMATION mbi{};
+            if (!REX::W32::VirtualQuery(base, &mbi, sizeof(mbi)) || mbi.state != REX::W32::MEM_COMMIT) return;
+            const auto end = reinterpret_cast<std::uintptr_t>(mbi.baseAddress) + mbi.regionSize;
+            len = std::min<std::size_t>(len, end - reinterpret_cast<std::uintptr_t>(base));
+            if (!Readable(base, len)) return;
+            scanned += len;
+            for (std::size_t off = 0; off + 8 <= len; off += 8) {
+                std::uint64_t v;
+                std::memcpy(&v, base + off, 8);
+                for (int i = 0; i < 5; ++i)
+                    if (v == want[i] && hits < 40) {
+                        ++hits;
+                        out += std::format("\n  '{}' at {}+{:X} ({:X})", names[i], path, off,
+                                           reinterpret_cast<std::uintptr_t>(base + off));
+                        if (i == 0 && !first_lwrist) first_lwrist = base + off;
+                    }
+                if (depth < 2 && v > 0x10000 && v < 0x7FFFFFFFFFFF && (v & 7) == 0)
+                    scan(reinterpret_cast<const std::byte*>(v), depth == 0 ? 0x10000 : 0x4000,
+                         path + std::format("+{:X}>", off), depth + 1);
+            }
+        };
+    scan(reinterpret_cast<const std::byte*>(rig), 0x400, "rigRoot", 0);
+    out += std::format("\n  searched {} KB, {} hit(s)", scanned >> 10, hits);
+    if (first_lwrist) out += "\n  around the first 'L_Wrist' (floats):" + Floats(first_lwrist, -0x100, 0x100);
     return out;
 }
 

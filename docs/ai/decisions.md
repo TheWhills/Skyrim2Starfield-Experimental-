@@ -558,3 +558,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   after the stance re-equip, which equips the base form without instance data (supported reading: the worn check
   reads the instance's keywords). The poll now also asks Papyrus for the equipped weapon (GetEquippedWeapon) and
   Form.HasKeyword on its base form, chained in the same poll; dual = worn keyword or the weapon's keyword.
+- 2026-10-26 owner's pair weapon run (screenshots + log): the dual moveset now plays with the pair weapon
+  (verified). The left blade is not in the left hand: it shows dark and loose near the right hand / at the feet in
+  the status screen and inventory preview, so the game does not bind a weapon model's skinned shape to the actor's
+  L_Wrist (verified that it does not work this way). The 3D dumps also show the weapon node "Longsword" directly under
+  the player's root (not under a hand bone) and nothing under Human_rigRoot: the game places the weapon from the
+  skeleton each frame, and the bones are not child nodes (supported: a flattened bone tree as in Fallout 4). Next:
+  the plugin moves a rigid left-blade node of the pair model to the left hand bone each frame. To find where the bone
+  transforms live, a one-time search logs rigRoot's memory and every place within two pointer hops holding the pooled
+  bone-name strings, with the floats around L_Wrist.

@@ -436,6 +436,7 @@ void Plugin::Tick() {
                 ++dumps_;
                 REX::INFO("dual wield: player 3D (looking for '{}'):{}", settings_.left_blade_node,
                           game::DumpPlayer3D(500));
+                if (dumps_ == 1) REX::INFO("dual wield: bone search:{}", game::DumpBoneSearch());
             }
             cmds.insert(cmds.end(), more.begin(), more.end());
         }

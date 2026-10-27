@@ -32,6 +32,10 @@ bool IsWeaponDrawn(std::function<void(bool)> result);
 // The player's 3D (loadedData's data3D; CommonLibSF layout, memory-checked): every node's name under it, one per line
 // ("<depth spaces><name> flags <hex>"), at most max_nodes. For finding the left blade's node.
 std::string DumpPlayer3D(int max_nodes);
+// Where the skeleton keeps its bones (they are not child nodes on 1.16): rigRoot's memory, and every place within two
+// pointer hops of it holding the pooled "L_Wrist" / "R_Wrist" / "WEAPON" / "COM" / "Root" strings, with the floats
+// around the first L_Wrist (its transforms, to be read), the weapon node's transforms and the player's position.
+std::string DumpBoneSearch();
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base
