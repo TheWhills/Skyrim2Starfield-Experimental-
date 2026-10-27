@@ -206,8 +206,10 @@ bool ReadChildren(const void* node, const ChildLayout& l, RE::NiAVObject**& data
         std::memcpy(&data, b, 8);
         std::memcpy(&n, b + 8, 2);
         std::memcpy(&c, b + 10, 2);
-        size = n;
-        cap = c;
+        // which u16 is the count is not known: the owner's dumps read 14 / 14, then 14 / 13 (an item off): the
+        // smaller one is the count (null entries are skipped by the walk anyway)
+        size = std::min(n, c);
+        cap = std::max(n, c);
     } else if (l.kind == 1) {
         std::memcpy(&data, b, 8);
         std::memcpy(&cap, b + 8, 4);

@@ -567,3 +567,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the plugin moves a rigid left-blade node of the pair model to the left hand bone each frame. To find where the bone
   transforms live, a one-time search logs rigRoot's memory and every place within two pointer hops holding the pooled
   bone-name strings, with the floats around L_Wrist.
+- 2026-10-26 owner's bone-search run: the child list was not found this time: +0x140 read 0E 00 0D 00 (14, 13), the
+  reader took the first u16 as the count and rejected count > capacity. Now the smaller of the two is the count. The
+  same dump confirms the transforms: local at +0x40 (3 rows of 16 bytes, translation +0x70, scale +0x7C), world at
+  +0x80 (translation +0xB0 = the player's position, 1515 / -797 / -161), previous world at +0xC0.
