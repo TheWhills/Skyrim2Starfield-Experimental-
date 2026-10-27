@@ -514,3 +514,19 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   HumanExportRoot): CommonLibSF's BSTArray children layout does not apply. The child search now also tries
   {T* data, u16 size, u16 cap}; the blade's nodes are remembered (re-walked every 2 s, or when one no longer hangs
   under the root) instead of walking the whole tree every 0.25 s.
+- 2026-10-26 owner's run with the child layout fix: the 3D walk works (children at +0x138, 14 on the root; the blade's
+  node longsword_left found, 1 node). Two findings. (1) The dump taken before the plugin touched any flag, spacesuit
+  on, shows bit 0 of flags +0x118 set on the outfit's nodes, the hands and the head (under the suit's gloves and
+  helmet) and on longsword_left: the game hides the blade as it hides the outfit under a spacesuit. xEdit's Starfield
+  definitions name biped slots 0-31 for the outfit and 32-63 "SS ..." for the spacesuit (same parts twice), so the
+  supported reading is that the game shows one set at a time. The blade's ARMO now lists two addons with the same
+  model, one on a free outfit slot (0-31) and one on a free spacesuit slot (32-61) (`--left-slot`,
+  `--left-suit-slot`; Misc 3 / SS Misc 3 if a set has no free slot, reported). To verify: blade seen with and without
+  the suit, and with the suit hidden in a settlement. (2) Writing that same bit from the plugin did nothing visible
+  (log: hidden / shown on 1 node, owner: the blade stayed), and cost ~0.4-0.7 ms per frame on average with the blade
+  on. Dropped. The blade is now taken off on 'weaponSheathe' and put on again on 'BeginWeaponDraw' with the native
+  equip (as the stance re-equip), with s2s/left_blade.h deciding (tested): the dual moveset stays on while the plugin
+  has the blade put away; equipped from the menu while sheathed, it is put away on closing; after a load, the dual
+  stance keyword on the player plus a blade in the bag, not worn, means the save was made with it put away
+  (unverified: whether the keyword added through Papyrus AddKeyword is kept in saves). The blade forms are the ARMOs
+  of the plugin that defines S2S_LeftBlade (no keyword arrays read natively).

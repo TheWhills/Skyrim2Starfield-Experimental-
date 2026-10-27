@@ -183,15 +183,33 @@ def used_slots(records) -> int:
     return used
 
 
-def free_slot(records, top: int = 61) -> int:
-    """A biped slot (bit index) no vanilla ARMO / ARMA uses, the highest at or below `top`: the left blade there does
+def free_slot(records, top: int = 61, bottom: int = 0) -> int:
+    """A biped slot (bit index) in [bottom, top] no vanilla ARMO / ARMA uses, the highest: the left blade there does
     not take an outfit's or a spacesuit's place (owner's run 2026-10-26: the nightwear copy removed the outfit, the
     legs and could not be worn with a spacesuit)."""
     used = used_slots(records)
-    for bit in range(top, -1, -1):
+    for bit in range(top, bottom - 1, -1):
         if not used >> bit & 1:
             return bit
-    raise SystemExit("every biped slot is used by some vanilla apparel")
+    raise SystemExit(f"every biped slot {bottom}-{top} is used by some vanilla apparel")
+
+
+# Starfield's two sets of biped slots (xEdit's wbDefinitionsSF1: 0-31 the outfit's, 32-63 "SS ..." the spacesuit's).
+# Owner's run 2026-10-26: with a spacesuit on, the game hid the left blade the same way as the outfit under it (NiAVObject
+# flag bit 0 on the blade's and the outfit's nodes, before the plugin touched them). Supported, not verified: the game
+# shows one set at a time (the suit's while it is shown, else the outfit's), so the blade gets an addon in each.
+OUTFIT_SLOTS = (0, 31)
+SUIT_SLOTS = (32, 61)
+SHARED_SLOT = {OUTFIT_SLOTS: 15, SUIT_SLOTS: 47}   # "Misc 3" / "SS Misc 3" when every slot of the set is used
+
+
+def slot_in(records, span) -> tuple:
+    """(bit, shared): a free slot of the set `span` (lowest, highest), else its Misc 3 slot (shared = True: the blade
+    then takes off whatever vanilla item uses it)."""
+    try:
+        return free_slot(records, span[1], span[0]), False
+    except SystemExit:
+        return SHARED_SLOT[span], True
 
 
 def with_slot(subs, bit: int):
@@ -201,9 +219,12 @@ def with_slot(subs, bit: int):
 
 
 def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str, keyword: int = None,
-                       slot: int = None):
+                       slot: int = None, suit_slot: int = None):
     """(ARMA, ARMO) copies: the ARMA's worn and first-person models -> the left blade, the ARMO named and pointing at
-    the new ARMA (and carrying `keyword` when given; both on biped slot `slot` when given)."""
+    the new ARMA (and carrying `keyword` when given; both on biped slot `slot` when given). With `suit_slot`: (ARMA,
+    ARMO, ARMA on suit_slot), the ARMO listing both addons (the blade drawn with and without a spacesuit shown) and
+    covering both slots."""
+    import struct
     ta, ha, sa, fa = arma_t
     new_arma = sfplugin.new_form_id(first_index)
     m = sfplugin.zs(model)
@@ -216,7 +237,20 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
         so2 = with_keyword(so2, keyword)
     if slot is not None:
         sa2, so2 = with_slot(sa2, slot), with_slot(so2, slot)
-    return (ta, ha, sa2, new_arma), (to, ho, so2, sfplugin.new_form_id(first_index + 1))
+    armo = (to, ho, so2, sfplugin.new_form_id(first_index + 1))
+    if suit_slot is None:
+        return (ta, ha, sa2, new_arma), armo
+    suit_arma = sfplugin.new_form_id(first_index + 2)
+    sa3 = with_slot(sfplugin.edit(sa2, {b"EDID": sfplugin.zs(edid + "_SS_AA")}), suit_slot)
+    so3 = []
+    for s_, d in so2:                         # the second addon right after the first (INDX 0 + MODL, as the first)
+        indexed = bool(so3) and so3[-1][0] == b"INDX"
+        so3.append((s_, d))
+        if s_ == b"MODL" and d == struct.pack("<I", new_arma):
+            so3 += [(b"INDX", struct.pack("<H", 0))] * indexed + [(b"MODL", struct.pack("<I", suit_arma))]
+    bits = (1 << slot if slot is not None else 0) | 1 << suit_slot
+    so3 = sfplugin.edit(so3, {b"BO64": struct.pack("<Q", bits)})
+    return (ta, ha, sa2, new_arma), (to, ho, so3, armo[3]), (ta, ha, sa3, suit_arma)
 
 
 def pack(staging: str, out: str, starfield: str, archive2: str = None) -> dict:
@@ -251,7 +285,10 @@ def main(argv=None):
     ap.add_argument("--only", help="comma list of keys from the iron set (dagger,sword,waraxe,mace,greatsword,...)")
     ap.add_argument("--left-blade", default="sword",
                     help="iron weapon also made as a worn left-hand blade for dual wield ('' = none)")
-    ap.add_argument("--left-slot", type=int, help="biped slot bit (0-63) for the left blade (default: a free one)")
+    ap.add_argument("--left-slot", type=int,
+                    help="outfit biped slot bit (0-31) for the left blade (default: a free one)")
+    ap.add_argument("--left-suit-slot", type=int,
+                    help="spacesuit biped slot bit (32-63) for the left blade's second addon (default: a free one)")
     ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
                     help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
@@ -321,10 +358,15 @@ def main(argv=None):
             recs.append((b"KYWD", kywd_t[1], sfplugin.edit(kywd_t[2], {b"EDID": sfplugin.zs(LEFT_BLADE_KEYWORD)},
                                                            drop=(b"FULL", b"DESC")), kw_fid))
             apparel = [r for r in sf if r[0] in (b"ARMO", b"ARMA")]
-            slot = a.left_slot if a.left_slot is not None else free_slot(apparel)
-            aa, ao = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid, slot=slot)
-            row["biped_slot"] = {"bit": slot, "vanilla_slots_used": f"{used_slots(apparel):016X}"}
-            recs += [aa, ao]
+            slot, shared = (a.left_slot, False) if a.left_slot is not None else slot_in(apparel, OUTFIT_SLOTS)
+            suit, suit_shared = ((a.left_suit_slot, False) if a.left_suit_slot is not None
+                                 else slot_in(apparel, SUIT_SLOTS))
+            aa, ao, aa_suit = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid,
+                                                 slot=slot, suit_slot=suit)
+            row["biped_slot"] = {"bit": slot, "suit_bit": suit, "shared_with_vanilla": [b for b, sh in
+                                 ((slot, shared), (suit, suit_shared)) if sh],
+                                 "vanilla_slots_used": f"{used_slots(apparel):016X}"}
+            recs += [aa, ao, aa_suit]
             row["keyword"] = {"edid": LEFT_BLADE_KEYWORD, "form_id_in_plugin": f"{kw_fid & 0xFFFFFF:06X}"}
             row.update(starfield_model=model, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}", editor_id=edid, name=name,
                        test_with_pack="dual_" + lw["pack"].replace("1h_", ""), worn=True,

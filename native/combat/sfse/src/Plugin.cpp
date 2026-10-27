@@ -93,6 +93,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.effect_prev_key = static_cast<std::uint32_t>(to_int(plugin, "ieffectprevkey", 0));
     if (auto it = plugin.find("sleftbladenode"); it != plugin.end()) settings_.left_blade_node = it->second;
     settings_.hide_left_sheathed = to_int(plugin, "bhideleftbladesheathed", 1) != 0;
+    left_blade_ = combat::LeftBlade(settings_.hide_left_sheathed);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -225,6 +226,13 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
+    if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
+        std::scoped_lock l(lock_);
+        left_blade_.reset();
+        restore_ = 1;
+        dual_worn_ = -1;
+        ++poll_gen_;
+    }
     if (auto* c = clash_.load()) c->on_menu(std::string(name).c_str(), opening, menus_.blocked());
 }
 
@@ -313,6 +321,8 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
             REX::INFO("anim event: '{}' payload '{}'", tag, payload);
         }
         cmds = controller_.on_anim_event(tag, payload, game::Now());
+        if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)
+            left_action_ = static_cast<int>(a);       // done in Tick (main thread)
     }
     Run(std::move(cmds));
 }
@@ -333,51 +343,103 @@ void Plugin::Tick() {
         if (c->wants_ghost()) invulnerable = true;
     }
     // Dual wield: is the left blade (sDualWornKeyword) worn? Asked every 0.5 s; a change switches the stance group
-    // (the controller), the moveset following on the re-equip.
+    // (the controller), the moveset following on the re-equip. The blade put away while sheathed counts as worn.
     const auto& dual_kw = controller_.config().dual_worn_keyword;
+    using LB = combat::LeftBlade::Action;
     if (!dual_kw.empty() && now >= dual_poll_at_) {
         dual_poll_at_ = now + 0.5;
         auto* player = game::Player();
         if (player && player->parentCell && !menus_.blocked()) {
-            const int asked = game::WornHasKeyword(dual_kw, [this](bool worn) { dual_worn_ = worn ? 1 : 0; });
-            if (dual_applied_ == 1) game::IsWeaponDrawn([this](bool d) { weapon_drawn_ = d ? 1 : 0; });
+            const int gen = poll_gen_.load();
+            const int asked = game::WornHasKeyword(dual_kw, [this, gen](bool worn) {
+                if (gen != poll_gen_.load()) return;          // asked before the blade was taken off / put on
+                dual_worn_ = worn ? 1 : 0;
+                worn_gen_ = gen + 1;                          // a fresh answer for Tick
+            });
             if (asked < 0 && !dual_missing_logged_) {
                 dual_missing_logged_ = true;
                 REX::INFO("dual wield: keyword {} not found (S2SWeapons.esm not loaded?): dual moveset switching off",
                           dual_kw);
             }
+            if (asked > 0 && !blades_searched_) {
+                blades_searched_ = true;
+                blades_ = game::ArmorsBesideKeyword(dual_kw);
+                REX::INFO("dual wield: {} left blade(s) in the plugin that has {}", blades_.size(), dual_kw);
+            }
+            if (blades_.size() == 1) blade_id_ = blades_[0];
+            else if (dual_worn_.load() == 1)                  // several: which one is on
+                for (const auto id : blades_)
+                    game::IsEquipped(id, [this, id](bool on) { if (on) blade_id_ = id; });
+            if (restore_ == 1 && blades_searched_) {          // after a load: was the blade put away in the save?
+                restore_ = blades_.empty() ? 0 : 2;
+                restore_answers_ = 0;
+                blade_in_bag_ = 0;
+                for (const auto id : blades_)
+                    game::ItemCount(id, [this, id](int n) {
+                        if (n > 0) blade_in_bag_ = id;
+                        ++restore_answers_;
+                    });
+            }
         }
     }
-    if (const int worn = dual_worn_.load(); worn >= 0 && worn != dual_applied_) {
-        dual_applied_ = worn;
-        std::vector<combat::Command> more;
+    if (restore_ == 2 && restore_answers_.load() >= static_cast<int>(blades_.size()) && worn_gen_.load() > 0) {
+        restore_ = 0;
+        const bool kw = game::HasKeyword(controller_.config().dual_stance_keyword) == 1;
+        std::scoped_lock l(lock_);
+        left_blade_.on_load(kw, blade_in_bag_.load() != 0, dual_worn_.load() == 1);
+        if (left_blade_.parked()) {
+            blade_id_ = blade_in_bag_.load();
+            REX::INFO("dual wield: the left blade was put away in the save ({:08X}): it comes back when you draw",
+                      blade_id_.load());
+        }
+    }
+    // the poll's fresh answer -> worn (or put away by us) -> the stance group
+    if (const int g = worn_gen_.exchange(0); g > 0 && restore_ == 0) {
+        bool newly_worn = false, effective = false;
         {
             std::scoped_lock l(lock_);
-            more = controller_.on_dual_worn(worn == 1, now);
+            newly_worn = dual_worn_.load() == 1 && !left_blade_.worn();
+            effective = left_blade_.on_worn(dual_worn_.load() == 1);
         }
-        if (!more.empty()) REX::INFO("dual wield: left blade {} -> stance {}", worn ? "worn" : "off",
-                                     worn ? controller_.config().dual_stance_keyword : "before");
-        left_hidden_ = -1;
-        if (worn && dumps_ < 3) {                     // where the blade sits in the player's 3D (and if it is there)
-            ++dumps_;
-            REX::INFO("dual wield: player 3D (looking for '{}'):{}", settings_.left_blade_node, game::DumpPlayer3D(500));
+        if (newly_worn && settings_.hide_left_sheathed) {   // equipped while sheathed (the menu): put away now
+            drawn_answer_ = -1;
+            game::IsWeaponDrawn([this](bool d) { drawn_answer_ = d ? 1 : 0; });
         }
-        cmds.insert(cmds.end(), more.begin(), more.end());
-    }
-    // the worn left blade drawn only with the weapon (re-applied every poll: the game may rebuild the 3D)
-    if (settings_.hide_left_sheathed && !settings_.left_blade_node.empty() && dual_applied_ == 1 &&
-        now >= hide_at_) {
-        hide_at_ = now + 0.25;
-        const int drawn = weapon_drawn_.load();
-        if (drawn >= 0) {
-            const bool hide = drawn == 0;
-            const int n = game::SetPlayerNodesHidden(settings_.left_blade_node, hide);
-            if ((hide ? 1 : 0) != left_hidden_ && hide_logs_ < 20) {
-                ++hide_logs_;
-                REX::INFO("dual wield: left blade {} ({} node(s) named '*{}*')", hide ? "hidden (sheathed)" : "shown (drawn)",
-                          n, settings_.left_blade_node);
+        if (const int worn = effective ? 1 : 0; worn != dual_applied_) {
+            dual_applied_ = worn;
+            std::vector<combat::Command> more;
+            {
+                std::scoped_lock l(lock_);
+                more = controller_.on_dual_worn(worn == 1, now);
             }
-            left_hidden_ = hide ? 1 : 0;
+            if (!more.empty()) REX::INFO("dual wield: left blade {} -> stance {}", worn ? "worn" : "off",
+                                         worn ? controller_.config().dual_stance_keyword : "before");
+            if (worn && dumps_ < 3) {                 // where the blade sits in the player's 3D (and if it is there)
+                ++dumps_;
+                REX::INFO("dual wield: player 3D (looking for '{}'):{}", settings_.left_blade_node,
+                          game::DumpPlayer3D(500));
+            }
+            cmds.insert(cmds.end(), more.begin(), more.end());
+        }
+    }
+    if (const int d = drawn_answer_.exchange(-1); d >= 0) {
+        std::scoped_lock l(lock_);
+        if (const auto a = left_blade_.on_drawn(d == 1); a != LB::None) left_action_ = static_cast<int>(a);
+    }
+    // put the blade away / back (the animation events and the drawn answer above decide; main thread)
+    if (const auto a = static_cast<LB>(left_action_.exchange(0)); a != LB::None) {
+        const auto id = blade_id_.load();
+        const bool put_on = a == LB::Unpark;
+        ++poll_gen_;                                  // older poll answers no longer count
+        const bool ok = id && game::EquipForm(id, put_on);
+        if (!ok) {
+            std::scoped_lock l(lock_);
+            left_blade_.on_failed(a);
+        }
+        if (left_logs_ < 20 || !ok) {
+            ++left_logs_;
+            REX::INFO("dual wield: left blade {:08X} {}{}", id, put_on ? "put on (drawn)" : "taken off (sheathed)",
+                      ok ? "" : id ? ": refused" : ": not known which blade");
         }
     }
     Run(std::move(cmds));

@@ -215,6 +215,30 @@ class LeftBladeKeywordTests(unittest.TestCase):
         self.assertEqual(dict(aa[2])[b"BO64"], struct.pack("<Q", 1 << 59))
         self.assertEqual(dict(ao[2])[b"BO64"], struct.pack("<Q", 1 << 59))
 
+    def test_left_blade_has_an_outfit_and_a_spacesuit_addon(self):
+        def rec(t, bits):
+            return (t, bytes(24), [(b"EDID", b"x\0"), (b"BO64", struct.pack("<Q", bits))], 1)
+        vanilla = [rec(b"ARMO", (1 << 31) | (1 << 30) | (1 << 61))]
+        self.assertEqual(P.slot_in(vanilla, P.OUTFIT_SLOTS), (29, False))
+        self.assertEqual(P.slot_in(vanilla, P.SUIT_SLOTS), (60, False))
+        full = [rec(b"ARMO", (1 << 32) - 1)]
+        self.assertEqual(P.slot_in(full, P.OUTFIT_SLOTS), (15, True))           # shares "Misc 3"
+        arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0"), (b"BO64", struct.pack("<Q", 1 << 3)), (b"MOD2", b"a.nif\0")],
+                0x100)
+        armo = (b"ARMO", bytes(24), [(b"EDID", b"O\0"), (b"BO64", struct.pack("<Q", 1 << 3)),
+                                     (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x100)),
+                                     (b"DATA", b"d")], 0x200)
+        aa, ao, ss = P.left_blade_records(armo, arma, 1, "S2S_Left", "Left", "l.nif", slot=29, suit_slot=60)
+        self.assertEqual(dict(aa[2])[b"BO64"], struct.pack("<Q", 1 << 29))
+        self.assertEqual(dict(ss[2])[b"BO64"], struct.pack("<Q", 1 << 60))
+        self.assertEqual(dict(ss[2])[b"EDID"], b"S2S_Left_SS_AA\0")
+        self.assertEqual(dict(ss[2])[b"MOD2"], b"l.nif\0")                       # the same blade
+        self.assertEqual(dict(ao[2])[b"BO64"], struct.pack("<Q", (1 << 29) | (1 << 60)))
+        self.assertEqual([(s_, d) for s_, d in ao[2] if s_ in (b"INDX", b"MODL")],
+                         [(b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", aa[3])),
+                          (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", ss[3]))])
+        self.assertEqual(len({aa[3], ao[3], ss[3]}), 3)
+
     def test_only_the_left_blade_addon_is_kept(self):
         subs = [(b"EDID", b"O\0"), (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x100)),
                 (b"INDX", struct.pack("<H", 1)), (b"MODL", struct.pack("<I", 0x101)), (b"DATA", b"x")]
@@ -270,7 +294,12 @@ class PackTests(unittest.TestCase):
             aas = dict(aa[2])
             for k in (b"MOD2", b"MOD3", b"MOD4"):
                 self.assertEqual(aas[k], b"s2s\\weapons\\iron\\longsword_left.nif\0")
-            self.assertEqual(dict(ao[2])[b"MODL"], struct.pack("<I", aa[3]))        # the ARMO wears the new ARMA
+            suit = recs["S2S_IronSword_Left_SS_AA"]                               # the addon shown with a spacesuit
+            self.assertEqual(dict(suit[2])[b"MOD2"], b"s2s\\weapons\\iron\\longsword_left.nif\0")
+            self.assertEqual([d for s_, d in ao[2] if s_ == b"MODL"],              # the ARMO wears the new ARMAs
+                             [struct.pack("<I", aa[3]), struct.pack("<I", suit[3])])
+            self.assertEqual(left["biped_slot"]["suit_bit"], 61)
+            self.assertLess(left["biped_slot"]["bit"], 32)
             self.assertEqual(dict(ao[2])[b"FULL"], b"Iron Sword (Skyrim, left hand)\0")
             self.assertEqual(aas[b"RNAM"], struct.pack("<I", 0x347D))               # race etc. kept
             sword = ok[0]

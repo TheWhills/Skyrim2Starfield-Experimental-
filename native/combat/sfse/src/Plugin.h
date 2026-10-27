@@ -3,6 +3,7 @@
 
 #include "ClashApi.h"
 #include "s2s/controller.h"
+#include "s2s/left_blade.h"
 
 namespace s2s::sfse {
 
@@ -26,8 +27,8 @@ struct Settings {
     // Preview: each press plays the next impact data set onto the floor and shows its form ID (to find the sparks for
     // sTimedBlockEffect by eye); the other key goes back one. 0 = off. Key codes as in [Keys].
     std::uint32_t effect_next_key = 0, effect_prev_key = 0;
-    // Dual wield: the left blade's node in the player's 3D (name part, any case) is hidden while the weapon is
-    // sheathed (the worn blade is always drawn otherwise). Empty / 0 = off.
+    // Dual wield: the worn left blade is taken off when the weapon is sheathed and put on again when it is drawn
+    // (s2s/left_blade.h). left_blade_node: part of the blade's node name, for the 3D listing in the log.
     std::string left_blade_node = "longsword_left";
     bool hide_left_sheathed = true;
 };
@@ -96,9 +97,20 @@ private:
     std::atomic_int dual_worn_{-1};
     int dual_applied_ = -1;
     bool dual_missing_logged_ = false;
-    std::atomic_int weapon_drawn_{-1};            // Papyrus IsWeaponDrawn, polled with the dual check
-    int left_hidden_ = -1, dumps_ = 0, hide_logs_ = 0;
-    double hide_at_ = 0.0;
+    // the left blade put away while sheathed (left_blade_ under lock_). A poll answer counts only if no equip /
+    // unequip of the blade happened since it was asked (poll_gen_): an older one says what was worn before.
+    combat::LeftBlade left_blade_;
+    std::atomic_int poll_gen_{0}, worn_gen_{0};
+    std::atomic_int left_action_{0};              // a LeftBlade::Action from the animation events, done in Tick
+    std::atomic_int drawn_answer_{-1};            // Papyrus IsWeaponDrawn, asked once when the blade is first worn
+    std::vector<std::uint32_t> blades_;           // the left blade ARMOs (S2SWeapons.esm)
+    bool blades_searched_ = false;
+    std::atomic<std::uint32_t> blade_id_{0};      // the one worn (or put away by us)
+    // after a load: 1 = to ask, 2 = asked (answers_ of blades_.size() item counts), 0 = done
+    int restore_ = 1;
+    std::atomic_int restore_answers_{0};
+    std::atomic<std::uint32_t> blade_in_bag_{0};
+    int dumps_ = 0, left_logs_ = 0;
     std::atomic<const api::ClashCallbacks*> clash_{nullptr};
 };
 

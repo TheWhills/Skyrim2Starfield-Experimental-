@@ -1227,3 +1227,13 @@ $dst = "C:\Users\elija\AppData\Local\ModOrganizer\Starfield\mods\S2S AnimInfo\Me
 robocopy "$src\AnimationFileData" "$dst\AnimationFileData" /MIR
 robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubgraphInfoAndOffsetData.txt
 ```
+
+## 2026-10-26: the left blade with a spacesuit and while sheathed
+* Starfield has two sets of biped slots: 0-31 for the outfit, 32-63 ("SS ...") for the spacesuit (xEdit's
+  definitions). With a spacesuit shown, the game hides everything on the outfit slots, the left blade included (seen in
+  the plugin's 3D listing: the hidden bit on the outfit's and the blade's nodes). The blade's ARMO now carries two
+  addons with the same model, one on a free slot of each set (`weapon_test_pack.py --left-slot / --left-suit-slot`,
+  default: the highest free one; the report's `biped_slot` gives them). Supported, to verify in game.
+* Hiding the blade's node from the plugin (the same hidden bit) did not hide it, so S2SCombat now takes the blade off
+  when the weapon is sheathed ('weaponSheathe') and puts it on again on 'BeginWeaponDraw' (`s2s/left_blade.h`;
+  S2SCombat.ini bHideLeftBladeSheathed = 0 keeps it on). The inventory shows it unequipped while sheathed.

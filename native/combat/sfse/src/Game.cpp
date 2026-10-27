@@ -264,14 +264,6 @@ void Walk(RE::NiAVObject* o, int depth, int& budget, F&& f) {
     }
 }
 
-bool NameHas(const RE::NiAVObject* o, std::string_view part) {
-    const char* name = o->name.c_str();
-    if (!name || part.empty()) return false;
-    std::string_view n(name);
-    auto low = [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
-    return std::search(n.begin(), n.end(), part.begin(), part.end(),
-                       [&](char a, char b) { return low(a) == low(b); }) != n.end();
-}
 }  // namespace
 
 std::string DumpPlayer3D(int max_nodes) {
@@ -291,48 +283,6 @@ std::string DumpPlayer3D(int max_nodes) {
                            o->flags);
     });
     return out;
-}
-
-int SetPlayerNodesHidden(std::string_view part, bool hidden) {
-    auto* root = Player3D();
-    if (!root) return -1;
-    if (g_children.offset < 0) {
-        if (g_layout_tries >= 3) return -2;
-        ++g_layout_tries;
-        if (!FindChildLayout(root)) return -2;
-    }
-    // The matches are remembered and the tree walked again only every 2 s (a walk checks every node's memory:
-    // too slow for every call) or when the root or the name changes.
-    static RE::NiAVObject* cached_root = nullptr;
-    static std::string cached_part;
-    static std::vector<RE::NiAVObject*> found;
-    static double walked_at = -10.0;
-    const double now = Now();
-    // a remembered node still hangs under the root (its parent chain reaches it): else the 3D was rebuilt
-    auto attached = [&](RE::NiAVObject* o) {
-        for (int i = 0; i < 64 && o; ++i) {
-            if (o == root) return true;
-            if (!Readable(o, 0x40)) return false;
-            o = reinterpret_cast<RE::NiAVObject*>(o->parent);
-        }
-        return false;
-    };
-    const bool stale = std::any_of(found.begin(), found.end(), [&](RE::NiAVObject* o) { return !attached(o); });
-    if (stale || root != cached_root || part != cached_part || now - walked_at > 2.0) {
-        cached_root = root;
-        cached_part = std::string(part);
-        walked_at = now;
-        found.clear();
-        int budget = 2000;
-        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
-            if (NameHas(o, part)) found.push_back(o);
-        });
-    }
-    for (auto* o : found) {
-        if (hidden) o->flags |= 1ull;
-        else o->flags &= ~1ull;
-    }
-    return static_cast<int>(found.size());
 }
 
 int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {
@@ -365,6 +315,50 @@ bool EquipNative(std::uint32_t form_id, bool equip) {
                  : mgr->UnequipObject(player, item, nullptr, false, false, true, true, nullptr);
 }
 }  // namespace
+
+bool EquipForm(std::uint32_t form_id, bool equip) { return EquipNative(form_id, equip); }
+
+std::vector<std::uint32_t> ArmorsBesideKeyword(std::string_view editor_id) {
+    std::vector<std::uint32_t> out;
+    auto* keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(RE::BSFixedString(std::string(editor_id).c_str()));
+    if (!keyword) return out;
+    // the keyword's file: full (index in the top byte), medium (0xFD, 16-bit local IDs) or light (0xFE, 12-bit)
+    const std::uint32_t id = keyword->GetFormID();
+    const std::uint32_t top = id >> 24;
+    const std::uint32_t base = top == 0xFE ? id & 0xFFFFF000u : top == 0xFD ? id & 0xFFFF0000u : id & 0xFF000000u;
+    const std::uint32_t span = top == 0xFE ? 0x1000u : 0x10000u;    // S2SWeapons.esm numbers its records from 0x800
+    for (std::uint32_t local = 0; local < span; ++local) {
+        auto* f = RE::TESForm::LookupByID(base | local);
+        if (f && f->GetFormType() == RE::FormType::kARMO) out.push_back(base | local);
+    }
+    return out;
+}
+
+bool IsEquipped(std::uint32_t form_id, std::function<void(bool)> result) {
+    auto* armo = RE::TESForm::LookupByID<RE::TESObjectARMO>(form_id);
+    if (!armo) return false;
+    return Dispatch("Actor", "IsEquipped",
+                    [armo](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                        out.resize(1);
+                        RE::BSScript::PackVariable(out[0], armo);
+                    },
+                    [result](const RE::BSScript::Variable& v) {
+                        if (result) result(v.is<bool>() && RE::BSScript::get<bool>(v));
+                    });
+}
+
+bool ItemCount(std::uint32_t form_id, std::function<void(int)> result) {
+    auto* armo = RE::TESForm::LookupByID<RE::TESObjectARMO>(form_id);
+    if (!armo) return false;
+    return Dispatch("ObjectReference", "GetItemCount",
+                    [armo](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                        out.resize(1);
+                        RE::BSScript::PackVariable(out[0], armo);
+                    },
+                    [result](const RE::BSScript::Variable& v) {
+                        if (result) result(v.is<std::int32_t>() ? RE::BSScript::get<std::int32_t>(v) : 0);
+                    });
+}
 
 // Stance re-equip, in two steps the controller spaces out: Papyrus Actor.GetEquippedWeapon(0) finds the weapon (its
 // VM handle carries the FormID in the low 32 bits), then the native unequip on the main thread; EquipWeapon equips
