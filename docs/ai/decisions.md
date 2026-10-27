@@ -668,3 +668,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   docs/re/ghidra-ai-setup.md section 6; output capture needs no RE); (2) the offline walkthrough and the clean-room
   method are for when quests are converted (PLAN P5). Their lessons match ours: an engine call's answer is not
   evidence (our unequip answered false and worked), measure the effect instead; never assume the load-order index.
+- 2026-10-27 owner: convert KS Hairdos SMP's physics. Decision: generate Starfield's own bone-driving cloth per SMP
+  chain (plan route A) instead of an SFSE solver (route B): no runtime code, and every rule the cloth needs was
+  verified on the owner's uploaded hairs (docs/armor/animation-port.md "SMP hair -> Starfield cloth"). New: a Havok
+  tagfile writer (`fo4sf/hktagwrite.py`, byte-identical rewrites of the OC cloth files), the chain-cloth builder
+  (`fo4sf/smpcloth.py`, bone- or object-space skin templates, its own checker), the hair re-rig (`fo4sf/skyrimhair.py`:
+  head-relative placement measured on the two games' heads, simulated SMP bones as S2S_ bones, anchors merged into
+  C_Head) and `scripts/armor/hair_pack.py` (KS wigs as head apparel in S2SHair.esm). The cloth template (TYPE section,
+  human skeleton, body capsules) is read at conversion time from the game or a mod, never committed. Alternatives:
+  reusing a game hair's rig unchanged (no KS physics), an SFSE solver (route B, kept as the fallback if the generated
+  cloth looks stiff). Unresolved until the owner's run: whether it simulates in game.

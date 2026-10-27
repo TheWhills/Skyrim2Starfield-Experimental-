@@ -850,6 +850,49 @@ hollywood_curls 22, cropped_bang 19, bob 12, whitney_curls 12, child ponytail_ha
 smallest writer template), hairspray_bob 4, spiked 3, coily_mohawk 2, top_bun 2. The long, layered rigs use BonePlanes +
 LocalRange (pose-keeping, like SMP's angular limits) besides links and bend stiffness.
 
+## SMP hair -> Starfield cloth (2026-10-27, `hktagwrite`, `smpcloth`, `skyrimhair`, `scripts/armor/hair_pack.py`)
+Owner: convert KS Hairdos SMP's physics. Route A of the plan above (native cloth), per-chain cloth generated from the SMP
+config. Measured on the owner's uploads (OC Hairs, Eris Hairstyles, KS Hairdos SMP); nothing read from FSMP / HDT-SMP
+code; no mod or game file committed.
+* **verified: Havok tagfile writer.** TYPE copied from a template; DATA / ITEM / PTCH regenerated. Rewriting the 7
+  distinct OC cloth payloads (Ponytail, Pigtails, Dint hair, agent outfit) gives byte-identical files; the 8 Eris
+  payloads (another exporter's item order) give files that decode to equal values. Rules learnt doing so: items in
+  breadth-first discovery order, equal strings share one item, a type with its own layout aligns to its alignment and a
+  typedef (hkVector4, hkUint32, hkQsTransform ...) only to 2, an array / pointer / string holds its item index, null
+  references are not patched, patch groups in order of first use.
+* **verified: the bone deformer's triangle frame** (every pair of Eris balding / long curls and OC Ponytail, 1e-4):
+  origin = centroid c, axes [v0 - c, v1 - c, cross(v1 - v0, v2 - v0) / 3]; bone rest = frame @ localBoneTransform.
+* **verified: skin operators.** Bone-space (Eris): 16-vertex blocks, one bone each (control byte 3), float positions =
+  inverse(bone rest) @ vertex; four-bone blocks hold one weighted local point per bone (w = weight). Object-space (OC):
+  control bytes 0 / 1 / 2 / 3 = four / three / two / one-bone blocks (localPNs in control order), vertex = sum weight x
+  bone @ boneFromSkinMesh @ local, packed positions (hkPackedVector3: value x 2^16 x float(bits = w << 16)); the
+  pinned particles come back to 5e-5 m. The visible mesh's binds are inverse(bone rest) from the cloth skeleton
+  (Eris long curls: bind @ rest = identity to 1e-6), vertices in model space.
+* **verified: link stiffness split** stiffnessA = wA / (wA + wB), stiffnessB = -wB / (wA + wB) (w = inverse mass,
+  pinned 0); no particle twice in a batch of 4. Colliders sit at their bone's origin with model axes at rest (offset =
+  inverse rest rotation); capsule dir = normalised, capLenSqrdInv = 1 / length^2. Trackers: skin reads its bones, sim
+  reads the collider bones, the deformer writes the chain bones.
+* **Design (supported hypothesis until the owner's test):** per SMP chain, two particles per joint (on it and 1.5 cm
+  beside it); each simulated bone follows the triangle (joint, side, next joint); the first simulated bone's origin is
+  pinned (SMP pivots it on its kinematic anchor there); kinematic anchors merge into their human bone (C_Head);
+  standard links along and across the strip, stretch links from the pinned root (path length), a local range per
+  particle = chord of the accumulated SMP angular limits (SMP's springs back to the rest pose are not modelled; nor bend
+  stiffness); mass = the SMP bone's, split between the joint's two particles; damping 0.9 / s; gravity -9.81; a skull
+  capsule on C_Head (from the Starfield head: sphere centre (0, 0.023, 0.067) m from C_Head, r 0.084; shrunk to clear
+  the particles) plus the template's own body capsules. New bones are named S2S_<SMP bone>, appended to the template's
+  human skeleton (its own driven bones removed): the engine creates them from the cloth skeleton as it does for the
+  mods' hairs (their NIFs have no nodes for them).
+* **Placement (measured):** Skyrim and Starfield share model axes; a Skyrim male skull is 0.93 x a Starfield one (ICP on
+  the cranium, rms 6.7 mm), the Skyrim head bone maps 2 cm behind / 0.5 cm below Starfield's C_Head. Female heads not
+  measured (--head-scale / --head-offset).
+* Dry run on all 100 KS wigs (female) with the Eris long curls template: 100 converted, rebuilt cloth checks (bone from
+  triangle 7e-6 m, pins 5e-8 m, links 1e-7 m); also builds on the OC (object-space, no local range) templates.
+* **Unresolved, for the owner's test:** whether the game simulates the generated cloth (first: does the wig move at all,
+  then how it swings), whether the vanilla game has a template the builder accepts (the script ranks the vanilla hairs;
+  else --cloth-template with Eris' long curls), female head fit, hair through the back / legs on long styles (only the
+  template's chest or arm capsules), hair materials (the generic converted material, not Starfield's hair shader), the
+  character's own hair under the wig (not hidden; pick a short style).
+
 ## New weapon types (two-handed, dagger / axe / mace) and dual wield: plan (2026-10-20)
 Owner: most Skyrim weapon types (greatsword, battleaxe, warhammer...) do not exist in Starfield, and dual wield has
 to be worked out.

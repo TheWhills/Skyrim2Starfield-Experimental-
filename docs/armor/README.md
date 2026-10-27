@@ -17,6 +17,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 | Starfield animation-system survey (graphs, descriptors, rigs, native behaviours) | `scripts/armor/sf_anim_survey.py` | synthetic test; plan: animation-port.md |
 | HDT-SMP / FSMP physics configs: features, chains, mesh links, extra bones | `scripts/armor/smp_survey.py` | synthetic test; findings: animation-port.md "SMP config survey" |
 | Starfield Havok cloth (BSClothExtraData, .hkx, BA2): bone-driving rigs, constraints, colliders | `scripts/armor/sf_cloth_survey.py` | synthetic test; findings: animation-port.md "Starfield cloth decoded" |
+| Havok tagfile writer; SMP hair -> Starfield cloth (bone chains, links, local range, capsules); KS wig test pack | `src/fo4sf/hktagwrite.py`, `src/fo4sf/smpcloth.py`, `src/fo4sf/skyrimhair.py`, `scripts/armor/hair_pack.py` | synthetic tests; writer byte-identical on the OC cloth files; animation-port.md "SMP hair -> Starfield cloth" |
 
 ## Runs to do on the PC (each writes a report to paste back)
 1. `python -I scripts\skyrim_first_run.py ...` (terrain, objects, now also armor).

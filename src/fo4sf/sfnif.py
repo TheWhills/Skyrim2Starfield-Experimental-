@@ -216,6 +216,21 @@ def build_skinned_nif(node_name: bytes, shapes: List[SkinnedShape], bs_version: 
     return f
 
 
+def add_cloth(n: nifmod.NifFile, payload: bytes) -> int:
+    """Append a BSClothExtraData (u32 size + Havok cloth tagfile, no name: the layout of the game's and mods' physics
+    hairs) and list it in the root NiNode's extra data after the existing entries (as OC Ponytail / Eris Hairstyles:
+    root extras = BSXFlags, BSClothExtraData). Returns the block index."""
+    if n.type_of(0) != "NiNode":
+        raise nifmod.NifError("add_cloth: block 0 is not the root NiNode")
+    idx = n.add_block("BSClothExtraData", struct.pack("<I", len(payload)) + payload)
+    root = n.blocks[0]
+    name, n_extra = struct.unpack_from("<iI", root, 0)
+    extras = list(struct.unpack_from(f"<{n_extra}i", root, 8)) + [idx]
+    n.blocks[0] = struct.pack("<iI", name, len(extras)) + struct.pack(f"<{len(extras)}i", *extras) \
+        + root[8 + 4 * n_extra:]
+    return idx
+
+
 def merge_under_node(base: nifmod.NifFile, static: nifmod.NifFile, node_name: bytes) -> nifmod.NifFile:
     """`base` (a build_static_nif model) with a new child NiNode `node_name` of its root holding the shapes of `static`
     (a build_static_nif model without collision): their BSGeometry / NiIntegerExtraData / BSLightingShaderProperty
