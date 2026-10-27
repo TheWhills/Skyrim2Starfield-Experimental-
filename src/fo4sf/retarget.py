@@ -443,6 +443,12 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
     wq = np.zeros((F, B, 4))
     dsf = np.zeros((F, B, 4))                                          # Starfield world delta per bone
     dsf[..., 3] = 1.0
+    # The extra world turn a hand_follow hand got (its aimed rotation against the one Skyrim's hand gives), carried to
+    # the bones below it that follow Skyrim's own world deltas (the fingers): they keep their pose IN the hand.
+    # Without it the left hand's dual-wield turn (~150 deg about the blade) left the fingers where Skyrim's were in the
+    # world, splayed open (owner's run 2026-10-26: "the hand is still open").
+    turn = np.zeros((F, B, 4))
+    turn[..., 3] = 1.0
     for i, p in enumerate(sf.parents):
         pw_t = wt[:, p, :] if p >= 0 else np.zeros((F, 3))
         pw_q = wq[:, p, :] if p >= 0 else np.tile([0.0, 0.0, 0.0, 1.0], (F, 1))
@@ -472,11 +478,17 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
         elif rule and rule[0][0] == "full":
             d = delta[:, rule[0][1], :]
             target_q = qmul(d, qmul(align.get(i, np.array([0.0, 0.0, 0.0, 1.0])), rq_sf[i])[None])
+            if p >= 0 and i not in hand_follow:
+                target_q = qmul(turn[:, p, :], target_q)
+                turn[:, i, :] = turn[:, p, :]
             dsf[:, i, :] = d
         elif rule and rule[0][0] == "split":
             _k, src, w = rule[0]
             d = qslerp(pd, delta[:, src, :], w)
             target_q = qmul(d, rq_sf[i][None])
+            if p >= 0 and i not in hand_follow:
+                target_q = qmul(turn[:, p, :], target_q)
+                turn[:, i, :] = turn[:, p, :]
             dsf[:, i, :] = d
         elif i in world_src:
             d = delta[:, world_src[i], :]
@@ -495,6 +507,8 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
             w = next((hw for wi, (hw, _s) in handover.items() if grips[wi][0] == i), None)
             if w is not None and target_q is not None:                 # the hand let go: back to Skyrim's hand
                 follow = np.stack([qslerp(follow[f], target_q[f], float(w[f])) for f in range(F)])
+            if target_q is not None:
+                turn[:, i, :] = qmul(follow, qinv(target_q))
             target_q = follow
             dsf[:, i, :] = qmul(target_q, qinv(rq_sf[i])[None])
         name = sf.names[i]

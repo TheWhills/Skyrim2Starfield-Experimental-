@@ -221,6 +221,24 @@ class RetargetTests(unittest.TestCase):
         wq_off = sf.fk(off["t"], off["q"])[1]
         self.assertLess(abs(float(np.dot(want, wq_off[0, 2]))), 0.9999)
 
+    def test_fingers_stay_curled_in_a_turned_left_hand(self):
+        names = ["NPC Root [Root]", "NPC L Hand [LHnd]", "NPC L Finger10 [LF10]", "Shield"]
+        sk = R.Rig(names, [-1, 0, 1, 1], [(0, 0, 0), (-30, 0, 70), (-3, 0, 0), (0, -2, 7)],
+                   [I, I, I, qaxis((1, 0, 0), 35)])
+        sf = R.Rig(["Root", "L_Wrist", "L_Index", "WeaponLeft"], [-1, 0, 1, 0],
+                   [(0, 0, 0), (-0.45, 0, 1.0), (-0.04, 0, 0), (-0.47, 0.07, 0.95)], [I, qaxis((0, 1, 0), 20), I, I])
+        q_hand, q_curl = qaxis((0, 0, 1), 70), qaxis((0, 1, 0), 60)            # a curled finger in a turned hand
+        tr = [(tuple(sk.t[i]), q_hand if i == 1 else q_curl if i == 2 else tuple(sk.q[i]), (1, 1, 1)) for i in range(4)]
+        clip = {"frames": 1, "fps": 30.0, "bones": names, "tracks": [[x] for x in tr]}
+        rel = {}
+        for dual in (False, True):
+            res = R.retarget(clip, sk, sf, weapon_in_hand=True, left_weapon=dual)
+            _wt, wq = sf.fk(res["t"], res["q"])
+            rel[dual] = R.qmul(R.qinv(wq[0, sf.index["L_Wrist"]]), wq[0, sf.index["L_Index"]])
+            if dual:                                                            # the hand really was turned
+                self.assertGreater(abs(float(np.dot(wq[0, sf.index["L_Wrist"]], qaxis((0, 1, 0), 20)))), 0)
+        self.assertAlmostEqual(abs(float(np.dot(rel[False], rel[True]))), 1.0, places=6)   # same curl in the hand
+
     def test_two_bone_ik_reaches_and_keeps_the_hand(self):
         names = ["Root", "L_Biceps", "L_Forearm", "L_Wrist", "L_Index"]
         rig = R.Rig(names, [-1, 0, 1, 2, 3], [(0, 0, 1.4), (-0.3, 0, 0), (-0.28, 0, 0), (-0.25, 0, 0), (-0.08, 0, 0)],

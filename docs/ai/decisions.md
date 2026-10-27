@@ -488,3 +488,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   nightwear copy took the outfit's slot (outfit and legs gone, not wearable with a spacesuit). Now the blade is skinned
   to L_Wrist at the WeaponLeft rest grip (same look in the dual attacks, in the hand in every clip), and the ARMO / ARMA
   copies sit on one biped slot (BO64) no vanilla ARMO / ARMA uses (highest free bit <= 61, --left-slot overrides).
+- 2026-10-26 owner: left hand open while dual wielding. Read back from the dual clips: the left finger roots sat
+  143-159 deg from rest (the right 27-32): the retarget's hand_follow turns the left hand ~150 deg about the blade so
+  the left weapon aims as Skyrim's, and the fingers kept Skyrim's world orientation. The extra turn of a followed hand
+  is now carried to the bones under it that follow Skyrim's world deltas (fingers keep their pose in the hand; the
+  right fingers shift slightly too). Rebuilt: left finger roots 15-33 deg, as the right. Delivered as
+  SkyrimMelee_LoreRim_dual_stance_v2.zip. Next (owner's go): the left weapon drawn by the plugin instead of apparel.
