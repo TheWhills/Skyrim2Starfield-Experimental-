@@ -239,6 +239,21 @@ class LeftBladeKeywordTests(unittest.TestCase):
                           (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", ss[3]))])
         self.assertEqual(len({aa[3], ao[3], ss[3]}), 3)
 
+    def test_spacesuit_check_lists_both_records(self):
+        def rec(edid, bits, kws, fid):
+            return (b"ARMO", struct.pack("<I", 0x4) + bytes(20),
+                    [(b"EDID", edid + b"\0"), (b"BO64", struct.pack("<Q", bits)),
+                     (b"KSIZ", struct.pack("<I", len(kws))), (b"KWDA", struct.pack(f"<{len(kws)}I", *kws))], fid)
+        outfit = rec(b"Clothes_Nightwear_01", 1 << 3, [7], 0x10)
+        armo = [outfit, rec(b"Helmet_X", 1 << 36, [8], 0x11), rec(b"Spacesuit_Body_X", (1 << 35) | (1 << 40), [8, 9], 0x12)]
+        got = P.spacesuit_check(outfit, armo, {7: "ArmorTypeApparel", 8: "ArmorTypeSpacesuit"})
+        self.assertEqual(got["outfit"]["keywords"], ["ArmorTypeApparel"])
+        self.assertEqual(got["outfit"]["biped_slots"], [3])
+        self.assertEqual(got["spacesuit"]["edid"], "Spacesuit_Body_X")
+        self.assertEqual(got["spacesuit"]["keywords"], ["ArmorTypeSpacesuit", "00000009"])
+        self.assertEqual(got["spacesuit"]["record_flags"], "00000004")
+        self.assertIsNone(P.spacesuit_check(outfit, armo[:2], {})["spacesuit"])
+
     def test_only_the_left_blade_addon_is_kept(self):
         subs = [(b"EDID", b"O\0"), (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x100)),
                 (b"INDX", struct.pack("<H", 1)), (b"MODL", struct.pack("<I", 0x101)), (b"DATA", b"x")]

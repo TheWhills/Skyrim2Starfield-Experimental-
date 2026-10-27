@@ -365,10 +365,12 @@ void Plugin::Tick() {
                 const bool sent = game::EquippedWeaponHasKeyword(kw, [this, gen, worn](bool weapon) {
                     if (gen != poll_gen_.load()) return;
                     weapon_dual_ = weapon ? 1 : 0;
+                    armor_hits_ = worn && !weapon ? 1 : 0;    // the keyword worn, not on the weapon: the ARMO blade
                     dual_worn_ = worn || weapon ? 1 : 0;
                     worn_gen_ = gen + 1;                      // a fresh answer for Tick
                 });
                 if (!sent) {
+                    armor_hits_ = worn ? 1 : 0;
                     dual_worn_ = worn ? 1 : 0;
                     worn_gen_ = gen + 1;
                 }
@@ -383,21 +385,18 @@ void Plugin::Tick() {
                 blades_ = game::ArmorsBesideKeyword(dual_kw);
                 REX::INFO("dual wield: {} left blade(s) in the plugin that has {}", blades_.size(), dual_kw);
             }
-            // the worn (ARMO) blade on? (the previous poll's answers): only that one is put away while sheathed
-            const bool armor_on = armor_hits_.exchange(0) > 0;
+            // the worn (ARMO) blade on? (the previous poll's answer: worn keyword, the weapon without it). Owner's run
+            // 2026-10-27: Papyrus Actor.IsEquipped on the blade never said yes, so sheathing put nothing away.
+            const bool armor_on = armor_hits_.load() > 0;
             if (armor_on && !armor_blade_on_.load() && settings_.hide_left_sheathed) {   // just put on: sheathed?
                 drawn_answer_ = -1;
                 game::IsWeaponDrawn([this](bool d) { drawn_answer_ = d ? 1 : 0; });
             }
             armor_blade_on_ = armor_on;
             if (blades_.size() == 1 && !blade_id_.load()) blade_id_ = blades_[0];
-            if (dual_worn_.load() == 1)
+            if (blades_.size() > 1 && armor_on)              // several blades: which one is on (for putting it away)
                 for (const auto id : blades_)
-                    game::IsEquipped(id, [this, id](bool on) {
-                        if (!on) return;
-                        blade_id_ = id;
-                        ++armor_hits_;
-                    });
+                    game::IsEquipped(id, [this, id](bool on) { if (on) blade_id_ = id; });
             if (restore_ == 1 && blades_searched_) {          // after a load: was the blade put away in the save?
                 restore_ = blades_.empty() ? 0 : 2;
                 restore_answers_ = 0;

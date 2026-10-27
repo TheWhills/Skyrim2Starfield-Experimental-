@@ -261,6 +261,26 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
 LEFT_HAND_NODE = b"S2S_LeftHand"
 
 
+def _armo_summary(rec, kw_names) -> dict:
+    import struct
+    t, header, subs, fid = rec
+    bo = next((struct.unpack_from("<Q", d)[0] for s_, d in subs if s_ == b"BO64" and len(d) >= 8), 0)
+    flags = struct.unpack_from("<I", header, 0)[0] if len(header) >= 4 else None
+    return {"edid": sfplugin.edid(subs), "form_id": f"{fid:08X}", "record_flags": f"{flags:08X}" if flags is not None
+            else None, "biped_slots": [b for b in range(64) if bo >> b & 1],
+            "keywords": [kw_names.get(k, f"{k:08X}") for k in sfplugin.keywords(subs)],
+            "subrecords": sorted({s_.decode("latin-1") for s_, _d in subs})}
+
+
+def spacesuit_check(outfit, armo, kw_names) -> dict:
+    """The outfit ARMO the left blade copies and the first vanilla ARMO on the spacesuit body slot (35) whose EditorID
+    says spacesuit: keywords, record flags, slots, subrecord types, to compare."""
+    import struct
+    suit = next((r for r in armo if re.search("spacesuit", sfplugin.edid(r[2]), re.I) and any(
+        s_ == b"BO64" and len(d) >= 8 and struct.unpack_from("<Q", d)[0] >> 35 & 1 for s_, d in r[2])), None)
+    return {"outfit": _armo_summary(outfit, kw_names), "spacesuit": _armo_summary(suit, kw_names) if suit else None}
+
+
 def pair_model(staging: str, right_model: str, left_model: str) -> str:
     """The pair weapon's NIF in staging: the right weapon's model with the left blade's (rigid, L_Wrist frame) shapes
     under a node LEFT_HAND_NODE (sfnif.merge_under_node); returns its model path (as in WEAP MODL)."""
@@ -412,6 +432,10 @@ def main(argv=None):
                                  "vanilla_slots_used": f"{used_slots(apparel):016X}"}
             recs += [aa, ao, aa_suit]
             row["keyword"] = {"edid": LEFT_BLADE_KEYWORD, "form_id_in_plugin": f"{kw_fid & 0xFFFFFF:06X}"}
+            # what the game may tell outfits and spacesuits apart by (owner's runs 2026-10-27: the blade is hidden
+            # under a spacesuit even with an addon on a spacesuit slot): the copied outfit's keywords and record
+            # flags, next to a vanilla spacesuit body's
+            row["spacesuit_check"] = spacesuit_check(armo_t, [r for r in sf if r[0] == b"ARMO"], kw_names)
             row.update(starfield_model=model, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}", editor_id=edid, name=name,
                        test_with_pack="dual_" + lw["pack"].replace("1h_", ""), worn=True,
                        apparel_template={"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2]),
@@ -456,6 +480,10 @@ def main(argv=None):
         fh.write("\n".join(lines) + "\n")
     shutil.rmtree(staging, ignore_errors=True)
     print("\n".join(lines))
+    for r in report["weapons"]:
+        if r.get("spacesuit_check"):
+            print("\nspacesuit check (paste this back):")
+            print(json.dumps({"slots": r.get("biped_slot"), **r["spacesuit_check"]}, indent=1))
     print(f"\nreport: {os.path.join(out, 'weapon_test_pack.json')}")
     return 0
 

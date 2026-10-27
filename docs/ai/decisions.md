@@ -595,3 +595,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   follow is off by default (sLeftHandNode empty), the listing / search only with bDualDebug = 1. The worn left blade
   (which draws in the left hand, verified 2026-10-26) is the working route again, with the spacesuit-slot addon and
   the put-away-while-sheathed fixes still to test.
+- 2026-10-27 owner's worn-blade run: blade in the hand (dual moveset), but sheathing did not put it away (no "taken
+  off" line: Papyrus Actor.IsEquipped on the blade ARMO never answered yes, so the plugin thought no ARMO blade was
+  on) and still invisible with a spacesuit (the outfit-slot + spacesuit-slot addons did not help). Now the ARMO blade
+  is "the keyword is worn and the weapon does not carry it" from the same poll. For the spacesuit, the pack prints the
+  copied outfit's keywords / record flags / slots next to a vanilla spacesuit body's, to see what the game sorts by.
