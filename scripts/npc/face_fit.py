@@ -7,12 +7,14 @@ Reads (Starfield): the facial bone regions (humanracefacialboneregions*.txt), th
 face-bone mod's).
 
     python -I scripts\\npc\\face_fit.py --skyrim-data "<Skyrim SE>\\Data" --starfield "<Starfield>" --out <folder>
-        [--npc EDID ...] [--count 12] [--test-plugin]
+        [--npc EDID ...] [--count 12] [--test-plugin [--hair --texconv <texconv.exe>]]
 
 Writes <out>\\faces.json (per NPC: dial values by slider id and name, fit RMS before / after, alignment) and, with
 --test-plugin, S2SFaceTest.esm: one Starfield NPC per fitted face (a vanilla human NPC of the same sex copied, its face
 dials replaced, its phenotype morphs cleared) named "<Skyrim EditorID> (S2S)", to place with the console
 (player.placeatme <id>; the ids are in faces.json).
+With --hair the test NPCs also wear their Skyrim hair and beard (scripts/npc/npc_hair.py: converted rigidly onto
+Starfield's head, hair colour baked in), packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2".
 Unverified until the first run (all reported in faces.json): position units (cm), dial value range (-1..1), that
 FMSI is the regions file's slider ID, the head NIF's bind convention.
 """
@@ -26,6 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
+sys.path.insert(0, HERE)
 
 import numpy as np  # noqa: E402
 
@@ -125,6 +128,29 @@ def pick_template(npc_recs, race_fid, female, edid=None):
     return best
 
 
+def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_subs) -> dict:
+    """--hair: convert and pack the test NPCs' Skyrim hair (npc_hair.add_hair), head part records added to recs."""
+    import shutil
+    import hair_pack
+    import npc_hair
+    from fo4sf import skyrimconvert
+    cr = a.content_resources or os.path.join(a.starfield, "Tools", "ContentResources.zip")
+    if not os.path.isfile(cr):
+        sys.exit(f"ContentResources.zip (Creation Kit) not found: {cr}")
+    staging = os.path.join(out, "_staging")
+    shutil.rmtree(staging, ignore_errors=True)
+    conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None, prefix="s2s")
+    sf_world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
+    sf_hdpt = {r[3]: r for r in sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
+    hdpt, clfm = npc_hair.head_parts(esm)
+    npc_hair.add_hair(rows, npcs, chosen, recs, test_subs, a, sky, conv, sf_world, sf_hdpt, hdpt, clfm, staging)
+    base = os.path.splitext(PLUGIN)[0]
+    res = hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2", f"{base} - Textures.ba2")
+    res["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
+    shutil.rmtree(staging, ignore_errors=True)
+    return res
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
@@ -139,7 +165,17 @@ def main(argv=None):
     ap.add_argument("--test-plugin", action="store_true")
     ap.add_argument("--template-npc", action="append", default=[],
                     help="Starfield NPC EditorID the test NPCs copy (male, then female); default: a plain one")
+    ap.add_argument("--hair", action="store_true",
+                    help="with --test-plugin: the test NPCs wear their Skyrim hair and beard (needs --texconv)")
+    ap.add_argument("--texconv", help="texconv.exe, for --hair")
+    ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip (for --hair)")
+    ap.add_argument("--archive2", help="default: <Starfield>/Tools/Archive2/Archive2.exe")
+    ap.add_argument("--hair-tint-gain", type=float, default=1.0,
+                    help="hair colour baked into the texture as texture x colour x gain (Skyrim's tint strength "
+                         "unverified)")
     a = ap.parse_args(argv)
+    if a.hair and not (a.test_plugin and a.texconv):
+        sys.exit("--hair needs --test-plugin and --texconv")
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
@@ -216,7 +252,7 @@ def main(argv=None):
         info = sfplugin.header_info(sf_esm)
         human = next(fid for _t, _h, s, fid in sfplugin.records(sf_esm, [b"RACE"]) if sfplugin.edid(s) == "HumanRace")
         npc_recs = sfplugin.records(sf_esm, [b"NPC_"])
-        recs = []
+        recs, test_subs = [], {}
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -229,10 +265,14 @@ def main(argv=None):
             subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}),
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
                                   b"FULL": sfplugin.zs(f"{row['edid']} (S2S)")}, drop=STRIP)
+            test_subs[row["edid"]] = len(recs)
             recs.append((b"NPC_", tpl[1], subs, fid))
             row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]),
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
                                           f"order index)"}
+        if recs and a.hair:
+            report["hair_packing"] = add_hair_files(a, out, sky, esm, sf_data, report["npcs"], npcs, chosen, recs,
+                                                    test_subs)
         if recs:
             with open(os.path.join(out, PLUGIN), "wb") as fh:
                 fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces"))

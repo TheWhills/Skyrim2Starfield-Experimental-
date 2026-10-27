@@ -119,17 +119,46 @@ def _limit(cfg: Dict, child: str, parent: str) -> float:
     return 0.5 if best is None else float(best)
 
 
-def convert(nif_bytes: bytes, smp_bytes: bytes, sf_world: Dict[str, np.ndarray],
+def _bind_world(s, k: int) -> np.ndarray:
+    """A skin bone's world transform at bind time (Skyrim units, model space): inverse(bind @ skin transform), the
+    frame the vertices were skinned in (NiSkinData: bind = skin -> bone, skin transform = model -> skin)."""
+    def m4(t):
+        m = np.eye(4)
+        m[:3, :3] = np.array(t.rotation, float).reshape(3, 3) * t.scale
+        m[:3, 3] = t.translation
+        return m
+    skin = m4(s.skin_transform) if s.skin_transform is not None else np.eye(4)
+    return np.linalg.inv(m4(s.binds[k]) @ skin)
+
+
+def head_anchor(n: nifmod.NifFile, nodes: Dict[str, np.ndarray]) -> np.ndarray:
+    """Where the Skyrim head bone was when the mesh was skinned (units): from a shape's skin bind when one is skinned
+    to it, else the NIF's node; 4x4. The nodes need not agree: in KS Amor / Kikyo the whole node tree sits 3.3 units
+    above and 2.5 behind the skinning frame (verified 2026-10-27: every bone's bind equals its node re-anchored at the
+    bind head), and the game draws vertices in the bind frame, so the bind is the truth."""
+    for s in skyrimskin.skinned_shapes(n):
+        names = [b.decode("latin-1") if isinstance(b, bytes) else b for b in s.bones]
+        if SKY_HEAD in names and len(s.binds) == len(names):
+            return _bind_world(s, names.index(SKY_HEAD))
+    if SKY_HEAD in nodes:
+        return nodes[SKY_HEAD]
+    raise HairError(f"no {SKY_HEAD} in the hair NIF (neither a skin bone nor a node)")
+
+
+def convert(nif_bytes: bytes, smp_bytes: Optional[bytes], sf_world: Dict[str, np.ndarray],
             scale: float = HEAD_SCALE, offset=HEAD_OFFSET) -> Hair:
-    """sf_world: Starfield rest world transforms by bone name (the cloth template's skeleton, smpcloth.skeleton_world)."""
+    """sf_world: Starfield rest world transforms by bone name (the cloth template's skeleton, smpcloth.skeleton_world,
+    or the game's skeleton). smp_bytes None: no physics (a vanilla Skyrim hair: rigid on its head / neck bones)."""
     n = nifmod.parse(nif_bytes)
-    cfg = smp.parse(smp_bytes)
+    cfg = smp.parse(smp_bytes) if smp_bytes else {"bones": {}, "constraints": []}
     nodes, parent = node_worlds(n)
-    if SKY_HEAD not in nodes:
-        raise HairError(f"no {SKY_HEAD} node in the hair NIF")
     if SF_HEAD not in sf_world:
         raise HairError(f"no {SF_HEAD} in the Starfield skeleton")
-    place = Placement(scale, tuple(offset), nodes[SKY_HEAD][:3, 3] * UNIT, sf_world[SF_HEAD][:3, 3])
+    anchor = head_anchor(n, nodes)
+    if SKY_HEAD in nodes:                              # the node tree into the skinning frame (see head_anchor)
+        corr = anchor @ np.linalg.inv(nodes[SKY_HEAD])
+        nodes = {k: corr @ m for k, m in nodes.items()}
+    place = Placement(scale, tuple(offset), anchor[:3, 3] * UNIT, sf_world[SF_HEAD][:3, 3])
     dynamic = {b for b, p in cfg["bones"].items() if p.get("dynamic") and b in nodes}
     report = {"config_dynamic_bones": sorted(b for b, p in cfg["bones"].items() if p.get("dynamic")),
               "missing_in_nif": sorted(b for b, p in cfg["bones"].items() if p.get("dynamic") and b not in nodes)}
@@ -230,6 +259,18 @@ def convert(nif_bytes: bytes, smp_bytes: bytes, sf_world: Dict[str, np.ndarray],
     return Hair(shapes, bones, host_of_root, report)
 
 
+def merge(hairs: List[Hair]) -> Hair:
+    """One hair from several (a head part and its extra parts, e.g. Skyrim's hair + hairline): shapes and bones
+    together, reports listed."""
+    out = Hair([], [], {}, {"parts": []})
+    for h in hairs:
+        out.shapes += h.shapes
+        out.bones += [b for b in h.bones if b.name not in {x.name for x in out.bones}]
+        out.host_of_root.update(h.host_of_root)
+        out.report["parts"].append(h.report)
+    return out
+
+
 def head_capsule(sf_world: Dict[str, np.ndarray], hair: Hair, margin: float = 0.004) -> smpcloth.Capsule:
     """A capsule for the skull on C_Head, shrunk so that no simulated particle starts inside it. Size from the
     Starfield male head mesh (2026-10-27: least-squares sphere through the cranium above the head bone: centre
@@ -275,10 +316,11 @@ def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     return m
 
 
-def nif_files(hair: Hair, materials: List[Optional[str]], cloth_blob: bytes, sf_world: Dict[str, np.ndarray],
-              out_name: str, back_faces: Optional[List[bool]] = None) -> Dict[str, bytes]:
+def nif_files(hair: Hair, materials: List[Optional[str]], cloth_blob: Optional[bytes],
+              sf_world: Dict[str, np.ndarray], out_name: str,
+              back_faces: Optional[List[bool]] = None) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif": ..., "geometries/<a>/<b>.mesh": ...}: the skinned hair with the cloth on its root
-    (materials[i] None = shape left out). Binds are the inverses of the bones' rest world transforms (the cloth
+    (cloth_blob None: no physics; materials[i] None = shape left out). Binds are the inverses of the bones' rest world transforms (the cloth
     skeleton's), the convention of the game's own hairs (Eris long curls: bind @ world = identity to 1e-6)."""
     from . import convert_static, sfmesh, sfnif
     world = dict(sf_world)
@@ -313,6 +355,7 @@ def nif_files(hair: Hair, materials: List[Optional[str]], cloth_blob: bytes, sf_
     if not skinned:
         raise HairError("no shape with a material")
     n = sfnif.build_skinned_nif(out_name.rsplit("/", 1)[-1].encode(), skinned)
-    sfnif.add_cloth(n, cloth_blob)
+    if cloth_blob is not None:
+        sfnif.add_cloth(n, cloth_blob)
     files[f"meshes/{out_name}.nif"] = nifmod.serialize(n)
     return files

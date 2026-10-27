@@ -8,8 +8,15 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
 2. Face fitter (`src/fo4sf/facefit.py`, `scripts/npc/face_fit.py`): Starfield face dials fitted to each NPC's baked
    Skyrim face. **Done** to the first-run stage (synthetic tests; PC checklist step 9 runs it on the real games and
    writes a test plugin).
-3. Hair: map each Skyrim hairstyle to the nearest vanilla Starfield one first; convert the meshes later (armor
-   pipeline). Not started.
+3. Hair: **the NPC's own Skyrim hair and beard on its test NPC** (owner 2026-10-27: they tell NPCs apart while the
+   faces are checked): `face_fit.py --test-plugin --hair --texconv ...` (scripts/npc/npc_hair.py). The hair head part and
+   its extra parts (hairline) are converted rigidly onto Starfield's head with the SMP hair code's placement
+   (fo4sf.skyrimhair: head-relative, Skyrim skull 0.93 x Starfield's, anchored on the skin bind), the NPC's hair colour
+   (HCLF -> CLFM) multiplied into the texture, written as a new head part copied from the test NPC's own hair / beard
+   head part, and swapped into the NPC's head parts; packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2".
+   **Unresolved until the run:** Starfield's head-part type numbers for hair / facial hair (assumed Skyrim's 3 / 4;
+   OC Hairs' hairs carry 3), how strong Skyrim's hair tint is (--hair-tint-gain), the race-default hair of NPCs
+   without a hair head part (not converted, reported). Matching vanilla Starfield hairstyles: later.
 4. NPC placement in the converted world (no schedules): later.
 5. Navmesh, then schedules (AI packages: Skyrim PACK -> Starfield PACK; both from the same engine line). Navmesh is the
    blocker: without it NPCs cannot walk.

@@ -164,7 +164,9 @@ def head_apparel(armo, arma, kw_names):
     raise SystemExit(f"no vanilla ARMO with {HEAD_KEYWORD} and an addon")
 
 
-def pack(staging: str, out: str, starfield: str, archive2: str = None) -> dict:
+def pack(staging: str, out: str, starfield: str, archive2: str = None, main_ba2: str = MAIN_BA2,
+         tex_ba2: str = TEX_BA2) -> dict:
+    """BA2 archives named after the plugin (Starfield loads "<plugin> - *.ba2"), or the files loose."""
     tool = archive2 or os.path.join(starfield, "Tools", "Archive2", "Archive2.exe")
     main = [d for d in ("meshes", "geometries", "materials") if os.path.isdir(os.path.join(staging, d))]
     tex = [d for d in ("textures",) if os.path.isdir(os.path.join(staging, d))]
@@ -173,10 +175,10 @@ def pack(staging: str, out: str, starfield: str, archive2: str = None) -> dict:
         a = types.SimpleNamespace(starfield=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(tool)))),
                                   staging=staging)
         if main:
-            deploy_starfield.build_archive(a, os.path.join(out, MAIN_BA2), main, "General")
+            deploy_starfield.build_archive(a, os.path.join(out, main_ba2), main, "General")
         if tex:
-            deploy_starfield.build_archive(a, os.path.join(out, TEX_BA2), tex, "DDS")
-        return {"archives": [MAIN_BA2] * bool(main) + [TEX_BA2] * bool(tex)}
+            deploy_starfield.build_archive(a, os.path.join(out, tex_ba2), tex, "DDS")
+        return {"archives": [main_ba2] * bool(main) + [tex_ba2] * bool(tex)}
     for d in main + tex:
         shutil.copytree(os.path.join(staging, d), os.path.join(out, d), dirs_exist_ok=True)
     return {"loose": main + tex, "note": "Archive2 not found: files left loose"}

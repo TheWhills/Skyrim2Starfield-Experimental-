@@ -678,3 +678,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   human skeleton, body capsules) is read at conversion time from the game or a mod, never committed. Alternatives:
   reusing a game hair's rig unchanged (no KS physics), an SFSE solver (route B, kept as the fallback if the generated
   cloth looks stiff). Unresolved until the owner's run: whether it simulates in game.
+- 2026-10-27 owner: vanilla Skyrim hair on the first NPC conversions, to tell NPCs apart and judge the faces. Decision:
+  the face test NPCs (face_fit.py --hair) wear their own Skyrim hair / beard, converted rigidly with the SMP hair code
+  (no physics: vanilla hair has none) and the hair colour baked into the texture, rather than mapping to the nearest
+  Starfield hairstyle (later). Found while doing it (verified on KS Amor / Kikyo): a head part NIF's bone nodes can sit
+  away from the frame it was skinned in (3.3 units up, 2.5 back); the binds are the truth, so skyrimhair now anchors on
+  the skin bind of NPC Head and moves the node tree into that frame (the first KS pack would have put those wigs 4.6 cm
+  low).
