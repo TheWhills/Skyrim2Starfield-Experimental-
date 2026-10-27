@@ -2,6 +2,7 @@
 
 #include <set>
 #include "s2s/controller.h"
+#include "s2s/xform.h"
 
 namespace s2s::sfse::game {
 namespace {
@@ -367,6 +368,77 @@ std::string DumpBoneSearch() {
     out += std::format("\n  searched {} KB, {} hit(s)", scanned >> 10, hits);
     if (first_lwrist) out += "\n  around the first 'L_Wrist' (floats):" + Floats(first_lwrist, -0x100, 0x100);
     return out;
+}
+
+namespace {
+// NiAVObject transforms on 1.16 (owner's dump 2026-10-27: local at +0x40, world at +0x80; each 3 rows of 16 bytes,
+// translation +0x30, scale +0x3C; the root's world translation was the player's position)
+combat::Xform ReadXform(const void* node, std::ptrdiff_t at) {
+    const auto* b = reinterpret_cast<const std::byte*>(node) + at;
+    combat::Xform x;
+    for (int i = 0; i < 3; ++i) std::memcpy(x.r[i].data(), b + 0x10 * i, 12);
+    std::memcpy(x.t.data(), b + 0x30, 12);
+    std::memcpy(&x.s, b + 0x3C, 4);
+    return x;
+}
+
+void WriteXform(void* node, std::ptrdiff_t at, const combat::Xform& x) {
+    auto* b = reinterpret_cast<std::byte*>(node) + at;
+    for (int i = 0; i < 3; ++i) std::memcpy(b + 0x10 * i, x.r[i].data(), 12);
+    std::memcpy(b + 0x30, x.t.data(), 12);
+    std::memcpy(b + 0x3C, &x.s, 4);
+}
+
+bool NameIs(const RE::NiAVObject* o, std::string_view want) {
+    const char* n = o->name.c_str();
+    const std::string_view name(n ? n : "");
+    return name.size() == want.size() && std::equal(name.begin(), name.end(), want.begin(), [](char a, char b) {
+               return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+           });
+}
+}  // namespace
+
+int FollowBone(std::string_view node_name, std::string_view bone_name) {
+    auto* root = Player3D();
+    if (!root) return -1;
+    if (g_children.offset < 0) {
+        if (g_layout_tries >= 3) return -2;
+        ++g_layout_tries;
+        if (!FindChildLayout(root)) return -2;
+    }
+    static RE::NiAVObject *cached_root = nullptr, *node = nullptr, *bone = nullptr;
+    static double looked_at = -10.0;
+    auto attached = [&](RE::NiAVObject* o) {
+        for (int i = 0; i < 64 && o; ++i) {
+            if (o == root) return true;
+            if (!Readable(o, 0x40)) return false;
+            o = reinterpret_cast<RE::NiAVObject*>(o->parent);
+        }
+        return false;
+    };
+    const bool ok = root == cached_root && node && bone && attached(node) && attached(bone) && NameIs(node, node_name) &&
+                    NameIs(bone, bone_name);
+    if (!ok) {
+        node = bone = nullptr;
+        cached_root = root;
+        const double now = Now();
+        if (now - looked_at < 1.0) return 0;           // a walk reads every node: not every frame
+        looked_at = now;
+        int budget = 4000;
+        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+            if (!node && NameIs(o, node_name)) node = o;
+            if (!bone && NameIs(o, bone_name)) bone = o;
+        });
+        if (!node || !bone) return 0;
+    }
+    auto* parent = reinterpret_cast<RE::NiAVObject*>(node->parent);
+    if (!parent || !Readable(parent, 0xC0)) return 0;
+    // the node's local so that parent world * local = the bone's world; the world written too (this frame's draw,
+    // before the game's next update recomputes it)
+    const auto bone_world = ReadXform(bone, 0x80);
+    WriteXform(node, 0x40, combat::local_for(ReadXform(parent, 0x80), bone_world));
+    WriteXform(node, 0x80, bone_world);
+    return 1;
 }
 
 int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {

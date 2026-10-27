@@ -216,6 +216,57 @@ def build_skinned_nif(node_name: bytes, shapes: List[SkinnedShape], bs_version: 
     return f
 
 
+def merge_under_node(base: nifmod.NifFile, static: nifmod.NifFile, node_name: bytes) -> nifmod.NifFile:
+    """`base` (a build_static_nif model) with a new child NiNode `node_name` of its root holding the shapes of `static`
+    (a build_static_nif model without collision): their BSGeometry / NiIntegerExtraData / BSLightingShaderProperty
+    copied with refs and strings renumbered. The dual wield pair weapon: the left blade rigid in the left hand's frame,
+    under a node S2SCombat moves onto the left hand bone each frame."""
+    import copy
+    out = copy.deepcopy(base)
+    if static.type_of(0) != "NiNode" or static.type_of(1) != "BSXFlags":
+        raise nifmod.NifError("merge_under_node: not a build_static_nif layout")
+    node = len(out.blocks)
+    remap = {i: node + i - 1 for i in range(2, len(static.blocks))}
+
+    def ref(r):
+        return -1 if r < 0 else remap[r]
+
+    def text(i):
+        return -1 if i < 0 else out.string_index(static.strings[i])
+
+    shapes = [remap[i] for i in range(2, len(static.blocks)) if static.type_of(i) == "BSGeometry"]
+    ident = struct.pack("<3f9ff", 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0)
+    out.add_block("NiNode", struct.pack("<iIiI", out.string_index(node_name), 0, -1, 0xE) + ident
+                  + struct.pack("<iI", -1, len(shapes)) + struct.pack(f"<{len(shapes)}i", *shapes))
+    for i in range(2, len(static.blocks)):
+        t, b = static.type_of(i), static.blocks[i]
+        if t == "BSGeometry":
+            g = parse_bsgeometry(b)
+            g.name_idx = text(g.name_idx)
+            g.extra_refs = [ref(r) for r in g.extra_refs]
+            g.controller, g.collision = ref(g.controller), ref(g.collision)
+            g.skin, g.shader, g.alpha = ref(g.skin), ref(g.shader), ref(g.alpha)
+            data = build_bsgeometry(g)
+        elif t == "NiIntegerExtraData":
+            data = struct.pack("<i", text(struct.unpack_from("<i", b, 0)[0])) + b[4:]
+        elif t == "BSLightingShaderProperty":
+            name, n_extra, ctrl = struct.unpack_from("<iIi", b, 0)
+            if n_extra:
+                raise nifmod.NifError("merge_under_node: shader with extra data")
+            data = struct.pack("<iIi", text(name), 0, ref(ctrl)) + b[12:]
+        else:
+            raise nifmod.NifError(f"merge_under_node: block type {t} not known")
+        out.add_block(t, data)
+    root = out.blocks[0]
+    _name, n_extra = struct.unpack_from("<iI", root, 0)
+    p = 8 + 4 * n_extra + 8 + 52
+    coll, n_child = struct.unpack_from("<iI", root, p)
+    children = list(struct.unpack_from(f"<{n_child}i", root, p + 8)) + [node]
+    out.blocks[0] = root[:p] + struct.pack("<iI", coll, len(children)) + struct.pack(f"<{len(children)}i", *children) \
+        + root[p + 8 + 4 * n_child:]
+    return out
+
+
 def merge_skinned(base: nifmod.NifFile, skinned: nifmod.NifFile) -> nifmod.NifFile:
     """`base` (a build_static_nif model, e.g. a weapon) with the shapes of `skinned` (a build_skinned_nif model) added
     as further children of its root: their blocks copied after base's, block refs and string indices renumbered, the

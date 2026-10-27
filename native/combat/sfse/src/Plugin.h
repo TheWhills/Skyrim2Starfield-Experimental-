@@ -31,6 +31,10 @@ struct Settings {
     // (s2s/left_blade.h). left_blade_node: part of the blade's node name, for the 3D listing in the log.
     std::string left_blade_node = "longsword_left";
     bool hide_left_sheathed = true;
+    // The pair weapon (both blades in one weapon): its left blade node is moved onto this bone every frame while the
+    // weapon carries the dual keyword. Empty = off.
+    std::string left_hand_node = "S2S_LeftHand";
+    std::string left_hand_bone = "L_Wrist";
 };
 
 class Plugin {
@@ -119,6 +123,7 @@ private:
     std::atomic_int restore_answers_{0};
     std::atomic<std::uint32_t> blade_in_bag_{0};
     int dumps_ = 0, left_logs_ = 0;
+    int follow_state_ = -9, follow_logs_ = 0;      // last FollowBone result (logged on change)
     std::atomic<const api::ClashCallbacks*> clash_{nullptr};
 };
 

@@ -571,3 +571,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   reader took the first u16 as the count and rejected count > capacity. Now the smaller of the two is the count. The
   same dump confirms the transforms: local at +0x40 (3 rows of 16 bytes, translation +0x70, scale +0x7C), world at
   +0x80 (translation +0xB0 = the player's position, 1515 / -797 / -161), previous world at +0xC0.
+- 2026-10-27 owner's bone-search run (with the count fix): the skeleton is an ordinary node tree under "Root" (COM,
+  ..., L_Clavicle > ... > L_Wrist, R_Wrist, Weapon, WeaponLeft; ~440 nodes with the face bones), so the earlier empty
+  rigRoot was the child-count bug, not a flattened bone tree. The weapon model ("Longsword") is a child of the
+  player's root, beside the skeleton. Done: the pair weapon's left blade is now a rigid static shape in L_Wrist's
+  frame under a node S2S_LeftHand (`sfnif.merge_under_node`, tested), and S2SCombat moves that node onto L_Wrist
+  every frame while the weapon carries the dual keyword: local = inverse(parent world) * L_Wrist world
+  (`s2s/xform.h`, tested), world written too. Unverified: whether the game keeps our transform for the draw (the tick
+  runs at input time, so the blade may trail the hand by a frame), and whether it lines up in the hand.

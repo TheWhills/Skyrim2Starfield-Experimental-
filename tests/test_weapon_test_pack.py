@@ -287,6 +287,30 @@ class PairModelTests(unittest.TestCase):
         self.assertEqual(sfnif.parse_bsgeometry(m.blocks[2]).meshes[0].path, b"aa\\bb")   # the right blade as before
 
 
+class LeftHandNodeTests(unittest.TestCase):
+    def test_static_shapes_go_under_a_new_node(self):
+        def model(name, mesh, mat):
+            return sfnif.build_static_nif(name, [sfnif.StaticShape(b"Blade", mesh, 36, 8, mat, (0, 0, 0, 1),
+                                                                   (0, 0, 0, 1, 1, 1))])
+        m = nif.parse(nif.serialize(sfnif.merge_under_node(model(b"longsword", b"aa\\bb", "materials\\r.mat"),
+                                                           model(b"left", b"cc\\dd", "materials\\l.mat"),
+                                                           b"S2S_LeftHand")))
+        types_ = [m.type_of(i) for i in range(len(m.blocks))]
+        self.assertEqual(types_[5:], ["NiNode", "BSGeometry", "NiIntegerExtraData", "BSLightingShaderProperty"])
+        root = m.blocks[0]
+        n_child, = struct.unpack_from("<I", root, 76)
+        self.assertEqual(struct.unpack_from(f"<{n_child}i", root, 80), (2, 5))     # right blade, the left node
+        node = m.blocks[5]
+        self.assertEqual(m.strings[struct.unpack_from("<i", node, 0)[0]], b"S2S_LeftHand")
+        self.assertEqual(struct.unpack_from("<iI", node, 68), (-1, 1))             # no collision, one child
+        self.assertEqual(struct.unpack_from("<i", node, 76)[0], 6)
+        self.assertEqual(struct.unpack_from("<13f", node, 16), (0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0))
+        g = sfnif.parse_bsgeometry(m.blocks[6])
+        self.assertEqual((g.extra_refs, g.shader), ([7], 8))
+        self.assertEqual(g.meshes[0].path, b"cc\\dd")
+        self.assertEqual(m.strings[struct.unpack_from("<i", m.blocks[8], 0)[0]], b"materials\\l.mat")
+
+
 class PackTests(unittest.TestCase):
     def test_end_to_end_on_synthetic_games(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(textures, "texconv", lambda *a, **k: None):
@@ -332,7 +356,8 @@ class PackTests(unittest.TestCase):
                                 "rb").read())
             types_ = [pn.type_of(i) for i in range(len(pn.blocks))]
             self.assertEqual(types_.count("BSGeometry"), 2)
-            self.assertEqual(sfnif.parse_skin(pn)["bones"], [b"L_Wrist"])
+            self.assertNotIn("SkinAttach", types_)                                # rigid: S2SCombat moves it
+            self.assertIn(b"S2S_LeftHand", pn.strings)
             pw = [r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"WEAP"])
                   if sfplugin.edid(r[2]) == "S2S_IronSword_Pair"][0]
             self.assertEqual(dict(pw[2])[b"MODL"], b"s2s\\weapons\\iron\\longsword_pair.nif\0")
@@ -370,7 +395,7 @@ class PackTests(unittest.TestCase):
                     kinds.append("right")                                          # right blade: along the bone's +Z
                 elif abs(float(along.max() - along.min()) - 70 * W.UNIT) < 0.01:
                     kinds.append("left")                                           # left blade: the wrist grip's +Z
-            self.assertEqual(sorted(kinds), ["left", "right"])
+            self.assertEqual(sorted(kinds), ["left", "left", "right"])   # worn (skinned) + pair (rigid) left
 
 
 if __name__ == "__main__":

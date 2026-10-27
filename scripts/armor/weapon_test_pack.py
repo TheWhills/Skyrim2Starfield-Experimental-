@@ -255,9 +255,15 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
     return (ta, ha, sa2, new_arma), (to, ho, so3, armo[3]), (ta, ha, sa3, suit_arma)
 
 
+# Node of the pair weapon's model holding the left blade (in the left wrist's frame): S2SCombat.ini sLeftHandNode,
+# moved onto the L_Wrist bone each frame. Owner's run 2026-10-26: a skinned left blade in a weapon model is not bound
+# to the actor's bones (drawn loose by the right hand), so the blade is rigid under this node instead.
+LEFT_HAND_NODE = b"S2S_LeftHand"
+
+
 def pair_model(staging: str, right_model: str, left_model: str) -> str:
-    """The pair weapon's NIF in staging: the right weapon's model with the left blade's skinned shapes added
-    (sfnif.merge_skinned); returns its model path (as in WEAP MODL)."""
+    """The pair weapon's NIF in staging: the right weapon's model with the left blade's (rigid, L_Wrist frame) shapes
+    under a node LEFT_HAND_NODE (sfnif.merge_under_node); returns its model path (as in WEAP MODL)."""
     def path(m):
         return os.path.join(staging, "meshes", *m.split("\\"))
     with open(path(right_model), "rb") as fh:
@@ -266,14 +272,15 @@ def pair_model(staging: str, right_model: str, left_model: str) -> str:
         left = nifmod.parse(fh.read())
     model = re.sub(r"\.nif$", "", right_model, flags=re.I) + "_pair.nif"
     with open(path(model), "wb") as fh:
-        fh.write(nifmod.serialize(sfnif.merge_skinned(base, left)))
+        fh.write(nifmod.serialize(sfnif.merge_under_node(base, left, LEFT_HAND_NODE)))
     return model
 
 
 def pair_weapon(staging: str, template, recs: list, right: dict, lw: dict, left_model: str, keyword: int) -> dict:
     """Dual wield as one weapon (Starfield equips one weapon at a time): a WEAP copy whose model holds both blades,
-    the left one skinned to L_Wrist, carrying the dual keyword (S2SCombat's worn-keyword check switches the moveset).
-    Unverified: whether the game binds a weapon model's skinned shapes to the actor's bones."""
+    the left one under LEFT_HAND_NODE (S2SCombat moves it onto the left hand), carrying the dual keyword (S2SCombat
+    switches to the Dual stance; verified 2026-10-26). `left_model`: the left blade as a static model in L_Wrist's
+    frame."""
     row = {"key": lw["key"] + "_pair", "ok": False}
     try:
         model = pair_model(staging, right["starfield_model"], left_model)
@@ -410,9 +417,16 @@ def main(argv=None):
                        apparel_template={"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2]),
                                          "arma_subrecords": [f"{x.decode('latin-1')}:{len(d)}" for x, d in arma_t[2]]})
             right = next((w for w in report["weapons"] if w["key"] == lw["key"] and w.get("ok")), None)
-            if right is not None:
+            if right is not None and on_wrist:
                 report["weapons"].append(row)
-                row = pair_weapon(staging, template, recs, right, lw, model, kw_fid)
+                conv.shape_hook = skyrimweapon.left_wrist_shapes        # the same blade, rigid (static model)
+                rigid = conv.convert_nif("meshes\\" + re.sub(r"^meshes[\\/]", "", lw["model"].replace("/", "\\"),
+                                                            flags=re.I), out_suffix="_left_rigid")
+                if rigid["ok"]:
+                    row = pair_weapon(staging, template, recs, right, lw,
+                                      rigid["out_name"].replace("/", "\\") + ".nif", kw_fid)
+                else:
+                    row = {"key": lw["key"] + "_pair", "ok": False, "reason": rigid.get("reason")}
         report["weapons"].append(row)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))

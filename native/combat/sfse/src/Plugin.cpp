@@ -94,6 +94,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     if (auto it = plugin.find("sleftbladenode"); it != plugin.end()) settings_.left_blade_node = it->second;
     settings_.hide_left_sheathed = to_int(plugin, "bhideleftbladesheathed", 1) != 0;
     left_blade_ = combat::LeftBlade(settings_.hide_left_sheathed);
+    if (auto it = plugin.find("slefthandnode"); it != plugin.end()) settings_.left_hand_node = it->second;
+    if (auto it = plugin.find("slefthandbone"); it != plugin.end()) settings_.left_hand_bone = it->second;
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -444,6 +446,17 @@ void Plugin::Tick() {
     if (const int d = drawn_answer_.exchange(-1); d >= 0) {
         std::scoped_lock l(lock_);
         if (const auto a = left_blade_.on_drawn(d == 1); a != LB::None) left_action_ = static_cast<int>(a);
+    }
+    // the pair weapon's left blade onto the left hand (every frame; the game places only the right-hand weapon)
+    if (!settings_.left_hand_node.empty() && weapon_dual_.load() == 1) {
+        const int st = game::FollowBone(settings_.left_hand_node, settings_.left_hand_bone);
+        if (st != follow_state_ && follow_logs_ < 20) {
+            ++follow_logs_;
+            REX::INFO("dual wield: pair weapon's '{}' {}", settings_.left_hand_node,
+                      st == 1 ? "follows " + settings_.left_hand_bone
+                      : st == 0 ? std::string("or the bone not found (yet)") : std::string("not reachable (no 3D)"));
+        }
+        follow_state_ = st;
     }
     // put the blade away / back (the animation events and the drawn answer above decide; main thread)
     if (const auto a = static_cast<LB>(left_action_.exchange(0)); a != LB::None) {
