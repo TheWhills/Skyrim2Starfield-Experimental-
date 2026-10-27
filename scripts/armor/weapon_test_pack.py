@@ -174,10 +174,12 @@ def with_keyword(subs, kw: int):
     return out
 
 
-# Keywords of the copied outfit that file the blade with the outfit layer the game hides under a shown spacesuit
-# (owner's spacesuit check 2026-10-27: Clothes_Nightwear_01 carries InventoryCategoryApparel and
-# ArmorTypeApparelOrNakedBody; a spacesuit body carries ArmorTypeSpacesuitBody instead). Supported, not verified.
+# The game's two worn layers by keyword (owner's spacesuit check 2026-10-27: Clothes_Nightwear_01 carries
+# ArmorTypeApparelOrNakedBody, a spacesuit body ArmorTypeSpacesuitBody). With the outfit's keyword the blade was
+# hidden under a shown spacesuit; without it, never drawn at all (owner's run 2026-10-27, verified). So the blade
+# carries both: drawn with either layer, to test.
 OUTFIT_LAYER_KEYWORDS = ("ArmorTypeApparelOrNakedBody",)
+SUIT_LAYER_KEYWORDS = ("ArmorTypeSpacesuitBody",)
 
 
 def without_keywords(subs, drop: set):
@@ -379,6 +381,9 @@ def main(argv=None):
                     help="outfit biped slot bit (0-31) for the left blade (default: a free one)")
     ap.add_argument("--left-suit-slot", type=int,
                     help="spacesuit biped slot bit (32-63) for the left blade's second addon (default: a free one)")
+    ap.add_argument("--left-layers", default="both", choices=["both", "outfit", "none"],
+                    help="worn-layer keywords on the left blade: both (outfit + spacesuit body), the outfit's only, "
+                         "or none (owner 2026-10-27: outfit = hidden under a spacesuit, none = never drawn)")
     ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
                     help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
@@ -451,10 +456,16 @@ def main(argv=None):
             slot, shared = (a.left_slot, False) if a.left_slot is not None else slot_in(apparel, OUTFIT_SLOTS)
             suit, suit_shared = ((a.left_suit_slot, False) if a.left_suit_slot is not None
                                  else slot_in(apparel, SUIT_SLOTS))
-            layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
             aa, ao, aa_suit = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid,
-                                                 slot=slot, suit_slot=suit, drop_keywords=layer)
-            row["keywords_dropped"] = sorted(kw_names[k] for k in layer if k in sfplugin.keywords(armo_t[2]))
+                                                 slot=slot, suit_slot=suit)
+            if a.left_layers == "both":                   # the spacesuit layer's keyword too
+                for k in sorted(k for k, n in kw_names.items() if n in SUIT_LAYER_KEYWORDS):
+                    ao = (ao[0], ao[1], with_keyword(ao[2], k), ao[3])
+            elif a.left_layers == "none":
+                layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
+                ao = (ao[0], ao[1], without_keywords(ao[2], layer), ao[3])
+            row["layer_keywords"] = [kw_names.get(k, f"{k:08X}") for k in sfplugin.keywords(ao[2])
+                                     if kw_names.get(k, "").startswith("ArmorType")]
             row["biped_slot"] = {"bit": slot, "suit_bit": suit, "shared_with_vanilla": [b for b, sh in
                                  ((slot, shared), (suit, suit_shared)) if sh],
                                  "vanilla_slots_used": f"{used_slots(apparel):016X}"}

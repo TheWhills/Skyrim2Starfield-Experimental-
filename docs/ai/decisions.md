@@ -609,3 +609,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   InventoryCategoryApparel for the inventory tab). To verify: the blade drawn with the suit on. If the game still
   hides it, next is two blade copies (outfit / spacesuit) swapped by the plugin. The pack's record_flags read the
   type signature (offset 0); now offset 8.
+- 2026-10-27 owner: without ArmorTypeApparelOrNakedBody the blade is never drawn (verified): the game draws worn
+  items by their layer keyword. Now `--left-layers both` (default): the blade keeps the outfit's layer keyword and
+  also gets ArmorTypeSpacesuitBody, to see whether either layer being shown draws it. `outfit` / `none` give the
+  earlier two. If both-layers hides it under a suit too, next is two blade ARMOs (outfit / spacesuit layer) the
+  plugin swaps.

@@ -55,6 +55,8 @@ def starfield_esm(path):
     wp = struct.pack("<4sIII", b"WEAP", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
     recs = [(b"KYWD", kw, [(b"EDID", b"AnimSword\0")], 0x000A0001),
             (b"KYWD", kw, [(b"EDID", b"WeaponTypeMelee1H\0")], 0x000A0002),
+            (b"KYWD", kw, [(b"EDID", b"ArmorTypeApparelOrNakedBody\0")], 0x000A0003),
+            (b"KYWD", kw, [(b"EDID", b"ArmorTypeSpacesuitBody\0")], 0x000A0004),
             (b"WEAP", wp, [(b"EDID", b"Melee_Knife\0"), (b"KWDA", struct.pack("<I", 0x000A0002)),
                            (b"MODL", b"Weapons\\Knife\\Knife.nif\0")], 0x000B0001),
             (b"WEAP", wp, [(b"EDID", b"Melee_Sword\0"), (b"FULL", struct.pack("<I", 1234)),
@@ -67,6 +69,7 @@ def starfield_esm(path):
                             (b"MOD4", b"Clothes\\Nightwear_M_1st.nif\0"), (b"RNAM", struct.pack("<I", 0x347D))],
               0x000C0001),
              (b"ARMO", ao, [(b"EDID", b"Clothes_Nightwear_01\0"), (b"FULL", struct.pack("<I", 77)),
+                            (b"KSIZ", struct.pack("<I", 1)), (b"KWDA", struct.pack("<I", 0x000A0003)),
                             (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x000C0001))], 0x000C0002)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
@@ -393,6 +396,7 @@ class PackTests(unittest.TestCase):
             kw = [r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"KYWD"])][0]
             self.assertIn(kw[3], sfplugin.keywords(pw[2]))
             self.assertLess(left["biped_slot"]["bit"], 32)
+            self.assertEqual(left["layer_keywords"], ["ArmorTypeApparelOrNakedBody", "ArmorTypeSpacesuitBody"])
             self.assertEqual(dict(ao[2])[b"FULL"], b"Iron Sword (Skyrim, left hand)\0")
             self.assertEqual(aas[b"RNAM"], struct.pack("<I", 0x347D))               # race etc. kept
             sword = ok[0]
