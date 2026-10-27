@@ -623,3 +623,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   ArmorTypeApparelOrNakedBody + ArmorTypeSpacesuitBackpack, addons on slots 31 and 61. Open: the left grip (the
   mirrored right grip) and a finger look a bit off. `--left-grip-move X Y Z` (cm) / `--left-grip-turn RX RY RZ` (deg,
   about the grip point, L_Wrist axes) tune it in the pack without touching the clips (tested).
+- 2026-10-27 owner: "that finger standing out" in the dual grip. Read back from the dual clips: the left pinky root
+  sat 167 deg from rest (right pinky 19, every other left finger within a few degrees of the right). Starfield's
+  pinky hangs off L_Cup, which the retarget keeps at rest (no Skyrim source), and the left hand's dual-wield turn was
+  only carried to children of bones that follow Skyrim (the earlier finger fix), so it stopped at L_Cup. Now every
+  bone inherits its parent's turn first (tested: a pinky under a rest-kept cup keeps its curl in the turned hand).
+  Rebuilt the dual stance: L_Pinky 167 -> 14 deg, every other bone within 0.05 deg of v2. Delivered as
+  SkyrimMelee_LoreRim_dual_stance_v3.zip (dual folder only, as v2).

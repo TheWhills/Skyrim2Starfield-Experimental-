@@ -453,6 +453,8 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
         pw_t = wt[:, p, :] if p >= 0 else np.zeros((F, 3))
         pw_q = wq[:, p, :] if p >= 0 else np.tile([0.0, 0.0, 0.0, 1.0], (F, 1))
         pd = dsf[:, p, :] if p >= 0 else np.tile([0.0, 0.0, 0.0, 1.0], (F, 1))
+        if p >= 0:          # a bone kept in its parent's frame (L_Cup, at rest) carries its parent's turn down
+            turn[:, i, :] = turn[:, p, :]
         rule = drive.get(i)
         target_q, target_t = None, None
         if i in grips and grips[i][0] < i:                             # weapon held as in vanilla clips
