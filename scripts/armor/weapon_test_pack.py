@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import types
 
@@ -28,7 +29,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.dirname(HERE))
 
-from fo4sf import bsa, sfplugin, skyrimconvert, skyrimweapon  # noqa: E402
+from fo4sf import bsa, sfnif, sfplugin, skyrimconvert, skyrimweapon  # noqa: E402
+from fo4sf import nif as nifmod  # noqa: E402
 
 PLUGIN = "S2SWeapons.esm"
 MAIN_BA2 = "S2SWeapons - Main.ba2"
@@ -253,6 +255,41 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
     return (ta, ha, sa2, new_arma), (to, ho, so3, armo[3]), (ta, ha, sa3, suit_arma)
 
 
+def pair_model(staging: str, right_model: str, left_model: str) -> str:
+    """The pair weapon's NIF in staging: the right weapon's model with the left blade's skinned shapes added
+    (sfnif.merge_skinned); returns its model path (as in WEAP MODL)."""
+    def path(m):
+        return os.path.join(staging, "meshes", *m.split("\\"))
+    with open(path(right_model), "rb") as fh:
+        base = nifmod.parse(fh.read())
+    with open(path(left_model), "rb") as fh:
+        left = nifmod.parse(fh.read())
+    model = re.sub(r"\.nif$", "", right_model, flags=re.I) + "_pair.nif"
+    with open(path(model), "wb") as fh:
+        fh.write(nifmod.serialize(sfnif.merge_skinned(base, left)))
+    return model
+
+
+def pair_weapon(staging: str, template, recs: list, right: dict, lw: dict, left_model: str, keyword: int) -> dict:
+    """Dual wield as one weapon (Starfield equips one weapon at a time): a WEAP copy whose model holds both blades,
+    the left one skinned to L_Wrist, carrying the dual keyword (S2SCombat's worn-keyword check switches the moveset).
+    Unverified: whether the game binds a weapon model's skinned shapes to the actor's bones."""
+    row = {"key": lw["key"] + "_pair", "ok": False}
+    try:
+        model = pair_model(staging, right["starfield_model"], left_model)
+    except (OSError, nifmod.NifError, struct.error) as e:
+        row["reason"] = f"{type(e).__name__}: {e}"
+        return row
+    edid = "S2S_" + lw["edid"] + "_Pair"
+    name = lw["name"] + "s (Skyrim, pair)"
+    rec = weapon_record(template, len(recs), edid, name, model)
+    rec = (rec[0], rec[1], with_keyword(rec[2], keyword), rec[3])
+    recs.append(rec)
+    row.update(ok=True, starfield_model=model, form_id_in_plugin=f"{rec[3] & 0xFFFFFF:06X}", editor_id=edid,
+               name=name, test_with_pack="dual_" + lw["pack"].replace("1h_", ""), pair=True)
+    return row
+
+
 def pack(staging: str, out: str, starfield: str, archive2: str = None) -> dict:
     """BA2 archives with Archive2 when present (as deploy_starfield), else the files loose in the mod folder."""
     tool = archive2 or os.path.join(starfield, "Tools", "Archive2", "Archive2.exe")
@@ -372,6 +409,10 @@ def main(argv=None):
                        test_with_pack="dual_" + lw["pack"].replace("1h_", ""), worn=True,
                        apparel_template={"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2]),
                                          "arma_subrecords": [f"{x.decode('latin-1')}:{len(d)}" for x, d in arma_t[2]]})
+            right = next((w for w in report["weapons"] if w["key"] == lw["key"] and w.get("ok")), None)
+            if right is not None:
+                report["weapons"].append(row)
+                row = pair_weapon(staging, template, recs, right, lw, model, kw_fid)
         report["weapons"].append(row)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))
@@ -392,6 +433,9 @@ def main(argv=None):
         lines += ["", "The left-hand blade is worn (equip it like clothing) next to the same weapon in the right hand,",
                   "with the Dual stance moveset (S2SStances.esm). It sits on a biped slot no vanilla apparel uses, so",
                   "it is worn alongside outfits and spacesuits."]
+    if any(r.get("pair") for r in report["weapons"]):
+        lines += ["", "The pair weapon holds both blades in one weapon (the left one moves with the left hand): equip only",
+                  "it, nothing worn. It switches to the Dual stance moveset by itself."]
     lines += ["", f"Copied from the vanilla weapon {report['template']['edid']} ({report['template']['why']}): stats,",
               "sounds and keywords are that weapon's for now; only the model and name change."]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:

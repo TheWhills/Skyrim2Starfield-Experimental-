@@ -1237,3 +1237,7 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
 * Hiding the blade's node from the plugin (the same hidden bit) did not hide it, so S2SCombat now takes the blade off
   when the weapon is sheathed ('weaponSheathe') and puts it on again on 'BeginWeaponDraw' (`s2s/left_blade.h`;
   S2SCombat.ini bHideLeftBladeSheathed = 0 keeps it on). The inventory shows it unequipped while sheathed.
+* Pair weapon (test): `S2S_IronSword_Pair` holds both blades in one weapon model, the left one skinned to L_Wrist, and
+  carries S2S_LeftBlade for the Dual stance. Starfield equips one weapon at a time, so this is the weapon-side route
+  to dual wield (it sheathes and shows with a spacesuit like any weapon). To verify: the left blade follows the left
+  hand; the moveset switches.

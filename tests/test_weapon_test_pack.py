@@ -261,6 +261,32 @@ class LeftBladeKeywordTests(unittest.TestCase):
         self.assertEqual(sfplugin.keywords(ao2[2]), [])
 
 
+class PairModelTests(unittest.TestCase):
+    def test_skinned_shapes_join_a_static_model(self):
+        st = sfnif.build_static_nif(b"longsword", [sfnif.StaticShape(b"Blade", b"aa\\bb", 36, 8, "materials\\r.mat",
+                                                                     (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))])
+        sk = sfnif.build_skinned_nif(b"longsword_left", [sfnif.SkinnedShape(
+            b"BladeL", b"cc\\dd", 24, 6, "materials\\l.mat", [b"L_Wrist"],
+            [((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])])
+        m = nif.parse(nif.serialize(sfnif.merge_skinned(st, sk)))
+        types_ = [m.type_of(i) for i in range(len(m.blocks))]
+        self.assertEqual(types_[:5], ["NiNode", "BSXFlags", "BSGeometry", "NiIntegerExtraData",
+                                      "BSLightingShaderProperty"])
+        self.assertEqual(types_[5:], ["BSGeometry", "BSLightingShaderProperty", "NiIntegerExtraData", "SkinAttach",
+                                      "BSSkin::Instance", "BSSkin::BoneData"])
+        root = m.blocks[0]
+        n_child, = struct.unpack_from("<I", root, 76)
+        self.assertEqual(struct.unpack_from(f"<{n_child}i", root, 80), (2, 5))     # both blades under the root
+        g = sfnif.parse_bsgeometry(m.blocks[5])
+        self.assertEqual((g.shader, g.skin, g.extra_refs), (6, 9, [7, 8]))
+        self.assertEqual(m.strings[g.name_idx], b"BladeL")
+        self.assertEqual(struct.unpack_from("<iiI", m.blocks[9], 0), (0, 10, 1))     # skeleton root = the root
+        self.assertEqual(m.strings[struct.unpack_from("<i", m.blocks[6], 0)[0]], b"materials\\l.mat")
+        self.assertEqual(m.strings[struct.unpack_from("<i", m.blocks[8], 0)[0]], b"SkinBMP")
+        self.assertEqual(sfnif.parse_skin(m)["bones"], [b"L_Wrist"])
+        self.assertEqual(sfnif.parse_bsgeometry(m.blocks[2]).meshes[0].path, b"aa\\bb")   # the right blade as before
+
+
 class PackTests(unittest.TestCase):
     def test_end_to_end_on_synthetic_games(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(textures, "texconv", lambda *a, **k: None):
@@ -283,7 +309,7 @@ class PackTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             rep = json.load(open(os.path.join(out, "weapon_test_pack.json")))
             ok = [w for w in rep["weapons"] if w["ok"]]
-            self.assertEqual([w["key"] for w in ok], ["sword", "sword_left"])     # only the sword is in the archive
+            self.assertEqual([w["key"] for w in ok], ["sword", "sword_left", "sword_pair"])   # only the sword in the archive
             left = ok[1]
             self.assertEqual(left["apparel_template"]["armo"], "Clothes_Nightwear_01")
             ln = nif.parse(open(os.path.join(out, "meshes", "s2s", "weapons", "iron", "longsword_left.nif"), "rb").read())
@@ -299,6 +325,19 @@ class PackTests(unittest.TestCase):
             self.assertEqual([d for s_, d in ao[2] if s_ == b"MODL"],              # the ARMO wears the new ARMAs
                              [struct.pack("<I", aa[3]), struct.pack("<I", suit[3])])
             self.assertEqual(left["biped_slot"]["suit_bit"], 61)
+            pair = [w for w in rep["weapons"] if w["key"] == "sword_pair"][0]       # both blades in one weapon
+            self.assertTrue(pair["ok"], pair)
+            self.assertEqual(pair["starfield_model"], "s2s\\weapons\\iron\\longsword_pair.nif")
+            pn = nif.parse(open(os.path.join(out, "meshes", "s2s", "weapons", "iron", "longsword_pair.nif"),
+                                "rb").read())
+            types_ = [pn.type_of(i) for i in range(len(pn.blocks))]
+            self.assertEqual(types_.count("BSGeometry"), 2)
+            self.assertEqual(sfnif.parse_skin(pn)["bones"], [b"L_Wrist"])
+            pw = [r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"WEAP"])
+                  if sfplugin.edid(r[2]) == "S2S_IronSword_Pair"][0]
+            self.assertEqual(dict(pw[2])[b"MODL"], b"s2s\\weapons\\iron\\longsword_pair.nif\0")
+            kw = [r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"KYWD"])][0]
+            self.assertIn(kw[3], sfplugin.keywords(pw[2]))
             self.assertLess(left["biped_slot"]["bit"], 32)
             self.assertEqual(dict(ao[2])[b"FULL"], b"Iron Sword (Skyrim, left hand)\0")
             self.assertEqual(aas[b"RNAM"], struct.pack("<I", 0x347D))               # race etc. kept
@@ -311,7 +350,7 @@ class PackTests(unittest.TestCase):
             n = nif.parse(open(os.path.join(out, "meshes", "s2s", "weapons", "iron", "longsword.nif"), "rb").read())
             geo = [sfnif.parse_bsgeometry(n.blocks[i]) for i in range(len(n.blocks)) if n.type_of(i) == "BSGeometry"]
             self.assertEqual(len(geo), 1)                                          # blade only
-            (wid,) = [w for w in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"WEAP"])]
+            wid, _pair = [w for w in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"WEAP"])]
             mesh_left = [r for r in rep["weapons"] if r["key"] == "sword_left"][0]["starfield_model"]
             self.assertTrue(mesh_left.endswith("longsword_left.nif"))
             self.assertEqual(sfplugin.edid(wid[2]), "S2S_IronSword")

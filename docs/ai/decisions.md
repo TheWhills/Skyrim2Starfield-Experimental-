@@ -537,3 +537,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   weapon instead of apparel: Starfield equips one weapon at a time (no left-hand weapon slot); proposed a paired weapon
   (one WEAP whose model holds both blades, the left one skinned to L_Wrist), to test whether a weapon NIF's skinned
   geometry binds to the actor's skeleton.
+- 2026-10-26 owner chose the pair weapon test. `weapon_test_pack.py` now also writes S2S_IronSword_Pair ("Iron
+  Swords (Skyrim, pair)"): a copy of the template WEAP whose model `longsword_pair.nif` is the right sword's static
+  model plus the left blade's skinned shape (L_Wrist, identity bind) as a second child of the root
+  (`sfnif.merge_skinned`, tested: refs and strings renumbered, skin root = the weapon's root; BSXFlags stays the
+  weapon's 0, the robe's 0x10000 left out). It carries S2S_LeftBlade so S2SCombat's Actor.WornHasKeyword poll switches
+  to the Dual stance. Unverified, the two things this test answers: whether the game binds a weapon model's skinned
+  shape to the actor's L_Wrist (else the left blade is invisible, stuck, or at the right hand), and whether
+  WornHasKeyword counts the equipped weapon's keywords (else the moveset stays one-handed and the plugin needs an
+  equipped-weapon check).

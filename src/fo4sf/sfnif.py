@@ -216,6 +216,72 @@ def build_skinned_nif(node_name: bytes, shapes: List[SkinnedShape], bs_version: 
     return f
 
 
+def merge_skinned(base: nifmod.NifFile, skinned: nifmod.NifFile) -> nifmod.NifFile:
+    """`base` (a build_static_nif model, e.g. a weapon) with the shapes of `skinned` (a build_skinned_nif model) added
+    as further children of its root: their blocks copied after base's, block refs and string indices renumbered, the
+    skin instances' skeleton root pointed at base's root. Used for the dual wield pair weapon: the right blade rigid in
+    the weapon's frame, the left blade skinned to L_Wrist. Only the block types the two builders write are known."""
+    import copy
+    out = copy.deepcopy(base)
+    first = len(out.blocks)
+    skip = {0, 1}                                         # skinned's root NiNode and BSXFlags
+    if skinned.type_of(0) != "NiNode" or skinned.type_of(1) != "BSXFlags":
+        raise nifmod.NifError("merge_skinned: not a build_skinned_nif layout")
+    remap = {}
+    for i in range(len(skinned.blocks)):
+        if i not in skip:
+            remap[i] = first + len(remap)
+    remap[0] = 0                                          # skeleton root / parent: base's root
+
+    def ref(r):
+        return -1 if r < 0 else remap[r]
+
+    def text(i):
+        return -1 if i < 0 else out.string_index(skinned.strings[i])
+
+    added = []
+    for i, b in enumerate(skinned.blocks):
+        if i in skip:
+            continue
+        t = skinned.type_of(i)
+        if t == "BSGeometry":
+            g = parse_bsgeometry(b)
+            g.name_idx = text(g.name_idx)
+            g.extra_refs = [ref(r) for r in g.extra_refs]
+            g.controller, g.collision = ref(g.controller), ref(g.collision)
+            g.skin, g.shader, g.alpha = ref(g.skin), ref(g.shader), ref(g.alpha)
+            data = build_bsgeometry(g)
+            added.append(remap[i])
+        elif t in ("BSLightingShaderProperty", "NiIntegerExtraData", "SkinAttach"):
+            name, = struct.unpack_from("<i", b, 0)
+            data = struct.pack("<i", text(name)) + b[4:]
+            if t == "BSLightingShaderProperty":
+                n_extra, = struct.unpack_from("<I", b, 4)
+                if n_extra:
+                    raise nifmod.NifError("merge_skinned: shader with extra data")
+                ctrl, = struct.unpack_from("<i", b, 8)
+                data = struct.pack("<iIi", text(name), 0, ref(ctrl)) + b[12:]
+        elif t == "BSSkin::Instance":
+            root, bone_data, nb = struct.unpack_from("<iiI", b, 0)
+            bones = struct.unpack_from(f"<{nb}i", b, 12)
+            data = struct.pack("<iiI", ref(root), ref(bone_data), nb) + struct.pack(f"<{nb}i", *map(ref, bones)) \
+                + b[12 + 4 * nb:]
+        elif t == "BSSkin::BoneData":
+            data = b
+        else:
+            raise nifmod.NifError(f"merge_skinned: block type {t} not known")
+        out.add_block(t, data)
+    # base's root: the new geometries as more children
+    root = out.blocks[0]
+    _name, n_extra = struct.unpack_from("<iI", root, 0)
+    p = 8 + 4 * n_extra + 8 + 52                          # extra refs, controller + flags, transform
+    coll, n_child = struct.unpack_from("<iI", root, p)
+    children = list(struct.unpack_from(f"<{n_child}i", root, p + 8)) + added
+    out.blocks[0] = root[:p] + struct.pack("<iI", coll, len(children)) + struct.pack(f"<{len(children)}i", *children) \
+        + root[p + 8 + 4 * n_child:]
+    return out
+
+
 def parse_skin(n: nifmod.NifFile) -> dict:
     """{"bones": [names], "binds": [(sphere, rot, trans, scale)], "instance": (root, data, n)} of a skinned NIF."""
     out = {}
