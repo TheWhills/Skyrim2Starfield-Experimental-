@@ -239,9 +239,23 @@ class LeftBladeKeywordTests(unittest.TestCase):
                           (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", ss[3]))])
         self.assertEqual(len({aa[3], ao[3], ss[3]}), 3)
 
+    def test_outfit_layer_keyword_is_dropped(self):
+        subs = [(b"EDID", b"O\0"), (b"KSIZ", struct.pack("<I", 2)), (b"KWDA", struct.pack("<2I", 5, 6)),
+                (b"MODL", struct.pack("<I", 0x100))]
+        out = P.without_keywords(subs, {6})
+        self.assertEqual(dict(out)[b"KWDA"], struct.pack("<I", 5))
+        self.assertEqual(dict(out)[b"KSIZ"], struct.pack("<I", 1))
+        self.assertEqual([s_ for s_, _ in P.without_keywords(subs, {5, 6})], [b"EDID", b"MODL"])
+        self.assertEqual(P.without_keywords(subs, {9}), subs)
+        arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0")], 0x100)
+        armo = (b"ARMO", bytes(24), subs, 0x200)
+        _aa, ao = P.left_blade_records(armo, arma, 1, "S2S_Left", "Left", "l.nif", keyword=0x01000800,
+                                       drop_keywords={6})
+        self.assertEqual(sfplugin.keywords(ao[2]), [5, 0x01000800])        # apparel category kept, layer gone
+
     def test_spacesuit_check_lists_both_records(self):
         def rec(edid, bits, kws, fid):
-            return (b"ARMO", struct.pack("<I", 0x4) + bytes(20),
+            return (b"ARMO", b"ARMO" + struct.pack("<II", 0, 0x4) + bytes(12),
                     [(b"EDID", edid + b"\0"), (b"BO64", struct.pack("<Q", bits)),
                      (b"KSIZ", struct.pack("<I", len(kws))), (b"KWDA", struct.pack(f"<{len(kws)}I", *kws))], fid)
         outfit = rec(b"Clothes_Nightwear_01", 1 << 3, [7], 0x10)

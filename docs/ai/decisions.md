@@ -600,3 +600,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   on) and still invisible with a spacesuit (the outfit-slot + spacesuit-slot addons did not help). Now the ARMO blade
   is "the keyword is worn and the weapon does not carry it" from the same poll. For the spacesuit, the pack prints the
   copied outfit's keywords / record flags / slots next to a vanilla spacesuit body's, to see what the game sorts by.
+- 2026-10-27 owner: sheathing now puts the worn blade away and drawing brings it back (verified; the native unequip
+  still answers false and works). Spacesuit check from the pack: the copied Clothes_Nightwear_01 carries
+  InventoryCategoryApparel + ArmorTypeApparelOrNakedBody; a vanilla spacesuit body (Spacesuit_SpaceTrucker_Generic)
+  carries InventoryCategoryArmorSuit + ArmorTypeSpacesuitBody (+ ma_ / display keywords). Slots chosen: 31 (outfit),
+  61 (suit); vanilla slot use 886BFFFF6FCF7FFF. Supported reading: ArmorTypeApparelOrNakedBody files an item with
+  the body layer the game hides under a shown spacesuit. The blade's ARMO now drops it (keeps
+  InventoryCategoryApparel for the inventory tab). To verify: the blade drawn with the suit on. If the game still
+  hides it, next is two blade copies (outfit / spacesuit) swapped by the plugin. The pack's record_flags read the
+  type signature (offset 0); now offset 8.

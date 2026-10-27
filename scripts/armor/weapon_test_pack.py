@@ -174,6 +174,32 @@ def with_keyword(subs, kw: int):
     return out
 
 
+# Keywords of the copied outfit that file the blade with the outfit layer the game hides under a shown spacesuit
+# (owner's spacesuit check 2026-10-27: Clothes_Nightwear_01 carries InventoryCategoryApparel and
+# ArmorTypeApparelOrNakedBody; a spacesuit body carries ArmorTypeSpacesuitBody instead). Supported, not verified.
+OUTFIT_LAYER_KEYWORDS = ("ArmorTypeApparelOrNakedBody",)
+
+
+def without_keywords(subs, drop: set):
+    """Subrecords with the keyword IDs in `drop` removed from KWDA (KSIZ kept in step)."""
+    import struct
+    have = sfplugin.keywords(subs)
+    keep = [k for k in have if k not in drop]
+    if keep == have:
+        return list(subs)
+    out = []
+    for s_, d in subs:
+        if s_ == b"KWDA":
+            if keep:
+                out.append((s_, struct.pack(f"<{len(keep)}I", *keep)))
+        elif s_ == b"KSIZ":
+            if keep:
+                out.append((s_, struct.pack("<I", len(keep))))
+        else:
+            out.append((s_, d))
+    return out
+
+
 def used_slots(records) -> int:
     """The biped slot bits (BO64, u64) any of these ARMO / ARMA records uses."""
     import struct
@@ -221,7 +247,7 @@ def with_slot(subs, bit: int):
 
 
 def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str, keyword: int = None,
-                       slot: int = None, suit_slot: int = None):
+                       slot: int = None, suit_slot: int = None, drop_keywords: set = frozenset()):
     """(ARMA, ARMO) copies: the ARMA's worn and first-person models -> the left blade, the ARMO named and pointing at
     the new ARMA (and carrying `keyword` when given; both on biped slot `slot` when given). With `suit_slot`: (ARMA,
     ARMO, ARMA on suit_slot), the ARMO listing both addons (the blade drawn with and without a spacesuit shown) and
@@ -234,7 +260,7 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
     to, ho, so, _fo = armo_t
     so2 = replace_refs(sfplugin.edit(so, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name)}, drop=(b"DESC",)),
                        fa, new_arma)
-    so2 = only_addon(so2, new_arma)
+    so2 = without_keywords(only_addon(so2, new_arma), set(drop_keywords))
     if keyword is not None:
         so2 = with_keyword(so2, keyword)
     if slot is not None:
@@ -265,7 +291,7 @@ def _armo_summary(rec, kw_names) -> dict:
     import struct
     t, header, subs, fid = rec
     bo = next((struct.unpack_from("<Q", d)[0] for s_, d in subs if s_ == b"BO64" and len(d) >= 8), 0)
-    flags = struct.unpack_from("<I", header, 0)[0] if len(header) >= 4 else None
+    flags = struct.unpack_from("<I", header, 8)[0] if len(header) >= 12 else None   # after the type and size
     return {"edid": sfplugin.edid(subs), "form_id": f"{fid:08X}", "record_flags": f"{flags:08X}" if flags is not None
             else None, "biped_slots": [b for b in range(64) if bo >> b & 1],
             "keywords": [kw_names.get(k, f"{k:08X}") for k in sfplugin.keywords(subs)],
@@ -425,8 +451,10 @@ def main(argv=None):
             slot, shared = (a.left_slot, False) if a.left_slot is not None else slot_in(apparel, OUTFIT_SLOTS)
             suit, suit_shared = ((a.left_suit_slot, False) if a.left_suit_slot is not None
                                  else slot_in(apparel, SUIT_SLOTS))
+            layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
             aa, ao, aa_suit = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid,
-                                                 slot=slot, suit_slot=suit)
+                                                 slot=slot, suit_slot=suit, drop_keywords=layer)
+            row["keywords_dropped"] = sorted(kw_names[k] for k in layer if k in sfplugin.keywords(armo_t[2]))
             row["biped_slot"] = {"bit": slot, "suit_bit": suit, "shared_with_vanilla": [b for b, sh in
                                  ((slot, shared), (suit, suit_shared)) if sh],
                                  "vanilla_slots_used": f"{used_slots(apparel):016X}"}
