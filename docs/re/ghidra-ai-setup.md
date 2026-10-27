@@ -73,3 +73,30 @@ S2SCombat gets a "send this weapon to the left hand" key: the drawn right weapon
 cloned and attached under `WeaponLeft` / `L_Wrist` with the left grip; the copy is dropped on unequip, sheathe and
 load and rebuilt on draw. The dual moveset switch stays as it is. Spells do not depend on any of this
 (docs/ai/decisions.md 2026-10-27).
+
+## 6. Later sessions: further targets, in order
+
+Same output format as the first session (address, slot, Address Library ID, one line, how sure), appended to
+`docs/re/findings.md` under a heading per target. Check CommonLibSF and SFSE first; only search for what they lack.
+
+1. **Test bridge** (the TES4 converter's `game_bridge` idea, see docs/ai/decisions.md 2026-10-27): a pipe in
+   S2SCombat that runs console lines and returns their output, so the in-game tests stop reading the console by OCR.
+   - Output capture needs no RE: CommonLibSF has `ConsoleLog::Print` / `AddString` (IDs 113647 / 113649).
+   - To find: how the console runs a typed line (in Skyrim the "execute" call only compiled; the dispatcher ran it and
+     took the selected reference as an argument), and the per-thread state that lets commands print.
+   - Without it, much still works by calling Papyrus directly through the VM (as S2SCombat already does):
+     `Quest.SetStage`, `ObjectReference.MoveTo`, `GetDistance`.
+2. **Papyrus errors in-process**: the VM's error logger (`GameVM` user logs, `BSScript::ErrorLogger`), so a test
+   sees script errors from converted quests without reading Papyrus.0.log.
+3. **Dialogue state**: which topics the dialogue menu offers and which line plays (in Skyrim this was memory only,
+   no log, no console).
+4. **Skinned shapes on attach**: why a skinned shape in a weapon model is not bound to the actor's bones (our run
+   2026-10-26) and what binds it for armor; would let converted weapons and creature parts carry skinned pieces.
+5. **Behavior graph readback**: an actor's active state and graph variables live, to tell "the graph did not bind"
+   apart from "the clip is wrong" (stances, casting, creatures).
+6. **Spells**: launching a projectile from a node, and the magic caster per hand.
+7. **Worn layers**: the rule the renderer applies to ArmorType keywords (outfit vs spacesuit layer, body hiding,
+   backpack and O2 / CO2); we found the working pair by trial.
+8. **Open loader questions from the docs**: how LOD composite files are found (folder scan by world or an index),
+   Starfield terrain scale, whether a DOOR without an animation graph loads its target, Havok motion entries (mass,
+   motion type).

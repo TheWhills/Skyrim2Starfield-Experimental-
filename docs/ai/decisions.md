@@ -654,3 +654,17 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   an MCP server, Claude Code as client) on the owner's PC. Setup and the first-session brief in
   docs/re/ghidra-ai-setup.md (targets: the NiObject clone virtual, NiNode attach, and what the equip path calls after
   attaching a weapon so it is drawn).
+- 2026-10-27 owner asked what else to look for in Ghidra, and whether the TES4 converter's (bryantmh/tes4skyrim)
+  automated quest testing carries over. Read its public repo (master, last commit 2026-10-13; MIT except
+  external/, OpenMW there is GPL-3.0; ideas only, no code taken). What it has: `game_bridge` (an SKSE plugin with a
+  named pipe: runs console lines and returns their output, captures Papyrus output, reads memory, traces behavior
+  graphs; addresses by Address Library ID with a signature-scan fallback; every game call on the main thread),
+  `quest_labtest.py` (a quest's cast found from the export, the real references moved into an empty test cell after
+  the quest reset, then passive observation and A / B trials with an injected change), `quest_walkthrough.py`
+  (offline: fires every stage edge whose conditions can hold until nothing changes; a quest is completable when its
+  completing stage is reached; the same run on the source game is the baseline), crash / hang dump capture. The
+  autonomous quest-completing update itself is not public yet (unresolved). Decision: for us, (1) an S2SCombat test
+  bridge replaces the OCR console reading in scripts/game when the console's run path is found (target 1 in
+  docs/re/ghidra-ai-setup.md section 6; output capture needs no RE); (2) the offline walkthrough and the clean-room
+  method are for when quests are converted (PLAN P5). Their lessons match ours: an engine call's answer is not
+  evidence (our unequip answered false and worked), measure the effect instead; never assume the load-order index.
