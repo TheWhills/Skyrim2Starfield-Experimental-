@@ -352,10 +352,20 @@ void Plugin::Tick() {
         auto* player = game::Player();
         if (player && player->parentCell && !menus_.blocked()) {
             const int gen = poll_gen_.load();
-            const int asked = game::WornHasKeyword(dual_kw, [this, gen](bool worn) {
+            // worn (the ARMO blade) or the weapon's own keyword (the pair weapon): asked one after the other, so
+            // Tick sees both answers of the same poll
+            const int asked = game::WornHasKeyword(dual_kw, [this, gen, kw = dual_kw](bool worn) {
                 if (gen != poll_gen_.load()) return;          // asked before the blade was taken off / put on
-                dual_worn_ = worn ? 1 : 0;
-                worn_gen_ = gen + 1;                          // a fresh answer for Tick
+                const bool sent = game::EquippedWeaponHasKeyword(kw, [this, gen, worn](bool weapon) {
+                    if (gen != poll_gen_.load()) return;
+                    weapon_dual_ = weapon ? 1 : 0;
+                    dual_worn_ = worn || weapon ? 1 : 0;
+                    worn_gen_ = gen + 1;                      // a fresh answer for Tick
+                });
+                if (!sent) {
+                    dual_worn_ = worn ? 1 : 0;
+                    worn_gen_ = gen + 1;
+                }
             });
             if (asked < 0 && !dual_missing_logged_) {
                 dual_missing_logged_ = true;
@@ -419,7 +429,8 @@ void Plugin::Tick() {
                 std::scoped_lock l(lock_);
                 more = controller_.on_dual_worn(worn == 1, now);
             }
-            if (!more.empty()) REX::INFO("dual wield: left blade {} -> stance {}", worn ? "worn" : "off",
+            if (!more.empty()) REX::INFO("dual wield: left blade {}{} -> stance {}", worn ? "worn" : "off",
+                                         weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
                                          worn ? controller_.config().dual_stance_keyword : "before");
             if (worn && dumps_ < 3) {                 // where the blade sits in the player's 3D (and if it is there)
                 ++dumps_;

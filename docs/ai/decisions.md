@@ -553,3 +553,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the polls wait while a re-equip is under way (s2s::combat::ReequipHold, tested), and only a worn ARMO blade
   (Papyrus IsEquipped) is taken off while sheathed (the plugin had also tried to put away the unworn ARMO blade).
   Where the left blade draws is still to see (screenshot).
+- 2026-10-26 owner's run with the re-equip hold: the hold worked (no poll during the swap), but the first poll after
+  it still said the keyword was not worn: WornHasKeyword saw the pair's keyword when equipped from the menu, not
+  after the stance re-equip, which equips the base form without instance data (supported reading: the worn check
+  reads the instance's keywords). The poll now also asks Papyrus for the equipped weapon (GetEquippedWeapon) and
+  Form.HasKeyword on its base form, chained in the same poll; dual = worn keyword or the weapon's keyword.

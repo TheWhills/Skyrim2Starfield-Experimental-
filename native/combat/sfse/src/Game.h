@@ -38,6 +38,9 @@ std::string DumpPlayer3D(int max_nodes);
 // form on the player (main thread; as the stance re-equip).
 std::vector<std::uint32_t> ArmorsBesideKeyword(std::string_view editor_id);
 bool IsEquipped(std::uint32_t form_id, std::function<void(bool)> result);
+// Papyrus: the right-hand weapon's base form has the keyword (Actor.GetEquippedWeapon, then Form.HasKeyword on it).
+// WornHasKeyword alone loses the pair weapon's keyword after the stance re-equip (equipped without instance data).
+bool EquippedWeaponHasKeyword(std::string_view editor_id, std::function<void(bool)> result);
 bool ItemCount(std::uint32_t form_id, std::function<void(int)> result);
 bool EquipForm(std::uint32_t form_id, bool equip);
 float ActorValue(std::string_view editor_id);    // < 0 when the value is not found

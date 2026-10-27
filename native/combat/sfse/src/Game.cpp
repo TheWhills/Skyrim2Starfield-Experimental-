@@ -334,6 +334,36 @@ std::vector<std::uint32_t> ArmorsBesideKeyword(std::string_view editor_id) {
     return out;
 }
 
+bool EquippedWeaponHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {
+    auto* keyword = RE::TESForm::LookupByEditorID<RE::BGSKeyword>(RE::BSFixedString(std::string(editor_id).c_str()));
+    if (!keyword) return false;
+    return Dispatch("Actor", "GetEquippedWeapon",
+        [](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+            out.resize(1);
+            RE::BSScript::PackVariable(out[0], static_cast<std::int32_t>(0));
+        },
+        [keyword, result](const RE::BSScript::Variable& weapon) {
+            auto obj = weapon.is<RE::BSScript::Object>() ? RE::BSScript::get<RE::BSScript::Object>(weapon) : nullptr;
+            auto* game = RE::GameVM::GetSingleton();
+            auto* vm = game ? game->GetVM() : nullptr;
+            if (!obj || !vm) {
+                if (result) result(false);
+                return;
+            }
+            // Form.HasKeyword on the weapon's own script object (its base form: the keyword in the WEAP record)
+            auto args = [keyword](RE::BSScrapArray<RE::BSScript::Variable>& out) {
+                out.resize(1);
+                RE::BSScript::PackVariable(out[0], keyword);
+                return true;
+            };
+            RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> cb(new Callback(
+                [result](const RE::BSScript::Variable& v) { if (result) result(v.is<bool>() && RE::BSScript::get<bool>(v)); }));
+            if (!vm->DispatchMethodCall(obj->GetHandle(), RE::BSFixedString("Form"), RE::BSFixedString("HasKeyword"), args,
+                                        cb, 0) && result)
+                result(false);
+        });
+}
+
 bool IsEquipped(std::uint32_t form_id, std::function<void(bool)> result) {
     auto* armo = RE::TESForm::LookupByID<RE::TESObjectARMO>(form_id);
     if (!armo) return false;
