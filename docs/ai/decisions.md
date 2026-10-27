@@ -505,3 +505,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   1.16); not visible with a spacesuit. Fixes: the left blade's ARMO keeps only its own addon (the nightwear ARMO lists
   more than one INDX / MODL addon: the outfit's other part came along and took the pants); the child list of a node
   is found at run time (the offset whose array elements have that node as parent, NiAVObject +0x38).
+- 2026-10-26 owner: pants fixed (verified); blade still not shown with a spacesuit; lag with the blade on. The child
+  list search failed (no offset in 0x110..0x200 whose elements have the node as parent at +0x38) and ran again every
+  0.25 s (avg 2.4 ms per frame in the timing lines). Now at most 3 tries per session, and the first failure logs the
+  root node's first 0x200 bytes (and what each pointer points at) to read the real layout from.

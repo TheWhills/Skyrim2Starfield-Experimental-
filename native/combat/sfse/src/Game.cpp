@@ -170,6 +170,28 @@ RE::NiAVObject* Player3D() {
 // cap, u32 size}) whose elements are readable objects whose parent (NiAVObject +0x38) is that node.
 struct ChildLayout { std::ptrdiff_t offset = -1; bool data_first = false; };
 ChildLayout g_children;
+int g_layout_tries = 0;                 // the search costs VirtualQuery calls: at most a few tries per session
+
+// One look at a node's memory for the log (owner's run 2026-10-26: no child list found at +0x110..0x200 with the
+// parent at +0x38): its first 0x200 bytes as 8-byte words, and for each word that points at readable memory the
+// first four words there. The layout can then be read off the log.
+std::string NodeMemory(const void* node) {
+    std::string out;
+    for (std::ptrdiff_t off = 0; off < 0x200; off += 8) {
+        const auto* at = reinterpret_cast<const std::byte*>(node) + off;
+        if (!Readable(at, 8)) break;
+        std::uint64_t v = 0;
+        std::memcpy(&v, at, 8);
+        out += std::format("\n  +{:03X} {:016X}", off, v);
+        const void* p = reinterpret_cast<const void*>(v);
+        if (v > 0x10000 && v < 0x7FFFFFFFFFFF && Readable(p, 32)) {
+            std::uint64_t w[4];
+            std::memcpy(w, p, 32);
+            out += std::format(" -> {:016X} {:016X} {:016X} {:016X}", w[0], w[1], w[2], w[3]);
+        }
+    }
+    return out;
+}
 
 bool ReadChildren(const void* node, const ChildLayout& l, RE::NiAVObject**& data, std::uint32_t& size) {
     const auto* b = reinterpret_cast<const std::byte*>(node) + l.offset;
@@ -247,7 +269,12 @@ bool NameHas(const RE::NiAVObject* o, std::string_view part) {
 std::string DumpPlayer3D(int max_nodes) {
     auto* root = Player3D();
     if (!root) return "no player 3D";
-    if (g_children.offset < 0 && !FindChildLayout(root)) return " (no child list found on the player's root)";
+    if (g_children.offset < 0) {
+        if (g_layout_tries >= 3) return " (no child list found on the player's root)";
+        ++g_layout_tries;
+        if (!FindChildLayout(root))
+            return " (no child list found on the player's root; its memory:" + NodeMemory(root) + ")";
+    }
     std::string out;
     int budget = max_nodes;
     Walk(root, 0, budget, [&](RE::NiAVObject* o, int depth) {
@@ -261,7 +288,11 @@ std::string DumpPlayer3D(int max_nodes) {
 int SetPlayerNodesHidden(std::string_view part, bool hidden) {
     auto* root = Player3D();
     if (!root) return -1;
-    if (g_children.offset < 0 && !FindChildLayout(root)) return -2;
+    if (g_children.offset < 0) {
+        if (g_layout_tries >= 3) return -2;
+        ++g_layout_tries;
+        if (!FindChildLayout(root)) return -2;
+    }
     int count = 0, budget = 2000;
     Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
         if (!NameHas(o, part)) return;
