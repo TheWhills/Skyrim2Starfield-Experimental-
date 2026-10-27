@@ -579,3 +579,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   every frame while the weapon carries the dual keyword: local = inverse(parent world) * L_Wrist world
   (`s2s/xform.h`, tested), world written too. Unverified: whether the game keeps our transform for the draw (the tick
   runs at input time, so the blade may trail the hand by a frame), and whether it lines up in the hand.
+- 2026-10-27 owner's follow run (screenshots + log): S2S_LeftHand found and written every frame ("follows L_Wrist"),
+  but the left blade stayed fixed beside the right sword (where its L_Wrist-frame geometry lands at an identity
+  local): the write had no visible effect. The full 3D listing shows the weapon model ("Longsword") under the
+  skeleton's "Weapon" bone, S2S_LeftHand under it. Also the plugin's frame time went to ~23 ms (from ~5 us). Now:
+  the root and nodes are looked up twice a second and on equips / menus / draws (no Player3D lock and memory queries
+  every frame), the call is timed, and each frame reads back the previous frame's write (is our local still there,
+  is the node's world what our local gives) and logs it every 5 s with the positions, to tell whether the game
+  resets the transform or draws from somewhere else.

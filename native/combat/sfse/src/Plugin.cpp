@@ -228,6 +228,7 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
+    follow_invalid_ = true;                            // equips happen in menus; loads rebuild the 3D
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
         left_blade_.reset();
@@ -323,6 +324,8 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
             REX::INFO("anim event: '{}' payload '{}'", tag, payload);
         }
         cmds = controller_.on_anim_event(tag, payload, game::Now());
+        if (tag == "weaponDraw" || tag == "weaponSheathe" || tag == "UnequipComplete" || tag == "BeginWeaponDraw")
+            follow_invalid_ = true;                   // the weapon's 3D may be rebuilt
         if (armor_blade_on_.load() || left_blade_.parked())          // a worn blade (not the pair weapon)
             if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)
                 left_action_ = static_cast<int>(a);   // done in Tick (main thread)
@@ -449,7 +452,17 @@ void Plugin::Tick() {
     }
     // the pair weapon's left blade onto the left hand (every frame; the game places only the right-hand weapon)
     if (!settings_.left_hand_node.empty() && weapon_dual_.load() == 1) {
+        if (follow_invalid_.exchange(false)) game::InvalidateBoneFollow();
         const int st = game::FollowBone(settings_.left_hand_node, settings_.left_hand_bone);
+        if (st == 1 && follow_reports_ < 6 && now >= follow_report_at_) {
+            if (follow_report_at_ > 0.0) {
+                ++follow_reports_;
+                REX::INFO("dual wield: left blade follow: {}", game::BoneFollowReport());
+            } else {
+                game::BoneFollowReport();                       // start counting
+            }
+            follow_report_at_ = now + 5.0;
+        }
         if (st != follow_state_ && follow_logs_ < 20) {
             ++follow_logs_;
             REX::INFO("dual wield: pair weapon's '{}' {}", settings_.left_hand_node,
@@ -563,12 +576,14 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
                 case K::UnequipWeapon:
                     reequip_hold_.on_unequip(game::Now());         // the pair weapon's keyword is off meanwhile
+                    follow_invalid_ = true;
                     ++poll_gen_;
                     result = game::UnequipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
                                  ? "dispatched" : "not dispatched";
                     break;
                 case K::EquipWeapon:
                     reequip_hold_.on_equip(game::Now());
+                    follow_invalid_ = true;
                     ++poll_gen_;
                     result = game::EquipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
                                  ? "dispatched" : "not dispatched";

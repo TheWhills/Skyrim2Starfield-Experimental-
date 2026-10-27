@@ -124,6 +124,9 @@ private:
     std::atomic<std::uint32_t> blade_in_bag_{0};
     int dumps_ = 0, left_logs_ = 0;
     int follow_state_ = -9, follow_logs_ = 0;      // last FollowBone result (logged on change)
+    double follow_report_at_ = 0.0;
+    int follow_reports_ = 0;
+    std::atomic_bool follow_invalid_{false};       // set from event threads, applied in Tick
     std::atomic<const api::ClashCallbacks*> clash_{nullptr};
 };
 

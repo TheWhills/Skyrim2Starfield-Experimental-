@@ -40,6 +40,8 @@ std::string DumpBoneSearch();
 // transform from the parent's and the bone's world transforms; main thread, every frame). 1 = moved, 0 = a node not
 // found (looked for again after 1 s), -1 no 3D, -2 no child list.
 int FollowBone(std::string_view node_name, std::string_view bone_name);
+void InvalidateBoneFollow();                     // the 3D may be rebuilt (equip, menu, load): look the nodes up again
+std::string BoneFollowReport();                  // read-backs and time since the last report
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base

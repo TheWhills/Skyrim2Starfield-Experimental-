@@ -1,5 +1,6 @@
 #include "Game.h"
 
+#include <cmath>
 #include <set>
 #include "s2s/controller.h"
 #include "s2s/xform.h"
@@ -398,47 +399,114 @@ bool NameIs(const RE::NiAVObject* o, std::string_view want) {
 }
 }  // namespace
 
+namespace {
+struct Follow {
+    RE::NiAVObject *root = nullptr, *node = nullptr, *bone = nullptr, *parent = nullptr;
+    double root_at = -10.0, looked_at = -10.0;
+    bool wrote = false;
+    combat::Xform written;                 // the local written last frame
+    // diagnostics (owner's run 2026-10-27: "follows" logged, yet the blade stayed by the right sword, and the
+    // plugin's frame time went to ~23 ms): read-backs of last frame's write, and our time per call
+    int frames = 0, local_kept = 0, world_ours = 0;
+    double us_total = 0.0, us_max = 0.0;
+    std::string last;                      // positions of the last frame, for the report
+} g_follow;
+
+float Dist(const std::array<float, 3>& a, const std::array<float, 3>& b) {
+    const float x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2];
+    return std::sqrt(x * x + y * y + z * z);
+}
+}  // namespace
+
+void InvalidateBoneFollow() {
+    g_follow.node = g_follow.bone = g_follow.parent = nullptr;
+    g_follow.root = nullptr;
+    g_follow.wrote = false;
+}
+
+std::string BoneFollowReport() {
+    auto& f = g_follow;
+    if (!f.frames) return "no frames";
+    std::string out = std::format("{} frames: our local still there next frame {}, our world still there {}; "
+                                  "{:.0f} us per frame on average (max {:.0f}){}",
+                                  f.frames, f.local_kept, f.world_ours, f.us_total / f.frames, f.us_max, f.last);
+    f.frames = f.local_kept = f.world_ours = 0;
+    f.us_total = f.us_max = 0.0;
+    return out;
+}
+
 int FollowBone(std::string_view node_name, std::string_view bone_name) {
-    auto* root = Player3D();
-    if (!root) return -1;
-    if (g_children.offset < 0) {
-        if (g_layout_tries >= 3) return -2;
-        ++g_layout_tries;
-        if (!FindChildLayout(root)) return -2;
-    }
-    static RE::NiAVObject *cached_root = nullptr, *node = nullptr, *bone = nullptr;
-    static double looked_at = -10.0;
-    auto attached = [&](RE::NiAVObject* o) {
-        for (int i = 0; i < 64 && o; ++i) {
-            if (o == root) return true;
-            if (!Readable(o, 0x40)) return false;
-            o = reinterpret_cast<RE::NiAVObject*>(o->parent);
-        }
-        return false;
+    const auto t0 = std::chrono::steady_clock::now();
+    auto& f = g_follow;
+    const double now = Now();
+    auto done = [&](int r) {
+        const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+        f.us_total += us;
+        f.us_max = std::max(f.us_max, us);
+        ++f.frames;
+        return r;
     };
-    const bool ok = root == cached_root && node && bone && attached(node) && attached(bone) && NameIs(node, node_name) &&
-                    NameIs(bone, bone_name);
-    if (!ok) {
-        node = bone = nullptr;
-        cached_root = root;
-        const double now = Now();
-        if (now - looked_at < 1.0) return 0;           // a walk reads every node: not every frame
-        looked_at = now;
-        int budget = 4000;
-        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
-            if (!node && NameIs(o, node_name)) node = o;
-            if (!bone && NameIs(o, bone_name)) bone = o;
-        });
-        if (!node || !bone) return 0;
+    // the player's root and the two nodes are looked up twice a second, not every frame (Player3D takes the 3D's
+    // lock and the checks query memory): the plugin also drops them on equips, menus and loads
+    // (InvalidateBoneFollow), when the 3D may be rebuilt
+    if (!f.node || now - f.root_at > 0.5) {
+        f.root_at = now;
+        auto* root = Player3D();
+        if (!root) return done(-1);
+        if (g_children.offset < 0) {
+            if (g_layout_tries >= 3) return done(-2);
+            ++g_layout_tries;
+            if (!FindChildLayout(root)) return done(-2);
+        }
+        auto attached = [&](RE::NiAVObject* o) {
+            for (int i = 0; i < 64 && o; ++i) {
+                if (o == root) return true;
+                if (!Readable(o, 0x40)) return false;
+                o = reinterpret_cast<RE::NiAVObject*>(o->parent);
+            }
+            return false;
+        };
+        const bool ok = root == f.root && f.node && f.bone && attached(f.node) && attached(f.bone) &&
+                        NameIs(f.node, node_name) && NameIs(f.bone, bone_name);
+        if (!ok) {
+            InvalidateBoneFollow();
+            f.root = root;
+            if (now - f.looked_at < 1.0) return done(0);
+            f.looked_at = now;
+            int budget = 4000;
+            RE::NiAVObject *node = nullptr, *bone = nullptr;
+            Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+                if (!node && NameIs(o, node_name)) node = o;
+                if (!bone && NameIs(o, bone_name)) bone = o;
+            });
+            if (!node || !bone) return done(0);
+            auto* parent = reinterpret_cast<RE::NiAVObject*>(node->parent);
+            if (!parent || !Readable(parent, 0xC0)) return done(0);
+            f.node = node, f.bone = bone, f.parent = parent;
+        }
     }
-    auto* parent = reinterpret_cast<RE::NiAVObject*>(node->parent);
-    if (!parent || !Readable(parent, 0xC0)) return 0;
-    // the node's local so that parent world * local = the bone's world; the world written too (this frame's draw,
-    // before the game's next update recomputes it)
-    const auto bone_world = ReadXform(bone, 0x80);
-    WriteXform(node, 0x40, combat::local_for(ReadXform(parent, 0x80), bone_world));
-    WriteXform(node, 0x80, bone_world);
-    return 1;
+    if (reinterpret_cast<RE::NiAVObject*>(f.node->parent) != f.parent) {   // moved elsewhere: look again
+        InvalidateBoneFollow();
+        return done(0);
+    }
+    // read-back: is last frame's write still there (the game neither reset it nor recomputed it)?
+    const auto local_now = ReadXform(f.node, 0x40);
+    const auto bone_world = ReadXform(f.bone, 0x80);
+    const auto parent_world = ReadXform(f.parent, 0x80);
+    if (f.wrote) {
+        if (Dist(local_now.t, f.written.t) < 1e-4f) ++f.local_kept;
+        if (Dist(ReadXform(f.node, 0x80).t, combat::compose(parent_world, f.written).t) < 1e-3f) ++f.world_ours;
+    }
+    f.written = combat::local_for(parent_world, bone_world);
+    WriteXform(f.node, 0x40, f.written);
+    WriteXform(f.node, 0x80, bone_world);
+    f.wrote = true;
+    f.last = std::format("; last frame: local before our write t ({:.3f} {:.3f} {:.3f}), ours ({:.3f} {:.3f} {:.3f}); "
+                         "bone world ({:.2f} {:.2f} {:.2f}), parent (the weapon) world ({:.2f} {:.2f} {:.2f})",
+                         local_now.t[0], local_now.t[1], local_now.t[2], f.written.t[0], f.written.t[1],
+                         f.written.t[2], bone_world.t[0], bone_world.t[1], bone_world.t[2], parent_world.t[0],
+                         parent_world.t[1], parent_world.t[2]);
+    return done(1);
 }
 
 int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {
