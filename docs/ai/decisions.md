@@ -509,3 +509,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   list search failed (no offset in 0x110..0x200 whose elements have the node as parent at +0x38) and ran again every
   0.25 s (avg 2.4 ms per frame in the timing lines). Now at most 3 tries per session, and the first failure logs the
   root node's first 0x200 bytes (and what each pointer points at) to read the real layout from.
+- 2026-10-26 owner's root-node dump (1.16): name +0x10, parent +0x38 (verified), transforms +0x40.., flags +0x118, a
+  second vtable at +0x130, and at +0x138 a pointer to the children with u16 count / capacity at +0x140 (14 / 14 on
+  HumanExportRoot): CommonLibSF's BSTArray children layout does not apply. The child search now also tries
+  {T* data, u16 size, u16 cap}; the blade's nodes are remembered (re-walked every 2 s, or when one no longer hangs
+  under the root) instead of walking the whole tree every 0.25 s.

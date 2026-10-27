@@ -168,7 +168,9 @@ RE::NiAVObject* Player3D() {
 // as empty on the player's root (the dump showed the root only). Found on a node that has children: the 8-byte
 // aligned offset in [0x110, 0x200) holding a BSTArray in either layout ({u32 size, u32 cap, T* data} or {T* data, u32
 // cap, u32 size}) whose elements are readable objects whose parent (NiAVObject +0x38) is that node.
-struct ChildLayout { std::ptrdiff_t offset = -1; bool data_first = false; };
+// kind 0: {u32 size, u32 cap, T* data}; 1: {T* data, u32 cap, u32 size}; 2: {T* data, u16 size, u16 cap} (the
+// owner's 1.16 dump 2026-10-26: HumanExportRoot +0x138 a pointer to its children, +0x140 0E 00 0E 00: 14 of 14)
+struct ChildLayout { std::ptrdiff_t offset = -1; int kind = 0; };
 ChildLayout g_children;
 int g_layout_tries = 0;                 // the search costs VirtualQuery calls: at most a few tries per session
 
@@ -197,7 +199,14 @@ bool ReadChildren(const void* node, const ChildLayout& l, RE::NiAVObject**& data
     const auto* b = reinterpret_cast<const std::byte*>(node) + l.offset;
     if (!Readable(b, 16)) return false;
     std::uint32_t cap = 0;
-    if (l.data_first) {
+    if (l.kind == 2) {
+        std::uint16_t n = 0, c = 0;
+        std::memcpy(&data, b, 8);
+        std::memcpy(&n, b + 8, 2);
+        std::memcpy(&c, b + 10, 2);
+        size = n;
+        cap = c;
+    } else if (l.kind == 1) {
         std::memcpy(&data, b, 8);
         std::memcpy(&cap, b + 8, 4);
         std::memcpy(&size, b + 12, 4);
@@ -212,8 +221,8 @@ bool ReadChildren(const void* node, const ChildLayout& l, RE::NiAVObject**& data
 
 bool FindChildLayout(RE::NiAVObject* node) {
     for (std::ptrdiff_t off = 0x110; off < 0x200; off += 8) {
-        for (bool data_first : {false, true}) {
-            ChildLayout l{off, data_first};
+        for (int kind : {0, 1, 2}) {
+            ChildLayout l{off, kind};
             RE::NiAVObject** data = nullptr;
             std::uint32_t size = 0;
             if (!ReadChildren(node, l, data, size) || size == 0) continue;
@@ -227,8 +236,7 @@ bool FindChildLayout(RE::NiAVObject* node) {
             }
             if (ok >= 1) {
                 g_children = l;
-                REX::INFO("3D: a node's children are at +{:X} ({}), {} on the player's root", off,
-                          data_first ? "data first" : "size first", size);
+                REX::INFO("3D: a node's children are at +{:X} (layout {}), {} on the player's root", off, kind, size);
                 return true;
             }
         }
@@ -293,14 +301,38 @@ int SetPlayerNodesHidden(std::string_view part, bool hidden) {
         ++g_layout_tries;
         if (!FindChildLayout(root)) return -2;
     }
-    int count = 0, budget = 2000;
-    Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
-        if (!NameHas(o, part)) return;
-        ++count;
+    // The matches are remembered and the tree walked again only every 2 s (a walk checks every node's memory:
+    // too slow for every call) or when the root or the name changes.
+    static RE::NiAVObject* cached_root = nullptr;
+    static std::string cached_part;
+    static std::vector<RE::NiAVObject*> found;
+    static double walked_at = -10.0;
+    const double now = Now();
+    // a remembered node still hangs under the root (its parent chain reaches it): else the 3D was rebuilt
+    auto attached = [&](RE::NiAVObject* o) {
+        for (int i = 0; i < 64 && o; ++i) {
+            if (o == root) return true;
+            if (!Readable(o, 0x40)) return false;
+            o = reinterpret_cast<RE::NiAVObject*>(o->parent);
+        }
+        return false;
+    };
+    const bool stale = std::any_of(found.begin(), found.end(), [&](RE::NiAVObject* o) { return !attached(o); });
+    if (stale || root != cached_root || part != cached_part || now - walked_at > 2.0) {
+        cached_root = root;
+        cached_part = std::string(part);
+        walked_at = now;
+        found.clear();
+        int budget = 2000;
+        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+            if (NameHas(o, part)) found.push_back(o);
+        });
+    }
+    for (auto* o : found) {
         if (hidden) o->flags |= 1ull;
         else o->flags &= ~1ull;
-    });
-    return count;
+    }
+    return static_cast<int>(found.size());
 }
 
 int WornHasKeyword(std::string_view editor_id, std::function<void(bool)> result) {
