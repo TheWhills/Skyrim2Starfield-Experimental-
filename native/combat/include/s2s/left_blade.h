@@ -47,4 +47,18 @@ private:
     bool unparking_ = false;     // put on again at the draw: a poll still saying "not worn" after that gives up
 };
 
+// The stance re-equip takes the weapon off for a moment; a dual keyword on the weapon (the pair weapon) is not worn
+// then, so the worn-keyword polls wait until it is back (owner's run 2026-10-26: dual -> one-handed right after each
+// switch). The equip lands about 0.5 s after it is asked for.
+class ReequipHold {
+public:
+    static constexpr double kAfterUnequip = 1.5, kAfterEquip = 1.0;
+    void on_unequip(double now) { until_ = now + kAfterUnequip; }
+    void on_equip(double now) { until_ = now + kAfterEquip; }
+    bool may_poll(double now) const { return now >= until_; }
+
+private:
+    double until_ = 0.0;
+};
+
 }  // namespace s2s::combat

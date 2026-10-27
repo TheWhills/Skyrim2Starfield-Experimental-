@@ -321,8 +321,9 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
             REX::INFO("anim event: '{}' payload '{}'", tag, payload);
         }
         cmds = controller_.on_anim_event(tag, payload, game::Now());
-        if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)
-            left_action_ = static_cast<int>(a);       // done in Tick (main thread)
+        if (armor_blade_on_.load() || left_blade_.parked())          // a worn blade (not the pair weapon)
+            if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)
+                left_action_ = static_cast<int>(a);   // done in Tick (main thread)
     }
     Run(std::move(cmds));
 }
@@ -346,7 +347,7 @@ void Plugin::Tick() {
     // (the controller), the moveset following on the re-equip. The blade put away while sheathed counts as worn.
     const auto& dual_kw = controller_.config().dual_worn_keyword;
     using LB = combat::LeftBlade::Action;
-    if (!dual_kw.empty() && now >= dual_poll_at_) {
+    if (!dual_kw.empty() && now >= dual_poll_at_ && reequip_hold_.may_poll(now)) {
         dual_poll_at_ = now + 0.5;
         auto* player = game::Player();
         if (player && player->parentCell && !menus_.blocked()) {
@@ -366,10 +367,21 @@ void Plugin::Tick() {
                 blades_ = game::ArmorsBesideKeyword(dual_kw);
                 REX::INFO("dual wield: {} left blade(s) in the plugin that has {}", blades_.size(), dual_kw);
             }
-            if (blades_.size() == 1) blade_id_ = blades_[0];
-            else if (dual_worn_.load() == 1)                  // several: which one is on
+            // the worn (ARMO) blade on? (the previous poll's answers): only that one is put away while sheathed
+            const bool armor_on = armor_hits_.exchange(0) > 0;
+            if (armor_on && !armor_blade_on_.load() && settings_.hide_left_sheathed) {   // just put on: sheathed?
+                drawn_answer_ = -1;
+                game::IsWeaponDrawn([this](bool d) { drawn_answer_ = d ? 1 : 0; });
+            }
+            armor_blade_on_ = armor_on;
+            if (blades_.size() == 1 && !blade_id_.load()) blade_id_ = blades_[0];
+            if (dual_worn_.load() == 1)
                 for (const auto id : blades_)
-                    game::IsEquipped(id, [this, id](bool on) { if (on) blade_id_ = id; });
+                    game::IsEquipped(id, [this, id](bool on) {
+                        if (!on) return;
+                        blade_id_ = id;
+                        ++armor_hits_;
+                    });
             if (restore_ == 1 && blades_searched_) {          // after a load: was the blade put away in the save?
                 restore_ = blades_.empty() ? 0 : 2;
                 restore_answers_ = 0;
@@ -395,15 +407,10 @@ void Plugin::Tick() {
     }
     // the poll's fresh answer -> worn (or put away by us) -> the stance group
     if (const int g = worn_gen_.exchange(0); g > 0 && restore_ == 0) {
-        bool newly_worn = false, effective = false;
+        bool effective = false;
         {
             std::scoped_lock l(lock_);
-            newly_worn = dual_worn_.load() == 1 && !left_blade_.worn();
             effective = left_blade_.on_worn(dual_worn_.load() == 1);
-        }
-        if (newly_worn && settings_.hide_left_sheathed) {   // equipped while sheathed (the menu): put away now
-            drawn_answer_ = -1;
-            game::IsWeaponDrawn([this](bool d) { drawn_answer_ = d ? 1 : 0; });
         }
         if (const int worn = effective ? 1 : 0; worn != dual_applied_) {
             dual_applied_ = worn;
@@ -530,10 +537,14 @@ void Plugin::Run(std::vector<combat::Command> commands) {
                 case K::ToggleLock: Lock::Get().Toggle(); result = "lock-on toggled (result in the lock-on line)"; break;
                 case K::SwitchTarget: Lock::Get().Switch(c.dx, c.dy); result = "switch"; break;
                 case K::UnequipWeapon:
+                    reequip_hold_.on_unequip(game::Now());         // the pair weapon's keyword is off meanwhile
+                    ++poll_gen_;
                     result = game::UnequipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
                                  ? "dispatched" : "not dispatched";
                     break;
                 case K::EquipWeapon:
+                    reequip_hold_.on_equip(game::Now());
+                    ++poll_gen_;
                     result = game::EquipWeapon([](const std::string& r) { REX::INFO("stance re-equip: {}", r); })
                                  ? "dispatched" : "not dispatched";
                     break;

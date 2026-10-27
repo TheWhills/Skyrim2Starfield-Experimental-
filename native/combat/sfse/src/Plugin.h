@@ -106,6 +106,13 @@ private:
     std::vector<std::uint32_t> blades_;           // the left blade ARMOs (S2SWeapons.esm)
     bool blades_searched_ = false;
     std::atomic<std::uint32_t> blade_id_{0};      // the one worn (or put away by us)
+    // whether a worn (ARMO) blade is on, from the previous poll: only that one is put away while sheathed (the pair
+    // weapon carries the keyword too and sheathes by itself)
+    std::atomic_bool armor_blade_on_{false};
+    std::atomic_int armor_hits_{0};
+    // the stance re-equip takes the weapon off for a moment: the pair weapon's keyword is not worn then, so the polls
+    // wait until it is back (owner's run 2026-10-26: dual -> one-handed right after every switch)
+    combat::ReequipHold reequip_hold_;           // main thread (Tick, and Run's task)
     // after a load: 1 = to ask, 2 = asked (answers_ of blades_.size() item counts), 0 = done
     int restore_ = 1;
     std::atomic_int restore_answers_{0};

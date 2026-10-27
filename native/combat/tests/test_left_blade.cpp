@@ -79,7 +79,18 @@ static void disabled() {
     CHECK(!b.parked());
 }
 
+static void reequip_hold() {
+    ReequipHold h;
+    CHECK(h.may_poll(0.0));
+    h.on_unequip(10.0);
+    CHECK(!h.may_poll(10.4));                                  // the weapon is off: no poll
+    h.on_equip(10.3);
+    CHECK(!h.may_poll(11.0));
+    CHECK(h.may_poll(11.3));                                   // back on
+}
+
 int main() {
+    reequip_hold();
     sheathe_and_draw();
     equipped_while_sheathed();
     failures_and_removal();

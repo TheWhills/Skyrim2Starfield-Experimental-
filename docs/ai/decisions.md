@@ -546,3 +546,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   shape to the actor's L_Wrist (else the left blade is invisible, stuck, or at the right hand), and whether
   WornHasKeyword counts the equipped weapon's keywords (else the moveset stays one-handed and the plugin needs an
   equipped-weapon check).
+- 2026-10-26 owner's pair weapon run: Actor.WornHasKeyword does count the equipped weapon's keyword (verified: "left
+  blade worn -> stance S2S_StanceDual" on equipping the pair), and the weapon's 3D holds both blade shapes (node
+  Longsword, two IronLongSword01:0, both visible flags). But the stance re-equip takes the weapon off for ~0.5 s, the
+  next poll saw the keyword gone and switched back (log: worn -> dual, 0.5 s later off -> before, every time). Now
+  the polls wait while a re-equip is under way (s2s::combat::ReequipHold, tested), and only a worn ARMO blade
+  (Papyrus IsEquipped) is taken off while sheathed (the plugin had also tried to put away the unworn ARMO blade).
+  Where the left blade draws is still to see (screenshot).
