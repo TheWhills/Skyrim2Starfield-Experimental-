@@ -630,3 +630,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   bone inherits its parent's turn first (tested: a pinky under a rest-kept cup keeps its curl in the turned hand).
   Rebuilt the dual stance: L_Pinky 167 -> 14 deg, every other bone within 0.05 deg of v2. Delivered as
   SkyrimMelee_LoreRim_dual_stance_v3.zip (dual folder only, as v2).
+- 2026-10-27 owner: left-hand versions of another mod's weapons (All Trilogy Lightsabers, 22 WEAPs). New
+  `fo4sf/sfweaponleft.py`: a Starfield weapon NIF's shapes (node transforms composed as skyrimnif: p' = s R p + t,
+  R row-major) moved into L_Wrist's frame at the left grip (`skyrimweapon.left_grip_metres`, the mirrored right grip,
+  same --left-grip-move / -turn tuning) and rigidly skinned to L_Wrist (identity bind, one weight per vertex); each
+  LOD0 .mesh rewritten (positions, normals, tangents moved; triangles, UVs, colours, LOD lists and the meshlet split
+  kept; cull data recomputed); collision and lights (NiAmbientLight) left out, object-mod parts not included.
+  Materials and textures stay the mod's (it must stay enabled). `weapon_test_pack.py --left-hand-mod <plugin>`
+  (its '<name> - *.ba2' next to it) adds an ARMO / ARMA per weapon to S2SWeapons.esm like the iron left blade.
+  Dry run on the uploaded mod: 22 / 22 converted (Count Dooku's emitter mesh is missing from the mod's own archive).
+  Tested on a synthetic mod (positions, normals, bitangent sign, skin, records). Several blades: S2SCombat now tells
+  which one is worn by a per-blade keyword S2S_LB_<the ARMO's local FormID> (WornHasKeyword, every 2 s while one is
+  on) instead of Papyrus IsEquipped, which never answered yes. The iron blade's IDs are unchanged; the pair weapon
+  moves to the next ID (it is abandoned).

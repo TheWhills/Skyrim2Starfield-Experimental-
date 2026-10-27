@@ -312,6 +312,104 @@ def spacesuit_check(outfit, armo, kw_names) -> dict:
     return {"outfit": _armo_summary(outfit, kw_names), "spacesuit": _armo_summary(suit, kw_names) if suit else None}
 
 
+def with_layers(ao, layers: str, suit_layer: str, kw_names: dict, row: dict):
+    """The blade ARMO with its worn-layer keywords set (--left-layers: both = the outfit's + `suit_layer`)."""
+    if layers == "both":                              # a spacesuit layer's keyword too
+        suit_kw = [k for k, n in kw_names.items() if n == suit_layer]
+        if not suit_kw:
+            row["layer_missing"] = suit_layer
+        for k in suit_kw:
+            ao = (ao[0], ao[1], with_keyword(ao[2], k), ao[3])
+    elif layers == "none":
+        layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
+        ao = (ao[0], ao[1], without_keywords(ao[2], layer), ao[3])
+    return ao
+
+
+BLADE_TAG = "S2S_LB_{:06X}"     # per-blade keyword: S2SCombat tells which left blade is worn (WornHasKeyword)
+
+
+def tag_blade(ao, next_index: int, kywd_t):
+    """(ARMO with its own keyword, the KYWD record) for one left blade. The keyword's EditorID carries the ARMO's
+    local FormID (BLADE_TAG), so S2SCombat finds it from the ARMO without reading keyword lists (owner's run
+    2026-10-27: Papyrus Actor.IsEquipped on the blade never answered yes); `next_index` is where the KYWD goes."""
+    kid = sfplugin.new_form_id(next_index)
+    rec = (b"KYWD", kywd_t[1], sfplugin.edit(kywd_t[2], {b"EDID": sfplugin.zs(BLADE_TAG.format(ao[3] & 0xFFFFFF))},
+                                             drop=(b"FULL", b"DESC")), kid)
+    return (ao[0], ao[1], with_keyword(ao[2], kid), ao[3]), rec
+
+
+def mod_archives(plugin: str) -> list:
+    """The BA2 archives that go with a mod's plugin: '<plugin name> - *.ba2' next to it (Starfield's naming)."""
+    import glob
+    stem = os.path.splitext(os.path.basename(plugin))[0]
+    return sorted(glob.glob(os.path.join(glob.escape(os.path.dirname(os.path.abspath(plugin))), stem + " - *.ba2")))
+
+
+def mod_left_hands(plugin: str, staging: str, recs: list, armo_t, arma_t, kw_fid: int, slot: int, suit: int, a,
+                   kw_names: dict, kywd_t=None) -> list:
+    """Left-hand worn versions of every weapon of another Starfield mod (its plugin and BA2s): each WEAP's model
+    converted by sfweaponleft (into L_Wrist's frame at the left grip, skinned) and worn through ARMO / ARMA copies like
+    the iron left blade (same keyword, slots and layers). The mod stays needed in game (its meshes and materials are
+    the ones the new models point at). Returns report rows."""
+    from fo4sf import ba2 as ba2mod, sfweaponleft
+    arcs = [ba2mod.Ba2(p) for p in mod_archives(plugin)]
+
+    def read(path):
+        for arc in arcs:
+            i = arc.find(path)
+            if i is not None:
+                return arc.read(i)
+        return None
+    stem = re.sub(r"[^a-z0-9]+", "_", os.path.splitext(os.path.basename(plugin))[0].lower()).strip("_")
+    rows = []
+    grip = skyrimweapon.left_grip_metres(skyrimweapon.LEFT_GRIP_ADJUST["move_cm"],
+                                         skyrimweapon.LEFT_GRIP_ADJUST["turn_deg"])
+    for _t, _h, subs, fid in sfplugin.records(plugin, [b"WEAP"]):
+        wed = sfplugin.edid(subs)
+        fulls = [d for s_, d in subs if s_ == b"FULL" and len(d) > 4 and d.endswith(b"\0")]
+        wname = fulls[0].rstrip(b"\0").decode("utf-8", "replace") if fulls else wed
+        modl = next((d.rstrip(b"\0").decode("latin-1") for s_, d in subs if s_ == b"MODL"), None)
+        row = {"key": f"{stem}:{wed}", "ok": False, "mod": os.path.basename(plugin)}
+        if not modl:
+            row["reason"] = "no model"
+            rows.append(row)
+            continue
+        src = "meshes/" + modl.replace("\\", "/").lower()
+        raw = read(src)
+        if raw is None:
+            row["reason"] = f"{src} not in the mod's archives"
+            rows.append(row)
+            continue
+        out_name = f"s2s/lefthand/{stem}/{re.sub(r'[^a-z0-9]+', '_', wed.lower())}_left"
+        try:
+            files, rep = sfweaponleft.left_hand_model(raw, read, out_name, grip)
+        except (nifmod.NifError, struct.error, ValueError) as e:
+            row["reason"] = f"{type(e).__name__}: {e}"
+            rows.append(row)
+            continue
+        for rel, data in files.items():
+            dst = os.path.join(staging, *rel.split("/"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with open(dst, "wb") as fh:
+                fh.write(data)
+        edid = "S2S_LH_" + wed
+        name = wname + " (left hand)"
+        model = out_name.replace("/", "\\") + ".nif"
+        aa, ao, aa_suit = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid,
+                                             slot=slot, suit_slot=suit)
+        ao = with_layers(ao, a.left_layers, a.left_suit_layer, kw_names, row)
+        tag = []
+        if kywd_t is not None:
+            ao, tag_rec = tag_blade(ao, len(recs) + 3, kywd_t)
+            tag = [tag_rec]
+        recs += [aa, ao, aa_suit] + tag
+        row.update(ok=True, name=name, editor_id=edid, starfield_model=model, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}",
+                   test_with_pack="dual_sword", worn=True, from_weapon=f"{fid:08X}", model_report=rep)
+        rows.append(row)
+    return rows
+
+
 def pair_model(staging: str, right_model: str, left_model: str) -> str:
     """The pair weapon's NIF in staging: the right weapon's model with the left blade's (rigid, L_Wrist frame) shapes
     under a node LEFT_HAND_NODE (sfnif.merge_under_node); returns its model path (as in WEAP MODL)."""
@@ -394,6 +492,9 @@ def main(argv=None):
                     help="move the left blade in the left wrist's frame (cm)")
     ap.add_argument("--left-grip-turn", type=float, nargs=3, default=(0.0, 0.0, 0.0), metavar=("RX", "RY", "RZ"),
                     help="turn the left blade about its grip point, about the left wrist's axes (degrees)")
+    ap.add_argument("--left-hand-mod", action="append", metavar="PLUGIN",
+                    help="another Starfield mod's plugin (its '<name> - *.ba2' next to it): left-hand worn versions "
+                         "of all its weapons (repeatable)")
     ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
                     help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
@@ -469,22 +570,15 @@ def main(argv=None):
                                  else slot_in(apparel, SUIT_SLOTS))
             aa, ao, aa_suit = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid,
                                                  slot=slot, suit_slot=suit)
-            if a.left_layers == "both":                   # a spacesuit layer's keyword too
-                suit_kw = [k for k, n in kw_names.items() if n == a.left_suit_layer]
-                if not suit_kw:
-                    row["layer_missing"] = a.left_suit_layer
-                for k in suit_kw:
-                    ao = (ao[0], ao[1], with_keyword(ao[2], k), ao[3])
-            elif a.left_layers == "none":
-                layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
-                ao = (ao[0], ao[1], without_keywords(ao[2], layer), ao[3])
+            ao = with_layers(ao, a.left_layers, a.left_suit_layer, kw_names, row)
             row["armor_type_keywords"] = sorted(n for n in kw_names.values() if n.startswith("ArmorType"))
             row["layer_keywords"] = [kw_names.get(k, f"{k:08X}") for k in sfplugin.keywords(ao[2])
                                      if kw_names.get(k, "").startswith("ArmorType")]
             row["biped_slot"] = {"bit": slot, "suit_bit": suit, "shared_with_vanilla": [b for b, sh in
                                  ((slot, shared), (suit, suit_shared)) if sh],
                                  "vanilla_slots_used": f"{used_slots(apparel):016X}"}
-            recs += [aa, ao, aa_suit]
+            ao, tag_rec = tag_blade(ao, len(recs) + 3, kywd_t)
+            recs += [aa, ao, aa_suit, tag_rec]
             row["keyword"] = {"edid": LEFT_BLADE_KEYWORD, "form_id_in_plugin": f"{kw_fid & 0xFFFFFF:06X}"}
             # what the game may tell outfits and spacesuits apart by (owner's runs 2026-10-27: the blade is hidden
             # under a spacesuit even with an addon on a spacesuit slot): the copied outfit's keywords and record
@@ -494,6 +588,9 @@ def main(argv=None):
                        test_with_pack="dual_" + lw["pack"].replace("1h_", ""), worn=True,
                        apparel_template={"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2]),
                                          "arma_subrecords": [f"{x.decode('latin-1')}:{len(d)}" for x, d in arma_t[2]]})
+            for mod in a.left_hand_mod or []:              # other mods' weapons as left-hand blades too
+                mrows = mod_left_hands(mod, staging, recs, armo_t, arma_t, kw_fid, slot, suit, a, kw_names, kywd_t)
+                report["weapons"] += mrows
             right = next((w for w in report["weapons"] if w["key"] == lw["key"] and w.get("ok")), None)
             if right is not None and on_wrist:
                 report["weapons"].append(row)

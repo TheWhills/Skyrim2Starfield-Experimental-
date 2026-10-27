@@ -394,9 +394,17 @@ void Plugin::Tick() {
             }
             armor_blade_on_ = armor_on;
             if (blades_.size() == 1 && !blade_id_.load()) blade_id_ = blades_[0];
-            if (blades_.size() > 1 && armor_on)              // several blades: which one is on (for putting it away)
-                for (const auto id : blades_)
-                    game::IsEquipped(id, [this, id](bool on) { if (on) blade_id_ = id; });
+            // several blades: which one is on (to put that one away), by its own keyword S2S_LB_<its local FormID>
+            // (weapon_test_pack.BLADE_TAG; Papyrus IsEquipped never answered yes). Every 2 s while one is on.
+            if (blades_.size() > 1 && armor_on && now >= blade_ident_at_) {
+                blade_ident_at_ = now + 2.0;
+                for (const auto id : blades_) {
+                    const std::uint32_t top = id >> 24;
+                    const std::uint32_t local = id & (top == 0xFE ? 0xFFFu : top == 0xFD ? 0xFFFFu : 0xFFFFFFu);
+                    game::WornHasKeyword(std::format("S2S_LB_{:06X}", local),
+                                         [this, id](bool worn) { if (worn) blade_id_ = id; });
+                }
+            }
             if (restore_ == 1 && blades_searched_) {          // after a load: was the blade put away in the save?
                 restore_ = blades_.empty() ? 0 : 2;
                 restore_answers_ = 0;

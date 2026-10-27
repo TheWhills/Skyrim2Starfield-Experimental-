@@ -133,6 +133,17 @@ def adjusted_left_wrist_frame(move_cm=(0.0, 0.0, 0.0), turn_deg=(0.0, 0.0, 0.0))
 
 LEFT_GRIP_ADJUST = {"move_cm": (0.0, 0.0, 0.0), "turn_deg": (0.0, 0.0, 0.0)}   # set by weapon_test_pack
 
+def left_grip_metres(move_cm=(0.0, 0.0, 0.0), turn_deg=(0.0, 0.0, 0.0)) -> Tuple[tuple, tuple]:
+    """(row-major rotation, translation in metres) taking a point of a Starfield weapon model (its WEAPON / WeaponLeft
+    frame, metres) into L_Wrist's frame: the weapon held at LEFT_GRIP (the mirrored right grip), with the same hand
+    tuning as adjusted_left_wrist_frame (turned about the grip point, then moved)."""
+    _h, gt, gq = M.LEFT_GRIP["weaponleft"]
+    q = _norm(gq)
+    cols = [_qrot(q, e) for e in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))]
+    g = tuple(cols[c][r] for r in range(3) for c in range(3))
+    rot = _matmul(_euler_deg(*turn_deg), g)
+    return rot, tuple(gt[i] + move_cm[i] / 100.0 for i in range(3))
+
 
 def left_wrist_shapes(n: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], report: Optional[dict] = None):
     """The drawn-weapon shapes in L_Wrist's frame (see left_wrist_frame; LEFT_GRIP_ADJUST applied)."""

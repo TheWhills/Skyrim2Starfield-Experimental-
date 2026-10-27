@@ -116,6 +116,7 @@ private:
     std::atomic_bool armor_blade_on_{false};
     std::atomic_int weapon_dual_{-1};             // the right-hand weapon carries the keyword (the pair weapon)
     std::atomic_int armor_hits_{0};
+    double blade_ident_at_ = 0.0;
     // the stance re-equip takes the weapon off for a moment: the pair weapon's keyword is not worn then, so the polls
     // wait until it is back (owner's run 2026-10-26: dual -> one-handed right after every switch)
     combat::ReequipHold reequip_hold_;           // main thread (Tick, and Run's task)
