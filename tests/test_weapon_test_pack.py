@@ -115,6 +115,23 @@ class LeftBladeTests(unittest.TestCase):
         tip = apply((0, 60, 0)) - apply((0, 0, 0))                                  # Shield +Y: the blade
         self.assertTrue(np.allclose(tip / np.linalg.norm(tip), [0, 0, 1], atol=1e-3))   # +Z, as the right blade
 
+    def test_left_grip_adjust(self):
+        base = W.left_wrist_frame()
+        self.assertEqual(W.adjusted_left_wrist_frame(), base)
+        rot, trans = W.adjusted_left_wrist_frame(move_cm=(1.0, 0.0, -2.0))
+        self.assertTrue(np.allclose(rot, base[0]))
+        self.assertTrue(np.allclose(np.array(trans) - np.array(base[1]), [0.7, 0.0, -1.4]))   # 1 cm = 0.7 units
+        _h, gt, _q = M.LEFT_GRIP["weaponleft"]
+        c = np.array(gt) / W.UNIT
+        rot2, trans2 = W.adjusted_left_wrist_frame(turn_deg=(0.0, 0.0, 90.0))
+        R0, R2 = np.array(base[0]).reshape(3, 3), np.array(rot2).reshape(3, 3)
+        Rz = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1.0]])
+        self.assertTrue(np.allclose(R2, Rz @ R0, atol=1e-9))
+        p = np.array([3.0, -1.0, 2.0])                                         # any blade point
+        before = R0 @ p + np.array(base[1])
+        after = R2 @ p + np.array(trans2)
+        self.assertTrue(np.allclose(after - c, Rz @ (before - c), atol=1e-9))  # turned about the grip point
+
     def test_left_wrist_frame_is_the_weaponleft_frame_at_its_grip(self):
         rot, trans = W.left_weapon_frame()
         rot2, trans2 = W.left_wrist_frame()

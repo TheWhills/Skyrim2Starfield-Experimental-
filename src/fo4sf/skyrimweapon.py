@@ -105,13 +105,43 @@ def left_wrist_frame() -> Tuple[tuple, tuple]:
     return rot2, tuple(moved[i] + gt[i] / UNIT for i in range(3))
 
 
+def _euler_deg(rx: float, ry: float, rz: float) -> tuple:
+    """Row-major rotation: about x, then y, then z (degrees, the L_Wrist frame's axes)."""
+    def axis(i, d):
+        c, s = math.cos(math.radians(d)), math.sin(math.radians(d))
+        m = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+        j, k = (i + 1) % 3, (i + 2) % 3
+        m[j][j], m[j][k], m[k][j], m[k][k] = c, -s, s, c
+        return tuple(v for row in m for v in row)
+    return _matmul(axis(2, rz), _matmul(axis(1, ry), axis(0, rx)))
+
+
+def adjusted_left_wrist_frame(move_cm=(0.0, 0.0, 0.0), turn_deg=(0.0, 0.0, 0.0)) -> Tuple[tuple, tuple]:
+    """left_wrist_frame with a hand-tuned correction in L_Wrist's frame: the blade turned `turn_deg` about the grip
+    point (where WeaponLeft sits on the wrist, LEFT_GRIP) and moved `move_cm`. Owner's run 2026-10-27: the left grip
+    (the mirrored right one) looks a bit off in game; this lets it be tuned without changing the clips."""
+    rot, trans = left_wrist_frame()
+    if not any(move_cm) and not any(turn_deg):
+        return rot, trans
+    adj = _euler_deg(*turn_deg)
+    _h, gt, _gq = M.LEFT_GRIP["weaponleft"]
+    c = tuple(v / UNIT for v in gt)                                       # grip point, units
+    rot2 = _matmul(adj, rot)
+    t = tuple(sum(adj[3 * r + k] * (trans[k] - c[k]) for k in range(3)) + c[r] for r in range(3))
+    return rot2, tuple(t[i] + move_cm[i] / 100.0 / UNIT for i in range(3))
+
+
+LEFT_GRIP_ADJUST = {"move_cm": (0.0, 0.0, 0.0), "turn_deg": (0.0, 0.0, 0.0)}   # set by weapon_test_pack
+
+
 def left_wrist_shapes(n: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], report: Optional[dict] = None):
-    """The drawn-weapon shapes in L_Wrist's frame (see left_wrist_frame)."""
+    """The drawn-weapon shapes in L_Wrist's frame (see left_wrist_frame; LEFT_GRIP_ADJUST applied)."""
     scb = scabbard_blocks(n)
     kept = [s for s in shapes if s.block not in scb and not SCABBARD.match(s.name or b"")]
     if report is not None:
         report["scabbard_shapes_dropped"] = len(shapes) - len(kept)
-    rot, trans = left_wrist_frame()
+        report["left_grip_adjust"] = dict(LEFT_GRIP_ADJUST)
+    rot, trans = adjusted_left_wrist_frame(LEFT_GRIP_ADJUST["move_cm"], LEFT_GRIP_ADJUST["turn_deg"])
     return [to_weapon_frame(s, rot, trans) for s in kept]
 
 

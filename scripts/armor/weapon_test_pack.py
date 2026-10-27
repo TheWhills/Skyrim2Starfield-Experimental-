@@ -390,11 +390,16 @@ def main(argv=None):
     ap.add_argument("--left-suit-layer", default=SUIT_LAYER_KEYWORDS[0],
                     help="the spacesuit-layer keyword added with --left-layers both (ArmorTypeSpacesuitBody hid the "
                          "player's body without a suit)")
+    ap.add_argument("--left-grip-move", type=float, nargs=3, default=(0.0, 0.0, 0.0), metavar=("X", "Y", "Z"),
+                    help="move the left blade in the left wrist's frame (cm)")
+    ap.add_argument("--left-grip-turn", type=float, nargs=3, default=(0.0, 0.0, 0.0), metavar=("RX", "RY", "RZ"),
+                    help="turn the left blade about its grip point, about the left wrist's axes (degrees)")
     ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
                     help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
                     help="EditorID regex of the vanilla outfit whose ARMO / ARMA the left blade copies")
     a = ap.parse_args(argv)
+    skyrimweapon.LEFT_GRIP_ADJUST.update(move_cm=tuple(a.left_grip_move), turn_deg=tuple(a.left_grip_turn))
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")

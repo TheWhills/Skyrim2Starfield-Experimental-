@@ -618,3 +618,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   suit (verified), but without a suit the player's body is invisible: the game took it for a spacesuit body. Now the
   added spacesuit-layer keyword is ArmorTypeSpacesuitBackpack (`--left-suit-layer` to pick another); the pack prints
   every ArmorType keyword the game has.
+- 2026-10-27 owner: the worn left blade now works end to end (verified): in the left hand with the dual moveset,
+  put away on sheathe and back on draw, visible with and without a spacesuit, body kept. The blade ARMO carries
+  ArmorTypeApparelOrNakedBody + ArmorTypeSpacesuitBackpack, addons on slots 31 and 61. Open: the left grip (the
+  mirrored right grip) and a finger look a bit off. `--left-grip-move X Y Z` (cm) / `--left-grip-turn RX RY RZ` (deg,
+  about the grip point, L_Wrist axes) tune it in the pack without touching the clips (tested).
