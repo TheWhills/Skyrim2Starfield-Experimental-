@@ -97,6 +97,27 @@ def form_refs(subs, ids) -> list:
     return out
 
 
+def only_addon(subs, keep: int):
+    """ARMO subrecords with every armor-addon entry (INDX + its MODL form ID) dropped except the one pointing at `keep`
+    (renumbered 0). Vanilla Clothes_Nightwear_01 lists more than one addon (Starfield ARMOs: 716 INDX / MODL pairs on
+    300 records): the left blade's copy kept the outfit's other parts (owner's run 2026-10-26: pants gone)."""
+    import struct
+    out, i = [], 0
+    while i < len(subs):
+        s, d = subs[i]
+        if s == b"INDX":
+            j = next((k for k in range(i + 1, len(subs)) if subs[k][0] in (b"MODL", b"INDX")), None)
+            if j is not None and subs[j][0] == b"MODL" and len(subs[j][1]) == 4:
+                if struct.unpack("<I", subs[j][1])[0] == keep:
+                    out.append((b"INDX", struct.pack("<H", 0)))
+                    out.extend(subs[i + 1:j + 1])
+                i = j + 1
+                continue
+        out.append((s, d))
+        i += 1
+    return out
+
+
 def replace_refs(subs, old: int, new: int):
     import struct
     out = []
@@ -190,6 +211,7 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
     to, ho, so, _fo = armo_t
     so2 = replace_refs(sfplugin.edit(so, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name)}, drop=(b"DESC",)),
                        fa, new_arma)
+    so2 = only_addon(so2, new_arma)
     if keyword is not None:
         so2 = with_keyword(so2, keyword)
     if slot is not None:

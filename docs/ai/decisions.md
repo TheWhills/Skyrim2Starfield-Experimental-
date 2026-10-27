@@ -500,3 +500,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the worn blade stays, and S2SCombat hides its node (sLeftBladeNode, NiAVObject flags +0x118 bit 0: supported, from
   Skyrim's AppCulled) while Papyrus IsWeaponDrawn says sheathed, and logs the player's 3D tree when the blade goes on
   (also answers whether the spacesuit removes the blade's node or only hides it).
+- 2026-10-26 owner's run: left fingers now grip (dual stance v2 verified by screenshot); pants still gone; hide /
+  show matched 0 nodes and the 3D dump listed only HumanExportRoot (CommonLibSF's NiNode::children reads empty on
+  1.16); not visible with a spacesuit. Fixes: the left blade's ARMO keeps only its own addon (the nightwear ARMO lists
+  more than one INDX / MODL addon: the outfit's other part came along and took the pants); the child list of a node
+  is found at run time (the offset whose array elements have that node as parent, NiAVObject +0x38).

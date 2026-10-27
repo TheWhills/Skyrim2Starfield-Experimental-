@@ -215,6 +215,18 @@ class LeftBladeKeywordTests(unittest.TestCase):
         self.assertEqual(dict(aa[2])[b"BO64"], struct.pack("<Q", 1 << 59))
         self.assertEqual(dict(ao[2])[b"BO64"], struct.pack("<Q", 1 << 59))
 
+    def test_only_the_left_blade_addon_is_kept(self):
+        subs = [(b"EDID", b"O\0"), (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x100)),
+                (b"INDX", struct.pack("<H", 1)), (b"MODL", struct.pack("<I", 0x101)), (b"DATA", b"x")]
+        out = P.only_addon(subs, 0x101)
+        self.assertEqual(out, [(b"EDID", b"O\0"), (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x101)),
+                               (b"DATA", b"x")])
+        arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0")], 0x100)
+        armo = (b"ARMO", bytes(24), [(b"EDID", b"O\0"), (b"INDX", struct.pack("<H", 0)), (b"MODL", struct.pack("<I", 0x100)),
+                                     (b"INDX", struct.pack("<H", 1)), (b"MODL", struct.pack("<I", 0x555))], 0x200)
+        aa, ao = P.left_blade_records(armo, arma, 1, "S2S_Left", "Left", "l.nif")
+        self.assertEqual([d for s_, d in ao[2] if s_ == b"MODL"], [struct.pack("<I", aa[3])])      # the pants part gone
+
     def test_left_blade_records_carry_the_keyword(self):
         arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0"), (b"MOD2", b"old.nif\0")], 0x100)
         armo = (b"ARMO", bytes(24), [(b"EDID", b"O\0"), (b"FULL", b"n\0"), (b"MODL", struct.pack("<I", 0x100))], 0x200)
