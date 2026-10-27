@@ -643,3 +643,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   which one is worn by a per-blade keyword S2S_LB_<the ARMO's local FormID> (WornHasKeyword, every 2 s while one is
   on) instead of Papyrus IsEquipped, which never answered yes. The iron blade's IDs are unchanged; the pair weapon
   moves to the next ID (it is abandoned).
+- 2026-10-27 owner: with ArmorTypeSpacesuitBackpack on the blade, drawing (the blade put on) drops O2 / CO2 into the
+  red, sheathing restores it (verified): the game takes it for an empty pack. The game's ArmorType keywords: Apparel
+  Head, ApparelOrNakedBody, Neuroamp, SpacesuitBackpack, SpacesuitBody, SpacesuitHelmet, SpacesuitShowAlways,
+  VaruunZealot. The blade's spacesuit-layer keyword is now ArmorTypeSpacesuitShowAlways (with the outfit's), to test.

@@ -58,6 +58,7 @@ def starfield_esm(path):
             (b"KYWD", kw, [(b"EDID", b"ArmorTypeApparelOrNakedBody\0")], 0x000A0003),
             (b"KYWD", kw, [(b"EDID", b"ArmorTypeSpacesuitBody\0")], 0x000A0004),
             (b"KYWD", kw, [(b"EDID", b"ArmorTypeSpacesuitBackpack\0")], 0x000A0005),
+            (b"KYWD", kw, [(b"EDID", b"ArmorTypeSpacesuitShowAlways\0")], 0x000A0006),
             (b"WEAP", wp, [(b"EDID", b"Melee_Knife\0"), (b"KWDA", struct.pack("<I", 0x000A0002)),
                            (b"MODL", b"Weapons\\Knife\\Knife.nif\0")], 0x000B0001),
             (b"WEAP", wp, [(b"EDID", b"Melee_Sword\0"), (b"FULL", struct.pack("<I", 1234)),
@@ -414,7 +415,7 @@ class PackTests(unittest.TestCase):
             kw = [r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"), [b"KYWD"])][0]
             self.assertIn(kw[3], sfplugin.keywords(pw[2]))
             self.assertLess(left["biped_slot"]["bit"], 32)
-            self.assertEqual(left["layer_keywords"], ["ArmorTypeApparelOrNakedBody", "ArmorTypeSpacesuitBackpack"])
+            self.assertEqual(left["layer_keywords"], ["ArmorTypeApparelOrNakedBody", "ArmorTypeSpacesuitShowAlways"])
             self.assertIn("ArmorTypeSpacesuitBody", left["armor_type_keywords"])
             self.assertEqual(dict(ao[2])[b"FULL"], b"Iron Sword (Skyrim, left hand)\0")
             self.assertEqual(aas[b"RNAM"], struct.pack("<I", 0x347D))               # race etc. kept

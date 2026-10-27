@@ -179,10 +179,13 @@ def with_keyword(subs, kw: int):
 # hidden under a shown spacesuit; without it, never drawn at all (owner's run 2026-10-27, verified). So the blade
 # carries both: drawn with either layer, to test.
 # With ArmorTypeSpacesuitBody the blade showed with and without a suit, but without a suit the player's body vanished
-# (owner's run 2026-10-27: the game took the blade for a spacesuit body, which covers the body). A spacesuit part
-# that covers nothing instead: the backpack's layer (supported by the name; the pack lists every ArmorType keyword).
+# (owner's run 2026-10-27: the game took the blade for a spacesuit body, which covers the body). With
+# ArmorTypeSpacesuitBackpack it showed both ways with the body kept, but drawing (the blade put on) dropped the
+# player's O2 / CO2 into the red: the game took it for a pack with nothing in it. The game's ArmorType keywords
+# (owner's list): ApparelHead, ApparelOrNakedBody, Neuroamp, SpacesuitBackpack, SpacesuitBody, SpacesuitHelmet,
+# SpacesuitShowAlways, VaruunZealot. SpacesuitShowAlways by its name is the shown-with-either-layer one.
 OUTFIT_LAYER_KEYWORDS = ("ArmorTypeApparelOrNakedBody",)
-SUIT_LAYER_KEYWORDS = ("ArmorTypeSpacesuitBackpack",)
+SUIT_LAYER_KEYWORDS = ("ArmorTypeSpacesuitShowAlways",)
 
 
 def without_keywords(subs, drop: set):
