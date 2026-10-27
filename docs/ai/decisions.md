@@ -685,3 +685,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   away from the frame it was skinned in (3.3 units up, 2.5 back); the binds are the truth, so skyrimhair now anchors on
   the skin bind of NPC Head and moves the node tree into that frame (the first KS pack would have put those wigs 4.6 cm
   low).
+- 2026-10-27 owner: is the Skyrim grass Starfield grass (wind, fade, pop-in handling) or a static? It is baked patch
+  statics. Starfield has a run-time grass system (GRAS / GCVR ground cover / BIOM terrain entries, per xEdit's
+  definitions) that maps almost field for field onto Skyrim's. Decision: test it before changing the default: a
+  read-only survey (`scripts/terrain/grass_survey.py`) answers whether hand-made worlds get ground cover by painted
+  texture, and a test build (`scripts/terrain/skyrim_grass_native.py`, S2SGrass.esm) grows Skyrim's grass through
+  GRAS + GCVR on the spare LTEX records the terrain overrides (never on vanilla ones: that would put Skyrim grass on
+  vanilla planets), optionally through the planet's biome. The patches stay the default until it works in game.

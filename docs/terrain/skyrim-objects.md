@@ -176,6 +176,29 @@ First in-game look (2026-10-16): only sparse, pale yellow clumps. Changes: `--gr
 Skyrim tries every 20-60 units, 0.3-0.9 m), and `--grass-tint vertex` (default) multiplies each grass model's texture
 by the mean Skyrim vertex colour (VCLR) under its instances, as Skyrim tints grass with the ground.
 
+## Native grass: Skyrim's grass grown by Starfield's grass system (2026-10-27, to test)
+Owner: the patches above are plain statics (no wind, no fade / density settings, no LOD, pop-in like any object).
+Starfield has a run-time grass system (xEdit's wbDefinitionsSF1, format only; `src/fo4sf/sfgrass.py`):
+* **GRAS** grass: model, DNAM = contrast, cluster scale, height range, colour range, wind frequency, water clamps,
+  max density, min / max slope, flags (vertex lighting, uniform scaling, fits slope, apply between), coverage,
+  dirtiness. Skyrim's GRAS has the same core fields and the same flag bits.
+* **GCVR** ground cover: grasses (each with an override density, -1 = own), the landscape textures it grows on, a
+  painted-material threshold. Skyrim's LTEX -> GRAS link in reverse.
+* **BIOM** biome terrain entries {mask, LTEX, GCVR}: how procedural planet surfaces get grass.
+**Unresolved:** whether the engine grows a GCVR's grass on a hand-made BTD world like the overlay (painted with the
+listed texture), or only through a biome; the real GRAS DNAM layout (38 bytes from xEdit's field list); the scale of
+Max Density; what a vanilla grass model needs. Two tools:
+* `scripts/terrain/grass_survey.py --starfield ... --out ...` (read-only): the GRAS / GCVR / BIOM records, which LTEX
+  carry cover, how many vanilla BTDs (and which world folders) paint one of them, DNAM sizes and the density range,
+  block types / materials of a few vanilla grass models. If hand-made worlds paint cover textures, cover alone should
+  work.
+* `scripts/terrain/skyrim_grass_native.py` (test build, MO2 mod S2SGrass.esm): a GRAS per Skyrim grass on the
+  converted ground (vanilla GRAS copied: model = the converted Skyrim grass, single instance; Skyrim's density x
+  --density-scale, slopes, height / colour range, flags), a GCVR per spare LTEX the terrain overrides (SKYG_...),
+  listing the grasses of the Skyrim textures painted with it. Textures that fell back to a vanilla Starfield LTEX get
+  no cover (it would grow Skyrim grass on vanilla planets). `--biome <EDID>` also overrides that biome with
+  {LTEX, GCVR} entries (second attempt). Test with the terrain staged `--no-grass`.
+
 ## Model-space normal maps (2026-10-16)
 Riverwood's riverbank ledges and cliffs drew dark and flat with only the grass texture's flowers showing, while the
 same texture on the flat terrain looked right. Skyrim landscape objects often set SLSF1 Model_Space_Normals (bit 12,
