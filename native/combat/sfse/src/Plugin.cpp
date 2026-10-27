@@ -96,6 +96,7 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     left_blade_ = combat::LeftBlade(settings_.hide_left_sheathed);
     if (auto it = plugin.find("slefthandnode"); it != plugin.end()) settings_.left_hand_node = it->second;
     if (auto it = plugin.find("slefthandbone"); it != plugin.end()) settings_.left_hand_bone = it->second;
+    settings_.dual_debug = to_int(plugin, "bdualdebug", 0) != 0;
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -437,7 +438,7 @@ void Plugin::Tick() {
             if (!more.empty()) REX::INFO("dual wield: left blade {}{} -> stance {}", worn ? "worn" : "off",
                                          weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
                                          worn ? controller_.config().dual_stance_keyword : "before");
-            if (worn && dumps_ < 3) {                 // where the blade sits in the player's 3D (and if it is there)
+            if (worn && settings_.dual_debug && dumps_ < 3) {   // the player's 3D (a ~1 s hitch: debug only)
                 ++dumps_;
                 REX::INFO("dual wield: player 3D (looking for '{}'):{}", settings_.left_blade_node,
                           game::DumpPlayer3D(500));

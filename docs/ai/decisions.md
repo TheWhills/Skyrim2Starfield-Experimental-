@@ -587,3 +587,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   every frame), the call is timed, and each frame reads back the previous frame's write (is our local still there,
   is the node's world what our local gives) and logs it every 5 s with the positions, to tell whether the game
   resets the transform or draws from somewhere else.
+- 2026-10-27 owner's read-back run: our local transform on S2S_LeftHand stayed every frame (450 / 450: the game does
+  not reset it), but the node's world never matched it and the blade on screen did not move: the game draws the
+  weapon model's parts from its own copy of the transforms, not from the node's local / world (verified that writing
+  them does nothing visible). Moving a part of a weapon needs the engine's own update path (Ghidra). Also each
+  dual switch cost a ~1.7 s hitch (the 3D listing + bone search) and the 0.5 s lookups ~40 ms spikes. Now: the
+  follow is off by default (sLeftHandNode empty), the listing / search only with bDualDebug = 1. The worn left blade
+  (which draws in the left hand, verified 2026-10-26) is the working route again, with the spacesuit-slot addon and
+  the put-away-while-sheathed fixes still to test.

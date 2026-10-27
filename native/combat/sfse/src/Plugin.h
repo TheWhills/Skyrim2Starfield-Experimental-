@@ -33,7 +33,8 @@ struct Settings {
     bool hide_left_sheathed = true;
     // The pair weapon (both blades in one weapon): its left blade node is moved onto this bone every frame while the
     // weapon carries the dual keyword. Empty = off.
-    std::string left_hand_node = "S2S_LeftHand";
+    std::string left_hand_node;                     // off by default: the game draws the weapon from its own copy
+    bool dual_debug = false;                        // the 3D listing / bone search when dual turns on (slow: ~1 s)
     std::string left_hand_bone = "L_Wrist";
 };
 
