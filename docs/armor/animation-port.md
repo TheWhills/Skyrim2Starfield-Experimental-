@@ -1223,7 +1223,7 @@ skinned-mesh writer: not in this pack).
 Remove-Item -Recurse -Force "C:\Modding\work\s2s\animinfo" -ErrorAction SilentlyContinue
 # run the MO2 executable "CreationKit (1)" (-GenerateAnimInfo:S2SStances.esm, output C:\Modding\work\s2s\animinfo); wait for it to close
 $src = "C:\Modding\work\s2s\animinfo\Meshes\AnimTextData"
-$dst = "C:\Users\elija\AppData\Local\ModOrganizer\Starfield\mods\S2S AnimInfo\Meshes\AnimTextData"
+$dst = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S AnimInfo\Meshes\AnimTextData"
 robocopy "$src\AnimationFileData" "$dst\AnimationFileData" /MIR
 robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubgraphInfoAndOffsetData.txt
 ```
