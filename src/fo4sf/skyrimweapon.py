@@ -90,6 +90,31 @@ def left_weapon_frame() -> Tuple[tuple, tuple]:
     return rot, tuple(wrist_sf[i] - moved[i] for i in range(3))
 
 
+def left_wrist_frame() -> Tuple[tuple, tuple]:
+    """As left_weapon_frame, into L_Wrist's frame instead (WeaponLeft held at its rest grip LEFT_GRIP on the wrist): a
+    blade skinned to L_Wrist stays in the left hand in every clip, also the vanilla idles / walks / blocks where
+    WeaponLeft is not in the hand (owner's run 2026-10-26: the left blade hung at the hip outside the dual attacks).
+    In the clips converted with --left-weapon WeaponLeft sits at this grip, so the attacks look the same."""
+    rot, trans = left_weapon_frame()
+    _h, gt, gq = M.LEFT_GRIP["weaponleft"]
+    q = _norm(gq)
+    cols = [_qrot(q, e) for e in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))]
+    g = tuple(cols[c][r] for r in range(3) for c in range(3))
+    rot2 = _matmul(g, rot)
+    moved = tuple(sum(g[3 * r + c] * trans[c] for c in range(3)) for r in range(3))
+    return rot2, tuple(moved[i] + gt[i] / UNIT for i in range(3))
+
+
+def left_wrist_shapes(n: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], report: Optional[dict] = None):
+    """The drawn-weapon shapes in L_Wrist's frame (see left_wrist_frame)."""
+    scb = scabbard_blocks(n)
+    kept = [s for s in shapes if s.block not in scb and not SCABBARD.match(s.name or b"")]
+    if report is not None:
+        report["scabbard_shapes_dropped"] = len(shapes) - len(kept)
+    rot, trans = left_wrist_frame()
+    return [to_weapon_frame(s, rot, trans) for s in kept]
+
+
 def left_weapon_shapes(n: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], report: Optional[dict] = None):
     """The drawn-weapon shapes (scabbard left out) in WeaponLeft's frame: the left blade of a dual-wield pair."""
     scb = scabbard_blocks(n)

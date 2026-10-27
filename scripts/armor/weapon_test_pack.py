@@ -151,9 +151,38 @@ def with_keyword(subs, kw: int):
     return out
 
 
-def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str, keyword: int = None):
+def used_slots(records) -> int:
+    """The biped slot bits (BO64, u64) any of these ARMO / ARMA records uses."""
+    import struct
+    used = 0
+    for _t, _h, subs, _f in records:
+        for s, d in subs:
+            if s == b"BO64" and len(d) >= 8:
+                used |= struct.unpack_from("<Q", d)[0]
+    return used
+
+
+def free_slot(records, top: int = 61) -> int:
+    """A biped slot (bit index) no vanilla ARMO / ARMA uses, the highest at or below `top`: the left blade there does
+    not take an outfit's or a spacesuit's place (owner's run 2026-10-26: the nightwear copy removed the outfit, the
+    legs and could not be worn with a spacesuit)."""
+    used = used_slots(records)
+    for bit in range(top, -1, -1):
+        if not used >> bit & 1:
+            return bit
+    raise SystemExit("every biped slot is used by some vanilla apparel")
+
+
+def with_slot(subs, bit: int):
+    """BO64 set to the single slot `bit` (appended after EDID when missing)."""
+    import struct
+    return sfplugin.edit(subs, {b"BO64": struct.pack("<Q", 1 << bit)})
+
+
+def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, model: str, keyword: int = None,
+                       slot: int = None):
     """(ARMA, ARMO) copies: the ARMA's worn and first-person models -> the left blade, the ARMO named and pointing at
-    the new ARMA (and carrying `keyword` when given)."""
+    the new ARMA (and carrying `keyword` when given; both on biped slot `slot` when given)."""
     ta, ha, sa, fa = arma_t
     new_arma = sfplugin.new_form_id(first_index)
     m = sfplugin.zs(model)
@@ -163,6 +192,8 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
                        fa, new_arma)
     if keyword is not None:
         so2 = with_keyword(so2, keyword)
+    if slot is not None:
+        sa2, so2 = with_slot(sa2, slot), with_slot(so2, slot)
     return (ta, ha, sa2, new_arma), (to, ho, so2, sfplugin.new_form_id(first_index + 1))
 
 
@@ -198,6 +229,9 @@ def main(argv=None):
     ap.add_argument("--only", help="comma list of keys from the iron set (dagger,sword,waraxe,mace,greatsword,...)")
     ap.add_argument("--left-blade", default="sword",
                     help="iron weapon also made as a worn left-hand blade for dual wield ('' = none)")
+    ap.add_argument("--left-slot", type=int, help="biped slot bit (0-63) for the left blade (default: a free one)")
+    ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
+                    help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
                     help="EditorID regex of the vanilla outfit whose ARMO / ARMA the left blade copies")
     a = ap.parse_args(argv)
@@ -249,9 +283,10 @@ def main(argv=None):
         sys.exit("no weapon converted: " + json.dumps(report["weapons"], indent=1))
     lw = next((w for w in weapons if a.left_blade and w["key"] == a.left_blade), None)
     if lw is not None:
-        conv.shape_hook = skyrimweapon.left_weapon_shapes
+        on_wrist = a.left_bone.lower() == "l_wrist"
+        conv.shape_hook = skyrimweapon.left_wrist_shapes if on_wrist else skyrimweapon.left_weapon_shapes
         res = conv.convert_nif("meshes\\" + re.sub(r"^meshes[\\/]", "", lw["model"].replace("/", "\\"), flags=re.I),
-                               skin_bone="WeaponLeft", out_suffix="_left")
+                               skin_bone="L_Wrist" if on_wrist else "WeaponLeft", out_suffix="_left")
         row = {"key": lw["key"] + "_left", "ok": res["ok"], "reason": res.get("reason")}
         if res["ok"]:
             armo_t, arma_t = pick_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"],
@@ -263,7 +298,10 @@ def main(argv=None):
             kw_fid = sfplugin.new_form_id(len(recs))
             recs.append((b"KYWD", kywd_t[1], sfplugin.edit(kywd_t[2], {b"EDID": sfplugin.zs(LEFT_BLADE_KEYWORD)},
                                                            drop=(b"FULL", b"DESC")), kw_fid))
-            aa, ao = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid)
+            apparel = [r for r in sf if r[0] in (b"ARMO", b"ARMA")]
+            slot = a.left_slot if a.left_slot is not None else free_slot(apparel)
+            aa, ao = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid, slot=slot)
+            row["biped_slot"] = {"bit": slot, "vanilla_slots_used": f"{used_slots(apparel):016X}"}
             recs += [aa, ao]
             row["keyword"] = {"edid": LEFT_BLADE_KEYWORD, "form_id_in_plugin": f"{kw_fid & 0xFFFFFF:06X}"}
             row.update(starfield_model=model, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}", editor_id=edid, name=name,
@@ -288,8 +326,8 @@ def main(argv=None):
             lines.append(f"  {r['key']}: not converted ({r['reason']})")
     if any(r.get("worn") for r in report["weapons"]):
         lines += ["", "The left-hand blade is worn (equip it like clothing) next to the same weapon in the right hand,",
-                  "with a dual-wield Nordic pack. It copies a vanilla outfit's records, so it replaces your outfit",
-                  "while worn (a test shortcut)."]
+                  "with the Dual stance moveset (S2SStances.esm). It sits on a biped slot no vanilla apparel uses, so",
+                  "it is worn alongside outfits and spacesuits."]
     lines += ["", f"Copied from the vanilla weapon {report['template']['edid']} ({report['template']['why']}): stats,",
               "sounds and keywords are that weapon's for now; only the model and name change."]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:

@@ -483,3 +483,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   S2SStances.esm, S2S_LeftBlade keyword on the left-blade ARMO, S2SCombat switches the stance while it is worn, the
   converter keeps both HitFrames of a dual attack. Built here: s2s_stances\dual from LoreRim 9011100 (ring of 6, as
   v15). Next: the owner's run (moveset switch, left blade, one or two hits per swing), then plugin damage if needed.
+- 2026-10-26 owner's dual test: the Dual stance plays with the left blade worn (verified: moveset switch), but the left
+  blade hung at the hip outside the dual attacks (vanilla idles / walks do not put WeaponLeft in the hand), and the
+  nightwear copy took the outfit's slot (outfit and legs gone, not wearable with a spacesuit). Now the blade is skinned
+  to L_Wrist at the WeaponLeft rest grip (same look in the dual attacks, in the hand in every clip), and the ARMO / ARMA
+  copies sit on one biped slot (BO64) no vanilla ARMO / ARMA uses (highest free bit <= 61, --left-slot overrides).

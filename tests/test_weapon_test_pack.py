@@ -111,6 +111,19 @@ class LeftBladeTests(unittest.TestCase):
         tip = apply((0, 60, 0)) - apply((0, 0, 0))                                  # Shield +Y: the blade
         self.assertTrue(np.allclose(tip / np.linalg.norm(tip), [0, 0, 1], atol=1e-3))   # +Z, as the right blade
 
+    def test_left_wrist_frame_is_the_weaponleft_frame_at_its_grip(self):
+        rot, trans = W.left_weapon_frame()
+        rot2, trans2 = W.left_wrist_frame()
+        app = lambda R_, T, p: np.array([sum(R_[3 * r + c] * p[c] for c in range(3)) + T[r] for r in range(3)])  # noqa
+        _h, gt, gq = M.LEFT_GRIP["weaponleft"]
+        gq = np.array(gq) / np.linalg.norm(gq)
+        for p in [(0, 0, 0), (0, 60, 0), (3, -2, 7), M.SKYRIM_HAND_IN_SHIELD]:
+            in_weapon = app(rot, trans, p)                                       # Skyrim units, WeaponLeft frame
+            in_wrist = R.qrot(gq, in_weapon * W.UNIT) + np.array(gt)              # metres, L_Wrist frame
+            self.assertTrue(np.allclose(app(rot2, trans2, p) * W.UNIT, in_wrist, atol=1e-6))
+        # the hand point lands on the wrist's own origin
+        self.assertTrue(np.allclose(app(rot2, trans2, M.SKYRIM_HAND_IN_SHIELD), 0, atol=1e-4))
+
     def test_skinned_nif_layout(self):
         sh = sfnif.SkinnedShape(b"Blade", b"a" * 20 + b"\\" + b"b" * 20, 6, 4, "materials\\s2s\\x.mat", [b"WeaponLeft"],
                                 [((0.1, 0.0, 0.3, 0.5), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])
@@ -186,6 +199,22 @@ class LeftBladeKeywordTests(unittest.TestCase):
         nosize = P.with_keyword([(b"EDID", b"A\0"), (b"KWDA", struct.pack("<I", 5))], 6)
         self.assertEqual([s for s, _ in nosize], [b"EDID", b"KSIZ", b"KWDA"])
 
+    def test_free_slot_and_records_on_it(self):
+        def rec(t, bits):
+            return (t, bytes(24), [(b"EDID", b"x\0"), (b"BO64", struct.pack("<Q", bits))], 1)
+        recs = [rec(b"ARMO", 1 << 3), rec(b"ARMA", (1 << 61) | (1 << 3)), rec(b"ARMO", 1 << 60)]
+        self.assertEqual(P.used_slots(recs), (1 << 61) | (1 << 60) | (1 << 3))
+        self.assertEqual(P.free_slot(recs), 59)
+        self.assertEqual(P.free_slot([]), 61)
+        with self.assertRaises(SystemExit):
+            P.free_slot([rec(b"ARMO", (1 << 64) - 1)])
+        arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0"), (b"BO64", struct.pack("<Q", 1 << 3))], 0x100)
+        armo = (b"ARMO", bytes(24), [(b"EDID", b"O\0"), (b"BO64", struct.pack("<Q", 1 << 3)),
+                                     (b"MODL", struct.pack("<I", 0x100))], 0x200)
+        aa, ao = P.left_blade_records(armo, arma, 1, "S2S_Left", "Left", "l.nif", slot=59)
+        self.assertEqual(dict(aa[2])[b"BO64"], struct.pack("<Q", 1 << 59))
+        self.assertEqual(dict(ao[2])[b"BO64"], struct.pack("<Q", 1 << 59))
+
     def test_left_blade_records_carry_the_keyword(self):
         arma = (b"ARMA", bytes(24), [(b"EDID", b"AA\0"), (b"MOD2", b"old.nif\0")], 0x100)
         armo = (b"ARMO", bytes(24), [(b"EDID", b"O\0"), (b"FULL", b"n\0"), (b"MODL", struct.pack("<I", 0x100))], 0x200)
@@ -222,7 +251,7 @@ class PackTests(unittest.TestCase):
             left = ok[1]
             self.assertEqual(left["apparel_template"]["armo"], "Clothes_Nightwear_01")
             ln = nif.parse(open(os.path.join(out, "meshes", "s2s", "weapons", "iron", "longsword_left.nif"), "rb").read())
-            self.assertEqual(sfnif.parse_skin(ln)["bones"], [b"WeaponLeft"])
+            self.assertEqual(sfnif.parse_skin(ln)["bones"], [b"L_Wrist"])
             recs = {sfplugin.edid(r[2]): r for r in sfplugin.records(os.path.join(out, "S2SWeapons.esm"),
                                                                      [b"ARMO", b"ARMA"])}
             aa, ao = recs["S2S_IronSword_Left_AA"], recs["S2S_IronSword_Left"]
@@ -249,11 +278,19 @@ class PackTests(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(out, "_staging")))
             # the blade tip is along +Z from the grip in the written mesh
             mesh_files = [os.path.join(r, f) for r, _d, fs in os.walk(os.path.join(out, "geometries")) for f in fs]
-            m = sfmesh.parse(open(mesh_files[0], "rb").read())
-            pts = np.array([sfmesh.decode_position(p, m.scale) for p in m.positions])
-            span = pts.max(0) - pts.min(0)
-            self.assertEqual(int(np.argmax(span)), 2)                              # longest along Z
-            self.assertAlmostEqual(float(span[2]), 70 * W.UNIT, places=2)          # 60 + 10 units of sword
+            _h, _gt, gq = M.LEFT_GRIP["weaponleft"]
+            left_dir = R.qrot(np.array(gq) / np.linalg.norm(gq), np.array([0.0, 0.0, 1.0]))
+            kinds = []
+            for mf in mesh_files:
+                m = sfmesh.parse(open(mf, "rb").read())
+                pts = np.array([sfmesh.decode_position(p, m.scale) for p in m.positions])
+                span = pts.max(0) - pts.min(0)
+                along = pts @ left_dir
+                if int(np.argmax(span)) == 2 and abs(float(span[2]) - 70 * W.UNIT) < 0.01:
+                    kinds.append("right")                                          # right blade: along the bone's +Z
+                elif abs(float(along.max() - along.min()) - 70 * W.UNIT) < 0.01:
+                    kinds.append("left")                                           # left blade: the wrist grip's +Z
+            self.assertEqual(sorted(kinds), ["left", "right"])
 
 
 if __name__ == "__main__":
