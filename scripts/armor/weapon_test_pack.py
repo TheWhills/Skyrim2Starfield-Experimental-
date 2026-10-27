@@ -470,10 +470,10 @@ def main(argv=None):
                     row["layer_missing"] = a.left_suit_layer
                 for k in suit_kw:
                     ao = (ao[0], ao[1], with_keyword(ao[2], k), ao[3])
-            row["armor_type_keywords"] = sorted(n for n in kw_names.values() if n.startswith("ArmorType"))
             elif a.left_layers == "none":
                 layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
                 ao = (ao[0], ao[1], without_keywords(ao[2], layer), ao[3])
+            row["armor_type_keywords"] = sorted(n for n in kw_names.values() if n.startswith("ArmorType"))
             row["layer_keywords"] = [kw_names.get(k, f"{k:08X}") for k in sfplugin.keywords(ao[2])
                                      if kw_names.get(k, "").startswith("ArmorType")]
             row["biped_slot"] = {"bit": slot, "suit_bit": suit, "shared_with_vanilla": [b for b, sh in
