@@ -178,8 +178,11 @@ def with_keyword(subs, kw: int):
 # ArmorTypeApparelOrNakedBody, a spacesuit body ArmorTypeSpacesuitBody). With the outfit's keyword the blade was
 # hidden under a shown spacesuit; without it, never drawn at all (owner's run 2026-10-27, verified). So the blade
 # carries both: drawn with either layer, to test.
+# With ArmorTypeSpacesuitBody the blade showed with and without a suit, but without a suit the player's body vanished
+# (owner's run 2026-10-27: the game took the blade for a spacesuit body, which covers the body). A spacesuit part
+# that covers nothing instead: the backpack's layer (supported by the name; the pack lists every ArmorType keyword).
 OUTFIT_LAYER_KEYWORDS = ("ArmorTypeApparelOrNakedBody",)
-SUIT_LAYER_KEYWORDS = ("ArmorTypeSpacesuitBody",)
+SUIT_LAYER_KEYWORDS = ("ArmorTypeSpacesuitBackpack",)
 
 
 def without_keywords(subs, drop: set):
@@ -384,6 +387,9 @@ def main(argv=None):
     ap.add_argument("--left-layers", default="both", choices=["both", "outfit", "none"],
                     help="worn-layer keywords on the left blade: both (outfit + spacesuit body), the outfit's only, "
                          "or none (owner 2026-10-27: outfit = hidden under a spacesuit, none = never drawn)")
+    ap.add_argument("--left-suit-layer", default=SUIT_LAYER_KEYWORDS[0],
+                    help="the spacesuit-layer keyword added with --left-layers both (ArmorTypeSpacesuitBody hid the "
+                         "player's body without a suit)")
     ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
                     help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
@@ -458,9 +464,13 @@ def main(argv=None):
                                  else slot_in(apparel, SUIT_SLOTS))
             aa, ao, aa_suit = left_blade_records(armo_t, arma_t, len(recs), edid, name, model, keyword=kw_fid,
                                                  slot=slot, suit_slot=suit)
-            if a.left_layers == "both":                   # the spacesuit layer's keyword too
-                for k in sorted(k for k, n in kw_names.items() if n in SUIT_LAYER_KEYWORDS):
+            if a.left_layers == "both":                   # a spacesuit layer's keyword too
+                suit_kw = [k for k, n in kw_names.items() if n == a.left_suit_layer]
+                if not suit_kw:
+                    row["layer_missing"] = a.left_suit_layer
+                for k in suit_kw:
                     ao = (ao[0], ao[1], with_keyword(ao[2], k), ao[3])
+            row["armor_type_keywords"] = sorted(n for n in kw_names.values() if n.startswith("ArmorType"))
             elif a.left_layers == "none":
                 layer = {k for k, n in kw_names.items() if n in OUTFIT_LAYER_KEYWORDS}
                 ao = (ao[0], ao[1], without_keywords(ao[2], layer), ao[3])
@@ -522,7 +532,9 @@ def main(argv=None):
     for r in report["weapons"]:
         if r.get("spacesuit_check"):
             print("\nspacesuit check (paste this back):")
-            print(json.dumps({"slots": r.get("biped_slot"), **r["spacesuit_check"]}, indent=1))
+            print(json.dumps({"slots": r.get("biped_slot"), "blade_layer_keywords": r.get("layer_keywords"),
+                              "layer_missing": r.get("layer_missing"),
+                              "armor_type_keywords": r.get("armor_type_keywords")}, indent=1))
     print(f"\nreport: {os.path.join(out, 'weapon_test_pack.json')}")
     return 0
 

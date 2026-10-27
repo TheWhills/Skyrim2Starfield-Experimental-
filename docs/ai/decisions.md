@@ -614,3 +614,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   also gets ArmorTypeSpacesuitBody, to see whether either layer being shown draws it. `outfit` / `none` give the
   earlier two. If both-layers hides it under a suit too, next is two blade ARMOs (outfit / spacesuit layer) the
   plugin swaps.
+- 2026-10-27 owner: with both layer keywords (outfit + ArmorTypeSpacesuitBody) the blade shows with and without a
+  suit (verified), but without a suit the player's body is invisible: the game took it for a spacesuit body. Now the
+  added spacesuit-layer keyword is ArmorTypeSpacesuitBackpack (`--left-suit-layer` to pick another); the pack prints
+  every ArmorType keyword the game has.
