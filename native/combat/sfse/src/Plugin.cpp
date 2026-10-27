@@ -431,15 +431,17 @@ void Plugin::Tick() {
         const auto id = blade_id_.load();
         const bool put_on = a == LB::Unpark;
         ++poll_gen_;                                  // older poll answers no longer count
+        // The game's answer is only logged: owner's run 2026-10-26, the unequip answered false and still took the
+        // blade off. The next poll says whether it is worn (LeftBlade decides from that).
         const bool ok = id && game::EquipForm(id, put_on);
-        if (!ok) {
+        if (!id) {
             std::scoped_lock l(lock_);
             left_blade_.on_failed(a);
         }
-        if (left_logs_ < 20 || !ok) {
+        if (left_logs_ < 20 || !id) {
             ++left_logs_;
-            REX::INFO("dual wield: left blade {:08X} {}{}", id, put_on ? "put on (drawn)" : "taken off (sheathed)",
-                      ok ? "" : id ? ": refused" : ": not known which blade");
+            REX::INFO("dual wield: left blade {:08X} {} (the game answered {}){}", id,
+                      put_on ? "put on (drawn)" : "taken off (sheathed)", ok, id ? "" : ": not known which blade");
         }
     }
     Run(std::move(cmds));

@@ -29,12 +29,13 @@ public:
     // Whether the weapon is drawn, asked once when the blade is first seen worn (e.g. equipped in the menu while
     // sheathed): sheathed parks it.
     Action on_drawn(bool drawn);
-    // The equip / unequip did not happen (the blade was dropped, sold, ...): forget the parking.
+    // The equip / unequip could not be asked for (no blade known): forget the parking. The game's own answer is not
+    // used (owner's run 2026-10-26: the unequip said "refused" and still took the blade off); the next poll tells.
     void on_failed(Action what);
     // After a load (the first poll): the dual stance keyword on the player and a blade in the inventory, not worn,
     // means the save was made with the blade parked.
     void on_load(bool dual_keyword, bool blade_in_inventory, bool worn);
-    void reset() { parked_ = false; worn_ = false; }
+    void reset() { parked_ = false; worn_ = false; unparking_ = false; }
 
     bool parked() const { return parked_; }
     bool worn() const { return worn_ || parked_; }
@@ -43,6 +44,7 @@ private:
     bool enabled_;
     bool parked_ = false;
     bool worn_ = false;
+    bool unparking_ = false;     // put on again at the draw: a poll still saying "not worn" after that gives up
 };
 
 }  // namespace s2s::combat

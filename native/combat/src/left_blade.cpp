@@ -15,7 +15,8 @@ bool same(std::string_view a, std::string_view b) {
 
 bool LeftBlade::on_worn(bool worn) {
     worn_ = worn;
-    if (worn) parked_ = false;      // the unpark landed, or the player put it on again
+    if (worn || unparking_) parked_ = false;   // put on again (or that did not work: the blade is gone)
+    unparking_ = false;
     return this->worn();
 }
 
@@ -26,7 +27,10 @@ LeftBlade::Action LeftBlade::on_event(std::string_view tag) {
         worn_ = false;
         return Action::Park;
     }
-    if (same(tag, "BeginWeaponDraw") && parked_) return Action::Unpark;
+    if (same(tag, "BeginWeaponDraw") && parked_) {
+        unparking_ = true;
+        return Action::Unpark;
+    }
     return Action::None;
 }
 
@@ -43,6 +47,7 @@ void LeftBlade::on_failed(Action what) {
         worn_ = true;               // still on
     } else if (what == Action::Unpark) {
         parked_ = false;            // gone: the next poll (not worn) switches the moveset back
+        unparking_ = false;
     }
 }
 

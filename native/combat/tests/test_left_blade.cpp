@@ -26,10 +26,12 @@ static void sheathe_and_draw() {
     CHECK(b.on_worn(false));                                   // taken off by us: the moveset stays dual
     CHECK(b.on_event("weaponSheathe") == A::None);             // the game sends it twice
     CHECK(b.on_event("BeginWeaponDraw") == A::Unpark);
-    CHECK(b.on_worn(false));                                   // the equip not landed yet: still dual
-    CHECK(b.on_worn(true));
+    CHECK(b.on_worn(true));                                    // the poll after the equip
     CHECK(!b.parked());
     CHECK(b.on_event("weaponSheathe") == A::Park);
+    CHECK(b.on_event("BeginWeaponDraw") == A::Unpark);
+    CHECK(!b.on_worn(false));                                  // the equip did not happen: the moveset goes back
+    CHECK(!b.parked());
 }
 
 static void equipped_while_sheathed() {
@@ -49,7 +51,7 @@ static void failures_and_removal() {
     CHECK(!b.parked() && b.worn());
     CHECK(b.on_event("weaponSheathe") == A::Park);
     CHECK(b.on_event("BeginWeaponDraw") == A::Unpark);
-    b.on_failed(A::Unpark);                                    // dropped / sold while put away
+    b.on_failed(A::Unpark);                                    // no blade known
     CHECK(!b.on_worn(false));                                  // the moveset goes back
     CHECK(b.on_event("BeginWeaponDraw") == A::None);
 }

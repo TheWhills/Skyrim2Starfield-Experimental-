@@ -530,3 +530,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   stance keyword on the player plus a blade in the bag, not worn, means the save was made with it put away
   (unverified: whether the keyword added through Papyrus AddKeyword is kept in saves). The blade forms are the ARMOs
   of the plugin that defines S2S_LeftBlade (no keyword arrays read natively).
+- 2026-10-26 owner's run: sheathing took the blade off, but the native unequip answered false ("refused"), so the
+  plugin dropped the parking and the next poll (not worn) switched back to one-handed; the blade stayed off. The game's
+  answer is now only logged; the polls decide (an equip at the draw that a fresh poll does not confirm gives up). Still
+  not visible with a spacesuit (the dump listed one longsword_left node, hidden). Owner asked for the left blade as a
+  weapon instead of apparel: Starfield equips one weapon at a time (no left-hand weapon slot); proposed a paired weapon
+  (one WEAP whose model holds both blades, the left one skinned to L_Wrist), to test whether a weapon NIF's skinned
+  geometry binds to the actor's skeleton.
