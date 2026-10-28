@@ -31,7 +31,8 @@ def sf_esm(path):
             (b"BIOM", h(b"BIOM"), [(b"EDID", b"BiomeA\0"), (b"TNAM", struct.pack("<I", 0)),
                                    (b"LNAM", struct.pack("<3I", 7, 0x30, 0x20)), (b"TX16", b"x\0")], 0x40),
             (b"LTEX", h(b"LTEX"), [(b"EDID", b"LGrassSF\0")], 0x30),
-            (b"LTEX", h(b"LTEX"), [(b"EDID", b"LSpare01\0")], 0x31)]
+            (b"LTEX", h(b"LTEX"), [(b"EDID", b"LSpare01\0")], 0x31),
+            (b"WRLD", h(b"WRLD"), [(b"EDID", b"GreenWorld\0"), (b"BNAM", struct.pack("<I", 0x40))], 0x50)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
     return path
@@ -103,6 +104,26 @@ class SurveyTests(unittest.TestCase):
         self.assertEqual(s["gcvr_used_by_biomes"], 1)
         self.assertEqual(s["example_gcvr"]["ltex"], ["LGrassSF"])
         self.assertEqual(rep["biomes"]["00000040"]["terrain"][0]["gcvr"], 0x20)
+        self.assertEqual(rep["world_biome"], {"greenworld": "00000040"})
+        self.assertEqual(s["biome_masks"], {"7": 1})
+
+    def test_btd_painting_its_biomes_cover(self):
+        import grass_survey
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(grass_survey, "btd_tables",
+                                  return_value={"terrain/greenworld.btd": [0x31, 0x30], "terrain/other.btd": [0x30]}):
+            os.makedirs(os.path.join(d, "Data"))
+            sf_esm(os.path.join(d, "Data", "Starfield.esm"))
+            out = os.path.join(d, "s.json")
+            with contextlib.redirect_stdout(io.StringIO()):
+                grass_survey.main(["--starfield", d, "--out", out])
+            with open(out, encoding="utf-8") as fh:
+                s = json.load(fh)["summary"]
+        self.assertEqual(s["btds_painting_a_texture_their_biome_covers"], 1)        # greenworld's own biome
+        self.assertEqual(s["btds_painting_a_texture_any_biome_covers"], 2)
+        self.assertEqual(s["btds_without_a_world_biome"], 1)
+        self.assertEqual(s["examples_own_biome"]["terrain/greenworld.btd"],
+                         {"world_biome": "BiomeA", "ltex": ["LGrassSF"]})
 
 
 class NativeBuildTests(unittest.TestCase):

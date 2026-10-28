@@ -192,6 +192,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   carry cover, how many vanilla BTDs (and which world folders) paint one of them, DNAM sizes and the density range,
   block types / materials of a few vanilla grass models. If hand-made worlds paint cover textures, cover alone should
   work.
+* **Survey run (owner, 2026-10-28), verified on Starfield.esm:** 189 GRAS, every DNAM 38 bytes with the layout above
+  (e.g. GrassFieldDried04A: contrast 15, cluster 0.2, height range 0.35, colour range 0.1, wind 10, max density 94,
+  slopes 0-50, flags 4 = fits slope, coverage 90, dirtiness 127 / 127); Max Density 2-98, the same percent scale as
+  Skyrim's density (--density-scale 1). 96 GCVR, **all 96 used by biomes** (1,250 biome terrain entries), only ONE
+  lists landscape textures itself (GC_GrassFieldDried01_Yellow: LGrassLive01_Red / 02_Yellow, threshold 0.44: a 0-1
+  value, not 28), and **none of the 1,999 vanilla BTDs paints a texture a GCVR lists**. So ground cover is not driven by
+  a GCVR's own texture list: it comes through the biomes' {mask, LTEX, GCVR} entries (masks: Base, Solid, FlatOuter,
+  FlatInner, Talus, Flow, Path = procedural terrain regions). Grass models are ordinary one-shape statics (NiNode,
+  BSXFlags, BSGeometry, MaterialID, BSLightingShaderProperty with a .mat), the same layout the converter writes.
+  Next (survey extended): whether hand-made worlds' BTDs paint textures that their world's biome (WRLD BNAM) pairs
+  with a GCVR, which would say grass on BTD terrain follows the painted texture through the world's biome.
 * `scripts/terrain/skyrim_grass_native.py` (test build, MO2 mod S2SGrass.esm): a GRAS per Skyrim grass on the
   converted ground (vanilla GRAS copied: model = the converted Skyrim grass, single instance; Skyrim's density x
   --density-scale, slopes, height / colour range, flags), a GCVR per spare LTEX the terrain overrides (SKYG_...),

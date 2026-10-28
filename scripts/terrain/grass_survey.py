@@ -90,7 +90,7 @@ def main(argv=None):
     esm = os.path.join(data, "Starfield.esm")
     recs = sfplugin.records(esm, [b"GRAS", b"GCVR", b"BIOM", b"LTEX", b"WRLD"])
     edid = {fid: sfplugin.edid(s) for _t, _h, s, fid in recs}
-    gras, gcvr, biom = {}, {}, {}
+    gras, gcvr, biom, world_biome = {}, {}, {}, {}
     for t, _h, subs, fid in recs:
         if t == b"GRAS":
             d = dict((s, bytes(v)) for s, v in subs)
@@ -108,6 +108,10 @@ def main(argv=None):
                          "threshold": g["threshold"], "subrecords": [s.decode("latin-1") for s, _v in subs]}
         elif t == b"BIOM":
             biom[fid] = {"edid": edid[fid], "terrain": sfgrass.biome_terrain(subs)}
+        elif t == b"WRLD":
+            bn = next((struct.unpack_from("<I", bytes(d))[0] for s, d in subs if s == b"BNAM" and len(d) >= 4), None)
+            if bn is not None:
+                world_biome[edid[fid].lower()] = bn
     cover_ltex = Counter(x for g in gcvr.values() for x in g["ltex_ids"])
     biome_cover = Counter(e["gcvr"] for b in biom.values() for e in b["terrain"] if e["gcvr"])
     btd = btd_tables(data)
@@ -116,6 +120,27 @@ def main(argv=None):
         hit = [edid.get(x, f"{x:08X}") for x in table if x in cover_ltex]
         if hit:
             painted_with_cover[name] = hit
+    # the biomes' own pairs {mask, LTEX, GCVR}: does a hand-made world paint a texture its biome gives ground cover?
+    masks = Counter(e["mask"] for b in biom.values() for e in b["terrain"])
+    covered_by = {}                                             # biome -> {LTEX: GCVR}
+    any_cover = {}
+    for bf, b in biom.items():
+        for e in b["terrain"]:
+            if e["gcvr"]:
+                covered_by.setdefault(bf, {})[e["ltex"]] = e["gcvr"]
+                any_cover.setdefault(e["ltex"], set()).add(e["gcvr"])
+    own_hits, any_hits, no_biome = {}, {}, 0
+    for name, table in btd.items():
+        stem = os.path.splitext(os.path.basename(name.replace("\\", "/")))[0].lower()
+        b = world_biome.get(stem)
+        if b is None:
+            no_biome += 1
+        hit = [edid.get(x, f"{x:08X}") for x in table if x in covered_by.get(b, {})]
+        if hit:
+            own_hits[name] = {"world_biome": edid.get(b, f"{b:08X}"), "ltex": hit}
+        hit = [edid.get(x, f"{x:08X}") for x in table if x in any_cover]
+        if hit:
+            any_hits[name] = hit
     worlds = Counter(n.replace("\\", "/").split("/")[1] if "/" in n.replace("\\", "/") else n
                      for n in painted_with_cover)
     dens = [g["dnam"]["max_density"] for g in gras.values() if "dnam" in g]
@@ -129,6 +154,13 @@ def main(argv=None):
         "gcvr_used_by_biomes": len(biome_cover), "gcvr_not_in_any_biome": len(set(gcvr) - set(biome_cover)),
         "btds": len(btd), "btds_painting_a_cover_texture": len(painted_with_cover),
         "btd_folders_painting_cover": dict(worlds.most_common(15)),
+        "biome_masks": {str(k): v for k, v in sorted(masks.items())},
+        "worlds_with_biome": len(world_biome), "btds_without_a_world_biome": no_biome,
+        "btds_painting_a_texture_their_biome_covers": len(own_hits),
+        "btds_painting_a_texture_any_biome_covers": len(any_hits),
+        "examples_own_biome": dict(list(own_hits.items())[:8]),
+        "examples_any_biome": {k: v[:5] for k, v in list(any_hits.items())[:8]},
+        "biome_ltex_with_cover": len(any_cover),
         "example_gcvr": next(({"edid": g["edid"], "grasses": g["grasses"][:6], "ltex": g["ltex"][:6],
                                 "threshold": g["threshold"]} for g in gcvr.values() if g["ltex_ids"]), None),
         "example_gras": next(({k: v for k, v in g.items() if k != "subrecords"} for g in gras.values()
@@ -141,7 +173,9 @@ def main(argv=None):
         json.dump({"summary": summary, "gras": {f"{k:08X}": v for k, v in gras.items()},
                    "gcvr": {f"{k:08X}": v for k, v in gcvr.items()},
                    "biomes": {f"{k:08X}": v for k, v in biom.items()},
-                   "btd_painting_cover": painted_with_cover}, fh, indent=1)
+                   "btd_painting_cover": painted_with_cover, "btd_own_biome_cover": own_hits,
+                   "btd_any_biome_cover": any_hits,
+                   "world_biome": {k: f"{v:08X}" for k, v in world_biome.items()}}, fh, indent=1)
     print(json.dumps(summary, indent=1))
     print(f"\nreport: {a.out}")
     return 0
