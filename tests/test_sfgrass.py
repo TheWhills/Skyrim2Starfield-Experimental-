@@ -73,6 +73,8 @@ class RecordTests(unittest.TestCase):
         terr = sfgrass.biome_terrain(out)
         self.assertEqual([(e["kind"], e["mask"], e["ltex"], e["gcvr"]) for e in terr],
                          [("LNAM", 7, 0x30, 0x99), ("LNAM", 7, 0x55, 0x98), ("ANAM", 7, 0x31, 0)])
+        every = sfgrass.biome_terrain(sfgrass.biome_with_cover(subs, [(0x55, 0x98)], masks=range(7)))
+        self.assertEqual(sorted(e["mask"] for e in every if e["ltex"] == 0x55), list(range(7)))
 
     def test_cover_plan_only_on_spare_overrides(self):
         mapping = {"1": {"edid": "LFieldGrass01", "starfield": "SKYG_LFieldGrass01"},
@@ -151,12 +153,13 @@ class NativeBuildTests(unittest.TestCase):
             terrain = os.path.join(tmp, "terrain")
             os.makedirs(terrain)
             with open(os.path.join(terrain, "overlays_params.json"), "w") as fh:
-                json.dump({"ltex_overrides": [{"form_id": 0x31, "skyrim": "LFernGround"}]}, fh)
+                json.dump({"ltex_overrides": [{"form_id": 0x31, "skyrim": "LFernGround"}],
+                           "world_overrides": {"biome": "00000040"}}, fh)
             with open(os.path.join(terrain, "ltex_mapping.json"), "w") as fh:
                 json.dump({"skyrim": {"119": {"edid": "LFernGround", "starfield": "SKYG_LFernGround"}}}, fh)
             out = os.path.join(tmp, "mod")
             rc = N.main(["--skyrim", sky_esm, "--skyrim-data", data, "--starfield", sf, "--terrain", terrain,
-                         "--texconv", "texconv.exe", "--out", out, "--biome", "BiomeA", "--density-scale", "2"])
+                         "--texconv", "texconv.exe", "--out", out, "--density-scale", "2", "--biome-masks", "0,4"])
             self.assertEqual(rc, 0)
             recs = sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS", b"GCVR", b"BIOM"])
             with open(os.path.join(out, "grass_native.json"), encoding="utf-8") as fh:
@@ -171,8 +174,10 @@ class NativeBuildTests(unittest.TestCase):
         self.assertEqual(cover["ltex"], [0x31])
         biome = by["BiomeA"]
         self.assertEqual(biome[3], 0x40)                                      # an override of the vanilla record
-        self.assertIn((0x31, by["S2S_Cover_00000031"][3]),
-                      [(e["ltex"], e["gcvr"]) for e in sfgrass.biome_terrain(biome[2])])
+        added = [e["mask"] for e in sfgrass.biome_terrain(biome[2])
+                 if (e["ltex"], e["gcvr"]) == (0x31, by["S2S_Cover_00000031"][3])]
+        self.assertEqual(added, [0, 4])                                       # the world's biome, the asked masks
+        self.assertEqual(rep["biome"]["edid"], "BiomeA")
         self.assertEqual(rep["templates"]["gras"], "GrassA")
         self.assertEqual(rep["failed"], {})
 

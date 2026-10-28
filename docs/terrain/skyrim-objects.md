@@ -201,8 +201,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   a GCVR's own texture list: it comes through the biomes' {mask, LTEX, GCVR} entries (masks: Base, Solid, FlatOuter,
   FlatInner, Talus, Flow, Path = procedural terrain regions). Grass models are ordinary one-shape statics (NiNode,
   BSXFlags, BSGeometry, MaterialID, BSLightingShaderProperty with a .mat), the same layout the converter writes.
-  Next (survey extended): whether hand-made worlds' BTDs paint textures that their world's biome (WRLD BNAM) pairs
-  with a GCVR, which would say grass on BTD terrain follows the painted texture through the world's biome.
+  Second run (2026-10-28): biome entries spread over all 7 masks (Base 582, Solid 778, FlatOuter 825, FlatInner
+  826, Talus 816, Flow 812, Path 363), 179 textures carry cover through biomes. Only 430 of 1,999 BTDs are named
+  after a world with a biome, and none of those (the hand-made worlds: cities, sites) paints a biome-covered texture:
+  **no vanilla hand-made world gets run-time grass from its BTD** (their greenery is placed objects). The 31 BTDs that
+  do paint biome-covered textures are all planet-trait overlays (overlaytraitboiledseas*, ...diseasedbiosphere*,
+  ...emergingtectonics*: LVolcanicMineralDeposit01, LMossForest01_Yellow, LVolcanicRoughSlab01), overlays placed on
+  procedural planets like ours. Supported hypothesis: on an overlay the engine grows the cover its biome pairs with
+  the painted texture. So the test build's default is now that route: the world's biome gets a {mask, LTEX, GCVR}
+  entry per spare Skyrim LTEX and mask (all 7 by default).
 * `scripts/terrain/skyrim_grass_native.py` (test build, MO2 mod S2SGrass.esm): a GRAS per Skyrim grass on the
   converted ground (vanilla GRAS copied: model = the converted Skyrim grass, single instance; Skyrim's density x
   --density-scale, slopes, height / colour range, flags), a GCVR per spare LTEX the terrain overrides (SKYG_...),

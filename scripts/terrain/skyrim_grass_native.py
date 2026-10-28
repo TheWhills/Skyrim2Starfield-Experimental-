@@ -6,8 +6,12 @@
   * one Ground Cover (GCVR) per spare Starfield LTEX the Skyrim terrain overrides (SKYG_..., overlays_params.json
     "ltex_overrides"), listing the grasses of the Skyrim textures painted with it (ltex_mapping.json) and that LTEX;
     textures that fell back to a vanilla Starfield LTEX get no cover (it would grow on vanilla planets);
-  * with --biome, an override of that biome adding {LTEX, GCVR} terrain entries (second attempt, if cover on its own
-    shows nothing).
+  * an override of the Skyrim world's biome (--biome, default: the one the terrain build gave the world) adding a
+    {mask, LTEX, GCVR} terrain entry per spare LTEX and terrain mask (--biome-masks). The grass survey (2026-10-28)
+    found every vanilla ground cover reached through biomes, none through its own texture list, and the planet-trait
+    overlay BTDs (overlaytrait*) painting exactly textures their biomes pair with ground cover: the supported route
+    for an overlay. Side effect, test only: the planet generator may also paint those Skyrim textures on planets of
+    that biome.
 Use it with a terrain build staged with --no-grass (make_skyrim_objects.py stage), so only the engine's grass shows.
 
     python -I scripts\\terrain\\skyrim_grass_native.py --skyrim "<Skyrim SE>\\Data\\Skyrim.esm"
@@ -93,7 +97,13 @@ def main(argv=None):
     ap.add_argument("--tints", help="grass.json of a make_skyrim_objects.py grass run: its per-model vertex-colour tints")
     ap.add_argument("--density-scale", type=float, default=1.0, help="Skyrim density (percent) x this = Max Density")
     ap.add_argument("--threshold", type=float, help="GCVR painted-material threshold (default: the template's)")
-    ap.add_argument("--biome", help="EditorID or hex FormID of the biome to also list the covers in (second attempt)")
+    ap.add_argument("--biome", default="world",
+                    help="EditorID or hex FormID of the biome to list the covers in; 'world' (default) = the terrain "
+                         "build's world biome (overlays_params.json world_overrides), 'none' = ground cover records "
+                         "only")
+    ap.add_argument("--biome-masks", default="all",
+                    help="terrain masks of the added biome entries: 'all' (0-6: Base, Solid, FlatOuter, FlatInner, "
+                         "Talus, Flow, Path) or a comma list, e.g. 0")
     ap.add_argument("--gras-template", help="EditorID regex of the vanilla GRAS to copy (default: the first usable)")
     ap.add_argument("--gcvr-template", help="EditorID regex of the vanilla GCVR to copy (default: the first with LTEX)")
     a = ap.parse_args(argv)
@@ -170,14 +180,24 @@ def main(argv=None):
         recs.append((b"GCVR", ct[1], subs, fid))
         covers.append((slot, fid))
     report["covers"] = [{"ltex": f"{s:08X}", "gcvr": f"{c:08X}"} for s, c in covers]
-    if a.biome:
-        want = a.biome.lower()
+    biome = a.biome
+    if biome.lower() == "world":
+        biome = (prm.get("world_overrides") or {}).get("biome")
+        if not biome:
+            sys.exit("the terrain build sets no world biome (overlays_params.json world_overrides): pass --biome "
+                     "<EditorID or hex FormID> (Jemison / New Atlantis: 1CBD6A) or --biome none")
+    if biome.lower() == "none":
+        biome = None
+    masks = list(range(7)) if a.biome_masks == "all" else [int(x) for x in a.biome_masks.split(",") if x.strip()]
+    if biome:
+        want = biome.lower()
         b = next((r for r in sf if r[0] == b"BIOM" and (sfplugin.edid(r[2]).lower() == want
                                                         or f"{r[3]:08x}" == want.zfill(8))), None)
         if b is None:
-            sys.exit(f"biome {a.biome} not in Starfield.esm")
-        recs.append((b"BIOM", b[1], sfgrass.biome_with_cover(b[2], covers), b[3]))
-        report["biome"] = {"edid": sfplugin.edid(b[2]), "form_id": f"{b[3]:08X}", "entries_added": len(covers)}
+            sys.exit(f"biome {biome} not in Starfield.esm")
+        recs.append((b"BIOM", b[1], sfgrass.biome_with_cover(b[2], covers, masks=masks), b[3]))
+        report["biome"] = {"edid": sfplugin.edid(b[2]), "form_id": f"{b[3]:08X}", "masks": masks,
+                           "entries_added": len(covers) * len(masks)}
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, sfplugin.header_info(sf_esm), author="Skyrim2Starfield grass"))
     import hair_pack
@@ -189,7 +209,8 @@ def main(argv=None):
     with open(os.path.join(out, "grass_native.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1, default=str)
     print(f"{len(gras_fid)} grasses, {len(covers)} ground covers"
-          + (f", biome {report['biome']['edid']} overridden" if a.biome else "")
+          + (f", biome {report['biome']['edid']} overridden ({report['biome']['entries_added']} entries)"
+             if biome else ", no biome override")
           + f"; {len(plan['skipped'])} grassy Skyrim textures skipped (vanilla Starfield ground), "
             f"{len(report['failed'])} models failed")
     print(f"report: {os.path.join(out, 'grass_native.json')}")

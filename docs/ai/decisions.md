@@ -692,3 +692,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   texture, and a test build (`scripts/terrain/skyrim_grass_native.py`, S2SGrass.esm) grows Skyrim's grass through
   GRAS + GCVR on the spare LTEX records the terrain overrides (never on vanilla ones: that would put Skyrim grass on
   vanilla planets), optionally through the planet's biome. The patches stay the default until it works in game.
+- 2026-10-28 grass survey (owner's run): vanilla ground cover is reached only through biome terrain entries (all 96
+  GCVR, none by their own texture list on any BTD); no vanilla hand-made world paints a biome-covered texture; the
+  only BTDs that do are planet-trait overlays. Decision: the native grass test goes through the Skyrim world's biome
+  (skyrim_grass_native.py default --biome world, entries for all 7 masks), accepting for the test that the planet
+  generator may also paint the Skyrim textures on planets of that biome; a biome of our own is the clean follow-up if
+  it works.

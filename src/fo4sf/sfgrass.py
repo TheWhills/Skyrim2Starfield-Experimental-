@@ -97,9 +97,11 @@ def biome_terrain(subs) -> List[Dict]:
     return out
 
 
-def biome_with_cover(subs, entries: Iterable[Tuple[int, int]], mask: Optional[int] = None):
-    """A BIOM's subrecords with LNAM {mask, LTEX, GCVR} entries added after its last LNAM (mask: the first existing
-    entry's when not given). Entries for an LTEX the biome already lists replace that entry's ground cover."""
+def biome_with_cover(subs, entries: Iterable[Tuple[int, int]], mask: Optional[int] = None,
+                     masks: Optional[Iterable[int]] = None):
+    """A BIOM's subrecords with LNAM {mask, LTEX, GCVR} entries added after its last LNAM: one per LTEX with `mask`
+    (default: the first existing entry's), or one per LTEX and mask in `masks`. Entries for an LTEX the biome already
+    lists replace that entry's ground cover."""
     subs = [(s, bytes(d)) for s, d in subs]
     have = biome_terrain(subs)
     if mask is None:
@@ -115,7 +117,8 @@ def biome_with_cover(subs, entries: Iterable[Tuple[int, int]], mask: Optional[in
             last = len(out)
             continue
         out.append((s, d))
-    add = [(b"LNAM", struct.pack("<3I", mask, lt, gc)) for lt, gc in want.items()]
+    use = list(masks) if masks is not None else [mask]
+    add = [(b"LNAM", struct.pack("<3I", m, lt, gc)) for lt, gc in want.items() for m in use]
     at = last if last is not None else next((i + 1 for i, (s, _d) in enumerate(out) if s == b"TNAM"), len(out))
     out[at:at] = add
     return out
