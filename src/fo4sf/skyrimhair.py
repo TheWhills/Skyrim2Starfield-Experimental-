@@ -259,6 +259,30 @@ def convert(nif_bytes: bytes, smp_bytes: Optional[bytes], sf_world: Dict[str, np
     return Hair(shapes, bones, host_of_root, report)
 
 
+def rigid(hair: Hair) -> Hair:
+    """The same hair without physics: every simulated bone's weight moved to the human bone its chain hangs from
+    (no new bones, no cloth). A control for in-game tests: if this shows and the physics version does not, the
+    simulated bones / cloth are the problem."""
+    par = {b.name: b.parent for b in hair.bones}
+
+    def host(name):
+        seen = 0
+        while name in par and seen < 256:
+            name, seen = par[name], seen + 1
+        return name
+    shapes = []
+    for sh in hair.shapes:
+        ws = []
+        for vw in sh.weights:
+            acc: Dict[str, float] = {}
+            for b, w in vw:
+                acc[host(b)] = acc.get(host(b), 0.0) + w
+            ws.append(sorted(acc.items(), key=lambda kv: -kv[1]))
+        shapes.append(HairShape(sh.name, sh.positions, sh.normals, sh.tangents, sh.uvs, sh.triangles, ws,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, [], {}, dict(hair.report, rigid=True))
+
+
 def merge(hairs: List[Hair]) -> Hair:
     """One hair from several (a head part and its extra parts, e.g. Skyrim's hair + hairline): shapes and bones
     together, reports listed."""

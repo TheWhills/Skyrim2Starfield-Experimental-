@@ -482,6 +482,10 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertEqual(dict(got["S2S_KSWig_Test_AA"][2])[b"MOD3"], b"s2s\\hair\\test.nif\0")
             self.assertEqual(dict(got["S2S_KSWig_Test"][2])[b"FULL"], b"Test wig (Skyrim)\0")
             self.assertIn(0x000A0001, sfplugin.keywords(got["S2S_KSWig_Test"][2]))   # still head apparel
+            rn = nif.parse(open(os.path.join(out, "meshes", "s2s", "hair", "test_rigid.nif"), "rb").read())
+            self.assertNotIn("BSClothExtraData", [rn.type_of(i) for i in range(len(rn.blocks))])
+            self.assertEqual(sfnif.parse_skin(rn)["bones"], [b"C_Head"])          # the control: no new bones
+            self.assertEqual(dict(got["S2S_KSWig_Test_Rigid"][2])[b"FULL"], b"Test wig (Skyrim, no physics)\0")
 
 
 if __name__ == "__main__":

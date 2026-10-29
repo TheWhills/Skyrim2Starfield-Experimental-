@@ -222,6 +222,14 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         with open(p, "wb") as fh:
             fh.write(data)
     row.update(ok=True, model=out_name.replace("/", "\\") + ".nif")
+    if getattr(a, "rigid_copies", False):          # the control: the same wig without physics
+        files = skyrimhair.nif_files(skyrimhair.rigid(hair), mats, None, sf_world, out_name + "_rigid", backs)
+        for rel, data in files.items():
+            p = os.path.join(staging, *rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as fh:
+                fh.write(data)
+        row["model_rigid"] = out_name.replace("/", "\\") + "_rigid.nif"
     return row
 
 
@@ -241,6 +249,8 @@ def main(argv=None):
                     help="metres added after scaling, model axes (+Y forward, +Z up)")
     ap.add_argument("--damping", type=float, default=smpcloth.Settings.damping, help="cloth damping per second")
     ap.add_argument("--range-scale", type=float, default=1.0, help="how far the hair may swing (x the SMP limits)")
+    ap.add_argument("--no-rigid-copies", dest="rigid_copies", action="store_false",
+                    help="leave out the no-physics copy of each wig (made by default as an in-game control)")
     ap.add_argument("--slot", type=int, help="biped slot bit for the wigs (default: the template hat's)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
@@ -296,6 +306,11 @@ def main(argv=None):
         aa, ao = wtp.left_blade_records(armo_t, arma_t, len(recs), edid, name, r["model"], slot=a.slot)
         recs += [aa, ao]
         r.update(editor_id=edid, name=name, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}")
+        if r.get("model_rigid"):
+            aa2, ao2 = wtp.left_blade_records(armo_t, arma_t, len(recs), edid + "_Rigid",
+                                              f"{r['wig']} wig (Skyrim, no physics)", r["model_rigid"], slot=a.slot)
+            recs += [aa2, ao2]
+            r["form_id_rigid"] = f"{ao2[3] & 0xFFFFFF:06X}"
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))
     report["packing"] = pack(staging, out, a.starfield, a.archive2)
@@ -309,7 +324,8 @@ def main(argv=None):
              "Wig               FormID ending   simulated bones"]
     for r in report["wigs"]:
         if r["ok"]:
-            lines.append(f"  {r['wig']:<16} ..{r['form_id_in_plugin'][-3:]}          {len(r.get('chain_bones', []))}")
+            lines.append(f"  {r['wig']:<16} ..{r['form_id_in_plugin'][-3:]}          {len(r.get('chain_bones', []))}"
+                         + (f"      (no-physics copy ..{r['form_id_rigid'][-3:]})" if r.get("form_id_rigid") else ""))
         else:
             lines.append(f"  {r['wig']}: not converted ({r.get('reason')})")
     lines += ["", f"Record copied from the vanilla head apparel {report['apparel_template']['armo']}.",
