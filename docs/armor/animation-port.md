@@ -892,6 +892,11 @@ code; no mod or game file committed.
   else --cloth-template with Eris' long curls), female head fit, hair through the back / legs on long styles (only the
   template's chest or arm capsules), hair materials (the generic converted material, not Starfield's hair shader), the
   character's own hair under the wig (not hidden; pick a short style).
+* **2026-10-28, in game (owner):** neither the physics wig nor its no-physics copy is drawn (verified: the
+  no-physics Steammist equipped, the character's own short hair shows, nothing else). Controls added to the pack (all
+  by default, `--no-rigid-copies` leaves them out): per wig a no-physics copy (simulated bones folded into their host
+  bone, rest-pose binds) and a head-bone copy (C_Head only, C_Head-local vertices, identity bind: the left blade's
+  convention), plus `S2S control hat (vanilla model)`. Next step depends on which of them show.
 
 ## New weapon types (two-handed, dagger / axe / mace) and dual wield: plan (2026-10-20)
 Owner: most Skyrim weapon types (greatsword, battleaxe, warhammer...) do not exist in Starfield, and dual wield has

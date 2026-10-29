@@ -230,6 +230,14 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
             with open(p, "wb") as fh:
                 fh.write(data)
         row["model_rigid"] = out_name.replace("/", "\\") + "_rigid.nif"
+        hl, hw = skyrimhair.head_local(skyrimhair.rigid(hair), sf_world)   # second control: the left blade's skin
+        files = skyrimhair.nif_files(hl, mats, None, hw, out_name + "_head", backs)
+        for rel, data in files.items():
+            p = os.path.join(staging, *rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as fh:
+                fh.write(data)
+        row["model_head"] = out_name.replace("/", "\\") + "_head.nif"
     return row
 
 
@@ -250,7 +258,7 @@ def main(argv=None):
     ap.add_argument("--damping", type=float, default=smpcloth.Settings.damping, help="cloth damping per second")
     ap.add_argument("--range-scale", type=float, default=1.0, help="how far the hair may swing (x the SMP limits)")
     ap.add_argument("--no-rigid-copies", dest="rigid_copies", action="store_false",
-                    help="leave out the no-physics copy of each wig (made by default as an in-game control)")
+                    help="leave out the in-game controls: each wig's no-physics and head-bone copies and the vanilla control hat")
     ap.add_argument("--slot", type=int, help="biped slot bit for the wigs (default: the template hat's)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
@@ -311,6 +319,18 @@ def main(argv=None):
                                               f"{r['wig']} wig (Skyrim, no physics)", r["model_rigid"], slot=a.slot)
             recs += [aa2, ao2]
             r["form_id_rigid"] = f"{ao2[3] & 0xFFFFFF:06X}"
+        if r.get("model_head"):
+            aa3, ao3 = wtp.left_blade_records(armo_t, arma_t, len(recs), edid + "_Head",
+                                              f"{r['wig']} wig (Skyrim, head bone)", r["model_head"], slot=a.slot)
+            recs += [aa3, ao3]
+            r["form_id_head"] = f"{ao3[3] & 0xFFFFFF:06X}"
+    if a.rigid_copies:                       # the record control: the template hat itself under a new name
+        ta, ha, sa, _f = armo_t
+        ctl = (ta, ha, sfplugin.edit(sa, {b"EDID": sfplugin.zs("S2S_KSWig_ControlHat"),
+                                          b"FULL": sfplugin.zs("S2S control hat (vanilla model)")}),
+               sfplugin.new_form_id(len(recs)))
+        recs.append(ctl)
+        report["control_hat"] = f"{ctl[3] & 0xFFFFFF:06X}"
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))
     report["packing"] = pack(staging, out, a.starfield, a.archive2)
@@ -325,9 +345,13 @@ def main(argv=None):
     for r in report["wigs"]:
         if r["ok"]:
             lines.append(f"  {r['wig']:<16} ..{r['form_id_in_plugin'][-3:]}          {len(r.get('chain_bones', []))}"
-                         + (f"      (no-physics copy ..{r['form_id_rigid'][-3:]})" if r.get("form_id_rigid") else ""))
+                         + (f"      (no-physics copy ..{r['form_id_rigid'][-3:]})" if r.get("form_id_rigid") else "")
+                         + (f" (head-bone copy ..{r['form_id_head'][-3:]})" if r.get("form_id_head") else ""))
         else:
             lines.append(f"  {r['wig']}: not converted ({r.get('reason')})")
+    if report.get("control_hat"):
+        lines += ["", f"Control: 'S2S control hat (vanilla model)' ..{report['control_hat'][-3:]} is the vanilla hat "
+                      "record under a new name (if it does not show either, the head slot itself is hidden)."]
     lines += ["", f"Record copied from the vanilla head apparel {report['apparel_template']['armo']}.",
               f"Cloth template: {report.get('cloth_template')}"]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:

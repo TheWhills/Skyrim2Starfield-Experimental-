@@ -391,6 +391,25 @@ class HairTests(unittest.TestCase):
         self.assertEqual(skyrimhair.bone_name("Anna Back 2"), "S2S_Anna_Back_2")
 
 
+class HeadLocalTests(unittest.TestCase):
+    def test_head_local_puts_the_hair_in_the_head_frame(self):
+        w = sf_world()
+        th = np.radians(30)
+        w["C_Head"] = np.array([[np.cos(th), -np.sin(th), 0, 0.1], [np.sin(th), np.cos(th), 0, 0.2], [0, 0, 1, 1.6],
+                                [0, 0, 0, 1]])                       # a turned head, to see the frame change
+        hair = skyrimhair.rigid(skyrimhair.convert(hair_nif_bytes(), SMP_XML, w))
+        hl, hw = skyrimhair.head_local(hair, w)
+        self.assertEqual(list(hw), ["C_Head"])
+        np.testing.assert_allclose(hw["C_Head"], np.eye(4))
+        for a, b in zip(hair.shapes, hl.shapes):
+            back = np.asarray(b.positions) @ w["C_Head"][:3, :3].T + w["C_Head"][:3, 3]
+            np.testing.assert_allclose(back, a.positions, atol=1e-9)     # head world @ local = model space
+            np.testing.assert_allclose(np.asarray(b.normals) @ w["C_Head"][:3, :3].T,
+                                       np.asarray(a.normals) / np.linalg.norm(a.normals, axis=1, keepdims=True),
+                                       atol=1e-9)
+            self.assertTrue(all(vw == [("C_Head", 1.0)] for vw in b.weights))
+
+
 class PackHelperTests(unittest.TestCase):
     def test_loose_roots_and_wig_names(self):
         import hair_pack
@@ -486,6 +505,15 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertNotIn("BSClothExtraData", [rn.type_of(i) for i in range(len(rn.blocks))])
             self.assertEqual(sfnif.parse_skin(rn)["bones"], [b"C_Head"])          # the control: no new bones
             self.assertEqual(dict(got["S2S_KSWig_Test_Rigid"][2])[b"FULL"], b"Test wig (Skyrim, no physics)\0")
+            hn = nif.parse(open(os.path.join(out, "meshes", "s2s", "hair", "test_head.nif"), "rb").read())
+            hs = sfnif.parse_skin(hn)
+            self.assertEqual(hs["bones"], [b"C_Head"])                           # second control: the left
+            sphere, rot, trans, scale = hs["binds"][0]                             # blade's identity bind
+            self.assertEqual((rot, trans, scale), ((1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0), (0, 0, 0), 1.0))
+            self.assertEqual(dict(got["S2S_KSWig_Test_Head"][2])[b"FULL"], b"Test wig (Skyrim, head bone)\0")
+            ctl = got["S2S_KSWig_ControlHat"][2]                                   # the vanilla hat, renamed
+            self.assertEqual(dict(ctl)[b"MODL"], struct.pack("<I", 0x000C0001))
+            self.assertEqual(dict(ctl)[b"FULL"], b"S2S control hat (vanilla model)\0")
 
 
 if __name__ == "__main__":

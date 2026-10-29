@@ -283,6 +283,29 @@ def rigid(hair: Hair) -> Hair:
     return Hair(shapes, [], {}, dict(hair.report, rigid=True))
 
 
+def head_local(hair: Hair, sf_world: Dict[str, np.ndarray], bone: str = None) -> Tuple[Hair, Dict[str, np.ndarray]]:
+    """The hair rigidly on one bone (default C_Head) in that bone's own frame: (hair, world) with world = {bone:
+    identity}, so nif_files writes an identity bind and bone-local vertices: the convention of the worn left blade,
+    seen in game. A second control: if this shows and rigid() does not, the multi-bone / rest-pose binds are the
+    problem."""
+    bone = bone or SF_HEAD
+    inv = np.linalg.inv(sf_world[bone])
+    r, t = inv[:3, :3], inv[:3, 3]
+
+    def turn(v):
+        if len(v) == 0:
+            return v
+        v = np.asarray(v, float).reshape(-1, 3) @ r.T
+        n = np.linalg.norm(v, axis=1, keepdims=True)
+        return v / np.maximum(n, 1e-12)
+    shapes = []
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float) @ r.T + t
+        shapes.append(HairShape(sh.name, pos, turn(sh.normals), turn(sh.tangents), sh.uvs, sh.triangles,
+                                [[(bone, 1.0)] for _ in sh.weights], sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, [], {}, dict(hair.report, rigid=True, head_local=bone)), {bone: np.eye(4)}
+
+
 def merge(hairs: List[Hair]) -> Hair:
     """One hair from several (a head part and its extra parts, e.g. Skyrim's hair + hairline): shapes and bones
     together, reports listed."""

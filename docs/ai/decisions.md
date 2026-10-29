@@ -700,3 +700,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   it works.
 - 2026-10-28 native grass parked: no grass in game through the world's biome; the worldspace No Grass flag is off on
   our world (survey). Skyrim grass stays the baked patches; S2S Grass Native is test-only (it edits a vanilla biome).
+- 2026-10-28 owner: KS wigs not seen in game. Then the no-physics copy (Steammist, C_Head + C_Chest, rest-pose binds,
+  no cloth) equipped in the inventory: still not drawn (verified from his screenshot: her own short hair, no
+  waist-long Steammist). So the cloth is not (only) the cause. Untested parts left: the multi-bone rest-pose binds
+  (read from the robe, never written and seen in game) and the hat record. hair_pack now also writes per wig a
+  head-bone copy (every vertex on C_Head in C_Head's own frame, identity bind: the worn left blade's convention,
+  seen in game) and one 'S2S control hat (vanilla model)' (the template hat renamed, its own addon). Reading: control
+  hat hidden -> the head slot is hidden (not our files); head-bone copy shows, no-physics not -> the binds; neither
+  copy shows but the hat does -> mesh / material.
