@@ -698,3 +698,5 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (skyrim_grass_native.py default --biome world, entries for all 7 masks), accepting for the test that the planet
   generator may also paint the Skyrim textures on planets of that biome; a biome of our own is the clean follow-up if
   it works.
+- 2026-10-28 native grass parked: no grass in game through the world's biome; the worldspace No Grass flag is off on
+  our world (survey). Skyrim grass stays the baked patches; S2S Grass Native is test-only (it edits a vanilla biome).

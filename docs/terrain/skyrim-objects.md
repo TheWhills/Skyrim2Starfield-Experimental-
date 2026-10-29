@@ -216,6 +216,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   LC172World, and if its WRLD DATA has No Grass (bit 7) the engine grows none whatever the biome says (the survey now
   prints the worlds' No Grass / Allow ProcGen flags, ours with --plugin); else the engine does not grow biome cover on
   BTD overlay terrain at all, and the patches stay (with fade work instead).
+  **Flags checked (owner's survey, 2026-10-28):** SKY_Tamriel DATA 0x01 (Small World only), No Grass **off**, biome
+  1CBD6A; LC172World the same (0x01, Mars biome 2A3777); NewAtlantis 0x00. Only 1 of 433 vanilla worlds sets No
+  Grass and none sets FNAM Allow ProcGen. So the flag is not the cause. **Parked:** two routes tried (cover by texture
+  list, cover through the world's biome on all masks), no vanilla hand-made world grows run-time grass, nothing left
+  to test cheaply. Untested ideas for later: whether painted weights must pass the cover's threshold (0.44) with
+  Skyrim's blended layers; a vanilla grass + vanilla cover on one of our textures as a control. Grass stays the baked
+  patches; next for grass is their draw / fade distance.
 * `scripts/terrain/skyrim_grass_native.py` (test build, MO2 mod S2SGrass.esm): a GRAS per Skyrim grass on the
   converted ground (vanilla GRAS copied: model = the converted Skyrim grass, single instance; Skyrim's density x
   --density-scale, slopes, height / colour range, flags), a GCVR per spare LTEX the terrain overrides (SKYG_...),
