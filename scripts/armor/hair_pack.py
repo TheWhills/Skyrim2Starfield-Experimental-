@@ -262,6 +262,10 @@ def main(argv=None):
     world = smpcloth.skeleton_world(sk)
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale)
+    missing = [k for k in a.ks if not os.path.isdir(k)]
+    if missing:
+        sys.exit(f"--ks folder not found: {', '.join(missing)} (the KS Hairdos SMP folder with '00 Core' and "
+                 f"'01 Wigs', or an installed copy with Meshes\\Armor\\KSWigsHDT)")
     src = LooseRoots(a.ks)
     wigs = sorted(k for k in src.index if k.startswith("meshes/") and WIG_GLOB.search(k))
     if a.only:
