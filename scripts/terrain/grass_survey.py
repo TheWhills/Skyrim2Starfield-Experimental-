@@ -80,17 +80,33 @@ def find_models(sf_data: str, models, limit: int):
     return found
 
 
+NO_GRASS, ALLOW_PROCGEN = 0x80, 0x08          # WRLD DATA bit 7, FNAM bit 3 (xEdit wbDefinitionsSF1)
+
+
+def world_flag_info(subs) -> dict:
+    d = dict((s, bytes(v)) for s, v in subs)
+    data, fnam = d.get(b"DATA", b"\0")[0], d.get(b"FNAM", b"\0")[0]
+    bn = d.get(b"BNAM")
+    return {"data_flags": data, "no_grass": bool(data & NO_GRASS), "fnam_flags": fnam,
+            "allow_procgen": bool(fnam & ALLOW_PROCGEN), "biome": f"{struct.unpack_from('<I', bn)[0]:08X}" if bn else None}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--models", type=int, default=6, help="vanilla grass models to describe")
+    ap.add_argument("--plugin", action="append", default=[],
+                    help="another plugin whose worldspaces' grass / procgen flags to report (e.g. the Skyrim terrain "
+                         "plugin in Starfield\\Data); repeatable")
+    ap.add_argument("--world", action="append", default=["LC172World", "NewAtlantis", "CityNewAtlantisLodge"],
+                    help="vanilla worldspace EditorIDs to show the flags of")
     a = ap.parse_args(argv)
     data = os.path.join(a.starfield, "Data")
     esm = os.path.join(data, "Starfield.esm")
     recs = sfplugin.records(esm, [b"GRAS", b"GCVR", b"BIOM", b"LTEX", b"WRLD"])
     edid = {fid: sfplugin.edid(s) for _t, _h, s, fid in recs}
-    gras, gcvr, biom, world_biome = {}, {}, {}, {}
+    gras, gcvr, biom, world_biome, world_flags = {}, {}, {}, {}, {}
     for t, _h, subs, fid in recs:
         if t == b"GRAS":
             d = dict((s, bytes(v)) for s, v in subs)
@@ -112,6 +128,7 @@ def main(argv=None):
             bn = next((struct.unpack_from("<I", bytes(d))[0] for s, d in subs if s == b"BNAM" and len(d) >= 4), None)
             if bn is not None:
                 world_biome[edid[fid].lower()] = bn
+            world_flags[edid[fid]] = world_flag_info(subs)
     cover_ltex = Counter(x for g in gcvr.values() for x in g["ltex_ids"])
     biome_cover = Counter(e["gcvr"] for b in biom.values() for e in b["terrain"] if e["gcvr"])
     btd = btd_tables(data)
@@ -146,7 +163,15 @@ def main(argv=None):
     dens = [g["dnam"]["max_density"] for g in gras.values() if "dnam" in g]
     sizes = Counter(g["dnam_size"] for g in gras.values())
     models = find_models(data, sorted({g["model"] for g in gras.values() if g["model"]}), a.models)
+    ours = {}
+    for pl in a.plugin:
+        for _t, _h, subs, _f in sfplugin.records(pl, [b"WRLD"]):
+            ours[f"{os.path.basename(pl)}:{sfplugin.edid(subs)}"] = world_flag_info(subs)
     summary = {
+        "worlds": len(world_flags), "worlds_no_grass": sum(1 for w in world_flags.values() if w["no_grass"]),
+        "worlds_allow_procgen": sum(1 for w in world_flags.values() if w["allow_procgen"]),
+        "named_worlds": {w: world_flags.get(w) for w in a.world},
+        "our_worlds": ours,
         "grass_records": len(gras), "dnam_sizes": dict(sizes),
         "max_density_range": [min(dens), max(dens)] if dens else None,
         "ground_cover_records": len(gcvr), "gcvr_with_ltex": sum(1 for g in gcvr.values() if g["ltex_ids"]),
@@ -175,7 +200,8 @@ def main(argv=None):
                    "biomes": {f"{k:08X}": v for k, v in biom.items()},
                    "btd_painting_cover": painted_with_cover, "btd_own_biome_cover": own_hits,
                    "btd_any_biome_cover": any_hits,
-                   "world_biome": {k: f"{v:08X}" for k, v in world_biome.items()}}, fh, indent=1)
+                   "world_biome": {k: f"{v:08X}" for k, v in world_biome.items()},
+                   "world_flags": world_flags}, fh, indent=1)
     print(json.dumps(summary, indent=1))
     print(f"\nreport: {a.out}")
     return 0

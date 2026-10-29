@@ -210,6 +210,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   procedural planets like ours. Supported hypothesis: on an overlay the engine grows the cover its biome pairs with
   the painted texture. So the test build's default is now that route: the world's biome gets a {mask, LTEX, GCVR}
   entry per spare Skyrim LTEX and mask (all 7 by default).
+  **First in-game test (owner, 2026-10-28, Nirn near Riverwood, terrain staged --no-grass): no grass.** The build itself
+  ran clean (27 grasses, 19 covers, ForestDeciduousLifeJemison overridden with 133 entries; Nirn's land biome is that
+  vanilla record, so the override reaches the planet). Candidates, cheapest first: the overlay world is a copy of
+  LC172World, and if its WRLD DATA has No Grass (bit 7) the engine grows none whatever the biome says (the survey now
+  prints the worlds' No Grass / Allow ProcGen flags, ours with --plugin); else the engine does not grow biome cover on
+  BTD overlay terrain at all, and the patches stay (with fade work instead).
 * `scripts/terrain/skyrim_grass_native.py` (test build, MO2 mod S2SGrass.esm): a GRAS per Skyrim grass on the
   converted ground (vanilla GRAS copied: model = the converted Skyrim grass, single instance; Skyrim's density x
   --density-scale, slopes, height / colour range, flags), a GCVR per spare LTEX the terrain overrides (SKYG_...),

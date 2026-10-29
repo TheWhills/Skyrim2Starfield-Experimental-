@@ -32,7 +32,8 @@ def sf_esm(path):
                                    (b"LNAM", struct.pack("<3I", 7, 0x30, 0x20)), (b"TX16", b"x\0")], 0x40),
             (b"LTEX", h(b"LTEX"), [(b"EDID", b"LGrassSF\0")], 0x30),
             (b"LTEX", h(b"LTEX"), [(b"EDID", b"LSpare01\0")], 0x31),
-            (b"WRLD", h(b"WRLD"), [(b"EDID", b"GreenWorld\0"), (b"BNAM", struct.pack("<I", 0x40))], 0x50)]
+            (b"WRLD", h(b"WRLD"), [(b"EDID", b"GreenWorld\0"), (b"BNAM", struct.pack("<I", 0x40)),
+                                   (b"DATA", bytes([0x81])), (b"FNAM", bytes([0x08]))], 0x50)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
     return path
@@ -97,7 +98,8 @@ class SurveyTests(unittest.TestCase):
             sf_esm(os.path.join(d, "Data", "Starfield.esm"))
             out = os.path.join(d, "s.json")
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(grass_survey.main(["--starfield", d, "--out", out]), 0)
+                self.assertEqual(grass_survey.main(["--starfield", d, "--out", out, "--plugin",
+                                                    os.path.join(d, "Data", "Starfield.esm")]), 0)
             with open(out, encoding="utf-8") as fh:
                 rep = json.load(fh)
         s = rep["summary"]
@@ -107,7 +109,11 @@ class SurveyTests(unittest.TestCase):
         self.assertEqual(s["example_gcvr"]["ltex"], ["LGrassSF"])
         self.assertEqual(rep["biomes"]["00000040"]["terrain"][0]["gcvr"], 0x20)
         self.assertEqual(rep["world_biome"], {"greenworld": "00000040"})
+        self.assertTrue(s["our_worlds"]["Starfield.esm:GreenWorld"]["no_grass"])
         self.assertEqual(s["biome_masks"], {"7": 1})
+        self.assertEqual((s["worlds"], s["worlds_no_grass"], s["worlds_allow_procgen"]), (1, 1, 1))
+        self.assertEqual(rep["world_flags"]["GreenWorld"], {"data_flags": 0x81, "no_grass": True, "fnam_flags": 8,
+                                                           "allow_procgen": True, "biome": "00000040"})
 
     def test_btd_painting_its_biomes_cover(self):
         import grass_survey
