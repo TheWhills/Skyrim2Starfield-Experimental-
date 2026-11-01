@@ -1289,3 +1289,27 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   carries S2S_LeftBlade for the Dual stance. Starfield equips one weapon at a time, so this is the weapon-side route
   to dual wield (it sheathes and shows with a spacesuit like any weapon). To verify: the left blade follows the left
   hand; the moveset switches.
+
+## 2026-11-01: what Far Away Movesets (Nexus 18670) + its Style Switcher show (owner upload; read for the format only)
+* **Verified from its files:** 9 styles (SFBM base + Luke, Dooku, Rey, Vader, Anakin, Kylo, Obi-Wan, Maul), player only,
+  one-handed: 783 clips in melee\onehanded\player{,\female,\sword,\sword\twohandblock} named `<Tag>_Sw<Style>.af` beside
+  the plain ones. Each .afx declares the variant itself: `<tag>MeleeAttack_A</tag> <prefix>Ready</prefix>
+  <suffix>SwVader</suffix>` (descriptors carry explicit prefix / suffix fields; our earlier note only saw the file name).
+* **Style selection = one switch node** in its Player_Melee.agx (and one in MeleeActions.agx): NT_SWITCH_NODE
+  "SFBMStyleSwitch", Variable `iSFBMStyle`, Tag Alteration **Suffix**, 9 inputs all linked to the same subtree (the
+  Copy Bone Weights node = locomotion + layered attacks), blend 0.3 s; inputs 1-8 add suffix SwLuke ... SwMaul, 0 adds
+  none. So one graph serves every style; the variable picks the clip variant, and a missing variant falls back to the
+  plain clip. Graph variables belong to each actor's graph (supported: per-actor state), so per-character movesets
+  would be this switch on the NPC graph + the variable set per NPC.
+* The switcher (SFSE DLL, no source) cycles the style on a key (ini: Key, Modifier, Message, [Styles]); its strings
+  name `iSFBMStyle`, `iAttackState`, `bIsAttacking` (supported: it sets the graph variable and waits out attacks).
+* **New tags without the Creation Kit cache run:** `meshes\animtextdata\fragments\FarAwayMovesets\` holds
+  tables\anim_actions.xtbl (7 new tags: MeleeAttack_F, MeleeAttackRecover_A-F), animationoffsets (12 set files, V5,
+  same format as the CK's) and animeventinfo (V2), plus fragments\FarAwayMovesets_animations.txt (the clip list, i.e.
+  AnimationFileData's job). Its header says they are merged in game by "SfAnimMerge (SAM)" and that SAM expects a plugin
+  FarAwayMovesets.esm / .esp / .esl; neither download has one, and SAM was not found publicly (unresolved).
+* **Compared with ours:** our stances pick clip folders through subgraph entries (actor keyword per stance), need the
+  CK GenerateAnimInfo run, and re-equip the weapon to switch (loses instance data). The suffix switch switches in
+  place, without subgraph entries or re-equip, and works per actor by design. Our Skyrim combos reuse spare host tags
+  (sneak / zero-g descriptors) where it declares new tags through SAM. Both ship loose Player_Melee / MeleeActions
+  overrides, so the two cannot be installed together without a graph merge.
