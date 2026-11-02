@@ -528,7 +528,12 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertEqual(dict(ctl)[b"FULL"], b"S2S control hat (vanilla model)\0")
             ctrl = rep["controls"]                                                 # no game archives here:
             self.assertFalse(ctrl["hat_found"])                                    # only the solid-material one
-            self.assertEqual(set(ctrl) & {"opaque", "hatmat", "hatcopy"}, {"opaque"})
+            self.assertEqual(set(ctrl) & {"opaque", "hatmat", "hatcopy", "armacopy"}, {"opaque", "armacopy"})
+            ac = dict(got["S2S_KSWig_Control_armacopy"][2])                       # the copy, vanilla model path
+            self.assertEqual(ac[b"FULL"], b"S2S control hat (copied addon, vanilla path)\0")
+            self.assertEqual(dict(got["S2S_KSWig_Control_armacopy_AA"][2])[b"MOD3"], b"Clothes\\Hat_F.nif\0")
+            self.assertEqual([r[0] for r in ctrl["arma_template"]], ["EDID", "BO64", "MOD2", "MOD3"])
+            self.assertEqual(ctrl["hat_model_files"], [])
             sol = got["S2S_KSWig_Control_opaque"][2]
             self.assertEqual(dict(sol)[b"FULL"], b"Test wig (Skyrim, solid material)\0")
             on = nif.parse(open(os.path.join(out, "meshes", "s2s", "hair", "test_opaque.nif"), "rb").read())

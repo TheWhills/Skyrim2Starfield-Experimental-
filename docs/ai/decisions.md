@@ -715,3 +715,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   cutout, threshold 40; the left blade is opaque) or the S2SHair archive. hair_pack now adds three controls on the
   first wig: the head-bone copy with a solid material, the head-bone copy with the vanilla hat's own material, and
   the vanilla hat NIF copied into S2SHair's archive under s2s\hair\control_hat_copy.nif.
+- 2026-11-02 owner, in game: solid-material and hat-material wig copies invisible too, and so is the vanilla hat NIF
+  loaded from S2SHair - Main.ba2 (control_hat_copy; the archive holds all 6 NIFs, listed on his PC). So neither the
+  hair mesh nor the material: the shared factor is our copied ARMA (every test item) or the new model path (data the
+  game keeps per model path, e.g. morphs, missing). Note: his console's help matches EditorIDs, not names. Added the
+  control `S2S_KSWig_Control_armacopy` (the ARMA copied as for a wig but naming the vanilla model path) and dumps of
+  the template ARMA / ARMO subrecords and of game files named after the hat model into hair_pack.json.

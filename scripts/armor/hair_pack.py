@@ -181,6 +181,30 @@ def read_game_file(starfield: str, rel: str):
     return None
 
 
+def game_files_named(starfield: str, stem: str, limit: int = 200):
+    """Paths in the game's archives whose file or folder name contains `stem` (case-blind): what else the game keeps
+    for a model (morphs, face bones ...), found by name only."""
+    stem = stem.lower()
+    data = os.path.join(starfield, "Data")
+    out = []
+    for f in sorted(os.listdir(data)):
+        if not (f.lower().startswith("starfield - ") and f.lower().endswith(".ba2")):
+            continue
+        try:
+            a = ba2mod.Ba2(os.path.join(data, f))
+        except ba2mod.Ba2Error:
+            continue
+        out += [f"{f}:{n}" for n in a.names if stem in n.replace("\\", "/").lower()]
+        if len(out) >= limit:
+            break
+    return out[:limit]
+
+
+def subrecord_dump(rec):
+    """[signature, size, first 48 bytes as hex] of a record's subrecords (for comparing a template with its copy)."""
+    return [[s.decode("latin-1"), len(d), bytes(d[:48]).hex()] for s, d in rec[2]]
+
+
 def nif_materials(raw: bytes):
     """The material names of a Starfield NIF's shapes (BSLightingShaderProperty names), in block order."""
     n = nifmod.parse(raw)
@@ -223,6 +247,8 @@ def control_files(row: dict, conv, hat_raw, hat_model: str) -> dict:
                                               backs), out_name + "_hatmat")
     if hat_raw:
         out["hatcopy"] = ({f"meshes/{PREFIX}/hair/control_hat_copy.nif": hat_raw}, f"{PREFIX}/hair/control_hat_copy")
+    if hat_model:            # the addon copied exactly as for a wig, but still naming the vanilla model path
+        out["armacopy"] = ({}, os.path.splitext(hat_model.replace("\\", "/"))[0])
     return out
 
 
@@ -400,7 +426,12 @@ def main(argv=None):
             hat_raw = read_game_file(a.starfield, "meshes/" + hat_model) if hat_model else None
             report["controls"] = {"wig": first["wig"], "hat_model": hat_model, "hat_found": hat_raw is not None,
                                   "hat_materials": nif_materials(hat_raw) if hat_raw else []}
-            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None}
+            report["controls"]["arma_template"] = subrecord_dump(arma_t)
+            report["controls"]["armo_template"] = subrecord_dump(armo_t)
+            if hat_model:
+                stem = os.path.splitext(os.path.basename(hat_model.replace("\\", "/")))[0]
+                report["controls"]["hat_model_files"] = game_files_named(a.starfield, stem)
+            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None, "armacopy": None}
             for kind, (files, model) in control_files(first, conv, hat_raw, hat_model).items():
                 for rel, data in files.items():
                     pth = os.path.join(staging, *rel.split("/"))
@@ -408,6 +439,7 @@ def main(argv=None):
                     with open(pth, "wb") as fh:
                         fh.write(data)
                 label = (f"{first['wig']} wig (Skyrim, {names[kind]})" if names[kind]
+                         else "S2S control hat (copied addon, vanilla path)" if kind == "armacopy"
                          else "S2S control hat (from S2SHair archive)")
                 aa4, ao4 = wtp.left_blade_records(armo_t, arma_t, len(recs), f"S2S_KSWig_Control_{kind}", label,
                                                   model.replace("/", "\\") + ".nif", slot=a.slot)
