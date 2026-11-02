@@ -721,3 +721,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   game keeps per model path, e.g. morphs, missing). Note: his console's help matches EditorIDs, not names. Added the
   control `S2S_KSWig_Control_armacopy` (the ARMA copied as for a wig but naming the vanilla model path) and dumps of
   the template ARMA / ARMO subrecords and of game files named after the hat model into hair_pack.json.
+- 2026-11-02 cause found (supported, from the owner's hair_pack.json + Eris files): head items ship a second model,
+  <model>_facebones.nif (vanilla: outfit_akila_security_hat_f_facebones.nif next to the hat; Eris: every hair, same
+  vertex count, skinned to 39 faceBone_* bones instead of C_Head). Every in-game result fits "actors with face bones
+  (player, named NPCs) draw the _facebones file": the vanilla hat shows, the same hat NIF at our path (no companion)
+  does not, every wig copy does not. hair_pack now writes <model>_facebones.nif for each wig and copy: C_Head's
+  weights moved to one face bone (faceBone_C_HeadTop), its rest world = inverse of the bind in the vanilla hat's
+  facebones NIF read from the game (binds are inverse rest worlds: checked on Eris, HeadTop at z 1.762, chin 1.568);
+  the archive control gets the hat's own facebones file. To verify in game. Later: spread the weights over the face
+  bones (follows chargen face shape) instead of one bone. Also for the NPC hair head parts (npc_hair.py).

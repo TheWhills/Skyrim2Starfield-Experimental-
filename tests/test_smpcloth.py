@@ -403,6 +403,31 @@ class ControlHelperTests(unittest.TestCase):
         self.assertEqual(hair_pack.arma_model((b"ARMA", b"", [(b"MOD2", b"M.nif\0"), (b"MOD3", b"\0")], 1)), "M.nif")
 
 
+class FaceBoneTests(unittest.TestCase):
+    def test_face_bone_worlds_invert_the_binds(self):
+        rot = (0, -1, 0, 1, 0, 0, 0, 0, 1)
+        skin = {"bones": [b"C_Head", b"faceBone_C_HeadTop", b"faceBone_C_Chin"],
+                "binds": [((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, -1.6), 1.0),
+                          ((0, 0, 0, 1), rot, (0.1, 0.2, -1.75), 1.0),
+                          ((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, -0.1, -1.55), 1.0)]}
+        w = skyrimhair.face_bone_worlds(skin)
+        self.assertEqual(sorted(w), ["faceBone_C_Chin", "faceBone_C_HeadTop"])     # face bones only
+        inv = np.eye(4)
+        inv[:3, :3] = np.array(rot, float).reshape(3, 3)
+        inv[:3, 3] = (0.1, 0.2, -1.75)
+        np.testing.assert_allclose(w["faceBone_C_HeadTop"] @ inv, np.eye(4), atol=1e-12)
+        self.assertEqual(skyrimhair.pick_face_bone(w), "faceBone_C_HeadTop")
+        self.assertEqual(skyrimhair.pick_face_bone({"faceBone_Z": np.eye(4), "faceBone_A": np.eye(4)}), "faceBone_A")
+
+    def test_on_face_bone_moves_only_the_host_weights(self):
+        hair = skyrimhair.convert(hair_nif_bytes(), SMP_XML, sf_world())
+        fb = skyrimhair.on_face_bone(hair, "faceBone_C_HeadTop")
+        for a, b in zip(hair.shapes, fb.shapes):
+            for va, vb in zip(a.weights, b.weights):
+                self.assertEqual([("faceBone_C_HeadTop" if n == "C_Head" else n, w) for n, w in va], vb)
+        self.assertEqual([x.name for x in fb.bones], [x.name for x in hair.bones])   # the cloth chain unchanged
+
+
 class HeadLocalTests(unittest.TestCase):
     def test_head_local_puts_the_hair_in_the_head_frame(self):
         w = sf_world()
@@ -490,7 +515,18 @@ class PackEndToEndTests(unittest.TestCase):
             F.content_resources(os.path.join(sf, "Tools", "ContentResources.zip"))
             out = os.path.join(d, "mod")
             cloth = b"\x10\x00\x00\x40TAG0-synthetic"
+            ident = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+
+            def game_nif(bones, binds):
+                sh = sfnif.SkinnedShape(b"Hat", b"aa\\bb", 3, 3, "materials\\clothes\\hat.mat", bones,
+                                        [((0.0, 0.0, 0.0, 1.0), ident, t, 1.0) for t in binds])
+                return nif.serialize(sfnif.build_skinned_nif(b"Hat", [sh]))
+            game = {"meshes/clothes/hat_f.nif": game_nif([b"C_Head"], [(0, 0, -1.6)]),       # inverse rest worlds
+                    "meshes/clothes/hat_f_facebones.nif": game_nif([b"faceBone_C_Chin", b"faceBone_C_HeadTop"],
+                                                                    [(0, -0.1, -1.55), (0, 0, -1.75)])}
             with mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                    mock.patch.object(hair_pack, "read_game_file",
+                                      lambda sfp, rel: game.get(rel.replace("\\", "/").lower())), \
                     mock.patch.object(hair_pack, "read_template", lambda spec: cloth), \
                     mock.patch.object(smpcloth, "check_template", lambda blob: template_root()), \
                     mock.patch.object(smpcloth, "write", lambda blob, root: cloth), \
@@ -526,18 +562,33 @@ class PackEndToEndTests(unittest.TestCase):
             ctl = got["S2S_KSWig_ControlHat"][2]                                   # the vanilla hat, renamed
             self.assertEqual(dict(ctl)[b"MODL"], struct.pack("<I", 0x000C0001))
             self.assertEqual(dict(ctl)[b"FULL"], b"S2S control hat (vanilla model)\0")
-            ctrl = rep["controls"]                                                 # no game archives here:
-            self.assertFalse(ctrl["hat_found"])                                    # only the solid-material one
-            self.assertEqual(set(ctrl) & {"opaque", "hatmat", "hatcopy", "armacopy"}, {"opaque", "armacopy"})
+            ctrl = rep["controls"]
+            self.assertTrue(ctrl["hat_found"])
+            self.assertEqual(set(ctrl) & {"opaque", "hatmat", "hatcopy", "armacopy"},
+                             {"opaque", "hatmat", "hatcopy", "armacopy"})
             ac = dict(got["S2S_KSWig_Control_armacopy"][2])                       # the copy, vanilla model path
             self.assertEqual(ac[b"FULL"], b"S2S control hat (copied addon, vanilla path)\0")
             self.assertEqual(dict(got["S2S_KSWig_Control_armacopy_AA"][2])[b"MOD3"], b"Clothes\\Hat_F.nif\0")
             self.assertEqual([r[0] for r in ctrl["arma_template"]], ["EDID", "BO64", "MOD2", "MOD3"])
-            self.assertEqual(ctrl["hat_model_files"], [])
             sol = got["S2S_KSWig_Control_opaque"][2]
             self.assertEqual(dict(sol)[b"FULL"], b"Test wig (Skyrim, solid material)\0")
-            on = nif.parse(open(os.path.join(out, "meshes", "s2s", "hair", "test_opaque.nif"), "rb").read())
+            hair_dir = os.path.join(out, "meshes", "s2s", "hair")
+            on = nif.parse(open(os.path.join(hair_dir, "test_opaque.nif"), "rb").read())
             self.assertEqual(sfnif.parse_skin(on)["bones"], [b"C_Head"])
+            # the *_facebones.nif the game draws on actors with face bones: C_Head's weights on a face bone
+            self.assertEqual(rep["face_bone"], "faceBone_C_HeadTop")
+            self.assertTrue(wig["facebones"])
+            fbn = sfnif.parse_skin(nif.parse(open(os.path.join(hair_dir, "test_facebones.nif"), "rb").read()))
+            self.assertEqual(fbn["bones"], [b"S2S_Hair_2", b"S2S_Hair_3", b"faceBone_C_HeadTop"])
+            k = fbn["bones"].index(b"faceBone_C_HeadTop")
+            np.testing.assert_allclose(fbn["binds"][k][2], (0, 0, -1.75), atol=1e-6)   # inverse rest world kept
+            for name in ("test_rigid_facebones", "test_head_facebones", "test_opaque_facebones",
+                         "test_hatmat_facebones"):
+                bones = sfnif.parse_skin(nif.parse(open(os.path.join(hair_dir, name + ".nif"), "rb").read()))["bones"]
+                self.assertNotIn(b"C_Head", bones, name)
+            self.assertEqual(open(os.path.join(hair_dir, "control_hat_copy_facebones.nif"), "rb").read(),
+                             game["meshes/clothes/hat_f_facebones.nif"])
+            self.assertNotIn("_fb", wig)
             self.assertNotIn("_control", wig)
 
 

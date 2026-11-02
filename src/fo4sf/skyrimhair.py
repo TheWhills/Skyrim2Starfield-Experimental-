@@ -306,6 +306,43 @@ def head_local(hair: Hair, sf_world: Dict[str, np.ndarray], bone: str = None) ->
     return Hair(shapes, [], {}, dict(hair.report, rigid=True, head_local=bone)), {bone: np.eye(4)}
 
 
+FACE_BONES_PREFERRED = ("faceBone_C_HeadTop", "faceBone_C_HeadBack", "faceBone_C_HeadFore1")
+
+
+def face_bone_worlds(skin: dict) -> Dict[str, np.ndarray]:
+    """{face bone: rest world 4x4} from a vanilla *_facebones.nif's skin (sfnif.parse_skin): each bind is the inverse
+    of the bone's rest world (the convention of the game's own hairs, verified on Eris long curls), stored row-major."""
+    out = {}
+    for name, (_sphere, rot, trans, scale) in zip(skin["bones"], skin["binds"]):
+        name = name.decode("latin-1") if isinstance(name, bytes) else name
+        if not name.lower().startswith("facebone_"):
+            continue
+        inv = np.eye(4)
+        inv[:3, :3] = np.asarray(rot, float).reshape(3, 3) * float(scale or 1.0)
+        inv[:3, 3] = trans
+        out[name] = np.linalg.inv(inv)
+    return out
+
+
+def pick_face_bone(worlds: Dict[str, np.ndarray]) -> str:
+    for b in FACE_BONES_PREFERRED:
+        if b in worlds:
+            return b
+    if not worlds:
+        raise HairError("no face bone in the facebones template")
+    return sorted(worlds)[0]
+
+
+def on_face_bone(hair: Hair, face_bone: str, host: str = None) -> Hair:
+    """The hair with every weight on `host` (default C_Head) moved to `face_bone`: the *_facebones.nif variant the
+    game draws on actors with face bones (vanilla hairs and hats ship both; the facebones one has no C_Head)."""
+    host = host or SF_HEAD
+    shapes = [HairShape(sh.name, sh.positions, sh.normals, sh.tangents, sh.uvs, sh.triangles,
+                        [[(face_bone if b == host else b, w) for b, w in vw] for vw in sh.weights],
+                        sh.shader_ref, sh.alpha_ref, sh.block) for sh in hair.shapes]
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, face_bone=face_bone))
+
+
 def merge(hairs: List[Hair]) -> Hair:
     """One hair from several (a head part and its extra parts, e.g. Skyrim's hair + hairline): shapes and bones
     together, reports listed."""

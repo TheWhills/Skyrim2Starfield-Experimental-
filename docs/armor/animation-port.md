@@ -902,6 +902,10 @@ code; no mod or game file committed.
   archive)`: solid shows -> the cutout material / hair texture; hat material shows but solid not -> our material
   files; archive copy invisible -> S2SHair - Main.ba2 is not loaded; none of the wig ones but the archive copy ->
   the mesh data.
+* **2026-11-02 cause (supported):** the archive control (vanilla hat NIF at our path) is invisible too; the game draws
+  `<model>_facebones.nif` on actors with face bones (vanilla hat and every Eris hair ship one, skinned to faceBone_*
+  bones). hair_pack writes that file for every wig and control (C_Head's weights on faceBone_C_HeadTop, rest world from
+  the vanilla hat's facebones binds).
 
 ## New weapon types (two-handed, dagger / axe / mace) and dual wield: plan (2026-10-20)
 Owner: most Skyrim weapon types (greatsword, battleaxe, warhammer...) do not exist in Starfield, and dual wield has

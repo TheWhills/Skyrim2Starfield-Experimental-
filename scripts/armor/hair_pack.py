@@ -34,7 +34,7 @@ sys.path.insert(0, HERE)
 
 from fo4sf import ba2 as ba2mod  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
-from fo4sf import sfcloth, sfplugin, skyrimconvert, skyrimhair, skyrimnif, smpcloth  # noqa: E402
+from fo4sf import sfcloth, sfnif, sfplugin, skyrimconvert, skyrimhair, skyrimnif, smpcloth  # noqa: E402
 from fo4sf import smpconfig as smp  # noqa: E402
 
 PLUGIN = "S2SHair.esm"
@@ -226,7 +226,47 @@ def arma_model(arma) -> str:
     return ""
 
 
-def control_files(row: dict, conv, hat_raw, hat_model: str) -> dict:
+def write_files(staging: str, files: dict):
+    for rel, data in files.items():
+        p = os.path.join(staging, *rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as fh:
+            fh.write(data)
+
+
+def facebones_template(starfield: str, hat_model: str, report: dict):
+    """(face bone, its rest world, every face bone's world, the hat's facebones NIF bytes) from the vanilla hat's
+    <model>_facebones.nif, or None. Head items are drawn from that file on actors with face bones (the player, named
+    NPCs): vanilla hats and hairs ship both files (verified: Akila hat, Eris long curls), ours had only the plain one."""
+    if not hat_model:
+        return None
+    rel = "meshes/" + os.path.splitext(hat_model.replace("\\", "/"))[0] + "_facebones.nif"
+    raw = read_game_file(starfield, rel)
+    report["facebones_template"] = rel if raw is not None else f"not found: {rel}"
+    if raw is None:
+        return None
+    worlds = skyrimhair.face_bone_worlds(sfnif.parse_skin(nifmod.parse(raw)))
+    face = skyrimhair.pick_face_bone(worlds)
+    report["face_bone"], report["face_bones_in_template"] = face, len(worlds)
+    return face, worlds[face], worlds, raw
+
+
+def facebones_files(row: dict, fb, sf_world: dict, rigid_copies: bool) -> dict:
+    """<model>_facebones.nif for a wig and its no-physics / head-bone copies: C_Head's weights on the face bone."""
+    hair, mats, blob, out_name, backs = row["_fb"]
+    face, fw = fb[0], fb[1]
+    world = dict(sf_world, **{face: fw})
+    files = skyrimhair.nif_files(skyrimhair.on_face_bone(hair, face), mats, blob, world, out_name + "_facebones", backs)
+    if rigid_copies:
+        rg = skyrimhair.rigid(hair)
+        files.update(skyrimhair.nif_files(skyrimhair.on_face_bone(rg, face), mats, None, world,
+                                          out_name + "_rigid_facebones", backs))
+        hl, hw = skyrimhair.head_local(rg, world, bone=face)
+        files.update(skyrimhair.nif_files(hl, mats, None, hw, out_name + "_head_facebones", backs))
+    return files
+
+
+def control_files(row: dict, conv, hat_raw, hat_model: str, fb=None, sf_world=None) -> dict:
     """In-game controls for one wig, to find why a wig is not drawn (each {relative path: bytes} plus its model):
     "opaque": the head-bone copy with its material made solid (no alpha test), "hatmat": the head-bone copy with the
     vanilla hat's own material, "hatcopy": the vanilla hat NIF itself put in this mod's archive."""
@@ -240,13 +280,25 @@ def control_files(row: dict, conv, hat_raw, hat_model: str) -> dict:
                         conv.neutral)
         else:
             mats.append(conv.neutral)
-    out["opaque"] = (skyrimhair.nif_files(hl, mats, None, hw, out_name + "_opaque", backs), out_name + "_opaque")
+    fhl = fhw = None
+    if fb is not None:                        # the same controls on the face bone (the file the game draws)
+        fhl, fhw = skyrimhair.head_local(skyrimhair.rigid(row["_fb"][0]), dict(sf_world, **{fb[0]: fb[1]}),
+                                         bone=fb[0])
+
+    def both(materials, name):
+        files = skyrimhair.nif_files(hl, materials, None, hw, name, backs)
+        if fhl is not None:
+            files.update(skyrimhair.nif_files(fhl, materials, None, fhw, name + "_facebones", backs))
+        return files, name
+    out["opaque"] = both(mats, out_name + "_opaque")
     hat_mats = nif_materials(hat_raw) if hat_raw else []
     if hat_mats:
-        out["hatmat"] = (skyrimhair.nif_files(hl, [hat_mats[0]] * len(hl.shapes), None, hw, out_name + "_hatmat",
-                                              backs), out_name + "_hatmat")
+        out["hatmat"] = both([hat_mats[0]] * len(hl.shapes), out_name + "_hatmat")
     if hat_raw:
-        out["hatcopy"] = ({f"meshes/{PREFIX}/hair/control_hat_copy.nif": hat_raw}, f"{PREFIX}/hair/control_hat_copy")
+        files = {f"meshes/{PREFIX}/hair/control_hat_copy.nif": hat_raw}
+        if fb is not None:
+            files[f"meshes/{PREFIX}/hair/control_hat_copy_facebones.nif"] = fb[3]
+        out["hatcopy"] = (files, f"{PREFIX}/hair/control_hat_copy")
     if hat_model:            # the addon copied exactly as for a wig, but still naming the vanilla model path
         out["armacopy"] = ({}, os.path.splitext(hat_model.replace("\\", "/"))[0])
     return out
@@ -310,6 +362,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         with open(p, "wb") as fh:
             fh.write(data)
     row.update(ok=True, model=out_name.replace("/", "\\") + ".nif")
+    row["_fb"] = (hair, mats, blob, out_name, backs)
     if getattr(a, "rigid_copies", False):          # the control: the same wig without physics
         files = skyrimhair.nif_files(skyrimhair.rigid(hair), mats, None, sf_world, out_name + "_rigid", backs)
         for rel, data in files.items():
@@ -395,6 +448,11 @@ def main(argv=None):
     kw_names = {fid: sfplugin.edid(s) for t, _h, s, fid in sf if t == b"KYWD"}
     armo_t, arma_t = head_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"], kw_names)
     report["apparel_template"] = {"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2])}
+    fb = facebones_template(a.starfield, arma_model(arma_t), report)
+    for r in good:
+        if fb is not None:
+            write_files(staging, facebones_files(r, fb, sf_world, a.rigid_copies))
+            r["facebones"] = True
     import weapon_test_pack as wtp
     recs = []
     for r in good:
@@ -432,7 +490,7 @@ def main(argv=None):
                 stem = os.path.splitext(os.path.basename(hat_model.replace("\\", "/")))[0]
                 report["controls"]["hat_model_files"] = game_files_named(a.starfield, stem)
             names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None, "armacopy": None}
-            for kind, (files, model) in control_files(first, conv, hat_raw, hat_model).items():
+            for kind, (files, model) in control_files(first, conv, hat_raw, hat_model, fb, sf_world).items():
                 for rel, data in files.items():
                     pth = os.path.join(staging, *rel.split("/"))
                     os.makedirs(os.path.dirname(pth), exist_ok=True)
@@ -447,6 +505,7 @@ def main(argv=None):
                 report["controls"][kind] = {"name": label, "form_id": f"{ao4[3] & 0xFFFFFF:06X}"}
     for r in report["wigs"]:
         r.pop("_control", None)
+        r.pop("_fb", None)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))
     report["packing"] = pack(staging, out, a.starfield, a.archive2)
