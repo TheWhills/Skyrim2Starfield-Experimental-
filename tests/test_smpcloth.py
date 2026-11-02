@@ -417,6 +417,9 @@ class FaceBoneTests(unittest.TestCase):
         inv[:3, 3] = (0.1, 0.2, -1.75)
         np.testing.assert_allclose(w["faceBone_C_HeadTop"] @ inv, np.eye(4), atol=1e-12)
         self.assertEqual(skyrimhair.pick_face_bone(w), "faceBone_C_HeadTop")
+        node = skyrimhair.xf_matrix(((1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 1.6), 1.0))      # an offset shape node
+        wn = skyrimhair.face_bone_worlds(skin, node)
+        np.testing.assert_allclose(wn["faceBone_C_HeadTop"], node @ w["faceBone_C_HeadTop"], atol=1e-12)
         self.assertEqual(skyrimhair.pick_face_bone({"faceBone_Z": np.eye(4), "faceBone_A": np.eye(4)}), "faceBone_A")
 
     def test_on_face_bone_moves_only_the_host_weights(self):
@@ -589,6 +592,11 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertEqual(open(os.path.join(hair_dir, "control_hat_copy_facebones.nif"), "rb").read(),
                              game["meshes/clothes/hat_f_facebones.nif"])
             self.assertNotIn("_fb", wig)
+            self.assertEqual(rep["facebones"]["used"], "hat")
+            self.assertIn("headshift", ctrl)
+            self.assertEqual(dict(got["S2S_KSWig_Control_headshift"][2])[b"FULL"],
+                             b"Test wig (Skyrim, head bone, head height off)\0")
+            self.assertTrue(os.path.exists(os.path.join(hair_dir, "test_headshift_facebones.nif")))
             self.assertNotIn("_control", wig)
 
 

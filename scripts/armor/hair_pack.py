@@ -26,6 +26,8 @@ import struct
 import sys
 import types
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
@@ -234,20 +236,48 @@ def write_files(staging: str, files: dict):
             fh.write(data)
 
 
-def facebones_template(starfield: str, hat_model: str, report: dict):
-    """(face bone, its rest world, every face bone's world, the hat's facebones NIF bytes) from the vanilla hat's
-    <model>_facebones.nif, or None. Head items are drawn from that file on actors with face bones (the player, named
-    NPCs): vanilla hats and hairs ship both files (verified: Akila hat, Eris long curls), ours had only the plain one."""
+def facebones_worlds_of(raw: bytes) -> dict:
+    """({face bone: rest world}, the shape node transform as a 4x4) of a vanilla *_facebones.nif."""
+    from fo4sf import sfweaponleft
+    n = nifmod.parse(raw)
+    shapes = sfweaponleft.shapes_in_model(n)
+    node = skyrimhair.xf_matrix(shapes[0][1]) if shapes else None
+    return skyrimhair.face_bone_worlds(sfnif.parse_skin(n), node), node
+
+
+def facebones_template(starfield: str, hat_model: str, report: dict, hair_template: str = None):
+    """(face bone, its rest world, every face bone's world, the hat's facebones NIF bytes) or None. Head items are
+    drawn from <model>_facebones.nif on actors with face bones (the player, named NPCs): vanilla hats and hairs ship
+    both files (verified in game 2026-11-02: our wigs show once that file exists). The face bones' rest worlds come
+    from a vanilla hair's facebones file (the cloth template's, e.g. bob_f_facebones.nif) when found, else the hat's;
+    both are reported to compare."""
     if not hat_model:
         return None
     rel = "meshes/" + os.path.splitext(hat_model.replace("\\", "/"))[0] + "_facebones.nif"
     raw = read_game_file(starfield, rel)
-    report["facebones_template"] = rel if raw is not None else f"not found: {rel}"
+    info = report.setdefault("facebones", {})
+    info["hat_file"] = rel if raw is not None else f"not found: {rel}"
     if raw is None:
         return None
-    worlds = skyrimhair.face_bone_worlds(sfnif.parse_skin(nifmod.parse(raw)))
-    face = skyrimhair.pick_face_bone(worlds)
-    report["face_bone"], report["face_bones_in_template"] = face, len(worlds)
+    sources = []
+    if hair_template and ":" in hair_template:
+        hrel = os.path.splitext(hair_template.split(":", 1)[1].replace("\\", "/"))[0] + "_facebones.nif"
+        hraw = read_game_file(starfield, hrel)
+        info["hair_file"] = hrel if hraw is not None else f"not found: {hrel}"
+        if hraw is not None:
+            sources.append(("hair", hraw))
+    sources.append(("hat", raw))
+    picked = None
+    for kind, data in sources:
+        worlds, node = facebones_worlds_of(data)
+        face = skyrimhair.pick_face_bone(worlds)
+        info[kind] = {"node": None if node is None else np.round(node, 4).tolist(), "face_bones": len(worlds),
+                      "face_bone": face, "face_bone_world": np.round(worlds[face], 4).tolist()}
+        if picked is None:
+            picked = (kind, face, worlds)
+    kind, face, worlds = picked
+    info["used"] = kind
+    report["face_bone"] = face
     return face, worlds[face], worlds, raw
 
 
@@ -291,6 +321,16 @@ def control_files(row: dict, conv, hat_raw, hat_model: str, fb=None, sf_world=No
             files.update(skyrimhair.nif_files(fhl, materials, None, fhw, name + "_facebones", backs))
         return files, name
     out["opaque"] = both(mats, out_name + "_opaque")
+    if fhl is not None:       # hypothesis B: the game places facebones models at the head; take its height off
+        lift = np.asarray(sf_world[skyrimhair.SF_HEAD], float)[:3, 3]
+        rg = skyrimhair.rigid(row["_fb"][0])
+        moved = skyrimhair.Hair([skyrimhair.HairShape(sh.name, np.asarray(sh.positions, float) - lift, sh.normals,
+                                                      sh.tangents, sh.uvs, sh.triangles, sh.weights, sh.shader_ref,
+                                                      sh.alpha_ref, sh.block) for sh in rg.shapes], [], {}, rg.report)
+        shl, shw = skyrimhair.head_local(moved, dict(sf_world, **{fb[0]: fb[1]}), bone=fb[0])
+        files = skyrimhair.nif_files(hl, mats, None, hw, out_name + "_headshift", backs)
+        files.update(skyrimhair.nif_files(shl, mats, None, shw, out_name + "_headshift_facebones", backs))
+        out["headshift"] = (files, out_name + "_headshift")
     hat_mats = nif_materials(hat_raw) if hat_raw else []
     if hat_mats:
         out["hatmat"] = both([hat_mats[0]] * len(hl.shapes), out_name + "_hatmat")
@@ -448,7 +488,7 @@ def main(argv=None):
     kw_names = {fid: sfplugin.edid(s) for t, _h, s, fid in sf if t == b"KYWD"}
     armo_t, arma_t = head_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"], kw_names)
     report["apparel_template"] = {"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2])}
-    fb = facebones_template(a.starfield, arma_model(arma_t), report)
+    fb = facebones_template(a.starfield, arma_model(arma_t), report, report.get("cloth_template"))
     for r in good:
         if fb is not None:
             write_files(staging, facebones_files(r, fb, sf_world, a.rigid_copies))
@@ -489,7 +529,8 @@ def main(argv=None):
             if hat_model:
                 stem = os.path.splitext(os.path.basename(hat_model.replace("\\", "/")))[0]
                 report["controls"]["hat_model_files"] = game_files_named(a.starfield, stem)
-            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None, "armacopy": None}
+            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None, "armacopy": None,
+                     "headshift": "head bone, head height off"}
             for kind, (files, model) in control_files(first, conv, hat_raw, hat_model, fb, sf_world).items():
                 for rel, data in files.items():
                     pth = os.path.join(staging, *rel.split("/"))

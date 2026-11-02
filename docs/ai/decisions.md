@@ -730,3 +730,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   facebones NIF read from the game (binds are inverse rest worlds: checked on Eris, HeadTop at z 1.762, chin 1.568);
   the archive control gets the hat's own facebones file. To verify in game. Later: spread the weights over the face
   bones (follows chargen face shape) instead of one bone. Also for the NPC hair head parts (npc_hair.py).
+- 2026-11-02 owner, in game: with the _facebones files the wigs are DRAWN (verified: facebones was the cause), but
+  misplaced: the physics Steammist hangs correctly shaped about a head's height above the player; the head-bone copy
+  stands as a tall column from the head upward. The face-bone rest world was read from the vanilla hat's facebones
+  binds as inverse(bind); two explanations kept, one build tests both: (A) the hat's shape node carries a transform
+  that its binds include (the robe convention: bind = inverse(world) @ node), now world = node @ inverse(bind), and
+  the face bones are read from the cloth template hair's facebones file (vanilla bob) first, the hat's second, both
+  reported in hair_pack.json "facebones"; (B) the game places facebones models at the head, so the head height is
+  counted twice: control `S2S_KSWig_Control_headshift` (head-bone copy with C_Head's height taken off).

@@ -309,9 +309,20 @@ def head_local(hair: Hair, sf_world: Dict[str, np.ndarray], bone: str = None) ->
 FACE_BONES_PREFERRED = ("faceBone_C_HeadTop", "faceBone_C_HeadBack", "faceBone_C_HeadFore1")
 
 
-def face_bone_worlds(skin: dict) -> Dict[str, np.ndarray]:
-    """{face bone: rest world 4x4} from a vanilla *_facebones.nif's skin (sfnif.parse_skin): each bind is the inverse
-    of the bone's rest world (the convention of the game's own hairs, verified on Eris long curls), stored row-major."""
+def xf_matrix(xf) -> np.ndarray:
+    """4x4 of a NIF transform (rot 9 row-major, trans 3, scale): p' = s R p + t."""
+    rot, trans, scale = xf
+    m = np.eye(4)
+    m[:3, :3] = np.asarray(rot, float).reshape(3, 3) * float(scale)
+    m[:3, 3] = trans
+    return m
+
+
+def face_bone_worlds(skin: dict, node: Optional[np.ndarray] = None) -> Dict[str, np.ndarray]:
+    """{face bone: rest world 4x4} from a vanilla *_facebones.nif's skin (sfnif.parse_skin): bind = inverse(rest world)
+    composed with the shape's node transform (the robe's convention; identity on Eris' hairs), so world = node @
+    inverse(bind). Stored row-major."""
+    node = np.eye(4) if node is None else np.asarray(node, float)
     out = {}
     for name, (_sphere, rot, trans, scale) in zip(skin["bones"], skin["binds"]):
         name = name.decode("latin-1") if isinstance(name, bytes) else name
@@ -320,7 +331,7 @@ def face_bone_worlds(skin: dict) -> Dict[str, np.ndarray]:
         inv = np.eye(4)
         inv[:3, :3] = np.asarray(rot, float).reshape(3, 3) * float(scale or 1.0)
         inv[:3, 3] = trans
-        out[name] = np.linalg.inv(inv)
+        out[name] = node @ np.linalg.inv(inv)
     return out
 
 
