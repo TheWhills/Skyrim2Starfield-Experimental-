@@ -164,6 +164,68 @@ def head_apparel(armo, arma, kw_names):
     raise SystemExit(f"no vanilla ARMO with {HEAD_KEYWORD} and an addon")
 
 
+def read_game_file(starfield: str, rel: str):
+    """A file of the game's own archives (Starfield - Meshes*.ba2 ...) by its path in the archive, or None."""
+    want = rel.replace("\\", "/").lower()
+    data = os.path.join(starfield, "Data")
+    for f in sorted(os.listdir(data)):
+        if not (f.lower().startswith("starfield - ") and f.lower().endswith(".ba2")):
+            continue
+        try:
+            a = ba2mod.Ba2(os.path.join(data, f))
+        except ba2mod.Ba2Error:
+            continue
+        for i, name in enumerate(a.names):
+            if name.replace("\\", "/").lower() == want:
+                return a.read(i)
+    return None
+
+
+def nif_materials(raw: bytes):
+    """The material names of a Starfield NIF's shapes (BSLightingShaderProperty names), in block order."""
+    n = nifmod.parse(raw)
+    out = []
+    for i in range(len(n.blocks)):
+        if n.type_of(i) == "BSLightingShaderProperty":
+            si, = struct.unpack_from("<i", n.blocks[i], 0)
+            if 0 <= si < len(n.strings) and n.strings[si]:
+                out.append(n.strings[si].decode("latin-1"))
+    return out
+
+
+def arma_model(arma) -> str:
+    """The worn model of an ARMA (female, else male), as written in the record."""
+    d = dict((k, bytes(v)) for k, v in arma[2])
+    for k in (b"MOD3", b"MOD2"):
+        if d.get(k, b"\0")[:1] != b"\0":
+            return d[k].split(b"\0")[0].decode("latin-1")
+    return ""
+
+
+def control_files(row: dict, conv, hat_raw, hat_model: str) -> dict:
+    """In-game controls for one wig, to find why a wig is not drawn (each {relative path: bytes} plus its model):
+    "opaque": the head-bone copy with its material made solid (no alpha test), "hatmat": the head-bone copy with the
+    vanilla hat's own material, "hatcopy": the vanilla hat NIF itself put in this mod's archive."""
+    hl, hw, n, out_name, backs = row["_control"]
+    out = {}
+    mats = []
+    for sh in hl.shapes:
+        paths = skyrimnif.texture_set(n, sh.shader_ref) if sh.shader_ref >= 0 else []
+        if paths and paths[0]:
+            mats.append(conv.skyrim_material(paths[0], paths[1] if len(paths) > 1 else "", False, False, 0) or
+                        conv.neutral)
+        else:
+            mats.append(conv.neutral)
+    out["opaque"] = (skyrimhair.nif_files(hl, mats, None, hw, out_name + "_opaque", backs), out_name + "_opaque")
+    hat_mats = nif_materials(hat_raw) if hat_raw else []
+    if hat_mats:
+        out["hatmat"] = (skyrimhair.nif_files(hl, [hat_mats[0]] * len(hl.shapes), None, hw, out_name + "_hatmat",
+                                              backs), out_name + "_hatmat")
+    if hat_raw:
+        out["hatcopy"] = ({f"meshes/{PREFIX}/hair/control_hat_copy.nif": hat_raw}, f"{PREFIX}/hair/control_hat_copy")
+    return out
+
+
 def pack(staging: str, out: str, starfield: str, archive2: str = None, main_ba2: str = MAIN_BA2,
          tex_ba2: str = TEX_BA2) -> dict:
     """BA2 archives named after the plugin (Starfield loads "<plugin> - *.ba2"), or the files loose."""
@@ -238,6 +300,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
             with open(p, "wb") as fh:
                 fh.write(data)
         row["model_head"] = out_name.replace("/", "\\") + "_head.nif"
+        row["_control"] = (hl, hw, n, out_name, backs)
     return row
 
 
@@ -331,6 +394,27 @@ def main(argv=None):
                sfplugin.new_form_id(len(recs)))
         recs.append(ctl)
         report["control_hat"] = f"{ctl[3] & 0xFFFFFF:06X}"
+        first = next((r for r in good if r.get("_control")), None)
+        if first is not None:                # material / archive controls, on the first wig only
+            hat_model = arma_model(arma_t)
+            hat_raw = read_game_file(a.starfield, "meshes/" + hat_model) if hat_model else None
+            report["controls"] = {"wig": first["wig"], "hat_model": hat_model, "hat_found": hat_raw is not None,
+                                  "hat_materials": nif_materials(hat_raw) if hat_raw else []}
+            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None}
+            for kind, (files, model) in control_files(first, conv, hat_raw, hat_model).items():
+                for rel, data in files.items():
+                    pth = os.path.join(staging, *rel.split("/"))
+                    os.makedirs(os.path.dirname(pth), exist_ok=True)
+                    with open(pth, "wb") as fh:
+                        fh.write(data)
+                label = (f"{first['wig']} wig (Skyrim, {names[kind]})" if names[kind]
+                         else "S2S control hat (from S2SHair archive)")
+                aa4, ao4 = wtp.left_blade_records(armo_t, arma_t, len(recs), f"S2S_KSWig_Control_{kind}", label,
+                                                  model.replace("/", "\\") + ".nif", slot=a.slot)
+                recs += [aa4, ao4]
+                report["controls"][kind] = {"name": label, "form_id": f"{ao4[3] & 0xFFFFFF:06X}"}
+    for r in report["wigs"]:
+        r.pop("_control", None)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info))
     report["packing"] = pack(staging, out, a.starfield, a.archive2)
@@ -352,6 +436,9 @@ def main(argv=None):
     if report.get("control_hat"):
         lines += ["", f"Control: 'S2S control hat (vanilla model)' ..{report['control_hat'][-3:]} is the vanilla hat "
                       "record under a new name (if it does not show either, the head slot itself is hidden)."]
+    for kind, c in (report.get("controls") or {}).items():
+        if isinstance(c, dict) and "form_id" in c:
+            lines.append(f"Control: '{c['name']}' ..{c['form_id'][-3:]}")
     lines += ["", f"Record copied from the vanilla head apparel {report['apparel_template']['armo']}.",
               f"Cloth template: {report.get('cloth_template')}"]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:

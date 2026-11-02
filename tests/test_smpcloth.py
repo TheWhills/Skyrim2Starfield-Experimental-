@@ -391,6 +391,18 @@ class HairTests(unittest.TestCase):
         self.assertEqual(skyrimhair.bone_name("Anna Back 2"), "S2S_Anna_Back_2")
 
 
+class ControlHelperTests(unittest.TestCase):
+    def test_nif_materials_and_arma_model(self):
+        import hair_pack
+        sh = sfnif.SkinnedShape(b"Hat", b"aa\\bb", 3, 3, "materials\\clothes\\hat.mat", [b"C_Head"],
+                                [((0.0, 0.0, 0.0, 1.0), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])
+        raw = nif.serialize(sfnif.build_skinned_nif(b"Hat", [sh]))
+        self.assertEqual(hair_pack.nif_materials(raw), ["materials\\clothes\\hat.mat"])
+        arma = (b"ARMA", b"", [(b"MOD2", b"Clothes\\Hat_M.nif\0"), (b"MOD3", b"Clothes\\Hat_F.nif\0")], 1)
+        self.assertEqual(hair_pack.arma_model(arma), "Clothes\\Hat_F.nif")
+        self.assertEqual(hair_pack.arma_model((b"ARMA", b"", [(b"MOD2", b"M.nif\0"), (b"MOD3", b"\0")], 1)), "M.nif")
+
+
 class HeadLocalTests(unittest.TestCase):
     def test_head_local_puts_the_hair_in_the_head_frame(self):
         w = sf_world()
@@ -514,6 +526,14 @@ class PackEndToEndTests(unittest.TestCase):
             ctl = got["S2S_KSWig_ControlHat"][2]                                   # the vanilla hat, renamed
             self.assertEqual(dict(ctl)[b"MODL"], struct.pack("<I", 0x000C0001))
             self.assertEqual(dict(ctl)[b"FULL"], b"S2S control hat (vanilla model)\0")
+            ctrl = rep["controls"]                                                 # no game archives here:
+            self.assertFalse(ctrl["hat_found"])                                    # only the solid-material one
+            self.assertEqual(set(ctrl) & {"opaque", "hatmat", "hatcopy"}, {"opaque"})
+            sol = got["S2S_KSWig_Control_opaque"][2]
+            self.assertEqual(dict(sol)[b"FULL"], b"Test wig (Skyrim, solid material)\0")
+            on = nif.parse(open(os.path.join(out, "meshes", "s2s", "hair", "test_opaque.nif"), "rb").read())
+            self.assertEqual(sfnif.parse_skin(on)["bones"], [b"C_Head"])
+            self.assertNotIn("_control", wig)
 
 
 if __name__ == "__main__":

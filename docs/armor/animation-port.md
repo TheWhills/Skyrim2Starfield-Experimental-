@@ -897,6 +897,11 @@ code; no mod or game file committed.
   by default, `--no-rigid-copies` leaves them out): per wig a no-physics copy (simulated bones folded into their host
   bone, rest-pose binds) and a head-bone copy (C_Head only, C_Head-local vertices, identity bind: the left blade's
   convention), plus `S2S control hat (vanilla model)`. Next step depends on which of them show.
+* **2026-11-02, in game (owner):** the control hat shows, every wig copy is invisible (head-bone one too). Added
+  controls on the first wig: `(Skyrim, solid material)`, `(Skyrim, hat material)`, `S2S control hat (from S2SHair
+  archive)`: solid shows -> the cutout material / hair texture; hat material shows but solid not -> our material
+  files; archive copy invisible -> S2SHair - Main.ba2 is not loaded; none of the wig ones but the archive copy ->
+  the mesh data.
 
 ## New weapon types (two-handed, dagger / axe / mace) and dual wield: plan (2026-10-20)
 Owner: most Skyrim weapon types (greatsword, battleaxe, warhammer...) do not exist in Starfield, and dual wield has

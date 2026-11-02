@@ -708,3 +708,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   seen in game) and one 'S2S control hat (vanilla model)' (the template hat renamed, its own addon). Reading: control
   hat hidden -> the head slot is hidden (not our files); head-bone copy shows, no-physics not -> the binds; neither
   copy shows but the hat does -> mesh / material.
+- 2026-11-02 owner, in game: 'S2S control hat (vanilla model)' shows (the head slot and the copied hat record work;
+  wearing a wig also swaps her hair to the short hat hair, so the game takes the wig records as worn hats), but no
+  wig copy is drawn: physics, no-physics and head-bone (the left blade's skin convention) all invisible (verified,
+  screenshots). So not the cloth, not the binds. Left: what only the wigs have: the hair material (alpha-tested
+  cutout, threshold 40; the left blade is opaque) or the S2SHair archive. hair_pack now adds three controls on the
+  first wig: the head-bone copy with a solid material, the head-bone copy with the vanilla hat's own material, and
+  the vanilla hat NIF copied into S2SHair's archive under s2s\hair\control_hat_copy.nif.
