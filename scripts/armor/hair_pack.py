@@ -321,16 +321,6 @@ def control_files(row: dict, conv, hat_raw, hat_model: str, fb=None, sf_world=No
             files.update(skyrimhair.nif_files(fhl, materials, None, fhw, name + "_facebones", backs))
         return files, name
     out["opaque"] = both(mats, out_name + "_opaque")
-    if fhl is not None:       # hypothesis B: the game places facebones models at the head; take its height off
-        lift = np.asarray(sf_world[skyrimhair.SF_HEAD], float)[:3, 3]
-        rg = skyrimhair.rigid(row["_fb"][0])
-        moved = skyrimhair.Hair([skyrimhair.HairShape(sh.name, np.asarray(sh.positions, float) - lift, sh.normals,
-                                                      sh.tangents, sh.uvs, sh.triangles, sh.weights, sh.shader_ref,
-                                                      sh.alpha_ref, sh.block) for sh in rg.shapes], [], {}, rg.report)
-        shl, shw = skyrimhair.head_local(moved, dict(sf_world, **{fb[0]: fb[1]}), bone=fb[0])
-        files = skyrimhair.nif_files(hl, mats, None, hw, out_name + "_headshift", backs)
-        files.update(skyrimhair.nif_files(shl, mats, None, shw, out_name + "_headshift_facebones", backs))
-        out["headshift"] = (files, out_name + "_headshift")
     hat_mats = nif_materials(hat_raw) if hat_raw else []
     if hat_mats:
         out["hatmat"] = both([hat_mats[0]] * len(hl.shapes), out_name + "_hatmat")
@@ -529,8 +519,7 @@ def main(argv=None):
             if hat_model:
                 stem = os.path.splitext(os.path.basename(hat_model.replace("\\", "/")))[0]
                 report["controls"]["hat_model_files"] = game_files_named(a.starfield, stem)
-            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None, "armacopy": None,
-                     "headshift": "head bone, head height off"}
+            names = {"opaque": "solid material", "hatmat": "hat material", "hatcopy": None, "armacopy": None}
             for kind, (files, model) in control_files(first, conv, hat_raw, hat_model, fb, sf_world).items():
                 for rel, data in files.items():
                     pth = os.path.join(staging, *rel.split("/"))

@@ -738,3 +738,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the face bones are read from the cloth template hair's facebones file (vanilla bob) first, the hat's second, both
   reported in hair_pack.json "facebones"; (B) the game places facebones models at the head, so the head height is
   counted twice: control `S2S_KSWig_Control_headshift` (head-bone copy with C_Head's height taken off).
+- 2026-11-02 owner, in game: the KS Steammist wig sits on the head (verified, screenshots: scalp on the head, hair
+  down the back to the waist), both the head-bone copy and the physics wig; the head-shift control sits about a head
+  height below the player. So explanation A: face-bone rest world = shape node @ inverse(bind) of a vanilla
+  facebones file (the hat's node carries an offset); B (head counted twice) ruled out, its control removed. Open:
+  hair colour (greyscale KS texture, our material does not tint: needs the vanilla hair material's tint), whether
+  the cloth swings, face bones spread over the scalp instead of one bone (follows chargen face shape), the
+  _facebones files for npc_hair.py's head parts.

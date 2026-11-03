@@ -593,10 +593,7 @@ class PackEndToEndTests(unittest.TestCase):
                              game["meshes/clothes/hat_f_facebones.nif"])
             self.assertNotIn("_fb", wig)
             self.assertEqual(rep["facebones"]["used"], "hat")
-            self.assertIn("headshift", ctrl)
-            self.assertEqual(dict(got["S2S_KSWig_Control_headshift"][2])[b"FULL"],
-                             b"Test wig (Skyrim, head bone, head height off)\0")
-            self.assertTrue(os.path.exists(os.path.join(hair_dir, "test_headshift_facebones.nif")))
+            self.assertNotIn("headshift", ctrl)                                   # hypothesis B ruled out
             self.assertNotIn("_control", wig)
 
 
