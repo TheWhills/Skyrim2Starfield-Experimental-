@@ -156,6 +156,8 @@ class Settings:
                                 # this is about half its thickness (2026-11-02: 5 mm let the mesh sink into the body)
     lateral: float = 0.12       # m: chains whose roots are closer than this are tied to each other joint by joint
                                 # (a sheet, as vanilla hair cloth; free ribbons twisted and flailed in game); 0 = off
+    mass_scale: float = 1.0     # x the SMP masses: heavier hair is pushed less by Starfield's wind (if it acts as a
+                                # force: unverified) and keeps more momentum when the actor moves
     twist: float = 0.3          # stiffness (0-1) of the diagonal brace in each chain segment: resists a lock turning
                                 # about its own length (2026-11-02: twisted in game) while it still swings sideways
     lateral_stiffness: float = 0.5
@@ -187,14 +189,13 @@ def _children(bones: List[ChainBone]) -> Dict[str, List[ChainBone]]:
 
 
 def _side(b: ChainBone, along: np.ndarray) -> np.ndarray:
-    """Unit vector perpendicular to the segment: the bone's own axis most perpendicular to it."""
-    best, out = 2.0, None
-    for k in range(3):
-        a = b.world[:3, k] / (np.linalg.norm(b.world[:3, k]) or 1.0)
-        d = abs(float(a @ along))
-        if d < best:
-            best, out = d, a
-    s = out - (out @ along) * along
+    """Unit vector perpendicular to the segment for its second particle row: model X (across the body) made
+    perpendicular to the segment, or model Y for a segment running mostly along X. The same for every bone of a lock,
+    so the ribbon is flat at rest and hinges front to back (the way hair trails when the actor moves). 2026-11-02:
+    the bone's own axes gave neighbouring bones opposite sides (a half-turn built into the ribbon) and slanted hinges;
+    the owner saw locks twisting instead of trailing."""
+    axis = np.array([1.0, 0.0, 0.0]) if abs(float(along[0])) < 0.9 else np.array([0.0, 1.0, 0.0])
+    s = axis - (axis @ along) * along
     return s / (np.linalg.norm(s) or 1.0)
 
 
@@ -220,7 +221,7 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
     def new(p, pinned, m, h):
         pos.append(np.asarray(p, float))
         fixed.append(pinned)
-        masses.append(0.0 if pinned else m)
+        masses.append(0.0 if pinned else m * s.mass_scale)
         host.append(h)
         return len(pos) - 1
 

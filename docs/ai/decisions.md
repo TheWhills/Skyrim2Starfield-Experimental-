@@ -773,3 +773,15 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   spread over the face bones like the vanilla hair's facebones file (cloth template's, e.g. bob_f_facebones.nif + its
   .mesh read from the game: k = 4 nearest reference vertices mostly on face bones, inverse-distance blend, at most 4
   weights), so it follows the face-bone shape; falls back to one face bone when the mesh is not found. Unverified.
+- 2026-11-02 owner, in game (face bones spread, damping 0.6): hair still clips the forehead and does not quite fit
+  the face; locks twist and swing side to side instead of trailing; the hair follows Starfield's wind (verified:
+  the cloth reacts to the world; no wind action in our cloth data, so the engine applies it). From his
+  hair_pack.json: the vanilla bob's facebones shape node sits at C_Head (0, -0.0018, 1.6323) and its binds are
+  head-relative, so node @ inverse(bind) was needed (consistent with the placement fix). Found: the ribbon's side
+  direction came from each bone's own axes: neighbouring bones got opposite sides (Caress: a half-turn built into
+  the ribbon) and side locks got slanted hinges. Now one side per lock, model X across the body made perpendicular to
+  the segment (model Y for a lock running along X): flat ribbon at rest, hinge front to back (tested). Added
+  --mass-scale (heavier hair: less wind if wind is a force, unverified; more momentum) and --skyrim-data: measures
+  the female head fit (Skyrim femalehead.nif cranium onto Starfield femalehead_facebones mesh, similarity without
+  rotation, as the male constants) and uses it unless --head-scale / --head-offset are given (hair_pack.json
+  head_fit). Range reach per joint checked: 4 cm at the root to 40-55 cm at the tip (Anna / Spring), not the limit.

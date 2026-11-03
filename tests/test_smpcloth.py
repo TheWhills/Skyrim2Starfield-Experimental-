@@ -130,6 +130,31 @@ class RigTests(unittest.TestCase):
         self.assertEqual(rig.masses[rig.fixed[0]], 0.0)
         self.assertTrue(all(h == "C_Head" for h in rig.host))
 
+    def test_ribbon_side_is_across_the_body_on_every_bone(self):
+        bones = chain(["C1", "C2", "C3"], step=(0.0, 0.03, -0.06))
+        flip = np.diag([-1.0, -1.0, 1.0])                                      # own axes turned half a turn
+        bones[1].world[:3, :3] = flip
+        rig = smpcloth.build_rig(bones, {"C1": "C_Head"}, smpcloth.Settings())
+        sides = []
+        for name, t in rig.driven:
+            a0, b0, a1 = rig.triangles[t]
+            sides.append(rig.positions[b0] - rig.positions[a0])
+            along = rig.positions[a1] - rig.positions[a0]
+            self.assertAlmostEqual(float(sides[-1] @ along), 0.0, places=9)      # perpendicular to the segment
+        for v in sides:
+            self.assertGreater(v[0], 0.0)                                       # +X on every joint: no built-in twist
+        sideways = chain(["S1", "S2"], step=(0.06, 0.0, -0.005))
+        rig = smpcloth.build_rig(sideways, {"S1": "C_Head"}, smpcloth.Settings())
+        a0, b0, _a1 = rig.triangles[rig.driven[0][1]]
+        self.assertGreater(abs((rig.positions[b0] - rig.positions[a0])[1]), 0.9 * smpcloth.Settings.width)
+
+    def test_mass_scale(self):
+        bones = chain(["M1", "M2"])
+        a = smpcloth.build_rig(bones, {"M1": "C_Head"}, smpcloth.Settings())
+        b = smpcloth.build_rig(bones, {"M1": "C_Head"}, smpcloth.Settings(mass_scale=3.0))
+        np.testing.assert_allclose(b.masses, [3.0 * m for m in a.masses])
+        self.assertEqual({b.masses[i] for i in b.fixed}, {0.0})
+
     def test_soft_diagonal_brace_against_twist(self):
         bones = chain(["B1", "B2", "B3"])
         rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings())
@@ -564,6 +589,27 @@ class FaceSkinTests(unittest.TestCase):
         inside = smpcloth.ChainBone("S2S_C", "S2S_A", np.eye(4), 0.1, 0.3, None)
         inside.world[:3, 3] = w["C_Head"][:3, 3] + (0.0, 0.035, 0.0)
         self.assertIsNone(skyrimhair.face_capsule(w, skyrimhair.Hair([], [far, inside], {}, {})))
+
+
+class HeadFitTests(unittest.TestCase):
+    def test_fit_head_recovers_scale_and_offset(self):
+        rng = np.random.default_rng(1)
+        d = rng.normal(size=(3000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        sf_head = np.eye(4)
+        sf_head[:3, 3] = (0.0, -0.002, 1.632)
+        sf_pts = sf_head[:3, 3] + d * [0.075, 0.095, 0.09] + [0.0, 0.02, 0.05]       # an egg around the skull
+        sky_head = np.eye(4)
+        sky_head[:3, 3] = (0.0, -1.5, 120.0)                                         # units
+        scale, offset = 0.95, np.array([0.001, -0.018, -0.006])
+        rel = sf_pts - sf_head[:3, 3]
+        sky_pts = (rel - offset) / scale / skyrimhair.UNIT + sky_head[:3, 3]
+        s, t, rms = skyrimhair.fit_head(sky_pts, sky_head, sf_pts, sf_head)
+        self.assertAlmostEqual(s, scale, places=3)
+        np.testing.assert_allclose(t, offset, atol=1e-3)
+        self.assertLess(rms, 2e-3)
+        with self.assertRaises(skyrimhair.HairError):
+            skyrimhair.fit_head(sky_pts[:10], sky_head, sf_pts, sf_head)
 
 
 class FaceBoneTests(unittest.TestCase):

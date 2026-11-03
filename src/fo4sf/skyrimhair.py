@@ -259,6 +259,22 @@ def convert(nif_bytes: bytes, smp_bytes: Optional[bytes], sf_world: Dict[str, np
     return Hair(shapes, bones, host_of_root, report)
 
 
+def fit_head(sky_points: np.ndarray, sky_head: np.ndarray, sf_points: np.ndarray,
+             sf_head: np.ndarray) -> Tuple[float, Tuple[float, float, float], float]:
+    """(HEAD_SCALE, HEAD_OFFSET, rms m) for one pair of base heads, measured as the male constants were: the cranium
+    (points above each head bone) of the Skyrim head (units, model space; sky_head its head bone 4x4 in units) fitted
+    onto the Starfield head (metres; sf_head C_Head 4x4) by a similarity without rotation (fo4sf.facefit.align_heads),
+    both relative to their head bones: p_sf - C_Head = scale * (p_sky - head_sky) * UNIT + offset."""
+    from . import facefit
+    q = (np.asarray(sky_points, float) - np.asarray(sky_head, float)[:3, 3]) * UNIT
+    r = np.asarray(sf_points, float) - np.asarray(sf_head, float)[:3, 3]
+    q, r = q[q[:, 2] > 0.0], r[r[:, 2] > 0.0]
+    if len(q) < 50 or len(r) < 50:
+        raise HairError(f"too few cranium points to fit ({len(q)} Skyrim, {len(r)} Starfield)")
+    s, _R, t, rms = facefit.align_heads(q, r, rotate=False)
+    return float(s), tuple(float(x) for x in t), float(rms)
+
+
 def rigid(hair: Hair) -> Hair:
     """The same hair without physics: every simulated bone's weight moved to the human bone its chain hangs from
     (no new bones, no cloth). A control for in-game tests: if this shows and the physics version does not, the

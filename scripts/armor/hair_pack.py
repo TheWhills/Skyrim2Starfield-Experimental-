@@ -261,6 +261,43 @@ def facebones_worlds_of(raw: bytes) -> dict:
     return skyrimhair.face_bone_worlds(sfnif.parse_skin(n), node), node
 
 
+SKY_FEMALE_HEAD = r"meshes\actors\character\character assets\femalehead.nif"
+SF_FEMALE_HEAD = "meshes/actors/human/characterassets/female/femalehead_facebones.nif"
+
+
+def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report: dict):
+    """(scale, offset) fitting the Skyrim female head onto the Starfield female head (skyrimhair.fit_head), or None.
+    The KS wigs are made for Skyrim's female head; the constants were measured on the male heads (2026-11-02: the
+    owner's female character showed the wigs clipping the forehead)."""
+    from fo4sf import bsa, skyrimnpc, skyrimskin
+    info = report.setdefault("head_fit", {})
+    try:
+        sky = bsa.SkyrimArchives(skyrim_data)
+        raw = sky._read(bsa.norm(SKY_FEMALE_HEAD))
+        if raw is None:
+            info["error"] = f"not in Skyrim's archives: {SKY_FEMALE_HEAD}"
+            return None
+        n = nifmod.parse(raw)
+        shape = skyrimnpc.head_shape(skyrimskin.skinned_shapes(n))
+        anchor = skyrimhair.head_anchor(n, skyrimhair.node_worlds(n)[0])
+        sf_raw = read_game_file(starfield, SF_FEMALE_HEAD)
+        if sf_raw is None:
+            info["error"] = f"not in the game's archives: {SF_FEMALE_HEAD}"
+            return None
+        skin = facebones_skin_of(starfield, sf_raw)
+        if skin is None:
+            info["error"] = "the Starfield female head's mesh was not found"
+            return None
+        scale, offset, rms = skyrimhair.fit_head(np.array(shape.positions, float), anchor, skin[0],
+                                                 sf_world[skyrimhair.SF_HEAD])
+    except Exception as e:                                       # noqa: BLE001 (reported; male constants kept)
+        info["error"] = f"{type(e).__name__}: {e}"
+        return None
+    info.update(scale=round(scale, 4), offset=[round(x, 4) for x in offset], rms_m=round(rms, 4),
+                male_constants={"scale": skyrimhair.HEAD_SCALE, "offset": list(skyrimhair.HEAD_OFFSET)})
+    return scale, offset
+
+
 def facebones_skin_of(starfield: str, raw: bytes):
     """(points (V, 3) model space, per-vertex [(bone name, weight)]) of a vanilla *_facebones.nif's first skinned
     shape, its mesh read from the game's archives; None when the mesh is not found."""
@@ -491,6 +528,8 @@ def main(argv=None):
     ap.add_argument("--cloth-template", help="Starfield NIF / .hkx / '<ba2>:<path>' with a physics hair's cloth")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
+    ap.add_argument("--skyrim-data", help="Skyrim SE's Data folder: measure the female head fit (Skyrim female head "
+                                          "onto Starfield's) and use it instead of the male constants")
     ap.add_argument("--head-scale", type=float, default=skyrimhair.HEAD_SCALE,
                     help="Skyrim -> Starfield skull size ratio (measured on the male heads: 0.93)")
     ap.add_argument("--head-offset", type=float, nargs=3, default=skyrimhair.HEAD_OFFSET, metavar=("X", "Y", "Z"),
@@ -499,6 +538,8 @@ def main(argv=None):
                     help="share of the hair's speed lost per second (vanilla hairs: 0.97, a subtle jiggle; lower "
                          "flows more)")
     ap.add_argument("--friction", type=float, default=0.1, help="how much the hair sticks to the body colliders")
+    ap.add_argument("--mass-scale", type=float, default=1.0,
+                    help="x the SMP masses (heavier: less pushed by wind, more momentum)")
     ap.add_argument("--hair-radius", type=float, default=smpcloth.Settings.radius,
                     help="collision thickness around each hair chain, m (the mesh around the chain must not sink)")
     ap.add_argument("--twist", type=float, default=smpcloth.Settings.twist,
@@ -533,9 +574,15 @@ def main(argv=None):
     sk = smpcloth.human_skeleton(template_root)
     world = smpcloth.skeleton_world(sk)
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
+    if a.skyrim_data:
+        fit = measure_female_fit(a.skyrim_data, a.starfield, sf_world, report)
+        if fit is not None and a.head_scale == skyrimhair.HEAD_SCALE and \
+                tuple(a.head_offset) == tuple(skyrimhair.HEAD_OFFSET):     # explicit --head-* values win
+            a.head_scale, a.head_offset = fit[0], list(fit[1])
+            report["head_fit"]["used"] = True
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
                                  friction=a.friction, lateral=smpcloth.Settings.lateral if a.sheet else 0.0,
-                                 twist=a.twist)
+                                 twist=a.twist, mass_scale=a.mass_scale)
     missing = [k for k in a.ks if not os.path.isdir(k)]
     if missing:
         sys.exit(f"--ks folder not found: {', '.join(missing)} (the KS Hairdos SMP folder with '00 Core' and "
