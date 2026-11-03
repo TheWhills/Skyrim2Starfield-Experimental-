@@ -125,6 +125,12 @@ class MainTests(unittest.TestCase):
             fbn = game_nif([b"faceBone_C_Chin", b"faceBone_C_HeadTop"], [(0, -0.1, -1.55), (0, 0, -1.75)])
             game = {"meshes/actors/human/mesh/hairs/bob/bob_f_facebones.nif": fbn,
                     "meshes/actors/human/mesh/hairs/short/short_m_facebones.nif": fbn}
+            ks_dir = os.path.join(d, "S2S Hair")                                  # the KS hairstyles next to it
+            os.makedirs(ks_dir)
+            ks = [rec(b"HDPT", hdpt("S2S_Hair_Anna", "s2s\\hair\\anna.nif", 3, 0x01), 0x01000800),
+                  rec(b"FLST", [(b"EDID", b"HeadPartsChargenOptionsFemale\0")] + lnam(0x2311, 0x01000800), 0x0003D9B0)]
+            with open(os.path.join(ks_dir, "S2SHair.esm"), "wb") as fh:
+                fh.write(sfplugin.build(ks, {"hedr_version": 0.96, "form_version": 555}))
             out = os.path.join(d, "mod")
             with mock.patch.object(textures, "texconv", lambda *a, **k: None), \
                     mock.patch.object(hair_pack, "read_game_file",
@@ -159,7 +165,10 @@ class MainTests(unittest.TestCase):
             lists = {sfplugin.edid(r[2]): r for r in got if r[0] == b"FLST"}
             fem = [struct.unpack("<I", x)[0] for s, x in lists["HeadPartsChargenOptionsFemale"][2] if s == b"LNAM"]
             self.assertEqual(fem[0], 0x2311)                                        # the vanilla entry kept
-            self.assertEqual(set(fem[1:]), {parts["S2S_HairFemaleNord01"][3], parts["S2S_HairFemaleSerana"][3]})
+            self.assertEqual(fem[1], 0x01000800)                                    # the KS hairstyle kept (master 1)
+            self.assertEqual(set(fem[2:]), {parts["S2S_HairFemaleNord01"][3], parts["S2S_HairFemaleSerana"][3]})
+            self.assertEqual({parts[k][3] >> 24 for k in parts}, {2})               # ours after both masters
+            self.assertEqual(rep["masters"], ["Starfield.esm", "S2SHair.esm"])
             male = [struct.unpack("<I", x)[0] for s, x in lists["HeadPartsChargenOptionsMale"][2] if s == b"LNAM"]
             self.assertEqual(male, [0x2312, parts["S2S_HairMaleNord01"][3]])
             mats = rows["HairFemaleNord01"]["materials"]

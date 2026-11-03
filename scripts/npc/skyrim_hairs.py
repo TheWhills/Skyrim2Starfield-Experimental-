@@ -125,6 +125,27 @@ def is_female(p) -> bool:
     return not re.search(r"(^|[^e])male", p["edid"], re.I)
 
 
+def list_entries_from(plugin_path: str, edid: str, masters_out) -> list:
+    """The entries (LNAM) of `plugin_path`'s record of the form list `edid` (an override of a vanilla list), as
+    FormIDs in a plugin whose masters are `masters_out` (file names; entries of a plugin not among them dropped)."""
+    names = [m.lower() for m in masters_out]
+    own = os.path.basename(plugin_path).lower()
+    mx = plugin_masters(plugin_path)
+    out = []
+    for _t, _h, subs, _f in sfplugin.records(plugin_path, [b"FLST"]):
+        if sfplugin.edid(subs) != edid:
+            continue
+        for s, d in subs:
+            if s != b"LNAM" or len(d) < 4:
+                continue
+            fid = struct.unpack_from("<I", bytes(d), 0)[0]
+            i = fid >> 24
+            name = mx[i] if i < len(mx) else own
+            if name in names:
+                out.append((names.index(name) << 24) | (fid & 0xFFFFFF))
+    return out
+
+
 def chargen_template(sf_hdpt, flst, female: bool, kind: int, prefer: str = ""):
     """A vanilla head part of `kind` from that sex's looks-menu list to copy (the one whose model names `prefer`
     first), or None."""
@@ -211,6 +232,10 @@ def main(argv=None):
     ap.add_argument("--playable-only", action="store_true",
                     help="only the parts Skyrim's own character creation offers (default: every human / elf hair, "
                          "NPC-only ones too)")
+    ap.add_argument("--merge-plugin", action="append", default=[],
+                    help="another plugin that adds to the looks-menu lists (e.g. ...\\S2S Hair\\S2SHair.esm): its "
+                         "entries are kept in ours, so both show (it becomes a master: load it first). Default: "
+                         "S2SHair.esm in the 'S2S Hair' mod folder next to --out, when there")
     ap.add_argument("--cloth-template", help="as hair_pack: the vanilla hair whose skeleton / face bones are used")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
@@ -256,6 +281,12 @@ def main(argv=None):
     conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None,
                                          prefix=hair_pack.PREFIX)
     conv.hair_settings = dict(a.hair_setting) or None
+    merge = [os.path.abspath(m) for m in a.merge_plugin]
+    sibling = os.path.join(os.path.dirname(out), "S2S Hair", "S2SHair.esm")
+    if not merge and os.path.isfile(sibling):
+        merge = [sibling]
+    masters = ["Starfield.esm"] + [os.path.basename(m) for m in merge]
+    report["masters"] = masters
     recs, added = [], {True: [], False: []}
     contexts = {}
     for p in chosen:
@@ -279,7 +310,7 @@ def main(argv=None):
         row["female"] = female
         if row.get("ok"):
             rec = hair_pack.hair_part_record(tpl, len(recs), "S2S_" + p["edid"], f"{p['edid']} (Skyrim)",
-                                             row["model"])
+                                             row["model"], masters=len(masters))
             recs.append(rec)
             added[female].append(rec[3])
             row["form_id_in_plugin"] = f"{rec[3] & 0xFFFFFF:06X}"
@@ -288,16 +319,18 @@ def main(argv=None):
     if not good:
         sys.exit("no hair converted: " + json.dumps(report["parts"][:5], indent=1, default=str))
     for female, ids in added.items():
-        if not ids:
+        kept = [x for m in merge for x in list_entries_from(m, CHARGEN[female], masters)]
+        if not ids and not kept:
             continue
-        lst = hair_pack.chargen_list_override(flst, CHARGEN[female], ids)
+        lst = hair_pack.chargen_list_override(flst, CHARGEN[female], kept + ids)
         if lst is None:
             report.setdefault("chargen_lists", {})[CHARGEN[female]] = "not found in Starfield.esm"
             continue
         recs.append(lst)
-        report.setdefault("chargen_lists", {})[CHARGEN[female]] = {"added": len(ids)}
+        report.setdefault("chargen_lists", {})[CHARGEN[female]] = {"added": len(ids), "kept_from_other_plugins":
+                                                                  len([x for x in kept if x >> 24 > 0])}
     with open(os.path.join(out, PLUGIN), "wb") as fh:
-        fh.write(sfplugin.build(recs, sfplugin.header_info(esm)))
+        fh.write(sfplugin.build(recs, sfplugin.header_info(esm), masters=tuple(masters)))
     report["packing"] = hair_pack.pack(staging, out, a.starfield, a.archive2, MAIN_BA2, TEX_BA2)
     report["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
     with open(os.path.join(out, "skyrim_hairs.json"), "w", encoding="utf-8") as fh:
@@ -305,7 +338,8 @@ def main(argv=None):
     bad = [r for r in report["parts"] if not r.get("ok")]
     lines = [f"S2S Skyrim Hairs: {len(good)} Skyrim hairstyles for Starfield's looks menu "
              f"({sum(1 for r in good if r['female'])} women's, {sum(1 for r in good if not r['female'])} men's).", "",
-             "Enable the mod in MO2 (S2SSkyrimHairs.esm after any other mod that edits the looks-menu lists), then",
+             "Enable the mod in MO2 (S2SSkyrimHairs.esm after any other mod that edits the looks-menu lists; with",
+             "S2S Hair next to it, S2SHair.esm is its master and its hairstyles are kept: load S2SHair.esm first), then",
              "open the looks menu (console: slm 14) and pick '<Skyrim EditorID> (Skyrim)' from the hair list.",
              "The character's hair colour applies."]
     if bad:

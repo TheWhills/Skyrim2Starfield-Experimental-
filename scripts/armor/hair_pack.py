@@ -343,7 +343,7 @@ def hair_part_template(hdpt, prefer: str = ""):
     return next((r for r in hairs if want and want in model(r).lower()), hairs[0] if hairs else None)
 
 
-def hair_part_record(template, index: int, edid: str, name: str, model: str):
+def hair_part_record(template, index: int, edid: str, name: str, model: str, masters: int = 1):
     """A new playable hair head part copied from `template` with its own EditorID, name and model, without the
     template's extra parts (HNAM) and face-slider morphs (MNAM: they move the template mesh's vertices, not ours).
     Starfield lists playable hair head parts of the character's race in the looks menu, and a head part takes the
@@ -353,7 +353,7 @@ def hair_part_record(template, index: int, edid: str, name: str, model: str):
     flags = next((bytes(x) for s_, x in subs if s_ == b"DATA" and len(x) >= 1), b"\0")
     subs = sfplugin.edit(subs, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name), b"MODL": sfplugin.zs(model),
                                 b"DATA": bytes([flags[0] | PART_PLAYABLE]) + flags[1:]}, drop=(b"HNAM", b"MNAM"))
-    return (t, h, subs, sfplugin.new_form_id(index))
+    return (t, h, subs, sfplugin.new_form_id(index, masters))
 
 
 CHARGEN_FEMALE = "HeadPartsChargenOptionsFemale"   # vanilla FLST of the head parts the looks menu offers women

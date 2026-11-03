@@ -105,7 +105,7 @@ def with_face(subs, values):
 
 
 # Data a test copy must not carry: scripts (VMAD) and companion affinity hooks (QSTA quest, BNAM dialogue)
-STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT")
+STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT", b"SOFT")   # SOFT: space outfit (2026-11-03: Ysolda in a helmeted suit)
 
 
 def pick_template(npc_recs, race_fid, female, edid=None):

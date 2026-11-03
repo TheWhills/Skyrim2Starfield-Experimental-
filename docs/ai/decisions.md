@@ -1065,3 +1065,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   lightest-sounding hair colour name the game's NPCs use (by name: white, platinum, silver, grey, blond; unverified
   which is lightest: reported, --hair-color-name). Unverified in game: all of it; the head part types 3 / 4 are
   verified on xEdit's SF1 definitions (3 Hair, 4 Facial Hair, 11 Extra Hair).
+- 2026-11-03 Owner's first runs: skyrim_hairs --only Nord01 built 2 hairstyles (one per sex) and they show in the
+  looks menu with the chosen hair colour (verified); but the KS hairstyles vanished: S2SSkyrimHairs.esm's override of
+  HeadPartsChargenOptionsFemale replaced S2SHair.esm's (verified by the result; the expected load-order conflict).
+  Now skyrim_hairs keeps other plugins' list entries (--merge-plugin, default S2SHair.esm in the "S2S Hair" folder
+  next to --out): that plugin becomes a master, its override's entries are remapped into our FormID space, ours come
+  after both masters. face_fit: Ralof / Ysolda fitted (rms 4.4 -> 3.4 mm, 3.9 -> 3.1 mm: about 22 % of the
+  difference closed, a modest fit); the test NPCs wore their template's helmeted space suit, so test NPCs now drop
+  SOFT (Space Outfit, xEdit SF1 NPC_) and keep the default outfit.

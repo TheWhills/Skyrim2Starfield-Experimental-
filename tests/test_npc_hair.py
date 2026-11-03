@@ -180,6 +180,11 @@ class PipelineTests(unittest.TestCase):
 
 
 class ScriptArgsTests(unittest.TestCase):
+    def test_test_npcs_lose_the_space_outfit(self):
+        import face_fit
+        self.assertIn(b"SOFT", face_fit.STRIP)          # Space Outfit (xEdit SF1): a helmet hid Ysolda's face
+        self.assertNotIn(b"DOFT", face_fit.STRIP)       # the default outfit stays
+
     def test_hair_needs_texconv(self):
         import face_fit
         with self.assertRaises(SystemExit):
