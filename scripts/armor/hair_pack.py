@@ -321,6 +321,36 @@ def tint_material(conv, n, sh, cutoff: int, color=None):
         conv._shape_material(n, sh)
 
 
+HAIR_PART = 3                    # HDPT PNAM: hair (IDG's 46 hairs and OC Hairs' carry 3)
+PART_PLAYABLE = 0x01             # HDPT DATA flag (IDG's hairs: 0x01; extra parts 0x09)
+
+
+def hair_part_template(hdpt, prefer: str = ""):
+    """A vanilla playable hair head part to copy (its race list, cap mask and hair category kept): the one whose model
+    names `prefer` (the cloth template's hair, e.g. 'bob_f'), else the first playable hair. None when there is none."""
+    def ok(r):
+        d = next((bytes(x) for s_, x in r[2] if s_ == b"PNAM" and len(x) >= 4), None)
+        f = next((bytes(x) for s_, x in r[2] if s_ == b"DATA" and len(x) >= 1), b"\0")
+        return d is not None and struct.unpack_from("<I", d, 0)[0] == HAIR_PART and f[0] & PART_PLAYABLE
+    hairs = sorted((r for r in hdpt if ok(r)), key=lambda r: sfplugin.edid(r[2]))
+    model = lambda r: next((bytes(x).rstrip(b"\0").decode("latin-1") for s_, x in r[2] if s_ == b"MODL"), "")
+    want = prefer.lower()
+    return next((r for r in hairs if want and want in model(r).lower()), hairs[0] if hairs else None)
+
+
+def hair_part_record(template, index: int, edid: str, name: str, model: str):
+    """A new playable hair head part copied from `template` with its own EditorID, name and model, without the
+    template's extra parts (HNAM) and face-slider morphs (MNAM: they move the template mesh's vertices, not ours).
+    Starfield lists playable hair head parts of the character's race in the looks menu, and a head part takes the
+    actor's hair colour (an apparel item does not: the wigs drew the texture's own grey, 2026-11-02). IDG's hairs
+    are added the same way, with no change to the race or the menu's lists."""
+    t, h, subs, _f = template
+    flags = next((bytes(x) for s_, x in subs if s_ == b"DATA" and len(x) >= 1), b"\0")
+    subs = sfplugin.edit(subs, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name), b"MODL": sfplugin.zs(model),
+                                b"DATA": bytes([flags[0] | PART_PLAYABLE]) + flags[1:]}, drop=(b"HNAM", b"MNAM"))
+    return (t, h, subs, sfplugin.new_form_id(index))
+
+
 def write_files(staging: str, files: dict):
     for rel, data in files.items():
         p = os.path.join(staging, *rel.split("/"))
@@ -726,6 +756,9 @@ def main(argv=None):
     ap.add_argument("--hair-setting", action="append", default=[], type=hair_setting, metavar="NAME=VALUE",
                     help="override one of the hair shader's settings (BSMaterial::HairSettingsComponent: %s), e.g. "
                          "MaxDepthOffset=0; repeatable" % ", ".join(sorted(cm.HAIR_SETTINGS)))
+    ap.add_argument("--head-parts", action="store_true",
+                    help="also add every wig as a hairstyle in the looks menu (a hair head part, which takes the "
+                         "character's hair colour; leave out --hair-color then)")
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,
@@ -889,6 +922,19 @@ def main(argv=None):
             aa3, ao3 = (aa3, ao3) if a.keep_own_hair else (hide_hair(aa3), hide_hair(ao3))
             recs += [aa3, ao3]
             r["form_id_head"] = f"{ao3[3] & 0xFFFFFF:06X}"
+    if a.head_parts:                         # the same wigs as looks-menu hairs (the actor's hair colour)
+        tpl = hair_part_template(sfplugin.records(esm, [b"HDPT"]),
+                                 os.path.splitext(os.path.basename((report.get("cloth_template") or "")
+                                                                   .replace("\\", "/")))[0])
+        if tpl is None:
+            report["head_parts"] = "no playable vanilla hair head part to copy"
+        else:
+            report["head_part_template"] = sfplugin.edid(tpl[2])
+            for r in good:
+                hp = hair_part_record(tpl, len(recs), "S2S_Hair_" + re.sub(r"[^A-Za-z0-9]+", "_", r["wig"]),
+                                      f"{r['wig']} (Skyrim)", r["model"])
+                recs.append(hp)
+                r["head_part"] = {"editor_id": sfplugin.edid(hp[2]), "form_id_in_plugin": f"{hp[3] & 0xFFFFFF:06X}"}
     if a.rigid_copies:                       # the record control: the template hat itself under a new name
         ta, ha, sa, _f = armo_t
         ctl = (ta, ha, sfplugin.edit(sa, {b"EDID": sfplugin.zs("S2S_KSWig_ControlHat"),
@@ -948,6 +994,11 @@ def main(argv=None):
     for kind, c in (report.get("controls") or {}).items():
         if isinstance(c, dict) and "form_id" in c:
             lines.append(f"Control: '{c['name']}' ..{c['form_id'][-3:]}")
+    if report.get("head_part_template"):
+        lines += ["", "Looks menu: the wigs are also hairstyles named '<wig> (Skyrim)' (copied from the vanilla "
+                      f"{report['head_part_template']}); they take the character's hair colour."]
+    elif report.get("head_parts"):
+        lines += ["", f"Looks menu hairstyles: not added ({report['head_parts']})."]
     lines += ["", f"Record copied from the vanilla head apparel {report['apparel_template']['armo']}.",
               f"Cloth template: {report.get('cloth_template')}"]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:

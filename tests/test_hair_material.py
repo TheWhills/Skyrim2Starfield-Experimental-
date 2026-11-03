@@ -202,6 +202,39 @@ class HairColorTests(unittest.TestCase):
         self.assertEqual(conv.skyrim_material.call_args.kwargs, {"albedo_target": (200, 160, 90)})
 
 
+class HeadPartTests(unittest.TestCase):
+    def test_hair_head_part_copied_from_a_playable_vanilla_hair(self):
+        import struct
+        import hair_pack
+        from fo4sf import sfplugin
+        zs = sfplugin.zs
+
+        def hdpt(fid, edid, model, part, flags, extra=()):
+            subs = [(b"EDID", zs(edid)), (b"FULL", zs(edid)), (b"MODL", zs(model)), (b"DATA", bytes([flags])),
+                    (b"PNAM", struct.pack("<I", part)), (b"HNAM", struct.pack("<I", 0x1234)),
+                    (b"NAM2", zs("Hair_Medium")), (b"NAM3", zs("Bob_Cap_mask")), (b"RNAM", struct.pack("<I", 0x24A024)),
+                    (b"MNAM", struct.pack("<I", 0x5678))] + list(extra)
+            return (b"HDPT", bytes(24), subs, fid)
+        recs = [hdpt(1, "BeardA", "Actors\\Human\\beard.nif", 4, 1),
+                hdpt(2, "HairBobNPC", "Actors\\Human\\Mesh\\hairs\\bob\\bob_f.nif", 3, 0),     # not playable
+                hdpt(3, "Hair_Afro", "Actors\\Human\\Mesh\\hairs\\afro\\afro_f.nif", 3, 1),
+                hdpt(4, "Hair_Bob", "Actors\\Human\\Mesh\\hairs\\bob\\bob_f.nif", 3, 5)]
+        self.assertEqual(sfplugin.edid(hair_pack.hair_part_template(recs, "bob_f")[2]), "Hair_Bob")
+        self.assertEqual(sfplugin.edid(hair_pack.hair_part_template(recs, "nothing")[2]), "Hair_Afro")
+        self.assertIsNone(hair_pack.hair_part_template(recs[:2]))
+        t, h, subs, fid = hair_pack.hair_part_record(recs[3], 7, "S2S_Hair_Anna", "Anna (Skyrim)", "s2s\\hair\\anna.nif")
+        d = dict(subs)
+        self.assertEqual(t, b"HDPT")
+        self.assertEqual(fid, sfplugin.new_form_id(7))
+        self.assertEqual(d[b"EDID"], zs("S2S_Hair_Anna"))
+        self.assertEqual(d[b"FULL"], zs("Anna (Skyrim)"))
+        self.assertEqual(d[b"MODL"], zs("s2s\\hair\\anna.nif"))
+        self.assertEqual(d[b"DATA"][0] & hair_pack.PART_PLAYABLE, 1)
+        self.assertEqual(struct.unpack("<I", d[b"PNAM"])[0], hair_pack.HAIR_PART)
+        self.assertNotIn(b"HNAM", d)                     # no extra parts of the template
+        self.assertNotIn(b"MNAM", d)                     # no morphs made for the template's mesh
+        self.assertEqual(d[b"RNAM"], struct.pack("<I", 0x24A024))   # the template's races kept
+
 class ReferenceHairTests(unittest.TestCase):
     def test_reads_nif_and_mesh_from_the_named_archive(self):
         import numpy as np

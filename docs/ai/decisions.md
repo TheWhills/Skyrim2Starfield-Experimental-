@@ -977,3 +977,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Icarus. MaxDepthOffset stays IDG's 0.01 (it did not change the spots).
 - 2026-11-02 Verified in game (owner, 6f6b560): turning the inward-facing KS cards outward fixed the light / dark
   flicker on the hair-shader wigs. Cause confirmed: the hair shader lights a card's back with the front's normal.
+- 2026-11-02 owner: can the wig use the player's hair colour? As apparel, no (seen: the hair shader on an ARMO drew
+  the texture's own grey). A head part takes the actor's hair colour (supported: that is how vanilla and IDG hairs
+  are coloured; for our own Hair1Layer material unverified). hair_pack --head-parts: every wig also becomes a
+  playable hair head part copied from the vanilla playable hair whose model is the cloth template's (bob_f), with
+  its own EditorID / FULL '<wig> (Skyrim)' / MODL (the wig's NIF, its _facebones twin and cloth), its race list
+  (RNAM), cap mask (NAM3) and hair category (NAM2) kept, HNAM (extra parts) and MNAM (face-slider morphs, made for
+  the template's vertices) dropped. Verified from IDG's plugin: its 46 hairs are HDPT type 3 with DATA 0x01 and the
+  vanilla race list 0x24A024; its overrides of HeadPartsChargenOptionsFemale / Male add none of its own hairs, so
+  playable head parts reach the looks menu without list edits (supported; no list override here, so no conflict
+  with IDG). No morph.dat yet: the hair does not follow face sliders / expressions.
