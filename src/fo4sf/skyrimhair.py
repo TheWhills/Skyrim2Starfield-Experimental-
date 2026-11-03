@@ -344,38 +344,58 @@ def judged(points: np.ndarray, head_pts: np.ndarray, dist: np.ndarray, reach: fl
     return (dist < reach) & (np.asarray(points, float)[:, 2] > float(np.min(np.asarray(head_pts)[:, 2])) + 0.02)
 
 
+PUSH_BLEND = 0.04            # m: how far push_out eases its move off around the points it had to move
+
+
 def push_out(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, gap: float = 0.002,
-             reach: float = 0.03) -> Tuple[Hair, Dict]:
+             reach: float = 0.03, blend: float = PUSH_BLEND, chunk: int = 256) -> Tuple[Hair, Dict]:
     """Conform the wig to the head: every judged vertex closer than `gap` above the surface (or inside it) moves along
-    the nearest head normal to `gap` above it, the move spread half-strength to its mesh neighbours so the scalp does
-    not crease. The Skyrim and Starfield female skulls differ in shape (2026-11-02, measured: after the best similarity
-    a quarter of Skyrim's head lies over 2 mm inside Starfield's), so no scale / offset alone keeps a wig out."""
-    shapes, moved, deepest = [], 0, 0.0
+    the nearest head normal to `gap` above it. The Skyrim and Starfield female skulls differ in shape (2026-11-02,
+    measured: after the best similarity a quarter of Skyrim's head lies over 2 mm inside Starfield's), so no scale /
+    offset alone keeps a wig out.
+
+    The move is one smooth field over the whole wig, not per vertex: each point moves by the largest of the needed
+    moves around it, each eased off to nothing over `blend` m of distance (smoothstep), along its own nearest head
+    normal. So every point still clears the head by `gap`, and the hair around a pushed patch rises with it in a
+    curve (2026-11-02: owner saw a bump over Anna's brow where only the points inside Starfield's forehead had moved,
+    half-spread to their mesh neighbours; Skyrim's hair curves smoothly there). One field for all shapes also moves
+    neighbouring cards alike."""
+    nrm_head = np.asarray(head_nrm, float)
+    pos_all, need_all, idx_all = [], [], []
     for sh in hair.shapes:
-        pos = np.asarray(sh.positions, float).copy()
+        pos = np.asarray(sh.positions, float)
         depth, dist, idx = nearest_surface(pos, head_pts, head_nrm)
         ok = judged(pos, head_pts, dist, reach)
-        need = np.where(ok & (depth < gap), gap - depth, 0.0)
-        push = need[:, None] * np.asarray(head_nrm, float)[idx]
-        if need.any():
-            spread = np.zeros_like(push)
-            count = np.zeros(len(pos))
-            for t in sh.triangles:
-                for a in t:
-                    for b in t:
-                        if a != b:
-                            spread[a] += push[b]
-                            count[a] += 1
-            spread = 0.5 * spread / np.maximum(count, 1)[:, None]
-            # a neighbour's push only where it is larger along the vertex's own direction (never pulls inward)
-            use = np.where((np.linalg.norm(spread, axis=1) > np.linalg.norm(push, axis=1))[:, None], spread, push)
-            pos = pos + use
-            moved += int((need > 0).sum())
-            deepest = max(deepest, float(need.max()))
-        shapes.append(HairShape(sh.name, pos, sh.normals, sh.tangents, sh.uvs, sh.triangles, sh.weights,
-                                sh.shader_ref, sh.alpha_ref, sh.block))
-    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, pushed_out=moved)),
-            {"vertices_moved": moved, "deepest_mm": round(1000 * deepest, 1)})
+        pos_all.append(pos)
+        need_all.append(np.where(ok & (depth < gap), gap - depth, 0.0))
+        idx_all.append(idx)
+    flat = np.concatenate(pos_all) if pos_all else np.zeros((0, 3))
+    need = np.concatenate(need_all) if need_all else np.zeros(0)
+    src = need > 0
+    amount = need.copy()
+    if src.any() and blend > 0:
+        q, qn = flat[src], need[src]
+        # one source per 4 mm cell (its largest need): the ease is 4 cm wide, and a wig has ~10k scalp points
+        cell = np.floor(q / 0.004).astype(np.int64)
+        order = np.argsort(-qn, kind="stable")
+        _u, first = np.unique(cell[order], axis=0, return_index=True)
+        q, qn = q[order[first]], qn[order[first]]
+        qq = (q * q).sum(1)
+        for c in range(0, len(flat), chunk):
+            p = flat[c:c + chunk]
+            d = np.sqrt(np.maximum((p * p).sum(1)[:, None] + qq[None, :] - 2.0 * p @ q.T, 0.0))
+            ease = 1.0 - _smooth(d / blend)
+            amount[c:c + chunk] = np.maximum(amount[c:c + chunk], (ease * qn[None, :]).max(axis=1))
+    shapes, start = [], 0
+    for sh, pos, idx in zip(hair.shapes, pos_all, idx_all):
+        a = amount[start:start + len(pos)]
+        start += len(pos)
+        shapes.append(HairShape(sh.name, pos + a[:, None] * nrm_head[idx], sh.normals, sh.tangents, sh.uvs,
+                                sh.triangles, sh.weights, sh.shader_ref, sh.alpha_ref, sh.block))
+    moved = int(src.sum())
+    report = {"vertices_moved": moved, "deepest_mm": round(1000 * float(need.max()), 1) if moved else 0.0,
+              "vertices_eased": int((amount > need + 1e-4).sum()), "blend_mm": round(1000 * blend, 1)}
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, pushed_out=moved)), report
 
 
 TINT_SHAPES = (b"hairline",)   # KS's skin-tight scalp layer with a fading texture: not where the hair starts

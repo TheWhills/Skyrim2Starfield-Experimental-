@@ -154,6 +154,8 @@ def main(argv=None):
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
     ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
+    ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
+                    help="mm the conform step eases its push off over, as hair_pack (0 = per point, the old bump)")
     ap.add_argument("--reference-hair", help="'<archive.ba2>:<path of a _facebones.nif in it>': the green hair and "
                                              "the target of lift / volume (as hair_pack; default the vanilla bob)")
     ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline everywhere (default: per "
@@ -234,7 +236,7 @@ def main(argv=None):
         before = regions(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
                          head_depth(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
                                     sf_pts, sf_nrm), head)
-        wig_hair, _push = skyrimhair.push_out(wig_hair, sf_pts, sf_nrm)
+        wig_hair, _push = skyrimhair.push_out(wig_hair, sf_pts, sf_nrm, blend=a.push_blend / 1000.0)
     wig = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     depth = head_depth(wig, sf_pts, sf_nrm)
     sky_depth, _d, _i = skyrimhair.nearest_surface(sky_moved, sf_pts, sf_nrm)

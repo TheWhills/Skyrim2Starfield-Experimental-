@@ -588,7 +588,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
             row["volume_mm"] = round(1000 * volume, 1)
             if a.layers > 0:
                 row["layers"] = {"count": a.layers, "vertices_added": hair.report.get("layer_vertices", 0)}
-        hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)   # no scalp point inside the head
+        hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface,   # no scalp point inside the head
+                                                   blend=a.push_blend / 1000.0)
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"
@@ -676,6 +677,9 @@ def main(argv=None):
     ap.add_argument("--tint-cutoff", type=int, default=128,
                     help="alpha (0-255) below which KS's scalp fade layer ('Hairline') is not drawn: Skyrim blends it, "
                          "a cutout at Skyrim's 10 draws the whole fade as a band down the forehead")
+    ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
+                    help="mm over which the conform step eases its push off around the points it moves, so the hair "
+                         "curves over Starfield's forehead instead of bumping (default %(default)s; 0 = per point)")
     ap.add_argument("--no-conform", dest="conform", action="store_false",
                     help="leave the wig where the fit puts it (default: scalp points inside Starfield's female head "
                          "are pushed just outside it)")

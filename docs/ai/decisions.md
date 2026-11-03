@@ -911,3 +911,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   128) average the chosen colour (variation kept); skyrim_hair_material(color) gets its own textures / material
   (stem suffix = hex colour); the 'Hairline' scalp fade takes the same colour (skyrim_material albedo_target).
   Default: the texture as is. Classic material: not recoloured.
+- 2026-11-02 push_out eases its move into a smooth field. Owner: Anna in game has a bump over the brow where
+  Skyrim's hair curves smoothly. push_out moved only the points inside / within 2 mm of Starfield's head (half the
+  move spread to mesh neighbours, one card at a time), so the hair followed Starfield's forehead where it pokes
+  through and Skyrim's shape beside it: a ridge at the edge of the pushed patch. Now each point moves by the largest
+  needed move around it eased off by smoothstep over PUSH_BLEND (40 mm) of distance, along its own head normal, one
+  field for all shapes (sources pooled per 4 mm cell: 21k points in ~2.5 s). Synthetic: a 6 mm head bump under
+  smooth hair, the result's largest second difference under half the per-point push's, clearance kept.
+  --push-blend mm (pack / viewer; 0 = per point). That the brow bump in game is this step (and not the hairline
+  lift): supported, not verified.

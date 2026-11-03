@@ -183,6 +183,35 @@ class FitViewTests(unittest.TestCase):
         self.assertEqual(rep["vertices_moved"], 2)
 
 
+    def test_push_out_eases_into_a_smooth_curve_across_shapes(self):
+        from fo4sf import skyrimhair
+        c = np.array([0.0, 0.0, 1.65])
+        d = np.random.default_rng(3).normal(size=(40000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        bump = lambda u: 0.09 + 0.006 * np.exp(-(np.degrees(np.arccos(np.clip(u[:, 2], -1, 1))) / 5.0) ** 2)
+        pts, nrm = c + bump(d)[:, None] * d, d                  # a head with a 6 mm brow-like bump on top
+        ang = np.radians(np.arange(-40.0, 40.01, 0.5))
+        u = np.stack([np.sin(ang), np.zeros_like(ang), np.cos(ang)], axis=1)
+        line = c + 0.092 * u                                     # smooth hair, 2 mm over the head off the bump
+        tris = [(i, i + 1, i + 1) for i in range(len(line) - 1)]
+        a = skyrimhair.HairShape(b"A", line, None, None, [(0, 0)] * len(line), tris,
+                                 [[("C_Head", 1.0)]] * len(line), -1, -1, 0)
+        near = c + 0.092 * np.array([[0.0, np.sin(np.radians(6)), np.cos(np.radians(6))]])   # a card beside it
+        b = skyrimhair.HairShape(b"B", near, None, None, [(0, 0)], [], [[("C_Head", 1.0)]], -1, -1, 0)
+        out, rep = skyrimhair.push_out(skyrimhair.Hair([a, b], [], {}, {}), pts, nrm)
+        hard, _r = skyrimhair.push_out(skyrimhair.Hair([a], [], {}, {}), pts, nrm, blend=0.0)
+        prof = np.linalg.norm(np.asarray(out.shapes[0].positions) - c, axis=1)
+        old = np.linalg.norm(np.asarray(hard.shapes[0].positions) - c, axis=1)
+        self.assertTrue(np.all(prof >= bump(u) + 0.002 - 3e-4))   # still clear of the head everywhere
+        self.assertLess(np.abs(np.diff(prof, 2)).max(), 0.5 * np.abs(np.diff(old, 2)).max())   # no crease
+        deg = np.abs(np.degrees(ang))
+        edge = deg[(old - 0.092) > 1e-4].max()                   # where the old push stopped
+        far = deg > edge + np.degrees(skyrimhair.PUSH_BLEND / 0.092) + 1.0
+        np.testing.assert_allclose(prof[far], 0.092, atol=5e-5)  # beyond the blend: as before
+        self.assertGreater(prof[np.argmin(np.abs(deg - (edge + 5.0)))] - 0.092, 0.0005)   # beside: eased up
+        self.assertGreater(np.linalg.norm(np.asarray(out.shapes[1].positions)[0] - near[0]), 0.002)  # other card
+        self.assertGreater(rep["vertices_eased"], 0)
+
     def test_depth_regions_and_page(self):
         pts, nrm = sphere()
         head = np.eye(4)
