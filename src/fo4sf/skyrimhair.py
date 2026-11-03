@@ -771,6 +771,67 @@ def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.
     return Hair(shapes, hair.bones, hair.host_of_root, report)
 
 
+def _components(n_vertices: int, triangles) -> np.ndarray:
+    """Connected-component label per vertex (vertices sharing a triangle are connected)."""
+    parent = np.arange(n_vertices)
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    for t in triangles:
+        a = find(t[0])
+        for v in t[1:]:
+            b = find(v)
+            if a != b:
+                parent[b] = a
+    return np.array([find(v) for v in range(n_vertices)])
+
+
+def orient_outward(hair: Hair, head: np.ndarray) -> Tuple[Hair, Dict]:
+    """Every hair card turned to face away from the head: a card (connected piece of mesh) whose triangles mostly face
+    inward gets its winding reversed and its normals negated. Away from the head = from the cranium's centre (C_Head +
+    9 cm up) above it, from the vertical through it below (hanging hair faces away from the body). Verified 2026-11-02:
+    IDG's cards face outward (99-100 % of the triangles over the head), KS Anna's only half (Skyrim lights both sides
+    of a double-sided card, flipping the normal for the back). Starfield's hair shader draws a card's back with the
+    front's normal, so the inward half lit as if facing the scalp and changed light / dark as the view turned
+    (owner's in-game shots, also on the no-physics wigs and with the depth offset off)."""
+    c = np.asarray(head, float)[:3, 3] + np.array([0.0, 0.0, 0.09])
+    shapes, flipped, cards = [], 0, 0
+    for sh in hair.shapes:
+        tris = np.asarray(sh.triangles, int).reshape(-1, 3)
+        pos = np.asarray(sh.positions, float)
+        if not len(tris):
+            shapes.append(sh)
+            continue
+        a, b, d = pos[tris[:, 0]], pos[tris[:, 1]], pos[tris[:, 2]]
+        fn = np.cross(b - a, d - a)                      # area-weighted
+        mid = (a + b + d) / 3.0
+        out = mid - np.stack([np.full(len(mid), c[0]), np.full(len(mid), c[1]), np.minimum(mid[:, 2], c[2])], axis=1)
+        facing = (fn * out).sum(1)
+        comp = _components(len(pos), tris)
+        tri_comp = comp[tris[:, 0]]
+        score = {}
+        for k, f in zip(tri_comp, facing):
+            score[k] = score.get(k, 0.0) + f
+        flip_comp = {k for k, v in score.items() if v < 0}
+        cards += len(score)
+        flipped += len(flip_comp)
+        if not flip_comp:
+            shapes.append(sh)
+            continue
+        flip_tri = np.isin(tri_comp, list(flip_comp))
+        new_tris = [(t[0], t[2], t[1]) if f else tuple(t) for t, f in zip(sh.triangles, flip_tri)]
+        flip_v = np.isin(comp, list(flip_comp))
+        nrm = None if sh.normals is None else np.where(flip_v[:, None], -np.asarray(sh.normals, float),
+                                                         np.asarray(sh.normals, float))
+        shapes.append(HairShape(sh.name, sh.positions, nrm, sh.tangents, sh.uvs, new_tris, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, oriented=True)),
+            {"cards": cards, "turned": flipped})
+
+
 def drop_duplicate_shapes(hair: Hair) -> Tuple[Hair, List[str]]:
     """The hair without shapes whose geometry repeats an earlier shape's (same positions, triangles and UVs): KS
     draws every wig twice, 'KSSMP_<name>' alpha-blended (test 40) and '..._HL' alpha-tested (test 200), Skyrim's

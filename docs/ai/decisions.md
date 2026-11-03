@@ -966,3 +966,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   dithering. Next suspect (supported, not verified): the depth offset. MaxDepthOffset 0.01 m (IDG's value) with our
   flat mid-grey DepthOffset map moves every hair pixel's depth by up to ~5 mm, more than the 2-3 mm the wig sits
   over the scalp, so the head can win the depth test in patches that change with the view. Test: MaxDepthOffset=0.
+- 2026-11-02 Hair cards turned to face outward (skyrimhair.orient_outward, hair_pack with the hair shader). Owner:
+  the light / dark changes stay with MaxDepthOffset=0 too ("still changing constantly lighting wise"). Verified on
+  the meshes: IDG's cards all face away from the head (99-100 % of the triangles over the head face out; normals on
+  the faces' side); KS's face out only about half the time (Anna 50 %, Erena 80 %: per card, 36 of Anna's 73 cards
+  face the scalp), which Skyrim's two-sided lighting hides. Without the mirrored copies (a7bae09) the inward half is
+  lit as facing the scalp (supported: the hair shader does not flip a back face's normal). Each connected card whose
+  triangles mostly face inward (away = from C_Head + 9 cm above it, from the vertical through it below) gets its
+  winding reversed and normals negated: afterwards 96-100 % face out on Anna / Erena / Spring / Caress / Gecko /
+  Icarus. MaxDepthOffset stays IDG's 0.01 (it did not change the spots).

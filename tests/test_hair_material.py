@@ -132,6 +132,34 @@ class HairColorTests(unittest.TestCase):
         src = open(pipeline.__file__, encoding="utf-8").read()
         self.assertIn('getattr(self, "hair_settings", None)', src)                  # the converter passes them on
 
+    def test_orient_outward_turns_inward_cards(self):
+        import numpy as np
+        head = np.eye(4)
+        head[:3, 3] = (0.0, 0.0, 1.6)
+        top = 1.6 + 0.09 + 0.1                              # 1 dm over the cranium's centre
+        quad = lambda z, dz: np.array([[-0.01, -0.01, z], [0.01, -0.01, z + dz], [0.01, 0.01, z], [-0.01, 0.01, z]])
+        p = np.concatenate([quad(top, 0.0), quad(top + 0.01, 0.0)])
+        tris = [(0, 1, 2), (0, 2, 3),                        # card 1: counter-clockwise from above: faces up (out)
+                (4, 6, 5), (4, 7, 6)]                        # card 2: clockwise: faces down, toward the head
+        nrm = np.array([[0, 0, 1.0]] * 4 + [[0, 0, -1.0]] * 4)
+        sh = skyrimhair.HairShape(b"A", p, nrm, np.zeros_like(nrm), [(0, 0)] * 8, tris, [[("C_Head", 1.0)]] * 8,
+                                  -1, -1, 0)
+        out, rep = skyrimhair.orient_outward(skyrimhair.Hair([sh], [], {}, {}), head)
+        o = out.shapes[0]
+        self.assertEqual(rep, {"cards": 2, "turned": 1})
+        self.assertEqual(o.triangles[:2], [(0, 1, 2), (0, 2, 3)])           # the outward card untouched
+        self.assertEqual(o.triangles[2:], [(4, 5, 6), (4, 6, 7)])           # the inward one rewound
+        np.testing.assert_allclose(o.normals, [[0, 0, 1.0]] * 8)            # and its normals negated
+        for a, b, c in o.triangles:
+            self.assertGreater(np.cross(p[b] - p[a], p[c] - p[a])[2], 0)
+        hang = np.array([[0.1, -0.01, 1.3], [0.1, 0.01, 1.3], [0.1, 0.0, 1.2]])   # a lock beside the body
+        hs = skyrimhair.HairShape(b"H", hang, np.array([[-1.0, 0, 0]] * 3), np.zeros((3, 3)), [(0, 0)] * 3,
+                                  [(0, 1, 2)], [[("C_Head", 1.0)]] * 3, -1, -1, 0)
+        o2, r2 = skyrimhair.orient_outward(skyrimhair.Hair([hs], [], {}, {}), head)
+        a, b, c = o2.shapes[0].triangles[0]
+        self.assertGreater(np.cross(hang[b] - hang[a], hang[c] - hang[a])[0], 0)   # faces away from the body (+X)
+        self.assertEqual(r2["turned"], 1)
+
     def test_opacity_ramp(self):
         import argparse
         import numpy as np

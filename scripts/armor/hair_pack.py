@@ -600,6 +600,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         hair, dropped = skyrimhair.drop_duplicate_shapes(hair)
         if dropped:
             row["dropped_duplicate_shapes"] = dropped
+        # and draws a card's back with the front's lighting: every card faces away from the head
+        hair, row["oriented"] = skyrimhair.orient_outward(hair, sf_world[skyrimhair.SF_HEAD])
     if getattr(a, "head_surface", None) is not None:
         head = sf_world[skyrimhair.SF_HEAD]
         pts = skyrimhair.hair_points(hair)                       # without KS's scalp tint layer
