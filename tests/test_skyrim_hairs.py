@@ -108,6 +108,28 @@ class StrandAxisTests(unittest.TestCase):
                                     [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)], [[("C_Head", 1.0)]] * 3, -1, -1, 0)
         self.assertIsNone(skyrimhair.strand_axis(flat))                          # lying flat: cannot tell
 
+    def test_mixed_cards_split_and_crown_cards_judged(self):
+        from fo4sf import skyrimhair
+        a, b = self.card(True), self.card(False)
+        p = np.concatenate([a.positions, b.positions + [0.05, 0, 0]])
+        tris = list(a.triangles) + [tuple(v + 4 for v in t) for t in b.triangles]
+        mixed = skyrimhair.HairShape(b"M", p, np.concatenate([a.normals, b.normals]), np.zeros((8, 3)),
+                                     list(a.uvs) + list(b.uvs), tris, [[("C_Head", 1.0)]] * 8, 3, -1, 0)
+        out, flags = skyrimhair.strands_down(skyrimhair.Hair([mixed], [], {}, {}))
+        self.assertEqual([s.name for s in out.shapes], [b"M", b"M_rot"])
+        self.assertEqual(flags, [False, True])
+        self.assertEqual(len(out.shapes[1].positions), 4)
+        self.assertEqual(skyrimhair.strand_axis(out.shapes[1]), "v")
+        # a card lying on the crown, strands running front to back along U: judged by the flow from the crown
+        head = np.eye(4)
+        head[:3, 3] = (0.0, 0.0, 1.6)
+        top = 1.6 + 0.09 + 0.09
+        q = np.array([[-0.005, 0.06, top], [0.005, 0.06, top], [-0.005, -0.06, top - 0.01], [0.005, -0.06, top - 0.01]])
+        crown = skyrimhair.HairShape(b"T", q, np.array([[0, 0, 1.0]] * 4), np.zeros((4, 3)),
+                                     [(0, 0), (0, 1), (1, 0), (1, 1)], [(0, 2, 1), (1, 2, 3)],
+                                     [[("C_Head", 1.0)]] * 4, 3, -1, 0)
+        self.assertEqual(skyrimhair.strand_axis(crown, head), "u")
+
     def test_transposed_texture(self):
         import shutil
         from fo4sf import pipeline, skyrimconvert, textures

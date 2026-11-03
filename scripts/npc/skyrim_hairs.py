@@ -189,9 +189,18 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         except (skyrimhair.HairError, nifmod.NifError, ValueError) as e:
             row["skipped"].append(f"{m}: {e}")
             continue
+        if "hairline" in m.lower():                  # the scalp layer (an extra part): no strands, kept on the skin
+            h = skyrimhair.Hair([s if skyrimhair.is_tint(s) else
+                                 skyrimhair.HairShape(b"Hairline_" + (s.name or b""), s.positions, s.normals,
+                                                      s.tangents, s.uvs, s.triangles, s.weights, s.shader_ref,
+                                                      s.alpha_ref, s.block) for s in h.shapes],
+                                h.bones, h.host_of_root, h.report)
         if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
             h, _dropped = skyrimhair.drop_duplicate_shapes(h)
-            h, turned = skyrimhair.strands_down(h)    # strands along V for the hair shader
+            if all(skyrimhair.is_tint(x) for x in h.shapes):
+                turned = [False] * len(h.shapes)
+            else:                                    # strands along V for the hair shader
+                h, turned = skyrimhair.strands_down(h, sf_world.get(skyrimhair.SF_HEAD))
         else:
             turned = [False] * len(h.shapes)
         flips += turned

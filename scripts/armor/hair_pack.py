@@ -750,8 +750,9 @@ def hair_materials(conv, nifs, hair, a, color=None, tint=None, transposed=None):
     mats, backs = [], []
     for k, (n, sh) in enumerate(zip(nifs, hair.shapes)):
         turn = bool(transposed[k]) if transposed else False
-        m = (hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn) if a.hair_shader
-             else None)
+        scalp = skyrimhair.is_tint(sh)             # a scalp fade has no strands: its soft alpha as it is
+        m = (hair_shader_material(conv, n, sh, color, None if scalp else a.opacity_ramp,
+                                  a.strands and not scalp, tint, turn) if a.hair_shader else None)
         hair_mat = m is not None
         if m is None:                          # the generic converted material (alpha cutout)
             m = (tint_material(conv, n, sh, a.tint_cutoff, color) if skyrimhair.is_tint(sh)

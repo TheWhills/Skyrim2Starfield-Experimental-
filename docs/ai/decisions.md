@@ -1083,3 +1083,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   than dP/dv lays its strands along U; its UVs are swapped and its texture transposed (pipeline transpose=True,
   material stem _rot), because the strand maps, the band evening and the hair shader's tangent frame all assume
   strands along V (verified on KS and IDG). "Very flat" is partly the vanilla meshes themselves (few cards).
+- 2026-11-03 Owner: the Skyrim hairstyles are "much better" (verified: no gap, mostly strands down), but the scalp
+  is "strandy across" and some hair still has sideways lines. (1) Strand direction is now judged per card (connected
+  piece), area-weighted, against the way hair runs there (down and out from a point 24 cm above C_Head, so cards on
+  the crown are judged too, not just hanging ones); a shape whose cards disagree is split, the turned cards as
+  '<name>_rot' with swapped UVs and the transposed texture. (2) The scalp layer (Skyrim's hairline extra parts,
+  model path with 'hairline', named 'Hairline_...' so is_tint holds) gets no strand cutting, no turning and its own
+  soft alpha (no ramp) in every pipeline (KS's 'Hairline' too): the strand maps had cut its fade into lines.
