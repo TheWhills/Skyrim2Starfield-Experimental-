@@ -154,6 +154,22 @@ def find_template(starfield: str, report: dict) -> bytes:
     return best[1]
 
 
+HIDE_HAIR, MORPH_HAIR = 1 << 0, 1 << 1        # biped object bits (xEdit wbDefinitionsSF1: 0 Hide Hair, 1 Morph Hair)
+
+
+def hide_hair(arma):
+    """The ARMA with Hide Hair instead of Morph Hair (a hat squashes the hair under it; a wig replaces it: 2026-11-02
+    the owner's own hair showed through the KS wigs' scalp)."""
+    t, h, subs, fid = arma
+    out = []
+    for sig, d in subs:
+        if sig == b"BO64" and len(d) >= 8:
+            bits = (struct.unpack_from("<Q", d)[0] & ~MORPH_HAIR) | HIDE_HAIR
+            d = struct.pack("<Q", bits) + bytes(d[8:])
+        out.append((sig, d))
+    return (t, h, out, fid)
+
+
 def head_apparel(armo, arma, kw_names):
     """(ARMO, ARMA) of the first vanilla ARMO with the head-apparel keyword that names an ARMA."""
     head = {k for k, n in kw_names.items() if n == HEAD_KEYWORD}
@@ -375,9 +391,13 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"
         return row
-    cap = skyrimhair.head_capsule(sf_world, hair)
-    body, body_report = ([], {}) if a.body_scale <= 0 else skyrimhair.body_capsules(sf_world, hair, a.body_scale)
-    root, rig = smpcloth.build_cloth(template_root, hair.bones, hair.host_of_root, [cap] + body, settings)
+    cap = skyrimhair.head_capsule(sf_world, hair, margin=settings.radius + 0.004)
+    body, body_report = ([], {}) if a.body_scale <= 0 else skyrimhair.body_capsules(
+        sf_world, hair, a.body_scale, margin=settings.radius + 0.005)
+    # the template's own colliders are left out: sized for its hair, the KS particles can start inside them (2026-11-02:
+    # short wigs flailed at rest); S2S_head replaces its head collider
+    root, rig = smpcloth.build_cloth(template_root, hair.bones, hair.host_of_root, [cap] + body, settings,
+                                     keep_template_colliders=False)
     blob = smpcloth.write(template_blob, root)
     row["cloth"] = {**rig.report, "check": smpcloth.verify(blob), "head_capsule_radius": round(cap.radius, 4),
                     "body_colliders": body_report}
@@ -429,7 +449,16 @@ def main(argv=None):
                     help="Skyrim -> Starfield skull size ratio (measured on the male heads: 0.93)")
     ap.add_argument("--head-offset", type=float, nargs=3, default=skyrimhair.HEAD_OFFSET, metavar=("X", "Y", "Z"),
                     help="metres added after scaling, model axes (+Y forward, +Z up)")
-    ap.add_argument("--damping", type=float, default=smpcloth.Settings.damping, help="cloth damping per second")
+    ap.add_argument("--damping", type=float, help="cloth damping per second (default: the template's, 0.97 on the "
+                                                  "vanilla hairs)")
+    ap.add_argument("--hair-radius", type=float, default=smpcloth.Settings.radius,
+                    help="collision thickness around each hair chain, m (the mesh around the chain must not sink)")
+    ap.add_argument("--twist", type=float, default=smpcloth.Settings.twist,
+                    help="0-1: how strongly each lock resists turning about its own length (0 = free)")
+    ap.add_argument("--no-sheet", dest="sheet", action="store_false",
+                    help="leave neighbouring hair chains untied (each strand swings on its own)")
+    ap.add_argument("--keep-own-hair", action="store_true",
+                    help="keep the actor's own hair under the wig (squashed, as under a hat) instead of hiding it")
     ap.add_argument("--range-scale", type=float, default=1.0, help="how far the hair may swing (x the SMP limits)")
     ap.add_argument("--body-scale", type=float, default=1.0,
                     help="size of the body colliders (neck, chest, waist, hips, thighs, upper arms) the hair rests on; "
@@ -456,7 +485,8 @@ def main(argv=None):
     sk = smpcloth.human_skeleton(template_root)
     world = smpcloth.skeleton_world(sk)
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
-    settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale)
+    settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
+                                 lateral=smpcloth.Settings.lateral if a.sheet else 0.0, twist=a.twist)
     missing = [k for k in a.ks if not os.path.isdir(k)]
     if missing:
         sys.exit(f"--ks folder not found: {', '.join(missing)} (the KS Hairdos SMP folder with '00 Core' and "
@@ -494,16 +524,20 @@ def main(argv=None):
         edid = "S2S_KSWig_" + re.sub(r"[^A-Za-z0-9]+", "_", r["wig"])
         name = f"{r['wig']} wig (Skyrim)"
         aa, ao = wtp.left_blade_records(armo_t, arma_t, len(recs), edid, name, r["model"], slot=a.slot)
+        if not a.keep_own_hair:
+            aa = hide_hair(aa)
         recs += [aa, ao]
         r.update(editor_id=edid, name=name, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}")
         if r.get("model_rigid"):
             aa2, ao2 = wtp.left_blade_records(armo_t, arma_t, len(recs), edid + "_Rigid",
                                               f"{r['wig']} wig (Skyrim, no physics)", r["model_rigid"], slot=a.slot)
+            aa2 = aa2 if a.keep_own_hair else hide_hair(aa2)
             recs += [aa2, ao2]
             r["form_id_rigid"] = f"{ao2[3] & 0xFFFFFF:06X}"
         if r.get("model_head"):
             aa3, ao3 = wtp.left_blade_records(armo_t, arma_t, len(recs), edid + "_Head",
                                               f"{r['wig']} wig (Skyrim, head bone)", r["model_head"], slot=a.slot)
+            aa3 = aa3 if a.keep_own_hair else hide_hair(aa3)
             recs += [aa3, ao3]
             r["form_id_head"] = f"{ao3[3] & 0xFFFFFF:06X}"
     if a.rigid_copies:                       # the record control: the template hat itself under a new name

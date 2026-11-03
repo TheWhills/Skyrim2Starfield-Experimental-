@@ -752,3 +752,15 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (all at full size on Steammist / Anna / Amor: their chains hang clear of the body at rest); hair_pack --body-scale
   (0 = head only), radii reported per wig in hair_pack.json cloth.body_colliders. Unverified: the radii against the
   Starfield female body; per-gender sizes.
+- 2026-11-02 owner, in game (Caress, Erena, Spring, Anna): locks twist and flail while standing, sink into the body
+  while moving, and his own hair shows through the scalp. Changes (each tested synthetically, unverified in game):
+  (1) the wig ARMA gets biped bit 0 Hide Hair instead of 1 Morph Hair (xEdit wbDefinitionsSF1 names: 0 Hide Hair, 1
+  Morph Hair, 4 Hat; the copied Akila hat addon had 0x12 = Morph Hair + Hat), --keep-own-hair for the old way;
+  (2) the template's own colliders are no longer kept (sized for its hair: KS particles started inside the bob's
+  head collider), S2S_head + body capsules only; (3) particle collision radius 5 mm -> 2 cm (the particles run along
+  the middle of a lock, the mesh around them sank), capsule shrink margins follow it (--hair-radius); (4) damping =
+  the template's (0.97 on the vanilla hairs) instead of 0.9 (--damping); (5) a soft second diagonal (stiffness 0.3,
+  --twist) in every chain segment: the ribbon (A0, B0, A1, B1) could fold along B0-A1, which turns the lock about
+  its length; standard-link weights scaled per link (the solver moves each end by weight x error); (6) neighbouring
+  chains (roots < 12 cm) tied joint to joint (A-A, B-B, stiffness 0.5; --no-sheet): Steammist gets 70 links, the
+  short KS wigs none (2-3 separate locks 15-23 cm apart, left untied).

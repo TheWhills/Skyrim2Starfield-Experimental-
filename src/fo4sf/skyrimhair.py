@@ -366,7 +366,7 @@ def merge(hairs: List[Hair]) -> Hair:
     return out
 
 
-def head_capsule(sf_world: Dict[str, np.ndarray], hair: Hair, margin: float = 0.004) -> smpcloth.Capsule:
+def head_capsule(sf_world: Dict[str, np.ndarray], hair: Hair, margin: float = 0.024) -> smpcloth.Capsule:
     """A capsule for the skull on C_Head, shrunk so that no simulated particle starts inside it. Size from the
     Starfield male head mesh (2026-10-27: least-squares sphere through the cranium above the head bone: centre
     (0, 0.023, 0.067) m from C_Head in model axes, radius 0.084), a little inside the scalp."""
@@ -400,7 +400,7 @@ BODY_CAPSULES = (
 
 
 def body_capsules(sf_world: Dict[str, np.ndarray], hair: Hair, scale: float = 1.0,
-                  margin: float = 0.01) -> Tuple[List[smpcloth.Capsule], Dict[str, float]]:
+                  margin: float = 0.025) -> Tuple[List[smpcloth.Capsule], Dict[str, float]]:
     """Capsules for the neck, chest, waist, hips, thighs and upper arms (BODY_CAPSULES, radii x `scale`), each shrunk so
     that no simulated particle starts inside it (as head_capsule), left out when that leaves under 2 cm or its bone
     is not in the skeleton. Returns (capsules, {name: radius or a reason})."""

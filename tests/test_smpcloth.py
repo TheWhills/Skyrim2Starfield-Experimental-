@@ -130,6 +130,48 @@ class RigTests(unittest.TestCase):
         self.assertEqual(rig.masses[rig.fixed[0]], 0.0)
         self.assertTrue(all(h == "C_Head" for h in rig.host))
 
+    def test_soft_diagonal_brace_against_twist(self):
+        bones = chain(["B1", "B2", "B3"])
+        rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings())
+        tri = dict(rig.driven)
+        braces = set()
+        for name in ("B1", "B2", "B3"):                                       # (A0, B0, A1), (B0, B1, A1)
+            a0, b0, a1 = rig.triangles[tri[name]]
+            b1 = rig.triangles[tri[name] + 1][1]
+            braces.add(tuple(sorted((a0, b1))))
+        self.assertTrue(braces <= set(rig.links))
+        self.assertEqual({rig.soft[b] for b in braces}, {0.3})
+        inv = [0.0 if i in set(rig.fixed) else 1.0 for i in range(len(rig.positions))]
+        rest = lambda i, j: float(np.linalg.norm(rig.positions[i] - rig.positions[j]))
+        batches, singles = smpcloth._std_links(rig.links, inv, rest, rig.soft)
+        got = {}
+        for b in batches:
+            for k in range(len(b["particlesA"])):
+                got[tuple(sorted((b["particlesA"][k], b["particlesB"][k])))] = b["stiffnessesA"][k] - b["stiffnessesB"][k]
+        for x in singles:
+            got[tuple(sorted((x["particleA"], x["particleB"])))] = x["stiffnessA"] - x["stiffnessB"]
+        for l, k in got.items():
+            self.assertAlmostEqual(k, 0.3 if l in braces else 1.0)               # weights scaled by the softness
+        stiff = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings(twist=0.0))
+        self.assertEqual(len(rig.links) - len(stiff.links), 3)
+
+    def test_neighbouring_chains_are_tied_into_a_sheet(self):
+        left = chain(["L1", "L2", "L3"], start=(0.03, -0.08, 1.65))
+        right = chain(["R1", "R2", "R3"], start=(-0.03, -0.08, 1.65))
+        far = chain(["F1", "F2"], start=(0.0, 0.30, 1.65))                   # 38 cm away: left alone
+        bones = left + right + far
+        hosts = {"L1": "C_Head", "R1": "C_Head", "F1": "C_Head"}
+        rig = smpcloth.build_rig(bones, hosts, smpcloth.Settings())
+        self.assertEqual(rig.report["lateral_links"], 6)                     # 3 free joints x (A-A, B-B)
+        a_of = {name: rig.triangles[t][0] for name, t in rig.driven}
+        linked = {tuple(sorted(l)) for l in rig.links}
+        self.assertIn(tuple(sorted((a_of["L2"], a_of["R2"]))), linked)       # joint to joint at the same depth
+        self.assertFalse(any(i in {a_of["F2"]} or j in {a_of["F2"]} for i, j in linked
+                             if {i, j} & {a_of["L2"], a_of["R2"]}))
+        loose = smpcloth.build_rig(bones, hosts, smpcloth.Settings(lateral=0.0))
+        self.assertEqual(loose.report["lateral_links"], 0)
+        self.assertEqual(len(rig.links) - len(loose.links), 6)
+
     def test_branch_shares_or_links_its_joint(self):
         bones = chain(["T1", "T2"])
         m = bones[1].world.copy()
@@ -243,7 +285,21 @@ class BuildTests(unittest.TestCase):
         sim_read = cd["operators"][2]["usedTransformSets"][0]["transformSetUsage"]["perComponentTransformTrackers"]
         self.assertEqual(sim_read[1]["read"]["storage"]["words"], [(1 << 1) | (1 << 2)])
         self.assertEqual(sim["transferMotionData"]["transformIndex"], 2)
+        self.assertAlmostEqual(sim["simulationInfo"]["globalDampingPerSecond"], 0.97)   # no template value: default
+        self.assertEqual({p["radius"] for p in sim["particleDatas"]}, {0.02})
         self.assertEqual(len(rig.driven), 3)
+
+    def test_damping_from_the_template_unless_given(self):
+        root = template_root()
+        root["hclClothData"]["simClothDatas"][0]["simulationInfo"] = {"gravity": [0, 0, -9.81, 0],
+                                                                      "globalDampingPerSecond": 0.8}
+        bones = chain(["S2S_A1"], start=(0.06, -0.05, 1.8))
+        out, _rig = smpcloth.build_cloth(root, bones, {"S2S_A1": "C_Head"}, [])
+        self.assertAlmostEqual(out["hclClothData"]["simClothDatas"][0]["simulationInfo"]["globalDampingPerSecond"], 0.8)
+        out, _rig = smpcloth.build_cloth(root, bones, {"S2S_A1": "C_Head"}, [], smpcloth.Settings(damping=0.5))
+        self.assertAlmostEqual(out["hclClothData"]["simClothDatas"][0]["simulationInfo"]["globalDampingPerSecond"], 0.5)
+        out, _rig = smpcloth.build_cloth(root, bones, {"S2S_A1": "C_Head"}, [], keep_template_colliders=False)
+        self.assertEqual(out["hclClothData"]["simClothDatas"][0]["perInstanceCollidables"], [])
 
     def test_object_space_template_without_range(self):
         _t, out, _rig = self.build(object_space=True, with_range=False)
@@ -392,6 +448,12 @@ class HairTests(unittest.TestCase):
 
 
 class ControlHelperTests(unittest.TestCase):
+    def test_hide_hair_replaces_morph_hair(self):
+        import hair_pack
+        arma = (b"ARMA", b"", [(b"EDID", b"X\0"), (b"BO64", struct.pack("<Q", 0x12))], 1)   # the Akila hat's addon
+        bits = struct.unpack("<Q", dict(hair_pack.hide_hair(arma)[2])[b"BO64"])[0]
+        self.assertEqual(bits, 0x11)                                          # Hide Hair + Hat, no Morph Hair
+
     def test_nif_materials_and_arma_model(self):
         import hair_pack
         sh = sfnif.SkinnedShape(b"Hat", b"aa\\bb", 3, 3, "materials\\clothes\\hat.mat", [b"C_Head"],
@@ -425,7 +487,7 @@ class BodyColliderTests(unittest.TestCase):
         # a particle 0.06 m behind the chest axis: the chest capsule shrinks to keep it outside (minus the margin)
         near = smpcloth.ChainBone("S2S_B", "S2S_A", at(0, -0.06, 1.31), 0.1, 0.3, None)
         caps, rep = skyrimhair.body_capsules(w, skyrimhair.Hair([], [far, near], {}, {}))
-        self.assertAlmostEqual(rep["S2S_chest"], 0.05, places=6)
+        self.assertAlmostEqual(rep["S2S_chest"], 0.06 - 0.025, places=6)          # default margin 2.5 cm
         # one right on the waist axis: that capsule is left out
         on = smpcloth.ChainBone("S2S_C", "S2S_A", at(0, -0.01, 1.14), 0.1, 0.3, None)
         _caps, rep = skyrimhair.body_capsules(w, skyrimhair.Hair([], [far, on], {}, {}))
@@ -626,6 +688,8 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertEqual(rep["facebones"]["used"], "hat")
             self.assertNotIn("headshift", ctrl)                                   # hypothesis B ruled out
             self.assertIn("body_colliders", wig["cloth"])
+            self.assertNotIn("collision_capsule_C_Chest", wig["cloth"]["colliders"])   # template's left out
+            self.assertEqual(struct.unpack("<Q", dict(got["S2S_KSWig_Test_AA"][2])[b"BO64"])[0], 1)   # Hide Hair
             self.assertNotIn("_control", wig)
 
 

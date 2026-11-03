@@ -150,9 +150,15 @@ class Capsule:
 @dataclass
 class Settings:
     width: float = 0.015        # m, side offset of the second particle row (gives each bone a twist reference)
-    damping: float = 0.9        # globalDampingPerSecond
+    damping: Optional[float] = None   # globalDampingPerSecond; None = the template's (vanilla hairs: 0.97)
     gravity: float = -9.81
-    radius: float = 0.005       # particle collision radius (m)
+    radius: float = 0.02        # particle collision radius (m): the particles run along the middle of the hair, so
+                                # this is about half its thickness (2026-11-02: 5 mm let the mesh sink into the body)
+    lateral: float = 0.12       # m: chains whose roots are closer than this are tied to each other joint by joint
+                                # (a sheet, as vanilla hair cloth; free ribbons twisted and flailed in game); 0 = off
+    twist: float = 0.3          # stiffness (0-1) of the diagonal brace in each chain segment: resists a lock turning
+                                # about its own length (2026-11-02: twisted in game) while it still swings sideways
+    lateral_stiffness: float = 0.5
     friction: float = 0.3
     range_scale: float = 1.0    # scales the local-range distances (looser > 1)
     name: str = "S2S Bone Chain Cloth"
@@ -170,6 +176,7 @@ class Rig:
     stretch: List[Tuple[int, int, float]]    # (root, particle, max length)
     ranges: List[Tuple[int, float]]          # (particle, max distance from its rest position)
     report: Dict = field(default_factory=dict)
+    soft: Dict[Tuple[int, int], float] = field(default_factory=dict)   # (i, j) sorted -> link stiffness below 1
 
 
 def _children(bones: List[ChainBone]) -> Dict[str, List[ChainBone]]:
@@ -208,6 +215,7 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
     angle: Dict[int, float] = {}             # A particle -> cumulative limit of the bones above it
     reach: Dict[int, float] = {}             # A particle -> how far it may move from rest
     triangles, driven, links = [], [], []
+    soft: Dict[Tuple[int, int], float] = {}
 
     def new(p, pinned, m, h):
         pos.append(np.asarray(p, float))
@@ -281,6 +289,13 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
         driven.append((b.name, len(triangles) - 1))
         triangles.append((b0, b1, a1))
         links += [(a0, a1), (b0, b1), (a1, b1), (b0, a1), (a0, b0)]
+        if s.twist > 0:                     # the second diagonal: a soft brace against folding (= twisting)
+            links.append((a0, b1))
+            soft[tuple(sorted((a0, b1)))] = s.twist
+    lateral = _lateral_links(pos, root_of, side_of, path_len, fixed, s.lateral)
+    links += lateral
+    for l in lateral:
+        soft[tuple(sorted(l))] = min(soft.get(tuple(sorted(l)), 1.0), s.lateral_stiffness)
     links = [(i, j) for i, j in dict.fromkeys(tuple(sorted(l)) for l in links) if not (fixed[i] and fixed[j])]
     stretch, ranges = [], []
     for a, r in root_of.items():
@@ -291,7 +306,35 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
             ranges.append((p, reach[a] * s.range_scale))
     return Rig(np.array(pos), [i for i, f in enumerate(fixed) if f], masses, host, triangles, driven, links,
                stretch, ranges, {"particles": len(pos), "fixed": sum(fixed), "triangles": len(triangles),
-                                 "bones": len(order)})
+                                 "bones": len(order), "lateral_links": len(lateral)},
+               {k: v for k, v in soft.items() if k in set(links)})
+
+
+def _lateral_links(pos, root_of, side_of, path_len, fixed, max_root_distance: float) -> List[Tuple[int, int]]:
+    """Links tying neighbouring chains together: each chain to its (up to two) nearest chains whose roots lie within
+    max_root_distance, joint to joint at the closest distance along the chain (A to A and B to B, so a chain turning
+    about its own length stretches them)."""
+    if max_root_distance <= 0:
+        return []
+    chains: Dict[int, List[int]] = {}
+    for a, r in root_of.items():
+        chains.setdefault(r, []).append(a)
+    roots = sorted(chains)
+    out, pairs = [], set()
+    for r in roots:
+        near = sorted((float(np.linalg.norm(pos[r] - pos[q])), q) for q in roots if q != r)
+        for d, q in near[:2]:
+            if d > max_root_distance or (min(r, q), max(r, q)) in pairs:
+                continue
+            pairs.add((min(r, q), max(r, q)))
+            for a in chains[r]:
+                if fixed[a]:
+                    continue
+                b = min(chains[q], key=lambda x: abs(path_len[x] - path_len[a]))
+                if fixed[b] or abs(path_len[b] - path_len[a]) > 0.5 * max(path_len[a], 1e-3):
+                    continue
+                out += [(a, b), (side_of[a], side_of[b])]
+    return out
 
 
 # -- cloth data --------------------------------------------------------------------------------------------------------
@@ -357,8 +400,10 @@ def template_score(root: Dict) -> int:
     return (k["range"] is not None) * 2 + (k["stretch"] is not None)
 
 
-def _std_links(links, inv_mass, rest):
-    """hclStandardLinkConstraintSetMx batches (4 links, no particle twice) and singles."""
+def _std_links(links, inv_mass, rest, soft=None):
+    """hclStandardLinkConstraintSetMx batches (4 links, no particle twice) and singles. soft: {(i, j) sorted: k}, a
+    link's two stiffness weights scaled by k (the solver moves each end by its weight x the length error)."""
+    soft = soft or {}
     todo = list(links)
     batches, singles = [], []
     while todo:
@@ -376,15 +421,17 @@ def _std_links(links, inv_mass, rest):
         b = {"restLengths": [], "stiffnessesA": [], "stiffnessesB": [], "particlesA": [], "particlesB": []}
         for i, j in batch:
             wa, wb = inv_mass[i], inv_mass[j]
+            k = soft.get(tuple(sorted((i, j))), 1.0)
             b["restLengths"].append(rest(i, j))
-            b["stiffnessesA"].append(wa / (wa + wb))
-            b["stiffnessesB"].append(-wb / (wa + wb))
+            b["stiffnessesA"].append(k * wa / (wa + wb))
+            b["stiffnessesB"].append(-k * wb / (wa + wb))
             b["particlesA"].append(i)
             b["particlesB"].append(j)
         batches.append(b)
-    singles = [{"restLength": rest(i, j), "stiffnessA": inv_mass[i] / (inv_mass[i] + inv_mass[j]),
-                "stiffnessB": -inv_mass[j] / (inv_mass[i] + inv_mass[j]), "particleA": i, "particleB": j}
-               for i, j in singles]
+    singles = [{"restLength": rest(i, j),
+                "stiffnessA": soft.get(tuple(sorted((i, j))), 1.0) * inv_mass[i] / (inv_mass[i] + inv_mass[j]),
+                "stiffnessB": -soft.get(tuple(sorted((i, j))), 1.0) * inv_mass[j] / (inv_mass[i] + inv_mass[j]),
+                "particleA": i, "particleB": j} for i, j in singles]
     return batches, singles
 
 
@@ -457,7 +504,9 @@ def build_cloth(template_root: Dict, bones: List[ChainBone], host_of_root: Dict[
     fixed = set(rig.fixed)
     inv_mass = [0.0 if i in fixed else 1.0 / max(rig.masses[i], 1e-4) for i in range(n)]
     sim["name"] = "Sim"
-    sim["simulationInfo"] = {"gravity": [0.0, 0.0, s.gravity, 0.0], "globalDampingPerSecond": s.damping}
+    damping = s.damping if s.damping is not None else float(
+        t_cd["simClothDatas"][0].get("simulationInfo", {}).get("globalDampingPerSecond", 0.97))
+    sim["simulationInfo"] = {"gravity": [0.0, 0.0, s.gravity, 0.0], "globalDampingPerSecond": damping}
     sim["particleDatas"] = [{"mass": 0.0 if i in fixed else rig.masses[i], "invMass": inv_mass[i],
                              "radius": s.radius, "friction": s.friction} for i in range(n)]
     sim["fixedParticles"] = list(rig.fixed)
@@ -465,7 +514,7 @@ def build_cloth(template_root: Dict, bones: List[ChainBone], host_of_root: Dict[
     sim["simClothPoses"] = [{"sizeAndFlags": 0, "refCount": 0, "name": "DefaultClothPose",
                              "positions": [[*map(float, p), 1.0] for p in rig.positions], "$class": "hclSimClothPose"}]
     rest = lambda i, j: float(np.linalg.norm(rig.positions[i] - rig.positions[j]))
-    batches, singles = _std_links(rig.links, inv_mass, rest)
+    batches, singles = _std_links(rig.links, inv_mass, rest, rig.soft)
     kind = template_root.get("$kind") or template_kind(template_root)
     sets = [{"sizeAndFlags": 0, "refCount": 0, "name": "StandardLink Constraint", "constraintId": {"value": 0},
              "type": 0, "batches": batches, "singles": singles, "$class": "hclStandardLinkConstraintSetMx"}]
