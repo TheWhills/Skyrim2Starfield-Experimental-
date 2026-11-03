@@ -933,6 +933,47 @@ def separate_layers_once(hair: Hair, head: np.ndarray, step: float = LAYER_STEP,
              "median_moved_mm": round(1000 * float(np.median(move[moved])), 2) if moved.any() else 0.0})
 
 
+def uv_tangents(hair: Hair) -> Tuple[Hair, Dict]:
+    """Tangents recomputed from the UVs as Starfield expects them: along +U (dP/du), perpendicular to the normal.
+    Verified 2026-11-03: IDG's (the game's own convention) tangents follow dP/du (|cos| 1.0 on two styles); the
+    tangents a Skyrim NIF hands us follow dP/dv (KS Anna / Erena: |cos| 1.0 with dP/dv, 0.2 with dP/du: the
+    Skyrim tangent / bitangent swap). The hair shader lights along the strand from the tangent frame, so the KS
+    hair was lit across its strands: bright / dark bands bounded by the cards' quads, the "brick" pattern (owner's
+    looks-menu shots, unchanged by every texture fix). Vertices with no usable UV gradient keep their tangent."""
+    shapes, fixed, total = [], 0, 0
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        if sh.normals is None or not len(pos) or not sh.uvs or not len(sh.triangles):
+            shapes.append(sh)
+            continue
+        uv = np.asarray(sh.uvs, float)
+        t = np.asarray(sh.triangles, int).reshape(-1, 3)
+        e1, e2 = pos[t[:, 1]] - pos[t[:, 0]], pos[t[:, 2]] - pos[t[:, 0]]
+        d1, d2 = uv[t[:, 1]] - uv[t[:, 0]], uv[t[:, 2]] - uv[t[:, 0]]
+        det = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
+        ok = np.abs(det) > 1e-12
+        du = (e1 * d2[:, 1:2] - e2 * d1[:, 1:2]) * np.where(ok, np.sign(det), 0.0)[:, None]   # dP/du * |det|
+        acc = np.zeros_like(pos)
+        for k in range(3):
+            np.add.at(acc, t[:, k], du)
+        n = np.asarray(sh.normals, float)
+        n = n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+        acc -= (acc * n).sum(1, keepdims=True) * n
+        size = np.linalg.norm(acc, axis=1)
+        good = size > 1e-12
+        old = (np.asarray(sh.tangents, float) if sh.tangents is not None and np.shape(sh.tangents) == pos.shape
+               else np.zeros_like(pos))
+        old = old - (old * n).sum(1, keepdims=True) * n
+        old = old / np.maximum(np.linalg.norm(old, axis=1, keepdims=True), 1e-12)
+        tan = np.where(good[:, None], acc / np.maximum(size, 1e-12)[:, None], old)
+        fixed += int(good.sum())
+        total += len(pos)
+        shapes.append(HairShape(sh.name, sh.positions, sh.normals, tan, sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, uv_tangents=True)),
+            {"vertices": total, "recomputed": fixed})
+
+
 def drop_duplicate_shapes(hair: Hair) -> Tuple[Hair, List[str]]:
     """The hair without shapes whose geometry repeats an earlier shape's (same positions, triangles and UVs): KS
     draws every wig twice, 'KSSMP_<name>' alpha-blended (test 40) and '..._HL' alpha-tested (test 200), Skyrim's

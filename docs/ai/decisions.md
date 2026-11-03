@@ -1028,3 +1028,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   per channel over a window 9 texels along the strands and 129 across them: the row-mean RGB spread falls from ~26
   to ~3.5 while the across-strand detail stays (row std 23 -> 25). The stacked-cards fix (separate_layers) stays:
   the z-fighting was measured, the pattern may have had both causes.
+- 2026-11-03 Hair tangents from the UVs (skyrimhair.uv_tangents, hair_pack after every shape change). The brick
+  pattern stayed after the texture fixes (owner's looks-menu shots). Verified: Starfield's convention (IDG, two
+  styles) puts the tangent along dP/du (|cos| 1.0); the tangents read from KS's NIFs run along dP/dv (Anna / Erena
+  |cos| 1.0 with dP/dv, ~0.2 with dP/du): the Skyrim tangent / bitangent swap. The hair shader lights along the
+  strand from the tangent frame, so the hair was lit across its strands, bands breaking at the cards' quads
+  (supported). Now per-vertex tangents = area-weighted dP/du, made perpendicular to the normal (degenerate UVs keep
+  the old tangent, also made perpendicular). Lead, unverified: every other Skyrim conversion that copies the NIF's
+  tangents (convert_static / skyrimconvert) may have the same swap, which would turn normal maps by 90 degrees.

@@ -689,6 +689,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     if a.hair_shader and a.layer_gap > 0:    # stacked cards apart: the hair shader would etch their fight in
         hair, row["layers_apart"] = skyrimhair.separate_layers(hair, sf_world[skyrimhair.SF_HEAD],
                                                                step=a.layer_gap / 1000.0)
+    hair, row["tangents"] = skyrimhair.uv_tangents(hair)    # Starfield's convention (along +U), from the final shape
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"

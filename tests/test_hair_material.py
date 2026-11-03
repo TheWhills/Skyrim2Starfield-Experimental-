@@ -160,6 +160,24 @@ class HairColorTests(unittest.TestCase):
         self.assertGreater(np.cross(hang[b] - hang[a], hang[c] - hang[a])[0], 0)   # faces away from the body (+X)
         self.assertEqual(r2["turned"], 1)
 
+    def test_uv_tangents_follow_u_as_starfield_expects(self):
+        import numpy as np
+        # a quad in the XZ plane facing -Y; U runs along +X, V down (-Z) like a hanging strand
+        p = np.array([[0, 0, 1.0], [0.1, 0, 1.0], [0, 0, 0.9], [0.1, 0, 0.9]])
+        uv = [(0, 0), (1, 0), (0, 1), (1, 1)]
+        nrm = np.array([[0, -1.0, 0]] * 4)
+        skyrim_tan = np.array([[0, 0, -1.0]] * 4)          # what a Skyrim NIF hands us: along V
+        sh = skyrimhair.HairShape(b"A", p, nrm, skyrim_tan, uv, [(0, 2, 1), (1, 2, 3)], [[("C_Head", 1.0)]] * 4,
+                                  -1, -1, 0)
+        out, rep = skyrimhair.uv_tangents(skyrimhair.Hair([sh], [], {}, {}))
+        np.testing.assert_allclose(out.shapes[0].tangents, [[1.0, 0, 0]] * 4, atol=1e-9)   # along +U (+X)
+        self.assertEqual(rep, {"vertices": 4, "recomputed": 4})
+        flipped = [(1.0 - u, v) for u, v in uv]             # mirrored UVs: the tangent turns with U
+        sh2 = skyrimhair.HairShape(b"B", p, nrm, skyrim_tan, flipped, [(0, 2, 1), (1, 2, 3)],
+                                   [[("C_Head", 1.0)]] * 4, -1, -1, 0)
+        out2, _r = skyrimhair.uv_tangents(skyrimhair.Hair([sh2], [], {}, {}))
+        np.testing.assert_allclose(out2.shapes[0].tangents, [[-1.0, 0, 0]] * 4, atol=1e-9)
+
     def test_opacity_ramp(self):
         import argparse
         import numpy as np
