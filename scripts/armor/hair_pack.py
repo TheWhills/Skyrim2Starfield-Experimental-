@@ -544,13 +544,13 @@ def facebones_template(starfield: str, hat_model: str, report: dict, hair_templa
     return face, worlds[face], worlds, raw, report.pop("_face_skin", None)
 
 
-def facebones_files(row: dict, fb, sf_world: dict, rigid_copies: bool) -> dict:
+def facebones_files(row: dict, fb, sf_world: dict, rigid_copies: bool, spread: bool = True) -> dict:
     """<model>_facebones.nif for a wig and its no-physics / head-bone copies: C_Head's weights on the face bone."""
     hair, mats, blob, out_name, backs = row["_fb"]
     face, fw = fb[0], fb[1]
     world = dict(sf_world, **{face: fw})
     skin = fb[4] if len(fb) > 4 else None
-    if skin is not None:                     # the scalp spread over the face bones as the vanilla hair's
+    if skin is not None and spread:          # the scalp spread over the face bones as the vanilla hair's
         world.update(fb[2])
         on_face = skyrimhair.on_face_bones(hair, skin[0], skin[1])
         row["face_bones"] = "spread"
@@ -789,6 +789,9 @@ def main(argv=None):
     ap.add_argument("--no-orient", dest="orient", action="store_false",
                     help="keep KS's card facing (about half face the scalp) instead of turning every card outward; "
                          "for comparing (the turned cards fixed the light / dark flicker)")
+    ap.add_argument("--single-face-bone", dest="spread_face_bones", action="store_false",
+                    help="the _facebones model puts the head's share of the hair on one face bone instead of spreading "
+                         "it over the face bones like the vanilla hair (for comparing the lighting)")
     ap.add_argument("--no-balance", dest="balance", action="store_false",
                     help="physics: the old one-sided ribbon per lock instead of a particle row on each side (the "
                          "one-sided ribbon settles turned under gravity, darkening the lower hair)")
@@ -934,7 +937,7 @@ def main(argv=None):
         sys.exit("no wig converted: " + json.dumps(report["wigs"], indent=1))
     for r in good:
         if fb is not None:
-            write_files(staging, facebones_files(r, fb, sf_world, a.rigid_copies))
+            write_files(staging, facebones_files(r, fb, sf_world, a.rigid_copies, a.spread_face_bones))
             r["facebones"] = True
     import weapon_test_pack as wtp
     recs = []
