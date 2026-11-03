@@ -897,3 +897,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   hair_pack / viewer --layers (default 3; 0 = the old move), default volume cap 20 mm with layers (8 without).
   On a stand-in ellipsoid head (no Starfield head here) Anna goes to 10 sheets / 20 mm with 39.5k vertices
   (42.8k before, with the duplicate). Supported, not seen in game.
+- 2026-11-02 Fill layers off by default. Owner's viewer shot of Anna with 3 layers at 20 mm (IDG reference): a
+  puffed helmet with a hard shelf where the copies end above the forehead and along the part: "that looks so
+  choppy". LAYERS = 0 (the wig moves out by at most 8 mm, as before); --layers N kept as an option. The duplicate
+  KS '_HL' shape is still dropped with the hair shader. Copying KS cards outward does not give IDG's look; IDG's
+  depth is authored (many cards of different lengths at different depths).

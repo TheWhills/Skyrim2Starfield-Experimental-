@@ -522,7 +522,9 @@ def _sub_shape(sh: HairShape, name: bytes, pos, nrm, tan, keep_tri) -> Optional[
                      [sh.weights[v] for v in used], sh.shader_ref, sh.alpha_ref, sh.block)
 
 
-LAYERS = 3                  # fill layers add_volume stacks under a raised wig by default (hair_pack)
+LAYERS = 0                  # fill layers add_volume stacks under a raised wig by default (hair_pack): off
+                            # (2026-11-02: 3 layers at 20 mm read in the viewer as a choppy puffed shelf
+                            # ending above the forehead; owner: 'that looks so choppy')
 VOLUME_MAX_LAYERED = 0.02   # m: the most volume by default when the gap is filled (IDG Elegant's extra-long straight:
                             # ~18 hair sheets over ~24 mm along a ray out of the scalp; KS Anna ~4 within ~1 mm)
 LAYER_TURN = 2.0            # degrees each fill layer is turned about the vertical, alternating, so its cards cover

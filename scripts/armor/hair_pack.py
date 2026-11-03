@@ -651,8 +651,8 @@ def main(argv=None):
                          "height, at most 20 with fill layers, 8 without; 0 = off)")
     ap.add_argument("--layers", type=int, default=skyrimhair.LAYERS,
                     help="fill layers under raised hair: the wig stays on the scalp and this many turned copies of "
-                         "its top stand between it and the volume, so it reads thick instead of floating (default "
-                         "%(default)s; 0 = move the wig itself out, the old way)")
+                         "its top stand between it and the volume (default %(default)s = off: the wig itself moves out; "
+                         "3 at 20 mm looked like a choppy shelf)")
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,
