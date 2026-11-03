@@ -65,10 +65,17 @@ hairline = skyrimhair.hairline
 
 
 def page(sets: dict, title: str, stats: dict) -> str:
-    """The HTML viewer: sets {name: (points (N, 3) model space, colours (N, 3) 0..1)}; three.js maps model (x, y, z)
-    to (x, z, y) so +Z is up and the face looks at the 'front' camera."""
-    data = {k: {"p": np.round(np.asarray(p, float)[:, [0, 2, 1]] * 1000.0).astype(int).ravel().tolist(),
-                "c": np.round(np.asarray(c, float) * 255).astype(int).ravel().tolist()} for k, (p, c) in sets.items()}
+    """The HTML viewer: sets {name: (points (N, 3) model space, colours (N, 3) 0..1[, triangles])}; sets with
+    triangles can also be drawn as shaded surfaces (the 'Surfaces' button). three.js maps model (x, y, z) to (x, z, y)
+    so +Z is up and the face looks at the 'front' camera."""
+    data = {}
+    for k, v in sets.items():
+        p, c = v[0], v[1]
+        d = {"p": np.round(np.asarray(p, float)[:, [0, 2, 1]] * 1000.0).astype(int).ravel().tolist(),
+             "c": np.round(np.asarray(c, float) * 255).astype(int).ravel().tolist()}
+        if len(v) > 2 and v[2] is not None and len(v[2]):
+            d["t"] = np.asarray(v[2], int).ravel().tolist()
+        data[k] = d
     return """<!doctype html><html><head><meta charset="utf-8"><title>Hair fit</title>
 <style>body{margin:0;background:#1b1d22;color:#ddd;font:13px system-ui,sans-serif}#ui{position:fixed;top:10px;left:10px;
 background:#2a2d34e0;padding:10px 12px;border-radius:8px;max-width:330px}#ui label{display:block;margin:3px 0}
@@ -76,6 +83,7 @@ button{margin:2px;background:#3b4050;color:#eee;border:1px solid #555;border-rad
 pre{white-space:pre-wrap;font-size:12px;margin:6px 0 0}</style></head><body><div id="ui"><b>TITLE</b>
 <div id="toggles"></div><div><button data-v="front">Front</button><button data-v="side">Side</button>
 <button data-v="top">Top</button><button data-v="back">Back</button></div>
+<div><button id="surf">Surfaces</button> <span id="mode">points</span></div>
 <label>Slice (left-right, cm): <input id="slice" type="range" min="-12" max="12" step="0.5" value="0"
  style="width:150px"> <span id="sv">off</span></label><label><input id="sliceon" type="checkbox"> show slice only
 </label><pre id="stats">STATS</pre></div>
@@ -88,10 +96,20 @@ document.body.appendChild(r.domElement);const ctl=new THREE.OrbitControls(cam,r.
 let cx=0,cy=0,cz=0,n=0;for(const k in DATA){const p=DATA[k].p;for(let i=0;i<p.length;i+=3){cx+=p[i];cy+=p[i+1];cz+=p[i+2];n++;}}
 const C=new THREE.Vector3(cx/n/1000,cy/n/1000,cz/n/1000);ctl.target.copy(C);
 const objs={};const tg=document.getElementById('toggles');
+scene.add(new THREE.AmbientLight(0xffffff,0.45));const sun=new THREE.DirectionalLight(0xffffff,0.8);cam.add(sun);scene.add(cam);
+let surfaces=false;
 for(const k in DATA){const g=new THREE.BufferGeometry();const p=Float32Array.from(DATA[k].p,v=>v/1000);
  g.setAttribute('position',new THREE.BufferAttribute(p,3));g.setAttribute('color',new THREE.BufferAttribute(Float32Array.from(DATA[k].c,v=>v/255),3));
- const m=new THREE.Points(g,new THREE.PointsMaterial({size:0.003,vertexColors:true}));scene.add(m);objs[k]={m,p,all:g.getAttribute('position').array.slice()};
- const l=document.createElement('label');l.innerHTML='<input type=checkbox checked> '+k;l.firstChild.onchange=e=>{m.visible=e.target.checked};tg.appendChild(l);}
+ const m=new THREE.Points(g,new THREE.PointsMaterial({size:0.003,vertexColors:true}));scene.add(m);
+ let mesh=null;if(DATA[k].t){const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.BufferAttribute(p.slice(),3));
+  mg.setAttribute('color',g.getAttribute('color'));mg.setIndex(DATA[k].t);mg.computeVertexNormals();
+  mesh=new THREE.Mesh(mg,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:0.85}));mesh.visible=false;scene.add(mesh);}
+ objs[k]={m,mesh,on:true,all:g.getAttribute('position').array.slice()};
+ const l=document.createElement('label');l.innerHTML='<input type=checkbox checked> '+k;l.firstChild.onchange=e=>{objs[k].on=e.target.checked;show();};tg.appendChild(l);}
+function show(){const sl=document.getElementById('sliceon').checked;for(const k in objs){const o=objs[k];
+ const asMesh=surfaces&&o.mesh&&!sl;o.m.visible=o.on&&!asMesh;if(o.mesh)o.mesh.visible=o.on&&asMesh;}
+ document.getElementById('mode').textContent=surfaces&&!sl?'surfaces':'points';}
+document.getElementById('surf').onclick=()=>{surfaces=!surfaces;show();};
 function view(v){const d=0.75;const o={front:[0,0,d],back:[0,0,-d],side:[d,0,0],top:[0,d,0.0001]}[v];
  cam.position.set(C.x+o[0],C.y+o[1],C.z+o[2]);ctl.update();}
 document.querySelectorAll('button[data-v]').forEach(b=>b.onclick=()=>view(b.dataset.v));
@@ -100,7 +118,7 @@ function slice(){const on=document.getElementById('sliceon').checked;const s=par
  for(const k in objs){const o=objs[k];const a=o.m.geometry.getAttribute('position');const src=o.all;
   for(let i=0;i<src.length;i+=3){const keep=!on||Math.abs(src[i]-s)<0.008;a.array[i]=src[i];a.array[i+1]=keep?src[i+1]:1e6;a.array[i+2]=src[i+2];}
   a.needsUpdate=true;}}
-document.getElementById('slice').oninput=slice;document.getElementById('sliceon').onchange=()=>{slice();if(document.getElementById('sliceon').checked)view('side');};
+document.getElementById('slice').oninput=slice;document.getElementById('sliceon').onchange=()=>{slice();show();if(document.getElementById('sliceon').checked)view('side');};
 view('front');addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.setSize(innerWidth,innerHeight);});
 (function loop(){requestAnimationFrame(loop);r.render(scene,cam);})();
 </script></body></html>""".replace("TITLE", title).replace("STATS", json.dumps(stats, indent=1)).replace(
@@ -148,6 +166,7 @@ def main(argv=None):
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
     head = sf_world[skyrimhair.SF_HEAD]
     sky_pts, anchor, sf_pts, sf_nrm = hair_pack.load_female_heads(a.skyrim_data, a.starfield)
+    head_tris = hair_pack.game_mesh_of(a.starfield, hair_pack.read_game_file(a.starfield, hair_pack.SF_FEMALE_HEAD))[3]
     fit_s, fit_t, fit_rms = skyrimhair.fit_head(sky_pts, anchor, sf_pts, head)
     ax_s, ax_t, ax_rms = skyrimhair.fit_head_axes(sky_pts, anchor, sf_pts, head)
     if a.head_scale is not None or a.head_offset is not None:
@@ -162,13 +181,14 @@ def main(argv=None):
         scale, offset, used = np.array(ax_s), ax_t, "female fit, per axis (measured)"
     sky_moved = head[:3, 3] + np.asarray(offset) + scale * (sky_pts - anchor[:3, 3]) * skyrimhair.UNIT
     wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
-    vanilla = None                                     # the cloth template hair's facebones mesh: Starfield's own fit
+    vanilla = vanilla_tris = None                      # the cloth template hair's facebones mesh: Starfield's own fit
     tpl = report.get("cloth_template") or ""
     if ":" in tpl:
         rel = os.path.splitext(tpl.split(":", 1)[1].replace("\\", "/"))[0] + "_facebones.nif"
         raw = hair_pack.read_game_file(a.starfield, rel)
         got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None
         vanilla = got[0] if got is not None else None
+        vanilla_tris = got[3] if got is not None else None
     raw_pts = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     hl_van = hairline(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
     hl_raw = hairline(raw_pts, sf_pts, sf_nrm, head)
@@ -188,8 +208,10 @@ def main(argv=None):
         volume = a.volume / 1000.0
     elif crown_van is not None and crown_raw is not None:
         volume = float(np.clip(crown_van - crown_raw, 0.0, 0.02))
-    if volume:
-        wig_hair = skyrimhair.add_volume(wig_hair, sf_pts, sf_nrm, head, volume)
+    if volume:                         # as hair_pack: fading to nothing at the (lifted) hairline
+        edge = skyrimhair.hairline_profile(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
+                                           sf_pts, sf_nrm, head)
+        wig_hair = skyrimhair.add_volume(wig_hair, sf_pts, sf_nrm, head, volume, edge=edge)
     before = None
     if not a.no_push_out:
         before = regions(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
@@ -237,20 +259,22 @@ def main(argv=None):
             return (p, extra) if extra is not None else p
         k = np.sort(rng.choice(len(p), a.max_points, replace=False))
         return (p[k], extra[k]) if extra is not None else p[k]
-    wp, wd = thin(wig, depth)
+    wp, wd = wig, depth                                  # all points: the surfaces need every vertex
     wd = np.nan_to_num(wd, nan=1.0)
     red = np.clip(-wd / 0.01, 0, 1)[:, None]
     wig_col = np.where(wd[:, None] < INSIDE, np.hstack([0.6 + 0.4 * red, 0.15 * (1 - red), 0.1 * (1 - red)]),
                        np.array([[0.55, 0.55, 0.58]]))
-    sfp = thin(sf_pts)
     skp = thin(sky_moved)
-    sets = {"Starfield female head": (sfp, np.tile([0.85, 0.68, 0.52], (len(sfp), 1))),
+    wig_tris, base = [], 0
+    for sh in wig_hair.shapes:
+        wig_tris += [(t[0] + base, t[1] + base, t[2] + base) for t in sh.triangles]
+        base += len(sh.positions)
+    sets = {"Starfield female head": (sf_pts, np.tile([0.85, 0.68, 0.52], (len(sf_pts), 1)), head_tris),
             "Skyrim female head (moved by the fit)": (skp, np.tile([0.35, 0.55, 0.95], (len(skp), 1))),
-            f"{a.wig} wig (red = inside the head)": (wp, wig_col)}
+            f"{a.wig} wig (red = inside the head)": (wp, wig_col, wig_tris)}
     if vanilla is not None:
-        vp = thin(vanilla)
         sets["Starfield's own hair (" + os.path.basename(tpl.split(":", 1)[-1]) + ")"] = (
-            vp, np.tile([0.35, 0.85, 0.45], (len(vp), 1)))
+            vanilla, np.tile([0.35, 0.85, 0.45], (len(vanilla), 1)), vanilla_tris)
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(page(sets, f"{a.wig}: {used}", stats))

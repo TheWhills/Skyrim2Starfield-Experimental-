@@ -472,18 +472,32 @@ def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: 
 
 
 def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, amount: float,
-               low: float = 0.0, high: float = 0.07) -> Hair:
+               low: float = 0.0, high: float = 0.07, edge: Optional[Dict[int, Optional[float]]] = None,
+               edge_fade: float = 0.03, keep=(b"hairline",)) -> Hair:
     """Hair lying on the head moved `amount` m outward along the head's normal, full above `high` (C_Head-relative
     height), fading to nothing at `low`: KS wigs hug the scalp, Starfield's own hair stands off it (2026-11-02: owner
     saw the wigs flat next to the vanilla bob). Points off the head (strands) follow by the same fade with the
-    displacement of their nearest head point, so locks stay attached."""
+    displacement of their nearest head point, so locks stay attached. The wig's edge stays on the skin: with `edge` (its
+    hairline_profile) the push fades to nothing at the hairline over `edge_fade` m (the sides up to 120 deg take the
+    temple's height), and shapes named like `keep` (KS's 'Hairline' scalp tint) never move: a pushed-out edge or
+    tint would leave a visible gap between hair and skin."""
     h = np.asarray(head, float)[:3, 3]
+    known = sorted(k for k, v in (edge or {}).items() if v is not None)
     shapes = []
     for sh in hair.shapes:
         pos = np.asarray(sh.positions, float)
+        if any(k in (sh.name or b"").lower() for k in keep):
+            shapes.append(sh)
+            continue
         _d, dist, j = nearest_surface(pos, head_pts, head_nrm)
-        rel_z = pos[:, 2] - h[2]
+        rel = pos - h
+        rel_z = rel[:, 2]
         w = amount * _smooth((rel_z - low) / (high - low)) * _smooth((0.06 - dist) / 0.03)
+        if known:
+            ang = np.degrees(np.arctan2(rel[:, 0], rel[:, 1]))
+            line = np.interp(np.clip(ang, known[0], known[-1]), known, [edge[k] for k in known])
+            at_edge = np.abs(ang) <= 120.0
+            w = np.where(at_edge, w * _smooth((rel_z - line) / edge_fade), w)
         shapes.append(HairShape(sh.name, pos + w[:, None] * np.asarray(head_nrm, float)[j], sh.normals, sh.tangents,
                                 sh.uvs, sh.triangles, sh.weights, sh.shader_ref, sh.alpha_ref, sh.block))
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, volume=amount))

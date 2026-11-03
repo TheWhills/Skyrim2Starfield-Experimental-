@@ -290,9 +290,9 @@ def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report:
 
 
 def game_mesh_of(starfield: str, raw: bytes):
-    """(points (V, 3) model space, unit normals (V, 3), per-vertex [(bone name, weight)]) of a vanilla skinned NIF's
-    first shape (the shape node's transform applied: the female head stores its mesh in C_Head's rotated frame, the
-    bob hair at C_Head), its mesh read from the game's archives; None when the mesh is not found."""
+    """(points (V, 3) model space, unit normals (V, 3), per-vertex [(bone name, weight)], triangles) of a vanilla
+    skinned NIF's first shape (the shape node's transform applied: the female head stores its mesh in C_Head's
+    rotated frame, the bob hair at C_Head), its mesh read from the game's archives; None when the mesh is not found."""
     from fo4sf import sfmesh, sfweaponleft
     n = nifmod.parse(raw)
     shapes = sfweaponleft.shapes_in_model(n)
@@ -320,7 +320,7 @@ def game_mesh_of(starfield: str, raw: bytes):
     for v in range(len(m.positions)):
         row = m.weights[v * k:(v + 1) * k] if k else []
         ws.append([(names[b], w / 65535.0) for b, w in row if w > 0 and b < len(names)])
-    return pts, nrm, ws
+    return pts, nrm, ws, [tuple(t) for t in m.triangles]
 
 
 def facebones_skin_of(starfield: str, raw: bytes):
@@ -518,8 +518,10 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
             if own_crown is not None:
                 volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, 0.02))
                 row["crown_above_C_Head_mm"] = round(1000 * own_crown, 1)
-        if volume:
-            hair = skyrimhair.add_volume(hair, *a.head_surface, head, volume)
+        if volume:                       # fading to nothing at the (lifted) hairline: the edge stays on the skin
+            edge = skyrimhair.hairline_profile(np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes]),
+                                               *a.head_surface, head)
+            hair = skyrimhair.add_volume(hair, *a.head_surface, head, volume, edge=edge)
             row["volume_mm"] = round(1000 * volume, 1)
         hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)   # no scalp point inside the head
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})

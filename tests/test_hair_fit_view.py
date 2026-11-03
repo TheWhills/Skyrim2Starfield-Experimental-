@@ -57,6 +57,20 @@ class FitViewTests(unittest.TestCase):
         self.assertAlmostEqual(out[0, 2] - top[2], 0.01, delta=0.001)      # the top stands 1 cm off
         np.testing.assert_allclose(out[1], low, atol=1e-9)                  # below C_Head: untouched
         self.assertAlmostEqual(skyrimhair.crown_height(out, head), 0.103, delta=0.001)
+        # the edge stays on the skin: no push at the hairline, full 3 cm above it; the scalp tint never moves
+        fore = np.radians(0)
+        at_line = head[:3, 3] + [0.0, 0.093 * np.cos(np.arcsin(0.05 / 0.093)), 0.05]
+        above = head[:3, 3] + [0.0, 0.093 * np.cos(np.arcsin(0.085 / 0.093)), 0.085]
+        hs = skyrimhair.HairShape(b"KSSMP_X", np.array([at_line, above]), np.zeros((2, 3)), np.zeros((2, 3)),
+                                  [(0, 0)] * 2, [(0, 1, 0)], [[("C_Head", 1.0)]] * 2, -1, -1, 0)
+        tint = skyrimhair.HairShape(b"Hairline", np.array([above]), np.zeros((1, 3)), np.zeros((1, 3)), [(0, 0)],
+                                    [], [[("C_Head", 1.0)]], -1, -1, 0)
+        edge = {a: 0.05 for a in skyrimhair.HAIRLINE_ANGLES}
+        out = skyrimhair.add_volume(skyrimhair.Hair([hs, tint], [], {}, {}), pts, nrm, head, 0.01, edge=edge)
+        moved = np.linalg.norm(np.asarray(out.shapes[0].positions) - hs.positions, axis=1)
+        self.assertLess(moved[0], 1e-6)                                   # on the hairline: stays on the skin
+        self.assertGreater(moved[1], 0.008)                               # 3.5 cm above it: (almost) full volume
+        np.testing.assert_allclose(out.shapes[1].positions, tint.positions)   # 'Hairline' tint untouched
 
     def test_lift_hairline_raises_the_front_keeps_the_back_and_the_gap(self):
         from fo4sf import skyrimhair

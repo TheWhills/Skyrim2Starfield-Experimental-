@@ -843,3 +843,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   above C_Head + 7 cm, nothing at C_Head height; strands within 6 cm follow). hair_pack does lift -> volume ->
   conform (--hairline-lift mm forces a uniform lift, --volume mm), reporting both per wig; the viewer previews and
   prints the hairline per angle (before / after / vanilla) and the crown heights. Tested on synthetic spheres.
+- 2026-11-02 owner asked whether the wig will look like it sits off her head (the viewer's points have gaps). Points
+  are only the vertices; in game the triangles are filled. But the volume step did risk a real gap: it pushed the
+  whole wig out, edge and KS 'Hairline' scalp tint included. Now add_volume fades to nothing at the wig's own
+  (lifted) hairline over 3 cm (sides up to 120 deg take the temple height) and never moves shapes named like
+  'hairline'; tested. The viewer gains a 'Surfaces' button: head, wig and vanilla hair drawn as shaded triangles
+  (game_mesh_of now also returns triangles); rendered headless with a stand-in head and the real Anna wig.
