@@ -648,7 +648,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         if dropped:
             row["dropped_duplicate_shapes"] = dropped
         # and draws a card's back with the front's lighting: every card faces away from the head
-        hair, row["oriented"] = skyrimhair.orient_outward(hair, sf_world[skyrimhair.SF_HEAD])
+        if a.orient:
+            hair, row["oriented"] = skyrimhair.orient_outward(hair, sf_world[skyrimhair.SF_HEAD])
     if getattr(a, "head_surface", None) is not None:
         head = sf_world[skyrimhair.SF_HEAD]
         pts = skyrimhair.hair_points(hair)                       # without KS's scalp tint layer
@@ -773,6 +774,9 @@ def main(argv=None):
     ap.add_argument("--hair-setting", action="append", default=[], type=hair_setting, metavar="NAME=VALUE",
                     help="override one of the hair shader's settings (BSMaterial::HairSettingsComponent: %s), e.g. "
                          "MaxDepthOffset=0; repeatable" % ", ".join(sorted(cm.HAIR_SETTINGS)))
+    ap.add_argument("--no-orient", dest="orient", action="store_false",
+                    help="keep KS's card facing (about half face the scalp) instead of turning every card outward; "
+                         "for comparing (the turned cards fixed the light / dark flicker)")
     ap.add_argument("--head-parts", action="store_true",
                     help="also add every wig as a hairstyle in the looks menu (a hair head part, which takes the "
                          "character's hair colour; leave out --hair-color then)")
