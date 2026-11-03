@@ -247,7 +247,7 @@ def arma_model(arma) -> str:
     return ""
 
 
-def hair_shader_material(conv, n, sh, color=None, ramp=None):
+def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -256,6 +256,8 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None):
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
+    if strands:
+        return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color, None, True)
     if ramp is None:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color)
     return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color, ramp)
@@ -703,7 +705,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
                     "body_colliders": body_report}
     mats, backs = [], []
     for sh in hair.shapes:
-        m = hair_shader_material(conv, n, sh, a.hair_color, a.opacity_ramp) if a.hair_shader else None
+        m = hair_shader_material(conv, n, sh, a.hair_color, a.opacity_ramp, a.strands) if a.hair_shader else None
         hair_mat = m is not None
         if m is None:                          # the generic converted material (alpha cutout)
             m = (tint_material(conv, n, sh, a.tint_cutoff, a.hair_color) if skyrimhair.is_tint(sh)
@@ -767,6 +769,9 @@ def main(argv=None):
                     help="the colour the hair averages to, sRGB 0-255 (e.g. 200,160,90 for blonde): Skyrim tints KS "
                          "wigs with the actor's hair colour, Starfield draws a wig's texture as it is (grey); "
                          "default the texture's own colour")
+    ap.add_argument("--no-strands", dest="strands", action="store_false",
+                    help="hair shader: keep KS's soft alpha (with --opacity-ramp) instead of crisp strands at its "
+                         "density with a per-strand hair ID, and KS's painted light / dark patches")
     ap.add_argument("--opacity-ramp", type=opacity_ramp, default=OPACITY_RAMP, metavar="LO,HI",
                     help="hair shader: alpha LO and below fully clear, HI and above fully solid (0-255): fewer "
                          "half-clear texels, which the shader draws as a flickering checker pattern (default "

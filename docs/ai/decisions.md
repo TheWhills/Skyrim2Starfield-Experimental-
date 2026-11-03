@@ -1000,3 +1000,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   are smoother than IDG's: 2.3 vs 7.5 deg median spread within 1 cm). Suspect (supported): the opacity ramp (48-112)
   made most of KS's soft strand alpha solid, and KS carries its strand detail in the alpha; the ramp was added
   against the flicker that turned out to be the inward-facing cards. Next test: --opacity-ramp 0,255.
+- 2026-11-03 Strand maps for the hair shader (default; --no-strands for the old ramp path). Owner's looks-menu and
+  in-game shots (opacity ramp 0,255): blocky maze-like patches in the hair close up, "not that hairlike compared to
+  Starfield's", and "clear difference in colours in the different parts". Both read as the textures, not the mesh:
+  KS's alpha is soft (made for blending), which the hair shader dithers into blocks, and KS paints broad light /
+  dark shading into its albedo, which the lit, tinted shader shows as patches. pipeline.strand_maps: the alpha
+  upscaled 2x and cut into crisp 2-texel strands along V (one random threshold per strand, wobbling slowly), so the
+  solid share follows KS's alpha (Anna: 0.549 alpha -> 0.552 solid); the strand's random value is the hair ID map
+  (per-strand variation, was flat). pipeline.flatten_albedo: each texel divided by the brightness of the visible
+  texels within 24 texels (strength 0.8): broad patches evened, strand lines kept. The physics test (owner): the
+  no-physics copy shows less top / bottom difference, so part of it is the cloth bones turning (the planned rig
+  rework); some layering difference remains.

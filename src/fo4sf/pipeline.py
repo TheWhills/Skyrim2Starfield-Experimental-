@@ -67,6 +67,66 @@ class Fo4Archives:
         return sorted(set(out), key=str.lower)
 
 
+def _box_blur(img, r: int):
+    """Separable box blur (edge-clamped) of a 2-D float array with radius r."""
+    import numpy as np
+    out = np.asarray(img, np.float64)
+    for axis in (0, 1):
+        pad = [(0, 0), (0, 0)]
+        pad[axis] = (r + 1, r)
+        c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis)
+        hi = np.take(c, range(2 * r + 1, c.shape[axis]), axis=axis)
+        lo = np.take(c, range(0, c.shape[axis] - 2 * r - 1), axis=axis)
+        out = (hi - lo) / (2 * r + 1)
+    return out
+
+
+def flatten_albedo(rgba, radius: int = 24, strength: float = 0.8) -> "np.ndarray":
+    """The RGB of an (h, w, 4) uint8 texture with its broad light / dark patches evened out (each texel divided by
+    the brightness of the visible texels around it, `radius` texels, `strength` 0-1) and its fine strand detail
+    kept. KS paints shading into its hair (darker underlayers, lighter tops); under Starfield's lit, tinted hair
+    shader those read as blotches of another colour (2026-11-03, owner: 'clear difference in colours in the
+    different parts'); the game's own hair albedo is even, its variation per strand."""
+    import numpy as np
+    px = np.asarray(rgba)
+    rgb = px[:, :, :3].astype(np.float64)
+    lum = rgb @ np.array([0.2126, 0.7152, 0.0722])
+    seen = (px[:, :, 3] >= 64).astype(np.float64) if px.shape[2] > 3 else np.ones(lum.shape)
+    if seen.sum() < 1:
+        return px[:, :, :3].copy()
+    local = _box_blur(lum * seen, radius) / np.maximum(_box_blur(seen, radius), 1e-6)
+    mean = float((lum * seen).sum() / seen.sum())
+    gain = (mean / np.maximum(local, 1.0)) ** strength
+    return np.clip(np.rint(rgb * gain[:, :, None]), 0, 255).astype(np.uint8)
+
+
+def strand_maps(alpha, scale: int = 2, width: int = 2, wobble: float = 0.06, seed: int = 7):
+    """(opacity, hair ID) for Starfield's hair shader from a soft Skyrim hair alpha: the alpha upscaled `scale` times,
+    then cut into crisp strands running along V (KS's strands do, verified, as IDG's): each `width`-texel column is a
+    strand with its own random threshold (wobbling slowly along it), solid where the soft alpha exceeds it, so the
+    share of solid texels follows the alpha (its density) and every edge is a strand edge. The hair ID map is that
+    strand's random value (the shader's per-strand variation; a flat ID made every strand alike). 2026-11-03: KS's
+    soft alpha drew as blotchy patches under the hair shader, and ramped as plastic sheets (owner's looks-menu shots);
+    the game's own hair opacity is thin crisp strands."""
+    import numpy as np
+    a = np.asarray(alpha, np.float32) / 255.0
+    if scale > 1:                                     # bilinear-ish: repeat, then a [1 2 1] smoothing both ways
+        a = np.repeat(np.repeat(a, scale, axis=0), scale, axis=1)
+        a = (np.roll(a, 1, 1) + 2 * a + np.roll(a, -1, 1)) / 4.0
+        a = (np.vstack([a[:1], a[:-1]]) + 2 * a + np.vstack([a[1:], a[-1:]])) / 4.0
+    h, w = a.shape
+    rng = np.random.default_rng(seed)
+    n = (w + width - 1) // width
+    base = np.repeat(rng.random(n), width)[:w]
+    phase = np.repeat(rng.random(n), width)[:w]
+    period = np.repeat(rng.uniform(24.0, 64.0, n), width)[:w] * scale
+    v = np.arange(h, dtype=np.float32)[:, None]
+    thr = np.clip(base[None, :] + wobble * np.sin(2 * np.pi * (v / period[None, :] + phase[None, :])), 0.02, 0.98)
+    opacity = np.where(a > thr, 255, 0).astype(np.uint8)
+    hair_id = np.broadcast_to(np.rint(base[None, :] * 255).astype(np.uint8), (h, w)).copy()
+    return opacity, hair_id
+
+
 def ramp_alpha(alpha, lo: int, hi: int) -> "np.ndarray":
     """Alpha (uint8) stretched linearly so `lo` -> 0 and `hi` -> 255 (clipped): fewer half-transparent texels. The hair
     shader dithers partial opacity into a screen-space pattern that the game's anti-aliasing smooths over frames;
@@ -275,7 +335,7 @@ class Converter:
                              color_alpha: Optional[int] = None, albedo_luminance: Optional[float] = None,
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
                              hair: bool = False, albedo_target: Optional[tuple] = None,
-                             opacity_ramp: Optional[tuple] = None) -> str:
+                             opacity_ramp: Optional[tuple] = None, strands: bool = False) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -297,12 +357,18 @@ class Converter:
                 ha = textures.read_dds_header(raw_a)
                 px = np.frombuffer(raw_a[ha["data_offset"]:ha["data_offset"] + ha["width"] * ha["height"] * 4], np.uint8)
                 alpha = px.reshape(ha["height"], ha["width"], 4)[:, :, 3].copy()
-                if opacity_ramp is not None:
+                hair_id = None
+                if strands:                                # crisp strands at KS's density (strand_maps)
+                    alpha, hair_id = strand_maps(alpha)
+                elif opacity_ramp is not None:
                     alpha = ramp_alpha(alpha, *opacity_ramp)
                 if decal or alpha.min() < 250:            # only if the texture really has a cutout
                     textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
                     textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
                     opacity = "o_in.dds"
+                if hair_id is not None:
+                    textures.write_r8(os.path.join(tmp, "id_in.dds"), hair_id)
+                    textures.texconv(self.texconv, os.path.join(tmp, "id_in.dds"), tmp, "BC4_UNORM")
             if color_alpha is None:
                 # BC1 below keeps 1-bit alpha: texconv turns every texel under alpha 0.5 into transparent BLACK.
                 # Skyrim / FO4 diffuse alpha is often a specular mask, not opacity (cutouts use the opacity map
@@ -310,7 +376,7 @@ class Converter:
                 # bright flowers on a near-black sheet (owner's Riverwood tests). Opaque colour it is.
                 color_alpha = 255
             if (color_alpha is not None or albedo_luminance is not None or albedo_tint is not None
-                    or albedo_target is not None):                                                  # rewrite colour
+                    or albedo_target is not None or strands):                                                  # rewrite colour
                 textures.texconv(self.texconv, os.path.join(tmp, "d.dds"), tmp, "R8G8B8A8_UNORM", ("-m", "1"))
                 raw_d = open(os.path.join(tmp, "d.dds"), "rb").read()
                 hd = textures.read_dds_header(raw_d)
@@ -318,6 +384,8 @@ class Converter:
                                    np.uint8).reshape(hd["height"], hd["width"], 4).copy()
                 if albedo_tint is not None:                 # Skyrim's vertex colour, multiplied in sRGB like Skyrim
                     pd[:, :, :3] = np.clip(np.rint(pd[:, :, :3] * np.array(albedo_tint, np.float32)), 0, 255)
+                if strands:                                 # even it out: the hair shader / tint add the light
+                    pd[:, :, :3] = flatten_albedo(pd)
                 if albedo_target is not None:               # recoloured so the visible texels average this sRGB
                     pd[:, :, :3] = recolor(pd, albedo_target)
                 if albedo_luminance is not None:
@@ -344,6 +412,8 @@ class Converter:
             textures.write_r8(os.path.join(tmp, "r_in.dds"), rough)
             textures.texconv(self.texconv, os.path.join(tmp, "r_in.dds"), tmp, "BC4_UNORM")
             kinds = [("color", "d.dds"), ("normal", "n_in.dds"), ("rough", "r_in.dds")] + ([("opacity", opacity)] if opacity else [])
+            if hair and (alpha_test or decal) and hair_id is not None:
+                kinds.append(("hairid", "id_in.dds"))
             for kind, fn in kinds:
                 dst = os.path.join(self.staging, *f"{tex_rel}_{kind}.dds".split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -352,8 +422,11 @@ class Converter:
         if hair:                                           # Starfield's hair shader (cm.build_hair_mat)
             if not out.get("opacity"):
                 raise ValueError(f"hair texture {diffuse}: no alpha to make an opacity map from")
+            maps = dict(self._hair_fillers())
+            if out.get("hairid"):
+                maps["HairID"] = out["hairid"]
             mat = cm.build_hair_mat("S2SHair_" + re.sub(r"[^a-z0-9]+", "_", stem),
-                                    dict(Albedo=out["color"], Opacity=out["opacity"], **self._hair_fillers()),
+                                    dict(Albedo=out["color"], Opacity=out["opacity"], **maps),
                                     getattr(self, "hair_settings", None))
         elif template is not None:                         # any single-layer vanilla material (terrain ground, ...)
             mat = cm.build_from_template(template, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", stem),

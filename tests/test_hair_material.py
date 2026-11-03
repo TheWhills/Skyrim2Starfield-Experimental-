@@ -178,6 +178,39 @@ class HairColorTests(unittest.TestCase):
         conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40, None, (48, 112))
         conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40, None, (0, 255))
         self.assertEqual(seen, [(48, 112), (0, 255)])                           # one material per ramp
+        got = []
+        conv._convert_texture_set = lambda stem, d, n, s, **kw: got.append(kw.get("strands")) or stem
+        conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40, None, None, True)
+        self.assertEqual(got, [True])
+
+    def test_strand_maps_keep_the_density_in_crisp_strands(self):
+        import numpy as np
+        a = np.zeros((64, 64), np.uint8)
+        a[:, 16:48] = 128                                   # a half-clear band
+        a[:, 48:] = 255
+        op, hid = pipeline.strand_maps(a)
+        self.assertEqual(op.shape, (128, 128))
+        self.assertEqual(set(np.unique(op)), {0, 255})      # crisp: solid or clear
+        band = op[8:-8, 40:88]
+        self.assertAlmostEqual((band > 0).mean(), 0.5, delta=0.12)   # about half the band's texels solid
+        self.assertTrue((op[8:-8, 104:] == 255).all())      # solid stays solid
+        self.assertTrue((op[8:-8, :24] == 0).all())         # clear stays clear
+        cols = (band > 0).mean(axis=0)
+        self.assertGreater((cols > 0.8).mean() + (cols < 0.2).mean(), 0.6)   # strands: whole columns, not noise
+        self.assertTrue((hid == hid[0]).all())              # one ID per strand (column)
+        self.assertGreater(len(np.unique(hid[0])), 20)
+
+    def test_flatten_albedo_evens_patches_keeps_strands(self):
+        import numpy as np
+        px = np.zeros((64, 128, 4), np.uint8)
+        px[:, :, 3] = 255
+        px[:, :64, :3] = 60                                 # a dark painted half
+        px[:, 64:, :3] = 180                                # a light half
+        px[:, ::4, :3] = (px[:, ::4, :3] * 0.7).astype(np.uint8)   # strand lines
+        out = pipeline.flatten_albedo(px, radius=8).astype(float)
+        dark, light = out[:, 8:56, 0].mean(), out[:, 72:120, 0].mean()
+        self.assertLess(abs(dark - light) / max(dark, light), 0.35)  # was 3x apart
+        self.assertLess(out[10, 64 + 8, 0], out[10, 64 + 9, 0])       # the strand line still darker
 
     def test_hair_color_option_and_material_names(self):
         import argparse
