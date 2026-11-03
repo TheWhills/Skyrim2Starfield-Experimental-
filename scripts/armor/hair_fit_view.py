@@ -61,17 +61,7 @@ def regions(points: np.ndarray, depth: np.ndarray, head: np.ndarray) -> dict:
     return out
 
 
-def hairline(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray):
-    """Height of the hairline above C_Head at the middle of the forehead (m), or None: the lowest point lying on the
-    head (within 1 cm of its surface) in a 3 cm wide band down the front of the face."""
-    p = np.asarray(points, float)
-    rel = p - head[:3, 3]
-    band = (np.abs(rel[:, 0]) < 0.015) & (rel[:, 1] > 0.04)
-    if not band.any():
-        return None
-    depth, dist, _i = skyrimhair.nearest_surface(p[band], head_pts, head_nrm)
-    on = (dist < 0.03) & (depth < 0.01)
-    return float(rel[band][on, 2].min()) if on.any() else None
+hairline = skyrimhair.hairline
 
 
 def page(sets: dict, title: str, stats: dict) -> str:
@@ -143,6 +133,8 @@ def main(argv=None):
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
     ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
+    ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline (default: up to the vanilla "
+                                                        "hair's, at most 30, as hair_pack; 0 = off)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -168,6 +160,23 @@ def main(argv=None):
         scale, offset, used = np.array(ax_s), ax_t, "female fit, per axis (measured)"
     sky_moved = head[:3, 3] + np.asarray(offset) + scale * (sky_pts - anchor[:3, 3]) * skyrimhair.UNIT
     wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
+    vanilla = None                                     # the cloth template hair's facebones mesh: Starfield's own fit
+    tpl = report.get("cloth_template") or ""
+    if ":" in tpl:
+        rel = os.path.splitext(tpl.split(":", 1)[1].replace("\\", "/"))[0] + "_facebones.nif"
+        raw = hair_pack.read_game_file(a.starfield, rel)
+        got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None
+        vanilla = got[0] if got is not None else None
+    hl_van = hairline(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
+    hl_raw = hairline(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]), sf_pts, sf_nrm,
+                      head)
+    lift = 0.0
+    if a.hairline_lift is not None:
+        lift = a.hairline_lift / 1000.0
+    elif hl_van is not None and hl_raw is not None:
+        lift = float(np.clip(hl_van - hl_raw, 0.0, 0.03))
+    if lift:
+        wig_hair = skyrimhair.lift_hairline(wig_hair, sf_pts, sf_nrm, head, lift)
     before = None
     if not a.no_push_out:
         before = regions(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
@@ -177,15 +186,7 @@ def main(argv=None):
     wig = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     depth = head_depth(wig, sf_pts, sf_nrm)
     sky_depth, _d, _i = skyrimhair.nearest_surface(sky_moved, sf_pts, sf_nrm)
-    vanilla = None                                     # the cloth template hair's facebones mesh: Starfield's own fit
-    tpl = report.get("cloth_template") or ""
-    if ":" in tpl:
-        rel = os.path.splitext(tpl.split(":", 1)[1].replace("\\", "/"))[0] + "_facebones.nif"
-        raw = hair_pack.read_game_file(a.starfield, rel)
-        got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None
-        vanilla = got[0] if got is not None else None
     hl_wig = hairline(wig, sf_pts, sf_nrm, head)
-    hl_van = hairline(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
     stats = {"wig": a.wig, "placement": used, "scale": np.round(np.asarray(scale, float), 4).tolist(),
              "offset_m": [round(x, 4) for x in offset],
              "female_fit_per_axis": {"scale_xyz (width, depth, height)": [round(x, 4) for x in ax_s],
@@ -196,6 +197,8 @@ def main(argv=None):
              "wig_inside_head": regions(wig, depth, head),
              "hairline_above_C_Head_mm": {
                  a.wig: None if hl_wig is None else round(1000 * hl_wig, 1),
+                 a.wig + " before the lift": None if hl_raw is None else round(1000 * hl_raw, 1),
+                 "lift_mm": round(1000 * lift, 1),
                  "vanilla " + os.path.basename(tpl.split(":", 1)[-1]): None if hl_van is None else round(1000 * hl_van, 1),
                  "note": "middle of the forehead; lower = the hair covers more of the forehead"},
              "conformed": not a.no_push_out,

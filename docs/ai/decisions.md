@@ -823,3 +823,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   --uniform-fit for one scale; per-axis normals by 1/s, tangents by s), reported next to the uniform fit; the viewer
   adds the cloth template's own facebones hair (vanilla bob, green) and the hairline height at the middle of the
   forehead (lowest point within 1 cm of the head in a 3 cm band) for the wig and the vanilla hair.
+- 2026-11-02 owner's viewer run (per-axis fit, Anna): scale width / depth / height 0.9586 / 0.9335 / 0.9182, rms
+  5.7 mm (uniform 5.8): proportions barely matter, and Starfield's skull is relatively WIDER, so the "too wide" look
+  is the hairstyle's volume, not the fit. Hairline at the middle of the forehead: Anna 83.3 mm above C_Head, vanilla
+  bob_f 97.8 mm (verified, his numbers): the KS hair starts ~15 mm lower = the "small forehead" (Skyrim faces have
+  shorter foreheads; the cranium fit cannot see it). Added skyrimhair.lift_hairline: the front of the wig raised,
+  full at the forehead, smoothstep fade to nothing toward the back (C_Head-relative Y 0.02 -> 0.08 m) and the crown
+  (Z 0.16 -> 0.12 m); points that lay on the head keep their height above it; then the conform. hair_pack lifts each
+  wig up to the vanilla hair's hairline (at most 30 mm; --hairline-lift mm to force, 0 = off), reported per wig;
+  the viewer previews the same. Records / face bones now read before the wig loop (the lift needs the vanilla
+  hair's mesh).

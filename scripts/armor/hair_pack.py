@@ -495,8 +495,21 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         return row
     row["config"] = paths[0]
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
-    if getattr(a, "head_surface", None) is not None:          # conform: no scalp point inside Starfield's head
-        hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)
+    if getattr(a, "head_surface", None) is not None:
+        head = sf_world[skyrimhair.SF_HEAD]
+        lift = None
+        if a.hairline_lift is not None:
+            lift = a.hairline_lift / 1000.0
+        elif getattr(a, "vanilla_hairline", None) is not None:   # up to the vanilla hair's hairline
+            own = skyrimhair.hairline(np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes]),
+                                      *a.head_surface, head)
+            if own is not None:
+                lift = float(np.clip(a.vanilla_hairline - own, 0.0, 0.03))
+                row["hairline_above_C_Head_mm"] = round(1000 * own, 1)
+        if lift:
+            hair = skyrimhair.lift_hairline(hair, *a.head_surface, head, lift)
+            row["hairline_lift_mm"] = round(1000 * lift, 1)
+        hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)   # no scalp point inside the head
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"
@@ -558,6 +571,8 @@ def main(argv=None):
     ap.add_argument("--cloth-template", help="Starfield NIF / .hkx / '<ba2>:<path>' with a physics hair's cloth")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
+    ap.add_argument("--hairline-lift", type=float,
+                    help="mm to raise the front hairline (default: up to the vanilla hair's, at most 30; 0 = off)")
     ap.add_argument("--no-conform", dest="conform", action="store_false",
                     help="leave the wig where the fit puts it (default: scalp points inside Starfield's female head "
                          "are pushed just outside it)")
@@ -637,6 +652,17 @@ def main(argv=None):
     if not wigs:
         sys.exit("no wig NIF found (meshes/armor/kswigshdt/f/*.nif under --ks)")
     conv = skyrimconvert.SkyrimConverter(src, staging, a.texconv, cr, collision_template=None, prefix=PREFIX)
+    info = sfplugin.header_info(esm)
+    sf = sfplugin.records(esm, [b"ARMO", b"ARMA", b"KYWD"])
+    kw_names = {fid: sfplugin.edid(s) for t, _h, s, fid in sf if t == b"KYWD"}
+    armo_t, arma_t = head_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"], kw_names)
+    report["apparel_template"] = {"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2])}
+    fb = facebones_template(a.starfield, arma_model(arma_t), report, report.get("cloth_template"))
+    a.vanilla_hairline = None                 # the vanilla hair's hairline height, the target of the hairline lift
+    if a.head_surface is not None and fb is not None and len(fb) > 4 and fb[4] is not None:
+        a.vanilla_hairline = skyrimhair.hairline(fb[4][0], *a.head_surface, sf_world[skyrimhair.SF_HEAD])
+        report["vanilla_hairline_above_C_Head_mm"] = (None if a.vanilla_hairline is None
+                                                      else round(1000 * a.vanilla_hairline, 1))
     for w in wigs:
         try:
             report["wigs"].append(build_one(src, conv, w, template_blob, template_root, sf_world, settings, a,
@@ -646,12 +672,6 @@ def main(argv=None):
     good = [r for r in report["wigs"] if r["ok"]]
     if not good:
         sys.exit("no wig converted: " + json.dumps(report["wigs"], indent=1))
-    info = sfplugin.header_info(esm)
-    sf = sfplugin.records(esm, [b"ARMO", b"ARMA", b"KYWD"])
-    kw_names = {fid: sfplugin.edid(s) for t, _h, s, fid in sf if t == b"KYWD"}
-    armo_t, arma_t = head_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"], kw_names)
-    report["apparel_template"] = {"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2])}
-    fb = facebones_template(a.starfield, arma_model(arma_t), report, report.get("cloth_template"))
     for r in good:
         if fb is not None:
             write_files(staging, facebones_files(r, fb, sf_world, a.rigid_copies))

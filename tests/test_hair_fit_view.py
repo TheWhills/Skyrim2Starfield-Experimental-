@@ -20,6 +20,27 @@ def sphere(n=4000, r=0.09, c=(0.0, 0.0, 1.65)):
 
 
 class FitViewTests(unittest.TestCase):
+    def test_lift_hairline_raises_the_front_keeps_the_back_and_the_gap(self):
+        from fo4sf import skyrimhair
+        pts, nrm = sphere(8000)
+        head = np.eye(4)
+        head[:3, 3] = (0.0, 0.0, 1.65)                      # C_Head at the sphere centre for this test
+        d = np.array([[0.0, 0.8, 0.6], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, -0.3]])
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        p = head[:3, 3] + d * 0.094                           # 4 mm above the head: forehead, back, crown, cheek
+        p[3] = head[:3, 3] + [0.0, 0.14, -0.04]               # a lock hanging well in front of the face
+        sh = skyrimhair.HairShape(b"S", p, np.zeros((4, 3)), np.zeros((4, 3)), [(0, 0)] * 4, [(0, 1, 2)],
+                                  [[("C_Head", 1.0)]] * 4, -1, -1, 0)
+        out = np.asarray(skyrimhair.lift_hairline(skyrimhair.Hair([sh], [], {}, {}), pts, nrm, head,
+                                                  0.015).shapes[0].positions)
+        self.assertGreater(out[0, 2] - p[0, 2], 0.005)          # the forehead point went up
+        np.testing.assert_allclose(out[1], p[1], atol=1e-9)     # the back stayed
+        np.testing.assert_allclose(out[2], p[2], atol=1e-9)     # the crown stayed
+        self.assertAlmostEqual(out[3, 2] - p[3, 2], 0.015)      # a lock off the head: lifted as is
+        g0, _d, _i = skyrimhair.nearest_surface(p[:1], pts, nrm)
+        g1, _d, _i = skyrimhair.nearest_surface(out[:1], pts, nrm)
+        self.assertAlmostEqual(float(g1[0]), float(g0[0]), delta=0.0015)   # still ~4 mm above the head
+
     def test_push_out_conforms_without_pulling_in(self):
         from fo4sf import skyrimhair
         pts, nrm = sphere()

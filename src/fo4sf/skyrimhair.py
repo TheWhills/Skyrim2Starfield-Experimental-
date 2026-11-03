@@ -378,6 +378,50 @@ def push_out(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, gap: float 
             {"vertices_moved": moved, "deepest_mm": round(1000 * deepest, 1)})
 
 
+def hairline(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray) -> Optional[float]:
+    """Height of the hairline above C_Head at the middle of the forehead (m), or None: the lowest point lying on the
+    head (within 1 cm of its surface) in a 3 cm wide band down the front of the face."""
+    p = np.asarray(points, float)
+    rel = p - np.asarray(head, float)[:3, 3]
+    band = (np.abs(rel[:, 0]) < 0.015) & (rel[:, 1] > 0.04)
+    if not band.any():
+        return None
+    depth, dist, _i = nearest_surface(p[band], head_pts, head_nrm)
+    on = (dist < 0.03) & (depth < 0.01)
+    return float(rel[band][on, 2].min()) if on.any() else None
+
+
+def _smooth(x):
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3.0 - 2.0 * x)
+
+
+def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, lift: float,
+                  front=(0.02, 0.08), crown=(0.12, 0.16)) -> Hair:
+    """The front of the wig raised by `lift` m: full at the forehead (C_Head-relative +Y beyond front[1]), fading to
+    nothing toward the back (front[0]) and toward the top of the head (crown), so the crown and the back stay put.
+    Points that lay on the head keep their height above its surface (moved back along the nearest normal after the
+    lift). 2026-11-02 measured: Skyrim wigs start ~15 mm lower on the forehead than Starfield's own hair (Anna 83 mm
+    above C_Head, vanilla bob 98): Skyrim faces have shorter foreheads, which the cranium fit cannot see."""
+    h = np.asarray(head, float)[:3, 3]
+    shapes = []
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        rel = pos - h
+        w = _smooth((rel[:, 1] - front[0]) / (front[1] - front[0])) * \
+            _smooth((crown[1] - rel[:, 2]) / (crown[1] - crown[0]))
+        d0, dist0, _i = nearest_surface(pos, head_pts, head_nrm)
+        new = pos.copy()
+        new[:, 2] += lift * w
+        on = judged(pos, head_pts, dist0) & (w > 0)
+        if on.any():
+            d1, _d, j = nearest_surface(new[on], head_pts, head_nrm)
+            new[on] += (d0[on] - d1)[:, None] * np.asarray(head_nrm, float)[j]
+        shapes.append(HairShape(sh.name, new, sh.normals, sh.tangents, sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, hairline_lift=lift))
+
+
 def rigid(hair: Hair) -> Hair:
     """The same hair without physics: every simulated bone's weight moved to the human bone its chain hangs from
     (no new bones, no cloth). A control for in-game tests: if this shows and the physics version does not, the
