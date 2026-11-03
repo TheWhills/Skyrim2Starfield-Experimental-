@@ -769,7 +769,8 @@ class PackEndToEndTests(unittest.TestCase):
                     (b"ARMA", ar, [(b"EDID", b"AA_Hat\0"), (b"BO64", struct.pack("<Q", 1)),
                                    (b"MOD2", b"Clothes\\Hat_M.nif\0"), (b"MOD3", b"Clothes\\Hat_F.nif\0")],
                      0x000C0001),
-                    (b"ARMO", ao, [(b"EDID", b"Clothes_Hat\0"), (b"KSIZ", struct.pack("<I", 1)),
+                    (b"ARMO", ao, [(b"EDID", b"Clothes_Hat\0"), (b"BO64", struct.pack("<Q", 0x10)),
+                                   (b"KSIZ", struct.pack("<I", 1)),
                                    (b"KWDA", struct.pack("<I", 0x000A0001)), (b"INDX", struct.pack("<H", 0)),
                                    (b"MODL", struct.pack("<I", 0x000C0001))], 0x000C0002)]
             with open(os.path.join(sf, "Data", "Starfield.esm"), "wb") as fh:
@@ -857,6 +858,7 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertIn("S2S_face", wig["cloth"]["body_colliders"])
             self.assertNotIn("collision_capsule_C_Chest", wig["cloth"]["colliders"])   # template's left out
             self.assertEqual(struct.unpack("<Q", dict(got["S2S_KSWig_Test_AA"][2])[b"BO64"])[0], 1)   # Hide Hair
+            self.assertEqual(struct.unpack("<Q", dict(got["S2S_KSWig_Test"][2])[b"BO64"])[0], 0x11)   # ARMO too
             self.assertNotIn("_control", wig)
 
 

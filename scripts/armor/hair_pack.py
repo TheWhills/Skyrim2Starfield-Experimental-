@@ -158,8 +158,10 @@ HIDE_HAIR, MORPH_HAIR = 1 << 0, 1 << 1        # biped object bits (xEdit wbDefin
 
 
 def hide_hair(arma):
-    """The ARMA with Hide Hair instead of Morph Hair (a hat squashes the hair under it; a wig replaces it: 2026-11-02
-    the owner's own hair showed through the KS wigs' scalp)."""
+    """The ARMA (or ARMO) with Hide Hair instead of Morph Hair (a hat squashes the hair under it; a wig replaces it:
+    2026-11-02 the owner's own hair showed through the KS wigs' scalp). Set on both records: with only the addon
+    flagged, a bun of the actor's own hair still showed behind a short wig (supported reading: as in Fallout 4, the
+    worn item's own slots decide what it hides)."""
     t, h, subs, fid = arma
     out = []
     for sig, d in subs:
@@ -720,19 +722,19 @@ def main(argv=None):
         name = f"{r['wig']} wig (Skyrim)"
         aa, ao = wtp.left_blade_records(armo_t, arma_t, len(recs), edid, name, r["model"], slot=a.slot)
         if not a.keep_own_hair:
-            aa = hide_hair(aa)
+            aa, ao = hide_hair(aa), hide_hair(ao)
         recs += [aa, ao]
         r.update(editor_id=edid, name=name, form_id_in_plugin=f"{ao[3] & 0xFFFFFF:06X}")
         if r.get("model_rigid"):
             aa2, ao2 = wtp.left_blade_records(armo_t, arma_t, len(recs), edid + "_Rigid",
                                               f"{r['wig']} wig (Skyrim, no physics)", r["model_rigid"], slot=a.slot)
-            aa2 = aa2 if a.keep_own_hair else hide_hair(aa2)
+            aa2, ao2 = (aa2, ao2) if a.keep_own_hair else (hide_hair(aa2), hide_hair(ao2))
             recs += [aa2, ao2]
             r["form_id_rigid"] = f"{ao2[3] & 0xFFFFFF:06X}"
         if r.get("model_head"):
             aa3, ao3 = wtp.left_blade_records(armo_t, arma_t, len(recs), edid + "_Head",
                                               f"{r['wig']} wig (Skyrim, head bone)", r["model_head"], slot=a.slot)
-            aa3 = aa3 if a.keep_own_hair else hide_hair(aa3)
+            aa3, ao3 = (aa3, ao3) if a.keep_own_hair else (hide_hair(aa3), hide_hair(ao3))
             recs += [aa3, ao3]
             r["form_id_head"] = f"{ao3[3] & 0xFFFFFF:06X}"
     if a.rigid_copies:                       # the record control: the template hat itself under a new name

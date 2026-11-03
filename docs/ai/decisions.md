@@ -864,3 +864,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   hair floats off the skull in places (Caress: sides / temples stand off with dark showing through). The volume
   pushed everything above the ears (full from C_Head + 7 cm). Now the top of the head only (fade from C_Head + 6 cm
   to full at + 12 cm: above the hairline, the sides stay snug like the vanilla hairs), at most 8 mm by default.
+- 2026-11-02 owner, in game: Anna / Erena / Spring look better (sit on the head, frame the face; verified); Caress
+  shows a brown bun behind the head: not Caress geometry (it ends 12 cm behind C_Head; the bun sticks out further
+  and is tinted), so the actor's own hair. Hide Hair was set on the ARMA only; now on the ARMO's BO64 too (0x11 =
+  Hide Hair + Hat; supported reading from Fallout 4: the worn item's slots decide what it hides). All still look
+  "strandy": candidates are the material (hard cutout at Skyrim's 40/255 where Skyrim blends the strand edges; no
+  Starfield hair shading or tint), the ribbon physics pulling locks apart, and the strand-card meshes themselves.
