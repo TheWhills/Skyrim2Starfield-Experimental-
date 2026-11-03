@@ -860,3 +860,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (--tint-cutoff), the hairline / crown measurements skip the tint layer (skyrimhair.hair_points / is_tint; before,
   the tint's low edge was taken for the hairline), volume never moves it, and the viewer draws it as a separate
   see-through layer. Unverified in game.
+- 2026-11-02 owner, in game after the tint cut-off: Anna's hairline sits naturally (verified, screenshot); but the
+  hair floats off the skull in places (Caress: sides / temples stand off with dark showing through). The volume
+  pushed everything above the ears (full from C_Head + 7 cm). Now the top of the head only (fade from C_Head + 6 cm
+  to full at + 12 cm: above the hairline, the sides stay snug like the vanilla hairs), at most 8 mm by default.

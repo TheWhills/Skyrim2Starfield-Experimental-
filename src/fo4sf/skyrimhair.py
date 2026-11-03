@@ -405,8 +405,8 @@ def hairline(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, hea
     return float(rel[band][on, 2].min()) if on.any() else None
 
 
-VOLUME_MAX = 0.012          # m: the most add_volume adds by default (2026-11-02: up to 20 mm over a 3 cm rise read
-                            # as a ridge above the forehead in the owner's surface view)
+VOLUME_MAX = 0.008          # m: the most add_volume adds by default (2026-11-02: 20 mm over a 3 cm rise read as a
+                            # ridge above the forehead; 12 mm everywhere above the ears floated the sides off the head)
 HAIRLINE_ANGLES = tuple(range(-70, 71, 10))       # degrees around the head from the front (+Y), + = the actor's right
 
 
@@ -488,11 +488,12 @@ def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: 
 
 
 def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, amount: float,
-               low: float = 0.0, high: float = 0.07, edge: Optional[Dict[int, Optional[float]]] = None,
+               low: float = 0.06, high: float = 0.12, edge: Optional[Dict[int, Optional[float]]] = None,
                edge_fade: float = 0.05, keep=TINT_SHAPES) -> Hair:
     """Hair lying on the head moved `amount` m outward along the head's normal, full above `high` (C_Head-relative
-    height), fading to nothing at `low`: KS wigs hug the scalp, Starfield's own hair stands off it (2026-11-02: owner
-    saw the wigs flat next to the vanilla bob). Points off the head (strands) follow by the same fade with the
+    height: the top of the head only; the sides stay snug, as on the vanilla hairs), fading to nothing at `low`: KS
+    wigs hug the scalp, Starfield's own hair stands off it (2026-11-02: owner saw the wigs flat next to the vanilla
+    bob, then the sides floating when the whole head above the ears was pushed). Points off the head (strands) follow by the same fade with the
     displacement of their nearest head point, so locks stay attached. The wig's edge stays on the skin: with `edge` (its
     hairline_profile) the push fades to nothing at the hairline over `edge_fade` m (the sides up to 120 deg take the
     temple's height), and shapes named like `keep` (KS's 'Hairline' scalp tint) never move: a pushed-out edge or

@@ -52,8 +52,8 @@ class FitViewTests(unittest.TestCase):
         low = head[:3, 3] + [0.0, -0.093, -0.02]
         sh = skyrimhair.HairShape(b"S", np.array([top, low]), np.zeros((2, 3)), np.zeros((2, 3)), [(0, 0)] * 2,
                                   [(0, 1, 0)], [[("C_Head", 1.0)]] * 2, -1, -1, 0)
-        out = np.asarray(skyrimhair.add_volume(skyrimhair.Hair([sh], [], {}, {}), pts, nrm, head, 0.01)
-                         .shapes[0].positions)
+        out = np.asarray(skyrimhair.add_volume(skyrimhair.Hair([sh], [], {}, {}), pts, nrm, head, 0.01,
+                                               low=0.0, high=0.07).shapes[0].positions)
         self.assertAlmostEqual(out[0, 2] - top[2], 0.01, delta=0.001)      # the top stands 1 cm off
         np.testing.assert_allclose(out[1], low, atol=1e-9)                  # below C_Head: untouched
         self.assertAlmostEqual(skyrimhair.crown_height(out, head), 0.103, delta=0.001)
@@ -66,11 +66,19 @@ class FitViewTests(unittest.TestCase):
         tint = skyrimhair.HairShape(b"Hairline", np.array([above]), np.zeros((1, 3)), np.zeros((1, 3)), [(0, 0)],
                                     [], [[("C_Head", 1.0)]], -1, -1, 0)
         edge = {a: 0.05 for a in skyrimhair.HAIRLINE_ANGLES}
-        out = skyrimhair.add_volume(skyrimhair.Hair([hs, tint], [], {}, {}), pts, nrm, head, 0.01, edge=edge)
+        out = skyrimhair.add_volume(skyrimhair.Hair([hs, tint], [], {}, {}), pts, nrm, head, 0.01, edge=edge,
+                                    low=0.0, high=0.07)
         moved = np.linalg.norm(np.asarray(out.shapes[0].positions) - hs.positions, axis=1)
         self.assertLess(moved[0], 1e-6)                                   # on the hairline: stays on the skin
         self.assertGreater(moved[1], 0.007)                               # 3.5 cm up the 5 cm rise: ~0.8 of it
         np.testing.assert_allclose(out.shapes[1].positions, tint.positions)   # 'Hairline' tint untouched
+        side = head[:3, 3] + [0.093 * np.cos(np.arcsin(0.04 / 0.093)), 0.0, 0.04]   # above the ear
+        ss = skyrimhair.HairShape(b"S", np.array([side, top]), np.zeros((2, 3)), np.zeros((2, 3)), [(0, 0)] * 2,
+                                  [(0, 1, 0)], [[("C_Head", 1.0)]] * 2, -1, -1, 0)
+        out = np.asarray(skyrimhair.add_volume(skyrimhair.Hair([ss], [], {}, {}), pts, nrm, head, 0.008)
+                         .shapes[0].positions)                             # defaults: the top only
+        np.testing.assert_allclose(out[0], side, atol=1e-9)                # the side stays snug
+        self.assertGreater(out[1, 2] - top[2], 0.001)                      # the very top still gains some
         both = skyrimhair.Hair([hs, tint], [], {}, {})
         self.assertEqual(len(skyrimhair.hair_points(both)), 2)              # the measurements skip the tint layer
         self.assertTrue(skyrimhair.is_tint(tint) and not skyrimhair.is_tint(hs))
