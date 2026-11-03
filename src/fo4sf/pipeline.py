@@ -342,7 +342,8 @@ class Converter:
                              color_alpha: Optional[int] = None, albedo_luminance: Optional[float] = None,
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
                              hair: bool = False, albedo_target: Optional[tuple] = None,
-                             opacity_ramp: Optional[tuple] = None, strands: bool = False) -> str:
+                             opacity_ramp: Optional[tuple] = None, strands: bool = False,
+                             transpose: bool = False) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -364,6 +365,8 @@ class Converter:
                 ha = textures.read_dds_header(raw_a)
                 px = np.frombuffer(raw_a[ha["data_offset"]:ha["data_offset"] + ha["width"] * ha["height"] * 4], np.uint8)
                 alpha = px.reshape(ha["height"], ha["width"], 4)[:, :, 3].copy()
+                if transpose:                              # strands across the texture: turned to run down it
+                    alpha = np.ascontiguousarray(alpha.T)
                 hair_id = None
                 if strands:                                # crisp strands at KS's density (strand_maps)
                     alpha, hair_id = strand_maps(alpha)
@@ -389,6 +392,8 @@ class Converter:
                 hd = textures.read_dds_header(raw_d)
                 pd = np.frombuffer(raw_d[hd["data_offset"]:hd["data_offset"] + hd["width"] * hd["height"] * 4],
                                    np.uint8).reshape(hd["height"], hd["width"], 4).copy()
+                if transpose:
+                    pd = np.ascontiguousarray(pd.transpose(1, 0, 2))
                 if albedo_tint is not None:                 # Skyrim's vertex colour, multiplied in sRGB like Skyrim
                     pd[:, :, :3] = np.clip(np.rint(pd[:, :, :3] * np.array(albedo_tint, np.float32)), 0, 255)
                 if strands:                                 # even it out: the hair shader / tint add the light
@@ -399,7 +404,7 @@ class Converter:
                     pd[:, :, :3] = textures.scale_albedo(pd[:, :, :3], albedo_luminance)
                 if color_alpha is not None:
                     pd[:, :, 3] = color_alpha
-                textures.write_dds_dx10(os.path.join(tmp, "d.dds"), hd["width"], hd["height"],
+                textures.write_dds_dx10(os.path.join(tmp, "d.dds"), pd.shape[1], pd.shape[0],
                                         textures.DXGI_R8G8B8A8_UNORM, pd.tobytes(), 4)
             # BC1 cannot keep a colour under alpha 0 (punch-through black): an explicit alpha needs BC3
             fmt = "BC3_UNORM_SRGB" if color_alpha is not None and color_alpha < 255 else "BC1_UNORM_SRGB"

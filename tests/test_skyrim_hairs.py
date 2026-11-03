@@ -85,6 +85,63 @@ class PartTests(unittest.TestCase):
         self.assertFalse(SH.is_female({"type": 3, "flags": 0, "edid": "HairMaleOdd"}))
 
 
+class StrandAxisTests(unittest.TestCase):
+    def card(self, along_u):
+        """A hanging card 1 cm wide, 10 cm long; strands run along U or V in its texture."""
+        from fo4sf import skyrimhair
+        p = np.array([[0, 0, 1.6], [0.01, 0, 1.6], [0, 0, 1.5], [0.01, 0, 1.5]])
+        uv = [(0, 0), (0, 1), (1, 0), (1, 1)] if along_u else [(0, 0), (1, 0), (0, 1), (1, 1)]
+        return skyrimhair.HairShape(b"C", p, np.array([[0, -1.0, 0]] * 4), np.zeros((4, 3)), uv,
+                                    [(0, 2, 1), (1, 2, 3)], [[("C_Head", 1.0)]] * 4, 3, -1, 0)
+
+    def test_strands_turned_to_run_down_the_texture(self):
+        from fo4sf import skyrimhair
+        across, down = self.card(True), self.card(False)
+        self.assertEqual(skyrimhair.strand_axis(across), "u")
+        self.assertEqual(skyrimhair.strand_axis(down), "v")
+        out, flags = skyrimhair.strands_down(skyrimhair.Hair([across, down], [], {}, {}))
+        self.assertEqual(flags, [True, False])
+        self.assertEqual(skyrimhair.strand_axis(out.shapes[0]), "v")              # now down the texture
+        self.assertEqual(out.shapes[0].uvs, [(v, u) for u, v in across.uvs])
+        self.assertIs(out.shapes[1], down)
+        flat = skyrimhair.HairShape(b"F", np.array([[0, 0, 1.7], [0.1, 0, 1.7], [0, 0.1, 1.7]]), None, None,
+                                    [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)], [[("C_Head", 1.0)]] * 3, -1, -1, 0)
+        self.assertIsNone(skyrimhair.strand_axis(flat))                          # lying flat: cannot tell
+
+    def test_transposed_texture(self):
+        import shutil
+        from fo4sf import pipeline, skyrimconvert, textures
+
+        def fake_texconv(exe, src, out_dir, fmt, extra=()):
+            dst = os.path.join(out_dir, os.path.basename(src))
+            if os.path.abspath(dst) != os.path.abspath(src):
+                shutil.copy2(src, dst)
+        px = np.zeros((4, 8, 4), np.uint8)                       # 8 wide, 4 tall; alpha rises along U
+        px[..., :3] = 120
+        px[..., 3] = np.arange(8, dtype=np.uint8)[None, :] * 30
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.dds")
+            textures.write_dds_dx10(p, 8, 4, textures.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            raw = open(p, "rb").read()
+            conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+            conv._materials, conv.stats, conv.material_errors = {}, {"materials_ok": 0}, {}
+            conv.staging, conv.texconv, conv.prefix, conv.texture_caps = d, "t.exe", "s2s", {}
+            conv.src = mock.Mock(texture=lambda name: raw)
+            conv._hair_fill = {"AmbientOcclusion": "a", "DepthOffset": "b", "HairID": "c"}
+            with mock.patch.object(textures, "texconv", fake_texconv):
+                mat = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, transpose=True)
+            self.assertTrue(mat.endswith("t_hair_rot.mat"))
+            col = open(os.path.join(d, "textures", "s2s", "h", "t_hair_rot_color.dds"), "rb").read()
+            h = textures.read_dds_header(col)
+            self.assertEqual((h["width"], h["height"]), (4, 8))                 # turned
+            op = open(os.path.join(d, "textures", "s2s", "h", "t_hair_rot_opacity.dds"), "rb").read()
+            ho = textures.read_dds_header(op)
+            a = np.frombuffer(op[ho["data_offset"]:], np.uint8)[:ho["width"] * ho["height"]]
+            a = a.reshape(ho["height"], ho["width"])
+            self.assertEqual((ho["width"], ho["height"]), (4, 8))              # turned too
+            self.assertGreater(a[-2:, :].mean(), a[:2, :].mean())              # the old U now runs down
+
+
 class MainTests(unittest.TestCase):
     def test_main_on_synthetic_games(self):
         from fo4sf import textures

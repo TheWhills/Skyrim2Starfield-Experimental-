@@ -49,6 +49,11 @@ TEX_BA2 = "S2SSkyrimHairs - Textures.ba2"
 OUT_DIR = "s2s/skyrimhair"
 SKYRIM_PLUGINS = ("Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm")
 HAIR, FACIAL_HAIR = 3, 4
+# KS-tuned steps that hurt a vanilla Skyrim hair (one thin shell over its own hairline layer): the hairline lift
+# (KS starts low; vanilla's matches its own scalp layer), the volume and the temple bridge (they lift the shell off the
+# scalp layer: a gap), a wide conform blend (a deep spot lifts the whole neighbourhood) and wide card spacing
+# (2026-11-03: owner saw the Skyrim hairstyles float off the skull with a gap, "flat")
+VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3)
 FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
 BEAST = re.compile(r"khajiit|argonian", re.I)
 CHARGEN = {True: "HeadPartsChargenOptionsFemale", False: "HeadPartsChargenOptionsMale"}
@@ -171,7 +176,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
     albedo (an NPC's own; the looks-menu hairstyles have none). Returns its report row (ok, model, ...)."""
     row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
-    hairs, nifs = [], []
+    hairs, nifs, flips = [], [], []
     for m in models:
         rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", m.replace("/", "\\"), flags=re.I)
         raw = sky.mesh(rel) if hasattr(sky, "mesh") else sky._read(bsa.norm(rel))
@@ -186,6 +191,10 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
             continue
         if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
             h, _dropped = skyrimhair.drop_duplicate_shapes(h)
+            h, turned = skyrimhair.strands_down(h)    # strands along V for the hair shader
+        else:
+            turned = [False] * len(h.shapes)
+        flips += turned
         hairs.append(h)
         nifs += [n] * len(h.shapes)
     if not hairs:
@@ -193,7 +202,9 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         return row
     hair = skyrimhair.merge(hairs)
     hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
-    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint)
+    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, transposed=flips)
+    if any(flips):
+        row["textures_turned"] = sum(flips)
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
@@ -240,6 +251,7 @@ def main(argv=None):
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
     hair_pack.add_shape_args(ap)
+    ap.set_defaults(**VANILLA_DEFAULTS)
     a = ap.parse_args(argv)
     if not a.skyrim_data:
         sys.exit("--skyrim-data is required")

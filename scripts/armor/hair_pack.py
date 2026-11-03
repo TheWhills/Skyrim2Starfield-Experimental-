@@ -247,7 +247,7 @@ def arma_model(arma) -> str:
     return ""
 
 
-def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint=None):
+def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint=None, transpose=False):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -256,9 +256,9 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
-    if tint is not None:
+    if tint is not None or transpose:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
-                                         None if strands else ramp, strands, tint)
+                                         None if strands else ramp, strands, tint, transpose)
     if strands:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color, None, True)
     if ramp is None:
@@ -740,15 +740,18 @@ def shape_hair(hair, a, sf_world: dict, row: dict, drop: bool = True):
     return hair
 
 
-def hair_materials(conv, nifs, hair, a, color=None, tint=None):
+def hair_materials(conv, nifs, hair, a, color=None, tint=None, transposed=None):
     """(material per shape, back faces per shape) for a converted hair: Starfield's hair shader (hair_pack's options
     a.hair_shader / opacity_ramp / strands; `color` or a.hair_color baked into the albedo) or the generic cutout
     material. nifs: the source NIF of each shape (head parts merge several). tint: Skyrim's hair colour (0-1 RGB)
-    multiplied into the albedo as Skyrim's hair shader does (an NPC's own colour)."""
+    multiplied into the albedo as Skyrim's hair shader does (an NPC's own colour). transposed: per shape, its texture
+    is turned so its strands run down it (its UVs were swapped: skyrimhair.strands_down)."""
     color = color if color is not None else getattr(a, "hair_color", None)
     mats, backs = [], []
-    for n, sh in zip(nifs, hair.shapes):
-        m = hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint) if a.hair_shader else None
+    for k, (n, sh) in enumerate(zip(nifs, hair.shapes)):
+        turn = bool(transposed[k]) if transposed else False
+        m = (hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn) if a.hair_shader
+             else None)
         hair_mat = m is not None
         if m is None:                          # the generic converted material (alpha cutout)
             m = (tint_material(conv, n, sh, a.tint_cutoff, color) if skyrimhair.is_tint(sh)

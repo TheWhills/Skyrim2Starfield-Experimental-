@@ -160,6 +160,7 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
         from fo4sf import smpcloth
         shape = _ap.ArgumentParser()
         hair_pack.add_shape_args(shape)
+        shape.set_defaults(**skyrim_hairs.VANILLA_DEFAULTS)
         ctx = shape.parse_args([])
         ctx.skyrim_data, ctx.starfield = a.skyrim_data, a.starfield
         conv.hair_settings = None

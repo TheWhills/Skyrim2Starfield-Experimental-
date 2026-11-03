@@ -933,6 +933,48 @@ def separate_layers_once(hair: Hair, head: np.ndarray, step: float = LAYER_STEP,
              "median_moved_mm": round(1000 * float(np.median(move[moved])), 2) if moved.any() else 0.0})
 
 
+def strand_axis(sh: HairShape) -> Optional[str]:
+    """'u' or 'v': which texture axis the shape's strands run along, judged on its steep triangles (strands hang
+    down): the UV direction (dP/du or dP/dv) that points more nearly down. None when it cannot tell."""
+    pos = np.asarray(sh.positions, float)
+    if not sh.uvs or not len(sh.triangles) or not len(pos):
+        return None
+    uv = np.asarray(sh.uvs, float)
+    t = np.asarray(sh.triangles, int).reshape(-1, 3)
+    e1, e2 = pos[t[:, 1]] - pos[t[:, 0]], pos[t[:, 2]] - pos[t[:, 0]]
+    d1, d2 = uv[t[:, 1]] - uv[t[:, 0]], uv[t[:, 2]] - uv[t[:, 0]]
+    det = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
+    fn = np.cross(e1, e2)
+    fl = np.linalg.norm(fn, axis=1)
+    ok = (np.abs(det) > 1e-12) & (fl > 1e-12)
+    ok &= np.abs(fn[:, 2]) < 0.8 * np.maximum(fl, 1e-12)          # steep: not lying flat on the crown
+    if not ok.any():
+        return None
+    du = (e1 * d2[:, 1:2] - e2 * d1[:, 1:2])[ok]
+    dv = (e2 * d1[:, 0:1] - e1 * d2[:, 0:1])[ok]
+    su = np.median(np.abs(du[:, 2]) / np.maximum(np.linalg.norm(du, axis=1), 1e-12))
+    sv = np.median(np.abs(dv[:, 2]) / np.maximum(np.linalg.norm(dv, axis=1), 1e-12))
+    if abs(su - sv) < 0.1:
+        return None
+    return "u" if su > sv else "v"
+
+
+def strands_down(hair: Hair) -> Tuple[Hair, List[bool]]:
+    """The hair with every shape whose strands run along U given swapped UVs (u, v) -> (v, u), and per shape whether
+    it was (its texture must be transposed to match: pipeline transpose=True). Starfield's hair shader runs strands
+    along V (IDG's, and KS's: dP/dv points down, verified 2026-11-03); some vanilla Skyrim hair textures lay them
+    across, which the strand maps, the band evening and the tangents all read the wrong way: the owner saw
+    horizontal-looking texture and patchy light / dark on the Skyrim hairstyles."""
+    shapes, flags = [], []
+    for sh in hair.shapes:
+        turn = strand_axis(sh) == "u"
+        flags.append(turn)
+        shapes.append(sh if not turn else HairShape(sh.name, sh.positions, sh.normals, sh.tangents,
+                                                    [(v, u) for u, v in sh.uvs], sh.triangles, sh.weights,
+                                                    sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, hair.bones, hair.host_of_root, hair.report), flags
+
+
 def uv_tangents(hair: Hair) -> Tuple[Hair, Dict]:
     """Tangents recomputed from the UVs as Starfield expects them: along +U (dP/du), perpendicular to the normal.
     Verified 2026-11-03: IDG's (the game's own convention) tangents follow dP/du (|cos| 1.0 on two styles); the

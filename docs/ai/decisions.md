@@ -1073,3 +1073,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   after both masters. face_fit: Ralof / Ysolda fitted (rms 4.4 -> 3.4 mm, 3.9 -> 3.1 mm: about 22 % of the
   difference closed, a modest fit); the test NPCs wore their template's helmeted space suit, so test NPCs now drop
   SOFT (Space Outfit, xEdit SF1 NPC_) and keep the default outfit.
+- 2026-11-03 Skyrim hairstyles: owner's looks-menu shots of the converted vanilla hairs: "very flat", "a gap
+  between the head and the hair like it's floating", texture "horizontal and not very hair like", patchy light /
+  dark. Two changes (supported, not seen in game yet): (1) skyrim_hairs and face_fit --hair use VANILLA_DEFAULTS:
+  no hairline lift, no volume, no temple bridge (drape), conform blend 15 mm, card spacing 0.3 mm. The KS steps
+  move a thick layered wig; a vanilla hair is one thin shell over its own hairline layer, and every one of them lifts
+  the shell off that layer (the 60 mm blend lifts a whole region by its deepest point); the KS defaults stay in
+  hair_pack. (2) skyrimhair.strand_axis / strands_down: a shape whose steep triangles have dP/du pointing down more
+  than dP/dv lays its strands along U; its UVs are swapped and its texture transposed (pipeline transpose=True,
+  material stem _rot), because the strand maps, the band evening and the hair shader's tangent frame all assume
+  strands along V (verified on KS and IDG). "Very flat" is partly the vanilla meshes themselves (few cards).
