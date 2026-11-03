@@ -83,6 +83,68 @@ class FitViewTests(unittest.TestCase):
         self.assertEqual(len(skyrimhair.hair_points(both)), 2)              # the measurements skip the tint layer
         self.assertTrue(skyrimhair.is_tint(tint) and not skyrimhair.is_tint(hs))
 
+    def test_fill_layers_stack_turned_copies_of_the_raised_top(self):
+        from fo4sf import skyrimhair
+        pts, nrm = sphere(8000)
+        head = np.eye(4)
+        head[:3, 3] = (0.0, 0.0, 1.65)
+        c = head[:3, 3]
+
+        def on_head(el, az, r=0.091):
+            e, a = np.radians(el), np.radians(az)
+            return c + r * np.array([np.cos(e) * np.sin(a), np.cos(e) * np.cos(a), np.sin(e)])
+        # a crown triangle (fully raised), a side triangle below `low` (never raised), and the scalp tint
+        crown = np.array([on_head(80, 0), on_head(80, 90), on_head(75, 45)])
+        side = np.array([on_head(10, 90), on_head(15, 90), on_head(10, 100)])
+        pos = np.concatenate([crown, side])
+        sh = skyrimhair.HairShape(b"KSSMP_X", pos, nrm[:6].copy(), nrm[:6].copy(), [(i * 0.1, 0.0) for i in range(6)],
+                                  [(0, 1, 2), (3, 4, 5)], [[("C_Head", 1.0)]] * 3 + [[("Hair1", 1.0)]] * 3, 7, 8, 0)
+        tint = skyrimhair.HairShape(b"Hairline", crown.copy(), np.zeros((3, 3)), np.zeros((3, 3)), [(0, 0)] * 3,
+                                    [(0, 1, 2)], [[("C_Head", 1.0)]] * 3, -1, -1, 0)
+        out = skyrimhair.add_volume(skyrimhair.Hair([sh, tint], [], {}, {}), pts, nrm, head, 0.02,
+                                    low=0.0, high=0.07, layers=3)
+        names = [s.name for s in out.shapes]
+        self.assertEqual(names, [b"KSSMP_X", b"KSSMP_X_layer1", b"KSSMP_X_layer2", b"KSSMP_X_layer3", b"Hairline"])
+        np.testing.assert_allclose(out.shapes[0].positions, pos)             # the wig itself stays on the scalp
+        np.testing.assert_allclose(out.shapes[4].positions, crown)           # and so does the tint
+        for k, layer in enumerate(out.shapes[1:4], 1):
+            self.assertEqual(len(layer.positions), 3)                        # the crown only: the side never rose
+            self.assertEqual(layer.triangles, [(0, 1, 2)])
+            self.assertEqual(layer.uvs, sh.uvs[:3])
+            self.assertEqual(layer.weights, sh.weights[:3])
+            self.assertEqual((layer.shader_ref, layer.alpha_ref), (7, 8))
+            off = np.linalg.norm(layer.positions - c, axis=1) - 0.091
+            np.testing.assert_allclose(off, 0.02 * k / 3, atol=0.002)        # evenly up to the full amount
+        turned = [np.degrees(np.arctan2(l.positions[1, 0] - c[0], l.positions[1, 1] - c[1])) for l in out.shapes[1:4]]
+        d = [t - 90.0 for t in turned]                                       # alternating sides, so the cards
+        self.assertGreater(abs(d[0]), 0.5)                                   # of one layer cover the gaps of
+        self.assertLess(d[0] * d[1], 0.0)                                    # the next
+        self.assertGreater(d[2] * d[0], 0.0)
+        self.assertGreater(abs(d[2]), abs(d[0]) + 0.5)
+        self.assertEqual(out.report["layers"], 3)
+        self.assertEqual(out.report["layer_vertices"], 9)
+        self.assertEqual(out.report["vertices"], 6 + 3 + 9)
+        moved = skyrimhair.add_volume(skyrimhair.Hair([sh], [], {}, {}), pts, nrm, head, 0.02, low=0.0, high=0.07)
+        self.assertEqual(len(moved.shapes), 1)                               # layers=0: the old move
+        self.assertGreater(np.linalg.norm(moved.shapes[0].positions[0] - pos[0]), 0.015)
+
+    def test_drop_duplicate_shapes_keeps_one_copy_of_ks_two_pass_wig(self):
+        from fo4sf import skyrimhair
+        p = np.array([[0.0, 0.0, 1.7], [0.01, 0.0, 1.7], [0.0, 0.01, 1.7]])
+
+        def shape(name, pos, uvs=((0, 0), (1, 0), (0, 1))):
+            return skyrimhair.HairShape(name, pos, None, None, list(uvs), [(0, 1, 2)], [[("C_Head", 1.0)]] * 3,
+                                        -1, -1, 0)
+        hair = skyrimhair.Hair([shape(b"KSSMP_A", p), shape(b"KSSMP_A_HL", p.copy()), shape(b"Hairline", p + 0.001),
+                                shape(b"Other", p.copy(), uvs=((0, 0), (0.5, 0), (0, 0.5)))], [], {}, {})
+        out, dropped = skyrimhair.drop_duplicate_shapes(hair)
+        self.assertEqual(dropped, ["KSSMP_A_HL"])
+        self.assertEqual([s.name for s in out.shapes], [b"KSSMP_A", b"Hairline", b"Other"])
+        self.assertEqual(out.report["vertices"], 9)
+        same, none = skyrimhair.drop_duplicate_shapes(out)
+        self.assertIs(same, out)
+        self.assertEqual(none, [])
+
     def test_lift_hairline_raises_the_front_keeps_the_back_and_the_gap(self):
         from fo4sf import skyrimhair
         pts, nrm = sphere(8000)

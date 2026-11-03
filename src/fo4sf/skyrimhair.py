@@ -487,9 +487,54 @@ def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: 
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, hairline_lift=True))
 
 
+def _volume_share(pos, head_pts, head_nrm, h, low, high, edge, edge_fade):
+    """(share 0..1 of the volume each point takes, its nearest head point's index): add_volume's fade."""
+    known = sorted(k for k, v in (edge or {}).items() if v is not None)
+    _d, dist, j = nearest_surface(pos, head_pts, head_nrm)
+    rel = pos - h
+    rel_z = rel[:, 2]
+    w = _smooth((rel_z - low) / (high - low)) * _smooth((0.06 - dist) / 0.03)
+    if known:
+        ang = np.degrees(np.arctan2(rel[:, 0], rel[:, 1]))
+        line = np.interp(np.clip(ang, known[0], known[-1]), known, [edge[k] for k in known])
+        at_edge = np.abs(ang) <= 120.0
+        w = np.where(at_edge, w * _smooth((rel_z - line) / edge_fade), w)
+    return w, j
+
+
+def _turn_z(v: np.ndarray, deg: np.ndarray) -> np.ndarray:
+    """Vectors (n, 3) turned about the vertical by per-row angles (degrees)."""
+    a = np.radians(deg)
+    c, s = np.cos(a), np.sin(a)
+    return np.stack([c * v[:, 0] - s * v[:, 1], s * v[:, 0] + c * v[:, 1], v[:, 2]], axis=1)
+
+
+def _sub_shape(sh: HairShape, name: bytes, pos, nrm, tan, keep_tri) -> Optional[HairShape]:
+    """The triangles `keep_tri` of sh with its vertices renumbered (pos / nrm / tan per original vertex)."""
+    tris = [t for t, k in zip(sh.triangles, keep_tri) if k]
+    if not tris:
+        return None
+    used = sorted({v for t in tris for v in t})
+    new = {v: i for i, v in enumerate(used)}
+    pick = np.array(used)
+    return HairShape(name, pos[pick], None if nrm is None else nrm[pick], None if tan is None else tan[pick],
+                     [sh.uvs[v] for v in used] if sh.uvs else sh.uvs, [tuple(new[v] for v in t) for t in tris],
+                     [sh.weights[v] for v in used], sh.shader_ref, sh.alpha_ref, sh.block)
+
+
+LAYERS = 3                  # fill layers add_volume stacks under a raised wig by default (hair_pack)
+VOLUME_MAX_LAYERED = 0.02   # m: the most volume by default when the gap is filled (IDG Elegant's extra-long straight:
+                            # ~18 hair sheets over ~24 mm along a ray out of the scalp; KS Anna ~4 within ~1 mm)
+LAYER_TURN = 2.0            # degrees each fill layer is turned about the vertical, alternating, so its cards cover
+                            # the gaps between the cards of the layer under it instead of lining up with them
+LAYER_MIN_SHARE = 0.2       # a fill layer keeps the triangles that take at least this share of the volume: nearer
+                            # the hairline / the strands it would lie on the original (z-fighting)
+
+
 def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, amount: float,
                low: float = 0.06, high: float = 0.12, edge: Optional[Dict[int, Optional[float]]] = None,
-               edge_fade: float = 0.05, keep=TINT_SHAPES) -> Hair:
+               edge_fade: float = 0.05, keep=TINT_SHAPES, layers: int = 0, turn: float = LAYER_TURN,
+               min_share: float = LAYER_MIN_SHARE) -> Hair:
     """Hair lying on the head moved `amount` m outward along the head's normal, full above `high` (C_Head-relative
     height: the top of the head only; the sides stay snug, as on the vanilla hairs), fading to nothing at `low`: KS
     wigs hug the scalp, Starfield's own hair stands off it (2026-11-02: owner saw the wigs flat next to the vanilla
@@ -497,27 +542,67 @@ def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.
     displacement of their nearest head point, so locks stay attached. The wig's edge stays on the skin: with `edge` (its
     hairline_profile) the push fades to nothing at the hairline over `edge_fade` m (the sides up to 120 deg take the
     temple's height), and shapes named like `keep` (KS's 'Hairline' scalp tint) never move: a pushed-out edge or
-    tint would leave a visible gap between hair and skin."""
+    tint would leave a visible gap between hair and skin.
+
+    With `layers` > 0 the wig is filled instead of moved (2026-11-02: owner: a raised KS wig looks like it floats,
+    IDG's hair is 'more 3D, filled in'): the original stays on the scalp and `layers` copies of its raised part stand
+    at amount * k / layers (k = 1..layers, the last at the full amount), each turned `turn` degrees about the vertical
+    (alternating sides, scaled by the same fade) so the stack covers the gaps between cards. A copy keeps only the
+    triangles whose three corners take at least `min_share` of the volume; weights / UVs / material are the
+    original's, so the copies swing with it."""
     h = np.asarray(head, float)[:3, 3]
-    known = sorted(k for k, v in (edge or {}).items() if v is not None)
-    shapes = []
+    nrm_head = np.asarray(head_nrm, float)
+    shapes, added = [], []
     for sh in hair.shapes:
         pos = np.asarray(sh.positions, float)
         if any(k in (sh.name or b"").lower() for k in keep):
             shapes.append(sh)
             continue
-        _d, dist, j = nearest_surface(pos, head_pts, head_nrm)
-        rel = pos - h
-        rel_z = rel[:, 2]
-        w = amount * _smooth((rel_z - low) / (high - low)) * _smooth((0.06 - dist) / 0.03)
-        if known:
-            ang = np.degrees(np.arctan2(rel[:, 0], rel[:, 1]))
-            line = np.interp(np.clip(ang, known[0], known[-1]), known, [edge[k] for k in known])
-            at_edge = np.abs(ang) <= 120.0
-            w = np.where(at_edge, w * _smooth((rel_z - line) / edge_fade), w)
-        shapes.append(HairShape(sh.name, pos + w[:, None] * np.asarray(head_nrm, float)[j], sh.normals, sh.tangents,
-                                sh.uvs, sh.triangles, sh.weights, sh.shader_ref, sh.alpha_ref, sh.block))
-    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, volume=amount))
+        share, j = _volume_share(pos, head_pts, head_nrm, h, low, high, edge, edge_fade)
+        if layers <= 0:
+            shapes.append(HairShape(sh.name, pos + (amount * share)[:, None] * nrm_head[j], sh.normals, sh.tangents,
+                                    sh.uvs, sh.triangles, sh.weights, sh.shader_ref, sh.alpha_ref, sh.block))
+            continue
+        shapes.append(sh)
+        tris = np.asarray(sh.triangles, int).reshape(-1, 3)
+        ok_tri = (share[tris] >= min_share).all(axis=1) if len(tris) else np.zeros(0, bool)
+        nrm = None if sh.normals is None else np.asarray(sh.normals, float)
+        tan = None if sh.tangents is None else np.asarray(sh.tangents, float)
+        for k in range(1, layers + 1):
+            deg = turn * ((k + 1) // 2) * (1 if k % 2 else -1) * share
+            p = _turn_z(pos - h, deg) + h + (amount * k / layers * share)[:, None] * nrm_head[j]
+            sub = _sub_shape(sh, (sh.name or b"") + b"_layer%d" % k, p,
+                             None if nrm is None or nrm.shape != pos.shape else _turn_z(nrm, deg),
+                             None if tan is None or tan.shape != pos.shape else _turn_z(tan, deg), ok_tri)
+            if sub is not None:
+                shapes.append(sub)
+                added.append(len(sub.positions))
+    report = dict(hair.report, volume=amount)
+    if layers > 0:
+        report.update(layers=layers, layer_vertices=int(sum(added)),
+                      shapes=[(s.name or b"").decode("latin-1") for s in shapes],
+                      vertices=int(sum(len(s.positions) for s in shapes)))
+    return Hair(shapes, hair.bones, hair.host_of_root, report)
+
+
+def drop_duplicate_shapes(hair: Hair) -> Tuple[Hair, List[str]]:
+    """The hair without shapes whose geometry repeats an earlier shape's (same positions, triangles and UVs): KS
+    draws every wig twice, 'KSSMP_<name>' alpha-blended (test 40) and '..._HL' alpha-tested (test 200), Skyrim's
+    two-pass trick for soft edges. Starfield's hair shader does its own soft edges, so the second copy would only lie
+    in the first (z-fighting). (hair, names dropped)."""
+    kept, dropped = [], []
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        twin = any(len(o.positions) == len(pos) and list(o.triangles) == list(sh.triangles)
+                   and np.allclose(np.asarray(o.positions, float), pos, atol=1e-6) and list(o.uvs) == list(sh.uvs)
+                   for o in kept)
+        (dropped if twin else kept).append(sh)
+    if not dropped:
+        return hair, []
+    names = [(s.name or b"").decode("latin-1") for s in dropped]
+    report = dict(hair.report, shapes=[(s.name or b"").decode("latin-1") for s in kept],
+                  vertices=int(sum(len(s.positions) for s in kept)), dropped_duplicates=names)
+    return Hair(kept, hair.bones, hair.host_of_root, report), names
 
 
 def rigid(hair: Hair) -> Hair:

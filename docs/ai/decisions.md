@@ -884,3 +884,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   is near-grey; whether Hair1Layer multiplies the actor's hair colour is the in-game test). Also --reference-hair
   '<ba2>:<facebones nif>' (pack and viewer): the hair whose hairline / crown the wigs are matched to; IDG's styles
   read here (soft wave 62,498 verts, top 21 cm above C_Head; straight bob 12,730, 18 cm; KS Anna about 15 cm).
+- 2026-11-02 Fill layers under raised hair; one copy of KS's two-pass wig. Owner: IDG's hair is "more 3D, filled
+  in", a raised KS wig (old --volume) looks like it floats. Measured here (rays out of C_Head over the scalp,
+  counting triangle hits; verified on the files): IDG extra-long straight crosses a median 18 hair sheets spread
+  over 24 mm; KS Anna 4 sheets within 1 mm (Erena 5 / 12 mm, Spring 3 / 2 mm, Caress 4 / 8 mm), i.e. a thin
+  shell. KS also draws every wig twice: 'KSSMP_<name>' alpha-blend (test 40) and '..._HL' alpha-test (test 200),
+  identical geometry (Skyrim's two-pass soft edge). Now: skyrimhair.drop_duplicate_shapes (hair_pack with the hair
+  shader, the viewer unless --classic-material) and add_volume(layers=N): the wig stays on the scalp, N copies of
+  its raised part stand at volume*k/N, each turned LAYER_TURN deg about the vertical (alternating, scaled by the
+  fade) to cover the gaps between cards, triangles taking under LAYER_MIN_SHARE of the volume left out (no
+  z-fighting at the hairline / on strands); weights / UVs / material copied, so the copies swing with the wig.
+  hair_pack / viewer --layers (default 3; 0 = the old move), default volume cap 20 mm with layers (8 without).
+  On a stand-in ellipsoid head (no Starfield head here) Anna goes to 10 sheets / 20 mm with 39.5k vertices
+  (42.8k before, with the duplicate). Supported, not seen in game.

@@ -159,7 +159,12 @@ def main(argv=None):
     ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline everywhere (default: per "
                                                         "angle up to the vanilla hair's, as hair_pack; 0 = off)")
     ap.add_argument("--volume", type=float, help="mm to stand the hair off the scalp (default: up to the vanilla "
-                                                 "hair's crown, at most 12, as hair_pack; 0 = off)")
+                                                 "hair's crown, at most 20 with fill layers, 8 without, as "
+                                                 "hair_pack; 0 = off)")
+    ap.add_argument("--layers", type=int, default=skyrimhair.LAYERS,
+                    help="fill layers under raised hair, as hair_pack (0 = move the wig itself out)")
+    ap.add_argument("--classic-material", action="store_true",
+                    help="as hair_pack's: keep KS's second copy of the wig")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -186,6 +191,8 @@ def main(argv=None):
         scale, offset, used = np.array(ax_s), ax_t, "female fit, per axis (measured)"
     sky_moved = head[:3, 3] + np.asarray(offset) + scale * (sky_pts - anchor[:3, 3]) * skyrimhair.UNIT
     wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
+    if not a.classic_material:          # as hair_pack: one copy of KS's two-pass wig
+        wig_hair, _dropped = skyrimhair.drop_duplicate_shapes(wig_hair)
     vanilla = vanilla_tris = None                      # the cloth template hair's facebones mesh: Starfield's own fit
     tpl = report.get("cloth_template") or ""
     if a.reference_hair:
@@ -217,10 +224,11 @@ def main(argv=None):
     if a.volume is not None:
         volume = a.volume / 1000.0
     elif crown_van is not None and crown_raw is not None:
-        volume = float(np.clip(crown_van - crown_raw, 0.0, skyrimhair.VOLUME_MAX))
+        volume = float(np.clip(crown_van - crown_raw, 0.0,
+                               skyrimhair.VOLUME_MAX_LAYERED if a.layers > 0 else skyrimhair.VOLUME_MAX))
     if volume:                         # as hair_pack: fading to nothing at the (lifted) hairline
         edge = skyrimhair.hairline_profile(skyrimhair.hair_points(wig_hair), sf_pts, sf_nrm, head)
-        wig_hair = skyrimhair.add_volume(wig_hair, sf_pts, sf_nrm, head, volume, edge=edge)
+        wig_hair = skyrimhair.add_volume(wig_hair, sf_pts, sf_nrm, head, volume, edge=edge, layers=a.layers)
     before = None
     if not a.no_push_out:
         before = regions(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
@@ -256,7 +264,9 @@ def main(argv=None):
              "crown_above_C_Head_mm": {"wig before": None if crown_raw is None else round(1000 * crown_raw, 1),
                                        "wig after": round(1000 * skyrimhair.crown_height(hair_only, head), 1),
                                        "vanilla": None if crown_van is None else round(1000 * crown_van, 1),
-                                       "volume_mm": round(1000 * volume, 1)},
+                                       "volume_mm": round(1000 * volume, 1),
+                                       "fill_layers": a.layers if volume else 0,
+                                       "layer_vertices": wig_hair.report.get("layer_vertices", 0)},
              "conformed": not a.no_push_out,
              "wig_inside_head_before_conform": before,
              "skyrim_head_vs_starfield_mm": {"median_gap": round(1000 * float(np.median(sky_depth)), 1),

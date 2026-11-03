@@ -541,6 +541,10 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         return row
     row["config"] = paths[0]
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
+    if a.hair_shader:                    # KS's second (alpha-tested) copy of every wig: the hair shader needs one
+        hair, dropped = skyrimhair.drop_duplicate_shapes(hair)
+        if dropped:
+            row["dropped_duplicate_shapes"] = dropped
     if getattr(a, "head_surface", None) is not None:
         head = sf_world[skyrimhair.SF_HEAD]
         pts = skyrimhair.hair_points(hair)                       # without KS's scalp tint layer
@@ -562,12 +566,15 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         elif getattr(a, "vanilla_crown", None) is not None:      # stand off the scalp like the vanilla hair
             own_crown = skyrimhair.crown_height(pts, head)
             if own_crown is not None:
-                volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, skyrimhair.VOLUME_MAX))
+                cap = skyrimhair.VOLUME_MAX_LAYERED if a.layers > 0 else skyrimhair.VOLUME_MAX
+                volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, cap))
                 row["crown_above_C_Head_mm"] = round(1000 * own_crown, 1)
         if volume:                       # fading to nothing at the (lifted) hairline: the edge stays on the skin
             edge = skyrimhair.hairline_profile(skyrimhair.hair_points(hair), *a.head_surface, head)
-            hair = skyrimhair.add_volume(hair, *a.head_surface, head, volume, edge=edge)
+            hair = skyrimhair.add_volume(hair, *a.head_surface, head, volume, edge=edge, layers=a.layers)
             row["volume_mm"] = round(1000 * volume, 1)
+            if a.layers > 0:
+                row["layers"] = {"count": a.layers, "vertices_added": hair.report.get("layer_vertices", 0)}
         hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)   # no scalp point inside the head
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
@@ -640,8 +647,12 @@ def main(argv=None):
                     help="mm to raise the front hairline everywhere (default: up to the vanilla hair's at each angle "
                          "from temple to temple, at most 30; 0 = off)")
     ap.add_argument("--volume", type=float,
-                    help="mm to stand the hair off the scalp at the top (default: up to the vanilla hair's crown "
-                         "height, at most 12; 0 = off)")
+                    help="mm to stand the hair off the scalp at the top (default: up to the reference hair's crown "
+                         "height, at most 20 with fill layers, 8 without; 0 = off)")
+    ap.add_argument("--layers", type=int, default=skyrimhair.LAYERS,
+                    help="fill layers under raised hair: the wig stays on the scalp and this many turned copies of "
+                         "its top stand between it and the volume, so it reads thick instead of floating (default "
+                         "%(default)s; 0 = move the wig itself out, the old way)")
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,
