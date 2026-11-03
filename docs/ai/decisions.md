@@ -853,3 +853,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the volume rose to its full amount within 3 cm of the hairline: a visible ridge, like a hairband. Default volume
   now at most 12 mm (skyrimhair.VOLUME_MAX) over a 5 cm rise (edge_fade). The side locks lying on the outer cheeks
   are Anna's face-framing strands on Starfield's relatively wider face (left as they are).
+- 2026-11-02 owner: the KS scalp looks too low (surface view and in game). Cause found: KS wigs carry a 'Hairline'
+  shape, a skin-tight scalp layer over the forehead whose texture fades out (Skyrim: alpha test 10 + blend); the
+  converted cutout material kept every pixel above 10/255, so the whole fade drew as a hard band down the forehead
+  (the Anna tint layer reaches about brow level, rendered headless). Now hair_pack gives tint shapes a cutout at 128
+  (--tint-cutoff), the hairline / crown measurements skip the tint layer (skyrimhair.hair_points / is_tint; before,
+  the tint's low edge was taken for the hairline), volume never moves it, and the viewer draws it as a separate
+  see-through layer. Unverified in game.

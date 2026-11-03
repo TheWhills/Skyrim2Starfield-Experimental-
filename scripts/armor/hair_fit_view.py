@@ -75,6 +75,8 @@ def page(sets: dict, title: str, stats: dict) -> str:
              "c": np.round(np.asarray(c, float) * 255).astype(int).ravel().tolist()}
         if len(v) > 2 and v[2] is not None and len(v[2]):
             d["t"] = np.asarray(v[2], int).ravel().tolist()
+        if len(v) > 3:
+            d["o"] = float(v[3])
         data[k] = d
     return """<!doctype html><html><head><meta charset="utf-8"><title>Hair fit</title>
 <style>body{margin:0;background:#1b1d22;color:#ddd;font:13px system-ui,sans-serif}#ui{position:fixed;top:10px;left:10px;
@@ -103,7 +105,8 @@ for(const k in DATA){const g=new THREE.BufferGeometry();const p=Float32Array.fro
  const m=new THREE.Points(g,new THREE.PointsMaterial({size:0.003,vertexColors:true}));scene.add(m);
  let mesh=null;if(DATA[k].t){const mg=new THREE.BufferGeometry();mg.setAttribute('position',new THREE.BufferAttribute(p.slice(),3));
   mg.setAttribute('color',g.getAttribute('color'));mg.setIndex(DATA[k].t);mg.computeVertexNormals();
-  mesh=new THREE.Mesh(mg,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:0.85}));mesh.visible=false;scene.add(mesh);}
+  const op=DATA[k].o||1;mesh=new THREE.Mesh(mg,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:0.85,transparent:op<1,opacity:op,depthWrite:op>=1}));mesh.visible=false;scene.add(mesh);}
+ if(DATA[k].o&&DATA[k].t){m.material.size=0.0;}
  objs[k]={m,mesh,on:true,all:g.getAttribute('position').array.slice()};
  const l=document.createElement('label');l.innerHTML='<input type=checkbox checked> '+k;l.firstChild.onchange=e=>{objs[k].on=e.target.checked;show();};tg.appendChild(l);}
 function show(){const sl=document.getElementById('sliceon').checked;for(const k in objs){const o=objs[k];
@@ -189,7 +192,7 @@ def main(argv=None):
         got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None
         vanilla = got[0] if got is not None else None
         vanilla_tris = got[3] if got is not None else None
-    raw_pts = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
+    raw_pts = skyrimhair.hair_points(wig_hair)                # without KS's scalp tint layer
     hl_van = hairline(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
     hl_raw = hairline(raw_pts, sf_pts, sf_nrm, head)
     prof_van = skyrimhair.hairline_profile(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
@@ -209,8 +212,7 @@ def main(argv=None):
     elif crown_van is not None and crown_raw is not None:
         volume = float(np.clip(crown_van - crown_raw, 0.0, skyrimhair.VOLUME_MAX))
     if volume:                         # as hair_pack: fading to nothing at the (lifted) hairline
-        edge = skyrimhair.hairline_profile(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
-                                           sf_pts, sf_nrm, head)
+        edge = skyrimhair.hairline_profile(skyrimhair.hair_points(wig_hair), sf_pts, sf_nrm, head)
         wig_hair = skyrimhair.add_volume(wig_hair, sf_pts, sf_nrm, head, volume, edge=edge)
     before = None
     if not a.no_push_out:
@@ -221,8 +223,9 @@ def main(argv=None):
     wig = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     depth = head_depth(wig, sf_pts, sf_nrm)
     sky_depth, _d, _i = skyrimhair.nearest_surface(sky_moved, sf_pts, sf_nrm)
-    hl_wig = hairline(wig, sf_pts, sf_nrm, head)
-    prof_new = skyrimhair.hairline_profile(wig, sf_pts, sf_nrm, head)
+    hair_only = skyrimhair.hair_points(wig_hair)
+    hl_wig = hairline(hair_only, sf_pts, sf_nrm, head)
+    prof_new = skyrimhair.hairline_profile(hair_only, sf_pts, sf_nrm, head)
     stats = {"wig": a.wig, "placement": used, "scale": np.round(np.asarray(scale, float), 4).tolist(),
              "offset_m": [round(x, 4) for x in offset],
              "female_fit_per_axis": {"scale_xyz (width, depth, height)": [round(x, 4) for x in ax_s],
@@ -244,7 +247,7 @@ def main(argv=None):
                  "vanilla " + os.path.basename(tpl.split(":", 1)[-1]): None if hl_van is None else round(1000 * hl_van, 1),
                  "note": "middle of the forehead; lower = the hair covers more of the forehead"},
              "crown_above_C_Head_mm": {"wig before": None if crown_raw is None else round(1000 * crown_raw, 1),
-                                       "wig after": round(1000 * skyrimhair.crown_height(wig, head), 1),
+                                       "wig after": round(1000 * skyrimhair.crown_height(hair_only, head), 1),
                                        "vanilla": None if crown_van is None else round(1000 * crown_van, 1),
                                        "volume_mm": round(1000 * volume, 1)},
              "conformed": not a.no_push_out,
@@ -265,13 +268,22 @@ def main(argv=None):
     wig_col = np.where(wd[:, None] < INSIDE, np.hstack([0.6 + 0.4 * red, 0.15 * (1 - red), 0.1 * (1 - red)]),
                        np.array([[0.55, 0.55, 0.58]]))
     skp = thin(sky_moved)
-    wig_tris, base = [], 0
+    wig_tris, tint_tris, base = [], [], 0
+    tint_mask = np.zeros(len(wp), bool)
     for sh in wig_hair.shapes:
-        wig_tris += [(t[0] + base, t[1] + base, t[2] + base) for t in sh.triangles]
+        tri = [(t[0] + base, t[1] + base, t[2] + base) for t in sh.triangles]
+        if skyrimhair.is_tint(sh):
+            tint_mask[base:base + len(sh.positions)] = True
+            tint_tris += tri
+        else:
+            wig_tris += tri
         base += len(sh.positions)
     sets = {"Starfield female head": (sf_pts, np.tile([0.85, 0.68, 0.52], (len(sf_pts), 1)), head_tris),
             "Skyrim female head (moved by the fit)": (skp, np.tile([0.35, 0.55, 0.95], (len(skp), 1))),
             f"{a.wig} wig (red = inside the head)": (wp, wig_col, wig_tris)}
+    if tint_tris:                       # KS's fading scalp layer: mostly see-through in game, drawn see-through here
+        sets[f"{a.wig} scalp fade layer ('Hairline', see-through in game)"] = (
+            wp, np.where(tint_mask[:, None], [[0.75, 0.6, 0.35]], wig_col), tint_tris, 0.35)
     if vanilla is not None:
         sets["Starfield's own hair (" + os.path.basename(tpl.split(":", 1)[-1]) + ")"] = (
             vanilla, np.tile([0.35, 0.85, 0.45], (len(vanilla), 1)), vanilla_tris)

@@ -71,6 +71,9 @@ class FitViewTests(unittest.TestCase):
         self.assertLess(moved[0], 1e-6)                                   # on the hairline: stays on the skin
         self.assertGreater(moved[1], 0.007)                               # 3.5 cm up the 5 cm rise: ~0.8 of it
         np.testing.assert_allclose(out.shapes[1].positions, tint.positions)   # 'Hairline' tint untouched
+        both = skyrimhair.Hair([hs, tint], [], {}, {})
+        self.assertEqual(len(skyrimhair.hair_points(both)), 2)              # the measurements skip the tint layer
+        self.assertTrue(skyrimhair.is_tint(tint) and not skyrimhair.is_tint(hs))
 
     def test_lift_hairline_raises_the_front_keeps_the_back_and_the_gap(self):
         from fo4sf import skyrimhair

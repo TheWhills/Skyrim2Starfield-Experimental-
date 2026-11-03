@@ -378,6 +378,20 @@ def push_out(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, gap: float 
             {"vertices_moved": moved, "deepest_mm": round(1000 * deepest, 1)})
 
 
+TINT_SHAPES = (b"hairline",)   # KS's skin-tight scalp layer with a fading texture: not where the hair starts
+
+
+def is_tint(sh: HairShape) -> bool:
+    return any(k in (sh.name or b"").lower() for k in TINT_SHAPES)
+
+
+def hair_points(hair: Hair) -> np.ndarray:
+    """The points of the hair's own shapes, without the scalp tint layer (the measurements' input: the tint fades out
+    lower on the forehead than the hair starts, 2026-11-02)."""
+    pts = [np.asarray(sh.positions, float) for sh in hair.shapes if not is_tint(sh)]
+    return np.concatenate(pts) if pts else np.zeros((0, 3))
+
+
 def hairline(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray) -> Optional[float]:
     """Height of the hairline above C_Head at the middle of the forehead (m), or None: the lowest point lying on the
     head (within 1 cm of its surface) in a 3 cm wide band down the front of the face."""
@@ -475,7 +489,7 @@ def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: 
 
 def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, amount: float,
                low: float = 0.0, high: float = 0.07, edge: Optional[Dict[int, Optional[float]]] = None,
-               edge_fade: float = 0.05, keep=(b"hairline",)) -> Hair:
+               edge_fade: float = 0.05, keep=TINT_SHAPES) -> Hair:
     """Hair lying on the head moved `amount` m outward along the head's normal, full above `high` (C_Head-relative
     height), fading to nothing at `low`: KS wigs hug the scalp, Starfield's own hair stands off it (2026-11-02: owner
     saw the wigs flat next to the vanilla bob). Points off the head (strands) follow by the same fade with the

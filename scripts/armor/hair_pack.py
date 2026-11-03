@@ -244,6 +244,18 @@ def arma_model(arma) -> str:
     return ""
 
 
+def tint_material(conv, n, sh, cutoff: int):
+    """The material of KS's scalp fade layer ('Hairline'): its texture fades out over the forehead and Skyrim blends
+    it (alpha test 10 + blend); a converted cutout material keeps every pixel above alpha 10/255, so the whole fade
+    drew as a hard band down the forehead (2026-11-02: owner saw the KS scalp too low). The cut-off is raised to
+    `cutoff` (0-255) so only the solid part of the fade shows."""
+    paths = skyrimnif.texture_set(n, sh.shader_ref) if sh.shader_ref >= 0 else []
+    if not paths or not paths[0]:
+        return conv._shape_material(n, sh)
+    return conv.skyrim_material(paths[0], paths[1] if len(paths) > 1 else "", True, False, int(cutoff)) or \
+        conv._shape_material(n, sh)
+
+
 def write_files(staging: str, files: dict):
     for rel, data in files.items():
         p = os.path.join(staging, *rel.split("/"))
@@ -497,7 +509,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
     if getattr(a, "head_surface", None) is not None:
         head = sf_world[skyrimhair.SF_HEAD]
-        pts = np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes])
+        pts = skyrimhair.hair_points(hair)                       # without KS's scalp tint layer
         lift = None
         if a.hairline_lift is not None:
             lift = a.hairline_lift / 1000.0
@@ -519,8 +531,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
                 volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, skyrimhair.VOLUME_MAX))
                 row["crown_above_C_Head_mm"] = round(1000 * own_crown, 1)
         if volume:                       # fading to nothing at the (lifted) hairline: the edge stays on the skin
-            edge = skyrimhair.hairline_profile(np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes]),
-                                               *a.head_surface, head)
+            edge = skyrimhair.hairline_profile(skyrimhair.hair_points(hair), *a.head_surface, head)
             hair = skyrimhair.add_volume(hair, *a.head_surface, head, volume, edge=edge)
             row["volume_mm"] = round(1000 * volume, 1)
         hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)   # no scalp point inside the head
@@ -543,7 +554,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
                     "body_colliders": body_report}
     mats, backs = [], []
     for sh in hair.shapes:
-        mats.append(conv._shape_material(n, sh))
+        mats.append(tint_material(conv, n, sh, a.tint_cutoff) if skyrimhair.is_tint(sh) else
+                    conv._shape_material(n, sh))
         backs.append(bool(sh.shader_ref >= 0 and skyrimnif.double_sided(n, sh.shader_ref)))
     row["materials"] = mats
     out_name = f"{PREFIX}/hair/{stem.lower()}"
@@ -591,6 +603,9 @@ def main(argv=None):
     ap.add_argument("--volume", type=float,
                     help="mm to stand the hair off the scalp at the top (default: up to the vanilla hair's crown "
                          "height, at most 12; 0 = off)")
+    ap.add_argument("--tint-cutoff", type=int, default=128,
+                    help="alpha (0-255) below which KS's scalp fade layer ('Hairline') is not drawn: Skyrim blends it, "
+                         "a cutout at Skyrim's 10 draws the whole fade as a band down the forehead")
     ap.add_argument("--no-conform", dest="conform", action="store_false",
                     help="leave the wig where the fit puts it (default: scalp points inside Starfield's female head "
                          "are pushed just outside it)")

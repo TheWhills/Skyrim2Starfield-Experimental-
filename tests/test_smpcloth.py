@@ -507,6 +507,24 @@ class ControlHelperTests(unittest.TestCase):
         self.assertAlmostEqual(weights[1][0][1], 0.8, places=4)
         self.assertNotIn("_face_skin", rep)
 
+    def test_tint_layer_gets_a_higher_cutoff(self):
+        import hair_pack
+        from unittest import mock
+        calls = []
+
+        class Conv:
+            def skyrim_material(self, *args, **kw):
+                calls.append(args)
+                return "materials\\tint.mat"
+
+            def _shape_material(self, n, sh):
+                return "materials\\plain.mat"
+        sh = skyrimhair.HairShape(b"Hairline", np.zeros((1, 3)), [], [], [], [], [[]], 7, 8, 0)
+        with mock.patch.object(hair_pack.skyrimnif, "texture_set", lambda n, ref: ["tex\\hl.dds", "tex\\hl_n.dds"]):
+            got = hair_pack.tint_material(Conv(), None, sh, 128)
+        self.assertEqual(got, "materials\\tint.mat")
+        self.assertEqual(calls, [("tex\\hl.dds", "tex\\hl_n.dds", True, False, 128)])   # cutout at 128, no blend
+
     def test_hide_hair_replaces_morph_hair(self):
         import hair_pack
         arma = (b"ARMA", b"", [(b"EDID", b"X\0"), (b"BO64", struct.pack("<Q", 0x12))], 1)   # the Akila hat's addon
