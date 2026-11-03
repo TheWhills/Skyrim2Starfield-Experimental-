@@ -269,27 +269,10 @@ def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report:
     """(scale, offset) fitting the Skyrim female head onto the Starfield female head (skyrimhair.fit_head), or None.
     The KS wigs are made for Skyrim's female head; the constants were measured on the male heads (2026-11-02: the
     owner's female character showed the wigs clipping the forehead)."""
-    from fo4sf import bsa, skyrimnpc, skyrimskin
     info = report.setdefault("head_fit", {})
     try:
-        sky = bsa.SkyrimArchives(skyrim_data)
-        raw = sky._read(bsa.norm(SKY_FEMALE_HEAD))
-        if raw is None:
-            info["error"] = f"not in Skyrim's archives: {SKY_FEMALE_HEAD}"
-            return None
-        n = nifmod.parse(raw)
-        shape = skyrimnpc.head_shape(skyrimskin.skinned_shapes(n))
-        anchor = skyrimhair.head_anchor(n, skyrimhair.node_worlds(n)[0])
-        sf_raw = read_game_file(starfield, SF_FEMALE_HEAD)
-        if sf_raw is None:
-            info["error"] = f"not in the game's archives: {SF_FEMALE_HEAD}"
-            return None
-        skin = facebones_skin_of(starfield, sf_raw)
-        if skin is None:
-            info["error"] = "the Starfield female head's mesh was not found"
-            return None
-        scale, offset, rms = skyrimhair.fit_head(np.array(shape.positions, float), anchor, skin[0],
-                                                 sf_world[skyrimhair.SF_HEAD])
+        sky_pts, anchor, sf_pts, _nrm = load_female_heads(skyrim_data, starfield)
+        scale, offset, rms = skyrimhair.fit_head(sky_pts, anchor, sf_pts, sf_world[skyrimhair.SF_HEAD])
     except Exception as e:                                       # noqa: BLE001 (reported; male constants kept)
         info["error"] = f"{type(e).__name__}: {e}"
         return None
@@ -298,9 +281,10 @@ def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report:
     return scale, offset
 
 
-def facebones_skin_of(starfield: str, raw: bytes):
-    """(points (V, 3) model space, per-vertex [(bone name, weight)]) of a vanilla *_facebones.nif's first skinned
-    shape, its mesh read from the game's archives; None when the mesh is not found."""
+def game_mesh_of(starfield: str, raw: bytes):
+    """(points (V, 3) model space, unit normals (V, 3), per-vertex [(bone name, weight)]) of a vanilla skinned NIF's
+    first shape (the shape node's transform applied: the female head stores its mesh in C_Head's rotated frame, the
+    bob hair at C_Head), its mesh read from the game's archives; None when the mesh is not found."""
     from fo4sf import sfmesh, sfweaponleft
     n = nifmod.parse(raw)
     shapes = sfweaponleft.shapes_in_model(n)
@@ -317,13 +301,48 @@ def facebones_skin_of(starfield: str, raw: bytes):
     node = skyrimhair.xf_matrix(xf)
     pts = np.array([sfmesh.decode_position(p, m.scale) for p in m.positions], float)
     pts = pts @ node[:3, :3].T + node[:3, 3]
+    if m.normals:
+        nrm = np.array([sfmesh.decode_packed(u)[:3] for u in m.normals], float) @ node[:3, :3].T
+        nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-9)
+    else:
+        nrm = np.zeros_like(pts)
     names = [b.decode("latin-1") for b in sfnif.parse_skin(n)["bones"]]
     k = m.weights_per_vertex or 0
     ws = []
     for v in range(len(m.positions)):
         row = m.weights[v * k:(v + 1) * k] if k else []
         ws.append([(names[b], w / 65535.0) for b, w in row if w > 0 and b < len(names)])
-    return pts, ws
+    return pts, nrm, ws
+
+
+def facebones_skin_of(starfield: str, raw: bytes):
+    """(points (V, 3) model space, per-vertex [(bone name, weight)]) of a vanilla *_facebones.nif's first skinned
+    shape (game_mesh_of), or None."""
+    got = game_mesh_of(starfield, raw)
+    return None if got is None else (got[0], got[2])
+
+
+def load_female_heads(skyrim_data: str, starfield: str):
+    """(Skyrim female head points in units, its head bone 4x4 in units, Starfield female head points m, normals)."""
+    from fo4sf import bsa, skyrimnpc, skyrimskin
+    sky = bsa.SkyrimArchives(skyrim_data)
+    raw = sky._read(bsa.norm(SKY_FEMALE_HEAD))
+    if raw is None:
+        raise HairPackError(f"not in Skyrim's archives: {SKY_FEMALE_HEAD}")
+    n = nifmod.parse(raw)
+    shape = skyrimnpc.head_shape(skyrimskin.skinned_shapes(n))
+    anchor = skyrimhair.head_anchor(n, skyrimhair.node_worlds(n)[0])
+    sf_raw = read_game_file(starfield, SF_FEMALE_HEAD)
+    if sf_raw is None:
+        raise HairPackError(f"not in the game's archives: {SF_FEMALE_HEAD}")
+    got = game_mesh_of(starfield, sf_raw)
+    if got is None:
+        raise HairPackError("the Starfield female head's mesh was not found")
+    return np.array(shape.positions, float), anchor, got[0], got[1]
+
+
+class HairPackError(Exception):
+    pass
 
 
 def facebones_template(starfield: str, hat_model: str, report: dict, hair_template: str = None):

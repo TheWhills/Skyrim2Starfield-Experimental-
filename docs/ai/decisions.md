@@ -785,3 +785,18 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the female head fit (Skyrim femalehead.nif cranium onto Starfield femalehead_facebones mesh, similarity without
   rotation, as the male constants) and uses it unless --head-scale / --head-offset are given (hair_pack.json
   head_fit). Range reach per joint checked: 4 cm at the root to 40-55 cm at the tip (Anna / Spring), not the limit.
+- 2026-11-02 owner: KS wigs still do not fit the face and the locks read as "a piece twisting around"; asked for a
+  side-by-side head comparison, and sent OC Hairs (Nexus 14496, read for the format only) as the flowiest Starfield
+  hair he has seen. OC (verified from its files): the ponytail simulates its own tube mesh (367 particles, 160
+  fixed, 463 triangles; pigtails 2,182 / 3,169), particle mass 0.01 kg, radius 2 mm, friction 0.5, damping 0.9, NO
+  local range, transfer motion off, constraint sets standard links + stretch links + hclVolumeConstraintMx (pigtails
+  also hclBendStiffnessConstraintSetMx), colliders: convex-geometry head and torso + biceps capsules, object-space
+  skin, 1 substep / 1 iteration. Ours: a two-row ribbon per lock (2 particles per joint), so twist is barely
+  resisted: the gap is the sim shape, not a parameter. Next (proposed): a tube of particles per lock (rings around
+  each SMP joint) with volume / bend constraints and OC-like settings, on a template whose TYPE section has those
+  classes (OC's own .hkx read from the owner's install, as the bob is), convex head / torso colliders.
+  Also found: Starfield's femalehead_facebones mesh is stored in C_Head's rotated frame (node rotation (0,0,-1 /
+  0,1,0 / 1,0,0) at C_Head), so every head reader must apply the shape node (hair_pack.game_mesh_of does).
+  New scripts/armor/hair_fit_view.py: an HTML 3D page (three.js) with the Starfield female head, the Skyrim female
+  head moved by the fit, and a wig (points inside the Starfield head in red), a left-right slice slider, and counts
+  per region; tested on synthetic data and rendered headless with a stand-in head and the real Anna wig.
