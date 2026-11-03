@@ -943,3 +943,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   as before). Also looked at the "back thing" (owner's side shot, ponytail wig): Spring's own mesh gathers the top
   into a raised crown above the ponytail root (KS geometry, seen in a point plot here); the 8 mm top volume adds
   to it (--volume 0 to compare).
+- 2026-11-02 drape: the hair bridges the temple hollow. Owner drew (viewer, Anna, side) the path he wants: one
+  smooth convex arc from the crown past the brow, where the hair now goes in over the temple and out over the
+  brow (it lies 2-3 mm over Starfield's skin and so takes the skin's hollow). skyrimhair.drape: the wig's outer
+  surface as distance from the cranium's least-squares sphere centre per 1.5-degree direction, morphologically
+  closed over DRAPE_RADIUS (30 mm; dilate then erode: only ever raises), the rise smoothed over the cells that hold
+  hair, every point within 3 cm of the head moved out radially by it (none beyond 6 cm). Front and temples only:
+  full within 75 deg of the front (none past 95: ears / tucked hair / back) and below 45 deg elevation (none above
+  60: the parting). Runs after volume, before push_out; scalp tint not moved. Synthetic: a 5 mm, ~2 cm hollow at the
+  temple bridged (87.5 -> >90.5 mm of 92), one at the back left alone, flat parts unchanged. --drape mm (0 = off).
+  In game / on the real head: unverified.

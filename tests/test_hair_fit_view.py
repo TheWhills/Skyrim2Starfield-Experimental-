@@ -250,6 +250,42 @@ class FitViewTests(unittest.TestCase):
         curv = lambda h: np.abs(np.diff(np.linalg.norm(np.asarray(h.shapes[0].positions)[:-1] - c, axis=1), 2)).max()
         self.assertLess(curv(wide), 0.5 * curv(narrow))
 
+    def test_drape_bridges_a_temple_hollow_and_only_raises(self):
+        from fo4sf import skyrimhair
+        c = np.array([0.0, 0.0, 1.65])
+        head = np.eye(4)
+        head[:3, 3] = c - [0.0, 0.0, 0.06]
+        rng = np.random.default_rng(0)
+        d = rng.normal(size=(20000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+
+        def dent(u, at):
+            at = np.asarray(at, float) / np.linalg.norm(at)
+            return -0.005 * np.exp(-(np.degrees(np.arccos(np.clip(u @ at, -1, 1))) / 8.0) ** 2)
+        temple, behind = [0.5, 0.85, 0.17], [0.0, -1.0, 0.1]     # one at the temple, one at the back of the head
+        dev = lambda u: dent(u, temple) + dent(u, behind)
+        pts, nrm = c + (0.09 + dev(d))[:, None] * d, d
+        g = rng.normal(size=(30000, 3))
+        g /= np.linalg.norm(g, axis=1, keepdims=True)
+        g = g[g[:, 2] > -0.3]
+        hair = c + (0.092 + dev(g))[:, None] * g                   # hair 2 mm over the head, into both hollows
+        sh = skyrimhair.HairShape(b"A", hair, None, None, [(0, 0)] * len(hair), [], [[("C_Head", 1.0)]] * len(hair),
+                                  -1, -1, 0)
+        tint = skyrimhair.HairShape(b"Hairline", hair[:50].copy(), None, None, [(0, 0)] * 50, [],
+                                    [[("C_Head", 1.0)]] * 50, -1, -1, 0)
+        out, rep = skyrimhair.drape(skyrimhair.Hair([sh, tint], [], {}, {}), pts, nrm, head)
+        r0 = np.linalg.norm(hair - c, axis=1)
+        r1 = np.linalg.norm(np.asarray(out.shapes[0].positions) - c, axis=1)
+        self.assertTrue(np.all(r1 >= r0 - 1e-9))                    # never in
+        near = lambda at, deg: np.degrees(np.arccos(np.clip(g @ (np.asarray(at) / np.linalg.norm(at)), -1, 1))) < deg
+        self.assertGreater(r1[near(temple, 4)].mean(), 0.0905)      # the temple hollow bridged (was 87.5 mm)
+        self.assertLess(r0[near(temple, 4)].mean(), 0.0885)
+        np.testing.assert_allclose(r1[near(behind, 4)], r0[near(behind, 4)], atol=1e-6)   # the back: as it was
+        flat = ~near(temple, 30) & ~near(behind, 30)
+        np.testing.assert_allclose(r1[flat], r0[flat], atol=3e-4)   # where nothing dips: as it was
+        np.testing.assert_allclose(out.shapes[1].positions, tint.positions)   # the scalp tint stays on the skin
+        self.assertGreater(rep["largest_mm"], 3.0)
+
     def test_depth_regions_and_page(self):
         pts, nrm = sphere()
         head = np.eye(4)

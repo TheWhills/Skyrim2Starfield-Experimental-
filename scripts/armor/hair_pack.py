@@ -609,6 +609,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
             row["volume_mm"] = round(1000 * volume, 1)
             if a.layers > 0:
                 row["layers"] = {"count": a.layers, "vertices_added": hair.report.get("layer_vertices", 0)}
+        if a.drape > 0:                  # bridge the temple hollow: one convex curve from crown to brow
+            hair, row["drape"] = skyrimhair.drape(hair, *a.head_surface, head, radius=a.drape / 1000.0)
         hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface,   # no scalp point inside the head
                                                    blend=a.push_blend / 1000.0)
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
@@ -708,6 +710,9 @@ def main(argv=None):
     ap.add_argument("--follow-sigma", type=float, default=1000 * skyrimhair.FOLLOW_SIGMA,
                     help="mm over which the head-shape difference is averaged: larger = smoother hair, less of the "
                          "face's small shapes (default %(default)s)")
+    ap.add_argument("--drape", type=float, default=1000 * skyrimhair.DRAPE_RADIUS,
+                    help="mm: hollows in the hair narrower than about this over the temples / forehead are bridged, "
+                         "so it runs in one curve from the crown past the brow (default %(default)s; 0 = off)")
     ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
                     help="mm over which the conform step eases its push off around the points it moves, so the hair "
                          "curves over Starfield's forehead instead of bumping (default %(default)s; 0 = per point)")

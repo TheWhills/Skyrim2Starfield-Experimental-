@@ -390,6 +390,122 @@ def follow_head(hair: Hair, sky_pts: np.ndarray, head_pts: np.ndarray, head_nrm:
                                      "in_max": round(1000 * float(d_sky[use].max()), 1)}})
 
 
+DRAPE_RADIUS = 0.03         # m: dips in the hair narrower than about this are bridged by drape()
+
+
+def _disc_op(grid: np.ndarray, el_deg: np.ndarray, cell: float, radius_deg: float, op) -> np.ndarray:
+    """max / min (op) of a (rows = elevation, cols = azimuth, wrapping) grid over a disc of `radius_deg` angular
+    radius around every cell, NaN cells left out (NaN where the disc holds none)."""
+    fill = -np.inf if op is np.fmax else np.inf
+    g = np.where(np.isnan(grid), fill, grid)
+    out = np.full_like(g, fill)
+    k = int(np.ceil(radius_deg / cell))
+    cos_el = np.maximum(np.cos(np.radians(np.minimum(np.abs(el_deg), 75.0))), 0.25)
+    kx = int(np.ceil(k / cos_el.min()))
+    nrow = len(el_deg)
+    for dy in range(-k, k + 1):
+        shifted_rows = np.full_like(g, fill)
+        if dy >= 0:
+            shifted_rows[:nrow - dy] = g[dy:]
+        else:
+            shifted_rows[-dy:] = g[:nrow + dy]
+        for dx in range(-kx, kx + 1):
+            inside = np.hypot(dx * cell * cos_el, dy * cell) <= radius_deg
+            if not inside.any():
+                continue
+            cand = np.roll(shifted_rows, -dx, axis=1)
+            out = np.where(inside[:, None], op(out, cand), out)
+    return np.where(np.isinf(out), np.nan, out)
+
+
+def _sphere_centre(pts: np.ndarray) -> np.ndarray:
+    """Least-squares sphere centre of points (|p|^2 = 2 p.c + k, linear)."""
+    p = np.asarray(pts, float)
+    A = np.hstack([2.0 * p, np.ones((len(p), 1))])
+    sol, *_ = np.linalg.lstsq(A, (p * p).sum(1), rcond=None)
+    return sol[:3]
+
+
+def drape(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, radius: float = DRAPE_RADIUS,
+          cell: float = 1.5, near: float = 0.03, far: float = 0.06, lowest: float = -35.0,
+          zone_az=(75.0, 95.0), zone_el=(45.0, 60.0), keep=None) -> Tuple[Hair, Dict]:
+    """Hair over a hollow of the head bridged instead of sinking into it: the wig's outer surface (largest distance
+    from the cranium's centre per `cell`-degree direction) is closed (largest within `radius`, then smallest within
+    `radius`: a morphological closing, which only ever raises), the rise smoothed and every point near the head moved
+    out along its direction by it (full within `near` m of the head, none beyond `far`; directions below `lowest`
+    degrees elevation and the 'Hairline' scalp tint left alone). Only the front and the temples: full within
+    zone_az[0] degrees of the front fading out by zone_az[1] (the ears, where hair tucks behind them, and the back stay
+    as they are) and below zone_el[0] degrees elevation fading out by zone_el[1] (the parting on top stays). Never
+    moves a point in. 2026-11-02: owner's viewer,
+    Anna's temple strand went in over the temple hollow and out over the brow; he drew the path he wants, one smooth
+    convex arc from the crown past the brow."""
+    keep = TINT_SHAPES if keep is None else keep
+    h = np.asarray(head, float)[:3, 3]
+    hp = np.asarray(head_pts, float)
+    cranium = hp[hp[:, 2] > h[2] + 0.05]
+    centre = _sphere_centre(cranium) if len(cranium) >= 4 else h    # radii from it vary little over the skull
+    nrows = int(np.ceil((90.0 - lowest) / cell)) + 1
+    ncols = int(round(360.0 / cell))
+    el_axis = lowest + cell * np.arange(nrows)
+    per, outer = [], np.full((nrows, ncols), np.nan)
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        rel = pos - centre
+        r = np.linalg.norm(rel, axis=1)
+        el = np.degrees(np.arcsin(np.clip(rel[:, 2] / np.maximum(r, 1e-9), -1, 1)))
+        az = np.degrees(np.arctan2(rel[:, 0], rel[:, 1])) % 360.0
+        _d, dist, _j = nearest_surface(pos, head_pts, head_nrm)
+        fade = 1.0 - _smooth((dist - near) / (far - near))
+        tint = any(k in (sh.name or b"").lower() for k in keep)
+        use = (el >= lowest) & (fade > 0) & (not tint)
+        row = np.clip(np.rint((el - lowest) / cell).astype(int), 0, nrows - 1)
+        col = np.rint(az / cell).astype(int) % ncols
+        if use.any():
+            sel = use & (dist < near)                    # the outer surface: hair lying on / by the head
+            if sel.any():
+                flat = np.full(nrows * ncols, -np.inf)
+                np.maximum.at(flat, row[sel] * ncols + col[sel], r[sel])
+                flat = flat.reshape(nrows, ncols)
+                outer = np.where(np.isfinite(flat), np.fmax(outer, flat), outer)
+        per.append((pos, rel, r, el, az, fade, use))
+    if np.all(np.isnan(outer)):
+        return hair, {"vertices_moved": 0}
+    rad_deg = np.degrees(radius / max(float(np.nanmedian(outer)), 1e-3))
+    closed = _disc_op(_disc_op(outer, el_axis, cell, rad_deg, np.fmax), el_axis, cell, rad_deg, np.fmin)
+    known = ~(np.isnan(outer) | np.isnan(closed))
+    rise = np.where(known, np.maximum(np.nan_to_num(closed) - np.nan_to_num(outer), 0.0), 0.0)
+    weight = known.astype(float)
+
+    def blur(g):                                         # [1 2 1] / 4 both ways
+        g = (np.roll(g, 1, 1) + 2 * g + np.roll(g, -1, 1)) / 4.0
+        return (np.vstack([g[:1], g[:-1]]) + 2 * g + np.vstack([g[1:], g[-1:]])) / 4.0
+    for _ in range(3):                                   # smoothed over the cells that hold hair (normalised:
+        rise, weight = blur(rise * weight), blur(weight)  # the empty cells between points neither dilute it
+        rise = np.where(weight > 1e-6, rise / np.maximum(weight, 1e-6), 0.0)   # nor pull it to zero)
+        weight = (weight > 1e-6).astype(float)
+    shapes, moved, largest = [], 0, 0.0
+    for sh, (pos, rel, r, el, az, fade, use) in zip(hair.shapes, per):
+        fr = np.clip((el - lowest) / cell, 0, nrows - 1)
+        fc = az / cell
+        r0, c0 = np.floor(fr).astype(int), np.floor(fc).astype(int)
+        r1, c1 = np.minimum(r0 + 1, nrows - 1), c0 + 1
+        tr, tc = fr - r0, fc - c0
+        c0, c1 = c0 % ncols, c1 % ncols
+        val = ((1 - tr) * (1 - tc) * rise[r0, c0] + (1 - tr) * tc * rise[r0, c1]
+               + tr * (1 - tc) * rise[r1, c0] + tr * tc * rise[r1, c1])
+        side = np.minimum(az, 360.0 - az)                 # degrees from the front
+        zone = _smooth((zone_az[1] - side) / (zone_az[1] - zone_az[0])) * \
+            _smooth((zone_el[1] - el) / (zone_el[1] - zone_el[0]))
+        amount = np.where(use, val * fade * zone, 0.0)
+        moved += int((amount > 1e-4).sum())
+        largest = max(largest, float(amount.max()) if len(amount) else 0.0)
+        unit = rel / np.maximum(r, 1e-9)[:, None]
+        shapes.append(HairShape(sh.name, pos + amount[:, None] * unit, sh.normals, sh.tangents, sh.uvs, sh.triangles,
+                                sh.weights, sh.shader_ref, sh.alpha_ref, sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, draped=True)),
+            {"vertices_moved": moved, "largest_mm": round(1000 * largest, 1), "radius_mm": round(1000 * radius, 1)})
+
+
 PUSH_BLEND = 0.06            # m: how far push_out eases its move off around the points it had to move (40 mm
                             # still left a bump on the temple strand in the owner's viewer, 2026-11-02)
 
