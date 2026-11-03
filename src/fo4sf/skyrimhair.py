@@ -431,6 +431,77 @@ def body_capsules(sf_world: Dict[str, np.ndarray], hair: Hair, scale: float = 1.
     return out, report
 
 
+def face_capsule(sf_world: Dict[str, np.ndarray], hair: Hair, margin: float = 0.024) -> Optional[smpcloth.Capsule]:
+    """A capsule just behind the face (chin to brow) on C_Head, so front locks hang beside / in front of the face
+    instead of through it (2026-11-02: locks crossed the cheek and eye; the skull capsule does not reach the face).
+    From the cloth skeleton: C_Head z 1.632, the eyes 4 cm above and 8 cm in front of it, the chin 6 cm below and
+    10 cm in front. Shrunk like head_capsule; None when that leaves under 3 cm."""
+    w = sf_world[SF_HEAD]
+    start, end, radius = np.array([0.0, 0.035, -0.065]), np.array([0.0, 0.035, 0.03]), 0.055
+    roots = set(hair.host_of_root)
+    pts = [b.world[:3, 3] for b in hair.bones if b.name not in roots] + [b.tip for b in hair.bones
+                                                                         if b.tip is not None]
+    for p in pts:
+        q = np.asarray(p, float) - w[:3, 3]
+        t = float(np.clip((q - start) @ (end - start) / ((end - start) @ (end - start)), 0.0, 1.0))
+        radius = min(radius, float(np.linalg.norm(q - (start + t * (end - start)))) - margin)
+    return smpcloth.Capsule("S2S_face", SF_HEAD, start, end, radius) if radius >= 0.03 else None
+
+
+def on_face_bones(hair: Hair, ref_points: np.ndarray, ref_weights: List[List[Tuple[str, float]]], k: int = 4,
+                  host: str = None) -> Hair:
+    """The hair with each vertex's `host` (C_Head) weight spread over face bones as a vanilla facebones hair skins
+    the same spot: the face-bone weights of the k nearest reference vertices (ref_points model space; only those
+    mostly on face bones), blended by inverse distance. The scalp then follows the face-bone shape the character was
+    made with (one face bone does not). At most MAX_WEIGHTS weights per vertex, renormalised."""
+    host = host or SF_HEAD
+    keep, refw = [], []
+    for i, ws in enumerate(ref_weights):
+        face = {b: w for b, w in ws if b.lower().startswith("facebone_") and w > 0}
+        tot = sum(face.values())
+        if tot >= 0.5 * max(sum(w for _b, w in ws), 1e-9):
+            keep.append(i)
+            refw.append({b: w / tot for b, w in face.items()})
+    if not keep:
+        raise HairError("no reference vertex on face bones")
+    ref = np.asarray(ref_points, float)[keep]
+    shapes = []
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        need = [i for i, vw in enumerate(sh.weights) if any(b == host for b, _w in vw)]
+        near = {}
+        rr = (ref * ref).sum(1)
+        kk = min(k, len(ref))
+        for c in range(0, len(need), 512):                      # nearest reference vertices, a block at a time
+            idx = need[c:c + 512]
+            p = pos[idx]
+            d2 = np.maximum((p * p).sum(1)[:, None] + rr[None, :] - 2.0 * p @ ref.T, 0.0)
+            nn = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
+            for row, i in enumerate(idx):
+                near[i] = [(int(j), float(np.sqrt(d2[row, j]))) for j in nn[row]]
+        ws_out = []
+        for i, vw in enumerate(sh.weights):
+            if i not in near:
+                ws_out.append(list(vw))
+                continue
+            acc: Dict[str, float] = {}
+            for b, w in vw:
+                if b != host:
+                    acc[b] = acc.get(b, 0.0) + w
+            hw = sum(w for b, w in vw if b == host)
+            inv = [(j, 1.0 / max(dist, 1e-4)) for j, dist in near[i]]
+            tot = sum(x for _j, x in inv)
+            for j, x in inv:
+                for b, w in refw[j].items():
+                    acc[b] = acc.get(b, 0.0) + hw * w * x / tot
+            top = sorted(acc.items(), key=lambda kv: -kv[1])[:MAX_WEIGHTS]
+            s = sum(w for _b, w in top)
+            ws_out.append([(b, w / s) for b, w in top])
+        shapes.append(HairShape(sh.name, sh.positions, sh.normals, sh.tangents, sh.uvs, sh.triangles, ws_out,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, face_bones="spread"))
+
+
 def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     """(SfMesh, per-vertex weights) of a shape: geometry through convert_static.shape_to_mesh (metres already), then
     4 weights per vertex as (index into `bones`, u16) summing to 65535."""

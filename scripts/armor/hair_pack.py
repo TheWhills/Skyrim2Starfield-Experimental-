@@ -261,6 +261,34 @@ def facebones_worlds_of(raw: bytes) -> dict:
     return skyrimhair.face_bone_worlds(sfnif.parse_skin(n), node), node
 
 
+def facebones_skin_of(starfield: str, raw: bytes):
+    """(points (V, 3) model space, per-vertex [(bone name, weight)]) of a vanilla *_facebones.nif's first skinned
+    shape, its mesh read from the game's archives; None when the mesh is not found."""
+    from fo4sf import sfmesh, sfweaponleft
+    n = nifmod.parse(raw)
+    shapes = sfweaponleft.shapes_in_model(n)
+    if not shapes:
+        return None
+    i, xf = shapes[0]
+    g = sfnif.parse_bsgeometry(n.blocks[i])
+    if not g.meshes or g.meshes[0] is None:
+        return None
+    data = read_game_file(starfield, sfweaponleft.mesh_archive_path(g.meshes[0].path))
+    if data is None:
+        return None
+    m = sfmesh.parse(data)
+    node = skyrimhair.xf_matrix(xf)
+    pts = np.array([sfmesh.decode_position(p, m.scale) for p in m.positions], float)
+    pts = pts @ node[:3, :3].T + node[:3, 3]
+    names = [b.decode("latin-1") for b in sfnif.parse_skin(n)["bones"]]
+    k = m.weights_per_vertex or 0
+    ws = []
+    for v in range(len(m.positions)):
+        row = m.weights[v * k:(v + 1) * k] if k else []
+        ws.append([(names[b], w / 65535.0) for b, w in row if w > 0 and b < len(names)])
+    return pts, ws
+
+
 def facebones_template(starfield: str, hat_model: str, report: dict, hair_template: str = None):
     """(face bone, its rest world, every face bone's world, the hat's facebones NIF bytes) or None. Head items are
     drawn from <model>_facebones.nif on actors with face bones (the player, named NPCs): vanilla hats and hairs ship
@@ -282,6 +310,13 @@ def facebones_template(starfield: str, hat_model: str, report: dict, hair_templa
         info["hair_file"] = hrel if hraw is not None else f"not found: {hrel}"
         if hraw is not None:
             sources.append(("hair", hraw))
+            try:
+                skin = facebones_skin_of(starfield, hraw)
+            except Exception as e:                               # noqa: BLE001 (reported; one face bone instead)
+                skin, info["hair_skin_error"] = None, f"{type(e).__name__}: {e}"
+            if skin is not None:
+                info["hair_skin_vertices"] = len(skin[0])
+                report["_face_skin"] = skin
     sources.append(("hat", raw))
     picked = None
     for kind, data in sources:
@@ -294,7 +329,7 @@ def facebones_template(starfield: str, hat_model: str, report: dict, hair_templa
     kind, face, worlds = picked
     info["used"] = kind
     report["face_bone"] = face
-    return face, worlds[face], worlds, raw
+    return face, worlds[face], worlds, raw, report.pop("_face_skin", None)
 
 
 def facebones_files(row: dict, fb, sf_world: dict, rigid_copies: bool) -> dict:
@@ -302,7 +337,15 @@ def facebones_files(row: dict, fb, sf_world: dict, rigid_copies: bool) -> dict:
     hair, mats, blob, out_name, backs = row["_fb"]
     face, fw = fb[0], fb[1]
     world = dict(sf_world, **{face: fw})
-    files = skyrimhair.nif_files(skyrimhair.on_face_bone(hair, face), mats, blob, world, out_name + "_facebones", backs)
+    skin = fb[4] if len(fb) > 4 else None
+    if skin is not None:                     # the scalp spread over the face bones as the vanilla hair's
+        world.update(fb[2])
+        on_face = skyrimhair.on_face_bones(hair, skin[0], skin[1])
+        row["face_bones"] = "spread"
+    else:
+        on_face = skyrimhair.on_face_bone(hair, face)
+        row["face_bones"] = face
+    files = skyrimhair.nif_files(on_face, mats, blob, world, out_name + "_facebones", backs)
     if rigid_copies:
         rg = skyrimhair.rigid(hair)
         files.update(skyrimhair.nif_files(skyrimhair.on_face_bone(rg, face), mats, None, world,
@@ -396,7 +439,10 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         sf_world, hair, a.body_scale, margin=settings.radius + 0.005)
     # the template's own colliders are left out: sized for its hair, the KS particles can start inside them (2026-11-02:
     # short wigs flailed at rest); S2S_head replaces its head collider
-    root, rig = smpcloth.build_cloth(template_root, hair.bones, hair.host_of_root, [cap] + body, settings,
+    face = skyrimhair.face_capsule(sf_world, hair, margin=settings.radius + 0.004)
+    body_report["S2S_face"] = round(face.radius, 4) if face is not None else "left out: the hair starts inside it"
+    root, rig = smpcloth.build_cloth(template_root, hair.bones, hair.host_of_root,
+                                     [cap] + ([face] if face is not None else []) + body, settings,
                                      keep_template_colliders=False)
     blob = smpcloth.write(template_blob, root)
     row["cloth"] = {**rig.report, "check": smpcloth.verify(blob), "head_capsule_radius": round(cap.radius, 4),
@@ -449,8 +495,10 @@ def main(argv=None):
                     help="Skyrim -> Starfield skull size ratio (measured on the male heads: 0.93)")
     ap.add_argument("--head-offset", type=float, nargs=3, default=skyrimhair.HEAD_OFFSET, metavar=("X", "Y", "Z"),
                     help="metres added after scaling, model axes (+Y forward, +Z up)")
-    ap.add_argument("--damping", type=float, help="cloth damping per second (default: the template's, 0.97 on the "
-                                                  "vanilla hairs)")
+    ap.add_argument("--damping", type=float, default=0.6,
+                    help="share of the hair's speed lost per second (vanilla hairs: 0.97, a subtle jiggle; lower "
+                         "flows more)")
+    ap.add_argument("--friction", type=float, default=0.1, help="how much the hair sticks to the body colliders")
     ap.add_argument("--hair-radius", type=float, default=smpcloth.Settings.radius,
                     help="collision thickness around each hair chain, m (the mesh around the chain must not sink)")
     ap.add_argument("--twist", type=float, default=smpcloth.Settings.twist,
@@ -486,7 +534,8 @@ def main(argv=None):
     world = smpcloth.skeleton_world(sk)
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
-                                 lateral=smpcloth.Settings.lateral if a.sheet else 0.0, twist=a.twist)
+                                 friction=a.friction, lateral=smpcloth.Settings.lateral if a.sheet else 0.0,
+                                 twist=a.twist)
     missing = [k for k in a.ks if not os.path.isdir(k)]
     if missing:
         sys.exit(f"--ks folder not found: {', '.join(missing)} (the KS Hairdos SMP folder with '00 Core' and "

@@ -448,6 +448,40 @@ class HairTests(unittest.TestCase):
 
 
 class ControlHelperTests(unittest.TestCase):
+    def test_facebones_template_reads_the_vanilla_hair_skin(self):
+        import hair_pack
+        from unittest import mock
+        from fo4sf import convert_static
+        pts = [(0.0, 0.0, 1.8), (0.05, 0.0, 1.7), (0.0, -0.1, 1.6)]
+        scale, raw = sfmesh.encode_positions(pts)
+        m = sfmesh.SfMesh(triangles=[(0, 1, 2)], scale=scale, positions=raw, weights_per_vertex=2,
+                          weights=[(0, 65535), (0, 0), (1, 52428), (0, 13107), (2, 65535), (0, 0)])
+        sfmesh.build_meshlets(m)
+        data = sfmesh.serialize(m)
+        d, f = convert_static.mesh_file_path(data)
+        ident = (1, 0, 0, 0, 1, 0, 0, 0, 1)
+        sh = sfnif.SkinnedShape(b"Bob", f"{d}\\{f}".encode(), 3, 3, "materials\\hair.mat",
+                                [b"faceBone_C_HeadTop", b"faceBone_L_Temple", b"Hair_1"],
+                                [((0, 0, 0, 1), ident, (0, 0, -1.76), 1.0), ((0, 0, 0, 1), ident, (-0.06, 0, -1.7), 1.0),
+                                 ((0, 0, 0, 1), ident, (0, 0.1, -1.6), 1.0)])
+        bob = nif.serialize(sfnif.build_skinned_nif(b"Bob", [sh]))
+        hat = sfnif.SkinnedShape(b"Hat", b"aa\\bb", 3, 3, "materials\\hat.mat", [b"faceBone_C_HeadTop"],
+                                 [((0, 0, 0, 1), ident, (0, 0, -1.75), 1.0)])
+        game = {"meshes/clothes/hat_f_facebones.nif": nif.serialize(sfnif.build_skinned_nif(b"Hat", [hat])),
+                "meshes/hair/bob_f_facebones.nif": bob, f"geometries/{d}/{f}.mesh": data}
+        rep = {}
+        with mock.patch.object(hair_pack, "read_game_file",
+                               lambda sfp, rel: game.get(rel.replace("\\", "/").lower())):
+            fb = hair_pack.facebones_template("sf", "Clothes\\Hat_F.nif", rep, "Meshes01.ba2:meshes/hair/bob_f.nif")
+        self.assertEqual(rep["facebones"]["used"], "hair")
+        self.assertEqual(rep["facebones"]["hair_skin_vertices"], 3)
+        self.assertEqual(sorted(fb[2]), ["faceBone_C_HeadTop", "faceBone_L_Temple"])
+        points, weights = fb[4]
+        np.testing.assert_allclose(points, pts, atol=1e-4)
+        self.assertEqual([b for b, _w in weights[1]], ["faceBone_L_Temple", "faceBone_C_HeadTop"])
+        self.assertAlmostEqual(weights[1][0][1], 0.8, places=4)
+        self.assertNotIn("_face_skin", rep)
+
     def test_hide_hair_replaces_morph_hair(self):
         import hair_pack
         arma = (b"ARMA", b"", [(b"EDID", b"X\0"), (b"BO64", struct.pack("<Q", 0x12))], 1)   # the Akila hat's addon
@@ -494,6 +528,42 @@ class BodyColliderTests(unittest.TestCase):
         self.assertEqual(rep["S2S_waist"], "left out: the hair starts inside it")
         _caps, rep = skyrimhair.body_capsules(w, hair, scale=0.5)
         self.assertAlmostEqual(rep["S2S_hips"], 0.055)
+
+
+class FaceSkinTests(unittest.TestCase):
+    def test_on_face_bones_spreads_the_head_weight_like_the_reference(self):
+        sh = skyrimhair.HairShape(b"S", np.array([[0.0, 0.0, 1.80], [0.05, 0.0, 1.70], [0.0, -0.1, 1.2]]),
+                                  np.tile([0.0, 0.0, 1.0], (3, 1)), np.tile([1.0, 0.0, 0.0], (3, 1)), [(0, 0)] * 3,
+                                  [(0, 1, 2)], [[("C_Head", 1.0)], [("C_Head", 0.5), ("S2S_X", 0.5)],
+                                                [("S2S_X", 1.0)]], -1, -1, 0)
+        hair = skyrimhair.Hair([sh], [], {}, {})
+        ref = np.array([[0.0, 0.0, 1.80], [0.05, 0.0, 1.70], [0.0, 0.5, 1.0]])
+        refw = [[("faceBone_C_HeadTop", 1.0)], [("faceBone_L_Temple", 0.8), ("faceBone_C_HeadTop", 0.2)],
+                [("Hair_1", 1.0)]]                                            # not a face vertex: ignored
+        out = skyrimhair.on_face_bones(hair, ref, refw, k=1)
+        w = out.shapes[0].weights
+        self.assertEqual(w[0], [("faceBone_C_HeadTop", 1.0)])
+        self.assertEqual(dict(w[1]), {"S2S_X": 0.5, "faceBone_L_Temple": 0.4, "faceBone_C_HeadTop": 0.1})
+        self.assertEqual(w[2], [("S2S_X", 1.0)])                             # no head weight: unchanged
+        blend = skyrimhair.on_face_bones(hair, ref, refw, k=2).shapes[0].weights[0]
+        self.assertAlmostEqual(sum(x for _b, x in blend), 1.0)
+        self.assertGreater(dict(blend)["faceBone_C_HeadTop"], 0.9)            # the exact match dominates
+        with self.assertRaises(skyrimhair.HairError):
+            skyrimhair.on_face_bones(hair, ref[2:], refw[2:])
+
+    def test_face_capsule_shrinks_or_stays_out(self):
+        w = sf_world()
+        far = smpcloth.ChainBone("S2S_A", "C_Head", np.eye(4), 0.1, 0.3, None)
+        far.world[:3, 3] = w["C_Head"][:3, 3] + (0.0, -0.3, 0.0)
+        cap = skyrimhair.face_capsule(w, skyrimhair.Hair([], [far], {}, {}))
+        self.assertEqual((cap.name, cap.bone, cap.radius), ("S2S_face", "C_Head", 0.055))
+        near = smpcloth.ChainBone("S2S_B", "S2S_A", np.eye(4), 0.1, 0.3, None)
+        near.world[:3, 3] = w["C_Head"][:3, 3] + (0.0, 0.035 + 0.06, 0.0)      # 6 cm in front of the axis
+        cap = skyrimhair.face_capsule(w, skyrimhair.Hair([], [far, near], {}, {}))
+        self.assertAlmostEqual(cap.radius, 0.06 - 0.024)
+        inside = smpcloth.ChainBone("S2S_C", "S2S_A", np.eye(4), 0.1, 0.3, None)
+        inside.world[:3, 3] = w["C_Head"][:3, 3] + (0.0, 0.035, 0.0)
+        self.assertIsNone(skyrimhair.face_capsule(w, skyrimhair.Hair([], [far, inside], {}, {})))
 
 
 class FaceBoneTests(unittest.TestCase):
@@ -688,6 +758,7 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertEqual(rep["facebones"]["used"], "hat")
             self.assertNotIn("headshift", ctrl)                                   # hypothesis B ruled out
             self.assertIn("body_colliders", wig["cloth"])
+            self.assertIn("S2S_face", wig["cloth"]["body_colliders"])
             self.assertNotIn("collision_capsule_C_Chest", wig["cloth"]["colliders"])   # template's left out
             self.assertEqual(struct.unpack("<Q", dict(got["S2S_KSWig_Test_AA"][2])[b"BO64"])[0], 1)   # Hide Hair
             self.assertNotIn("_control", wig)

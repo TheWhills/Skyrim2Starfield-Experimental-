@@ -764,3 +764,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   its length; standard-link weights scaled per link (the solver moves each end by weight x error); (6) neighbouring
   chains (roots < 12 cm) tied joint to joint (A-A, B-B, stiffness 0.5; --no-sheet): Steammist gets 70 links, the
   short KS wigs none (2-3 separate locks 15-23 cm apart, left untied).
+- 2026-11-02 owner, in game: with the stability changes the KS wigs sit well (clean scalp, no sinking) but barely
+  move; the ponytail lies on the back instead of trailing; front locks clip the face; the scalp does not follow his
+  character's head shape. Owner: vanilla hairs only jiggle subtly, never flow (matches their damping 0.97 if it is
+  the share of speed lost per second: supported reading of globalDampingPerSecond). Changes: hair_pack --damping
+  default 0.6 (Settings.damping None still means the template's), --friction default 0.1 (0.3 before); S2S_face
+  capsule on C_Head (chin to brow, 3.5 cm forward, r 5.5 cm, shrunk like the skull one); the scalp's C_Head weights
+  spread over the face bones like the vanilla hair's facebones file (cloth template's, e.g. bob_f_facebones.nif + its
+  .mesh read from the game: k = 4 nearest reference vertices mostly on face bones, inverse-distance blend, at most 4
+  weights), so it follows the face-bone shape; falls back to one face bone when the mesh is not found. Unverified.
