@@ -993,3 +993,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Now --head-parts also overrides the vanilla FLST HeadPartsChargenOptionsFemale (read from the owner's
   Starfield.esm) with our head parts appended; the report says how many of its entries are head parts / lists and
   whether the copied template is one of them. Load-order conflict with any other mod overriding that list.
+- 2026-11-03 Verified in game (owner): with the female chargen list override the KS hairstyles appear in the
+  looks menu and take the character's hair colour (our own Hair1Layer material is enough for the tint). New issue:
+  close up they look like folded plastic sheets next to the vanilla bob (no fine strands). Checked here and ruled
+  out: UV / strand direction (KS and IDG both run strands along +V, pointing down) and normal roughness (KS's normals
+  are smoother than IDG's: 2.3 vs 7.5 deg median spread within 1 cm). Suspect (supported): the opacity ramp (48-112)
+  made most of KS's soft strand alpha solid, and KS carries its strand detail in the alpha; the ramp was added
+  against the flicker that turned out to be the inward-facing cards. Next test: --opacity-ramp 0,255.
