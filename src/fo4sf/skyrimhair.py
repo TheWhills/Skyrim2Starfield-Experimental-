@@ -390,7 +390,8 @@ def follow_head(hair: Hair, sky_pts: np.ndarray, head_pts: np.ndarray, head_nrm:
                                      "in_max": round(1000 * float(d_sky[use].max()), 1)}})
 
 
-DRAPE_RADIUS = 0.03         # m: dips in the hair narrower than about this are bridged by drape()
+DRAPE_RADIUS = 0.05         # m: dips in the hair narrower than about this are bridged by drape() (30 mm left
+                            # a shallow wave at eye level in the owner's viewer; 50 looked smooth, 2026-11-02)
 
 
 def _disc_op(grid: np.ndarray, el_deg: np.ndarray, cell: float, radius_deg: float, op) -> np.ndarray:

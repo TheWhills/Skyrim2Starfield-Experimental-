@@ -953,3 +953,5 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   60: the parting). Runs after volume, before push_out; scalp tint not moved. Synthetic: a 5 mm, ~2 cm hollow at the
   temple bridged (87.5 -> >90.5 mm of 92), one at the back left alone, flat parts unchanged. --drape mm (0 = off).
   In game / on the real head: unverified.
+- 2026-11-02 DRAPE_RADIUS 50 mm (was 30): owner's viewer with --drape 50 smoothed the remaining wave at eye level;
+  going into the in-game build as the default.
