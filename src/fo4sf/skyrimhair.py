@@ -391,12 +391,54 @@ def hairline(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, hea
     return float(rel[band][on, 2].min()) if on.any() else None
 
 
+HAIRLINE_ANGLES = tuple(range(-70, 71, 10))       # degrees around the head from the front (+Y), + = the actor's right
+
+
+def hairline_profile(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray,
+                     angles=HAIRLINE_ANGLES) -> Dict[int, Optional[float]]:
+    """{angle: hairline height above C_Head (m) or None}: as `hairline`, in a 3 cm wide vertical band through the head
+    axis at each angle around the front (0 = the middle of the forehead, +-70 = the temples)."""
+    p = np.asarray(points, float)
+    rel = p - np.asarray(head, float)[:3, 3]
+    depth, dist, _i = nearest_surface(p, head_pts, head_nrm)
+    on = (dist < 0.03) & (depth < 0.01)
+    out = {}
+    for ang in angles:
+        a = np.radians(ang)
+        fwd, side = np.array([np.sin(a), np.cos(a)]), np.array([np.cos(a), -np.sin(a)])
+        h = rel[:, :2]
+        band = on & (np.abs(h @ side) < 0.015) & (h @ fwd > 0.04)
+        out[int(ang)] = float(rel[band, 2].min()) if band.any() else None
+    return out
+
+
+def crown_height(points: np.ndarray, head: np.ndarray) -> Optional[float]:
+    """Highest point of the hair within 3 cm of the head's vertical axis, above C_Head (m)."""
+    rel = np.asarray(points, float) - np.asarray(head, float)[:3, 3]
+    near = np.linalg.norm(rel[:, :2], axis=1) < 0.03
+    return float(rel[near, 2].max()) if near.any() else None
+
+
+def lift_profile(own: Dict[int, Optional[float]], target: Dict[int, Optional[float]],
+                 limit: float = 0.03) -> Dict[int, float]:
+    """{angle: lift (m)}: how far the wig's hairline is below the target's at each angle (0 where it is higher or a
+    side is missing), clipped to `limit`, gaps filled from the neighbours, then smoothed over neighbouring angles."""
+    angs = sorted(own)
+    raw = {a: (min(max(target[a] - own[a], 0.0), limit) if own.get(a) is not None and target.get(a) is not None
+               else None) for a in angs}
+    known = [a for a in angs if raw[a] is not None]
+    if not known:
+        return {a: 0.0 for a in angs}
+    filled = {a: raw[a] if raw[a] is not None else float(np.interp(a, known, [raw[k] for k in known])) for a in angs}
+    return {a: float(np.mean([filled[b] for b in angs if abs(b - a) <= 10])) for a in angs}
+
+
 def _smooth(x):
     x = np.clip(x, 0.0, 1.0)
     return x * x * (3.0 - 2.0 * x)
 
 
-def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, lift: float,
+def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, lift,
                   front=(0.02, 0.08), crown=(0.12, 0.16)) -> Hair:
     """The front of the wig raised by `lift` m: full at the forehead (C_Head-relative +Y beyond front[1]), fading to
     nothing toward the back (front[0]) and toward the top of the head (crown), so the crown and the back stay put.
@@ -408,18 +450,43 @@ def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: 
     for sh in hair.shapes:
         pos = np.asarray(sh.positions, float)
         rel = pos - h
-        w = _smooth((rel[:, 1] - front[0]) / (front[1] - front[0])) * \
-            _smooth((crown[1] - rel[:, 2]) / (crown[1] - crown[0]))
+        if isinstance(lift, dict):        # per angle around the head (lift_profile): the temples too
+            angs = sorted(lift)
+            ang = np.degrees(np.arctan2(rel[:, 0], rel[:, 1]))
+            amount = np.interp(ang, angs, [lift[k] for k in angs])
+            front_w = _smooth((np.abs(ang) - 90.0) / -20.0) * _smooth((np.hypot(rel[:, 0], rel[:, 1]) - 0.02) / 0.04)
+        else:
+            amount = np.full(len(pos), float(lift))
+            front_w = _smooth((rel[:, 1] - front[0]) / (front[1] - front[0]))
+        w = amount * front_w * _smooth((crown[1] - rel[:, 2]) / (crown[1] - crown[0]))
         d0, dist0, _i = nearest_surface(pos, head_pts, head_nrm)
         new = pos.copy()
-        new[:, 2] += lift * w
+        new[:, 2] += w
         on = judged(pos, head_pts, dist0) & (w > 0)
         if on.any():
             d1, _d, j = nearest_surface(new[on], head_pts, head_nrm)
             new[on] += (d0[on] - d1)[:, None] * np.asarray(head_nrm, float)[j]
         shapes.append(HairShape(sh.name, new, sh.normals, sh.tangents, sh.uvs, sh.triangles, sh.weights,
                                 sh.shader_ref, sh.alpha_ref, sh.block))
-    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, hairline_lift=lift))
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, hairline_lift=True))
+
+
+def add_volume(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, amount: float,
+               low: float = 0.0, high: float = 0.07) -> Hair:
+    """Hair lying on the head moved `amount` m outward along the head's normal, full above `high` (C_Head-relative
+    height), fading to nothing at `low`: KS wigs hug the scalp, Starfield's own hair stands off it (2026-11-02: owner
+    saw the wigs flat next to the vanilla bob). Points off the head (strands) follow by the same fade with the
+    displacement of their nearest head point, so locks stay attached."""
+    h = np.asarray(head, float)[:3, 3]
+    shapes = []
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        _d, dist, j = nearest_surface(pos, head_pts, head_nrm)
+        rel_z = pos[:, 2] - h[2]
+        w = amount * _smooth((rel_z - low) / (high - low)) * _smooth((0.06 - dist) / 0.03)
+        shapes.append(HairShape(sh.name, pos + w[:, None] * np.asarray(head_nrm, float)[j], sh.normals, sh.tangents,
+                                sh.uvs, sh.triangles, sh.weights, sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, volume=amount))
 
 
 def rigid(hair: Hair) -> Hair:

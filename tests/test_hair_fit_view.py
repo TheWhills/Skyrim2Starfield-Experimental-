@@ -20,6 +20,44 @@ def sphere(n=4000, r=0.09, c=(0.0, 0.0, 1.65)):
 
 
 class FitViewTests(unittest.TestCase):
+    def test_profile_lift_and_volume(self):
+        from fo4sf import skyrimhair
+        pts, nrm = sphere(8000)
+        head = np.eye(4)
+        head[:3, 3] = (0.0, 0.0, 1.65)
+
+        def ring(height_by_angle):                           # hairline points 3 mm above the sphere
+            out = []
+            for ang, z in height_by_angle.items():
+                a = np.radians(ang)
+                horiz = np.sqrt(max(0.093 ** 2 - z ** 2, 0.0))
+                out.append(head[:3, 3] + [horiz * np.sin(a), horiz * np.cos(a), z])
+            return np.array(out)
+        target = {a: 0.05 for a in skyrimhair.HAIRLINE_ANGLES}
+        own = {a: (0.03 if abs(a) >= 50 else 0.045) for a in skyrimhair.HAIRLINE_ANGLES}   # low at the temples
+        prof = skyrimhair.hairline_profile(ring(own), pts, nrm, head)
+        for a in (0, 30, 60):
+            self.assertAlmostEqual(prof[a], own[a], delta=0.002)
+        lift = skyrimhair.lift_profile(prof, skyrimhair.hairline_profile(ring(target), pts, nrm, head))
+        self.assertGreater(lift[70], lift[0] + 0.01)          # more lift at the temples than in the middle
+        self.assertTrue(all(0.0 <= v <= 0.03 for v in lift.values()))
+        self.assertEqual(skyrimhair.lift_profile({0: None, 10: None}, {0: 0.05, 10: 0.05}), {0: 0.0, 10: 0.0})
+        ringed = ring(own)
+        sh0 = skyrimhair.HairShape(b"R", ringed, np.zeros_like(ringed), np.zeros_like(ringed),
+                                   [(0, 0)] * len(ringed), [(0, 1, 2)], [[("C_Head", 1.0)]] * len(ringed), -1, -1, 0)
+        lifted = skyrimhair.lift_hairline(skyrimhair.Hair([sh0], [], {}, {}), pts, nrm, head, lift)
+        after = skyrimhair.hairline_profile(np.asarray(lifted.shapes[0].positions), pts, nrm, head)
+        self.assertLess(abs(after[60] - 0.05), abs(prof[60] - 0.05) - 0.008)   # the temples came up toward the target
+        top = head[:3, 3] + [0.0, 0.0, 0.093]
+        low = head[:3, 3] + [0.0, -0.093, -0.02]
+        sh = skyrimhair.HairShape(b"S", np.array([top, low]), np.zeros((2, 3)), np.zeros((2, 3)), [(0, 0)] * 2,
+                                  [(0, 1, 0)], [[("C_Head", 1.0)]] * 2, -1, -1, 0)
+        out = np.asarray(skyrimhair.add_volume(skyrimhair.Hair([sh], [], {}, {}), pts, nrm, head, 0.01)
+                         .shapes[0].positions)
+        self.assertAlmostEqual(out[0, 2] - top[2], 0.01, delta=0.001)      # the top stands 1 cm off
+        np.testing.assert_allclose(out[1], low, atol=1e-9)                  # below C_Head: untouched
+        self.assertAlmostEqual(skyrimhair.crown_height(out, head), 0.103, delta=0.001)
+
     def test_lift_hairline_raises_the_front_keeps_the_back_and_the_gap(self):
         from fo4sf import skyrimhair
         pts, nrm = sphere(8000)

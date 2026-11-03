@@ -833,3 +833,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   wig up to the vanilla hair's hairline (at most 30 mm; --hairline-lift mm to force, 0 = off), reported per wig;
   the viewer previews the same. Records / face bones now read before the wig loop (the lift needs the vanilla
   hair's mesh).
+- 2026-11-02 owner's viewer run after the lift: middle hairline Anna 97.6 / vanilla 97.8 mm (matched; lift 15.4 mm),
+  but in game "a bit flat" and still lower than the vanilla hair beside it. Two differences the middle-only lift
+  missed: the hairline curve toward the temples and the vanilla hair's thickness over the scalp (bob's crown stands
+  well above Anna's in his screenshot). Added skyrimhair.hairline_profile (hairline height in 3 cm bands at -70..70
+  deg around the front), lift_profile (per angle, clipped 0-30 mm, gaps interpolated, smoothed over +-10 deg),
+  lift_hairline accepting the per-angle lift (fade past 70 deg and near the head axis), crown_height and add_volume
+  (hair on the head pushed out along the head normal by the vanilla-minus-wig crown difference, at most 20 mm, full
+  above C_Head + 7 cm, nothing at C_Head height; strands within 6 cm follow). hair_pack does lift -> volume ->
+  conform (--hairline-lift mm forces a uniform lift, --volume mm), reporting both per wig; the viewer previews and
+  prints the hairline per angle (before / after / vanilla) and the crown heights. Tested on synthetic spheres.

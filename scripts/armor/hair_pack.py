@@ -497,18 +497,30 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
     if getattr(a, "head_surface", None) is not None:
         head = sf_world[skyrimhair.SF_HEAD]
+        pts = np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes])
         lift = None
         if a.hairline_lift is not None:
             lift = a.hairline_lift / 1000.0
-        elif getattr(a, "vanilla_hairline", None) is not None:   # up to the vanilla hair's hairline
-            own = skyrimhair.hairline(np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes]),
-                                      *a.head_surface, head)
-            if own is not None:
-                lift = float(np.clip(a.vanilla_hairline - own, 0.0, 0.03))
-                row["hairline_above_C_Head_mm"] = round(1000 * own, 1)
+        elif getattr(a, "vanilla_profile", None) is not None:   # up to the vanilla hair's hairline, temple to temple
+            own = skyrimhair.hairline_profile(pts, *a.head_surface, head)
+            lift = skyrimhair.lift_profile(own, a.vanilla_profile)
+            row["hairline_above_C_Head_mm_by_angle"] = {k: None if v is None else round(1000 * v, 1)
+                                                         for k, v in own.items()}
         if lift:
             hair = skyrimhair.lift_hairline(hair, *a.head_surface, head, lift)
-            row["hairline_lift_mm"] = round(1000 * lift, 1)
+            row["hairline_lift_mm"] = ({k: round(1000 * v, 1) for k, v in lift.items()} if isinstance(lift, dict)
+                                       else round(1000 * lift, 1))
+        volume = None
+        if a.volume is not None:
+            volume = a.volume / 1000.0
+        elif getattr(a, "vanilla_crown", None) is not None:      # stand off the scalp like the vanilla hair
+            own_crown = skyrimhair.crown_height(pts, head)
+            if own_crown is not None:
+                volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, 0.02))
+                row["crown_above_C_Head_mm"] = round(1000 * own_crown, 1)
+        if volume:
+            hair = skyrimhair.add_volume(hair, *a.head_surface, head, volume)
+            row["volume_mm"] = round(1000 * volume, 1)
         hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)   # no scalp point inside the head
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
@@ -572,7 +584,11 @@ def main(argv=None):
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
     ap.add_argument("--hairline-lift", type=float,
-                    help="mm to raise the front hairline (default: up to the vanilla hair's, at most 30; 0 = off)")
+                    help="mm to raise the front hairline everywhere (default: up to the vanilla hair's at each angle "
+                         "from temple to temple, at most 30; 0 = off)")
+    ap.add_argument("--volume", type=float,
+                    help="mm to stand the hair off the scalp at the top (default: up to the vanilla hair's crown "
+                         "height, at most 20; 0 = off)")
     ap.add_argument("--no-conform", dest="conform", action="store_false",
                     help="leave the wig where the fit puts it (default: scalp points inside Starfield's female head "
                          "are pushed just outside it)")
@@ -658,11 +674,15 @@ def main(argv=None):
     armo_t, arma_t = head_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"], kw_names)
     report["apparel_template"] = {"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2])}
     fb = facebones_template(a.starfield, arma_model(arma_t), report, report.get("cloth_template"))
-    a.vanilla_hairline = None                 # the vanilla hair's hairline height, the target of the hairline lift
+    a.vanilla_profile = a.vanilla_crown = None   # the vanilla hair's hairline / crown: targets of lift and volume
     if a.head_surface is not None and fb is not None and len(fb) > 4 and fb[4] is not None:
-        a.vanilla_hairline = skyrimhair.hairline(fb[4][0], *a.head_surface, sf_world[skyrimhair.SF_HEAD])
-        report["vanilla_hairline_above_C_Head_mm"] = (None if a.vanilla_hairline is None
-                                                      else round(1000 * a.vanilla_hairline, 1))
+        head = sf_world[skyrimhair.SF_HEAD]
+        a.vanilla_profile = skyrimhair.hairline_profile(fb[4][0], *a.head_surface, head)
+        a.vanilla_crown = skyrimhair.crown_height(fb[4][0], head)
+        report["vanilla_hair"] = {
+            "hairline_above_C_Head_mm_by_angle": {k: None if v is None else round(1000 * v, 1)
+                                                  for k, v in a.vanilla_profile.items()},
+            "crown_above_C_Head_mm": None if a.vanilla_crown is None else round(1000 * a.vanilla_crown, 1)}
     for w in wigs:
         try:
             report["wigs"].append(build_one(src, conv, w, template_blob, template_root, sf_world, settings, a,

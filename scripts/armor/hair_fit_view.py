@@ -133,8 +133,10 @@ def main(argv=None):
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
     ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
-    ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline (default: up to the vanilla "
-                                                        "hair's, at most 30, as hair_pack; 0 = off)")
+    ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline everywhere (default: per "
+                                                        "angle up to the vanilla hair's, as hair_pack; 0 = off)")
+    ap.add_argument("--volume", type=float, help="mm to stand the hair off the scalp (default: up to the vanilla "
+                                                 "hair's crown, at most 20, as hair_pack; 0 = off)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -167,16 +169,27 @@ def main(argv=None):
         raw = hair_pack.read_game_file(a.starfield, rel)
         got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None
         vanilla = got[0] if got is not None else None
+    raw_pts = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     hl_van = hairline(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
-    hl_raw = hairline(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]), sf_pts, sf_nrm,
-                      head)
+    hl_raw = hairline(raw_pts, sf_pts, sf_nrm, head)
+    prof_van = skyrimhair.hairline_profile(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
+    prof_raw = skyrimhair.hairline_profile(raw_pts, sf_pts, sf_nrm, head)
+    crown_van = skyrimhair.crown_height(vanilla, head) if vanilla is not None else None
+    crown_raw = skyrimhair.crown_height(raw_pts, head)
     lift = 0.0
     if a.hairline_lift is not None:
         lift = a.hairline_lift / 1000.0
-    elif hl_van is not None and hl_raw is not None:
-        lift = float(np.clip(hl_van - hl_raw, 0.0, 0.03))
+    elif prof_van is not None:
+        lift = skyrimhair.lift_profile(prof_raw, prof_van)
     if lift:
         wig_hair = skyrimhair.lift_hairline(wig_hair, sf_pts, sf_nrm, head, lift)
+    volume = 0.0
+    if a.volume is not None:
+        volume = a.volume / 1000.0
+    elif crown_van is not None and crown_raw is not None:
+        volume = float(np.clip(crown_van - crown_raw, 0.0, 0.02))
+    if volume:
+        wig_hair = skyrimhair.add_volume(wig_hair, sf_pts, sf_nrm, head, volume)
     before = None
     if not a.no_push_out:
         before = regions(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
@@ -187,6 +200,7 @@ def main(argv=None):
     depth = head_depth(wig, sf_pts, sf_nrm)
     sky_depth, _d, _i = skyrimhair.nearest_surface(sky_moved, sf_pts, sf_nrm)
     hl_wig = hairline(wig, sf_pts, sf_nrm, head)
+    prof_new = skyrimhair.hairline_profile(wig, sf_pts, sf_nrm, head)
     stats = {"wig": a.wig, "placement": used, "scale": np.round(np.asarray(scale, float), 4).tolist(),
              "offset_m": [round(x, 4) for x in offset],
              "female_fit_per_axis": {"scale_xyz (width, depth, height)": [round(x, 4) for x in ax_s],
@@ -198,9 +212,19 @@ def main(argv=None):
              "hairline_above_C_Head_mm": {
                  a.wig: None if hl_wig is None else round(1000 * hl_wig, 1),
                  a.wig + " before the lift": None if hl_raw is None else round(1000 * hl_raw, 1),
-                 "lift_mm": round(1000 * lift, 1),
+                 "lift_mm_by_angle": ({k: round(1000 * v, 1) for k, v in lift.items()} if isinstance(lift, dict)
+                                      else round(1000 * lift, 1)),
+                 "by_angle (deg from the front: wig before / after / vanilla)": {
+                     k: [None if prof_raw[k] is None else round(1000 * prof_raw[k], 1),
+                         None if prof_new[k] is None else round(1000 * prof_new[k], 1),
+                         None if prof_van is None or prof_van.get(k) is None else round(1000 * prof_van[k], 1)]
+                     for k in prof_raw},
                  "vanilla " + os.path.basename(tpl.split(":", 1)[-1]): None if hl_van is None else round(1000 * hl_van, 1),
                  "note": "middle of the forehead; lower = the hair covers more of the forehead"},
+             "crown_above_C_Head_mm": {"wig before": None if crown_raw is None else round(1000 * crown_raw, 1),
+                                       "wig after": round(1000 * skyrimhair.crown_height(wig, head), 1),
+                                       "vanilla": None if crown_van is None else round(1000 * crown_van, 1),
+                                       "volume_mm": round(1000 * volume, 1)},
              "conformed": not a.no_push_out,
              "wig_inside_head_before_conform": before,
              "skyrim_head_vs_starfield_mm": {"median_gap": round(1000 * float(np.median(sky_depth)), 1),
