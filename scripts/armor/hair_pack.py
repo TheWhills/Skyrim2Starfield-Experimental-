@@ -516,7 +516,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         elif getattr(a, "vanilla_crown", None) is not None:      # stand off the scalp like the vanilla hair
             own_crown = skyrimhair.crown_height(pts, head)
             if own_crown is not None:
-                volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, 0.02))
+                volume = float(np.clip(a.vanilla_crown - own_crown, 0.0, skyrimhair.VOLUME_MAX))
                 row["crown_above_C_Head_mm"] = round(1000 * own_crown, 1)
         if volume:                       # fading to nothing at the (lifted) hairline: the edge stays on the skin
             edge = skyrimhair.hairline_profile(np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes]),
@@ -590,7 +590,7 @@ def main(argv=None):
                          "from temple to temple, at most 30; 0 = off)")
     ap.add_argument("--volume", type=float,
                     help="mm to stand the hair off the scalp at the top (default: up to the vanilla hair's crown "
-                         "height, at most 20; 0 = off)")
+                         "height, at most 12; 0 = off)")
     ap.add_argument("--no-conform", dest="conform", action="store_false",
                     help="leave the wig where the fit puts it (default: scalp points inside Starfield's female head "
                          "are pushed just outside it)")

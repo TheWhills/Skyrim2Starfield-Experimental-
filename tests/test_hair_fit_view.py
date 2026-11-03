@@ -69,7 +69,7 @@ class FitViewTests(unittest.TestCase):
         out = skyrimhair.add_volume(skyrimhair.Hair([hs, tint], [], {}, {}), pts, nrm, head, 0.01, edge=edge)
         moved = np.linalg.norm(np.asarray(out.shapes[0].positions) - hs.positions, axis=1)
         self.assertLess(moved[0], 1e-6)                                   # on the hairline: stays on the skin
-        self.assertGreater(moved[1], 0.008)                               # 3.5 cm above it: (almost) full volume
+        self.assertGreater(moved[1], 0.007)                               # 3.5 cm up the 5 cm rise: ~0.8 of it
         np.testing.assert_allclose(out.shapes[1].positions, tint.positions)   # 'Hairline' tint untouched
 
     def test_lift_hairline_raises_the_front_keeps_the_back_and_the_gap(self):

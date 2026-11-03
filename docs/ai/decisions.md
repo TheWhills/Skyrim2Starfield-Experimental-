@@ -849,3 +849,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (lifted) hairline over 3 cm (sides up to 120 deg take the temple height) and never moves shapes named like
   'hairline'; tested. The viewer gains a 'Surfaces' button: head, wig and vanilla hair drawn as shaded triangles
   (game_mesh_of now also returns triangles); rendered headless with a stand-in head and the real Anna wig.
+- 2026-11-02 owner's surface view (Anna, lift + volume + conform): the edge sits on the skin all round (no gap), but
+  the volume rose to its full amount within 3 cm of the hairline: a visible ridge, like a hairband. Default volume
+  now at most 12 mm (skyrimhair.VOLUME_MAX) over a 5 cm rise (edge_fade). The side locks lying on the outer cheeks
+  are Anna's face-framing strands on Starfield's relatively wider face (left as they are).

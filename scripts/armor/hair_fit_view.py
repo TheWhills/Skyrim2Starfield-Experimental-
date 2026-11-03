@@ -154,7 +154,7 @@ def main(argv=None):
     ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline everywhere (default: per "
                                                         "angle up to the vanilla hair's, as hair_pack; 0 = off)")
     ap.add_argument("--volume", type=float, help="mm to stand the hair off the scalp (default: up to the vanilla "
-                                                 "hair's crown, at most 20, as hair_pack; 0 = off)")
+                                                 "hair's crown, at most 12, as hair_pack; 0 = off)")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -207,7 +207,7 @@ def main(argv=None):
     if a.volume is not None:
         volume = a.volume / 1000.0
     elif crown_van is not None and crown_raw is not None:
-        volume = float(np.clip(crown_van - crown_raw, 0.0, 0.02))
+        volume = float(np.clip(crown_van - crown_raw, 0.0, skyrimhair.VOLUME_MAX))
     if volume:                         # as hair_pack: fading to nothing at the (lifted) hairline
         edge = skyrimhair.hairline_profile(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
                                            sf_pts, sf_nrm, head)
