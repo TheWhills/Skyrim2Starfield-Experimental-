@@ -389,15 +389,24 @@ def facebones_worlds_of(raw: bytes) -> dict:
 
 SKY_FEMALE_HEAD = r"meshes\actors\character\character assets\femalehead.nif"
 SF_FEMALE_HEAD = "meshes/actors/human/characterassets/female/femalehead_facebones.nif"
+SKY_MALE_HEAD = r"meshes\actors\character\character assets\malehead.nif"
+SF_MALE_HEAD = "meshes/actors/human/characterassets/male/malehead_facebones.nif"     # as face_fit.py's
+SKY_HEADS = {True: SKY_FEMALE_HEAD, False: SKY_MALE_HEAD}
+SF_HEADS = {True: SF_FEMALE_HEAD, False: SF_MALE_HEAD}
 
 
 def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report: dict, per_axis: bool = True):
+    return measure_fit(skyrim_data, starfield, sf_world, report, per_axis, female=True)
+
+
+def measure_fit(skyrim_data: str, starfield: str, sf_world: dict, report: dict, per_axis: bool = True,
+                female: bool = True):
     """(scale, offset) fitting the Skyrim female head onto the Starfield female head (skyrimhair.fit_head), or None.
     The KS wigs are made for Skyrim's female head; the constants were measured on the male heads (2026-11-02: the
     owner's female character showed the wigs clipping the forehead)."""
     info = report.setdefault("head_fit", {})
     try:
-        sky_pts, anchor, sf_pts, _nrm = load_female_heads(skyrim_data, starfield)
+        sky_pts, anchor, sf_pts, _nrm = load_heads(skyrim_data, starfield, female)
         report["_sky_head"] = (sky_pts, anchor)                 # for follow_head (not written to the report)
         head = sf_world[skyrimhair.SF_HEAD]
         s1, t1, rms1 = skyrimhair.fit_head(sky_pts, anchor, sf_pts, head)
@@ -478,21 +487,25 @@ def facebones_skin_of(starfield: str, raw: bytes):
 
 
 def load_female_heads(skyrim_data: str, starfield: str):
-    """(Skyrim female head points in units, its head bone 4x4 in units, Starfield female head points m, normals)."""
+    return load_heads(skyrim_data, starfield, True)
+
+
+def load_heads(skyrim_data: str, starfield: str, female: bool = True):
+    """(Skyrim head points in units, its head bone 4x4 in units, Starfield head points m, normals) of one sex."""
     from fo4sf import bsa, skyrimnpc, skyrimskin
     sky = bsa.SkyrimArchives(skyrim_data)
-    raw = sky._read(bsa.norm(SKY_FEMALE_HEAD))
+    raw = sky._read(bsa.norm(SKY_HEADS[female]))
     if raw is None:
-        raise HairPackError(f"not in Skyrim's archives: {SKY_FEMALE_HEAD}")
+        raise HairPackError(f"not in Skyrim's archives: {SKY_HEADS[female]}")
     n = nifmod.parse(raw)
     shape = skyrimnpc.head_shape(skyrimskin.skinned_shapes(n))
     anchor = skyrimhair.head_anchor(n, skyrimhair.node_worlds(n)[0])
-    sf_raw = read_game_file(starfield, SF_FEMALE_HEAD)
+    sf_raw = read_game_file(starfield, SF_HEADS[female])
     if sf_raw is None:
-        raise HairPackError(f"not in the game's archives: {SF_FEMALE_HEAD}")
+        raise HairPackError(f"not in the game's archives: {SF_HEADS[female]}")
     got = game_mesh_of(starfield, sf_raw)
     if got is None:
-        raise HairPackError("the Starfield female head's mesh was not found")
+        raise HairPackError(f"the Starfield {'female' if female else 'male'} head's mesh was not found")
     to_model, _rot = skyrimhair.skin_to_model(shape)          # skinned vertices are stored in skin space
     return np.array([to_model(v) for v in shape.positions], float), anchor, got[0], got[1]
 
@@ -625,31 +638,62 @@ def pack(staging: str, out: str, starfield: str, archive2: str = None, main_ba2:
     return {"loose": main + tex, "note": "Archive2 not found: files left loose"}
 
 
-def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, template_root: dict, sf_world: dict,
-              settings: smpcloth.Settings, a, staging: str) -> dict:
-    """Convert one wig: files written into staging; returns its report row (ok, model, ...)."""
-    stem = os.path.splitext(os.path.basename(src.index.get(nif_rel, nif_rel)))[0]     # the file's own spelling
-    row = {"wig": stem, "nif": nif_rel, "ok": False}
-    raw = src._read(nif_rel)
-    n = nifmod.parse(raw)
-    paths = smp.nif_physics_paths(n)
-    if not paths:
-        row["reason"] = "no SMP config named in the NIF"
-        return row
-    xml = src.data(paths[0])
-    if xml is None:
-        row["reason"] = f"config not found: {paths[0]}"
-        return row
-    row["config"] = paths[0]
-    hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
+def setup_head(a, sf_world: dict, report: dict, female: bool = True):
+    """The head context on `a` for one sex: head_scale / head_offset from the measured head fit (with
+    --skyrim-data, unless given by hand), head_surface (Starfield's head of that sex, for the conform steps) and
+    sky_head (Skyrim's head where the fit puts it, for follow_head)."""
+    if a.skyrim_data:
+        fit = measure_fit(a.skyrim_data, a.starfield, sf_world, report, per_axis=not a.uniform_fit, female=female)
+        if fit is not None and a.head_scale == skyrimhair.HEAD_SCALE and \
+                tuple(a.head_offset) == tuple(skyrimhair.HEAD_OFFSET):     # explicit --head-* values win
+            a.head_scale, a.head_offset = fit[0], list(fit[1])
+            report["head_fit"]["used"] = True
+    a.head_surface = a.sky_head = None
+    sex = "female" if female else "male"
+    if a.conform:
+        head_raw = read_game_file(a.starfield, SF_HEADS[female])
+        got = game_mesh_of(a.starfield, head_raw) if head_raw is not None else None
+        if got is not None:
+            a.head_surface = (got[0], got[1])
+        report["conform"] = f"Starfield {sex} head" if got is not None else "head mesh not found: not conformed"
+        sky = report.pop("_sky_head", None)
+        if got is not None and sky is not None and getattr(a, "follow_head", True):   # Skyrim's head, fitted
+            head_t = sf_world[skyrimhair.SF_HEAD][:3, 3]
+            a.sky_head = (head_t + np.asarray(a.head_offset, float)
+                          + np.asarray(a.head_scale, float) * (sky[0] - sky[1][:3, 3]) * skyrimhair.UNIT)
+    report.pop("_sky_head", None)
+
+
+def setup_reference(a, sf_world: dict, report: dict, ref_pts):
+    """a.vanilla_profile / a.vanilla_crown from a reference hair's points (the targets of the hairline lift and the
+    volume), None without a head surface or reference."""
+    a.vanilla_profile = a.vanilla_crown = None
+    if a.head_surface is not None and ref_pts is not None:
+        head = sf_world[skyrimhair.SF_HEAD]
+        a.vanilla_profile = skyrimhair.hairline_profile(ref_pts, *a.head_surface, head)
+        a.vanilla_crown = skyrimhair.crown_height(ref_pts, head)
+        report["vanilla_hair"] = {
+            "hairline_above_C_Head_mm_by_angle": {k: None if v is None else round(1000 * v, 1)
+                                                  for k, v in a.vanilla_profile.items()},
+            "crown_above_C_Head_mm": None if a.vanilla_crown is None else round(1000 * a.vanilla_crown, 1)}
+
+
+def shape_hair(hair, a, sf_world: dict, row: dict, drop: bool = True):
+    """The Skyrim hair shaped and prepared for Starfield's head and hair shader, in order: moved with the skull
+    difference (follow_head), one copy of a two-pass mesh (drop), cards turned outward, hairline lifted and volume
+    added to the reference hair's, the temple hollow bridged (drape), pushed out of the head (push_out), stacked cards
+    apart (separate_layers), tangents along +U (uv_tangents). `a` carries the settings (hair_pack's options and the
+    head context: head_surface, sky_head, vanilla_profile, vanilla_crown); results are reported in `row`. Used by
+    hair_pack (KS wigs) and the Skyrim hair head parts (scripts/npc/skyrim_hairs.py, npc_hair.py)."""
     if getattr(a, "sky_head", None) is not None and getattr(a, "head_surface", None) is not None:
         hair, row["follow_head"] = skyrimhair.follow_head(hair, a.sky_head, *a.head_surface,
                                                             sigma=a.follow_sigma / 1000.0)
-    if a.hair_shader:                    # KS's second (alpha-tested) copy of every wig: the hair shader needs one
-        hair, dropped = skyrimhair.drop_duplicate_shapes(hair)
-        if dropped:
-            row["dropped_duplicate_shapes"] = dropped
-        # and draws a card's back with the front's lighting: every card faces away from the head
+    if a.hair_shader:
+        if drop:                         # KS's second (alpha-tested) copy of every wig: the hair shader needs one
+            hair, dropped = skyrimhair.drop_duplicate_shapes(hair)
+            if dropped:
+                row["dropped_duplicate_shapes"] = dropped
+        # the shader draws a card's back with the front's lighting: every card faces away from the head
         if a.orient:
             hair, row["oriented"] = skyrimhair.orient_outward(hair, sf_world[skyrimhair.SF_HEAD])
     if getattr(a, "head_surface", None) is not None:
@@ -690,6 +734,44 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         hair, row["layers_apart"] = skyrimhair.separate_layers(hair, sf_world[skyrimhair.SF_HEAD],
                                                                step=a.layer_gap / 1000.0)
     hair, row["tangents"] = skyrimhair.uv_tangents(hair)    # Starfield's convention (along +U), from the final shape
+    return hair
+
+
+def hair_materials(conv, nifs, hair, a, color=None):
+    """(material per shape, back faces per shape) for a converted hair: Starfield's hair shader (hair_pack's options
+    a.hair_shader / opacity_ramp / strands; `color` or a.hair_color baked into the albedo) or the generic cutout
+    material. nifs: the source NIF of each shape (head parts merge several)."""
+    color = color if color is not None else getattr(a, "hair_color", None)
+    mats, backs = [], []
+    for n, sh in zip(nifs, hair.shapes):
+        m = hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands) if a.hair_shader else None
+        hair_mat = m is not None
+        if m is None:                          # the generic converted material (alpha cutout)
+            m = (tint_material(conv, n, sh, a.tint_cutoff, color) if skyrimhair.is_tint(sh)
+                 else conv._shape_material(n, sh))
+        mats.append(m)
+        backs.append(back_faces_for(n, sh, hair_mat))
+    return mats, backs
+
+
+def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, template_root: dict, sf_world: dict,
+              settings: smpcloth.Settings, a, staging: str) -> dict:
+    """Convert one wig: files written into staging; returns its report row (ok, model, ...)."""
+    stem = os.path.splitext(os.path.basename(src.index.get(nif_rel, nif_rel)))[0]     # the file's own spelling
+    row = {"wig": stem, "nif": nif_rel, "ok": False}
+    raw = src._read(nif_rel)
+    n = nifmod.parse(raw)
+    paths = smp.nif_physics_paths(n)
+    if not paths:
+        row["reason"] = "no SMP config named in the NIF"
+        return row
+    xml = src.data(paths[0])
+    if xml is None:
+        row["reason"] = f"config not found: {paths[0]}"
+        return row
+    row["config"] = paths[0]
+    hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
+    hair = shape_hair(hair, a, sf_world, row)
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"
@@ -707,15 +789,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     blob = smpcloth.write(template_blob, root)
     row["cloth"] = {**rig.report, "check": smpcloth.verify(blob), "head_capsule_radius": round(cap.radius, 4),
                     "body_colliders": body_report}
-    mats, backs = [], []
-    for sh in hair.shapes:
-        m = hair_shader_material(conv, n, sh, a.hair_color, a.opacity_ramp, a.strands) if a.hair_shader else None
-        hair_mat = m is not None
-        if m is None:                          # the generic converted material (alpha cutout)
-            m = (tint_material(conv, n, sh, a.tint_cutoff, a.hair_color) if skyrimhair.is_tint(sh)
-                 else conv._shape_material(n, sh))
-        mats.append(m)
-        backs.append(back_faces_for(n, sh, hair_mat))
+    mats, backs = hair_materials(conv, [n] * len(hair.shapes), hair, a)
     row["materials"] = mats
     out_name = f"{PREFIX}/hair/{stem.lower()}"
     files = skyrimhair.nif_files(hair, mats, blob, sf_world, out_name, backs)
@@ -746,16 +820,9 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     return row
 
 
-def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--ks", required=True, nargs="+", help="the KS Hairdos SMP folder(s) (installer or installed)")
-    ap.add_argument("--starfield", required=True)
-    ap.add_argument("--texconv", required=True)
-    ap.add_argument("--out", required=True, help="the mod folder to create (outside the repository)")
-    ap.add_argument("--only", help="comma list of wig names (file stems, e.g. Anna,Kikyo); default all")
-    ap.add_argument("--cloth-template", help="Starfield NIF / .hkx / '<ba2>:<path>' with a physics hair's cloth")
-    ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
-    ap.add_argument("--archive2")
+def add_shape_args(ap):
+    """The options of the hair shaping and material steps (shape_hair, hair_materials, setup_head): shared by
+    hair_pack and the Skyrim hair head parts (scripts/npc/skyrim_hairs.py)."""
     ap.add_argument("--reference-hair",
                     help="'<archive.ba2>:<path of a _facebones.nif in it>': the hair whose hairline and crown height "
                          "the wigs are matched to (default: the cloth template's vanilla hair)")
@@ -826,6 +893,19 @@ def main(argv=None):
                     help="Skyrim -> Starfield skull size ratio (measured on the male heads: 0.93)")
     ap.add_argument("--head-offset", type=float, nargs=3, default=skyrimhair.HEAD_OFFSET, metavar=("X", "Y", "Z"),
                     help="metres added after scaling, model axes (+Y forward, +Z up)")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--ks", required=True, nargs="+", help="the KS Hairdos SMP folder(s) (installer or installed)")
+    ap.add_argument("--starfield", required=True)
+    ap.add_argument("--texconv", required=True)
+    ap.add_argument("--out", required=True, help="the mod folder to create (outside the repository)")
+    ap.add_argument("--only", help="comma list of wig names (file stems, e.g. Anna,Kikyo); default all")
+    ap.add_argument("--cloth-template", help="Starfield NIF / .hkx / '<ba2>:<path>' with a physics hair's cloth")
+    ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
+    ap.add_argument("--archive2")
+    add_shape_args(ap)
     ap.add_argument("--damping", type=float, default=0.6,
                     help="share of the hair's speed lost per second (vanilla hairs: 0.97, a subtle jiggle; lower "
                          "flows more)")
@@ -866,25 +946,7 @@ def main(argv=None):
     sk = smpcloth.human_skeleton(template_root)
     world = smpcloth.skeleton_world(sk)
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
-    if a.skyrim_data:
-        fit = measure_female_fit(a.skyrim_data, a.starfield, sf_world, report, per_axis=not a.uniform_fit)
-        if fit is not None and a.head_scale == skyrimhair.HEAD_SCALE and \
-                tuple(a.head_offset) == tuple(skyrimhair.HEAD_OFFSET):     # explicit --head-* values win
-            a.head_scale, a.head_offset = fit[0], list(fit[1])
-            report["head_fit"]["used"] = True
-    a.head_surface = a.sky_head = None
-    if a.conform:
-        head_raw = read_game_file(a.starfield, SF_FEMALE_HEAD)
-        got = game_mesh_of(a.starfield, head_raw) if head_raw is not None else None
-        if got is not None:
-            a.head_surface = (got[0], got[1])
-        report["conform"] = "Starfield female head" if got is not None else "head mesh not found: not conformed"
-        sky = report.pop("_sky_head", None)
-        if got is not None and sky is not None and a.follow_head:   # Skyrim's head where the fit puts it
-            head_t = sf_world[skyrimhair.SF_HEAD][:3, 3]
-            a.sky_head = (head_t + np.asarray(a.head_offset, float)
-                          + np.asarray(a.head_scale, float) * (sky[0] - sky[1][:3, 3]) * skyrimhair.UNIT)
-    report.pop("_sky_head", None)
+    setup_head(a, sf_world, report, female=True)
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
                                  friction=a.friction, lateral=smpcloth.Settings.lateral if a.sheet else 0.0,
                                  twist=a.twist, mass_scale=a.mass_scale, balance=a.balance)
@@ -918,14 +980,7 @@ def main(argv=None):
     elif fb is not None and len(fb) > 4 and fb[4] is not None:
         ref_pts = fb[4][0]
         report["reference_hair"] = report.get("cloth_template")
-    if a.head_surface is not None and ref_pts is not None:
-        head = sf_world[skyrimhair.SF_HEAD]
-        a.vanilla_profile = skyrimhair.hairline_profile(ref_pts, *a.head_surface, head)
-        a.vanilla_crown = skyrimhair.crown_height(ref_pts, head)
-        report["vanilla_hair"] = {
-            "hairline_above_C_Head_mm_by_angle": {k: None if v is None else round(1000 * v, 1)
-                                                  for k, v in a.vanilla_profile.items()},
-            "crown_above_C_Head_mm": None if a.vanilla_crown is None else round(1000 * a.vanilla_crown, 1)}
+    setup_reference(a, sf_world, report, ref_pts)
     for w in wigs:
         try:
             report["wigs"].append(build_one(src, conv, w, template_blob, template_root, sf_world, settings, a,
