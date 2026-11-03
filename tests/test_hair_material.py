@@ -107,6 +107,17 @@ class HairColorTests(unittest.TestCase):
         clear = pipeline.recolor(np.full((2, 2, 4), 0, np.uint8) + np.array([50, 50, 50, 0], np.uint8), (10, 20, 30))
         np.testing.assert_allclose(clear[0, 0], (10, 20, 30), atol=1.0)   # no visible texel: all count
 
+    def test_no_mirrored_back_faces_under_the_hair_shader(self):
+        import hair_pack
+        sh = skyrimhair.HairShape(b"KSSMP_Anna", [], [], [], [], [], [], 3, 4, 0)
+        none = skyrimhair.HairShape(b"X", [], [], [], [], [], [], -1, -1, 0)
+        with mock.patch.object(hair_pack.skyrimnif, "double_sided", lambda n, r: True):
+            self.assertFalse(hair_pack.back_faces_for(None, sh, True))      # the hair shader draws both sides
+            self.assertTrue(hair_pack.back_faces_for(None, sh, False))      # a cutout material needs the copy
+            self.assertFalse(hair_pack.back_faces_for(None, none, False))
+        with mock.patch.object(hair_pack.skyrimnif, "double_sided", lambda n, r: False):
+            self.assertFalse(hair_pack.back_faces_for(None, sh, False))
+
     def test_opacity_ramp(self):
         import argparse
         import numpy as np

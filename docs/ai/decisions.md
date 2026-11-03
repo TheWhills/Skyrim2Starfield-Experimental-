@@ -955,3 +955,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   In game / on the real head: unverified.
 - 2026-11-02 DRAPE_RADIUS 50 mm (was 30): owner's viewer with --drape 50 smoothed the remaining wave at eye level;
   going into the in-game build as the default.
+- 2026-11-02 No mirrored back faces under the hair shader. Owner's in-game shots (opacity ramp in): the hair looks
+  like hair now but strands flicker dark / light. KS shapes are double-sided, so hair_pack added a mirrored copy of
+  every triangle (same place, normal reversed: skyrimconvert.with_back_faces). Verified: IDG's hairs carry no
+  mirrored triangles (6 styles checked: 0-2 reversed twins in 20-50k triangles), so the hair shader draws both
+  sides itself (supported); the copy then z-fights the original with opposite lighting. hair_pack.back_faces_for:
+  none with the hair shader (the classic cutout material keeps them). Also ~halves those shapes' vertices.

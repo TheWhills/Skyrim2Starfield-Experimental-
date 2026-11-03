@@ -272,6 +272,16 @@ def hair_color(text: str) -> tuple:
     return rgb
 
 
+def back_faces_for(n, sh, hair_shader: bool) -> bool:
+    """Whether a shape gets a mirrored copy of its triangles (skyrimconvert.with_back_faces: how a double-sided Skyrim
+    surface is drawn from behind with an ordinary one-sided Starfield material). Never under the hair shader: it draws
+    both sides itself (IDG's hairs have no mirrored triangles, verified on six styles), so the copy lay in the same
+    place with its normal reversed and the two flickered dark / light (2026-11-02, owner's in-game shots)."""
+    if hair_shader:
+        return False
+    return bool(sh.shader_ref >= 0 and skyrimnif.double_sided(n, sh.shader_ref))
+
+
 OPACITY_RAMP = (48, 112)
 
 
@@ -633,11 +643,12 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     mats, backs = [], []
     for sh in hair.shapes:
         m = hair_shader_material(conv, n, sh, a.hair_color, a.opacity_ramp) if a.hair_shader else None
+        hair_mat = m is not None
         if m is None:                          # the generic converted material (alpha cutout)
             m = (tint_material(conv, n, sh, a.tint_cutoff, a.hair_color) if skyrimhair.is_tint(sh)
                  else conv._shape_material(n, sh))
         mats.append(m)
-        backs.append(bool(sh.shader_ref >= 0 and skyrimnif.double_sided(n, sh.shader_ref)))
+        backs.append(back_faces_for(n, sh, hair_mat))
     row["materials"] = mats
     out_name = f"{PREFIX}/hair/{stem.lower()}"
     files = skyrimhair.nif_files(hair, mats, blob, sf_world, out_name, backs)
