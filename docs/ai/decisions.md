@@ -987,3 +987,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   vanilla race list 0x24A024; its overrides of HeadPartsChargenOptionsFemale / Male add none of its own hairs, so
   playable head parts reach the looks menu without list edits (supported; no list override here, so no conflict
   with IDG). No morph.dat yet: the hair does not follow face sliders / expressions.
+- 2026-11-02 Owner's run: the playable hair head parts (copied from Human_Female_Hair_Bob) did not appear in the
+  looks menu. So a playable flag and race list are not enough (the IDG reading above was wrong on that point; how
+  IDG reaches the menu is unresolved: its override of HeadPartsChargenOptionsFemale lists only vanilla FormIDs).
+  Now --head-parts also overrides the vanilla FLST HeadPartsChargenOptionsFemale (read from the owner's
+  Starfield.esm) with our head parts appended; the report says how many of its entries are head parts / lists and
+  whether the copied template is one of them. Load-order conflict with any other mod overriding that list.

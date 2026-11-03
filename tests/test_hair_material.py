@@ -235,6 +235,23 @@ class HeadPartTests(unittest.TestCase):
         self.assertNotIn(b"MNAM", d)                     # no morphs made for the template's mesh
         self.assertEqual(d[b"RNAM"], struct.pack("<I", 0x24A024))   # the template's races kept
 
+class ChargenListTests(unittest.TestCase):
+    def test_override_appends_once_and_keeps_the_rest(self):
+        import struct
+        import hair_pack
+        from fo4sf import sfplugin
+        l = lambda i: (b"LNAM", struct.pack("<I", i))
+        rec = (b"FLST", bytes(24), [(b"EDID", sfplugin.zs("HeadPartsChargenOptionsFemale")), l(0x2311), l(0x3A3D6F),
+                                    (b"XXXX", b"tail")], 0x3D9B0)
+        other = (b"FLST", bytes(24), [(b"EDID", sfplugin.zs("Other"))], 5)
+        t, h, subs, fid = hair_pack.chargen_list_override([other, rec], "HeadPartsChargenOptionsFemale",
+                                                          [0x1000801, 0x2311, 0x1000803])
+        self.assertEqual(fid, 0x3D9B0)                                   # the vanilla record, overridden
+        self.assertEqual([s for s, _d in subs], [b"EDID", b"LNAM", b"LNAM", b"LNAM", b"LNAM", b"XXXX"])
+        self.assertEqual([struct.unpack("<I", d)[0] for s, d in subs if s == b"LNAM"],
+                         [0x2311, 0x3A3D6F, 0x1000801, 0x1000803])
+        self.assertIsNone(hair_pack.chargen_list_override([other], "HeadPartsChargenOptionsFemale", [1]))
+
 class ReferenceHairTests(unittest.TestCase):
     def test_reads_nif_and_mesh_from_the_named_archive(self):
         import numpy as np

@@ -351,6 +351,23 @@ def hair_part_record(template, index: int, edid: str, name: str, model: str):
     return (t, h, subs, sfplugin.new_form_id(index))
 
 
+CHARGEN_FEMALE = "HeadPartsChargenOptionsFemale"   # vanilla FLST of the head parts the looks menu offers women
+
+
+def chargen_list_override(flst, edid: str, new_ids):
+    """An override of the vanilla form list `edid` with `new_ids` appended (each once), or None when the game has no
+    such list. 2026-11-02: playable hair head parts alone did not appear in the owner's looks menu; vanilla lists its
+    choices here."""
+    rec = next((r for r in flst if sfplugin.edid(r[2]) == edid), None)
+    if rec is None:
+        return None
+    t, h, subs, fid = rec
+    have = {struct.unpack_from("<I", bytes(d), 0)[0] for s_, d in subs if s_ == b"LNAM" and len(d) >= 4}
+    add = [(b"LNAM", struct.pack("<I", i)) for i in new_ids if i not in have]
+    last = max((k for k, (s_, _d) in enumerate(subs) if s_ == b"LNAM"), default=len(subs) - 1)
+    return (t, h, list(subs[:last + 1]) + add + list(subs[last + 1:]), fid)
+
+
 def write_files(staging: str, files: dict):
     for rel, data in files.items():
         p = os.path.join(staging, *rel.split("/"))
@@ -923,7 +940,9 @@ def main(argv=None):
             recs += [aa3, ao3]
             r["form_id_head"] = f"{ao3[3] & 0xFFFFFF:06X}"
     if a.head_parts:                         # the same wigs as looks-menu hairs (the actor's hair colour)
-        tpl = hair_part_template(sfplugin.records(esm, [b"HDPT"]),
+        hdpt_all = sfplugin.records(esm, [b"HDPT", b"FLST"])
+        flst = [r for r in hdpt_all if r[0] == b"FLST"]
+        tpl = hair_part_template([r for r in hdpt_all if r[0] == b"HDPT"],
                                  os.path.splitext(os.path.basename((report.get("cloth_template") or "")
                                                                    .replace("\\", "/")))[0])
         if tpl is None:
@@ -935,6 +954,19 @@ def main(argv=None):
                                       f"{r['wig']} (Skyrim)", r["model"])
                 recs.append(hp)
                 r["head_part"] = {"editor_id": sfplugin.edid(hp[2]), "form_id_in_plugin": f"{hp[3] & 0xFFFFFF:06X}"}
+            parts = [r["head_part"] for r in good if r.get("head_part")]
+            ids = [rec[3] for rec in recs if rec[0] == b"HDPT"]
+            lst = chargen_list_override(flst, CHARGEN_FEMALE, ids)
+            if lst is None:
+                report["chargen_list"] = f"{CHARGEN_FEMALE} not found in Starfield.esm: looks menu not changed"
+            else:
+                recs.append(lst)
+                kinds = {r[3]: r[0] for r in hdpt_all}
+                entries = [struct.unpack_from("<I", bytes(d), 0)[0] for s_, d in lst[2] if s_ == b"LNAM"]
+                report["chargen_list"] = {"edid": CHARGEN_FEMALE, "entries": len(entries), "added": len(parts),
+                                          "head_parts": sum(kinds.get(e) == b"HDPT" for e in entries),
+                                          "lists": sum(kinds.get(e) == b"FLST" for e in entries),
+                                          "template_listed": tpl[3] in entries}
     if a.rigid_copies:                       # the record control: the template hat itself under a new name
         ta, ha, sa, _f = armo_t
         ctl = (ta, ha, sfplugin.edit(sa, {b"EDID": sfplugin.zs("S2S_KSWig_ControlHat"),
@@ -996,7 +1028,13 @@ def main(argv=None):
             lines.append(f"Control: '{c['name']}' ..{c['form_id'][-3:]}")
     if report.get("head_part_template"):
         lines += ["", "Looks menu: the wigs are also hairstyles named '<wig> (Skyrim)' (copied from the vanilla "
-                      f"{report['head_part_template']}); they take the character's hair colour."]
+                      f"{report['head_part_template']}); they take the character's hair colour.",
+                  "They are added to the vanilla list " + CHARGEN_FEMALE + " (another mod that edits that list "
+                  "wins or loses by load order)."]
+    if isinstance(report.get("chargen_list"), dict):
+        c = report["chargen_list"]
+        lines.append(f"  ({c['edid']}: {c['entries']} entries, {c['head_parts']} head parts, {c['lists']} lists; "
+                     f"template listed: {c['template_listed']})")
     elif report.get("head_parts"):
         lines += ["", f"Looks menu hairstyles: not added ({report['head_parts']})."]
     lines += ["", f"Record copied from the vanilla head apparel {report['apparel_template']['armo']}.",
