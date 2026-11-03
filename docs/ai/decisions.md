@@ -814,3 +814,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   judged vertices less than 2 mm above Starfield's female base head move out along the nearest head normal, half the
   push spread to mesh neighbours, never inward; --no-conform). The viewer shows the conformed wig and the counts
   before / after (--no-push-out for the raw fit). Base head only: face sliders move the face bones on top.
+- 2026-11-02 owner's viewer run with conform: judged points inside the head 596 (2.98 %, deepest 7.9 mm; forehead
+  106, top 405, sides 65, back 8) -> 0 after the push-out (deepest 1.1 mm, under the 2 mm test); in game the
+  hairline sits clean (verified, screenshots). He now sees the wigs as too wide or the forehead too small (hairline
+  low): the push-out only moves points outward, so a Skyrim-proportioned scalp keeps its width / height. Added
+  skyrimhair.fit_head_axes (a scale per model axis + shift, same both-way closest-point ICP, starting from the
+  uniform fit; synthetic test recovers 0.90 / 0.96 / 0.99) used by default with --skyrim-data (hair_pack
+  --uniform-fit for one scale; per-axis normals by 1/s, tangents by s), reported next to the uniform fit; the viewer
+  adds the cloth template's own facebones hair (vanilla bob, green) and the hairline height at the middle of the
+  forehead (lowest point within 1 cm of the head in a 3 cm band) for the wig and the vanilla hair.

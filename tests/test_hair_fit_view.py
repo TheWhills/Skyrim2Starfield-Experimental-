@@ -56,6 +56,9 @@ class FitViewTests(unittest.TestCase):
         self.assertEqual((r["inside"], r["top"], r["forehead / face (front)"], r["back"]), (2, 1, 1, 0))
         self.assertEqual(r["judged (near the head)"], 3)
         self.assertAlmostEqual(r["deepest_mm"], 20.0, delta=3.0)
+        line = np.array([[0.0, 0.0911, 1.66], [0.0, 0.0911, 1.70], [0.05, 0.08, 1.60], [0.0, 0.2, 1.50]])
+        self.assertAlmostEqual(V.hairline(line, pts, nrm, head), 1.66 - 1.62, places=6)   # lowest on the front
+        self.assertIsNone(V.hairline(line[2:], pts, nrm, head))                 # off the band / off the head
         html = V.page({"head": (pts[:10], np.ones((10, 3))), "wig": (probe, np.zeros((4, 3)))}, "T", r)
         self.assertIn("three.min.js", html)
         self.assertIn('"wig":{"p":[0,1720,0,', html)            # model (x, y, z) -> page (x, z, y), mm

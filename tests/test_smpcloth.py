@@ -592,6 +592,24 @@ class FaceSkinTests(unittest.TestCase):
 
 
 class HeadFitTests(unittest.TestCase):
+    def test_fit_head_axes_recovers_per_axis_scale(self):
+        rng = np.random.default_rng(3)
+        d = rng.normal(size=(4000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        sf_head = np.eye(4)
+        sf_head[:3, 3] = (0.0, -0.002, 1.632)
+        sf_pts = sf_head[:3, 3] + d * [0.072, 0.095, 0.09] + [0.0, 0.02, 0.05]
+        sky_head = np.eye(4)
+        sky_head[:3, 3] = (0.0, -1.5, 120.0)
+        sc, off = np.array([0.90, 0.96, 0.99]), np.array([0.0, -0.02, 0.004])
+        sky_pts = (sf_pts - sf_head[:3, 3] - off) / sc / skyrimhair.UNIT + sky_head[:3, 3]
+        s3, t3, rms = skyrimhair.fit_head_axes(sky_pts, sky_head, sf_pts, sf_head)
+        np.testing.assert_allclose(s3, sc, atol=4e-3)
+        np.testing.assert_allclose(t3, off, atol=2e-3)
+        self.assertLess(rms, 2e-3)
+        s1, _t1, rms1 = skyrimhair.fit_head(sky_pts, sky_head, sf_pts, sf_head)
+        self.assertLess(rms, rms1)                                             # proportions fit better per axis
+
     def test_skin_to_model_inverts_the_skin_transform(self):
         from types import SimpleNamespace
         from fo4sf import skyrimskin

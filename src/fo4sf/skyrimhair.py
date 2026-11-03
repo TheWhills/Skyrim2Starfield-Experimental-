@@ -215,6 +215,13 @@ def convert(nif_bytes: bytes, smp_bytes: Optional[bytes], sf_world: Dict[str, np
         pos = np.array([place.point(to_model(v)) for v in s.positions])
         nrm = np.array([rot(v) for v in s.normals]) if s.normals else np.zeros((0, 3))
         tan = np.array([rot(v) for v in s.tangents]) if s.tangents else np.zeros((0, 3))
+        sc = np.broadcast_to(np.asarray(place.scale, float), (3,))
+        if len(nrm) and not np.allclose(sc, sc[0]):        # a per-axis scale: normals by 1/s, tangents by s
+            nrm = nrm / sc
+            nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+            if len(tan):
+                tan = tan * sc
+                tan /= np.maximum(np.linalg.norm(tan, axis=1, keepdims=True), 1e-12)
         names = [b.decode("latin-1") if isinstance(b, bytes) else b for b in s.bones]
         tgt = []
         for nm in names:
@@ -278,6 +285,40 @@ def fit_head(sky_points: np.ndarray, sky_head: np.ndarray, sf_points: np.ndarray
         raise HairError(f"too few cranium points to fit ({len(q)} Skyrim, {len(r)} Starfield)")
     s, _R, t, rms = facefit.align_heads(q, r, rotate=False)
     return float(s), tuple(float(x) for x in t), float(rms)
+
+
+def fit_head_axes(sky_points: np.ndarray, sky_head: np.ndarray, sf_points: np.ndarray, sf_head: np.ndarray,
+                  iters: int = 30) -> Tuple[Tuple[float, float, float], Tuple[float, float, float], float]:
+    """As fit_head but with a scale per model axis (width X, depth Y, height Z): the skulls differ in proportions, not
+    only size (2026-11-02: after the uniform fit the owner saw the wigs too wide). Starts from the uniform fit, then
+    alternates closest points both ways (as facefit.align_heads) with a least-squares scale and shift per axis."""
+    from . import facefit
+    s0, t0, _rms = fit_head(sky_points, sky_head, sf_points, sf_head)
+    q = (np.asarray(sky_points, float) - np.asarray(sky_head, float)[:3, 3]) * UNIT
+    r = np.asarray(sf_points, float) - np.asarray(sf_head, float)[:3, 3]
+    q, r = q[q[:, 2] > 0.0], r[r[:, 2] > 0.0]
+    sc, t = np.full(3, s0), np.asarray(t0, float)
+    rms = float("inf")
+    for _ in range(iters):
+        moved = q * sc + t
+        j, d = facefit._nearest(r, moved, 1)            # each Skyrim point -> its nearest Starfield point
+        i, e = facefit._nearest(moved, r, 1)            # each Starfield point -> its nearest Skyrim point
+        a = np.concatenate([q, q[i[:, 0]]])
+        b = np.concatenate([r[j[:, 0]], r])
+        for k in range(3):
+            ak, bk = a[:, k] - a[:, k].mean(), b[:, k] - b[:, k].mean()
+            sc[k] = float(np.sum(ak * bk) / np.sum(ak * ak))
+            t[k] = float(b[:, k].mean() - sc[k] * a[:, k].mean())
+        new = float(np.sqrt((np.sum(d ** 2) + np.sum(e ** 2)) / (len(d) + len(e))))
+        if abs(rms - new) < 1e-7:
+            rms = new
+            break
+        rms = new
+    moved = q * sc + t
+    _j, d = facefit._nearest(r, moved, 1)
+    _i, e = facefit._nearest(moved, r, 1)
+    rms = float(np.sqrt((np.sum(d ** 2) + np.sum(e ** 2)) / (len(d) + len(e))))
+    return tuple(float(x) for x in sc), tuple(float(x) for x in t), rms
 
 
 def nearest_surface(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, chunk: int = 512):

@@ -12,7 +12,8 @@ written next to the page. Read-only on both games' files.
     python -I scripts\\armor\\hair_fit_view.py --ks "<KS Hairdos SMP>" --starfield "<Starfield>"
         --skyrim-data "<Skyrim SE>\\Data" --wig Anna --out C:\\Modding\\work\\hair_fit_anna.html
 
-By default the wig is placed with the female fit measured from the two heads (as hair_pack --skyrim-data); --male
+By default the wig is placed with the per-axis female fit measured from the two heads (as hair_pack --skyrim-data;
+--uniform: one scale); --male
 uses the male constants (hair_pack without --skyrim-data); --head-scale / --head-offset place it by hand. Base heads
 only: a character's own face sliders move Starfield's face bones on top of this.
 """
@@ -58,6 +59,19 @@ def regions(points: np.ndarray, depth: np.ndarray, head: np.ndarray) -> dict:
     for name, m in parts.items():
         out[name] = int((inside & m).sum())
     return out
+
+
+def hairline(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray):
+    """Height of the hairline above C_Head at the middle of the forehead (m), or None: the lowest point lying on the
+    head (within 1 cm of its surface) in a 3 cm wide band down the front of the face."""
+    p = np.asarray(points, float)
+    rel = p - head[:3, 3]
+    band = (np.abs(rel[:, 0]) < 0.015) & (rel[:, 1] > 0.04)
+    if not band.any():
+        return None
+    depth, dist, _i = skyrimhair.nearest_surface(p[band], head_pts, head_nrm)
+    on = (dist < 0.03) & (depth < 0.01)
+    return float(rel[band][on, 2].min()) if on.any() else None
 
 
 def page(sets: dict, title: str, stats: dict) -> str:
@@ -124,6 +138,7 @@ def main(argv=None):
     ap.add_argument("--wig", default="Anna")
     ap.add_argument("--out", required=True, help="the .html page to write (outside the repository)")
     ap.add_argument("--male", action="store_true", help="place the wig with the male constants instead")
+    ap.add_argument("--uniform", action="store_true", help="the female fit with one scale instead of one per axis")
     ap.add_argument("--head-scale", type=float)
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
@@ -140,14 +155,17 @@ def main(argv=None):
     head = sf_world[skyrimhair.SF_HEAD]
     sky_pts, anchor, sf_pts, sf_nrm = hair_pack.load_female_heads(a.skyrim_data, a.starfield)
     fit_s, fit_t, fit_rms = skyrimhair.fit_head(sky_pts, anchor, sf_pts, head)
+    ax_s, ax_t, ax_rms = skyrimhair.fit_head_axes(sky_pts, anchor, sf_pts, head)
     if a.head_scale is not None or a.head_offset is not None:
         scale = a.head_scale if a.head_scale is not None else skyrimhair.HEAD_SCALE
         offset = tuple(a.head_offset) if a.head_offset is not None else skyrimhair.HEAD_OFFSET
         used = "by hand"
     elif a.male:
         scale, offset, used = skyrimhair.HEAD_SCALE, skyrimhair.HEAD_OFFSET, "male constants"
+    elif a.uniform:
+        scale, offset, used = fit_s, fit_t, "female fit, one scale (measured)"
     else:
-        scale, offset, used = fit_s, fit_t, "female fit (measured)"
+        scale, offset, used = np.array(ax_s), ax_t, "female fit, per axis (measured)"
     sky_moved = head[:3, 3] + np.asarray(offset) + scale * (sky_pts - anchor[:3, 3]) * skyrimhair.UNIT
     wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
     before = None
@@ -159,11 +177,27 @@ def main(argv=None):
     wig = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     depth = head_depth(wig, sf_pts, sf_nrm)
     sky_depth, _d, _i = skyrimhair.nearest_surface(sky_moved, sf_pts, sf_nrm)
-    stats = {"wig": a.wig, "placement": used, "scale": round(scale, 4), "offset_m": [round(x, 4) for x in offset],
+    vanilla = None                                     # the cloth template hair's facebones mesh: Starfield's own fit
+    tpl = report.get("cloth_template") or ""
+    if ":" in tpl:
+        rel = os.path.splitext(tpl.split(":", 1)[1].replace("\\", "/"))[0] + "_facebones.nif"
+        raw = hair_pack.read_game_file(a.starfield, rel)
+        got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None
+        vanilla = got[0] if got is not None else None
+    hl_wig = hairline(wig, sf_pts, sf_nrm, head)
+    hl_van = hairline(vanilla, sf_pts, sf_nrm, head) if vanilla is not None else None
+    stats = {"wig": a.wig, "placement": used, "scale": np.round(np.asarray(scale, float), 4).tolist(),
+             "offset_m": [round(x, 4) for x in offset],
+             "female_fit_per_axis": {"scale_xyz (width, depth, height)": [round(x, 4) for x in ax_s],
+                                     "offset_m": [round(x, 4) for x in ax_t], "rms_mm": round(1000 * ax_rms, 1)},
              "female_fit": {"scale": round(fit_s, 4), "offset_m": [round(x, 4) for x in fit_t],
                             "rms_mm": round(1000 * fit_rms, 1)},
              "male_constants": {"scale": skyrimhair.HEAD_SCALE, "offset_m": list(skyrimhair.HEAD_OFFSET)},
              "wig_inside_head": regions(wig, depth, head),
+             "hairline_above_C_Head_mm": {
+                 a.wig: None if hl_wig is None else round(1000 * hl_wig, 1),
+                 "vanilla " + os.path.basename(tpl.split(":", 1)[-1]): None if hl_van is None else round(1000 * hl_van, 1),
+                 "note": "middle of the forehead; lower = the hair covers more of the forehead"},
              "conformed": not a.no_push_out,
              "wig_inside_head_before_conform": before,
              "skyrim_head_vs_starfield_mm": {"median_gap": round(1000 * float(np.median(sky_depth)), 1),
@@ -186,6 +220,10 @@ def main(argv=None):
     sets = {"Starfield female head": (sfp, np.tile([0.85, 0.68, 0.52], (len(sfp), 1))),
             "Skyrim female head (moved by the fit)": (skp, np.tile([0.35, 0.55, 0.95], (len(skp), 1))),
             f"{a.wig} wig (red = inside the head)": (wp, wig_col)}
+    if vanilla is not None:
+        vp = thin(vanilla)
+        sets["Starfield's own hair (" + os.path.basename(tpl.split(":", 1)[-1]) + ")"] = (
+            vp, np.tile([0.35, 0.85, 0.45], (len(vp), 1)))
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(page(sets, f"{a.wig}: {used}", stats))

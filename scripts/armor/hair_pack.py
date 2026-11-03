@@ -265,20 +265,28 @@ SKY_FEMALE_HEAD = r"meshes\actors\character\character assets\femalehead.nif"
 SF_FEMALE_HEAD = "meshes/actors/human/characterassets/female/femalehead_facebones.nif"
 
 
-def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report: dict):
+def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report: dict, per_axis: bool = True):
     """(scale, offset) fitting the Skyrim female head onto the Starfield female head (skyrimhair.fit_head), or None.
     The KS wigs are made for Skyrim's female head; the constants were measured on the male heads (2026-11-02: the
     owner's female character showed the wigs clipping the forehead)."""
     info = report.setdefault("head_fit", {})
     try:
         sky_pts, anchor, sf_pts, _nrm = load_female_heads(skyrim_data, starfield)
-        scale, offset, rms = skyrimhair.fit_head(sky_pts, anchor, sf_pts, sf_world[skyrimhair.SF_HEAD])
+        head = sf_world[skyrimhair.SF_HEAD]
+        s1, t1, rms1 = skyrimhair.fit_head(sky_pts, anchor, sf_pts, head)
+        s3, t3, rms3 = skyrimhair.fit_head_axes(sky_pts, anchor, sf_pts, head)
     except Exception as e:                                       # noqa: BLE001 (reported; male constants kept)
         info["error"] = f"{type(e).__name__}: {e}"
         return None
-    info.update(scale=round(scale, 4), offset=[round(x, 4) for x in offset], rms_m=round(rms, 4),
+    info.update(uniform={"scale": round(s1, 4), "offset": [round(x, 4) for x in t1], "rms_mm": round(1000 * rms1, 2)},
+                per_axis={"scale_xyz": [round(x, 4) for x in s3], "offset": [round(x, 4) for x in t3],
+                          "rms_mm": round(1000 * rms3, 2)},
                 male_constants={"scale": skyrimhair.HEAD_SCALE, "offset": list(skyrimhair.HEAD_OFFSET)})
-    return scale, offset
+    if per_axis:
+        info["applied"] = "per_axis"
+        return np.array(s3), t3
+    info["applied"] = "uniform"
+    return s1, t1
 
 
 def game_mesh_of(starfield: str, raw: bytes):
@@ -555,6 +563,8 @@ def main(argv=None):
                          "are pushed just outside it)")
     ap.add_argument("--skyrim-data", help="Skyrim SE's Data folder: measure the female head fit (Skyrim female head "
                                           "onto Starfield's) and use it instead of the male constants")
+    ap.add_argument("--uniform-fit", action="store_true",
+                    help="with --skyrim-data: one scale for the head instead of one per axis (width / depth / height)")
     ap.add_argument("--head-scale", type=float, default=skyrimhair.HEAD_SCALE,
                     help="Skyrim -> Starfield skull size ratio (measured on the male heads: 0.93)")
     ap.add_argument("--head-offset", type=float, nargs=3, default=skyrimhair.HEAD_OFFSET, metavar=("X", "Y", "Z"),
@@ -600,7 +610,7 @@ def main(argv=None):
     world = smpcloth.skeleton_world(sk)
     sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
     if a.skyrim_data:
-        fit = measure_female_fit(a.skyrim_data, a.starfield, sf_world, report)
+        fit = measure_female_fit(a.skyrim_data, a.starfield, sf_world, report, per_axis=not a.uniform_fit)
         if fit is not None and a.head_scale == skyrimhair.HEAD_SCALE and \
                 tuple(a.head_offset) == tuple(skyrimhair.HEAD_OFFSET):     # explicit --head-* values win
             a.head_scale, a.head_offset = fit[0], list(fit[1])
