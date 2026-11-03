@@ -303,10 +303,12 @@ class SkyrimConverter(pipeline.Converter):
         self.stair_layer = stair_layer                # layer of the stair ramps added to native collision; None = none
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
-                        flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None) -> Optional[str]:
+                        flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None,
+                        albedo_target: Optional[tuple] = None) -> Optional[str]:
         kind = "decal" if blend and not test else "cutout" if test else "opaque"
         ident = "|".join([diffuse.replace("\\", "/").lower(), normal.replace("\\", "/").lower(), kind, str(ref)]
-                         + ([",".join(f"{v:.3f}" for v in albedo_tint)] if albedo_tint else []))
+                         + ([",".join(f"{v:.3f}" for v in albedo_tint)] if albedo_tint else [])
+                         + (["to:" + ",".join(str(int(v)) for v in albedo_target)] if albedo_target else []))
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_" + hashlib.sha1(ident.encode()).hexdigest()[:8]
         if kind == "decal":
@@ -317,7 +319,7 @@ class SkyrimConverter(pipeline.Converter):
                 self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=test,
                                                                  alpha_ref=ref, decal=(kind == "decal"),
                                                                  flat_normal_ok=flat_normal_ok,
-                                                                 albedo_tint=albedo_tint)
+                                                                 albedo_tint=albedo_tint, albedo_target=albedo_target)
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None
@@ -325,16 +327,21 @@ class SkyrimConverter(pipeline.Converter):
                 self.material_errors[key] = f"{type(e).__name__}: {e}"
         return self._materials[key]
 
-    def skyrim_hair_material(self, diffuse: str, normal: str, ref: int) -> Optional[str]:
+    def skyrim_hair_material(self, diffuse: str, normal: str, ref: int,
+                             color: Optional[tuple] = None) -> Optional[str]:
         """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
-        colour and its alpha as the opacity map; None when it cannot be made (the caller falls back)."""
+        colour (recoloured to average `color`, sRGB 0-255, when given: pipeline.recolor) and its alpha as the opacity
+        map; None when it cannot be made (the caller falls back)."""
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_hair"
+        if color:
+            stem += "_" + "".join(f"{int(v):02x}" for v in color[:3])
         key = "skyhair:" + stem
         if key not in self._materials:
             try:
                 self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=True,
-                                                                 alpha_ref=ref, flat_normal_ok=True, hair=True)
+                                                                 alpha_ref=ref, flat_normal_ok=True, hair=True,
+                                                                 albedo_target=color)
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None

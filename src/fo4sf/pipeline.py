@@ -67,6 +67,20 @@ class Fo4Archives:
         return sorted(set(out), key=str.lower)
 
 
+def recolor(rgba, target) -> "np.ndarray":
+    """The RGB of an (h, w, 4) uint8 texture scaled per channel so its visible texels (alpha >= 128; all when none
+    are) average `target` (sRGB 0-255): brightness variation kept, the colour chosen. Skyrim tints hair by the actor's
+    hair colour (HairTint shader); a Starfield wig is an armor item and shows the texture as it is (2026-11-02: the
+    KS wigs, a pale grey ~(145, 128, 114), drew grey-white in game under the hair shader)."""
+    import numpy as np
+    px = np.asarray(rgba)
+    rgb = px[:, :, :3].astype(np.float64)
+    seen = px[:, :, 3] >= 128 if px.shape[2] > 3 else np.ones(px.shape[:2], bool)
+    if not seen.any():
+        seen = np.ones(px.shape[:2], bool)
+    mean = np.maximum(rgb[seen].mean(axis=0), 1.0)
+    return np.clip(np.rint(rgb * (np.asarray(target, np.float64)[:3] / mean)), 0, 255).astype(np.uint8)
+
 def _plane_pair(dds: bytes, tmp: str, texconv_exe: str):
     """(R, G) uint8 planes of a DDS: native BC5, otherwise decoded through texconv."""
     h = textures.read_dds_header(dds)
@@ -249,7 +263,7 @@ class Converter:
                              template: Optional[dict] = None, extra_files: Optional[dict] = None,
                              color_alpha: Optional[int] = None, albedo_luminance: Optional[float] = None,
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
-                             hair: bool = False) -> str:
+                             hair: bool = False, albedo_target: Optional[tuple] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -281,7 +295,8 @@ class Converter:
                 # above), so those texels drew black: Skyrim's FieldGrass02 on the riverbank ledges showed only its
                 # bright flowers on a near-black sheet (owner's Riverwood tests). Opaque colour it is.
                 color_alpha = 255
-            if color_alpha is not None or albedo_luminance is not None or albedo_tint is not None:   # rewrite colour
+            if (color_alpha is not None or albedo_luminance is not None or albedo_tint is not None
+                    or albedo_target is not None):                                                  # rewrite colour
                 textures.texconv(self.texconv, os.path.join(tmp, "d.dds"), tmp, "R8G8B8A8_UNORM", ("-m", "1"))
                 raw_d = open(os.path.join(tmp, "d.dds"), "rb").read()
                 hd = textures.read_dds_header(raw_d)
@@ -289,6 +304,8 @@ class Converter:
                                    np.uint8).reshape(hd["height"], hd["width"], 4).copy()
                 if albedo_tint is not None:                 # Skyrim's vertex colour, multiplied in sRGB like Skyrim
                     pd[:, :, :3] = np.clip(np.rint(pd[:, :, :3] * np.array(albedo_tint, np.float32)), 0, 255)
+                if albedo_target is not None:               # recoloured so the visible texels average this sRGB
+                    pd[:, :, :3] = recolor(pd, albedo_target)
                 if albedo_luminance is not None:
                     pd[:, :, :3] = textures.scale_albedo(pd[:, :, :3], albedo_luminance)
                 if color_alpha is not None:

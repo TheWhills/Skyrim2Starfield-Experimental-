@@ -246,7 +246,7 @@ def arma_model(arma) -> str:
     return ""
 
 
-def hair_shader_material(conv, n, sh):
+def hair_shader_material(conv, n, sh, color=None):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -255,10 +255,22 @@ def hair_shader_material(conv, n, sh):
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
-    return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref)
+    return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color)
 
 
-def tint_material(conv, n, sh, cutoff: int):
+def hair_color(text: str) -> tuple:
+    """argparse type for --hair-color: 'R,G,B' (0-255) -> (R, G, B)."""
+    parts = [p.strip() for p in str(text).replace(" ", ",").split(",") if p.strip()]
+    try:
+        rgb = tuple(int(p) for p in parts)
+    except ValueError:
+        rgb = ()
+    if len(rgb) != 3 or not all(0 <= v <= 255 for v in rgb):
+        raise argparse.ArgumentTypeError(f"expected R,G,B with each 0-255, got {text!r}")
+    return rgb
+
+
+def tint_material(conv, n, sh, cutoff: int, color=None):
     """The material of KS's scalp fade layer ('Hairline'): its texture fades out over the forehead and Skyrim blends
     it (alpha test 10 + blend); a converted cutout material keeps every pixel above alpha 10/255, so the whole fade
     drew as a hard band down the forehead (2026-11-02: owner saw the KS scalp too low). The cut-off is raised to
@@ -266,7 +278,8 @@ def tint_material(conv, n, sh, cutoff: int):
     paths = skyrimnif.texture_set(n, sh.shader_ref) if sh.shader_ref >= 0 else []
     if not paths or not paths[0]:
         return conv._shape_material(n, sh)
-    return conv.skyrim_material(paths[0], paths[1] if len(paths) > 1 else "", True, False, int(cutoff)) or \
+    return conv.skyrim_material(paths[0], paths[1] if len(paths) > 1 else "", True, False, int(cutoff),
+                                albedo_target=color) or \
         conv._shape_material(n, sh)
 
 
@@ -595,9 +608,10 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
                     "body_colliders": body_report}
     mats, backs = [], []
     for sh in hair.shapes:
-        m = hair_shader_material(conv, n, sh) if a.hair_shader else None
+        m = hair_shader_material(conv, n, sh, a.hair_color) if a.hair_shader else None
         if m is None:                          # the generic converted material (alpha cutout)
-            m = tint_material(conv, n, sh, a.tint_cutoff) if skyrimhair.is_tint(sh) else conv._shape_material(n, sh)
+            m = (tint_material(conv, n, sh, a.tint_cutoff, a.hair_color) if skyrimhair.is_tint(sh)
+                 else conv._shape_material(n, sh))
         mats.append(m)
         backs.append(bool(sh.shader_ref >= 0 and skyrimnif.double_sided(n, sh.shader_ref)))
     row["materials"] = mats
@@ -653,6 +667,10 @@ def main(argv=None):
                     help="fill layers under raised hair: the wig stays on the scalp and this many turned copies of "
                          "its top stand between it and the volume (default %(default)s = off: the wig itself moves out; "
                          "3 at 20 mm looked like a choppy shelf)")
+    ap.add_argument("--hair-color", type=hair_color, metavar="R,G,B",
+                    help="the colour the hair averages to, sRGB 0-255 (e.g. 200,160,90 for blonde): Skyrim tints KS "
+                         "wigs with the actor's hair colour, Starfield draws a wig's texture as it is (grey); "
+                         "default the texture's own colour")
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,

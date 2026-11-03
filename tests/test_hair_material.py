@@ -83,11 +83,51 @@ class HairMaterialTests(unittest.TestCase):
                 mock.patch.object(hair_pack.skyrimnif, "alpha_test", lambda n, r: (True, True, 40)):
             calls = []
             fake = mock.Mock()
-            fake.skyrim_hair_material = lambda d, nn, ref: calls.append((d, nn, ref)) or "materials\\h.mat"
+            fake.skyrim_hair_material = lambda d, nn, ref, col: calls.append((d, nn, ref, col)) or "materials\\h.mat"
             self.assertEqual(hair_pack.hair_shader_material(fake, None, sh), "materials\\h.mat")
-            self.assertEqual(calls, [("textures\\a.dds", "textures\\a_n.dds", 40)])
+            self.assertEqual(hair_pack.hair_shader_material(fake, None, sh, (200, 160, 90)), "materials\\h.mat")
+            self.assertEqual(calls, [("textures\\a.dds", "textures\\a_n.dds", 40, None),
+                                     ("textures\\a.dds", "textures\\a_n.dds", 40, (200, 160, 90))])
         no_shader = skyrimhair.HairShape(b"X", [], [], [], [], [], [], -1, -1, 0)
         self.assertIsNone(hair_pack.hair_shader_material(fake, None, no_shader))
+
+
+class HairColorTests(unittest.TestCase):
+    def test_recolor_averages_the_visible_texels_to_the_target(self):
+        import numpy as np
+        px = np.zeros((4, 4, 4), np.uint8)
+        px[:2, :, :3] = (100, 100, 100)
+        px[2:, :, :3] = (160, 140, 120)
+        px[:, :2, 3] = 255                                   # left half visible, right half cut out
+        px[:, 2:, :3] = (255, 0, 0)                          # invisible red must not count
+        out = pipeline.recolor(px, (200, 160, 90)).astype(float)
+        vis = out[:, :2].reshape(-1, 3)
+        np.testing.assert_allclose(vis.mean(axis=0), (200, 160, 90), atol=1.0)
+        self.assertLess(out[0, 0, 0], out[3, 0, 0])          # darker strands stay darker
+        clear = pipeline.recolor(np.full((2, 2, 4), 0, np.uint8) + np.array([50, 50, 50, 0], np.uint8), (10, 20, 30))
+        np.testing.assert_allclose(clear[0, 0], (10, 20, 30), atol=1.0)   # no visible texel: all count
+
+    def test_hair_color_option_and_material_names(self):
+        import argparse
+        import hair_pack
+        self.assertEqual(hair_pack.hair_color("200,160,90"), (200, 160, 90))
+        self.assertEqual(hair_pack.hair_color(" 20, 15 ,10"), (20, 15, 10))
+        for bad in ("200,160", "300,1,1", "a,b,c"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                hair_pack.hair_color(bad)
+        conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        conv._materials, conv.stats, conv.material_errors = {}, {"materials_ok": 0}, {}
+        seen = []
+        conv._convert_texture_set = lambda stem, d, n, s, **kw: seen.append((stem, kw.get("albedo_target"))) or stem
+        plain = conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40)
+        blonde = conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40, (200, 160, 90))
+        self.assertNotEqual(plain, blonde)                    # its own textures and material
+        self.assertEqual(seen, [("h/anna_hair", None), ("h/anna_hair_c8a05a", (200, 160, 90))])
+        conv.skyrim_material = mock.Mock(return_value="materials\\t.mat")
+        sh = skyrimhair.HairShape(b"Hairline", [], [], [], [], [], [], 3, 4, 0)
+        with mock.patch.object(hair_pack.skyrimnif, "texture_set", lambda n, r: ["textures\\hl.dds", ""]):
+            hair_pack.tint_material(conv, None, sh, 128, (200, 160, 90))
+        self.assertEqual(conv.skyrim_material.call_args.kwargs, {"albedo_target": (200, 160, 90)})
 
 
 class ReferenceHairTests(unittest.TestCase):

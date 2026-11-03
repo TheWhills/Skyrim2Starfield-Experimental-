@@ -902,3 +902,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   choppy". LAYERS = 0 (the wig moves out by at most 8 mm, as before); --layers N kept as an option. The duplicate
   KS '_HL' shape is still dropped with the hair shader. Copying KS cards outward does not give IDG's look; IDG's
   depth is authored (many cards of different lengths at different depths).
+- 2026-11-02 Wig colour: --hair-color R,G,B (hair_pack). Owner's in-game shots with the Hair1Layer material: the
+  braid drew grey-white, Anna grey-brown, where Skyrim shows them blonde. Verified: Skyrim's KS shapes use shader
+  type 6 (HairTint), so Skyrim multiplies the actor's hair colour into a pale texture (opaque texels average about
+  sRGB (145, 128, 114) on Anna / Erena / Spring / Caress). Supported: Starfield does not tint an armor item's hair
+  material by the actor's hair colour (the result in game was the texture's grey); the actor's colour is a head
+  part matter, for the later looks-menu hairs. pipeline.recolor scales each channel so the visible texels (alpha >=
+  128) average the chosen colour (variation kept); skyrim_hair_material(color) gets its own textures / material
+  (stem suffix = hex colour); the 'Hairline' scalp fade takes the same colour (skyrim_material albedo_target).
+  Default: the texture as is. Classic material: not recoloured.
