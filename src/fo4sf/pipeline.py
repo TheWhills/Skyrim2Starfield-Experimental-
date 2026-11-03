@@ -67,11 +67,11 @@ class Fo4Archives:
         return sorted(set(out), key=str.lower)
 
 
-def _box_blur(img, r: int):
-    """Separable box blur (edge-clamped) of a 2-D float array with radius r."""
+def _box_blur(img, r, rx=None):
+    """Separable box blur (edge-clamped) of a 2-D float array: radius r down the rows (V), rx across (U; default r)."""
     import numpy as np
     out = np.asarray(img, np.float64)
-    for axis in (0, 1):
+    for axis, r in ((0, r), (1, r if rx is None else rx)):
         pad = [(0, 0), (0, 0)]
         pad[axis] = (r + 1, r)
         c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis)
@@ -81,12 +81,15 @@ def _box_blur(img, r: int):
     return out
 
 
-def flatten_albedo(rgba, radius: int = 24, strength: float = 0.8) -> "np.ndarray":
-    """The RGB of an (h, w, 4) uint8 texture with its broad light / dark patches evened out (each texel divided by
-    the brightness of the visible texels around it, `radius` texels, `strength` 0-1) and its fine strand detail
-    kept. KS paints shading into its hair (darker underlayers, lighter tops); under Starfield's lit, tinted hair
-    shader those read as blotches of another colour (2026-11-03, owner: 'clear difference in colours in the
-    different parts'); the game's own hair albedo is even, its variation per strand."""
+def flatten_albedo(rgba, radius: int = 4, radius_u: int = 64, strength: float = 0.9) -> "np.ndarray":
+    """The RGB of an (h, w, 4) uint8 texture with its painted light / dark bands evened out (each texel divided by
+    the brightness of the visible texels in a window `radius` texels tall and `radius_u` wide, `strength` 0-1) and
+    its strand detail kept. KS paints horizontal light / dark bands across its strands (Anna: ~200 texels apart,
+    darker roots: Skyrim-era fake highlights) and shading (darker underlayers); each card samples the bands at its
+    own height, so under Starfield's lit, tinted hair shader they draw as a brick / maze pattern and patches of
+    another colour (2026-11-03, owner's looks-menu shots, still there with crisp strands and the cards apart). The
+    window is wide across the strands (their own light / dark averages out) and short along them (the bands do
+    not); the game's own hair albedo is even, its variation per strand."""
     import numpy as np
     px = np.asarray(rgba)
     rgb = px[:, :, :3].astype(np.float64)
@@ -94,10 +97,14 @@ def flatten_albedo(rgba, radius: int = 24, strength: float = 0.8) -> "np.ndarray
     seen = (px[:, :, 3] >= 64).astype(np.float64) if px.shape[2] > 3 else np.ones(lum.shape)
     if seen.sum() < 1:
         return px[:, :, :3].copy()
-    local = _box_blur(lum * seen, radius) / np.maximum(_box_blur(seen, radius), 1e-6)
-    mean = float((lum * seen).sum() / seen.sum())
-    gain = (mean / np.maximum(local, 1.0)) ** strength
-    return np.clip(np.rint(rgb * gain[:, :, None]), 0, 255).astype(np.uint8)
+    den = np.maximum(_box_blur(seen, radius, radius_u), 1e-6)
+    out = rgb.copy()
+    for ch in range(3):                                   # per channel: the bands differ in hue as well as light
+        local = _box_blur(rgb[:, :, ch] * seen, radius, radius_u) / den
+        mean = float((rgb[:, :, ch] * seen).sum() / seen.sum())
+        gain = np.clip((mean / np.maximum(local, 1.0)) ** strength, 0.33, 3.0)
+        out[:, :, ch] = rgb[:, :, ch] * gain
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
 
 def strand_maps(alpha, scale: int = 2, width: int = 2, wobble: float = 0.06, seed: int = 7):

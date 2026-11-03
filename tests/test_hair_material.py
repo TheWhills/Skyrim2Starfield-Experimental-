@@ -200,17 +200,18 @@ class HairColorTests(unittest.TestCase):
         self.assertTrue((hid == hid[0]).all())              # one ID per strand (column)
         self.assertGreater(len(np.unique(hid[0])), 20)
 
-    def test_flatten_albedo_evens_patches_keeps_strands(self):
+    def test_flatten_albedo_evens_painted_bands_keeps_strands(self):
         import numpy as np
-        px = np.zeros((64, 128, 4), np.uint8)
+        px = np.zeros((128, 128, 4), np.uint8)
         px[:, :, 3] = 255
-        px[:, :64, :3] = 60                                 # a dark painted half
-        px[:, 64:, :3] = 180                                # a light half
-        px[:, ::4, :3] = (px[:, ::4, :3] * 0.7).astype(np.uint8)   # strand lines
-        out = pipeline.flatten_albedo(px, radius=8).astype(float)
-        dark, light = out[:, 8:56, 0].mean(), out[:, 72:120, 0].mean()
-        self.assertLess(abs(dark - light) / max(dark, light), 0.35)  # was 3x apart
-        self.assertLess(out[10, 64 + 8, 0], out[10, 64 + 9, 0])       # the strand line still darker
+        px[:64, :, :3] = (90, 60, 40)                        # a dark, warmer painted band across the strands
+        px[64:, :, :3] = (190, 170, 150)                     # a light band
+        px[:, ::4, :3] = (px[:, ::4, :3] * 0.7).astype(np.uint8)   # strand lines along V
+        out = pipeline.flatten_albedo(px).astype(float)
+        dark, light = out[8:56, 8:120].mean(axis=(0, 1)), out[72:120, 8:120].mean(axis=(0, 1))
+        self.assertTrue(np.all(np.abs(dark - light) / light < 0.15))    # light and hue evened (was 2-4x apart)
+        self.assertLess(out[100, 64, 0], out[100, 65, 0])               # a strand line still darker
+        self.assertLess(out[30, 64, 0], out[30, 65, 0])
 
     def test_hair_color_option_and_material_names(self):
         import argparse

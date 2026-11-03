@@ -1020,3 +1020,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   ordered by distance from the head and each moved out to sit 0.8 mm over the one under it, smoothed over mesh
   neighbours, 4 passes, total capped at 6 mm, outward only: Anna's stacked share 91 % -> 2 %, Erena 55 -> 9, Spring
   59 -> 12. Runs after the conform step.
+- 2026-11-03 The maze / brick pattern is in KS's colour texture. Owner's looks-menu shots after separate_layers:
+  the pattern stays, brick-shaped across the strands. Verified on Anna.dds: strands run down the texture, and KS
+  paints horizontal light / dark bands across them every ~200 texels (darker roots, darker and warmer bands:
+  Skyrim-era painted highlights); every card samples them at its own height, so neighbouring cards meet light
+  against dark: bricks. (No dark fringe at low alpha: luminance 131-138 at every alpha.) flatten_albedo now evens
+  per channel over a window 9 texels along the strands and 129 across them: the row-mean RGB spread falls from ~26
+  to ~3.5 while the across-strand detail stays (row std 23 -> 25). The stacked-cards fix (separate_layers) stays:
+  the z-fighting was measured, the pattern may have had both causes.
