@@ -686,6 +686,9 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
             hair, row["drape"] = skyrimhair.drape(hair, *a.head_surface, head, radius=a.drape / 1000.0)
         hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface,   # no scalp point inside the head
                                                    blend=a.push_blend / 1000.0)
+    if a.hair_shader and a.layer_gap > 0:    # stacked cards apart: the hair shader would etch their fight in
+        hair, row["layers_apart"] = skyrimhair.separate_layers(hair, sf_world[skyrimhair.SF_HEAD],
+                                                               step=a.layer_gap / 1000.0)
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"
@@ -769,6 +772,9 @@ def main(argv=None):
                     help="the colour the hair averages to, sRGB 0-255 (e.g. 200,160,90 for blonde): Skyrim tints KS "
                          "wigs with the actor's hair colour, Starfield draws a wig's texture as it is (grey); "
                          "default the texture's own colour")
+    ap.add_argument("--layer-gap", type=float, default=1000 * skyrimhair.LAYER_STEP,
+                    help="mm: hair shader: KS's cards lying on top of each other are moved apart by at least this, "
+                         "so they stop fighting over pixels (the etched maze pattern); 0 = off (default %(default)s)")
     ap.add_argument("--no-strands", dest="strands", action="store_false",
                     help="hair shader: keep KS's soft alpha (with --opacity-ramp) instead of crisp strands at its "
                          "density with a per-strand hair ID, and KS's painted light / dark patches")

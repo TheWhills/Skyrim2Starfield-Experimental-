@@ -1011,3 +1011,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   texels within 24 texels (strength 0.8): broad patches evened, strand lines kept. The physics test (owner): the
   no-physics copy shows less top / bottom difference, so part of it is the cloth bones turning (the planned rig
   rework); some layering difference remains.
+- 2026-11-03 separate_layers: stacked KS cards moved apart (hair_pack with the hair shader, --layer-gap mm, default
+  0.8; 0 = off). Owner: with crisp strands the hair reads as hair in the looks menu, but a maze pattern stays
+  "etched" into it. Verified on the meshes: KS lays cards directly on each other (Anna: in 91 % of 6 mm patches
+  where cards overlap, consecutive cards lie within 0.5 mm, median gap 0; Erena 55 %, Spring 59 %), which Skyrim's
+  sorted blending hides; Starfield's hair shader writes depth, so the cards z-fight and the winner changes along
+  the triangles (supported: the outlines are staircase-shaped like triangle edges). Per 6 mm patch the cards are
+  ordered by distance from the head and each moved out to sit 0.8 mm over the one under it, smoothed over mesh
+  neighbours, 4 passes, total capped at 6 mm, outward only: Anna's stacked share 91 % -> 2 %, Erena 55 -> 9, Spring
+  59 -> 12. Runs after the conform step.

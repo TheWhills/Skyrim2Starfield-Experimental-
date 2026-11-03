@@ -832,6 +832,107 @@ def orient_outward(hair: Hair, head: np.ndarray) -> Tuple[Hair, Dict]:
             {"cards": cards, "turned": flipped})
 
 
+LAYER_STEP = 0.0008           # m: the least gap separate_layers leaves between stacked hair cards
+LAYER_CELL = 0.006           # m: the neighbourhood in which cards count as stacked
+LAYER_MAX = 0.006            # m: the most any card is moved out
+
+
+def separate_layers(hair: Hair, head: np.ndarray, step: float = LAYER_STEP, cell: float = LAYER_CELL,
+                    limit: float = LAYER_MAX, smooth: int = 4, passes: int = 4, keep=None) -> Tuple[Hair, Dict]:
+    """separate_layers_once `passes` times (the smoothing gives back part of each gap; repeating closes it)."""
+    report = {}
+    start = hair
+    for _ in range(max(1, passes)):
+        hair, report = separate_layers_once(hair, head, step, cell, limit, smooth, keep)
+    shapes, moved = [], []
+    for a, b in zip(start.shapes, hair.shapes):     # the total move capped at `limit` (deep stacks: the top ones)
+        p0 = np.asarray(a.positions, float)
+        dv = np.asarray(b.positions, float) - p0 if len(p0) else np.zeros((0, 3))
+        n = np.linalg.norm(dv, axis=1) if len(p0) else np.zeros(0)
+        dv = dv * np.minimum(1.0, limit / np.maximum(n, 1e-12))[:, None]
+        moved.append(np.minimum(n, limit))
+        shapes.append(b if b is a else HairShape(b.name, p0 + dv, b.normals, b.tangents, b.uvs, b.triangles,
+                                                 b.weights, b.shader_ref, b.alpha_ref, b.block))
+    hair = Hair(shapes, hair.bones, hair.host_of_root, hair.report)
+    allm = np.concatenate(moved) if moved else np.zeros(0)
+    on = allm > 1e-5
+    return hair, {"vertices_moved": int(on.sum()), "largest_mm": round(1000 * float(allm.max()), 2) if len(allm) else 0,
+                  "median_moved_mm": round(1000 * float(np.median(allm[on])), 2) if on.any() else 0.0,
+                  "passes": passes}
+
+
+def separate_layers_once(hair: Hair, head: np.ndarray, step: float = LAYER_STEP, cell: float = LAYER_CELL,
+                         limit: float = LAYER_MAX, smooth: int = 4, keep=None) -> Tuple[Hair, Dict]:
+    """Stacked hair cards moved apart: KS lays its cards on top of each other with no gap (Anna, measured
+    2026-11-03: in 91 % of 6 mm patches where cards overlap, consecutive cards lie within 0.5 mm of each other,
+    median 0), which Skyrim's sorted alpha blending hides. Starfield's hair shader writes depth, so two such cards
+    fight over every pixel and the winner changes along the triangles: a maze of outlines etched into the hair
+    (owner's looks-menu shots, also with crisp opacity). In every `cell` patch the cards present are ordered by
+    their distance from the head (as orient_outward: from C_Head + 9 cm above it, from the vertical through it below)
+    and each is moved outward just enough to sit `step` beyond the one under it (never more than `limit`); the moves
+    are averaged over mesh neighbours `smooth` times so a card bends instead of stepping. Only moves outward."""
+    keep = TINT_SHAPES if keep is None else keep
+    c = np.asarray(head, float)[:3, 3] + np.array([0.0, 0.0, 0.09])
+    use = [k for k, sh in enumerate(hair.shapes) if len(sh.positions) and len(sh.triangles)
+           and not any(t in (sh.name or b"").lower() for t in keep)]
+    if not use:
+        return hair, {"vertices_moved": 0}
+    pos, card, tris, base = [], [], [], 0
+    for n, k in enumerate(use):
+        sh = hair.shapes[k]
+        p = np.asarray(sh.positions, float)
+        t = np.asarray(sh.triangles, int).reshape(-1, 3)
+        pos.append(p)
+        card.append(_components(len(p), t) + base)
+        tris.append(t + base)
+        base += len(p)
+    pos, card, tris = np.concatenate(pos), np.concatenate(card), np.concatenate(tris)
+    axis = np.stack([np.full(len(pos), c[0]), np.full(len(pos), c[1]), np.minimum(pos[:, 2], c[2])], axis=1)
+    out = pos - axis
+    d = np.linalg.norm(out, axis=1)
+    out /= np.maximum(d, 1e-9)[:, None]
+    key = np.floor(pos / cell).astype(np.int64)
+    _cells, cell_of = np.unique(key, axis=0, return_inverse=True)
+    cell_of = cell_of.reshape(-1)
+    pair, pair_of = np.unique(np.stack([cell_of, card], axis=1), axis=0, return_inverse=True)
+    pair_of = pair_of.reshape(-1)
+    mean = np.zeros(len(pair))
+    np.add.at(mean, pair_of, d)
+    mean /= np.maximum(np.bincount(pair_of, minlength=len(pair)), 1)
+    lift = np.zeros(len(pair))
+    order = np.lexsort((mean, pair[:, 0]))               # by cell, then distance from the head
+    prev_cell, prev_top = -1, 0.0
+    for i in order:
+        if pair[i, 0] != prev_cell:
+            prev_cell, prev_top = pair[i, 0], mean[i]
+            continue
+        want = prev_top + step
+        lift[i] = min(max(want - mean[i], 0.0), limit)
+        prev_top = mean[i] + lift[i]
+    move = lift[pair_of]
+    if smooth > 0 and len(tris):
+        e = np.concatenate([tris[:, [0, 1]], tris[:, [1, 2]], tris[:, [2, 0]]])
+        e = np.concatenate([e, e[:, ::-1]])
+        deg = np.bincount(e[:, 0], minlength=len(pos)).astype(float)
+        need = move.copy()
+        for _ in range(smooth):
+            acc = np.bincount(e[:, 0], weights=move[e[:, 1]], minlength=len(pos))
+            move = np.where(deg > 0, 0.5 * move + 0.5 * acc / np.maximum(deg, 1), move)
+        move = np.maximum(move, 0.5 * need)              # smoothing never undoes more than half a gap
+    new = pos + move[:, None] * out
+    shapes, start, it = list(hair.shapes), 0, iter(use)
+    for k in use:
+        sh = hair.shapes[k]
+        n = len(sh.positions)
+        shapes[k] = HairShape(sh.name, new[start:start + n], sh.normals, sh.tangents, sh.uvs, sh.triangles,
+                              sh.weights, sh.shader_ref, sh.alpha_ref, sh.block)
+        start += n
+    moved = move > 1e-5
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, separated_layers=True)),
+            {"vertices_moved": int(moved.sum()), "largest_mm": round(1000 * float(move.max()), 2),
+             "median_moved_mm": round(1000 * float(np.median(move[moved])), 2) if moved.any() else 0.0})
+
+
 def drop_duplicate_shapes(hair: Hair) -> Tuple[Hair, List[str]]:
     """The hair without shapes whose geometry repeats an earlier shape's (same positions, triangles and UVs): KS
     draws every wig twice, 'KSSMP_<name>' alpha-blended (test 40) and '..._HL' alpha-tested (test 200), Skyrim's

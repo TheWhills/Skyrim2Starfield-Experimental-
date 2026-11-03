@@ -286,6 +286,36 @@ class FitViewTests(unittest.TestCase):
         np.testing.assert_allclose(out.shapes[1].positions, tint.positions)   # the scalp tint stays on the skin
         self.assertGreater(rep["largest_mm"], 3.0)
 
+    def test_separate_layers_moves_stacked_cards_apart(self):
+        from fo4sf import skyrimhair
+        head = np.eye(4)
+        head[:3, 3] = (0.0, 0.0, 1.6)
+        top = 1.6 + 0.09 + 0.1
+        xs = np.linspace(-0.02, 0.02, 9)
+
+        def strip(z0, wobble, x0=0.0):             # a card along X at height z0 (wavy), 1 cm wide in Y
+            pts = [(x0 + x, y, z0 + wobble * np.sin(40 * x)) for x in xs for y in (-0.005, 0.005)]
+            tris = []
+            for i in range(len(xs) - 1):
+                a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3
+                tris += [(a, c, b), (b, c, d)]
+            return np.array(pts), tris
+        p1, t1 = strip(top, 0.0003)
+        p2, t2 = strip(top + 0.0001, -0.0003)            # crosses the first: they fight
+        p3, t3 = strip(top, 0.0, x0=0.2)                 # far away, alone
+        p = np.concatenate([p1, p2, p3])
+        t = t1 + [tuple(v + len(p1) for v in tri) for tri in t2] + [tuple(v + 2 * len(p1) for v in tri) for tri in t3]
+        sh = skyrimhair.HairShape(b"A", p, None, None, [(0, 0)] * len(p), t, [[("C_Head", 1.0)]] * len(p), -1, -1, 0)
+        out, rep = skyrimhair.separate_layers(skyrimhair.Hair([sh], [], {}, {}), head)
+        q = np.asarray(out.shapes[0].positions)
+        n1 = len(p1)
+        gap = q[n1:2 * n1, 2] - q[:n1, 2]                # same x / y: the second card over the first
+        self.assertGreater(np.median(np.abs(gap)), 0.0006)               # now about a step apart
+        self.assertTrue(np.all(np.abs(gap) > 0.0002))                     # nowhere crossing any more
+        self.assertTrue(np.all(q[:, 2] >= p[:, 2] - 1e-9))               # only ever outward (up, here)
+        np.testing.assert_allclose(q[2 * n1:], p3, atol=1e-9)            # the lone card untouched
+        self.assertLessEqual(rep["largest_mm"], 1000 * skyrimhair.LAYER_MAX + 1e-6)
+
     def test_depth_regions_and_page(self):
         pts, nrm = sphere()
         head = np.eye(4)
