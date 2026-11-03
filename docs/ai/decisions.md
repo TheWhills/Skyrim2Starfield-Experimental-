@@ -920,3 +920,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   smooth hair, the result's largest second difference under half the per-point push's, clearance kept.
   --push-blend mm (pack / viewer; 0 = per point). That the brow bump in game is this step (and not the hairline
   lift): supported, not verified.
+- 2026-11-02 follow_head: the wig moves with the skull difference before the conform push. Owner (viewer, Anna,
+  with the eased push): still a "bridge" over the brow, "it goes kind of down and bumps rather than smoothly going
+  down". Cause (supported): the hair keeps Skyrim's forehead curve and is only pushed where Starfield's brow pokes
+  through. Now (hair_pack with --skyrim-data, and the viewer): each Skyrim female head point, placed by the head fit,
+  gets the move onto Starfield's head along the nearest Starfield normal (out at the brow, in where Starfield's
+  head is smaller); a wig point takes the Gaussian (8 mm) average of the moves around it, full within 3 cm of the
+  Skyrim head, none beyond 8 cm. The hair keeps its Skyrim height over the skin and curves with Starfield's
+  forehead; push_out handles what is left. Synthetic: a sphere vs a head 6 mm out at the front and 4 mm in at the
+  back: hair 3 mm over the Skyrim head ends ~3 mm (1.75-4.4) over Starfield's all round, smooth. --no-follow-head
+  to compare. In game: unverified.

@@ -154,6 +154,8 @@ def main(argv=None):
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
     ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
+    ap.add_argument("--no-follow-head", action="store_true",
+                    help="as hair_pack's: no move by the difference between the Skyrim and Starfield heads")
     ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
                     help="mm the conform step eases its push off over, as hair_pack (0 = per point, the old bump)")
     ap.add_argument("--reference-hair", help="'<archive.ba2>:<path of a _facebones.nif in it>': the green hair and "
@@ -195,6 +197,9 @@ def main(argv=None):
     wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
     if not a.classic_material:          # as hair_pack: one copy of KS's two-pass wig
         wig_hair, _dropped = skyrimhair.drop_duplicate_shapes(wig_hair)
+    followed = None
+    if not a.no_follow_head and not a.no_push_out:   # as hair_pack: with the skull difference first
+        wig_hair, followed = skyrimhair.follow_head(wig_hair, sky_moved, sf_pts, sf_nrm)
     vanilla = vanilla_tris = None                      # the cloth template hair's facebones mesh: Starfield's own fit
     tpl = report.get("cloth_template") or ""
     if a.reference_hair:
@@ -270,6 +275,7 @@ def main(argv=None):
                                        "fill_layers": a.layers if volume else 0,
                                        "layer_vertices": wig_hair.report.get("layer_vertices", 0)},
              "conformed": not a.no_push_out,
+             "followed_head": followed,
              "wig_inside_head_before_conform": before,
              "skyrim_head_vs_starfield_mm": {"median_gap": round(1000 * float(np.median(sky_depth)), 1),
                                              "inside_starfield_percent": round(100 * float((sky_depth < INSIDE).mean()), 1),

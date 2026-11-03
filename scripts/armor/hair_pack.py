@@ -311,6 +311,7 @@ def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report:
     info = report.setdefault("head_fit", {})
     try:
         sky_pts, anchor, sf_pts, _nrm = load_female_heads(skyrim_data, starfield)
+        report["_sky_head"] = (sky_pts, anchor)                 # for follow_head (not written to the report)
         head = sf_world[skyrimhair.SF_HEAD]
         s1, t1, rms1 = skyrimhair.fit_head(sky_pts, anchor, sf_pts, head)
         s3, t3, rms3 = skyrimhair.fit_head_axes(sky_pts, anchor, sf_pts, head)
@@ -554,6 +555,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         return row
     row["config"] = paths[0]
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
+    if getattr(a, "sky_head", None) is not None and getattr(a, "head_surface", None) is not None:
+        hair, row["follow_head"] = skyrimhair.follow_head(hair, a.sky_head, *a.head_surface)
     if a.hair_shader:                    # KS's second (alpha-tested) copy of every wig: the hair shader needs one
         hair, dropped = skyrimhair.drop_duplicate_shapes(hair)
         if dropped:
@@ -677,6 +680,9 @@ def main(argv=None):
     ap.add_argument("--tint-cutoff", type=int, default=128,
                     help="alpha (0-255) below which KS's scalp fade layer ('Hairline') is not drawn: Skyrim blends it, "
                          "a cutout at Skyrim's 10 draws the whole fade as a band down the forehead")
+    ap.add_argument("--no-follow-head", dest="follow_head", action="store_false",
+                    help="with --skyrim-data: do not move the wig by the difference between Skyrim's and Starfield's "
+                         "head shapes (default: it follows Starfield's forehead / brow, then the conform step)")
     ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
                     help="mm over which the conform step eases its push off around the points it moves, so the hair "
                          "curves over Starfield's forehead instead of bumping (default %(default)s; 0 = per point)")
@@ -737,13 +743,19 @@ def main(argv=None):
                 tuple(a.head_offset) == tuple(skyrimhair.HEAD_OFFSET):     # explicit --head-* values win
             a.head_scale, a.head_offset = fit[0], list(fit[1])
             report["head_fit"]["used"] = True
-    a.head_surface = None
+    a.head_surface = a.sky_head = None
     if a.conform:
         head_raw = read_game_file(a.starfield, SF_FEMALE_HEAD)
         got = game_mesh_of(a.starfield, head_raw) if head_raw is not None else None
         if got is not None:
             a.head_surface = (got[0], got[1])
         report["conform"] = "Starfield female head" if got is not None else "head mesh not found: not conformed"
+        sky = report.pop("_sky_head", None)
+        if got is not None and sky is not None and a.follow_head:   # Skyrim's head where the fit puts it
+            head_t = sf_world[skyrimhair.SF_HEAD][:3, 3]
+            a.sky_head = (head_t + np.asarray(a.head_offset, float)
+                          + np.asarray(a.head_scale, float) * (sky[0] - sky[1][:3, 3]) * skyrimhair.UNIT)
+    report.pop("_sky_head", None)
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
                                  friction=a.friction, lateral=smpcloth.Settings.lateral if a.sheet else 0.0,
                                  twist=a.twist, mass_scale=a.mass_scale)

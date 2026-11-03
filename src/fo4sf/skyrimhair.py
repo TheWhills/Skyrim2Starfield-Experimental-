@@ -344,6 +344,47 @@ def judged(points: np.ndarray, head_pts: np.ndarray, dist: np.ndarray, reach: fl
     return (dist < reach) & (np.asarray(points, float)[:, 2] > float(np.min(np.asarray(head_pts)[:, 2])) + 0.02)
 
 
+def follow_head(hair: Hair, sky_pts: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, near: float = 0.03,
+                far: float = 0.08, sigma: float = 0.008, chunk: int = 256) -> Tuple[Hair, Dict]:
+    """The wig moved with the difference between the two skulls: KS made it to sit on Skyrim's female head
+    (`sky_pts`, already placed on Starfield's by the head fit), and every point near that head moves the way the
+    Skyrim head's surface around it must move to lie on Starfield's (`head_pts` / `head_nrm`): out where Starfield's
+    brow / forehead stands further out, in where it lies further in. So the hair keeps the height above the skin it
+    had in Skyrim, and its curve over the forehead follows Starfield's forehead instead of being pushed out only
+    where it would clip (2026-11-02: owner saw Anna's hair go down over the forehead and then bump over the brow).
+    Each Skyrim head point's move is along the nearest Starfield normal; a hair point takes a Gaussian (`sigma` m)
+    average of the moves of the Skyrim head points around it, in full within `near` m of that head and fading to
+    nothing at `far` (hanging hair below stays). push_out still runs after it for what is left."""
+    sky = np.asarray(sky_pts, float)
+    hn = np.asarray(head_nrm, float)
+    d_sky, dist_sky, j_sky = nearest_surface(sky, head_pts, head_nrm)
+    use = judged(sky, head_pts, dist_sky)
+    sky, move = sky[use], (-d_sky[use])[:, None] * hn[j_sky[use]]
+    if not len(sky):
+        return hair, {"vertices_moved": 0}
+    ss = (sky * sky).sum(1)
+    shapes, moved, largest = [], 0, 0.0
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        out = np.zeros_like(pos)
+        for c in range(0, len(pos), chunk):
+            p = pos[c:c + chunk]
+            d2 = np.maximum((p * p).sum(1)[:, None] + ss[None, :] - 2.0 * p @ sky.T, 0.0)
+            r = np.sqrt(d2.min(axis=1))
+            w = np.exp(-(d2 - d2.min(axis=1, keepdims=True)) / (2.0 * sigma * sigma))   # relative to the nearest
+            avg = (w @ move) / np.maximum(w.sum(axis=1, keepdims=True), 1e-12)
+            out[c:c + chunk] = avg * (1.0 - _smooth((r - near) / (far - near)))[:, None]
+        size = np.linalg.norm(out, axis=1)
+        moved += int((size > 1e-4).sum())
+        largest = max(largest, float(size.max()) if len(size) else 0.0)
+        shapes.append(HairShape(sh.name, pos + out, sh.normals, sh.tangents, sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, followed_head=True)),
+            {"vertices_moved": moved, "largest_mm": round(1000 * largest, 1),
+             "skull_difference_mm": {"out_max": round(1000 * float(-d_sky[use].min()), 1),
+                                     "in_max": round(1000 * float(d_sky[use].max()), 1)}})
+
+
 PUSH_BLEND = 0.04            # m: how far push_out eases its move off around the points it had to move
 
 

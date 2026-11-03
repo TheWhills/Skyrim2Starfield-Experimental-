@@ -212,6 +212,37 @@ class FitViewTests(unittest.TestCase):
         self.assertGreater(np.linalg.norm(np.asarray(out.shapes[1].positions)[0] - near[0]), 0.002)  # other card
         self.assertGreater(rep["vertices_eased"], 0)
 
+    def test_follow_head_carries_the_hair_with_the_skull_difference(self):
+        from fo4sf import skyrimhair
+        c = np.array([0.0, 0.0, 1.65])
+        rng = np.random.default_rng(4)
+        d = rng.normal(size=(15000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        dev = lambda u: 0.006 * np.exp(-(np.degrees(np.arccos(np.clip(u @ [0, 1, 0], -1, 1))) / 15.0) ** 2) \
+            - 0.004 * np.exp(-(np.degrees(np.arccos(np.clip(u @ [0, -1, 0], -1, 1))) / 15.0) ** 2)
+        sf_pts, sf_nrm = c + (0.09 + dev(d))[:, None] * d, d     # Starfield: brow 6 mm out, the back 4 mm in
+        s = rng.normal(size=(12000, 3))
+        s /= np.linalg.norm(s, axis=1, keepdims=True)
+        sky = c + 0.09 * s                                       # Skyrim's head: a plain sphere
+        ang = np.radians(np.arange(-180.0, 180.0, 1.0))
+        u = np.stack([np.zeros_like(ang), np.cos(ang), np.sin(ang)], axis=1)
+        ring = c + 0.093 * u                                     # hair 3 mm over the Skyrim head, front to back
+        hang = c + np.array([[0.0, -0.05, -0.25]])               # a lock far below: stays
+        sh = skyrimhair.HairShape(b"A", np.concatenate([ring, hang]), None, None, [(0, 0)] * (len(ring) + 1), [],
+                                  [[("C_Head", 1.0)]] * (len(ring) + 1), -1, -1, 0)
+        out, rep = skyrimhair.follow_head(skyrimhair.Hair([sh], [], {}, {}), sky, sf_pts, sf_nrm)
+        p = np.asarray(out.shapes[0].positions)
+        gap = np.linalg.norm(p[:-1] - c, axis=1) - (0.09 + dev(u))
+        np.testing.assert_allclose(gap, 0.003, atol=0.0015)        # ~3 mm over Starfield's head all round
+        self.assertGreater(gap.min(), 0.001)                       # (narrow peaks a little smoothed)
+        self.assertGreater(np.linalg.norm(p[180] - c) - 0.093, 0.004)  # the brow (+Y): out with it
+        self.assertLess(np.linalg.norm(p[0] - c) - 0.093, -0.002)     # the back (-Y): in with it
+        prof = np.linalg.norm(p[:-1] - c, axis=1)
+        self.assertLess(np.abs(np.diff(prof, 2)).max(), 0.0004)    # a smooth curve, no step
+        np.testing.assert_allclose(p[-1], hang[0], atol=1e-9)
+        self.assertGreater(rep["skull_difference_mm"]["out_max"], 5.0)
+        self.assertGreater(rep["skull_difference_mm"]["in_max"], 3.0)
+
     def test_depth_regions_and_page(self):
         pts, nrm = sphere()
         head = np.eye(4)
