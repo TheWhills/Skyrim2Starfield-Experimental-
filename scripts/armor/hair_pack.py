@@ -376,9 +376,11 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         row["reason"] = "the config simulates no bone of this mesh"
         return row
     cap = skyrimhair.head_capsule(sf_world, hair)
-    root, rig = smpcloth.build_cloth(template_root, hair.bones, hair.host_of_root, [cap], settings)
+    body, body_report = ([], {}) if a.body_scale <= 0 else skyrimhair.body_capsules(sf_world, hair, a.body_scale)
+    root, rig = smpcloth.build_cloth(template_root, hair.bones, hair.host_of_root, [cap] + body, settings)
     blob = smpcloth.write(template_blob, root)
-    row["cloth"] = {**rig.report, "check": smpcloth.verify(blob), "head_capsule_radius": round(cap.radius, 4)}
+    row["cloth"] = {**rig.report, "check": smpcloth.verify(blob), "head_capsule_radius": round(cap.radius, 4),
+                    "body_colliders": body_report}
     mats, backs = [], []
     for sh in hair.shapes:
         mats.append(conv._shape_material(n, sh))
@@ -429,6 +431,9 @@ def main(argv=None):
                     help="metres added after scaling, model axes (+Y forward, +Z up)")
     ap.add_argument("--damping", type=float, default=smpcloth.Settings.damping, help="cloth damping per second")
     ap.add_argument("--range-scale", type=float, default=1.0, help="how far the hair may swing (x the SMP limits)")
+    ap.add_argument("--body-scale", type=float, default=1.0,
+                    help="size of the body colliders (neck, chest, waist, hips, thighs, upper arms) the hair rests on; "
+                         "0 = head collider only")
     ap.add_argument("--no-rigid-copies", dest="rigid_copies", action="store_false",
                     help="leave out the in-game controls: each wig's no-physics and head-bone copies and the vanilla control hat")
     ap.add_argument("--slot", type=int, help="biped slot bit for the wigs (default: the template hat's)")

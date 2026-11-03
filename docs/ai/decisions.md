@@ -745,3 +745,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   hair colour (greyscale KS texture, our material does not tint: needs the vanilla hair material's tint), whether
   the cloth swings, face bones spread over the scalp instead of one bone (follows chargen face shape), the
   _facebones files for npc_hair.py's head parts.
+- 2026-11-02 owner, in game: the physics wig swings and follows movement (verified: the cloth runs), but the long
+  hair sinks into the back / hips: the cloth had only head colliders (the template's + S2S_head). Added body
+  capsules (skyrimhair.body_capsules): neck, chest, waist, hips (horizontal), thighs, upper arms (mirrored), placed
+  from the cloth skeleton's rest bone origins with estimated slim-body radii, each shrunk so no particle starts inside
+  (all at full size on Steammist / Anna / Amor: their chains hang clear of the body at rest); hair_pack --body-scale
+  (0 = head only), radii reported per wig in hair_pack.json cloth.body_colliders. Unverified: the radii against the
+  Starfield female body; per-gender sizes.

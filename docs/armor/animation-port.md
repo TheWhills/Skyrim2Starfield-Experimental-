@@ -908,6 +908,8 @@ code; no mod or game file committed.
   the vanilla hat's facebones binds).
 * **2026-11-02 verified in game:** with face-bone rest worlds = shape node @ inverse(bind) (vanilla bob / hat facebones
   files), the Steammist wig sits on the head, plain head-bone copy and physics wig alike. Colour is untinted grey.
+* **2026-11-02 verified in game:** the physics wig swings and follows the player. Long hair sank into the body (head
+  colliders only): body capsules added (neck, chest, waist, hips, thighs, upper arms; `--body-scale`).
 
 ## New weapon types (two-handed, dagger / axe / mace) and dual wield: plan (2026-10-20)
 Owner: most Skyrim weapon types (greatsword, battleaxe, warhammer...) do not exist in Starfield, and dual wield has

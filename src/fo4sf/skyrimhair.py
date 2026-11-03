@@ -384,6 +384,53 @@ def head_capsule(sf_world: Dict[str, np.ndarray], hair: Hair, margin: float = 0.
     return smpcloth.Capsule("S2S_head", SF_HEAD, start, end, max(radius, 0.03))
 
 
+# Body colliders for long hair (2026-11-02: the owner saw the physics wigs sink into the back / hips with only the head
+# collider). Model space at rest (metres, +Y forward, +Z up, left = -X), placed from the cloth skeleton's bone origins
+# (C_Chest z 1.23, C_Hips 1.06, L_Butt (-0.08, -0.14, 0.97), L_Thigh (-0.12, -0.02, 0.94), L_Calf z 0.49, L_Biceps
+# (-0.15, -0.05, 1.40), L_Elbow (-0.34, -0.07, 1.20)); radii estimated for a slim body (--body-scale to change).
+# (name, bone, start, end, radius); the R_ ones are mirrored from the L_ ones.
+BODY_CAPSULES = (
+    ("S2S_neck", "C_Neck", (0.0, -0.03, 1.44), (0.0, -0.03, 1.52), 0.050),
+    ("S2S_chest", "C_Chest", (-0.08, 0.0, 1.31), (0.08, 0.0, 1.31), 0.105),
+    ("S2S_waist", "C_Spine1", (-0.06, -0.01, 1.14), (0.06, -0.01, 1.14), 0.090),
+    ("S2S_hips", "C_Hips", (-0.08, -0.03, 0.98), (0.08, -0.03, 0.98), 0.110),
+    ("S2S_L_thigh", "L_Thigh", (-0.11, -0.02, 0.90), (-0.14, -0.05, 0.56), 0.070),
+    ("S2S_L_upperarm", "L_Biceps", (-0.154, -0.047, 1.398), (-0.341, -0.067, 1.202), 0.045),
+)
+
+
+def body_capsules(sf_world: Dict[str, np.ndarray], hair: Hair, scale: float = 1.0,
+                  margin: float = 0.01) -> Tuple[List[smpcloth.Capsule], Dict[str, float]]:
+    """Capsules for the neck, chest, waist, hips, thighs and upper arms (BODY_CAPSULES, radii x `scale`), each shrunk so
+    that no simulated particle starts inside it (as head_capsule), left out when that leaves under 2 cm or its bone
+    is not in the skeleton. Returns (capsules, {name: radius or a reason})."""
+    specs = []
+    for name, bone, a, b, r in BODY_CAPSULES:
+        specs.append((name, bone, a, b, r))
+        if bone.startswith("L_"):
+            specs.append((name.replace("_L_", "_R_"), "R_" + bone[2:], (-a[0], a[1], a[2]), (-b[0], b[1], b[2]), r))
+    roots = set(hair.host_of_root)
+    pts = [np.asarray(x.world[:3, 3], float) for x in hair.bones if x.name not in roots] + \
+          [np.asarray(x.tip, float) for x in hair.bones if x.tip is not None]
+    out, report = [], {}
+    for name, bone, a, b, r in specs:
+        if bone not in sf_world:
+            report[name] = f"no bone {bone}"
+            continue
+        a, b = np.asarray(a, float), np.asarray(b, float)
+        radius = r * scale
+        for p in pts:
+            t = float(np.clip((p - a) @ (b - a) / ((b - a) @ (b - a)), 0.0, 1.0))
+            radius = min(radius, float(np.linalg.norm(p - (a + t * (b - a)))) - margin)
+        if radius < 0.02:
+            report[name] = "left out: the hair starts inside it"
+            continue
+        o = np.asarray(sf_world[bone], float)[:3, 3]
+        out.append(smpcloth.Capsule(name, bone, a - o, b - o, radius))
+        report[name] = round(radius, 4)
+    return out, report
+
+
 def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     """(SfMesh, per-vertex weights) of a shape: geometry through convert_static.shape_to_mesh (metres already), then
     4 weights per vertex as (index into `bones`, u16) summing to 65535."""

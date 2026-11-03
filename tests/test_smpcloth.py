@@ -403,6 +403,37 @@ class ControlHelperTests(unittest.TestCase):
         self.assertEqual(hair_pack.arma_model((b"ARMA", b"", [(b"MOD2", b"M.nif\0"), (b"MOD3", b"\0")], 1)), "M.nif")
 
 
+class BodyColliderTests(unittest.TestCase):
+    def test_body_capsules_mirror_shrink_and_skip(self):
+        def at(x, y, z):
+            m = np.eye(4)
+            m[:3, 3] = (x, y, z)
+            return m
+        w = {"C_Neck": at(0, -0.04, 1.49), "C_Chest": at(0, -0.02, 1.23), "C_Spine1": at(0, -0.01, 1.11),
+             "C_Hips": at(0, -0.02, 1.06), "L_Thigh": at(-0.12, -0.02, 0.94), "R_Thigh": at(0.12, -0.02, 0.94),
+             "L_Biceps": at(-0.15, -0.05, 1.40)}                                  # no R_Biceps: skipped
+        far = smpcloth.ChainBone("S2S_A", "C_Head", at(0, -0.40, 1.30), 0.1, 0.3, np.array([0, -0.40, 1.0]))
+        hair = skyrimhair.Hair([], [far], {}, {})
+        caps, rep = skyrimhair.body_capsules(w, hair)
+        names = {c.name: c for c in caps}
+        self.assertEqual(rep["S2S_R_upperarm"], "no bone R_Biceps")
+        self.assertEqual(set(names), {"S2S_neck", "S2S_chest", "S2S_waist", "S2S_hips", "S2S_L_thigh", "S2S_R_thigh",
+                                      "S2S_L_upperarm"})
+        np.testing.assert_allclose(names["S2S_R_thigh"].start, [0.11 - 0.12, 0.0, 0.90 - 0.94], atol=1e-12)
+        np.testing.assert_allclose(names["S2S_L_thigh"].start, [-0.11 + 0.12, 0.0, 0.90 - 0.94], atol=1e-12)
+        self.assertAlmostEqual(names["S2S_chest"].radius, 0.105)               # hair far behind: full size
+        # a particle 0.06 m behind the chest axis: the chest capsule shrinks to keep it outside (minus the margin)
+        near = smpcloth.ChainBone("S2S_B", "S2S_A", at(0, -0.06, 1.31), 0.1, 0.3, None)
+        caps, rep = skyrimhair.body_capsules(w, skyrimhair.Hair([], [far, near], {}, {}))
+        self.assertAlmostEqual(rep["S2S_chest"], 0.05, places=6)
+        # one right on the waist axis: that capsule is left out
+        on = smpcloth.ChainBone("S2S_C", "S2S_A", at(0, -0.01, 1.14), 0.1, 0.3, None)
+        _caps, rep = skyrimhair.body_capsules(w, skyrimhair.Hair([], [far, on], {}, {}))
+        self.assertEqual(rep["S2S_waist"], "left out: the hair starts inside it")
+        _caps, rep = skyrimhair.body_capsules(w, hair, scale=0.5)
+        self.assertAlmostEqual(rep["S2S_hips"], 0.055)
+
+
 class FaceBoneTests(unittest.TestCase):
     def test_face_bone_worlds_invert_the_binds(self):
         rot = (0, -1, 0, 1, 0, 0, 0, 0, 1)
@@ -594,6 +625,7 @@ class PackEndToEndTests(unittest.TestCase):
             self.assertNotIn("_fb", wig)
             self.assertEqual(rep["facebones"]["used"], "hat")
             self.assertNotIn("headshift", ctrl)                                   # hypothesis B ruled out
+            self.assertIn("body_colliders", wig["cloth"])
             self.assertNotIn("_control", wig)
 
 
