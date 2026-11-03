@@ -800,3 +800,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   New scripts/armor/hair_fit_view.py: an HTML 3D page (three.js) with the Starfield female head, the Skyrim female
   head moved by the fit, and a wig (points inside the Starfield head in red), a left-right slice slider, and counts
   per region; tested on synthetic data and rendered headless with a stand-in head and the real Anna wig.
+- 2026-11-02 owner's run of hair_fit_view: "too few cranium points (0 Skyrim, 9894 Starfield)": the Skyrim head's
+  skinned vertices are stored in skin space (NiSkinData overall transform) and load_female_heads used them raw;
+  convert already mapped them to model space. Shared now as skyrimhair.skin_to_model (tested); the female fit in
+  hair_pack --skyrim-data had the same bug (it would have reported the error and kept the male constants).

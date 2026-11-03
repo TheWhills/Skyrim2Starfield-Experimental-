@@ -131,6 +131,17 @@ def _bind_world(s, k: int) -> np.ndarray:
     return np.linalg.inv(m4(s.binds[k]) @ skin)
 
 
+def skin_to_model(s):
+    """(point map, direction map) from a Skyrim skinned shape's vertex space to model space (units): the inverse of
+    its NiSkinData overall transform (identity without one). Vertices of skinned shapes are stored in skin space."""
+    st = s.skin_transform
+    if st is None:
+        ident = lambda v: np.asarray(v, float)
+        return ident, ident
+    rs, ts = np.array(st.rotation, float).reshape(3, 3), np.array(st.translation, float)
+    return (lambda v: ((np.asarray(v, float) - ts) @ rs) / st.scale), (lambda v: np.asarray(v, float) @ rs)
+
+
 def head_anchor(n: nifmod.NifFile, nodes: Dict[str, np.ndarray]) -> np.ndarray:
     """Where the Skyrim head bone was when the mesh was skinned (units): from a shape's skin bind when one is skinned
     to it, else the NIF's node; 4x4. The nodes need not agree: in KS Amor / Kikyo the whole node tree sits 3.3 units
@@ -200,13 +211,7 @@ def convert(nif_bytes: bytes, smp_bytes: Optional[bytes], sf_world: Dict[str, np
     shapes = []
     unmapped = set()
     for s in skyrimskin.skinned_shapes(n):
-        st = s.skin_transform
-        if st is not None:
-            rs, ts = np.array(st.rotation, float).reshape(3, 3), np.array(st.translation, float)
-            to_model = lambda v: ((np.asarray(v, float) - ts) @ rs) / st.scale
-            rot = lambda v: np.asarray(v, float) @ rs
-        else:
-            to_model = rot = lambda v: np.asarray(v, float)
+        to_model, rot = skin_to_model(s)
         pos = np.array([place.point(to_model(v)) for v in s.positions])
         nrm = np.array([rot(v) for v in s.normals]) if s.normals else np.zeros((0, 3))
         tan = np.array([rot(v) for v in s.tangents]) if s.tangents else np.zeros((0, 3))

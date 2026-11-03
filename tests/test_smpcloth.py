@@ -592,6 +592,20 @@ class FaceSkinTests(unittest.TestCase):
 
 
 class HeadFitTests(unittest.TestCase):
+    def test_skin_to_model_inverts_the_skin_transform(self):
+        from types import SimpleNamespace
+        from fo4sf import skyrimskin
+        R = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+        st = skyrimskin.Bind(tuple(R.ravel()), (1.0, 2.0, -120.0), 1.0)          # model -> skin
+        shape = SimpleNamespace(skin_transform=st)
+        p_model = np.array([3.0, 4.0, 121.0])
+        p_skin = R @ p_model + [1.0, 2.0, -120.0]
+        to_model, rot = skyrimhair.skin_to_model(shape)
+        np.testing.assert_allclose(to_model(p_skin), p_model, atol=1e-12)
+        np.testing.assert_allclose(rot(R @ [0.0, 0.0, 1.0]), [0.0, 0.0, 1.0], atol=1e-12)
+        ident, _ = skyrimhair.skin_to_model(SimpleNamespace(skin_transform=None))
+        np.testing.assert_allclose(ident([1, 2, 3]), [1, 2, 3])
+
     def test_fit_head_recovers_scale_and_offset(self):
         rng = np.random.default_rng(1)
         d = rng.normal(size=(3000, 3))

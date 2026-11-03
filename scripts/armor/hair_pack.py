@@ -338,7 +338,8 @@ def load_female_heads(skyrim_data: str, starfield: str):
     got = game_mesh_of(starfield, sf_raw)
     if got is None:
         raise HairPackError("the Starfield female head's mesh was not found")
-    return np.array(shape.positions, float), anchor, got[0], got[1]
+    to_model, _rot = skyrimhair.skin_to_model(shape)          # skinned vertices are stored in skin space
+    return np.array([to_model(v) for v in shape.positions], float), anchor, got[0], got[1]
 
 
 class HairPackError(Exception):
