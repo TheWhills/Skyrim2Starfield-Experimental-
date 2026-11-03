@@ -156,6 +156,9 @@ def main(argv=None):
     ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
     ap.add_argument("--no-follow-head", action="store_true",
                     help="as hair_pack's: no move by the difference between the Skyrim and Starfield heads")
+    ap.add_argument("--follow-sigma", type=float, default=1000 * skyrimhair.FOLLOW_SIGMA,
+                    help="mm over which the head-shape difference is averaged: larger = smoother hair, less of the "
+                         "face's small shapes (default %(default)s)")
     ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
                     help="mm the conform step eases its push off over, as hair_pack (0 = per point, the old bump)")
     ap.add_argument("--reference-hair", help="'<archive.ba2>:<path of a _facebones.nif in it>': the green hair and "
@@ -199,7 +202,8 @@ def main(argv=None):
         wig_hair, _dropped = skyrimhair.drop_duplicate_shapes(wig_hair)
     followed = None
     if not a.no_follow_head and not a.no_push_out:   # as hair_pack: with the skull difference first
-        wig_hair, followed = skyrimhair.follow_head(wig_hair, sky_moved, sf_pts, sf_nrm)
+        wig_hair, followed = skyrimhair.follow_head(wig_hair, sky_moved, sf_pts, sf_nrm,
+                                                     sigma=a.follow_sigma / 1000.0)
     vanilla = vanilla_tris = None                      # the cloth template hair's facebones mesh: Starfield's own fit
     tpl = report.get("cloth_template") or ""
     if a.reference_hair:

@@ -930,3 +930,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   forehead; push_out handles what is left. Synthetic: a sphere vs a head 6 mm out at the front and 4 mm in at the
   back: hair 3 mm over the Skyrim head ends ~3 mm (1.75-4.4) over Starfield's all round, smooth. --no-follow-head
   to compare. In game: unverified.
+- 2026-11-02 Smoother defaults: follow_head averages over 20 mm (was 8), push_out eases over 60 mm (was 40).
+  Owner (viewer, Anna, side view): the temple strand dips and bumps down the side of the face where Skyrim's is one
+  smooth strand: the 8 mm average printed the face's small hollows / ridges (eye socket, temple, brow ridge) into
+  the hanging hair. Synthetic: a 4 mm hollow 4 deg wide beside the brow: the hair's largest second difference halves
+  with the 20 mm average. --follow-sigma / --push-blend (mm) in pack and viewer to tune. In game: unverified.

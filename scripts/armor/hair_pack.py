@@ -556,7 +556,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
     row["config"] = paths[0]
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
     if getattr(a, "sky_head", None) is not None and getattr(a, "head_surface", None) is not None:
-        hair, row["follow_head"] = skyrimhair.follow_head(hair, a.sky_head, *a.head_surface)
+        hair, row["follow_head"] = skyrimhair.follow_head(hair, a.sky_head, *a.head_surface,
+                                                            sigma=a.follow_sigma / 1000.0)
     if a.hair_shader:                    # KS's second (alpha-tested) copy of every wig: the hair shader needs one
         hair, dropped = skyrimhair.drop_duplicate_shapes(hair)
         if dropped:
@@ -683,6 +684,9 @@ def main(argv=None):
     ap.add_argument("--no-follow-head", dest="follow_head", action="store_false",
                     help="with --skyrim-data: do not move the wig by the difference between Skyrim's and Starfield's "
                          "head shapes (default: it follows Starfield's forehead / brow, then the conform step)")
+    ap.add_argument("--follow-sigma", type=float, default=1000 * skyrimhair.FOLLOW_SIGMA,
+                    help="mm over which the head-shape difference is averaged: larger = smoother hair, less of the "
+                         "face's small shapes (default %(default)s)")
     ap.add_argument("--push-blend", type=float, default=1000 * skyrimhair.PUSH_BLEND,
                     help="mm over which the conform step eases its push off around the points it moves, so the hair "
                          "curves over Starfield's forehead instead of bumping (default %(default)s; 0 = per point)")

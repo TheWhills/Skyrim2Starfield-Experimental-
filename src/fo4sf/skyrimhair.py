@@ -344,8 +344,13 @@ def judged(points: np.ndarray, head_pts: np.ndarray, dist: np.ndarray, reach: fl
     return (dist < reach) & (np.asarray(points, float)[:, 2] > float(np.min(np.asarray(head_pts)[:, 2])) + 0.02)
 
 
+FOLLOW_SIGMA = 0.02          # m: follow_head's averaging: wide enough that the face's small hollows and ridges (eye
+                            # socket, temple, brow ridge) are not printed into hanging strands (2026-11-02: 8 mm made
+                            # the temple strand dip and bump in the owner's viewer; Skyrim's is one smooth strand)
+
+
 def follow_head(hair: Hair, sky_pts: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, near: float = 0.03,
-                far: float = 0.08, sigma: float = 0.008, chunk: int = 256) -> Tuple[Hair, Dict]:
+                far: float = 0.08, sigma: float = FOLLOW_SIGMA, chunk: int = 256) -> Tuple[Hair, Dict]:
     """The wig moved with the difference between the two skulls: KS made it to sit on Skyrim's female head
     (`sky_pts`, already placed on Starfield's by the head fit), and every point near that head moves the way the
     Skyrim head's surface around it must move to lie on Starfield's (`head_pts` / `head_nrm`): out where Starfield's
@@ -385,7 +390,8 @@ def follow_head(hair: Hair, sky_pts: np.ndarray, head_pts: np.ndarray, head_nrm:
                                      "in_max": round(1000 * float(d_sky[use].max()), 1)}})
 
 
-PUSH_BLEND = 0.04            # m: how far push_out eases its move off around the points it had to move
+PUSH_BLEND = 0.06            # m: how far push_out eases its move off around the points it had to move (40 mm
+                            # still left a bump on the temple strand in the owner's viewer, 2026-11-02)
 
 
 def push_out(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, gap: float = 0.002,

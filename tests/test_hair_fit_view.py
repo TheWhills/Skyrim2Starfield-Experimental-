@@ -230,7 +230,7 @@ class FitViewTests(unittest.TestCase):
         hang = c + np.array([[0.0, -0.05, -0.25]])               # a lock far below: stays
         sh = skyrimhair.HairShape(b"A", np.concatenate([ring, hang]), None, None, [(0, 0)] * (len(ring) + 1), [],
                                   [[("C_Head", 1.0)]] * (len(ring) + 1), -1, -1, 0)
-        out, rep = skyrimhair.follow_head(skyrimhair.Hair([sh], [], {}, {}), sky, sf_pts, sf_nrm)
+        out, rep = skyrimhair.follow_head(skyrimhair.Hair([sh], [], {}, {}), sky, sf_pts, sf_nrm, sigma=0.008)
         p = np.asarray(out.shapes[0].positions)
         gap = np.linalg.norm(p[:-1] - c, axis=1) - (0.09 + dev(u))
         np.testing.assert_allclose(gap, 0.003, atol=0.0015)        # ~3 mm over Starfield's head all round
@@ -242,6 +242,13 @@ class FitViewTests(unittest.TestCase):
         np.testing.assert_allclose(p[-1], hang[0], atol=1e-9)
         self.assertGreater(rep["skull_difference_mm"]["out_max"], 5.0)
         self.assertGreater(rep["skull_difference_mm"]["in_max"], 3.0)
+        # the default averaging is wide: a narrow 4 mm hollow beside the brow is not printed into the hair
+        hollow = lambda u: dev(u) - 0.004 * np.exp(-(np.degrees(np.arccos(np.clip(u @ [0, 0.8, 0.6], -1, 1))) / 4.0) ** 2)
+        sf2 = c + (0.09 + hollow(d))[:, None] * d
+        narrow, _r = skyrimhair.follow_head(skyrimhair.Hair([sh], [], {}, {}), sky, sf2, sf_nrm, sigma=0.008)
+        wide, _r = skyrimhair.follow_head(skyrimhair.Hair([sh], [], {}, {}), sky, sf2, sf_nrm)
+        curv = lambda h: np.abs(np.diff(np.linalg.norm(np.asarray(h.shapes[0].positions)[:-1] - c, axis=1), 2)).max()
+        self.assertLess(curv(wide), 0.5 * curv(narrow))
 
     def test_depth_regions_and_page(self):
         pts, nrm = sphere()
