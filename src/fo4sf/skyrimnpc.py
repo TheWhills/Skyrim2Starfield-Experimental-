@@ -92,7 +92,7 @@ def parse_npc(subs, form_id: int) -> Dict:
 
 def parse_head_part(subs, form_id: int) -> Dict:
     out = {"form_id": form_id, "edid": "", "model": None, "type": None, "type_name": None, "extra_parts": [],
-           "flags": 0, "texture_set": None}
+           "flags": 0, "texture_set": None, "races": None}
     for sig, d in subs:
         d = bytes(d)
         if sig == b"EDID":
@@ -108,6 +108,8 @@ def parse_head_part(subs, form_id: int) -> Dict:
             out["flags"] = d[0]
         elif sig == b"TNAM" and len(d) >= 4:
             out["texture_set"] = _u32(d)
+        elif sig == b"RNAM" and len(d) >= 4:
+            out["races"] = _u32(d)                          # the valid races' form list
     return out
 
 

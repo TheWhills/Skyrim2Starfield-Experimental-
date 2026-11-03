@@ -1,0 +1,321 @@
+"""Every Skyrim hairstyle as a Starfield looks-menu hairstyle (owner 2026-11-03: "export all of Skyrim's hairs").
+
+On the owner's PC, in one run:
+  1. reads the hair head parts (HDPT type 3; with --facial-hair also beards, type 4) of Skyrim.esm and the official
+     masters after it (Update, Dawnguard, HearthFires, Dragonborn: later ones override), leaving out the beast races'
+     (Khajiit / Argonian) and extra parts (each part's extra parts, e.g. its hairline, are merged into it);
+  2. converts each with the KS wig pipeline (scripts/armor/hair_pack.py, fo4sf.skyrimhair): placed on Starfield's head
+     of the part's sex by the measured head fit, shaped (follow the skull difference, cards outward, hairline / volume
+     to the vanilla hair's, temple hollow bridged, pushed out of the head, stacked cards apart, tangents along +U),
+     Starfield's hair shader (crisp strands, per-strand ID, KS-style painted bands evened) with no colour baked in:
+     the character's hair colour applies, as verified on the KS hairstyles 2026-11-03; no physics (vanilla Skyrim hair
+     has none); the <model>_facebones.nif twin with the head's share on the face bones;
+  3. writes one head part per hairstyle into S2SSkyrimHairs.esm, copied from a vanilla hairstyle of that sex's looks
+     menu list, and overrides the vanilla lists HeadPartsChargenOptionsFemale / Male with them appended (another mod
+     that edits those lists wins or loses by load order);
+  4. packs "S2SSkyrimHairs - Main.ba2" / "- Textures.ba2" (Archive2) or leaves the files loose.
+
+    python -I scripts\\npc\\skyrim_hairs.py --skyrim-data "<Skyrim SE>\\Data" --starfield "<Starfield folder>"
+        --texconv "<texconv.exe>" --out "<MO2 mods>\\S2S Skyrim Hairs" [--only Nord01,Serana] [--facial-hair]
+
+The shaping / material options are hair_pack's (--drape, --layer-gap, --no-strands, --classic-material, ...).
+Read-only on both games' files.
+"""
+import argparse
+import copy
+import json
+import os
+import re
+import shutil
+import struct
+import sys
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+sys.path.insert(0, HERE)
+
+from fo4sf import bsa, fo4land, sfplugin, skyrimconvert, skyrimhair, skyrimnpc, smpcloth  # noqa: E402
+from fo4sf import nif as nifmod  # noqa: E402
+import hair_pack  # noqa: E402
+
+PLUGIN = "S2SSkyrimHairs.esm"
+MAIN_BA2 = "S2SSkyrimHairs - Main.ba2"
+TEX_BA2 = "S2SSkyrimHairs - Textures.ba2"
+OUT_DIR = "s2s/skyrimhair"
+SKYRIM_PLUGINS = ("Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm")
+HAIR, FACIAL_HAIR = 3, 4
+FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
+BEAST = re.compile(r"khajiit|argonian", re.I)
+CHARGEN = {True: "HeadPartsChargenOptionsFemale", False: "HeadPartsChargenOptionsMale"}
+
+
+def plugin_masters(path: str):
+    """The plugin's master file names (TES4 MAST), lower case."""
+    with fo4land.Plugin(path) as p:
+        return [fo4land.zstring(bytes(d)).lower() for s, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, 0))
+                if s == b"MAST"]
+
+
+def resolve(fid: int, plugin: str, masters) -> tuple:
+    """(plugin, object id) of a FormID as written in `plugin` (its high byte indexes the masters, then itself)."""
+    i = fid >> 24
+    return (masters[i] if i < len(masters) else plugin.lower(), fid & 0xFFFFFF)
+
+
+def load_parts(skyrim_data: str, plugins=SKYRIM_PLUGINS):
+    """({key: head part}, {key: form list EditorID}) of the given plugins present in the Data folder, later plugins
+    overriding earlier ones; FormIDs (the part's own, its extra parts', its race list) resolved to keys
+    (plugin, object id) so parts of different plugins can refer to each other."""
+    parts, lists = {}, {}
+    for name in plugins:
+        path = os.path.join(skyrim_data, name)
+        if not os.path.isfile(path):
+            continue
+        masters = plugin_masters(path)
+        for t, _h, subs, fid in sfplugin.records(path, [b"HDPT", b"FLST"]):
+            key = resolve(fid, name, masters)
+            if t == b"FLST":
+                lists[key] = sfplugin.edid(subs)
+                continue
+            p = skyrimnpc.parse_head_part(subs, fid)
+            p["key"] = key
+            p["plugin"] = name
+            p["extra_parts"] = [resolve(x, name, masters) for x in p["extra_parts"]]
+            p["races"] = resolve(p["races"], name, masters) if p["races"] is not None else None
+            parts[key] = p
+    return parts, lists
+
+
+def part_models(key, parts, seen=None):
+    """The part's model and its extra parts' (followed), in order."""
+    seen = set() if seen is None else seen
+    if key in seen or key not in parts:
+        return []
+    seen.add(key)
+    p = parts[key]
+    out = [p["model"]] if p.get("model") else []
+    for x in p["extra_parts"]:
+        out += part_models(x, parts, seen)
+    return out
+
+
+def wanted(p, lists, kinds=(HAIR,), playable_only=False) -> bool:
+    """A part to export: of the wanted kinds, not an extra part, with a model, not for the beast races."""
+    if p["type"] not in kinds or p["flags"] & FLAG_EXTRA or not p.get("model"):
+        return False
+    if playable_only and not p["flags"] & FLAG_PLAYABLE:
+        return False
+    race_list = lists.get(p["races"], "") if p["races"] is not None else ""
+    return not (BEAST.search(race_list) or BEAST.search(p["model"]) or BEAST.search(p["edid"]))
+
+
+def is_female(p) -> bool:
+    """Female when flagged female, or flagged neither and not male-sounding; beards are male."""
+    if p["type"] == FACIAL_HAIR:
+        return False
+    if p["flags"] & FLAG_FEMALE:
+        return True
+    if p["flags"] & FLAG_MALE:
+        return False
+    return not re.search(r"(^|[^e])male", p["edid"], re.I)
+
+
+def chargen_template(sf_hdpt, flst, female: bool, kind: int, prefer: str = ""):
+    """A vanilla head part of `kind` from that sex's looks-menu list to copy (the one whose model names `prefer`
+    first), or None."""
+    lst = next((r for r in flst if sfplugin.edid(r[2]) == CHARGEN[female]), None)
+    ids = [struct.unpack_from("<I", bytes(d), 0)[0] for s, d in (lst[2] if lst else []) if s == b"LNAM" and len(d) >= 4]
+    cands = [sf_hdpt[i] for i in ids if i in sf_hdpt and part_type(sf_hdpt[i]) == kind]
+    model = lambda r: next((bytes(x).rstrip(b"\0").decode("latin-1") for s, x in r[2] if s == b"MODL"), "")  # noqa
+    want = prefer.lower()
+    return next((r for r in cands if want and want in model(r).lower()), cands[0] if cands else None)
+
+
+def part_type(rec):
+    d = next((bytes(x) for s, x in rec[2] if s == b"PNAM" and len(x) >= 4), None)
+    return struct.unpack_from("<I", d, 0)[0] if d else None
+
+
+def record_model(rec) -> str:
+    return next((bytes(x).rstrip(b"\0").decode("latin-1") for s, x in rec[2] if s == b"MODL"), "")
+
+
+def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True) -> dict:
+    """Convert one head part (its models merged), shape it for ctx's head, write its NIF and _facebones twin into
+    staging. Returns its report row (ok, model, ...)."""
+    row = {"skyrim": p["edid"], "plugin": p["plugin"], "models": models, "ok": False, "skipped": []}
+    hairs, nifs = [], []
+    for m in models:
+        rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", m.replace("/", "\\"), flags=re.I)
+        raw = sky.mesh(rel) if hasattr(sky, "mesh") else sky._read(bsa.norm(rel))
+        if raw is None:
+            row["skipped"].append(f"{m}: not in the archives")
+            continue
+        try:
+            n = nifmod.parse(raw)
+            h = skyrimhair.convert(raw, None, sf_world, ctx.head_scale, tuple(ctx.head_offset))
+        except (skyrimhair.HairError, nifmod.NifError, ValueError) as e:
+            row["skipped"].append(f"{m}: {e}")
+            continue
+        if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
+            h, _dropped = skyrimhair.drop_duplicate_shapes(h)
+        hairs.append(h)
+        nifs += [n] * len(h.shapes)
+    if not hairs:
+        row["reason"] = "no model converted"
+        return row
+    hair = skyrimhair.merge(hairs)
+    hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
+    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, color=getattr(ctx, "bake_color", None))
+    if any(m is None for m in mats):
+        row["reason"] = "a shape has no material"
+        return row
+    out_name = f"{OUT_DIR}/{p['edid'].lower()}"
+    hair_pack.write_files(staging, skyrimhair.nif_files(hair, mats, None, sf_world, out_name, backs))
+    row["_fb"] = (hair, mats, None, out_name, backs)
+    if fb is not None:
+        hair_pack.write_files(staging, hair_pack.facebones_files(row, fb, sf_world, False, spread))
+        row["facebones"] = True
+    row.pop("_fb", None)
+    row.update(ok=True, model=out_name.replace("/", "\\") + ".nif", shapes=len(hair.shapes),
+               vertices=int(sum(len(s.positions) for s in hair.shapes)), materials=mats)
+    return row
+
+
+def sex_context(a, sf_world, report, female: bool, template, starfield: str):
+    """(settings namespace with that sex's head context, facebones template) for converting parts of one sex."""
+    ctx = copy.copy(a)
+    rep = report.setdefault("heads", {}).setdefault("female" if female else "male", {})
+    hair_pack.setup_head(ctx, sf_world, rep, female=female)
+    fb = None
+    if template is not None:
+        model = record_model(template)
+        fb = hair_pack.facebones_template(starfield, model, rep, "x:meshes/" + model.replace("\\", "/"))
+    hair_pack.setup_reference(ctx, sf_world, rep, fb[4][0] if fb is not None and fb[4] is not None else None)
+    return ctx, fb
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--starfield", required=True)
+    ap.add_argument("--texconv", required=True)
+    ap.add_argument("--out", required=True, help="the mod folder to create (outside the repository)")
+    ap.add_argument("--only", help="comma list of text the head parts' EditorIDs must contain (e.g. Nord01,Serana)")
+    ap.add_argument("--facial-hair", action="store_true", help="also the beards (the men's looks-menu list)")
+    ap.add_argument("--playable-only", action="store_true",
+                    help="only the parts Skyrim's own character creation offers (default: every human / elf hair, "
+                         "NPC-only ones too)")
+    ap.add_argument("--cloth-template", help="as hair_pack: the vanilla hair whose skeleton / face bones are used")
+    ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
+    ap.add_argument("--archive2")
+    hair_pack.add_shape_args(ap)
+    a = ap.parse_args(argv)
+    if not a.skyrim_data:
+        sys.exit("--skyrim-data is required")
+    out = os.path.abspath(a.out)
+    if out.lower().startswith(os.path.abspath(REPO).lower()):
+        sys.exit("--out must be outside the repository")
+    os.makedirs(out, exist_ok=True)
+    staging = os.path.join(out, "_staging")
+    shutil.rmtree(staging, ignore_errors=True)
+    cr = a.content_resources or os.path.join(a.starfield, "Tools", "ContentResources.zip")
+    esm = os.path.join(a.starfield, "Data", "Starfield.esm")
+    for p, what in ((cr, "ContentResources.zip (Creation Kit)"), (esm, "Starfield.esm")):
+        if not os.path.isfile(p):
+            sys.exit(f"{what} not found: {p}")
+    report = {"plugin": PLUGIN, "parts": []}
+
+    parts, lists = load_parts(a.skyrim_data)
+    kinds = (HAIR, FACIAL_HAIR) if a.facial_hair else (HAIR,)
+    chosen = sorted((p for p in parts.values() if wanted(p, lists, kinds, a.playable_only)), key=lambda p: p["edid"])
+    if a.only:
+        keys = [k.strip().lower() for k in a.only.split(",") if k.strip()]
+        chosen = [p for p in chosen if any(k in p["edid"].lower() for k in keys)]
+    report["skyrim_parts"] = {"read": len(parts), "chosen": len(chosen)}
+    if not chosen:
+        sys.exit("no Skyrim hair head part chosen")
+
+    template_blob = (hair_pack.read_template(a.cloth_template) if a.cloth_template
+                     else hair_pack.find_template(a.starfield, report))
+    report.setdefault("cloth_template", a.cloth_template)
+    sk = smpcloth.human_skeleton(smpcloth.check_template(template_blob))
+    world = smpcloth.skeleton_world(sk)
+    sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
+    sf_recs = sfplugin.records(esm, [b"HDPT", b"FLST"])
+    sf_hdpt = {r[3]: r for r in sf_recs if r[0] == b"HDPT"}
+    flst = [r for r in sf_recs if r[0] == b"FLST"]
+    stem = os.path.splitext(os.path.basename((report.get("cloth_template") or "").replace("\\", "/")))[0]
+
+    sky = bsa.SkyrimArchives(a.skyrim_data)
+    conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None,
+                                         prefix=hair_pack.PREFIX)
+    conv.hair_settings = dict(a.hair_setting) or None
+    recs, added = [], {True: [], False: []}
+    contexts = {}
+    for p in chosen:
+        female = is_female(p)
+        tpl = chargen_template(sf_hdpt, flst, female, p["type"], stem if female else stem.replace("_f", "_m"))
+        if tpl is None:
+            report["parts"].append({"skyrim": p["edid"], "ok": False,
+                                    "reason": f"no vanilla {'female' if female else 'male'} head part of type "
+                                              f"{p['type']} in {CHARGEN[female]} to copy"})
+            continue
+        if (female, p["type"]) not in contexts:
+            contexts[(female, p["type"])] = sex_context(a, sf_world, report, female, tpl, a.starfield)
+            report.setdefault("templates", {})[f"{'female' if female else 'male'} type {p['type']}"] = \
+                sfplugin.edid(tpl[2])
+        ctx, fb = contexts[(female, p["type"])]
+        try:
+            row = build_part(p, part_models(p["key"], parts), sky, conv, sf_world, ctx, fb, staging,
+                             a.spread_face_bones)
+        except Exception as e:                                   # noqa: BLE001 (one bad part must not stop the rest)
+            row = {"skyrim": p["edid"], "ok": False, "reason": f"{type(e).__name__}: {e}"}
+        row["female"] = female
+        if row.get("ok"):
+            rec = hair_pack.hair_part_record(tpl, len(recs), "S2S_" + p["edid"], f"{p['edid']} (Skyrim)",
+                                             row["model"])
+            recs.append(rec)
+            added[female].append(rec[3])
+            row["form_id_in_plugin"] = f"{rec[3] & 0xFFFFFF:06X}"
+        report["parts"].append(row)
+    good = [r for r in report["parts"] if r.get("ok")]
+    if not good:
+        sys.exit("no hair converted: " + json.dumps(report["parts"][:5], indent=1, default=str))
+    for female, ids in added.items():
+        if not ids:
+            continue
+        lst = hair_pack.chargen_list_override(flst, CHARGEN[female], ids)
+        if lst is None:
+            report.setdefault("chargen_lists", {})[CHARGEN[female]] = "not found in Starfield.esm"
+            continue
+        recs.append(lst)
+        report.setdefault("chargen_lists", {})[CHARGEN[female]] = {"added": len(ids)}
+    with open(os.path.join(out, PLUGIN), "wb") as fh:
+        fh.write(sfplugin.build(recs, sfplugin.header_info(esm)))
+    report["packing"] = hair_pack.pack(staging, out, a.starfield, a.archive2, MAIN_BA2, TEX_BA2)
+    report["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
+    with open(os.path.join(out, "skyrim_hairs.json"), "w", encoding="utf-8") as fh:
+        json.dump(report, fh, indent=1, default=str)
+    bad = [r for r in report["parts"] if not r.get("ok")]
+    lines = [f"S2S Skyrim Hairs: {len(good)} Skyrim hairstyles for Starfield's looks menu "
+             f"({sum(1 for r in good if r['female'])} women's, {sum(1 for r in good if not r['female'])} men's).", "",
+             "Enable the mod in MO2 (S2SSkyrimHairs.esm after any other mod that edits the looks-menu lists), then",
+             "open the looks menu (console: slm 14) and pick '<Skyrim EditorID> (Skyrim)' from the hair list.",
+             "The character's hair colour applies."]
+    if bad:
+        lines += ["", f"Not converted ({len(bad)}):"] + [f"  {r['skyrim']}: {r.get('reason')}" for r in bad[:40]]
+    with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+    shutil.rmtree(staging, ignore_errors=True)
+    print("\n".join(lines))
+    print(f"\nreport: {os.path.join(out, 'skyrim_hairs.json')}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
