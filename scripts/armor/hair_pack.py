@@ -789,6 +789,9 @@ def main(argv=None):
     ap.add_argument("--no-orient", dest="orient", action="store_false",
                     help="keep KS's card facing (about half face the scalp) instead of turning every card outward; "
                          "for comparing (the turned cards fixed the light / dark flicker)")
+    ap.add_argument("--no-balance", dest="balance", action="store_false",
+                    help="physics: the old one-sided ribbon per lock instead of a particle row on each side (the "
+                         "one-sided ribbon settles turned under gravity, darkening the lower hair)")
     ap.add_argument("--head-parts", action="store_true",
                     help="also add every wig as a hairstyle in the looks menu (a hair head part, which takes the "
                          "character's hair colour; leave out --hair-color then)")
@@ -881,7 +884,7 @@ def main(argv=None):
     report.pop("_sky_head", None)
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
                                  friction=a.friction, lateral=smpcloth.Settings.lateral if a.sheet else 0.0,
-                                 twist=a.twist, mass_scale=a.mass_scale)
+                                 twist=a.twist, mass_scale=a.mass_scale, balance=a.balance)
     missing = [k for k in a.ks if not os.path.isdir(k)]
     if missing:
         sys.exit(f"--ks folder not found: {', '.join(missing)} (the KS Hairdos SMP folder with '00 Core' and "

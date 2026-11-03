@@ -161,6 +161,10 @@ class Settings:
     twist: float = 0.3          # stiffness (0-1) of the diagonal brace in each chain segment: resists a lock turning
                                 # about its own length (2026-11-02: twisted in game) while it still swings sideways
     lateral_stiffness: float = 0.5
+    balance: bool = True        # a third particle row on the other side of the joint (-width), so the lock's cross
+                                # section is symmetric about its own length: gravity no longer turns it about that
+                                # length at rest (2026-11-03: the one-sided ribbon settled turned, its bones turned the
+                                # lower hair's lighting: a dark band that moved with --twist / --damping in game)
     friction: float = 0.3
     range_scale: float = 1.0    # scales the local-range distances (looser > 1)
     name: str = "S2S Bone Chain Cloth"
@@ -211,6 +215,7 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
     joint_of: Dict[str, int] = {}            # bone -> A particle of its origin
     end_of: Dict[str, int] = {}
     side_of: Dict[int, int] = {}             # A particle -> its B particle
+    opp_of: Dict[int, int] = {}              # A particle -> its C particle (balance: the other side)
     root_of: Dict[int, int] = {}             # A particle -> A particle of the chain root
     path_len: Dict[int, float] = {}
     angle: Dict[int, float] = {}             # A particle -> cumulative limit of the bones above it
@@ -228,6 +233,8 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
     def joint(p, side_dir, pinned, m, h):
         a = new(p, pinned, m, h)
         side_of[a] = new(p + s.width * side_dir, pinned, m, h)
+        if s.balance:
+            opp_of[a] = new(p - s.width * side_dir, pinned, m, h)
         return a
 
     order, seen = [], set()
@@ -293,7 +300,14 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
         if s.twist > 0:                     # the second diagonal: a soft brace against folding (= twisting)
             links.append((a0, b1))
             soft[tuple(sorted((a0, b1)))] = s.twist
-    lateral = _lateral_links(pos, root_of, side_of, path_len, fixed, s.lateral)
+        if s.balance:                       # the mirror half: C row, its triangles, links and brace
+            c0, c1 = opp_of[a0], opp_of[a1]
+            triangles += [(c0, a1, a0), (c0, c1, a1)]
+            links += [(c0, c1), (a1, c1), (c0, a1), (a0, c0), (b1, c1)]
+            if s.twist > 0:
+                links.append((a0, c1))
+                soft[tuple(sorted((a0, c1)))] = s.twist
+    lateral = _lateral_links(pos, root_of, side_of, path_len, fixed, s.lateral, opp_of)
     links += lateral
     for l in lateral:
         soft[tuple(sorted(l))] = min(soft.get(tuple(sorted(l)), 1.0), s.lateral_stiffness)
@@ -302,8 +316,8 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
     for a, r in root_of.items():
         if fixed[a]:
             continue
-        for p in (a, side_of[a]):
-            stretch.append((r if p == a else side_of[r], p, path_len[a]))
+        for p, pr in ((a, r), (side_of[a], side_of[r])) + (((opp_of[a], opp_of[r]),) if a in opp_of else ()):
+            stretch.append((pr, p, path_len[a]))
             ranges.append((p, reach[a] * s.range_scale))
     return Rig(np.array(pos), [i for i, f in enumerate(fixed) if f], masses, host, triangles, driven, links,
                stretch, ranges, {"particles": len(pos), "fixed": sum(fixed), "triangles": len(triangles),
@@ -311,7 +325,8 @@ def build_rig(bones: List[ChainBone], host_of_root: Dict[str, str], s: Settings)
                {k: v for k, v in soft.items() if k in set(links)})
 
 
-def _lateral_links(pos, root_of, side_of, path_len, fixed, max_root_distance: float) -> List[Tuple[int, int]]:
+def _lateral_links(pos, root_of, side_of, path_len, fixed, max_root_distance: float,
+                   opp_of=None) -> List[Tuple[int, int]]:
     """Links tying neighbouring chains together: each chain to its (up to two) nearest chains whose roots lie within
     max_root_distance, joint to joint at the closest distance along the chain (A to A and B to B, so a chain turning
     about its own length stretches them)."""
@@ -335,6 +350,8 @@ def _lateral_links(pos, root_of, side_of, path_len, fixed, max_root_distance: fl
                 if fixed[b] or abs(path_len[b] - path_len[a]) > 0.5 * max(path_len[a], 1e-3):
                     continue
                 out += [(a, b), (side_of[a], side_of[b])]
+                if opp_of and a in opp_of and b in opp_of:
+                    out.append((opp_of[a], opp_of[b]))
     return out
 
 

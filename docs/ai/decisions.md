@@ -1040,3 +1040,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   weird texture looking thing"). Remaining: "the lighting still is off": in his looks-menu shot a darker band with a
   sharp top edge under where the top layer ends (supported: the top layer's shadow on the cards under it, which
   separate_layers moved up to 6 mm apart, or the cloth bones' rotation; unresolved).
+- 2026-11-03 Balanced physics ribbon (smpcloth Settings.balance, default on; hair_pack --no-balance). Owner: the
+  dark lower hair stayed with --layer-gap 0 and moved up with --twist 1.0 --damping 0.9 ("that did change where the
+  lighting is happening"): so it follows the cloth (verified as a dependency). Cause (supported): each lock was a
+  two-row ribbon, the side row 1.5 cm to one side, so gravity turned it about its own length until it settled;
+  each chain bone follows its ribbon triangle, so the bones turned and took the lower hair's normals with them
+  (lit as facing sideways / down). Now a third row mirrors the side row about the joint (C = A - width x side),
+  with its own triangles, links, twist brace and a B-C link holding the section's width: the section's weight sits
+  on the joint, so gravity no longer turns it. The bones' own triangles (A0, B0, A1) are unchanged, so the rest
+  pose and verify() results are the same (Anna: bone 6e-6, pins 6e-8).

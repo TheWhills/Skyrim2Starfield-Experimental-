@@ -115,7 +115,7 @@ def chain(names, host="C_Head", start=(0.05, -0.08, 1.65), step=(0.0, -0.01, -0.
 class RigTests(unittest.TestCase):
     def test_chain(self):
         bones = chain(["B1", "B2", "B3"])
-        rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings())
+        rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings(balance=False))
         self.assertEqual((len(rig.positions), len(rig.fixed), len(rig.triangles)), (8, 2, 6))
         self.assertEqual([b for b, _t in rig.driven], ["B1", "B2", "B3"])
         fixed = set(rig.fixed)
@@ -134,7 +134,7 @@ class RigTests(unittest.TestCase):
         bones = chain(["C1", "C2", "C3"], step=(0.0, 0.03, -0.06))
         flip = np.diag([-1.0, -1.0, 1.0])                                      # own axes turned half a turn
         bones[1].world[:3, :3] = flip
-        rig = smpcloth.build_rig(bones, {"C1": "C_Head"}, smpcloth.Settings())
+        rig = smpcloth.build_rig(bones, {"C1": "C_Head"}, smpcloth.Settings(balance=False))
         sides = []
         for name, t in rig.driven:
             a0, b0, a1 = rig.triangles[t]
@@ -144,20 +144,20 @@ class RigTests(unittest.TestCase):
         for v in sides:
             self.assertGreater(v[0], 0.0)                                       # +X on every joint: no built-in twist
         sideways = chain(["S1", "S2"], step=(0.06, 0.0, -0.005))
-        rig = smpcloth.build_rig(sideways, {"S1": "C_Head"}, smpcloth.Settings())
+        rig = smpcloth.build_rig(sideways, {"S1": "C_Head"}, smpcloth.Settings(balance=False))
         a0, b0, _a1 = rig.triangles[rig.driven[0][1]]
         self.assertGreater(abs((rig.positions[b0] - rig.positions[a0])[1]), 0.9 * smpcloth.Settings.width)
 
     def test_mass_scale(self):
         bones = chain(["M1", "M2"])
-        a = smpcloth.build_rig(bones, {"M1": "C_Head"}, smpcloth.Settings())
-        b = smpcloth.build_rig(bones, {"M1": "C_Head"}, smpcloth.Settings(mass_scale=3.0))
+        a = smpcloth.build_rig(bones, {"M1": "C_Head"}, smpcloth.Settings(balance=False))
+        b = smpcloth.build_rig(bones, {"M1": "C_Head"}, smpcloth.Settings(mass_scale=3.0, balance=False))
         np.testing.assert_allclose(b.masses, [3.0 * m for m in a.masses])
         self.assertEqual({b.masses[i] for i in b.fixed}, {0.0})
 
     def test_soft_diagonal_brace_against_twist(self):
         bones = chain(["B1", "B2", "B3"])
-        rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings())
+        rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings(balance=False))
         tri = dict(rig.driven)
         braces = set()
         for name in ("B1", "B2", "B3"):                                       # (A0, B0, A1), (B0, B1, A1)
@@ -177,7 +177,7 @@ class RigTests(unittest.TestCase):
             got[tuple(sorted((x["particleA"], x["particleB"])))] = x["stiffnessA"] - x["stiffnessB"]
         for l, k in got.items():
             self.assertAlmostEqual(k, 0.3 if l in braces else 1.0)               # weights scaled by the softness
-        stiff = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings(twist=0.0))
+        stiff = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings(twist=0.0, balance=False))
         self.assertEqual(len(rig.links) - len(stiff.links), 3)
 
     def test_neighbouring_chains_are_tied_into_a_sheet(self):
@@ -186,16 +186,39 @@ class RigTests(unittest.TestCase):
         far = chain(["F1", "F2"], start=(0.0, 0.30, 1.65))                   # 38 cm away: left alone
         bones = left + right + far
         hosts = {"L1": "C_Head", "R1": "C_Head", "F1": "C_Head"}
-        rig = smpcloth.build_rig(bones, hosts, smpcloth.Settings())
+        rig = smpcloth.build_rig(bones, hosts, smpcloth.Settings(balance=False))
         self.assertEqual(rig.report["lateral_links"], 6)                     # 3 free joints x (A-A, B-B)
         a_of = {name: rig.triangles[t][0] for name, t in rig.driven}
         linked = {tuple(sorted(l)) for l in rig.links}
         self.assertIn(tuple(sorted((a_of["L2"], a_of["R2"]))), linked)       # joint to joint at the same depth
         self.assertFalse(any(i in {a_of["F2"]} or j in {a_of["F2"]} for i, j in linked
                              if {i, j} & {a_of["L2"], a_of["R2"]}))
-        loose = smpcloth.build_rig(bones, hosts, smpcloth.Settings(lateral=0.0))
+        loose = smpcloth.build_rig(bones, hosts, smpcloth.Settings(lateral=0.0, balance=False))
         self.assertEqual(loose.report["lateral_links"], 0)
         self.assertEqual(len(rig.links) - len(loose.links), 6)
+
+    def test_balanced_rig_mirrors_the_side_row(self):
+        bones = chain(["B1", "B2", "B3"])
+        one = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings(balance=False))
+        rig = smpcloth.build_rig(bones, {"B1": "C_Head"}, smpcloth.Settings())
+        self.assertEqual((len(rig.positions), len(rig.fixed)), (12, 3))       # A, B and C per joint
+        self.assertEqual([b for b, _t in rig.driven], ["B1", "B2", "B3"])
+        for (_n, t1), (_m, t2) in zip(one.driven, rig.driven):               # the bones' triangles as before
+            np.testing.assert_allclose(one.positions[list(one.triangles[t1])], rig.positions[list(rig.triangles[t2])])
+        m = np.array(rig.masses)
+        for name, t in rig.driven:
+            a0, b0, a1 = rig.triangles[t]
+            c0 = next(c for c, x, y in rig.triangles if (x, y) == (a1, a0))
+            np.testing.assert_allclose(rig.positions[c0] - rig.positions[a0],
+                                       -(rig.positions[b0] - rig.positions[a0]))   # C mirrors B about the joint
+            self.assertEqual(m[b0], m[c0])                                   # so the section's weight sits on A:
+            centre = (m[a0] * rig.positions[a0] + m[b0] * rig.positions[b0] + m[c0] * rig.positions[c0])
+            if m[a0] + m[b0] + m[c0] > 0:                                    # gravity does not turn the lock
+                np.testing.assert_allclose(centre / (m[a0] + m[b0] + m[c0]), rig.positions[a0], atol=1e-12)
+            b1 = rig.triangles[t + 1][1]
+            c1 = next(y for x, y, z in rig.triangles if x == c0 and z == a1 and y != a1)
+            self.assertIn(tuple(sorted((b1, c1))), set(rig.links))           # the section holds its width
+        self.assertGreater(len(rig.links), len(one.links))
 
     def test_branch_shares_or_links_its_joint(self):
         bones = chain(["T1", "T2"])
@@ -204,7 +227,7 @@ class RigTests(unittest.TestCase):
         bones.append(smpcloth.ChainBone("T2b", "T1", m))
         rig = smpcloth.build_rig(bones, {"T1": "C_Head"}, smpcloth.Settings())
         self.assertEqual(len(rig.driven), 3)
-        self.assertEqual(len(rig.positions), 10)                              # T1 2 joints, T2 1, T2b 2 of its own
+        self.assertEqual(len(rig.positions), 15)                              # T1 2 joints, T2 1, T2b 2 of its own (x A, B, C)
         a0 = rig.triangles[dict(rig.driven)["T2b"]][0]
         t1_origin, t1_end = rig.triangles[dict(rig.driven)["T1"]][0], rig.triangles[dict(rig.driven)["T1"]][2]
         linked = {tuple(sorted(l)) for l in rig.links}
