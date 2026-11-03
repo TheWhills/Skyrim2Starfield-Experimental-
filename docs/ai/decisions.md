@@ -975,3 +975,5 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   triangles mostly face inward (away = from C_Head + 9 cm above it, from the vertical through it below) gets its
   winding reversed and normals negated: afterwards 96-100 % face out on Anna / Erena / Spring / Caress / Gecko /
   Icarus. MaxDepthOffset stays IDG's 0.01 (it did not change the spots).
+- 2026-11-02 Verified in game (owner, 6f6b560): turning the inward-facing KS cards outward fixed the light / dark
+  flicker on the hair-shader wigs. Cause confirmed: the hair shader lights a card's back with the front's normal.
