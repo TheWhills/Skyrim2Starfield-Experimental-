@@ -67,6 +67,17 @@ class Fo4Archives:
         return sorted(set(out), key=str.lower)
 
 
+def ramp_alpha(alpha, lo: int, hi: int) -> "np.ndarray":
+    """Alpha (uint8) stretched linearly so `lo` -> 0 and `hi` -> 255 (clipped): fewer half-transparent texels. The hair
+    shader dithers partial opacity into a screen-space pattern that the game's anti-aliasing smooths over frames;
+    KS's textures are made for Skyrim's alpha blending and are ~20 % half-transparent (alpha 40-199 on Anna), which
+    drew as flickering checkered patches (2026-11-02, owner's in-game shots). (0, 255) leaves it as it is."""
+    import numpy as np
+    a = np.asarray(alpha, np.float64)
+    hi = max(int(hi), int(lo) + 1)
+    return np.clip(np.rint((a - lo) * 255.0 / (hi - lo)), 0, 255).astype(np.uint8)
+
+
 def recolor(rgba, target) -> "np.ndarray":
     """The RGB of an (h, w, 4) uint8 texture scaled per channel so its visible texels (alpha >= 128; all when none
     are) average `target` (sRGB 0-255): brightness variation kept, the colour chosen. Skyrim tints hair by the actor's
@@ -263,7 +274,8 @@ class Converter:
                              template: Optional[dict] = None, extra_files: Optional[dict] = None,
                              color_alpha: Optional[int] = None, albedo_luminance: Optional[float] = None,
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
-                             hair: bool = False, albedo_target: Optional[tuple] = None) -> str:
+                             hair: bool = False, albedo_target: Optional[tuple] = None,
+                             opacity_ramp: Optional[tuple] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -285,6 +297,8 @@ class Converter:
                 ha = textures.read_dds_header(raw_a)
                 px = np.frombuffer(raw_a[ha["data_offset"]:ha["data_offset"] + ha["width"] * ha["height"] * 4], np.uint8)
                 alpha = px.reshape(ha["height"], ha["width"], 4)[:, :, 3].copy()
+                if opacity_ramp is not None:
+                    alpha = ramp_alpha(alpha, *opacity_ramp)
                 if decal or alpha.min() < 250:            # only if the texture really has a cutout
                     textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
                     textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")

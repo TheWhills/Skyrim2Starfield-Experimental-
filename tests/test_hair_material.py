@@ -107,6 +107,25 @@ class HairColorTests(unittest.TestCase):
         clear = pipeline.recolor(np.full((2, 2, 4), 0, np.uint8) + np.array([50, 50, 50, 0], np.uint8), (10, 20, 30))
         np.testing.assert_allclose(clear[0, 0], (10, 20, 30), atol=1.0)   # no visible texel: all count
 
+    def test_opacity_ramp(self):
+        import argparse
+        import numpy as np
+        import hair_pack
+        a = np.array([0, 48, 80, 112, 200, 255], np.uint8)
+        np.testing.assert_array_equal(pipeline.ramp_alpha(a, 48, 112), [0, 0, 128, 255, 255, 255])
+        np.testing.assert_array_equal(pipeline.ramp_alpha(a, 0, 255), a)          # 0,255: as it is
+        self.assertEqual(hair_pack.opacity_ramp("48,112"), (48, 112))
+        for bad in ("112,48", "0,300", "x"):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                hair_pack.opacity_ramp(bad)
+        conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        conv._materials, conv.stats, conv.material_errors = {}, {"materials_ok": 0}, {}
+        seen = []
+        conv._convert_texture_set = lambda stem, d, n, s, **kw: seen.append(kw.get("opacity_ramp")) or stem
+        conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40, None, (48, 112))
+        conv.skyrim_hair_material("textures\\h\\anna.dds", "", 40, None, (0, 255))
+        self.assertEqual(seen, [(48, 112), (0, 255)])                           # one material per ramp
+
     def test_hair_color_option_and_material_names(self):
         import argparse
         import hair_pack

@@ -246,7 +246,7 @@ def arma_model(arma) -> str:
     return ""
 
 
-def hair_shader_material(conv, n, sh, color=None):
+def hair_shader_material(conv, n, sh, color=None, ramp=None):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -255,7 +255,9 @@ def hair_shader_material(conv, n, sh, color=None):
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
-    return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color)
+    if ramp is None:
+        return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color)
+    return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color, ramp)
 
 
 def hair_color(text: str) -> tuple:
@@ -268,6 +270,21 @@ def hair_color(text: str) -> tuple:
     if len(rgb) != 3 or not all(0 <= v <= 255 for v in rgb):
         raise argparse.ArgumentTypeError(f"expected R,G,B with each 0-255, got {text!r}")
     return rgb
+
+
+OPACITY_RAMP = (48, 112)
+
+
+def opacity_ramp(text: str) -> tuple:
+    """argparse type for --opacity-ramp: 'LO,HI' (0-255, LO < HI)."""
+    parts = [p.strip() for p in str(text).split(",") if p.strip()]
+    try:
+        lo, hi = (int(p) for p in parts)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected LO,HI (0-255), got {text!r}")
+    if not 0 <= lo < hi <= 255:
+        raise argparse.ArgumentTypeError(f"expected 0 <= LO < HI <= 255, got {text!r}")
+    return lo, hi
 
 
 def tint_material(conv, n, sh, cutoff: int, color=None):
@@ -613,7 +630,7 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
                     "body_colliders": body_report}
     mats, backs = [], []
     for sh in hair.shapes:
-        m = hair_shader_material(conv, n, sh, a.hair_color) if a.hair_shader else None
+        m = hair_shader_material(conv, n, sh, a.hair_color, a.opacity_ramp) if a.hair_shader else None
         if m is None:                          # the generic converted material (alpha cutout)
             m = (tint_material(conv, n, sh, a.tint_cutoff, a.hair_color) if skyrimhair.is_tint(sh)
                  else conv._shape_material(n, sh))
@@ -676,6 +693,10 @@ def main(argv=None):
                     help="the colour the hair averages to, sRGB 0-255 (e.g. 200,160,90 for blonde): Skyrim tints KS "
                          "wigs with the actor's hair colour, Starfield draws a wig's texture as it is (grey); "
                          "default the texture's own colour")
+    ap.add_argument("--opacity-ramp", type=opacity_ramp, default=OPACITY_RAMP, metavar="LO,HI",
+                    help="hair shader: alpha LO and below fully clear, HI and above fully solid (0-255): fewer "
+                         "half-clear texels, which the shader draws as a flickering checker pattern (default "
+                         "%s; 0,255 = KS's alpha as it is)" % ",".join(map(str, OPACITY_RAMP)))
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,

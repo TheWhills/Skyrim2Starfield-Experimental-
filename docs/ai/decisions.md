@@ -935,3 +935,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   smooth strand: the 8 mm average printed the face's small hollows / ridges (eye socket, temple, brow ridge) into
   the hanging hair. Synthetic: a 4 mm hollow 4 deg wide beside the brow: the hair's largest second difference halves
   with the 20 mm average. --follow-sigma / --push-blend (mm) in pack and viewer to tune. In game: unverified.
+- 2026-11-02 Hair-shader opacity ramp. Owner's in-game shots (blonde --hair-color, Hair1Layer): less strandy but
+  flickering, checkered dark patches. KS alpha is made for Skyrim's blending: ~20 % of Anna's texels are half clear
+  (alpha 40-199; 27 % zero, 33 % 240+), and the hair shader dithers partial opacity in screen space (supported:
+  the checker pattern sits where the texture is half clear). Now the hair branch stretches the opacity map
+  linearly (pipeline.ramp_alpha): 48 and below clear, 112 and above solid (hair_pack --opacity-ramp LO,HI; 0,255 =
+  as before). Also looked at the "back thing" (owner's side shot, ponytail wig): Spring's own mesh gathers the top
+  into a raised crown above the ponytail root (KS geometry, seen in a point plot here); the 8 mm top volume adds
+  to it (--volume 0 to compare).
