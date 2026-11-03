@@ -118,6 +118,20 @@ class HairColorTests(unittest.TestCase):
         with mock.patch.object(hair_pack.skyrimnif, "double_sided", lambda n, r: False):
             self.assertFalse(hair_pack.back_faces_for(None, sh, False))
 
+    def test_hair_setting_override_reaches_the_material(self):
+        import argparse
+        import hair_pack
+        self.assertEqual(hair_pack.hair_setting("MaxDepthOffset=0"), ("MaxDepthOffset", "0"))
+        for bad in ("Nope=1", "MaxDepthOffset", "MaxDepthOffset="):
+            with self.assertRaises(argparse.ArgumentTypeError):
+                hair_pack.hair_setting(bad)
+        mat = cm.build_hair_mat("x", {"Albedo": "a", "Opacity": "o"}, dict([hair_pack.hair_setting("MaxDepthOffset=0")]))
+        hs = {c["Type"]: c["Data"] for c in mat["Objects"][0]["Components"]}["BSMaterial::HairSettingsComponent"]
+        self.assertEqual(hs["MaxDepthOffset"], "0")
+        self.assertEqual(hs["DitherScale"], cm.HAIR_SETTINGS["DitherScale"])       # the rest as before
+        src = open(pipeline.__file__, encoding="utf-8").read()
+        self.assertIn('getattr(self, "hair_settings", None)', src)                  # the converter passes them on
+
     def test_opacity_ramp(self):
         import argparse
         import numpy as np

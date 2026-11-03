@@ -353,7 +353,8 @@ class Converter:
             if not out.get("opacity"):
                 raise ValueError(f"hair texture {diffuse}: no alpha to make an opacity map from")
             mat = cm.build_hair_mat("S2SHair_" + re.sub(r"[^a-z0-9]+", "_", stem),
-                                    dict(Albedo=out["color"], Opacity=out["opacity"], **self._hair_fillers()))
+                                    dict(Albedo=out["color"], Opacity=out["opacity"], **self._hair_fillers()),
+                                    getattr(self, "hair_settings", None))
         elif template is not None:                         # any single-layer vanilla material (terrain ground, ...)
             mat = cm.build_from_template(template, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", stem),
                                          dict({"Albedo": out["color"], "Normal": out["normal"], "Roughness": out["rough"]},

@@ -38,6 +38,7 @@ from fo4sf import ba2 as ba2mod  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 from fo4sf import sfcloth, sfnif, sfplugin, skyrimconvert, skyrimhair, skyrimnif, smpcloth  # noqa: E402
 from fo4sf import smpconfig as smp  # noqa: E402
+from fo4sf import convert_material as cm  # noqa: E402
 
 PLUGIN = "S2SHair.esm"
 MAIN_BA2 = "S2SHair - Main.ba2"
@@ -280,6 +281,16 @@ def back_faces_for(n, sh, hair_shader: bool) -> bool:
     if hair_shader:
         return False
     return bool(sh.shader_ref >= 0 and skyrimnif.double_sided(n, sh.shader_ref))
+
+
+def hair_setting(text: str) -> tuple:
+    """argparse type for --hair-setting: 'Name=Value' with Name one of the hair shader's settings."""
+    name, sep, value = str(text).partition("=")
+    name, value = name.strip(), value.strip()
+    if not sep or name not in cm.HAIR_SETTINGS or not value:
+        raise argparse.ArgumentTypeError(f"expected NAME=VALUE with NAME one of {', '.join(sorted(cm.HAIR_SETTINGS))}, "
+                                         f"got {text!r}")
+    return name, value
 
 
 OPACITY_RAMP = (48, 112)
@@ -710,6 +721,9 @@ def main(argv=None):
                     help="hair shader: alpha LO and below fully clear, HI and above fully solid (0-255): fewer "
                          "half-clear texels, which the shader draws as a flickering checker pattern (default "
                          "%s; 0,255 = KS's alpha as it is)" % ",".join(map(str, OPACITY_RAMP)))
+    ap.add_argument("--hair-setting", action="append", default=[], type=hair_setting, metavar="NAME=VALUE",
+                    help="override one of the hair shader's settings (BSMaterial::HairSettingsComponent: %s), e.g. "
+                         "MaxDepthOffset=0; repeatable" % ", ".join(sorted(cm.HAIR_SETTINGS)))
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,
@@ -812,6 +826,9 @@ def main(argv=None):
     if not wigs:
         sys.exit("no wig NIF found (meshes/armor/kswigshdt/f/*.nif under --ks)")
     conv = skyrimconvert.SkyrimConverter(src, staging, a.texconv, cr, collision_template=None, prefix=PREFIX)
+    conv.hair_settings = dict(a.hair_setting) or None
+    if a.hair_setting:
+        report["hair_settings"] = dict(a.hair_setting)
     info = sfplugin.header_info(esm)
     sf = sfplugin.records(esm, [b"ARMO", b"ARMA", b"KYWD"])
     kw_names = {fid: sfplugin.edid(s) for t, _h, s, fid in sf if t == b"KYWD"}

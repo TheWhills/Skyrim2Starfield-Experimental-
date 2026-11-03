@@ -961,3 +961,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   mirrored triangles (6 styles checked: 0-2 reversed twins in 20-50k triangles), so the hair shader draws both
   sides itself (supported); the copy then z-fights the original with opposite lighting. hair_pack.back_faces_for:
   none with the hair shader (the classic cutout material keeps them). Also ~halves those shapes' vertices.
+- 2026-11-02 --hair-setting NAME=VALUE (hair_pack; converter.hair_settings -> build_hair_mat). Owner: the moving
+  dark spots stay on the no-physics wigs with hard edges (--opacity-ramp 100,101), so neither the cloth nor the
+  dithering. Next suspect (supported, not verified): the depth offset. MaxDepthOffset 0.01 m (IDG's value) with our
+  flat mid-grey DepthOffset map moves every hair pixel's depth by up to ~5 mm, more than the 2-3 mm the wig sits
+  over the scalp, so the head can win the depth test in patches that change with the view. Test: MaxDepthOffset=0.
