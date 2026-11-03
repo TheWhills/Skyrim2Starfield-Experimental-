@@ -487,6 +487,8 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
         return row
     row["config"] = paths[0]
     hair = skyrimhair.convert(raw, xml, sf_world, a.head_scale, tuple(a.head_offset))
+    if getattr(a, "head_surface", None) is not None:          # conform: no scalp point inside Starfield's head
+        hair, row["conform"] = skyrimhair.push_out(hair, *a.head_surface)
     row.update({k: hair.report[k] for k in ("chain_bones", "hosts", "shapes", "vertices") if k in hair.report})
     if not hair.bones:
         row["reason"] = "the config simulates no bone of this mesh"
@@ -548,6 +550,9 @@ def main(argv=None):
     ap.add_argument("--cloth-template", help="Starfield NIF / .hkx / '<ba2>:<path>' with a physics hair's cloth")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
+    ap.add_argument("--no-conform", dest="conform", action="store_false",
+                    help="leave the wig where the fit puts it (default: scalp points inside Starfield's female head "
+                         "are pushed just outside it)")
     ap.add_argument("--skyrim-data", help="Skyrim SE's Data folder: measure the female head fit (Skyrim female head "
                                           "onto Starfield's) and use it instead of the male constants")
     ap.add_argument("--head-scale", type=float, default=skyrimhair.HEAD_SCALE,
@@ -600,6 +605,13 @@ def main(argv=None):
                 tuple(a.head_offset) == tuple(skyrimhair.HEAD_OFFSET):     # explicit --head-* values win
             a.head_scale, a.head_offset = fit[0], list(fit[1])
             report["head_fit"]["used"] = True
+    a.head_surface = None
+    if a.conform:
+        head_raw = read_game_file(a.starfield, SF_FEMALE_HEAD)
+        got = game_mesh_of(a.starfield, head_raw) if head_raw is not None else None
+        if got is not None:
+            a.head_surface = (got[0], got[1])
+        report["conform"] = "Starfield female head" if got is not None else "head mesh not found: not conformed"
     settings = smpcloth.Settings(damping=a.damping, range_scale=a.range_scale, radius=a.hair_radius,
                                  friction=a.friction, lateral=smpcloth.Settings.lateral if a.sheet else 0.0,
                                  twist=a.twist, mass_scale=a.mass_scale)

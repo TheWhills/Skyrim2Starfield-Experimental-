@@ -804,3 +804,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   skinned vertices are stored in skin space (NiSkinData overall transform) and load_female_heads used them raw;
   convert already mapped them to model space. Shared now as skyrimhair.skin_to_model (tested); the female fit in
   hair_pack --skyrim-data had the same bug (it would have reported the error and kept the male constants).
+- 2026-11-02 owner's hair_fit_view run (Anna, measured female fit): scale 0.9446, offset (0.0003, -0.0212, -0.0016),
+  rms 5.8 mm (male constants 0.9303 / (0.0001, -0.0199, -0.0051)). The Skyrim female head moved by the fit lies
+  inside Starfield's for 24.9 % of its points (> 2 mm) and outside by > 5 mm for only 3.2 % (median gap -0.5 mm):
+  the skulls differ in shape (Starfield's bulges at crown / forehead / sides), not only size, so no similarity keeps a
+  Skyrim-shaped scalp out (verified as numbers; matches the red crown / hairline in his screenshots). The viewer's
+  count was inflated by hair below the neck cut judged against the cut edge (deepest 312 mm): now only points within
+  3 cm of the head and above its lowest 2 cm are judged. Fix: hair_pack conforms by default (skyrimhair.push_out:
+  judged vertices less than 2 mm above Starfield's female base head move out along the nearest head normal, half the
+  push spread to mesh neighbours, never inward; --no-conform). The viewer shows the conformed wig and the counts
+  before / after (--no-push-out for the raw fit). Base head only: face sliders move the face bones on top.

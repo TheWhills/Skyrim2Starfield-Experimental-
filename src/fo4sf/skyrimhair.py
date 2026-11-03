@@ -280,6 +280,63 @@ def fit_head(sky_points: np.ndarray, sky_head: np.ndarray, sf_points: np.ndarray
     return float(s), tuple(float(x) for x in t), float(rms)
 
 
+def nearest_surface(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, chunk: int = 512):
+    """(signed depth, distance, nearest index) of each point against a head surface given as vertices with outward
+    normals: depth = (p - nearest) . normal (negative = inside)."""
+    points = np.asarray(points, float)
+    hp = np.asarray(head_pts, float)
+    hh = (hp * hp).sum(1)
+    depth, dist, idx = np.empty(len(points)), np.empty(len(points)), np.empty(len(points), int)
+    for c in range(0, len(points), chunk):
+        p = points[c:c + chunk]
+        d2 = (p * p).sum(1)[:, None] + hh[None, :] - 2.0 * p @ hp.T
+        j = np.argmin(d2, axis=1)
+        idx[c:c + chunk] = j
+        dist[c:c + chunk] = np.sqrt(np.maximum(d2[np.arange(len(p)), j], 0.0))
+        depth[c:c + chunk] = np.einsum("ij,ij->i", p - hp[j], np.asarray(head_nrm, float)[j])
+    return depth, dist, idx
+
+
+def judged(points: np.ndarray, head_pts: np.ndarray, dist: np.ndarray, reach: float = 0.03) -> np.ndarray:
+    """Points the nearest-vertex test can judge: within `reach` of the head and above its lowest 2 cm (the head mesh
+    ends at the neck; hair hanging below it would be judged against the cut edge)."""
+    return (dist < reach) & (np.asarray(points, float)[:, 2] > float(np.min(np.asarray(head_pts)[:, 2])) + 0.02)
+
+
+def push_out(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, gap: float = 0.002,
+             reach: float = 0.03) -> Tuple[Hair, Dict]:
+    """Conform the wig to the head: every judged vertex closer than `gap` above the surface (or inside it) moves along
+    the nearest head normal to `gap` above it, the move spread half-strength to its mesh neighbours so the scalp does
+    not crease. The Skyrim and Starfield female skulls differ in shape (2026-11-02, measured: after the best similarity
+    a quarter of Skyrim's head lies over 2 mm inside Starfield's), so no scale / offset alone keeps a wig out."""
+    shapes, moved, deepest = [], 0, 0.0
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float).copy()
+        depth, dist, idx = nearest_surface(pos, head_pts, head_nrm)
+        ok = judged(pos, head_pts, dist, reach)
+        need = np.where(ok & (depth < gap), gap - depth, 0.0)
+        push = need[:, None] * np.asarray(head_nrm, float)[idx]
+        if need.any():
+            spread = np.zeros_like(push)
+            count = np.zeros(len(pos))
+            for t in sh.triangles:
+                for a in t:
+                    for b in t:
+                        if a != b:
+                            spread[a] += push[b]
+                            count[a] += 1
+            spread = 0.5 * spread / np.maximum(count, 1)[:, None]
+            # a neighbour's push only where it is larger along the vertex's own direction (never pulls inward)
+            use = np.where((np.linalg.norm(spread, axis=1) > np.linalg.norm(push, axis=1))[:, None], spread, push)
+            pos = pos + use
+            moved += int((need > 0).sum())
+            deepest = max(deepest, float(need.max()))
+        shapes.append(HairShape(sh.name, pos, sh.normals, sh.tangents, sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, pushed_out=moved)),
+            {"vertices_moved": moved, "deepest_mm": round(1000 * deepest, 1)})
+
+
 def rigid(hair: Hair) -> Hair:
     """The same hair without physics: every simulated bone's weight moved to the human bone its chain hangs from
     (no new bones, no cloth). A control for in-game tests: if this shows and the physics version does not, the

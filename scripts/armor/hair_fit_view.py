@@ -37,31 +37,24 @@ import hair_pack  # noqa: E402
 INSIDE = -0.002          # m: a wig point this far under the head surface counts as inside
 
 
-def head_depth(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray, chunk: int = 512) -> np.ndarray:
-    """Signed distance of each point to the head surface, approximated by its nearest head vertex and that vertex's
-    outward normal (negative = inside the head)."""
-    points = np.asarray(points, float)
-    hp = np.asarray(head_pts, float)
-    hh = (hp * hp).sum(1)
-    out = np.empty(len(points))
-    for c in range(0, len(points), chunk):
-        p = points[c:c + chunk]
-        d2 = (p * p).sum(1)[:, None] + hh[None, :] - 2.0 * p @ hp.T
-        j = np.argmin(d2, axis=1)
-        out[c:c + chunk] = np.einsum("ij,ij->i", p - hp[j], head_nrm[j])
-    return out
+def head_depth(points: np.ndarray, head_pts: np.ndarray, head_nrm: np.ndarray) -> np.ndarray:
+    """Signed distance of each point to the head surface (skyrimhair.nearest_surface), NaN where the test cannot
+    judge it (over 3 cm from the head, or below the head mesh's neck cut)."""
+    depth, dist, _idx = skyrimhair.nearest_surface(points, head_pts, head_nrm)
+    return np.where(skyrimhair.judged(points, head_pts, dist), depth, np.nan)
 
 
 def regions(points: np.ndarray, depth: np.ndarray, head: np.ndarray) -> dict:
-    """Points inside the head, split by where they are relative to C_Head (model axes: +Y forward, +Z up)."""
+    """Judged points inside the head, split by where they are relative to C_Head (model axes: +Y forward, +Z up)."""
     rel = np.asarray(points, float) - head[:3, 3]
-    inside = depth < INSIDE
+    ok = ~np.isnan(depth)
+    inside = ok & (np.nan_to_num(depth, nan=1.0) < INSIDE)
     parts = {"forehead / face (front)": rel[:, 1] > 0.04, "top": (rel[:, 1] <= 0.04) & (rel[:, 2] > 0.08),
              "sides": (np.abs(rel[:, 0]) > 0.05) & (rel[:, 1] <= 0.04) & (rel[:, 2] <= 0.08),
              "back": (rel[:, 1] < -0.04) & (rel[:, 2] <= 0.08)}
-    out = {"wig_points": int(len(points)), "inside": int(inside.sum()),
-           "inside_percent": round(100.0 * float(inside.mean()), 2) if len(points) else 0.0,
-           "deepest_mm": round(-1000.0 * float(depth.min()), 1) if len(depth) else 0.0}
+    out = {"wig_points": int(len(points)), "judged (near the head)": int(ok.sum()), "inside": int(inside.sum()),
+           "inside_percent_of_judged": round(100.0 * float(inside.sum()) / max(int(ok.sum()), 1), 2),
+           "deepest_mm": round(-1000.0 * float(np.nanmin(depth)), 1) if ok.any() else 0.0}
     for name, m in parts.items():
         out[name] = int((inside & m).sum())
     return out
@@ -110,7 +103,7 @@ view('front');addEventListener('resize',()=>{cam.aspect=innerWidth/innerHeight;c
         "DATAJSON", json.dumps(data, separators=(",", ":")))
 
 
-def wig_points(ks, starfield, sf_world, wig, scale, offset):
+def wig_hair_of(ks, sf_world, wig, scale, offset):
     src = hair_pack.LooseRoots(ks)
     want = wig.lower()
     rel = next((k for k in src.index if k.startswith("meshes/") and hair_pack.WIG_GLOB.search(k)
@@ -120,8 +113,7 @@ def wig_points(ks, starfield, sf_world, wig, scale, offset):
     raw = src._read(rel)
     paths = smp.nif_physics_paths(nifmod.parse(raw))
     xml = src.data(paths[0]) if paths else None
-    hair = skyrimhair.convert(raw, xml, sf_world, scale, offset)
-    return np.concatenate([np.asarray(sh.positions, float) for sh in hair.shapes])
+    return skyrimhair.convert(raw, xml, sf_world, scale, offset)
 
 
 def main(argv=None):
@@ -135,6 +127,7 @@ def main(argv=None):
     ap.add_argument("--head-scale", type=float)
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
+    ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -156,14 +149,23 @@ def main(argv=None):
     else:
         scale, offset, used = fit_s, fit_t, "female fit (measured)"
     sky_moved = head[:3, 3] + np.asarray(offset) + scale * (sky_pts - anchor[:3, 3]) * skyrimhair.UNIT
-    wig = wig_points(a.ks, a.starfield, sf_world, a.wig, scale, offset)
+    wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
+    before = None
+    if not a.no_push_out:
+        before = regions(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
+                         head_depth(np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes]),
+                                    sf_pts, sf_nrm), head)
+        wig_hair, _push = skyrimhair.push_out(wig_hair, sf_pts, sf_nrm)
+    wig = np.concatenate([np.asarray(sh.positions, float) for sh in wig_hair.shapes])
     depth = head_depth(wig, sf_pts, sf_nrm)
-    sky_depth = head_depth(sky_moved, sf_pts, sf_nrm)
+    sky_depth, _d, _i = skyrimhair.nearest_surface(sky_moved, sf_pts, sf_nrm)
     stats = {"wig": a.wig, "placement": used, "scale": round(scale, 4), "offset_m": [round(x, 4) for x in offset],
              "female_fit": {"scale": round(fit_s, 4), "offset_m": [round(x, 4) for x in fit_t],
                             "rms_mm": round(1000 * fit_rms, 1)},
              "male_constants": {"scale": skyrimhair.HEAD_SCALE, "offset_m": list(skyrimhair.HEAD_OFFSET)},
              "wig_inside_head": regions(wig, depth, head),
+             "conformed": not a.no_push_out,
+             "wig_inside_head_before_conform": before,
              "skyrim_head_vs_starfield_mm": {"median_gap": round(1000 * float(np.median(sky_depth)), 1),
                                              "inside_starfield_percent": round(100 * float((sky_depth < INSIDE).mean()), 1),
                                              "outside_by_5mm_percent": round(100 * float((sky_depth > 0.005).mean()), 1)}}
@@ -175,6 +177,7 @@ def main(argv=None):
         k = np.sort(rng.choice(len(p), a.max_points, replace=False))
         return (p[k], extra[k]) if extra is not None else p[k]
     wp, wd = thin(wig, depth)
+    wd = np.nan_to_num(wd, nan=1.0)
     red = np.clip(-wd / 0.01, 0, 1)[:, None]
     wig_col = np.where(wd[:, None] < INSIDE, np.hstack([0.6 + 0.4 * red, 0.15 * (1 - red), 0.1 * (1 - red)]),
                        np.array([[0.55, 0.55, 0.58]]))
