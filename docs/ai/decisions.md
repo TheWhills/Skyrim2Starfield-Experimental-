@@ -1036,3 +1036,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (supported). Now per-vertex tangents = area-weighted dP/du, made perpendicular to the normal (degenerate UVs keep
   the old tangent, also made perpendicular). Lead, unverified: every other Skyrim conversion that copies the NIF's
   tangents (convert_static / skyrimconvert) may have the same swap, which would turn normal maps by 90 degrees.
+- 2026-11-03 Verified in game (owner, c57e2b0): the UV tangents removed the brick / maze pattern ("got rid of the
+  weird texture looking thing"). Remaining: "the lighting still is off": in his looks-menu shot a darker band with a
+  sharp top edge under where the top layer ends (supported: the top layer's shadow on the cards under it, which
+  separate_layers moved up to 6 mm apart, or the cloth bones' rotation; unresolved).
