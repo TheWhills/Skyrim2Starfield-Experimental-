@@ -123,7 +123,7 @@ def head_part_record(template, fid: int, edid: str, model: str):
     model)."""
     t, h, subs, _f = template
     return (t, h, sfplugin.edit(subs, {b"EDID": sfplugin.zs(edid), b"MODL": sfplugin.zs(model)},
-                                drop=(b"HNAM",)), fid)
+                                drop=(b"HNAM", b"MNAM")), fid)     # MNAM: morphs made for the template's vertices
 
 
 def with_head_parts(subs, sf_hdpt: Dict[int, tuple], new: Dict[int, int]):
@@ -148,10 +148,35 @@ def with_head_parts(subs, sf_hdpt: Dict[int, tuple], new: Dict[int, int]):
     return out
 
 
+NEUTRAL_HINTS = ("white", "platinum", "silver", "grey", "gray", "blond")
+
+
+def neutral_hair_color(names) -> Optional[str]:
+    """The lightest-sounding of the hair colour names the game's NPCs use (HCOL), for NPCs whose Skyrim colour is
+    baked into their hair's texture: the hair shader also tints head parts by the actor's colour (verified on the
+    KS hairstyles 2026-11-03), so a light one should leave the baked colour nearly as it is. Unverified which name is
+    the lightest: chosen by name, reported."""
+    names = sorted({n for n in names if n})
+    for hint in NEUTRAL_HINTS:
+        hit = [n for n in names if hint in n.lower()]
+        if hit:
+            return hit[0]
+    return None
+
+
+def with_hair_color(subs, name: str):
+    """NPC subrecords with its hair and facial hair colour (HCOL / FHCL, by name) set to `name`."""
+    return sfplugin.edit(subs, {b"HCOL": sfplugin.zs(name), b"FHCL": sfplugin.zs(name)})
+
+
 def add_hair(rows, npcs, chosen, recs, test_subs, args, sky, conv, sf_world, sf_hdpt, hdpt, clfm, staging,
-             esm_name="Skyrim.esm"):
+             esm_name="Skyrim.esm", ctxs=None, hair_color_name=None):
     """For every test NPC row (face_fit.py): convert its Skyrim hair / facial hair, add the head part records and
-    swap them into the test NPC (test_subs: {row edid: index into recs}). Fills row["hair"]."""
+    swap them into the test NPC (test_subs: {row edid: index into recs}). Fills row["hair"].
+    ctxs {female: (settings, facebones template)} (skyrim_hairs.sex_context): the looks-menu hair pipeline (fitted to
+    Starfield's head of the NPC's sex, the hair shader with the Skyrim colour multiplied in, _facebones twins), and
+    the NPC's hair colour set to `hair_color_name` (a light one, so the baked colour shows); without: the first
+    rigid conversion."""
     faces = skyrimnpc.faces_by_template(npcs)
     done: Dict[Tuple, int] = {}
     by_edid = {n["edid"]: n for n in chosen}
@@ -165,7 +190,7 @@ def add_hair(rows, npcs, chosen, recs, test_subs, args, sky, conv, sf_world, sf_
         rinfo, new = {}, {}
         col = tint(src_npc, clfm, args.hair_tint_gain)
         for kind, (part, models) in sorted(parts.items()):
-            key = (tuple(models), col if kind == HAIR else None)
+            key = (tuple(models), col if (kind == HAIR or ctxs is not None) else None, n["female"])
             name = KINDS[kind]
             try:
                 if key not in done:
@@ -173,13 +198,25 @@ def add_hair(rows, npcs, chosen, recs, test_subs, args, sky, conv, sf_world, sf_
                     if tpl is None:
                         raise skyrimhair.HairError(f"no Starfield {name} head part to copy")
                     tag = f"_{''.join(f'{int(v * 255):02X}' for v in col)}" if key[1] else ""
+                    if ctxs is not None:                 # fitted per sex: one copy each
+                        tag += "_f" if n["female"] else "_m"
                     out = f"s2s/npc/{name.replace(' ', '')}/{part['edid'].lower()}{tag.lower()}"
-                    files, rep = convert_part(models, sky, conv, sf_world, out, key[1])
-                    for rel, data in files.items():
-                        p = os.path.join(staging, *rel.split("/"))
-                        os.makedirs(os.path.dirname(p), exist_ok=True)
-                        with open(p, "wb") as fh:
-                            fh.write(data)
+                    if ctxs is not None:
+                        import skyrim_hairs
+                        ctx, fb = ctxs[n["female"]]
+                        rep = skyrim_hairs.build_part(dict(part, plugin=esm_name), models, sky, conv, sf_world, ctx,
+                                                      fb, staging, getattr(ctx, "spread_face_bones", True),
+                                                      out_name=out, tint=key[1])
+                        if not rep.get("ok"):
+                            raise skyrimhair.HairError(rep.get("reason") or "not converted")
+                        rep = {k: v for k, v in rep.items() if k not in ("ok", "model", "skyrim", "plugin")}
+                    else:
+                        files, rep = convert_part(models, sky, conv, sf_world, out, key[1])
+                        for rel, data in files.items():
+                            p = os.path.join(staging, *rel.split("/"))
+                            os.makedirs(os.path.dirname(p), exist_ok=True)
+                            with open(p, "wb") as fh:
+                                fh.write(data)
                     fid = sfplugin.new_form_id(len(recs))
                     recs.append(head_part_record(tpl, fid, f"S2S_{part['edid']}{tag}",
                                                  out.replace("/", "\\") + ".nif"))
@@ -195,6 +232,10 @@ def add_hair(rows, npcs, chosen, recs, test_subs, args, sky, conv, sf_world, sf_
             rinfo["note"] = "no hair head part on the NPC (the race default is not converted)"
         if new:
             t, h, subs, fid = recs[k]
-            recs[k] = (t, h, with_head_parts(subs, sf_hdpt, new), fid)
+            subs = with_head_parts(subs, sf_hdpt, new)
+            if ctxs is not None and hair_color_name:
+                subs = with_hair_color(subs, hair_color_name)
+                rinfo["starfield_hair_color"] = hair_color_name
+            recs[k] = (t, h, subs, fid)
         rinfo["hair_tint"] = col
         row["hair"] = rinfo

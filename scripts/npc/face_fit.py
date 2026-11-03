@@ -13,8 +13,9 @@ Writes <out>\\faces.json (per NPC: dial values by slider id and name, fit RMS be
 --test-plugin, S2SFaceTest.esm: one Starfield NPC per fitted face (a vanilla human NPC of the same sex copied, its face
 dials replaced, its phenotype morphs cleared) named "<Skyrim EditorID> (S2S)", to place with the console
 (player.placeatme <id>; the ids are in faces.json).
-With --hair the test NPCs also wear their Skyrim hair and beard (scripts/npc/npc_hair.py: converted rigidly onto
-Starfield's head, hair colour baked in), packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2".
+With --hair the test NPCs also wear their Skyrim hair and beard (scripts/npc/npc_hair.py: the looks-menu hair pipeline
+of scripts/npc/skyrim_hairs.py, fitted to the NPC's sex, hair colour baked in; --hair-legacy: the first rigid
+conversion), packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2".
 Unverified until the first run (all reported in faces.json): position units (cm), dial value range (-1..1), that
 FMSI is the regions file's slider ID, the head NIF's bind convention.
 """
@@ -128,6 +129,10 @@ def pick_template(npc_recs, race_fid, female, edid=None):
     return best
 
 
+def fo4land_zstring(d) -> str:
+    return bytes(d).split(b"\0")[0].decode("latin-1")
+
+
 def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_subs) -> dict:
     """--hair: convert and pack the test NPCs' Skyrim hair (npc_hair.add_hair), head part records added to recs."""
     import shutil
@@ -140,12 +145,44 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
     staging = os.path.join(out, "_staging")
     shutil.rmtree(staging, ignore_errors=True)
     conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None, prefix="s2s")
-    sf_world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
-    sf_hdpt = {r[3]: r for r in sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
+    sf_esm = os.path.join(sf_data, "Starfield.esm")
+    sf_recs = sfplugin.records(sf_esm, [b"HDPT", b"FLST"])
+    sf_hdpt = {r[3]: r for r in sf_recs if r[0] == b"HDPT"}
     hdpt, clfm = npc_hair.head_parts(esm)
-    npc_hair.add_hair(rows, npcs, chosen, recs, test_subs, a, sky, conv, sf_world, sf_hdpt, hdpt, clfm, staging)
+    res = {}
+    if a.hair_legacy:                         # the first conversion: rigid on the head, cutout material
+        sf_world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
+        npc_hair.add_hair(rows, npcs, chosen, recs, test_subs, a, sky, conv, sf_world, sf_hdpt, hdpt, clfm,
+                          staging)
+    else:                                     # the looks-menu hair pipeline (scripts/npc/skyrim_hairs.py)
+        import argparse as _ap
+        import skyrim_hairs
+        from fo4sf import smpcloth
+        shape = _ap.ArgumentParser()
+        hair_pack.add_shape_args(shape)
+        ctx = shape.parse_args([])
+        ctx.skyrim_data, ctx.starfield = a.skyrim_data, a.starfield
+        conv.hair_settings = None
+        rep = res.setdefault("hair_pipeline", {})
+        blob = hair_pack.find_template(a.starfield, rep)
+        sk = smpcloth.human_skeleton(smpcloth.check_template(blob))
+        world = smpcloth.skeleton_world(sk)
+        sf_world = {b["name"]: world[i] for i, b in enumerate(sk["bones"])}
+        flst = [r for r in sf_recs if r[0] == b"FLST"]
+        stem = os.path.splitext(os.path.basename((rep.get("cloth_template") or "").replace("\\", "/")))[0]
+        ctxs = {}
+        for female in sorted({n["female"] for n in chosen}):
+            tpl = skyrim_hairs.chargen_template(sf_hdpt, flst, female, skyrim_hairs.HAIR,
+                                                stem if female else stem.replace("_f", "_m"))
+            ctxs[female] = skyrim_hairs.sex_context(ctx, sf_world, rep, female, tpl, a.starfield)
+        names = {fo4land_zstring(d) for _t, _h, subs, _f in sfplugin.records(sf_esm, [b"NPC_"])
+                 for sig, d in subs if sig == b"HCOL"} - {""}
+        name = a.hair_color_name or npc_hair.neutral_hair_color(names)
+        rep["starfield_hair_colors"] = {"seen": sorted(names), "chosen_for_baked_hair": name}
+        npc_hair.add_hair(rows, npcs, chosen, recs, test_subs, a, sky, conv, sf_world, sf_hdpt, hdpt, clfm,
+                          staging, ctxs=ctxs, hair_color_name=name)
     base = os.path.splitext(PLUGIN)[0]
-    res = hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2", f"{base} - Textures.ba2")
+    res.update(hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2", f"{base} - Textures.ba2"))
     res["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
     shutil.rmtree(staging, ignore_errors=True)
     return res
@@ -170,6 +207,12 @@ def main(argv=None):
     ap.add_argument("--texconv", help="texconv.exe, for --hair")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip (for --hair)")
     ap.add_argument("--archive2", help="default: <Starfield>/Tools/Archive2/Archive2.exe")
+    ap.add_argument("--hair-legacy", action="store_true",
+                    help="with --hair: the first conversion (rigid, cutout material, no _facebones twin) instead of the "
+                         "looks-menu hair pipeline (fitted, Starfield's hair shader)")
+    ap.add_argument("--hair-color-name",
+                    help="with --hair: the Starfield hair colour name (HCOL) the test NPCs get; the Skyrim colour is "
+                         "baked into the hair, so a light one (default: the lightest-sounding one the game's NPCs use)")
     ap.add_argument("--hair-tint-gain", type=float, default=1.0,
                     help="hair colour baked into the texture as texture x colour x gain (Skyrim's tint strength "
                          "unverified)")

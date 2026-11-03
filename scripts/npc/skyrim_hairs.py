@@ -145,10 +145,11 @@ def record_model(rec) -> str:
     return next((bytes(x).rstrip(b"\0").decode("latin-1") for s, x in rec[2] if s == b"MODL"), "")
 
 
-def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True) -> dict:
+def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, out_name=None, tint=None) -> dict:
     """Convert one head part (its models merged), shape it for ctx's head, write its NIF and _facebones twin into
-    staging. Returns its report row (ok, model, ...)."""
-    row = {"skyrim": p["edid"], "plugin": p["plugin"], "models": models, "ok": False, "skipped": []}
+    staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
+    albedo (an NPC's own; the looks-menu hairstyles have none). Returns its report row (ok, model, ...)."""
+    row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
     hairs, nifs = [], []
     for m in models:
         rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", m.replace("/", "\\"), flags=re.I)
@@ -171,11 +172,11 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True) ->
         return row
     hair = skyrimhair.merge(hairs)
     hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
-    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, color=getattr(ctx, "bake_color", None))
+    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint)
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
-    out_name = f"{OUT_DIR}/{p['edid'].lower()}"
+    out_name = out_name or f"{OUT_DIR}/{p['edid'].lower()}"
     hair_pack.write_files(staging, skyrimhair.nif_files(hair, mats, None, sf_world, out_name, backs))
     row["_fb"] = (hair, mats, None, out_name, backs)
     if fb is not None:

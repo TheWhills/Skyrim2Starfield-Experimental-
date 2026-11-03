@@ -1049,3 +1049,19 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   with its own triangles, links, twist brace and a B-C link holding the section's width: the section's weight sits
   on the joint, so gravity no longer turns it. The bones' own triangles (A0, B0, A1) are unchanged, so the rest
   pose and verify() results are the same (Anna: bone 6e-6, pins 6e-8).
+- 2026-11-03 owner: export all of Skyrim's hairs to the looks menu, and the test NPCs with their correct Skyrim
+  hair. Decisions: (1) hair_pack's steps became reusable (setup_head per sex with Starfield's / Skyrim's male or
+  female head, setup_reference, shape_hair, hair_materials, add_shape_args) with the KS output unchanged;
+  (2) scripts/npc/skyrim_hairs.py: hair head parts (type 3; --facial-hair adds 4) of Skyrim.esm, Update, Dawnguard,
+  HearthFires, Dragonborn (FormIDs resolved through each plugin's masters, later plugins override), not extra parts,
+  not the beast races (race list / model / EditorID naming Khajiit or Argonian), NPC-only ones included unless
+  --playable-only; sex from the DATA flags (female 0x04, male 0x02; neither: by name; beards male); each part's
+  models merged, converted rigidly (vanilla Skyrim hair has no physics), shaped for that sex's head, hair shader
+  without baked colour (the character's applies), _facebones twin from the template's facebones file; the record
+  copied from the first hairstyle of that sex's vanilla looks-menu list (the cloth template's, bob_f / bob_m, when
+  listed), MNAM / HNAM dropped, appended to HeadPartsChargenOptionsFemale / Male; S2SSkyrimHairs.esm + ba2s;
+  (3) npc_hair / face_fit --hair use the same builder (skyrim_hairs.build_part) per NPC sex with the NPC's Skyrim
+  colour multiplied into the albedo (beards too, as Skyrim tints them) and the NPC's HCOL / FHCL set to the
+  lightest-sounding hair colour name the game's NPCs use (by name: white, platinum, silver, grey, blond; unverified
+  which is lightest: reported, --hair-color-name). Unverified in game: all of it; the head part types 3 / 4 are
+  verified on xEdit's SF1 definitions (3 Hair, 4 Facial Hair, 11 Extra Hair).

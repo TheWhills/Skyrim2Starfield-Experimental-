@@ -329,7 +329,7 @@ class SkyrimConverter(pipeline.Converter):
 
     def skyrim_hair_material(self, diffuse: str, normal: str, ref: int,
                              color: Optional[tuple] = None, opacity_ramp: Optional[tuple] = None,
-                             strands: bool = False) -> Optional[str]:
+                             strands: bool = False, tint: Optional[tuple] = None) -> Optional[str]:
         """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
         colour (recoloured to average `color`, sRGB 0-255, when given: pipeline.recolor) and its alpha as the opacity
         map; None when it cannot be made (the caller falls back)."""
@@ -337,6 +337,8 @@ class SkyrimConverter(pipeline.Converter):
         stem = os.path.splitext(stem)[0] + "_hair"
         if color:
             stem += "_" + "".join(f"{int(v):02x}" for v in color[:3])
+        if tint:                                    # Skyrim's hair tint, multiplied in (an NPC's own colour)
+            stem += "_t" + "".join(f"{min(255, int(round(v * 255))):02x}" for v in tint[:3])
         key = "skyhair:" + stem + ("|ramp:%d,%d" % tuple(opacity_ramp) if opacity_ramp else "") + \
             ("|strands" if strands else "")
         if key not in self._materials:
@@ -344,7 +346,7 @@ class SkyrimConverter(pipeline.Converter):
                 self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=True,
                                                                  alpha_ref=ref, flat_normal_ok=True, hair=True,
                                                                  albedo_target=color, opacity_ramp=opacity_ramp,
-                                                                 strands=strands)
+                                                                 strands=strands, albedo_tint=tint)
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None
