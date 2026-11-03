@@ -154,6 +154,8 @@ def main(argv=None):
     ap.add_argument("--head-offset", type=float, nargs=3, metavar=("X", "Y", "Z"))
     ap.add_argument("--max-points", type=int, default=20000, help="points per set in the page")
     ap.add_argument("--no-push-out", action="store_true", help="show the wig without the conform step hair_pack does")
+    ap.add_argument("--reference-hair", help="'<archive.ba2>:<path of a _facebones.nif in it>': the green hair and "
+                                             "the target of lift / volume (as hair_pack; default the vanilla bob)")
     ap.add_argument("--hairline-lift", type=float, help="mm to raise the front hairline everywhere (default: per "
                                                         "angle up to the vanilla hair's, as hair_pack; 0 = off)")
     ap.add_argument("--volume", type=float, help="mm to stand the hair off the scalp (default: up to the vanilla "
@@ -186,7 +188,12 @@ def main(argv=None):
     wig_hair = wig_hair_of(a.ks, sf_world, a.wig, scale, offset)
     vanilla = vanilla_tris = None                      # the cloth template hair's facebones mesh: Starfield's own fit
     tpl = report.get("cloth_template") or ""
-    if ":" in tpl:
+    if a.reference_hair:
+        got = hair_pack.reference_hair(a.reference_hair, a.starfield)
+        vanilla = got[0] if got is not None else None
+        vanilla_tris = got[3] if got is not None else None
+        tpl = a.reference_hair
+    elif ":" in tpl:
         rel = os.path.splitext(tpl.split(":", 1)[1].replace("\\", "/"))[0] + "_facebones.nif"
         raw = hair_pack.read_game_file(a.starfield, rel)
         got = hair_pack.game_mesh_of(a.starfield, raw) if raw is not None else None

@@ -325,6 +325,22 @@ class SkyrimConverter(pipeline.Converter):
                 self.material_errors[key] = f"{type(e).__name__}: {e}"
         return self._materials[key]
 
+    def skyrim_hair_material(self, diffuse: str, normal: str, ref: int) -> Optional[str]:
+        """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
+        colour and its alpha as the opacity map; None when it cannot be made (the caller falls back)."""
+        stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
+        stem = os.path.splitext(stem)[0] + "_hair"
+        key = "skyhair:" + stem
+        if key not in self._materials:
+            try:
+                self._materials[key] = self._convert_texture_set(stem, diffuse, normal, "", alpha_test=True,
+                                                                 alpha_ref=ref, flat_normal_ok=True, hair=True)
+                self.stats["materials_ok"] += 1
+            except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
+                self._materials[key] = None
+                self.material_errors[key] = f"{type(e).__name__}: {e}"
+        return self._materials[key]
+
     def _shape_material(self, src, s, flat_normal_ok: bool = False,
                         albedo_tint: Optional[tuple] = None) -> Optional[str]:
         """flat_normal_ok: a diffuse without a normal map converts with a flat normal (Skyrim grass) instead of

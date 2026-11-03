@@ -248,7 +248,8 @@ class Converter:
                              alpha_test: bool = False, alpha_ref: int = 128, decal: bool = False,
                              template: Optional[dict] = None, extra_files: Optional[dict] = None,
                              color_alpha: Optional[int] = None, albedo_luminance: Optional[float] = None,
-                             albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False) -> str:
+                             albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
+                             hair: bool = False) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -317,7 +318,12 @@ class Converter:
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 self._publish_texture(os.path.join(tmp, fn), dst, kind)
                 out[kind] = cm.game_path(f"{tex_rel}_{kind}.dds")
-        if template is not None:                           # any single-layer vanilla material (terrain ground, ...)
+        if hair:                                           # Starfield's hair shader (cm.build_hair_mat)
+            if not out.get("opacity"):
+                raise ValueError(f"hair texture {diffuse}: no alpha to make an opacity map from")
+            mat = cm.build_hair_mat("S2SHair_" + re.sub(r"[^a-z0-9]+", "_", stem),
+                                    dict(Albedo=out["color"], Opacity=out["opacity"], **self._hair_fillers()))
+        elif template is not None:                         # any single-layer vanilla material (terrain ground, ...)
             mat = cm.build_from_template(template, "FO4Port_" + re.sub(r"[^a-z0-9]+", "_", stem),
                                          dict({"Albedo": out["color"], "Normal": out["normal"], "Roughness": out["rough"]},
                                               **(extra_files or {})))
@@ -335,6 +341,25 @@ class Converter:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "w", encoding="utf-8", newline="\n").write(cm.dump_mat(mat))
         return mat_rel.replace("/", "\\")
+
+    def _hair_fillers(self) -> dict:
+        """Flat maps for the hair shader's slots a Skyrim hair has no texture for, written once: ambient occlusion
+        white (none), depth offset and hair ID mid grey (no per-strand variation)."""
+        if getattr(self, "_hair_fill", None) is None:
+            import numpy as np
+            out = {}
+            with tempfile.TemporaryDirectory() as tmp:
+                for kind, value in (("AmbientOcclusion", 255), ("DepthOffset", 128), ("HairID", 128)):
+                    src = os.path.join(tmp, f"{kind}_in.dds")
+                    textures.write_r8(src, np.full((16, 16), value, np.uint8))
+                    textures.texconv(self.texconv, src, tmp, "BC4_UNORM")
+                    rel = f"textures/{self.prefix}/_hair_{kind.lower()}.dds"
+                    dst = os.path.join(self.staging, *rel.split("/"))
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(src, dst)
+                    out[kind] = cm.game_path(rel)
+            self._hair_fill = out
+        return self._hair_fill
 
     def glass_material(self, base: str, normal: str) -> Optional[str]:
         key = "glass:" + "|".join(x.replace("/", "\\").lower() for x in (base, normal))

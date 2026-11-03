@@ -246,6 +246,18 @@ def arma_model(arma) -> str:
     return ""
 
 
+def hair_shader_material(conv, n, sh):
+    """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
+    game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
+    if sh.shader_ref < 0:
+        return None
+    paths = skyrimnif.texture_set(n, sh.shader_ref)
+    if not paths or not paths[0]:
+        return None
+    _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
+    return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref)
+
+
 def tint_material(conv, n, sh, cutoff: int):
     """The material of KS's scalp fade layer ('Hairline'): its texture fades out over the forehead and Skyrim blends
     it (alpha test 10 + blend); a converted cutout material keeps every pixel above alpha 10/255, so the whole fade
@@ -303,7 +315,7 @@ def measure_female_fit(skyrim_data: str, starfield: str, sf_world: dict, report:
     return s1, t1
 
 
-def game_mesh_of(starfield: str, raw: bytes):
+def game_mesh_of(starfield: str, raw: bytes, read=None):
     """(points (V, 3) model space, unit normals (V, 3), per-vertex [(bone name, weight)], triangles) of a vanilla
     skinned NIF's first shape (the shape node's transform applied: the female head stores its mesh in C_Head's
     rotated frame, the bob hair at C_Head), its mesh read from the game's archives; None when the mesh is not found."""
@@ -316,7 +328,8 @@ def game_mesh_of(starfield: str, raw: bytes):
     g = sfnif.parse_bsgeometry(n.blocks[i])
     if not g.meshes or g.meshes[0] is None:
         return None
-    data = read_game_file(starfield, sfweaponleft.mesh_archive_path(g.meshes[0].path))
+    rel = sfweaponleft.mesh_archive_path(g.meshes[0].path)
+    data = (read(rel) if read is not None else None) or read_game_file(starfield, rel)
     if data is None:
         return None
     m = sfmesh.parse(data)
@@ -335,6 +348,25 @@ def game_mesh_of(starfield: str, raw: bytes):
         row = m.weights[v * k:(v + 1) * k] if k else []
         ws.append([(names[b], w / 65535.0) for b, w in row if w > 0 and b < len(names)])
     return pts, nrm, ws, [tuple(t) for t in m.triangles]
+
+
+def reference_hair(spec: str, starfield: str):
+    """game_mesh_of for a hair named "<archive.ba2>:<path of its _facebones.nif in it>" (e.g. an IDG Elegant Hair
+    style), its mesh read from the same archive (else the game's): the target of the hairline lift and the volume
+    in place of the cloth template's vanilla hair. None when not found."""
+    m = re.match(r"^(.*\.ba2):(.+)$", spec, re.I)
+    if not m:
+        raise SystemExit(f"--reference-hair: expected '<archive.ba2>:<path in archive>', got {spec}")
+    arc = ba2mod.Ba2(m.group(1))
+    index = {n.replace("\\", "/").lower(): i for i, n in enumerate(arc.names)}
+
+    def read(rel):
+        i = index.get(rel.replace("\\", "/").lower())
+        return arc.read(i) if i is not None else None
+    raw = read(m.group(2))
+    if raw is None:
+        raise SystemExit(f"--reference-hair: {m.group(2)} not in {m.group(1)}")
+    return game_mesh_of(starfield, raw, read)
 
 
 def facebones_skin_of(starfield: str, raw: bytes):
@@ -556,8 +588,10 @@ def build_one(src: LooseRoots, conv, nif_rel: str, template_blob: bytes, templat
                     "body_colliders": body_report}
     mats, backs = [], []
     for sh in hair.shapes:
-        mats.append(tint_material(conv, n, sh, a.tint_cutoff) if skyrimhair.is_tint(sh) else
-                    conv._shape_material(n, sh))
+        m = hair_shader_material(conv, n, sh) if a.hair_shader else None
+        if m is None:                          # the generic converted material (alpha cutout)
+            m = tint_material(conv, n, sh, a.tint_cutoff) if skyrimhair.is_tint(sh) else conv._shape_material(n, sh)
+        mats.append(m)
         backs.append(bool(sh.shader_ref >= 0 and skyrimnif.double_sided(n, sh.shader_ref)))
     row["materials"] = mats
     out_name = f"{PREFIX}/hair/{stem.lower()}"
@@ -599,12 +633,17 @@ def main(argv=None):
     ap.add_argument("--cloth-template", help="Starfield NIF / .hkx / '<ba2>:<path>' with a physics hair's cloth")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
+    ap.add_argument("--reference-hair",
+                    help="'<archive.ba2>:<path of a _facebones.nif in it>': the hair whose hairline and crown height "
+                         "the wigs are matched to (default: the cloth template's vanilla hair)")
     ap.add_argument("--hairline-lift", type=float,
                     help="mm to raise the front hairline everywhere (default: up to the vanilla hair's at each angle "
                          "from temple to temple, at most 30; 0 = off)")
     ap.add_argument("--volume", type=float,
                     help="mm to stand the hair off the scalp at the top (default: up to the vanilla hair's crown "
                          "height, at most 12; 0 = off)")
+    ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
+                    help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,
                     help="alpha (0-255) below which KS's scalp fade layer ('Hairline') is not drawn: Skyrim blends it, "
                          "a cutout at Skyrim's 10 draws the whole fade as a band down the forehead")
@@ -693,11 +732,19 @@ def main(argv=None):
     armo_t, arma_t = head_apparel([r for r in sf if r[0] == b"ARMO"], [r for r in sf if r[0] == b"ARMA"], kw_names)
     report["apparel_template"] = {"armo": sfplugin.edid(armo_t[2]), "arma": sfplugin.edid(arma_t[2])}
     fb = facebones_template(a.starfield, arma_model(arma_t), report, report.get("cloth_template"))
-    a.vanilla_profile = a.vanilla_crown = None   # the vanilla hair's hairline / crown: targets of lift and volume
-    if a.head_surface is not None and fb is not None and len(fb) > 4 and fb[4] is not None:
+    a.vanilla_profile = a.vanilla_crown = None   # the reference hair's hairline / crown: targets of lift and volume
+    ref_pts = None
+    if a.reference_hair:
+        got = reference_hair(a.reference_hair, a.starfield)
+        ref_pts = got[0] if got is not None else None
+        report["reference_hair"] = a.reference_hair if ref_pts is not None else f"mesh not found: {a.reference_hair}"
+    elif fb is not None and len(fb) > 4 and fb[4] is not None:
+        ref_pts = fb[4][0]
+        report["reference_hair"] = report.get("cloth_template")
+    if a.head_surface is not None and ref_pts is not None:
         head = sf_world[skyrimhair.SF_HEAD]
-        a.vanilla_profile = skyrimhair.hairline_profile(fb[4][0], *a.head_surface, head)
-        a.vanilla_crown = skyrimhair.crown_height(fb[4][0], head)
+        a.vanilla_profile = skyrimhair.hairline_profile(ref_pts, *a.head_surface, head)
+        a.vanilla_crown = skyrimhair.crown_height(ref_pts, head)
         report["vanilla_hair"] = {
             "hairline_above_C_Head_mm_by_angle": {k: None if v is None else round(1000 * v, 1)
                                                   for k, v in a.vanilla_profile.items()},

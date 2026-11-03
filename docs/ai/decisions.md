@@ -870,3 +870,17 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Hide Hair + Hat; supported reading from Fallout 4: the worn item's slots decide what it hides). All still look
   "strandy": candidates are the material (hard cutout at Skyrim's 40/255 where Skyrim blends the strand edges; no
   Starfield hair shading or tint), the ribbon physics pulling locks apart, and the strand-card meshes themselves.
+- 2026-11-02 owner sent IDG Elegant Hair Collection (Nexus 17706, RAR5; read for the format only, nothing copied
+  but the hair-shader setting values) as the look to match. Verified from its files: 50 looks-menu hairs (HDPT), each
+  plain + _facebones NIF, morph.dat per hair under meshes\morphs\human\{female,male}\{chargen,performance}\<name>\
+  (face sliders / expressions), NO textures and one custom .mat: the hairs use the vanilla hair materials
+  (Long_Straight_Hair_Shared, Choppy_Bob, Medium_Hair_Shared ...). The custom one shows the hair shader:
+  ShaderModel Hair1Layer, AlphaSettings HasOpacity, BSMaterial::HairSettingsComponent (DiffuseTransmissionScale
+  0.675, DitherScale 1, EdgeMaskMin 0.5, IndirectSpecularTransmissionScale 0.05, MaxDepthOffset 0.01, Roughness
+  0.5125), texture slots 0 albedo, 2 opacity, 5 AO, 12 depth offset, 20 hair ID. Added convert_material.build_hair_mat
+  (that layout, from scratch), the converter's hair branch (KS diffuse colour + its alpha as opacity, flat AO /
+  depth offset / ID fillers written once) and SkyrimConverter.skyrim_hair_material; hair_pack uses it for every wig
+  shape by default (--classic-material for the old cutout). Hair colour tint from the actor: unverified (KS diffuse
+  is near-grey; whether Hair1Layer multiplies the actor's hair colour is the in-game test). Also --reference-hair
+  '<ba2>:<facebones nif>' (pack and viewer): the hair whose hairline / crown the wigs are matched to; IDG's styles
+  read here (soft wave 62,498 verts, top 21 cm above C_Head; straight bob 12,730, 18 cm; KS Anna about 15 cm).

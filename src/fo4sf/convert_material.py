@@ -272,6 +272,46 @@ def build_mat_standalone(name: str, albedo: str, normal: str, rough: str, tint=(
     ], "Version": 1}
 
 
+# Starfield's hair shader (read from IDG Elegant Hair Collection's one custom hair material, Nexus 17706, owner upload
+# 2026-11-02; its hairs otherwise use the vanilla hair materials): ShaderModel "Hair1Layer", alpha from an opacity map,
+# BSMaterial::HairSettingsComponent (dithered edges, light transmission, depth offset), texture slots 0 albedo,
+# 2 opacity, 5 ambient occlusion, 12 depth offset, 20 hair ID. Values as in that material.
+HAIR_SETTINGS = {"DiffuseTransmissionScale": "0.675", "DitherScale": "1", "EdgeMaskMin": "0.5", "Enabled": "true",
+                 "IndirectSpecularTransmissionScale": "0.05", "MaxDepthOffset": "0.01", "Roughness": "0.5125"}
+HAIR_SLOTS = {"Albedo": 0, "Opacity": 2, "AmbientOcclusion": 5, "DepthOffset": 12, "HairID": 20}
+
+
+def build_hair_mat(name: str, files: dict, settings: dict = None) -> dict:
+    """A hair material built from scratch in the layout of the game's own (objects parented by 'Parent' to the Root
+    classes, linked by OuterEdge): Hair1Layer shader, HairSettingsComponent, the files {slot name in HAIR_SLOTS: game
+    path}. Albedo and Opacity are required."""
+    for k in ("Albedo", "Opacity"):
+        if not files.get(k):
+            raise ValueError(f"hair material {name}: no {k} texture")
+    L, U, M, T = (_rid(name, r) for r in ("layer", "uv", "material", "textureset"))
+    ctn = lambda n: {"Data": {"Name": n}, "Index": 0, "Type": "BSComponentDB::CTName"}  # noqa: E731
+    edge = lambda to: [{"EdgeIndex": 0, "To": to, "Type": "BSComponentDB2::OuterEdge"}]  # noqa: E731
+    tex = [{"Data": {"FileName": files[k]}, "Index": i, "Type": "BSMaterial::MRTextureFile", "Version": 2}
+           for k, i in HAIR_SLOTS.items() if files.get(k)]
+    root = [ctn(name), {"Data": {"ID": L}, "Index": 0, "Type": "BSMaterial::LayerID"},
+            {"Data": {"HasOpacity": "true"}, "Index": 0, "Type": "BSMaterial::AlphaSettingsComponent"},
+            {"Data": {"FileName": "Hair1Layer"}, "Index": 0, "Type": "BSMaterial::ShaderModelComponent"},
+            {"Data": dict(HAIR_SETTINGS, **(settings or {})), "Index": 0, "Type": "BSMaterial::HairSettingsComponent"}]
+    return {"Filename": "", "Objects": [
+        {"Components": root, "Parent": ROOT + "LayeredMaterials.mat"},
+        {"Components": [ctn(name + "_Layer1"), {"Data": {"ID": M}, "Index": 0, "Type": "BSMaterial::MaterialID"},
+                        {"Data": {"ID": U}, "Index": 0, "Type": "BSMaterial::UVStreamID"}],
+         "Edges": edge("<this>"), "ID": L, "Parent": ROOT + "Layers.mat"},
+        {"Components": [ctn(name + "_Material1"),
+                        {"Data": {"ID": T}, "Index": 0, "Type": "BSMaterial::TextureSetID", "Version": 3}],
+         "Edges": edge(L), "ID": M, "Parent": ROOT + "Materials.mat"},
+        {"Components": [ctn(name + "_TextureSet1"),
+                        {"Data": {"DisableMipBiasHint": "false"}, "Index": 0, "Type": "BSMaterial::MipBiasSetting"}] + tex,
+         "Edges": edge(M), "ID": T, "Parent": ROOT + "TextureSets.mat"},
+        {"Components": [ctn(name + "_UVStreamA")], "Edges": edge(L), "ID": U, "Parent": ROOT + "UVStreams.mat"},
+    ], "Version": 1}
+
+
 def dump_mat(mat: dict) -> str:
     return json.dumps(mat, indent="\t", separators=(",", " : "), ensure_ascii=False)
 
