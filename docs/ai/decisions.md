@@ -1259,3 +1259,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   strips, up to 1800 cards; and the converted Skyrim hair kept under the cards (its body; the cards give strands
   and outline). Speed: neighbour queries use scipy's cKDTree when installed (synthetic 7k-vertex guide: 3 s
   per hairstyle with it, 50 s with numpy alone) and the guide is thinned to one vertex per 4 mm.
+- 2026-11-04 Strand cards round 3. Owner (7271bc7): "it just looks like the originals again, not like it's using
+  Starfield's": with the converted Skyrim hair kept under the cards the Skyrim look wins (the cards' strands are
+  mostly see-through, vanilla opacity ~17 % solid). Now two copies per hairstyle: '[strands]' the cards alone and
+  '[strandsbase]' the cards over the Skyrim hair, both denser (5 layers 1.5 mm apart, lines 5 mm apart, 18 mm wide,
+  10 mm rows, up to 3500 cards; synthetic shell: ~2100 cards, ~100k triangles in 5 shapes of ~21k vertices, 4 s).

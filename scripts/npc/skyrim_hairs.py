@@ -82,7 +82,10 @@ VANILLA_HAIR_SETTINGS = {"MaxDepthOffset": "0"}
 DIAGNOSE = (("depth", "old depth offset"),)
 # --strand-cards (owner 2026-11-03: "do we need it to have all the strands like Starfield's" - yes): a looks-menu
 # copy of each hairstyle made of Starfield-style strand cards on a vanilla hair material (fo4sf.hairstrands)
-STRANDS = ("strands", "Starfield strands")
+STRANDS = (("strands", "Starfield strands"), ("strandsbase", "Starfield strands over Skyrim"))
+# round 3 (owner 2026-11-04: with the Skyrim hair kept under the cards "it just looks like the originals again"):
+# the cards alone, denser (5 layers, 5 mm apart, 18 mm wide, up to 3500), next to the same over the Skyrim hair
+DENSE_CARDS = dict(layers=5, spacing=0.005, width=0.018, gap=0.0015, max_cards=3500, step=0.010)
 # the material most of IDG's hairs use (22 of 50, read from its NIFs 2026-11-03): straight strands (the bob's
 # Medium_Hair_Shared made every card wavy, owner's first strand-card shots)
 STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Long_Straight_Hair_Shared.mat"
@@ -413,7 +416,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
-    if variant == "strands":                         # Starfield-style cards grown over the shaped Skyrim hair
+    if variant in ("strands", "strandsbase"):        # Starfield-style cards grown over the shaped Skyrim hair
         if not strands:
             row["reason"] = "no strand material / strips (see the report's strand_material)"
             return row
@@ -421,15 +424,20 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         cover = [skyrim_coverage(conv, n, sh) for n, sh in zip(nifs, hair.shapes)]
         cards, row["strand_cards"] = hairstrands.grow_cards(hair, sf_world[skyrimhair.SF_HEAD], strands[1],
                                                             dirs=dirs, coverage=cover,
-                                                            densities=strands[2] if len(strands) > 2 else None)
+                                                            densities=strands[2] if len(strands) > 2 else None,
+                                                            **DENSE_CARDS)
         if not cards.shapes:
             row["reason"] = "no strand cards grown"
             return row
         cards, _t = skyrimhair.uv_tangents(cards)
-        # the converted Skyrim hair stays under the cards: the body of the hair, the cards its strands and outline
-        hair = skyrimhair.Hair(list(hair.shapes) + list(cards.shapes), hair.bones, hair.host_of_root, hair.report)
-        mats = list(mats) + [strands[0]] * len(cards.shapes)
-        backs = list(backs) + [False] * len(cards.shapes)
+        if variant == "strandsbase":                 # the converted Skyrim hair under the cards
+            hair = skyrimhair.Hair(list(hair.shapes) + list(cards.shapes), hair.bones, hair.host_of_root,
+                                   hair.report)
+            mats = list(mats) + [strands[0]] * len(cards.shapes)
+            backs = list(backs) + [False] * len(cards.shapes)
+        else:                                        # the cards alone
+            hair = cards
+            mats, backs = [strands[0]] * len(cards.shapes), [False] * len(cards.shapes)
     out_name = out_name or f"{OUT_DIR}/{p['edid'].lower()}"
     hair_pack.write_files(staging, skyrimhair.nif_files(hair, mats, None, sf_world, out_name, backs))
     row["_fb"] = (hair, mats, None, out_name, backs)
@@ -549,7 +557,7 @@ def main(argv=None):
                 sfplugin.edid(tpl[2])
             report.setdefault("template_extra_parts", {})[sfplugin.edid(tpl[2])] = extra_parts(tpl, sf_hdpt)
         ctx, fb = contexts[(female, p["type"])]
-        extra = (DIAGNOSE if a.diagnose else ()) + ((STRANDS,) if a.strand_cards else ())
+        extra = (DIAGNOSE if a.diagnose else ()) + (STRANDS if a.strand_cards else ())
         for variant, label in ((None, None),) + extra:
             try:
                 row = build_part(p, part_models(p["key"], parts), sky, conv, sf_world, ctx, fb, staging,

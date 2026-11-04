@@ -606,6 +606,7 @@ class MainTests(unittest.TestCase):
 
             def fake_cards(h, head, st, **kw):           # the fixture is one tiny card: the growing has its own tests
                 self.assertEqual(len(kw["dirs"]), len(h.shapes))
+                self.assertEqual(kw["layers"], SH.DENSE_CARDS["layers"])
                 from fo4sf import skyrimhair
                 sh = h.shapes[0]
                 p = np.asarray(sh.positions)[:3]
@@ -633,9 +634,11 @@ class MainTests(unittest.TestCase):
             row = cards["parts"][1]
             self.assertEqual((row["variant"], row["ok"]), ("strands", True), row.get("reason"))
             self.assertGreater(row["strand_cards"]["cards"], 0)
-            self.assertEqual(row["materials"][-1], "Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat")
-            self.assertEqual(len(row["materials"]), 2)                        # the converted hair stays under the cards
-            self.assertIn("_hair_", row["materials"][0])
+            self.assertEqual(row["materials"], ["Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"])
+            base = cards["parts"][2]                                          # the cards over the converted hair
+            self.assertEqual((base["variant"], base["ok"]), ("strandsbase", True), base.get("reason"))
+            self.assertEqual(len(base["materials"]), 2)
+            self.assertIn("_hair_", base["materials"][0])
             cparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "cards", SH.PLUGIN),
                                                                                  [b"HDPT"])}
             self.assertEqual(cparts["S2S_HairMaleNord01_strands"][b"FULL"],
