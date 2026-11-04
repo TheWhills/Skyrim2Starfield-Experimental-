@@ -55,7 +55,8 @@ HAIR, FACIAL_HAIR = 3, 4
 # (2026-11-03: owner saw the Skyrim hairstyles float off the skull with a gap, "flat")
 # geometric_normals: the stored Skyrim normals do not follow the shaping (2026-11-03, dark / light patches)
 # hairline_drop / skyrim_cutout (2026-11-03): the hair started 12-23 mm above Starfield's hairline (a bare band) and
-# the hair Skyrim alpha-tested solid was half see-through. tessellate / blend_coverage (2026-11-03, owner's diagnose rounds + report): the vanilla hairs are low-poly shells
+# the hair Skyrim alpha-tested solid was half see-through. tessellate / blend_coverage (2026-11-03, owner's
+# diagnose rounds + report): the vanilla hairs are low-poly shells
 # (a faceted helmet with broad flat light patches) and their hairline layers were alpha-blended (cut into strands
 # they read as a pale band of thin hair between the forehead and the hair)
 VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
@@ -202,6 +203,45 @@ def record_model(rec) -> str:
     return next((bytes(x).rstrip(b"\0").decode("latin-1") for s, x in rec[2] if s == b"MODL"), "")
 
 
+def settings_variant(conv, material, suffix: str, settings: dict):
+    """A copy of a hair material (written in conv's staging) with other hair shader settings and its own name, on
+    the same texture files: '<material>_<suffix>.mat'. 2026-11-03: the 'rough' / 'no light through' copies had
+    re-converted every texture under a new name (the owner's --diagnose run took over an hour)."""
+    from fo4sf import convert_material as cm
+    if not material or not material.lower().endswith(".mat"):
+        return material
+    out = material[:-4] + "_" + suffix + ".mat"
+    cache = conv.__dict__.setdefault("_settings_variants", {})
+    if out in cache:
+        return cache[out]
+    src = os.path.join(conv.staging, *material.split("\\"))
+    try:
+        with open(src, encoding="utf-8") as fh:
+            mat = json.load(fh)
+    except OSError:
+        cache[out] = material
+        return material
+    slot = {i: k for k, i in cm.HAIR_SLOTS.items()}
+    files, base = {}, {}
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::MRTextureFile" and c.get("Index") in slot:
+                files[slot[c["Index"]]] = c["Data"]["FileName"]
+            elif c.get("Type") == "BSMaterial::HairSettingsComponent":
+                base = dict(c.get("Data", {}))
+    if not files.get("Albedo") or not files.get("Opacity"):     # not one of our hair materials: kept as is
+        cache[out] = material
+        return material
+    name = "S2SHair_" + re.sub(r"[^a-z0-9]+", "_", os.path.splitext(os.path.basename(out.replace("\\", "/")))[0]
+                                                    .lower())
+    new = cm.build_hair_mat(name, files, dict(base, **settings))
+    dst = os.path.join(conv.staging, *out.split("\\"))
+    with open(dst, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(cm.dump_mat(new))
+    cache[out] = out
+    return out
+
+
 def fit_report(placed, hair, ctx, sf_world) -> dict:
     """How the hair sits, by region (skyrimhair.fit_gaps): the Skyrim hair on Skyrim's head where the head fit puts
     both ('skyrim': what it should look like), the result on Starfield's head ('starfield'); and the result's
@@ -247,48 +287,52 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     cards, 'notrans': no light through the hair, 'soft': Skyrim's blended layers keep their soft alpha, 'rough': a
     rougher hair shader). Returns its report row (ok, model, ...)."""
     row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
-    hairs, nifs = [], []
-    for m in models:
-        rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", m.replace("/", "\\"), flags=re.I)
-        raw = sky.mesh(rel) if hasattr(sky, "mesh") else sky._read(bsa.norm(rel))
-        if raw is None:
-            row["skipped"].append(f"{m}: not in the archives")
-            continue
-        try:
-            n = nifmod.parse(raw)
-            h = skyrimhair.convert(raw, None, sf_world, ctx.head_scale, tuple(ctx.head_offset))
-        except (skyrimhair.HairError, nifmod.NifError, ValueError) as e:
-            row["skipped"].append(f"{m}: {e}")
-            continue
-        if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
-            h, _dropped = skyrimhair.drop_duplicate_shapes(h)
-        # 2026-11-03: the strand direction comes from each texture region (strand_orientation, after the
-        # materials), not from the mesh: the whole-shape guess (strands_down) left cards cut across their strands
-        hairs.append(h)
-        nifs += [n] * len(h.shapes)
-    if not hairs:
-        row["reason"] = "no model converted"
-        return row
-    hair = skyrimhair.merge(hairs)
-    if getattr(ctx, "tessellate", 1) > 1:            # low-poly shells rounded (before the shaping works on them)
-        hair, row["tessellated"] = skyrimhair.tessellate(hair, ctx.tessellate)
-    placed = hair
-    hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
-    row["fit"] = fit_report(placed, hair, ctx, sf_world)
+    key = (p["edid"], tuple(models))
+    last = ctx.__dict__.get("_shaped_last")
+    if last is not None and last[0] == key:          # a diagnostic copy: the same shape as the hairstyle's own
+        hair, nifs, done = last[1], last[2], last[3]
+        row.update(copy.deepcopy(done))
+    else:
+        hairs, nifs = [], []
+        for m in models:
+            rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", m.replace("/", "\\"), flags=re.I)
+            raw = sky.mesh(rel) if hasattr(sky, "mesh") else sky._read(bsa.norm(rel))
+            if raw is None:
+                row["skipped"].append(f"{m}: not in the archives")
+                continue
+            try:
+                n = nifmod.parse(raw)
+                h = skyrimhair.convert(raw, None, sf_world, ctx.head_scale, tuple(ctx.head_offset))
+            except (skyrimhair.HairError, nifmod.NifError, ValueError) as e:
+                row["skipped"].append(f"{m}: {e}")
+                continue
+            if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
+                h, _dropped = skyrimhair.drop_duplicate_shapes(h)
+            # 2026-11-03: the strand direction comes from each texture region (strand_orientation, after the
+            # materials), not from the mesh: the whole-shape guess (strands_down) left cards cut across their strands
+            hairs.append(h)
+            nifs += [n] * len(h.shapes)
+        if not hairs:
+            row["reason"] = "no model converted"
+            return row
+        hair = skyrimhair.merge(hairs)
+        if getattr(ctx, "tessellate", 1) > 1:            # low-poly shells rounded (before the shaping works on them)
+            hair, row["tessellated"] = skyrimhair.tessellate(hair, ctx.tessellate)
+        placed = hair
+        hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
+        row["fit"] = fit_report(placed, hair, ctx, sf_world)
+        ctx.__dict__["_shaped_last"] = (key, hair, nifs, copy.deepcopy({k: v for k, v in row.items()
+                                                                         if k not in ("skyrim", "plugin", "models",
+                                                                                      "ok")}))
     if variant == "shell":
         hair, row["shell_normals"] = skyrimhair.shell_normals(hair, sf_world[skyrimhair.SF_HEAD])
         hair, row["tangents"] = skyrimhair.uv_tangents(hair)
-    look = variant if variant in ("flat", "solid", "soft") or variant in SETTING_VARIANTS else None
-    saved = getattr(conv, "hair_settings", None)
-    if variant in SETTING_VARIANTS:
-        conv.hair_settings = dict(saved or {}, **SETTING_VARIANTS[variant])
-    try:
-        mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, orient=bool(ctx.hair_shader),
-                                               look=look)
-    finally:
-        conv.hair_settings = saved
+    look = variant if variant in ("flat", "solid", "soft") else None
+    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, orient=bool(ctx.hair_shader), look=look)
     across = [skyrimhair.strands_across(sh, conv.hair_orientation_of(m) if hasattr(conv, "hair_orientation_of")
                                         else None) for sh, m in zip(hair.shapes, mats)]
+    if variant in SETTING_VARIANTS:                  # the same textures, only the shader settings differ
+        mats = [settings_variant(conv, m, variant, SETTING_VARIANTS[variant]) for m in mats]
     if any(x.any() for x in across):                 # cards whose strands run along U: lit along them
         hair, row["tangents"] = skyrimhair.uv_tangents(hair, along_v=across)
     if variant == "combed":

@@ -359,9 +359,10 @@ class SkyrimConverter(pipeline.Converter):
             stem += "_c%g" % coverage
         if cutout is not None:
             stem += "_k%d" % int(cutout)
-        if region is not None and len(region):
-            import numpy as np
-            stem += "_r" + hashlib.sha1(np.round(np.asarray(region, float), 4).tobytes()).hexdigest()[:8]
+        if region is not None and len(region):      # keyed by the coarse cells it touches: hairlines sampling the
+            import numpy as np                       # same part of the texture share one material (2026-11-03: one
+            cells = np.unique(np.floor(np.mod(np.asarray(region, float), 1.0) * 16).astype(int), axis=0)   # per
+            stem += "_r" + hashlib.sha1(cells.tobytes()).hexdigest()[:8]    # shape re-converted the atlas ~45x)
         key = "skyhair:" + stem + ("|ramp:%d,%d" % tuple(opacity_ramp) if opacity_ramp else "") + \
             ("|strands" if strands else "")
         if key not in self._materials:

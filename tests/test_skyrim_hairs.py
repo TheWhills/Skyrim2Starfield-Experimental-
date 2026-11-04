@@ -487,6 +487,19 @@ class NormalTests(unittest.TestCase):
             sop = pixels("t_hair_o_soft_opacity.dds", 1)
             self.assertGreater(len(np.unique(sop)), 2)                           # soft alpha kept, not cut
             self.assertIn("gain", conv.hair_coverage_of(reg)["region"])
+            with mock.patch.object(textures, "texconv", fake_texconv):    # the same part of the texture: shared
+                reg2 = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
+                                                 coverage=3.0, region=np.array([[0.61, 0.51], [0.91, 0.21]]))
+            self.assertEqual(reg2, reg)
+            rough = SH.settings_variant(conv, reg, "rough", {"Roughness": "0.85"})
+            self.assertTrue(rough.endswith("_rough.mat"))
+            with open(os.path.join(d, *rough.split("\\")), encoding="utf-8") as fh:
+                rm = fh.read()
+            with open(os.path.join(d, *reg.split("\\")), encoding="utf-8") as fh:
+                base_txt = fh.read()
+            self.assertIn('"Roughness" : "0.85"', rm)
+            tex = lambda txt: sorted(x for x in txt.split('"') if x.lower().endswith(".dds"))   # noqa: E731
+            self.assertEqual(tex(rm), tex(base_txt))                             # the same textures
             self.assertGreater(pixels("t_hair_o_c3_opacity.dds", 1).astype(float).mean() / 255,
                                base["after_cut"] + 0.1)                           # Skyrim's blended layers: denser
             col = pixels("t_hair_o_flat_color.dds", 4).reshape(-1, 4)
@@ -566,6 +579,8 @@ class MainTests(unittest.TestCase):
                              [("HairMaleNord01", None, True), ("HairMaleNord01", "soft", True),
                               ("HairMaleNord01", "rough", True)])
             self.assertEqual(diag["parts"][1]["materials"], diag["parts"][0]["materials"])   # nothing blended here
+            self.assertEqual(diag["parts"][1]["fit"], diag["parts"][0]["fit"])   # the copies reuse the shaping
+            self.assertEqual(diag["parts"][2]["tessellated"], diag["parts"][0]["tessellated"])
             nt = [m for m in diag["parts"][2]["materials"] if "_rough" in m]
             self.assertTrue(nt)
             with open(os.path.join(d, "diag", *nt[0].split("\\")), encoding="utf-8") as fh:

@@ -42,3 +42,14 @@ whole long session history replayed) and, in the default read-only sandbox, coul
 After: default is a fresh session with a short brief pointing at #32 / handoff / AGENTS.md, with workspace-write +
 network. `--fork` stays available when the old context is really needed. After (measured): the next fresh-session wake fixed the bug it was briefed on, ran the tests and the guard, and
 opened PR #34 using **54,793 tokens** (99% less than the fork's 5,677,999).
+
+## 2026-11-03 skyrim_hairs --diagnose: hair texture conversions and repeated shaping (Claude)
+Owner: the Nord / Imperial --diagnose run (48 hairstyles x 3 copies, 61c5ff1) was still going after 15+ minutes.
+Causes: every Skyrim-blended hairline got its own full-atlas conversion (region keyed by its exact UV points), the
+'rough' copies re-converted every texture under a new name, and each copy re-ran the whole shaping (follow head,
+conform, layers, fit report) on ~10k tessellated vertices. Now: regions keyed by the 1/16-texture cells they touch
+(hairlines sampling the same part share one material), setting-only copies write a new .mat on the same textures
+(skyrim_hairs.settings_variant), and the copies reuse the hairstyle's shaped mesh. Measured (scratchpad
+bench_hairmats.py: 12 blended hairline shapes in one area of a 1024x1024 texture, each with a 'rough' copy, texconv
+stubbed): before 24 texture conversions, 11.6 s; after 4 conversions, 1.9 s. Shaping per hairstyle in --diagnose:
+3 runs -> 1 (by construction; not timed on the owner's data).
