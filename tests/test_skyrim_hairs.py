@@ -477,6 +477,21 @@ class NormalTests(unittest.TestCase):
                                                                        orient=True))
             self.assertTrue(dense.endswith("t_hair_o_c3.mat"))
             with mock.patch.object(textures, "texconv", fake_texconv):
+                van = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
+                                                vanilla_maps=True)
+            self.assertTrue(van.endswith("t_hair_o_v.mat"))
+            with open(os.path.join(d, *van.split("\\")), encoding="utf-8") as fh:
+                vm = fh.read()
+            self.assertIn("t_hair_o_v_ao.dds", vm)                               # its own AO, not the white filler
+            ao = pixels("t_hair_o_v_ao.dds", 1)
+            self.assertGreaterEqual(int(ao.min()), 108)
+            self.assertLessEqual(int(ao.max()), 190)
+            hid = pixels("t_hair_o_v_hairid.dds", 1)
+            self.assertGreaterEqual(int(hid.min()), 28)
+            self.assertLessEqual(int(hid.max()), 101)
+            vc = pixels("t_hair_o_v_color.dds", 4).reshape(-1, 4)[:, :3].astype(float)
+            self.assertTrue(np.allclose(vc.mean(0), (38, 23, 12), atol=4))       # Starfield's dark brown albedo
+            with mock.patch.object(textures, "texconv", fake_texconv):
                 reg = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
                                                 coverage=3.0, region=np.array([[0.6, 0.5], [0.9, 0.2]]))
             self.assertIn("_c3_r", reg)

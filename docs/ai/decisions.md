@@ -1212,3 +1212,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (ContentResources.zip) and textures (game archives) and reports their settings, slots and texture statistics
   (depth map percentiles, AO, albedo spread, opacity strand direction) with small PNGs: the evidence for re-texturing
   the Skyrim cards with Starfield's hair textures.
+- 2026-11-03 hair_probe.py on the owner's game (verified, his hair_probe.json): the vanilla hairs' materials are
+  Medium_Hair_Shared (bob), Long_Unkempt_Wavy_Hair_Shared (hairspray bob), Beard_shared (buzz cuts); their
+  textures: albedo a dark brown, mean sRGB (36-42, 22-26, 12-14), luminance spread ~10; AO mean 124-138 (p10 = median
+  108-125, p90 ~190); depth offset spread per strand (p10 11-15, median 163-174, p90 ~249); hair ID median 30-48
+  (p90 62-101); opacity 10-18 % solid, strands down the texture. Their settings differ per material (the bob:
+  Roughness 0.25, DiffuseTransmissionScale 0.7, DirectTransmissionScale 0.2375, SpecularTransmissionScale 0.675,
+  AlphaDistance 0.37, MipBase 2.5, MaxDepthOffset 0.01). Ours: Skyrim's light albedo, AO white, IDs over 0-255: a far
+  brighter, patchier hair than vanilla. Now (--vanilla-maps, on for the vanilla Skyrim hairstyles): albedo recoloured
+  to the vanilla mean (38, 23, 12) keeping the strand detail, a per-strand AO map in 108-190 (mostly low), hair IDs
+  in 28-101. Owner's [depth] copy (IDG's MaxDepthOffset) looked the same as the new default 0 (settings-only copies
+  still never differ in game; unresolved).

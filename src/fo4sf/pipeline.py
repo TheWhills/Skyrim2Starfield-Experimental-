@@ -81,6 +81,26 @@ def _box_blur(img, r, rx=None):
     return out
 
 
+# Starfield's own hair maps, measured by scripts/armor/hair_probe.py on the owner's game (2026-11-03: the bob's
+# Medium_Hair_Shared and Long_Unkempt_Wavy_Hair_Shared, the buzz cuts' Beard_shared): albedo a dark brown, mean sRGB
+# (36-42, 22-26, 12-14) with a luminance spread of only ~10 (the hair colour option tints it); ambient occlusion mostly
+# 108 / 255 (p10 = median 108-125, p90 ~190); hair ID low (median 30-48, p90 62-101). Ours were a light Skyrim
+# albedo (~120-180), AO white and IDs spread over 0-255: the hair drew far brighter and patchier than vanilla.
+VANILLA_HAIR_ALBEDO = (38, 23, 12)
+VANILLA_AO = (108, 190)
+VANILLA_HAIR_ID = (28, 101)
+
+
+def vanilla_strand_maps(hair_id):
+    """(ambient occlusion, hair ID) per strand in the ranges of Starfield's own hair maps, from strand_maps' per-strand
+    random value (0-255): AO mostly near its low end (squared), as vanilla's (p10 = median), IDs spread evenly."""
+    import numpy as np
+    r = np.asarray(hair_id, np.float64) / 255.0
+    ao = VANILLA_AO[0] + (VANILLA_AO[1] - VANILLA_AO[0]) * r * r
+    hid = VANILLA_HAIR_ID[0] + (VANILLA_HAIR_ID[1] - VANILLA_HAIR_ID[0]) * r
+    return np.rint(ao).astype(np.uint8), np.rint(hid).astype(np.uint8)
+
+
 def cutout_alpha(alpha, threshold: int, width: int = 48):
     """Alpha remapped for the strand cut so that it draws what Skyrim's alpha test drew: solid from `width` / 2 over
     Skyrim's threshold, nothing from `width` / 2 under it, a ramp between (the strands' ragged ends). Plain alpha as
@@ -427,7 +447,8 @@ class Converter:
                              hair: bool = False, albedo_target: Optional[tuple] = None,
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
                              transpose: bool = False, orient: bool = False, look: Optional[str] = None,
-                             coverage: float = 1.0, region=None, cutout: Optional[int] = None) -> str:
+                             coverage: float = 1.0, region=None, cutout: Optional[int] = None,
+                             vanilla_maps: bool = False) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -483,6 +504,9 @@ class Converter:
                     alpha = ramp_alpha(alpha, *opacity_ramp)
                 if look == "solid":                        # diagnostic: nothing seen through the hair
                     alpha = np.full_like(alpha, 255)
+                ao = None
+                if vanilla_maps and hair_id is not None:   # the ranges of Starfield's own hair maps (hair_probe)
+                    ao, hair_id = vanilla_strand_maps(hair_id)
                 if decal or alpha.min() < 250 or look == "solid":   # only if the texture really has a cutout
                     textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
                     textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
@@ -490,6 +514,9 @@ class Converter:
                 if hair_id is not None:
                     textures.write_r8(os.path.join(tmp, "id_in.dds"), hair_id)
                     textures.texconv(self.texconv, os.path.join(tmp, "id_in.dds"), tmp, "BC4_UNORM")
+                if ao is not None:
+                    textures.write_r8(os.path.join(tmp, "ao_in.dds"), ao)
+                    textures.texconv(self.texconv, os.path.join(tmp, "ao_in.dds"), tmp, "BC4_UNORM")
             if color_alpha is None:
                 # BC1 below keeps 1-bit alpha: texconv turns every texel under alpha 0.5 into transparent BLACK.
                 # Skyrim / FO4 diffuse alpha is often a specular mask, not opacity (cutouts use the opacity map
@@ -515,6 +542,8 @@ class Converter:
                 if look == "flat":                          # diagnostic: one colour (the visible texels' mean)
                     seen = pd[:, :, 3] >= 128 if (pd[:, :, 3] >= 128).any() else np.ones(pd.shape[:2], bool)
                     pd[:, :, :3] = np.rint(pd[:, :, :3][seen].astype(np.float64).mean(0)).astype(np.uint8)
+                if albedo_target is None and vanilla_maps and albedo_tint is None:   # Starfield's own hair albedo
+                    albedo_target = VANILLA_HAIR_ALBEDO
                 if albedo_target is not None:               # recoloured so the visible texels average this sRGB
                     pd[:, :, :3] = recolor(pd, albedo_target)
                 if albedo_luminance is not None:
@@ -543,6 +572,8 @@ class Converter:
             kinds = [("color", "d.dds"), ("normal", "n_in.dds"), ("rough", "r_in.dds")] + ([("opacity", opacity)] if opacity else [])
             if hair and (alpha_test or decal) and hair_id is not None:
                 kinds.append(("hairid", "id_in.dds"))
+            if hair and (alpha_test or decal) and ao is not None:
+                kinds.append(("ao", "ao_in.dds"))
             for kind, fn in kinds:
                 dst = os.path.join(self.staging, *f"{tex_rel}_{kind}.dds".split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -554,6 +585,8 @@ class Converter:
             maps = dict(self._hair_fillers())
             if out.get("hairid"):
                 maps["HairID"] = out["hairid"]
+            if out.get("ao"):
+                maps["AmbientOcclusion"] = out["ao"]
             mat = cm.build_hair_mat("S2SHair_" + re.sub(r"[^a-z0-9]+", "_", stem),
                                     dict(Albedo=out["color"], Opacity=out["opacity"], **maps),
                                     getattr(self, "hair_settings", None))

@@ -61,7 +61,7 @@ HAIR, FACIAL_HAIR = 3, 4
 # they read as a pale band of thin hair between the forehead and the hair)
 VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
                         geometric_normals=True, tessellate=3, blend_coverage=3.0, hairline_drop=20.0,
-                        skyrim_cutout=True)
+                        skyrim_cutout=True, vanilla_maps=True)
 # The hair shader's depth offset off (IDG's 0.01 m with our flat mid-grey depth map moves every hair pixel's depth
 # by about 5 mm; the vanilla Skyrim shells lie 2.5-4 mm over Starfield's skin at the front and sides, 0-2 mm at a
 # parting: the skin then wins the depth test. 2026-11-03, owner: "every time strands meet in the middle they go into

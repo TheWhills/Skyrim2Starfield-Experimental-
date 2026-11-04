@@ -332,7 +332,7 @@ class SkyrimConverter(pipeline.Converter):
                              strands: bool = False, tint: Optional[tuple] = None,
                              transpose: bool = False, orient: bool = False,
                              look: Optional[str] = None, coverage: float = 1.0, region=None,
-                             cutout: Optional[int] = None) -> Optional[str]:
+                             cutout: Optional[int] = None, vanilla_maps: bool = False) -> Optional[str]:
         """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
         colour (recoloured to average `color`, sRGB 0-255, when given: pipeline.recolor) and its alpha as the opacity
         map; None when it cannot be made (the caller falls back). orient: the strands are cut along the texture's own
@@ -342,7 +342,8 @@ class SkyrimConverter(pipeline.Converter):
         alpha-blended, e.g. the hairlines: blended they read as a coat of colour, cut into strands as thin hair).
         region: UV points (n, 2) of the part of the texture the shape shows: its alpha is first scaled to its own
         level there (pipeline.normalize_region_alpha); the material is then that shape's own. cutout: Skyrim's
-        alpha-test threshold (0-255): solid over it, the strand cut only near it (pipeline.cutout_alpha)."""
+        alpha-test threshold (0-255): solid over it, the strand cut only near it (pipeline.cutout_alpha).
+        vanilla_maps: albedo, AO and hair ID in the ranges of Starfield's own hair (pipeline.VANILLA_*)."""
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_hair"
         if color:
@@ -359,6 +360,8 @@ class SkyrimConverter(pipeline.Converter):
             stem += "_c%g" % coverage
         if cutout is not None:
             stem += "_k%d" % int(cutout)
+        if vanilla_maps:
+            stem += "_v"
         if region is not None and len(region):      # keyed by the coarse cells it touches: hairlines sampling the
             import numpy as np                       # same part of the texture share one material (2026-11-03: one
             cells = np.unique(np.floor(np.mod(np.asarray(region, float), 1.0) * 16).astype(int), axis=0)   # per
@@ -373,7 +376,7 @@ class SkyrimConverter(pipeline.Converter):
                                                                  strands=strands, albedo_tint=tint,
                                                                  transpose=transpose, orient=orient and strands,
                                                                  look=look, coverage=coverage, region=region,
-                                                                 cutout=cutout)
+                                                                 cutout=cutout, vanilla_maps=vanilla_maps)
                 if self._materials[key] is not None and stem in self.hair_orientation:
                     self._hair_material_stem[self._materials[key]] = stem
                 self.stats["materials_ok"] += 1

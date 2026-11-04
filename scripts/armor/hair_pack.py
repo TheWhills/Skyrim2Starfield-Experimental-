@@ -260,7 +260,7 @@ def uv_samples(sh, per_side: int = 4):
 
 
 def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint=None, transpose=False,
-                         orient=False, look=None, coverage=1.0, cutout=False):
+                         orient=False, look=None, coverage=1.0, cutout=False, vanilla_maps=False):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -269,7 +269,7 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
-    if orient or look or coverage > 1.0 or cutout:
+    if orient or look or coverage > 1.0 or cutout or vanilla_maps:
         region = None
         test, blend = (skyrimnif.alpha_test(n, sh.alpha_ref)[:2] if sh.alpha_ref >= 0 else (False, False))
         if look == "soft" and not blend:           # diagnostic 'soft': only Skyrim's blended layers keep soft alpha
@@ -279,6 +279,8 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
         elif coverage > 1.0:                       # ... brought to full at their own part of the texture
             region = uv_samples(sh)
         extra = {"cutout": ref} if cutout and test and not blend else {}
+        if vanilla_maps:
+            extra["vanilla_maps"] = True
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
                                          None if strands else ramp, strands, tint, transpose, orient=orient,
                                          look=look, coverage=coverage, region=region, **extra)
@@ -791,8 +793,10 @@ def hair_materials(conv, nifs, hair, a, color=None, tint=None, transposed=None, 
         turn = bool(transposed[k]) if transposed else False
         cov = float(getattr(a, "blend_coverage", 1.0) or 1.0)
         cut = bool(getattr(a, "skyrim_cutout", False))
+        van = bool(getattr(a, "vanilla_maps", False))
         m = ((hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn, orient=orient,
-                                   look=look, coverage=cov, cutout=cut) if orient or look or cov > 1.0 or cut
+                                   look=look, coverage=cov, cutout=cut, vanilla_maps=van)
+              if orient or look or cov > 1.0 or cut or van
               else hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn))
              if a.hair_shader else None)
         hair_mat = m is not None
@@ -907,6 +911,9 @@ def add_shape_args(ap):
     ap.add_argument("--hairline-drop", type=float, default=0.0,
                     help="mm at most to bring the front hairline DOWN to the vanilla hair's (made symmetric), within "
                          "40 deg of the middle of the forehead (default: 20 for the vanilla Skyrim hairstyles; 0 = off)")
+    ap.add_argument("--vanilla-maps", action=argparse.BooleanOptionalAction, default=False,
+                    help="albedo, ambient occlusion and hair ID in the ranges of Starfield's own hair textures "
+                         "(measured with hair_probe.py; default: on for the vanilla Skyrim hairstyles)")
     ap.add_argument("--skyrim-cutout", action=argparse.BooleanOptionalAction, default=False,
                     help="shapes Skyrim alpha-tested: solid where Skyrim drew them (alpha over its threshold), the "
                          "strand cut only near the threshold (default: on for the vanilla Skyrim hairstyles)")
