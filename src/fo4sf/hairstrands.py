@@ -26,7 +26,10 @@ CARD_SPACING = 0.006        # m: the least distance between neighbouring cards' 
 LAYER_GAP = 0.002           # m: each layer this much further out from the guide surface
 LAYERS = 3
 MAX_CARDS = 1800
-COVERED = 0.4               # a guide vertex whose texture is at least this opaque there counts as hair
+COVERED = 0.4               # a guide vertex whose texture is at least this opaque there counts as hair (seeds)
+CONTINUE = 0.2              # a trace goes on while the (smoothed) coverage stays above this
+STRIP_LENGTH = 0.30         # m: the hair length a texture strip stands for (root at its top, tip at its bottom)
+SCALP_REACH = 0.025         # m: a line end within this of the head lies on the scalp
 SURFACE_REACH = 0.010       # m: a trace leaving the guide by more than this stops (its edge)
 MAX_TURN_DEG = 50.0         # a trace turning more than this in one step stops (a fold or a parting)
 
@@ -95,7 +98,8 @@ class Guide:
     coverage: per shape the texture's opacity at each vertex (Skyrim's hairline layers reach down the forehead fading
     out: owner 2026-11-03, the first cards grew 'bangs' over it), else 1 everywhere."""
 
-    def __init__(self, hair: Hair, head: np.ndarray, dirs=None, coverage=None, voxel: float = 0.004):
+    def __init__(self, hair: Hair, head: np.ndarray, dirs=None, coverage=None, voxel: float = 0.004,
+                 smooth_k: int = 16):
         pts, nrm, tan, wts, sd, cov = [], [], [], [], [], []
         for k, sh in enumerate(hair.shapes):
             p = np.asarray(sh.positions, float)
@@ -142,6 +146,9 @@ class Guide:
             self.tree = cKDTree(self.p)
         except Exception:                                  # noqa: BLE001 (numpy only: brute force in chunks)
             self.tree = None
+        if smooth_k > 1 and len(self.p) > smooth_k:        # coverage over ~1-2 cm: the gaps between Skyrim's
+            j, _d = self.neighbours(self.p, smooth_k)     # painted strands must not end a trace
+            self.cov = self.cov[j].mean(1)
 
     def neighbours(self, q: np.ndarray, k: int = 6, chunk: int = 256) -> Tuple[np.ndarray, np.ndarray]:
         """(indices (m, k) of the k nearest guide vertices, their distances (m, k)) for points q (m, 3)."""
@@ -207,7 +214,7 @@ class Guide:
 
 
 def trace(guide: Guide, seeds: np.ndarray, sign: float, step: float = CARD_STEP, max_steps: int = 120,
-          reach: float = SURFACE_REACH, max_turn: float = MAX_TURN_DEG, covered: float = COVERED) -> List[np.ndarray]:
+          reach: float = SURFACE_REACH, max_turn: float = MAX_TURN_DEG, covered: float = CONTINUE) -> List[np.ndarray]:
     """Each seed followed over the guide along its strand direction (sign +1: toward the tips, -1: toward the roots),
     all seeds at once: a step along the smoothed field (Guide.field), then back onto the nearest vertex's tangent
     plane. A trace stops off the guide (beyond `reach`), where the guide is no longer hair (coverage under
@@ -279,6 +286,27 @@ def uv_strand_dirs(sh: HairShape, along_u=None) -> np.ndarray:
     return np.where(size > 1e-12, acc_v / np.maximum(size, 1e-12), 0.0)
 
 
+def root_at_hairline(line: np.ndarray, head_pts, head, reach: float = SCALP_REACH,
+                     hairline_above: float = 0.075) -> Tuple[np.ndarray, int]:
+    """(the line, 1 if turned round else 0): a line whose two ends both lie on the head (within `reach`) and whose
+    tip end is its front one, on the upper forehead (more than `hairline_above` over C_Head and in front of it),
+    turned so that end is its root. Hair lying on the scalp starts at the hairline and runs back; a tip ending at
+    the hairline reads as a fringe (owner 2026-11-04: the cards gave several slicked-back styles 'a bang-like
+    appearance': Skyrim's texture runs those front pieces from the crown). Hair ending lower, on the face, or
+    hanging free keeps its direction (real fringes, hanging ends)."""
+    p = np.asarray(line, float)
+    hp = np.asarray(head_pts, float)
+    ends = p[[0, -1]]
+    d = np.sqrt(((ends[:, None, :] - hp[None, :, :]) ** 2).sum(2).min(1))
+    if not (d <= reach).all():
+        return p, 0
+    c = np.asarray(head, float)[:3, 3]
+    root, tip = ends[0] - c, ends[1] - c
+    if tip[1] > root[1] + 0.01 and tip[1] > 0.02 and tip[2] > hairline_above:
+        return p[::-1].copy(), 1
+    return p, 0
+
+
 def strip_coverage(opacity, strips) -> List[float]:
     """The mean opacity (0-1) of each strip: the dense ones make the inner layer."""
     a = np.asarray(opacity, np.float64)
@@ -307,7 +335,10 @@ def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, 
     pos[1::2] = centre + across * width / 2.0
     nrm = np.repeat(normals, 2, axis=0)
     arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(seg, axis=1))])
-    t = arc / max(arc[-1], 1e-9)
+    # the strip stands for STRIP_LENGTH of hair, its tip at the bottom: a card takes the strip's last `length` (its
+    # tip end wispy as the texture's, its root end inside the strands, no hard cut line where a card starts mid-hair)
+    span = min(1.0, arc[-1] / STRIP_LENGTH)
+    t = (1.0 - span) + span * arc / max(arc[-1], 1e-9)
     u0, v0, u1, v1 = strip
     uv = []
     for ti in t:
@@ -328,14 +359,17 @@ def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, 
 
 def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float, float, float]],
                layers: int = LAYERS, width: float = CARD_WIDTH, spacing: float = CARD_SPACING,
-               gap: float = LAYER_GAP, step: float = CARD_STEP, min_length: float = 0.02, seed: int = 11,
-               max_cards: int = MAX_CARDS, dirs=None, coverage=None, densities=None) -> Tuple[Hair, Dict]:
+               gap: float = LAYER_GAP, step: float = CARD_STEP, min_length: float = 0.04, seed: int = 11,
+               max_cards: int = MAX_CARDS, dirs=None, coverage=None, densities=None,
+               head_pts=None) -> Tuple[Hair, Dict]:
     """Cards over the guide hair, one shape per layer: per layer, random seed points on the guide where it is hair,
     each traced to its root and to its tip and smoothed; a line is kept when most of its points are not within
     `spacing` of a line already kept in that layer (evenly spaced lines); each kept line becomes a ribbon `width`
     wide, (layer + 1) * gap out from the guide, mapped onto a random strip (the inner layer: the denser half of the
     strips by `densities`), with the bone weights of the guide vertex under each point. dirs / coverage: see Guide.
-    Returns (Hair of the card shapes with the guide's bones, report)."""
+    head_pts: Starfield's head surface points; with them a line lying on the scalp at both ends gets its root at
+    its front end on the upper forehead (root_at_hairline). Returns (Hair of the card shapes with the guide's
+    bones, report)."""
     if not strips:
         raise ValueError("no texture strips to map the cards onto")
     guide = Guide(hair, head, dirs, coverage)
@@ -346,7 +380,7 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
         cut = float(np.median(densities))
         dense = [st for st, d in zip(strips, densities) if d >= cut] or strips
     shapes, report = [], {"layers": [], "covered_share": round(float((guide.cov >= COVERED).mean()), 3)}
-    total = 0
+    total, turned = 0, 0
     per_layer = max(1, max_cards // max(1, layers))
     for layer in range(layers):
         seeds = guide.area_samples(hair, spacing * 1.5, rng)
@@ -366,6 +400,9 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
             if len(line) < 3 or np.linalg.norm(np.diff(line, axis=0), axis=1).sum() < min_length:
                 continue
             line = smooth_line(guide, line)
+            if head_pts is not None:
+                line, flipped = root_at_hairline(line, head_pts, head)
+                turned += flipped
             keys = [tuple(k) for k in np.floor(line / cell).astype(int)]
             if sum(1 for k in keys if k in occupied) > 0.5 * len(keys):
                 continue
@@ -393,6 +430,7 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
             shapes.append(HairShape(f"Cards{layer}".encode(), p, np.vstack(nrm_l), np.zeros_like(p), uv_l, tri_l,
                                     w_l, -1, -1, 0))
     report["cards"] = total
+    report["roots_moved_to_the_hairline"] = turned
     report["vertices"] = int(sum(len(s.positions) for s in shapes))
     report["triangles"] = int(sum(len(s.triangles) for s in shapes))
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, strand_cards=True)), report

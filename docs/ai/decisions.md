@@ -1264,3 +1264,15 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   mostly see-through, vanilla opacity ~17 % solid). Now two copies per hairstyle: '[strands]' the cards alone and
   '[strandsbase]' the cards over the Skyrim hair, both denser (5 layers 1.5 mm apart, lines 5 mm apart, 18 mm wide,
   10 mm rows, up to 3500 cards; synthetic shell: ~2100 cards, ~100k triangles in 5 shapes of ~21k vertices, 4 s).
+- 2026-11-04 Strand cards round 4. Owner (3766082): the '[strands]' copy (cards alone) "does look like Starfield
+  hair now", fuller and sitting right; left: a bang-like front on some styles, and from the back "choppy" instead of
+  strand-like. His report: Long_Straight_Hair_Shared loaded (20 strips), coverage 50-99 %, 2600-3500 cards; some
+  styles average ~10 triangles per card (Nord16: 3500 cards, 36k triangles): many short cards. Causes (supported):
+  traces stopped at every gap between Skyrim's painted strands (per-vertex texture opacity), so lines broke into
+  short pieces, and every card took the whole strip (its hard root edge where a card starts mid-hair: the chop);
+  scalp pieces whose texture runs from the crown end their tips at the hairline (a fringe). Now: coverage averaged
+  over each guide vertex's 16 neighbours, seeds where >= 0.4, traces go on while >= 0.2 (synthetic: a 38 %-gapped
+  coverage traced 4 cm before, down to the hem now); cards shorter than 4 cm dropped; a strip stands for 30 cm of
+  hair and a card takes its last part (tip end wispy, root end inside the strands); a line on the scalp at both
+  ends whose tip is its front end on the upper forehead (> 75 mm over C_Head) is turned round (root at the
+  hairline), real fringes (ending lower or hanging free) kept.

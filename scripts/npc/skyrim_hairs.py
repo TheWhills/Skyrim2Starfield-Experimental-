@@ -425,6 +425,9 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         cards, row["strand_cards"] = hairstrands.grow_cards(hair, sf_world[skyrimhair.SF_HEAD], strands[1],
                                                             dirs=dirs, coverage=cover,
                                                             densities=strands[2] if len(strands) > 2 else None,
+                                                            head_pts=(ctx.head_surface[0]
+                                                                      if getattr(ctx, "head_surface", None)
+                                                                      is not None else None),
                                                             **DENSE_CARDS)
         if not cards.shapes:
             row["reason"] = "no strand cards grown"

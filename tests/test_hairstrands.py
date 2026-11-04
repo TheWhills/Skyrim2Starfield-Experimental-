@@ -152,5 +152,46 @@ class GuideTests(unittest.TestCase):
         self.assertLess(u.max(), 0.5 + 1e-9)                                # inner layer: the dense strips only
 
 
+class RoundThreeTests(unittest.TestCase):
+    def head(self):
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        return head
+
+    def test_short_cards_take_the_strip_tip(self):
+        line = np.array([[0, 0.1, 1.6 - 0.01 * k] for k in range(7)])        # 6 cm
+        pos, nrm, uv, tris, wts = HS._ribbon(line, np.tile([0, 1.0, 0], (7, 1)), 0.01, 0.0, (0.0, 0.2, 0.1, 0.8),
+                                             [[("C_Head", 1.0)]] * 7)
+        v = np.asarray(uv)[:, 1]
+        self.assertAlmostEqual(v[-1], 0.8)                                  # the tip at the strip's tip
+        self.assertAlmostEqual(v[0], 0.8 - 0.6 * 0.06 / HS.STRIP_LENGTH)    # its root inside the strip
+        long = np.array([[0, 0.1, 1.6 - 0.04 * k] for k in range(10)])      # 36 cm: the whole strip
+        _p, _n, uv2, _t, _w = HS._ribbon(long, np.tile([0, 1.0, 0], (10, 1)), 0.01, 0.0, (0.0, 0.2, 0.1, 0.8),
+                                         [[("C_Head", 1.0)]] * 10)
+        self.assertAlmostEqual(np.asarray(uv2)[0, 1], 0.2)
+
+    def test_root_at_the_hairline(self):
+        rng = np.random.default_rng(3)
+        d = rng.normal(size=(4000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        skull = np.array([0, 0, 1.69]) + 0.09 * d
+        crown_to_front = np.array([[0, 0.0, 1.785], [0, 0.05, 1.77], [0, 0.085, 1.72]])   # tip at the hairline
+        out, flipped = HS.root_at_hairline(crown_to_front, skull, self.head())
+        self.assertEqual(flipped, 1)
+        self.assertTrue(np.allclose(out[0], crown_to_front[-1]))
+        back = np.array([[0, 0.0, 1.785], [0, -0.05, 1.77], [0, -0.085, 1.72]])   # crown to the back: kept
+        self.assertEqual(HS.root_at_hairline(back, skull, self.head())[1], 0)
+        fringe = np.array([[0, 0.05, 1.77], [0, 0.11, 1.70], [0, 0.12, 1.66]])     # hangs free: kept
+        self.assertEqual(HS.root_at_hairline(fringe, skull, self.head())[1], 0)
+
+    def test_gaps_in_the_painted_strands_do_not_end_a_trace(self):
+        sh = shell()
+        z = np.asarray(sh.positions)[:, 2]
+        cov = ((np.round(z / 0.004) % 3) != 0).astype(float)               # every third row of the skin 'empty'
+        g = HS.Guide(H.Hair([sh], [], {}, {}), self.head(), coverage=[cov])
+        line = HS.trace(g, np.array([[0.1, 0.0, 1.66]]), +1.0, 0.005, max_steps=200)[0]
+        self.assertLess(line[-1][2], 1.53)                                  # down to the hem
+
+
 if __name__ == "__main__":
     unittest.main()
