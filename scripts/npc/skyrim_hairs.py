@@ -189,18 +189,9 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         except (skyrimhair.HairError, nifmod.NifError, ValueError) as e:
             row["skipped"].append(f"{m}: {e}")
             continue
-        if "hairline" in m.lower():                  # the scalp layer (an extra part): no strands, kept on the skin
-            h = skyrimhair.Hair([s if skyrimhair.is_tint(s) else
-                                 skyrimhair.HairShape(b"Hairline_" + (s.name or b""), s.positions, s.normals,
-                                                      s.tangents, s.uvs, s.triangles, s.weights, s.shader_ref,
-                                                      s.alpha_ref, s.block) for s in h.shapes],
-                                h.bones, h.host_of_root, h.report)
         if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
             h, _dropped = skyrimhair.drop_duplicate_shapes(h)
-            if all(skyrimhair.is_tint(x) for x in h.shapes):
-                turned = [False] * len(h.shapes)
-            else:                                    # strands along V for the hair shader
-                h, turned = skyrimhair.strands_down(h, sf_world.get(skyrimhair.SF_HEAD))
+            h, turned = skyrimhair.strands_down(h, sf_world.get(skyrimhair.SF_HEAD))   # strands along V
         else:
             turned = [False] * len(h.shapes)
         flips += turned
@@ -214,6 +205,8 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, transposed=flips)
     if any(flips):
         row["textures_turned"] = sum(flips)
+    row["shape_detail"] = [{"name": (sh.name or b"").decode("latin-1"), "vertices": len(sh.positions),
+                            "turned": bool(f), "material": m} for sh, f, m in zip(hair.shapes, flips, mats)]
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row

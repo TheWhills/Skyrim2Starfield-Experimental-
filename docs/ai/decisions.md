@@ -1090,3 +1090,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   '<name>_rot' with swapped UVs and the transposed texture. (2) The scalp layer (Skyrim's hairline extra parts,
   model path with 'hairline', named 'Hairline_...' so is_tint holds) gets no strand cutting, no turning and its own
   soft alpha (no ramp) in every pipeline (KS's 'Hairline' too): the strand maps had cut its fade into lines.
+- 2026-11-03 Reverted the soft scalp layer (8ff9fe4). Owner's shots of that build: front hair missing (bald
+  forehead), the rest smooth and flat. Supported: Skyrim's hairline extra parts carry the front hairline's own short
+  hair cards, not only a scalp fade, and their alpha without the strand cut / ramp drew mostly see-through. Kept: the
+  per-card strand direction (crown included) and the split of mixed shapes. The report now lists each shape (name,
+  vertices, turned, material) per hairstyle (skyrim_hairs.json "shape_detail").
