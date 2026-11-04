@@ -81,7 +81,39 @@ def _box_blur(img, r, rx=None):
     return out
 
 
-def flatten_albedo(rgba, radius: int = 4, radius_u: int = 64, strength: float = 0.9) -> "np.ndarray":
+def strand_orientation(alpha, rgb=None, block: int = 32, ratio: float = 1.3):
+    """Per texel True where the texture's strands run along U (across the image), False where along V (down it),
+    judged per `block`-texel square from where the image changes most: strands vary across their width, little along
+    their length (gradient energy of the alpha plus the luminance; one direction must win by `ratio`). Undecided
+    squares take their neighbours' majority, then V (the common layout: KS / IDG, verified). 2026-11-03: vanilla
+    Skyrim hair atlases mix both layouts (the owner saw strands cut across on the back of a Skyrim hairstyle), and
+    cards of either kind can share one shape, so the direction comes from the texture, not from the mesh."""
+    import numpy as np
+    a = np.asarray(alpha, np.float64) / 255.0
+    sig = [a]
+    if rgb is not None:
+        sig.append((np.asarray(rgb, np.float64)[:, :, :3] @ np.array([0.2126, 0.7152, 0.0722])) / 255.0)
+    h, w = a.shape
+    gu = sum(np.abs(np.diff(x, axis=1, append=x[:, -1:])) for x in sig)    # change along U: strands run down
+    gv = sum(np.abs(np.diff(x, axis=0, append=x[-1:, :])) for x in sig)    # change along V: strands run across
+    nb_r, nb_c = (h + block - 1) // block, (w + block - 1) // block
+    pad = lambda x: np.pad(x, ((0, nb_r * block - h), (0, nb_c * block - w)))     # noqa: E731
+    eu = pad(gu).reshape(nb_r, block, nb_c, block).sum((1, 3))
+    ev = pad(gv).reshape(nb_r, block, nb_c, block).sum((1, 3))
+    lab = np.where(ev > ratio * eu + 1e-9, 1, np.where(eu > ratio * ev + 1e-9, -1, 0))   # 1: along U, -1: along V
+    for _ in range(8):                                    # fill undecided squares from their neighbours
+        if not (lab == 0).any():
+            break
+        acc = np.zeros_like(lab)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                acc += np.roll(np.roll(lab, dy, 0), dx, 1)
+        lab = np.where(lab == 0, np.sign(acc), lab)
+    across = np.repeat(np.repeat(lab > 0, block, 0), block, 1)[:h, :w]
+    return across
+
+
+def flatten_albedo(rgba, radius: int = 4, radius_u: int = 64, strength: float = 0.9, across=None) -> "np.ndarray":
     """The RGB of an (h, w, 4) uint8 texture with its painted light / dark bands evened out (each texel divided by
     the brightness of the visible texels in a window `radius` texels tall and `radius_u` wide, `strength` 0-1) and
     its strand detail kept. KS paints horizontal light / dark bands across its strands (Anna: ~200 texels apart,
@@ -89,8 +121,15 @@ def flatten_albedo(rgba, radius: int = 4, radius_u: int = 64, strength: float = 
     own height, so under Starfield's lit, tinted hair shader they draw as a brick / maze pattern and patches of
     another colour (2026-11-03, owner's looks-menu shots, still there with crisp strands and the cards apart). The
     window is wide across the strands (their own light / dark averages out) and short along them (the bands do
-    not); the game's own hair albedo is even, its variation per strand."""
+    not); the game's own hair albedo is even, its variation per strand. across (strand_orientation): where strands
+    run along U the window is turned (tall and narrow)."""
     import numpy as np
+    if across is not None and np.asarray(across).any():
+        down = flatten_albedo(rgba, radius, radius_u, strength)
+        side = np.ascontiguousarray(np.transpose(
+            flatten_albedo(np.ascontiguousarray(np.transpose(np.asarray(rgba), (1, 0, 2))), radius, radius_u,
+                           strength), (1, 0, 2)))
+        return np.where(np.asarray(across)[:, :, None], side, down)
     px = np.asarray(rgba)
     rgb = px[:, :, :3].astype(np.float64)
     lum = rgb @ np.array([0.2126, 0.7152, 0.0722])
@@ -107,15 +146,21 @@ def flatten_albedo(rgba, radius: int = 4, radius_u: int = 64, strength: float = 
     return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
 
-def strand_maps(alpha, scale: int = 2, width: int = 2, wobble: float = 0.06, seed: int = 7):
+def strand_maps(alpha, scale: int = 2, width: int = 2, wobble: float = 0.06, seed: int = 7, across=None):
     """(opacity, hair ID) for Starfield's hair shader from a soft Skyrim hair alpha: the alpha upscaled `scale` times,
     then cut into crisp strands running along V (KS's strands do, verified, as IDG's): each `width`-texel column is a
     strand with its own random threshold (wobbling slowly along it), solid where the soft alpha exceeds it, so the
     share of solid texels follows the alpha (its density) and every edge is a strand edge. The hair ID map is that
     strand's random value (the shader's per-strand variation; a flat ID made every strand alike). 2026-11-03: KS's
     soft alpha drew as blotchy patches under the hair shader, and ramped as plastic sheets (owner's looks-menu shots);
-    the game's own hair opacity is thin crisp strands."""
+    the game's own hair opacity is thin crisp strands. across (strand_orientation, per source texel): there the
+    strands are cut along U instead (rows), so they follow the texture's own strands."""
     import numpy as np
+    if across is not None and np.asarray(across).any():
+        op_d, id_d = strand_maps(alpha, scale, width, wobble, seed)
+        op_s, id_s = strand_maps(np.ascontiguousarray(np.asarray(alpha).T), scale, width, wobble, seed + 1)
+        m = np.repeat(np.repeat(np.asarray(across, bool), scale, 0), scale, 1)[:op_d.shape[0], :op_d.shape[1]]
+        return np.where(m, op_s.T, op_d), np.where(m, id_s.T, id_d)
     a = np.asarray(alpha, np.float32) / 255.0
     if scale > 1:                                     # bilinear-ish: repeat, then a [1 2 1] smoothing both ways
         a = np.repeat(np.repeat(a, scale, axis=0), scale, axis=1)
@@ -343,7 +388,7 @@ class Converter:
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
                              hair: bool = False, albedo_target: Optional[tuple] = None,
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
-                             transpose: bool = False) -> str:
+                             transpose: bool = False, orient: bool = False) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -364,12 +409,17 @@ class Converter:
                 raw_a = open(os.path.join(tmp, "a.dds"), "rb").read()
                 ha = textures.read_dds_header(raw_a)
                 px = np.frombuffer(raw_a[ha["data_offset"]:ha["data_offset"] + ha["width"] * ha["height"] * 4], np.uint8)
-                alpha = px.reshape(ha["height"], ha["width"], 4)[:, :, 3].copy()
+                rgba_a = px.reshape(ha["height"], ha["width"], 4)
+                alpha = rgba_a[:, :, 3].copy()
                 if transpose:                              # strands across the texture: turned to run down it
                     alpha = np.ascontiguousarray(alpha.T)
+                    rgba_a = np.ascontiguousarray(rgba_a.transpose(1, 0, 2))
                 hair_id = None
                 if strands:                                # crisp strands at KS's density (strand_maps)
-                    alpha, hair_id = strand_maps(alpha)
+                    across = strand_orientation(alpha, rgba_a) if orient else None
+                    if across is not None:
+                        self.hair_orientation[stem] = across
+                    alpha, hair_id = strand_maps(alpha, across=across)
                 elif opacity_ramp is not None:
                     alpha = ramp_alpha(alpha, *opacity_ramp)
                 if decal or alpha.min() < 250:            # only if the texture really has a cutout
@@ -397,7 +447,10 @@ class Converter:
                 if albedo_tint is not None:                 # Skyrim's vertex colour, multiplied in sRGB like Skyrim
                     pd[:, :, :3] = np.clip(np.rint(pd[:, :, :3] * np.array(albedo_tint, np.float32)), 0, 255)
                 if strands:                                 # even it out: the hair shader / tint add the light
-                    pd[:, :, :3] = flatten_albedo(pd)
+                    turned = self.hair_orientation.get(stem) if orient else None
+                    if turned is not None and turned.shape != pd.shape[:2]:
+                        turned = None
+                    pd[:, :, :3] = flatten_albedo(pd, across=turned)
                 if albedo_target is not None:               # recoloured so the visible texels average this sRGB
                     pd[:, :, :3] = recolor(pd, albedo_target)
                 if albedo_luminance is not None:
@@ -458,6 +511,13 @@ class Converter:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "w", encoding="utf-8", newline="\n").write(cm.dump_mat(mat))
         return mat_rel.replace("/", "\\")
+
+    @property
+    def hair_orientation(self) -> dict:
+        """stem -> strand_orientation map of each hair texture converted with orient=True (True: strands along U)."""
+        if "_hair_orientation" not in self.__dict__:
+            self._hair_orientation = {}
+        return self._hair_orientation
 
     def _hair_fillers(self) -> dict:
         """Flat maps for the hair shader's slots a Skyrim hair has no texture for, written once: ambient occlusion

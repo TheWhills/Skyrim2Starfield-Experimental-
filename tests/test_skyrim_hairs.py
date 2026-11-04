@@ -142,6 +142,107 @@ class StrandAxisTests(unittest.TestCase):
             self.assertGreater(a[-2:, :].mean(), a[:2, :].mean())              # the old U now runs down
 
 
+def mixed_strand_texture(h=64, w=128):
+    """RGBA hair texture: the left half's strands run down it (alpha varies along U), the right half's across it
+    (alpha varies along V) - a vanilla Skyrim atlas holding both layouts."""
+    rng = np.random.default_rng(3)
+    px = np.zeros((h, w, 4), np.uint8)
+    cols = (rng.random(w) * 255).astype(np.uint8)
+    rows = (rng.random(h) * 255).astype(np.uint8)
+    px[:, :w // 2, 3] = cols[None, :w // 2]
+    px[:, w // 2:, 3] = rows[:, None]
+    px[..., :3] = 100
+    return px
+
+
+class StrandOrientationTests(unittest.TestCase):
+    def test_regions_read_from_the_texture(self):
+        from fo4sf import pipeline
+        px = mixed_strand_texture()
+        m = pipeline.strand_orientation(px[..., 3], px, block=16)
+        self.assertEqual(m.shape, (64, 128))
+        self.assertLess(m[:, :64].mean(), 0.05)                     # strands down: V
+        self.assertGreater(m[:, 64:].mean(), 0.95)                  # strands across: U
+        flat = np.full((32, 32), 200, np.uint8)
+        self.assertFalse(pipeline.strand_orientation(flat, block=16).any())   # undecided: V
+
+    def test_strands_cut_along_each_region(self):
+        from fo4sf import pipeline
+        px = mixed_strand_texture()
+        px[..., 3] = 200                                           # full: the cut alone shows the direction
+        across = np.zeros((64, 128), bool)
+        across[:, 64:] = True
+        op, hid = pipeline.strand_maps(px[..., 3], across=across)
+        self.assertEqual(op.shape, (128, 256))
+        left, right = op[:, :128].astype(float), op[:, 128:].astype(float)
+        # down the texture a column keeps its value longer than a row does, and the other way round across it
+        self.assertLess(np.abs(np.diff(left, axis=0)).mean(), np.abs(np.diff(left, axis=1)).mean())
+        self.assertLess(np.abs(np.diff(right, axis=1)).mean(), np.abs(np.diff(right, axis=0)).mean())
+        idr = hid[:, 128:].astype(float)
+        self.assertEqual(np.abs(np.diff(idr, axis=1)).max(), 0)    # one HairID per row there
+
+    def test_flatten_turns_its_window(self):
+        from fo4sf import pipeline
+        px = np.zeros((128, 128, 4), np.uint8)
+        px[..., 3] = 255
+        band = np.where((np.arange(128) // 32) % 2 == 0, 60, 180).astype(np.uint8)
+        px[:, :64, :3] = band[:, None, None]                   # painted bands along V (left: strands down)
+        px[:, 64:, :3] = band[None, 64:, None]                 # and along U (right: strands across)
+        across = np.zeros((128, 128), bool)
+        across[:, 64:] = True
+        out = pipeline.flatten_albedo(px, across=across)
+        self.assertLess(out[:, :64, 0].astype(float).std(), 0.5 * band.std())
+        self.assertLess(out[:, 72:120, 0].astype(float).std(), 0.5 * band.std())
+
+    def test_cards_sampled_and_lit_along_their_strands(self):
+        from fo4sf import skyrimhair
+        p = np.array([[0, 0, 1.6], [0.01, 0, 1.6], [0, 0, 1.5], [0.01, 0, 1.5]])
+        n = np.array([[0, -1.0, 0]] * 4)
+        tri = [(0, 2, 1), (1, 2, 3)]
+        left = skyrimhair.HairShape(b"L", p, n, np.zeros((4, 3)), [(0, 0), (0.4, 0), (0, 1), (0.4, 1)], tri,
+                                    [[("C_Head", 1.0)]] * 4, 3, -1, 0)
+        right = skyrimhair.HairShape(b"R", p + [0.05, 0, 0], n, np.zeros((4, 3)),
+                                     [(0.6, 0), (1.0, 0), (0.6, 1), (1.0, 1)], tri, [[("C_Head", 1.0)]] * 4, 3, -1, 0)
+        across = np.zeros((64, 128), bool)
+        across[:, 64:] = True
+        a_l, a_r = skyrimhair.strands_across(left, across), skyrimhair.strands_across(right, across)
+        self.assertFalse(a_l.any())
+        self.assertTrue(a_r.all())
+        self.assertFalse(skyrimhair.strands_across(right, None).any())
+        out, rep = skyrimhair.uv_tangents(skyrimhair.Hair([left, right], [], {}, {}), along_v=[a_l, a_r])
+        self.assertEqual(rep["along_v"], 4)
+        self.assertAlmostEqual(abs(out.shapes[0].tangents[0][0]), 1.0, 5)     # dP/du: across the card (x)
+        self.assertAlmostEqual(abs(out.shapes[1].tangents[0][2]), 1.0, 5)     # dP/dv: down the card (z)
+
+    def test_material_keeps_its_map(self):
+        import shutil
+        from fo4sf import skyrimconvert, textures
+
+        def fake_texconv(exe, src, out_dir, fmt, extra=()):
+            dst = os.path.join(out_dir, os.path.basename(src))
+            if os.path.abspath(dst) != os.path.abspath(src):
+                shutil.copy2(src, dst)
+        px = mixed_strand_texture()
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.dds")
+            textures.write_dds_dx10(p, 128, 64, textures.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            with open(p, "rb") as fh:
+                raw = fh.read()
+            conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+            conv._materials, conv.stats, conv.material_errors = {}, {"materials_ok": 0}, {}
+            conv.staging, conv.texconv, conv.prefix, conv.texture_caps = d, "t.exe", "s2s", {}
+            conv.src = mock.Mock(texture=lambda name: raw)
+            conv._hair_fill = {"AmbientOcclusion": "a", "DepthOffset": "b", "HairID": "c"}
+            with mock.patch.object(textures, "texconv", fake_texconv):
+                mat = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True)
+                plain = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True)
+            self.assertTrue(mat.endswith("t_hair_o.mat"))
+            m = conv.hair_orientation_of(mat)
+            self.assertGreater(m[:, 80:].mean(), 0.9)
+            self.assertLess(m[:, :48].mean(), 0.1)
+            self.assertIsNone(conv.hair_orientation_of(plain))                # KS's path: no map, as before
+
+
 class MainTests(unittest.TestCase):
     def test_main_on_synthetic_games(self):
         from fo4sf import textures

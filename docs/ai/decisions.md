@@ -1101,3 +1101,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   cards wrongly (Spring 5586 of 19287 triangles, Icarus 4451 of 11796: braids, curls, ponytails lying sideways):
   strands follow a card's own length, not gravity. Next, if sideways lines remain: judge a card by its UV island
   (long in U or in V), with the owner's shape_detail report of the affected hairstyle.
+- 2026-11-03 Vanilla Skyrim hair: the strand direction now comes from the texture, region by region
+  (pipeline.strand_orientation: per 32-texel square, which way the alpha + luminance change most; strands vary
+  across their width, not along their length). Strands are cut (strand_maps), the albedo evened (flatten_albedo) and
+  each card's tangents chosen (dP/du, or dP/dv where its texture's strands run along U: skyrimhair.strands_across,
+  sampled at the card's UVs, majority per card) to match. Replaces the whole-shape mesh guess (strands_down) for
+  skyrim_hairs / NPC hair: owner's shot showed strands cut across on the back of the head, i.e. one texture holding
+  both layouts. Checked here: DintHair and FO4 HairCurly read as all-V (0 % across), the same texture transposed as
+  99.9 % across, a half / half composite as 2 % / 99 %. KS wigs unchanged (orient off; their textures are all V).
+  Alternatives: per-card UV-island shape (needs the texture's layout anyway), per-card gravity (reverted: misjudged
+  braids and curls).

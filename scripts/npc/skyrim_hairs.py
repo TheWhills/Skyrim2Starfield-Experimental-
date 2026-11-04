@@ -176,7 +176,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
     albedo (an NPC's own; the looks-menu hairstyles have none). Returns its report row (ok, model, ...)."""
     row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
-    hairs, nifs, flips = [], [], []
+    hairs, nifs = [], []
     for m in models:
         rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", m.replace("/", "\\"), flags=re.I)
         raw = sky.mesh(rel) if hasattr(sky, "mesh") else sky._read(bsa.norm(rel))
@@ -191,10 +191,8 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
             continue
         if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
             h, _dropped = skyrimhair.drop_duplicate_shapes(h)
-            h, turned = skyrimhair.strands_down(h, sf_world.get(skyrimhair.SF_HEAD))   # strands along V
-        else:
-            turned = [False] * len(h.shapes)
-        flips += turned
+        # 2026-11-03: the strand direction comes from each texture region (strand_orientation, after the
+        # materials), not from the mesh: the whole-shape guess (strands_down) left cards cut across their strands
         hairs.append(h)
         nifs += [n] * len(h.shapes)
     if not hairs:
@@ -202,11 +200,14 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         return row
     hair = skyrimhair.merge(hairs)
     hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
-    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, transposed=flips)
-    if any(flips):
-        row["textures_turned"] = sum(flips)
+    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, orient=bool(ctx.hair_shader))
+    across = [skyrimhair.strands_across(sh, conv.hair_orientation_of(m) if hasattr(conv, "hair_orientation_of")
+                                        else None) for sh, m in zip(hair.shapes, mats)]
+    if any(x.any() for x in across):                 # cards whose strands run along U: lit along them
+        hair, row["tangents"] = skyrimhair.uv_tangents(hair, along_v=across)
     row["shape_detail"] = [{"name": (sh.name or b"").decode("latin-1"), "vertices": len(sh.positions),
-                            "turned": bool(f), "material": m} for sh, f, m in zip(hair.shapes, flips, mats)]
+                            "across_share": round(float(x.mean()), 2) if len(x) else 0.0, "material": m}
+                           for sh, x, m in zip(hair.shapes, across, mats)]
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row

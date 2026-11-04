@@ -330,10 +330,11 @@ class SkyrimConverter(pipeline.Converter):
     def skyrim_hair_material(self, diffuse: str, normal: str, ref: int,
                              color: Optional[tuple] = None, opacity_ramp: Optional[tuple] = None,
                              strands: bool = False, tint: Optional[tuple] = None,
-                             transpose: bool = False) -> Optional[str]:
+                             transpose: bool = False, orient: bool = False) -> Optional[str]:
         """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
         colour (recoloured to average `color`, sRGB 0-255, when given: pipeline.recolor) and its alpha as the opacity
-        map; None when it cannot be made (the caller falls back)."""
+        map; None when it cannot be made (the caller falls back). orient: the strands are cut along the texture's own
+        strands region by region (pipeline.strand_orientation; the map is kept: hair_orientation_of)."""
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_hair"
         if color:
@@ -342,6 +343,8 @@ class SkyrimConverter(pipeline.Converter):
             stem += "_rot"
         if tint:                                    # Skyrim's hair tint, multiplied in (an NPC's own colour)
             stem += "_t" + "".join(f"{min(255, int(round(v * 255))):02x}" for v in tint[:3])
+        if orient and strands:                      # strands cut region by region (kept apart from KS's files)
+            stem += "_o"
         key = "skyhair:" + stem + ("|ramp:%d,%d" % tuple(opacity_ramp) if opacity_ramp else "") + \
             ("|strands" if strands else "")
         if key not in self._materials:
@@ -350,12 +353,25 @@ class SkyrimConverter(pipeline.Converter):
                                                                  alpha_ref=ref, flat_normal_ok=True, hair=True,
                                                                  albedo_target=color, opacity_ramp=opacity_ramp,
                                                                  strands=strands, albedo_tint=tint,
-                                                                 transpose=transpose)
+                                                                 transpose=transpose, orient=orient and strands)
+                if self._materials[key] is not None and stem in self.hair_orientation:
+                    self._hair_material_stem[self._materials[key]] = stem
                 self.stats["materials_ok"] += 1
             except Exception as e:                    # noqa: BLE001  (fallback by design; reason is recorded)
                 self._materials[key] = None
                 self.material_errors[key] = f"{type(e).__name__}: {e}"
         return self._materials[key]
+
+    @property
+    def _hair_material_stem(self) -> dict:
+        if "_hair_mat_stem" not in self.__dict__:
+            self._hair_mat_stem = {}
+        return self._hair_mat_stem
+
+    def hair_orientation_of(self, material: Optional[str]):
+        """The strand_orientation map (True: strands along U) of a hair material made with orient=True, or None."""
+        stem = self._hair_material_stem.get(material) if material else None
+        return self.hair_orientation.get(stem) if stem else None
 
     def _shape_material(self, src, s, flat_normal_ok: bool = False,
                         albedo_tint: Optional[tuple] = None) -> Optional[str]:

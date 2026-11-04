@@ -975,15 +975,44 @@ def strands_down(hair: Hair, head=None) -> Tuple[Hair, List[bool]]:
     return Hair(shapes, hair.bones, hair.host_of_root, hair.report), flags
 
 
-def uv_tangents(hair: Hair) -> Tuple[Hair, Dict]:
+def strands_across(sh: HairShape, across) -> np.ndarray:
+    """Per vertex True where the shape's card has its texture's strands along U, from `across` (the texture's
+    pipeline.strand_orientation map, rows = V, columns = U): each triangle sampled at its UV centroid (wrapping), then
+    the majority of each card (connected piece) for all its vertices, so a card is lit one way. All False without a
+    map or UVs."""
+    pos = np.asarray(sh.positions, float)
+    out = np.zeros(len(pos), bool)
+    if across is None or not sh.uvs or not len(sh.triangles):
+        return out
+    m = np.asarray(across, bool)
+    if not m.any():
+        return out
+    h, w = m.shape
+    uv = np.asarray(sh.uvs, float)
+    t = np.asarray(sh.triangles, int).reshape(-1, 3)
+    c = uv[t].mean(1)
+    col = np.floor(np.mod(c[:, 0], 1.0) * w).astype(int).clip(0, w - 1)
+    row = np.floor(np.mod(c[:, 1], 1.0) * h).astype(int).clip(0, h - 1)
+    tri = m[row, col]
+    comp = _components(len(pos), t)
+    tc = comp[t[:, 0]]
+    for k in np.unique(tc):
+        sel = tc == k
+        out[comp == k] = tri[sel].mean() > 0.5
+    return out
+
+
+def uv_tangents(hair: Hair, along_v=None) -> Tuple[Hair, Dict]:
     """Tangents recomputed from the UVs as Starfield expects them: along +U (dP/du), perpendicular to the normal.
     Verified 2026-11-03: IDG's (the game's own convention) tangents follow dP/du (|cos| 1.0 on two styles); the
     tangents a Skyrim NIF hands us follow dP/dv (KS Anna / Erena: |cos| 1.0 with dP/dv, 0.2 with dP/du: the
     Skyrim tangent / bitangent swap). The hair shader lights along the strand from the tangent frame, so the KS
     hair was lit across its strands: bright / dark bands bounded by the cards' quads, the "brick" pattern (owner's
-    looks-menu shots, unchanged by every texture fix). Vertices with no usable UV gradient keep their tangent."""
-    shapes, fixed, total = [], 0, 0
-    for sh in hair.shapes:
+    looks-menu shots, unchanged by every texture fix). Vertices with no usable UV gradient keep their tangent.
+    along_v: per shape, a per-vertex bool (strands_across) or None: those vertices take dP/dv instead, for cards whose
+    texture has its strands along U (the shader's strand direction, the bitangent, then runs along them)."""
+    shapes, fixed, total, turned = [], 0, 0, 0
+    for k_sh, sh in enumerate(hair.shapes):
         pos = np.asarray(sh.positions, float)
         if sh.normals is None or not len(pos) or not sh.uvs or not len(sh.triangles):
             shapes.append(sh)
@@ -998,6 +1027,15 @@ def uv_tangents(hair: Hair) -> Tuple[Hair, Dict]:
         acc = np.zeros_like(pos)
         for k in range(3):
             np.add.at(acc, t[:, k], du)
+        turn = None if along_v is None or k_sh >= len(along_v) else along_v[k_sh]
+        if turn is not None and np.asarray(turn, bool).any():
+            turn = np.asarray(turn, bool)
+            dv = (e2 * d1[:, 0:1] - e1 * d2[:, 0:1]) * np.where(ok, np.sign(det), 0.0)[:, None]   # dP/dv * |det|
+            acc_v = np.zeros_like(pos)
+            for k in range(3):
+                np.add.at(acc_v, t[:, k], dv)
+            acc = np.where(turn[:, None], acc_v, acc)
+            turned += int(turn.sum())
         n = np.asarray(sh.normals, float)
         n = n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
         acc -= (acc * n).sum(1, keepdims=True) * n
@@ -1012,8 +1050,10 @@ def uv_tangents(hair: Hair) -> Tuple[Hair, Dict]:
         total += len(pos)
         shapes.append(HairShape(sh.name, sh.positions, sh.normals, tan, sh.uvs, sh.triangles, sh.weights,
                                 sh.shader_ref, sh.alpha_ref, sh.block))
-    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, uv_tangents=True)),
-            {"vertices": total, "recomputed": fixed})
+    rep = {"vertices": total, "recomputed": fixed}
+    if turned:
+        rep["along_v"] = turned
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, uv_tangents=True)), rep
 
 
 def drop_duplicate_shapes(hair: Hair) -> Tuple[Hair, List[str]]:
