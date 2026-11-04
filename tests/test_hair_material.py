@@ -90,6 +90,14 @@ class HairMaterialTests(unittest.TestCase):
                                      ("textures\\a.dds", "textures\\a_n.dds", 40, (200, 160, 90))])
         no_shader = skyrimhair.HairShape(b"X", [], [], [], [], [], [], -1, -1, 0)
         self.assertIsNone(hair_pack.hair_shader_material(fake, None, no_shader))
+        got = []
+        fake2 = mock.Mock()
+        fake2.skyrim_hair_material = lambda *a, **k: got.append(k["coverage"]) or "m.mat"
+        for blend in (True, False):                       # denser only where Skyrim alpha-blended the shape
+            with mock.patch.object(hair_pack.skyrimnif, "texture_set", lambda n, r: ["textures\\a.dds"]), \
+                    mock.patch.object(hair_pack.skyrimnif, "alpha_test", lambda n, r, b=blend: (not b, b, 40)):
+                hair_pack.hair_shader_material(fake2, None, sh, strands=True, orient=True, coverage=3.0)
+        self.assertEqual(got, [3.0, 1.0])
 
 
 class HairColorTests(unittest.TestCase):

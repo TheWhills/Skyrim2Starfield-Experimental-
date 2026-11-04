@@ -248,7 +248,7 @@ def arma_model(arma) -> str:
 
 
 def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint=None, transpose=False,
-                         orient=False, look=None):
+                         orient=False, look=None, coverage=1.0):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -257,10 +257,12 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
-    if orient or look:
+    if orient or look or coverage > 1.0:
+        if coverage > 1.0 and not (sh.alpha_ref >= 0 and skyrimnif.alpha_test(n, sh.alpha_ref)[1]):
+            coverage = 1.0                         # only shapes Skyrim alpha-blended
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
                                          None if strands else ramp, strands, tint, transpose, orient=orient,
-                                         look=look)
+                                         look=look, coverage=coverage)
     if tint is not None or transpose:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
                                          None if strands else ramp, strands, tint, transpose)
@@ -759,8 +761,9 @@ def hair_materials(conv, nifs, hair, a, color=None, tint=None, transposed=None, 
     mats, backs = [], []
     for k, (n, sh) in enumerate(zip(nifs, hair.shapes)):
         turn = bool(transposed[k]) if transposed else False
+        cov = float(getattr(a, "blend_coverage", 1.0) or 1.0)
         m = ((hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn, orient=orient,
-                                   look=look) if orient or look
+                                   look=look, coverage=cov) if orient or look or cov > 1.0
               else hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn))
              if a.hair_shader else None)
         hair_mat = m is not None
@@ -872,6 +875,12 @@ def add_shape_args(ap):
     ap.add_argument("--hair-setting", action="append", default=[], type=hair_setting, metavar="NAME=VALUE",
                     help="override one of the hair shader's settings (BSMaterial::HairSettingsComponent: %s), e.g. "
                          "MaxDepthOffset=0; repeatable" % ", ".join(sorted(cm.HAIR_SETTINGS)))
+    ap.add_argument("--tessellate", type=int, default=1,
+                    help="split every triangle n x n onto a smooth curved surface through its corners' normals "
+                         "(default: 3 for the vanilla Skyrim hairstyles, which are low-poly; 1 = off, KS wigs)")
+    ap.add_argument("--blend-coverage", type=float, default=1.0,
+                    help="make the shapes Skyrim alpha-blended (hairlines) denser before the strand cut: "
+                         "1 - (1 - alpha) ** N (default: 3 for the vanilla Skyrim hairstyles; 1 = off)")
     ap.add_argument("--geometric-normals", action=argparse.BooleanOptionalAction, default=False,
                     help="recompute the vertex normals from the final shape, as Starfield's own hair has them "
                          "(default: on for the vanilla Skyrim hairstyles, off for KS wigs)")

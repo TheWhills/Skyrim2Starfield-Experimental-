@@ -331,12 +331,14 @@ class SkyrimConverter(pipeline.Converter):
                              color: Optional[tuple] = None, opacity_ramp: Optional[tuple] = None,
                              strands: bool = False, tint: Optional[tuple] = None,
                              transpose: bool = False, orient: bool = False,
-                             look: Optional[str] = None) -> Optional[str]:
+                             look: Optional[str] = None, coverage: float = 1.0) -> Optional[str]:
         """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
         colour (recoloured to average `color`, sRGB 0-255, when given: pipeline.recolor) and its alpha as the opacity
         map; None when it cannot be made (the caller falls back). orient: the strands are cut along the texture's own
         strands region by region (pipeline.strand_orientation; the map is kept: hair_orientation_of). look:
-        diagnostic variants: 'flat' (the albedo one colour, its visible mean), 'solid' (opacity full everywhere)."""
+        diagnostic variants: 'flat' (the albedo one colour, its visible mean), 'solid' (opacity full everywhere).
+        coverage > 1: the alpha made denser before the strand cut, 1 - (1 - a) ** coverage (shapes Skyrim
+        alpha-blended, e.g. the hairlines: blended they read as a coat of colour, cut into strands as thin hair)."""
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_hair"
         if color:
@@ -349,6 +351,8 @@ class SkyrimConverter(pipeline.Converter):
             stem += "_o"
         if look:
             stem += "_" + look
+        if coverage > 1.0:
+            stem += "_c%g" % coverage
         key = "skyhair:" + stem + ("|ramp:%d,%d" % tuple(opacity_ramp) if opacity_ramp else "") + \
             ("|strands" if strands else "")
         if key not in self._materials:
@@ -358,7 +362,7 @@ class SkyrimConverter(pipeline.Converter):
                                                                  albedo_target=color, opacity_ramp=opacity_ramp,
                                                                  strands=strands, albedo_tint=tint,
                                                                  transpose=transpose, orient=orient and strands,
-                                                                 look=look)
+                                                                 look=look, coverage=coverage)
                 if self._materials[key] is not None and stem in self.hair_orientation:
                     self._hair_material_stem[self._materials[key]] = stem
                 self.stats["materials_ok"] += 1

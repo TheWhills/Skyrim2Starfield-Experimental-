@@ -269,6 +269,60 @@ class FitTests(unittest.TestCase):
         self.assertEqual(rep["skyrim"], rep["starfield"])
 
 
+class TessellateTests(unittest.TestCase):
+    def octahedron(self, seam=False):
+        """A unit-radius-0.1 octahedron round (0, 0, 1.7), normals pointing out (a round shell's), optionally with
+        one edge's corners duplicated (a UV seam)."""
+        from fo4sf import skyrimhair
+        c = np.array([0, 0, 1.7])
+        d = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1.0]])
+        p = list(c + 0.1 * d)
+        n = list(d)
+        tris = [(4, 0, 2), (4, 2, 1), (4, 1, 3), (4, 3, 0), (5, 2, 0), (5, 1, 2), (5, 3, 1), (5, 0, 3)]
+        w = [[("C_Head", 1.0)]] * 6
+        if seam:                                    # vertices 6 / 7: copies of 4 / 0 used by one triangle
+            p += [p[4], p[0]]
+            n += [n[4], n[0]]
+            w = w + [[("Hair1", 1.0)], [("C_Head", 1.0)]]
+            tris[3] = (6, 3, 7)
+        uv = [(float(i) / 8, 0.5) for i in range(len(p))]
+        return skyrimhair.HairShape(b"S", np.array(p), np.array(n, float), np.zeros((len(p), 3)), uv, tris, w,
+                                    3, -1, 0), c
+
+    def test_rounds_the_shell(self):
+        from fo4sf import skyrimhair
+        sh, c = self.octahedron()
+        out, rep = skyrimhair.tessellate(skyrimhair.Hair([sh], [], {}, {}), 3)
+        new = out.shapes[0]
+        self.assertEqual(len(new.triangles), 8 * 9)
+        self.assertEqual(rep["vertices_before"], 6)
+        self.assertEqual(len(new.positions), 6 + 12 * 2 + 8 * 1)    # corners, 2 per edge, 1 inside each face
+        r_new = np.linalg.norm(np.asarray(new.positions) - c, axis=1)
+        flat = []                                                     # the same points on the flat facets
+        P = np.asarray(sh.positions)
+        for a, b, cc in sh.triangles:
+            for i in range(4):
+                for j in range(4 - i):
+                    flat.append((1 - (i + j) / 3) * P[a] + i / 3 * P[b] + j / 3 * P[cc])
+        r_flat = np.linalg.norm(np.array(flat) - c, axis=1)
+        self.assertLess(np.abs(r_new - 0.1).max(), np.abs(r_flat - 0.1).max() * 0.6)   # rounder (even at 90 deg)
+        self.assertGreater(rep["largest_edge_bulge_mm"], 0)
+        self.assertTrue(all(abs(sum(w for _b, w in vw) - 1) < 1e-9 for vw in new.weights))
+        same, _r = skyrimhair.tessellate(skyrimhair.Hair([sh], [], {}, {}), 1)
+        self.assertIs(same.shapes[0], sh)
+
+    def test_seam_has_no_crack(self):
+        from fo4sf import skyrimhair
+        sh, _c = self.octahedron(seam=True)
+        out, _rep = skyrimhair.tessellate(skyrimhair.Hair([sh], [], {}, {}), 3)
+        pos = np.round(np.asarray(out.shapes[0].positions), 9)
+        # the edge 4-0 is built twice (once from 4 / 0, once from the copies 6 / 7): the same points both times
+        uniq = {tuple(x) for x in pos}
+        self.assertEqual(len(uniq), 6 + 12 * 2 + 8)                 # no extra (cracked) positions
+        mixed = [vw for vw in out.shapes[0].weights if len(vw) == 2]
+        self.assertTrue(mixed)                                       # Hair1 blended into the seam's side
+
+
 class NormalTests(unittest.TestCase):
     def shape(self, normals):
         from fo4sf import skyrimhair
@@ -352,6 +406,14 @@ class NormalTests(unittest.TestCase):
                     b = fh.read()
                 h = textures.read_dds_header(b)
                 return np.frombuffer(b[h["data_offset"]:], np.uint8)[:h["width"] * h["height"] * ch]
+            with mock.patch.object(textures, "texconv", fake_texconv):
+                dense = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
+                                                  coverage=3.0)
+                base = conv.hair_coverage_of(conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True,
+                                                                       orient=True))
+            self.assertTrue(dense.endswith("t_hair_o_c3.mat"))
+            self.assertGreater(pixels("t_hair_o_c3_opacity.dds", 1).astype(float).mean() / 255,
+                               base["after_cut"] + 0.1)                           # Skyrim's blended layers: denser
             col = pixels("t_hair_o_flat_color.dds", 4).reshape(-1, 4)
             self.assertEqual(len(np.unique(col[:, 0])), 1)                       # one colour
             op = pixels("t_hair_o_solid_opacity.dds", 1)
@@ -432,6 +494,8 @@ class MainTests(unittest.TestCase):
             with open(os.path.join(d, "diag", *plain.split("\\")), encoding="utf-8") as fh:
                 self.assertIn('"DiffuseTransmissionScale" : "0.675"', fh.read())       # the others keep IDG's
             self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
+            self.assertGreater(diag["parts"][0]["tessellated"]["vertices_after"],
+                               diag["parts"][0]["tessellated"]["vertices_before"])   # low-poly shells rounded
             self.assertEqual(diag["parts"][0]["fit"], {})                       # no head mesh in this game
             detail = diag["parts"][0]["shape_detail"][0]
             self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)

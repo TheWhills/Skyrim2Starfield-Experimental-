@@ -388,7 +388,8 @@ class Converter:
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
                              hair: bool = False, albedo_target: Optional[tuple] = None,
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
-                             transpose: bool = False, orient: bool = False, look: Optional[str] = None) -> str:
+                             transpose: bool = False, orient: bool = False, look: Optional[str] = None,
+                             coverage: float = 1.0) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -415,6 +416,9 @@ class Converter:
                     alpha = np.ascontiguousarray(alpha.T)
                     rgba_a = np.ascontiguousarray(rgba_a.transpose(1, 0, 2))
                 hair_id = None
+                if coverage > 1.0:                         # Skyrim blended this: denser, 1 - (1 - a) ** coverage
+                    alpha = np.rint(255.0 * (1.0 - (1.0 - alpha.astype(np.float64) / 255.0) ** coverage)
+                                    ).astype(np.uint8)
                 if strands:                                # crisp strands at KS's density (strand_maps)
                     across = strand_orientation(alpha, rgba_a) if orient else None
                     if across is not None:

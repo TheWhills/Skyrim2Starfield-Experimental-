@@ -54,8 +54,11 @@ HAIR, FACIAL_HAIR = 3, 4
 # scalp layer: a gap), a wide conform blend (a deep spot lifts the whole neighbourhood) and wide card spacing
 # (2026-11-03: owner saw the Skyrim hairstyles float off the skull with a gap, "flat")
 # geometric_normals: the stored Skyrim normals do not follow the shaping (2026-11-03, dark / light patches)
+# tessellate / blend_coverage (2026-11-03, owner's diagnose rounds + report): the vanilla hairs are low-poly shells
+# (a faceted helmet with broad flat light patches) and their hairline layers were alpha-blended (cut into strands
+# they read as a pale band of thin hair between the forehead and the hair)
 VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
-                        geometric_normals=True)
+                        geometric_normals=True, tessellate=3, blend_coverage=3.0)
 # --diagnose: extra looks-menu copies of each hairstyle, each with one suspect of the dark / light patches removed
 # (round 1, owner 2026-11-03: flat colour / no see-through / shell normals all kept the same patches: neither the
 # texture, the gaps nor the normals. Round 2: the strand direction and the light through the hair)
@@ -245,6 +248,8 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         row["reason"] = "no model converted"
         return row
     hair = skyrimhair.merge(hairs)
+    if getattr(ctx, "tessellate", 1) > 1:            # low-poly shells rounded (before the shaping works on them)
+        hair, row["tessellated"] = skyrimhair.tessellate(hair, ctx.tessellate)
     placed = hair
     hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
     row["fit"] = fit_report(placed, hair, ctx, sf_world)

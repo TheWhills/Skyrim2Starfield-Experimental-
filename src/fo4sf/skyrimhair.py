@@ -1335,6 +1335,122 @@ def on_face_bone(hair: Hair, face_bone: str, host: str = None) -> Hair:
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, face_bone=face_bone))
 
 
+def _pn_point(P, N, u, v):
+    """Curved point-normal (PN) triangle (Vlachos et al. 2001) at barycentric (w = 1-u-v on corner 0, u on 1, v on
+    2): a cubic patch through the corners, tangent to their normals. P, N: (3, 3) corners / unit normals."""
+    w = 1.0 - u - v
+    p1, p2, p3 = P
+    n1, n2, n3 = N
+    b210 = (2 * p1 + p2 - ((p2 - p1) @ n1) * n1) / 3.0
+    b120 = (2 * p2 + p1 - ((p1 - p2) @ n2) * n2) / 3.0
+    b021 = (2 * p2 + p3 - ((p3 - p2) @ n2) * n2) / 3.0
+    b012 = (2 * p3 + p2 - ((p2 - p3) @ n3) * n3) / 3.0
+    b102 = (2 * p3 + p1 - ((p1 - p3) @ n3) * n3) / 3.0
+    b201 = (2 * p1 + p3 - ((p3 - p1) @ n1) * n1) / 3.0
+    e = (b210 + b120 + b021 + b012 + b102 + b201) / 6.0
+    b111 = e + (e - (p1 + p2 + p3) / 3.0) / 2.0
+    return (p1 * w ** 3 + p2 * u ** 3 + p3 * v ** 3 + 3 * b210 * w * w * u + 3 * b120 * w * u * u
+            + 3 * b201 * w * w * v + 3 * b021 * u * u * v + 3 * b102 * w * v * v + 3 * b012 * u * v * v
+            + 6 * b111 * w * u * v)
+
+
+def _blend_weights(items, top: int = 4):
+    """Bone weights mixed by factors: [(factor, [(bone, w), ...]), ...] -> the `top` largest, summing to 1."""
+    acc = {}
+    for f, vw in items:
+        if f <= 0:
+            continue
+        for b, w in vw:
+            acc[b] = acc.get(b, 0.0) + f * w
+    best = sorted(acc.items(), key=lambda x: -x[1])[:top]
+    tot = sum(w for _b, w in best) or 1.0
+    return [(b, w / tot) for b, w in best]
+
+
+def tessellate(hair: Hair, n: int = 3) -> Tuple[Hair, Dict]:
+    """Every triangle split into n x n, the new points on its curved PN patch (_pn_point) from the corners' normals
+    averaged per position (so the two sides of a UV seam get the same points: no cracks): a low-poly shell rounded
+    where Skyrim's smooth shading only pretended it was round. UVs and bone weights interpolated; tangents are
+    rebuilt later (uv_tangents). Vanilla Skyrim hairs are 200-2000 vertices (owner's report 2026-11-03; IDG's
+    20-50k triangles): their flat facets showed in Starfield as a faceted helmet with broad flat light / shadow
+    patches. n < 2: unchanged. Report: vertices before / after, the largest move off the flat facets in mm."""
+    if n < 2:
+        return hair, {"subdivisions": 1}
+    shapes, before, after, bulge = [], 0, 0, 0.0
+    for sh in hair.shapes:
+        P = np.asarray(sh.positions, float)
+        tris = np.asarray(sh.triangles, int).reshape(-1, 3)
+        if sh.normals is None or not len(tris) or not sh.uvs or np.shape(sh.normals) != P.shape:
+            shapes.append(sh)
+            continue
+        N0 = np.asarray(sh.normals, float)
+        key = [tuple(k) for k in np.round(P, 6)]
+        avg = {}
+        for k, nv in zip(key, N0):
+            avg[k] = avg.get(k, 0.0) + nv
+        N = np.array([avg[k] for k in key], float)
+        N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-12)
+        uv = np.asarray(sh.uvs, float)
+        pos, uvs, nrm, wts = list(P), list(uv), list(N0), list(sh.weights)
+        edge_pts, new_tris = {}, []
+
+        def point(t, i, j):
+            """Index of the grid point (i along corner0->1, j along corner0->2) of triangle t."""
+            a, b, c = tris[t]
+            k = n - i - j
+            if (i, j) in ((0, 0), (n, 0), (0, n)):
+                return a if (i, j) == (0, 0) else b if i == n else c
+            on = None
+            if j == 0:
+                on, s = (a, b), i
+            elif i == 0:
+                on, s = (a, c), j
+            elif k == 0:
+                on, s = (b, c), j
+            if on is not None:
+                lo, hi = (on, s) if on[0] < on[1] else ((on[1], on[0]), n - s)
+                ek = (lo[0], lo[1], hi)
+                if ek in edge_pts:
+                    return edge_pts[ek]
+            u, v = i / n, j / n
+            w = 1.0 - u - v
+            corners = (a, b, c)
+            pos.append(_pn_point(P[[a, b, c]], N[[a, b, c]], u, v))
+            uvs.append(w * uv[a] + u * uv[b] + v * uv[c])
+            nn = w * N0[a] + u * N0[b] + v * N0[c]
+            nrm.append(nn / max(np.linalg.norm(nn), 1e-12))
+            wts.append(_blend_weights([(f, sh.weights[x]) for f, x in zip((w, u, v), corners)]))
+            idx = len(pos) - 1
+            if on is not None:
+                edge_pts[ek] = idx
+            return idx
+        for t in range(len(tris)):
+            g = {}
+            for i in range(n + 1):
+                for j in range(n + 1 - i):
+                    g[(i, j)] = point(t, i, j)
+            for i in range(n):
+                for j in range(n - i):
+                    new_tris.append((g[(i, j)], g[(i + 1, j)], g[(i, j + 1)]))
+                    if i + j < n - 1:
+                        new_tris.append((g[(i + 1, j)], g[(i + 1, j + 1)], g[(i, j + 1)]))
+        pos = np.asarray(pos, float)
+        before += len(P)
+        after += len(pos)
+        if len(pos) > len(P):                     # how far the new points left the flat facets
+            moved = []
+            for (lo0, lo1, s), idx in list(edge_pts.items())[:20000]:
+                moved.append(np.linalg.norm(pos[idx] - (P[lo0] * (1 - s / n) + P[lo1] * (s / n))))
+            if moved:
+                bulge = max(bulge, float(np.max(moved)))
+        shapes.append(HairShape(sh.name, pos, np.asarray(nrm, float), np.zeros_like(pos),
+                                [tuple(map(float, x)) for x in uvs], new_tris, wts, sh.shader_ref, sh.alpha_ref,
+                                sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, tessellated=n)),
+            {"subdivisions": n, "vertices_before": before, "vertices_after": after,
+             "largest_edge_bulge_mm": round(1000 * bulge, 2)})
+
+
 def merge(hairs: List[Hair]) -> Hair:
     """One hair from several (a head part and its extra parts, e.g. Skyrim's hair + hairline): shapes and bones
     together, reports listed."""

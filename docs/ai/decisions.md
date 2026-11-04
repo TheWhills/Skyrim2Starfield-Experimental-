@@ -1139,3 +1139,19 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   testable from the material). Round 2 copies: 'combed strands' (skyrimhair.comb_strands: each vertex's strand
   direction averaged with its neighbours' within 15 mm over all cards, sign-agnostic, tangent rebuilt across it)
   and 'no light through' (both transmission scales 0). The round-1 copies are dropped from --diagnose.
+- 2026-11-03 Diagnose round 2 (owner, ponytail hairstyle): 'combed strands' and 'no light through' keep the same
+  patches. Ruled out in game: strand direction (combing turned it by a median 2-7 deg, p90 13-26) and the
+  transmission. His skyrim_hairs.json (Nord / Imperial, 48 hairstyles) shows two things instead (verified on the
+  report): (1) the vanilla Skyrim hairs are low-poly shells: 200-2000 vertices per hairstyle (IDG: 20-50k
+  triangles), so the shell is a few large flat facets (his shots: a faceted helmet outline, broad flat light /
+  shadow areas); (2) every Nord hairline extra part (Hairline01..21) was alpha-BLENDED in Skyrim (no test), on the
+  same texture as the hair: Skyrim showed it as a soft coat of hair colour on the scalp; our strand cut turns it
+  into sparse thin strands, the pale band between the forehead and the hair in his front shot (supported). The fit
+  report's gaps are to the nearest head vertex, so Skyrim's (coarse head) read high: not comparable; Starfield's
+  2.5-3.5 mm front / sides say the shell lies on the scalp, not floating. Changes (VANILLA_DEFAULTS; hair_pack
+  options, off for KS): --tessellate 3 (skyrimhair.tessellate: each triangle split 3 x 3 onto its curved PN
+  triangle from the corners' normals averaged per position, no seam cracks, UVs / weights interpolated) and
+  --blend-coverage 3 (shapes Skyrim alpha-blended get alpha 1 - (1 - a)^3 before the strand cut, own material
+  '_c3'). The patches themselves: unresolved; with every material / shading suspect ruled out what is left is the
+  geometry (shadows on large facets), which the tessellation changes. Needs a vanilla Starfield hair shot from the
+  same angle as a reference.
