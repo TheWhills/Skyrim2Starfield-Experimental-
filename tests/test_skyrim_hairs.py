@@ -243,6 +243,32 @@ class StrandOrientationTests(unittest.TestCase):
             self.assertIsNone(conv.hair_orientation_of(plain))                # KS's path: no map, as before
 
 
+class FitTests(unittest.TestCase):
+    def test_gaps_by_region(self):
+        from fo4sf import skyrimhair
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        c = np.array([0, 0, 1.69])
+        rng = np.random.default_rng(1)
+        d = rng.normal(size=(4000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        skull = c + 0.08 * d
+        hair = c + np.where(d[:, :1] > 0.75, 0.10, 0.085) * d          # 5 mm over the skull, 20 mm on the right
+        g = skyrimhair.fit_gaps(hair, skull, head)
+        self.assertAlmostEqual(g["front"]["gap_median_mm"], 5.0, delta=1.5)
+        self.assertGreater(g["right"]["gap_p10_mm"], 4.0)
+        self.assertGreater(g["right"]["gap_median_mm"], 12.0)
+        self.assertLess(g["left"]["gap_median_mm"], 7.0)
+        self.assertIsNone(skyrimhair.fit_gaps(hair[:0], skull, head)["top"])
+        import types
+        sh = skyrimhair.HairShape(b"H", hair, None, None, [(0, 0)] * len(hair), [], [[("C_Head", 1.0)]] * len(hair),
+                                  -1, -1, 0)
+        h = skyrimhair.Hair([sh], [], {}, {})
+        ctx = types.SimpleNamespace(sky_head=skull, head_surface=(skull, d), vanilla_profile=None)
+        rep = SH.fit_report(h, h, ctx, {skyrimhair.SF_HEAD: head})
+        self.assertEqual(rep["skyrim"], rep["starfield"])
+
+
 class NormalTests(unittest.TestCase):
     def shape(self, normals):
         from fo4sf import skyrimhair
@@ -378,6 +404,9 @@ class MainTests(unittest.TestCase):
                               ("HairMaleNord01", "solid", True), ("HairMaleNord01", "shell", True)])
             self.assertTrue(diag["parts"][3]["shell_normals"]["vertices"] > 0)
             self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
+            self.assertEqual(diag["parts"][0]["fit"], {})                       # no head mesh in this game
+            detail = diag["parts"][0]["shape_detail"][0]
+            self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)
             dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
                                                                                  [b"HDPT"])}
             self.assertEqual(dparts["S2S_HairMaleNord01_shell"][b"FULL"],

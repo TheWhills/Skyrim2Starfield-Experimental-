@@ -569,6 +569,41 @@ def is_tint(sh: HairShape) -> bool:
     return any(k in (sh.name or b"").lower() for k in TINT_SHAPES)
 
 
+FIT_REGIONS = ("front", "top", "left", "right", "back")
+
+
+def fit_gaps(points: np.ndarray, head_pts: np.ndarray, head: np.ndarray) -> Dict[str, Optional[Dict]]:
+    """How the hair sits on a head, by region around the cranium's centre (C_Head + 9 cm up; top = within ~37 deg of
+    straight up, the rest by direction: front / back / left / right; points below 20 deg under the centre left out,
+    hanging hair): per region the hair points' distance to the nearest head vertex in mm, 10th percentile (the
+    inner layer: how far it floats) and median, and the count. For comparing a Skyrim hair on Skyrim's head with the
+    result on Starfield's (skyrim_hairs report "fit")."""
+    p = np.asarray(points, float)
+    if not len(p) or head_pts is None or not len(head_pts):
+        return {r: None for r in FIT_REGIONS}
+    c = np.asarray(head, float)[:3, 3] + np.array([0.0, 0.0, 0.09])
+    rel = p - c
+    d = rel / np.maximum(np.linalg.norm(rel, axis=1, keepdims=True), 1e-12)
+    hp = np.asarray(head_pts, float)
+    dist = np.empty(len(p))
+    hh = (hp * hp).sum(1)
+    for k in range(0, len(p), 512):
+        q = p[k:k + 512]
+        dist[k:k + 512] = np.sqrt(np.maximum(((q * q).sum(1)[:, None] + hh[None, :] - 2.0 * q @ hp.T).min(1), 0))
+    az = np.degrees(np.arctan2(d[:, 0], d[:, 1]))             # 0 = front (+Y), + = the actor's right (+X)
+    keep = d[:, 2] > -0.34
+    region = np.where(d[:, 2] > 0.8, "top", np.where(np.abs(az) <= 45, "front", np.where(np.abs(az) >= 135, "back",
+                                                                                         np.where(az > 0, "right",
+                                                                                                  "left"))))
+    out = {}
+    for r in FIT_REGIONS:
+        m = keep & (region == r)
+        out[r] = None if m.sum() < 5 else {"gap_p10_mm": round(1000 * float(np.percentile(dist[m], 10)), 1),
+                                           "gap_median_mm": round(1000 * float(np.median(dist[m])), 1),
+                                           "points": int(m.sum())}
+    return out
+
+
 def hair_points(hair: Hair) -> np.ndarray:
     """The points of the hair's own shapes, without the scalp tint layer (the measurements' input: the tint fades out
     lower on the forehead than the hair starts, 2026-11-02)."""

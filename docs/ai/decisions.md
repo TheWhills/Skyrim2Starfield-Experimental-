@@ -1121,3 +1121,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   copies, each without one suspect: 'flat colour' (albedo one colour: if the patches stay, they are lighting, not
   the texture), 'no see-through' (opacity full: if they go, they are what shows through the strand gaps) and
   'shell normals' (every normal pointing away from the head: if they go, they come from the cards' tilt).
+- 2026-11-03 skyrim_hairs report "fit" and per-shape opacity. Owner (front shot next to Skyrim): the vanilla
+  hairstyle does not sit / flow from the scalp like Skyrim's: a pale band of thin strands between the forehead and
+  where the dense hair starts, and the hair stands off like a helmet. Unresolved which: the hairline part's coverage
+  (Skyrim blends a soft alpha, we cut it into strands: same coverage, but read as thin hair over skin), or the
+  placement. Measured now per hairstyle: fit.skyrim / fit.starfield = the hair's distance to the head per region
+  (front / top / left / right / back; 10th percentile = how far the inner layer floats), Skyrim's hair on Skyrim's
+  fitted head vs the result on Starfield's; fit.hairline_vs_vanilla_mm = our hairline minus the vanilla Starfield
+  hair's per angle; shape_detail[].skyrim_alpha (blend / test / threshold) and .opacity (alpha mean, share over
+  Skyrim's threshold, share solid after the cut). The '--diagnose' 'no see-through' copy shows the coverage case.

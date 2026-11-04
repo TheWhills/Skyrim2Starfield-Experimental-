@@ -373,6 +373,12 @@ class SkyrimConverter(pipeline.Converter):
             self._hair_mat_stem = {}
         return self._hair_mat_stem
 
+    def hair_coverage_of(self, material: Optional[str]):
+        """The opacity record (pipeline: alpha mean, share over the threshold, share after the strand cut) of a hair
+        material made with orient=True, or None."""
+        stem = self._hair_material_stem.get(material) if material else None
+        return self.hair_coverage.get(stem) if stem else None
+
     def hair_orientation_of(self, material: Optional[str]):
         """The strand_orientation map (True: strands along U) of a hair material made with orient=True, or None."""
         stem = self._hair_material_stem.get(material) if material else None

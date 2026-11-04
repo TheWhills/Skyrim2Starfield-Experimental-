@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, HERE)
 
-from fo4sf import bsa, fo4land, sfplugin, skyrimconvert, skyrimhair, skyrimnpc, smpcloth  # noqa: E402
+from fo4sf import bsa, fo4land, sfplugin, skyrimconvert, skyrimhair, skyrimnif, skyrimnpc, smpcloth  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 import hair_pack  # noqa: E402
 
@@ -175,6 +175,42 @@ def record_model(rec) -> str:
     return next((bytes(x).rstrip(b"\0").decode("latin-1") for s, x in rec[2] if s == b"MODL"), "")
 
 
+def fit_report(placed, hair, ctx, sf_world) -> dict:
+    """How the hair sits, by region (skyrimhair.fit_gaps): the Skyrim hair on Skyrim's head where the head fit puts
+    both ('skyrim': what it should look like), the result on Starfield's head ('starfield'); and the result's
+    hairline against the vanilla Starfield hair's (mm, + = ours higher: bare forehead between), when known. Owner
+    2026-11-03: the vanilla hairstyles do not sit / flow from the scalp like in Skyrim."""
+    head = sf_world[skyrimhair.SF_HEAD]
+    out = {}
+    if getattr(ctx, "sky_head", None) is not None:
+        out["skyrim"] = skyrimhair.fit_gaps(skyrimhair.hair_points(placed), ctx.sky_head, head)
+    if getattr(ctx, "head_surface", None) is not None:
+        pts = skyrimhair.hair_points(hair)
+        out["starfield"] = skyrimhair.fit_gaps(pts, ctx.head_surface[0], head)
+        if getattr(ctx, "vanilla_profile", None):
+            own = skyrimhair.hairline_profile(pts, *ctx.head_surface, head)
+            out["hairline_vs_vanilla_mm"] = {
+                k: None if own.get(k) is None or v is None else round(1000 * (own[k] - v), 1)
+                for k, v in ctx.vanilla_profile.items()}
+    return out
+
+
+def shape_alpha(n, sh, conv, material) -> dict:
+    """How a shape was drawn in Skyrim (alpha blend / test and threshold) and its opacity before / after the strand
+    cut (the converter's record), for the report."""
+    out = {}
+    try:
+        if sh.alpha_ref >= 0:
+            test, blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref)
+            out["skyrim_alpha"] = {"blend": blend, "test": test, "threshold": ref}
+    except Exception:                                      # noqa: BLE001 (report only)
+        pass
+    cov = conv.hair_coverage_of(material) if hasattr(conv, "hair_coverage_of") else None
+    if cov:
+        out["opacity"] = cov
+    return out
+
+
 def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, out_name=None, tint=None,
                variant=None) -> dict:
     """Convert one head part (its models merged), shape it for ctx's head, write its NIF and _facebones twin into
@@ -205,7 +241,9 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         row["reason"] = "no model converted"
         return row
     hair = skyrimhair.merge(hairs)
+    placed = hair
     hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
+    row["fit"] = fit_report(placed, hair, ctx, sf_world)
     if variant == "shell":
         hair, row["shell_normals"] = skyrimhair.shell_normals(hair, sf_world[skyrimhair.SF_HEAD])
         hair, row["tangents"] = skyrimhair.uv_tangents(hair)
@@ -215,9 +253,10 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
                                         else None) for sh, m in zip(hair.shapes, mats)]
     if any(x.any() for x in across):                 # cards whose strands run along U: lit along them
         hair, row["tangents"] = skyrimhair.uv_tangents(hair, along_v=across)
-    row["shape_detail"] = [{"name": (sh.name or b"").decode("latin-1"), "vertices": len(sh.positions),
-                            "across_share": round(float(x.mean()), 2) if len(x) else 0.0, "material": m}
-                           for sh, x, m in zip(hair.shapes, across, mats)]
+    row["shape_detail"] = [dict({"name": (sh.name or b"").decode("latin-1"), "vertices": len(sh.positions),
+                                 "across_share": round(float(x.mean()), 2) if len(x) else 0.0, "material": m},
+                                **shape_alpha(n, sh, conv, m))
+                           for sh, x, m, n in zip(hair.shapes, across, mats, nifs)]
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row

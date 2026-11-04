@@ -419,7 +419,13 @@ class Converter:
                     across = strand_orientation(alpha, rgba_a) if orient else None
                     if across is not None:
                         self.hair_orientation[stem] = across
+                    before = alpha
                     alpha, hair_id = strand_maps(alpha, across=across)
+                    if orient:                             # report: how much of it is hair, before / after the cut
+                        self.hair_coverage[stem] = {
+                            "alpha_mean": round(float(before.mean()) / 255.0, 3),
+                            "over_threshold": round(float((before >= alpha_ref).mean()), 3),
+                            "after_cut": round(float((alpha >= 128).mean()), 3)}
                 elif opacity_ramp is not None:
                     alpha = ramp_alpha(alpha, *opacity_ramp)
                 if look == "solid":                        # diagnostic: nothing seen through the hair
@@ -516,6 +522,13 @@ class Converter:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "w", encoding="utf-8", newline="\n").write(cm.dump_mat(mat))
         return mat_rel.replace("/", "\\")
+
+    @property
+    def hair_coverage(self) -> dict:
+        """stem -> opacity before / after the strand cut of each hair texture converted with orient=True."""
+        if "_hair_coverage" not in self.__dict__:
+            self._hair_coverage = {}
+        return self._hair_coverage
 
     @property
     def hair_orientation(self) -> dict:
