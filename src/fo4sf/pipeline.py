@@ -467,7 +467,8 @@ class Converter:
                     if across is not None:
                         self.hair_orientation[stem] = across
                     before = alpha
-                    alpha, hair_id = strand_maps(alpha, across=across)
+                    if look != "soft":                     # 'soft': the soft alpha kept (the shader dithers it)
+                        alpha, hair_id = strand_maps(alpha, across=across)
                     if orient:                             # report: how much of it is hair, before / after the cut
                         self.hair_coverage[stem] = {
                             "alpha_mean": round(float(before.mean()) / 255.0, 3),

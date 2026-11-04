@@ -64,8 +64,13 @@ VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.
 # --diagnose: extra looks-menu copies of each hairstyle, each with one suspect of the dark / light patches removed
 # (round 1, owner 2026-11-03: flat colour / no see-through / shell normals all kept the same patches: neither the
 # texture, the gaps nor the normals. Round 2: the strand direction and the light through the hair)
-DIAGNOSE = (("combed", "combed strands"), ("notrans", "no light through"))
+# Round 3 (owner 2026-11-03: the parts of the hair differ in colour, brightest where they overlap / face up; the
+# hair sits on the scalp instead of growing from it): Skyrim's blended layers (hairlines) with their soft alpha kept
+# (a soft fade at the roots, dithered by the shader, instead of cut strands) and a rougher hair shader (a softer,
+# wider highlight: the near-white sheen on the top piece)
+DIAGNOSE = (("soft", "soft hairline"), ("rough", "rougher"))
 NO_TRANSMISSION = {"DiffuseTransmissionScale": "0", "IndirectSpecularTransmissionScale": "0"}
+SETTING_VARIANTS = {"notrans": NO_TRANSMISSION, "rough": {"Roughness": "0.85"}}
 FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
 BEAST = re.compile(r"khajiit|argonian", re.I)
 CHARGEN = {True: "HeadPartsChargenOptionsFemale", False: "HeadPartsChargenOptionsMale"}
@@ -239,7 +244,8 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
     albedo (an NPC's own; the looks-menu hairstyles have none). variant: a diagnostic copy ('flat' / 'solid':
     texture variants, 'shell': normals pointing away from the head, 'combed': strand directions smoothed across
-    cards, 'notrans': no light through the hair). Returns its report row (ok, model, ...)."""
+    cards, 'notrans': no light through the hair, 'soft': Skyrim's blended layers keep their soft alpha, 'rough': a
+    rougher hair shader). Returns its report row (ok, model, ...)."""
     row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
     hairs, nifs = [], []
     for m in models:
@@ -272,10 +278,10 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     if variant == "shell":
         hair, row["shell_normals"] = skyrimhair.shell_normals(hair, sf_world[skyrimhair.SF_HEAD])
         hair, row["tangents"] = skyrimhair.uv_tangents(hair)
-    look = variant if variant in ("flat", "solid", "notrans") else None
+    look = variant if variant in ("flat", "solid", "soft") or variant in SETTING_VARIANTS else None
     saved = getattr(conv, "hair_settings", None)
-    if variant == "notrans":
-        conv.hair_settings = dict(saved or {}, **NO_TRANSMISSION)
+    if variant in SETTING_VARIANTS:
+        conv.hair_settings = dict(saved or {}, **SETTING_VARIANTS[variant])
     try:
         mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, orient=bool(ctx.hair_shader),
                                                look=look)

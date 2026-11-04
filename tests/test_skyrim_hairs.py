@@ -480,6 +480,12 @@ class NormalTests(unittest.TestCase):
                 reg = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
                                                 coverage=3.0, region=np.array([[0.6, 0.5], [0.9, 0.2]]))
             self.assertIn("_c3_r", reg)
+            with mock.patch.object(textures, "texconv", fake_texconv):
+                soft = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
+                                                 look="soft")
+            self.assertTrue(soft.endswith("t_hair_o_soft.mat"))
+            sop = pixels("t_hair_o_soft_opacity.dds", 1)
+            self.assertGreater(len(np.unique(sop)), 2)                           # soft alpha kept, not cut
             self.assertIn("gain", conv.hair_coverage_of(reg)["region"])
             self.assertGreater(pixels("t_hair_o_c3_opacity.dds", 1).astype(float).mean() / 255,
                                base["after_cut"] + 0.1)                           # Skyrim's blended layers: denser
@@ -553,20 +559,20 @@ class MainTests(unittest.TestCase):
             with open(os.path.join(d, "diag", "README.txt"), encoding="utf-8") as fh:
                 readme = fh.read()
             self.assertIn("    1. HairMaleNord01\n", readme)
-            self.assertIn("    2. HairMaleNord01 [combed]", readme)
+            self.assertIn("    2. HairMaleNord01 [soft]", readme)
             with open(os.path.join(d, "diag", "skyrim_hairs.json")) as fh:
                 diag = json.load(fh)
             self.assertEqual([(r["skyrim"], r.get("variant"), r["ok"]) for r in diag["parts"]],
-                             [("HairMaleNord01", None, True), ("HairMaleNord01", "combed", True),
-                              ("HairMaleNord01", "notrans", True)])
-            self.assertIn("turn_median_deg", diag["parts"][1]["combed"])
-            nt = [m for m in diag["parts"][2]["materials"] if "_notrans" in m]
+                             [("HairMaleNord01", None, True), ("HairMaleNord01", "soft", True),
+                              ("HairMaleNord01", "rough", True)])
+            self.assertEqual(diag["parts"][1]["materials"], diag["parts"][0]["materials"])   # nothing blended here
+            nt = [m for m in diag["parts"][2]["materials"] if "_rough" in m]
             self.assertTrue(nt)
             with open(os.path.join(d, "diag", *nt[0].split("\\")), encoding="utf-8") as fh:
-                self.assertIn('"DiffuseTransmissionScale" : "0"', fh.read())           # no light through
+                self.assertIn('"Roughness" : "0.85"', fh.read())                         # a rougher shader
             plain = diag["parts"][0]["materials"][0]
             with open(os.path.join(d, "diag", *plain.split("\\")), encoding="utf-8") as fh:
-                self.assertIn('"DiffuseTransmissionScale" : "0.675"', fh.read())       # the others keep IDG's
+                self.assertIn('"Roughness" : "0.5125"', fh.read())                       # the others keep IDG's
             self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
             self.assertGreater(diag["parts"][0]["tessellated"]["vertices_after"],
                                diag["parts"][0]["tessellated"]["vertices_before"])   # low-poly shells rounded
@@ -575,11 +581,11 @@ class MainTests(unittest.TestCase):
             self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)
             dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
                                                                                  [b"HDPT"])}
-            self.assertNotIn(b"HNAM", dparts["S2S_HairMaleNord01_combed"])          # the male template has none
-            self.assertEqual(dparts["S2S_HairMaleNord01_combed"][b"FULL"],
-                             b"HairMaleNord01 (Skyrim, combed strands)\0")
-            self.assertEqual(dparts["S2S_HairMaleNord01_notrans"][b"MODL"],
-                             b"s2s\\skyrimhair\\hairmalenord01_notrans.nif\0")
+            self.assertNotIn(b"HNAM", dparts["S2S_HairMaleNord01_soft"])            # the male template has none
+            self.assertEqual(dparts["S2S_HairMaleNord01_soft"][b"FULL"],
+                             b"HairMaleNord01 (Skyrim, soft hairline)\0")
+            self.assertEqual(dparts["S2S_HairMaleNord01_rough"][b"MODL"],
+                             b"s2s\\skyrimhair\\hairmalenord01_rough.nif\0")
             self.assertEqual(rc, 0)
             rep = json.load(open(os.path.join(out, "skyrim_hairs.json")))
             rows = {r["skyrim"]: r for r in rep["parts"]}

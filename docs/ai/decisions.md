@@ -1186,3 +1186,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   alpha-tested: pipeline.cutout_alpha remaps alpha so the strand cut is solid from 24 over Skyrim's threshold and
   empty from 24 under it: alpha 0.4-0.7 over a threshold of 0.3 had been half see-through, showing the dark
   insides). The README lists the hairstyles in looks-menu order (the menu shows no names).
+- 2026-11-03 Owner (9c9cd97, front / side shots next to Skyrim): sits better on the face (the front came down);
+  remaining: the parts of the hair differ strongly in colour, most where they overlap (the top piece near-white
+  with a sheen, the sides grey), and the hair sits on the scalp rather than growing out of it. Not resolved here;
+  diagnose round 3 instead of another guess: 'soft hairline' (Skyrim's blended layers keep their soft alpha,
+  dithered by the shader, instead of the strand cut: the fade at the roots Skyrim's blending gave) and 'rougher'
+  (Roughness 0.85 instead of IDG's 0.5125: a wider, weaker highlight; supported: the near-white top is the
+  shader's highlight on a large smooth surface whose strands all point one way). The round-2 copies are dropped.

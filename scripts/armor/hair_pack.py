@@ -272,6 +272,8 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
     if orient or look or coverage > 1.0 or cutout:
         region = None
         test, blend = (skyrimnif.alpha_test(n, sh.alpha_ref)[:2] if sh.alpha_ref >= 0 else (False, False))
+        if look == "soft" and not blend:           # diagnostic 'soft': only Skyrim's blended layers keep soft alpha
+            look = None
         if coverage > 1.0 and not blend:
             coverage = 1.0                         # only shapes Skyrim alpha-blended
         elif coverage > 1.0:                       # ... brought to full at their own part of the texture
