@@ -1130,3 +1130,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   fitted head vs the result on Starfield's; fit.hairline_vs_vanilla_mm = our hairline minus the vanilla Starfield
   hair's per angle; shape_detail[].skyrim_alpha (blend / test / threshold) and .opacity (alpha mean, share over
   Skyrim's threshold, share solid after the cut). The '--diagnose' 'no see-through' copy shows the coverage case.
+- 2026-11-03 Diagnose round 1 (owner, back shots of one vanilla hairstyle): the normal build, 'flat colour', 'no
+  see-through' and 'shell normals' all show the same light / dark patches (sharp-edged lighter blocks, darker lower
+  hair). Ruled out (verified in game): the albedo, what shows through the strand gaps, the vertex normals / card
+  tilt. Left: what all four shared, the per-card strand direction (the tangent frame; a hair shader's diffuse and
+  highlight follow the strand, not the normal: supported, it also fits the KS band moving with the cloth bones),
+  the light through the hair (DiffuseTransmissionScale 0.675, IDG's) and shadows / screen-space occlusion (not
+  testable from the material). Round 2 copies: 'combed strands' (skyrimhair.comb_strands: each vertex's strand
+  direction averaged with its neighbours' within 15 mm over all cards, sign-agnostic, tangent rebuilt across it)
+  and 'no light through' (both transmission scales 0). The round-1 copies are dropped from --diagnose.

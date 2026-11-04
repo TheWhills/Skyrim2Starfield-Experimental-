@@ -299,6 +299,27 @@ class NormalTests(unittest.TestCase):
         self.assertTrue((n[:, 1] < -0.9).all())                                  # behind the head: -Y
         self.assertTrue(np.allclose(np.linalg.norm(n, axis=1), 1.0))
 
+    def test_comb_evens_neighbouring_cards(self):
+        from fo4sf import skyrimhair
+        n = np.array([[0, -1.0, 0]] * 4)
+        tri = [(0, 2, 1), (1, 2, 3)]
+        p = np.array([[0, -0.1, 1.6], [0.01, -0.1, 1.6], [0, -0.1, 1.59], [0.01, -0.1, 1.59]])
+        down = skyrimhair.HairShape(b"A", p, n, np.array([[1.0, 0, 0]] * 4), [(0, 0)] * 4, tri,
+                                    [[("C_Head", 1.0)]] * 4, 3, -1, 0)          # strands vertical
+        a = np.radians(40)
+        tilt = skyrimhair.HairShape(b"B", p + [0.008, 0, 0], n, np.array([[np.cos(a), 0, np.sin(a)]] * 4),
+                                    [(0, 0)] * 4, tri, [[("C_Head", 1.0)]] * 4, 3, -1, 0)   # strands 40 deg off
+        far = skyrimhair.HairShape(b"C", p + [0.2, 0, 0], n, np.array([[0, 0, 1.0]] * 4), [(0, 0)] * 4, tri,
+                                   [[("C_Head", 1.0)]] * 4, 3, -1, 0)           # out of reach: kept
+        out, rep = skyrimhair.comb_strands(skyrimhair.Hair([down, tilt, far], [], {}, {}))
+        ta, tb, tc = (np.asarray(sh.tangents) for sh in out.shapes)
+        ang = lambda u, v: np.degrees(np.arccos(np.clip(abs(float(u @ v)), 0, 1)))     # noqa: E731
+        self.assertLess(ang(ta[0], tb[0]), 15.0)                           # the two cards now close
+        self.assertTrue(np.allclose(tc, [[0, 0, 1.0]] * 4))
+        self.assertTrue(np.allclose((ta * n).sum(1), 0))                    # still across the normal
+        self.assertGreater(float(ta[0] @ [1.0, 0, 0]), 0)                   # on the old tangent's side
+        self.assertGreater(rep["turn_median_deg"], 0)
+
     def test_diagnostic_texture_looks(self):
         import shutil
         from fo4sf import skyrimconvert, textures
@@ -400,19 +421,26 @@ class MainTests(unittest.TestCase):
             with open(os.path.join(d, "diag", "skyrim_hairs.json")) as fh:
                 diag = json.load(fh)
             self.assertEqual([(r["skyrim"], r.get("variant"), r["ok"]) for r in diag["parts"]],
-                             [("HairMaleNord01", None, True), ("HairMaleNord01", "flat", True),
-                              ("HairMaleNord01", "solid", True), ("HairMaleNord01", "shell", True)])
-            self.assertTrue(diag["parts"][3]["shell_normals"]["vertices"] > 0)
+                             [("HairMaleNord01", None, True), ("HairMaleNord01", "combed", True),
+                              ("HairMaleNord01", "notrans", True)])
+            self.assertIn("turn_median_deg", diag["parts"][1]["combed"])
+            nt = [m for m in diag["parts"][2]["materials"] if "_notrans" in m]
+            self.assertTrue(nt)
+            with open(os.path.join(d, "diag", *nt[0].split("\\")), encoding="utf-8") as fh:
+                self.assertIn('"DiffuseTransmissionScale" : "0"', fh.read())           # no light through
+            plain = diag["parts"][0]["materials"][0]
+            with open(os.path.join(d, "diag", *plain.split("\\")), encoding="utf-8") as fh:
+                self.assertIn('"DiffuseTransmissionScale" : "0.675"', fh.read())       # the others keep IDG's
             self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
             self.assertEqual(diag["parts"][0]["fit"], {})                       # no head mesh in this game
             detail = diag["parts"][0]["shape_detail"][0]
             self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)
             dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
                                                                                  [b"HDPT"])}
-            self.assertEqual(dparts["S2S_HairMaleNord01_shell"][b"FULL"],
-                             b"HairMaleNord01 (Skyrim, shell normals)\0")
-            self.assertEqual(dparts["S2S_HairMaleNord01_flat"][b"MODL"],
-                             b"s2s\\skyrimhair\\hairmalenord01_flat.nif\0")
+            self.assertEqual(dparts["S2S_HairMaleNord01_combed"][b"FULL"],
+                             b"HairMaleNord01 (Skyrim, combed strands)\0")
+            self.assertEqual(dparts["S2S_HairMaleNord01_notrans"][b"MODL"],
+                             b"s2s\\skyrimhair\\hairmalenord01_notrans.nif\0")
             self.assertEqual(rc, 0)
             rep = json.load(open(os.path.join(out, "skyrim_hairs.json")))
             rows = {r["skyrim"]: r for r in rep["parts"]}

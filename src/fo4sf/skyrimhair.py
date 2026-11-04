@@ -910,6 +910,73 @@ def geometric_normals(hair: Hair) -> Tuple[Hair, Dict]:
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, geometric_normals=True)), {"shapes": rows}
 
 
+COMB_RADIUS = 0.015          # m: comb_strands' neighbourhood (a few cards wide)
+
+
+def comb_strands(hair: Hair, radius: float = COMB_RADIUS, chunk: int = 256) -> Tuple[Hair, Dict]:
+    """Each vertex's strand direction (cross(normal, tangent): the shader lights along it) replaced by the Gaussian
+    average of the strand directions within `radius` over every shape (each neighbour's turned to agree with the
+    vertex's own: a strand line has no sign for the light), made perpendicular to the normal; the tangent becomes
+    the across-strand direction of that, on the old tangent's side. So neighbouring cards whose strands are tilted
+    differently in the texture no longer meet in a hard light / dark edge (2026-11-03: the dark / light patches stayed
+    with one flat colour, no see-through and smooth normals; the hair shader's light depends on the strand
+    direction). Report: the median turn in degrees."""
+    vs, ns, ts, owner = [], [], [], []
+    for k, sh in enumerate(hair.shapes):
+        if sh.normals is None or sh.tangents is None or not len(sh.positions):
+            continue
+        p = np.asarray(sh.positions, float)
+        n = np.asarray(sh.normals, float)
+        t = np.asarray(sh.tangents, float)
+        if n.shape != p.shape or t.shape != p.shape:
+            continue
+        vs.append(p)
+        ns.append(n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12))
+        ts.append(t / np.maximum(np.linalg.norm(t, axis=1, keepdims=True), 1e-12))
+        owner.append(np.full(len(p), k))
+    if not vs:
+        return hair, {"vertices": 0}
+    P, N, T, own = np.concatenate(vs), np.concatenate(ns), np.concatenate(ts), np.concatenate(owner)
+    S = np.cross(N, T)
+    S /= np.maximum(np.linalg.norm(S, axis=1, keepdims=True), 1e-12)
+    sig2 = 2.0 * (radius / 2.0) ** 2
+    out = np.empty_like(S)
+    cell = np.floor(P / radius).astype(np.int64)                    # neighbours only from the 27 cells around
+    cells = {}
+    for i, key in enumerate(map(tuple, cell)):
+        cells.setdefault(key, []).append(i)
+    for key, members in cells.items():
+        near = [j for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)
+                for j in cells.get((key[0] + dx, key[1] + dy, key[2] + dz), ())]
+        near = np.asarray(near)
+        for c in range(0, len(members), chunk):
+            idx = np.asarray(members[c:c + chunk])
+            d2 = ((P[idx][:, None, :] - P[near][None, :, :]) ** 2).sum(2)
+            w = np.where(d2 < radius * radius, np.exp(-d2 / sig2), 0.0)
+            agree = np.sign(S[idx] @ S[near].T)
+            agree[agree == 0] = 1.0
+            out[idx] = (w * agree) @ S[near]
+    out -= (out * N).sum(1, keepdims=True) * N
+    size = np.linalg.norm(out, axis=1)
+    ok = size > 1e-9
+    out = np.where(ok[:, None], out / np.maximum(size, 1e-12)[:, None], S)
+    newT = np.cross(out, N)
+    newT /= np.maximum(np.linalg.norm(newT, axis=1, keepdims=True), 1e-12)
+    newT *= np.where((newT * T).sum(1) < 0, -1.0, 1.0)[:, None]
+    turn = np.degrees(np.arccos(np.clip(np.abs((out * S).sum(1)), 0.0, 1.0)))
+    shapes, at = [], 0
+    for k, sh in enumerate(hair.shapes):
+        m = own == k
+        if not m.any():
+            shapes.append(sh)
+            continue
+        shapes.append(HairShape(sh.name, sh.positions, sh.normals, newT[m], sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return (Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, combed=True)),
+            {"vertices": int(len(P)), "turn_median_deg": round(float(np.median(turn)), 1),
+             "turn_p90_deg": round(float(np.percentile(turn, 90)), 1)})
+
+
 def shell_normals(hair: Hair, head: np.ndarray) -> Tuple[Hair, Dict]:
     """Diagnostic: every vertex normal set to 'away from the head' (orient_outward's direction: from the cranium's
     centre above it, from the vertical through it below), as if the hair were one smooth shell. Lighting then no
