@@ -247,6 +247,18 @@ def arma_model(arma) -> str:
     return ""
 
 
+def uv_samples(sh, per_side: int = 4):
+    """UV points spread over a shape's triangles (a barycentric grid of `per_side` steps on each), (n, 2), or None:
+    the part of its texture the shape shows."""
+    if not sh.uvs or not len(sh.triangles):
+        return None
+    uv = np.asarray(sh.uvs, float)
+    t = np.asarray(sh.triangles, int).reshape(-1, 3)
+    bary = np.array([((per_side - i - j) / per_side, i / per_side, j / per_side)
+                     for i in range(per_side + 1) for j in range(per_side + 1 - i)])
+    return (bary[None, :, :, None] * uv[t][:, None, :, :]).sum(2).reshape(-1, 2)
+
+
 def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint=None, transpose=False,
                          orient=False, look=None, coverage=1.0):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
@@ -258,11 +270,14 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
     if orient or look or coverage > 1.0:
+        region = None
         if coverage > 1.0 and not (sh.alpha_ref >= 0 and skyrimnif.alpha_test(n, sh.alpha_ref)[1]):
             coverage = 1.0                         # only shapes Skyrim alpha-blended
+        elif coverage > 1.0:                       # ... brought to full at their own part of the texture
+            region = uv_samples(sh)
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
                                          None if strands else ramp, strands, tint, transpose, orient=orient,
-                                         look=look, coverage=coverage)
+                                         look=look, coverage=coverage, region=region)
     if tint is not None or transpose:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
                                          None if strands else ramp, strands, tint, transpose)

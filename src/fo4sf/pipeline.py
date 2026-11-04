@@ -81,6 +81,34 @@ def _box_blur(img, r, rx=None):
     return out
 
 
+def sample_texels(img, uv, scale: float = 1.0):
+    """Values of a (h, w) image at UV points (n, 2) (wrapping; row = v), at `scale` x the image's own size."""
+    import numpy as np
+    img = np.asarray(img)
+    h, w = img.shape[:2]
+    uv = np.asarray(uv, float)
+    col = np.floor(np.mod(uv[:, 0], 1.0) * w).astype(int).clip(0, w - 1)
+    row = np.floor(np.mod(uv[:, 1], 1.0) * h).astype(int).clip(0, h - 1)
+    return img[row, col]
+
+
+def normalize_region_alpha(alpha, uv, level: float = 0.9, floor: int = 8, max_gain: float = 8.0):
+    """The alpha scaled so the `level` percentile of the hair the shape shows (its UV sample points `uv`, texels over
+    `floor`) becomes full: a layer Skyrim alpha-blended at a low alpha (the vanilla hairlines: a faint wash of
+    colour over the scalp) reaches the strand cut at the same density as the hair over it. (alpha, report)."""
+    import numpy as np
+    a = np.asarray(alpha)
+    seen = sample_texels(a, uv).astype(np.float64)
+    hair = seen[seen > floor]
+    rep = {"samples": int(len(seen)), "alpha_mean": round(float(seen.mean()) / 255.0, 3) if len(seen) else 0.0}
+    if len(hair) < 4:
+        rep["gain"] = 1.0
+        return a, rep
+    gain = float(np.clip(255.0 / max(np.percentile(hair, 100 * level), 1.0), 1.0, max_gain))
+    rep["gain"] = round(gain, 2)
+    return np.clip(np.rint(a.astype(np.float64) * gain), 0, 255).astype(np.uint8), rep
+
+
 def strand_orientation(alpha, rgb=None, block: int = 32, ratio: float = 1.3):
     """Per texel True where the texture's strands run along U (across the image), False where along V (down it),
     judged per `block`-texel square from where the image changes most: strands vary across their width, little along
@@ -389,7 +417,7 @@ class Converter:
                              hair: bool = False, albedo_target: Optional[tuple] = None,
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
                              transpose: bool = False, orient: bool = False, look: Optional[str] = None,
-                             coverage: float = 1.0) -> str:
+                             coverage: float = 1.0, region=None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -416,6 +444,9 @@ class Converter:
                     alpha = np.ascontiguousarray(alpha.T)
                     rgba_a = np.ascontiguousarray(rgba_a.transpose(1, 0, 2))
                 hair_id = None
+                region_rep = None
+                if region is not None and len(region):     # the part of the texture this shape uses: its own level
+                    alpha, region_rep = normalize_region_alpha(alpha, region)
                 if coverage > 1.0:                         # Skyrim blended this: denser, 1 - (1 - a) ** coverage
                     alpha = np.rint(255.0 * (1.0 - (1.0 - alpha.astype(np.float64) / 255.0) ** coverage)
                                     ).astype(np.uint8)
@@ -430,6 +461,11 @@ class Converter:
                             "alpha_mean": round(float(before.mean()) / 255.0, 3),
                             "over_threshold": round(float((before >= alpha_ref).mean()), 3),
                             "after_cut": round(float((alpha >= 128).mean()), 3)}
+                        if region_rep is not None:
+                            region_rep["after_cut"] = round(float(
+                                (sample_texels(alpha, region, scale=alpha.shape[0] / before.shape[0]) >= 128).mean()),
+                                3)
+                            self.hair_coverage[stem]["region"] = region_rep
                 elif opacity_ramp is not None:
                     alpha = ramp_alpha(alpha, *opacity_ramp)
                 if look == "solid":                        # diagnostic: nothing seen through the hair

@@ -269,6 +269,26 @@ class FitTests(unittest.TestCase):
         self.assertEqual(rep["skyrim"], rep["starfield"])
 
 
+class RegionCoverageTests(unittest.TestCase):
+    def test_faint_layer_brought_to_full_in_its_own_region(self):
+        from fo4sf import pipeline
+        import hair_pack
+        from fo4sf import skyrimhair
+        a = np.full((64, 64), 230, np.uint8)
+        a[:, 32:] = (np.arange(64)[:, None] % 2) * 40              # right half: faint strands (alpha 0 / 40)
+        sh = skyrimhair.HairShape(b"L", np.zeros((3, 3)), None, None, [(0.55, 0.1), (0.95, 0.1), (0.75, 0.9)],
+                                  [(0, 1, 2)], [[("C_Head", 1.0)]] * 3, 3, 0, 0)
+        uv = hair_pack.uv_samples(sh)
+        self.assertEqual(uv.shape, (15, 2))
+        self.assertTrue((uv[:, 0] >= 0.55).all() and (uv[:, 0] <= 0.95).all())
+        out, rep = pipeline.normalize_region_alpha(a, uv)
+        self.assertGreater(rep["gain"], 5.0)
+        self.assertEqual(int(out[:, 32:].max()), 255)               # the faint strands full
+        self.assertEqual(int(out[:, :32].min()), 255)               # (the rest of the atlas clips: own material)
+        same, rep2 = pipeline.normalize_region_alpha(np.zeros((8, 8), np.uint8), uv)
+        self.assertEqual(rep2["gain"], 1.0)
+
+
 class TessellateTests(unittest.TestCase):
     def octahedron(self, seam=False):
         """A unit-radius-0.1 octahedron round (0, 0, 1.7), normals pointing out (a round shell's), optionally with
@@ -412,6 +432,11 @@ class NormalTests(unittest.TestCase):
                 base = conv.hair_coverage_of(conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True,
                                                                        orient=True))
             self.assertTrue(dense.endswith("t_hair_o_c3.mat"))
+            with mock.patch.object(textures, "texconv", fake_texconv):
+                reg = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
+                                                coverage=3.0, region=np.array([[0.6, 0.5], [0.9, 0.2]]))
+            self.assertIn("_c3_r", reg)
+            self.assertIn("gain", conv.hair_coverage_of(reg)["region"])
             self.assertGreater(pixels("t_hair_o_c3_opacity.dds", 1).astype(float).mean() / 255,
                                base["after_cut"] + 0.1)                           # Skyrim's blended layers: denser
             col = pixels("t_hair_o_flat_color.dds", 4).reshape(-1, 4)

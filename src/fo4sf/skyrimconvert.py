@@ -331,14 +331,16 @@ class SkyrimConverter(pipeline.Converter):
                              color: Optional[tuple] = None, opacity_ramp: Optional[tuple] = None,
                              strands: bool = False, tint: Optional[tuple] = None,
                              transpose: bool = False, orient: bool = False,
-                             look: Optional[str] = None, coverage: float = 1.0) -> Optional[str]:
+                             look: Optional[str] = None, coverage: float = 1.0, region=None) -> Optional[str]:
         """A Starfield hair-shader material (Hair1Layer, cm.build_hair_mat) for a Skyrim hair texture: the diffuse's
         colour (recoloured to average `color`, sRGB 0-255, when given: pipeline.recolor) and its alpha as the opacity
         map; None when it cannot be made (the caller falls back). orient: the strands are cut along the texture's own
         strands region by region (pipeline.strand_orientation; the map is kept: hair_orientation_of). look:
         diagnostic variants: 'flat' (the albedo one colour, its visible mean), 'solid' (opacity full everywhere).
         coverage > 1: the alpha made denser before the strand cut, 1 - (1 - a) ** coverage (shapes Skyrim
-        alpha-blended, e.g. the hairlines: blended they read as a coat of colour, cut into strands as thin hair)."""
+        alpha-blended, e.g. the hairlines: blended they read as a coat of colour, cut into strands as thin hair).
+        region: UV points (n, 2) of the part of the texture the shape shows: its alpha is first scaled to its own
+        level there (pipeline.normalize_region_alpha); the material is then that shape's own."""
         stem = re.sub(r"^textures[\\/]", "", diffuse.replace("\\", "/"), flags=re.I).lower()
         stem = os.path.splitext(stem)[0] + "_hair"
         if color:
@@ -353,6 +355,9 @@ class SkyrimConverter(pipeline.Converter):
             stem += "_" + look
         if coverage > 1.0:
             stem += "_c%g" % coverage
+        if region is not None and len(region):
+            import numpy as np
+            stem += "_r" + hashlib.sha1(np.round(np.asarray(region, float), 4).tobytes()).hexdigest()[:8]
         key = "skyhair:" + stem + ("|ramp:%d,%d" % tuple(opacity_ramp) if opacity_ramp else "") + \
             ("|strands" if strands else "")
         if key not in self._materials:
@@ -362,7 +367,7 @@ class SkyrimConverter(pipeline.Converter):
                                                                  albedo_target=color, opacity_ramp=opacity_ramp,
                                                                  strands=strands, albedo_tint=tint,
                                                                  transpose=transpose, orient=orient and strands,
-                                                                 look=look, coverage=coverage)
+                                                                 look=look, coverage=coverage, region=region)
                 if self._materials[key] is not None and stem in self.hair_orientation:
                     self._hair_material_stem[self._materials[key]] = stem
                 self.stats["materials_ok"] += 1

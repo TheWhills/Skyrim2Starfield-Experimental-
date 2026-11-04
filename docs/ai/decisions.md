@@ -1166,3 +1166,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the Skyrim hair, in the character's hair colour; the report lists them ("template_extra_parts": EditorID, type,
   model). Expectation set with the owner: the vanilla Skyrim hairs are 2011 low-poly shells (200-2000 vertices)
   and will not reach the strand detail of Starfield's own hair; the goal is that they sit right and look clean.
+- 2026-11-03 Owner (5d753c2): front unchanged. His report: the templates Human_Female_Hair_Bob / Human_Male_Hair_Bob
+  have no extra parts (template_extra_parts empty), so keeping HNAM added nothing (the option stays, harmless).
+  The blended-hairline coverage ^3 was measured on the whole atlas (0.79 after the cut), not where the hairline
+  samples it, so it says nothing about the band. Now a Skyrim-blended shape's alpha is first brought to full at
+  its own part of the texture (pipeline.normalize_region_alpha: UV points spread over its triangles,
+  hair_pack.uv_samples; gain = 255 / the 90th percentile of the hair texels there, capped 8x; own material per
+  shape, '_r<hash>'), then ^3, then cut; the report gives per shape opacity.region (samples, alpha mean, gain, share
+  solid after the cut). Not done: lowering the front hairline to the vanilla hair's: the bob's hairline is
+  lopsided (side fringe: 97.8 mm above C_Head at 0 deg, 73 at +10, 47 at +20), so it is no target per angle.
