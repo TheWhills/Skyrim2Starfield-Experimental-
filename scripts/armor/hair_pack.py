@@ -350,16 +350,19 @@ def hair_part_template(hdpt, prefer: str = ""):
     return next((r for r in hairs if want and want in model(r).lower()), hairs[0] if hairs else None)
 
 
-def hair_part_record(template, index: int, edid: str, name: str, model: str, masters: int = 1):
+def hair_part_record(template, index: int, edid: str, name: str, model: str, masters: int = 1,
+                     keep_extra_parts: bool = False):
     """A new playable hair head part copied from `template` with its own EditorID, name and model, without the
     template's extra parts (HNAM) and face-slider morphs (MNAM: they move the template mesh's vertices, not ours).
     Starfield lists playable hair head parts of the character's race in the looks menu, and a head part takes the
     actor's hair colour (an apparel item does not: the wigs drew the texture's own grey, 2026-11-02). IDG's hairs
-    are added the same way, with no change to the race or the menu's lists."""
+    are added the same way, with no change to the race or the menu's lists. keep_extra_parts: the template's HNAM
+    stays (its vanilla extra parts, e.g. Starfield's own hairline, drawn with ours: the vanilla Skyrim hairstyles)."""
     t, h, subs, _f = template
     flags = next((bytes(x) for s_, x in subs if s_ == b"DATA" and len(x) >= 1), b"\0")
     subs = sfplugin.edit(subs, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name), b"MODL": sfplugin.zs(model),
-                                b"DATA": bytes([flags[0] | PART_PLAYABLE]) + flags[1:]}, drop=(b"HNAM", b"MNAM"))
+                                b"DATA": bytes([flags[0] | PART_PLAYABLE]) + flags[1:]},
+                         drop=(b"MNAM",) if keep_extra_parts else (b"HNAM", b"MNAM"))
     return (t, h, subs, sfplugin.new_form_id(index, masters))
 
 

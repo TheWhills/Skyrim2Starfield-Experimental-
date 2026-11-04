@@ -442,10 +442,11 @@ class MainTests(unittest.TestCase):
             sf = os.path.join(d, "Starfield")
             os.makedirs(os.path.join(sf, "Data"))
             os.makedirs(os.path.join(sf, "Tools"))
-            bob = hdpt("Human_Female_Hair_Bob", "Actors\\Human\\Mesh\\hairs\\bob\\bob_f.nif", 3, 0x01)
+            bob = hdpt("Human_Female_Hair_Bob", "Actors\\Human\\Mesh\\hairs\\bob\\bob_f.nif", 3, 0x01, [0x2313])
             short = hdpt("Human_Male_Hair_Short", "Actors\\Human\\Mesh\\hairs\\short\\short_m.nif", 3, 0x01)
             lnam = lambda *ids: [(b"LNAM", struct.pack("<I", i)) for i in ids]     # noqa: E731
             sfr = [rec(b"HDPT", bob, 0x00002311), rec(b"HDPT", short, 0x00002312),
+                   rec(b"HDPT", hdpt("Human_Female_Hairline01", "hairline_f.nif", 11, 0x0C), 0x00002313),
                    rec(b"FLST", [(b"EDID", b"HeadPartsChargenOptionsFemale\0")] + lnam(0x2311), 0x0003D9B0),
                    rec(b"FLST", [(b"EDID", b"HeadPartsChargenOptionsMale\0")] + lnam(0x2312), 0x0003D9AF)]
             with open(os.path.join(sf, "Data", "Starfield.esm"), "wb") as fh:
@@ -501,6 +502,7 @@ class MainTests(unittest.TestCase):
             self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)
             dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
                                                                                  [b"HDPT"])}
+            self.assertNotIn(b"HNAM", dparts["S2S_HairMaleNord01_combed"])          # the male template has none
             self.assertEqual(dparts["S2S_HairMaleNord01_combed"][b"FULL"],
                              b"HairMaleNord01 (Skyrim, combed strands)\0")
             self.assertEqual(dparts["S2S_HairMaleNord01_notrans"][b"MODL"],
@@ -525,6 +527,10 @@ class MainTests(unittest.TestCase):
             parts = {sfplugin.edid(r[2]): r for r in got if r[0] == b"HDPT"}
             self.assertEqual(sorted(parts), ["S2S_HairFemaleNord01", "S2S_HairFemaleSerana", "S2S_HairMaleNord01"])
             nord = dict(parts["S2S_HairFemaleNord01"][2])
+            self.assertEqual(struct.unpack("<I", nord[b"HNAM"])[0], 0x2313)          # Starfield's hairline kept
+            self.assertEqual(rep["template_extra_parts"]["Human_Female_Hair_Bob"],
+                             [{"form_id": "00002313", "edid": "Human_Female_Hairline01", "type": 11,
+                               "model": "hairline_f.nif"}])
             self.assertEqual(nord[b"MODL"], b"s2s\\skyrimhair\\hairfemalenord01.nif\0")
             self.assertEqual(nord[b"FULL"], b"HairFemaleNord01 (Skyrim)\0")
             lists = {sfplugin.edid(r[2]): r for r in got if r[0] == b"FLST"}

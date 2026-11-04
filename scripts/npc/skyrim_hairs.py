@@ -172,6 +172,20 @@ def chargen_template(sf_hdpt, flst, female: bool, kind: int, prefer: str = ""):
     return next((r for r in cands if want and want in model(r).lower()), cands[0] if cands else None)
 
 
+def extra_parts(rec, sf_hdpt) -> list:
+    """The extra parts (HNAM) of a vanilla head part: [{form_id, edid, type, model}] (report; the vanilla Skyrim
+    hairstyles keep them, 2026-11-03: Starfield's own hairline under the low-poly Skyrim hair)."""
+    out = []
+    for s, d in rec[2]:
+        if s != b"HNAM" or len(d) < 4:
+            continue
+        fid = struct.unpack_from("<I", bytes(d), 0)[0]
+        r = sf_hdpt.get(fid)
+        out.append({"form_id": f"{fid:08X}", "edid": sfplugin.edid(r[2]) if r else None,
+                    "type": part_type(r) if r else None, "model": record_model(r) if r else None})
+    return out
+
+
 def part_type(rec):
     d = next((bytes(x) for s, x in rec[2] if s == b"PNAM" and len(x) >= 4), None)
     return struct.unpack_from("<I", d, 0)[0] if d else None
@@ -317,6 +331,9 @@ def main(argv=None):
                     help="another plugin that adds to the looks-menu lists (e.g. ...\\S2S Hair\\S2SHair.esm): its "
                          "entries are kept in ours, so both show (it becomes a master: load it first). Default: "
                          "S2SHair.esm in the 'S2S Hair' mod folder next to --out, when there")
+    ap.add_argument("--no-starfield-hairline", dest="starfield_hairline", action="store_false",
+                    help="leave out the copied vanilla hairstyle's extra parts (HNAM: Starfield's own hairline / scalp "
+                         "pieces, kept by default under the Skyrim hair; the report lists them)")
     ap.add_argument("--diagnose", action="store_true",
                     help="also, per hairstyle, looks-menu copies each without one suspect of the dark / light patches: "
                          + ", ".join(f"'(Skyrim, {label})'" for _k, label in DIAGNOSE) + " (use with --only)")
@@ -386,6 +403,7 @@ def main(argv=None):
             contexts[(female, p["type"])] = sex_context(a, sf_world, report, female, tpl, a.starfield)
             report.setdefault("templates", {})[f"{'female' if female else 'male'} type {p['type']}"] = \
                 sfplugin.edid(tpl[2])
+            report.setdefault("template_extra_parts", {})[sfplugin.edid(tpl[2])] = extra_parts(tpl, sf_hdpt)
         ctx, fb = contexts[(female, p["type"])]
         for variant, label in ((None, None),) + (DIAGNOSE if a.diagnose else ()):
             try:
@@ -401,7 +419,8 @@ def main(argv=None):
                 edid = "S2S_" + p["edid"] + (f"_{variant}" if variant else "")
                 rec = hair_pack.hair_part_record(tpl, len(recs), edid,
                                                  f"{p['edid']} (Skyrim{', ' + label if label else ''})",
-                                                 row["model"], masters=len(masters))
+                                                 row["model"], masters=len(masters),
+                                                 keep_extra_parts=a.starfield_hairline)
                 recs.append(rec)
                 added[female].append(rec[3])
                 row["form_id_in_plugin"] = f"{rec[3] & 0xFFFFFF:06X}"

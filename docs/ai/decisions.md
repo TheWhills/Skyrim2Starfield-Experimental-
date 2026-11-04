@@ -1155,3 +1155,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   '_c3'). The patches themselves: unresolved; with every material / shading suspect ruled out what is left is the
   geometry (shadows on large facets), which the tessellation changes. Needs a vanilla Starfield hair shot from the
   same angle as a reference.
+- 2026-11-03 Owner's shots after 4a97218, next to vanilla Starfield hair (a slicked-back short style and a bun):
+  the back is smoother (tessellation: the broad flat patches mostly gone, one hatched spot left at the crown) but
+  the front still has a bare band between the forehead and where the Skyrim hair starts; the denser blended
+  hairline did not fill it. His report (before this build) put our hairline above the vanilla hair's in the middle
+  (Nord01 +13 mm at 0 deg, +35 at 10, +61 at 20; varies by style and side). Starfield's hairstyles carry extra parts
+  (HNAM on the copied vanilla template; KS's head parts drop them). Now the vanilla Skyrim hairstyles keep the
+  template's extra parts (hair_part_record keep_extra_parts; skyrim_hairs --no-starfield-hairline to drop), so
+  whatever the template draws under its hair (supported: a hairline / scalp piece, unverified which) is drawn under
+  the Skyrim hair, in the character's hair colour; the report lists them ("template_extra_parts": EditorID, type,
+  model). Expectation set with the owner: the vanilla Skyrim hairs are 2011 low-poly shells (200-2000 vertices)
+  and will not reach the strand detail of Starfield's own hair; the goal is that they sit right and look clean.

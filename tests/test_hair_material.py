@@ -294,6 +294,9 @@ class HeadPartTests(unittest.TestCase):
         self.assertNotIn(b"HNAM", d)                     # no extra parts of the template
         self.assertNotIn(b"MNAM", d)                     # no morphs made for the template's mesh
         self.assertEqual(d[b"RNAM"], struct.pack("<I", 0x24A024))   # the template's races kept
+        kept = dict(hair_pack.hair_part_record(recs[3], 8, "S2S_X", "X", "x.nif", keep_extra_parts=True)[2])
+        self.assertEqual(kept.get(b"HNAM"), dict(recs[3][2]).get(b"HNAM"))   # the vanilla hairline kept
+        self.assertNotIn(b"MNAM", kept)
 
 class ChargenListTests(unittest.TestCase):
     def test_override_appends_once_and_keeps_the_rest(self):
