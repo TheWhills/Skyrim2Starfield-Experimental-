@@ -96,5 +96,61 @@ class CardTests(unittest.TestCase):
         self.assertLess(lines[0][-1][2], 1.52)
 
 
+class GuideTests(unittest.TestCase):
+    def head(self):
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        return head
+
+    def test_uv_direction_root_to_tip(self):
+        p = np.array([[0, 0.1, 1.7], [0.01, 0.1, 1.7], [0, 0.1, 1.6], [0.01, 0.1, 1.6]])
+        sh = H.HairShape(b"C", p, np.array([[0, 1.0, 0]] * 4), np.zeros((4, 3)), [(0, 0), (1, 0), (0, 1), (1, 1)],
+                         [(0, 2, 1), (1, 2, 3)], [[("C_Head", 1.0)]] * 4, -1, -1, 0)
+        d = HS.uv_strand_dirs(sh)
+        self.assertTrue(np.allclose(d, [[0, 0, -1.0]] * 4))                 # +V runs down: root at the top
+        flipped = H.HairShape(b"C", p, sh.normals, sh.tangents, [(0, 1), (1, 1), (0, 0), (1, 0)], sh.triangles,
+                              sh.weights, -1, -1, 0)
+        self.assertTrue(np.allclose(HS.uv_strand_dirs(flipped), [[0, 0, 1.0]] * 4))   # roots at the bottom: up
+        across = HS.uv_strand_dirs(sh, np.ones(4, bool))
+        self.assertTrue(np.allclose(np.abs(across[:, 0]), 1.0))            # strands along U: +U
+
+    def test_given_directions_win_over_the_crown_guess(self):
+        sh = shell()
+        up = np.tile([0, 0, 1.0], (len(sh.positions), 1))                 # e.g. slicked back: toward the crown
+        g = HS.Guide(H.Hair([sh], [], {}, {}), self.head(), dirs=[up])
+        side = np.nonzero(np.asarray(sh.positions)[:, 2] < 1.65)[0][0]
+        self.assertGreater(g.s[side][2], 0.9)
+        g2 = HS.Guide(H.Hair([sh], [], {}, {}), self.head())
+        self.assertLess(g2.s[side][2], -0.9)                               # fallback: away from the crown
+
+    def test_cards_only_where_the_texture_is_hair(self):
+        sh = shell()
+        cov = (np.asarray(sh.positions)[:, 2] > 1.6).astype(float)         # the lower skirt is see-through
+        hair, rep = HS.grow_cards(H.Hair([sh], [], {}, {}), self.head(), HS.strip_layout(strip_texture()),
+                                  coverage=[cov], max_cards=150)
+        self.assertGreater(rep["cards"], 10)
+        allp = np.vstack([np.asarray(s.positions) for s in hair.shapes])
+        self.assertGreater(allp[:, 2].min(), 1.6 - 0.025)                   # no cards down the see-through part
+
+    def test_smooth_line_eases_zigzags(self):
+        sh = shell()
+        g = HS.Guide(H.Hair([sh], [], {}, {}), self.head())
+        z = np.linspace(1.67, 1.52, 16)
+        line = np.c_[0.1 + 0 * z, 0.004 * (-1) ** np.arange(16), z]           # zig-zag on the skirt
+        sm = HS.smooth_line(g, line)
+        self.assertLess(np.abs(np.diff(sm[:, 1])).mean(), 0.5 * np.abs(np.diff(line[:, 1])).mean())
+        self.assertLess(np.abs(np.linalg.norm(sm[:, :2], axis=1) - 0.1).max(), 0.003)   # still on the guide
+
+    def test_dense_strips_for_the_inner_layer(self):
+        op = strip_texture()
+        op[:, 64:] *= 0.2                                                  # the right half's strips sparse
+        st = HS.strip_layout(op)
+        dens = HS.strip_coverage(op, st)
+        self.assertEqual(len(dens), len(st))
+        hair, _rep = HS.grow_cards(H.Hair([shell()], [], {}, {}), self.head(), st, densities=dens, max_cards=90)
+        u = np.asarray(hair.shapes[0].uvs)[:, 0]
+        self.assertLess(u.max(), 0.5 + 1e-9)                                # inner layer: the dense strips only
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -83,7 +83,9 @@ DIAGNOSE = (("depth", "old depth offset"),)
 # --strand-cards (owner 2026-11-03: "do we need it to have all the strands like Starfield's" - yes): a looks-menu
 # copy of each hairstyle made of Starfield-style strand cards on a vanilla hair material (fo4sf.hairstrands)
 STRANDS = ("strands", "Starfield strands")
-STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"     # the bob's (hair_probe)
+# the material most of IDG's hairs use (22 of 50, read from its NIFs 2026-11-03): straight strands (the bob's
+# Medium_Hair_Shared made every card wavy, owner's first strand-card shots)
+STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Long_Straight_Hair_Shared.mat"
 
 
 def strand_material(starfield: str, texconv: str, cr_zip: str, mat_path: str, report: dict):
@@ -107,7 +109,7 @@ def strand_material(starfield: str, texconv: str, cr_zip: str, mat_path: str, re
     px = hair_probe.decode_rgba(dds, texconv)
     strips = hairstrands.strip_layout(px[:, :, 0])
     rep["strips"] = len(strips)
-    return mat_path, strips
+    return mat_path, strips, hairstrands.strip_coverage(px[:, :, 0], strips)
 NO_TRANSMISSION = {"DiffuseTransmissionScale": "0", "IndirectSpecularTransmissionScale": "0"}
 SETTING_VARIANTS = {"notrans": NO_TRANSMISSION, "rough": {"Roughness": "0.85"}, "depth": {"MaxDepthOffset": "0.01"}}
 FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
@@ -280,6 +282,35 @@ def settings_variant(conv, material, suffix: str, settings: dict):
     return out
 
 
+def skyrim_coverage(conv, n, sh):
+    """Per vertex how much of the shape's Skyrim texture is hair there (0-1): its alpha at the vertex's UV, ramped
+    around Skyrim's alpha-test threshold for shapes Skyrim alpha-tested (pipeline.cutout_alpha's ramp); None when
+    the texture cannot be read. Cached per texture on the converter."""
+    try:
+        import hair_probe
+        if sh.shader_ref < 0 or not sh.uvs:
+            return None
+        paths = skyrimnif.texture_set(n, sh.shader_ref)
+        if not paths or not paths[0]:
+            return None
+        cache = conv.__dict__.setdefault("_alpha_cache", {})
+        key = paths[0].lower()
+        if key not in cache:
+            dds = conv.src.texture(paths[0])
+            cache[key] = None if dds is None else hair_probe.decode_rgba(dds, conv.texconv)[:, :, 3].copy()
+        a = cache[key]
+        if a is None:
+            return None
+        from fo4sf import pipeline
+        alpha = pipeline.sample_texels(a, np.asarray(sh.uvs, float)).astype(float)
+        test, blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (False, False, 128)
+        if test and not blend:
+            return np.clip((alpha - (ref - 24.0)) / 48.0, 0.0, 1.0)
+        return alpha / 255.0
+    except Exception:                                      # noqa: BLE001 (no coverage: every vertex counts)
+        return None
+
+
 def fit_report(placed, hair, ctx, sf_world) -> dict:
     """How the hair sits, by region (skyrimhair.fit_gaps): the Skyrim hair on Skyrim's head where the head fit puts
     both ('skyrim': what it should look like), the result on Starfield's head ('starfield'); and the result's
@@ -386,12 +417,19 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         if not strands:
             row["reason"] = "no strand material / strips (see the report's strand_material)"
             return row
-        hair, row["strand_cards"] = hairstrands.grow_cards(hair, sf_world[skyrimhair.SF_HEAD], strands[1])
-        if not hair.shapes:
+        dirs = [hairstrands.uv_strand_dirs(sh, x) for sh, x in zip(hair.shapes, across)]
+        cover = [skyrim_coverage(conv, n, sh) for n, sh in zip(nifs, hair.shapes)]
+        cards, row["strand_cards"] = hairstrands.grow_cards(hair, sf_world[skyrimhair.SF_HEAD], strands[1],
+                                                            dirs=dirs, coverage=cover,
+                                                            densities=strands[2] if len(strands) > 2 else None)
+        if not cards.shapes:
             row["reason"] = "no strand cards grown"
             return row
-        hair, row["tangents"] = skyrimhair.uv_tangents(hair)
-        mats, backs = [strands[0]] * len(hair.shapes), [False] * len(hair.shapes)
+        cards, _t = skyrimhair.uv_tangents(cards)
+        # the converted Skyrim hair stays under the cards: the body of the hair, the cards its strands and outline
+        hair = skyrimhair.Hair(list(hair.shapes) + list(cards.shapes), hair.bones, hair.host_of_root, hair.report)
+        mats = list(mats) + [strands[0]] * len(cards.shapes)
+        backs = list(backs) + [False] * len(cards.shapes)
     out_name = out_name or f"{OUT_DIR}/{p['edid'].lower()}"
     hair_pack.write_files(staging, skyrimhair.nif_files(hair, mats, None, sf_world, out_name, backs))
     row["_fb"] = (hair, mats, None, out_name, backs)

@@ -1245,3 +1245,17 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   build time (strip_layout: 3 rows, 11-14 strips per row on the owner's Medium_Hair_Shared). skyrim_hairs
   --strand-cards adds a '(Skyrim, Starfield strands)' copy of each hairstyle next to the current conversion.
   Synthetic shell: ~400 cards, ~39k triangles, ~4 s. Unverified in game.
+- 2026-11-03 Strand cards, round 2. Owner's shots of the first build: thin and wiry, not full, "gives them bangs"
+  instead of following the outline, and all wavy. Causes (supported): (1) the root-to-tip sign came from "away
+  from the crown", which sends the front strands of slicked-back styles forward over the forehead; (2) Skyrim's
+  hairline layers reach down the forehead fading to nothing, and the cards followed their geometry, not their
+  opacity; (3) Medium_Hair_Shared's strands are wavy, and the step-by-step trace zig-zagged over the guide's facets;
+  (4) one strip layer over a see-through texture (vanilla opacity ~17 % solid) is thin. Now: the strand direction
+  and its sign from the texture's +V (uv_strand_dirs: root to tip by the KS / Starfield convention, verified for
+  both), the crown rule only where the UVs give none; per vertex coverage = the Skyrim texture's opacity at its UV
+  (ramped round Skyrim's alpha-test threshold), seeds and traces only where coverage >= 0.4; the field averaged
+  over the 6 nearest vertices, lines smoothed; the material Long_Straight_Hair_Shared (22 of IDG's 50 hairs use
+  it, read from its NIFs); 16 mm cards, 6 mm apart, 3 layers 2 mm apart, the inner layer on the denser half of the
+  strips, up to 1800 cards; and the converted Skyrim hair kept under the cards (its body; the cards give strands
+  and outline). Speed: neighbour queries use scipy's cKDTree when installed (synthetic 7k-vertex guide: 3 s
+  per hairstyle with it, 50 s with numpy alone) and the guide is thinned to one vertex per 4 mm.
