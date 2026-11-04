@@ -248,7 +248,7 @@ def arma_model(arma) -> str:
 
 
 def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint=None, transpose=False,
-                         orient=False):
+                         orient=False, look=None):
     """Starfield's hair shader for a KS shape (Hair1Layer: dithered soft edges and light through the hair, as the
     game's own and IDG's hairs; the generic cutout material gave hard 'strandy' edges, 2026-11-02), or None."""
     if sh.shader_ref < 0:
@@ -257,9 +257,10 @@ def hair_shader_material(conv, n, sh, color=None, ramp=None, strands=False, tint
     if not paths or not paths[0]:
         return None
     _test, _blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (True, False, 128)
-    if orient:
+    if orient or look:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
-                                         None if strands else ramp, strands, tint, transpose, orient=True)
+                                         None if strands else ramp, strands, tint, transpose, orient=orient,
+                                         look=look)
     if tint is not None or transpose:
         return conv.skyrim_hair_material(paths[0], paths[1] if len(paths) > 1 else "", ref, color,
                                          None if strands else ramp, strands, tint, transpose)
@@ -740,22 +741,26 @@ def shape_hair(hair, a, sf_world: dict, row: dict, drop: bool = True):
     if a.hair_shader and a.layer_gap > 0:    # stacked cards apart: the hair shader would etch their fight in
         hair, row["layers_apart"] = skyrimhair.separate_layers(hair, sf_world[skyrimhair.SF_HEAD],
                                                                step=a.layer_gap / 1000.0)
+    if getattr(a, "geometric_normals", False):    # Starfield's convention (normals = the faces'), from the final shape
+        hair, row["normals"] = skyrimhair.geometric_normals(hair)
     hair, row["tangents"] = skyrimhair.uv_tangents(hair)    # Starfield's convention (along +U), from the final shape
     return hair
 
 
-def hair_materials(conv, nifs, hair, a, color=None, tint=None, transposed=None, orient=False):
+def hair_materials(conv, nifs, hair, a, color=None, tint=None, transposed=None, orient=False, look=None):
     """(material per shape, back faces per shape) for a converted hair: Starfield's hair shader (hair_pack's options
     a.hair_shader / opacity_ramp / strands; `color` or a.hair_color baked into the albedo) or the generic cutout
     material. nifs: the source NIF of each shape (head parts merge several). tint: Skyrim's hair colour (0-1 RGB)
     multiplied into the albedo as Skyrim's hair shader does (an NPC's own colour). transposed: per shape, its texture
     is turned so its strands run down it (its UVs were swapped: skyrimhair.strands_down). orient: strands cut along
-    each texture region's own strands (pipeline.strand_orientation; the vanilla Skyrim hairs)."""
+    each texture region's own strands (pipeline.strand_orientation; the vanilla Skyrim hairs). look: a diagnostic
+    texture variant ('flat': one colour, 'solid': no see-through; skyrim_hairs --diagnose)."""
     color = color if color is not None else getattr(a, "hair_color", None)
     mats, backs = [], []
     for k, (n, sh) in enumerate(zip(nifs, hair.shapes)):
         turn = bool(transposed[k]) if transposed else False
-        m = ((hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn, orient=True) if orient
+        m = ((hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn, orient=orient,
+                                   look=look) if orient or look
               else hair_shader_material(conv, n, sh, color, a.opacity_ramp, a.strands, tint, turn))
              if a.hair_shader else None)
         hair_mat = m is not None
@@ -867,6 +872,9 @@ def add_shape_args(ap):
     ap.add_argument("--hair-setting", action="append", default=[], type=hair_setting, metavar="NAME=VALUE",
                     help="override one of the hair shader's settings (BSMaterial::HairSettingsComponent: %s), e.g. "
                          "MaxDepthOffset=0; repeatable" % ", ".join(sorted(cm.HAIR_SETTINGS)))
+    ap.add_argument("--geometric-normals", action=argparse.BooleanOptionalAction, default=False,
+                    help="recompute the vertex normals from the final shape, as Starfield's own hair has them "
+                         "(default: on for the vanilla Skyrim hairstyles, off for KS wigs)")
     ap.add_argument("--no-orient", dest="orient", action="store_false",
                     help="keep KS's card facing (about half face the scalp) instead of turning every card outward; "
                          "for comparing (the turned cards fixed the light / dark flicker)")

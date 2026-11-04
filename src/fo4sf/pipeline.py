@@ -388,7 +388,7 @@ class Converter:
                              albedo_tint: Optional[tuple] = None, flat_normal_ok: bool = False,
                              hair: bool = False, albedo_target: Optional[tuple] = None,
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
-                             transpose: bool = False, orient: bool = False) -> str:
+                             transpose: bool = False, orient: bool = False, look: Optional[str] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -422,7 +422,9 @@ class Converter:
                     alpha, hair_id = strand_maps(alpha, across=across)
                 elif opacity_ramp is not None:
                     alpha = ramp_alpha(alpha, *opacity_ramp)
-                if decal or alpha.min() < 250:            # only if the texture really has a cutout
+                if look == "solid":                        # diagnostic: nothing seen through the hair
+                    alpha = np.full_like(alpha, 255)
+                if decal or alpha.min() < 250 or look == "solid":   # only if the texture really has a cutout
                     textures.write_r8(os.path.join(tmp, "o_in.dds"), alpha)
                     textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
                     opacity = "o_in.dds"
@@ -451,6 +453,9 @@ class Converter:
                     if turned is not None and turned.shape != pd.shape[:2]:
                         turned = None
                     pd[:, :, :3] = flatten_albedo(pd, across=turned)
+                if look == "flat":                          # diagnostic: one colour (the visible texels' mean)
+                    seen = pd[:, :, 3] >= 128 if (pd[:, :, 3] >= 128).any() else np.ones(pd.shape[:2], bool)
+                    pd[:, :, :3] = np.rint(pd[:, :, :3][seen].astype(np.float64).mean(0)).astype(np.uint8)
                 if albedo_target is not None:               # recoloured so the visible texels average this sRGB
                     pd[:, :, :3] = recolor(pd, albedo_target)
                 if albedo_luminance is not None:

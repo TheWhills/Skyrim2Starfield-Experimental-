@@ -832,6 +832,68 @@ def orient_outward(hair: Hair, head: np.ndarray) -> Tuple[Hair, Dict]:
             {"cards": cards, "turned": flipped})
 
 
+def _vertex_face_normals(pos: np.ndarray, tris: np.ndarray) -> np.ndarray:
+    """Per vertex the sum of its triangles' area-weighted normals (by winding), unnormalised."""
+    acc = np.zeros_like(pos)
+    if len(tris):
+        fn = np.cross(pos[tris[:, 1]] - pos[tris[:, 0]], pos[tris[:, 2]] - pos[tris[:, 0]])
+        for k in range(3):
+            np.add.at(acc, tris[:, k], fn)
+    return acc
+
+
+def geometric_normals(hair: Hair) -> Tuple[Hair, Dict]:
+    """Vertex normals recomputed from the final shape: each the area-weighted average of its triangles' normals (by
+    their winding, which orient_outward turned away from the head). Verified 2026-11-03: IDG's (Starfield's own
+    convention) vertex normals are exactly that (|cos| median 1.0 with the face normals, all on the faces' side).
+    A Skyrim hair's stored normals were made for Skyrim's two-sided lighting and are not moved by the shaping
+    (follow_head, push_out, separate_layers move the vertices): where they disagree with the card the hair shader
+    lights the card as facing elsewhere (owner 2026-11-03: dark / light patches on the vanilla Skyrim hairstyles, as
+    on the KS wigs). Report: per shape the share of old normals that pointed against their triangles and the median
+    angle between old and new."""
+    shapes, rows = [], []
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        tris = np.asarray(sh.triangles, int).reshape(-1, 3)
+        if not len(pos) or not len(tris):
+            shapes.append(sh)
+            continue
+        acc = _vertex_face_normals(pos, tris)
+        size = np.linalg.norm(acc, axis=1)
+        good = size > 1e-14
+        old = (np.asarray(sh.normals, float) if sh.normals is not None and np.shape(sh.normals) == pos.shape
+               else np.zeros_like(pos))
+        oldn = old / np.maximum(np.linalg.norm(old, axis=1, keepdims=True), 1e-12)
+        new = np.where(good[:, None], acc / np.maximum(size, 1e-14)[:, None], oldn)
+        cos = (oldn * new).sum(1)[good]
+        rows.append({"name": (sh.name or b"").decode("latin-1"),
+                     "old_against_faces": round(float((cos < 0).mean()), 3) if len(cos) else 0.0,
+                     "old_vs_new_deg_median": round(float(np.degrees(np.arccos(np.clip(np.median(cos), -1, 1)))), 1)
+                     if len(cos) else 0.0})
+        shapes.append(HairShape(sh.name, sh.positions, new, sh.tangents, sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, geometric_normals=True)), {"shapes": rows}
+
+
+def shell_normals(hair: Hair, head: np.ndarray) -> Tuple[Hair, Dict]:
+    """Diagnostic: every vertex normal set to 'away from the head' (orient_outward's direction: from the cranium's
+    centre above it, from the vertical through it below), as if the hair were one smooth shell. Lighting then no
+    longer depends on how each card is tilted."""
+    c = np.asarray(head, float)[:3, 3] + np.array([0.0, 0.0, 0.09])
+    shapes, n = [], 0
+    for sh in hair.shapes:
+        pos = np.asarray(sh.positions, float)
+        if not len(pos):
+            shapes.append(sh)
+            continue
+        out = pos - np.stack([np.full(len(pos), c[0]), np.full(len(pos), c[1]), np.minimum(pos[:, 2], c[2])], axis=1)
+        out /= np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
+        n += len(pos)
+        shapes.append(HairShape(sh.name, sh.positions, out, sh.tangents, sh.uvs, sh.triangles, sh.weights,
+                                sh.shader_ref, sh.alpha_ref, sh.block))
+    return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, shell_normals=True)), {"vertices": n}
+
+
 LAYER_STEP = 0.0008           # m: the least gap separate_layers leaves between stacked hair cards
 LAYER_CELL = 0.006           # m: the neighbourhood in which cards count as stacked
 LAYER_MAX = 0.006            # m: the most any card is moved out

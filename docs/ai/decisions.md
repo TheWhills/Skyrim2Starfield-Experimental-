@@ -1111,3 +1111,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   99.9 % across, a half / half composite as 2 % / 99 %. KS wigs unchanged (orient off; their textures are all V).
   Alternatives: per-card UV-island shape (needs the texture's layout anyway), per-card gravity (reverted: misjudged
   braids and curls).
+- 2026-11-03 Verified in game (owner, 52558cc): the strand direction from the texture fixed the wrong-way lines on
+  the vanilla Skyrim hairstyles. Remaining: soft dark / light patches, as on the KS wigs (no physics on these, so
+  the cloth is not the whole cause of that either). Two changes: (1) vanilla hairstyles get their vertex normals
+  recomputed from the final shape (skyrimhair.geometric_normals; hair_pack --geometric-normals, on in
+  VANILLA_DEFAULTS, off for KS): Starfield's own convention (IDG: normals = the faces', verified), and the stored
+  Skyrim normals are not moved by the shaping; the report gives per shape how many old normals pointed against
+  their faces (supported cause, unverified). (2) skyrim_hairs --diagnose: per hairstyle three more looks-menu
+  copies, each without one suspect: 'flat colour' (albedo one colour: if the patches stay, they are lighting, not
+  the texture), 'no see-through' (opacity full: if they go, they are what shows through the strand gaps) and
+  'shell normals' (every normal pointing away from the head: if they go, they come from the cards' tilt).

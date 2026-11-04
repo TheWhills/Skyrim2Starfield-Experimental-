@@ -243,6 +243,74 @@ class StrandOrientationTests(unittest.TestCase):
             self.assertIsNone(conv.hair_orientation_of(plain))                # KS's path: no map, as before
 
 
+class NormalTests(unittest.TestCase):
+    def shape(self, normals):
+        from fo4sf import skyrimhair
+        p = np.array([[0, -0.1, 1.6], [0.01, -0.1, 1.6], [0, -0.1, 1.5], [0.01, -0.1, 1.5]])    # behind the head
+        return skyrimhair.HairShape(b"C", p, np.array(normals, float), np.zeros((4, 3)),
+                                    [(0, 0), (1, 0), (0, 1), (1, 1)], [(0, 1, 2), (1, 3, 2)],
+                                    [[("C_Head", 1.0)]] * 4, 3, -1, 0)
+
+    def test_normals_from_the_faces(self):
+        from fo4sf import skyrimhair
+        sh = self.shape([[0, 1.0, 0], [0, 1.0, 0], [1.0, 0, 0], [0, -1.0, 0]])     # stale: mostly wrong
+        out, rep = skyrimhair.geometric_normals(skyrimhair.Hair([sh], [], {}, {}))
+        n = np.asarray(out.shapes[0].normals)
+        face = np.cross(sh.positions[1] - sh.positions[0], sh.positions[2] - sh.positions[0])
+        face /= np.linalg.norm(face)
+        self.assertTrue(np.allclose(n, face[None, :]))                           # every vertex: the faces' normal
+        self.assertEqual(rep["shapes"][0]["old_against_faces"], 0.25)            # one of four pointed the other way
+        out2, rep2 = skyrimhair.geometric_normals(out)
+        self.assertEqual(rep2["shapes"][0]["old_against_faces"], 0.0)
+
+    def test_shell_normals_point_away_from_the_head(self):
+        from fo4sf import skyrimhair
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        out, rep = skyrimhair.shell_normals(skyrimhair.Hair([self.shape([[0, 0, 1.0]] * 4)], [], {}, {}), head)
+        n = np.asarray(out.shapes[0].normals)
+        self.assertEqual(rep["vertices"], 4)
+        self.assertTrue((n[:, 1] < -0.9).all())                                  # behind the head: -Y
+        self.assertTrue(np.allclose(np.linalg.norm(n, axis=1), 1.0))
+
+    def test_diagnostic_texture_looks(self):
+        import shutil
+        from fo4sf import skyrimconvert, textures
+
+        def fake_texconv(exe, src, out_dir, fmt, extra=()):
+            dst = os.path.join(out_dir, os.path.basename(src))
+            if os.path.abspath(dst) != os.path.abspath(src):
+                shutil.copy2(src, dst)
+        px = mixed_strand_texture()
+        px[:, :, 0] = np.arange(128, dtype=np.uint8)[None, :] * 2               # colour varies
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.dds")
+            textures.write_dds_dx10(p, 128, 64, textures.DXGI_R8G8B8A8_UNORM, px.tobytes(), 4)
+            with open(p, "rb") as fh:
+                raw = fh.read()
+            conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+            conv._materials, conv.stats, conv.material_errors = {}, {"materials_ok": 0}, {}
+            conv.staging, conv.texconv, conv.prefix, conv.texture_caps = d, "t.exe", "s2s", {}
+            conv.src = mock.Mock(texture=lambda name: raw)
+            conv._hair_fill = {"AmbientOcclusion": "a", "DepthOffset": "b", "HairID": "c"}
+            with mock.patch.object(textures, "texconv", fake_texconv):
+                flat = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True, look="flat")
+                solid = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
+                                                  look="solid")
+            self.assertTrue(flat.endswith("t_hair_o_flat.mat"))
+            self.assertTrue(solid.endswith("t_hair_o_solid.mat"))
+
+            def pixels(name, ch):
+                with open(os.path.join(d, "textures", "s2s", "h", name), "rb") as fh:
+                    b = fh.read()
+                h = textures.read_dds_header(b)
+                return np.frombuffer(b[h["data_offset"]:], np.uint8)[:h["width"] * h["height"] * ch]
+            col = pixels("t_hair_o_flat_color.dds", 4).reshape(-1, 4)
+            self.assertEqual(len(np.unique(col[:, 0])), 1)                       # one colour
+            op = pixels("t_hair_o_solid_opacity.dds", 1)
+            self.assertEqual(int(op.min()), 255)                                 # nothing seen through
+
+
 class MainTests(unittest.TestCase):
     def test_main_on_synthetic_games(self):
         from fo4sf import textures
@@ -298,6 +366,24 @@ class MainTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 rc = SH.main(["--skyrim-data", sky, "--starfield", sf, "--texconv", "texconv.exe", "--out", out,
                               "--cloth-template", "bob/bob_f.nif"])
+                rc_diag = SH.main(["--skyrim-data", sky, "--starfield", sf, "--texconv", "texconv.exe", "--out",
+                                   os.path.join(d, "diag"), "--cloth-template", "bob/bob_f.nif", "--only",
+                                   "HairMaleNord01", "--diagnose", "--merge-plugin",
+                                   os.path.join(ks_dir, "S2SHair.esm")])
+            self.assertEqual(rc_diag, 0)
+            with open(os.path.join(d, "diag", "skyrim_hairs.json")) as fh:
+                diag = json.load(fh)
+            self.assertEqual([(r["skyrim"], r.get("variant"), r["ok"]) for r in diag["parts"]],
+                             [("HairMaleNord01", None, True), ("HairMaleNord01", "flat", True),
+                              ("HairMaleNord01", "solid", True), ("HairMaleNord01", "shell", True)])
+            self.assertTrue(diag["parts"][3]["shell_normals"]["vertices"] > 0)
+            self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
+            dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
+                                                                                 [b"HDPT"])}
+            self.assertEqual(dparts["S2S_HairMaleNord01_shell"][b"FULL"],
+                             b"HairMaleNord01 (Skyrim, shell normals)\0")
+            self.assertEqual(dparts["S2S_HairMaleNord01_flat"][b"MODL"],
+                             b"s2s\\skyrimhair\\hairmalenord01_flat.nif\0")
             self.assertEqual(rc, 0)
             rep = json.load(open(os.path.join(out, "skyrim_hairs.json")))
             rows = {r["skyrim"]: r for r in rep["parts"]}

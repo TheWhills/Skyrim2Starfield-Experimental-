@@ -53,7 +53,11 @@ HAIR, FACIAL_HAIR = 3, 4
 # (KS starts low; vanilla's matches its own scalp layer), the volume and the temple bridge (they lift the shell off the
 # scalp layer: a gap), a wide conform blend (a deep spot lifts the whole neighbourhood) and wide card spacing
 # (2026-11-03: owner saw the Skyrim hairstyles float off the skull with a gap, "flat")
-VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3)
+# geometric_normals: the stored Skyrim normals do not follow the shaping (2026-11-03, dark / light patches)
+VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
+                        geometric_normals=True)
+# --diagnose: extra looks-menu copies of each hairstyle, each with one suspect of the dark / light patches removed
+DIAGNOSE = (("flat", "flat colour"), ("solid", "no see-through"), ("shell", "shell normals"))
 FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
 BEAST = re.compile(r"khajiit|argonian", re.I)
 CHARGEN = {True: "HeadPartsChargenOptionsFemale", False: "HeadPartsChargenOptionsMale"}
@@ -171,10 +175,12 @@ def record_model(rec) -> str:
     return next((bytes(x).rstrip(b"\0").decode("latin-1") for s, x in rec[2] if s == b"MODL"), "")
 
 
-def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, out_name=None, tint=None) -> dict:
+def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, out_name=None, tint=None,
+               variant=None) -> dict:
     """Convert one head part (its models merged), shape it for ctx's head, write its NIF and _facebones twin into
     staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
-    albedo (an NPC's own; the looks-menu hairstyles have none). Returns its report row (ok, model, ...)."""
+    albedo (an NPC's own; the looks-menu hairstyles have none). variant: one of DIAGNOSE ('flat' / 'solid':
+    texture variants, 'shell': normals pointing away from the head). Returns its report row (ok, model, ...)."""
     row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
     hairs, nifs = [], []
     for m in models:
@@ -200,7 +206,11 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         return row
     hair = skyrimhair.merge(hairs)
     hair = hair_pack.shape_hair(hair, ctx, sf_world, row, drop=False)
-    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, orient=bool(ctx.hair_shader))
+    if variant == "shell":
+        hair, row["shell_normals"] = skyrimhair.shell_normals(hair, sf_world[skyrimhair.SF_HEAD])
+        hair, row["tangents"] = skyrimhair.uv_tangents(hair)
+    look = variant if variant in ("flat", "solid") else None
+    mats, backs = hair_pack.hair_materials(conv, nifs, hair, ctx, tint=tint, orient=bool(ctx.hair_shader), look=look)
     across = [skyrimhair.strands_across(sh, conv.hair_orientation_of(m) if hasattr(conv, "hair_orientation_of")
                                         else None) for sh, m in zip(hair.shapes, mats)]
     if any(x.any() for x in across):                 # cards whose strands run along U: lit along them
@@ -250,6 +260,9 @@ def main(argv=None):
                     help="another plugin that adds to the looks-menu lists (e.g. ...\\S2S Hair\\S2SHair.esm): its "
                          "entries are kept in ours, so both show (it becomes a master: load it first). Default: "
                          "S2SHair.esm in the 'S2S Hair' mod folder next to --out, when there")
+    ap.add_argument("--diagnose", action="store_true",
+                    help="also, per hairstyle, looks-menu copies each without one suspect of the dark / light patches: "
+                         + ", ".join(f"'(Skyrim, {label})'" for _k, label in DIAGNOSE) + " (use with --only)")
     ap.add_argument("--cloth-template", help="as hair_pack: the vanilla hair whose skeleton / face bones are used")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--archive2")
@@ -317,19 +330,25 @@ def main(argv=None):
             report.setdefault("templates", {})[f"{'female' if female else 'male'} type {p['type']}"] = \
                 sfplugin.edid(tpl[2])
         ctx, fb = contexts[(female, p["type"])]
-        try:
-            row = build_part(p, part_models(p["key"], parts), sky, conv, sf_world, ctx, fb, staging,
-                             a.spread_face_bones)
-        except Exception as e:                                   # noqa: BLE001 (one bad part must not stop the rest)
-            row = {"skyrim": p["edid"], "ok": False, "reason": f"{type(e).__name__}: {e}"}
-        row["female"] = female
-        if row.get("ok"):
-            rec = hair_pack.hair_part_record(tpl, len(recs), "S2S_" + p["edid"], f"{p['edid']} (Skyrim)",
-                                             row["model"], masters=len(masters))
-            recs.append(rec)
-            added[female].append(rec[3])
-            row["form_id_in_plugin"] = f"{rec[3] & 0xFFFFFF:06X}"
-        report["parts"].append(row)
+        for variant, label in ((None, None),) + (DIAGNOSE if a.diagnose else ()):
+            try:
+                row = build_part(p, part_models(p["key"], parts), sky, conv, sf_world, ctx, fb, staging,
+                                 a.spread_face_bones, variant=variant,
+                                 out_name=f"{OUT_DIR}/{p['edid'].lower()}_{variant}" if variant else None)
+            except Exception as e:                               # noqa: BLE001 (one bad part must not stop the rest)
+                row = {"skyrim": p["edid"], "ok": False, "reason": f"{type(e).__name__}: {e}"}
+            row["female"] = female
+            if variant:
+                row["variant"] = variant
+            if row.get("ok"):
+                edid = "S2S_" + p["edid"] + (f"_{variant}" if variant else "")
+                rec = hair_pack.hair_part_record(tpl, len(recs), edid,
+                                                 f"{p['edid']} (Skyrim{', ' + label if label else ''})",
+                                                 row["model"], masters=len(masters))
+                recs.append(rec)
+                added[female].append(rec[3])
+                row["form_id_in_plugin"] = f"{rec[3] & 0xFFFFFF:06X}"
+            report["parts"].append(row)
     good = [r for r in report["parts"] if r.get("ok")]
     if not good:
         sys.exit("no hair converted: " + json.dumps(report["parts"][:5], indent=1, default=str))
