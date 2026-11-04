@@ -1232,3 +1232,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   map: white for blonde). Now pipeline.vanilla_albedo: each texel's brightness remapped by rank onto vanilla's
   percentiles, coloured in vanilla's R:G:B ratio (Skyrim's light / dark pattern kept, its range and colour vanilla's).
   Not done: darker roots (where a Skyrim card's root is is not known per card).
+- 2026-11-03 Strand cards (owner: "do we need to make it so it has all the strands like Starfield's" - yes; the
+  vanilla Skyrim hairs are a few shells with painted strands, which light as big surfaces under Starfield's hair
+  shader whatever their textures). fo4sf.hairstrands: the shaped Skyrim hair (fitted, tessellated, its strand
+  direction from the texture-read tangents) is only a guide; per layer (3, 1.5 mm apart) random seed points on it are
+  traced over the guide to the root and to the tip (stopping off the guide, at sharp turns, and where the root-to-tip
+  direction reverses: crown / parting), lines kept when they do not mostly overlap kept ones (7 mm cells), each a
+  12 mm ribbon (+-20 %) mapped onto one strand strip of a vanilla hair texture (root at the strip's top: verified
+  from Medium_Hair_Shared's albedo, darker at each strip's top), weights from the guide vertex under each point.
+  The cards use the vanilla material itself (Medium_Hair_Shared.mat, the bob's; --strand-material), as IDG's hairs
+  do: Starfield's strands, AO, depth, IDs and hair colour unchanged. Strips found from the vanilla opacity map at
+  build time (strip_layout: 3 rows, 11-14 strips per row on the owner's Medium_Hair_Shared). skyrim_hairs
+  --strand-cards adds a '(Skyrim, Starfield strands)' copy of each hairstyle next to the current conversion.
+  Synthetic shell: ~400 cards, ~39k triangles, ~4 s. Unverified in game.

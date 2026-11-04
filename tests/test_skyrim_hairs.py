@@ -603,6 +603,42 @@ class MainTests(unittest.TestCase):
                                    "HairMaleNord01", "--diagnose", "--merge-plugin",
                                    os.path.join(ks_dir, "S2SHair.esm")])
             self.assertEqual(rc_diag, 0)
+
+            def fake_cards(h, head, st):                 # the fixture is one tiny card: the growing has its own tests
+                from fo4sf import skyrimhair
+                sh = h.shapes[0]
+                p = np.asarray(sh.positions)[:3]
+                card = skyrimhair.HairShape(b"Cards0", p, np.asarray(sh.normals)[:3], np.zeros((3, 3)),
+                                            [(st[0][0], st[0][1]), (st[0][2], st[0][1]), (st[0][0], st[0][3])],
+                                            [(0, 1, 2)], list(sh.weights)[:3], -1, -1, 0)
+                return skyrimhair.Hair([card], h.bones, h.host_of_root, h.report), {"cards": 1, "layers": [{}]}
+            with mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                    mock.patch.object(hair_pack, "read_game_file",
+                                      lambda sfp, rel: game.get(rel.replace("\\", "/").lower())), \
+                    mock.patch.object(hair_pack, "read_template", lambda spec: b"cloth"), \
+                    mock.patch.object(smpcloth, "check_template", lambda blob: template_root()), \
+                    mock.patch.object(SH.hairstrands, "grow_cards", fake_cards), \
+                    mock.patch.object(SH, "strand_material",
+                                      lambda *a, **k: ("Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat",
+                                                       [(0.0, 0.0, 0.5, 1.0), (0.5, 0.0, 1.0, 1.0)])), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                rc_cards = SH.main(["--skyrim-data", sky, "--starfield", sf, "--texconv", "texconv.exe", "--out",
+                                    os.path.join(d, "cards"), "--cloth-template", "bob/bob_f.nif", "--only",
+                                    "HairMaleNord01", "--strand-cards", "--merge-plugin",
+                                    os.path.join(ks_dir, "S2SHair.esm")])
+            self.assertEqual(rc_cards, 0)
+            with open(os.path.join(d, "cards", "skyrim_hairs.json")) as fh:
+                cards = json.load(fh)
+            row = cards["parts"][1]
+            self.assertEqual((row["variant"], row["ok"]), ("strands", True), row.get("reason"))
+            self.assertGreater(row["strand_cards"]["cards"], 0)
+            self.assertEqual(set(row["materials"]), {"Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"})
+            cparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "cards", SH.PLUGIN),
+                                                                                 [b"HDPT"])}
+            self.assertEqual(cparts["S2S_HairMaleNord01_strands"][b"FULL"],
+                             b"HairMaleNord01 (Skyrim, Starfield strands)\0")
+            self.assertTrue(os.path.isfile(os.path.join(d, "cards", "meshes", "s2s", "skyrimhair",
+                                                        "hairmalenord01_strands_facebones.nif")))
             with open(os.path.join(d, "diag", "README.txt"), encoding="utf-8") as fh:
                 readme = fh.read()
             self.assertIn("    1. HairMaleNord01\n", readme)
@@ -626,6 +662,7 @@ class MainTests(unittest.TestCase):
                                diag["parts"][0]["tessellated"]["vertices_before"])   # low-poly shells rounded
             self.assertEqual(diag["parts"][0]["fit"], {})                       # no head mesh in this game
             detail = diag["parts"][0]["shape_detail"][0]
+            self.assertIn("opacity", detail, detail)
             self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)
             dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
                                                                                  [b"HDPT"])}

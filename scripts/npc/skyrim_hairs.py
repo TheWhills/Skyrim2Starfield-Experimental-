@@ -39,7 +39,8 @@ sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, HERE)
 
-from fo4sf import bsa, fo4land, sfplugin, skyrimconvert, skyrimhair, skyrimnif, skyrimnpc, smpcloth  # noqa: E402
+from fo4sf import bsa, fo4land, hairstrands, sfplugin, skyrimconvert  # noqa: E402
+from fo4sf import skyrimhair, skyrimnif, skyrimnpc, smpcloth  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 import hair_pack  # noqa: E402
 
@@ -79,6 +80,34 @@ VANILLA_HAIR_SETTINGS = {"MaxDepthOffset": "0"}
 # also shows whether the material's shader settings take effect in game at all (no settings-only copy has differed
 # so far: transmission, roughness, and earlier MaxDepthOffset on the KS wigs)
 DIAGNOSE = (("depth", "old depth offset"),)
+# --strand-cards (owner 2026-11-03: "do we need it to have all the strands like Starfield's" - yes): a looks-menu
+# copy of each hairstyle made of Starfield-style strand cards on a vanilla hair material (fo4sf.hairstrands)
+STRANDS = ("strands", "Starfield strands")
+STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"     # the bob's (hair_probe)
+
+
+def strand_material(starfield: str, texconv: str, cr_zip: str, mat_path: str, report: dict):
+    """(the material path for the NIFs, its texture's strand strips) of a vanilla hair material, or None: the .mat
+    from ContentResources.zip, its opacity map from the game's archives (decoded with texconv), its strips
+    (hairstrands.strip_layout)."""
+    import hair_probe
+    rep = report.setdefault("strand_material", {"path": mat_path})
+    mat = hair_probe.read_material(cr_zip, mat_path)
+    if mat is None:
+        rep["error"] = "not in ContentResources.zip"
+        return None
+    info = hair_probe.material_info(mat)
+    op = info["textures"].get("Opacity")
+    rep["opacity"] = op
+    dds = hair_pack.read_game_file(starfield, re.sub(r"^data[\\/]", "", op or "", flags=re.I).replace("\\", "/")) \
+        if op else None
+    if dds is None:
+        rep["error"] = "its opacity map is not in the game's archives"
+        return None
+    px = hair_probe.decode_rgba(dds, texconv)
+    strips = hairstrands.strip_layout(px[:, :, 0])
+    rep["strips"] = len(strips)
+    return mat_path, strips
 NO_TRANSMISSION = {"DiffuseTransmissionScale": "0", "IndirectSpecularTransmissionScale": "0"}
 SETTING_VARIANTS = {"notrans": NO_TRANSMISSION, "rough": {"Roughness": "0.85"}, "depth": {"MaxDepthOffset": "0.01"}}
 FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
@@ -288,7 +317,7 @@ def shape_alpha(n, sh, conv, material) -> dict:
 
 
 def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, out_name=None, tint=None,
-               variant=None) -> dict:
+               variant=None, strands=None) -> dict:
     """Convert one head part (its models merged), shape it for ctx's head, write its NIF and _facebones twin into
     staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
     albedo (an NPC's own; the looks-menu hairstyles have none). variant: a diagnostic copy ('flat' / 'solid':
@@ -353,6 +382,16 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
+    if variant == "strands":                         # Starfield-style cards grown over the shaped Skyrim hair
+        if not strands:
+            row["reason"] = "no strand material / strips (see the report's strand_material)"
+            return row
+        hair, row["strand_cards"] = hairstrands.grow_cards(hair, sf_world[skyrimhair.SF_HEAD], strands[1])
+        if not hair.shapes:
+            row["reason"] = "no strand cards grown"
+            return row
+        hair, row["tangents"] = skyrimhair.uv_tangents(hair)
+        mats, backs = [strands[0]] * len(hair.shapes), [False] * len(hair.shapes)
     out_name = out_name or f"{OUT_DIR}/{p['edid'].lower()}"
     hair_pack.write_files(staging, skyrimhair.nif_files(hair, mats, None, sf_world, out_name, backs))
     row["_fb"] = (hair, mats, None, out_name, backs)
@@ -395,6 +434,11 @@ def main(argv=None):
     ap.add_argument("--no-starfield-hairline", dest="starfield_hairline", action="store_false",
                     help="leave out the copied vanilla hairstyle's extra parts (HNAM: Starfield's own hairline / scalp "
                          "pieces, kept by default under the Skyrim hair; the report lists them)")
+    ap.add_argument("--strand-cards", action="store_true",
+                    help="also, per hairstyle, a looks-menu copy '(Skyrim, Starfield strands)': Starfield-style strand "
+                         "cards grown over it on a vanilla hair material (--strand-material)")
+    ap.add_argument("--strand-material", default=STRAND_MATERIAL,
+                    help="the vanilla hair material the strand cards use (default: the bob's, %(default)s)")
     ap.add_argument("--diagnose", action="store_true",
                     help="also, per hairstyle, looks-menu copies each without one suspect of the dark / light patches: "
                          + ", ".join(f"'(Skyrim, {label})'" for _k, label in DIAGNOSE) + " (use with --only)")
@@ -452,6 +496,7 @@ def main(argv=None):
     report["masters"] = masters
     recs, added = [], {True: [], False: []}
     contexts = {}
+    strands = (strand_material(a.starfield, a.texconv, cr, a.strand_material, report) if a.strand_cards else None)
     for p in chosen:
         female = is_female(p)
         tpl = chargen_template(sf_hdpt, flst, female, p["type"], stem if female else stem.replace("_f", "_m"))
@@ -466,11 +511,13 @@ def main(argv=None):
                 sfplugin.edid(tpl[2])
             report.setdefault("template_extra_parts", {})[sfplugin.edid(tpl[2])] = extra_parts(tpl, sf_hdpt)
         ctx, fb = contexts[(female, p["type"])]
-        for variant, label in ((None, None),) + (DIAGNOSE if a.diagnose else ()):
+        extra = (DIAGNOSE if a.diagnose else ()) + ((STRANDS,) if a.strand_cards else ())
+        for variant, label in ((None, None),) + extra:
             try:
                 row = build_part(p, part_models(p["key"], parts), sky, conv, sf_world, ctx, fb, staging,
                                  a.spread_face_bones, variant=variant,
-                                 out_name=f"{OUT_DIR}/{p['edid'].lower()}_{variant}" if variant else None)
+                                 out_name=f"{OUT_DIR}/{p['edid'].lower()}_{variant}" if variant else None,
+                                 strands=strands)
             except Exception as e:                               # noqa: BLE001 (one bad part must not stop the rest)
                 row = {"skyrim": p["edid"], "ok": False, "reason": f"{type(e).__name__}: {e}"}
             row["female"] = female

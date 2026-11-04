@@ -1,0 +1,100 @@
+"""fo4sf.hairstrands: Starfield-style strand cards grown over a hair shell, on synthetic shapes only."""
+import os
+import sys
+import unittest
+
+import numpy as np
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+from fo4sf import hairstrands as HS, skyrimhair as H  # noqa: E402
+
+
+def strip_texture():
+    """3 rows x 4 strips, as Starfield's hair textures (rows of strand strips)."""
+    op = np.zeros((96, 128))
+    for r in range(3):
+        for k in range(4):
+            op[r * 32 + 2:r * 32 + 30, k * 32 + 3:k * 32 + 28] = 255
+    return op
+
+
+def shell():
+    """A cap (radius 0.1 round (0, 0, 1.69)) and a hanging skirt to z 1.5, normals out, tangents across the strands
+    (horizontal: the strands run down), all on C_Head."""
+    th = np.linspace(0, np.pi / 2 * 0.95, 16)
+    ph = np.linspace(0, 2 * np.pi, 33)[:-1]
+    pts = [[0.1 * np.sin(t) * np.cos(f), 0.1 * np.sin(t) * np.sin(f), 1.69 + 0.1 * np.cos(t)] for t in th for f in ph]
+    pts += [[0.1 * np.cos(f), 0.1 * np.sin(f), z] for z in np.linspace(1.68, 1.5, 10) for f in ph]
+    p = np.array(pts)
+    nr, nc = len(th) + 10, len(ph)
+    tris = []
+    for r in range(nr - 1):
+        for c in range(nc):
+            a, b, d, e = r * nc + c, r * nc + (c + 1) % nc, (r + 1) * nc + c, (r + 1) * nc + (c + 1) % nc
+            tris += [(a, d, b), (b, d, e)]
+    centre = np.where(p[:, 2:3] < 1.69, np.c_[np.zeros(len(p)), np.zeros(len(p)), p[:, 2]], [0, 0, 1.69])
+    n = p - centre
+    n /= np.linalg.norm(n, axis=1, keepdims=True)
+    t = np.cross([0, 0, 1.0], n)
+    small = np.linalg.norm(t, axis=1) < 0.3
+    t[small] = [1.0, 0, 0]
+    t /= np.linalg.norm(t, axis=1, keepdims=True)
+    w = [[("C_Head", 0.7), ("Hair1", 0.3)]] * len(p)
+    return H.HairShape(b"S", p, n, t, [(0.0, 0.0)] * len(p), tris, w, -1, -1, 0)
+
+
+class StripTests(unittest.TestCase):
+    def test_rows_and_strips(self):
+        st = HS.strip_layout(strip_texture())
+        self.assertEqual(len(st), 12)
+        rows = sorted({round(s[1], 3) for s in st})
+        self.assertEqual(len(rows), 3)
+        for u0, v0, u1, v1 in st:
+            self.assertTrue(0 <= u0 < u1 <= 1 and 0 <= v0 < v1 <= 1)
+            self.assertLess(u1 - u0, 0.3)
+
+    def test_empty_falls_back(self):
+        self.assertEqual(HS.strip_layout(np.zeros((32, 32))), [])
+
+
+class CardTests(unittest.TestCase):
+    def test_cards_over_the_shell(self):
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        strips = HS.strip_layout(strip_texture())
+        hair, rep = HS.grow_cards(H.Hair([shell()], [], {}, {}), head, strips, max_cards=300)
+        self.assertGreater(rep["cards"], 30)
+        self.assertEqual(len(hair.shapes), len(rep["layers"]))
+        allp = np.vstack([np.asarray(s.positions) for s in hair.shapes])
+        r = np.where(allp[:, 2] < 1.69, np.linalg.norm(allp[:, :2], axis=1),
+                     np.linalg.norm(allp - [0, 0, 1.69], axis=1))
+        self.assertLess(np.abs(r - 0.1).max(), 0.02)                     # on the shell, a little out
+        self.assertGreater(np.median(r - 0.1), 0.0)
+        sh = hair.shapes[0]
+        uv = np.asarray(sh.uvs)
+        inside = [any(u0 - 1e-9 <= u <= u1 + 1e-9 and v0 - 1e-9 <= v <= v1 + 1e-9 for u0, v0, u1, v1 in strips)
+                  for u, v in uv]
+        self.assertTrue(all(inside))                                     # on the texture's strips
+        p = np.asarray(sh.positions)
+        skirt = [k for k, t in enumerate(sh.triangles) if p[list(t), 2].max() < 1.65]
+        self.assertTrue(skirt)
+        t = sh.triangles[skirt[0]]
+        rows = sorted(t, key=lambda i: -p[i, 2])                         # higher vertex: nearer the root (v0)
+        self.assertLessEqual(uv[rows[0], 1], uv[rows[-1], 1] + 1e-9)
+        self.assertEqual(sh.weights[0], [("C_Head", 0.7), ("Hair1", 0.3)])   # the guide's weights
+        a, b, c = (p[i] for i in sh.triangles[0])
+        out = (a + b + c) / 3 - [0, 0, min(1.69, ((a + b + c) / 3)[2])]
+        self.assertGreater(np.dot(np.cross(b - a, c - a), out), 0)        # facing out
+
+    def test_trace_stops_at_the_edge(self):
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        g = HS.Guide(H.Hair([shell()], [], {}, {}), head)
+        lines = HS.trace(g, np.array([[0.1, 0.0, 1.6]]), +1.0, 0.005, max_steps=200)
+        self.assertGreater(lines[0][-1][2], 1.5 - 0.012)                  # ends near the skirt's hem
+        self.assertLess(lines[0][-1][2], 1.52)
+
+
+if __name__ == "__main__":
+    unittest.main()
