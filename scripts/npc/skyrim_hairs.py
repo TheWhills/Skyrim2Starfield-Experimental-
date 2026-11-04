@@ -62,6 +62,11 @@ HAIR, FACIAL_HAIR = 3, 4
 VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
                         geometric_normals=True, tessellate=3, blend_coverage=3.0, hairline_drop=20.0,
                         skyrim_cutout=True)
+# The hair shader's depth offset off (IDG's 0.01 m with our flat mid-grey depth map moves every hair pixel's depth
+# by about 5 mm; the vanilla Skyrim shells lie 2.5-4 mm over Starfield's skin at the front and sides, 0-2 mm at a
+# parting: the skin then wins the depth test. 2026-11-03, owner: "every time strands meet in the middle they go into
+# the skull", the bare band at the front). --hair-setting MaxDepthOffset=0.01 puts it back.
+VANILLA_HAIR_SETTINGS = {"MaxDepthOffset": "0"}
 # --diagnose: extra looks-menu copies of each hairstyle, each with one suspect of the dark / light patches removed
 # (round 1, owner 2026-11-03: flat colour / no see-through / shell normals all kept the same patches: neither the
 # texture, the gaps nor the normals. Round 2: the strand direction and the light through the hair)
@@ -69,9 +74,13 @@ VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.
 # hair sits on the scalp instead of growing from it): Skyrim's blended layers (hairlines) with their soft alpha kept
 # (a soft fade at the roots, dithered by the shader, instead of cut strands) and a rougher hair shader (a softer,
 # wider highlight: the near-white sheen on the top piece)
-DIAGNOSE = (("soft", "soft hairline"), ("rough", "rougher"))
+# Round 4 (owner 2026-11-03: round 3's soft / rough copies looked exactly like the normal one; strands dip into the
+# skull where they meet in the middle): the depth offset back at IDG's value next to the new default of none, which
+# also shows whether the material's shader settings take effect in game at all (no settings-only copy has differed
+# so far: transmission, roughness, and earlier MaxDepthOffset on the KS wigs)
+DIAGNOSE = (("depth", "old depth offset"),)
 NO_TRANSMISSION = {"DiffuseTransmissionScale": "0", "IndirectSpecularTransmissionScale": "0"}
-SETTING_VARIANTS = {"notrans": NO_TRANSMISSION, "rough": {"Roughness": "0.85"}}
+SETTING_VARIANTS = {"notrans": NO_TRANSMISSION, "rough": {"Roughness": "0.85"}, "depth": {"MaxDepthOffset": "0.01"}}
 FLAG_PLAYABLE, FLAG_MALE, FLAG_FEMALE, FLAG_EXTRA = 0x01, 0x02, 0x04, 0x08     # Skyrim HDPT DATA (xEdit TES5)
 BEAST = re.compile(r"khajiit|argonian", re.I)
 CHARGEN = {True: "HeadPartsChargenOptionsFemale", False: "HeadPartsChargenOptionsMale"}
@@ -434,7 +443,7 @@ def main(argv=None):
     sky = bsa.SkyrimArchives(a.skyrim_data)
     conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None,
                                          prefix=hair_pack.PREFIX)
-    conv.hair_settings = dict(a.hair_setting) or None
+    conv.hair_settings = dict(VANILLA_HAIR_SETTINGS, **dict(a.hair_setting)) or None
     merge = [os.path.abspath(m) for m in a.merge_plugin]
     sibling = os.path.join(os.path.dirname(out), "S2S Hair", "S2SHair.esm")
     if not merge and os.path.isfile(sibling):

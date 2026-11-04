@@ -163,7 +163,7 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
         shape.set_defaults(**skyrim_hairs.VANILLA_DEFAULTS)
         ctx = shape.parse_args([])
         ctx.skyrim_data, ctx.starfield = a.skyrim_data, a.starfield
-        conv.hair_settings = None
+        conv.hair_settings = dict(skyrim_hairs.VANILLA_HAIR_SETTINGS)
         rep = res.setdefault("hair_pipeline", {})
         blob = hair_pack.find_template(a.starfield, rep)
         sk = smpcloth.human_skeleton(smpcloth.check_template(blob))

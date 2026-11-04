@@ -1193,3 +1193,22 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   dithered by the shader, instead of the strand cut: the fade at the roots Skyrim's blending gave) and 'rougher'
   (Roughness 0.85 instead of IDG's 0.5125: a wider, weaker highlight; supported: the near-white top is the
   shader's highlight on a large smooth surface whose strands all point one way). The round-2 copies are dropped.
+- 2026-11-03 Owner, diagnose round 3: 'soft hairline' and 'rougher' look exactly like the normal hairstyle; the
+  colour differences between the parts are "atrocious"; strands dip into the skull where they meet at a centre
+  parting; and the hair does not follow the face-shape option (round / square), unlike vanilla hair. Notes: (1) no
+  material-settings-only copy has ever looked different (transmission, roughness; MaxDepthOffset on KS): either the
+  settings do little or the game does not take them from our .mat (unresolved). (2) Default for the vanilla Skyrim
+  hairs and NPC hair now MaxDepthOffset 0 (skyrim_hairs.VANILLA_HAIR_SETTINGS): with our flat mid-grey depth map
+  IDG's 0.01 m can move hair pixels ~5 mm deeper, more than the 0-4 mm these shells lie over the skin (supported
+  cause of the dipping at the parting); --diagnose now makes one '[depth]' copy with IDG's value, which also tests
+  (1). (3) Face shape: vanilla / IDG hairs carry a morph.dat per hairstyle (meshes\morphs\human\<sex>\chargen\<name>\
+  and \performance\). Verified header from IDG's files: 'MDAT', u32 version 3, u32 vertex count (= the hair mesh's),
+  u32 morph count, then that many u32-length-prefixed names (female chargen: 'Hat', 'Overweight', 'Thin', 'Strong',
+  and per head preset and region e.g. 'female_eu_md2_Forehead', '..._Chin', '..._Ears', '..._Eyes', '..._Neck',
+  '..._Cheeks', '..._Jaw'); the per-vertex data after it is not decoded yet (unresolved). Next: decode it against the
+  head's own morph.dat and write one for our hairs by moving each hair vertex with the head vertices under it.
+  (4) Starfield's strand look: IDG's hairs use the vanilla hair materials and textures (verified 2026-11-02), i.e.
+  their UVs are laid out for Starfield's textures. scripts/armor/hair_probe.py reads vanilla hairstyles' .mat
+  (ContentResources.zip) and textures (game archives) and reports their settings, slots and texture statistics
+  (depth map percentiles, AO, albedo spread, opacity strand direction) with small PNGs: the evidence for re-texturing
+  the Skyrim cards with Starfield's hair textures.

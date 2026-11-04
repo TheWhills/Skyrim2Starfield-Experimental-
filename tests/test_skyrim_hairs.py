@@ -572,22 +572,21 @@ class MainTests(unittest.TestCase):
             with open(os.path.join(d, "diag", "README.txt"), encoding="utf-8") as fh:
                 readme = fh.read()
             self.assertIn("    1. HairMaleNord01\n", readme)
-            self.assertIn("    2. HairMaleNord01 [soft]", readme)
+            self.assertIn("    2. HairMaleNord01 [depth]", readme)
             with open(os.path.join(d, "diag", "skyrim_hairs.json")) as fh:
                 diag = json.load(fh)
             self.assertEqual([(r["skyrim"], r.get("variant"), r["ok"]) for r in diag["parts"]],
-                             [("HairMaleNord01", None, True), ("HairMaleNord01", "soft", True),
-                              ("HairMaleNord01", "rough", True)])
-            self.assertEqual(diag["parts"][1]["materials"], diag["parts"][0]["materials"])   # nothing blended here
+                             [("HairMaleNord01", None, True), ("HairMaleNord01", "depth", True)])
             self.assertEqual(diag["parts"][1]["fit"], diag["parts"][0]["fit"])   # the copies reuse the shaping
-            self.assertEqual(diag["parts"][2]["tessellated"], diag["parts"][0]["tessellated"])
-            nt = [m for m in diag["parts"][2]["materials"] if "_rough" in m]
+            nt = [m for m in diag["parts"][1]["materials"] if "_depth" in m]
             self.assertTrue(nt)
             with open(os.path.join(d, "diag", *nt[0].split("\\")), encoding="utf-8") as fh:
-                self.assertIn('"Roughness" : "0.85"', fh.read())                         # a rougher shader
+                self.assertIn('"MaxDepthOffset" : "0.01"', fh.read())                    # IDG's depth offset
             plain = diag["parts"][0]["materials"][0]
             with open(os.path.join(d, "diag", *plain.split("\\")), encoding="utf-8") as fh:
-                self.assertIn('"Roughness" : "0.5125"', fh.read())                       # the others keep IDG's
+                txt = fh.read()
+            self.assertIn('"MaxDepthOffset" : "0"', txt)                                 # vanilla Skyrim: none
+            self.assertIn('"Roughness" : "0.5125"', txt)                                 # the rest IDG's
             self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
             self.assertGreater(diag["parts"][0]["tessellated"]["vertices_after"],
                                diag["parts"][0]["tessellated"]["vertices_before"])   # low-poly shells rounded
@@ -596,11 +595,11 @@ class MainTests(unittest.TestCase):
             self.assertAlmostEqual(detail["opacity"]["after_cut"], detail["opacity"]["alpha_mean"], delta=0.05)
             dparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "diag", SH.PLUGIN),
                                                                                  [b"HDPT"])}
-            self.assertNotIn(b"HNAM", dparts["S2S_HairMaleNord01_soft"])            # the male template has none
-            self.assertEqual(dparts["S2S_HairMaleNord01_soft"][b"FULL"],
-                             b"HairMaleNord01 (Skyrim, soft hairline)\0")
-            self.assertEqual(dparts["S2S_HairMaleNord01_rough"][b"MODL"],
-                             b"s2s\\skyrimhair\\hairmalenord01_rough.nif\0")
+            self.assertNotIn(b"HNAM", dparts["S2S_HairMaleNord01_depth"])           # the male template has none
+            self.assertEqual(dparts["S2S_HairMaleNord01_depth"][b"FULL"],
+                             b"HairMaleNord01 (Skyrim, old depth offset)\0")
+            self.assertEqual(dparts["S2S_HairMaleNord01_depth"][b"MODL"],
+                             b"s2s\\skyrimhair\\hairmalenord01_depth.nif\0")
             self.assertEqual(rc, 0)
             rep = json.load(open(os.path.join(out, "skyrim_hairs.json")))
             rows = {r["skyrim"]: r for r in rep["parts"]}
