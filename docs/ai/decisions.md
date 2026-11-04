@@ -1223,3 +1223,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   to the vanilla mean (38, 23, 12) keeping the strand detail, a per-strand AO map in 108-190 (mostly low), hair IDs
   in 28-101. Owner's [depth] copy (IDG's MaxDepthOffset) looked the same as the new default 0 (settings-only copies
   still never differ in game; unresolved).
+- 2026-11-03 Owner (f5280e6): with a brown hair colour our hairs now match vanilla's tone, with a blonde one they are
+  grey-white and patchy ("the colour is still off"). Read: Starfield colours hair from colour maps shared by all
+  hairstyles, a gradient that shows along each hairstyle's strands (Nexus mod 'Ombre Hair Colours', its description:
+  supported, not verified), i.e. looked up by the albedo's brightness; vanilla's albedo (probe PNGs, visible texels)
+  is dark with a narrow range (luminance p5-p95 ~8-46, median ~21; roots darker than tips) in one brown ratio. Ours
+  had only been scaled to vanilla's mean, keeping Skyrim's wide painted range (strand highlights far up the colour
+  map: white for blonde). Now pipeline.vanilla_albedo: each texel's brightness remapped by rank onto vanilla's
+  percentiles, coloured in vanilla's R:G:B ratio (Skyrim's light / dark pattern kept, its range and colour vanilla's).
+  Not done: darker roots (where a Skyrim card's root is is not known per card).

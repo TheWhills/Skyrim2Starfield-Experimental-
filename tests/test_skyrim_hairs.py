@@ -333,6 +333,23 @@ class HairlineDropAndCutoutTests(unittest.TestCase):
         self.assertTrue(np.allclose(p[1], pts[1]))               # the back stayed
 
 
+class VanillaAlbedoTests(unittest.TestCase):
+    def test_brightness_by_rank_onto_vanilla_hair(self):
+        from fo4sf import pipeline
+        rng = np.random.default_rng(4)
+        px = np.zeros((64, 64, 4), np.uint8)
+        px[..., :3] = (rng.random((64, 64, 1)) * 200 + 40).astype(np.uint8)   # a light, wide Skyrim albedo
+        px[..., 3] = 255
+        out = pipeline.vanilla_albedo(px).astype(float)
+        lum = out @ [0.2126, 0.7152, 0.0722]
+        self.assertAlmostEqual(np.percentile(lum, 50), 21.5, delta=1.5)
+        self.assertAlmostEqual(np.percentile(lum, 95), 45.5, delta=3.0)
+        src = px[..., 0].astype(float).ravel()
+        order = np.argsort(src)
+        self.assertTrue(np.all(np.diff(lum.ravel()[order]) >= -1.0))           # the light / dark pattern kept
+        self.assertAlmostEqual(out[..., 0].mean() / out[..., 1].mean(), 1.59, delta=0.06)
+
+
 class TessellateTests(unittest.TestCase):
     def octahedron(self, seam=False):
         """A unit-radius-0.1 octahedron round (0, 0, 1.7), normals pointing out (a round shell's), optionally with
@@ -490,7 +507,9 @@ class NormalTests(unittest.TestCase):
             self.assertGreaterEqual(int(hid.min()), 28)
             self.assertLessEqual(int(hid.max()), 101)
             vc = pixels("t_hair_o_v_color.dds", 4).reshape(-1, 4)[:, :3].astype(float)
-            self.assertTrue(np.allclose(vc.mean(0), (38, 23, 12), atol=4))       # Starfield's dark brown albedo
+            lum = vc @ [0.2126, 0.7152, 0.0722]
+            self.assertLess(lum.mean(), 35)                                      # Starfield's dark brown albedo
+            self.assertAlmostEqual(vc[:, 0].mean() / max(vc[:, 1].mean(), 1e-6), 1.59, delta=0.1)
             with mock.patch.object(textures, "texconv", fake_texconv):
                 reg = conv.skyrim_hair_material("textures\\h\\t.dds", "", 40, strands=True, orient=True,
                                                 coverage=3.0, region=np.array([[0.6, 0.5], [0.9, 0.2]]))

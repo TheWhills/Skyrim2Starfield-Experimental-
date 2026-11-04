@@ -91,6 +91,36 @@ VANILLA_AO = (108, 190)
 VANILLA_HAIR_ID = (28, 101)
 
 
+# ... and the luminance of the visible albedo texels (owner's game, the three materials above, 2026-11-03): sRGB
+# percentiles 5 / 25 / 50 / 75 / 95 = 7-10 / 13-17 / 20-24 / 28-32 / 44-49, roots darker than tips; colour ratio
+# R : G : B = 1.56-1.62 : 1 : 0.52-0.56. Starfield colours hair from a colour map shared by all hairstyles (Nexus
+# 'Ombre Hair Colours': a colour's light-to-dark gradient shows along every hairstyle's strands), i.e. supported:
+# looked up by the albedo's brightness. A brighter or wider albedo than vanilla's lands elsewhere on that map: the
+# owner's blonde shots after f5280e6 (albedo only scaled to vanilla's mean) were grey-white and patchy.
+VANILLA_LUMINANCE = ((0, 3.0), (5, 8.7), (25, 14.5), (50, 21.5), (75, 30.0), (95, 45.5), (100, 70.0))
+VANILLA_RATIO = (1.59, 1.0, 0.54)
+
+
+def vanilla_albedo(rgba):
+    """The albedo's brightness remapped by rank onto vanilla hair's (VANILLA_LUMINANCE, from its visible texels:
+    alpha >= 128, all when none), coloured in vanilla's brown ratio: the texture's own light / dark pattern kept, its
+    range and colour Starfield's. (h, w, 3) uint8."""
+    import numpy as np
+    px = np.asarray(rgba)
+    rgb = px[:, :, :3].astype(np.float64)
+    lum = rgb @ np.array([0.2126, 0.7152, 0.0722])
+    seen = px[:, :, 3] >= 128 if px.shape[2] > 3 else np.ones(px.shape[:2], bool)
+    if not seen.any():
+        seen = np.ones(px.shape[:2], bool)
+    qs = [q for q, _v in VANILLA_LUMINANCE]
+    src = np.percentile(lum[seen], qs)
+    src = np.maximum.accumulate(src + np.arange(len(src)) * 1e-6)          # strictly rising
+    target = np.interp(lum, src, [v for _q, v in VANILLA_LUMINANCE])
+    ratio = np.asarray(VANILLA_RATIO, np.float64)
+    g = target / float(ratio @ np.array([0.2126, 0.7152, 0.0722]))
+    return np.clip(np.rint(g[:, :, None] * ratio[None, None, :]), 0, 255).astype(np.uint8)
+
+
 def vanilla_strand_maps(hair_id):
     """(ambient occlusion, hair ID) per strand in the ranges of Starfield's own hair maps, from strand_maps' per-strand
     random value (0-255): AO mostly near its low end (squared), as vanilla's (p10 = median), IDs spread evenly."""
@@ -543,7 +573,7 @@ class Converter:
                     seen = pd[:, :, 3] >= 128 if (pd[:, :, 3] >= 128).any() else np.ones(pd.shape[:2], bool)
                     pd[:, :, :3] = np.rint(pd[:, :, :3][seen].astype(np.float64).mean(0)).astype(np.uint8)
                 if albedo_target is None and vanilla_maps and albedo_tint is None:   # Starfield's own hair albedo
-                    albedo_target = VANILLA_HAIR_ALBEDO
+                    pd[:, :, :3] = vanilla_albedo(pd)
                 if albedo_target is not None:               # recoloured so the visible texels average this sRGB
                     pd[:, :, :3] = recolor(pd, albedo_target)
                 if albedo_luminance is not None:
