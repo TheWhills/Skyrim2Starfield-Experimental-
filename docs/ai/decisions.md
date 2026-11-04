@@ -1095,3 +1095,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   hair cards, not only a scalp fade, and their alpha without the strand cut / ramp drew mostly see-through. Kept: the
   per-card strand direction (crown included) and the split of mixed shapes. The report now lists each shape (name,
   vertices, turned, material) per hairstyle (skyrim_hairs.json "shape_detail").
+- 2026-11-03 Reverted the per-card strand direction too (back to 440ffc1's whole-shape check). With the soft scalp
+  undone the front / top hair was still missing in the owner's shot, so the per-card turning was the cause.
+  Measured here on KS (all of whose strands run along V): the per-card judgement against the hair's flow turned many
+  cards wrongly (Spring 5586 of 19287 triangles, Icarus 4451 of 11796: braids, curls, ponytails lying sideways):
+  strands follow a card's own length, not gravity. Next, if sideways lines remain: judge a card by its UV island
+  (long in U or in V), with the owner's shape_detail report of the affected hairstyle.

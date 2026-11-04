@@ -933,96 +933,45 @@ def separate_layers_once(hair: Hair, head: np.ndarray, step: float = LAYER_STEP,
              "median_moved_mm": round(1000 * float(np.median(move[moved])), 2) if moved.any() else 0.0})
 
 
-def _triangle_uv_dirs(sh: HairShape):
-    """(triangles (T, 3), unit dP/du, unit dP/dv, centroids, usable mask) of a shape."""
+def strand_axis(sh: HairShape, head=None) -> Optional[str]:
+    """'u' or 'v': which texture axis the shape's strands run along, judged on its steep triangles (strands hang
+    down): the UV direction (dP/du or dP/dv) that points more nearly down. None when it cannot tell."""
     pos = np.asarray(sh.positions, float)
+    if not sh.uvs or not len(sh.triangles) or not len(pos):
+        return None
     uv = np.asarray(sh.uvs, float)
     t = np.asarray(sh.triangles, int).reshape(-1, 3)
     e1, e2 = pos[t[:, 1]] - pos[t[:, 0]], pos[t[:, 2]] - pos[t[:, 0]]
     d1, d2 = uv[t[:, 1]] - uv[t[:, 0]], uv[t[:, 2]] - uv[t[:, 0]]
     det = d1[:, 0] * d2[:, 1] - d1[:, 1] * d2[:, 0]
-    du = e1 * d2[:, 1:2] - e2 * d1[:, 1:2]
-    dv = e2 * d1[:, 0:1] - e1 * d2[:, 0:1]
-    nu, nv = np.linalg.norm(du, axis=1), np.linalg.norm(dv, axis=1)
-    ok = (np.abs(det) > 1e-12) & (nu > 1e-12) & (nv > 1e-12)
-    return t, du / np.maximum(nu, 1e-12)[:, None], dv / np.maximum(nv, 1e-12)[:, None], pos[t].mean(1), ok
+    fn = np.cross(e1, e2)
+    fl = np.linalg.norm(fn, axis=1)
+    ok = (np.abs(det) > 1e-12) & (fl > 1e-12)
+    ok &= np.abs(fn[:, 2]) < 0.8 * np.maximum(fl, 1e-12)          # steep: not lying flat on the crown
+    if ok.sum() < 1:
+        return None
+    du = (e1 * d2[:, 1:2] - e2 * d1[:, 1:2])[ok]
+    dv = (e2 * d1[:, 0:1] - e1 * d2[:, 0:1])[ok]
+    su = np.median(np.abs(du[:, 2]) / np.maximum(np.linalg.norm(du, axis=1), 1e-12))
+    sv = np.median(np.abs(dv[:, 2]) / np.maximum(np.linalg.norm(dv, axis=1), 1e-12))
+    if abs(su - sv) < 0.1:
+        return None
+    return "u" if su > sv else "v"
 
 
-def _flow(centroids: np.ndarray, head: Optional[np.ndarray]) -> np.ndarray:
-    """The direction hair runs at each point: away from a point 15 cm above the head bone's crown (C_Head + 9 cm,
-    + 15 cm), i.e. down and outward over the scalp, radiating from the crown on top; straight down without a head."""
-    if head is None:
-        return np.tile([0.0, 0.0, -1.0], (len(centroids), 1))
-    apex = np.asarray(head, float)[:3, 3] + np.array([0.0, 0.0, 0.24])
-    d = centroids - apex
-    return d / np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-12)
-
-
-def strand_axes(sh: HairShape, head: Optional[np.ndarray] = None, margin: float = 0.1) -> List[Optional[str]]:
-    """Per triangle 'u' / 'v' / None: which texture axis its card's strands run along. Each connected card is judged
-    as a whole (area-weighted): the UV direction (dP/du or dP/dv) closer to the way hair runs there (_flow: down and
-    out from above the crown; on top of the head, out from the crown). None when too close to call; such cards take
-    the shape's majority."""
-    if not sh.uvs or not len(sh.triangles) or not len(sh.positions):
-        return [None] * len(sh.triangles)
-    t, du, dv, cen, ok = _triangle_uv_dirs(sh)
-    f = _flow(cen, head)
-    su, sv = np.abs((du * f).sum(1)), np.abs((dv * f).sum(1))
-    pos = np.asarray(sh.positions, float)
-    area = 0.5 * np.linalg.norm(np.cross(pos[t[:, 1]] - pos[t[:, 0]], pos[t[:, 2]] - pos[t[:, 0]]), axis=1)
-    comp = _components(len(pos), t)[t[:, 0]]
-    out: List[Optional[str]] = [None] * len(t)
-    votes = {}
-    for c in np.unique(comp):
-        m = (comp == c) & ok
-        if not m.any():
-            continue
-        w = area[m] + 1e-12
-        diff = float(((su[m] - sv[m]) * w).sum() / w.sum())
-        votes[c] = None if abs(diff) < margin else ("u" if diff > 0 else "v")
-    known = [v for v in votes.values() if v is not None]
-    major = max(set(known), key=known.count) if known else None
-    for i, c in enumerate(comp):
-        out[i] = votes.get(c) or major
-    return out
-
-
-def strand_axis(sh: HairShape, head: Optional[np.ndarray] = None) -> Optional[str]:
-    """'u' or 'v': the axis most of the shape's triangles run their strands along (strand_axes), or None."""
-    axes = [x for x in strand_axes(sh, head) if x is not None]
-    return max(set(axes), key=axes.count) if axes else None
-
-
-def strands_down(hair: Hair, head: Optional[np.ndarray] = None) -> Tuple[Hair, List[bool]]:
-    """The hair with every card whose strands run along U given swapped UVs (u, v) -> (v, u), and per resulting shape
-    whether it was (its texture must then be transposed: pipeline transpose=True). A shape whose cards disagree is
-    split in two, the turned cards as '<name>_rot'. Starfield's hair shader runs strands along V (IDG's, and KS's:
-    dP/dv points down, verified 2026-11-03); vanilla Skyrim hair atlases lay some cards across, which the strand maps,
-    the band evening and the tangents all read the wrong way: the owner saw sideways lines and a strandy-across scalp
-    on the Skyrim hairstyles (also after a whole-shape check)."""
+def strands_down(hair: Hair, head=None) -> Tuple[Hair, List[bool]]:
+    """The hair with every shape whose strands run along U given swapped UVs (u, v) -> (v, u), and per shape whether
+    it was (its texture must be transposed to match: pipeline transpose=True). Starfield's hair shader runs strands
+    along V (IDG's, and KS's: dP/dv points down, verified 2026-11-03); some vanilla Skyrim hair textures lay them
+    across, which the strand maps, the band evening and the tangents all read the wrong way: the owner saw
+    horizontal-looking texture and patchy light / dark on the Skyrim hairstyles."""
     shapes, flags = [], []
     for sh in hair.shapes:
-        axes = strand_axes(sh, head)
-        turn = [a == "u" for a in axes]
-        if not any(turn):
-            shapes.append(sh)
-            flags.append(False)
-            continue
-        swapped = HairShape(sh.name, sh.positions, sh.normals, sh.tangents, [(v, u) for u, v in sh.uvs],
-                            sh.triangles, sh.weights, sh.shader_ref, sh.alpha_ref, sh.block)
-        if all(turn):
-            shapes.append(swapped)
-            flags.append(True)
-            continue
-        pos = np.asarray(sh.positions, float)
-        nrm = None if sh.normals is None else np.asarray(sh.normals, float)
-        tan = None if sh.tangents is None else np.asarray(sh.tangents, float)
-        keep = _sub_shape(sh, sh.name, pos, nrm, tan, [not x for x in turn])
-        rot = _sub_shape(swapped, (sh.name or b"") + b"_rot", pos, nrm, tan, turn)
-        for part, flag in ((keep, False), (rot, True)):
-            if part is not None:
-                shapes.append(part)
-                flags.append(flag)
+        turn = strand_axis(sh) == "u"
+        flags.append(turn)
+        shapes.append(sh if not turn else HairShape(sh.name, sh.positions, sh.normals, sh.tangents,
+                                                    [(v, u) for u, v in sh.uvs], sh.triangles, sh.weights,
+                                                    sh.shader_ref, sh.alpha_ref, sh.block))
     return Hair(shapes, hair.bones, hair.host_of_root, hair.report), flags
 
 
