@@ -1175,3 +1175,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   shape, '_r<hash>'), then ^3, then cut; the report gives per shape opacity.region (samples, alpha mean, gain, share
   solid after the cut). Not done: lowering the front hairline to the vanilla hair's: the bob's hairline is
   lopsided (side fringe: 97.8 mm above C_Head at 0 deg, 73 at +10, 47 at +20), so it is no target per angle.
+- 2026-11-03 Owner (0423c52): front exactly as before, and the colour still differs a lot between parts of the
+  hair (top solid and light, sides stringy with dark gaps). Reading: the region-normalised hairline changed nothing
+  visible, so the bare band is not our hairline layer drawn too faint but forehead that our hair does not reach (the
+  fine strokes in it are on the skin: supported, Starfield's head shading under the copied bob's cap mask NAM3),
+  matching the report's +12..23 mm above the vanilla hairline at the middle. Changes (VANILLA_DEFAULTS):
+  --hairline-drop 20 (skyrimhair.drop_profile: own hairline minus the vanilla hair's made symmetric, each angle the
+  higher of its two sides because the bob's fringe hangs low on one side; within +-40 deg, at most 20 mm, smoothed;
+  lift_hairline with negative values brings the front down along the head) and --skyrim-cutout (shapes Skyrim
+  alpha-tested: pipeline.cutout_alpha remaps alpha so the strand cut is solid from 24 over Skyrim's threshold and
+  empty from 24 under it: alpha 0.4-0.7 over a threshold of 0.3 had been half see-through, showing the dark
+  insides). The README lists the hairstyles in looks-menu order (the menu shows no names).

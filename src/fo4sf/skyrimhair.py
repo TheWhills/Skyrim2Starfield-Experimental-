@@ -673,6 +673,30 @@ def _smooth(x):
     return x * x * (3.0 - 2.0 * x)
 
 
+def drop_profile(own: Dict[int, Optional[float]], target: Dict[int, Optional[float]], limit: float = 0.02,
+                 span: int = 40) -> Dict[int, float]:
+    """{angle: lift (m, <= 0)}: how far the hair's hairline is ABOVE the target's at each angle within +-`span` deg of
+    the middle of the forehead (0 elsewhere), clipped to `limit`, gaps filled from the neighbours, smoothed over
+    neighbouring angles: lift_hairline brings the front down by it. The target is made symmetric first, each angle
+    taking the higher of its two sides: the vanilla bob's side fringe hangs lower on one side (owner's report
+    2026-11-03: 97.8 mm above C_Head at 0 deg, 73 / 47 at +10 / +20, 100 / 95 at -10 / -20), the skin's hairline
+    under it does not. 2026-11-03: the vanilla Skyrim hairs start 12-23 mm higher than that at the middle (owner's
+    front shots: a bare band of forehead between Starfield's painted hairline and the hair)."""
+    angs = sorted(own)
+    sym = {}
+    for a in angs:
+        vals = [v for v in (target.get(a), target.get(-a)) if v is not None]
+        sym[a] = max(vals) if vals else None
+    raw = {a: (-min(max(own[a] - sym[a], 0.0), limit) if abs(a) <= span and own.get(a) is not None
+               and sym.get(a) is not None else None) for a in angs}
+    inside = [a for a in angs if abs(a) <= span and raw[a] is not None]
+    if not inside:
+        return {a: 0.0 for a in angs}
+    filled = {a: (0.0 if abs(a) > span else raw[a] if raw[a] is not None
+                  else float(np.interp(a, inside, [raw[k] for k in inside]))) for a in angs}
+    return {a: float(np.mean([filled[b] for b in angs if abs(b - a) <= 10])) for a in angs}
+
+
 def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: np.ndarray, lift,
                   front=(0.02, 0.08), crown=(0.12, 0.16)) -> Hair:
     """The front of the wig raised by `lift` m: full at the forehead (C_Head-relative +Y beyond front[1]), fading to
@@ -697,7 +721,7 @@ def lift_hairline(hair: Hair, head_pts: np.ndarray, head_nrm: np.ndarray, head: 
         d0, dist0, _i = nearest_surface(pos, head_pts, head_nrm)
         new = pos.copy()
         new[:, 2] += w
-        on = judged(pos, head_pts, dist0) & (w > 0)
+        on = judged(pos, head_pts, dist0) & (w != 0)
         if on.any():
             d1, _d, j = nearest_surface(new[on], head_pts, head_nrm)
             new[on] += (d0[on] - d1)[:, None] * np.asarray(head_nrm, float)[j]

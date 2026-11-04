@@ -98,6 +98,14 @@ class HairMaterialTests(unittest.TestCase):
                     mock.patch.object(hair_pack.skyrimnif, "alpha_test", lambda n, r, b=blend: (not b, b, 40)):
                 hair_pack.hair_shader_material(fake2, None, sh, strands=True, orient=True, coverage=3.0)
         self.assertEqual(got, [3.0, 1.0])
+        cut = []
+        fake3 = mock.Mock()
+        fake3.skyrim_hair_material = lambda *a, **k: cut.append(k.get("cutout")) or "m.mat"
+        for blend in (True, False):                       # Skyrim's threshold only for its alpha-tested shapes
+            with mock.patch.object(hair_pack.skyrimnif, "texture_set", lambda n, r: ["textures\\a.dds"]), \
+                    mock.patch.object(hair_pack.skyrimnif, "alpha_test", lambda n, r, b=blend: (not b, b, 77)):
+                hair_pack.hair_shader_material(fake3, None, sh, strands=True, orient=True, cutout=True)
+        self.assertEqual(cut, [None, 77])
 
 
 class HairColorTests(unittest.TestCase):

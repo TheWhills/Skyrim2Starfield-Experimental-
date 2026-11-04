@@ -81,6 +81,16 @@ def _box_blur(img, r, rx=None):
     return out
 
 
+def cutout_alpha(alpha, threshold: int, width: int = 48):
+    """Alpha remapped for the strand cut so that it draws what Skyrim's alpha test drew: solid from `width` / 2 over
+    Skyrim's threshold, nothing from `width` / 2 under it, a ramp between (the strands' ragged ends). Plain alpha as
+    coverage left the hair Skyrim drew solid half see-through (alpha 0.4-0.7 over a threshold of 0.3: owner's front
+    shot 2026-11-03, the sides stringy with dark gaps next to the solid top)."""
+    import numpy as np
+    a = np.asarray(alpha, np.float64)
+    return np.clip(np.rint((a - (threshold - width / 2.0)) / width * 255.0), 0, 255).astype(np.uint8)
+
+
 def sample_texels(img, uv, scale: float = 1.0):
     """Values of a (h, w) image at UV points (n, 2) (wrapping; row = v), at `scale` x the image's own size."""
     import numpy as np
@@ -417,7 +427,7 @@ class Converter:
                              hair: bool = False, albedo_target: Optional[tuple] = None,
                              opacity_ramp: Optional[tuple] = None, strands: bool = False,
                              transpose: bool = False, orient: bool = False, look: Optional[str] = None,
-                             coverage: float = 1.0, region=None) -> str:
+                             coverage: float = 1.0, region=None, cutout: Optional[int] = None) -> str:
         """FO4 diffuse / normal / smooth-spec textures -> Starfield colour / normal / rough DDS + a .mat. Spec is optional.
         decal: alpha-blended overlay; the diffuse alpha always becomes the opacity map and the .mat is cloned from the
         vanilla decal template (cm.DECAL_TEMPLATE_MAT) so it blends over the surface behind it."""
@@ -447,6 +457,8 @@ class Converter:
                 region_rep = None
                 if region is not None and len(region):     # the part of the texture this shape uses: its own level
                     alpha, region_rep = normalize_region_alpha(alpha, region)
+                if cutout is not None:                     # Skyrim alpha-tested this: solid where it drew
+                    alpha = cutout_alpha(alpha, cutout)
                 if coverage > 1.0:                         # Skyrim blended this: denser, 1 - (1 - a) ** coverage
                     alpha = np.rint(255.0 * (1.0 - (1.0 - alpha.astype(np.float64) / 255.0) ** coverage)
                                     ).astype(np.uint8)

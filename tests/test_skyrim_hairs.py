@@ -289,6 +289,50 @@ class RegionCoverageTests(unittest.TestCase):
         self.assertEqual(rep2["gain"], 1.0)
 
 
+class HairlineDropAndCutoutTests(unittest.TestCase):
+    def test_cutout_draws_what_skyrim_drew(self):
+        from fo4sf import pipeline
+        a = np.array([[0, 50, 77, 90, 110, 200]], np.uint8)
+        out = pipeline.cutout_alpha(a, 77)
+        self.assertEqual(out[0, 0], 0)
+        self.assertEqual(out[0, 1], 0)                          # well under Skyrim's threshold: not drawn
+        self.assertAlmostEqual(int(out[0, 2]), 128, delta=2)     # at it: the strands' ragged ends
+        self.assertEqual(out[0, 4], 255)                        # over it: solid, as Skyrim drew it
+        self.assertEqual(out[0, 5], 255)
+
+    def test_drop_to_the_symmetric_vanilla_hairline(self):
+        from fo4sf import skyrimhair
+        angs = skyrimhair.HAIRLINE_ANGLES
+        target = {a: 0.098 for a in angs}
+        target.update({10: 0.073, 20: 0.047, 30: 0.015})         # the bob's fringe hangs low on one side
+        own = {a: 0.115 for a in angs}
+        drop = skyrimhair.drop_profile(own, target, 0.02)
+        self.assertAlmostEqual(drop[0], -0.017, places=3)
+        self.assertAlmostEqual(drop[20], drop[-20], places=6)    # the fringe side not taken as the hairline
+        self.assertEqual(drop[70], 0.0)                          # temples left alone
+        self.assertTrue(all(v <= 0 for v in drop.values()))
+        high = skyrimhair.drop_profile({a: 0.2 for a in angs}, target, 0.02)
+        self.assertGreaterEqual(min(high.values()), -0.02 - 1e-9)
+
+    def test_lift_hairline_brings_the_front_down(self):
+        from fo4sf import skyrimhair
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        rng = np.random.default_rng(2)
+        d = rng.normal(size=(3000, 3))
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        c = np.array([0, 0, 1.69])
+        skull, nrm = c + 0.08 * d, d
+        pts = np.array([[0, 0.085, 1.70], [0, -0.085, 1.70]])     # front of the forehead, back of the head
+        sh = skyrimhair.HairShape(b"H", pts, np.array([[0, 1.0, 0], [0, -1.0, 0]]), np.zeros((2, 3)),
+                                  [(0, 0)] * 2, [], [[("C_Head", 1.0)]] * 2, -1, -1, 0)
+        out = skyrimhair.lift_hairline(skyrimhair.Hair([sh], [], {}, {}), skull, nrm, head,
+                                       {a: -0.015 for a in skyrimhair.HAIRLINE_ANGLES})
+        p = np.asarray(out.shapes[0].positions)
+        self.assertLess(p[0, 2], 1.70 - 0.01)                    # the front came down
+        self.assertTrue(np.allclose(p[1], pts[1]))               # the back stayed
+
+
 class TessellateTests(unittest.TestCase):
     def octahedron(self, seam=False):
         """A unit-radius-0.1 octahedron round (0, 0, 1.7), normals pointing out (a round shell's), optionally with
@@ -506,6 +550,10 @@ class MainTests(unittest.TestCase):
                                    "HairMaleNord01", "--diagnose", "--merge-plugin",
                                    os.path.join(ks_dir, "S2SHair.esm")])
             self.assertEqual(rc_diag, 0)
+            with open(os.path.join(d, "diag", "README.txt"), encoding="utf-8") as fh:
+                readme = fh.read()
+            self.assertIn("    1. HairMaleNord01\n", readme)
+            self.assertIn("    2. HairMaleNord01 [combed]", readme)
             with open(os.path.join(d, "diag", "skyrim_hairs.json")) as fh:
                 diag = json.load(fh)
             self.assertEqual([(r["skyrim"], r.get("variant"), r["ok"]) for r in diag["parts"]],

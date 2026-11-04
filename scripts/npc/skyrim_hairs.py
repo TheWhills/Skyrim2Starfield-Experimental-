@@ -54,11 +54,13 @@ HAIR, FACIAL_HAIR = 3, 4
 # scalp layer: a gap), a wide conform blend (a deep spot lifts the whole neighbourhood) and wide card spacing
 # (2026-11-03: owner saw the Skyrim hairstyles float off the skull with a gap, "flat")
 # geometric_normals: the stored Skyrim normals do not follow the shaping (2026-11-03, dark / light patches)
-# tessellate / blend_coverage (2026-11-03, owner's diagnose rounds + report): the vanilla hairs are low-poly shells
+# hairline_drop / skyrim_cutout (2026-11-03): the hair started 12-23 mm above Starfield's hairline (a bare band) and
+# the hair Skyrim alpha-tested solid was half see-through. tessellate / blend_coverage (2026-11-03, owner's diagnose rounds + report): the vanilla hairs are low-poly shells
 # (a faceted helmet with broad flat light patches) and their hairline layers were alpha-blended (cut into strands
 # they read as a pale band of thin hair between the forehead and the hair)
 VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
-                        geometric_normals=True, tessellate=3, blend_coverage=3.0)
+                        geometric_normals=True, tessellate=3, blend_coverage=3.0, hairline_drop=20.0,
+                        skyrim_cutout=True)
 # --diagnose: extra looks-menu copies of each hairstyle, each with one suspect of the dark / light patches removed
 # (round 1, owner 2026-11-03: flat colour / no see-through / shell normals all kept the same patches: neither the
 # texture, the gaps nor the normals. Round 2: the strand direction and the light through the hair)
@@ -452,6 +454,12 @@ def main(argv=None):
              "S2S Hair next to it, S2SHair.esm is its master and its hairstyles are kept: load S2SHair.esm first), then",
              "open the looks menu (console: slm 14) and pick '<Skyrim EditorID> (Skyrim)' from the hair list.",
              "The character's hair colour applies."]
+    for female in (True, False):        # the looks menu shows no names: its order, after the vanilla / other mods'
+        names = [r["skyrim"] + (f" [{r['variant']}]" if r.get("variant") else "") for r in good
+                 if r["female"] == female]
+        if names:
+            lines += ["", f"{'Women' if female else 'Men'}'s hairstyles in looks-menu order (after the vanilla ones "
+                          "and S2S Hair's):"] + [f"  {k + 1:3d}. {n}" for k, n in enumerate(names)]
     if bad:
         lines += ["", f"Not converted ({len(bad)}):"] + [f"  {r['skyrim']}: {r.get('reason')}" for r in bad[:40]]
     with open(os.path.join(out, "README.txt"), "w", encoding="utf-8") as fh:
