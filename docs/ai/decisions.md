@@ -1317,3 +1317,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   go on free outfit slots. Kept as a converter setting (mesh unchanged, only keywords and slots differ) so other
   layouts stay testable. Unresolved, first in-game checks: whether apparel applies damage resistance from the ARMO
   (where Skyrim's armor rating goes), and that the converted body piece hides the naked body without holes.
+- 2026-11-05 Later phase, direction only (owner): a Tamriel planet. From space an ocean world with Tamriel's continent
+  (shapes traced by us from maps, not their art), each province a fitting biome, mountains where the maps put them;
+  province landing areas (Skyrim, later converted Cyrodiil / Morrowind through TES4 AutoConvert) placed at their
+  places on it. Scale (owner's choice): the worldspaces keep their real game scale (Skyrim ~7 km across), so the
+  planet is small, moon-sized, and the continent is only as big as the provinces need; neighbouring provinces can meet
+  at their border ranges (Jerall: edge-to-edge overlays, or a generated bridge overlay). Reason: also what the
+  upcoming seamless-landing mod (Frederik Wessberg; reads planets' height tiles and biome maps) would show from orbit.
+  To work out then: a small body's gravity, atmosphere and day length set Earth-like on the planet record; the planet
+  height / biome rules (unresolved in terrain notes); the lat/long -> planet cell placement rule (unresolved). After
+  Skyrim works on its own planet and the 2 x 2 seam test.
