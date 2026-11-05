@@ -285,6 +285,9 @@ def settings_variant(conv, material, suffix: str, settings: dict):
     return out
 
 
+BLEND_SOLID = 0.5          # a Skyrim-blended layer counts as hair where its alpha is at least this
+
+
 def skyrim_coverage(conv, n, sh):
     """Per vertex how much of the shape's Skyrim texture is hair there (0-1): its alpha at the vertex's UV, ramped
     around Skyrim's alpha-test threshold for shapes Skyrim alpha-tested (pipeline.cutout_alpha's ramp); None when
@@ -309,7 +312,11 @@ def skyrim_coverage(conv, n, sh):
         test, blend, ref = skyrimnif.alpha_test(n, sh.alpha_ref) if sh.alpha_ref >= 0 else (False, False, 128)
         if test and not blend:
             return np.clip((alpha - (ref - 24.0)) / 48.0, 0.0, 1.0)
-        return alpha / 255.0
+        # Skyrim's blended layers (the hairlines) fade out down the forehead: only their solid part counts, so the
+        # guide's smoothed coverage does not carry cards onto the faded part (2026-11-05: a fringe down to the brows
+        # on a style without one)
+        a = alpha / 255.0
+        return np.where(a >= BLEND_SOLID, a, 0.0)
     except Exception:                                      # noqa: BLE001 (no coverage: every vertex counts)
         return None
 

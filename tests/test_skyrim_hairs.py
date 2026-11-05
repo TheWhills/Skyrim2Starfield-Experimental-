@@ -350,6 +350,35 @@ class VanillaAlbedoTests(unittest.TestCase):
         self.assertAlmostEqual(out[..., 0].mean() / out[..., 1].mean(), 1.59, delta=0.06)
 
 
+class CoverageTests(unittest.TestCase):
+    def test_blended_fade_and_tested_ramp(self):
+        import hair_probe
+        from fo4sf import skyrimhair
+        alpha = np.tile(np.linspace(255, 0, 8).astype(np.uint8), (8, 1))        # fades out across U
+        px = np.zeros((8, 8, 4), np.uint8)
+        px[..., 3] = alpha
+        uvs = [((k + 0.5) / 8, 0.5) for k in range(8)]
+        sh = skyrimhair.HairShape(b"L", np.zeros((8, 3)), None, None, uvs, [(0, 1, 2)], [[("C_Head", 1.0)]] * 8,
+                                  0, 1, 0)
+        conv = mock.Mock(texconv="t.exe")
+        conv.__dict__["_alpha_cache"] = {}
+        conv.src.texture = lambda p: b"dds"
+        with mock.patch.object(hair_probe, "decode_rgba", lambda dds, tc: px), \
+                mock.patch.object(SH.skyrimnif, "texture_set", lambda n, r: ["textures\\h.dds"]), \
+                mock.patch.object(SH.skyrimnif, "alpha_test", lambda n, r: (False, True, 164)):
+            blend = SH.skyrim_coverage(conv, None, sh)
+        self.assertTrue((blend[alpha[0] / 255.0 < SH.BLEND_SOLID] == 0).all())  # the faded part: not hair
+        self.assertAlmostEqual(blend[0], 1.0)
+        conv.__dict__["_alpha_cache"] = {}
+        with mock.patch.object(hair_probe, "decode_rgba", lambda dds, tc: px), \
+                mock.patch.object(SH.skyrimnif, "texture_set", lambda n, r: ["textures\\h.dds"]), \
+                mock.patch.object(SH.skyrimnif, "alpha_test", lambda n, r: (True, False, 128)):
+            test = SH.skyrim_coverage(conv, None, sh)
+        self.assertEqual(test[0], 1.0)
+        self.assertEqual(test[-1], 0.0)
+        self.assertTrue(0 < test[4] < 1)                                          # the ramp round the threshold
+
+
 class TessellateTests(unittest.TestCase):
     def octahedron(self, seam=False):
         """A unit-radius-0.1 octahedron round (0, 0, 1.7), normals pointing out (a round shell's), optionally with

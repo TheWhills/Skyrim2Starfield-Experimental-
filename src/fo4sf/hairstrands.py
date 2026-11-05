@@ -33,7 +33,7 @@ SCALP_REACH = 0.025         # m: a line end within this of the head lies on the 
 ROOT_TAPER = 0.02           # m: a card narrows to ROOT_WIDTH of its width over this much from its root ...
 ROOT_WIDTH = 0.3
 ROOT_SINK = 0.02            # m: ... and rises from the guide surface to its layer over this much
-ROOT_TRIM = 0.02            # m: up to this much cut off a card's root at random (no straight row of card starts)
+ROOT_TRIM = 0.01            # m: up to this much cut off a card's root at random (no straight row of card starts)
 SURFACE_REACH = 0.010       # m: a trace leaving the guide by more than this stops (its edge)
 MAX_TURN_DEG = 50.0         # a trace turning more than this in one step stops (a fold or a parting)
 

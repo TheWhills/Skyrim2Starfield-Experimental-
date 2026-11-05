@@ -1282,3 +1282,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   over 2 cm (its u range narrows with it: fewer strands, not thinner ones), height from a quarter of its layer
   offset to full over 2 cm (grows out of the scalp), and 0-2 cm cut off its root at random (no straight row of
   card starts).
+- 2026-11-05 Strand cards round 6. Owner (668da6f): a style that used to sit too high now has a fringe down to the
+  brows, and other hairlines do not start where the hair's shape says. Cause (supported): round 4's smoothed
+  coverage (16 neighbours, traces on while >= 0.2) carries cards from the hair onto the faded lower part of Skyrim's
+  blended hairline layers, which reach down the forehead. Now a blended layer counts as hair only where its alpha is
+  at least 0.5 (skyrim_hairs.skyrim_coverage, BLEND_SOLID), before the smoothing; the random root trim halved to
+  0-1 cm (the hairline was set back unevenly).
