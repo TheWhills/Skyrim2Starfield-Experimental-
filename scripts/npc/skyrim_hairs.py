@@ -83,7 +83,7 @@ DIAGNOSE = (("depth", "old depth offset"),)
 # --strand-cards (owner 2026-11-03: "do we need it to have all the strands like Starfield's" - yes): a looks-menu
 # copy of each hairstyle made of Starfield-style strand cards on a vanilla hair material (fo4sf.hairstrands)
 STRANDS = (("strands", "Starfield strands"), ("strandsthin", "Starfield strands, thin"),
-           ("strandsline", "Starfield strands, thin, Skyrim hairline"))
+           ("strandsedge", "Starfield strands, thin, smooth hairline"))
 # round 3 (owner 2026-11-04: with the Skyrim hair kept under the cards "it just looks like the originals again"):
 # the cards alone, denser (5 layers, 5 mm apart, 18 mm wide, up to 3500), next to the same over the Skyrim hair
 DENSE_CARDS = dict(layers=5, spacing=0.005, width=0.018, gap=0.0015, max_cards=3500, step=0.010)
@@ -94,6 +94,12 @@ DENSE_CARDS = dict(layers=5, spacing=0.005, width=0.018, gap=0.0015, max_cards=3
 # Skyrim's own hairline layers (the alpha-blended shapes: Skyrim draws its hairline with them, a soft fade into the
 # scalp) instead of card roots ending on the forehead. [strands] stays as it was, to compare.
 THIN_CARDS = dict(DENSE_CARDS, width=0.007, slots=3)
+# round 8 (owner 2026-11-05: thin cards better; [strandsline]'s Skyrim hairline layers covered the cards (on the Nord
+# styles they cap the whole top) with a dark comb fringe and pale blobs; "the hairline is so wrong ... you'd want to
+# see it starting from a smooth curved line", drawn over the shot): [strandsedge] the thin cards with every front
+# root on one smooth hairline curve per style (hairstrands.hairline_curve / to_hairline). [strandsline] dropped from
+# the copies (code kept).
+EDGE_CARDS = dict(THIN_CARDS, hairline=True)
 # the material most of IDG's hairs use (22 of 50, read from its NIFs 2026-11-03): straight strands (the bob's
 # Medium_Hair_Shared made every card wavy, owner's first strand-card shots)
 STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Long_Straight_Hair_Shared.mat"
@@ -454,7 +460,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
-    if variant in ("strands", "strandsbase", "strandsthin", "strandsline"):   # Starfield-style cards over the
+    if variant in ("strands", "strandsbase", "strandsthin", "strandsline", "strandsedge"):   # Starfield-style cards over the
         #                                            shaped Skyrim hair
         if not strands:
             row["reason"] = "no strand material / strips (see the report's strand_material)"
@@ -468,6 +474,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
                                                                       if getattr(ctx, "head_surface", None)
                                                                       is not None else None),
                                                             **(DENSE_CARDS if variant in ("strands", "strandsbase")
+                                                               else EDGE_CARDS if variant == "strandsedge"
                                                                else THIN_CARDS))
         if not cards.shapes:
             row["reason"] = "no strand cards grown"

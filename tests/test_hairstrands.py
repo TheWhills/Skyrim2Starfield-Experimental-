@@ -88,6 +88,50 @@ class CardTests(unittest.TestCase):
         out = (a + b + c) / 3 - [0, 0, min(1.69, ((a + b + c) / 3)[2])]
         self.assertGreater(np.dot(np.cross(b - a, c - a), out), 0)        # facing out
 
+    def _cap_guide(self):
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        guide = HS.Guide(H.Hair([shell()], [], {}, {}), head)
+        th = np.radians(np.arange(0, 90, 3))
+        ph = np.radians(np.arange(0, 360, 6))
+        scalp = np.array([[0.098 * np.sin(t) * np.sin(f), 0.098 * np.sin(t) * np.cos(f), 1.69 + 0.098 * np.cos(t)]
+                          for t in th for f in ph])
+        return head, guide, scalp
+
+    def _front_line(self, z0, z1, n=12):
+        """Points on the cap's front (+Y) meridian from height z0 up to z1."""
+        t = np.arccos((np.linspace(z0, z1, n) - 1.69) / 0.1)
+        return np.c_[np.zeros(n), 0.1 * np.sin(t), 1.69 + 0.1 * np.cos(t)]
+
+    def test_hairline_curve_is_smooth_and_follows_the_hair(self):
+        head, guide, scalp = self._cap_guide()
+        rel = guide.p - head[:3, 3]
+        guide.cov = np.where(rel[:, 2] > 0.13 + 0.01 * np.cos(np.arange(len(rel)) * 1.7), 1.0, 0.0)   # ragged edge
+        grid, h = HS.hairline_curve(guide, scalp, head)
+        self.assertEqual((grid[0], grid[-1]), (-HS.FRONT_ANGLE, HS.FRONT_ANGLE))
+        self.assertTrue(np.all((h > 0.12) & (h < 0.155)), h)               # where the hair starts (coarse cap)
+        self.assertLess(np.abs(np.diff(h)).max(), 0.002)                  # one smooth line, not the ragged edge
+        guide.cov[:] = 0.0
+        self.assertIsNone(HS.hairline_curve(guide, scalp, head))
+
+    def test_roots_carried_down_or_cut_to_the_curve(self):
+        head, guide, scalp = self._cap_guide()
+        curve = (np.array([-80.0, 80.0]), np.array([0.12, 0.12]))         # 12 cm over C_Head: z 1.72
+        high = self._front_line(1.76, 1.785)
+        out, moved = HS.to_hairline(high, guide, curve, head, scalp)
+        self.assertEqual(moved, 1)
+        self.assertAlmostEqual(out[0, 2], 1.72, delta=0.005)              # carried down to the line
+        self.assertTrue(np.allclose(out[-len(high):], high))
+        low = self._front_line(1.70, 1.785)
+        out, moved = HS.to_hairline(low, guide, curve, head, scalp)
+        self.assertEqual(moved, -1)
+        self.assertGreaterEqual(out[0, 2], 1.72 - 0.003 - 1e-9)           # cut off below the line
+        on = self._front_line(1.7205, 1.785)
+        self.assertEqual(HS.to_hairline(on, guide, curve, head, scalp)[1], 0)
+        back = on * [1, -1, 1]                                            # rooted at the back: left alone
+        self.assertEqual(HS.to_hairline(back, guide, curve, head, scalp)[1], 0)
+        self.assertEqual(HS.to_hairline(high, guide, None, head, scalp)[1], 0)
+
     def test_fixed_depth_slots(self):
         head = np.eye(4)
         head[:3, 3] = (0, 0, 1.6)

@@ -63,7 +63,7 @@ def skyrim_esms(d):
 class PartTests(unittest.TestCase):
     def test_strand_copies(self):
         self.assertEqual(SH.strand_copies(""), SH.STRANDS)
-        self.assertEqual([k for k, _l in SH.strand_copies("thin, strandsline")], ["strandsthin", "strandsline"])
+        self.assertEqual([k for k, _l in SH.strand_copies("thin, strandsedge")], ["strandsthin", "strandsedge"])
         self.assertEqual([k for k, _l in SH.strand_copies("strands")], ["strands"])
         with self.assertRaises(SystemExit):
             SH.strand_copies("curly")
@@ -654,7 +654,7 @@ class MainTests(unittest.TestCase):
             def fake_cards(h, head, st, **kw):           # the fixture is one tiny card: the growing has its own tests
                 self.assertEqual(len(kw["dirs"]), len(h.shapes))
                 self.assertEqual(kw["layers"], SH.DENSE_CARDS["layers"])
-                seen.append(kw.get("slots", 0))
+                seen.append((kw.get("slots", 0), kw.get("hairline", False)))
                 from fo4sf import skyrimhair
                 sh = h.shapes[0]
                 p = np.asarray(sh.positions)[:3]
@@ -677,18 +677,17 @@ class MainTests(unittest.TestCase):
                                     "HairMaleNord01", "--strand-cards", "--merge-plugin",
                                     os.path.join(ks_dir, "S2SHair.esm")])
             self.assertEqual(rc_cards, 0)
-            self.assertEqual(seen, [0, 3, 3])                                 # [strands] as before, the thin ones
+            self.assertEqual(seen, [(0, False), (3, False), (3, True)])                                 # [strands] as before, the thin ones
             with open(os.path.join(d, "cards", "skyrim_hairs.json")) as fh:
                 cards = json.load(fh)
             row = cards["parts"][1]
             self.assertEqual((row["variant"], row["ok"]), ("strands", True), row.get("reason"))
             self.assertGreater(row["strand_cards"]["cards"], 0)
             self.assertEqual(row["materials"], ["Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"])
-            thin, line = cards["parts"][2], cards["parts"][3]               # round 7's copies
+            thin, edge = cards["parts"][2], cards["parts"][3]               # rounds 7 and 8
             self.assertEqual((thin["variant"], thin["ok"]), ("strandsthin", True), thin.get("reason"))
-            self.assertEqual((line["variant"], line["ok"]), ("strandsline", True), line.get("reason"))
-            self.assertEqual(line["skyrim_hairline_shapes"], 0)               # the fixture has no blended layer
-            self.assertEqual(line["materials"], ["Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"])
+            self.assertEqual((edge["variant"], edge["ok"]), ("strandsedge", True), edge.get("reason"))
+            self.assertEqual(edge["materials"], ["Materials\\Actors\\Human\\Hair\\Medium_Hair_Shared.mat"])
             cparts = {sfplugin.edid(r[2]): dict(r[2]) for r in sfplugin.records(os.path.join(d, "cards", SH.PLUGIN),
                                                                                  [b"HDPT"])}
             self.assertEqual(cparts["S2S_HairMaleNord01_strands"][b"FULL"],

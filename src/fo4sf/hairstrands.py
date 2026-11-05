@@ -36,6 +36,9 @@ ROOT_SINK = 0.02            # m: ... and rises from the guide surface to its lay
 ROOT_TRIM = 0.01            # m: up to this much cut off a card's root at random (no straight row of card starts)
 SURFACE_REACH = 0.010       # m: a trace leaving the guide by more than this stops (its edge)
 MAX_TURN_DEG = 50.0         # a trace turning more than this in one step stops (a fold or a parting)
+FRONT_ANGLE = 80.0          # degrees either side of the forehead's middle where the front hairline curve applies
+CURVE_SMOOTH = 25.0         # degrees: the hairline curve is the mean over this much either side (one smooth line)
+CURVE_STEP = 0.004          # m: a root is carried down to the curve this much at a time
 PRE_OCCUPIED = 0.8         # a raw trace this much on cells of kept lines is dropped before smoothing (speed)
 
 
@@ -312,6 +315,96 @@ def root_at_hairline(line: np.ndarray, head_pts, head, reach: float = SCALP_REAC
     return p, 0
 
 
+def _angles(rel: np.ndarray) -> np.ndarray:
+    """Degrees around the head from the front (+Y), + toward +X (skyrimhair.HAIRLINE_ANGLES' convention)."""
+    return np.degrees(np.arctan2(rel[..., 0], rel[..., 1]))
+
+
+def hairline_curve(guide: "Guide", head_pts, head, step: float = 5.0, scalp: float = 0.012,
+                   low: float = 15.0) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """(angles, heights above C_Head) of one smooth front hairline for this hair: where its hair (guide coverage at
+    least COVERED) lying on the scalp (within `scalp` of the head) starts, per `step` degrees around the front (the
+    `low` percentile of its height there: its lower edge, not the alpha noise of single strands), filled across
+    missing angles and averaged over CURVE_SMOOTH either side. None without enough front hair. Owner 2026-11-05:
+    the strands must start from a smooth curved line round the forehead, not where each trace happened to end."""
+    hp = np.asarray(head_pts, float)
+    c = np.asarray(head, float)[:3, 3]
+    hair = guide.p[guide.cov >= COVERED]
+    if len(hair) < 20:
+        return None
+    d = np.empty(len(hair))
+    for i in range(0, len(hair), 512):
+        x = hair[i:i + 512]
+        d[i:i + 512] = np.sqrt(((x[:, None, :] - hp[None, :, :]) ** 2).sum(2).min(1))
+    rel = hair[d <= scalp] - c
+    rel = rel[rel[:, 1] > 0.02]
+    if len(rel) < 20:
+        return None
+    ang = _angles(rel)
+    grid = np.arange(-FRONT_ANGLE, FRONT_ANGLE + 1e-9, step)
+    raw = np.full(len(grid), np.nan)
+    for i, a in enumerate(grid):
+        m = np.abs(ang - a) <= step / 2
+        if m.sum() >= 3:
+            raw[i] = np.percentile(rel[m, 2], low)
+    ok = ~np.isnan(raw)
+    if ok.sum() < 3:
+        return None
+    filled = np.interp(grid, grid[ok], raw[ok])
+    smooth = np.array([filled[np.abs(grid - a) <= CURVE_SMOOTH].mean() for a in grid])
+    return grid, smooth
+
+
+def to_hairline(line: np.ndarray, guide: "Guide", curve, head, head_pts, scalp: float = SCALP_REACH,
+                tolerance: float = 0.003, max_reach: float = 0.06) -> Tuple[Optional[np.ndarray], int]:
+    """(the line, -1 cut / 0 kept / +1 carried down) with its root on the hairline curve when the root is on the
+    scalp at the front: points below the curve cut off (None when too little is left), a root that stops above it
+    carried on down over the guide (against the strand, on its tangent planes) until it reaches the curve (at most
+    `max_reach`). Lines rooted elsewhere (the back, the sides past FRONT_ANGLE, hanging) are left alone."""
+    if curve is None:
+        return line, 0
+    grid, height = curve
+    c = np.asarray(head, float)[:3, 3]
+    p = np.asarray(line, float)
+    rel = p - c
+    ang = _angles(rel)
+    front = (np.abs(ang) <= FRONT_ANGLE) & (rel[:, 1] > 0.02)
+    hp = np.asarray(head_pts, float)
+    if not front[0] or np.sqrt(((hp - p[0]) ** 2).sum(1).min()) > scalp:
+        return p, 0
+    h = np.interp(ang, grid, height)
+    below = front & (rel[:, 2] < h - tolerance)
+    if below[0]:
+        first = int(np.argmax(~below))
+        if not (~below).any() or len(p) - first < 3:
+            return None, -1
+        return p[first:].copy(), -1
+    if rel[0, 2] <= h[0] + tolerance:
+        return p, 0
+    back = p[0] - p[min(1, len(p) - 1)]
+    added, pos, went = [], p[0].copy(), 0.0
+    while went < max_reach:
+        size = np.linalg.norm(back)
+        if size < 1e-9:
+            break
+        nxt = pos + back / size * CURVE_STEP
+        _s, _cv, j, dist = guide.field(nxt[None])
+        j, dist = int(j[0]), float(dist[0])
+        if dist > SURFACE_REACH:
+            break
+        nxt -= np.dot(nxt - guide.p[j], guide.n[j]) * guide.n[j]
+        back = nxt - pos
+        pos = nxt
+        went += CURVE_STEP
+        added.append(pos.copy())
+        r = pos - c
+        if r[2] <= float(np.interp(_angles(r), grid, height)):
+            break
+    if not added:
+        return p, 0
+    return np.vstack([np.asarray(added[::-1]), p]), 1
+
+
 def strip_coverage(opacity, strips) -> List[float]:
     """The mean opacity (0-1) of each strip: the dense ones make the inner layer."""
     a = np.asarray(opacity, np.float64)
@@ -372,7 +465,7 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
                layers: int = LAYERS, width: float = CARD_WIDTH, spacing: float = CARD_SPACING,
                gap: float = LAYER_GAP, step: float = CARD_STEP, min_length: float = 0.04, seed: int = 11,
                max_cards: int = MAX_CARDS, dirs=None, coverage=None, densities=None,
-               head_pts=None, slots: int = 0) -> Tuple[Hair, Dict]:
+               head_pts=None, slots: int = 0, hairline: bool = False) -> Tuple[Hair, Dict]:
     """Cards over the guide hair, one shape per layer: per layer, random seed points on the guide where it is hair,
     each traced to its root and to its tip and smoothed; a line is kept when most of its points are not within
     `spacing` of a line already kept in that layer (evenly spaced lines); each kept line becomes a ribbon `width`
@@ -381,7 +474,9 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
     head_pts: Starfield's head surface points; with them a line lying on the scalp at both ends gets its root at
     its front end on the upper forehead (root_at_hairline). slots: 0 = each card a random depth within its layer
     (up to gap / 2 further out); n = the cards of a layer take n fixed depths in turn, gap / n apart, so cards that
-    overlap sideways mostly lie at clearly different depths instead of crossing each other. Returns (Hair of the
+    overlap sideways mostly lie at clearly different depths instead of crossing each other. hairline (with
+    head_pts): the front roots start on one smooth hairline curve (hairline_curve / to_hairline), not trimmed at
+    random. Returns (Hair of the
     card shapes with the guide's bones, report)."""
     if not strips:
         raise ValueError("no texture strips to map the cards onto")
@@ -394,6 +489,10 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
         dense = [st for st, d in zip(strips, densities) if d >= cut] or strips
     shapes, report = [], {"layers": [], "covered_share": round(float((guide.cov >= COVERED).mean()), 3)}
     total, turned = 0, 0
+    curve = hairline_curve(guide, head_pts, head) if hairline and head_pts is not None else None
+    hl = {"cut": 0, "carried": 0, "kept": 0, "dropped": 0}
+    if curve is not None:
+        report["hairline_curve_cm"] = {int(a): round(float(h) * 100, 1) for a, h in zip(*curve) if a % 20 == 0}
     per_layer = max(1, max_cards // max(1, layers))
     for layer in range(layers):
         seeds = guide.area_samples(hair, spacing * 1.5, rng)
@@ -420,6 +519,14 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
                 line, flipped = root_at_hairline(line, head_pts, head)
                 turned += flipped
             cut = int(rng.integers(0, int(ROOT_TRIM / step) + 1))
+            if curve is not None:
+                line, moved = to_hairline(line, guide, curve, head, head_pts)
+                if line is None:
+                    hl["dropped"] += 1
+                    continue
+                hl["cut" if moved < 0 else "carried" if moved > 0 else "kept"] += 1
+                if moved:
+                    cut = 0                               # on the curve: no random trim
             if cut and len(line) - cut >= 3:              # the roots of neighbouring cards not in one straight row
                 line = line[cut:]
             keys = [tuple(k) for k in np.floor(line / cell).astype(int)]
@@ -452,6 +559,8 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
                                     w_l, -1, -1, 0))
     report["cards"] = total
     report["roots_moved_to_the_hairline"] = turned
+    if curve is not None:
+        report["hairline_roots"] = hl
     report["vertices"] = int(sum(len(s.positions) for s in shapes))
     report["triangles"] = int(sum(len(s.triangles) for s in shapes))
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, strand_cards=True)), report

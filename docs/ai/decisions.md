@@ -1337,3 +1337,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   scalp; hairline_shapes; report: skyrim_hairline_shapes, 0 = the style has none). [strandsbase] dropped from the
   copies (code kept). Reading the result: thin smoother than strands -> the overlap; line's front better than thin's
   -> Skyrim's hairline layer is the way to the hairline.
+- 2026-11-05 owner (round 7, HairFemaleNord01 / 05): [strandsthin] better (finer strands, fewer blocks: supports
+  the overlap hypothesis); [strandsline] failed: the Nord styles' blended "hairline" layers cap the whole top, drawn
+  over the cards, with a dark comb fringe and pale blobs. Owner, drawing a smooth curve over the shot: "the hairline
+  is so wrong ... not starting at a part of the head consistently; you'd want to see it starting from a smooth curved
+  line". Cause: each card's root is where its trace stopped (the Skyrim alpha's ragged edge) minus a random trim.
+  Round 8: [strandsedge] = thin cards + one smooth front hairline per style (hairstrands.hairline_curve: per 5 deg
+  from -80 to +80 round the forehead, the 15th-percentile height of the style's covered hair lying on the scalp,
+  filled and averaged over +-25 deg); to_hairline: a front root on the scalp below the curve is cut back to it, one
+  stopping above it is carried on down over the guide to it (up to 6 cm), and such roots skip the random trim; the
+  back and sides past 80 deg are untouched. Report: hairline_curve_cm, hairline_roots (cut / carried / kept /
+  dropped). Copies now [strands], [strandsthin], [strandsedge]; [strandsline] code kept, not built.
