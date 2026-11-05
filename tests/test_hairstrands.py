@@ -170,6 +170,20 @@ class RoundThreeTests(unittest.TestCase):
                                          [[("C_Head", 1.0)]] * 10)
         self.assertAlmostEqual(np.asarray(uv2)[0, 1], 0.2)
 
+    def test_root_grows_out_of_the_scalp(self):
+        line = np.array([[0, 0.1, 1.7 - 0.01 * k] for k in range(8)])
+        pos, _n, uv, _t, _w = HS._ribbon(line, np.tile([0, 1.0, 0], (8, 1)), 0.02, 0.004, (0.0, 0.0, 0.2, 1.0),
+                                         [[("C_Head", 1.0)]] * 8)
+        widths = np.linalg.norm(pos[1::2] - pos[0::2], axis=1)
+        self.assertAlmostEqual(widths[0], 0.02 * HS.ROOT_WIDTH)              # narrow at the root
+        self.assertAlmostEqual(widths[-1], 0.02)                             # full after ROOT_TAPER
+        heights = pos[0::2, 1] - 0.1
+        self.assertLess(heights[0], 0.3 * 0.004 + 1e-9)                      # down on the scalp at the root
+        self.assertAlmostEqual(heights[-1], 0.004)
+        u = np.asarray(uv)[:, 0]
+        self.assertAlmostEqual(u[1] - u[0], 0.2 * HS.ROOT_WIDTH)              # fewer strands, not thinner ones
+        self.assertAlmostEqual(u[-1] - u[-2], 0.2)
+
     def test_root_at_the_hairline(self):
         rng = np.random.default_rng(3)
         d = rng.normal(size=(4000, 3))

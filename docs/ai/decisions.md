@@ -1276,3 +1276,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   hair and a card takes its last part (tip end wispy, root end inside the strands); a line on the scalp at both
   ends whose tip is its front end on the upper forehead (> 75 mm over C_Head) is turned round (root at the
   hairline), real fringes (ending lower or hanging free) kept.
+- 2026-11-05 Strand cards round 5. Owner (d93c27d, dark hair): the back smoother; the front hairline "especially
+  choppy": a row of blunt, card-wide blocks (roots now at the hairline, each the full 18 mm wide and a layer's
+  height off the scalp, all cut at the same coverage line). Now each card from its root: width from 30 % to full
+  over 2 cm (its u range narrows with it: fewer strands, not thinner ones), height from a quarter of its layer
+  offset to full over 2 cm (grows out of the scalp), and 0-2 cm cut off its root at random (no straight row of
+  card starts).

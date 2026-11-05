@@ -30,6 +30,10 @@ COVERED = 0.4               # a guide vertex whose texture is at least this opaq
 CONTINUE = 0.2              # a trace goes on while the (smoothed) coverage stays above this
 STRIP_LENGTH = 0.30         # m: the hair length a texture strip stands for (root at its top, tip at its bottom)
 SCALP_REACH = 0.025         # m: a line end within this of the head lies on the scalp
+ROOT_TAPER = 0.02           # m: a card narrows to ROOT_WIDTH of its width over this much from its root ...
+ROOT_WIDTH = 0.3
+ROOT_SINK = 0.02            # m: ... and rises from the guide surface to its layer over this much
+ROOT_TRIM = 0.02            # m: up to this much cut off a card's root at random (no straight row of card starts)
 SURFACE_REACH = 0.010       # m: a trace leaving the guide by more than this stops (its edge)
 MAX_TURN_DEG = 50.0         # a trace turning more than this in one step stops (a fold or a parting)
 
@@ -329,21 +333,27 @@ def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, 
     along /= np.maximum(np.linalg.norm(along, axis=1, keepdims=True), 1e-12)
     across = np.cross(normals, along)
     across /= np.maximum(np.linalg.norm(across, axis=1, keepdims=True), 1e-12)
-    centre = line + normals * offset
-    pos = np.empty((2 * k, 3))
-    pos[0::2] = centre - across * width / 2.0
-    pos[1::2] = centre + across * width / 2.0
-    nrm = np.repeat(normals, 2, axis=0)
     arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(seg, axis=1))])
+    # from the root: narrow (fewer strands, not thinner ones: u narrows with it) and down on the guide surface, so
+    # hair grows out of the scalp; full width and height after ROOT_TAPER / ROOT_SINK (2026-11-05: the hairline was a
+    # row of blunt, card-wide blocks)
+    ramp = lambda x, n: 0.5 - 0.5 * np.cos(np.pi * np.clip(arc / n, 0.0, 1.0))   # noqa: E731
+    wscale = ROOT_WIDTH + (1.0 - ROOT_WIDTH) * ramp(arc, ROOT_TAPER)
+    centre = line + normals * (offset * (0.25 + 0.75 * ramp(arc, ROOT_SINK)))[:, None]
+    pos = np.empty((2 * k, 3))
+    pos[0::2] = centre - across * (width * wscale / 2.0)[:, None]
+    pos[1::2] = centre + across * (width * wscale / 2.0)[:, None]
+    nrm = np.repeat(normals, 2, axis=0)
     # the strip stands for STRIP_LENGTH of hair, its tip at the bottom: a card takes the strip's last `length` (its
     # tip end wispy as the texture's, its root end inside the strands, no hard cut line where a card starts mid-hair)
     span = min(1.0, arc[-1] / STRIP_LENGTH)
     t = (1.0 - span) + span * arc / max(arc[-1], 1e-9)
     u0, v0, u1, v1 = strip
+    uc, uh = (u0 + u1) / 2.0, (u1 - u0) / 2.0
     uv = []
-    for ti in t:
+    for ti, ws in zip(t, wscale):
         v = v0 + (v1 - v0) * ti
-        uv += [(u0, v), (u1, v)]
+        uv += [(uc - uh * ws, v), (uc + uh * ws, v)]
     tris = []
     for i in range(k - 1):
         a, b, c, d = 2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3
@@ -403,6 +413,9 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
             if head_pts is not None:
                 line, flipped = root_at_hairline(line, head_pts, head)
                 turned += flipped
+            cut = int(rng.integers(0, int(ROOT_TRIM / step) + 1))
+            if cut and len(line) - cut >= 3:              # the roots of neighbouring cards not in one straight row
+                line = line[cut:]
             keys = [tuple(k) for k in np.floor(line / cell).astype(int)]
             if sum(1 for k in keys if k in occupied) > 0.5 * len(keys):
                 continue
