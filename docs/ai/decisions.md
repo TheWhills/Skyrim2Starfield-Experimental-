@@ -1356,3 +1356,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   that sit at a parting (strands falling to the sides) down to the front hairline. Round 9 (same [strandsedge]):
   Guide.island (mesh pieces), thinning per voxel and piece, field() averages only the nearest vertex's piece and
   strands running its way; to_hairline carries only roots combed back from the face; layers 1 mm apart (was 1.5).
+- 2026-11-05 owner (round 9 shots): the strand copies still look wrong (choppy, roots splayed on the forehead);
+  "the KS hair versions look far far better than our tests ... I'm wondering if we've gone too far. Those were
+  simple, there were just some lighting issues, almost certainly caused by us using a hair shader that expects
+  strands". Strand cards paused (code kept, --strand-cards off by default). Next: the KS wigs as looks-menu hair
+  with the generic cutout material (hair_pack --classic-material: no Hair1Layer shader) to see whether the
+  light / dark patches go. Known trade-off: the classic material is not tinted by the character's hair colour
+  (unresolved for head parts; the KS textures are pale grey, so --hair-color bakes a colour in until then).
