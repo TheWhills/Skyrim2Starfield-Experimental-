@@ -1363,3 +1363,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   with the generic cutout material (hair_pack --classic-material: no Hair1Layer shader) to see whether the
   light / dark patches go. Known trade-off: the classic material is not tinted by the character's hair colour
   (unresolved for head parts; the KS textures are pale grey, so --hair-color bakes a colour in until then).
+- 2026-11-05 owner: KS Anna as a looks-menu hair with --classic-material (+ --hair-color 170,140,100) "looks way
+  worse" (flat, the cards' rectangles visible) and "that weird line is still there" (a dark line along the hair's
+  outline). Reverted to the hair shader (the default). Finding (verified by that shot): the dark line is not the
+  hair shader's doing; it stays with the plain cutout material, so it is geometry or draw order (next to look at).
