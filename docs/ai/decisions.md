@@ -1367,3 +1367,18 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   worse" (flat, the cards' rectangles visible) and "that weird line is still there" (a dark line along the hair's
   outline). Reverted to the hair shader (the default). Finding (verified by that shot): the dark line is not the
   hair shader's doing; it stays with the plain cutout material, so it is geometry or draw order (next to look at).
+- 2026-11-05 Study of IDG Elegant Hair Collection v1.4.1 (owner's download; read-only scratchpad tools
+  idg_hairline.py / idg_detail.py; verified on its files): 50 styles, one skinned shape each, all on vanilla hair
+  materials (Long_Straight_Hair_Shared, Medium_Hair_Shared, ...), no textures of their own. Fit to the head: C_Head
+  plus 16-36 faceBone_* bones, 8 weights per vertex, and per style a chargen and a performance morph.dat (~50 keys:
+  Hat, per-preset Forehead / Chin / Ears such as female_eu_md2_Forehead, Overweight / Thin / Strong): the hair
+  follows face sliders, head presets and hats. Cards (mesh pieces): 234-3565 per style, typically 300-1000, wide
+  ribbons (median ~34-39 mm across at root and middle, no root taper). Hairline: 12-110 cards in the front row
+  (median ~27), roots 3.5-7 mm apart, on one smooth curve ~10-11 cm above C_Head mid-forehead falling to 3-6 cm at
+  the temples; one sheet at the very hairline, thickening behind it (front rays cross 1-15 cards, 0-33 mm).
+  KEY FINDING: every IDG mesh carries vertex colours, ours carry none (skyrimhair._mesh passes no colours): R runs
+  ~95 at a card's root to ~230 at its tip (corr with the card's v 0.26-0.61), G ~70-120 varying per card and along
+  it, B = A = 255. Supported hypothesis: Hair1Layer reads these (root darkening / per-strand variation); without them
+  the shader's input is constant, a candidate for the KS wigs' light / dark bands and the dark outline. Next
+  (owner's call): vertex colours on the KS wigs (R from the strand's root-to-tip, G per card), then morph.dat
+  (format known) for head shapes.
