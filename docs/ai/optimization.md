@@ -53,3 +53,13 @@ conform, layers, fit report) on ~10k tessellated vertices. Now: regions keyed by
 bench_hairmats.py: 12 blended hairline shapes in one area of a 1024x1024 texture, each with a 'rough' copy, texconv
 stubbed): before 24 texture conversions, 11.6 s; after 4 conversions, 1.9 s. Shaping per hairstyle in --diagnose:
 3 runs -> 1 (by construction; not timed on the owner's data).
+
+## 2026-11-05 strand cards: skip smoothing lines that are clearly taken, and fewer copies on request (Claude)
+Owner: the round 7 build (--strand-cards, three card copies per hairstyle) took about an hour; the first hair builds
+took ~2 minutes (no cards, no tessellation). Profile (scratchpad hash_cards.py, the test shell, 5 layers, 3500 card
+cap): ~85% of traced lines are rejected by the spacing test, after smoothing each; vertex offsets were re-summed
+per card. Now a raw trace on >= 80% kept cells is dropped before smoothing (PRE_OCCUPIED) and offsets are a running
+count. Measured: dense 4.48 s -> 3.73 s, thin 4.40 s -> 3.50 s with scipy; 14.6 s -> 12.0 s numpy-only (cards
+1654 -> 1674 / 1674 -> 1665: a few lines the old order smoothed then rejected are now dropped first, so the rng draws
+shift; same method). Bigger levers, not code: scipy installed (cKDTree; 4.5 s vs 14.6 s here, the gap grows with
+the hair's size) and --strand-copies (build only the copies being judged: each grows its own cards).

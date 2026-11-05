@@ -36,6 +36,7 @@ ROOT_SINK = 0.02            # m: ... and rises from the guide surface to its lay
 ROOT_TRIM = 0.01            # m: up to this much cut off a card's root at random (no straight row of card starts)
 SURFACE_REACH = 0.010       # m: a trace leaving the guide by more than this stops (its edge)
 MAX_TURN_DEG = 50.0         # a trace turning more than this in one step stops (a fold or a parting)
+PRE_OCCUPIED = 0.8         # a raw trace this much on cells of kept lines is dropped before smoothing (speed)
 
 
 # ------------------------------------------------------------------------------------------------- texture strips
@@ -406,11 +407,14 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
         cell = spacing
         occupied = set()
         pos_l, nrm_l, uv_l, tri_l, w_l = [], [], [], [], []
-        kept = 0
+        kept = n_vert = 0
         for a, b in zip(up, down):
             line = np.vstack([a[::-1], b[1:]])
             if len(line) < 3 or np.linalg.norm(np.diff(line, axis=0), axis=1).sum() < min_length:
                 continue
+            raw = {tuple(k) for k in np.floor(line / cell).astype(int)}
+            if sum(1 for k in raw if k in occupied) > PRE_OCCUPIED * len(raw):
+                continue                                  # clearly on top of kept lines: not worth smoothing
             line = smooth_line(guide, line)
             if head_pts is not None:
                 line, flipped = root_at_hairline(line, head_pts, head)
@@ -430,7 +434,8 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
                                               gap * (layer + 1) + (kept % slots * gap / slots if slots
                                                                    else rng.uniform(0, gap / 2)), strip,
                                               [guide.weights[x] for x in j])
-            base = sum(len(p) for p in pos_l)
+            base = n_vert
+            n_vert += len(pos)
             pos_l.append(pos)
             nrm_l.append(nrm)
             uv_l += uv

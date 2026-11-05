@@ -61,6 +61,13 @@ def skyrim_esms(d):
 
 
 class PartTests(unittest.TestCase):
+    def test_strand_copies(self):
+        self.assertEqual(SH.strand_copies(""), SH.STRANDS)
+        self.assertEqual([k for k, _l in SH.strand_copies("thin, strandsline")], ["strandsthin", "strandsline"])
+        self.assertEqual([k for k, _l in SH.strand_copies("strands")], ["strands"])
+        with self.assertRaises(SystemExit):
+            SH.strand_copies("curly")
+
     def test_hairline_shapes_are_the_blended_ones(self):
         from fo4sf import skyrimhair
         shapes = [skyrimhair.HairShape(b"S%d" % i, np.zeros((1, 3)), None, None, [], [], [], -1, ref, 0)

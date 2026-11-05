@@ -296,6 +296,19 @@ def settings_variant(conv, material, suffix: str, settings: dict):
 BLEND_SOLID = 0.5          # a Skyrim-blended layer counts as hair where its alpha is at least this
 
 
+def strand_copies(spec: str) -> tuple:
+    """The STRANDS entries named in `spec` (comma list of their keys, with or without the 'strands' prefix:
+    'thin,line'); all when empty."""
+    if not spec.strip():
+        return STRANDS
+    want = {w.strip().lower() for w in spec.split(",") if w.strip()}
+    want |= {"strands" + w for w in want if not w.startswith("strands")}
+    got = tuple(x for x in STRANDS if x[0] in want)
+    if not got:
+        raise SystemExit("--strand-copies: none of " + spec + " is one of " + ", ".join(k for k, _l in STRANDS))
+    return got
+
+
 def hairline_shapes(nifs, hair) -> list:
     """Indices of the shapes Skyrim alpha-blends (its hairline layers: the soft fade where the hair meets the scalp,
     drawn over the alpha-tested hair)."""
@@ -520,6 +533,10 @@ def main(argv=None):
     ap.add_argument("--strand-cards", action="store_true",
                     help="also, per hairstyle, a looks-menu copy '(Skyrim, Starfield strands)': Starfield-style strand "
                          "cards grown over it on a vanilla hair material (--strand-material)")
+    ap.add_argument("--strand-copies", default="",
+                    help="with --strand-cards: which copies to build, comma list of "
+                         + ", ".join(k for k, _l in STRANDS) + " (default all; each grows its own cards: fewer "
+                         "copies, faster test builds)")
     ap.add_argument("--strand-material", default=STRAND_MATERIAL,
                     help="the vanilla hair material the strand cards use (default: the bob's, %(default)s)")
     ap.add_argument("--diagnose", action="store_true",
@@ -594,7 +611,7 @@ def main(argv=None):
                 sfplugin.edid(tpl[2])
             report.setdefault("template_extra_parts", {})[sfplugin.edid(tpl[2])] = extra_parts(tpl, sf_hdpt)
         ctx, fb = contexts[(female, p["type"])]
-        extra = (DIAGNOSE if a.diagnose else ()) + (STRANDS if a.strand_cards else ())
+        extra = (DIAGNOSE if a.diagnose else ()) + (strand_copies(a.strand_copies) if a.strand_cards else ())
         for variant, label in ((None, None),) + extra:
             try:
                 row = build_part(p, part_models(p["key"], parts), sky, conv, sf_world, ctx, fb, staging,
