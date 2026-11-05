@@ -82,10 +82,18 @@ VANILLA_HAIR_SETTINGS = {"MaxDepthOffset": "0"}
 DIAGNOSE = (("depth", "old depth offset"),)
 # --strand-cards (owner 2026-11-03: "do we need it to have all the strands like Starfield's" - yes): a looks-menu
 # copy of each hairstyle made of Starfield-style strand cards on a vanilla hair material (fo4sf.hairstrands)
-STRANDS = (("strands", "Starfield strands"), ("strandsbase", "Starfield strands over Skyrim"))
+STRANDS = (("strands", "Starfield strands"), ("strandsthin", "Starfield strands, thin"),
+           ("strandsline", "Starfield strands, thin, Skyrim hairline"))
 # round 3 (owner 2026-11-04: with the Skyrim hair kept under the cards "it just looks like the originals again"):
 # the cards alone, denser (5 layers, 5 mm apart, 18 mm wide, up to 3500), next to the same over the Skyrim hair
 DENSE_CARDS = dict(layers=5, spacing=0.005, width=0.018, gap=0.0015, max_cards=3500, step=0.010)
+# round 7 (owner 2026-11-05: the cards are choppy, blocky light / dark patches the size of a card, worst on light
+# hair; neither copy has a good hairline): 18 mm cards 5 mm apart overlap about 3.6 times within a layer at nearly the
+# same depth, so neighbouring cards cross each other and show their different strips in card-sized blocks
+# (hypothesis). [strandsthin]: 7 mm cards (1.4 overlap) at three fixed depths per layer. [strandsline]: the same over
+# Skyrim's own hairline layers (the alpha-blended shapes: Skyrim draws its hairline with them, a soft fade into the
+# scalp) instead of card roots ending on the forehead. [strands] stays as it was, to compare.
+THIN_CARDS = dict(DENSE_CARDS, width=0.007, slots=3)
 # the material most of IDG's hairs use (22 of 50, read from its NIFs 2026-11-03): straight strands (the bob's
 # Medium_Hair_Shared made every card wavy, owner's first strand-card shots)
 STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Long_Straight_Hair_Shared.mat"
@@ -288,6 +296,16 @@ def settings_variant(conv, material, suffix: str, settings: dict):
 BLEND_SOLID = 0.5          # a Skyrim-blended layer counts as hair where its alpha is at least this
 
 
+def hairline_shapes(nifs, hair) -> list:
+    """Indices of the shapes Skyrim alpha-blends (its hairline layers: the soft fade where the hair meets the scalp,
+    drawn over the alpha-tested hair)."""
+    out = []
+    for i, (n, sh) in enumerate(zip(nifs, hair.shapes)):
+        if sh.alpha_ref >= 0 and skyrimnif.alpha_test(n, sh.alpha_ref)[1]:
+            out.append(i)
+    return out
+
+
 def skyrim_coverage(conv, n, sh):
     """Per vertex how much of the shape's Skyrim texture is hair there (0-1): its alpha at the vertex's UV, ramped
     around Skyrim's alpha-test threshold for shapes Skyrim alpha-tested (pipeline.cutout_alpha's ramp); None when
@@ -423,7 +441,8 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
-    if variant in ("strands", "strandsbase"):        # Starfield-style cards grown over the shaped Skyrim hair
+    if variant in ("strands", "strandsbase", "strandsthin", "strandsline"):   # Starfield-style cards over the
+        #                                            shaped Skyrim hair
         if not strands:
             row["reason"] = "no strand material / strips (see the report's strand_material)"
             return row
@@ -435,7 +454,8 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
                                                             head_pts=(ctx.head_surface[0]
                                                                       if getattr(ctx, "head_surface", None)
                                                                       is not None else None),
-                                                            **DENSE_CARDS)
+                                                            **(DENSE_CARDS if variant in ("strands", "strandsbase")
+                                                               else THIN_CARDS))
         if not cards.shapes:
             row["reason"] = "no strand cards grown"
             return row
@@ -445,6 +465,13 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
                                    hair.report)
             mats = list(mats) + [strands[0]] * len(cards.shapes)
             backs = list(backs) + [False] * len(cards.shapes)
+        elif variant == "strandsline":               # Skyrim's hairline layers under the cards
+            keep = hairline_shapes(nifs, hair)
+            row["skyrim_hairline_shapes"] = len(keep)
+            hair = skyrimhair.Hair([hair.shapes[i] for i in keep] + list(cards.shapes), hair.bones,
+                                   hair.host_of_root, hair.report)
+            mats = [mats[i] for i in keep] + [strands[0]] * len(cards.shapes)
+            backs = [backs[i] for i in keep] + [False] * len(cards.shapes)
         else:                                        # the cards alone
             hair = cards
             mats, backs = [strands[0]] * len(cards.shapes), [False] * len(cards.shapes)

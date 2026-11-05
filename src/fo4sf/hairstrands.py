@@ -371,15 +371,17 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
                layers: int = LAYERS, width: float = CARD_WIDTH, spacing: float = CARD_SPACING,
                gap: float = LAYER_GAP, step: float = CARD_STEP, min_length: float = 0.04, seed: int = 11,
                max_cards: int = MAX_CARDS, dirs=None, coverage=None, densities=None,
-               head_pts=None) -> Tuple[Hair, Dict]:
+               head_pts=None, slots: int = 0) -> Tuple[Hair, Dict]:
     """Cards over the guide hair, one shape per layer: per layer, random seed points on the guide where it is hair,
     each traced to its root and to its tip and smoothed; a line is kept when most of its points are not within
     `spacing` of a line already kept in that layer (evenly spaced lines); each kept line becomes a ribbon `width`
     wide, (layer + 1) * gap out from the guide, mapped onto a random strip (the inner layer: the denser half of the
     strips by `densities`), with the bone weights of the guide vertex under each point. dirs / coverage: see Guide.
     head_pts: Starfield's head surface points; with them a line lying on the scalp at both ends gets its root at
-    its front end on the upper forehead (root_at_hairline). Returns (Hair of the card shapes with the guide's
-    bones, report)."""
+    its front end on the upper forehead (root_at_hairline). slots: 0 = each card a random depth within its layer
+    (up to gap / 2 further out); n = the cards of a layer take n fixed depths in turn, gap / n apart, so cards that
+    overlap sideways mostly lie at clearly different depths instead of crossing each other. Returns (Hair of the
+    card shapes with the guide's bones, report)."""
     if not strips:
         raise ValueError("no texture strips to map the cards onto")
     guide = Guide(hair, head, dirs, coverage)
@@ -425,7 +427,8 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
             pool = dense if layer == 0 else strips
             strip = pool[rng.integers(len(pool))]
             pos, nrm, uv, tris, wts = _ribbon(line, guide.n[j], width * rng.uniform(0.8, 1.2),
-                                              gap * (layer + 1) + rng.uniform(0, gap / 2), strip,
+                                              gap * (layer + 1) + (kept % slots * gap / slots if slots
+                                                                   else rng.uniform(0, gap / 2)), strip,
                                               [guide.weights[x] for x in j])
             base = sum(len(p) for p in pos_l)
             pos_l.append(pos)

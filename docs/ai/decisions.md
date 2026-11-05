@@ -1327,3 +1327,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   To work out then: a small body's gravity, atmosphere and day length set Earth-like on the planet record; the planet
   height / biome rules (unresolved in terrain notes); the lat/long -> planet cell placement rule (unresolved). After
   Skyrim works on its own planet and the 2 x 2 seam test.
+- 2026-11-05 owner (round 6 shots: the shell copy and [strands]): neither has a good hairline; the cards are still
+  choppy, card-sized light / dark blocks, worst on light hair (reference: a vanilla Starfield long hair from behind,
+  fine continuous strands of one tone; Skyrim's own hair, a soft hairline swept back). Hypothesis (supported by the
+  numbers, not verified): 18 mm cards 5 mm apart overlap ~3.6 times within a layer at depths within 0.75 mm, so
+  neighbours cross each other and each shows its own strip in blocks. Round 7 copies next to [strands] (unchanged):
+  [strandsthin] 7 mm cards at three fixed depths per layer (grow_cards `slots`: gap / 3 apart) instead of random
+  ones; [strandsline] the same over Skyrim's own hairline layers (its alpha-blended shapes, the soft fade into the
+  scalp; hairline_shapes; report: skyrim_hairline_shapes, 0 = the style has none). [strandsbase] dropped from the
+  copies (code kept). Reading the result: thin smoother than strands -> the overlap; line's front better than thin's
+  -> Skyrim's hairline layer is the way to the hairline.

@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -86,6 +87,26 @@ class CardTests(unittest.TestCase):
         a, b, c = (p[i] for i in sh.triangles[0])
         out = (a + b + c) / 3 - [0, 0, min(1.69, ((a + b + c) / 3)[2])]
         self.assertGreater(np.dot(np.cross(b - a, c - a), out), 0)        # facing out
+
+    def test_fixed_depth_slots(self):
+        head = np.eye(4)
+        head[:3, 3] = (0, 0, 1.6)
+        strips = HS.strip_layout(strip_texture())
+
+        def depths(slots):
+            seen, real = [], HS._ribbon
+
+            def spy(line, normals, width, offset, *rest):
+                seen.append(round(offset, 6))
+                return real(line, normals, width, offset, *rest)
+            with mock.patch.object(HS, "_ribbon", spy):
+                HS.grow_cards(H.Hair([shell()], [], {}, {}), head, strips, max_cards=300, layers=1, gap=0.002,
+                              slots=slots)
+            return np.unique(seen)
+        fixed = depths(3)
+        self.assertEqual(len(fixed), 3)                              # three depths, gap / 3 apart
+        self.assertTrue(np.allclose(fixed, [0.002, 0.002 + 0.002 / 3, 0.002 + 0.004 / 3], atol=1e-6), fixed)
+        self.assertGreater(len(depths(0)), 3)                            # random depths otherwise
 
     def test_trace_stops_at_the_edge(self):
         head = np.eye(4)
