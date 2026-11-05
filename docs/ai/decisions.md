@@ -1305,3 +1305,15 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   files with our own reader): morph.dat = 'MDAT', 3 axes, vertex count, key count, length-prefixed key names, record
   count, offset count (= vertices), 16-byte records (3 half-float deltas, u16 colour, packed normal and tangent),
   20-byte per-vertex entries (first record, 128-bit key mask); the body has three keys: Overweight, Thin, Strong.
+- 2026-11-05 Worn layer for converted Skyrim clothes and armor (owner's choice): BOTH on the apparel (outfit) layer,
+  never the spacesuit layer. Reasons (owner): Skyrim NPCs walk around in their own outfits and never flip between
+  suit and apparel; an NPC taken to space wears whatever real Starfield spacesuit is in its spacesuit slot, over the
+  apparel (the game hides the outfit layer under a shown suit, verified with the left blade 2026-10-26). Records:
+  apparel keywords (InventoryCategoryApparel + ArmorTypeApparelOrNakedBody for body pieces, ArmorTypeApparelHead for
+  helmets / hats) on outfit slots 0-31; no spacesuit-layer keyword (ArmorTypeSpacesuitBody hides the naked body
+  wholesale and made it invisible; SpacesuitBackpack broke O2 / CO2; SpacesuitShowAlways would draw the armor and a
+  real suit together). Skyrim body armor already carries its visible skin, so the body piece must hide the naked body
+  through the apparel body slot as vanilla outfits do. Separate Skyrim pieces (gauntlets, boots, circlets, amulets)
+  go on free outfit slots. Kept as a converter setting (mesh unchanged, only keywords and slots differ) so other
+  layouts stay testable. Unresolved, first in-game checks: whether apparel applies damage resistance from the ARMO
+  (where Skyrim's armor rating goes), and that the converted body piece hides the naked body without holes.
