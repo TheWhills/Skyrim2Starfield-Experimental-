@@ -126,11 +126,33 @@ class CardTests(unittest.TestCase):
         out, moved = HS.to_hairline(low, guide, curve, head, scalp)
         self.assertEqual(moved, -1)
         self.assertGreaterEqual(out[0, 2], 1.72 - 0.003 - 1e-9)           # cut off below the line
+        side = np.c_[np.linspace(0, 0.06, 8), np.full(8, 0.07), np.linspace(1.76, 1.74, 8)]
+        side[:, 1] = np.sqrt(np.maximum(0.1 ** 2 - side[:, 0] ** 2 - (side[:, 2] - 1.69) ** 2, 0))
+        self.assertEqual(HS.to_hairline(side, guide, curve, head, scalp)[1], 0)   # from a parting: not carried
         on = self._front_line(1.7205, 1.785)
         self.assertEqual(HS.to_hairline(on, guide, curve, head, scalp)[1], 0)
         back = on * [1, -1, 1]                                            # rooted at the back: left alone
         self.assertEqual(HS.to_hairline(back, guide, curve, head, scalp)[1], 0)
         self.assertEqual(HS.to_hairline(high, guide, None, head, scalp)[1], 0)
+
+    def test_parting_sides_are_not_averaged(self):
+        def piece(x0, x1, sign, name):
+            xs, ys = np.linspace(x0, x1, 6), np.linspace(-0.05, 0.05, 6)
+            p = np.array([[x, y, 1.8] for y in ys for x in xs])
+            tris = [(r * 6 + c, r * 6 + c + 1, (r + 1) * 6 + c) for r in range(5) for c in range(5)]
+            tris += [(r * 6 + c + 1, (r + 1) * 6 + c + 1, (r + 1) * 6 + c) for r in range(5) for c in range(5)]
+            n = np.tile([0, 0, 1.0], (len(p), 1))
+            return H.HairShape(name, p, n, np.tile([0, 1.0, 0], (len(p), 1)), [(0, 0)] * len(p), tris,
+                               [[("C_Head", 1.0)]] * len(p), -1, -1, 0), np.tile([sign, 0, 0.0], (len(p), 1))
+        a, da = piece(-0.06, -0.002, -1.0, b"L")                       # left of the part: strands run to -x
+        b, db = piece(0.002, 0.06, 1.0, b"R")                          # right: to +x
+        head = np.eye(4)
+        g = HS.Guide(H.Hair([a, b], [], {}, {}), head, dirs=[da, db], smooth_k=1)
+        self.assertEqual(len(set(g.island.tolist())), 2)
+        s, _c, _j, _d = g.field(np.array([[-0.003, 0, 1.8], [0.003, 0, 1.8]]))
+        self.assertLess(s[0, 0], -0.99)                                 # each side keeps its own way
+        self.assertGreater(s[1, 0], 0.99)
+        self.assertEqual(HS.islands(4, [(0, 1, 2)]).tolist(), [0, 0, 0, 1])
 
     def test_fixed_depth_slots(self):
         head = np.eye(4)

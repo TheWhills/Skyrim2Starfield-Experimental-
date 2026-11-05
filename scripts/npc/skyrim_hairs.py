@@ -99,7 +99,11 @@ THIN_CARDS = dict(DENSE_CARDS, width=0.007, slots=3)
 # see it starting from a smooth curved line", drawn over the shot): [strandsedge] the thin cards with every front
 # root on one smooth hairline curve per style (hairstrands.hairline_curve / to_hairline). [strandsline] dropped from
 # the copies (code kept).
-EDGE_CARDS = dict(THIN_CARDS, hairline=True)
+# round 9 (owner 2026-11-05: [strandsedge] lost the Skyrim hair's centre parting and its two swept sections, and
+# sits off the head where Starfield's hair hugs the scalp): the guide's direction field no longer averages the two
+# sides of a parting (hairstrands.Guide: per mesh piece, strands running the same way), only combed-back roots are
+# carried to the hairline curve, and the layers 1 mm apart instead of 1.5.
+EDGE_CARDS = dict(THIN_CARDS, hairline=True, gap=0.001)
 # the material most of IDG's hairs use (22 of 50, read from its NIFs 2026-11-03): straight strands (the bob's
 # Medium_Hair_Shared made every card wavy, owner's first strand-card shots)
 STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Long_Straight_Hair_Shared.mat"

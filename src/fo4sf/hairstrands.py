@@ -108,7 +108,8 @@ class Guide:
 
     def __init__(self, hair: Hair, head: np.ndarray, dirs=None, coverage=None, voxel: float = 0.004,
                  smooth_k: int = 16):
-        pts, nrm, tan, wts, sd, cov = [], [], [], [], [], []
+        pts, nrm, tan, wts, sd, cov, isl = [], [], [], [], [], [], []
+        base_id = 0
         for k, sh in enumerate(hair.shapes):
             p = np.asarray(sh.positions, float)
             if not len(p) or sh.normals is None or sh.tangents is None:
@@ -117,6 +118,9 @@ class Guide:
             t = np.asarray(sh.tangents, float)
             if n.shape != p.shape or t.shape != p.shape:
                 continue
+            ids = islands(len(p), sh.triangles)
+            isl.append(ids + base_id)
+            base_id += int(ids.max()) + 1 if len(ids) else 0
             pts.append(p)
             nrm.append(n)
             tan.append(t)
@@ -141,11 +145,13 @@ class Guide:
         self.s = np.where((size > 1e-9)[:, None], given / np.maximum(size, 1e-12)[:, None], s)
         self.cov = np.clip(np.concatenate(cov), 0.0, 1.0)
         self.weights = wts
-        if voxel > 0 and len(self.p) > 2000:              # one vertex per voxel: the field is smooth anyway
-            keys = np.floor(self.p / voxel).astype(np.int64)
+        self.island = np.concatenate(isl)
+        if voxel > 0 and len(self.p) > 2000:              # one vertex per voxel and piece: the field is smooth
+            keys = np.c_[np.floor(self.p / voxel).astype(np.int64), self.island]   # (both sides of a parting kept)
             _u, first = np.unique(keys, axis=0, return_index=True)
             keep = np.sort(first)
             self.p, self.n, self.s, self.cov = self.p[keep], self.n[keep], self.s[keep], self.cov[keep]
+            self.island = self.island[keep]
             self.weights = [wts[i] for i in keep]
         self.pp = (self.p * self.p).sum(1)
         self.tree = None
@@ -178,7 +184,14 @@ class Guide:
         """(strand direction, coverage, nearest index, nearest distance) at points q: the coverage- and
         distance-weighted mean of the k nearest vertices' (smooth across the guide's facets and cards)."""
         j, d = self.neighbours(q, k)
-        w = self.cov[j] / np.maximum(d, 1e-4)
+        near0 = j[np.arange(len(q)), np.argmin(d, axis=1)]
+        # only the nearest vertex's own piece and strands running its way: the two sides of a parting (or pieces
+        # laid over each other) are not averaged into one sideways direction (owner 2026-11-05: the strand copies
+        # lost the Skyrim hair's centre parting and swept sections)
+        same = (self.island[j] == self.island[near0][:, None]) & \
+            ((self.s[j] * self.s[near0][:, None, :]).sum(2) > 0.0)
+        w = self.cov[j] / np.maximum(d, 1e-4) * np.where(same, 1.0, 0.0)
+        w[np.arange(len(q)), np.argmin(d, axis=1)] = np.maximum(w[np.arange(len(q)), np.argmin(d, axis=1)], 1e-6)
         s = (w[:, :, None] * self.s[j]).sum(1)
         s /= np.maximum(np.linalg.norm(s, axis=1, keepdims=True), 1e-12)
         cov = (self.cov[j] / np.maximum(d, 1e-4)).sum(1) / (1.0 / np.maximum(d, 1e-4)).sum(1)
@@ -315,6 +328,27 @@ def root_at_hairline(line: np.ndarray, head_pts, head, reach: float = SCALP_REAC
     return p, 0
 
 
+def islands(n: int, triangles) -> np.ndarray:
+    """Per vertex the id (0..) of the connected piece of the mesh it belongs to (vertices joined by triangles; a
+    vertex in no triangle is its own piece)."""
+    parent = np.arange(n)
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    for t in triangles:
+        a = find(int(t[0]))
+        for v in t[1:]:
+            b = find(int(v))
+            if a != b:
+                parent[b] = a
+    roots = np.array([find(i) for i in range(n)], dtype=np.int64)
+    _u, ids = np.unique(roots, return_inverse=True)
+    return ids.astype(np.int64)
+
+
 def _angles(rel: np.ndarray) -> np.ndarray:
     """Degrees around the head from the front (+Y), + toward +X (skyrimhair.HAIRLINE_ANGLES' convention)."""
     return np.degrees(np.arctan2(rel[..., 0], rel[..., 1]))
@@ -359,7 +393,7 @@ def to_hairline(line: np.ndarray, guide: "Guide", curve, head, head_pts, scalp: 
                 tolerance: float = 0.003, max_reach: float = 0.06) -> Tuple[Optional[np.ndarray], int]:
     """(the line, -1 cut / 0 kept / +1 carried down) with its root on the hairline curve when the root is on the
     scalp at the front: points below the curve cut off (None when too little is left), a root that stops above it
-    carried on down over the guide (against the strand, on its tangent planes) until it reaches the curve (at most
+    and runs back over the head (combed back from the face, not falling sideways from a parting) carried on down over the guide (against the strand, on its tangent planes) until it reaches the curve (at most
     `max_reach`). Lines rooted elsewhere (the back, the sides past FRONT_ANGLE, hanging) are left alone."""
     if curve is None:
         return line, 0
@@ -381,6 +415,9 @@ def to_hairline(line: np.ndarray, guide: "Guide", curve, head, head_pts, scalp: 
         return p[first:].copy(), -1
     if rel[0, 2] <= h[0] + tolerance:
         return p, 0
+    first = p[min(2, len(p) - 1)] - p[0]
+    if -first[1] < 0.5 * np.linalg.norm(first):          # only hair combed back from the face starts at the front
+        return p, 0                                       # hairline (a parting's strands fall to the sides)
     back = p[0] - p[min(1, len(p) - 1)]
     added, pos, went = [], p[0].copy(), 0.0
     while went < max_reach:

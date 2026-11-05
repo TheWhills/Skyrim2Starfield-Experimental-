@@ -1348,3 +1348,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   stopping above it is carried on down over the guide to it (up to 6 cm), and such roots skip the random trim; the
   back and sides past 80 deg are untouched. Report: hairline_curve_cm, hairline_roots (cut / carried / kept /
   dropped). Copies now [strands], [strandsthin], [strandsedge]; [strandsline] code kept, not built.
+- 2026-11-05 owner (round 8, HairFemaleNord01): [strandsedge] lost the Skyrim hair's shape: the plain copy keeps a
+  centre parting with two swept sections; the cards criss-cross there; vanilla Starfield hair (pigtails shot) parts
+  cleanly and hugs the scalp. Causes (supported, from the code): the guide's direction field averaged the k nearest
+  vertices across pieces, so at a parting the two sides' opposite directions mixed into sideways / random ones;
+  the voxel thinning kept one vertex per 4 mm cell, dropping one side of a parting; round 8's curve carried roots
+  that sit at a parting (strands falling to the sides) down to the front hairline. Round 9 (same [strandsedge]):
+  Guide.island (mesh pieces), thinning per voxel and piece, field() averages only the nearest vertex's piece and
+  strands running its way; to_hairline carries only roots combed back from the face; layers 1 mm apart (was 1.5).
