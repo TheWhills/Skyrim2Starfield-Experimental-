@@ -1288,3 +1288,20 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   blended hairline layers, which reach down the forehead. Now a blended layer counts as hair only where its alpha is
   at least 0.5 (skyrim_hairs.skyrim_coverage, BLEND_SOLID), before the smoothing; the random root trim halved to
   0-1 cm (the hairline was set back unevenly).
+- 2026-11-05 Armor conversion engine: Outfit Studio. Owner asked for the most long-term-friendly way to convert
+  clothes and armor. Reviewed: SFport WIP (MIT; FO4 -> Starfield; Outfit-Studio-style fit: skeleton retarget, smoothed
+  body-to-body displacement, push-out, weights and the body's morphs from the nearest Starfield body point; all NIF /
+  morph IO through PyNifly's NiflyDLL; its notes: not verified in game) and BodySlide and Outfit Studio v6.1.0
+  (ousnius, Nexus Starfield 18449, owner's download; verified from its files: Starfield target game, Starfield
+  skeletons, .mesh and morph.dat export, 8 bones per vertex, import of another game's NIF, automation scripts, and a
+  built-in MCP server, `OutfitStudio.exe --mcp`, localhost:47823, whose guides cover conform, weight copy, clipping,
+  cross-game conversion and batching). Chosen: Outfit Studio does the fitting, weights, body morphs and export; our
+  Python picks the armor, drives it over MCP from the owner's PC, converts materials (its guide: Starfield materials
+  not mapped) and writes the plugin (Robes of Oblivion layout). Reasons: the fitting is maintained by the tool's
+  author and already handles skirts, straps, chains and rigid parts; any bad piece can be fixed by hand in the same
+  program. Our own pure-Python fit (SFport's method) stays the fallback if its Starfield output fails in game
+  (unresolved: Starfield support is new). First step: scripts/armor/os_probe.py, a read-only look at the server's
+  real tools and argument schemas. Side finding (verified on a vanilla female body morph.dat from PyNifly's test
+  files with our own reader): morph.dat = 'MDAT', 3 axes, vertex count, key count, length-prefixed key names, record
+  count, offset count (= vertices), 16-byte records (3 half-float deltas, u16 colour, packed normal and tangent),
+  20-byte per-vertex entries (first record, 128-bit key mask); the body has three keys: Overweight, Thin, Strong.

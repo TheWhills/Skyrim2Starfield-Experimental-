@@ -14,6 +14,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 | Skeleton / body / animation sample fetch (one zip to upload) | `scripts/armor/fetch_skeletons.py` | synthetic + smoke test on a real Starfield-format archive |
 | .af round-trip survey through CALUMI | `scripts/armor/af_roundtrip_survey.py` | fake-backend tests; see af-format-status.md |
 | Reference: a working community outfit | robes-of-oblivion-reference.md | verified from its files |
+| Outfit Studio MCP probe (the armor conversion's engine: tools, argument schemas, reference templates, archive bodies; optional body load + render) | `scripts/armor/os_probe.py` | fake-server tests; decisions.md 2026-11-05 |
 | Starfield animation-system survey (graphs, descriptors, rigs, native behaviours) | `scripts/armor/sf_anim_survey.py` | synthetic test; plan: animation-port.md |
 | HDT-SMP / FSMP physics configs: features, chains, mesh links, extra bones | `scripts/armor/smp_survey.py` | synthetic test; findings: animation-port.md "SMP config survey" |
 | Starfield Havok cloth (BSClothExtraData, .hkx, BA2): bone-driving rigs, constraints, colliders | `scripts/armor/sf_cloth_survey.py` | synthetic test; findings: animation-port.md "Starfield cloth decoded" |
@@ -24,6 +25,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 2. `python -I scripts\armor\fetch_skeletons.py --skyrim-data ... --starfield-data ... --out C:\Modding\work\skeletons` -> upload the zip.
 3. `python -I scripts\armor\hkx_survey.py --skyrim-data ... --out C:\Modding\work\hkx` -> report.txt.
 4. `python -I scripts\armor\af_roundtrip_survey.py --dll <CALUMI.Animation.dll> --starfield-data ... --out C:\Modding\work\af_survey --limit 200`, then without --limit.
+5. Outfit Studio v6.1.0 running with `--mcp` (Starfield target game, empty project): `python -I scripts\armor\os_probe.py --out C:\Modding\work\os_probe --load-body auto` -> zip the folder.
 
 ## Next, once the reports are in
 Skeleton map (Skyrim bone -> Starfield bone(s), rest-pose offsets, length ratios) from the fetched skeletons; then the
