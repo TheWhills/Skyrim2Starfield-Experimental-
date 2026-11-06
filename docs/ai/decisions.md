@@ -1753,3 +1753,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   is kept again by default (--drop-skin leaves such pieces out) and pushed out at 2 mm. Feet: the moved Skyrim foot
   region's box (vertices >= 0.5 on Foot + Toe0) is fitted per axis onto Starfield's foot box (clamp 0.9-1.35),
   applied to the Foot / Toe transforms. unresolved: in game.
+- verified (owner run, same day): the foot box fit never ran: Skyrim's malebody_1.nif has no feet or hands (they are
+  malefeet_1 / malehands_1). gear_fit now loads those into the Skyrim body and says when foot sizing is skipped.
+  The kept MaleBodyStormcloak piece makes the bare forearms grey (it carries the skin AND the painted trousers; with
+  the borrowed material it is all grey). gear_fit now prints each Skyrim shape's diffuse texture, to decide how to
+  split skin from cloth on such pieces.

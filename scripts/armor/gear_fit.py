@@ -34,6 +34,19 @@ def sky_shapes(nif_bytes: bytes):
     return [gearfit.from_skyrim(s) for s in skyrimskin.skinned_shapes(nifmod.parse(nif_bytes))]
 
 
+def shape_textures(nif_bytes: bytes) -> dict:
+    """{shape name: its texture set (diffuse first)} of a Skyrim NIF."""
+    from fo4sf import skyrimnif
+    n = nifmod.parse(nif_bytes)
+    out = {}
+    for s in skyrimskin.skinned_shapes(n):
+        try:
+            out[s.name.decode("latin-1", "replace")] = skyrimnif.texture_set(n, s.shader_ref) or []
+        except Exception as e:                       # report, keep going
+            out[s.name.decode("latin-1", "replace")] = [f"? {e}"]
+    return out
+
+
 def starfield_body(sf_data: str, female: bool):
     """(points mesh space, triangles, body binds {bone: bind}) of the game's naked body."""
     nif, _ = hkx_to_af.vanilla_file(os_convert.SF_BODY[female], sf_data)
@@ -115,6 +128,14 @@ def find_body_morph(sf_data: str, num_vertices: int, female: bool):
     return None, None
 
 
+# Skyrim keeps the feet and hands out of the body mesh (2026-11-06: with malebody_1 alone there was no Skyrim foot to
+# size the boots by)
+SKYRIM_LIMBS = {False: ["meshes\\actors\\character\\character assets\\malefeet_1.nif",
+                        "meshes\\actors\\character\\character assets\\malehands_1.nif"],
+                True: ["meshes\\actors\\character\\character assets\\femalefeet_1.nif",
+                       "meshes\\actors\\character\\character assets\\femalehands_1.nif"]}
+
+
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, drop_skin: bool = False):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
@@ -129,7 +150,9 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
-    res = gearfit.fit(gear, sky_shapes(body_nif), world, surf_pts, surf_tris, gap, sf_body_weights=body_w)
+    body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
+    sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
+    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=body_w)
     if drop_skin:                           # Skyrim's body-textured pieces
         drop = {n for n, r in res.report["shapes"].items() if r["skin_piece"]}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
@@ -188,7 +211,18 @@ def main(argv=None):
         return data
     print(f"{a.npc} ({o['race']}, {'female' if female else 'male'}):",
           *[f"{m['armor']} {m['mesh']}" for m in meshes], sep="\n  ")
-    shapes, binds, rep = run([read(m["mesh"]) for m in meshes], read(os_convert.SKYRIM_BODY[female]), sf_data,
+    body = [read(os_convert.SKYRIM_BODY[female])]
+    for p in SKYRIM_LIMBS[female]:
+        data = sky._read(bsa.norm(p))
+        if data is None:
+            print("not in Skyrim's archives (skipped):", p)
+        else:
+            body.append(data)
+    gear_bytes = [read(m["mesh"]) for m in meshes]
+    textures = {}
+    for gb in gear_bytes:
+        textures.update(shape_textures(gb))
+    shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
                              a.drop_skin)
     os.makedirs(a.out, exist_ok=True)
@@ -218,6 +252,9 @@ def main(argv=None):
                     fh.write(data)
             rep["body_morph"] = mpath
             print(f"slider morphs from {mpath} ({', '.join(body_morph.keys)}): {len(morphs)} files")
+    rep["textures"] = textures
+    for n, t in textures.items():
+        print(f"textures {n}: {t[0] if t else '-'}")
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1, default=str)
@@ -236,8 +273,11 @@ def main(argv=None):
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
     if rep.get("dropped_skin_pieces"):
         print("body-textured pieces left out:", ", ".join(rep["dropped_skin_pieces"]))
-    for side, f in (rep.get("feet") or {}).items():
+    feet = rep.get("feet") or {}
+    for side, f in feet.items():
         print(f"foot {side}: boot foot scaled {f['scale']} to Starfield's foot")
+    if not feet:
+        print("foot sizing: SKIPPED (no Skyrim or Starfield foot region found)")
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1")
     return 0
