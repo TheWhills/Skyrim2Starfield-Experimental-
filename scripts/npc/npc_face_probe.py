@@ -22,6 +22,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, HERE)                     # npc_records (python -I leaves the script's own folder off the path)
 
 from fo4sf import fo4land, sfplugin, skyrimnpc  # noqa: E402
 import npc_records  # noqa: E402
