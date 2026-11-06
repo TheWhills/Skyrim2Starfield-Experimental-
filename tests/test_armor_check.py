@@ -62,7 +62,14 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(s["outside_body_box"], 1)
         self.assertEqual(s["outside_examples"][0]["weights"], [("D", 1.0)])
         self.assertEqual(s["top"][0]["v"], 2)
+        self.assertEqual((s["triangles"]["count"], s["triangles"]["out_of_range"]), (1, 0))
+        self.assertGreater(s["triangles"]["longest"][0]["edge_m"], 8.0)
         self.assertEqual(s["bone_vertices"], {"A": 1, "C": 1, "D": 1})
+
+    def test_triangle_report_flags_bad_indices(self):
+        pos = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float)
+        r = C.triangle_report(pos, np.array([[0, 1, 2], [0, 1, 7], [1, 1, 2]]), [[]] * 3, [])
+        self.assertEqual((r["out_of_range"], r["degenerate"], r["max_index"]), (1, 1, 7))
 
 
 if __name__ == "__main__":

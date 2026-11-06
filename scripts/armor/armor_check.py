@@ -79,6 +79,24 @@ def nif_shapes(nif_bytes: bytes):
     return out, types
 
 
+def triangle_report(pos: np.ndarray, tris: np.ndarray, ws, names) -> Dict:
+    """Triangle sanity: indices past the vertex count (the GPU reads garbage: thin lines shooting off), repeated
+    corners, and the longest edges (a triangle joining far-apart parts of the gear)."""
+    bad = tris[(tris >= len(pos)).any(1) | (tris < 0).any(1)]
+    ok = tris[~((tris >= len(pos)).any(1) | (tris < 0).any(1))]
+    degenerate = int(((ok[:, 0] == ok[:, 1]) | (ok[:, 1] == ok[:, 2]) | (ok[:, 0] == ok[:, 2])).sum()) if len(ok) else 0
+    longest = []
+    if len(ok):
+        p = pos[ok]
+        edge = np.max(np.linalg.norm(p - np.roll(p, 1, axis=1), axis=2), axis=1)
+        for t in np.argsort(-edge)[:5]:
+            longest.append({"edge_m": round(float(edge[t]), 3), "vertices": ok[t].tolist(),
+                            "z": [round(float(pos[v][2]), 3) for v in ok[t]],
+                            "weights": [[(names[b], round(w, 2)) for b, w in ws[v]] for v in ok[t]]})
+    return {"count": int(len(tris)), "out_of_range": int(len(bad)), "out_of_range_examples": bad[:5].tolist(),
+            "max_index": int(tris.max()) if len(tris) else -1, "degenerate": degenerate, "longest": longest}
+
+
 def check(body_nif: bytes, body_mesh: bytes, armor_nif: bytes, armor_meshes: Dict[str, bytes],
           world: Dict[str, np.ndarray], far: float = 0.3) -> Dict:
     rep = {}
@@ -104,7 +122,9 @@ def check(body_nif: bytes, body_mesh: bytes, armor_nif: bytes, armor_meshes: Dic
     for g, paths, skin in shapes:
         key = "geometries/" + paths[0].replace("\\", "/") + ".mesh"
         names = [b.decode("latin-1") for b in skin.get("bones", [])]
-        pos, ws = facefit.mesh_arrays(sfmesh.parse(armor_meshes[key]))
+        mesh = sfmesh.parse(armor_meshes[key])
+        pos, ws = facefit.mesh_arrays(mesh)
+        tris = np.array([tuple(t) for t in mesh.triangles], int).reshape(-1, 3)
         on_bad = {}
         for v, vw in enumerate(ws):
             for bi, w in vw:
@@ -115,6 +135,7 @@ def check(body_nif: bytes, body_mesh: bytes, armor_nif: bytes, armor_meshes: Dic
             "vertices": len(pos), "bones": names,
             "flagged_bones": {n: {"vertices": len(vs), "first": vs[:5]} for n, vs in on_bad.items()},
             "outside_body_box": len(out),
+            "triangles": triangle_report(pos, tris, ws, names),
             "top": [{"v": int(v), "m": pos[v].round(3).tolist(),
                      "weights": [(names[b], round(w, 3)) for b, w in ws[v]]} for v in np.argsort(-pos[:, 2])[:6]],
             "bone_vertices": {n: sum(1 for vw in ws if any(names[b] == n and w > 0.01 for b, w in vw))
@@ -152,6 +173,10 @@ def main(argv=None):
     for p, s in rep["shapes"].items():
         fb = ", ".join(f"{n} ({v['vertices']})" for n, v in s["flagged_bones"].items()) or "none"
         print(f"  {p}: {s['vertices']} v, outside body box {s['outside_body_box']}, on flagged bones: {fb}")
+        tr = s["triangles"]
+        le = tr["longest"][0]["edge_m"] if tr["longest"] else 0.0
+        print(f"     triangles {tr['count']}, max index {tr['max_index']}, out of range {tr['out_of_range']}, "
+              f"degenerate {tr['degenerate']}, longest edge {le:.3f} m")
         t = s["top"][0]
         print(f"     top vertex z {t['m'][2]:.3f} m: {t['weights']}")
     print("wrote", dst)
