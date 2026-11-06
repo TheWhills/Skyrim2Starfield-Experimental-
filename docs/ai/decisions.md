@@ -1411,3 +1411,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   docs/npc/voice-pipeline.md. Built the Skyrim half: skyrimdialog.py (DIAL / INFO / dlstrings / speakers / .fuz)
   and skyrim_voice.py (an NPC's greeting lines -> xwm -> wav -> wem + ffxanim on the owner's PC). Synthetic tests
   only; next the Starfield voice type + greeting records, then Ralof's lines in game.
+- 2026-11-05 owner's hair_color_probe run (verified from its report): Starfield.esm's NPCs use 22 hair colour names
+  (Black 795, Brown 440, BlackBrown 433, DirtyBlonde 317, SaltAndBrown 189, Jet 189, Copper 171, Platinum 135, Amber
+  112, SaltAndPepper 55, Auburn 51, Grey 43, White 29, then Violet, Blue, Blonde, Ruby, Fuchsia, Teal, AquaPurple,
+  Yellow, TealBlonde), facial hair 13 of them; no CLFM record ties a name to a colour; the file search matched names
+  inside unrelated words ('Ruby' in 'shrubyucca') and its one-entry palette was wrong. Fixed: names only as whole
+  words of file names under a hair folder, a measured palette used only when it covers 3+ names; until the real
+  colours are found, npc_records.NAME_RGB gives the 14 natural names a colour judged from the name (approximate) and
+  the NPC gets the nearest to its Skyrim RGB (never a fantasy colour). The faces.json sent was a run without
+  --npc / --hairs-plugin (no npc_conversion block).

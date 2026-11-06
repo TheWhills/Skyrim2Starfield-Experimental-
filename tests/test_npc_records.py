@@ -65,12 +65,22 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(NR.read_strings(b""), {})
 
     def test_hair_color_match(self):
+        sf = ["Black", "Brown", "BlackBrown", "DirtyBlonde", "SaltAndBrown", "Jet", "Copper", "Platinum", "Amber",
+              "SaltAndPepper", "Auburn", "Grey", "White", "Violet", "Blue", "Blonde", "Ruby", "Teal"]   # the owner's run
+        rgb = lambda e, c: {"edid": e, "rgba": c + (0,)}
+        self.assertEqual(NR.match_hair_color(rgb("HairColor01", (200, 168, 105)), sf),
+                         ("Blonde", "rgb of the name (approximate)"))
+        self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf)[0], "Brown")
+        self.assertEqual(NR.match_hair_color(rgb("X", (20, 18, 17)), sf)[0], "Black")
+        self.assertEqual(NR.match_hair_color(rgb("X", (120, 40, 25)), sf)[0], "Auburn")
+        self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 140)), sf)[0] in NR.NAME_RGB, True)  # never Violet
+        self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf, {"Ruby": [90, 60, 40]})[0], "Brown")
         names = ["Blonde01", "BrownDark02", "BrownLight03", "Red01", "Black01", "Grey01"]
         blonde = {"edid": "HairColor07Blonde", "rgba": (200, 170, 110, 0)}
         self.assertEqual(NR.match_hair_color(blonde, names), ("Blonde01", "colour words"))
         dark = {"edid": "HairColor03BrownDark", "rgba": (60, 40, 20, 0)}
         self.assertEqual(NR.match_hair_color(dark, names)[0], "BrownDark02")
-        pal = {"Blonde01": [210, 180, 120], "Black01": [20, 18, 15]}
+        pal = {"Blonde01": [210, 180, 120], "Black01": [20, 18, 15], "Red01": [150, 40, 20]}
         self.assertEqual(NR.match_hair_color(dark, names, pal), ("Black01", "palette rgb"))
         self.assertEqual(NR.match_hair_color({"edid": "HairColorX", "rgba": None}, names)[0], None)
         self.assertEqual(NR.match_hair_color(None, names)[0], None)
@@ -124,7 +134,9 @@ class ProbeTests(unittest.TestCase):
             recs = HP.color_records(esm, ["Blonde01", "Brown02"])
             self.assertEqual(recs[0]["rgba"][:3], [220, 190, 130])
             self.assertTrue(HP.matches("textures/actors/human/hair/HairColor_LUT.dds", []))
-            self.assertTrue(HP.matches("textures/x/brown02_grad.dds", ["Brown02"]))
+            self.assertTrue(HP.matches("textures/actors/hair/brown02_grad.dds", ["Brown02"]))
+            self.assertFalse(HP.matches("textures/lod/shrubyucca01_color.dds", ["Ruby"]))     # the first run's mistake
+            self.assertFalse(HP.matches("textures/x/brown02_grad.dds", ["Brown02"]))          # not under a hair folder
             self.assertFalse(HP.matches("textures/x/rock.dds", ["Brown02"]))
             cr = os.path.join(d, "ContentResources.zip")
             with zipfile.ZipFile(cr, "w") as z:
@@ -135,7 +147,8 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(len(mats), 1)
             self.assertEqual(mats[0]["textures"], ["Data\\textures\\hair\\brown02_ramp.dds"])
             pal = HP.palette_from(["Blonde01", "Brown02", "Red9"], recs,
-                                  [{"path": "textures/hair/brown02_ramp.dds", "mean_rgb": [90, 60, 30]}])
+                                  [{"path": "textures/hair/brown02_ramp.dds", "mean_rgb": [90, 60, 30]},
+                                   {"path": "textures/lod/shrubred9yucca.dds", "mean_rgb": [1, 2, 3]}])
             self.assertEqual(pal, {"Blonde01": [220, 190, 130], "Brown02": [90, 60, 30]})
 
 

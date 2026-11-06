@@ -61,10 +61,20 @@ def color_records(esm: str, names) -> list:
     return out
 
 
+def _tokens(text: str) -> set:
+    return {t.lower() for t in re.split(r"[^A-Za-z0-9]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", text)) if t}
+
+
 def matches(path: str, names) -> bool:
+    """A hair colour hint in the path, or a colour name as a whole word of the file name under a hair folder (the
+    owner's first run matched 'Ruby' inside 'shrubyucca')."""
     p = path.lower().replace("\\", "/")
-    base = os.path.basename(p)
-    return any(h in p for h in HINTS) or any(n and len(n) > 3 and n.lower() in base for n in names)
+    if any(h in p for h in HINTS):
+        return True
+    if "hair" not in p:
+        return False
+    toks = _tokens(os.path.splitext(os.path.basename(path))[0])
+    return any(n and n.lower() in toks for n in names)
 
 
 def archive_hits(data_dir: str, names, limit: int = 400) -> list:
@@ -126,7 +136,8 @@ def palette_from(names, clfm, textures) -> dict:
         if rec:
             pal[n] = rec["rgba"][:3]
             continue
-        tex = next((t for t in textures if "mean_rgb" in t and n.lower() in os.path.basename(t["path"]).lower()), None)
+        tex = next((t for t in textures if "mean_rgb" in t and "hair" in t["path"].lower()
+                    and n.lower() in _tokens(os.path.splitext(os.path.basename(t["path"]))[0])), None)
         if tex:
             pal[n] = tex["mean_rgb"]
     return pal

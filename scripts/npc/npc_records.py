@@ -125,19 +125,43 @@ def lightness(rgb) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+# Starfield's hair colour names (the owner's probe 2026-11-05: 22 names on Starfield.esm's NPCs; no colour record or
+# texture ties a name to a colour) with a colour judged from the NAME (approximate, not measured), the natural ones
+# only: a Skyrim NPC's natural colour should not land on Violet / Teal / Fuchsia.
+NAME_RGB = {"Jet": (14, 13, 14), "Black": (26, 22, 20), "BlackBrown": (46, 33, 25), "Brown": (86, 58, 38),
+            "Auburn": (112, 46, 30), "Copper": (156, 82, 42), "Amber": (168, 112, 52), "DirtyBlonde": (160, 130, 86),
+            "Blonde": (202, 168, 108), "Platinum": (216, 206, 182), "SaltAndBrown": (120, 104, 92),
+            "SaltAndPepper": (128, 126, 123), "Grey": (152, 152, 150), "White": (226, 224, 218)}
+
+
+def _nearest(rgb, table: Dict[str, Iterable[float]], names) -> Optional[str]:
+    cand = [n for n in names if n in table]
+    if not cand:
+        return None
+    w = (0.3, 0.59, 0.11)
+
+    def dist(n):
+        return sum(wi * (float(a) - float(b)) ** 2 for wi, a, b in zip(w, list(table[n])[:3], rgb))
+    return min(cand, key=dist)
+
+
 def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
                      palette: Optional[Dict[str, List[float]]] = None) -> Tuple[Optional[str], str]:
-    """(Starfield hair colour name, how) for a Skyrim CLFM {"edid", "rgba"}: nearest palette RGB when the palette
-    covers names; else the most shared colour words (ties: the word 'dark' / 'light' agreeing); else None."""
+    """(Starfield hair colour name, how) for a Skyrim CLFM {"edid", "rgba"}: the nearest colour by RGB in the measured
+    palette when it covers at least 3 of the names; else in NAME_RGB (colours judged from the names); else the most
+    shared colour words; else None."""
     names = sorted({n for n in names if n})
     if not names or not skyrim_color:
         return None, "no colour"
     rgb = (skyrim_color.get("rgba") or [None])[:3]
-    if palette and rgb and rgb[0] is not None:
-        known = [n for n in names if n in palette] or [n for n in palette]
-        if known:
-            best = min(known, key=lambda n: sum((float(a) - float(b)) ** 2 for a, b in zip(palette[n][:3], rgb)))
-            return best, "palette rgb"
+    if rgb and rgb[0] is not None:
+        if palette and sum(1 for n in names if n in palette) >= 3:
+            best = _nearest(rgb, palette, names)
+            if best:
+                return best, "palette rgb"
+        best = _nearest(rgb, NAME_RGB, names)
+        if best:
+            return best, "rgb of the name (approximate)"
     want = color_words(skyrim_color.get("edid", ""))
     if want:
         scored = []
