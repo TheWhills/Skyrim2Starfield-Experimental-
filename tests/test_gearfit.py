@@ -64,7 +64,9 @@ class BoneTests(unittest.TestCase):
     def test_child_joint_reached_along_the_bone(self):
         # the calf's own transform carries the Skyrim foot joint onto Starfield's foot (length stretched)
         self.assertTrue(np.allclose(self.apply(CLF, SKY[FT]), SF["L_Foot"], atol=1e-6))
-        self.assertAlmostEqual(self.rep["bones"][CLF]["stretch"], 1.2 / 1.0, places=2)
+        sky_len = np.linalg.norm(np.subtract(SKY[FT], SKY[CLF])) * self.rep["global_scale"]
+        sf_len = np.linalg.norm(np.subtract(SF["L_Foot"], SF["L_Calf"]))
+        self.assertAlmostEqual(self.rep["bones"][CLF]["stretch"], sf_len / sky_len, places=3)
 
     def test_neck_and_spine_split(self):
         self.assertEqual(self.rep["bones"][SPN1]["to"], "C_Spine1")
