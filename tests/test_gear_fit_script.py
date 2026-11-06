@@ -70,9 +70,20 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(rep, {"Boots": [3, 10]})
         t = out[0]
         self.assertEqual((len(t.points), len(t.triangles)), (10, 9))
+        self.assertTrue(np.allclose(t.points[:, 2], 0))                       # flat: stays on the triangle's plane
+        out2, rep2 = gear_fit.tessellate_shapes([s], 3, below=4, skip={"Boots"})
+        self.assertEqual(rep2, {})
         self.assertEqual(len(t.weights), 10)
         self.assertTrue(all(0 <= b < 2 for vw in t.weights for b, _w in vw))
+        self.assertTrue(all(abs(sum(w for _b, w in vw) - 1.0) < 1e-9 for vw in t.weights))
         self.assertIs(out[1], big)                       # at / over the limit: unchanged
+
+    def test_flat_subdivide_shares_edges(self):
+        import numpy as np
+        pts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], float)
+        p, _n, _uv, t, _w = gear_fit.flat_subdivide(pts, np.tile([0, 0, 1.0], (4, 1)), [(0, 0)] * 4,
+                                                    [(0, 1, 2), (1, 3, 2)], [[(0, 1.0)]] * 4, 2)
+        self.assertEqual((len(p), len(t)), (9, 8))                            # the shared edge's midpoint once
 
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))

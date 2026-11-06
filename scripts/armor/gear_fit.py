@@ -107,6 +107,33 @@ def sex_ok(base: str, female: bool) -> bool:
     return not is_m if female else not is_f
 
 
+SF_HEADS = {False: "meshes/actors/human/characterassets/male/malehead_facebones.nif",
+            True: "meshes/actors/human/characterassets/female/femalehead_facebones.nif"}
+SKY_HEADS = {False: "meshes\\actors\\character\\character assets\\malehead.nif",
+             True: "meshes\\actors\\character\\character assets\\femalehead.nif"}
+
+
+def starfield_part(sf_data: str, nif_path: str, world):
+    """(points in skeleton space, triangles, weights by bone name) of a vanilla skinned NIF's first shape (the head:
+    the body mesh stops at the base of the neck, 2026-11-06: the cowl was fitted against the shoulders only)."""
+    paths, skin = facefit.starfield_head_parts(hkx_to_af.vanilla_file(nif_path, sf_data)[0])
+    m = sfmesh.parse(hkx_to_af.vanilla_file("geometries/" + paths[0].replace("\\", "/") + ".mesh", sf_data)[0])
+    pts, w = facefit.mesh_arrays(m)
+    bones = [b.decode("latin-1") for b in skin.get("bones", [])]
+    frame = gearfit.mesh_frame(dict(zip(bones, skin.get("binds", []))), world)
+    tris = np.array([tuple(t) for t in m.triangles], int).reshape(-1, 3)
+    weights = [[(bones[b], x) for b, x in vw if b < len(bones)] for vw in w]
+    return pts @ frame[:3, :3].T + frame[:3, 3], tris, weights
+
+
+def skyrim_head_shapes(nif_bytes: bytes):
+    """The Skyrim head NIF's head shape only (not eyes / mouth / brows), as SkyShapes."""
+    from fo4sf import skyrimnpc
+    shapes = skyrimskin.skinned_shapes(nifmod.parse(nif_bytes))
+    h = skyrimnpc.head_shape(shapes)
+    return [gearfit.from_skyrim(h)] if h is not None else []
+
+
 def find_hands(sf_data: str, female: bool, world):
     """(path, points in skeleton space, triangles) of the game's hands mesh (a separate mesh from the naked body, so
     the push-out must see it too; 2026-11-06: Starfield fingers poked through the converted gloves), or (None, ...)."""
@@ -187,34 +214,72 @@ TESSELLATE = 3                 # low-poly gear split n x n before the fit
 TESSELLATE_BELOW = 2000        # vertices: only shapes smaller than this
 
 
-def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW):
-    """Low-poly Skyrim shapes split into n x n smaller, curved triangles before the fit (skyrimhair.tessellate, PN
-    patches, UVs and weights carried along) so they can hug Starfield's differently shaped body (2026-11-06, Ralof's
-    boots: 202 vertices; covering the calf pushed the flat faces 2.5 cm looser than in Skyrim). ([shapes], report)"""
-    from fo4sf import skyrimhair
+def flat_subdivide(points, normals, uvs, tris, weights, n: int):
+    """Every triangle split n x n on its own flat plane (no curved patch: on Ralof's cowl the PN patches ballooned
+    the folds and opened the chest, 2026-11-06). Points on shared edges are shared (same position and UV); UVs,
+    normals and weights {bone index: w} interpolated. Returns (points, normals, uvs, tris, weights)."""
+    P, N, U = np.asarray(points, float), np.asarray(normals, float), np.asarray(uvs, float)
+    W = [dict(vw) for vw in weights]
+    pos, nrm, uv, wts, index = [], [], [], [], {}
+
+    def point(t, i, j):
+        a, b, c = t
+        k = n - i - j
+        ba, bb, bc = k / n, i / n, j / n
+        corners = [(x, w) for x, w in ((a, ba), (b, bb), (c, bc)) if w > 0]
+        if len(corners) == 1:
+            key = ("v", corners[0][0])
+        else:
+            key = ("p",) + tuple(sorted((int(x), round(w, 6)) for x, w in corners))
+        if key in index:
+            return index[key]
+        p_ = ba * P[a] + bb * P[b] + bc * P[c]
+        n_ = ba * N[a] + bb * N[b] + bc * N[c]
+        u_ = ba * U[a] + bb * U[b] + bc * U[c]
+        w_ = {}
+        for x, w in ((a, ba), (b, bb), (c, bc)):
+            for bone, bw in W[x].items():
+                w_[bone] = w_.get(bone, 0.0) + w * bw
+        index[key] = len(pos)
+        pos.append(p_)
+        nrm.append(n_ / (np.linalg.norm(n_) or 1.0))
+        uv.append(tuple(map(float, u_)))
+        wts.append(sorted(w_.items(), key=lambda kv: -kv[1]))
+        return index[key]
+
+    out_t = []
+    for t in tris:
+        g = {}
+        for i in range(n + 1):
+            for j in range(n + 1 - i):
+                g[i, j] = point(t, i, j)
+        for i in range(n):
+            for j in range(n - i):
+                out_t.append((g[i, j], g[i + 1, j], g[i, j + 1]))
+                if i + j < n - 1:
+                    out_t.append((g[i + 1, j], g[i + 1, j + 1], g[i, j + 1]))
+    return np.array(pos), np.array(nrm), uv, out_t, wts
+
+
+def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, skip=()):
+    """Low-poly Skyrim shapes split into n x n smaller flat triangles before the fit (flat_subdivide) so the fit can
+    shape them around Starfield's differently shaped body (2026-11-06, Ralof's boots: 202 vertices; covering the calf
+    pushed the flat faces 2.5 cm looser than in Skyrim). Shapes named in skip (dropped skin pieces) are left.
+    ([shapes], report)"""
     out, rep = [], {}
     for s in gear:
-        if n < 2 or len(s.points) >= below:
+        name = s.name.decode("latin-1", "replace")
+        if n < 2 or len(s.points) >= below or name in skip:
             out.append(s)
             continue
-        names = list(s.bones)
-        hs = skyrimhair.HairShape(s.name, s.points, s.normals, np.zeros_like(s.normals), list(s.uvs),
-                                  list(s.triangles), [[(names[b], w) for b, w in vw if 0 <= b < len(names)]
-                                                      for vw in s.weights], -1, -1, -1)
-        t, _r = skyrimhair.tessellate(skyrimhair.Hair([hs], [], {}, {}), n)
-        sh = t.shapes[0]
-        idx = {b: i for i, b in enumerate(names)}
-        nrm = np.asarray(sh.normals, float)
-        nrm = nrm / np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
-        out.append(gearfit.SkyShape(s.name, np.asarray(sh.positions, float), nrm, list(sh.uvs),
-                                    [tuple(int(i) for i in tri) for tri in sh.triangles], names,
-                                    [[(idx[b], w) for b, w in vw if b in idx] for vw in sh.weights], s.joints))
-        rep[s.name.decode("latin-1", "replace")] = [len(s.points), len(sh.positions)]
+        p, nr, uv, tr, w = flat_subdivide(s.points, s.normals, s.uvs, s.triangles, s.weights, n)
+        out.append(gearfit.SkyShape(s.name, p, nr, uv, tr, list(s.bones), w, s.joints))
+        rep[name] = [len(s.points), len(p)]
     return out, rep
 
 
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
-        size_feet: bool = False, tessellate: int = TESSELLATE):
+        size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds, body_w = starfield_body(sf_data, female)
@@ -226,12 +291,22 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         surf_pts = np.concatenate([skel_pts, hand_pts])
         surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
         surf_w += hand_w if len(hand_w) == len(hand_pts) else [[] for _ in hand_pts]
+    head_path = SF_HEADS[female]
+    try:
+        h_pts, h_tris, h_w = starfield_part(sf_data, head_path, world)
+        surf_tris = np.concatenate([surf_tris, h_tris + len(surf_pts)])
+        surf_pts = np.concatenate([surf_pts, h_pts])
+        surf_w += h_w
+    except (SystemExit, Exception) as e:            # report, keep going without the head
+        head_path = f"NOT FOUND ({e})"
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
-    gear, tess = tessellate_shapes(gear, tessellate)
+    gear, tess = tessellate_shapes(gear, tessellate, skip=set(skin_names))
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
     sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
+    if sky_head:
+        sky_body += skyrim_head_shapes(sky_head)
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet)
     if skin_names:                           # Skyrim's bare-skin pieces
         drop = {n for n in res.report["shapes"] if n in set(skin_names)}
@@ -243,7 +318,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         shapes[i] = sh
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     binds = gearfit.skeleton_binds(bones, world, frame, shapes)
-    res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess)
+    res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
+                      head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
     return shapes, binds, res.report
 
@@ -322,7 +398,8 @@ def main(argv=None):
         double |= double_sided_shapes(gb)
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
-                             () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate)
+                             () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate,
+                             sky._read(bsa.norm(SKY_HEADS[female])))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
@@ -409,6 +486,7 @@ def main(argv=None):
     for n, (v0, v1) in (rep.get("tessellated") or {}).items():
         print(f"tessellated {n}: {v0} -> {v1} vertices")
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
+    print("head in the surface:", rep.get("head"), "| Skyrim head:", "yes" if rep.get("skyrim_head") else "NOT FOUND")
     if rep.get("dropped_skin_pieces"):
         print("bare-skin shapes left out (Skyrim skin textures):", ", ".join(rep["dropped_skin_pieces"]))
     feet = rep.get("feet") or {}

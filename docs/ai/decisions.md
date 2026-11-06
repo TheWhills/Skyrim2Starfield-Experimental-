@@ -1812,3 +1812,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the fit. The undershirt is a separate mesh (clothes/naked/naked_m.nif, Naked_M_Swimsuit): scripts/armor/slot_probe.py
   lists the slots of HumanRace's skin armor, the clothes\naked addons and full outfits, to choose our ARMA's slots so
   the game hides it (supported, unverified).
+- verified (owner + gap report, same day): with tessellation the cowl's median gap matched Skyrim (collar 28.7 -> 29.8
+  mm) yet it still bulged behind / in front of the neck, and part of the chest showed through. Supported causes: (1)
+  both gaps were measured to the BODY meshes, which stop at the base of the neck: the cowl was fitted against the
+  shoulders, never the neck; (2) the PN (curved) patches of skyrimhair.tessellate balloon a folded cowl and dip
+  elsewhere. Changes: the head joins both surfaces (Starfield malehead_facebones.nif mesh in skeleton space with its
+  weights; Skyrim malehead.nif head shape only), tessellation is flat (gear_fit.flat_subdivide) and skips the skin
+  shapes that are dropped anyway (the bare hands had been split to 13370 vertices).
