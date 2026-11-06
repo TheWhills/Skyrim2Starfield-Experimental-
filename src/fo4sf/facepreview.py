@@ -57,7 +57,15 @@ def heat(d: np.ndarray, top: float) -> np.ndarray:
     return np.hstack([np.full_like(t, 255), 255 * (1 - t), 255 * (1 - t)])
 
 
-def orientation(v: np.ndarray) -> np.ndarray:
+def boundary_vertices(tris) -> np.ndarray:
+    """Vertices on edges used by one triangle only (a mesh's open rims: a head's neck opening, eye holes, mouth)."""
+    t = np.asarray(tris, int)
+    e = np.sort(np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]]), axis=1)
+    uniq, cnt = np.unique(e, axis=0, return_counts=True)
+    return np.unique(uniq[cnt == 1].ravel())
+
+
+def orientation(v: np.ndarray, tris=None) -> np.ndarray:
     """A rotation putting a head upright and facing +Y: up = the axis the head is longest along (top = the side the
     face's widest part is not ... approximated: the end farther from the centroid's mass), front = of the other two
     axes, the one the nose sticks out along (the most extreme point relative to the centre). Owner's first preview
@@ -74,6 +82,12 @@ def orientation(v: np.ndarray) -> np.ndarray:
     lo = c[:, up] < np.percentile(c[:, up], 20)
     width = lambda m: np.ptp(c[m][:, rest], axis=0).prod() if m.any() else 0.0
     usign = 1.0 if width(hi) >= width(lo) else -1.0
+    if tris is not None and len(tris):
+        rim = boundary_vertices(tris)
+        if len(rim) > 20:                              # the neck opening is the largest rim: it is at the bottom
+            # (owner's second preview 2026-11-05: Starfield's head carries a flared neck, wider than the cranium,
+            # so the widest end was taken for the top and the faces were drawn upside down)
+            usign = -1.0 if c[rim, up].mean() > 0 else 1.0
     R = np.zeros((3, 3))
     R[2, up] = usign                                   # new z = up
     R[1, front] = fsign                                # new y = front
@@ -85,7 +99,7 @@ def sheet(heads: Sequence[np.ndarray], tris: np.ndarray, size: int = 220, focus_
     """Rows: front shaded, side shaded, front heat map of each head's distance to heads[0] (the same scale for all,
     the largest difference). Columns: the heads. Only the face (vertices in front of the head's middle and above
     the chin line when focus_z is given) is framed."""
-    R = orientation(heads[0])
+    R = orientation(heads[0], tris)
     heads = [np.asarray(h, float) @ R.T for h in heads]
     base = heads[0]
     keep = base[:, 1] > np.median(base[:, 1]) if focus_z is None else base[:, 2] > focus_z

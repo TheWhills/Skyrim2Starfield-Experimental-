@@ -52,6 +52,19 @@ class OrientAndSmoothTests(unittest.TestCase):
         self.assertTrue(np.allclose(np.abs(np.linalg.det(R)), 1))
         self.assertGreater(back[nose, 1].mean(), 0.09)               # the nose faces +Y again
         self.assertGreater(back[cranium, 2].mean(), 0)               # the cranium up
+        # a head mesh open at the neck, with a flared neck wider than the cranium: the open rim marks the bottom
+        u, v = np.meshgrid(np.linspace(0, 0.8 * np.pi, 40), np.linspace(0, 2 * np.pi, 80, endpoint=False))
+        cap = np.c_[(np.sin(u) * np.cos(v)).ravel(), (np.sin(u) * np.sin(v)).ravel(), np.cos(u).ravel()] * 0.1
+        cap[:, :2] *= np.where(cap[:, 2] < -0.07, 1.3, 1.0)[:, None]          # the flare
+        cap[:, 2] *= 1.8                                                      # a head is taller than wide
+        idx = np.arange(40 * 80).reshape(80, 40)
+        ctri = np.array([t for i in range(80) for j in range(39)
+                         for t in ((idx[i, j], idx[(i + 1) % 80, j], idx[i, j + 1]),
+                                   (idx[(i + 1) % 80, j], idx[(i + 1) % 80, j + 1], idx[i, j + 1]))])
+        cap[(cap[:, 1] > 0.07) & (np.abs(cap[:, 2]) < 0.05), 1] += 0.03
+        lying2 = cap[:, [2, 0, 1]] * [-1, 1, 1]                               # upside down along X
+        R2 = FP.orientation(lying2, ctri)
+        self.assertLess((lying2 @ R2.T)[cap[:, 2] < -0.12, 2].mean(), 0)     # the neck at the bottom
         img = FP.sheet([lying, lying], tris, size=48)
         self.assertEqual(img.shape, (144, 96, 3))
         noisy = np.random.default_rng(1).normal(size=(len(p), 3))

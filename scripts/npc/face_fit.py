@@ -281,6 +281,9 @@ def main(argv=None):
                          "Starfield hair colour closest to their Skyrim one (owner 2026-11-05); instead of --hair")
     ap.add_argument("--hair-colors", help="hair_color_probe.py's hair_colors.json ({name: [r, g, b]}), for "
                                           "--hairs-plugin's colour match (else by colour words)")
+    ap.add_argument("--voice-lines", help="skyrim_voice.py's --out folder (lines.json + converted .wem / .ffxanim): the "
+                                          "NPCs get their own voice type and their Skyrim greetings (needs "
+                                          "--test-plugin); files go under <--out>\\Sound\\Voice")
     ap.add_argument("--strings-language", default="english", help="Skyrim string tables for the NPCs' names")
     ap.add_argument("--hair-legacy", action="store_true",
                     help="with --hair: the first conversion (rigid, cutout material, no _facebones twin) instead of the "
@@ -418,9 +421,18 @@ def main(argv=None):
         if recs and a.hair:
             report["hair_packing"] = add_hair_files(a, out, sky, esm, sf_data, report["npcs"], npcs, chosen, recs,
                                                     test_subs)
+        children = {}
+        if recs and a.voice_lines:
+            import npc_voice
+            vt = {sfplugin.edid(r[2]): r for r in sfplugin.records(sf_esm, [b"VTYP"])}
+            qt = next(r for r in sfplugin.records(sf_esm, [b"QUST"]) if sfplugin.edid(r[2]) == "DialogueGeneric")
+            top, children = npc_voice.add_voices(recs, test_subs, report["npcs"], a.voice_lines, len(masters), PLUGIN,
+                                                 out, vt["GenericMaleEvenToned"], qt, report)
+            recs += top
         if recs:
             with open(os.path.join(out, PLUGIN), "wb") as fh:
-                fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces", masters=masters))
+                fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces", masters=masters,
+                                        children=children))
             print(f"{PLUGIN}: {len(recs)} test NPCs")
     with open(os.path.join(out, "faces.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)

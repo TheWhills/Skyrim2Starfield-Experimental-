@@ -1458,3 +1458,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   and the shared conditions), TRDA 12 bytes, TROT, NAM1 text id, NAM2-4, NAM9 8-byte timestamp, CTDA (32 bytes, same
   layout as Skyrim's), NAM0, INAM. 486 greeting topics, 126,347 INFOs. Probe extended: greeting quests by response
   count, the condition functions they use, generic dialogue quests in full.
+- 2026-11-05 Greeting records for the converted NPCs (npc_voice.py, face_fit --voice-lines): per NPC a voice type
+  (DNAM 2 woman / 0 man, as the named vanilla voices), one quest copied from vanilla DialogueGeneric (owner's probe:
+  EDID, FULL, DNAM 11 01 00 00 05 ..., two conditions - dropped -, NEXT, ANAM), its greeting topic in the quest's
+  type-10 group, one INFO per converted line in the topic's type-7 group with CTDA GetIsID (72, seen in vanilla
+  greetings) the NPC, NAM1 the text; files at Sound\Voice\S2SFaceTest.esm\<voice type>\<INFO FormID 8 hex>.wem /
+  .ffxanim; the NPC's VTCK set to its voice type. sfplugin.build gained child groups (children={FormID: (group type,
+  records)}). Unverified: whether the game plays them (the quest must run; TRDA / NAM9 are filled neutral), whether
+  the lip file compiled against S2SVoiceBuild.esm's registered folder plays from ours. Also: the previews were upside
+  down (the flared neck read as the wider cranium); the open neck rim now marks the bottom.
