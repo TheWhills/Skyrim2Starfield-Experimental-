@@ -45,6 +45,13 @@ class ParseTests(unittest.TestCase):
                     "vertexList": [[0, 1, 2, 3, 0, 0, 1, 0.5, 0.25]]}
         c = E.geometry(combined)
         self.assertEqual((c["positions"], c["normals"], c["uvs"]), ([[1, 2, 3]], [[0, 0, 1]], [[0.5, 0.25]]))
+        real = {"bounds": {}, "triangleFormat": "[triangle index, vertex 1, vertex 2, vertex 3]",
+                "triangleList": [[0, 1, 0, 2]], "triangles": 1, "vertices": 2,
+                "vertexData": [{"index": 1, "normal": [0, 0, 1], "position": [1, 2, 3], "uv": [0.5, 0.5]},
+                               {"index": 0, "normal": [0, 1, 0], "position": [0, 0, 0], "uv": [0, 0]}]}
+        r = E.geometry(real)                     # the owner's answer, 2026-11-06
+        self.assertEqual((r["positions"], r["normals"][1], r["triangles"]), ([[0, 0, 0], [1, 2, 3]], [0, 0, 1], [(1, 0, 2)]))
+        self.assertEqual(E.weight_list({"bone": "C_Hips", "weightData": [{"index": 3, "weight": 0.4}]}), [(3, 0.4)])
         w = E.weight_list({"weightFormat": "[vertex index, weight]", "weightList": [[4, 0.75], [9, 0.25]]})
         self.assertEqual(w, [(4, 0.75), (9, 0.25)])
 

@@ -122,8 +122,10 @@ def geometry(answer: dict) -> Dict[str, list]:
                         d[int(r[0])] = vals
                 if d:
                     out[key] = [d[i] for i in sorted(d)]
-    verts = _rows(answer, "vertices")
-    if verts and isinstance(verts[0], dict):
+    # Outfit Studio's vertex records (verified 2026-11-06): "vertexData": [{"index", "normal", "position", "uv"}]
+    verts = next((v for v in (_rows(answer, "vertexData"), _rows(answer, "vertices")) if v and isinstance(v[0], dict)),
+                 None)
+    if verts:
         verts = sorted(verts, key=lambda v: v.get("index", v.get("vertex", 0)))
         for key, names in (("positions", ("position", "pos")), ("normals", ("normal",)), ("uvs", ("uv", "texCoord"))):
             vals = [next((v[n] for n in names if n in v), None) for v in verts]
@@ -150,12 +152,17 @@ def weight_list(answer: dict) -> List[Tuple[int, float]]:
     w = answer.get("weights") if isinstance(answer, dict) else None
     if w is None and isinstance(answer, dict):
         w = answer.get("vertices")
+    if not (isinstance(w, list) and w and isinstance(w[0], dict)) and isinstance(answer, dict):
+        # any list of records that carry a weight ("weightData", "vertexWeights", ...)
+        w = next((v for v in answer.values() if isinstance(v, list) and v and isinstance(v[0], dict)
+                  and any("weight" in k.lower() for k in v[0])), w)
     if isinstance(w, dict):
         return [(int(k), float(v)) for k, v in w.items()]
     out = []
     for r in w or []:
         if isinstance(r, dict):
-            out.append((int(r.get("vertex", r.get("index"))), float(r.get("weight", r.get("value")))))
+            wk = next((k for k in r if "weight" in k.lower()), "value")
+            out.append((int(r.get("vertex", r.get("index"))), float(r.get(wk))))
         else:
             out.append((int(r[0]), float(r[1])))
     return out
