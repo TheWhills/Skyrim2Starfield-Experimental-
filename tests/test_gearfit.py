@@ -58,8 +58,11 @@ class BoneTests(unittest.TestCase):
         return m[:3, :3] @ np.array(p, float) + m[:3, 3]
 
     def test_joints_land_on_starfield_joints(self):
-        for sky, sf in ((PELV, "C_Hips"), (NECK, "C_Neck"), (CLF, "L_Calf"), (FT, "L_Foot")):
+        for sky, sf in ((NECK, "C_Neck"), (CLF, "L_Calf"), (FT, "L_Foot")):
             self.assertTrue(np.allclose(self.apply(sky, SKY[sky]), SF[sf], atol=1e-9), sky)
+        # the torso moves as one piece by the overall fit: near its joints, not exactly on them
+        self.assertLess(np.linalg.norm(self.apply(PELV, SKY[PELV]) - SF["C_Hips"]), 0.05)
+        self.assertTrue(np.allclose(self.t[PELV], self.t[SPN2]))
 
     def test_child_joint_reached_along_the_bone(self):
         # the calf's own transform carries the Skyrim foot joint onto Starfield's foot (length stretched)
@@ -138,6 +141,24 @@ class SurfaceTests(unittest.TestCase):
         off, rep = G.body_offsets(sky, sf, sfn, smooth=0, sky_nrm=-sky_n)   # facing the other way: no match
         self.assertEqual(rep["matched"], 0)
         self.assertEqual(float(np.abs(off).max()), 0.0)
+
+    def test_triangle_push_reaches_between_vertices(self):
+        # a coarse tube (8 sides): a point 1 cm inside the flat middle of a face, far from every vertex
+        a = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+        z = np.array([0.0, 1.0])
+        pts = np.array([[0.1 * np.cos(t), 0.1 * np.sin(t), h] for h in z for t in a])
+        nrm = np.array([[np.cos(t), np.sin(t), 0.0] for _h in z for t in a])
+        tris = []
+        for j in range(8):
+            a0, a1 = j, (j + 1) % 8
+            tris += [(a0, a1, a0 + 8), (a1, a1 + 8, a0 + 8)]
+        mid = (pts[0] + pts[1]) / 2 * 0.9 + [0, 0, 0.5]          # inside, under the middle of face 0
+        out, n = G.push_out(np.array([mid]), pts, nrm, gap=0.004, tris=np.array(tris))
+        self.assertEqual(n, 1)
+        face_n = (pts[0] + pts[1]) / 2
+        face_n = face_n / np.linalg.norm(face_n)
+        depth = float((out[0] - (pts[0] + pts[1]) / 2 * np.array([1, 1, 0])) @ face_n)
+        self.assertAlmostEqual(depth, 0.004, places=4)
 
     def test_outward(self):
         pts, nrm = self.cylinder(0.1)

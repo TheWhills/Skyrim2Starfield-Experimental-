@@ -16,6 +16,13 @@ class ScriptTests(unittest.TestCase):
             gear_fit.main(["--skyrim-data", "x", "--starfield", "y", "--npc", "Ralof", "--name", "R",
                            "--out", os.path.join(ROOT, "tmp_out")])
 
+    def test_sex_ok(self):
+        self.assertTrue(gear_fit.sex_ok("malehands.nif", False))
+        self.assertFalse(gear_fit.sex_ok("femalehands.nif", False))
+        self.assertTrue(gear_fit.sex_ok("femalehands.nif", True))
+        self.assertFalse(gear_fit.sex_ok("hands_m.nif", True))
+        self.assertTrue(gear_fit.sex_ok("hands.nif", True))
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 

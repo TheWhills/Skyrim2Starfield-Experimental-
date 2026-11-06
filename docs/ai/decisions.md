@@ -1740,3 +1740,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the borrowed material over Starfield's body), and a chest shelf (body offset up to 68 mm). gear_fit now drops
   Skyrim bare-skin pieces by default (--keep-skin keeps them); body offsets count only where the moved Skyrim body and
   the Starfield body face the same way (cos > 0.7) and are capped at 4 cm.
+- verified (owner, same day): the chest bulge is not in the original; feet are fully covered and the shins do not
+  show through in Skyrim; Starfield fingers poke through the gloves. Changes: the torso bones (pelvis, spine 0-2)
+  now share the overall fit's transform (moving each onto its own Starfield joint stepped the chest forward of the
+  belly); the push-out measures against the body's triangles (closest point on the triangles around the 6 nearest
+  vertices) instead of the nearest vertex, which missed points between the shins' and feet's sparse vertices; the
+  game's hands mesh (found under meshes/actors/human by name and hand bones) joins the push-out surface.
+  unresolved: in-game result.

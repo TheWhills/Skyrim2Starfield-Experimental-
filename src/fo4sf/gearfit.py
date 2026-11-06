@@ -185,8 +185,10 @@ def bone_transforms(joints: Dict[str, np.ndarray], sf_world: Dict[str, np.ndarra
 
     for b, f in pairs:
         if b in NO_TURN:
+            # the torso moves as one piece, by the overall fit (2026-11-06, Ralof: each torso joint moved onto its own
+            # Starfield joint stepped the chest forward of the belly into a bulge with a crease)
             turn[b] = np.eye(3)
-            out[b] = make(b, np.eye(3), 1.0, np.array([0.0, 0.0, 1.0]))
+            out[b] = g.copy()
             rep["bones"][b] = {"to": f, "stretch": 1.0, "turn_deg": 0.0, "torso": True}
             continue
         c = CHILD.get(b)
@@ -323,8 +325,92 @@ def body_offsets(sky_body: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, r
                  "median_depth_mm": float(np.median(np.abs(depth[ok])) * 1000) if ok.any() else None}
 
 
+def closest_on_mesh(points: np.ndarray, verts: np.ndarray, tris: np.ndarray, vnrm: np.ndarray, k: int = 6,
+                    chunk: int = 256) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(closest surface point, signed depth along the outward face normal, distance) of each point on a triangle
+    mesh, searching the triangles around its k nearest vertices (2026-11-06: nearest-VERTEX depth missed boot and
+    sole points just inside the shins and feet, where the body's vertices lie several cm apart)."""
+    tris = np.asarray(tris, int).reshape(-1, 3)
+    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
+    fn = np.cross(b - a, c - a)
+    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    flip = np.einsum("ij,ij->i", fn, vnrm[tris].sum(1)) < 0          # face normals the way the vertex normals point
+    fn[flip] *= -1
+    vt = [[] for _ in range(len(verts))]
+    for t, tri in enumerate(tris):
+        for v in tri:
+            vt[v].append(t)
+    vv = (verts * verts).sum(1)
+    best_p = np.zeros_like(points)
+    best_d = np.full(len(points), np.inf)
+    best_s = np.zeros(len(points))
+    for c0 in range(0, len(points), chunk):
+        q = points[c0:c0 + chunk]
+        d2 = (q * q).sum(1)[:, None] + vv[None, :] - 2.0 * q @ verts.T
+        kk = min(k, len(verts))
+        near = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
+        for j in range(len(q)):
+            cand = np.unique([t for v in near[j] for t in vt[v]])
+            if not len(cand):
+                continue
+            cp = _closest_on_triangles(q[j], a[cand], b[cand], c[cand])
+            dist = np.linalg.norm(cp - q[j], axis=1)
+            i = int(np.argmin(dist))
+            best_p[c0 + j], best_d[c0 + j] = cp[i], dist[i]
+            best_s[c0 + j] = float((q[j] - cp[i]) @ fn[cand[i]])
+    return best_p, best_s, best_d
+
+
+def _closest_on_triangles(p, a, b, c) -> np.ndarray:
+    """Closest point to p on each triangle (a, b, c) (Ericson, Real-Time Collision Detection 5.1.5), vectorised."""
+    ab, ac, ap = b - a, c - a, p - a
+    d1, d2 = np.einsum("ij,ij->i", ab, ap), np.einsum("ij,ij->i", ac, ap)
+    bp = p - b
+    d3, d4 = np.einsum("ij,ij->i", ab, bp), np.einsum("ij,ij->i", ac, bp)
+    cp = p - c
+    d5, d6 = np.einsum("ij,ij->i", ab, cp), np.einsum("ij,ij->i", ac, cp)
+    va, vb, vc = d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2
+    den = np.where(np.abs(va + vb + vc) > 1e-20, va + vb + vc, 1e-20)
+    v, w = vb / den, vc / den
+    out = a + ab * v[:, None] + ac * w[:, None]                       # inside the face
+    with np.errstate(divide="ignore", invalid="ignore"):
+        # edges
+        e_ab = (vc <= 0) & (d1 >= 0) & (d3 <= 0)
+        t = np.where(e_ab, d1 / np.where(d1 - d3 != 0, d1 - d3, 1), 0)
+        out = np.where(e_ab[:, None], a + ab * t[:, None], out)
+        e_ac = (vb <= 0) & (d2 >= 0) & (d6 <= 0)
+        t = np.where(e_ac, d2 / np.where(d2 - d6 != 0, d2 - d6, 1), 0)
+        out = np.where(e_ac[:, None], a + ac * t[:, None], out)
+        e_bc = (va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0)
+        t = np.where(e_bc, (d4 - d3) / np.where((d4 - d3) + (d5 - d6) != 0, (d4 - d3) + (d5 - d6), 1), 0)
+        out = np.where(e_bc[:, None], b + (c - b) * t[:, None], out)
+    # vertices
+    out = np.where(((d1 <= 0) & (d2 <= 0))[:, None], a, out)
+    out = np.where(((d3 >= 0) & (d4 <= d3))[:, None], b, out)
+    out = np.where(((d6 >= 0) & (d5 <= d6))[:, None], c, out)
+    return out
+
+
 def push_out(points: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, gap: float = GAP,
-             reach: float = PUSH_REACH) -> Tuple[np.ndarray, int]:
+             reach: float = PUSH_REACH, tris: Optional[np.ndarray] = None) -> Tuple[np.ndarray, int]:
+    """Gear points inside (or within `gap` of) the body moved out to `gap` along the body's outward normal; against
+    the triangles when given, else the nearest vertex."""
+    if tris is not None and len(tris):
+        cp, depth, dist = closest_on_mesh(points, sf_pts, tris, sf_nrm)
+        tri_n = np.zeros_like(points)
+        ok = np.isfinite(dist)
+        diff = points - cp
+        # outward direction: from the surface point to the gear point when outside, the reverse when inside
+        nn = np.linalg.norm(diff, axis=1, keepdims=True)
+        tri_n[ok] = np.where(nn[ok] > 1e-9, diff[ok] / np.maximum(nn[ok], 1e-12) * np.sign(depth[ok])[:, None],
+                             0.0)
+        bad = ok & (dist < reach) & (depth < gap)
+        _d, _dist, idx = nearest_surface(points[bad], sf_pts, sf_nrm)
+        fallback = sf_nrm[idx]
+        nrm = np.where((np.linalg.norm(tri_n[bad], axis=1) > 0.5)[:, None], tri_n[bad], fallback)
+        out = points.copy()
+        out[bad] = cp[bad] + gap * nrm
+        return out, int(bad.sum())
     depth, dist, idx = nearest_surface(points, sf_pts, sf_nrm)
     bad = (dist < reach) & (depth < gap)
     out = points.copy()
@@ -370,7 +456,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         pts = pts + shift
         pushed = 0
         if not skin and len(sf_body_pts):
-            pts, pushed = push_out(pts, sf_body_pts, sf_nrm, gap)
+            pts, pushed = push_out(pts, sf_body_pts, sf_nrm, gap, tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
             lo, hi = sf_body_pts.min(0) - FAR, sf_body_pts.max(0) + FAR

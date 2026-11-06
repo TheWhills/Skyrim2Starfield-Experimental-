@@ -45,6 +45,51 @@ def starfield_body(sf_data: str, female: bool):
     return pts, tris, binds
 
 
+HAND_BONES = ("L_Wrist", "R_Wrist", "L_Index", "R_Index")
+
+
+def sex_ok(base: str, female: bool) -> bool:
+    """Whether a file name can be for this sex (names without a sex mark count for both)."""
+    is_f = "female" in base or "_f." in base or "_f_" in base
+    is_m = ("male" in base and "female" not in base) or "_m." in base or "_m_" in base
+    return not is_m if female else not is_f
+
+
+def find_hands(sf_data: str, female: bool, world):
+    """(path, points in skeleton space, triangles) of the game's hands mesh (a separate mesh from the naked body, so
+    the push-out must see it too; 2026-11-06: Starfield fingers poked through the converted gloves), or (None, ...)."""
+    from fo4sf import sfnif
+    for fn in sorted(os.listdir(sf_data)):
+        low = fn.lower()
+        if not (low.startswith("starfield - meshes") and low.endswith(".ba2")):
+            continue
+        arc = ba2.Ba2(os.path.join(sf_data, fn))
+        for i, name in enumerate(arc.names):
+            p = name.replace("\\", "/").lower()
+            base = p.rsplit("/", 1)[-1]
+            if not (p.startswith("meshes/actors/human/") and p.endswith(".nif") and "hand" in base):
+                continue
+            if "1st" in base or not sex_ok(base, female):
+                continue
+            try:
+                paths, skin = facefit.starfield_head_parts(arc.read(i))
+            except Exception:
+                continue
+            bones = [b.decode("latin-1") for b in skin.get("bones", [])]
+            if not paths or not any(b in bones for b in HAND_BONES):
+                continue
+            try:
+                m = sfmesh.parse(hkx_to_af.vanilla_file("geometries/" + paths[0].replace("\\", "/") + ".mesh",
+                                                        sf_data)[0])
+            except SystemExit:
+                continue
+            pts, _w = facefit.mesh_arrays(m)
+            frame = gearfit.mesh_frame(dict(zip(bones, skin.get("binds", []))), world)
+            tris = np.array([tuple(t) for t in m.triangles], int).reshape(-1, 3)
+            return p, pts @ frame[:3, :3].T + frame[:3, 3], tris
+    return None, None, None
+
+
 def find_body_morph(sf_data: str, num_vertices: int, female: bool):
     """(path, Morph) of the game's chargen morph.dat for the naked body: the one under meshes/morphs/human/<sex>/
     with exactly the body mesh's vertex count and the Overweight key."""
@@ -74,10 +119,15 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     pts, tris, body_binds = starfield_body(sf_data, female)
     frame = gearfit.mesh_frame(body_binds, world)
     skel_pts = pts @ frame[:3, :3].T + frame[:3, 3]
+    surf_pts, surf_tris = skel_pts, tris
+    hand_path, hand_pts, hand_tris = find_hands(sf_data, female, world)
+    if hand_pts is not None:
+        surf_pts = np.concatenate([skel_pts, hand_pts])
+        surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
-    res = gearfit.fit(gear, sky_shapes(body_nif), world, skel_pts, tris, gap)
+    res = gearfit.fit(gear, sky_shapes(body_nif), world, surf_pts, surf_tris, gap)
     if not keep_skin:                           # Skyrim's bare-skin pieces: Starfield draws its own body there
         drop = {n for n, r in res.report["shapes"].items() if r["skin_piece"]}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
@@ -88,7 +138,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         shapes[i] = sh
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     binds = gearfit.skeleton_binds(bones, world, frame, shapes)
-    res.report.update(skipped=skipped, frame=frame.round(6).tolist())
+    res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path)
     res.report["_body_pts"] = pts
     return shapes, binds, res.report
 
@@ -180,6 +230,7 @@ def main(argv=None):
               f"{r['unweighted']} unweighted")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
+    print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
     if rep.get("dropped_skin_pieces"):
         print("bare-skin pieces dropped (Starfield's body shows there):", ", ".join(rep["dropped_skin_pieces"]))
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
