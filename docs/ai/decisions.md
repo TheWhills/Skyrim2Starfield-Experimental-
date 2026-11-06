@@ -1528,3 +1528,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   QNAM "Asian_Female_yo1_Sk3" (ethnicity_sex_age_Sk<shade>, VNAM textures/actors/human/face), so the face keeps the
   template's skin. npc_face_probe now lists every Dermaesthetic texture with the STON it is used with, to choose
   one per NPC. Also: Skyrim NPCs without a hair head part (Nazeem) now get their race's default hair (HEAD).
+- 2026-11-06 Face skin (owner's second npc_face_probe): 2,901 Dermaesthetic layers use 80 textures named
+  <African|Asian|European>_<Male|Female>_<yo1|md1|md2|ol1>_Sk<1|3|6|8> (capitalisation varies; 3 male_as_md2_sk*_Derm_color
+  odd ones). Vanilla pairs Sk with STON loosely (African faces with STON 0-8, European_Female_md1_Sk8 with STON 0), so
+  "Sk = the tone it was painted for" is a reading of the names (supported, not verified). face_fit sets the test
+  NPC's Dermaesthetic texture: ethnicity from the Skyrim race (Redguard -> African; Nord / Imperial / Breton / Elder
+  -> European), its sex, md1 when present, Sk nearest the STON chosen for the body. faces.json face_colors.face_skin.

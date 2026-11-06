@@ -291,3 +291,64 @@ def race_tints(subs) -> Dict:
             k = struct.unpack_from("<H", d, 0)[0]
             cur[2] = TINT_KINDS.get(k, str(k))
     return {k: (v[1], v[2]) for k, v in out.items()}
+
+
+# ------------------------------------------------------------------------------------- face skin texture (11-06)
+# Starfield's face skin is a texture layer, not STON (owner 2026-11-06: Nazeem's body went dark with STON 8, his face
+# stayed the template's light skin): a TNAM "Dermaesthetic" layer whose QNAM names the texture,
+# <Ethnicity>_<Sex>_<age>_Sk<n> (African / Asian / European; yo1, md1, md2, ol1; Sk1, 3, 6, 8; capitalisation varies),
+# 2,901 of 2,983 faced human NPCs (probe). Read as Sk = the skin tone it was painted for (assumed: vanilla NPCs pair
+# them loosely, e.g. European_Female_md1_Sk8 with STON 0).
+DERMA = re.compile(r"^(african|asian|european)_(male|female)_([a-z]+\d)_sk(\d+)$", re.I)
+SKYRIM_ETHNICITY = {"redguard": "african", "nord": "european", "imperial": "european", "breton": "european",
+                    "elder": "european"}
+
+
+def dermaesthetic_names(npc_recs) -> List[str]:
+    """Every Dermaesthetic texture name Starfield's NPCs use."""
+    out = set()
+    for _t, _h, subs, _f in npc_recs:
+        layer = None
+        for s, d in subs:
+            if s == b"TNAM":
+                layer = fo4land.zstring(d)
+            elif s == b"QNAM" and layer == "Dermaesthetic":
+                out.add(fo4land.zstring(d))
+                layer = None
+    return sorted(out)
+
+
+def skyrim_ethnicity(race_edid: str) -> str:
+    low = (race_edid or "").lower()
+    return next((v for k, v in SKYRIM_ETHNICITY.items() if k in low), "european")
+
+
+def choose_dermaesthetic(names, ethnicity: str, female: bool, ston: Optional[int], age: str = "md1"
+                         ) -> Tuple[Optional[str], str]:
+    """The face skin texture for an ethnicity / sex / age, its Sk nearest the skin tone (STON 0-8)."""
+    sex = "female" if female else "male"
+    cand = []
+    for n in names:
+        m = DERMA.match(n)
+        if m and m.group(1).lower() == ethnicity and m.group(2).lower() == sex:
+            cand.append((m.group(3).lower(), int(m.group(4)), n))
+    if not cand:
+        return None, f"no {ethnicity} {sex} face skin texture"
+    ages = [c for c in cand if c[0] == age] or cand
+    want = 4 if ston is None else ston
+    best = min(ages, key=lambda c: (abs(c[1] - want), c[0] != age, c[2]))
+    return best[2], f"{ethnicity} {sex}, Sk{best[1]} nearest skin tone {ston}"
+
+
+def with_layer_texture(subs, layer: str, texture: str) -> Tuple[list, bool]:
+    """subs with the texture (QNAM) of texture layer `layer` (TNAM) replaced; False when the NPC has no such layer."""
+    out, cur, done = [], None, False
+    for s, d in subs:
+        if s == b"TNAM":
+            cur = fo4land.zstring(d)
+        elif s == b"QNAM" and cur == layer and not done:
+            out.append((s, sfplugin.zs(texture)))
+            done, cur = True, None
+            continue
+        out.append((s, d))
+    return out, done

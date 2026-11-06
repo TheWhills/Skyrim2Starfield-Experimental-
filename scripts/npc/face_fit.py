@@ -171,13 +171,16 @@ def npc_setup(a, sky, esm, sf_esm, npc_recs, report) -> dict:
     voices = {fid: sfplugin.edid(subs) for _t, _h, subs, fid in sfplugin.records(sf_esm, [b"VTYP"])}
     strings = npc_records.skyrim_names(sky, a.strings_language)
     index = npc_records.hairs_index(hp)
-    races = {fid: (npc_records.race_tints(rs), npc_records.race_defaults(rs))
-             for _t, _h, rs, fid in sfplugin.records(esm, [b"RACE"])}
+    race_recs = sfplugin.records(esm, [b"RACE"])
+    races = {fid: (npc_records.race_tints(rs), npc_records.race_defaults(rs)) for _t, _h, rs, fid in race_recs}
+    race_edids = {fid: sfplugin.edid(rs) for _t, _h, rs, fid in race_recs}
+    derma = npc_records.dermaesthetic_names(npc_recs)
     report["npc_conversion"] = {"hairs_plugin": hp, "masters": masters, "hairstyles_in_it": len(index),
                                 "starfield_hair_colors": sorted(names), "palette": bool(palette),
                                 "skyrim_strings": len(strings)}
     return dict(masters=masters, sf_hdpt=sf_hdpt, hdpt=hdpt, clfm=clfm, names=names, palette=palette,
-                voices=voices, strings=strings, index=index, races=races, part_type=npc_hair.part_type,
+                voices=voices, strings=strings, index=index, races=races, race_edids=race_edids,
+                derma=derma, part_type=npc_hair.part_type,
                 npc_parts=npc_hair.npc_parts, with_hair_color=npc_hair.with_hair_color)
 
 
@@ -239,9 +242,15 @@ def face_colors(subs, src, real, hair_color_name):
         values[b"ECOL"] = sfplugin.zs(ecol)
     if hair_color_name:
         values[b"BCOL"] = sfplugin.zs(hair_color_name)
+    ethnicity = npc_records.skyrim_ethnicity(real.get("race_edids", {}).get(src.get("race"), ""))
+    derma, dhow = npc_records.choose_dermaesthetic(real.get("derma", []), ethnicity, src.get("female", False), ston)
+    placed = False
+    if derma:
+        subs, placed = npc_records.with_layer_texture(subs, "Dermaesthetic", derma)
     info = {"eyes": {"skyrim": eyes.get("edid") if eyes else None, "from": where, "starfield": ecol, "how": ehow},
+            "face_skin": {"starfield": derma, "how": dhow, "set": placed},
             "skin": {"skyrim_rgb": rgb, "from": shown, "starfield_ston": ston,
-                     "note": "assumed 0 = lightest, 8 = darkest"},
+                     "note": "0 = lightest, 8 = darkest (body: verified 2026-11-06)"},
             "brow_color": hair_color_name}
     return npc_records.with_face_colors(subs, values), info
 

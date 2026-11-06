@@ -87,6 +87,42 @@ class FaceColorsTests(unittest.TestCase):
         self.assertEqual(info["eyes"]["from"], "race default")
 
 
+NAMES = ["African_Male_Md1_Sk8", "African_Male_md1_Sk1", "African_Male_md1_Sk3", "African_Male_md1_Sk6",
+         "African_Male_ol1_Sk8", "African_Female_md1_Sk6", "African_Female_md1_sk8", "European_Male_md1_sk3",
+         "European_Male_Md1_Sk1", "European_Female_md1_Sk1", "male_as_md2_sk6_Derm_color"]
+
+
+class FaceSkinTests(unittest.TestCase):
+    def test_choose(self):
+        self.assertEqual(R.choose_dermaesthetic(NAMES, "african", False, 8)[0], "African_Male_Md1_Sk8")   # md1 kept
+        self.assertEqual(R.choose_dermaesthetic(NAMES, "african", True, 6)[0], "African_Female_md1_Sk6")
+        self.assertEqual(R.choose_dermaesthetic(NAMES, "european", False, 1)[0], "European_Male_Md1_Sk1")
+        self.assertEqual(R.choose_dermaesthetic(NAMES, "european", True, 1)[0], "European_Female_md1_Sk1")
+        self.assertIsNone(R.choose_dermaesthetic(NAMES, "asian", True, 1)[0])
+        self.assertEqual((R.skyrim_ethnicity("RedguardRace"), R.skyrim_ethnicity("NordRaceVampire"),
+                          R.skyrim_ethnicity("KhajiitRace")), ("african", "european", "european"))
+
+    def test_names_and_layer_edit(self):
+        subs = [(b"EDID", z("T")), (b"MNAM", b"\x01\0\0\0"), (b"TNAM", z("Dermaesthetic")),
+                (b"QNAM", z("Asian_Female_yo1_Sk3")), (b"VNAM", z("textures/actors/human/face")),
+                (b"MNAM", b"\x01\0\0\0"), (b"TNAM", z("Lipstick1")), (b"QNAM", z("Lipstick_Standard"))]
+        self.assertEqual(R.dermaesthetic_names([(b"NPC_", b"", subs, 1)]), ["Asian_Female_yo1_Sk3"])
+        out, done = R.with_layer_texture(subs, "Dermaesthetic", "African_Female_md1_Sk6")
+        self.assertTrue(done)
+        q = [d for s_, d in out if s_ == b"QNAM"]
+        self.assertEqual(q, [z("African_Female_md1_Sk6"), z("Lipstick_Standard")])
+        self.assertFalse(R.with_layer_texture([(b"EDID", z("T"))], "Dermaesthetic", "X")[1])
+
+    def test_face_colors_sets_face_skin(self):
+        real = {"hdpt": {}, "races": {0x99: ({(False, 1): ("SkinTone.dds", "skin tone")}, {False: [], True: []})},
+                "race_edids": {0x99: "RedguardRace"}, "derma": NAMES}
+        src = {"race": 0x99, "female": False, "head_parts": [], "tints": [{"index": 1, "color": (53, 39, 34, 0)}]}
+        subs = [(b"EDID", z("T")), (b"TNAM", z("Dermaesthetic")), (b"QNAM", z("European_Male_Md1_Sk1"))]
+        out, info = face_fit.face_colors(subs, src, real, None)
+        self.assertIn((b"QNAM", z("African_Male_Md1_Sk8")), out)
+        self.assertEqual(info["face_skin"]["set"], True)
+
+
 class RaceHairTests(unittest.TestCase):
     def test_race_default_hair_only_when_none(self):
         real = {"hdpt": {0x30: {"type": 3}, 0x31: {"type": 3}, 0x12: {"type": 6}},
