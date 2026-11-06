@@ -72,7 +72,10 @@ for _s in "LR":
 # level with the spine base, so pelvis -> spine pointed sideways and turned the hips 53 deg; Starfield has four spine
 # bones to Skyrim's three, so segment lengths do not compare and the clamp squashed them to 0.75)
 NO_TURN = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Spine2 [Spn2]", "NPC Root [Root]",
-           "NPC COM [COM ]")
+           "NPC COM [COM ]",
+           # the neck too (2026-11-06, Ralof's cowl: weighted chest + neck, the neck moved onto its own Starfield joint
+           # and the two halves pulled the cowl out into a bulge behind the neck)
+           "NPC Neck [Neck]")
 # joints the overall fit lines up: the body's axis and legs. Arms and fingers are left out (2026-11-06, Ralof: with
 # them in, Skyrim's different A-pose arm angle tipped the whole torso back, chest forward and coat hem behind); the
 # arms get their own per-bone turns.
@@ -485,6 +488,21 @@ def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, b
     return out, int((total > 1e-5).sum())
 
 
+def weld(original: np.ndarray, pts: np.ndarray, decimals: int = 5) -> Tuple[np.ndarray, int]:
+    """Vertices that were one point in the Skyrim mesh (copies along UV seams) put back on one point: their mean
+    (2026-11-06, Ralof's boots: the fit steps moved the two sides of the heel seam apart into a crack)."""
+    key = np.round(np.asarray(original, float), decimals)
+    _u, inv, counts = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    inv = inv.reshape(-1)
+    if (counts > 1).sum() == 0:
+        return pts, 0
+    sums = np.zeros((len(counts), 3))
+    np.add.at(sums, inv, pts)
+    mean = sums / counts[:, None]
+    out = np.where((counts[inv] > 1)[:, None], mean[inv], pts)
+    return out, int((counts[inv] > 1).sum())
+
+
 def gap_report(sky_pts: np.ndarray, sky_gap: np.ndarray, pts: np.ndarray, sf_pts, sf_tris, sf_nrm) -> Dict:
     """Median gap to the body (mm) in Skyrim and now in Starfield, for the vertices that sat within KEEP_REACH of
     Skyrim's body: all of them and the top tenth by height (on a coat, the collar)."""
@@ -634,6 +652,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         covered = 0
         if not skin and len(sf_body_pts):
             pts, covered = cover(pts, nrm, s.triangles, sf_body_pts, sf_nrm, gap)
+        pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
             lo, hi = sf_body_pts.min(0) - FAR, sf_body_pts.max(0) + FAR
@@ -652,7 +671,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "not_finite": int(bad.sum()), "far_outside": far,
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
-            "body_weighted": near, "covered": covered, "pulled_in": pulled,
+            "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}
     return FitResult(shapes, rep)

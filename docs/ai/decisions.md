@@ -1805,3 +1805,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   cover pushing flat faces over Starfield's leg / torso shape. gear_fit now tessellates shapes under 2000 vertices
   3 x 3 (skyrimhair.tessellate, PN patches, UVs and weights carried) before the fit (--tessellate 1 = off). Sleeve band:
   supported = Starfield's built-in undershirt below Ralof's short chainmail sleeves (owner to check unequipped).
+- verified (owner, same day): tessellated boots / coat look good; left: a crack at the heel, the cowl bulging far out
+  behind the neck, and Starfield's grey undershirt showing below Ralof's short sleeves (owner: Skyrim's bare arm runs
+  up under the sleeve; needed for other armors too). Changes: the neck bone moves with the torso (NO_TURN; its own
+  joint pulled the chest + neck weighted cowl apart); gearfit.weld puts Skyrim seam copies back on one point after
+  the fit. The undershirt is a separate mesh (clothes/naked/naked_m.nif, Naked_M_Swimsuit): scripts/armor/slot_probe.py
+  lists the slots of HumanRace's skin armor, the clothes\naked addons and full outfits, to choose our ARMA's slots so
+  the game hides it (supported, unverified).

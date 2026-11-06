@@ -58,11 +58,12 @@ class BoneTests(unittest.TestCase):
         return m[:3, :3] @ np.array(p, float) + m[:3, 3]
 
     def test_joints_land_on_starfield_joints(self):
-        for sky, sf in ((NECK, "C_Neck"), (CLF, "L_Calf"), (FT, "L_Foot")):
+        for sky, sf in ((CLF, "L_Calf"), (FT, "L_Foot")):
             self.assertTrue(np.allclose(self.apply(sky, SKY[sky]), SF[sf], atol=1e-9), sky)
         # the torso moves as one piece by the overall fit: near its joints, not exactly on them
         self.assertLess(np.linalg.norm(self.apply(PELV, SKY[PELV]) - SF["C_Hips"]), 0.05)
         self.assertTrue(np.allclose(self.t[PELV], self.t[SPN2]))
+        self.assertTrue(np.allclose(self.t[NECK], self.t[SPN2]))              # the neck moves with the torso
 
     def test_child_joint_reached_along_the_bone(self):
         # the calf's own transform carries the Skyrim foot joint onto Starfield's foot (length stretched)
@@ -307,6 +308,16 @@ class NearWeightTests(unittest.TestCase):
         self.assertAlmostEqual(dict(out[1])["L_Foot"], 0.5)          # half way: blended
         self.assertEqual(out[2], [("L_Calf", 1.0)])                   # far: its own
         self.assertEqual(n, 2)
+
+
+class WeldTests(unittest.TestCase):
+    def test_weld_seam_copies(self):
+        orig = np.array([[0, 0, 0], [0, 0, 0], [1, 0, 0]], float)
+        moved = np.array([[0, 0, 0.01], [0, 0, 0.03], [1, 0, 0.5]], float)
+        out, n = G.weld(orig, moved)
+        self.assertEqual(n, 2)
+        self.assertTrue(np.allclose(out[0], [0, 0, 0.02]) and np.allclose(out[1], [0, 0, 0.02]))
+        self.assertTrue(np.allclose(out[2], moved[2]))
 
 
 class BindTests(unittest.TestCase):
