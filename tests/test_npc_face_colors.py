@@ -112,6 +112,10 @@ class FaceSkinTests(unittest.TestCase):
         q = [d for s_, d in out if s_ == b"QNAM"]
         self.assertEqual(q, [z("African_Female_md1_Sk6"), z("Lipstick_Standard")])
         self.assertFalse(R.with_layer_texture([(b"EDID", z("T"))], "Dermaesthetic", "X")[1])
+        out2, _ = R.with_layer_texture(subs, "Dermaesthetic", "African_Female_md1_Sk6", "t/female_af_md1_sk6.dds")
+        self.assertEqual([d for s_, d in out2 if s_ == b"VNAM"], [z("t/female_af_md1_sk6.dds")])
+        self.assertEqual(R.dermaesthetic_paths([(b"NPC_", b"", subs, 1)]),
+                         {"Asian_Female_yo1_Sk3": "textures/actors/human/face"})
 
     def test_face_colors_sets_face_skin(self):
         real = {"hdpt": {}, "races": {0x99: ({(False, 1): ("SkinTone.dds", "skin tone")}, {False: [], True: []})},

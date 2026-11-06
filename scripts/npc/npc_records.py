@@ -340,15 +340,38 @@ def choose_dermaesthetic(names, ethnicity: str, female: bool, ston: Optional[int
     return best[2], f"{ethnicity} {sex}, Sk{best[1]} nearest skin tone {ston}"
 
 
-def with_layer_texture(subs, layer: str, texture: str) -> Tuple[list, bool]:
-    """subs with the texture (QNAM) of texture layer `layer` (TNAM) replaced; False when the NPC has no such layer."""
+def dermaesthetic_paths(npc_recs) -> Dict[str, str]:
+    """{Dermaesthetic texture name: its texture file (VNAM)} as Starfield's NPCs use them (owner's npc_dump
+    2026-11-06: the layer's VNAM holds the .dds path, female_af_md1_sk6_derm_color.dds; changing only the name left
+    the template's file in place)."""
+    out = {}
+    for _t, _h, subs, _f in npc_recs:
+        layer = name = None
+        for s, d in subs:
+            if s == b"TNAM":
+                layer, name = fo4land.zstring(d), None
+            elif s == b"QNAM" and layer == "Dermaesthetic":
+                name = fo4land.zstring(d)
+            elif s == b"VNAM" and layer == "Dermaesthetic" and name:
+                out.setdefault(name, fo4land.zstring(d))
+                layer = None
+    return out
+
+
+def with_layer_texture(subs, layer: str, texture: str, path: Optional[str] = None) -> Tuple[list, bool]:
+    """subs with the texture name (QNAM) and, when given, file (VNAM) of texture layer `layer` (TNAM) replaced;
+    False when the NPC has no such layer."""
     out, cur, done = [], None, False
     for s, d in subs:
         if s == b"TNAM":
             cur = fo4land.zstring(d)
         elif s == b"QNAM" and cur == layer and not done:
             out.append((s, sfplugin.zs(texture)))
-            done, cur = True, None
+            done = True
+            continue
+        elif s == b"VNAM" and cur == layer and done and path:
+            out.append((s, sfplugin.zs(path)))
+            cur = None
             continue
         out.append((s, d))
     return out, done

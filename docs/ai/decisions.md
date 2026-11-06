@@ -1547,3 +1547,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   drop TPLT / TPTA and clear those flags (face_fit.without_templates). Also added: --keep-blend-morphs (test whether
   BMPN / BMPV, e.g. female_af_md1_Mouth, carry the face skin colour) and scripts/npc/npc_dump.py (our NPC vs its
   vanilla template, field by field).
+- 2026-11-06 Owner's npc_dump: Saadia's record equals her dark template ChargenPresetFemale01 in every colour field
+  (STON 06, Dermaesthetic African_Female_md1_Sk6 + VNAM female_af_md1_sk6_derm_color.dds, no TPTA) yet her face is
+  white in game, also without More Sliders (owner). Remaining difference: we drop BMPN / BMPV (blend morph presets,
+  female_af_md1_Mouth ...) and FMRI / FMRG. The layer textures sit under postblenddetails, i.e. over a base made from
+  the blend presets: hypothesis, the base face skin comes from BMPN / BMPV. Test: --keep-blend-morphs (now keeps
+  FMRI / FMRG too). Also found: a texture layer's VNAM is the .dds path; the Dermaesthetic VNAM is now set from the
+  path vanilla uses with that name (npc_records.dermaesthetic_paths). Spacesuits gone? not yet reported.

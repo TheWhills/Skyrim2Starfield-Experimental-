@@ -228,12 +228,13 @@ def npc_setup(a, sky, esm, sf_esm, npc_recs, report) -> dict:
     races = {fid: (npc_records.race_tints(rs), npc_records.race_defaults(rs)) for _t, _h, rs, fid in race_recs}
     race_edids = {fid: sfplugin.edid(rs) for _t, _h, rs, fid in race_recs}
     derma = npc_records.dermaesthetic_names(npc_recs)
+    derma_paths = npc_records.dermaesthetic_paths(npc_recs)
     report["npc_conversion"] = {"hairs_plugin": hp, "masters": masters, "hairstyles_in_it": len(index),
                                 "starfield_hair_colors": sorted(names), "palette": bool(palette),
                                 "skyrim_strings": len(strings)}
     return dict(masters=masters, sf_hdpt=sf_hdpt, hdpt=hdpt, clfm=clfm, names=names, palette=palette,
                 voices=voices, strings=strings, index=index, races=races, race_edids=race_edids,
-                derma=derma, part_type=npc_hair.part_type,
+                derma=derma, derma_paths=derma_paths, part_type=npc_hair.part_type,
                 npc_parts=npc_hair.npc_parts, with_hair_color=npc_hair.with_hair_color)
 
 
@@ -311,7 +312,8 @@ def face_colors(subs, src, real, hair_color_name):
     derma, dhow = npc_records.choose_dermaesthetic(real.get("derma", []), ethnicity, src.get("female", False), ston)
     placed = False
     if derma:
-        subs, placed = npc_records.with_layer_texture(subs, "Dermaesthetic", derma)
+        subs, placed = npc_records.with_layer_texture(subs, "Dermaesthetic", derma,
+                                                      real.get("derma_paths", {}).get(derma))
     info = {"eyes": {"skyrim": eyes.get("edid") if eyes else None, "from": where, "starfield": ecol, "how": ehow},
             "face_skin": {"starfield": derma, "how": dhow, "set": placed},
             "skin": {"skyrim_rgb": rgb, "from": shown, "starfield_ston": ston,
@@ -395,8 +397,10 @@ def main(argv=None):
                          "MoreSlidersFaceBones_recipe.txt), with that mod's --regions and --head-nif: its new bones' "
                          "sliders then move the head in the fit as they do in game")
     ap.add_argument("--keep-blend-morphs", action="store_true",
-                    help="keep the template's blend morph presets (BMPN / BMPV: female_af_md1_Mouth ...) instead of "
-                         "removing them (2026-11-06 test: does Starfield take the face skin colour from them?)")
+                    help="keep the template's blend morph presets (BMPN / BMPV: female_af_md1_Mouth ...) and morph "
+                         "region data (FMRI / FMRG) instead of removing them (2026-11-06: Saadia's record matched her "
+                         "dark template in every colour field and her face was still white: the base face skin seems "
+                         "to come from these presets). The template's blend also changes the face shape.")
     ap.add_argument("--ridge", type=float, default=0.05,
                     help="cost of each dial's size, relative to an average dial's effect (2026-11-05: at 1e-6 More "
                          "Sliders' 307 sliders fought each other at +-1 and Ralof came out deformed; 0 = off)")
@@ -560,7 +564,7 @@ def main(argv=None):
             full = f"{row['edid']} (S2S)"
             if real is not None:
                 full = npc_records.npc_name(by_edid[row["edid"].lower()], real["strings"])
-            keep = (b"BMPN", b"BMPV") if a.keep_blend_morphs else ()
+            keep = (b"BMPN", b"BMPV", b"FMRI", b"FMRG") if a.keep_blend_morphs else ()
             subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}, keep),
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
                                   b"FULL": sfplugin.zs(full)}, drop=STRIP + STRIP_GEAR)

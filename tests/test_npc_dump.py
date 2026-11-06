@@ -27,7 +27,7 @@ class DumpTests(unittest.TestCase):
         subs = [(b"EDID", z("T")), (b"FMSI", b"\x05\0\0\0"), (b"FMRS", b"\0" * 4), (b"BMPN", z("male_af_md1_Eyes")),
                 (b"BMPV", b"\0\0\x80\x3f"), (b"STON", b"\x08")]
         gone = face_fit.with_face(subs, {13: 0.5})
-        kept = face_fit.with_face(subs, {13: 0.5}, keep=(b"BMPN", b"BMPV"))
+        kept = face_fit.with_face(subs, {13: 0.5}, keep=(b"BMPN", b"BMPV", b"FMRI", b"FMRG"))
         self.assertNotIn(b"BMPN", [s for s, _d in gone])
         self.assertEqual([s for s, _d in kept].count(b"BMPN"), 1)
         self.assertEqual([s for s, _d in kept].count(b"FMSI"), 1)            # dials replaced, not added twice
