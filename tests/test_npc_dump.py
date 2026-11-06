@@ -42,5 +42,46 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(dict(out)[b"ACBS"], acbs[:14] + b"\0\0")
 
 
+
+class BakedFaceTests(unittest.TestCase):
+    def test_index_and_pick(self):
+        names = {"Starfield - Textures01.ba2": ["textures\\actors\\character\\facecustomization\\starfield.esm\\0010c360_color.dds",
+                                                "textures\\actors\\character\\facecustomization\\starfield.esm\\0010c360_normal.dds",
+                                                "textures\\other.dds"],
+                 "Starfield - TexturesPatch01.ba2": ["textures\\actors\\character\\facecustomization\\starfield.esm\\0010c360_normal.dds"]}
+        idx = face_fit.baked_face_index(names)
+        self.assertEqual(sorted(idx), [0x10C360])
+        self.assertEqual(idx[0x10C360]["normal"][0], "Starfield - TexturesPatch01.ba2")    # the patch wins
+        self.assertEqual(idx[0x10C360]["color"][0], "Starfield - Textures01.ba2")
+
+    def test_pick_requires_baked(self):
+        import struct as st
+        def npc(fid, edid):
+            subs = [(b"EDID", z(edid)), (b"ACBS", st.pack("<I", 0) + bytes(12)), (b"RNAM", st.pack("<I", 7)),
+                    (b"FMSI", b"\0" * 4), (b"VTCK", b"\1\0\0\0"), (b"STON", b"\x08")]
+            return (b"NPC_", b"", subs, fid)
+        recs = [npc(1, "NoBake"), npc(2, "Baked")]
+        self.assertEqual(face_fit.pick_template(recs, 7, False, None, skin=(8, None), baked={2})[3], 2)
+        self.assertEqual(face_fit.pick_template(recs, 7, False, None, baked={2})[3], 2)
+        self.assertEqual(face_fit.pick_template(recs, 7, False, None)[3], 1)
+
+    def test_write(self):
+        import tempfile
+        from unittest import mock
+        idx = {0x50569: {"color": ("a.ba2", "x_color.dds"), "ao": ("a.ba2", "x_ao.dds")}}
+
+        class Fake:
+            def __init__(self, path):
+                pass
+
+            def read(self, name):
+                return name.encode()
+        with tempfile.TemporaryDirectory() as d, mock.patch("fo4sf.ba2.Ba2", Fake):
+            paths = face_fit.write_baked_face(idx, 0x50569, 0x03000805, d, d)
+            self.assertEqual(sorted(os.path.basename(p) for p in paths), ["00000805_ao.dds", "00000805_color.dds"])
+            self.assertIn(os.path.join("facecustomization", "S2SFaceTest.esm"), paths[0])
+            self.assertEqual(open(paths[1], "rb").read(), b"x_color.dds")
+
+
 if __name__ == "__main__":
     unittest.main()

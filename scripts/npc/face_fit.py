@@ -22,8 +22,10 @@ FMSI is the regions file's slider ID, the head NIF's bind convention.
 import argparse
 import json
 import os
+import re
 import struct
 import sys
+from typing import Dict, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -153,6 +155,43 @@ def without_templates(subs) -> list:
     return out
 
 
+BAKED_FACE = re.compile(r"facecustomization[\\/]starfield\.esm[\\/]([0-9a-f]{8})_(color|normal|rough|ao)\.dds$",
+                        re.I)
+
+
+def baked_face_index(names_by_archive) -> Dict[int, Dict[str, Tuple[str, str]]]:
+    """{FormID: {kind: (archive, entry)}} of the pre-built face textures Starfield ships per vanilla NPC
+    (owner's facegen_probe 2026-11-06, verified: textures/actors/character/facecustomization/starfield.esm/
+    <FormID 8 hex>_color / _normal / _rough / _ao.dds, plus a baked head mesh under meshes/.../facegendata/facegeom;
+    a new NPC has none and the game shows a default light face). Later archives (the patch) win."""
+    out: Dict[int, Dict[str, Tuple[str, str]]] = {}
+    for arc in sorted(names_by_archive):
+        for n in names_by_archive[arc]:
+            m = BAKED_FACE.search(n.replace("\\", "/"))
+            if m:
+                out.setdefault(int(m.group(1), 16), {})[m.group(2).lower()] = (arc, n)
+    return out
+
+
+def write_baked_face(index, tpl_fid: int, new_fid: int, data_dir: str, out: str, plugin: str = None) -> list:
+    """The template's baked face textures copied under the new NPC's FormID (load-order byte dropped, as the game
+    names its own) in out/textures/actors/character/facecustomization/<plugin>/. The baked head mesh is not
+    copied: the face shape stays ours (runtime). Returns the written paths."""
+    from fo4sf import ba2
+    plugin = plugin or PLUGIN
+    folder = os.path.join(out, "textures", "actors", "character", "facecustomization", plugin)
+    written, opened = [], {}
+    for kind, (arc, name) in sorted(index.get(tpl_fid, {}).items()):
+        if arc not in opened:
+            opened[arc] = ba2.Ba2(os.path.join(data_dir, arc))
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, f"{new_fid & 0xFFFFFF:08x}_{kind}.dds")
+        with open(path, "wb") as fh:
+            fh.write(opened[arc].read(name))
+        written.append(path)
+    return written
+
+
 def template_skin(subs):
     """(STON, face skin ethnicity) of a Starfield NPC (its Dermaesthetic texture's first word, lower case)."""
     ston = next((bytes(d)[0] for s, d in subs if s == b"STON" and len(d)), None)
@@ -167,7 +206,7 @@ def template_skin(subs):
     return ston, eth
 
 
-def pick_template(npc_recs, race_fid, female, edid=None, skin=None):
+def pick_template(npc_recs, race_fid, female, edid=None, skin=None, baked=None):
     """A vanilla human NPC of the sex to copy: `edid` when given; else one with face dials and no template, preferring
     plain ones (no scripts, no affinity data: a generic NPC rather than a quest character) with a voice type (VTCK:
     the game's generic greetings, owner 2026-11-05). skin (STON, ethnicity): among those, the one whose skin tone and
@@ -182,7 +221,8 @@ def pick_template(npc_recs, race_fid, female, edid=None, skin=None):
             is_f = bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1)
             rnam = next((struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"RNAM"), None)
             if rnam == race_fid and is_f == female and b"FMSI" in sigs and b"TPLT" not in sigs \
-                    and not (sigs & {b"VMAD", b"QSTA", b"BNAM"}) and b"VTCK" in sigs:
+                    and not (sigs & {b"VMAD", b"QSTA", b"BNAM"}) and b"VTCK" in sigs \
+                    and (baked is None or r[3] in baked):
                 ston, eth = template_skin(subs)
                 cost = abs((ston if ston is not None else 4) - (skin[0] if skin[0] is not None else 4)) + \
                     (0 if eth == skin[1] else 6)
@@ -199,7 +239,8 @@ def pick_template(npc_recs, race_fid, female, edid=None, skin=None):
         acbs = next((bytes(d) for s, d in subs if s == b"ACBS"), b"")
         is_f = bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1)
         rnam = next((struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"RNAM"), None)
-        if rnam == race_fid and is_f == female and b"FMSI" in sigs and b"TPLT" not in sigs:
+        if rnam == race_fid and is_f == female and b"FMSI" in sigs and b"TPLT" not in sigs \
+                and (baked is None or fid in baked):
             plain = not (sigs & {b"VMAD", b"QSTA", b"BNAM"})
             if plain and b"VTCK" in sigs:                # a voice type: the game's generic greetings and barks
                 return t, h, subs, fid
@@ -401,6 +442,10 @@ def main(argv=None):
                          "region data (FMRI / FMRG) instead of removing them (2026-11-06: Saadia's record matched her "
                          "dark template in every colour field and her face was still white: the base face skin seems "
                          "to come from these presets). The template's blend also changes the face shape.")
+    ap.add_argument("--baked-face-textures", action="store_true",
+                    help="copy the template's pre-built face textures (_color / _normal / _rough / _ao) under each "
+                         "test NPC's FormID, choosing templates that have them: Starfield shows a default light face "
+                         "for NPCs without (2026-11-06)")
     ap.add_argument("--control-npcs", action="store_true",
                     help="also write each NPC with its template's own face data (our hair, colours, outfit, name), "
                          "'<name> (template face)': tells whether our face dials cause the light faces")
@@ -557,6 +602,15 @@ def main(argv=None):
         # 2026-11-06: with no outfit (DOFT / SOFT dropped, or a template without one: ChargenPresetFemale01) the
         # game dressed the test NPCs in a spacesuit; Ralof, who kept his template's outfit, wore plain underwear.
         # An empty outfit of our own, as default and space outfit, keeps them in underwear until clothing exists.
+        baked = None
+        if a.baked_face_textures:
+            from fo4sf import ba2
+            names = {}
+            for fn in sorted(os.listdir(sf_data)):
+                if fn.lower().startswith("starfield - textures") and fn.lower().endswith(".ba2"):
+                    names[fn] = ba2.Ba2(os.path.join(sf_data, fn)).names
+            baked = baked_face_index(names)
+            report["baked_faces"] = len(baked)
         no_outfit = None
         otft = sfplugin.records(sf_esm, [b"OTFT"])
         if otft:
@@ -567,7 +621,7 @@ def main(argv=None):
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
             skin = target_skin(by_edid[row["edid"].lower()], npcs, real) if real is not None else None
-            tpl = pick_template(npc_recs, human, row["female"], want, skin=skin)
+            tpl = pick_template(npc_recs, human, row["female"], want, skin=skin, baked=baked)
             if tpl is None:
                 row["test_npc"] = "no vanilla template NPC of this sex"
                 continue
@@ -595,6 +649,9 @@ def main(argv=None):
                                                    f"from, to compare in game)",
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
                                           f"order index)"}
+            if baked is not None:
+                row["test_npc"]["baked_face_textures"] = [os.path.basename(p) for p in
+                                                          write_baked_face(baked, tpl[3], fid, sf_data, out)]
             if a.control_npcs:
                 # the same NPC with the template's own face data (dials, presets) kept: only hair, colours, outfit
                 # and name are ours (2026-11-06: our Saadia's face stays light where her template's is dark)

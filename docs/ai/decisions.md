@@ -1571,3 +1571,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   dials nor the colour fields cause it; the difference is outside the record. Hypothesis: vanilla NPCs have
   pre-built face data in the archives by FormID (as Skyrim's FaceGen) and new NPCs get a runtime face without the skin
   tone. scripts/npc/facegen_probe.py lists archive entries named by given FormIDs and face-like folders.
+- 2026-11-06 Verified (owner's facegen_probe): Starfield pre-builds each vanilla NPC's face: meshes/actors/character/
+  facegendata/facegeom/starfield.esm/<FormID 8 hex>.nif (Starfield - FaceMeshes.ba2) and textures/actors/character/
+  facecustomization/starfield.esm/<FormID>_color / _normal / _rough / _ao.dds (Textures01, patch overrides);
+  8,659 such textures, 1,552 face meshes. New NPCs have none: the game builds the shape at runtime (our dials show)
+  but its face colour is a default light one; this is the light-face bug. One template (0000913A) has none.
+  face_fit --baked-face-textures: templates restricted to NPCs with baked textures, and the template's four textures
+  copied to textures/actors/character/facecustomization/S2SFaceTest.esm/<our FormID, no load-order byte>_*.dds.
+  The facegeom mesh is NOT copied (it would freeze the template's face shape); whether the game uses the textures
+  without a mesh is the in-game test. Real fix later: bake our own (shape mesh + colour) per NPC.
