@@ -48,7 +48,9 @@ READ_CALLS = (
     ("browse_archives", {}),
     ("browse_archives", {"filter": "naked"}),
     ("browse_archives", {"pattern": "*characterassets*body*"}),
+    ("get_guide", {}),
 )
+MAX_GUIDES = 25
 # After --load-body: what the loaded body looks like to Outfit Studio.
 BODY_CALLS = (
     ("get_status", {}),
@@ -215,6 +217,42 @@ def save_result(out: str, n: int, name: str, res: dict) -> dict:
     return {"call": stem, "error": bool(res.get("isError")), "text": text[:300]}
 
 
+def guide_topics(res) -> list:
+    """Topic names out of get_guide's answer without a topic (JSON {"topics": [...]} of names or {name / topic}, or
+    a text list of '- name' lines)."""
+    out = []
+
+    def add(t):
+        if isinstance(t, dict):
+            t = t.get("topic") or t.get("name") or t.get("id")
+        if isinstance(t, str) and t.strip() and t.strip() not in out:
+            out.append(t.strip())
+    for s in _strings(res):
+        if s.lstrip()[:1] in ("{", "["):
+            try:
+                obj = json.loads(s)
+            except ValueError:
+                obj = None
+            if isinstance(obj, dict) and isinstance(obj.get("topics"), list):
+                for t in obj["topics"]:
+                    add(t)
+            continue
+        for line in s.splitlines():
+            m = re.match(r"^\s*[-*]\s+`?([A-Za-z0-9_./-]+)`?", line)
+            if m:
+                add(m.group(1))
+    return out
+
+
+def target_game(results) -> str:
+    """'skyrim-like' when the archives Outfit Studio browses are .bsa files (2026-11-06: the owner's first run listed
+    Skyrim's _ResourcePack.bsa: its target game was not Starfield), 'starfield-like' for .ba2, else 'unknown'."""
+    names = [s.lower() for res in results.get("browse_archives", []) for s in _strings(res)]
+    bsa = sum(n.endswith(".bsa") for n in names)
+    ba2 = sum(n.endswith(".ba2") for n in names)
+    return "skyrim-like" if bsa > ba2 else ("starfield-like" if ba2 else "unknown")
+
+
 def probe(client: Client, out: str, load_body: str = None) -> dict:
     os.makedirs(out, exist_ok=True)
     report = {"server": None, "tools": 0, "calls": [], "missing": [], "body": None}
@@ -251,6 +289,9 @@ def probe(client: Client, out: str, load_body: str = None) -> dict:
 
     for name, args in READ_CALLS:
         run(name, args)
+    for topic in guide_topics(results.get("get_guide", [None])[0])[:MAX_GUIDES]:
+        run("get_guide", {"topic": topic})
+    report["target_game"] = target_game(results)
 
     if load_body:
         path = load_body
@@ -267,7 +308,10 @@ def probe(client: Client, out: str, load_body: str = None) -> dict:
                                     "text": "no naked_f.nif in the archive listings; pass --load-body <path>"})
 
     lines = [f"server: {report['server']}", f"tools: {report['tools']} (tools.txt)",
-             f"body: {report['body']}" if load_body else "body: not loaded (no --load-body)"]
+             f"body: {report['body']}" if load_body else "body: not loaded (no --load-body)",
+             f"target game (from its archives): {report['target_game']}" +
+             (" - set Outfit Studio's game to Starfield (Settings) and its Data folder to Starfield\\Data"
+              if report["target_game"] == "skyrim-like" else "")]
     if report["missing"]:
         lines.append("not offered by this server: " + ", ".join(report["missing"]))
     for c in report["calls"]:

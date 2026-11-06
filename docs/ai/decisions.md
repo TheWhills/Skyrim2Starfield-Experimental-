@@ -1589,3 +1589,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   wear included. Template choice now also weighs 0.5 per rough texture layer (Accents, ColorlessAccents, Scars,
   EnvironmentMask) and +2 for an old (ol) face skin, after skin tone / ethnicity. Own per-NPC face textures later.
   Next (owner): clothing, starting with the Outfit Studio probe.
+- 2026-11-06 Owner's first os_probe run (verified): Outfit Studio's MCP server answers (outfit-studio 1.0.0, 153
+  tools: import_from_game, fit_to_body, copy_bone_weights, conform_sliders, export_slider_data dat = Starfield
+  morph.dat, validate_project, render_view, get_guide ...). But its target game was Skyrim SE: browse_archives listed
+  _ResourcePack.bsa and Creation Club .bsa files, no reference templates, no slider sets; so no naked_f.nif. The
+  owner sets Outfit Studio to Starfield and re-runs. os_probe now reports the target game from the archive names and
+  fetches get_guide's topic list and every guide (up to 25) into calls/.

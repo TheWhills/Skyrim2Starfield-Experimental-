@@ -133,6 +133,20 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(OP.parse_messages("application/json", b""), [])
         self.assertEqual(OP.parse_messages("application/json", b'[{"id":1},{"id":2}]'), [{"id": 1}, {"id": 2}])
 
+    def test_guide_topics_and_target_game(self):
+        js = {"content": [{"type": "text", "text": json.dumps({"topics": ["convert_outfit", {"name": "starfield"}]})}]}
+        self.assertEqual(OP.guide_topics(js), ["convert_outfit", "starfield"])
+        md = {"content": [{"type": "text", "text": "Topics:\n- `weights` copy\n* clipping: fixes\nplain line"}]}
+        self.assertEqual(OP.guide_topics(md), ["weights", "clipping"])
+        self.assertEqual(OP.guide_topics(None), [])
+        sky = {"browse_archives": [{"content": [{"type": "text", "text": json.dumps(
+            {"archives": [{"name": "_ResourcePack.bsa"}, {"name": "Skyrim - Meshes0.bsa"}]})}]}]}
+        self.assertEqual(OP.target_game(sky), "skyrim-like")
+        sf = {"browse_archives": [{"content": [{"type": "text", "text": json.dumps(
+            {"archives": [{"name": "Starfield - Meshes01.ba2"}]})}]}]}
+        self.assertEqual(OP.target_game(sf), "starfield-like")
+        self.assertEqual(OP.target_game({}), "unknown")
+
     def test_unreachable_server(self):
         c = OP.Client("http://127.0.0.1:9/mcp", timeout=2)
         with self.assertRaises(OP.McpError) as e:
