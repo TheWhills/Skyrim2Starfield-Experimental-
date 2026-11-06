@@ -150,6 +150,34 @@ class Session:
         return [s["name"] for s in self("list_shapes").get("shapes", [])]
 
 
+def bounds(s, shape: str):
+    """(min, max) of a shape as list_shapes reports it."""
+    for row in s("list_shapes").get("shapes", []):
+        if row.get("name") == shape and row.get("bounds"):
+            return row["bounds"]["min"], row["bounds"]["max"]
+    return None
+
+
+def standing(b, floor: float = 25.0) -> bool:
+    """A body whose feet are near z 0 and whose head is well above them."""
+    return bool(b) and abs(b[0][2]) <= floor and b[1][2] - b[0][2] > 50.0
+
+
+def union(bs):
+    bs = [b for b in bs if b]
+    if not bs:
+        return None
+    return ([min(b[0][i] for b in bs) for i in range(3)], [max(b[1][i] for b in bs) for i in range(3)])
+
+
+def overlaps(a, b, share: float = 0.5) -> bool:
+    """Whether a's height range covers at least `share` of b's (both (min, max))."""
+    if not a or not b:
+        return False
+    lo, hi = max(a[0][2], b[0][2]), min(a[1][2], b[1][2])
+    return hi - lo >= share * (b[1][2] - b[0][2])
+
+
 def convert(client, body_nif: str, gear_nifs: list, female: bool, out: str, name: str) -> dict:
     """The Outfit Studio half (module docstring). Returns {"steps": [...], "gear": [shape names], "exported": path}."""
     s = Session(client, out)
@@ -159,6 +187,14 @@ def convert(client, body_nif: str, gear_nifs: list, female: bool, out: str, name
         loaded = s("load_from_archive", files=[SF_BODY[female]], mode="import")
         sf_body = next((n for f in loaded.get("loaded", []) for n in f.get("shapes", [])), None) or s.shapes()[0]
         s("set_reference_shape", shape=sf_body)
+        # 2026-11-06 first run: Starfield's body reported z -114 .. -8 while it was drawn standing on the floor, the
+        # Skyrim gear came in at z 0 .. 117: its node transform is only applied for display, so every fit went to
+        # the wrong place (gear under the body's feet, no weights copied). Bake it in, then check.
+        s("shape_transforms", op="apply", shapes=[sf_body])
+        rep["body_bounds"] = bounds(s, sf_body)
+        if not standing(rep["body_bounds"]):
+            raise StepFailed(f"reference body is not standing at the origin after shape_transforms apply: "
+                             f"{rep['body_bounds']}")
         before = set(s.shapes())
         s("import_from_game", file=body_nif)
         old_body = [n for n in s.shapes() if n not in before]
@@ -172,6 +208,10 @@ def convert(client, body_nif: str, gear_nifs: list, female: bool, out: str, name
         figure = old_body + gear
         s("snapshot_save", name="imported")
         s("scale_to_body", shapes=figure, targets=old_body or gear)
+        rep["figure_bounds"] = union([bounds(s, n) for n in figure])
+        if not overlaps(rep["figure_bounds"], rep["body_bounds"]):
+            raise StepFailed(f"the scaled Skyrim figure {rep['figure_bounds']} does not overlap the body "
+                             f"{rep['body_bounds']}")
         s("fit_pose_to_shapes", targets=old_body or gear)
         s("unpose_shapes", shapes=figure, rigidParts=True)
         s("snapshot_save", name="unposed")

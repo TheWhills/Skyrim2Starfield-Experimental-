@@ -1614,3 +1614,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   probes ran before the restart). First driver scripts/armor/os_convert.py: Skyrim NPC outfit -> worn meshes (race
   addon, _1 weight variant) -> Outfit Studio sequence from its guides; stops at the first failing step and saves every
   result. Body sliders (morph.dat), materials and plugin records come after the first fitted render.
+- 2026-11-06 First os_convert run on Ralof (owner): all 22 steps ran and a NIF exported, but unusable. Starfield's
+  naked_m reported bounds z -114 .. -8 while drawn standing; the Skyrim gear came in at z 0 .. 117 and scale_to_body
+  moved its feet to the body's reported -112.7, i.e. under the drawn body; copy_bone_weights then found no body in
+  reach (every gear vertex unweighted, validate errors). Supported cause: the body's NIF node transform is applied
+  for display only. Now: shape_transforms op apply on the body right after loading it, and the run stops unless the
+  body stands at z ~0 and the scaled Skyrim figure overlaps it in height. Also seen: Skyrim's body NIF brings two
+  shapes (MaleUnderwear_1, MaleUnderwearBody:0), the cuirass a skin shape (MaleBodyStormcloak), the cuffs a
+  HandMale_Big1stperson shape; the skin shapes' role in Starfield apparel is open.

@@ -61,8 +61,9 @@ class SkyrimSideTests(unittest.TestCase):
 class Fake:
     """Outfit Studio's answers as JSON text; list_shapes follows the imports."""
 
-    def __init__(self, fail=None):
-        self.calls, self.shapes, self.fail = [], [], fail
+    def __init__(self, fail=None, baked=True):
+        self.calls, self.shapes, self.fail, self.baked = [], [], fail, baked
+        self.bounds = {"Naked_M:0": ([-28, -11, -114], [28, 8, -8])}
 
     def call(self, name, args):
         self.calls.append((name, args))
@@ -73,9 +74,14 @@ class Fake:
             self.shapes.append("Naked_M:0")
             body = {"loaded": [{"shapes": ["Naked_M:0"]}]}
         elif name == "import_from_game":
-            self.shapes.append("SkyBody" if "body" in args["file"] else os.path.basename(args["file"]))
+            n = "SkyBody" if "body" in args["file"] else os.path.basename(args["file"])
+            self.shapes.append(n)
+            self.bounds[n] = ([-20, -10, 0], [20, 10, 117])
+        elif name == "shape_transforms" and self.baked:
+            self.bounds["Naked_M:0"] = ([-28, -11, 0], [28, 8, 106])
         elif name == "list_shapes":
-            body = {"shapes": [{"name": n} for n in self.shapes]}
+            body = {"shapes": [{"name": n, "bounds": {"min": self.bounds[n][0], "max": self.bounds[n][1]}}
+                               for n in self.shapes]}
         elif name == "delete_shapes":
             self.shapes = [n for n in self.shapes if n not in args["shapes"]]
         elif name == "validate_project":
@@ -92,7 +98,8 @@ class StudioSideTests(unittest.TestCase):
         self.assertNotIn("failed_at", rep)
         self.assertEqual(rep["gear"], ["cuirass.nif", "boots.nif"])
         self.assertEqual(rep["old_body"], ["SkyBody"])
-        order = ["new_project", "load_from_archive", "set_reference_shape", "import_from_game", "scale_to_body",
+        order = ["new_project", "load_from_archive", "set_reference_shape", "shape_transforms", "import_from_game",
+                 "scale_to_body",
                  "fit_pose_to_shapes", "unpose_shapes", "fit_to_body", "delete_shapes", "copy_bone_weights",
                  "validate_project", "render_view", "export_file"]
         pos = [names.index(n) for n in order]
@@ -103,6 +110,21 @@ class StudioSideTests(unittest.TestCase):
         self.assertEqual(args["copy_bone_weights"]["shapes"], ["cuirass.nif", "boots.nif"])
         self.assertEqual(args["export_file"]["shapes"], ["cuirass.nif", "boots.nif"])
         self.assertTrue(args["export_file"]["path"].endswith("Ralof.nif"))
+
+    def test_body_not_standing_stops_early(self):
+        f = Fake(baked=False)                          # the transform did not move the body: stop before fitting
+        with tempfile.TemporaryDirectory() as d:
+            rep = C.convert(f, "body.nif", ["g.nif"], False, d, "X")
+        self.assertIn("not standing", rep["failed_at"])
+        self.assertNotIn("import_from_game", [c[0] for c in f.calls])
+        self.assertEqual(dict(f.calls)["shape_transforms"], {"op": "apply", "shapes": ["Naked_M:0"]})
+
+    def test_helpers(self):
+        self.assertTrue(C.standing(([-1, -1, -0.5], [1, 1, 106])))
+        self.assertFalse(C.standing(([-1, -1, -114], [1, 1, -8])))
+        self.assertTrue(C.overlaps(([0, 0, 0], [0, 0, 117]), ([0, 0, 0], [0, 0, 106])))
+        self.assertFalse(C.overlaps(([0, 0, -140], [0, 0, -20]), ([0, 0, 0], [0, 0, 106])))
+        self.assertEqual(C.union([None, ([0, 0, 0], [1, 1, 1]), ([-1, 2, 0], [0, 3, 5])]), ([-1, 0, 0], [1, 3, 5]))
 
     def test_stops_at_first_error(self):
         f = Fake(fail="fit_pose_to_shapes")
