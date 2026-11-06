@@ -1646,3 +1646,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   S2SArmorTest.esm (ARMO / ARMA copied from Clothes_Nightwear_01, worn model -> our NIF, one addon; OTFT). Material:
   the nightwear's, for a shape test only. Tool answer formats (geometry / weights) are parsed tolerantly: first run
   checks them.
+- 2026-11-06 Outfit Studio's get_shape_geometry answers in "<x>List" rows with a "<x>Format" text (verified:
+  "triangleFormat": "[triangle index, vertex 1, vertex 2, vertex 3]", "triangleList": [[0, 0, 1, 2], ...]); the first
+  parser read 0 positions. os_export now reads any <x>List / <x>Format pair by its column names (first column the
+  index) and names the answer's keys when the count is wrong.

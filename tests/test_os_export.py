@@ -31,6 +31,23 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(b["positions"], [[0, 0, 0], [1, 0, 0]])                  # sorted by index
         self.assertEqual(b["triangles"], [(0, 1, 1)])
 
+    def test_outfit_studio_lists(self):
+        ans = {"bounds": {}, "triangleFormat": "[triangle index, vertex 1, vertex 2, vertex 3]",
+               "triangleList": [[0, 0, 1, 2], [1, 2, 1, 3]],
+               "positionFormat": "[vertex index, x, y, z]", "positionList": [[1, 1.0, 0, 0], [0, 0.0, 0, 0]],
+               "normalFormat": "[vertex index, x, y, z]", "normalList": [[0, 0, 0, 1], [1, 0, 0, 1]],
+               "uvFormat": "[vertex index, u, v]", "uvList": [[0, 0, 0], [1, 1, 0]]}
+        g = E.geometry(ans)
+        self.assertEqual(g["triangles"], [(0, 1, 2), (2, 1, 3)])
+        self.assertEqual(g["positions"], [[0.0, 0, 0], [1.0, 0, 0]])                # by index
+        self.assertEqual(g["uvs"], [[0, 0], [1, 0]])
+        combined = {"vertexFormat": "[vertex index, x, y, z, nx, ny, nz, u, v]",
+                    "vertexList": [[0, 1, 2, 3, 0, 0, 1, 0.5, 0.25]]}
+        c = E.geometry(combined)
+        self.assertEqual((c["positions"], c["normals"], c["uvs"]), ([[1, 2, 3]], [[0, 0, 1]], [[0.5, 0.25]]))
+        w = E.weight_list({"weightFormat": "[vertex index, weight]", "weightList": [[4, 0.75], [9, 0.25]]})
+        self.assertEqual(w, [(4, 0.75), (9, 0.25)])
+
     def test_weights_and_bones(self):
         self.assertEqual(E.weight_list({"weights": [{"vertex": 3, "weight": 0.5}]}), [(3, 0.5)])
         self.assertEqual(E.weight_list({"weights": [[2, 1.0]]}), [(2, 1.0)])

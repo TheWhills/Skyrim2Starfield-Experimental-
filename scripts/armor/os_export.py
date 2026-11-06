@@ -57,31 +57,96 @@ def _rows(obj, *keys):
     return None
 
 
-def geometry(answer: dict) -> Dict[str, list]:
-    """positions / normals / uvs (per vertex, in vertex order) and triangles of a get_shape_geometry answer. Accepts
-    parallel lists ({"positions": [[x, y, z], ...]}) or a list of vertex records ({"vertices": [{"index", "position",
-    "normal", "uv"}]}); triangles as [a, b, c] or {"vertices"/"indices": [a, b, c]}."""
+def columns(fmt: str) -> List[str]:
+    """Column names of a format text such as "[triangle index, vertex 1, vertex 2, vertex 3]" (lower case)."""
+    return [c.strip().lower() for c in fmt.strip().strip("[]").split(",") if c.strip()]
+
+
+def listed(answer: dict) -> Dict[str, Tuple[List[str], list]]:
+    """{prefix: (columns, rows)} of every "<prefix>List" with a "<prefix>Format" in a tool answer (Outfit Studio's
+    form, seen 2026-11-06: "triangleFormat": "[triangle index, vertex 1, vertex 2, vertex 3]", "triangleList")."""
     out = {}
+    if not isinstance(answer, dict):
+        return out
+    for k, v in answer.items():
+        if k.endswith("List") and isinstance(v, list):
+            fmt = answer.get(k[:-4] + "Format")
+            out[k[:-4]] = (columns(fmt) if isinstance(fmt, str) else [], v)
+    return out
+
+
+def _pick(cols: List[str], row, names) -> list:
+    idx = [next((i for i, c in enumerate(cols) if c == n), None) for n in names]
+    return [row[i] for i in idx] if all(i is not None for i in idx) else None
+
+
+def _by_index(cols, rows, names, default_cols):
+    """{vertex index: values} from rows whose first column is an index; the value columns by name, else by position."""
+    out = {}
+    for r in rows:
+        if not isinstance(r, (list, tuple)):
+            continue
+        vals = _pick(cols, r, names) if cols else None
+        if vals is None:
+            vals = list(r[1:1 + default_cols])
+        out[int(r[0])] = vals
+    return out
+
+
+def geometry(answer: dict) -> Dict[str, list]:
+    """positions / normals / uvs (per vertex, in vertex order) and triangles of a get_shape_geometry answer.
+    Accepts Outfit Studio's "<x>List" + "<x>Format" rows (first column the index), plain parallel lists
+    ({"positions": [[x, y, z], ...]}) or vertex records ({"vertices": [{"index", "position", "normal", "uv"}]})."""
+    out = {}
+    for prefix, (cols, rows) in listed(answer).items():
+        p = prefix.lower()
+        if p.startswith("tri"):
+            out["triangles"] = [tuple(int(x) for x in r[-3:]) for r in rows if isinstance(r, (list, tuple))]
+            continue
+        if p.startswith("pos") or (p.startswith("vert") and "nx" not in cols and "u" not in cols):
+            d = _by_index(cols, rows, ["x", "y", "z"], 3)
+            out["positions"] = [d[i] for i in sorted(d)]
+        elif p.startswith("norm"):
+            d = _by_index(cols, rows, ["x", "y", "z"], 3)
+            out["normals"] = [d[i] for i in sorted(d)]
+        elif p.startswith("uv") or p.startswith("tex"):
+            d = _by_index(cols, rows, ["u", "v"], 2)
+            out["uvs"] = [d[i] for i in sorted(d)]
+        elif p.startswith("vert"):                           # one combined vertex list
+            for key, names, n in (("positions", ["x", "y", "z"], 3), ("normals", ["nx", "ny", "nz"], 3),
+                                  ("uvs", ["u", "v"], 2)):
+                d = {}
+                for r in rows:
+                    vals = _pick(cols, r, names)
+                    if vals is not None:
+                        d[int(r[0])] = vals
+                if d:
+                    out[key] = [d[i] for i in sorted(d)]
     verts = _rows(answer, "vertices")
     if verts and isinstance(verts[0], dict):
         verts = sorted(verts, key=lambda v: v.get("index", v.get("vertex", 0)))
         for key, names in (("positions", ("position", "pos")), ("normals", ("normal",)), ("uvs", ("uv", "texCoord"))):
             vals = [next((v[n] for n in names if n in v), None) for v in verts]
-            if any(x is not None for x in vals):
+            if any(x is not None for x in vals) and key not in out:
                 out[key] = vals
     for key, names in (("positions", ("positions",)), ("normals", ("normals",)), ("uvs", ("uvs", "UVs"))):
         rows = _rows(answer, *names)
         if rows is not None and key not in out:
             out[key] = rows
     tris = _rows(answer, "triangles", "tris")
-    if tris is not None:
+    if tris is not None and "triangles" not in out:
         out["triangles"] = [tuple(t.get("vertices") or t.get("indices") or t.get("points")) if isinstance(t, dict)
                             else tuple(t) for t in tris]
     return out
 
 
 def weight_list(answer: dict) -> List[Tuple[int, float]]:
-    """[(vertex, weight)] of a get_weights answer: {"weights": [{"vertex"/"index", "weight"}] | [[v, w]] | {v: w}}."""
+    """[(vertex, weight)] of a get_weights answer: "<x>List" rows [vertex, weight] (with a "<x>Format"), or
+    {"weights": [{"vertex"/"index", "weight"}] | [[v, w]] | {v: w}}."""
+    for prefix, (cols, rows) in listed(answer).items():
+        if rows and isinstance(rows[0], (list, tuple)) and len(rows[0]) >= 2:
+            wi = next((i for i, c in enumerate(cols) if "weight" in c), len(rows[0]) - 1)
+            return [(int(r[0]), float(r[wi])) for r in rows]
     w = answer.get("weights") if isinstance(answer, dict) else None
     if w is None and isinstance(answer, dict):
         w = answer.get("vertices")
@@ -156,16 +221,19 @@ def limit_weights(per_vertex: List[Dict[str, float]], k: int = skyrimhair.MAX_WE
 def pull_shape(s, shape: str, count: int) -> Dict:
     """Geometry and weights of one shape of the open project."""
     geo = {"positions": [], "normals": [], "uvs": []}
-    tris = None
+    tris, last_keys = None, []
     for start in range(0, max(count, 1), CHUNK):
         inc = ["positions", "normals", "uvs"] + (["triangles"] if start == 0 else [])
-        g = geometry(s("get_shape_geometry", shape=shape, start=start, count=min(CHUNK, count - start), include=inc))
+        raw = s("get_shape_geometry", shape=shape, start=start, count=min(CHUNK, count - start), include=inc)
+        last_keys = list(raw.keys()) if isinstance(raw, dict) else []
+        g = geometry(raw)
         for k in geo:
             geo[k] += list(g.get(k) or [])
         if start == 0:
             tris = g.get("triangles")
     if len(geo["positions"]) != count:
-        raise os_convert.StepFailed(f"{shape}: {len(geo['positions'])} positions read, {count} vertices")
+        raise os_convert.StepFailed(f"{shape}: {len(geo['positions'])} positions read, {count} vertices "
+                                    f"(answer keys: {sorted(last_keys)})")
     if not tris:
         raise os_convert.StepFailed(f"{shape}: no triangles in get_shape_geometry's answer")
     per = [dict() for _ in range(count)]
