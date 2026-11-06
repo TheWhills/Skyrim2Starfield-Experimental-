@@ -35,6 +35,7 @@ import numpy as np  # noqa: E402
 
 from fo4sf import bsa, facefit, nif as nifmod, sfmesh, sfplugin, skyrimnpc, skyrimskin  # noqa: E402
 import hkx_to_af  # noqa: E402  (archive helpers)
+import npc_records  # noqa: E402
 
 HUMAN_RACES = {"NordRace", "ImperialRace", "BretonRace", "RedguardRace", "DarkElfRace", "HighElfRace", "WoodElfRace",
                "OrcRace"}
@@ -110,8 +111,9 @@ STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT", b"SOFT")   # SOFT: space outfit (20
 
 def pick_template(npc_recs, race_fid, female, edid=None):
     """A vanilla human NPC of the sex to copy: `edid` when given; else one with face dials and no template, preferring
-    plain ones (no scripts, no affinity data: a generic NPC rather than a quest character)."""
-    best = None
+    plain ones (no scripts, no affinity data: a generic NPC rather than a quest character) with a voice type (VTCK:
+    the game's generic greetings, owner 2026-11-05)."""
+    best = plain_best = None
     for t, h, subs, fid in npc_recs:
         if edid is not None:
             if sfplugin.edid(subs).lower() == edid.lower():
@@ -123,10 +125,61 @@ def pick_template(npc_recs, race_fid, female, edid=None):
         rnam = next((struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"RNAM"), None)
         if rnam == race_fid and is_f == female and b"FMSI" in sigs and b"TPLT" not in sigs:
             plain = not (sigs & {b"VMAD", b"QSTA", b"BNAM"})
-            if plain:
+            if plain and b"VTCK" in sigs:                # a voice type: the game's generic greetings and barks
                 return t, h, subs, fid
+            if plain:
+                plain_best = plain_best or (t, h, subs, fid)
             best = best or (t, h, subs, fid)
-    return best
+    return plain_best or best
+
+
+def npc_setup(a, sky, esm, sf_esm, npc_recs, report) -> dict:
+    """--hairs-plugin: what the real NPC conversion needs once (npc_records)."""
+    import npc_hair
+    hp = os.path.abspath(a.hairs_plugin)
+    masters = npc_records.plugin_masters(hp) + [os.path.basename(hp)]
+    sf_hdpt = {r[3]: r for r in sfplugin.records(sf_esm, [b"HDPT"])}
+    hdpt, clfm = npc_hair.head_parts(esm)
+    names = {fo4land_zstring(d) for _t, _h, subs, _f in npc_recs for sig, d in subs if sig == b"HCOL"} - {""}
+    palette = None
+    if a.hair_colors:
+        with open(a.hair_colors, encoding="utf-8") as fh:
+            palette = json.load(fh).get("palette") or None
+    voices = {fid: sfplugin.edid(subs) for _t, _h, subs, fid in sfplugin.records(sf_esm, [b"VTYP"])}
+    strings = npc_records.skyrim_names(sky, a.strings_language)
+    index = npc_records.hairs_index(hp)
+    report["npc_conversion"] = {"hairs_plugin": hp, "masters": masters, "hairstyles_in_it": len(index),
+                                "starfield_hair_colors": sorted(names), "palette": bool(palette),
+                                "skyrim_strings": len(strings)}
+    return dict(masters=masters, sf_hdpt=sf_hdpt, hdpt=hdpt, clfm=clfm, names=names, palette=palette,
+                voices=voices, strings=strings, index=index, part_type=npc_hair.part_type,
+                npc_parts=npc_hair.npc_parts, with_hair_color=npc_hair.with_hair_color)
+
+
+def npc_dress(subs, n, npcs, real, row) -> list:
+    """The NPC's converted Skyrim hair / beard (from --hairs-plugin, by Skyrim EditorID; a template beard dropped when
+    Skyrim gives none) and its hair colour name (npc_records.match_hair_color)."""
+    faces = skyrimnpc.faces_by_template(npcs)
+    src = npcs.get(faces.get(n["form_id"], n["form_id"]), n)          # whose face (and hair) it wears
+    parts = real["npc_parts"](src, real["hdpt"])
+    new, info = {}, {}
+    for kind, (part, _models) in parts.items():
+        fid = real["index"].get(part["edid"].lower())
+        info[{3: "hair", 4: "facial_hair"}.get(kind, str(kind))] = (
+            {"skyrim": part["edid"], "form_id": f"{fid:08X}"} if fid else
+            {"skyrim": part["edid"], "missing": "not in the hairs plugin (build it with --facial-hair for beards)"})
+        if fid:
+            new[kind] = fid
+    drop = [k for k in (npc_records.HAIR, npc_records.FACIAL_HAIR) if k not in parts]
+    subs = npc_records.with_parts(subs, real["sf_hdpt"], new, drop=drop, part_type=real["part_type"])
+    color = real["clfm"].get(src.get("hair_color"))
+    name, how = npc_records.match_hair_color(color, real["names"], real["palette"])
+    if name:
+        subs = real["with_hair_color"](subs, name)
+    info["hair_color"] = {"skyrim": (color or {}).get("edid"), "skyrim_rgb": list((color or {}).get("rgba") or [])[:3],
+                          "starfield": name, "how": how}
+    row["dressed"] = info
+    return subs
 
 
 def fo4land_zstring(d) -> str:
@@ -208,6 +261,13 @@ def main(argv=None):
     ap.add_argument("--texconv", help="texconv.exe, for --hair")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip (for --hair)")
     ap.add_argument("--archive2", help="default: <Starfield>/Tools/Archive2/Archive2.exe")
+    ap.add_argument("--hairs-plugin",
+                    help="S2SSkyrimHairs.esm (scripts/npc/skyrim_hairs.py): the NPCs wear its converted looks-menu "
+                         "hair / beard of their Skyrim head parts (it becomes a master), get their Skyrim names and the "
+                         "Starfield hair colour closest to their Skyrim one (owner 2026-11-05); instead of --hair")
+    ap.add_argument("--hair-colors", help="hair_color_probe.py's hair_colors.json ({name: [r, g, b]}), for "
+                                          "--hairs-plugin's colour match (else by colour words)")
+    ap.add_argument("--strings-language", default="english", help="Skyrim string tables for the NPCs' names")
     ap.add_argument("--hair-legacy", action="store_true",
                     help="with --hair: the first conversion (rigid, cutout material, no _facebones twin) instead of the "
                          "looks-menu hair pipeline (fitted, Starfield's hair shader)")
@@ -220,6 +280,10 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.hair and not (a.test_plugin and a.texconv):
         sys.exit("--hair needs --test-plugin and --texconv")
+    if a.hairs_plugin and a.hair:
+        sys.exit("--hairs-plugin and --hair both give the NPCs hair: pick one")
+    if a.hairs_plugin and not os.path.isfile(a.hairs_plugin):
+        sys.exit(f"--hairs-plugin not found: {a.hairs_plugin}")
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
@@ -297,6 +361,11 @@ def main(argv=None):
         human = next(fid for _t, _h, s, fid in sfplugin.records(sf_esm, [b"RACE"]) if sfplugin.edid(s) == "HumanRace")
         npc_recs = sfplugin.records(sf_esm, [b"NPC_"])
         recs, test_subs = [], {}
+        masters = ["Starfield.esm"]
+        real = None
+        if a.hairs_plugin:
+            real = npc_setup(a, sky, esm, sf_esm, npc_recs, report)
+            masters = real["masters"]
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -305,10 +374,18 @@ def main(argv=None):
             if tpl is None:
                 row["test_npc"] = "no vanilla template NPC of this sex"
                 continue
-            fid = sfplugin.new_form_id(len(recs))
+            fid = sfplugin.new_form_id(len(recs), masters=len(masters))
+            full = f"{row['edid']} (S2S)"
+            if real is not None:
+                full = npc_records.npc_name(by_edid[row["edid"].lower()], real["strings"])
             subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}),
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
-                                  b"FULL": sfplugin.zs(f"{row['edid']} (S2S)")}, drop=STRIP)
+                                  b"FULL": sfplugin.zs(full)}, drop=STRIP)
+            if real is not None:
+                subs = npc_dress(subs, by_edid[row["edid"].lower()], npcs, real, row)
+                row["name"] = full
+                vt = next((struct.unpack_from("<I", bytes(d), 0)[0] for sg, d in subs if sg == b"VTCK"), None)
+                row["voice_type"] = real["voices"].get(vt, f"{vt:08X}" if vt else None)
             test_subs[row["edid"]] = len(recs)
             recs.append((b"NPC_", tpl[1], subs, fid))
             row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]),
@@ -319,7 +396,7 @@ def main(argv=None):
                                                     test_subs)
         if recs:
             with open(os.path.join(out, PLUGIN), "wb") as fh:
-                fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces"))
+                fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces", masters=masters))
             print(f"{PLUGIN}: {len(recs)} test NPCs")
     with open(os.path.join(out, "faces.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)

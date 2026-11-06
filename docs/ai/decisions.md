@@ -1397,3 +1397,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   owner's "Vanilla hair remake SMP" (Nexus 63979, read here: 271 NIFs over the vanilla hair paths, e.g. female
   hair01 4,014 vertices on 8 'JG Hair01' physics bones + NPC Head, 93 HDT-SMP configs, MIT; no plugin, no
   textures): built rigid for now (its physics bones follow the head); its SMP configs as Starfield cloth is later.
+- 2026-11-05 owner: the KS-way Skyrim hairs with the remake "look really good, use these hairs for conversion";
+  next Ralof and Ysolda "with their faces and generic greetings", hair colour matched. face_fit.py --hairs-plugin
+  (npc_records.py): Skyrim names from the string tables, the converted looks-menu head parts by Skyrim EditorID
+  (S2SSkyrimHairs.esm + its masters become masters; FormIDs kept as stored), template beard dropped when Skyrim has
+  none, HCOL / FHCL = nearest Starfield colour name (palette RGB when known, else colour words, else unchanged), the
+  template chosen with a voice type (generic Starfield greetings; Skyrim voices later, needs audio conversion).
+  Starfield hair colours are names whose colours are not known here: hair_color_probe.py (read-only) collects HCOL
+  names, CLFM records, archive / Creation Kit files about hair colour and decodes their textures -> hair_colors.json.

@@ -22,6 +22,14 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
    the official DLC masters' hair head parts, beast races left out, `--facial-hair` adds beards) with hair_pack's
    pipeline (head fit per sex, shaping, hair shader, `_facebones` twin), one head part per hairstyle copied from a
    vanilla one of that sex's looks-menu list, appended to HeadPartsChargenOptionsFemale / Male: S2SSkyrimHairs.esm.
+3c. Real NPC records (owner 2026-11-05: Ralof and Ysolda "with their faces and generic greetings", the converted
+   looks-menu hairs, matched hair colour): `face_fit.py --test-plugin --hairs-plugin <S2SSkyrimHairs.esm>`
+   (scripts/npc/npc_records.py): the NPC's Skyrim name (Skyrim's string tables), fitted face, its Skyrim hair / beard
+   as S2SSkyrimHairs.esm's head part 'S2S_<Skyrim EditorID>' (that plugin and its masters become ours; a template
+   beard is dropped when Skyrim gives none), the Starfield hair colour name nearest its Skyrim colour
+   (`--hair-colors` palette from `scripts/npc/hair_color_probe.py`, else colour words in both games' names), and a
+   vanilla template with a voice type (VTCK: the game's generic greetings; which voice is reported). Placed by console.
+   Unresolved: what colour each Starfield hair colour name is (the probe looks for it), Skyrim voices.
 4. NPC placement in the converted world (no schedules): later.
 5. Navmesh, then schedules (AI packages: Skyrim PACK -> Starfield PACK; both from the same engine line). Navmesh is the
    blocker: without it NPCs cannot walk.
