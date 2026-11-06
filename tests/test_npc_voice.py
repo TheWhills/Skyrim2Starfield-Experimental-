@@ -76,5 +76,20 @@ class VoiceRecordTests(unittest.TestCase):
             self.assertEqual(tifl["size"], 8)
 
 
+class VoiceNameMatchTests(unittest.TestCase):
+    def test_names_matched_to_form_ids_and_fields(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = (b"INFO", HDR(b"INFO"), [(b"ENAM", bytes(4)), (b"TRDA", struct.pack("<IIf", 0xFFFFFFFF, 1, 0.0)),
+                                         (b"NAM9", struct.pack("<II", 0x1234, 0))], 0x00000900)
+            b = (b"INFO", HDR(b"INFO"), [(b"ENAM", bytes(4)), (b"NAM9", struct.pack("<II", 0x0330, 0)),
+                                         (b"CTDA", struct.pack("<I", 0x0330) * 8)], 0x00000901)
+            plugin = os.path.join(d, "t.esm")
+            open(plugin, "wb").write(sfplugin.build([a, b], {"hedr_version": 0.96, "form_version": 555}))
+            rep = DP.name_match(plugin, ["00000900", "00000330", "readme"])
+            self.assertEqual((rep["voice_files"], rep["infos"], rep["names_that_are_info_form_ids"]), (2, 2, 1))
+            self.assertEqual(rep["names_inside_info_fields"], [("NAM9@0", 1)])       # CTDA is not counted
+            self.assertEqual(rep["by_field"][0]["form_id"], "00000901")
+
+
 if __name__ == "__main__":
     unittest.main()

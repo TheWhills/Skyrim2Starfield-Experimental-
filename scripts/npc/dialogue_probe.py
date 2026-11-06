@@ -145,6 +145,70 @@ def voice_files(data_dir: str, voice: str = "genericmaleeventoned", limit: int =
     return out
 
 
+def voice_names(data_dir: str, voice: str) -> dict:
+    """{file stem lower: archive path} of every .wem of one voice type in Starfield's voice archives."""
+    out = {}
+    rx = re.compile(r"sound[\\/]voice[\\/]starfield\.esm[\\/]" + voice + r"[\\/]([^\\/]+)\.wem$", re.I)
+    for fn in sorted(os.listdir(data_dir)):
+        low = fn.lower()
+        if not (low.startswith("starfield - voices") and low.endswith(".ba2")):
+            continue
+        try:
+            arc = ba2.Ba2(os.path.join(data_dir, fn))
+        except Exception:                                   # noqa: BLE001 (report only)
+            continue
+        for n in arc.names:
+            m = rx.search(n)
+            if m:
+                out[m.group(1).lower()] = n
+    return out
+
+
+def name_match(esm: str, stems, max_dump: int = 4) -> dict:
+    """How voice file names relate to the dialogue responses (owner 2026-11-05: a vanilla .wem copied under our
+    response FormIDs stayed silent, and vanilla names such as 00000330 are below Starfield's first FormID 0x800):
+    the share of names that are an INFO's FormID (low 24 bits), or a u32 / u16 inside one of its subrecords; a few
+    responses in full for each kind of match."""
+    stems = {s for s in stems if re.fullmatch(r"[0-9a-f]{1,8}", s)}
+    want = {int(s, 16) for s in stems}
+    by_fid, by_field, dumps = set(), {}, {"by_form_id": [], "by_field": []}
+    infos = 0
+
+    def walk(buf, start, end):
+        nonlocal infos
+        for it in fo4land.iter_items(buf, start, end):
+            if it[0] == "GRUP":
+                walk(buf, it[1] + 24, it[2])
+                continue
+            typ, off, flags, fid = it
+            if typ != b"INFO":
+                continue
+            infos += 1
+            subs = list(fo4land.iter_subrecords(fo4land.record_data(buf, off)))
+            if fid & 0xFFFFFF in want:
+                by_fid.add(fid & 0xFFFFFF)
+                if len(dumps["by_form_id"]) < max_dump:
+                    dumps["by_form_id"].append({"form_id": f"{fid:08X}", "subs": dump_subs(subs, 64)})
+            for sig, d in subs:
+                d = bytes(d)
+                if sig in (b"CTDA", b"NAM1", b"NAM2", b"NAM3", b"NAM4"):
+                    continue
+                for k in range(0, len(d) - 3):
+                    v = struct.unpack_from("<I", d, k)[0]
+                    if v in want and v > 0xFF:
+                        key = f"{sig.decode('latin-1')}@{k}"
+                        by_field[key] = by_field.get(key, 0) + 1
+                        if len(dumps["by_field"]) < max_dump:
+                            dumps["by_field"].append({"form_id": f"{fid:08X}", "field": key, "value": f"{v:08x}",
+                                                      "subs": dump_subs(subs, 64)})
+
+    with fo4land.Plugin(esm) as p:
+        walk(p.buf, p.body, len(p.buf))
+    return {"voice_files": len(stems), "infos": infos, "names_that_are_info_form_ids": len(by_fid),
+            "names_inside_info_fields": sorted(by_field.items(), key=lambda kv: -kv[1])[:20],
+            "sample_names": sorted(stems)[:20], **dumps}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield", required=True)
@@ -156,11 +220,16 @@ def main(argv=None):
     data = os.path.join(a.starfield, "Data")
     rep = probe(os.path.join(data, "Starfield.esm"))
     rep["voice_files_genericmaleeventoned"] = voice_files(data)
+    rep["voice_name_match"] = name_match(os.path.join(data, "Starfield.esm"),
+                                         voice_names(data, "genericmaleeventoned"))
     with open(os.path.join(a.out, "dialogue_probe.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)
     print(f"greeting topics dumped: {len(rep['greeting_topics'])}; INFOs: {rep['infos_total']} "
           f"({rep['infos_with_voice_type_condition']} with a voice type condition); "
           f"voice files listed: {len(rep['voice_files_genericmaleeventoned'])}")
+    vm = rep["voice_name_match"]
+    print(f"genericmaleeventoned: {vm['voice_files']} files, {vm['names_that_are_info_form_ids']} named like an INFO "
+          f"FormID, inside INFO fields: {vm['names_inside_info_fields'][:3]}")
     print("report:", os.path.join(a.out, "dialogue_probe.json"))
     return 0
 

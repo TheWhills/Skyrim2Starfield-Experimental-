@@ -1494,3 +1494,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   max_error_m, max_change_m. Also the greetings: Ralof now cycles his lines (Random flag: verified), still silent with
   the files in place. scripts/npc/voice_swap_test.py writes a vanilla generic .wem under our file names in a separate
   mod: heard -> our .wem conversion is wrong; silent -> the records / names are.
+- 2026-11-05 Voice swap test (owner): a vanilla genericmaleeventoned .wem under our response file names stays silent
+  too (subtitles shown), so the game does not look up / play Sound\Voice\<plugin>\<voice type>\<INFO FormID>.wem for
+  our responses: the records or the naming are wrong, not our .wem conversion (verified). The vanilla file names seen
+  (00000330, 0000115e) are below Starfield's first FormID (0x800), so the "file = INFO FormID" assumption from UNITY is
+  in doubt. dialogue_probe.py now reports how genericmaleeventoned's file names relate to Starfield.esm's INFOs (as
+  FormIDs, or as a u32 inside some subrecord) and dumps matching responses in full.
