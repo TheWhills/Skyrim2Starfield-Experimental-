@@ -42,7 +42,8 @@ def starfield_esm(path):
            (b"ATTX", b"\0"), (b"HCOL", b"Brown\0")]
     quest = [(b"EDID", b"QuestGuyM\0"), (b"VMAD", b"script"), (b"QSTA", struct.pack("<I", 5))] + tpl[1:]
     recs = [(b"RACE", h(b"RACE"), race, 0x3CDB), (b"NPC_", h(b"NPC_"), quest, 0x10000),
-            (b"NPC_", h(b"NPC_"), tpl, 0x10001)]
+            (b"NPC_", h(b"NPC_"), tpl, 0x10001),
+            (b"OTFT", h(b"OTFT"), [(b"EDID", b"SomeOutfit\0"), (b"INAM", struct.pack("<I", 0x10001))], 0x20000)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
@@ -109,6 +110,11 @@ class FaceFitScriptTests(unittest.TestCase):
                 self.assertIn("console", rows["HousecarlWhiterun"]["test_npc"])
                 self.assertEqual(rows["HousecarlWhiterun"]["test_npc"]["template"], "SettlerM01")   # the plain one
                 self.assertNotIn(b"VMAD", sigs)
+                # an empty outfit of our own as default and space outfit (2026-11-06: spacesuits without one)
+                otft = sfplugin.records(plugin, [b"OTFT"])
+                self.assertEqual([(sfplugin.edid(o[2]), dict(o[2])[b"INAM"]) for o in otft], [("S2S_NoOutfit", b"")])
+                self.assertEqual(dict(subs)[b"DOFT"], struct.pack("<I", otft[0][3]))
+                self.assertEqual(dict(subs)[b"SOFT"], struct.pack("<I", otft[0][3]))
         finally:
             (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head,
              S.bsa.SkyrimArchives) = saved

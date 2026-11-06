@@ -551,6 +551,14 @@ def main(argv=None):
         if a.hairs_plugin:
             real = npc_setup(a, sky, esm, sf_esm, npc_recs, report)
             masters = real["masters"]
+        # 2026-11-06: with no outfit (DOFT / SOFT dropped, or a template without one: ChargenPresetFemale01) the
+        # game dressed the test NPCs in a spacesuit; Ralof, who kept his template's outfit, wore plain underwear.
+        # An empty outfit of our own, as default and space outfit, keeps them in underwear until clothing exists.
+        no_outfit = None
+        otft = sfplugin.records(sf_esm, [b"OTFT"])
+        if otft:
+            no_outfit = sfplugin.new_form_id(0, masters=len(masters))
+            recs.append((b"OTFT", otft[0][1], [(b"EDID", sfplugin.zs("S2S_NoOutfit")), (b"INAM", b"")], no_outfit))
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -569,6 +577,8 @@ def main(argv=None):
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
                                   b"FULL": sfplugin.zs(full)}, drop=STRIP + STRIP_GEAR)
             subs = without_templates(subs)
+            if no_outfit is not None:
+                subs = sfplugin.edit(subs, {b"DOFT": struct.pack("<I", no_outfit), b"SOFT": struct.pack("<I", no_outfit)})
             if real is not None:
                 subs = npc_dress(subs, by_edid[row["edid"].lower()], npcs, real, row)
                 row["name"] = full

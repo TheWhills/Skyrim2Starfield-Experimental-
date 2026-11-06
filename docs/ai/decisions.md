@@ -1554,3 +1554,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the blend presets: hypothesis, the base face skin comes from BMPN / BMPV. Test: --keep-blend-morphs (now keeps
   FMRI / FMRG too). Also found: a texture layer's VNAM is the .dds path; the Dermaesthetic VNAM is now set from the
   path vanilla uses with that name (npc_records.dermaesthetic_paths). Spacesuits gone? not yet reported.
+- 2026-11-06 Owner: still spacesuits with DOFT / SOFT / CNTO / TPTA all gone (Saadia's template has no outfit at all),
+  while Ralof earlier (template outfit kept) wore plain underwear: an NPC with no outfit seems to get a default one
+  with a spacesuit. Test plugin now has its own empty outfit (OTFT S2S_NoOutfit, empty INAM) set as DOFT and SOFT of
+  every test NPC. Faces with --keep-blend-morphs: still lighter than the body (owner screenshots), maybe less;
+  next control: the vanilla template spawned beside the copy, to tell our bug from how Starfield renders faces.
