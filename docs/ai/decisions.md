@@ -1722,3 +1722,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   behind) and Starfield skin through boot knees / upper arms. The overall similarity fit now uses only the axial and
   leg joints (Skyrim's A-pose arm angle tipped the torso); arms keep their per-bone turns. supported: the poke-through
   is the player's body sliders (gear fitted to the default naked_m; no morph data yet).
+- verified (owner screenshots, same day): with the axial-only fit the gear sits right on the thinnest body slider
+  (collar, gloves, boots, coat); on the owner's default body the body pokes through (boots, upper arms, gloves).
+  Supported: the gear needs a morph.dat (body sliders Overweight / Thin / Strong) like vanilla worn meshes.
+  fo4sf.sfmorph reads / writes the layout noted 2026-11-02; scripts/armor/morph_probe.py finds where the game keeps
+  clothing and body morphs and checks the reader against them. Also open: a forward bulge at the chest in the side
+  view; Starfield hands poking through the gloves (the hands are a separate mesh, not in the push-out surface).
