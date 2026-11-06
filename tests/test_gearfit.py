@@ -66,6 +66,7 @@ class BoneTests(unittest.TestCase):
         self.assertTrue(np.allclose(self.t[NECK][:3, :3], self.t[SPN2][:3, :3]))   # the neck moves with the torso,
         self.assertTrue(np.allclose(self.t[NECK][:2, 3], self.t[SPN2][:2, 3]))     # forward / sideways too,
         self.assertAlmostEqual(self.apply(NECK, SKY[NECK])[2], SF["C_Neck"][2])      # at its joint's height
+        self.assertLessEqual(self.rep["bones"][NECK]["neck_height_ratio"], 1.0)
 
     def test_child_joint_reached_along_the_bone(self):
         # the calf's own transform carries the Skyrim foot joint onto Starfield's foot (length stretched)
@@ -95,6 +96,8 @@ class BoneTests(unittest.TestCase):
         sw = G.sf_weights(bones, [[(0, 0.6), (2, 0.4)], [(3, 1.0)]], set(WORLD) | {"C_Spine2"},
                           G.follow_map(JOINTS_ALL, self.t))
         self.assertEqual(sw[1], [("C_Spine1", 0.5), ("C_Spine2", 0.5)])          # SPLIT shares the weight
+        nw = G.sf_weights([NECK], [[(0, 1.0)]], {"C_Neck", "C_Neck_Twist"}, {})
+        self.assertEqual(nw[0], [("C_Neck_Twist", 1.0)])                        # the neck turns with the head
         self.assertAlmostEqual(sum(w for _b, w in sw[0]), 1.0)
         self.assertIn("L_Calf", dict(sw[0]))
 

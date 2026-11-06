@@ -1838,3 +1838,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   after the fit, with the body's UVs, weights and material, and the body's own slider deltas vertex for vertex.
   Hands keep slot 6. --no-skin-piece = old behaviour. Neck / head: still too high (owner) -> they keep the torso's
   transform but take their own joint's height (DROP_TO_JOINT). unresolved: all in game.
+- verified (owner, same day): with the naked body hidden and S2S_Skin (1401 body vertices) the calves are clean; the
+  arms showed shards and the chest orange patches. Supported cause: the body has up to 8 weights per vertex and the
+  writer 4; the extra entries shifted the following vertices onto wrong bones. The skin piece now keeps the 4 largest.
+  Neck: Skyrim Neck weights go to C_Neck_Twist (WEIGHT_REMAP; the Starfield body turns its neck with it, C_Neck moves
+  no body vertex) so the cowl turns with the head; the neck's gear is squashed in height about the neck joint by the
+  Starfield / Skyrim neck length ratio (clamp 0.7-1.0; owner: turtleneck vs Skyrim's half turtleneck).

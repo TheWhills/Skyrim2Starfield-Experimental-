@@ -135,8 +135,15 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
     tri = new[t]
     nrm = skyrimhair._vertex_face_normals(body_skel, t)[used]
     nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+    # the body has up to 8 weights per vertex, our writer 4: keep the 4 largest (2026-11-06: more overflowed into
+    # the next vertices' bones and threw the skin piece into shards)
+    w4 = []
+    for i in used:
+        top = sorted(body_w[i], key=lambda kv: -kv[1])[:skyrimhair.MAX_WEIGHTS]
+        tot = sum(x for _b, x in top)
+        w4.append([(b, x / tot) for b, x in top] if tot > 0 else top)
     sh = skyrimhair.HairShape(SKIN_SHAPE, pos, nrm, np.zeros_like(nrm), [body_uvs[i] for i in used],
-                              [tuple(map(int, x)) for x in tri], [body_w[i] for i in used], -1, -1, -1,
+                              [tuple(map(int, x)) for x in tri], w4, -1, -1, -1,
                               colors=[(255, 255, 255, 255)] * len(pos))
     return sh, used.tolist()
 

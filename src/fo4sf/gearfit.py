@@ -91,6 +91,10 @@ SKIN_GAP = 0.002                # m: skin pieces (Skyrim body-textured parts, e.
 ENVELOPE = {s: ((f"NPC {s} Foot [{s}ft ]", f"NPC {s} Toe0 [{s}Toe]"), (f"{s}_Foot", f"{s}_Toe")) for s in "LR"}
 ENVELOPE_SCALE = (0.9, 1.35)    # per-axis clamp of the foot box fit
 NEAR_WEIGHTS = (0.025, 0.05)    # m: gear this close to the body takes the body's weights, fading to its own by the 2nd
+# weights only (animation keeps skeletonmap's bones): Starfield's body turns its neck with C_Neck_Twist (395 body
+# vertices; C_Neck moves none), so gear on C_Neck stayed put when the head turned (owner 2026-11-06)
+WEIGHT_REMAP = {"C_Neck": "C_Neck_Twist"}
+NECK_SQUASH = (0.7, 1.0)        # clamp of the neck height ratio (Starfield / Skyrim, neck joint -> head joint)
 DROP_TO_JOINT = ("NPC Neck [Neck]", "NPC Head [Head]")   # torso bones that still take their joint's height
 FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
 
@@ -210,6 +214,18 @@ def bone_transforms(joints: Dict[str, np.ndarray], sf_world: Dict[str, np.ndarra
                 dz = float(sf_world[f][2, 3] - (gl @ joints[b][:3, 3] + g[:3, 3])[2])
                 out[b][2, 3] += dz
                 rep["bones"][b]["height_mm"] = round(dz * 1000, 1)
+                head_sky, head_sf = "NPC Head [Head]", sf_main("NPC Head [Head]")
+                if b == "NPC Neck [Neck]" and head_sky in joints and head_sf:
+                    # Starfield's neck is shorter: squash the neck's gear in height about the neck joint
+                    # (2026-11-06, owner: the cowl a turtleneck where Skyrim's is a half one)
+                    sky_len = float(np.linalg.norm(aligned[head_sky] - aligned[b]))
+                    sf_len = float(np.linalg.norm(sf_world[head_sf][:3, 3] - sf_world[f][:3, 3]))
+                    r = float(np.clip(sf_len / max(sky_len, 1e-6), *NECK_SQUASH))
+                    qz = float(sf_world[f][2, 3])
+                    sq = np.eye(4)
+                    sq[2, 2], sq[2, 3] = r, qz * (1.0 - r)
+                    out[b] = sq @ out[b]
+                    rep["bones"][b]["neck_height_ratio"] = round(r, 3)
             continue
         c = CHILD.get(b)
         cf = sf_main(c) if c in joints else None
@@ -293,6 +309,7 @@ def sf_weights(bones: List[str], weights, sf_bones, follows: Dict[str, str]) -> 
             b = bones[bi]
             hits = sf_of(b) or sf_of(follows.get(b) or "")
             for f, share in hits:
+                f = WEIGHT_REMAP.get(f, f)
                 if f in sf_bones:
                     acc[f] = acc.get(f, 0.0) + w * share
         top = sorted(acc.items(), key=lambda kv: -kv[1])[:MAX_WEIGHTS]

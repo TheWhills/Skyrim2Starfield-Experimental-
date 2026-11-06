@@ -104,6 +104,9 @@ class ScriptTests(unittest.TestCase):
         sh, used = gear_fit.skin_piece(body, tris, uvs, w, src, reach=0.2)
         self.assertEqual((used, sh.name, sh.triangles), ([0, 1, 2], gear_fit.SKIN_SHAPE, [(0, 1, 2)]))
         self.assertEqual(sh.uvs, uvs[:3])
+        eight = [[(f"B{k}", 0.125) for k in range(8)]] * 6
+        sh8, _u = gear_fit.skin_piece(body, tris, uvs, eight, src, reach=0.2)
+        self.assertTrue(all(len(vw) == 4 and abs(sum(x for _b, x in vw) - 1) < 1e-9 for vw in sh8.weights))
         m = sfmorph.parse(sfmorph.build(6, ["Overweight"], {"Overweight": {1: (0.01, 0, 0), 4: (0.02, 0, 0)}}))
         d, _e = gear_fit.skin_morph(m, used)
         self.assertEqual(list(d["Overweight"]), [1])             # body vertex 1 -> skin vertex 1, exactly
