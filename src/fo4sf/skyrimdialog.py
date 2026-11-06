@@ -142,8 +142,9 @@ def read_lstrings(raw: bytes, length_prefixed: bool) -> Dict[int, str]:
 
 
 def response_texts(sky, language: str = "english") -> Dict[int, str]:
-    """Skyrim.esm's dialogue strings (strings\\skyrim_<language>.dlstrings)."""
-    raw = sky._read(f"strings\\skyrim_{language}.dlstrings") if hasattr(sky, "_read") else None
+    """Skyrim.esm's dialogue response strings (strings\\skyrim_<language>.ilstrings: INFO texts; .dlstrings holds
+    descriptions and book text: the owner's first run found 2,686 of those and no response text)."""
+    raw = sky._read(f"strings\\skyrim_{language}.ilstrings") if hasattr(sky, "_read") else None
     return read_lstrings(raw, True) if raw else {}
 
 

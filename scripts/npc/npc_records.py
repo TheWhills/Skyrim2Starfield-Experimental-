@@ -102,11 +102,11 @@ def npc_name(npc: Dict, strings: Dict[int, str]) -> str:
 COLOR_WORDS = {
     "blonde": ("blond", "blonde", "golden", "gold", "honey", "flax", "straw", "sandy"),
     "brown": ("brown", "brunette", "chestnut", "chocolate", "umber", "hazel", "mousy", "mousey"),
-    "red": ("red", "auburn", "ginger", "copper", "strawberry"),
+    "red": ("red", "auburn", "ginger", "copper", "strawberry", "amber"),
     "black": ("black", "raven", "ebony", "jet"),
     "grey": ("grey", "gray", "silver", "ash", "white", "platinum", "salt"),
     "dark": ("dark", "deep"),
-    "light": ("light", "pale", "bright"),
+    "light": ("light", "pale", "bright", "platinum"),
 }
 
 
@@ -154,23 +154,36 @@ def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
     if not names or not skyrim_color:
         return None, "no colour"
     rgb = (skyrim_color.get("rgba") or [None])[:3]
-    if rgb and rgb[0] is not None:
-        if palette and sum(1 for n in names if n in palette) >= 3:
-            best = _nearest(rgb, palette, names)
-            if best:
-                return best, "palette rgb"
-        best = _nearest(rgb, NAME_RGB, names)
-        if best:
-            return best, "rgb of the name (approximate)"
+    has_rgb = bool(rgb) and rgb[0] is not None
+    table = palette if (palette and sum(1 for n in names if n in palette) >= 3) else NAME_RGB
+    how = "palette" if table is palette else "name colours (approximate)"
+    natural = [n for n in names if n in NAME_RGB] or \
+        [n for n in names if not re.search(r"violet|blue|teal|fuchsia|purple|yellow|aqua|ruby|pink|green", n, re.I)]
+    # Skyrim's colour EditorIDs say what the colour is (HairColor03BrightBlond, HairColor06Auburn); its CLFM RGB is a
+    # tint multiplied into the texture and reads much darker (BrightBlond is 81, 77, 57), so the words decide the
+    # family (owner 2026-11-05: Ralof came out red, then by RGB alone brown, Ysolda's Auburn black-brown)
     want = color_words(skyrim_color.get("edid", ""))
-    if want:
-        scored = []
-        for n in names:
-            have = color_words(n)
-            hue = len((want - {"dark", "light"}) & have)
-            tone = len((want & {"dark", "light"}) & have)
-            if hue:
-                scored.append((-hue, -tone, n))
-        if scored:
-            return min(scored)[2], "colour words"
+    hues = want - {"dark", "light"}
+    if hues:
+        fam = []
+        for n in natural:
+            have = color_words(n) - {"dark", "light"}
+            if have & hues:
+                fam.append((len(have & hues) - 0.5 * len(have - hues), n))
+        if fam:
+            top = max(f for f, _n in fam)
+            slack = 0.5 if want & {"dark", "light"} else 0.0     # 'dark brown' may go to BlackBrown
+            fam = [n for f, n in fam if f >= top - slack]
+            light = lambda n: lightness(table.get(n, NAME_RGB.get(n, (128, 128, 128))))
+            if "light" in want:
+                return max(fam, key=light), f"colour words, lightest ({how})"
+            if "dark" in want:
+                return min(fam, key=light), f"colour words, darkest ({how})"
+            if has_rgb and len(fam) > 1:
+                return _nearest(rgb, table, fam) or fam[0], f"colour words, nearest rgb ({how})"
+            return fam[0], "colour words"
+    if has_rgb:
+        best = _nearest(rgb, table, natural or names)
+        if best:
+            return best, f"rgb ({how})"
     return None, "no match"

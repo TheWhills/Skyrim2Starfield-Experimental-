@@ -68,8 +68,11 @@ class RecordTests(unittest.TestCase):
         sf = ["Black", "Brown", "BlackBrown", "DirtyBlonde", "SaltAndBrown", "Jet", "Copper", "Platinum", "Amber",
               "SaltAndPepper", "Auburn", "Grey", "White", "Violet", "Blue", "Blonde", "Ruby", "Teal"]   # the owner's run
         rgb = lambda e, c: {"edid": e, "rgba": c + (0,)}
-        self.assertEqual(NR.match_hair_color(rgb("HairColor01", (200, 168, 105)), sf),
-                         ("Blonde", "rgb of the name (approximate)"))
+        self.assertEqual(NR.match_hair_color(rgb("HairColor01", (200, 168, 105)), sf)[0], "Blonde")
+        # the owner's run: Skyrim's RGB is a dark tint, its EditorID says the colour (Ralof came out red, then brown)
+        self.assertEqual(NR.match_hair_color(rgb("HairColor03BrightBlond", (81, 77, 57)), sf)[0], "Blonde")
+        self.assertEqual(NR.match_hair_color(rgb("HairColor06Auburn", (48, 35, 33)), sf)[0], "Auburn")
+        self.assertEqual(NR.match_hair_color(rgb("HairColor02BrownDark", (40, 30, 20)), sf)[0], "BlackBrown")
         self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf)[0], "Brown")
         self.assertEqual(NR.match_hair_color(rgb("X", (20, 18, 17)), sf)[0], "Black")
         self.assertEqual(NR.match_hair_color(rgb("X", (120, 40, 25)), sf)[0], "Auburn")
@@ -77,11 +80,12 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf, {"Ruby": [90, 60, 40]})[0], "Brown")
         names = ["Blonde01", "BrownDark02", "BrownLight03", "Red01", "Black01", "Grey01"]
         blonde = {"edid": "HairColor07Blonde", "rgba": (200, 170, 110, 0)}
-        self.assertEqual(NR.match_hair_color(blonde, names), ("Blonde01", "colour words"))
+        self.assertEqual(NR.match_hair_color(blonde, names)[0], "Blonde01")
         dark = {"edid": "HairColor03BrownDark", "rgba": (60, 40, 20, 0)}
         self.assertEqual(NR.match_hair_color(dark, names)[0], "BrownDark02")
         pal = {"Blonde01": [210, 180, 120], "Black01": [20, 18, 15], "Red01": [150, 40, 20]}
-        self.assertEqual(NR.match_hair_color(dark, names, pal), ("Black01", "palette rgb"))
+        got = NR.match_hair_color({"edid": "HairColor09", "rgba": (30, 25, 20, 0)}, names, pal)
+        self.assertEqual(got, ("Black01", "rgb (palette)"))                    # no colour words: a measured palette
         self.assertEqual(NR.match_hair_color({"edid": "HairColorX", "rgba": None}, names)[0], None)
         self.assertEqual(NR.match_hair_color(None, names)[0], None)
 

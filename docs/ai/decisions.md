@@ -1420,3 +1420,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   colours are found, npc_records.NAME_RGB gives the 14 natural names a colour judged from the name (approximate) and
   the NPC gets the nearest to its Skyrim RGB (never a fantasy colour). The faces.json sent was a run without
   --npc / --hairs-plugin (no npc_conversion block).
+- 2026-11-05 owner: Ralof had red hair in game (that build used the probe's bad one-entry palette: 'Ruby' for
+  everyone). The rerun's report matched by RGB alone: Ralof's HairColor03BrightBlond (CLFM 81, 77, 57) -> Brown,
+  Ysolda's HairColor06Auburn (48, 35, 33) -> BlackBrown: Skyrim's CLFM RGB is a dark tint multiplied into the
+  texture. Now the Skyrim colour's EditorID words pick the family (blonde / brown / red incl. auburn, copper, amber /
+  black / grey), 'bright' / 'dark' the lightest / darkest in it, RGB only to break ties or without words; natural
+  names only. Expected now: Ralof Blonde, Ysolda Auburn. Voice run (verified: 10 of 10 lines got .wem and .ffxanim on
+  the owner's PC) but every text was empty: response texts are in .ILSTRINGS, not .DLSTRINGS (descriptions);
+  fixed, the lips need rebuilding with the real words.

@@ -123,7 +123,7 @@ class VoiceScriptTests(unittest.TestCase):
             skyrim_esm(os.path.join(data, "Skyrim.esm"))
             files = {"sound\\voice\\skyrim.esm\\malenord\\hellotopic__00000a01_1.fuz": fuz(b"L", b"XWM-A01"),
                      "sound\\voice\\skyrim.esm\\malenord\\hellotopic__00000a02_1.fuz": fuz(b"L", b"XWM-A02"),
-                     "strings\\skyrim_english.dlstrings": dlstrings({0x900: "Hello.", 0x901: "Hm?"})}
+                     "strings\\skyrim_english.ilstrings": dlstrings({0x900: "Hello.", 0x901: "Hm?"})}
             with open(os.path.join(data, "Skyrim - Voices_en0.bsa"), "wb") as fh:
                 fh.write(bsa.build(files))
             out = os.path.join(d, "out")
