@@ -114,6 +114,15 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(dict(armo[2])[b"FULL"], z("Ralof's outfit"))
         self.assertEqual(dict(otft[2])[b"INAM"], struct.pack("<I", armo[3]))
         self.assertEqual(rep["template_addon"], "00001000")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            sf_esm(p)
+            recs, _ = E.armor_records(p, "S2S\\X.nif", "X", 1, "X", drop=["MOD4"])
+        self.assertNotIn(b"MOD4", dict(recs[0][2]))                              # --drop-fields
+
+    def test_field_text(self):
+        self.assertEqual(E.field_text(b"\x05\x00Meshes\\a\\morph.dat\x00"), "Meshes\\a\\morph.dat  (21 bytes)")
+        self.assertEqual(E.field_text(b"\x01\x02"), "0102")
 
     def test_nif_material(self):
         self.assertEqual(E.nif_material(b"xx\0Materials\\Clothes\\NW\\nw_01.mat\0yy"), "Materials\\Clothes\\NW\\nw_01.mat")

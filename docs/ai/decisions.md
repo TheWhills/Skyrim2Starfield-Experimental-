@@ -1673,3 +1673,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   skeleton. unresolved: a first-shape special case (writer) vs. data in that shape; os_export --reverse tests it, and
   the export now lists the ARMA fields copied from the vanilla nightwear (a morph or bone-scale reference there would
   be applied to our mesh).
+- verified (owner, same day): with --reverse the spike moved to the cuffs (now first) and the boots were clean, so it
+  belongs to the first shape, not to any shape's data. Copied ARMA fields: EDID BO64 RNAM DNAM MOD2 FLLD MOD3 FLLDx5
+  NAM4 NAM6 MODL MNAM TNAM SNAM VNAM BSMPx2. supported (not yet tested): FLLD lists the nightwear's own files (body
+  morph data applied to shape 0 by vertex number); os_export now prints those fields and --drop-fields leaves them out.
+  Also seen: the Skyrim gloves (shape "HandMale_Big1stperson") hang at the hips, following hip bones, because the
+  Starfield body skin has no hand bones to copy from.

@@ -257,7 +257,7 @@ def vertex_counts(s) -> Dict[str, int]:
 
 
 # ------------------------------------------------------------------------------------------------ plugin
-def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str):
+def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=()):
     """[ARMA, ARMO, OTFT] copied from the vanilla template armor with the worn model pointed at nif_rel (Data-relative
     under meshes\\), new EditorIDs and FormIDs. Returns (records, report)."""
     recs = {fid: (t, h, subs) for t, h, subs, fid in sfplugin.records(sf_esm, [b"ARMO", b"ARMA", b"OTFT"])}
@@ -273,6 +273,7 @@ def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str)
     a_fid, o_fid, t_fid = (sfplugin.new_form_id(i, masters) for i in range(3))
     _t, ah, asubs = recs[addon]
     model = sfplugin.zs(nif_rel)
+    asubs = [(sub, d) for sub, d in asubs if sub.decode("latin-1") not in drop]
     arma = (b"ARMA", ah, sfplugin.edit(asubs, {b"EDID": sfplugin.zs(f"S2S_{name}_AA"), b"MOD2": model,
                                                 b"MOD3": model}), a_fid)
     osubs, seen = [], False
@@ -385,6 +386,7 @@ def main(argv=None):
     ap.add_argument("--url", default=os_probe.DEFAULT_URL)
     ap.add_argument("--token", default="")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out, e.g. MaleBodyStormcloak")
+    ap.add_argument("--drop-fields", default="", help="ARMA fields not copied from the vanilla template, e.g. FLLD")
     ap.add_argument("--reverse", action="store_true", help="write the shapes in reverse order (spike test)")
     ap.add_argument("--max-residual", type=float, default=0.002, help="metres (default %(default)s)")
     a = ap.parse_args(argv)
@@ -405,7 +407,8 @@ def main(argv=None):
     sf_esm = os.path.join(sf_data, "Starfield.esm")
     nif_rel = f"S2S\\{a.name}.nif"
     masters = ["Starfield.esm"]
-    recs, prep = armor_records(sf_esm, nif_rel, a.name, len(masters), a.full or a.name.replace("_", " "))
+    recs, prep = armor_records(sf_esm, nif_rel, a.name, len(masters), a.full or a.name.replace("_", " "),
+                               [x.strip() for x in a.drop_fields.split(",") if x.strip()])
     model = next((sfplugin_zstring(d) for s_, d in recs[0][2] if s_ == b"MOD2"), "")
     vanilla_arma = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if r[3] == int(prep["template_addon"], 16)),
                         None)
@@ -436,9 +439,18 @@ def main(argv=None):
         print(f"  {g}: {r['vertices']} vertices, {r['unweighted']} unweighted, {len(r['bones'])} bones")
     print("shape order:", ", ".join(rep["shapes"]))
     print("ARMA fields:", " ".join(f for f, _d in rep["arma_fields"]))
+    for sub, d in recs[0][2]:
+        if sub in (b"FLLD", b"MODL", b"MNAM", b"TNAM", b"SNAM", b"VNAM", b"NAM4", b"NAM6", b"BSMP", b"DNAM"):
+            print(f"  {sub.decode()}: {field_text(bytes(d))}")
     print(f"{PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}), outfit {prep['OTFT']}; material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1  (xx = {PLUGIN}'s load order index)")
     return 0
+
+
+def field_text(d: bytes) -> str:
+    """A record field for a person: its printable text runs if it holds any, else its bytes in hex (first 48)."""
+    runs = [r.decode("latin-1") for r in re.findall(rb"[ -~]{4,}", d)]
+    return (" | ".join(runs) + f"  ({len(d)} bytes)") if runs else d[:48].hex() + (" ..." if len(d) > 48 else "")
 
 
 def sfplugin_zstring(d) -> str:
