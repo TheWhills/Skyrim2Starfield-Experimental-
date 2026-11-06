@@ -85,6 +85,14 @@ class ScriptTests(unittest.TestCase):
                                                     [(0, 1, 2), (1, 3, 2)], [[(0, 1.0)]] * 4, 2)
         self.assertEqual((len(p), len(t)), (9, 8))                            # the shared edge's midpoint once
 
+    def test_neck_part(self):
+        import numpy as np
+        pts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], float)
+        w = [[("C_Neck", 1.0)], [("C_Neck", 0.5), ("C_Head", 0.5)], [("C_Neck1", 0.4), ("C_Head", 0.6)],
+             [("C_Head", 1.0)]]
+        p, t, ww, n = gear_fit.neck_part(pts, [(0, 1, 2), (1, 2, 3)], w, gear_fit.NECK_BONES_SF)
+        self.assertEqual((n, len(p), t.tolist()), (3, 3, [[0, 1, 2]]))         # the face-only vertex and its face go
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 

@@ -75,7 +75,10 @@ NO_TURN = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Sp
            "NPC COM [COM ]",
            # the neck too (2026-11-06, Ralof's cowl: weighted chest + neck, the neck moved onto its own Starfield joint
            # and the two halves pulled the cowl out into a bulge behind the neck)
-           "NPC Neck [Neck]")
+           "NPC Neck [Neck]",
+           # and the head (2026-11-06: the cowl's top is partly head-weighted; Starfield's head joint sits farther
+           # forward, so moving it onto that joint pulled the cowl forward). Helmets will want their own head fit.
+           "NPC Head [Head]")
 # joints the overall fit lines up: the body's axis and legs. Arms and fingers are left out (2026-11-06, Ralof: with
 # them in, Skyrim's different A-pose arm angle tipped the whole torso back, chest forward and coat hem behind); the
 # arms get their own per-bone turns.

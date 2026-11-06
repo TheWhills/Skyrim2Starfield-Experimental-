@@ -1819,3 +1819,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   elsewhere. Changes: the head joins both surfaces (Starfield malehead_facebones.nif mesh in skeleton space with its
   weights; Skyrim malehead.nif head shape only), tessellation is flat (gear_fit.flat_subdivide) and skips the skin
   shapes that are dropped anyway (the bare hands had been split to 13370 vertices).
+- verified (slot_probe, same day): HumanRace's skin armor Skin_Naked = AA_Naked_Body (slot 3, naked_m.nif) +
+  AA_Naked_Hands (slot 6); no separate undershirt mesh (the grey shirt is the naked body's own look). Vanilla
+  outfits cover slot 3 (nightwear UpperBody 3+5, miner shirt 3+5) and bring their own skin piece
+  (AA_Clothes_Nightwear_01_Skin, slot 13). Ours copied only the nightwear LowerBody slot (7), so the whole naked body
+  stays under Ralof's outfit: the leg / chest poke-through and the shirt under the sleeves. Plan (owner: "Skyrim's
+  arm goes up higher"): cover slot 3 and add our own skin piece cut from Starfield's body where Skyrim's bare-skin
+  piece lies (forearms up under the sleeves, neck, calves), with a vanilla outfit-skin material; slot_probe now lists
+  each addon's shapes, vertex counts and materials to pick that material and check the skin piece's layout.
+- owner (same day): the cowl still bulged far forward. Head bone now moves with the torso (its own joint is farther
+  forward); only the NECK part of both heads (>= 0.3 weight on neck / chest bones) joins the fit surfaces (the face and
+  jaw had pushed the cowl out).

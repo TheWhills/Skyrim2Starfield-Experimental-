@@ -76,7 +76,7 @@ class BoneTests(unittest.TestCase):
         self.assertEqual(self.rep["bones"][SPN1]["to"], "C_Spine1")
         self.assertTrue(self.rep["bones"][PELV]["torso"])                    # torso: no turn, no stretch
         self.assertTrue(np.allclose(self.t[PELV][:3, :3], self.t[SPN0][:3, :3]))
-        self.assertEqual(self.rep["bones"][HEAD]["turn_from"], NECK)
+        self.assertTrue(self.rep["bones"][HEAD]["torso"])                     # the head moves with the torso
 
     def test_unmapped_bone_follows_nearest(self):
         self.assertIn("follows", self.rep["bones"][SKIRT])

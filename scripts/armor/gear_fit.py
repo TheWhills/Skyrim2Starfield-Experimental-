@@ -126,12 +126,40 @@ def starfield_part(sf_data: str, nif_path: str, world):
     return pts @ frame[:3, :3].T + frame[:3, 3], tris, weights
 
 
+NECK_BONES_SF = ("C_Neck", "C_Neck1", "C_Neck_Twist", "C_Chest", "C_Spine2")
+NECK_BONES_SKY = ("NPC Neck [Neck]", "NPC Spine2 [Spn2]")
+NECK_SHARE = 0.3        # head vertices with at least this weight on neck / chest bones count as neck
+
+
+def neck_part(points, tris, weights, neck_bones, share: float = NECK_SHARE):
+    """The neck of a head mesh: vertices with >= share of their weight on neck / chest bones, and the triangles
+    among them (2026-11-06: with the whole head in the surface, the cover step pushed Ralof's cowl out over the chin and
+    jaw). weights: per vertex [(bone name, w)]. Returns (points, triangles, weights, kept vertex count)."""
+    keep = np.array([sum(w for b, w in vw if b in neck_bones) >= share for vw in weights], bool)
+    if not keep.any():
+        return np.zeros((0, 3)), np.zeros((0, 3), int), [], 0
+    new = -np.ones(len(points), int)
+    new[keep] = np.arange(int(keep.sum()))
+    t = np.asarray(tris, int).reshape(-1, 3)
+    t = t[keep[t].all(1)]
+    return np.asarray(points)[keep], new[t], [weights[i] for i in np.nonzero(keep)[0]], int(keep.sum())
+
+
 def skyrim_head_shapes(nif_bytes: bytes):
-    """The Skyrim head NIF's head shape only (not eyes / mouth / brows), as SkyShapes."""
+    """The neck of the Skyrim head NIF's head shape (not face / eyes / mouth), as SkyShapes."""
     from fo4sf import skyrimnpc
     shapes = skyrimskin.skinned_shapes(nifmod.parse(nif_bytes))
     h = skyrimnpc.head_shape(shapes)
-    return [gearfit.from_skyrim(h)] if h is not None else []
+    if h is None:
+        return []
+    s = gearfit.from_skyrim(h)
+    named = [[(s.bones[b], w) for b, w in vw if 0 <= b < len(s.bones)] for vw in s.weights]
+    p, t, _w, n = neck_part(s.points, s.triangles, named, NECK_BONES_SKY)
+    if not n:
+        return []
+    keep = [i for i, vw in enumerate(named) if sum(w for b, w in vw if b in NECK_BONES_SKY) >= NECK_SHARE]
+    return [gearfit.SkyShape(s.name, p, s.normals[keep], [s.uvs[i] for i in keep] if s.uvs else [],
+                             [tuple(map(int, x)) for x in t], s.bones, [s.weights[i] for i in keep], s.joints)]
 
 
 def find_hands(sf_data: str, female: bool, world):
@@ -294,6 +322,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     head_path = SF_HEADS[female]
     try:
         h_pts, h_tris, h_w = starfield_part(sf_data, head_path, world)
+        h_pts, h_tris, h_w, h_n = neck_part(h_pts, h_tris, h_w, NECK_BONES_SF)
+        head_path += f" (neck: {h_n} vertices)"
         surf_tris = np.concatenate([surf_tris, h_tris + len(surf_pts)])
         surf_pts = np.concatenate([surf_pts, h_pts])
         surf_w += h_w

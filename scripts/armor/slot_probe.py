@@ -18,7 +18,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
-from fo4sf import sfplugin  # noqa: E402
+from fo4sf import sfnif, sfplugin  # noqa: E402
+from fo4sf import nif as nifmod  # noqa: E402
+
+sys.path.insert(0, HERE)
 
 COMPARE = ("Clothes_Nightwear_01", "Clothes_Miner_UtilitySuit", "Clothes_Miner_Jumpsuit", "Outfit_UtilityOveralls_01")
 
@@ -51,6 +54,38 @@ def armor_addons(armo_subs, arma) -> list:
     return out
 
 
+def model_shapes(nif_bytes: bytes) -> list:
+    """[{shape, vertices (LOD0), material}] of a Starfield NIF (material: its BSLightingShaderProperty's name)."""
+    n = nifmod.parse(nif_bytes)
+    out = []
+    for i, b in enumerate(n.blocks):
+        if n.type_of(i) != "BSGeometry":
+            continue
+        g = sfnif.parse_bsgeometry(b)
+        m = next((x for x in g.meshes if x is not None), None)
+        mat = ""
+        if 0 <= g.shader < len(n.blocks) and n.type_of(g.shader) == "BSLightingShaderProperty":
+            idx, = struct.unpack_from("<i", n.blocks[g.shader], 0)
+            mat = n.strings[idx].decode("latin-1") if 0 <= idx < len(n.strings) else ""
+        name = n.strings[g.name_idx].decode("latin-1") if 0 <= g.name_idx < len(n.strings) else ""
+        out.append({"shape": name, "vertices": m.num_verts if m else None, "material": mat})
+    return out
+
+
+def add_models(rep: dict, sf_data: str) -> None:
+    """Each listed addon's male model: its shapes, vertex counts and materials."""
+    import hkx_to_af
+    rows = list(rep["skin"].get("addons", [])) + [r for rs in rep["compare"].values() for r in rs]
+    for r in rows:
+        if not r.get("male"):
+            continue
+        try:
+            data, _ = hkx_to_af.vanilla_file("meshes/" + r["male"].replace("\\", "/"), sf_data)
+            r["model"] = model_shapes(data)
+        except (SystemExit, Exception) as e:              # report, keep going
+            r["model"] = [{"error": str(e)}]
+
+
 def probe(esm: str) -> dict:
     recs = sfplugin.records(esm, [b"RACE", b"ARMO", b"ARMA"])
     arma = {fid: subs for t, _h, subs, fid in recs if t == b"ARMA"}
@@ -80,6 +115,7 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     rep = probe(os.path.join(a.starfield, "Data", "Starfield.esm"))
+    add_models(rep, os.path.join(a.starfield, "Data"))
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "slot_probe.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)
@@ -87,6 +123,8 @@ def main(argv=None):
     print(f"HumanRace skin armor {sk.get('armor')} {sk.get('edid')}:")
     for r in sk.get("addons", []):
         print(f"  {r['edid']}: slots {r['slots']}  {r['male']}")
+        for m in r.get("model", []):
+            print(f"      {m}")
     print("addons with models under clothes\\naked:")
     for r in rep["naked_addons"][:20]:
         print(f"  {r['edid']}: slots {r['slots']}  {r['male'] or r['female']}")
@@ -94,6 +132,8 @@ def main(argv=None):
         print(f"{name}:")
         for r in rows:
             print(f"  {r['edid']}: slots {r['slots']}  {r['male']}")
+            for m in r.get("model", []):
+                print(f"      {m}")
     return 0
 
 

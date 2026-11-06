@@ -23,5 +23,17 @@ class SlotTests(unittest.TestCase):
         self.assertEqual([r["form"] for r in P.armor_addons(armo, {0x1234: subs})], ["00001234"])
 
 
+class ModelTests(unittest.TestCase):
+    def test_model_shapes(self):
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        import os_export as E
+        from test_armor_check import shape, bind_for, WORLD
+        binds = {b: bind_for(WORLD[b]) for b in WORLD}
+        files = E.body_nif_files([shape("Skin", [[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0]], [[("A", 1.0)]] * 3)],
+                                 ["Materials\\x\\skin.mat"], binds, "S2S/T")
+        self.assertEqual(P.model_shapes(files["meshes/S2S/T.nif"]),
+                         [{"shape": "Skin", "vertices": 3, "material": "Materials\\x\\skin.mat"}])
+
+
 if __name__ == "__main__":
     unittest.main()
