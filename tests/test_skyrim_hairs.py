@@ -81,6 +81,20 @@ class PartTests(unittest.TestCase):
         finally:
             skyrimhair.VERTEX_COLORS = True
 
+    def test_skyrim_overrides_win(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            data, mod = os.path.join(d, "Data"), os.path.join(d, "Remake")
+            os.makedirs(os.path.join(data, "meshes", "hair"))
+            os.makedirs(os.path.join(mod, "Meshes", "Hair"))
+            open(os.path.join(data, "meshes", "hair", "a.nif"), "wb").write(b"vanilla")
+            open(os.path.join(data, "meshes", "hair", "b.nif"), "wb").write(b"vanilla b")
+            open(os.path.join(mod, "Meshes", "Hair", "A.nif"), "wb").write(b"remake")
+            arc = SH.OverriddenArchives(data, [mod])
+            self.assertEqual(arc.mesh("hair\\a.nif"), b"remake")             # the mod's, whatever its case
+            self.assertEqual(arc.mesh("meshes/hair/b.nif"), b"vanilla b")      # the rest from Data
+            self.assertIsNone(arc.mesh("hair\\c.nif"))
+
     def test_strand_copies(self):
         self.assertEqual(SH.strand_copies(""), SH.STRANDS)
         self.assertEqual([k for k, _l in SH.strand_copies("thin, strandsedge")], ["strandsthin", "strandsedge"])
@@ -730,11 +744,9 @@ class MainTests(unittest.TestCase):
             plain = diag["parts"][0]["materials"][0]
             with open(os.path.join(d, "diag", *plain.split("\\")), encoding="utf-8") as fh:
                 txt = fh.read()
-            self.assertIn('"MaxDepthOffset" : "0"', txt)                                 # vanilla Skyrim: none
+            self.assertIn('"MaxDepthOffset" : "0.01"', txt)                    # 2026-11-05: the KS wigs' value
             self.assertIn('"Roughness" : "0.5125"', txt)                                 # the rest IDG's
-            self.assertIn("normals", diag["parts"][0])                           # vanilla: normals from the faces
-            self.assertGreater(diag["parts"][0]["tessellated"]["vertices_after"],
-                               diag["parts"][0]["tessellated"]["vertices_before"])   # low-poly shells rounded
+            self.assertNotIn("tessellated", diag["parts"][0])                   # 2026-11-05: built the KS way
             self.assertEqual(diag["parts"][0]["fit"], {})                       # no head mesh in this game
             detail = diag["parts"][0]["shape_detail"][0]
             self.assertIn("opacity", detail, detail)

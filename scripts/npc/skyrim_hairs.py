@@ -61,14 +61,16 @@ HAIR, FACIAL_HAIR = 3, 4
 # diagnose rounds + report): the vanilla hairs are low-poly shells
 # (a faceted helmet with broad flat light patches) and their hairline layers were alpha-blended (cut into strands
 # they read as a pale band of thin hair between the forehead and the hair)
-VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3,
-                        geometric_normals=True, tessellate=3, blend_coverage=3.0, hairline_drop=20.0,
-                        skyrim_cutout=True, vanilla_maps=True)
+# 2026-11-05 owner: built the KS wigs' way (no tessellation, Skyrim's normals, no albedo remap / cutout / denser
+# hairline / hairline drop, the material's 0.01 depth offset) the vanilla hairs "do seem better": those extras are
+# off by default now (each still an option: --tessellate 3 --geometric-normals --vanilla-maps --skyrim-cutout
+# --blend-coverage 3 --hairline-drop 20 --hair-setting MaxDepthOffset=0 for the old build)
+VANILLA_DEFAULTS = dict(hairline_lift=0.0, volume=0.0, drape=0.0, push_blend=15.0, layer_gap=0.3)
 # The hair shader's depth offset off (IDG's 0.01 m with our flat mid-grey depth map moves every hair pixel's depth
 # by about 5 mm; the vanilla Skyrim shells lie 2.5-4 mm over Starfield's skin at the front and sides, 0-2 mm at a
 # parting: the skin then wins the depth test. 2026-11-03, owner: "every time strands meet in the middle they go into
 # the skull", the bare band at the front). --hair-setting MaxDepthOffset=0.01 puts it back.
-VANILLA_HAIR_SETTINGS = {"MaxDepthOffset": "0"}
+VANILLA_HAIR_SETTINGS = {}            # 2026-11-05: the KS wigs' material (MaxDepthOffset 0.01) looked better
 # --diagnose: extra looks-menu copies of each hairstyle, each with one suspect of the dark / light patches removed
 # (round 1, owner 2026-11-03: flat colour / no see-through / shell normals all kept the same patches: neither the
 # texture, the gaps nor the normals. Round 2: the strand direction and the light through the hair)
@@ -311,6 +313,42 @@ def settings_variant(conv, material, suffix: str, settings: dict):
 
 
 BLEND_SOLID = 0.5          # a Skyrim-blended layer counts as hair where its alpha is at least this
+
+
+class OverriddenArchives(bsa.SkyrimArchives):
+    """Skyrim's archives and Data folder with mod folders over them (--skyrim-overrides, MO2-style: a later folder
+    wins; their loose meshes / textures win over Data and the archives), e.g. a vanilla hair remake."""
+
+    def __init__(self, data_dir: str, overrides=()):
+        super().__init__(data_dir)
+        self.overrides = [os.path.abspath(o) for o in overrides]
+
+    def _loose(self, name):
+        for root in reversed(self.overrides):
+            p = os.path.join(root, *bsa.norm(name).split("\\"))
+            if os.path.isfile(p):
+                with open(p, "rb") as fh:
+                    return fh.read()
+            hit = _find_ci(root, bsa.norm(name).split("\\"))
+            if hit:
+                with open(hit, "rb") as fh:
+                    return fh.read()
+        return super()._loose(name)
+
+
+def _find_ci(root: str, parts) -> str:
+    """The file under root whose path matches parts ignoring case (mods ship mixed-case folders), or ''."""
+    cur = root
+    for part in parts:
+        try:
+            names = {n.lower(): n for n in os.listdir(cur)}
+        except OSError:
+            return ""
+        hit = names.get(part.lower())
+        if hit is None:
+            return ""
+        cur = os.path.join(cur, hit)
+    return cur if os.path.isfile(cur) else ""
 
 
 def strand_copies(spec: str) -> tuple:
@@ -557,6 +595,9 @@ def main(argv=None):
     ap.add_argument("--strand-cards", action="store_true",
                     help="also, per hairstyle, a looks-menu copy '(Skyrim, Starfield strands)': Starfield-style strand "
                          "cards grown over it on a vanilla hair material (--strand-material)")
+    ap.add_argument("--skyrim-overrides", action="append", default=[],
+                    help="a Skyrim mod folder whose loose meshes / textures replace the game's (repeatable, later "
+                         "wins; e.g. a vanilla hair remake's folder with its meshes\\ inside)")
     ap.add_argument("--strand-copies", default="",
                     help="with --strand-cards: which copies to build, comma list of "
                          + ", ".join(k for k, _l in STRANDS) + " (default all; each grows its own cards: fewer "
@@ -609,7 +650,7 @@ def main(argv=None):
     flst = [r for r in sf_recs if r[0] == b"FLST"]
     stem = os.path.splitext(os.path.basename((report.get("cloth_template") or "").replace("\\", "/")))[0]
 
-    sky = bsa.SkyrimArchives(a.skyrim_data)
+    sky = OverriddenArchives(a.skyrim_data, a.skyrim_overrides)
     conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None,
                                          prefix=hair_pack.PREFIX)
     conv.hair_settings = dict(VANILLA_HAIR_SETTINGS, **dict(a.hair_setting)) or None

@@ -1389,3 +1389,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (2) [strandsidg], IDG's card layout: the whole strip from its top (roots) stretched over each card (full_strip),
   no root taper, 35 mm cards ~6 mm apart at four fixed depths, roots on the smooth hairline curve, one sheet at the
   hairline (layer L's front cards start L x 8 mm further back), dark-root colours. Supported, not seen in game.
+- 2026-11-05 owner: vanilla Skyrim hairs built the KS wigs' way (--tessellate 1 --no-geometric-normals
+  --no-vanilla-maps --no-skyrim-cutout --blend-coverage 1 --hairline-drop 0, MaxDepthOffset 0.01) "do seem better".
+  Those are now skyrim_hairs' defaults (VANILLA_DEFAULTS keeps only lift / volume / drape off, push_blend, layer gap;
+  VANILLA_HAIR_SETTINGS empty); every old extra stays an option. Also --skyrim-overrides <mod folder> (repeatable,
+  MO2-style, case-insensitive): loose meshes / textures of a Skyrim mod win over Data and the archives. For the
+  owner's "Vanilla hair remake SMP" (Nexus 63979, read here: 271 NIFs over the vanilla hair paths, e.g. female
+  hair01 4,014 vertices on 8 'JG Hair01' physics bones + NPC Head, 93 HDT-SMP configs, MIT; no plugin, no
+  textures): built rigid for now (its physics bones follow the head); its SMP configs as Starfield cloth is later.
