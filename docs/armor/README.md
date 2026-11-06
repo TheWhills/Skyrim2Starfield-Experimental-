@@ -15,6 +15,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 | .af round-trip survey through CALUMI | `scripts/armor/af_roundtrip_survey.py` | fake-backend tests; see af-format-status.md |
 | Reference: a working community outfit | robes-of-oblivion-reference.md | verified from its files |
 | Outfit Studio MCP probe (the armor conversion's engine: tools, argument schemas, reference templates, archive bodies; optional body load + render) | `scripts/armor/os_probe.py` | fake-server tests; decisions.md 2026-11-05 |
+| Outfit Studio armor driver: a Skyrim NPC's default outfit (DOFT -> OTFT -> LVLI -> ARMO -> ARMA worn .nif) onto Starfield's body via MCP (import_from_game, scale / pose / unpose, fit_to_body keeping the old body's gap, copy_bone_weights, validate, render, export) | `scripts/armor/os_convert.py`, `scripts/armor/os_skeleton.py` | synthetic plugin + fake-server tests; route from Outfit Studio's guides (decisions.md 2026-11-06) |
 | Starfield animation-system survey (graphs, descriptors, rigs, native behaviours) | `scripts/armor/sf_anim_survey.py` | synthetic test; plan: animation-port.md |
 | HDT-SMP / FSMP physics configs: features, chains, mesh links, extra bones | `scripts/armor/smp_survey.py` | synthetic test; findings: animation-port.md "SMP config survey" |
 | Starfield Havok cloth (BSClothExtraData, .hkx, BA2): bone-driving rigs, constraints, colliders | `scripts/armor/sf_cloth_survey.py` | synthetic test; findings: animation-port.md "Starfield cloth decoded" |

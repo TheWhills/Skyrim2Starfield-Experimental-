@@ -1,0 +1,118 @@
+"""scripts/armor/os_convert.py: Skyrim outfit -> worn meshes (synthetic plugin) and the Outfit Studio call sequence
+(fake client)."""
+import json
+import os
+import struct
+import sys
+import tempfile
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+sys.path.insert(0, os.path.join(ROOT, "scripts", "armor"))
+from fo4sf import sfplugin, skyrimarmor  # noqa: E402
+import os_convert as C  # noqa: E402
+
+z = sfplugin.zs
+u32 = lambda v: struct.pack("<I", v)       # noqa: E731
+HDR = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(8)       # noqa: E731
+
+
+def esm(path):
+    recs = [
+        (b"RACE", HDR(b"RACE"), [(b"EDID", z("NordRace"))], 0x13746),
+        (b"RACE", HDR(b"RACE"), [(b"EDID", z("ImperialRace"))], 0x13744),
+        (b"ARMA", HDR(b"ARMA"), [(b"EDID", z("CuirassAA")), (b"BODT", u32(1 << 2) + bytes(4) + u32(0)),
+                                 (b"RNAM", u32(0x13744)), (b"DNAM", bytes([1, 1, 2, 2]) + bytes(8)),
+                                 (b"MOD2", z("armor\\cuirass_0.nif")), (b"MOD3", z("armor\\cuirassf_0.nif"))], 0x900),
+        (b"ARMA", HDR(b"ARMA"), [(b"EDID", z("CuirassNordAA")), (b"BODT", u32(1 << 2) + bytes(4) + u32(0)),
+                                 (b"RNAM", u32(0x13746)), (b"MOD2", z("armor\\nordcuirass.nif"))], 0x901),
+        (b"ARMA", HDR(b"ARMA"), [(b"EDID", z("BootsAA")), (b"BODT", u32(1 << 7) + bytes(4) + u32(0)),
+                                 (b"RNAM", u32(0x13744)), (b"MOD2", z("armor\\boots.nif"))], 0x902),
+        (b"ARMO", HDR(b"ARMO"), [(b"EDID", z("Cuirass")), (b"BODT", u32(1 << 2) + bytes(4) + u32(0)),
+                                 (b"MODL", u32(0x900)), (b"MODL", u32(0x901))], 0x910),
+        (b"ARMO", HDR(b"ARMO"), [(b"EDID", z("Boots")), (b"BODT", u32(1 << 7) + bytes(4) + u32(0)),
+                                 (b"MODL", u32(0x902))], 0x911),
+        (b"LVLI", HDR(b"LVLI"), [(b"EDID", z("LItemBoots")),
+                                 (b"LVLO", struct.pack("<HHIHH", 1, 0, 0x911, 1, 0))], 0x920),
+        (b"OTFT", HDR(b"OTFT"), [(b"EDID", z("RalofOutfit")), (b"INAM", u32(0x910) + u32(0x920))], 0x930),
+        (b"NPC_", HDR(b"NPC_"), [(b"EDID", z("Ralof")), (b"ACBS", bytes(24)), (b"RNAM", u32(0x13746)),
+                                 (b"DOFT", u32(0x930))], 0x2BF9D),
+    ]
+    with open(path, "wb") as fh:
+        fh.write(sfplugin.build(recs, {"hedr_version": 1.7, "form_version": 44}))
+
+
+class SkyrimSideTests(unittest.TestCase):
+    def test_outfit_to_meshes(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Skyrim.esm")
+            esm(p)
+            o = C.outfit_armor(p, "ralof")
+            self.assertEqual((o["race"], o["armor"], o["npc"]["female"]), ("NordRace", [0x910, 0x911], False))
+            m = C.worn_meshes(skyrimarmor.read_armor(p), o["armor"], o["race"], False)
+            self.assertEqual([x["mesh"] for x in m], ["meshes\\armor\\nordcuirass.nif", "meshes\\armor\\boots.nif"])
+            m = C.worn_meshes(skyrimarmor.read_armor(p), o["armor"], "ImperialRace", True)
+            self.assertEqual(m[0]["mesh"], "meshes\\armor\\cuirassf_1.nif")          # weight slider: the _1 file
+            with self.assertRaises(SystemExit):
+                C.outfit_armor(p, "Nobody")
+
+
+class Fake:
+    """Outfit Studio's answers as JSON text; list_shapes follows the imports."""
+
+    def __init__(self, fail=None):
+        self.calls, self.shapes, self.fail = [], [], fail
+
+    def call(self, name, args):
+        self.calls.append((name, args))
+        if name == self.fail:
+            return {"isError": True, "content": [{"type": "text", "text": "nope"}]}
+        body = {}
+        if name == "load_from_archive":
+            self.shapes.append("Naked_M:0")
+            body = {"loaded": [{"shapes": ["Naked_M:0"]}]}
+        elif name == "import_from_game":
+            self.shapes.append("SkyBody" if "body" in args["file"] else os.path.basename(args["file"]))
+        elif name == "list_shapes":
+            body = {"shapes": [{"name": n} for n in self.shapes]}
+        elif name == "delete_shapes":
+            self.shapes = [n for n in self.shapes if n not in args["shapes"]]
+        elif name == "validate_project":
+            body = {"ok": True, "errors": []}
+        return {"content": [{"type": "text", "text": json.dumps(body)}]}
+
+
+class StudioSideTests(unittest.TestCase):
+    def test_sequence(self):
+        f = Fake()
+        with tempfile.TemporaryDirectory() as d:
+            rep = C.convert(f, "c:/w/malebody_1.nif", ["c:/w/cuirass.nif", "c:/w/boots.nif"], False, d, "Ralof")
+            names = [c[0] for c in f.calls]
+        self.assertNotIn("failed_at", rep)
+        self.assertEqual(rep["gear"], ["cuirass.nif", "boots.nif"])
+        self.assertEqual(rep["old_body"], ["SkyBody"])
+        order = ["new_project", "load_from_archive", "set_reference_shape", "import_from_game", "scale_to_body",
+                 "fit_pose_to_shapes", "unpose_shapes", "fit_to_body", "delete_shapes", "copy_bone_weights",
+                 "validate_project", "render_view", "export_file"]
+        pos = [names.index(n) for n in order]
+        self.assertEqual(pos, sorted(pos))
+        args = dict((n, a) for n, a in f.calls)
+        self.assertEqual(args["load_from_archive"]["files"], [C.SF_BODY[False]])
+        self.assertEqual(args["fit_to_body"]["gapFrom"], ["SkyBody"])
+        self.assertEqual(args["copy_bone_weights"]["shapes"], ["cuirass.nif", "boots.nif"])
+        self.assertEqual(args["export_file"]["shapes"], ["cuirass.nif", "boots.nif"])
+        self.assertTrue(args["export_file"]["path"].endswith("Ralof.nif"))
+
+    def test_stops_at_first_error(self):
+        f = Fake(fail="fit_pose_to_shapes")
+        with tempfile.TemporaryDirectory() as d:
+            rep = C.convert(f, "body.nif", ["g.nif"], True, d, "X")
+            self.assertTrue(os.path.isdir(os.path.join(d, "calls")))
+        self.assertEqual(rep["failed_at"], "fit_pose_to_shapes")
+        self.assertNotIn("unpose_shapes", [c[0] for c in f.calls])
+        self.assertEqual(dict(f.calls)["load_from_archive"]["files"], [C.SF_BODY[True]])
+
+
+if __name__ == "__main__":
+    unittest.main()

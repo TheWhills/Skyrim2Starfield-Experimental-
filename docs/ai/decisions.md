@@ -1609,3 +1609,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (DefaultSkeletonReference), which is not in res. scripts/armor/os_skeleton.py copies the game's own skeleton
   (characterassets/female/skeleton.nif, as HumanRace ANAM) there. No Starfield reference templates or slider sets
   exist and OS cannot import morph.dat: body sliders will be written by us as per-slider OBJs for import_slider_data.
+- 2026-11-06 os_probe4 (verified): with Outfit Studio restarted it uses the Starfield skeleton (C_Head at z 1.63 m,
+  C_Hips 1.06 m) and the naked body renders upright (res\skeleton_female_sf.nif was already there; the earlier
+  probes ran before the restart). First driver scripts/armor/os_convert.py: Skyrim NPC outfit -> worn meshes (race
+  addon, _1 weight variant) -> Outfit Studio sequence from its guides; stops at the first failing step and saves every
+  result. Body sliders (morph.dat), materials and plugin records come after the first fitted render.
