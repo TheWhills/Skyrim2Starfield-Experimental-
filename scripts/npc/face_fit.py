@@ -279,6 +279,11 @@ def main(argv=None):
                     help="a face-bone mod's weight recipe (More Sliders: SFSE\\Plugins\\MoreSlidersFaceBones\\"
                          "MoreSlidersFaceBones_recipe.txt), with that mod's --regions and --head-nif: its new bones' "
                          "sliders then move the head in the fit as they do in game")
+    ap.add_argument("--ridge", type=float, default=0.05,
+                    help="cost of each dial's size, relative to an average dial's effect (2026-11-05: at 1e-6 More "
+                         "Sliders' 307 sliders fought each other at +-1 and Ralof came out deformed; 0 = off)")
+    ap.add_argument("--no-symmetry", action="store_true",
+                    help="fit the Skyrim face as it is, not averaged with its mirror image")
     ap.add_argument("--pos-unit", type=float, default=0.01, help="metres per regions-file position unit")
     ap.add_argument("--test-plugin", action="store_true")
     ap.add_argument("--template-npc", action="append", default=[],
@@ -346,7 +351,8 @@ def main(argv=None):
         chosen = chosen[:a.count]
     print(f"{len(npcs)} Skyrim NPCs; fitting {len(chosen)}: {', '.join(n['edid'] for n in chosen)}")
 
-    report = {"settings": {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit}, "sexes": {},
+    report = {"settings": {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit,
+                           "ridge": a.ridge, "symmetric": not a.no_symmetry}, "sexes": {},
               "npcs": []}
     setup = {}
     recipe = None
@@ -391,8 +397,11 @@ def main(argv=None):
             disp = facefit.transfer(base, fg, al, head.vertices)
             if a.smooth and getattr(head, "triangles", None) is not None and len(head.triangles):
                 disp = facefit.smooth_field(disp, head.triangles, a.smooth)
+            if not a.no_symmetry:
+                disp = facefit.symmetrize(disp, head.vertices)
             values, rep = facefit.fit(head, sliders, head.vertices + disp, facefit.face_weights(head),
-                                      pos_unit=a.pos_unit, limit=a.dial_limit)
+                                      pos_unit=a.pos_unit, limit=a.dial_limit,
+                                      ridge=a.ridge)
             names = {s.id: f"{s.region}: {s.name}" for s in sliders}
             if a.preview and getattr(head, "triangles", None) is not None and len(head.triangles):
                 fitted = facefit.deform(head, sliders, values, pos_unit=a.pos_unit)

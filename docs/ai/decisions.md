@@ -1485,3 +1485,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   .wem + .ffxanim, the INFO FormIDs without the load-order byte), yet the line is silent. Our INFOs' TRDA carried
   response number 0; now 1 (Bethesda numbers responses from 1). Hypothesis, to be checked in game; next suspects: the
   Wwise conversion settings, a missing TROT.
+- 2026-11-05 Owner's run with More Sliders (faces.json): recipe applied (male 29,806 moves, female 29,593, every new
+  bone weighted), 307 sliders, Ralof rms 4.3 -> 2.8 mm (vanilla set: -> ~3.2), but 278 dials used and 73 at +-1, and
+  in game his face is "entirely and completely deformed". Cause (supported): near-duplicate sliders bought small
+  residuals by cancelling each other at full strength (ridge 1e-6), and left / right sliders chased the transfer's
+  asymmetric noise. Now: --ridge 0.05 (each dial's size costs 5 % of an average dial's effect, relative to the mean
+  of diag(A^T A)) and the target averaged with its mirror image (--no-symmetry to skip); faces.json reports ridge,
+  max_error_m, max_change_m. Also the greetings: Ralof now cycles his lines (Random flag: verified), still silent with
+  the files in place. scripts/npc/voice_swap_test.py writes a vanilla generic .wem under our file names in a separate
+  mod: heard -> our .wem conversion is wrong; silent -> the records / names are.

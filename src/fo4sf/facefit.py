@@ -194,8 +194,30 @@ def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weight
     def rms(a):
         return float(np.sqrt(np.mean(np.sum((a[mask] - target[mask]) ** 2, axis=1)))) if mask.any() else 0.0
     at_limit = sorted(k for k, v in values.items() if abs(v) >= limit - 1e-4)
+    err = np.sqrt(np.sum((final - target) ** 2, axis=1))[mask]
+    moved = np.sqrt(np.sum((final - base) ** 2, axis=1))[mask]
     return values, {"rms_before": rms(base), "rms_after": rms(final), "sliders_used": len(values),
-                    "columns": len(keys), "sliders_at_limit": at_limit}
+                    "columns": len(keys), "sliders_at_limit": at_limit, "ridge": ridge,
+                    "max_error_m": float(err.max()) if len(err) else 0.0,
+                    "max_change_m": float(moved.max()) if len(moved) else 0.0}
+
+
+def mirror_index(vertices: np.ndarray) -> np.ndarray:
+    """For each vertex the index of the vertex nearest its mirror image across the head's middle (x = median x;
+    both games' heads face +Y with X across)."""
+    v = np.asarray(vertices, float)
+    c = float(np.median(v[:, 0]))
+    m = v.copy()
+    m[:, 0] = 2 * c - m[:, 0]
+    return _nearest(v, m)[0][:, 0]
+
+
+def symmetrize(field: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+    """The mean of a displacement field and its mirror image (2026-11-05: with More Sliders' left / right sliders the
+    fit chased the transfer's left-right noise: Ralof came out deformed)."""
+    m = mirror_index(vertices)
+    flipped = field[m] * np.array([-1.0, 1.0, 1.0])
+    return 0.5 * (field + flipped)
 
 
 # ------------------------------------------------------------------------------------------------ Skyrim -> Starfield

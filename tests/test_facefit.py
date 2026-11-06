@@ -164,6 +164,36 @@ class StarfieldHeadTests(unittest.TestCase):
         self.assertEqual(rep["vertices_moved_by_face_bones"], 400)
 
 
+class RidgeSymmetryTests(unittest.TestCase):
+    """2026-11-05: with More Sliders' 307 sliders Ralof came out deformed (73 dials at +-1)."""
+
+    def test_ridge_stops_opposed_near_duplicates(self):
+        head = make_head(head_points())
+        # two sliders that almost undo each other: up, and up a little less with a slight tilt
+        sl = F.load_regions(json.dumps({"Regions": [{"ID": 1, "Name": "Nose", "SculptRegion": True, "SlidersA": [
+            {"ID": 1, "Name": "a", "BonesA": [bone("faceBone_C_NoseMaster", mn=(0, 0, -1.0), mx=(0, 0, 1.0))]},
+            {"ID": 2, "Name": "b", "BonesA": [bone("faceBone_C_NoseMaster", mn=(0, 0, 0.98), mx=(0, 0, -0.98),
+                                                   rmn=(2, 0, 0), rmx=(-2, 0, 0))]}]}]}))
+        target = F.deform(head, sl, {1: 1.0, 2: 1.0})          # a small change only the pair at full makes
+        loose, rep0 = F.fit(head, sl, target, F.face_weights(head), ridge=1e-6)
+        tight, rep1 = F.fit(head, sl, target, F.face_weights(head), ridge=0.05)
+        self.assertGreater(max(abs(v) for v in loose.values()), 0.3)          # bought with the cancelling pair
+        self.assertLess(max([abs(v) for v in tight.values()] + [0.0]), 0.1)
+        self.assertLess(rep1["max_change_m"], rep0["max_change_m"])
+        self.assertIn("max_error_m", rep1)
+
+    def test_symmetrize(self):
+        v = head_points(800)
+        v = np.vstack([v, v * np.array([-1.0, 1.0, 1.0])])                # exactly mirrored halves
+        field = np.zeros_like(v)
+        field[:800, 0] = 0.002                                            # one half pushed out (+x) ...
+        field[:800, 1] = 0.001
+        sym = F.symmetrize(field, v)
+        m = F.mirror_index(v)
+        self.assertTrue(np.allclose(sym[m] * [-1, 1, 1], sym))           # ... the result is a mirror image of itself
+        self.assertAlmostEqual(float(np.abs(sym[:, 1]).max()), 0.0005, places=6)
+
+
 RECIPE = "\n".join([
     "MORESLIDERSFACEBONES\t1", "# comment",
     "NODE\tmeshes\\skeleton_facebones.nif\tfaceBone_MS_A\tfaceBone_C_Chin\t0\t0\t0",
