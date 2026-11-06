@@ -115,6 +115,10 @@ def check(body_nif: bytes, body_mesh: bytes, armor_nif: bytes, armor_meshes: Dic
             "vertices": len(pos), "bones": names,
             "flagged_bones": {n: {"vertices": len(vs), "first": vs[:5]} for n, vs in on_bad.items()},
             "outside_body_box": len(out),
+            "top": [{"v": int(v), "m": pos[v].round(3).tolist(),
+                     "weights": [(names[b], round(w, 3)) for b, w in ws[v]]} for v in np.argsort(-pos[:, 2])[:6]],
+            "bone_vertices": {n: sum(1 for vw in ws if any(names[b] == n and w > 0.01 for b, w in vw))
+                              for n in names},
             "outside_examples": [{"v": v, "m": pos[v].round(3).tolist(),
                                   "weights": [(names[b], round(w, 3)) for b, w in ws[v]]} for v in out[:8]]}
     return rep
@@ -148,6 +152,8 @@ def main(argv=None):
     for p, s in rep["shapes"].items():
         fb = ", ".join(f"{n} ({v['vertices']})" for n, v in s["flagged_bones"].items()) or "none"
         print(f"  {p}: {s['vertices']} v, outside body box {s['outside_body_box']}, on flagged bones: {fb}")
+        t = s["top"][0]
+        print(f"     top vertex z {t['m'][2]:.3f} m: {t['weights']}")
     print("wrote", dst)
     return 0
 

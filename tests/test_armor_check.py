@@ -61,6 +61,8 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(sorted(s["flagged_bones"]), ["C", "D"])
         self.assertEqual(s["outside_body_box"], 1)
         self.assertEqual(s["outside_examples"][0]["weights"], [("D", 1.0)])
+        self.assertEqual(s["top"][0]["v"], 2)
+        self.assertEqual(s["bone_vertices"], {"A": 1, "C": 1, "D": 1})
 
 
 if __name__ == "__main__":
