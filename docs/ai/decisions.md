@@ -1595,3 +1595,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   _ResourcePack.bsa and Creation Club .bsa files, no reference templates, no slider sets; so no naked_f.nif. The
   owner sets Outfit Studio to Starfield and re-runs. os_probe now reports the target game from the archive names and
   fetches get_guide's topic list and every guide (up to 25) into calls/.
+- 2026-11-06 Armor route from Outfit Studio's own guides (owner's os_probe2, get_guide: "Converting between games",
+  "Converting models from other programs", "Bone weights", "Conforming sliders"): no Skyrim -> Starfield conversion
+  reference exists, so treat Skyrim gear like an outside model: import_from_game (Skyrim NIF + Skyrim body as a
+  guide; weights don't carry over) -> load_reference Starfield body -> scale_to_body -> fit_pose_to_shapes ->
+  unpose_shapes -> fit_to_body (non-rigid, keeps folds / buckles; rigidParts for metal) -> copy_bone_weights (8 per
+  vertex in Starfield) -> conform_sliders -> validate_project -> export_file + export_slider_data dat (morph.dat).
+  OS does not map Starfield materials: ours do. Waiting for a probe with OS set to Starfield (reference templates,
+  body path).
