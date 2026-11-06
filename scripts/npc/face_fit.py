@@ -442,10 +442,10 @@ def main(argv=None):
                          "region data (FMRI / FMRG) instead of removing them (2026-11-06: Saadia's record matched her "
                          "dark template in every colour field and her face was still white: the base face skin seems "
                          "to come from these presets). The template's blend also changes the face shape.")
-    ap.add_argument("--baked-face-textures", action="store_true",
-                    help="copy the template's pre-built face textures (_color / _normal / _rough / _ao) under each "
-                         "test NPC's FormID, choosing templates that have them: Starfield shows a default light face "
-                         "for NPCs without (2026-11-06)")
+    ap.add_argument("--no-baked-face-textures", dest="baked_face_textures", action="store_false",
+                    help="do not copy a template's pre-built face textures (_color / _normal / _rough / _ao) under each "
+                         "test NPC's FormID (default: copy them, choosing templates that have them; without, "
+                         "Starfield shows a default light face: verified in game 2026-11-06)")
     ap.add_argument("--control-npcs", action="store_true",
                     help="also write each NPC with its template's own face data (our hair, colours, outfit, name), "
                          "'<name> (template face)': tells whether our face dials cause the light faces")
@@ -621,7 +621,8 @@ def main(argv=None):
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
             skin = target_skin(by_edid[row["edid"].lower()], npcs, real) if real is not None else None
-            tpl = pick_template(npc_recs, human, row["female"], want, skin=skin, baked=baked)
+            tpl = (pick_template(npc_recs, human, row["female"], want, skin=skin, baked=baked) if baked else None) \
+                or pick_template(npc_recs, human, row["female"], want, skin=skin)
             if tpl is None:
                 row["test_npc"] = "no vanilla template NPC of this sex"
                 continue
@@ -649,7 +650,7 @@ def main(argv=None):
                                                    f"from, to compare in game)",
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
                                           f"order index)"}
-            if baked is not None:
+            if baked and tpl[3] in baked:
                 row["test_npc"]["baked_face_textures"] = [os.path.basename(p) for p in
                                                           write_baked_face(baked, tpl[3], fid, sf_data, out)]
             if a.control_npcs:

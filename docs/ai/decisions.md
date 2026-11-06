@@ -1580,3 +1580,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   copied to textures/actors/character/facecustomization/S2SFaceTest.esm/<our FormID, no load-order byte>_*.dds.
   The facegeom mesh is NOT copied (it would freeze the template's face shape); whether the game uses the textures
   without a mesh is the in-game test. Real fix later: bake our own (shape mesh + colour) per NPC.
+- 2026-11-06 Verified in game (owner screenshot): with the template's baked face textures copied under our FormID
+  (no baked face mesh), Saadia's face matches her dark body and our fitted shape still shows. --baked-face-textures
+  is now the default (--no-baked-face-textures to skip); when no template with baked textures fits, any template is
+  used without them. Borrowed textures carry the template's own face detail (wrinkles, makeup); baking our own per
+  NPC is the later step.
