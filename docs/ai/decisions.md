@@ -1650,3 +1650,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   "triangleFormat": "[triangle index, vertex 1, vertex 2, vertex 3]", "triangleList": [[0, 0, 1, 2], ...]); the first
   parser read 0 positions. os_export now reads any <x>List / <x>Format pair by its column names (first column the
   index) and names the answer's keys when the count is wrong.
+- 2026-11-06 os_export on the owner's PC (verified offline): Outfit Studio's view of Starfield's body maps onto the
+  game's naked_m .mesh with 0.00 mm rms at scale 0.01429 (1 / 69.98: Havok units, metres in the .mesh); all 5 gear
+  shapes (MaleBodyStormcloak 398 v / 27 bones, StormCloak 699 / 33, Boots 202 / 8, HandMale_Big1stperson 1670 / 18,
+  PrisonerCuffs 3630 / 17) fully weighted; S2SArmorTest.esm ARMO 01000801, OTFT 01000802, material borrowed from
+  Outfit_Nightwear_LowerBody_01.mat. In-game check pending.
