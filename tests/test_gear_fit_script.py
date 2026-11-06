@@ -23,6 +23,12 @@ class ScriptTests(unittest.TestCase):
         self.assertFalse(gear_fit.sex_ok("hands_m.nif", True))
         self.assertTrue(gear_fit.sex_ok("hands.nif", True))
 
+    def test_skin_shapes_by_texture(self):
+        t = {"MaleBodyStormcloak": ["textures\\actors\\character\\male\\MaleBody_1.dds"],
+             "StormCloak": ["textures\\armor\\stormcloaks\\StormcloaksCuirass.dds"],
+             "HandMale_Big1stperson": ["textures/actors/character/male/MaleHands_1.dds"], "X": []}
+        self.assertEqual(gear_fit.skin_shapes(t), {"MaleBodyStormcloak", "HandMale_Big1stperson"})
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 

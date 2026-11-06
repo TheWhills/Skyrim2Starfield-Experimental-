@@ -1758,3 +1758,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   The kept MaleBodyStormcloak piece makes the bare forearms grey (it carries the skin AND the painted trousers; with
   the borrowed material it is all grey). gear_fit now prints each Skyrim shape's diffuse texture, to decide how to
   split skin from cloth on such pieces.
+- verified (owner run, same day): MaleBodyStormcloak uses textures\actors\character\male\MaleBody_1.dds and
+  HandMale_Big1stperson MaleHands_1.dds: Ralof's bare forearms / neck and bare hands, not trousers or gloves (the
+  "painted trousers" idea was wrong). gear_fit now leaves out shapes whose diffuse is under textures\actors\character\
+  (--keep-skin keeps them). Foot box fit ran (scale [0.9, 0.947, 1.072]); the heel still showed when running: gear
+  within 2.5 cm of the body now takes the nearest body / hands vertex's weights, blended back to its own Skyrim weights
+  by 5 cm (vanilla clothing is skinned like the body under it). Shins: boots are not inside the base body (pushed 0),
+  so the slots there are the heavier slider poking through (morph applied weakly or not; unresolved).

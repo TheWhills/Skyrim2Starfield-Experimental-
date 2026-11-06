@@ -98,11 +98,12 @@ def find_hands(sf_data: str, female: bool, world):
                                                         sf_data)[0])
             except SystemExit:
                 continue
-            pts, _w = facefit.mesh_arrays(m)
+            pts, hw = facefit.mesh_arrays(m)
             frame = gearfit.mesh_frame(dict(zip(bones, skin.get("binds", []))), world)
             tris = np.array([tuple(t) for t in m.triangles], int).reshape(-1, 3)
-            return p, pts @ frame[:3, :3].T + frame[:3, 3], tris
-    return None, None, None
+            weights = [[(bones[b], x) for b, x in vw if b < len(bones)] for vw in hw]
+            return p, pts @ frame[:3, :3].T + frame[:3, 3], tris, weights
+    return None, None, None, None
 
 
 def find_body_morph(sf_data: str, num_vertices: int, female: bool):
@@ -136,25 +137,35 @@ SKYRIM_LIMBS = {False: ["meshes\\actors\\character\\character assets\\malefeet_1
                        "meshes\\actors\\character\\character assets\\femalehands_1.nif"]}
 
 
-def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, drop_skin: bool = False):
+SKIN_TEXTURES = "textures\\actors\\character\\"     # Skyrim's body / hands / feet skin
+
+
+def skin_shapes(textures: dict) -> set:
+    """Names of shapes textured with Skyrim's own skin (bare body parts: Starfield's body shows there instead;
+    2026-11-06, Ralof: MaleBodyStormcloak = MaleBody_1.dds, HandMale_Big1stperson = MaleHands_1.dds)."""
+    return {n for n, t in textures.items() if t and t[0].lower().replace("/", "\\").startswith(SKIN_TEXTURES)}
+
+
+def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=()):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds, body_w = starfield_body(sf_data, female)
     frame = gearfit.mesh_frame(body_binds, world)
     skel_pts = pts @ frame[:3, :3].T + frame[:3, 3]
-    surf_pts, surf_tris = skel_pts, tris
-    hand_path, hand_pts, hand_tris = find_hands(sf_data, female, world)
+    surf_pts, surf_tris, surf_w = skel_pts, tris, list(body_w)
+    hand_path, hand_pts, hand_tris, hand_w = find_hands(sf_data, female, world)
     if hand_pts is not None:
         surf_pts = np.concatenate([skel_pts, hand_pts])
         surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
+        surf_w += hand_w if len(hand_w) == len(hand_pts) else [[] for _ in hand_pts]
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
     sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
-    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=body_w)
-    if drop_skin:                           # Skyrim's body-textured pieces
-        drop = {n for n, r in res.report["shapes"].items() if r["skin_piece"]}
+    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w)
+    if skin_names:                           # Skyrim's bare-skin pieces
+        drop = {n for n in res.report["shapes"] if n in set(skin_names)}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
         res.report["dropped_skin_pieces"] = sorted(drop)
     shapes = gearfit.to_mesh_space(res.shapes, frame)
@@ -187,9 +198,8 @@ def main(argv=None):
     ap.add_argument("--full", default=None, help="the armor's in-game name")
     ap.add_argument("--out", required=True, help="the mod folder (outside the repository)")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out")
-    ap.add_argument("--drop-skin", action="store_true",
-                    help="leave out Skyrim's body-textured pieces (kept by default: Skyrim paints clothes on them, e.g. "
-                         "the Stormcloak trousers)")
+    ap.add_argument("--keep-skin", action="store_true",
+                    help="keep shapes textured with Skyrim's skin (dropped by default: Starfield's own skin shows)")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
@@ -224,7 +234,7 @@ def main(argv=None):
         textures.update(shape_textures(gb))
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
-                             a.drop_skin)
+                             () if a.keep_skin else sorted(skin_shapes(textures)))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
@@ -267,12 +277,12 @@ def main(argv=None):
         print(f"  {n}: {r['vertices']} v, {'skin piece, ' if r['skin_piece'] else ''}pushed out {r['pushed_out']}, "
               f"body shift up to {r['max_body_shift_mm']:.0f} mm, {len(r['bones'])} bones, "
               f"z {r['box_m'][0][2]:.2f}..{r['box_m'][1][2]:.2f} m, "
-              f"{r['unweighted']} unweighted")
+              f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
     if rep.get("dropped_skin_pieces"):
-        print("body-textured pieces left out:", ", ".join(rep["dropped_skin_pieces"]))
+        print("bare-skin shapes left out (Skyrim skin textures):", ", ".join(rep["dropped_skin_pieces"]))
     feet = rep.get("feet") or {}
     for side, f in feet.items():
         print(f"foot {side}: boot foot scaled {f['scale']} to Starfield's foot")

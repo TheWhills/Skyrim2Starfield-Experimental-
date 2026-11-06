@@ -252,6 +252,20 @@ class EnvelopeTests(unittest.TestCase):
         self.assertAlmostEqual(res.report["feet"]["L"]["scale"][1], 1.2, places=1)
 
 
+class NearWeightTests(unittest.TestCase):
+    def test_body_weights_near(self):
+        body = np.array([[0, 0, 0], [1, 0, 0]], float)
+        nrm = np.array([[0, 0, 1.0], [0, 0, 1.0]])
+        bw = [[("L_Foot", 1.0)], [("L_Calf", 1.0)]]
+        pts = np.array([[0, 0, 0.01], [0, 0, 0.0375], [1, 0, 0.2]])
+        own = [[("L_Calf", 1.0)]] * 3
+        out, n = G.body_weights_near(pts, own, body, nrm, bw, {"L_Foot", "L_Calf"})
+        self.assertEqual(out[0], [("L_Foot", 1.0)])                   # on the body: the body's weights
+        self.assertAlmostEqual(dict(out[1])["L_Foot"], 0.5)          # half way: blended
+        self.assertEqual(out[2], [("L_Calf", 1.0)])                   # far: its own
+        self.assertEqual(n, 2)
+
+
 class BindTests(unittest.TestCase):
     def test_frame_and_binds(self):
         frame = at([0, 0, 1.632])

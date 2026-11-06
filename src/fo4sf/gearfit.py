@@ -81,6 +81,7 @@ CAP = 0.04                      # m: largest body offset
 SKIN_GAP = 0.002                # m: skin pieces (Skyrim body-textured parts, e.g. trousers painted on) pushed this far
 ENVELOPE = {s: ((f"NPC {s} Foot [{s}ft ]", f"NPC {s} Toe0 [{s}Toe]"), (f"{s}_Foot", f"{s}_Toe")) for s in "LR"}
 ENVELOPE_SCALE = (0.9, 1.35)    # per-axis clamp of the foot box fit
+NEAR_WEIGHTS = (0.025, 0.05)    # m: gear this close to the body takes the body's weights, fading to its own by the 2nd
 FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
 
 
@@ -504,6 +505,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         else:
             far = 0
         w = sf_weights(s.bones, s.weights, set(sf_world), follows)
+        near = 0
+        if sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
+            w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
         shapes.append(HairShape(s.name, pts, nrm, np.zeros_like(nrm), list(s.uvs), list(s.triangles), w, -1, -1, -1,
                                 colors=[(255, 255, 255, 255)] * len(pts)))
         rep["shapes"][s.name.decode("latin-1", "replace")] = {
@@ -511,8 +515,34 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "max_body_shift_mm": float(np.linalg.norm(shift, axis=1).max() * 1000) if len(shift) else 0.0,
             "not_finite": int(bad.sum()), "far_outside": far,
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
-            "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x})}
+            "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
+            "body_weighted": near}
     return FitResult(shapes, rep)
+
+
+def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.ndarray, body_w, bones,
+                      near=NEAR_WEIGHTS) -> Tuple[list, int]:
+    """Gear lying on the body takes the nearest body vertex's weights (fully within near[0], blended to its own by
+    near[1]), so it bends exactly like the skin under it (2026-11-06, Ralof running: boot heels and the Starfield
+    heel moved apart with Skyrim's own weights)."""
+    _d, dist, idx = nearest_surface(pts, body_pts, body_nrm)
+    t = np.clip((dist - near[0]) / max(near[1] - near[0], 1e-6), 0.0, 1.0)
+    out, n = [], 0
+    for v, vw in enumerate(own):
+        bw = [(b, x) for b, x in body_w[idx[v]] if b in bones]
+        if t[v] >= 1.0 or not bw:
+            out.append(vw)
+            continue
+        acc: Dict[str, float] = {}
+        for b, x in bw:
+            acc[b] = acc.get(b, 0.0) + (1.0 - t[v]) * x
+        for b, x in vw:
+            acc[b] = acc.get(b, 0.0) + t[v] * x
+        top = [(b, float(x)) for b, x in sorted(acc.items(), key=lambda kv: -kv[1])[:MAX_WEIGHTS] if x > 1e-6]
+        tot = sum(x for _b, x in top)
+        out.append([(b, x / tot) for b, x in top] if tot > 0 else vw)
+        n += 1
+    return out, n
 
 
 def mesh_frame(body_binds: Dict[str, tuple], sf_world: Dict[str, np.ndarray]) -> np.ndarray:
