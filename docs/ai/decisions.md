@@ -1888,3 +1888,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   7 and 8, or one shape per NIF with no anchor). gear_fit --test-variants writes a "[no morph]" armor (addons without
   NAM4 / NAM6) and a "[same slots]" armor (gear addons on 3, 5, 7) next to the main one, to tell them apart in one
   session.
+- 2026-11-06 (Claude, armor) Variant test results (owner, in game): "[no morph]": no pillars, no slider following;
+  "[same slots]": like the main armor (pillars, follows sliders); main: the coat follows the weight slider now, but
+  pillars rise from the coat around the thighs, and boots, cuffs and the skin piece's arms do not show. So: slots are
+  not the cause; our morph.dat is read now and something in it throws a few vertices. Changes: (1) morph.dat entries
+  with no records carry the running record index, not 0 (supported: a reader taking the record count from the next
+  entry's index would read far past for the vertex before an empty one; gear_fit prints the vanilla nightwear morph's
+  own empty-entry convention to verify); deltas are capped at 15 cm and the per-shape maxima printed. (2) ARMO INDX 0
+  on every addon (supported: numbered 0..3 only addon 0, the coat, showed; earlier the separate skin addon at INDX 1
+  never showed either; Fallout 4 uses INDX as the armor's variant index; gear_fit prints the template's INDX list to
+  verify). (3) Collar weights from the whole Starfield head too (fit weight_src), not only its neck-weighted part:
+  the collar had no C_Head weight and did not turn with the head.

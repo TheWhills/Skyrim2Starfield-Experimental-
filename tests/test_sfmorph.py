@@ -9,6 +9,13 @@ from fo4sf import sfmorph  # noqa: E402
 
 
 class MorphTests(unittest.TestCase):
+    def test_empty_entries_carry_running_index(self):
+        data = sfmorph.build(3, ["A"], {"A": {0: (0.01, 0, 0), 2: (0, 0.02, 0)}})
+        m = sfmorph.parse(data)
+        self.assertEqual(m.layout["empty_entries_first_running"], 1)
+        self.assertEqual(m.layout["empty_entries_first_0"], 0)
+        self.assertEqual(sorted(m.deltas["A"]), [0, 2])
+
     def test_round_trip(self):
         keys = ["Overweight", "Thin", "Strong"]
         d = {"Overweight": {0: (0.01, 0.0, 0.02), 2: (0.0, 0.005, 0.0)}, "Strong": {2: (0.003, 0.0, 0.0)}}

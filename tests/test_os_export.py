@@ -165,7 +165,7 @@ class RecordTests(unittest.TestCase):
         armo = recs[2][2]
         pairs = [(s, bytes(d)) for s, d in armo if s in (b"INDX", b"MODL")]
         self.assertEqual(pairs, [(b"INDX", b"\0\0"), (b"MODL", struct.pack("<I", recs[0][3])),
-                                 (b"INDX", b"\1\0"), (b"MODL", struct.pack("<I", recs[1][3]))])
+                                 (b"INDX", b"\1\0"), (b"MODL", struct.pack("<I", recs[1][3]))])   # old writer
         self.assertEqual(rep["skin_ARMA"], f"{recs[1][3]:08X}")
 
     def test_parts_get_own_addon_and_morph_record(self):
@@ -198,6 +198,9 @@ class RecordTests(unittest.TestCase):
         self.assertEqual([bytes(d)[:4] for s, d in armo if s == b"MODL"],
                          [struct.pack("<I", out[i][3]) for i in (0, 2, 4)])
         self.assertEqual(dict(out[-1][2])[b"INAM"], struct.pack("<I", out[-2][3]))
+        self.assertEqual([bytes(d) for s, d in armo if s == b"INDX"], [b"\0\0"] * 3)     # every addon on variant 0
+        self.assertEqual(rep["template_indx"], [("0000", "00001000"), ("0100", "00001000")])
+        self.assertEqual(rep["parts"][0]["template_morph_folder"], "Meshes\\NW\\M")
 
     def test_test_variants(self):
         mrph = (b"MRPH", HDR(b"MRPH"), [(b"EDID", z("MORPH_NW_M")), (b"TCMP", z("Meshes\\NW")),

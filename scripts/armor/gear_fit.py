@@ -452,8 +452,14 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
         surf_w += hand_w if len(hand_w) == len(hand_pts) else [[] for _ in hand_pts]
     head_path = SF_HEADS[female]
+    weight_src = None
     try:
         h_pts, h_tris, h_w = starfield_part(sf_data, head_path, world)
+        if len(h_w) == len(h_pts):
+            # weights also from the whole head: the collar's top takes the head's own neck-skin weights (2026-11-06:
+            # with only the neck-weighted part, the collar had no C_Head and stayed facing forward when the head turned)
+            weight_src = (np.concatenate([surf_pts, h_pts]), np.concatenate([surf_tris, h_tris + len(surf_pts)]),
+                          list(surf_w) + list(h_w))
         h_pts, h_tris, h_w, h_n = neck_part(h_pts, h_tris, h_w, NECK_BONES_SF)
         head_path += f" (neck: {h_n} vertices)"
         surf_tris = np.concatenate([surf_tris, h_tris + len(surf_pts)])
@@ -469,7 +475,10 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
     if sky_head:
         sky_body += skyrim_head_shapes(sky_head)
-    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet)
+    if weight_src is not None and len(weight_src[2]) != len(weight_src[0]):
+        weight_src = None
+    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet,
+                      weight_src=weight_src)
     skin = None
     if body_skin_names:                      # our own skin piece where Skyrim's body-skin pieces lie
         src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
@@ -510,9 +519,35 @@ def skin_morph(body_morph, used) -> tuple:
     return d, e
 
 
-def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None) -> dict:
+MORPH_MAX = 0.15     # metres: a slider delta longer than this is cut to it (and counted in the report)
+
+
+def morph_stats(d: dict) -> dict:
+    """{key: {"vertices", "max_mm", "over_cap"}} of {key: {vertex: delta}}."""
+    out = {}
+    for k, v in d.items():
+        a = np.array(list(v.values()), float).reshape(-1, 3)
+        n = np.linalg.norm(a, axis=1) if len(a) else np.zeros(0)
+        out[k] = {"vertices": int(len(a)), "max_mm": round(float(n.max()) * 1000, 1) if len(n) else 0.0,
+                  "not_finite": int((~np.isfinite(a)).any(1).sum()), "over_cap": int((n > MORPH_MAX).sum())}
+    return out
+
+
+def capped(d: dict) -> dict:
+    out = {}
+    for k, v in d.items():
+        out[k] = {}
+        for i, x in v.items():
+            a = np.nan_to_num(np.asarray(x, float))
+            ln = float(np.linalg.norm(a))
+            out[k][i] = tuple(float(y) for y in (a * (MORPH_MAX / ln) if ln > MORPH_MAX else a))
+    return out
+
+
+def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None, stats=None) -> dict:
     """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders. A shape
-    written with back faces has its vertices twice (copies after the originals): the copies get the same deltas."""
+    written with back faces has its vertices twice (copies after the originals): the copies get the same deltas.
+    Deltas over MORPH_MAX are cut to it; stats (a dict) gets morph_stats per shape, before the cut."""
     out = {}
     for sh in shapes:
         name = sh.name.decode("latin-1")
@@ -521,6 +556,9 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
             d, extra = skin_morph(body_morph, skin_used)
         else:
             d, extra = gearfit.morph_deltas(np.asarray(sh.positions), body_pts, body_morph)
+        if stats is not None:
+            stats[name] = morph_stats(d)
+        d = capped(d)
         total = n
         if name in doubled:
             d = {k: {**v, **{i + n: x for i, x in v.items()}} for k, v in d.items()}
@@ -653,7 +691,7 @@ def main(argv=None):
             print(f"  {r['shape']}: ARMA {r['ARMA']} slots {r['slots']} -> {r['model']}; MRPH {r['MRPH']} "
                   f"MOBC {r.get('MOBC_template')} -> {r.get('MOBC')}")
         for v in prep.get("variants", []):
-            print(f"test armor {v['name']}: player.additem xx{int(v['ARMO'], 16) & 0xFFFFFF:06X} 1")
+            print(f"test armor \"{v['name']}\": player.additem xx{int(v['ARMO'], 16) & 0xFFFFFF:06X} 1")
     if sp:
         print(f"skin piece: {sp['vertices']} Starfield body vertices where {', '.join(sp['from'])} lies, "
               f"material {sp['material']}; armor slots {slots} (naked body hidden)")
@@ -680,9 +718,28 @@ def main(argv=None):
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
             worn = shapes + ([skin_sh] if skin_sh is not None and slots else [])
+            mstats = {}
             for sh in worn:
                 morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], body_pts, body_morph, doubled,
-                                          skin_used))
+                                          skin_used, mstats))
+            rep["morph_stats"] = mstats
+            for n_, st in mstats.items():
+                print(f"  morph {n_}: " + ", ".join(f"{k} {v['vertices']} v max {v['max_mm']} mm"
+                                                    + (f" ({v['over_cap']} over cap)" if v['over_cap'] else "")
+                                                    + (f" ({v['not_finite']} NOT FINITE)" if v['not_finite'] else "")
+                                                    for k, v in st.items()))
+            tpl_morph = next((r.get("template_morph_folder") for r in prep.get("parts", [])
+                              if r.get("template_morph_folder")), None)
+            if tpl_morph:
+                try:
+                    tm = sfmorph.parse(hkx_to_af.vanilla_file(tpl_morph.replace("\\", "/").lower() + "/morph.dat",
+                                                              sf_data)[0])
+                    rep["template_morph"] = {"folder": tpl_morph, "keys": tm.keys, **tm.layout}
+                    print(f"  template morph {tpl_morph}: keys {tm.keys}, {tm.num_vertices} v, empty entries "
+                          f"first 0: {tm.layout['empty_entries_first_0']}, running: "
+                          f"{tm.layout['empty_entries_first_running']}")
+                except (SystemExit, Exception) as e:          # report only
+                    print(f"  template morph {tpl_morph}: not read ({e})")
             for rel, data in morphs.items():
                 dst = os.path.join(a.out, *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -735,7 +792,8 @@ def main(argv=None):
     if not feet and a.size_feet:
         print("foot sizing: SKIPPED (no Skyrim or Starfield foot region found)")
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
-    print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1")
+    print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1   (xx: S2SArmorTest.esm's load order "
+          f"index; or find them all with: help \"S2S_{a.name}\" 4)")
     return 0
 
 

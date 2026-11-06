@@ -93,7 +93,10 @@ def build(num_vertices: int, keys: List[str], deltas: Dict[str, Dict[int, Tuple[
             col, nrm, tan = (extra or {}).get(key, {}).get(v, (0, 0, 0))
             recs.append(np.asarray(d, "<f2").tobytes() + struct.pack("<HII", col, nrm, tan))
             n += 1
-        ents.append(struct.pack("<I", first if mask else 0) + mask.to_bytes(16, "little"))
+        # an entry without records still carries the running record index (2026-11-06: with 0 there, thin pillars
+        # shot out of the coat in game; a reader taking a vertex's record count from the next entry's index would
+        # read far past the vertex's own records)
+        ents.append(struct.pack("<I", first) + mask.to_bytes(16, "little"))
     return head + struct.pack("<II", n, num_vertices) + b"".join(recs) + b"".join(ents)
 
 

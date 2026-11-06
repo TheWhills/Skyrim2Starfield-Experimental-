@@ -251,6 +251,11 @@ class FitTests(unittest.TestCase):
         self.assertLess(g["starfield"], 15.0)                                  # kept close on Starfield's
         self.assertEqual(res.report["shapes"]["Cuirass"]["not_finite"], 0)
 
+        # weight_src: gear near it takes its weights (the whole head: a collar turns with the head)
+        res2 = G.fit([gear], [body], world, sp, np.array(st),
+                     weight_src=(sp, np.array(st), [[("C_Head", 1.0)]] * len(sp)))
+        self.assertEqual({b for vw in res2.shapes[0].weights for b, _ in vw}, {"C_Head"})
+
 
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):

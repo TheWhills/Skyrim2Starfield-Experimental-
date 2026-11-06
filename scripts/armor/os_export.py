@@ -451,7 +451,10 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
             row["MOBC"] = bytes(medits.get(b"MOBC", mobc)).hex()
             out_m = (b"MRPH", m_tpl[1], sfplugin.edit(list(m_tpl[2]), medits), m_fid)
             edits_m = {b"NAM4": struct.pack("<I", m_fid), b"NAM6": struct.pack("<I", m_fid)}
-            row.update(MRPH=f"{m_fid:08X}", morph_folder=folder)
+            row.update(MRPH=f"{m_fid:08X}", morph_folder=folder,
+                       template_morph_folder=sfplugin_zstring(msubs.get(b"TCMP", b"")[2:]
+                                                              if _len_prefixed(msubs.get(b"TCMP", b"")) else
+                                                              msubs.get(b"TCMP", b"")))
         else:
             out_m, edits_m = None, {}
             row["MRPH"] = None
@@ -465,15 +468,19 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
     src = armo[1][2]
     has_indx = any(s == b"INDX" for s, _d in src)
     first_modl = next(bytes(d) for s, d in src if s == b"MODL" and is_addon(d))
+    rep["template_indx"] = [(bytes(src[i][1]).hex(), f"{_fid(src[i + 1][1]):08X}") for i in range(len(src) - 1)
+                            if src[i][0] == b"INDX" and src[i + 1][0] == b"MODL"]
     osubs, placed = [], False
     for i, (s, d) in enumerate(src):
         addon_field = s == b"MODL" and is_addon(d)
         indx_field = s == b"INDX" and i + 1 < len(src) and src[i + 1][0] == b"MODL"
         if addon_field or indx_field:
             if not placed:
-                for k, fid in enumerate(addons):
+                for fid in addons:
                     if has_indx:
-                        osubs.append((b"INDX", struct.pack("<H", k)))
+                        # INDX 0 on every addon (2026-11-06: numbered 0, 1, 2, 3 only the first addon showed; as in
+                        # Fallout 4, INDX looks like the armor's variant index, not a list position)
+                        osubs.append((b"INDX", struct.pack("<H", 0)))
                     osubs.append((b"MODL", struct.pack("<I", fid) + first_modl[4:]))
                 placed = True
             continue
@@ -529,6 +536,11 @@ def test_variants(parts_recs, armor, name: str, full: str, masters: int, nxt) ->
                     nf))
     armor_with("Same_Slots", fids)
     return out
+
+
+def _len_prefixed(d) -> bool:
+    d = bytes(d)
+    return len(d) >= 2 and struct.unpack_from("<H", d, 0)[0] in (len(d) - 2, len(d) - 3)
 
 
 def _slot_list(bo64) -> list:

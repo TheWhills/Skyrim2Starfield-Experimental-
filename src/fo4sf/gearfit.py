@@ -674,9 +674,12 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 
 
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
-        sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False) -> FitResult:
+        sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
+        weight_src=None) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
-    sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it)."""
+    sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
+    (points, triangles, weights) gear near it takes its weights from instead of the body surface (the whole head as
+    well, so a collar under the jaw turns with the head as the head's own neck skin does)."""
     joints: Dict[str, np.ndarray] = {}
     for s in sky_body + gear:
         for b, w in s.joints.items():
@@ -685,6 +688,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     follows = follow_map(joints, transforms)
     sf_nrm = _vertex_face_normals(sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3))
     sf_nrm = outward(sf_body_pts, sf_nrm / np.maximum(np.linalg.norm(sf_nrm, axis=1, keepdims=True), 1e-12))
+    if weight_src is not None:
+        w_pts, w_tris, w_w = np.asarray(weight_src[0], float), np.asarray(weight_src[1], int).reshape(-1, 3), \
+            list(weight_src[2])
+        w_nrm = _vertex_face_normals(w_pts, w_tris)
+        w_nrm = outward(w_pts, w_nrm / np.maximum(np.linalg.norm(w_nrm, axis=1, keepdims=True), 1e-12))
     body_moved = [blend(s.points, s.normals, s.bones, s.weights, transforms) for s in sky_body]
     # off by default (2026-11-06, Ralof: scaling only the foot section opened a seam at the ankle; cover keeps the toes in)
     if size_feet and sf_body_weights is not None and sky_body:
@@ -760,7 +768,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             far = 0
         w = sf_weights(s.bones, s.weights, set(sf_world), follows)
         near = 0
-        if sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
+        if weight_src is not None and len(pts):
+            w, near = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
+        elif sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
             w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
         shapes.append(HairShape(s.name, pts, nrm, np.zeros_like(nrm), list(s.uvs), list(s.triangles), w, -1, -1, -1,
                                 colors=[(255, 255, 255, 255)] * len(pts)))

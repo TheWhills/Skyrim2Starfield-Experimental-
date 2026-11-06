@@ -199,3 +199,13 @@ class MorphFileTests(unittest.TestCase):
         files = os_export.body_nif_files([sh], ["m.mat"], binds, "S2S/T", None, [True])
         mesh = sfmesh.parse(next(v for k, v in files.items() if k.endswith(".mesh")))
         self.assertEqual((len(mesh.positions), len(mesh.triangles)), (6, 2))
+
+
+class MorphCapTests(unittest.TestCase):
+    def test_long_deltas_are_cut_and_counted(self):
+        d = {"Thin": {0: (0.01, 0.0, 0.0), 1: (0.0, 0.0, 3.0)}}
+        st = gear_fit.morph_stats(d)
+        self.assertEqual((st["Thin"]["vertices"], st["Thin"]["over_cap"], st["Thin"]["max_mm"]), (2, 1, 3000.0))
+        c = gear_fit.capped(d)
+        self.assertEqual(c["Thin"][0], (0.01, 0.0, 0.0))
+        self.assertAlmostEqual(c["Thin"][1][2], gear_fit.MORPH_MAX)
