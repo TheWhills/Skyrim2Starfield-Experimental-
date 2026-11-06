@@ -1636,3 +1636,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   copyReference false) and built with BodySlide (build_outfits into out\build), which should write the target game's
   format; to check on the next run's file list. Textures are white: Skyrim textures are not in Starfield's Data
   (materials are ours to make).
+- 2026-11-06 Fourth os_convert run (verified): the second weight copy at radius 25 left 0 unweighted (validate ok);
+  BodySlide's build (build_outfits) wrote the same old-format NIF as export_file. Read with skyrimskin: BS version
+  173 header, NiTriShape blocks, skin instance and skin data with 0 bones (weights dropped), only the skin transform
+  translation (0, 0.0018, -1.632) m: Outfit Studio cannot write Starfield files for shapes imported from Skyrim.
+  So scripts/armor/os_export.py pulls the fitted gear over MCP (get_shape_geometry, list_bones, get_weights),
+  calibrates Outfit Studio's units by an affine fit of the body to the game's naked .mesh (same vertex order; run
+  stops over 2 mm rms), writes BSGeometry + .mesh with the hair writer (4 weights per vertex) and an
+  S2SArmorTest.esm (ARMO / ARMA copied from Clothes_Nightwear_01, worn model -> our NIF, one addon; OTFT). Material:
+  the nightwear's, for a shape test only. Tool answer formats (geometry / weights) are parsed tolerantly: first run
+  checks them.
