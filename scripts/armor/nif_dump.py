@@ -79,6 +79,40 @@ def vanilla_armor_nif(sf_data: str, editor_id: str) -> tuple:
     return hkx_to_af.vanilla_file(path, sf_data)[0], path
 
 
+def skinned_shape_count(nif_bytes: bytes) -> int:
+    try:
+        n = nifmod.parse(nif_bytes)
+    except Exception:
+        return 0
+    return sum(1 for i in range(len(n.blocks)) if n.type_of(i) == "BSSkin::Instance")
+
+
+def find_multi(sf_data: str, min_shapes: int = 3, want: int = 2, folder: str = "meshes/clothes/",
+               limit: int = 3000):
+    """[(path, bytes)] of the first `want` vanilla worn NIFs under `folder` with at least `min_shapes` skinned
+    shapes (first-person and face models skipped); reads at most `limit` NIFs."""
+    from fo4sf import ba2
+    out, seen = [], 0
+    for fn in sorted(os.listdir(sf_data)):
+        low = fn.lower()
+        if not (low.startswith("starfield - meshes") and low.endswith(".ba2")):
+            continue
+        arc = ba2.Ba2(os.path.join(sf_data, fn))
+        for i, name in enumerate(arc.names):
+            p = name.replace("\\", "/").lower()
+            if not (p.startswith(folder) and p.endswith(".nif")) or "1stperson" in p or "_1st" in p:
+                continue
+            seen += 1
+            if seen > limit:
+                return out
+            data = arc.read(i)
+            if skinned_shape_count(data) >= min_shapes:
+                out.append((p, data))
+                if len(out) >= want:
+                    return out
+    return out
+
+
 def summary(name: str, d: dict) -> list:
     lines = [f"{name}: {len(d['blocks'])} blocks, bs_version {d['bs_version']}"]
     for b in d["blocks"]:
@@ -100,6 +134,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--vanilla-armor", default="Clothes_Nightwear_01", help="EditorID of a vanilla ARMO")
+    ap.add_argument("--find-multi", type=int, default=0,
+                    help="also dump the first vanilla clothes NIFs with at least this many skinned shapes")
     ap.add_argument("--file", action="append", default=[], help="a NIF on disk (repeatable)")
     ap.add_argument("--out", required=True, help="folder for nif_dump.json")
     a = ap.parse_args(argv)
@@ -107,6 +143,9 @@ def main(argv=None):
     rep = {}
     data, path = vanilla_armor_nif(sf_data, a.vanilla_armor)
     rep[path] = describe(data)
+    if a.find_multi:
+        for p, d in find_multi(sf_data, a.find_multi):
+            rep[p] = describe(d)
     for f in a.file:
         with open(f, "rb") as fh:
             rep[f] = describe(fh.read())

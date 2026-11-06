@@ -31,6 +31,8 @@ class DumpTests(unittest.TestCase):
         sa = [x for x in d["blocks"] if x["type"] == "SkinAttach"]
         self.assertEqual(sa[1]["bones"], ["B", "C"])
         self.assertTrue(any("BSSkin::Instance" in line for line in D.summary("t", d)))
+        self.assertEqual(D.skinned_shape_count(files["meshes/S2S/T.nif"]), 2)
+        self.assertEqual(D.skinned_shape_count(b"junk"), 0)
 
 
 if __name__ == "__main__":

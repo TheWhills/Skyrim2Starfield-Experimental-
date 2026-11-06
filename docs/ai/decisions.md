@@ -1688,3 +1688,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   actor's. Ours wrote 0. Other differences (block order, NiNode flag 0x20000000, unsorted bones) look cosmetic.
   os_export now copies the naked body NIF's own shape transform onto every shape (--no-shape-offset: old behaviour).
   unresolved: whether this removes the bar in game.
+- verified (owner, same day): the body's shape offset (+1.632 m) on every shape changed nothing visible, the bar
+  included: the game ignores a skinned BSGeometry's transform. The vanilla nightwear has ONE shape, so nif_dump
+  --find-multi now dumps vanilla clothes NIFs with several skinned shapes for the multi-shape layout.
