@@ -1717,3 +1717,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   base; Starfield has 4 spine bones to Skyrim's 3). Torso bones (pelvis, spine 0-2) now only move onto Starfield's
   joints. gear_fit writes nothing when a shape has non-finite vertices or vertices > 0.5 m outside the body box.
   unresolved: whether the blank came from far vertices or something else (armor_check on the next output).
+- verified (owner screenshots, same day): with torso bones unturned the gear renders and fits far better: collar below
+  the chin, gloves on the hands following the fingers, boots on the feet. Left: torso tipped back (chest forward, hem
+  behind) and Starfield skin through boot knees / upper arms. The overall similarity fit now uses only the axial and
+  leg joints (Skyrim's A-pose arm angle tipped the torso); arms keep their per-bone turns. supported: the poke-through
+  is the player's body sliders (gear fitted to the default naked_m; no morph data yet).

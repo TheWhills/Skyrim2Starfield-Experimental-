@@ -70,6 +70,12 @@ for _s in "LR":
 # bones to Skyrim's three, so segment lengths do not compare and the clamp squashed them to 0.75)
 NO_TURN = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Spine2 [Spn2]", "NPC Root [Root]",
            "NPC COM [COM ]")
+# joints the overall fit lines up: the body's axis and legs. Arms and fingers are left out (2026-11-06, Ralof: with
+# them in, Skyrim's different A-pose arm angle tipped the whole torso back, chest forward and coat hem behind); the
+# arms get their own per-bone turns.
+AXIAL = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Spine2 [Spn2]", "NPC Neck [Neck]",
+         "NPC Head [Head]", "NPC L Thigh [LThg]", "NPC R Thigh [RThg]", "NPC L Calf [LClf]", "NPC R Calf [RClf]",
+         "NPC L Foot [Lft ]", "NPC R Foot [Rft ]")
 FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
 
 
@@ -156,9 +162,12 @@ def bone_transforms(joints: Dict[str, np.ndarray], sf_world: Dict[str, np.ndarra
     pairs = [(b, sf_main(b)) for b in joints if sf_main(b)]
     if len(pairs) < 3:
         raise ValueError(f"only {len(pairs)} Skyrim joints match Starfield bones")
-    src = np.array([joints[b][:3, 3] for b, _f in pairs])
-    dst = np.array([sf_world[f][:3, 3] for _b, f in pairs])
+    axial = [(b, f) for b, f in pairs if b in AXIAL]
+    fit_pairs = axial if len(axial) >= 4 else pairs
+    src = np.array([joints[b][:3, 3] for b, _f in fit_pairs])
+    dst = np.array([sf_world[f][:3, 3] for _b, f in fit_pairs])
     g = similarity(src, dst)
+    rep_fit = [b for b, _f in fit_pairs]
     gl = g[:3, :3]
     aligned = {b: g[:3, :3] @ m[:3, 3] + g[:3, 3] for b, m in joints.items()}
     turn, out, rep = {}, {}, {"global_scale": float(np.cbrt(np.linalg.det(gl))), "bones": {}}
@@ -211,6 +220,7 @@ def bone_transforms(joints: Dict[str, np.ndarray], sf_world: Dict[str, np.ndarra
             near = mapped[int(np.argmin(np.linalg.norm(mp - aligned[b], axis=1)))]
             out[b] = out[near]
             rep["bones"][b] = {"follows": near}
+    rep["fit_joints"] = rep_fit
     rep["joint_rms_m"] = float(np.sqrt(np.mean(np.sum((src @ gl.T + g[:3, 3] - dst) ** 2, axis=1))))
     return out, rep
 

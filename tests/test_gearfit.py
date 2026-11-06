@@ -91,6 +91,23 @@ class BoneTests(unittest.TestCase):
         self.assertIn("L_Calf", dict(sw[0]))
 
 
+class AxialFitTests(unittest.TestCase):
+    def test_arm_pose_does_not_tilt_the_torso(self):
+        sky = {b: at(SKY[b]) for b in (PELV, SPN0, SPN1, SPN2, NECK, HEAD, THG, CLF, FT)}
+        world = {f: at(SKY[s_]) for s_, f in ((PELV, "C_Hips"), (SPN0, "C_Spine"), (SPN1, "C_Spine1"),
+                                              (SPN2, "C_Chest"), (NECK, "C_Neck"), (HEAD, "C_Head"),
+                                              (THG, "L_Thigh"), (CLF, "L_Calf"), (FT, "L_Foot"))}
+        arm = ["NPC L UpperArm [LUar]", "NPC L Forearm [LLar]", "NPC L Hand [LHnd]"]
+        for k, b in enumerate(arm):                      # Skyrim arm out at 45 deg, Starfield's straight down
+            sky[b] = at([0.2 + 0.2 * k, 0, 1.4 - 0.2 * k])
+        for k, f in enumerate(["L_Biceps", "L_Forearm", "L_Wrist"]):
+            world[f] = at([0.2, 0, 1.4 - 0.28 * k])
+        t, rep = G.bone_transforms(sky, world)
+        self.assertNotIn("NPC L UpperArm [LUar]", rep["fit_joints"])
+        self.assertTrue(np.allclose(t[PELV][:3, :3], np.eye(3), atol=1e-9))
+        self.assertGreater(rep["bones"]["NPC L UpperArm [LUar]"]["turn_deg"], 40)
+
+
 class SurfaceTests(unittest.TestCase):
     def cylinder(self, r, n=24, rows=12):
         a = np.linspace(0, 2 * np.pi, n, endpoint=False)
