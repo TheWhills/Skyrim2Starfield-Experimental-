@@ -101,6 +101,10 @@ def sf_esm(path):
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
 
 
+def sfplugin_name(rec):
+    return bytes(dict(rec[2])[b"FULL"]).split(b"\0")[0].decode()
+
+
 class RecordTests(unittest.TestCase):
     def test_armor_records(self):
         with tempfile.TemporaryDirectory() as d:
@@ -194,6 +198,33 @@ class RecordTests(unittest.TestCase):
         self.assertEqual([bytes(d)[:4] for s, d in armo if s == b"MODL"],
                          [struct.pack("<I", out[i][3]) for i in (0, 2, 4)])
         self.assertEqual(dict(out[-1][2])[b"INAM"], struct.pack("<I", out[-2][3]))
+
+    def test_test_variants(self):
+        mrph = (b"MRPH", HDR(b"MRPH"), [(b"EDID", z("MORPH_NW_M")), (b"TCMP", z("Meshes\\NW")),
+                                        (b"MOBC", b"\xff\0\0\0")], 0x4000)
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            recs = [(t, h, sfplugin.edit(subs, {b"NAM4": struct.pack("<I", 0x4000)})
+                     if sfplugin.edid(subs) == "Nightwear_AA" else subs, fid)
+                    for t, h, subs, fid in sfplugin.records(self._esm(d), [b"ARMA", b"ARMO", b"OTFT"])] + [mrph]
+            with open(p, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            parts = [{"shape": "Coat", "nif": "S2S\\R\\Coat.nif"}, {"shape": "Boots", "nif": "S2S\\R\\Boots.nif"},
+                     {"shape": "S2S_Skin", "nif": "S2S\\R\\S2S_Skin.nif", "skin": True}]
+            out, rep = E.armor_records_parts(p, "R", 1, "R", parts, variants=True)
+        fids = [r[3] for r in out]
+        self.assertEqual(len(fids), len(set(fids)))
+        by = {r[3]: r for r in out}
+        armors = [r for r in out if r[0] == b"ARMO"]
+        self.assertEqual([sfplugin_name(r) for r in armors], ["R", "R [no morph]", "R [same slots]"])
+        no_morph = [by[E._fid(d)] for s, d in armors[1][2] if s == b"MODL"]
+        self.assertEqual(len(no_morph), 3)
+        self.assertTrue(all(b"NAM4" not in dict(r[2]) for r in no_morph))
+        same = [by[E._fid(d)] for s, d in armors[2][2] if s == b"MODL"]
+        self.assertEqual([dict(r[2])[b"BO64"][:8] for r in same],
+                         [E.slot_bits([3, 5, 7])] * 2 + [(1 << 13).to_bytes(8, "little")])  # skin addon reused
+        self.assertIn(b"NAM4", dict(same[0][2]))
+        self.assertEqual(len(rep["variants"]), 2)
 
     def test_morph_folder_matches_where_morph_dat_is_written(self):
         from fo4sf import gearfit

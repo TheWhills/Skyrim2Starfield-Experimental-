@@ -388,7 +388,8 @@ def with_fields(subs, fields: Dict[bytes, bytes]) -> list:
     return out
 
 
-def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, drop=(), template_vertices=None):
+def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, drop=(), template_vertices=None,
+                        variants: bool = False):
     """ARMA + MRPH per part, then ARMO and OTFT. parts: [{"shape", "nif", "vertices", "skin": bool, "slots": list or
     None}]. Gear parts copy the template armor's addon, the skin part AA_Clothes_Nightwear_01_Skin; each part's MRPH
     is a copy of the morph record its template addon names (NAM4), with TCMP pointed at the part's morph folder, and
@@ -485,7 +486,49 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
     outfit = (b"OTFT", otft[1], [(b"EDID", sfplugin.zs(f"S2S_{name}_Outfit")), (b"INAM", struct.pack("<I", o_fid))],
               t_fid)
     rep.update(ARMO=f"{o_fid:08X}", OTFT=f"{t_fid:08X}", slots=union)
-    return out + [armor, outfit], rep
+    extra = test_variants(out, armor, name, full, masters, nxt) if variants else []
+    rep["variants"] = [{"ARMO": f"{r[3]:08X}", "name": sfplugin_zstring(dict(r[2])[b"FULL"])}
+                       for r in extra if r[0] == b"ARMO"]
+    return out + [armor, outfit] + extra, rep
+
+
+VARIANT_SLOTS = [3, 5, 7]    # what the single-NIF addon covered (it showed every piece)
+
+
+def test_variants(parts_recs, armor, name: str, full: str, masters: int, nxt) -> list:
+    """Two more armors for telling causes apart in one game session (2026-11-06: with one addon per shape the boots
+    stood up as two pillars and the cuffs did not show; the coat and skin were fine): "[no morph]", every addon
+    copied without NAM4 / NAM6; "[same slots]", every gear addon on slots VARIANT_SLOTS (morphs kept)."""
+    arma = [r for r in parts_recs if r[0] == b"ARMA"]
+    out = []
+
+    def armor_with(tag, fids):
+        a_subs, k = [], 0
+        for s, d in armor[2]:
+            if s == b"MODL" and len(d) >= 4 and _fid(d) in fids:
+                d = struct.pack("<I", fids[_fid(d)]) + bytes(d)[4:]
+            a_subs.append((s, d))
+        a_subs = sfplugin.edit(a_subs, {b"EDID": sfplugin.zs(f"S2S_{name}_{tag}"),
+                                        b"FULL": sfplugin.zs(f"{full} [{tag.replace('_', ' ').lower()}]")})
+        out.append((b"ARMO", armor[1], a_subs, sfplugin.new_form_id(next(nxt), masters)))
+    fids = {}
+    for t, h, subs, fid in arma:
+        nf = sfplugin.new_form_id(next(nxt), masters)
+        fids[fid] = nf
+        out.append((t, h, sfplugin.edit(list(subs), {b"EDID": sfplugin.zs(sfplugin.edid(subs) + "_NoMorph")},
+                                        drop=[b"NAM4", b"NAM6"]), nf))
+    armor_with("No_Morph", fids)
+    fids = {}
+    for t, h, subs, fid in arma:
+        if sfplugin.edid(subs).endswith("_S2S_Skin_AA"):
+            continue
+        nf = sfplugin.new_form_id(next(nxt), masters)
+        fids[fid] = nf
+        out.append((t, h, sfplugin.edit(list(subs), {b"EDID": sfplugin.zs(sfplugin.edid(subs) + "_SameSlots"),
+                                                     b"BO64": slot_bits(VARIANT_SLOTS, dict(subs).get(b"BO64"))}),
+                    nf))
+    armor_with("Same_Slots", fids)
+    return out
 
 
 def _slot_list(bo64) -> list:
@@ -665,7 +708,7 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
 
 
 def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds: Dict[str, tuple], transform=None,
-                      drop=()):
+                      drop=(), variants: bool = False):
     """One NIF, ARMA and MRPH per part (see armor_records_parts): meshes\\S2S\\<name>\\<shape>.nif each, and
     S2SArmorTest.esm. parts: [{"shape": HairShape, "material", "back": bool, "skin": bool, "slots": list or None}].
     Returns (files, records, report, template material, {shape name: nif path})."""
@@ -700,7 +743,7 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
                                     rel[:-4].replace("\\", "/"), transform, [bool(p.get("back"))]))
         rows.append({"shape": sname, "nif": rel, "skin": bool(p.get("skin")), "slots": p.get("slots"),
                      "vertices": len(sh.positions) * (2 if p.get("back") else 1)})
-    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices)
+    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices, variants)
     prep["template_vertices"] = tpl_vertices
     for rel, data in files.items():
         dst = os.path.join(out, *rel.split("/"))

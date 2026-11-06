@@ -1882,3 +1882,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   u32 equal to the template model's first-shape vertex count is set to the part's. Gear parts get distinct slots
   ([3, 5], [7], [8], ...; supported: vanilla outfits give each addon its own slots), the skin part its template's
   (13). --one-nif keeps the old layout.
+- 2026-11-06 (Claude, armor) First in-game test of one addon + MRPH per shape: coat and skin piece show, the boots
+  stand up as two tall pillars and the cuffs do not show. MOBC came out ff000000 (255) in the template, not a vertex
+  count. unresolved which change did it (our morph.dat now read for the first time, the boots' / cuffs' own slots
+  7 and 8, or one shape per NIF with no anchor). gear_fit --test-variants writes a "[no morph]" armor (addons without
+  NAM4 / NAM6) and a "[same slots]" armor (gear addons on 3, 5, 7) next to the main one, to tell them apart in one
+  session.

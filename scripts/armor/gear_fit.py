@@ -556,6 +556,8 @@ def main(argv=None):
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
+    ap.add_argument("--test-variants", action="store_true",
+                    help="also write a [no morph] and a [same slots] copy of the armor, to tell causes apart in game")
     ap.add_argument("--one-nif", action="store_true",
                     help="the old layout: all gear in one NIF and addon (its morph record is the nightwear's)")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
@@ -645,11 +647,13 @@ def main(argv=None):
         if skin_sh is not None and slots:
             parts.append({"shape": skin_sh, "material": sp["material"], "skin": True})
         files, _recs, prep, material, nifs = os_export.write_armor_parts(
-            sf_data, a.out, a.name, a.full or a.name.replace("_", " "), parts, binds)
+            sf_data, a.out, a.name, a.full or a.name.replace("_", " "), parts, binds, variants=a.test_variants)
         print(f"one addon + morph record per shape (template model {prep.get('template_vertices')} vertices):")
         for r in prep["parts"]:
             print(f"  {r['shape']}: ARMA {r['ARMA']} slots {r['slots']} -> {r['model']}; MRPH {r['MRPH']} "
                   f"MOBC {r.get('MOBC_template')} -> {r.get('MOBC')}")
+        for v in prep.get("variants", []):
+            print(f"test armor {v['name']}: player.additem xx{int(v['ARMO'], 16) & 0xFFFFFF:06X} 1")
     if sp:
         print(f"skin piece: {sp['vertices']} Starfield body vertices where {', '.join(sp['from'])} lies, "
               f"material {sp['material']}; armor slots {slots} (naked body hidden)")
