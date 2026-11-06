@@ -1799,3 +1799,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Ralof's short chainmail sleeves, not a mesh gap; the boot seam at the ankle came from the foot box fit (it moved
   the foot section only), now off by default (--size-feet). gear_fit prints per shape the median gap to the body in
   Skyrim and now (all, and the top tenth: the collar) to judge the neck with numbers.
+- verified (gap report, same day): median gap to the body Skyrim -> now: coat 16.8 -> 26.3 mm, collar (top tenth)
+  29.1 -> 31.2 mm, boots 22.3 -> 36.8 mm, boot tops 32 -> 56 mm, cuffs 7.2 -> 6.8 mm. So the collar sits as in Skyrim
+  (its look comes from Starfield's thicker neck), while the low-poly boots (202 vertices) and coat (699) are left loose by
+  cover pushing flat faces over Starfield's leg / torso shape. gear_fit now tessellates shapes under 2000 vertices
+  3 x 3 (skyrimhair.tessellate, PN patches, UVs and weights carried) before the fit (--tessellate 1 = off). Sleeve band:
+  supported = Starfield's built-in undershirt below Ralof's short chainmail sleeves (owner to check unequipped).

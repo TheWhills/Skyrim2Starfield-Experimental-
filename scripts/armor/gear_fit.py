@@ -183,8 +183,38 @@ def skin_shapes(textures: dict) -> set:
     return {n for n, t in textures.items() if t and t[0].lower().replace("/", "\\").startswith(SKIN_TEXTURES)}
 
 
+TESSELLATE = 3                 # low-poly gear split n x n before the fit
+TESSELLATE_BELOW = 2000        # vertices: only shapes smaller than this
+
+
+def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW):
+    """Low-poly Skyrim shapes split into n x n smaller, curved triangles before the fit (skyrimhair.tessellate, PN
+    patches, UVs and weights carried along) so they can hug Starfield's differently shaped body (2026-11-06, Ralof's
+    boots: 202 vertices; covering the calf pushed the flat faces 2.5 cm looser than in Skyrim). ([shapes], report)"""
+    from fo4sf import skyrimhair
+    out, rep = [], {}
+    for s in gear:
+        if n < 2 or len(s.points) >= below:
+            out.append(s)
+            continue
+        names = list(s.bones)
+        hs = skyrimhair.HairShape(s.name, s.points, s.normals, np.zeros_like(s.normals), list(s.uvs),
+                                  list(s.triangles), [[(names[b], w) for b, w in vw if 0 <= b < len(names)]
+                                                      for vw in s.weights], -1, -1, -1)
+        t, _r = skyrimhair.tessellate(skyrimhair.Hair([hs], [], {}, {}), n)
+        sh = t.shapes[0]
+        idx = {b: i for i, b in enumerate(names)}
+        nrm = np.asarray(sh.normals, float)
+        nrm = nrm / np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+        out.append(gearfit.SkyShape(s.name, np.asarray(sh.positions, float), nrm, list(sh.uvs),
+                                    [tuple(int(i) for i in tri) for tri in sh.triangles], names,
+                                    [[(idx[b], w) for b, w in vw if b in idx] for vw in sh.weights], s.joints))
+        rep[s.name.decode("latin-1", "replace")] = [len(s.points), len(sh.positions)]
+    return out, rep
+
+
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
-        size_feet: bool = False):
+        size_feet: bool = False, tessellate: int = TESSELLATE):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds, body_w = starfield_body(sf_data, female)
@@ -199,6 +229,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
+    gear, tess = tessellate_shapes(gear, tessellate)
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
     sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet)
@@ -212,7 +243,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         shapes[i] = sh
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     binds = gearfit.skeleton_binds(bones, world, frame, shapes)
-    res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path)
+    res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess)
     res.report["_body_pts"] = pts
     return shapes, binds, res.report
 
@@ -250,6 +281,8 @@ def main(argv=None):
                     help="ContentResources.zip (default: <Starfield>\\Tools\\ContentResources.zip)")
     ap.add_argument("--archive2", default="", help="Archive2.exe (default: <Starfield>\\Tools\\Archive2)")
     ap.add_argument("--no-textures", action="store_true", help="keep the borrowed nightwear material")
+    ap.add_argument("--tessellate", type=int, default=TESSELLATE,
+                    help=f"split low-poly shapes (under {TESSELLATE_BELOW} vertices) n x n before the fit; 1 = off")
     ap.add_argument("--size-feet", action="store_true",
                     help="scale the boots' foot section to Starfield's foot (off: it opened a seam at the ankle)")
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
@@ -289,7 +322,7 @@ def main(argv=None):
         double |= double_sided_shapes(gb)
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
-                             () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet)
+                             () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
@@ -373,6 +406,8 @@ def main(argv=None):
             print(f"     gap to the body ({part}, {g['vertices']} v): Skyrim {g['skyrim']} mm, now {g['starfield']} mm")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
+    for n, (v0, v1) in (rep.get("tessellated") or {}).items():
+        print(f"tessellated {n}: {v0} -> {v1} vertices")
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
     if rep.get("dropped_skin_pieces"):
         print("bare-skin shapes left out (Skyrim skin textures):", ", ".join(rep["dropped_skin_pieces"]))

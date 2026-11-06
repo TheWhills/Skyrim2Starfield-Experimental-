@@ -58,6 +58,22 @@ class ScriptTests(unittest.TestCase):
         import inspect
         self.assertIn("materials", inspect.signature(os_export.write_armor).parameters)
 
+    def test_tessellate_shapes(self):
+        import numpy as np
+        from fo4sf import gearfit
+        pts = np.array([[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0]], float)
+        s = gearfit.SkyShape(b"Boots", pts, np.tile([0, 0, 1.0], (3, 1)), [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)],
+                             ["NPC L Calf [LClf]", "NPC L Foot [Lft ]"], [[(0, 1.0)], [(1, 1.0)], [(0, 0.5), (1, 0.5)]])
+        big = gearfit.SkyShape(b"Big", np.vstack([pts, pts[:1]]), np.tile([0, 0, 1.0], (4, 1)), s.uvs + [(0, 0)],
+                               s.triangles, s.bones, s.weights + [[(0, 1.0)]])
+        out, rep = gear_fit.tessellate_shapes([s, big], 3, below=4)
+        self.assertEqual(rep, {"Boots": [3, 10]})
+        t = out[0]
+        self.assertEqual((len(t.points), len(t.triangles)), (10, 9))
+        self.assertEqual(len(t.weights), 10)
+        self.assertTrue(all(0 <= b < 2 for vw in t.weights for b, _w in vw))
+        self.assertIs(out[1], big)                       # at / over the limit: unchanged
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 
