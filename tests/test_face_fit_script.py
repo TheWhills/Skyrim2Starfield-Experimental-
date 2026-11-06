@@ -83,7 +83,7 @@ class FaceFitScriptTests(unittest.TestCase):
                 starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
                 out = os.path.join(tmp, "out")
                 self.assertEqual(S.main(["--skyrim-data", sky, "--starfield", sf, "--out", out, "--count", "2",
-                                         "--test-plugin"]), 0)
+                                         "--test-plugin", "--control-npcs"]), 0)
                 with open(os.path.join(out, "faces.json"), encoding="utf-8") as fh:
                     rep = json.load(fh)
                 rows = {r["edid"]: r for r in rep["npcs"]}
@@ -97,8 +97,12 @@ class FaceFitScriptTests(unittest.TestCase):
                                                                      "slider_ids_not_dials": 4})
                 plugin = os.path.join(out, S.PLUGIN)
                 recs = sfplugin.records(plugin, [b"NPC_"])
-                self.assertEqual(len(recs), 2)
-                subs = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2SFace_HousecarlWhiterun"]
+                self.assertEqual(len(recs), 4)                                   # + the two control copies
+                by = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)
+                subs = by["S2SFace_HousecarlWhiterun"]
+                ctl = by["S2SFaceControl_HousecarlWhiterun"]
+                self.assertIn((b"FMRG", b"Nose\0"), ctl)                        # the template's face data kept
+                self.assertIn("control_npc", rows["HousecarlWhiterun"])
                 sigs = [sg for sg, _d in subs]
                 self.assertNotIn(b"FMRI", sigs)                                          # phenotype cleared
                 self.assertNotIn(b"FMRG", sigs)

@@ -401,6 +401,9 @@ def main(argv=None):
                          "region data (FMRI / FMRG) instead of removing them (2026-11-06: Saadia's record matched her "
                          "dark template in every colour field and her face was still white: the base face skin seems "
                          "to come from these presets). The template's blend also changes the face shape.")
+    ap.add_argument("--control-npcs", action="store_true",
+                    help="also write each NPC with its template's own face data (our hair, colours, outfit, name), "
+                         "'<name> (template face)': tells whether our face dials cause the light faces")
     ap.add_argument("--ridge", type=float, default=0.05,
                     help="cost of each dial's size, relative to an average dial's effect (2026-11-05: at 1e-6 More "
                          "Sliders' 307 sliders fought each other at +-1 and Ralof came out deformed; 0 = off)")
@@ -592,6 +595,23 @@ def main(argv=None):
                                                    f"from, to compare in game)",
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
                                           f"order index)"}
+            if a.control_npcs:
+                # the same NPC with the template's own face data (dials, presets) kept: only hair, colours, outfit
+                # and name are ours (2026-11-06: our Saadia's face stays light where her template's is dark)
+                cfid = sfplugin.new_form_id(len(recs), masters=len(masters))
+                csubs = sfplugin.edit(tpl[2], {b"EDID": sfplugin.zs(f"S2SFaceControl_{row['edid']}"),
+                                                b"FULL": sfplugin.zs(f"{full} (template face)")},
+                                      drop=STRIP + STRIP_GEAR)
+                csubs = without_templates(csubs)
+                if no_outfit is not None:
+                    csubs = sfplugin.edit(csubs, {b"DOFT": struct.pack("<I", no_outfit),
+                                                  b"SOFT": struct.pack("<I", no_outfit)})
+                if real is not None:
+                    csubs = npc_dress(csubs, by_edid[row["edid"].lower()], npcs, real, dict(row))
+                recs.append((b"NPC_", tpl[1], csubs, cfid))
+                row["control_npc"] = {"form_id": f"{cfid:08X}",
+                                      "console": f"player.placeatme xx{cfid & 0xFFFFFF:06X}  (template face, our hair "
+                                                 f"and colours)"}
         if recs and a.hair:
             report["hair_packing"] = add_hair_files(a, out, sky, esm, sf_data, report["npcs"], npcs, chosen, recs,
                                                     test_subs)

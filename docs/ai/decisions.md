@@ -1561,3 +1561,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   next control: the vanilla template spawned beside the copy, to tell our bug from how Starfield renders faces.
 - 2026-11-06 Owner: no more spacesuits with the empty outfit (verified). faces.json test_npc now also gives the
   template's FormID and placeatme command (the console's help finds no NPC EditorIDs in Starfield).
+- 2026-11-06 Owner's control: the vanilla template ChargenPresetFemale01 spawned beside our Saadia has a dark face
+  matching her body; ours stays light, with --keep-blend-morphs too (verified our bug). Left as differences: our
+  ~283 face dials (with More Sliders ids 401-665) vs the template's 29, hair head part, colours, voice, name.
+  Hypothesis: our dial set makes the game skip baking the face texture. --control-npcs writes each NPC a second time
+  with the template's own face data (S2SFaceControl_<edid>, "<name> (template face)") to tell.
