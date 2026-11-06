@@ -1585,3 +1585,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   is now the default (--no-baked-face-textures to skip); when no template with baked textures fits, any template is
   used without them. Borrowed textures carry the template's own face detail (wrinkles, makeup); baking our own per
   NPC is the later step.
+- 2026-11-06 Owner: Ralof looks weathered since the baked textures: they are his template's (BE_CF02_DmitriMoldavski),
+  wear included. Template choice now also weighs 0.5 per rough texture layer (Accents, ColorlessAccents, Scars,
+  EnvironmentMask) and +2 for an old (ol) face skin, after skin tone / ethnicity. Own per-NPC face textures later.
+  Next (owner): clothing, starting with the Outfit Studio probe.

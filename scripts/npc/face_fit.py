@@ -192,6 +192,27 @@ def write_baked_face(index, tpl_fid: int, new_fid: int, data_dir: str, out: str,
     return written
 
 
+# Texture layers that bake wear into a template's face colour (2026-11-06: Ralof borrowed BE_CF02_DmitriMoldavski's
+# textures and came out weathered): skin-matched templates with fewer of these, and not old, are preferred
+ROUGH_LAYERS = ("Accents1", "Accents2", "ColorlessAccents1", "ColorlessAccents2", "Scars", "EnvironmentMask")
+
+
+def template_wear(subs) -> float:
+    """How weathered a template's baked face is likely to be: its rough texture layers, +2 for an old face (ol)."""
+    layers = [fo4land_zstring(d) for s, d in subs if s == b"TNAM"]
+    wear = float(sum(1 for n in layers if n in ROUGH_LAYERS))
+    layer = None
+    for s, d in subs:
+        if s == b"TNAM":
+            layer = fo4land_zstring(d)
+        elif s == b"QNAM" and layer == "Dermaesthetic":
+            m = npc_records.DERMA.match(fo4land_zstring(d))
+            if m and m.group(3).lower().startswith("ol"):
+                wear += 2.0
+            break
+    return wear
+
+
 def template_skin(subs):
     """(STON, face skin ethnicity) of a Starfield NPC (its Dermaesthetic texture's first word, lower case)."""
     ston = next((bytes(d)[0] for s, d in subs if s == b"STON" and len(d)), None)
@@ -225,7 +246,7 @@ def pick_template(npc_recs, race_fid, female, edid=None, skin=None, baked=None):
                     and (baked is None or r[3] in baked):
                 ston, eth = template_skin(subs)
                 cost = abs((ston if ston is not None else 4) - (skin[0] if skin[0] is not None else 4)) + \
-                    (0 if eth == skin[1] else 6)
+                    (0 if eth == skin[1] else 6) + 0.5 * template_wear(subs)
                 voiced.append((cost, sfplugin.edid(subs), r))
         if voiced:
             return min(voiced, key=lambda c: (c[0], c[1]))[2]

@@ -154,6 +154,14 @@ class TemplateSkinTests(unittest.TestCase):
         self.assertEqual(pick(True, (1, "european")), 5)
         self.assertEqual(face_fit.pick_template(self.RECS, 0x7D34, False, None)[3], 1)   # no skin: first voiced
 
+    def test_prefers_smooth_young_faces(self):
+        rough = [(b"TNAM", z("Accents1")), (b"QNAM", z("x")), (b"TNAM", z("Scars")), (b"QNAM", z("y"))]
+        recs = [sf_npc(1, "OldRough", False, 1, "European_Male_Ol1_Sk1", extra=rough),
+                sf_npc(2, "Smooth", False, 1, "European_Male_Md1_Sk1")]
+        self.assertEqual(face_fit.template_wear(recs[0][2]), 4.0)
+        self.assertEqual(face_fit.template_wear(recs[1][2]), 0.0)
+        self.assertEqual(face_fit.pick_template(recs, 0x7D34, False, None, skin=(1, "european"))[3], 2)
+
     def test_strip_gear_and_hair_fallback(self):
         self.assertTrue({b"DOFT", b"CNTO", b"COCT"} <= set(face_fit.STRIP_GEAR))
         self.assertEqual(R.default_hair_color("RedguardRace", ["Black", "Brown"]), "Black")
