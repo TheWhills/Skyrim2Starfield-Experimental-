@@ -1523,3 +1523,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   tint's luminance (ASSUMED 0 lightest .. 8 darkest; Ralof / Ysolda -> 1, Saadia -> 6, Nazeem -> 8: the in-game
   check decides the direction), BCOL = the matched hair colour. Brow SHAPE is not mapped yet (Skyrim brows are
   numbered, not named: needs a look at their textures). Test NPCs: Ralof + Nazeem, Ysolda + Saadia.
+- 2026-11-06 Owner's screenshot of Nazeem / Saadia: STON works on the body (Nazeem dark, Saadia medium: 8 = darkest,
+  verified) but Nazeem's face stays light. The template's face skin is a texture layer: TNAM "Dermaesthetic" with
+  QNAM "Asian_Female_yo1_Sk3" (ethnicity_sex_age_Sk<shade>, VNAM textures/actors/human/face), so the face keeps the
+  template's skin. npc_face_probe now lists every Dermaesthetic texture with the STON it is used with, to choose
+  one per NPC. Also: Skyrim NPCs without a hair head part (Nazeem) now get their race's default hair (HEAD).

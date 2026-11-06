@@ -186,7 +186,7 @@ def npc_dress(subs, n, npcs, real, row) -> list:
     Skyrim gives none) and its hair colour name (npc_records.match_hair_color)."""
     faces = skyrimnpc.faces_by_template(npcs)
     src = npcs.get(faces.get(n["form_id"], n["form_id"]), n)          # whose face (and hair) it wears
-    parts = real["npc_parts"](src, real["hdpt"])
+    parts = real["npc_parts"](with_race_hair(src, real), real["hdpt"])
     new, info = {}, {}
     for kind, (part, _models) in parts.items():
         fid = real["index"].get(part["edid"].lower())
@@ -206,6 +206,17 @@ def npc_dress(subs, n, npcs, real, row) -> list:
     subs, info["face_colors"] = face_colors(subs, src, real, name)
     row["dressed"] = info
     return subs
+
+
+def with_race_hair(src, real):
+    """The Skyrim NPC with its race's default hair added when it has none of its own (2026-11-06: Nazeem has no head
+    parts, wears his race's short hair in Skyrim, and kept the Starfield template's hair)."""
+    hdpt = real["hdpt"]
+    if any(hdpt.get(f, {}).get("type") == 3 for f in src.get("head_parts", [])):
+        return src
+    _t, defaults = real.get("races", {}).get(src.get("race"), ({}, {False: [], True: []}))
+    hair = [f for f in defaults.get(src.get("female", False), []) if hdpt.get(f, {}).get("type") == 3]
+    return dict(src, head_parts=list(src.get("head_parts", [])) + hair[:1]) if hair else src
 
 
 def face_colors(subs, src, real, hair_color_name):

@@ -50,6 +50,7 @@ def starfield(esm: str, dump_names=DUMP) -> dict:
         d = next((bytes(d) for s, d in subs if s == b"PNAM" and len(d) >= 4), None)
         return struct.unpack_from("<I", d, 0)[0] if d else None
     sig_count, values, parts = collections.Counter(), collections.defaultdict(collections.Counter), {}
+    derma, layers = collections.Counter(), collections.Counter()
     dumps, n = [], 0
     for _t, _h, subs, fid in sfplugin.records(esm, [b"NPC_"]):
         sigs = {s for s, _d in subs}
@@ -60,6 +61,15 @@ def starfield(esm: str, dump_names=DUMP) -> dict:
         if rnam != human or b"FMSI" not in sigs:
             continue
         n += 1
+        layer = None
+        ston = next((bytes(d)[0] for s_, d in subs if s_ == b"STON" and len(d)), None)
+        for s_, d in subs:                     # texture layers: MNAM, TNAM name, QNAM texture, VNAM folder, NNAM, INTV
+            if s_ == b"TNAM":
+                layer = value(d)
+                layers[layer] += 1
+            elif s_ == b"QNAM" and layer == "Dermaesthetic":
+                derma[f"{value(d)} | STON {ston}"] += 1
+                layer = None
         for s in sigs:
             sig_count[s.decode("latin-1")] += 1
         for s, d in subs:
@@ -81,6 +91,8 @@ def starfield(esm: str, dump_names=DUMP) -> dict:
             "values": {k: {"distinct": len(v), "top": v.most_common(15)} for k, v in sorted(values.items())},
             "head_part_types_in_esm": hp_types.most_common(),
             "head_parts_used_by_type": {k: {"distinct": len(v), "top": v.most_common(25)} for k, v in parts.items()},
+            "texture_layers": layers.most_common(),
+            "dermaesthetic_by_skin_tone": sorted(derma.items()),
             "dumps": dumps, "human_race_subrecords": race_sigs.most_common(), "human_race_text": race_text,
             "editor_ids": editor_ids(esm)}
 

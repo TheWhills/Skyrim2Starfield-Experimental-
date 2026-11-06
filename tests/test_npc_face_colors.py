@@ -87,5 +87,16 @@ class FaceColorsTests(unittest.TestCase):
         self.assertEqual(info["eyes"]["from"], "race default")
 
 
+class RaceHairTests(unittest.TestCase):
+    def test_race_default_hair_only_when_none(self):
+        real = {"hdpt": {0x30: {"type": 3}, 0x31: {"type": 3}, 0x12: {"type": 6}},
+                "races": {0x99: ({}, {False: [0x12, 0x30], True: []})}}
+        bald = {"race": 0x99, "female": False, "head_parts": [0x12]}
+        self.assertEqual(face_fit.with_race_hair(bald, real)["head_parts"], [0x12, 0x30])
+        own = {"race": 0x99, "female": False, "head_parts": [0x31]}
+        self.assertIs(face_fit.with_race_hair(own, real), own)
+        self.assertEqual(bald["head_parts"], [0x12])                        # the parsed NPC is not changed
+
+
 if __name__ == "__main__":
     unittest.main()

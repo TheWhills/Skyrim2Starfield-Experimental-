@@ -35,13 +35,17 @@ class ProbeTests(unittest.TestCase):
                 rec(b"HDPT", 0x901, [(b"EDID", z("Eyes_Blue")), (b"PNAM", u32(2))]),
                 rec(b"HDPT", 0x902, [(b"EDID", z("Brows_A")), (b"PNAM", u32(6))]),
                 rec(b"NPC_", 0x910, [(b"EDID", z("A")), (b"RNAM", u32(0x900)), (b"PNAM", u32(0x901)),
-                                     (b"PNAM", u32(0x902)), (b"STON", z("Tone03")), (b"FMSI", u32(1))]),
+                                     (b"PNAM", u32(0x902)), (b"STON", b"\x03"), (b"FMSI", u32(1)),
+                                     (b"MNAM", u32(1)), (b"TNAM", z("Dermaesthetic")), (b"QNAM", z("African_Male_yo1_Sk7")),
+                                     (b"MNAM", u32(1)), (b"TNAM", z("Lipstick1")), (b"QNAM", z("Lipstick_Soft"))]),
                 rec(b"NPC_", 0x911, [(b"EDID", z("SarahMorgan")), (b"RNAM", u32(0x900)), (b"PNAM", u32(0x901)),
                                      (b"STON", z("Tone05")), (b"FMSI", u32(1))]),
                 rec(b"NPC_", 0x912, [(b"EDID", z("Robot")), (b"RNAM", u32(0x999))])])
             r = P.starfield(esm)
             self.assertEqual(r["human_npcs_with_face"], 2)
             self.assertEqual(r["values"]["STON"]["distinct"], 2)
+            self.assertEqual(r["dermaesthetic_by_skin_tone"], [("African_Male_yo1_Sk7 | STON 3", 1)])
+            self.assertEqual(dict(r["texture_layers"]), {"Dermaesthetic": 1, "Lipstick1": 1})
             self.assertEqual(r["head_parts_used_by_type"]["2"]["top"], [("Eyes_Blue", 2)])
             self.assertEqual([x["edid"] for x in r["dumps"]], ["SarahMorgan"])
             self.assertEqual(r["editor_ids"], ["HDPT 00000901 Eyes_Blue", "HDPT 00000902 Brows_A"])
