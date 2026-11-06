@@ -1663,3 +1663,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   copied from that body, so the body's binds for the same bones are the ones that match. os_export now writes each
   bone's bind straight from the body NIF's BSSkin::BoneData (sphere radius +0.15 m) and stops if the gear uses a bone
   the body is not skinned to. unresolved: in-game result of this change.
+- verified (owner screenshots, same day): with the body's binds the Stormcloak gear sits on the body and follows it;
+  one thin spike rises from the back of the neck far above the head. unresolved: cause. armor_check.py reports body
+  bones whose bind disagrees with the skeleton or that move no body vertex, and gear vertices on them or far outside
+  the body.
