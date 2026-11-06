@@ -1683,3 +1683,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the body (up when standing, forward when running): a vertex placed far from its bone, not a bad rest position.
   supported: it comes off the first shape's first bone (boots first: L_Calf, left boot; coat/skin first: C_Chest,
   upper back). nif_dump.py compares our NIF's blocks with the vanilla nightwear NIF to find what differs.
+- verified (nif_dump, same day): vanilla Outfit_Nightwear_LowerBody_01_M.nif's BSGeometry carries a translation of
+  (0.000, -0.002, +1.632) m (rotation ~identity): vertices stay in the body mesh's space and the shape is lifted to the
+  actor's. Ours wrote 0. Other differences (block order, NiNode flag 0x20000000, unsorted bones) look cosmetic.
+  os_export now copies the naked body NIF's own shape transform onto every shape (--no-shape-offset: old behaviour).
+  unresolved: whether this removes the bar in game.

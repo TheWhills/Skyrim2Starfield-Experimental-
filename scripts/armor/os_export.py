@@ -347,13 +347,30 @@ def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.00
     unbound = sorted({b for sh in shapes for x in sh.weights for b, _ in x} - set(body_binds))
     if unbound:
         raise os_convert.StepFailed(f"bones the body is not skinned to: {unbound}")
+    rep["body_transform"] = shape_transform(nif_bytes)
     return dict(rep, shapes_data=shapes, world=world, body_binds=body_binds)
+
+
+def shape_transform(nif_bytes: bytes):
+    """(translation, rotation 9) of the first BSGeometry of a NIF: the lift vanilla worn meshes give their shapes
+    (vertices stay in the body mesh's space)."""
+    from fo4sf import sfnif
+    try:
+        n = nifmod.parse(nif_bytes)
+    except Exception:                               # not a NIF (synthetic tests): no offset
+        return [0.0, 0.0, 0.0], [1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0]
+    for i, b in enumerate(n.blocks):
+        if n.type_of(i) == "BSGeometry":
+            g = sfnif.parse_bsgeometry(b)
+            return [round(float(x), 6) for x in g.translation], [round(float(x), 6) for x in g.rotation]
+    return [0.0, 0.0, 0.0], [1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0]
 
 
 SPHERE_MARGIN = 0.15   # metres added to the body's per-bone bounding sphere: the gear sits a little outside the body
 
 
-def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], out_name: str) -> Dict[str, bytes]:
+def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], out_name: str,
+                   transform=None) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif", "geometries/...mesh"}: the gear skinned with the naked body's own binds (2026-11-06:
     binds from the skeleton's rest world put the gear in tall pillars in game; the positions are calibrated into the
     body mesh's space, so the body's binds are the ones that match). Spheres: the body's, widened by SPHERE_MARGIN."""
@@ -371,7 +388,8 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
             binds.append((tuple(sphere[:3]) + (float(sphere[3]) + SPHERE_MARGIN,), tuple(rot), tuple(trans), scale))
         skinned.append(sfnif.SkinnedShape(sh.name or f"Shape{i}".encode(), f"{d}\\{f}".encode(),
                                           len(m.triangles) * 3, len(m.positions), materials[i],
-                                          [b.encode("latin-1") for b in bones], binds))
+                                          [b.encode("latin-1") for b in bones], binds,
+                                          *(transform if transform else ())))
     n = sfnif.build_skinned_nif(out_name.rsplit("/", 1)[-1].encode(), skinned)
     files[f"meshes/{out_name}.nif"] = nifmod.serialize(n)
     return files
@@ -387,6 +405,8 @@ def main(argv=None):
     ap.add_argument("--token", default="")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out, e.g. MaleBodyStormcloak")
     ap.add_argument("--drop-fields", default="", help="ARMA fields not copied from the vanilla template, e.g. FLLD")
+    ap.add_argument("--no-shape-offset", action="store_true",
+                    help="leave the shapes at 0 instead of the body's own offset (the old behaviour)")
     ap.add_argument("--reverse", action="store_true", help="write the shapes in reverse order (spike test)")
     ap.add_argument("--max-residual", type=float, default=0.002, help="metres (default %(default)s)")
     a = ap.parse_args(argv)
@@ -419,7 +439,8 @@ def main(argv=None):
         except SystemExit:
             tpl_arma_nif = None
     material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
-    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{a.name}")
+    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{a.name}",
+                           None if a.no_shape_offset else rep["body_transform"])
     for rel, data in files.items():
         dst = os.path.join(a.out, *rel.split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -437,6 +458,7 @@ def main(argv=None):
     print(f"calibration: {rep['calibration']['rms_m'] * 1000:.2f} mm rms, scale {rep['calibration']['scale']:.5f}")
     for g, r in rep["shapes"].items():
         print(f"  {g}: {r['vertices']} vertices, {r['unweighted']} unweighted, {len(r['bones'])} bones")
+    print("shape offset:", "none" if a.no_shape_offset else rep["body_transform"][0])
     print("shape order:", ", ".join(rep["shapes"]))
     print("ARMA fields:", " ".join(f for f, _d in rep["arma_fields"]))
     for sub, d in recs[0][2]:

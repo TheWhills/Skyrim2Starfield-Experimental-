@@ -120,6 +120,17 @@ class RecordTests(unittest.TestCase):
             recs, _ = E.armor_records(p, "S2S\\X.nif", "X", 1, "X", drop=["MOD4"])
         self.assertNotIn(b"MOD4", dict(recs[0][2]))                              # --drop-fields
 
+    def test_shape_offset_written_and_read(self):
+        from fo4sf import nif as nifmod, sfnif
+        sh = E.skyrimhair.HairShape(b"S", np.zeros((3, 3)), np.tile([0.0, 0, 1], (3, 1)),
+                                    np.tile([1.0, 0, 0], (3, 1)), [(0.0, 0.0)] * 3, [(0, 1, 2)],
+                                    [[("C_Chest", 1.0)]] * 3, -1, -1, -1, colors=[(255, 255, 255, 255)] * 3)
+        lift = ([0.0, -0.002, 1.632], [1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0])
+        files = E.body_nif_files([sh], ["m.mat"], {"C_Chest": SKIN["binds"][0]}, "S2S/T", lift)
+        t, r = E.shape_transform(files["meshes/S2S/T.nif"])
+        self.assertEqual((t, r), lift)
+        self.assertEqual(E.shape_transform(b"not a nif")[0], [0.0, 0.0, 0.0])
+
     def test_field_text(self):
         self.assertEqual(E.field_text(b"\x05\x00Meshes\\a\\morph.dat\x00"), "Meshes\\a\\morph.dat  (21 bytes)")
         self.assertEqual(E.field_text(b"\x01\x02"), "0102")
@@ -206,6 +217,8 @@ class ExportTests(unittest.TestCase):
         self.assertIn("BSGeometry", [n.type_of(i) for i in range(len(n.blocks))])
         from fo4sf import sfnif
         skin = sfnif.parse_skin(n)
+        g = sfnif.parse_bsgeometry(n.blocks[[n.type_of(i) for i in range(len(n.blocks))].index("BSGeometry")])
+        self.assertEqual(tuple(g.translation), (0.0, 0.0, 0.0))                  # no offset given
         self.assertEqual(skin["bones"], [b"C_Chest", b"C_Spine2"])           # only the bones the gear uses
         got = skin["binds"][0]
         self.assertTrue(np.allclose(got[1], ROT) and np.allclose(got[2], (0, 0, -1.3)))   # the body's bind, as is

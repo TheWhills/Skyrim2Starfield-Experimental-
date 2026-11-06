@@ -171,6 +171,10 @@ class SkinnedShape:
     # per bone (bounding sphere centre xyz + radius in bone space, rotation row-major 9, translation 3, scale):
     # the skin-to-bone bind; a vertex is drawn at bone_world * bind * vertex
     binds: List[Tuple[Tuple[float, ...], Tuple[float, ...], Tuple[float, ...], float]]
+    # the shape's own transform (BSGeometry translation / rotation 9). Vanilla worn meshes keep their vertices in the
+    # body mesh's space and lift the shape by it (Outfit_Nightwear_LowerBody_01_M: +1.632 m in z, 2026-11-06)
+    translation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation: Tuple[float, ...] = (1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 
 FLT_MAX = 3.4028234663852886e38
@@ -199,7 +203,7 @@ def build_skinned_nif(node_name: bytes, shapes: List[SkinnedShape], bs_version: 
     for sh, base in zip(shapes, geo):
         nb = len(sh.bones)
         g = BSGeometry(name_idx=f.string_index(sh.name), extra_refs=[base + 2, base + 3], sphere=(0.0, 0.0, 0.0, 0.0),
-                       box=(FLT_MAX,) * 6, skin=base + 4, shader=base + 1,
+                       translation=tuple(sh.translation), rotation=tuple(sh.rotation), box=(FLT_MAX,) * 6, skin=base + 4, shader=base + 1,
                        meshes=[MeshRef(sh.indices_size, sh.num_verts, 0x40, sh.mesh_path), None, None, None])
         f.add_block("BSGeometry", build_bsgeometry(g))
         f.add_block("BSLightingShaderProperty",
