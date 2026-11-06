@@ -27,7 +27,8 @@ from .skyrimhair import MAX_WEIGHTS, UNIT, HairShape, nearest_surface, _vertex_f
 
 STRETCH = (0.75, 1.33)          # bone length ratio clamp
 REACH = 0.08                    # m: Skyrim body points farther from Starfield's surface get no offset
-CARRY = 0.15                    # m: gear takes the body offset of Skyrim body points within this distance
+CARRY = 0.10                    # m: gear takes the body offset of Skyrim body points within this distance
+COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
 SKIN_DEPTH = 0.003              # m: a shape whose vertices lie this close to the Skyrim body is a skin piece
@@ -302,6 +303,25 @@ def _knn_mean(src: np.ndarray, values: np.ndarray, query: np.ndarray, k: int, ra
     return out
 
 
+def _knn_mean_facing(src: np.ndarray, src_n: np.ndarray, values: np.ndarray, query: np.ndarray, query_n: np.ndarray,
+                     k: int, radius: float, chunk: int = 256) -> np.ndarray:
+    """As _knn_mean, each source weighted also by how well its normal agrees with the query's (cos^2, facing only):
+    a shin point learns from the shin, not from the calf behind it (2026-11-06, owner: the leg's shape differs)."""
+    out = np.zeros((len(query), values.shape[1]))
+    ss = (src * src).sum(1)
+    for c in range(0, len(query), chunk):
+        q, qn = query[c:c + chunk], query_n[c:c + chunk]
+        d2 = (q * q).sum(1)[:, None] + ss[None, :] - 2.0 * q @ src.T
+        kk = min(k, len(src))
+        idx = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
+        d = np.sqrt(np.maximum(np.take_along_axis(d2, idx, 1), 0.0))
+        face = np.clip(np.einsum("ij,ikj->ik", qn, src_n[idx]), 0.0, 1.0) ** 2
+        w = np.where(d < radius, face / np.maximum(d, 1e-3), 0.0)
+        tot = w.sum(1, keepdims=True)
+        out[c:c + chunk] = np.where(tot > 0, (w[:, :, None] * values[idx]).sum(1) / np.maximum(tot, 1e-12), 0.0)
+    return out
+
+
 def outward(points: np.ndarray, normals: np.ndarray) -> np.ndarray:
     """Normals flipped if most point toward the body's vertical axis (a body surface's normals point out)."""
     c = points.mean(0)
@@ -312,7 +332,7 @@ def outward(points: np.ndarray, normals: np.ndarray) -> np.ndarray:
 
 
 def body_offsets(sky_body: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, reach: float = REACH,
-                 smooth: int = 3, sky_nrm: Optional[np.ndarray] = None, agree: float = AGREE,
+                 smooth: int = 2, sky_nrm: Optional[np.ndarray] = None, agree: float = AGREE,
                  cap: float = CAP) -> Tuple[np.ndarray, Dict]:
     """Per moved-Skyrim-body point the offset onto the Starfield surface (along Starfield's normal), smoothed. A
     point counts only when the two surfaces face the same way there (normals within acos(agree)); offsets are capped
@@ -324,13 +344,13 @@ def body_offsets(sky_body: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, r
     depth = np.clip(depth, -cap, cap)
     off = np.where(ok[:, None], -depth[:, None] * sf_nrm[idx], 0.0)
     for _ in range(smooth):
-        off = _knn_mean(sky_body, off, sky_body, 8, 0.05)
+        off = _knn_mean(sky_body, off, sky_body, 6, 0.03)
     return off, {"matched": int(ok.sum()), "points": int(len(sky_body)),
                  "median_depth_mm": float(np.median(np.abs(depth[ok])) * 1000) if ok.any() else None}
 
 
 def closest_on_mesh(points: np.ndarray, verts: np.ndarray, tris: np.ndarray, vnrm: np.ndarray, k: int = 6,
-                    chunk: int = 256) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                    chunk: int = 256, with_normals: bool = False):
     """(closest surface point, signed depth along the outward face normal, distance) of each point on a triangle
     mesh, searching the triangles around its k nearest vertices (2026-11-06: nearest-VERTEX depth missed boot and
     sole points just inside the shins and feet, where the body's vertices lie several cm apart)."""
@@ -348,6 +368,7 @@ def closest_on_mesh(points: np.ndarray, verts: np.ndarray, tris: np.ndarray, vnr
     best_p = np.zeros_like(points)
     best_d = np.full(len(points), np.inf)
     best_s = np.zeros(len(points))
+    best_n = np.zeros_like(points)
     for c0 in range(0, len(points), chunk):
         q = points[c0:c0 + chunk]
         d2 = (q * q).sum(1)[:, None] + vv[None, :] - 2.0 * q @ verts.T
@@ -362,6 +383,9 @@ def closest_on_mesh(points: np.ndarray, verts: np.ndarray, tris: np.ndarray, vnr
             i = int(np.argmin(dist))
             best_p[c0 + j], best_d[c0 + j] = cp[i], dist[i]
             best_s[c0 + j] = float((q[j] - cp[i]) @ fn[cand[i]])
+            best_n[c0 + j] = fn[cand[i]]
+    if with_normals:
+        return best_p, best_s, best_d, best_n
     return best_p, best_s, best_d
 
 
@@ -395,30 +419,47 @@ def _closest_on_triangles(p, a, b, c) -> np.ndarray:
     return out
 
 
-def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, gap: float = GAP,
-          reach: float = 0.04, iters: int = 4, k: int = 3) -> Tuple[np.ndarray, int]:
+def _neighbours(n: int, tris: np.ndarray) -> List[np.ndarray]:
+    nb = [set() for _ in range(n)]
+    for a, b, c in tris:
+        nb[a] |= {b, c}
+        nb[b] |= {a, c}
+        nb[c] |= {a, b}
+    return [np.array(sorted(x), int) for x in nb]
+
+
+def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, body_nrm: Optional[np.ndarray] = None,
+          gap: float = GAP, reach: float = 0.04, iters: int = 6, k: int = 3,
+          most: float = COVER_MAX) -> Tuple[np.ndarray, int]:
     """Push gear faces out over body points that come through them (2026-11-06, Ralof's boots: 202 vertices, every one
     outside the leg, yet the flat faces between them cut through the calf and toes). A body point counts when its
     closest gear point is within `reach`, lies inside a face (the offset runs along the face normal, not off an
-    edge, so the leg above an opening does not drag its rim) and is less than `gap` inside the gear; the k gear
-    vertices nearest that spot move out along their normals by the shortfall (largest kept), repeated."""
+    edge, so the leg above an opening does not drag its rim), that face looks away from the body (its normal agrees
+    with the body's there: inner layers facing the skin are left alone) and the point is less than `gap` inside it.
+    The k gear vertices nearest the spot get the shortfall; the push is spread over each vertex's neighbours (two
+    averaging passes, so single vertices do not spike), capped at `most` in total, and repeated."""
     tris = np.asarray(gear_tris, int).reshape(-1, 3)
     if not len(tris) or not len(body):
         return gear, 0
     out = gear.copy()
     nrm = gear_nrm / np.maximum(np.linalg.norm(gear_nrm, axis=1, keepdims=True), 1e-12)
     lo, hi = gear.min(0) - reach, gear.max(0) + reach
-    near_body = body[((body >= lo) & (body <= hi)).all(1)]
-    moved = set()
+    sel = ((body >= lo) & (body <= hi)).all(1)
+    near_body = body[sel]
+    near_n = body_nrm[sel] if body_nrm is not None else None
+    nb = _neighbours(len(out), tris)
+    total = np.zeros(len(out))
     for _ in range(iters):
         if not len(near_body):
             break
-        cp, depth, dist = closest_on_mesh(near_body, out, tris, nrm)
+        cp, depth, dist, fn = closest_on_mesh(near_body, out, tris, nrm, with_normals=True)
         along = np.abs(depth) >= 0.9 * np.maximum(dist, 1e-9)
         bad = (dist < reach) & along & (depth > -gap)
+        if near_n is not None:
+            bad &= np.einsum("ij,ij->i", fn, near_n) > 0.3
         if not bad.any():
             break
-        need = depth[bad] + gap                          # how far the gear must move out at that spot
+        need = depth[bad] + gap
         push = np.zeros(len(out))
         gg = (out * out).sum(1)
         q = cp[bad]
@@ -429,10 +470,17 @@ def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, g
             for v in idx[j]:
                 if need[j] > push[v]:
                     push[v] = need[j]
-        hit = push > 0
-        out[hit] += push[hit, None] * nrm[hit]
-        moved |= set(np.nonzero(hit)[0].tolist())
-    return out, len(moved)
+        for _p in range(2):                               # spread to neighbours: no single-vertex spikes
+            spread = np.array([max(push[v], push[nb[v]].mean() if len(nb[v]) else 0.0) * 1.0
+                               if push[v] > 0 else (0.5 * push[nb[v]].max() if len(nb[v]) else 0.0)
+                               for v in range(len(out))])
+            push = spread
+        push = np.minimum(push, np.maximum(most - total, 0.0))
+        if not (push > 1e-5).any():
+            break
+        out += push[:, None] * nrm
+        total += push
+    return out, int((total > 1e-5).sum())
 
 
 def push_out(points: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, gap: float = GAP,
@@ -531,7 +579,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         if len(sky_bp):
             d, dist, _i = nearest_surface(s.points, sky_bp, sky_bn)
             skin = bool(np.median(np.abs(d)) < SKIN_DEPTH and np.median(dist) < 0.01)
-        shift = _knn_mean(bp, off, pts, 8, CARRY) if len(bp) else np.zeros_like(pts)
+        shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
         pts = pts + shift
         pushed = 0
         if len(sf_body_pts):
@@ -540,7 +588,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                    tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         covered = 0
         if not skin and len(sf_body_pts):
-            pts, covered = cover(pts, nrm, s.triangles, sf_body_pts, gap)
+            pts, covered = cover(pts, nrm, s.triangles, sf_body_pts, sf_nrm, gap)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
             lo, hi = sf_body_pts.min(0) - FAR, sf_body_pts.max(0) + FAR

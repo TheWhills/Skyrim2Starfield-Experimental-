@@ -161,22 +161,25 @@ class SurfaceTests(unittest.TestCase):
         self.assertAlmostEqual(depth, 0.004, places=4)
 
     def test_cover_pushes_flat_faces_over_a_round_leg(self):
-        # a square tube (4 sides, corners at r = 0.1) round a leg of radius 0.09: the corners are outside, the middle
-        # of each face (0.0707 from the axis) cuts 2 cm into the leg
-        a = np.linspace(0, 2 * np.pi, 4, endpoint=False) + np.pi / 4
+        # an 8-sided tube (corners at r = 0.1) round a leg of radius 0.095: the corners are outside, the middle of each
+        # face (0.0924 from the axis) cuts into the leg
+        a = np.linspace(0, 2 * np.pi, 8, endpoint=False)
         gear = np.array([[0.1 * np.cos(t), 0.1 * np.sin(t), h] for h in (0.0, 1.0) for t in a])
         gn = gear * [1, 1, 0]
         gn /= np.linalg.norm(gn, axis=1, keepdims=True)
         tris = []
-        for j in range(4):
-            a0, a1 = j, (j + 1) % 4
-            tris += [(a0, a1, a0 + 4), (a1, a1 + 4, a0 + 4)]
-        leg, _ = self.cylinder(0.09, n=48, rows=11)
-        out, moved = G.cover(gear, gn, tris, leg, gap=0.004)
-        self.assertEqual(moved, 8)
-        # the face middles now clear the leg: corners pushed so the flat sides sit outside r = 0.09
+        for j in range(8):
+            a0, a1 = j, (j + 1) % 8
+            tris += [(a0, a1, a0 + 8), (a1, a1 + 8, a0 + 8)]
+        leg, leg_n = self.cylinder(0.095, n=64, rows=11)
+        out, moved = G.cover(gear, gn, tris, leg, leg_n, gap=0.004)
+        self.assertEqual(moved, 16)
         mid = (out[0] + out[1]) / 2
-        self.assertGreater(np.linalg.norm(mid[:2]), 0.09)
+        self.assertGreater(np.linalg.norm(mid[:2]), 0.095)                 # faces now clear the leg
+        self.assertLess(np.linalg.norm(out[0][:2]), 0.1 + G.COVER_MAX + 1e-9)
+        # an inner layer (normals toward the leg) is left alone
+        out2, moved2 = G.cover(gear, -gn, tris, leg, leg_n, gap=0.004)
+        self.assertEqual(moved2, 0)
 
     def test_outward(self):
         pts, nrm = self.cylinder(0.1)

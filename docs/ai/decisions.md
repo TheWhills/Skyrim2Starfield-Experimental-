@@ -1776,3 +1776,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   them cut through the calf and toes. gearfit.cover now checks the other way: body points coming through a gear face
   (closest point inside the face, within 4 cm, less than the gap inside) push the 3 nearest gear vertices out along
   their normals by the shortfall, 4 rounds. Back faces stay opt-in (--back-faces auto = Skyrim's double-sided only).
+- verified (owner, same day): cover closed the shin / toe gaps but made the gear thick and the cuffs spiky (StormCloak
+  400, PrisonerCuffs 1730 vertices moved). Owner: the leg's own shape differs between the games. Changes: the
+  Skyrim->Starfield body offset is carried by facing body points only (cos^2 of the normals, k 24, within 10 cm;
+  smoothing 2 x within 3 cm) so the shin and calf keep their own differences; cover only pushes faces that look away
+  from the body (inner layers left), spreads each push over the vertex's neighbours (no spikes) and caps the total at
+  2.5 cm. unresolved: in game.
