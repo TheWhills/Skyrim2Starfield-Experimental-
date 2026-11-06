@@ -158,11 +158,6 @@ def bounds(s, shape: str):
     return None
 
 
-def standing(b, floor: float = 25.0) -> bool:
-    """A body whose feet are near z 0 and whose head is well above them."""
-    return bool(b) and abs(b[0][2]) <= floor and b[1][2] - b[0][2] > 50.0
-
-
 def union(bs):
     bs = [b for b in bs if b]
     if not bs:
@@ -187,14 +182,11 @@ def convert(client, body_nif: str, gear_nifs: list, female: bool, out: str, name
         loaded = s("load_from_archive", files=[SF_BODY[female]], mode="import")
         sf_body = next((n for f in loaded.get("loaded", []) for n in f.get("shapes", [])), None) or s.shapes()[0]
         s("set_reference_shape", shape=sf_body)
-        # 2026-11-06 first run: Starfield's body reported z -114 .. -8 while it was drawn standing on the floor, the
-        # Skyrim gear came in at z 0 .. 117: its node transform is only applied for display, so every fit went to
-        # the wrong place (gear under the body's feet, no weights copied). Bake it in, then check.
-        s("shape_transforms", op="apply", shapes=[sf_body])
+        # 2026-11-06: Starfield's body sits at z -113 .. -6 in its own mesh space and is drawn standing only through
+        # its skin transform. That raw space is where the game skins it, so the Skyrim gear is fitted there (the
+        # first run's fit_to_body found the body right beside the gear) and later takes the body's skin transform
+        # (copy_bone_weights copySkinTransform). Baking the node transform (second run) moved it 1.6 units: not it.
         rep["body_bounds"] = bounds(s, sf_body)
-        if not standing(rep["body_bounds"]):
-            raise StepFailed(f"reference body is not standing at the origin after shape_transforms apply: "
-                             f"{rep['body_bounds']}")
         before = set(s.shapes())
         s("import_from_game", file=body_nif)
         old_body = [n for n in s.shapes() if n not in before]
@@ -221,7 +213,8 @@ def convert(client, body_nif: str, gear_nifs: list, female: bool, out: str, name
         s("fit_to_body", **fit)
         if old_body:
             s("delete_shapes", shapes=old_body)
-        s("copy_bone_weights", shapes=gear)
+        # the gear takes the body's skin transform, its vertices stay where they were fitted (same raw space)
+        s("copy_bone_weights", shapes=gear, copySkinTransform=True, transformGeometry=False)
         rep["validate"] = s("validate_project", shapes=gear)
         s("render_view", views=["front", "left", "back"], grid=True, width=1024, height=1024)
         path = os.path.join(out, name + ".nif")

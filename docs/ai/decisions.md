@@ -1622,3 +1622,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   body stands at z ~0 and the scaled Skyrim figure overlaps it in height. Also seen: Skyrim's body NIF brings two
   shapes (MaleUnderwear_1, MaleUnderwearBody:0), the cuirass a skin shape (MaleBodyStormcloak), the cuffs a
   HandMale_Big1stperson shape; the skin shapes' role in Starfield apparel is open.
+- 2026-11-06 Second os_convert run: shape_transforms apply moved the body only 1.6 units (z -112.7 .. -5.9): the node
+  transform was not the cause; correction of the entry above. Revised reading (supported): Starfield's skinned body
+  lives at z -113 .. -6 in its mesh space and is drawn standing through its skin transform; the first run's fit
+  (fit_to_body found the body beside the gear, mean moves 2-5) was right in that space, and only the weight copy /
+  display missed because the gear had no skin transform. Now: no transform bake; copy_bone_weights with
+  copySkinTransform true, transformGeometry false; the run still stops if the scaled figure does not overlap the body.
