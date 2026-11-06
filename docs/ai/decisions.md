@@ -1679,3 +1679,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   morph data applied to shape 0 by vertex number); os_export now prints those fields and --drop-fields leaves them out.
   Also seen: the Skyrim gloves (shape "HandMale_Big1stperson") hang at the hips, following hip bones, because the
   Starfield body skin has no hand bones to copy from.
+- verified (owner, same day): --drop-fields FLLD did not remove the spike. In motion it is a rigid bar swinging with
+  the body (up when standing, forward when running): a vertex placed far from its bone, not a bad rest position.
+  supported: it comes off the first shape's first bone (boots first: L_Calf, left boot; coat/skin first: C_Chest,
+  upper back). nif_dump.py compares our NIF's blocks with the vanilla nightwear NIF to find what differs.
