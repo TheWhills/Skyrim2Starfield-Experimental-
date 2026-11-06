@@ -63,7 +63,9 @@ class BoneTests(unittest.TestCase):
         # the torso moves as one piece by the overall fit: near its joints, not exactly on them
         self.assertLess(np.linalg.norm(self.apply(PELV, SKY[PELV]) - SF["C_Hips"]), 0.05)
         self.assertTrue(np.allclose(self.t[PELV], self.t[SPN2]))
-        self.assertTrue(np.allclose(self.t[NECK], self.t[SPN2]))              # the neck moves with the torso
+        self.assertTrue(np.allclose(self.t[NECK][:3, :3], self.t[SPN2][:3, :3]))   # the neck moves with the torso,
+        self.assertTrue(np.allclose(self.t[NECK][:2, 3], self.t[SPN2][:2, 3]))     # forward / sideways too,
+        self.assertAlmostEqual(self.apply(NECK, SKY[NECK])[2], SF["C_Neck"][2])      # at its joint's height
 
     def test_child_joint_reached_along_the_bone(self):
         # the calf's own transform carries the Skyrim foot joint onto Starfield's foot (length stretched)

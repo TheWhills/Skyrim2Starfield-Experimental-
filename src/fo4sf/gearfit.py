@@ -91,6 +91,7 @@ SKIN_GAP = 0.002                # m: skin pieces (Skyrim body-textured parts, e.
 ENVELOPE = {s: ((f"NPC {s} Foot [{s}ft ]", f"NPC {s} Toe0 [{s}Toe]"), (f"{s}_Foot", f"{s}_Toe")) for s in "LR"}
 ENVELOPE_SCALE = (0.9, 1.35)    # per-axis clamp of the foot box fit
 NEAR_WEIGHTS = (0.025, 0.05)    # m: gear this close to the body takes the body's weights, fading to its own by the 2nd
+DROP_TO_JOINT = ("NPC Neck [Neck]", "NPC Head [Head]")   # torso bones that still take their joint's height
 FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
 
 
@@ -203,6 +204,12 @@ def bone_transforms(joints: Dict[str, np.ndarray], sf_world: Dict[str, np.ndarra
             turn[b] = np.eye(3)
             out[b] = g.copy()
             rep["bones"][b] = {"to": f, "stretch": 1.0, "turn_deg": 0.0, "torso": True}
+            if b in DROP_TO_JOINT:
+                # height only (2026-11-06, Ralof's cowl too high: Starfield's neck sits lower on the shoulders);
+                # forward / sideways stay with the torso (moving onto the joint fully made the cowl jut forward)
+                dz = float(sf_world[f][2, 3] - (gl @ joints[b][:3, 3] + g[:3, 3])[2])
+                out[b][2, 3] += dz
+                rep["bones"][b]["height_mm"] = round(dz * 1000, 1)
             continue
         c = CHILD.get(b)
         cf = sf_main(c) if c in joints else None

@@ -97,6 +97,50 @@ def starfield_body(sf_data: str, female: bool):
     return pts, tris, binds, weights
 
 
+def starfield_body_skin(sf_data: str, female: bool):
+    """(UVs per vertex, material path) of the game's naked body: for our skin piece, cut from it like the vanilla
+    outfits' own (AA_Clothes_Nightwear_01_Skin: a 938-vertex cut with Naked_M_Body.mat; slot_probe 2026-11-06)."""
+    import slot_probe
+    nif, _ = hkx_to_af.vanilla_file(os_convert.SF_BODY[female], sf_data)
+    paths, _skin = facefit.starfield_head_parts(nif)
+    m = sfmesh.parse(hkx_to_af.vanilla_file("geometries/" + paths[0].replace("\\", "/") + ".mesh", sf_data)[0])
+    uv = np.array(m.uv1, np.uint16).reshape(-1, 2).view(np.float16).astype(float)
+    mat = next((r["material"] for r in slot_probe.model_shapes(nif) if r["material"]), "")
+    return [tuple(map(float, x)) for x in uv], mat
+
+
+HIDE_BODY_SLOTS = [3, 5, 7]   # as vanilla outfits: 3 hides the naked body (nightwear upper body 3 + 5, lower 7)
+SKIN_REACH = 0.03       # m: Starfield body vertices this close to a fitted Skyrim bare-skin piece show as skin
+SKIN_SHAPE = b"S2S_Skin"
+
+
+def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH):
+    """(HairShape in skeleton space, kept body vertex indices) of the Starfield body where Skyrim's bare-skin pieces
+    lie after the fit (2026-11-06, owner: Skyrim's bare arm runs up under the sleeve, Starfield's skin starts lower):
+    the body vertices within `reach` of them and the triangles among them. None when nothing is kept."""
+    from fo4sf import skyrimhair
+    if not len(sources):
+        return None, []
+    zero = np.tile([0.0, 0.0, 1.0], (len(sources), 1))
+    _d, dist, _i = skyrimhair.nearest_surface(body_skel, sources, zero)
+    keep = dist < reach
+    t = np.asarray(body_tris, int).reshape(-1, 3)
+    t = t[keep[t].all(1)]
+    used = np.unique(t)
+    if not len(used):
+        return None, []
+    new = -np.ones(len(body_skel), int)
+    new[used] = np.arange(len(used))
+    pos = body_skel[used]
+    tri = new[t]
+    nrm = skyrimhair._vertex_face_normals(body_skel, t)[used]
+    nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+    sh = skyrimhair.HairShape(SKIN_SHAPE, pos, nrm, np.zeros_like(nrm), [body_uvs[i] for i in used],
+                              [tuple(map(int, x)) for x in tri], [body_w[i] for i in used], -1, -1, -1,
+                              colors=[(255, 255, 255, 255)] * len(pos))
+    return sh, used.tolist()
+
+
 HAND_BONES = ("L_Wrist", "R_Wrist", "L_Index", "R_Index")
 
 
@@ -232,6 +276,11 @@ SKYRIM_LIMBS = {False: ["meshes\\actors\\character\\character assets\\malefeet_1
 SKIN_TEXTURES = "textures\\actors\\character\\"     # Skyrim's body / hands / feet skin
 
 
+def body_skin_shapes(textures: dict) -> set:
+    """The bare-skin shapes textured with Skyrim's BODY skin (not hands: Starfield's hands stay on their own slot)."""
+    return {n for n in skin_shapes(textures) if "body" in textures[n][0].lower()}
+
+
 def skin_shapes(textures: dict) -> set:
     """Names of shapes textured with Skyrim's own skin (bare body parts: Starfield's body shows there instead;
     2026-11-06, Ralof: MaleBodyStormcloak = MaleBody_1.dds, HandMale_Big1stperson = MaleHands_1.dds)."""
@@ -307,7 +356,7 @@ def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, 
 
 
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
-        size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None):
+        size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=()):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds, body_w = starfield_body(sf_data, female)
@@ -338,10 +387,23 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     if sky_head:
         sky_body += skyrim_head_shapes(sky_head)
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet)
+    skin = None
+    if body_skin_names:                      # our own skin piece where Skyrim's body-skin pieces lie
+        src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
+               in set(body_skin_names)]
+        if src:
+            uvs, mat = starfield_body_skin(sf_data, female)
+            skel_body = pts @ frame[:3, :3].T + frame[:3, 3]
+            skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src))
+            if skin is not None:
+                res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
+                res.report["_skin_used"] = used
     if skin_names:                           # Skyrim's bare-skin pieces
         drop = {n for n in res.report["shapes"] if n in set(skin_names)}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
         res.report["dropped_skin_pieces"] = sorted(drop)
+    if skin is not None:
+        res.shapes = list(res.shapes) + [skin]
     shapes = gearfit.to_mesh_space(res.shapes, frame)
     for i, sh in enumerate(shapes):
         sh.tangents = os_export.tangents(np.asarray(sh.positions), np.asarray(sh.normals), sh.uvs, sh.triangles)
@@ -354,14 +416,26 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     return shapes, binds, res.report
 
 
-def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=()) -> dict:
+def skin_morph(body_morph, used) -> tuple:
+    """The skin piece's slider deltas: the body's own, vertex for vertex."""
+    d = {k: {j: body_morph.deltas[k][i] for j, i in enumerate(used) if i in body_morph.deltas[k]}
+         for k in body_morph.keys}
+    e = {k: {j: body_morph.extra[k][i] for j, i in enumerate(used) if i in body_morph.extra[k]}
+         for k in body_morph.keys}
+    return d, e
+
+
+def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None) -> dict:
     """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders. A shape
     written with back faces has its vertices twice (copies after the originals): the copies get the same deltas."""
     out = {}
     for sh in shapes:
         name = sh.name.decode("latin-1")
         n = len(sh.positions)
-        d, extra = gearfit.morph_deltas(np.asarray(sh.positions), body_pts, body_morph)
+        if sh.name == SKIN_SHAPE and skin_used is not None:
+            d, extra = skin_morph(body_morph, skin_used)
+        else:
+            d, extra = gearfit.morph_deltas(np.asarray(sh.positions), body_pts, body_morph)
         total = n
         if name in doubled:
             d = {k: {**v, **{i + n: x for i, x in v.items()}} for k, v in d.items()}
@@ -391,6 +465,8 @@ def main(argv=None):
                     help=f"split low-poly shapes (under {TESSELLATE_BELOW} vertices) n x n before the fit; 1 = off")
     ap.add_argument("--size-feet", action="store_true",
                     help="scale the boots' foot section to Starfield's foot (off: it opened a seam at the ankle)")
+    ap.add_argument("--no-skin-piece", action="store_true",
+                    help="no own skin piece and the naked body left visible (the old behaviour)")
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
@@ -429,9 +505,11 @@ def main(argv=None):
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
                              () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate,
-                             sky._read(bsa.norm(SKY_HEADS[female])))
+                             sky._read(bsa.norm(SKY_HEADS[female])),
+                             () if a.no_skin_piece else sorted(body_skin_shapes(textures)))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
+    skin_used = rep.pop("_skin_used", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -459,9 +537,16 @@ def main(argv=None):
             for gb in gear_bytes:
                 mats.update(shape_materials(conv, gb))
     doubled = set(names) if a.back_faces == "all" else (double & set(names) if a.back_faces == "auto" else set())
+    sp = rep.get("skin_piece")
+    if sp:
+        mats[SKIN_SHAPE.decode()] = sp["material"]
+    slots = None if (a.no_skin_piece or not sp) else HIDE_BODY_SLOTS
     files, _recs, prep, material, _model = os_export.write_armor(
         sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
-        back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names])
+        back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names], slots=slots)
+    if sp:
+        print(f"skin piece: {sp['vertices']} Starfield body vertices where {', '.join(sp['from'])} lies, "
+              f"material {sp['material']}; armor slots {slots} (naked body hidden)")
     if conv is not None:
         import shutil
         import hair_pack
@@ -484,7 +569,7 @@ def main(argv=None):
         if body_morph is None:
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
-            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph, doubled)
+            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph, doubled, skin_used)
             for rel, data in morphs.items():
                 dst = os.path.join(a.out, *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)

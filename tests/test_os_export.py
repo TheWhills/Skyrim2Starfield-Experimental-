@@ -119,6 +119,11 @@ class RecordTests(unittest.TestCase):
             sf_esm(p)
             recs, _ = E.armor_records(p, "S2S\\X.nif", "X", 1, "X", drop=["MOD4"])
         self.assertNotIn(b"MOD4", dict(recs[0][2]))                              # --drop-fields
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            sf_esm(p)
+            recs, _ = E.armor_records(p, "S2S\\X.nif", "X", 1, "X", slots=[3, 7])
+        self.assertEqual(dict(recs[0][2]).get(b"BO64", b"")[:8], E.slot_bits([3, 7]))
 
     def test_shape_offset_written_and_read(self):
         from fo4sf import nif as nifmod, sfnif

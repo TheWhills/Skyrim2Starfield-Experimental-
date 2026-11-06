@@ -257,7 +257,7 @@ def vertex_counts(s) -> Dict[str, int]:
 
 
 # ------------------------------------------------------------------------------------------------ plugin
-def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=()):
+def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=(), slots=None):
     """[ARMA, ARMO, OTFT] copied from the vanilla template armor with the worn model pointed at nif_rel (Data-relative
     under meshes\\), new EditorIDs and FormIDs. Returns (records, report)."""
     recs = {fid: (t, h, subs) for t, h, subs, fid in sfplugin.records(sf_esm, [b"ARMO", b"ARMA", b"OTFT"])}
@@ -274,8 +274,10 @@ def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str,
     _t, ah, asubs = recs[addon]
     model = sfplugin.zs(nif_rel)
     asubs = [(sub, d) for sub, d in asubs if sub.decode("latin-1") not in drop]
-    arma = (b"ARMA", ah, sfplugin.edit(asubs, {b"EDID": sfplugin.zs(f"S2S_{name}_AA"), b"MOD2": model,
-                                                b"MOD3": model}), a_fid)
+    edits = {b"EDID": sfplugin.zs(f"S2S_{name}_AA"), b"MOD2": model, b"MOD3": model}
+    if slots is not None:                         # BO64: which body slots the addon covers (3 hides the naked body)
+        edits[b"BO64"] = slot_bits(slots, dict(asubs).get(b"BO64"))
+    arma = (b"ARMA", ah, sfplugin.edit(asubs, edits), a_fid)
     osubs, seen = [], False
     for s, d in armo[1][2]:
         if s == b"MODL" and len(d) >= 4 and struct.unpack_from("<I", bytes(d), 0)[0] in recs:
@@ -284,13 +286,25 @@ def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str,
             seen = True
             d = struct.pack("<I", a_fid) + bytes(d)[4:]
         osubs.append((s, d))
-    osubs = sfplugin.edit(osubs, {b"EDID": sfplugin.zs(f"S2S_{name}"), b"FULL": sfplugin.zs(full)})
+    oedits = {b"EDID": sfplugin.zs(f"S2S_{name}"), b"FULL": sfplugin.zs(full)}
+    if slots is not None and b"BO64" in dict(osubs):
+        oedits[b"BO64"] = slot_bits(slots, dict(osubs).get(b"BO64"))
+    osubs = sfplugin.edit(osubs, oedits)
     armor = (b"ARMO", armo[1][1], osubs, o_fid)
     outfit = (b"OTFT", otft[1], [(b"EDID", sfplugin.zs(f"S2S_{name}_Outfit")), (b"INAM", struct.pack("<I", o_fid))],
               t_fid)
     rep = {"template": TEMPLATE_ARMOR, "template_addon": f"{addon:08X}", "ARMA": f"{a_fid:08X}",
            "ARMO": f"{o_fid:08X}", "OTFT": f"{t_fid:08X}", "model": nif_rel}
     return [arma, armor, outfit], rep
+
+
+def slot_bits(slots, old=None) -> bytes:
+    """A BO64 field with these slot bits set (the field's other bytes after the first 8 kept)."""
+    v = 0
+    for b in slots:
+        v |= 1 << int(b)
+    tail = bytes(old)[8:] if old is not None else b""
+    return v.to_bytes(8, "little") + tail
 
 
 def nif_material(nif_bytes: bytes) -> str:
@@ -411,7 +425,7 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
 
 
 def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dict[str, tuple], transform=None,
-                anchor: bool = True, drop=(), back_faces=None, materials=None):
+                anchor: bool = True, drop=(), back_faces=None, materials=None, slots=None):
     """Write meshes\\S2S\\<name>.nif + its .mesh files and S2SArmorTest.esm (ARMA / ARMO / OTFT from the vanilla
     template) into the mod folder `out`. shapes in the body mesh's space, weights by Starfield bone name; binds per
     bone. Returns (files, records, record report, material, model path)."""
@@ -419,7 +433,7 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
     sf_esm = os.path.join(sf_data, "Starfield.esm")
     nif_rel = f"S2S\\{name}.nif"
     masters = ["Starfield.esm"]
-    recs, prep = armor_records(sf_esm, nif_rel, name, len(masters), full, list(drop))
+    recs, prep = armor_records(sf_esm, nif_rel, name, len(masters), full, list(drop), slots)
     model = next((sfplugin_zstring(d) for s_, d in recs[0][2] if s_ == b"MOD2"), "")
     vanilla_arma = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if r[3] == int(prep["template_addon"], 16)),
                         None)

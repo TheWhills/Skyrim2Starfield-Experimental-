@@ -93,6 +93,29 @@ class ScriptTests(unittest.TestCase):
         p, t, ww, n = gear_fit.neck_part(pts, [(0, 1, 2), (1, 2, 3)], w, gear_fit.NECK_BONES_SF)
         self.assertEqual((n, len(p), t.tolist()), (3, 3, [[0, 1, 2]]))         # the face-only vertex and its face go
 
+    def test_skin_piece_and_morph(self):
+        import numpy as np
+        from fo4sf import sfmorph
+        body = np.array([[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0], [1, 1, 1], [1.1, 1, 1], [1, 1.1, 1]], float)
+        tris = [(0, 1, 2), (3, 4, 5)]
+        uvs = [(i * 0.1, 0.0) for i in range(6)]
+        w = [[("L_Forearm", 1.0)]] * 6
+        src = np.array([[0.02, 0.02, 0.0]])                     # Skyrim's bare arm lies on the first triangle only
+        sh, used = gear_fit.skin_piece(body, tris, uvs, w, src, reach=0.2)
+        self.assertEqual((used, sh.name, sh.triangles), ([0, 1, 2], gear_fit.SKIN_SHAPE, [(0, 1, 2)]))
+        self.assertEqual(sh.uvs, uvs[:3])
+        m = sfmorph.parse(sfmorph.build(6, ["Overweight"], {"Overweight": {1: (0.01, 0, 0), 4: (0.02, 0, 0)}}))
+        d, _e = gear_fit.skin_morph(m, used)
+        self.assertEqual(list(d["Overweight"]), [1])             # body vertex 1 -> skin vertex 1, exactly
+        self.assertIsNone(gear_fit.skin_piece(body, tris, uvs, w, np.zeros((0, 3)))[0])
+
+    def test_body_skin_shapes_and_slots(self):
+        t = {"MaleBodyStormcloak": ["textures\\actors\\character\\male\\MaleBody_1.dds"],
+             "HandMale": ["textures\\actors\\character\\male\\MaleHands_1.dds"]}
+        self.assertEqual(gear_fit.body_skin_shapes(t), {"MaleBodyStormcloak"})
+        self.assertEqual(os_export.slot_bits([3, 5, 7]), ((1 << 3) | (1 << 5) | (1 << 7)).to_bytes(8, "little"))
+        self.assertEqual(os_export.slot_bits([3], b"\0" * 8 + b"xy")[8:], b"xy")
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 

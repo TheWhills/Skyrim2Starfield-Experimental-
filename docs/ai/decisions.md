@@ -1830,3 +1830,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - owner (same day): the cowl still bulged far forward. Head bone now moves with the torso (its own joint is farther
   forward); only the NECK part of both heads (>= 0.3 weight on neck / chest bones) joins the fit surfaces (the face and
   jaw had pushed the cowl out).
+- verified (slot_probe models, same day): the nightwear's own skin piece (AA_Clothes_Nightwear_01_Skin, slot 13) is
+  a 938-vertex cut of the body using the body's material (Materials\Actors\Human\Naked_Body\Male\Naked_M_Body.mat).
+  Decision: gear_fit hides the naked body like vanilla outfits (our ARMA / ARMO BO64 = slots 3, 5, 7; os_export
+  slot_bits) and adds its own skin piece "S2S_Skin": the Starfield body vertices within 3 cm of where Skyrim's
+  body-skin pieces (MaleBody-textured: MaleBodyStormcloak = bare forearms up under the sleeves, neck, calves) lie
+  after the fit, with the body's UVs, weights and material, and the body's own slider deltas vertex for vertex.
+  Hands keep slot 6. --no-skin-piece = old behaviour. Neck / head: still too high (owner) -> they keep the torso's
+  transform but take their own joint's height (DROP_TO_JOINT). unresolved: all in game.
