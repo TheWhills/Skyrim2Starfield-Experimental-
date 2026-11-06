@@ -1603,3 +1603,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   vertex in Starfield) -> conform_sliders -> validate_project -> export_file + export_slider_data dat (morph.dat).
   OS does not map Starfield materials: ours do. Waiting for a probe with OS set to Starfield (reference templates,
   body path).
+- 2026-11-06 Owner's os_probe3 with Outfit Studio on Starfield (verified): Starfield archives browsed, naked_f.nif
+  loaded (6,616 vertices), all 24 calls ok, but the reference skeleton was Skyrim's (NPC Head [Head] at z 120) and
+  the body rendered lying on its side; BodySlide's Config.xml names res\skeleton_female_sf.nif
+  (DefaultSkeletonReference), which is not in res. scripts/armor/os_skeleton.py copies the game's own skeleton
+  (characterassets/female/skeleton.nif, as HumanRace ANAM) there. No Starfield reference templates or slider sets
+  exist and OS cannot import morph.dat: body sliders will be written by us as per-slider OBJs for import_slider_data.
