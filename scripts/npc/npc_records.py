@@ -187,3 +187,107 @@ def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
         if best:
             return best, f"rgb ({how})"
     return None, "no match"
+
+
+# ---------------------------------------------------------------------------------- eyes, skin tone, brows (11-06)
+# Starfield's NPC_ (owner's npc_face_probe 2026-11-06, 2,983 human NPCs with a face): ECOL eye colour by name, BCOL
+# brow colour by name (the hair colour names), STON skin tone u8 0-8, eyebrows a head part (type 6). Vanilla order:
+# ... DPLT, STON, HCOL, BCOL, ECOL
+EYE_COLORS = ("Brown", "Hazel", "Iron", "Grey", "Green", "Blue", "Red", "BrownDark", "Copper", "RedDevil", "Sulfur")
+# Skyrim eye head part EditorID words -> Starfield eye colour (judged from the names: approximate). Longest first.
+EYE_WORDS = (("darkbrown", "BrownDark"), ("iceblue", "Blue"), ("lightblue", "Blue"), ("lightgrey", "Grey"),
+             ("lightgray", "Grey"), ("blind", "Grey"), ("hazel", "Hazel"), ("amber", "Copper"),
+             ("orange", "Copper"), ("brown", "Brown"), ("green", "Green"), ("blue", "Blue"), ("grey", "Grey"),
+             ("gray", "Grey"), ("violet", "Blue"), ("yellow", "Sulfur"), ("gold", "Sulfur"), ("red", "Red"),
+             ("white", "Grey"))
+FACE_COLOR_ORDER = (b"STON", b"HCOL", b"BCOL", b"ECOL")
+# Skyrim skin tone tint luminance (Y, sRGB 0-255) at Starfield's lightest and darkest tone: Ralof's tint is about 179,
+# Nazeem's 41. ASSUMED: STON 0 is the lightest and 8 the darkest (unverified: the owner checks Nazeem / Saadia in game)
+SKIN_LIGHT_Y, SKIN_DARK_Y, SKIN_TONES = 200.0, 45.0, 9
+
+
+def eye_color(skyrim_edid: Optional[str]) -> Tuple[Optional[str], str]:
+    """(Starfield ECOL name, how) for a Skyrim eyes head part EditorID (MaleEyesHumanIceBlue -> Blue)."""
+    if not skyrim_edid:
+        return None, "no Skyrim eyes"
+    low = skyrim_edid.lower()
+    for word, name in EYE_WORDS:
+        if word in low:
+            return name, f"'{word}' in the EditorID"
+    return None, "no colour word"
+
+
+def skin_tone(rgb) -> Optional[int]:
+    """STON 0-8 for a Skyrim skin colour (the skin tone tint's RGB, 0-255) by its luminance."""
+    if not rgb or rgb[0] is None:
+        return None
+    y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+    t = (SKIN_LIGHT_Y - y) / (SKIN_LIGHT_Y - SKIN_DARK_Y)
+    return int(round(min(1.0, max(0.0, t)) * (SKIN_TONES - 1)))
+
+
+def skyrim_skin_rgb(npc: Dict, race_tints: Dict) -> Tuple[Optional[list], str]:
+    """The NPC's skin colour: its skin tone tint layer's colour (race_tints {(female, index): (mask, kind)}), else
+    its texture lighting (QNAM, 0-1 floats)."""
+    for t in npc.get("tints") or []:
+        if race_tints.get((npc.get("female", False), t["index"]), ("", None))[1] == "skin tone" and t.get("color"):
+            return list(t["color"][:3]), "skin tone tint"
+    tl = npc.get("texture_lighting")
+    if tl:
+        return [round(c * 255) for c in tl], "texture lighting"
+    return None, "none"
+
+
+def with_face_colors(subs, values: Dict[bytes, bytes]) -> list:
+    """subs with STON / HCOL / BCOL / ECOL set: replaced where present, else placed in vanilla's order."""
+    out = list(subs)
+    for sig, data in values.items():
+        at = next((i for i, (s, _d) in enumerate(out) if s == sig), None)
+        if at is not None:
+            out[at] = (sig, data)
+            continue
+        k = FACE_COLOR_ORDER.index(sig)
+        before = [i for i, (s, _d) in enumerate(out) if s in FACE_COLOR_ORDER[:k]]
+        after = [i for i, (s, _d) in enumerate(out) if s in FACE_COLOR_ORDER[k + 1:]]
+        pos = before[-1] + 1 if before else (after[0] if after else len(out))
+        out.insert(pos, (sig, data))
+    return out
+
+
+def race_defaults(race_subs) -> Dict[bool, List[int]]:
+    """{female: [default head part FormIDs]} of a Skyrim RACE (its head data: HEAD after MNAM / FNAM)."""
+    out, female = {False: [], True: []}, False
+    for s, d in race_subs:
+        if s == b"MNAM":
+            female = False
+        elif s == b"FNAM":
+            female = True
+        elif s == b"HEAD" and len(d) >= 4:
+            out[female].append(struct.unpack_from("<I", bytes(d), 0)[0])
+    return out
+
+
+# Skyrim RACE tint mask types (TINP; xEdit wbDefinitionsTES5)
+TINT_KINDS = {0: "none", 1: "lip color", 2: "cheek color", 3: "eyeliner", 4: "eye socket upper",
+              5: "eye socket lower", 6: "skin tone", 7: "paint", 8: "laugh lines", 9: "cheek color lower", 10: "nose",
+              11: "chin", 12: "neck", 13: "forehead", 14: "dirt"}
+
+
+def race_tints(subs) -> Dict:
+    """{(female, TINI index): (mask path, kind)} of a Skyrim RACE (MNAM / FNAM switch the sex of what follows)."""
+    out, female, cur = {}, False, None
+    for s, d in subs:
+        d = bytes(d)
+        if s == b"MNAM":
+            female = False
+        elif s == b"FNAM":
+            female = True
+        elif s == b"TINI" and len(d) >= 2:
+            cur = [struct.unpack_from("<H", d, 0)[0], "", None]
+            out[(female, cur[0])] = cur
+        elif s == b"TINT" and cur is not None:
+            cur[1] = fo4land.zstring(d)
+        elif s == b"TINP" and cur is not None and len(d) >= 2:
+            k = struct.unpack_from("<H", d, 0)[0]
+            cur[2] = TINT_KINDS.get(k, str(k))
+    return {k: (v[1], v[2]) for k, v in out.items()}

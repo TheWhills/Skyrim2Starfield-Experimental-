@@ -24,17 +24,12 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 from fo4sf import fo4land, sfplugin, skyrimnpc  # noqa: E402
+import npc_records  # noqa: E402
 
 DUMP = ("SarahMorgan", "Barrett", "ChargenPresetFemale02_Swap", "ChargenPresetMale01")
 WORDS = re.compile(r"eye|skin.?tone|brow|complexion", re.I)
 SKIP_GROUPS = {b"DIAL", b"INFO", b"CELL", b"WRLD", b"NAVM", b"LAND", b"REFR", b"ACHR", b"QUST", b"PNDT", b"STDT",
                b"SCEN", b"PACK", b"LCTN", b"BIOM"}
-# Skyrim RACE tint mask types (TINP; xEdit wbDefinitionsTES5)
-TINT_KINDS = {0: "none", 1: "lip color", 2: "cheek color", 3: "eyeliner", 4: "eye socket upper",
-              5: "eye socket lower", 6: "skin tone", 7: "paint", 8: "laugh lines", 9: "cheek color lower", 10: "nose",
-              11: "chin", 12: "neck", 13: "forehead", 14: "dirt"}
-
-
 def value(d: bytes):
     d = bytes(d)
     if d and d[-1:] == b"\0" and all(32 <= b < 127 for b in d[:-1]) and len(d) > 1:
@@ -113,30 +108,11 @@ def editor_ids(esm: str, limit: int = 300) -> list:
     return out
 
 
-def race_tints(subs) -> dict:
-    """{(female, TINI index): (mask path, kind)} of a Skyrim RACE (MNAM / FNAM switch the sex of what follows)."""
-    out, female, cur = {}, False, None
-    for s, d in subs:
-        d = bytes(d)
-        if s == b"MNAM":
-            female = False
-        elif s == b"FNAM":
-            female = True
-        elif s == b"TINI" and len(d) >= 2:
-            cur = [struct.unpack_from("<H", d, 0)[0], "", None]
-            out[(female, cur[0])] = cur
-        elif s == b"TINT" and cur is not None:
-            cur[1] = fo4land.zstring(d)
-        elif s == b"TINP" and cur is not None and len(d) >= 2:
-            cur[2] = TINT_KINDS.get(struct.unpack_from("<H", d, 0)[0], str(struct.unpack_from("<H", d, 0)[0]))
-    return {k: (v[1], v[2]) for k, v in out.items()}
-
-
 def skyrim(esm: str, names) -> list:
     npcs = {fid: skyrimnpc.parse_npc(s, fid) for _t, _h, s, fid in sfplugin.records(esm, [b"NPC_"])}
     by_edid = {n["edid"].lower(): n for n in npcs.values()}
     hdpt = {fid: skyrimnpc.parse_head_part(s, fid) for _t, _h, s, fid in sfplugin.records(esm, [b"HDPT"])}
-    races = {fid: (sfplugin.edid(s), race_tints(s)) for _t, _h, s, fid in sfplugin.records(esm, [b"RACE"])}
+    races = {fid: (sfplugin.edid(s), npc_records.race_tints(s)) for _t, _h, s, fid in sfplugin.records(esm, [b"RACE"])}
     out = []
     for name in names:
         n = by_edid.get(name.lower())

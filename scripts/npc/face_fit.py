@@ -171,11 +171,13 @@ def npc_setup(a, sky, esm, sf_esm, npc_recs, report) -> dict:
     voices = {fid: sfplugin.edid(subs) for _t, _h, subs, fid in sfplugin.records(sf_esm, [b"VTYP"])}
     strings = npc_records.skyrim_names(sky, a.strings_language)
     index = npc_records.hairs_index(hp)
+    races = {fid: (npc_records.race_tints(rs), npc_records.race_defaults(rs))
+             for _t, _h, rs, fid in sfplugin.records(esm, [b"RACE"])}
     report["npc_conversion"] = {"hairs_plugin": hp, "masters": masters, "hairstyles_in_it": len(index),
                                 "starfield_hair_colors": sorted(names), "palette": bool(palette),
                                 "skyrim_strings": len(strings)}
     return dict(masters=masters, sf_hdpt=sf_hdpt, hdpt=hdpt, clfm=clfm, names=names, palette=palette,
-                voices=voices, strings=strings, index=index, part_type=npc_hair.part_type,
+                voices=voices, strings=strings, index=index, races=races, part_type=npc_hair.part_type,
                 npc_parts=npc_hair.npc_parts, with_hair_color=npc_hair.with_hair_color)
 
 
@@ -201,8 +203,36 @@ def npc_dress(subs, n, npcs, real, row) -> list:
         subs = real["with_hair_color"](subs, name)
     info["hair_color"] = {"skyrim": (color or {}).get("edid"), "skyrim_rgb": list((color or {}).get("rgba") or [])[:3],
                           "starfield": name, "how": how}
+    subs, info["face_colors"] = face_colors(subs, src, real, name)
     row["dressed"] = info
     return subs
+
+
+def face_colors(subs, src, real, hair_color_name):
+    """Eye colour (ECOL, from the Skyrim eyes head part's name), skin tone (STON 0-8, from the skin tone tint) and brow
+    colour (BCOL = the hair colour; Skyrim brows take the hair colour) on the test NPC (owner 2026-11-06). NPCs without
+    their own eyes use their race's default eyes."""
+    tints, defaults = real.get("races", {}).get(src.get("race"), ({}, {False: [], True: []}))
+    hdpt = real["hdpt"]
+    own = [p for p in (hdpt.get(f) for f in src.get("head_parts", [])) if p and p.get("type") == 2]
+    eyes, where = (own[0], "own") if own else (next(
+        (hdpt[f] for f in defaults.get(src.get("female", False), []) if f in hdpt and hdpt[f].get("type") == 2),
+        None), "race default")
+    ecol, ehow = npc_records.eye_color(eyes.get("edid") if eyes else None)
+    rgb, shown = npc_records.skyrim_skin_rgb(src, tints)
+    ston = npc_records.skin_tone(rgb)
+    values = {}
+    if ston is not None:
+        values[b"STON"] = bytes([ston])
+    if ecol:
+        values[b"ECOL"] = sfplugin.zs(ecol)
+    if hair_color_name:
+        values[b"BCOL"] = sfplugin.zs(hair_color_name)
+    info = {"eyes": {"skyrim": eyes.get("edid") if eyes else None, "from": where, "starfield": ecol, "how": ehow},
+            "skin": {"skyrim_rgb": rgb, "from": shown, "starfield_ston": ston,
+                     "note": "assumed 0 = lightest, 8 = darkest"},
+            "brow_color": hair_color_name}
+    return npc_records.with_face_colors(subs, values), info
 
 
 def fo4land_zstring(d) -> str:

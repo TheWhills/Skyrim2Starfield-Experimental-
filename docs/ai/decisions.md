@@ -1514,3 +1514,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   known yet (hair colour is a name, HCOL / FHCL): scripts/npc/npc_face_probe.py dumps Starfield's human NPCs' field
   stats, head parts by type and HumanRace, and the Skyrim NPCs' eyes / brows head parts, texture lighting and tint
   layers (with the race's mask kind: skin tone ...), before writing any mapping.
+- 2026-11-06 Eyes / skin / brows, from the owner's npc_face_probe (verified field meanings by value): Starfield NPC_
+  ECOL = eye colour name (Brown, Hazel, Iron, Grey, Green, Blue, Red, BrownDark, Copper, RedDevil, Sulfur; 2,598 of
+  2,983 faced humans), BCOL = brow colour name (hair colour names), STON = skin tone u8 0-8, eyebrows = head part
+  type 6 (Human_Male_Eyebrow_Stern ...), eyes = head parts types 12 / 2 (left / right; colour is ECOL, not a part).
+  Vanilla order ... DPLT, STON, HCOL, BCOL, ECOL. face_fit now sets ECOL from the Skyrim eyes head part's name
+  (npc_records.EYE_WORDS; NPCs without their own use the race's default HEAD part: Nazeem), STON from the skin tone
+  tint's luminance (ASSUMED 0 lightest .. 8 darkest; Ralof / Ysolda -> 1, Saadia -> 6, Nazeem -> 8: the in-game
+  check decides the direction), BCOL = the matched hair colour. Brow SHAPE is not mapped yet (Skyrim brows are
+  numbered, not named: needs a look at their textures). Test NPCs: Ralof + Nazeem, Ysolda + Saadia.
