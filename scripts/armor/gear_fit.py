@@ -3,8 +3,9 @@ Studio (2026-11-06: Outfit Studio's fit left the collar over the face, the glove
 folded; owner: "fit the Starfield body the way it does on Skyrim's").
 
 Reads the NPC's default outfit and the Skyrim body from Skyrim's archives, Starfield's body and skeleton from the
-game's archives, fits (gearfit.fit), and writes the armor mod as os_export does (meshes\\S2S\\<name>.nif, its .mesh
-files, S2SArmorTest.esm with ARMA / ARMO / OTFT; the 1 mm anchor shape first). gear_fit.json holds the report.
+game's archives, fits (gearfit.fit), and writes the armor mod: one NIF per shape (meshes\\S2S\\<name>\\<shape>.nif),
+its .mesh files and slider morph.dat, and S2SArmorTest.esm with one ARMA + MRPH (morph record) per shape, the ARMO and
+an OTFT (os_export.write_armor_parts; --one-nif: the old single NIF). gear_fit.json holds the report.
 
     python -I scripts\\armor\\gear_fit.py --skyrim-data "<Skyrim>\\Data" --starfield "D:\\...\\Starfield" --npc Ralof ^
         --name Ralof_outfit --full "Stormcloak Cuirass (S2S)" --out "<MO2 mods>\\S2S Armor Test"
@@ -555,6 +556,8 @@ def main(argv=None):
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
+    ap.add_argument("--one-nif", action="store_true",
+                    help="the old layout: all gear in one NIF and addon (its morph record is the nightwear's)")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
@@ -629,14 +632,27 @@ def main(argv=None):
     if sp:
         mats[SKIN_SHAPE.decode()] = sp["material"]
     slots = None if (a.no_skin_piece or not sp) else HIDE_BODY_SLOTS
-    files, _recs, prep, material, _model = os_export.write_armor(
-        sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
-        back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names], slots=slots,
-        skin_shape=skin_sh if slots else None, skin_material=(sp or {}).get("material"))
+    if a.one_nif:
+        files, _recs, prep, material, _model = os_export.write_armor(
+            sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
+            back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names], slots=slots,
+            skin_shape=skin_sh if slots else None, skin_material=(sp or {}).get("material"))
+        nifs = {n: f"S2S\\{a.name}.nif" for n in names}
+        if skin_sh is not None and slots:
+            nifs[SKIN_SHAPE.decode()] = f"S2S\\{a.name}_Skin.nif"
+    else:
+        parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled} for sh, n in zip(shapes, names)]
+        if skin_sh is not None and slots:
+            parts.append({"shape": skin_sh, "material": sp["material"], "skin": True})
+        files, _recs, prep, material, nifs = os_export.write_armor_parts(
+            sf_data, a.out, a.name, a.full or a.name.replace("_", " "), parts, binds)
+        print(f"one addon + morph record per shape (template model {prep.get('template_vertices')} vertices):")
+        for r in prep["parts"]:
+            print(f"  {r['shape']}: ARMA {r['ARMA']} slots {r['slots']} -> {r['model']}; MRPH {r['MRPH']} "
+                  f"MOBC {r.get('MOBC_template')} -> {r.get('MOBC')}")
     if sp:
         print(f"skin piece: {sp['vertices']} Starfield body vertices where {', '.join(sp['from'])} lies, "
-              f"material {sp['material']}; own addon {prep.get('skin_ARMA')} ({prep.get('skin_model')}) copied from "
-              f"{os_export.SKIN_TEMPLATE_ADDON}; armor slots {slots} (naked body hidden)")
+              f"material {sp['material']}; armor slots {slots} (naked body hidden)")
     if conv is not None:
         import shutil
         import hair_pack
@@ -659,9 +675,9 @@ def main(argv=None):
         if body_morph is None:
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
-            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph, doubled)
-            if skin_sh is not None and slots:
-                morphs.update(morph_files([skin_sh], f"S2S\\{a.name}_Skin.nif", body_pts, body_morph, (),
+            worn = shapes + ([skin_sh] if skin_sh is not None and slots else [])
+            for sh in worn:
+                morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], body_pts, body_morph, doubled,
                                           skin_used))
             for rel, data in morphs.items():
                 dst = os.path.join(a.out, *rel.split("/"))

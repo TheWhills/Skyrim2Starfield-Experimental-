@@ -328,6 +328,173 @@ def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str,
     return [arma, armor, outfit], rep
 
 
+# one addon per shape (2026-11-06, verified with morph_ref_probe: an ARMA's NAM4 / NAM6 name ONE MRPH record each, and
+# the MRPH's TCMP names the folder holding morph.dat; our copied addon still named the nightwear's lower-body morph, so
+# its slider data hit our first shape by vertex number and our own morph.dat files were never read)
+PART_SLOTS = ([3, 5], [7], [8], [9], [10], [11], [12])   # gear parts in order; the skin part keeps its template's slots
+
+
+def part_slug(shape_name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_]+", "_", shape_name.split(":")[0]).strip("_") or "Shape"
+
+
+def part_nif(name: str, shape_name: str) -> str:
+    return f"S2S\\{name}\\{part_slug(shape_name)}.nif"
+
+
+def morph_folder(nif_rel: str, shape_name: str) -> str:
+    """The MRPH TCMP text for a part: the folder gearfit.morph_path writes morph.dat into, Windows style."""
+    stem = nif_rel[:-4] if nif_rel.lower().endswith(".nif") else nif_rel
+    return f"Meshes\\Morphs\\{stem}\\Chargen\\{shape_name.split(':')[0]}"
+
+
+def replace_text(d: bytes, new: str) -> bytes:
+    """A field whose longest printable run (the template's path) is replaced by `new`; a u16 / u32 length just before
+    the run (counting the run, or the run plus its terminating zero) is updated to match."""
+    d = bytes(d)
+    runs = list(re.finditer(rb"[ -~]{4,}", d))
+    nb = new.encode("latin-1")
+    if not runs:
+        return nb + b"\0"
+    m = max(runs, key=lambda r: len(r.group(0)))
+    a, b = m.span()
+    old = b - a
+    head, tail = bytearray(d[:a]), d[b:]
+    for size, fmt in ((2, "<H"), (4, "<I")):
+        if len(head) >= size:
+            v, = struct.unpack_from(fmt, head, len(head) - size)
+            if v in (old, old + 1):
+                struct.pack_into(fmt, head, len(head) - size, len(nb) + (v - old))
+                break
+    return bytes(head) + nb + tail
+
+
+def u32_offsets(d: bytes, value: int) -> list:
+    d = bytes(d)
+    return [i for i in range(0, len(d) - 3) if struct.unpack_from("<I", d, i)[0] == value]
+
+
+def _fid(d) -> int:
+    return struct.unpack_from("<I", bytes(d), 0)[0] if d is not None and len(d) >= 4 else 0
+
+
+def with_fields(subs, fields: Dict[bytes, bytes]) -> list:
+    """subs with each of `fields` replaced in place, or, if missing, added after the last model field (MOD*)."""
+    out = sfplugin.edit(list(subs), {k: v for k, v in fields.items() if any(s == k for s, _d in subs)})
+    missing = [(k, v) for k, v in fields.items() if not any(s == k for s, _d in subs)]
+    if missing:
+        at = max([i + 1 for i, (s, _d) in enumerate(out) if s.startswith(b"MOD")] or [len(out)])
+        out[at:at] = missing
+    return out
+
+
+def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, drop=(), template_vertices=None):
+    """ARMA + MRPH per part, then ARMO and OTFT. parts: [{"shape", "nif", "vertices", "skin": bool, "slots": list or
+    None}]. Gear parts copy the template armor's addon, the skin part AA_Clothes_Nightwear_01_Skin; each part's MRPH
+    is a copy of the morph record its template addon names (NAM4), with TCMP pointed at the part's morph folder, and
+    the part's NAM4 / NAM6 point at it. MOBC (meaning unknown): copied, except a u32 in it equal to the template
+    model's vertex count (template_vertices) becomes the part's vertex count. Returns (records, report)."""
+    recs = {fid: (t, h, subs) for t, h, subs, fid in sfplugin.records(sf_esm, [b"ARMO", b"ARMA", b"OTFT", b"MRPH"])}
+    armo = next(((fid, r) for fid, r in recs.items() if r[0] == b"ARMO" and sfplugin.edid(r[2]) == TEMPLATE_ARMOR),
+                None)
+    if armo is None:
+        raise SystemExit(f"no ARMO {TEMPLATE_ARMOR} in {sf_esm}")
+    is_addon = lambda d: len(d) >= 4 and recs.get(_fid(d), (None,))[0] == b"ARMA"      # noqa: E731
+    gear_tpl = next((_fid(d) for s, d in armo[1][2] if s == b"MODL" and is_addon(d)), None)
+    if gear_tpl is None:
+        raise SystemExit(f"{TEMPLATE_ARMOR}: no ARMA")
+    skin_tpl = next((fid for fid, r in recs.items() if r[0] == b"ARMA" and sfplugin.edid(r[2]) == SKIN_TEMPLATE_ADDON),
+                    None)
+    otft = next(r for r in recs.values() if r[0] == b"OTFT")
+    nxt = iter(range(10 ** 6))
+    out, addons, rep = [], [], {"template": TEMPLATE_ARMOR, "template_addon": f"{gear_tpl:08X}", "parts": []}
+    gear_i = 0
+    for p in parts:
+        tpl = skin_tpl if p.get("skin") else gear_tpl
+        if tpl is None:
+            raise SystemExit(f"no ARMA {SKIN_TEMPLATE_ADDON} in {sf_esm}")
+        _t, ah, asubs = recs[tpl]
+        asubs = [(s, d) for s, d in asubs if s.decode("latin-1") not in drop]
+        a_fid = sfplugin.new_form_id(next(nxt), masters)
+        key = part_slug(p["shape"])
+        model = sfplugin.zs(p["nif"])
+        edits = {b"EDID": sfplugin.zs(f"S2S_{name}_{key}_AA"), b"MOD2": model, b"MOD3": model}
+        slots = p.get("slots")
+        if slots is None and not p.get("skin"):
+            slots = PART_SLOTS[min(gear_i, len(PART_SLOTS) - 1)]
+        if not p.get("skin"):
+            gear_i += 1
+        if slots is not None:
+            edits[b"BO64"] = slot_bits(slots, dict(asubs).get(b"BO64"))
+        row = {"shape": p["shape"], "model": p["nif"], "ARMA": f"{a_fid:08X}", "template": sfplugin.edid(asubs),
+               "slots": slots if slots is not None else _slot_list(dict(asubs).get(b"BO64"))}
+        m_tpl = recs.get(_fid(dict(asubs).get(b"NAM4")))
+        if m_tpl is None or m_tpl[0] != b"MRPH":       # skin template without its own morph: the gear template's
+            m_tpl = recs.get(_fid(dict(recs[gear_tpl][2]).get(b"NAM4")))
+        if m_tpl is not None and m_tpl[0] == b"MRPH":
+            m_fid = sfplugin.new_form_id(next(nxt), masters)
+            folder = morph_folder(p["nif"], p["shape"])
+            medits = {b"EDID": sfplugin.zs(f"S2S_{name}_{key}_Morph")}
+            msubs = dict(m_tpl[2])
+            if b"TCMP" in msubs:
+                medits[b"TCMP"] = replace_text(msubs[b"TCMP"], folder)
+            mobc = bytes(msubs.get(b"MOBC", b""))
+            row["MOBC_template"] = mobc.hex()
+            if mobc and template_vertices and p.get("vertices"):
+                at = u32_offsets(mobc, int(template_vertices))
+                if at:
+                    b = bytearray(mobc)
+                    for i in at:
+                        struct.pack_into("<I", b, i, int(p["vertices"]))
+                    medits[b"MOBC"] = bytes(b)
+            row["MOBC"] = bytes(medits.get(b"MOBC", mobc)).hex()
+            out_m = (b"MRPH", m_tpl[1], sfplugin.edit(list(m_tpl[2]), medits), m_fid)
+            edits_m = {b"NAM4": struct.pack("<I", m_fid), b"NAM6": struct.pack("<I", m_fid)}
+            row.update(MRPH=f"{m_fid:08X}", morph_folder=folder)
+        else:
+            out_m, edits_m = None, {}
+            row["MRPH"] = None
+        arma = (b"ARMA", ah, with_fields(sfplugin.edit(asubs, edits), edits_m), a_fid)
+        out.append(arma)
+        if out_m is not None:
+            out.append(out_m)
+        addons.append(a_fid)
+        rep["parts"].append(row)
+    o_fid, t_fid = (sfplugin.new_form_id(next(nxt), masters) for _ in range(2))
+    src = armo[1][2]
+    has_indx = any(s == b"INDX" for s, _d in src)
+    first_modl = next(bytes(d) for s, d in src if s == b"MODL" and is_addon(d))
+    osubs, placed = [], False
+    for i, (s, d) in enumerate(src):
+        addon_field = s == b"MODL" and is_addon(d)
+        indx_field = s == b"INDX" and i + 1 < len(src) and src[i + 1][0] == b"MODL"
+        if addon_field or indx_field:
+            if not placed:
+                for k, fid in enumerate(addons):
+                    if has_indx:
+                        osubs.append((b"INDX", struct.pack("<H", k)))
+                    osubs.append((b"MODL", struct.pack("<I", fid) + first_modl[4:]))
+                placed = True
+            continue
+        osubs.append((s, d))
+    union = sorted({b for r in rep["parts"] for b in r["slots"]})
+    oedits = {b"EDID": sfplugin.zs(f"S2S_{name}"), b"FULL": sfplugin.zs(full)}
+    if b"BO64" in dict(osubs):
+        oedits[b"BO64"] = slot_bits(union, dict(osubs).get(b"BO64"))
+    armor = (b"ARMO", armo[1][1], sfplugin.edit(osubs, oedits), o_fid)
+    outfit = (b"OTFT", otft[1], [(b"EDID", sfplugin.zs(f"S2S_{name}_Outfit")), (b"INAM", struct.pack("<I", o_fid))],
+              t_fid)
+    rep.update(ARMO=f"{o_fid:08X}", OTFT=f"{t_fid:08X}", slots=union)
+    return out + [armor, outfit], rep
+
+
+def _slot_list(bo64) -> list:
+    if not bo64:
+        return []
+    v = int.from_bytes(bytes(bo64)[:8], "little")
+    return [i for i in range(64) if v >> i & 1]
+
+
 def slot_bits(slots, old=None) -> bytes:
     """A BO64 field with these slot bits set (the field's other bytes after the first 8 kept)."""
     v = 0
@@ -495,6 +662,55 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield armor test", masters=masters))
     return files, recs, prep, material, model
+
+
+def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds: Dict[str, tuple], transform=None,
+                      drop=()):
+    """One NIF, ARMA and MRPH per part (see armor_records_parts): meshes\\S2S\\<name>\\<shape>.nif each, and
+    S2SArmorTest.esm. parts: [{"shape": HairShape, "material", "back": bool, "skin": bool, "slots": list or None}].
+    Returns (files, records, report, template material, {shape name: nif path})."""
+    sf_esm = os.path.join(sf_data, "Starfield.esm")
+    tpl_nif, tpl_vertices = None, None
+    tpl = next((r for r in sfplugin.records(sf_esm, [b"ARMA", b"ARMO"]) if r[0] == b"ARMO"
+                and sfplugin.edid(r[2]) == TEMPLATE_ARMOR), None)
+    if tpl is not None:
+        a_fid = next((_fid(d) for s, d in tpl[2] if s == b"MODL"), 0)
+        arma = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if r[3] == a_fid), None)
+        vm = next((sfplugin_zstring(d) for s_, d in (arma[2] if arma else []) if s_ == b"MOD2"), "")
+        if vm:
+            try:
+                tpl_nif = hkx_to_af.vanilla_file("meshes/" + vm.replace("\\", "/"), sf_data)[0]
+            except SystemExit:
+                tpl_nif = None
+    if tpl_nif:
+        try:
+            import slot_probe
+            shapes = slot_probe.model_shapes(tpl_nif)
+            tpl_vertices = shapes[0]["vertices"] if shapes else None
+        except Exception:                              # report without the count; MOBC is then copied as is
+            tpl_vertices = None
+    material = nif_material(tpl_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
+    files, rows, nifs = {}, [], {}
+    for p in parts:
+        sh = p["shape"]
+        sname = sh.name.decode("latin-1")
+        rel = part_nif(name, sname)
+        nifs[sname] = rel
+        files.update(body_nif_files([sh], [p.get("material") or material], binds,
+                                    rel[:-4].replace("\\", "/"), transform, [bool(p.get("back"))]))
+        rows.append({"shape": sname, "nif": rel, "skin": bool(p.get("skin")), "slots": p.get("slots"),
+                     "vertices": len(sh.positions) * (2 if p.get("back") else 1)})
+    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices)
+    prep["template_vertices"] = tpl_vertices
+    for rel, data in files.items():
+        dst = os.path.join(out, *rel.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "wb") as fh:
+            fh.write(data)
+    info = sfplugin.header_info(sf_esm)
+    with open(os.path.join(out, PLUGIN), "wb") as fh:
+        fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield armor test", masters=["Starfield.esm"]))
+    return files, recs, prep, material, nifs
 
 
 def main(argv=None):

@@ -1873,3 +1873,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   scripts/armor/morph_ref_probe.py searches every Starfield.esm record for the morph folder name. Neck squash came
   out 1.0 (Starfield clavicle -> head joint not shorter than Skyrim's): the "5 cm higher" read compared neck regions
   cut by weights, not comparable; unresolved.
+- 2026-11-06 (Claude, armor) Body-slider morphs need their own MRPH record. verified (morph_ref_probe on the owner's
+  Starfield.esm): MRPH 00026685 MORPH_Clothes_Nightwear_01_LowerBody_M, fields EDID TCMP MOBC, TCMP = the folder
+  holding morph.dat; our copied ARMA's NAM4 = 0x00026685 (NAM6 0x00026688, the female one). So one ARMA names one
+  morph, and our outfit had the nightwear's morph and never read ours. gear_fit now writes one NIF + ARMA + MRPH per
+  shape (os_export.write_armor_parts): the MRPH copied from the one the template addon names, TCMP pointed at the
+  folder gearfit.morph_path writes into, NAM4 / NAM6 both at it; no anchor shape. MOBC unresolved: copied, except a
+  u32 equal to the template model's first-shape vertex count is set to the part's. Gear parts get distinct slots
+  ([3, 5], [7], [8], ...; supported: vanilla outfits give each addon its own slots), the skin part its template's
+  (13). --one-nif keeps the old layout.

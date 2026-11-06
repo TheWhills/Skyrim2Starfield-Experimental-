@@ -164,6 +164,71 @@ class RecordTests(unittest.TestCase):
                                  (b"INDX", b"\1\0"), (b"MODL", struct.pack("<I", recs[1][3]))])
         self.assertEqual(rep["skin_ARMA"], f"{recs[1][3]:08X}")
 
+    def test_parts_get_own_addon_and_morph_record(self):
+        tcmp = struct.pack("<H", 12) + b"Meshes\\NW\\M" + b"\0"   # u16 length counting the zero (assumed layout)
+        mrph = (b"MRPH", HDR(b"MRPH"), [(b"EDID", z("MORPH_NW_M")), (b"TCMP", tcmp),
+                                        (b"MOBC", struct.pack("<II", 7, 2792))], 0x4000)
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            recs = [r for r in sfplugin.records(self._esm(d), [b"ARMA", b"ARMO", b"OTFT"])]
+            recs = [(t, h, sfplugin.edit(subs, {b"NAM4": struct.pack("<I", 0x4000), b"NAM6": struct.pack("<I", 0x4001)})
+                     if sfplugin.edid(subs) == "Nightwear_AA" else subs, fid) for t, h, subs, fid in recs] + [mrph]
+            with open(p, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            parts = [{"shape": "StormCloak", "nif": "S2S\\R\\StormCloak.nif", "vertices": 4939},
+                     {"shape": "Boots", "nif": "S2S\\R\\Boots.nif", "vertices": 1382},
+                     {"shape": "S2S_Skin", "nif": "S2S\\R\\S2S_Skin.nif", "vertices": 700, "skin": True}]
+            out, rep = E.armor_records_parts(p, "R", 1, "R", parts, template_vertices=2792)
+        self.assertEqual([r[0] for r in out], [b"ARMA", b"MRPH"] * 3 + [b"ARMO", b"OTFT"])
+        for k in range(3):
+            arma, morph = dict(out[2 * k][2]), dict(out[2 * k + 1][2])
+            self.assertEqual(arma[b"MOD2"], z(parts[k]["nif"]))
+            self.assertEqual(arma[b"NAM4"], struct.pack("<I", out[2 * k + 1][3]))     # ours, not the nightwear's
+            self.assertEqual(arma[b"NAM6"], arma[b"NAM4"])
+            path = E.morph_folder(parts[k]["nif"], parts[k]["shape"]).encode()
+            self.assertEqual(morph[b"TCMP"], struct.pack("<H", len(path) + 1) + path + b"\0")
+            self.assertEqual(morph[b"MOBC"], struct.pack("<II", 7, parts[k]["vertices"]))
+        self.assertEqual(E.morph_folder("S2S\\R\\Boots.nif", "Boots"), "Meshes\\Morphs\\S2S\\R\\Boots\\Chargen\\Boots")
+        self.assertEqual([r["slots"] for r in rep["parts"]], [[3, 5], [7], [13]])
+        armo = out[-2][2]
+        self.assertEqual([bytes(d)[:4] for s, d in armo if s == b"MODL"],
+                         [struct.pack("<I", out[i][3]) for i in (0, 2, 4)])
+        self.assertEqual(dict(out[-1][2])[b"INAM"], struct.pack("<I", out[-2][3]))
+
+    def test_morph_folder_matches_where_morph_dat_is_written(self):
+        from fo4sf import gearfit
+        rel = E.part_nif("Ralof_outfit", "StormCloak")
+        self.assertEqual(rel, "S2S\\Ralof_outfit\\StormCloak.nif")
+        folder = E.morph_folder(rel, "StormCloak").replace("\\", "/").lower()
+        self.assertEqual(gearfit.morph_path(rel, "StormCloak"), folder + "/morph.dat")
+
+    def test_replace_text(self):
+        self.assertEqual(E.replace_text(b"Meshes\\a\0", "Meshes\\bc"), b"Meshes\\bc\0")
+        self.assertEqual(E.replace_text(struct.pack("<I", 9) + b"Meshes\\a\0", "Meshes\\bc"),
+                         struct.pack("<I", 10) + b"Meshes\\bc\0")
+
+    def test_write_armor_parts_files(self):
+        sh = lambda n: E.skyrimhair.HairShape(n, np.zeros((3, 3)), np.tile([0.0, 0, 1], (3, 1)),  # noqa: E731
+                                              np.tile([1.0, 0, 0], (3, 1)), [(0.0, 0.0)] * 3, [(0, 1, 2)],
+                                              [[("C_Chest", 1.0)]] * 3, -1, -1, -1, colors=[(255, 255, 255, 255)] * 3)
+        with tempfile.TemporaryDirectory() as d:
+            sf_esm(os.path.join(d, "Starfield.esm"))
+            out = os.path.join(d, "mod")
+            files, recs, rep, _m, nifs = E.write_armor_parts(
+                d, out, "R", "R", [{"shape": sh(b"Coat")}, {"shape": sh(b"S2S_Skin"), "skin": True}],
+                {"C_Chest": SKIN["binds"][0]})
+            self.assertTrue(os.path.isfile(os.path.join(out, "meshes", "S2S", "R", "Coat.nif")))
+            self.assertTrue(os.path.isfile(os.path.join(out, E.PLUGIN)))
+        self.assertEqual(nifs, {"Coat": "S2S\\R\\Coat.nif", "S2S_Skin": "S2S\\R\\S2S_Skin.nif"})
+        self.assertEqual([r[0] for r in recs], [b"ARMA", b"ARMA", b"ARMO", b"OTFT"])   # no MRPH in the template
+        self.assertEqual([r["MRPH"] for r in rep["parts"]], [None, None])
+
+    @staticmethod
+    def _esm(d):
+        p = os.path.join(d, "tpl.esm")
+        sf_esm(p)
+        return p
+
     def test_field_text(self):
         self.assertEqual(E.field_text(b"\x05\x00Meshes\\a\\morph.dat\x00"), "Meshes\\a\\morph.dat  (21 bytes)")
         self.assertEqual(E.field_text(b"\x01\x02"), "0102")
