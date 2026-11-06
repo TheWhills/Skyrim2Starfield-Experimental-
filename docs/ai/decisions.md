@@ -1509,3 +1509,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-06 Owner, in game: Ralof's and Ysolda's Skyrim greetings play with audio and their mouths move (verified):
   TRDA audio ID + loose .wem / .ffxanim under Sound\Voice\<plugin>\<voice type>\ works; the lips compiled under the
   Skyrim line names and renamed still play.
+- 2026-11-06 Owner: next for the test NPCs, eye colour, skin tone and eyebrows; compare two men and two women
+  (Ralof + Nazeem, Ysolda + Saadia: Nord and Redguard, so skin tone shows). Starfield's NPC fields for these are not
+  known yet (hair colour is a name, HCOL / FHCL): scripts/npc/npc_face_probe.py dumps Starfield's human NPCs' field
+  stats, head parts by type and HumanRace, and the Skyrim NPCs' eyes / brows head parts, texture lighting and tint
+  layers (with the race's mask kind: skin tone ...), before writing any mapping.
