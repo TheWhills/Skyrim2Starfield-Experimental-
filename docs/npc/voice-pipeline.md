@@ -61,7 +61,7 @@ The `.wem` lands somewhere under `<outdir>` (search for it recursively). The enc
 ## File layout and naming
 
 - Files go in `Data\Sound\Voice\<Plugin.esm or .esp>\<VoiceTypeEditorID>\<id>.wem` with a matching `<id>.ffxanim` next to it.
-- UNITY named lines with 8-hex IDs (`00666A79`...) that match INFO (dialogue response) FormIDs in its plugin, and the engine found them. **Assume `<id>` = the INFO record's FormID**, without the load-order byte. Confirm on one line before batch-converting.
+- UNITY named lines with 8-hex IDs (`00666A79`...) that match INFO (dialogue response) FormIDs in its plugin. **Corrected 2026-11-05 (probe-verified):** `<id>` is the audio file ID stored in the response's TRDA subrecord (bytes 4-7, after the emotion keyword): 3,973 of genericmaleeventoned's 4,248 vanilla files are named that way, only 33 match an INFO FormID. UNITY's lines likely played through its SFSE hooks. Any unique ID works as long as TRDA and the file name agree.
 - For lips, the engine reads from the NPC's actual voice-type folder. An NPC on a generic voice type only gets lips if the file is in that generic folder.
 
 ## What NOT to copy from UNITY (dynamic-only hacks)

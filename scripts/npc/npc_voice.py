@@ -6,11 +6,12 @@ Skyrim lines; the audio from skyrim_voice.py, UNITY's chain). Built on what dial
 * one quest copied from the vanilla DialogueGeneric (EDID, FULL, DNAM, its own conditions dropped, NEXT, ANAM);
 * in that quest's child group (type 10) one greeting topic (DIAL: EDID, PNAM f32 50, QNAM the quest, DATA 00 07 7D
   00, SNAM 'HELO', TIFL its responses' FormIDs, TIFC their count);
-* in the topic's child group (type 7) one response (INFO) per line: ENAM 0, TRDA (no emotion keyword, 0, 0.0), NAM1
+* in the topic's child group (type 7) one response (INFO) per line: ENAM 0, TRDA (no emotion keyword, the audio file ID, 0.0), NAM1
   the line's text (our plugin is not localized), NAM2-4 empty, NAM9 zero, CTDA GetIsID the NPC (function 72, the
   same index in both games: the probe saw vanilla greetings use it), NAM0 empty, INAM 1;
-* the audio and lips as Data\\Sound\\Voice\\<plugin>\\<voice type>\\<response FormID, 8 hex, no load-order byte>.wem /
-  .ffxanim (vanilla's generic voice files are named that way; UNITY's lines were found by it).
+* the audio and lips as Data\\Sound\\Voice\\<plugin>\\<voice type>\\<audio file ID, 8 hex>.wem / .ffxanim, the ID
+  stored in the response's TRDA (bytes 4-7; probe-verified on vanilla, see NO_EMOTION); we use the response FormID
+  without its load-order byte as the ID.
 """
 import json
 import os
@@ -25,10 +26,10 @@ GET_IS_ID = 72
 # verified). 2026-11-05 owner: Ralof only ever said his first line ('Hmph.', silent): without Random the game takes the
 # first response whose conditions pass
 RANDOM, RANDOM_END = 0x0002, 0x0020
-# TRDA: emotion keyword (none), response number, f32. 2026-11-05 owner: the line showed its subtitle and stayed silent
-# with the files in place; response numbers start at 1 in Skyrim and Fallout 4 (whose voice file names carry it), the
-# first build wrote 0 (hypothesis, not verified)
-RESPONSE_NUMBER = 1
+# TRDA: u32 emotion keyword (FFFFFFFF none), u32 the line's audio file ID, f32. Verified on the owner's probe
+# (2026-11-05): 3,973 of genericmaleeventoned's 4,248 .wem names are this u32 of a Starfield.esm response (only 33
+# match an INFO FormID); we had written 1 (and 0 before), so the game looked for 00000001.wem and played nothing
+NO_EMOTION = 0xFFFFFFFF
 GREETING_DATA = bytes.fromhex("00077d00")
 
 
@@ -57,8 +58,9 @@ def topic(header: bytes, fid: int, edid: str, quest_fid: int, infos: List[int]):
                               (b"TIFC", struct.pack("<I", len(infos)))], fid)
 
 
-def response(header: bytes, fid: int, text: str, npc_fid: int, flags: int = RANDOM):
-    return (b"INFO", header, [(b"ENAM", struct.pack("<HH", flags, 0)), (b"TRDA", struct.pack("<IIf", 0xFFFFFFFF, RESPONSE_NUMBER, 0.0)),
+def response(header: bytes, fid: int, text: str, npc_fid: int, flags: int = RANDOM, sound_id: int = 0):
+    trda = struct.pack("<IIf", NO_EMOTION, sound_id, 0.0)
+    return (b"INFO", header, [(b"ENAM", struct.pack("<HH", flags, 0)), (b"TRDA", trda),
                               (b"NAM1", sfplugin.zs(text)), (b"NAM2", b"\0"), (b"NAM3", b"\0"), (b"NAM4", b"\0"),
                               (b"NAM9", bytes(8)), (b"CTDA", ctda_get_is_id(npc_fid)), (b"NAM0", b"\0"),
                               (b"INAM", struct.pack("<I", 1))], fid)
@@ -116,7 +118,7 @@ def add_voices(recs: list, npc_index: Dict[str, int], rows: list, voice_dir: str
             lip = os.path.join(src, stem + ".ffxanim")
             if os.path.isfile(lip):
                 shutil.copyfile(lip, os.path.join(folder, name + ".ffxanim"))
-            infos.append(response(header, ifid, ln["text"], npc_fid))
+            infos.append(response(header, ifid, ln["text"], npc_fid, sound_id=int(name, 16)))
             done.append({"text": ln["text"], "info": f"{ifid:08X}", "file": name, "lips": os.path.isfile(lip)})
         row["voice"] = {"voice_type": vt_edid, "form_id": f"{vfid:08X}", "greetings": done}
     if not infos:

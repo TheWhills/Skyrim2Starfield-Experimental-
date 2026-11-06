@@ -1500,3 +1500,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (00000330, 0000115e) are below Starfield's first FormID (0x800), so the "file = INFO FormID" assumption from UNITY is
   in doubt. dialogue_probe.py now reports how genericmaleeventoned's file names relate to Starfield.esm's INFOs (as
   FormIDs, or as a u32 inside some subrecord) and dumps matching responses in full.
+- 2026-11-05 Voice file naming solved on the owner's probe (verified): Starfield names a response's audio after the u32
+  at TRDA bytes 4-7 (3,973 of 4,248 genericmaleeventoned .wem names; 33 match INFO FormIDs, the rest coincidences).
+  TRDA = u32 emotion keyword (FFFFFFFF or a KYWD), u32 audio file ID (24-bit values in vanilla), f32. npc_voice now
+  writes the file's ID there (still the response FormID without its load-order byte, so file names are unchanged);
+  the TRDA "response number" hypothesis was wrong. Vanilla ENAM values seen: 0x0A, 0x02, 0x400, 0x402, 0x308 (info
+  groups); the Random reading of 0x02 still stands (lines vary in game).

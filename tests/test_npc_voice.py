@@ -71,7 +71,7 @@ class VoiceRecordTests(unittest.TestCase):
             self.assertEqual([struct.unpack("<HH", e) for e in enams], [(NV.RANDOM, 0),
                                                                         (NV.RANDOM | NV.RANDOM_END, 0)])
             trda = bytes.fromhex(next(x["hex"] for x in info if x["sig"] == "TRDA"))
-            self.assertEqual(struct.unpack("<IIf", trda), (0xFFFFFFFF, 1, 0.0))      # response 1, not 0
+            self.assertEqual(struct.unpack("<IIf", trda), (0xFFFFFFFF, int(greet[0]["file"], 16), 0.0))  # audio ID
             tifl = next(x for x in t["subs"] if x["sig"] == "TIFL")
             self.assertEqual(tifl["size"], 8)
 
