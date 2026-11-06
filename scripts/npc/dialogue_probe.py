@@ -55,6 +55,7 @@ def probe(esm: str, max_topics: int = 8, max_infos: int = 4) -> dict:
     topics inside their quests' child groups); a topic's responses are the INFOs of the type-7 group labelled with
     its FormID."""
     topics, by_fid, quests, vtyp = [], {}, {}, []
+    index, idx_fid, funcs, quest_recs = [], {}, {}, {}
     counts = {"info_total": 0, "info_voice": 0, "dial_total": 0, "dial_greeting": 0}
     where = {}
 
@@ -71,6 +72,8 @@ def probe(esm: str, max_topics: int = 8, max_infos: int = 4) -> dict:
             subs = list(fo4land.iter_subrecords(fo4land.record_data(buf, off)))
             if typ == b"QUST":
                 quests[fid] = _edid(subs)
+                if "generic" in quests[fid].lower() and len(quest_recs) < 4:
+                    quest_recs[fid] = {"edid": quests[fid], "subs": dump_subs(subs, 24)}
             elif typ == b"VTYP":
                 if _edid(subs) in VOICE_TYPES:
                     vtyp.append({"form_id": f"{fid:08X}", "edid": _edid(subs), "subs": dump_subs(subs)})
@@ -78,6 +81,10 @@ def probe(esm: str, max_topics: int = 8, max_infos: int = 4) -> dict:
                 counts["dial_total"] += 1
                 if is_greeting(subs):
                     counts["dial_greeting"] += 1
+                    q = next((struct.unpack_from("<I", bytes(d), 0)[0] for s_, d in subs if s_ == b"QNAM"), None)
+                    row = {"topic": f"{fid:08X}", "edid": _edid(subs), "quest": q, "infos": 0}
+                    index.append(row)
+                    idx_fid[fid] = row
                     if len(topics) < max_topics:
                         t = {"form_id": f"{fid:08X}", "edid": _edid(subs), "subs": dump_subs(subs), "infos": [],
                              "info_count": 0,
@@ -91,6 +98,12 @@ def probe(esm: str, max_topics: int = 8, max_infos: int = 4) -> dict:
                        for s, d in subs):
                     counts["info_voice"] += 1
                 owner = next((o for g, o in reversed(path) if g == 7), None)
+                if owner in idx_fid:
+                    idx_fid[owner]["infos"] += 1
+                    for s_, d in subs:
+                        if s_ == b"CTDA" and len(d) >= 10:
+                            f = struct.unpack_from("<H", bytes(d), 8)[0]
+                            funcs[f] = funcs.get(f, 0) + 1
                 t = by_fid.get(owner)
                 if t is not None:
                     t["info_count"] += 1
@@ -103,9 +116,17 @@ def probe(esm: str, max_topics: int = 8, max_infos: int = 4) -> dict:
     for t in topics:
         q = next((r.get("u32") for r in t["subs"] if r["sig"] == "QNAM"), None)
         t["quest"] = quests.get(int(q, 16)) if q else None
+    for row in index:
+        row["quest"] = quests.get(row["quest"], f"{row['quest']:08X}" if row["quest"] is not None else None)
+    by_quest = {}
+    for row in index:
+        by_quest[row["quest"]] = by_quest.get(row["quest"], 0) + row["infos"]
     return {"greeting_topics": topics, "infos_total": counts["info_total"],
             "infos_with_voice_type_condition": counts["info_voice"], "topics_total": counts["dial_total"],
-            "greeting_topics_total": counts["dial_greeting"], "voice_types": vtyp, **where}
+            "greeting_topics_total": counts["dial_greeting"], "voice_types": vtyp,
+            "greeting_quests_by_responses": sorted(by_quest.items(), key=lambda kv: -kv[1])[:40],
+            "greeting_condition_functions": sorted(funcs.items(), key=lambda kv: -kv[1])[:30],
+            "generic_quests": list(quest_recs.values()), **where}
 
 
 def voice_files(data_dir: str, voice: str = "genericmaleeventoned", limit: int = 30) -> list:

@@ -266,6 +266,12 @@ def main(argv=None):
     ap.add_argument("--texconv", help="texconv.exe, for --hair")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip (for --hair)")
     ap.add_argument("--archive2", help="default: <Starfield>/Tools/Archive2/Archive2.exe")
+    ap.add_argument("--smooth", type=int, default=10,
+                    help="smooth the Skyrim face's displacement over Starfield's head this many steps before the fit "
+                         "(0: off; 2026-11-05: lumpy at Skyrim's vertex spacing)")
+    ap.add_argument("--dial-limit", type=float, default=1.0,
+                    help="largest dial value (1 = the looks menu's range; e.g. 1.5 to test whether the game takes "
+                         "more: the fit hit 1.0 on 8 of Ralof's dials)")
     ap.add_argument("--preview", action="store_true",
                     help="faces_preview\\<NPC>.png per NPC: Starfield's base head, the Skyrim face on it (the fit's "
                          "target), our fitted face; front, side, and a heat map of each one's change from the base")
@@ -315,7 +321,8 @@ def main(argv=None):
         chosen = chosen[:a.count]
     print(f"{len(npcs)} Skyrim NPCs; fitting {len(chosen)}: {', '.join(n['edid'] for n in chosen)}")
 
-    report = {"settings": {"pos_unit": a.pos_unit}, "sexes": {}, "npcs": []}
+    report = {"settings": {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit}, "sexes": {},
+              "npcs": []}
     setup = {}
     for female in (False, True):
         if not any(n["female"] == female for n in chosen):
@@ -352,8 +359,10 @@ def main(argv=None):
             if fg is None or len(fg) != len(base):
                 raise ValueError(f"FaceGen head has {0 if fg is None else len(fg)} vertices, base head {len(base)}")
             disp = facefit.transfer(base, fg, al, head.vertices)
+            if a.smooth and getattr(head, "triangles", None) is not None and len(head.triangles):
+                disp = facefit.smooth_field(disp, head.triangles, a.smooth)
             values, rep = facefit.fit(head, sliders, head.vertices + disp, facefit.face_weights(head),
-                                      pos_unit=a.pos_unit)
+                                      pos_unit=a.pos_unit, limit=a.dial_limit)
             names = {s.id: f"{s.region}: {s.name}" for s in sliders}
             if a.preview and getattr(head, "triangles", None) is not None and len(head.triangles):
                 fitted = facefit.deform(head, sliders, values, pos_unit=a.pos_unit)

@@ -143,8 +143,8 @@ def basis(head: Head, sliders: Sequence[Slider], pos_unit: float = 0.01):
 
 
 def bounded_lsq(A: np.ndarray, b: np.ndarray, w: Optional[np.ndarray] = None, ridge: float = 1e-6,
-                iters: int = 400, tol: float = 1e-10) -> np.ndarray:
-    """argmin_x ||sqrt(w) (A x - b)||^2 + ridge ||x||^2 with 0 <= x <= 1 (coordinate descent)."""
+                iters: int = 400, tol: float = 1e-10, upper: float = 1.0) -> np.ndarray:
+    """argmin_x ||sqrt(w) (A x - b)||^2 + ridge ||x||^2 with 0 <= x <= upper (coordinate descent)."""
     if w is not None:
         A = A * w[:, None]
         b = b * w
@@ -159,7 +159,7 @@ def bounded_lsq(A: np.ndarray, b: np.ndarray, w: Optional[np.ndarray] = None, ri
         for i in range(len(x)):
             if d[i] <= 0:
                 continue
-            new = min(1.0, max(0.0, x[i] + (h[i] - G[i] @ x) / d[i]))
+            new = min(upper, max(0.0, x[i] + (h[i] - G[i] @ x) / d[i]))
             biggest = max(biggest, abs(new - x[i]))
             x[i] = new
         if biggest < tol:
@@ -168,9 +168,11 @@ def bounded_lsq(A: np.ndarray, b: np.ndarray, w: Optional[np.ndarray] = None, ri
 
 
 def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weights: Optional[np.ndarray] = None,
-        pos_unit: float = 0.01, ridge: float = 1e-6, refine: int = 2) -> Tuple[Dict[int, float], Dict]:
+        pos_unit: float = 0.01, ridge: float = 1e-6, refine: int = 2, limit: float = 1.0
+        ) -> Tuple[Dict[int, float], Dict]:
     """Slider values {id: value} that move head.vertices toward target (V, 3), and a report (RMS before / after with
-    the exact deformation). refine > 0 re-linearises around the solution (rotations / scales) that many times."""
+    the exact deformation). refine > 0 re-linearises around the solution (rotations / scales) that many times.
+    limit: the largest |value| (1 = the looks menu's range; more is a test of what the game accepts)."""
     wv = np.ones(len(head.vertices)) if vertex_weights is None else np.asarray(vertex_weights, float)
     w = np.repeat(np.sqrt(np.maximum(wv, 0.0)), 3)
     A, keys = basis(head, sliders, pos_unit)
@@ -181,7 +183,7 @@ def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weight
         current = deform(head, sliders, values, pos_unit)
         x0 = np.array([max(0.0, values.get(k, 0.0) * s) for k, s in keys])
         rhs = (target - current).reshape(-1) + A @ x0
-        x = bounded_lsq(A, rhs, w, ridge)
+        x = bounded_lsq(A, rhs, w, ridge, upper=limit)
         new: Dict[int, float] = {}
         for (k, s), xi in zip(keys, x):
             new[k] = new.get(k, 0.0) + s * xi
@@ -191,8 +193,9 @@ def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weight
 
     def rms(a):
         return float(np.sqrt(np.mean(np.sum((a[mask] - target[mask]) ** 2, axis=1)))) if mask.any() else 0.0
+    at_limit = sorted(k for k, v in values.items() if abs(v) >= limit - 1e-4)
     return values, {"rms_before": rms(base), "rms_after": rms(final), "sliders_used": len(values),
-                    "columns": len(keys)}
+                    "columns": len(keys), "sliders_at_limit": at_limit}
 
 
 # ------------------------------------------------------------------------------------------------ Skyrim -> Starfield
@@ -268,6 +271,25 @@ def transfer(src_base: np.ndarray, src_face: np.ndarray, alignment, dst_vertices
     w = 1.0 / np.maximum(d, 1e-9)
     w /= w.sum(1, keepdims=True)
     return np.einsum("mk,mkc->mc", w, disp[j])
+
+
+def smooth_field(field: np.ndarray, triangles, iterations: int = 10, keep: float = 0.5) -> np.ndarray:
+    """field (V, k) averaged with its mesh neighbours `iterations` times (each step: keep x own + (1 - keep) x the
+    neighbours' mean). For the Skyrim displacement moved onto Starfield's 15,000-vertex head from Skyrim's ~900: the
+    owner's preview 2026-11-05 showed it lumpy at Skyrim's vertex spacing, noise no slider can follow."""
+    f = np.asarray(field, float).copy()
+    t = np.asarray(triangles, int)
+    if iterations <= 0 or not len(t):
+        return f
+    a = np.concatenate([t[:, 0], t[:, 1], t[:, 2], t[:, 1], t[:, 2], t[:, 0]])
+    b = np.concatenate([t[:, 1], t[:, 2], t[:, 0], t[:, 0], t[:, 1], t[:, 2]])
+    deg = np.bincount(a, minlength=len(f)).astype(float)
+    for _ in range(iterations):
+        acc = np.zeros_like(f)
+        np.add.at(acc, a, f[b])
+        mean = np.where(deg[:, None] > 0, acc / np.maximum(deg, 1)[:, None], f)
+        f = keep * f + (1 - keep) * mean
+    return f
 
 
 def face_weights(head: Head, minimum: float = 1e-3) -> np.ndarray:

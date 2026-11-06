@@ -35,3 +35,33 @@ class PreviewTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrientAndSmoothTests(unittest.TestCase):
+    def test_orientation_stands_a_lying_head_up(self):
+        from fo4sf import facefit
+        p, tris = sphere(40)
+        head = p * [0.8, 0.9, 1.2]                                   # taller than wide / deep, Z up
+        cranium = head[:, 2] > 0
+        head[cranium, :2] *= 1.15                                    # wider at the top than at the chin
+        nose = (head[:, 1] > 0.08) & (np.abs(head[:, 2]) < 0.03) & (np.abs(head[:, 0]) < 0.03)
+        head[nose, 1] += 0.03                                        # a nose towards +Y
+        lying = head[:, [2, 0, 1]] * [1, 1, -1]                      # up along X, front along -Z
+        R = FP.orientation(lying)
+        back = lying @ R.T
+        self.assertTrue(np.allclose(np.abs(np.linalg.det(R)), 1))
+        self.assertGreater(back[nose, 1].mean(), 0.09)               # the nose faces +Y again
+        self.assertGreater(back[cranium, 2].mean(), 0)               # the cranium up
+        img = FP.sheet([lying, lying], tris, size=48)
+        self.assertEqual(img.shape, (144, 96, 3))
+        noisy = np.random.default_rng(1).normal(size=(len(p), 3))
+        sm = facefit.smooth_field(noisy, tris, 10)
+        self.assertLess(sm.std(), noisy.std() * 0.5)
+        self.assertTrue(np.allclose(facefit.smooth_field(np.ones((len(p), 3)), tris, 10), 1))
+        self.assertTrue(np.allclose(facefit.smooth_field(noisy, tris, 0), noisy))
+
+    def test_dial_limit(self):
+        from fo4sf import facefit
+        A = np.eye(2)
+        self.assertTrue(np.allclose(facefit.bounded_lsq(A, np.array([3.0, 0.5])), [1.0, 0.5], atol=1e-6))
+        self.assertTrue(np.allclose(facefit.bounded_lsq(A, np.array([3.0, 0.5]), upper=1.5), [1.5, 0.5], atol=1e-6))

@@ -1446,3 +1446,15 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   topic at the top level: Starfield keeps topics in their quests' child groups; it now walks every depth.
   Verified there: voice types VTYP (EDID, DNAM u8, ANAM for the two named voices = 000C866C, PNAM u8) and the generic
   voice files named <8-hex FormID>.wem (sound/voice/starfield.esm/genericmaleeventoned/).
+- 2026-11-05 owner's face previews (Ralof, Ysolda; verified from the pictures): the Skyrim face moved onto
+  Starfield's head (the fit's target) is lumpy at Skyrim's ~900-vertex spacing (noise from transfer's nearest-vertex
+  average), and our fit reproduces the broad changes (jaw, chin, cheeks) weaker; 8 of Ralof's dials sit at the
+  +-1 limit. Changes: facefit.smooth_field (the displacement smoothed over Starfield's mesh, --smooth 10 default),
+  fit(limit=...) with --dial-limit (default 1, the looks menu's range; >1 is a test of what the game takes) and the
+  report's sliders_at_limit; facepreview.orientation (Starfield's head mesh is not Z-up: the faces lay sideways).
+  Starfield dialogue (verified, dialogue_probe): topics live in their quest's child group (type 10), responses in the
+  topic's type-7 group; greeting DIAL: PNAM f32 50 (priority), QNAM quest, DATA 00 07 7D 00, SNAM 'HELO', TIFL the
+  INFO FormIDs + TIFC count; INFO: ENAM flags, optional GNAM = its info group (an INFO with flags 0x40, an EditorID
+  and the shared conditions), TRDA 12 bytes, TROT, NAM1 text id, NAM2-4, NAM9 8-byte timestamp, CTDA (32 bytes, same
+  layout as Skyrim's), NAM0, INAM. 486 greeting topics, 126,347 INFOs. Probe extended: greeting quests by response
+  count, the condition functions they use, generic dialogue quests in full.
