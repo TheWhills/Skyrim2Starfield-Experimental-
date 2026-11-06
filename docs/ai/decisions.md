@@ -1566,3 +1566,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   ~283 face dials (with More Sliders ids 401-665) vs the template's 29, hair head part, colours, voice, name.
   Hypothesis: our dial set makes the game skip baking the face texture. --control-npcs writes each NPC a second time
   with the template's own face data (S2SFaceControl_<edid>, "<name> (template face)") to tell.
+- 2026-11-06 Owner's control: "Saadia (template face)" (the template's whole face record, our hair / colours /
+  outfit / name) is as light-faced as our fitted Saadia, while the vanilla template itself is dark. So neither our
+  dials nor the colour fields cause it; the difference is outside the record. Hypothesis: vanilla NPCs have
+  pre-built face data in the archives by FormID (as Skyrim's FaceGen) and new NPCs get a runtime face without the skin
+  tone. scripts/npc/facegen_probe.py lists archive entries named by given FormIDs and face-like folders.
