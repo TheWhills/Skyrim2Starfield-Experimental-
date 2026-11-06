@@ -1691,3 +1691,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - verified (owner, same day): the body's shape offset (+1.632 m) on every shape changed nothing visible, the bar
   included: the game ignores a skinned BSGeometry's transform. The vanilla nightwear has ONE shape, so nif_dump
   --find-multi now dumps vanilla clothes NIFs with several skinned shapes for the multi-shape layout.
+- verified (nif_dump --find-multi, same day): vanilla multi-shape worn NIFs (outfit_miner_utilitysuit_helmet_f/_m)
+  use our layout per shape (BSGeometry, extras, SkinAttach, BSSkin::Instance root 0 / bone refs -1 / tail 0,
+  BoneData 68 B per bone, shader); their shape translations differ between shapes (1.632 m on some, 0 on others).
+  Vanilla extras we lack: LOD1/LOD2 meshes, and a NiIntegersExtraData [1, 201] per shape. Neither explains a bar on
+  the first shape only. os_export --anchor puts a 1 mm one-bone triangle first (test and workaround).

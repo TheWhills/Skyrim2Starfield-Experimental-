@@ -366,6 +366,21 @@ def shape_transform(nif_bytes: bytes):
     return [0.0, 0.0, 0.0], [1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0]
 
 
+def anchor_shape(body_binds: Dict[str, tuple], bone: str = "C_Chest"):
+    """A 1 mm triangle, all three corners on one bone, to stand first in the NIF (2026-11-06: the game throws a rigid
+    bar off the FIRST shape of our NIFs, whichever shape that is; a shape that only moves rigidly cannot stretch)."""
+    if bone not in body_binds:
+        bone = sorted(body_binds)[0]
+    _sp, rot, trans, scale = body_binds[bone]
+    r = np.array(rot, float).reshape(3, 3)
+    origin = -r.T @ np.array(trans, float) / (float(scale) or 1.0)       # the bone's origin in mesh space
+    pos = origin + np.array([[0, 0, 0], [0.001, 0, 0], [0, 0.001, 0]])
+    nor = np.tile([0.0, 0.0, 1.0], (3, 1))
+    uv = [(0.0, 0.0), (0.01, 0.0), (0.0, 0.01)]
+    return skyrimhair.HairShape(b"S2S_Anchor", pos, nor, tangents(pos, nor, uv, [(0, 1, 2)]), uv, [(0, 1, 2)],
+                                [[(bone, 1.0)]] * 3, -1, -1, -1, colors=[(255, 255, 255, 255)] * 3)
+
+
 SPHERE_MARGIN = 0.15   # metres added to the body's per-bone bounding sphere: the gear sits a little outside the body
 
 
@@ -407,6 +422,8 @@ def main(argv=None):
     ap.add_argument("--drop-fields", default="", help="ARMA fields not copied from the vanilla template, e.g. FLLD")
     ap.add_argument("--no-shape-offset", action="store_true",
                     help="leave the shapes at 0 instead of the body's own offset (the old behaviour)")
+    ap.add_argument("--anchor", action="store_true",
+                    help="put a 1 mm one-bone triangle first in the NIF (first-shape bar test / workaround)")
     ap.add_argument("--reverse", action="store_true", help="write the shapes in reverse order (spike test)")
     ap.add_argument("--max-residual", type=float, default=0.002, help="metres (default %(default)s)")
     a = ap.parse_args(argv)
@@ -439,6 +456,9 @@ def main(argv=None):
         except SystemExit:
             tpl_arma_nif = None
     material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
+    if a.anchor:
+        shapes = [anchor_shape(binds)] + list(shapes)
+        print("first shape: S2S_Anchor (1 mm, on C_Chest)")
     files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{a.name}",
                            None if a.no_shape_offset else rep["body_transform"])
     for rel, data in files.items():

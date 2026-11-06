@@ -131,6 +131,16 @@ class RecordTests(unittest.TestCase):
         self.assertEqual((t, r), lift)
         self.assertEqual(E.shape_transform(b"not a nif")[0], [0.0, 0.0, 0.0])
 
+    def test_anchor_shape_sits_on_its_bone(self):
+        a = E.anchor_shape({"C_Chest": SKIN["binds"][0]})
+        self.assertEqual(a.name, b"S2S_Anchor")
+        self.assertEqual(a.weights, [[("C_Chest", 1.0)]] * 3)
+        # bind ROT maps (x, y, z) -> (y, -x, z), trans (0, 0, -1.3): the bone origin is at z = 1.3
+        self.assertTrue(np.allclose(a.positions[0], [0, 0, 1.3]))
+        self.assertLess(np.ptp(np.asarray(a.positions), axis=0).max(), 0.0011)
+        files = E.body_nif_files([a], ["m.mat"], {"C_Chest": SKIN["binds"][0]}, "S2S/A")
+        self.assertIn("meshes/S2S/A.nif", files)
+
     def test_field_text(self):
         self.assertEqual(E.field_text(b"\x05\x00Meshes\\a\\morph.dat\x00"), "Meshes\\a\\morph.dat  (21 bytes)")
         self.assertEqual(E.field_text(b"\x01\x02"), "0102")
