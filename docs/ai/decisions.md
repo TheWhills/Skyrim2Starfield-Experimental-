@@ -1405,3 +1405,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   template chosen with a voice type (generic Starfield greetings; Skyrim voices later, needs audio conversion).
   Starfield hair colours are names whose colours are not known here: hair_color_probe.py (read-only) collects HCOL
   names, CLFM records, archive / Creation Kit files about hair colour and decodes their textures -> hair_colors.json.
+- 2026-11-05 owner: Skyrim voice lines, using UNITY's proven Starfield chain (owner's notes + unity_wem_gen.py:
+  WwiseConsole 2021.1.14 with Starfield's Wwise project, Vorbis Quality High, Windows; LipGenerator on the raw wav
+  with the text as a plain string; ffxc into a registered voice folder; files named by INFO FormID), saved as
+  docs/npc/voice-pipeline.md. Built the Skyrim half: skyrimdialog.py (DIAL / INFO / dlstrings / speakers / .fuz)
+  and skyrim_voice.py (an NPC's greeting lines -> xwm -> wav -> wem + ffxanim on the owner's PC). Synthetic tests
+  only; next the Starfield voice type + greeting records, then Ralof's lines in game.
