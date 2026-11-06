@@ -1699,3 +1699,16 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - verified (owner screenshots, same day): with the 1 mm one-bone anchor shape first, the bar is gone and every real
   shape renders in place. The game mishandles the first shape of our worn NIFs (cause unresolved); the anchor is now
   the default (--no-anchor to leave it out).
+
+## 2026-11-06 — Gear fitted by skeleton and body shape instead of Outfit Studio (Claude)
+- verified (owner screenshots): Outfit Studio's fit_to_body + copy_bone_weights left the Stormcloak collar ~20 cm
+  above the Starfield neck (over the face), the gloves on hip / thigh weights (the Starfield body has no hand bones),
+  and the coat folded. Owner: fit the Starfield body "the way it does on Skyrim's".
+- decision: fo4sf.gearfit + scripts/armor/gear_fit.py. Per Skyrim bone a transform (overall similarity fit of the
+  matched joints, then joint onto Starfield's joint, direction onto Starfield's, stretched by the length ratio clamped
+  0.75-1.33); gear vertices blend their OWN Skyrim weights; the Skyrim body moved the same way gives the offset onto
+  the Starfield surface, smoothed and carried onto nearby gear; gear inside the Starfield body pushed out to 4 mm.
+  Weights: Skyrim bones renamed by skeletonmap (hands -> *_Wrist, fingers mapped). Binds: inverse(skeleton rest
+  world) @ the body mesh frame (world @ bind of the game's body, identical for every body bone, armor_check).
+- supported (synthetic tests) / unresolved (in game): the clamp, smoothing and gap values; skin pieces follow the
+  body offset without push-out.

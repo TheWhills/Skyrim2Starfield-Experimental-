@@ -410,6 +410,40 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
     return files
 
 
+def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dict[str, tuple], transform=None,
+                anchor: bool = True, drop=()):
+    """Write meshes\\S2S\\<name>.nif + its .mesh files and S2SArmorTest.esm (ARMA / ARMO / OTFT from the vanilla
+    template) into the mod folder `out`. shapes in the body mesh's space, weights by Starfield bone name; binds per
+    bone. Returns (files, records, record report, material, model path)."""
+    tpl_arma_nif = None
+    sf_esm = os.path.join(sf_data, "Starfield.esm")
+    nif_rel = f"S2S\\{name}.nif"
+    masters = ["Starfield.esm"]
+    recs, prep = armor_records(sf_esm, nif_rel, name, len(masters), full, list(drop))
+    model = next((sfplugin_zstring(d) for s_, d in recs[0][2] if s_ == b"MOD2"), "")
+    vanilla_arma = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if r[3] == int(prep["template_addon"], 16)),
+                        None)
+    if vanilla_arma is not None:
+        vm = next((sfplugin_zstring(d) for s_, d in vanilla_arma[2] if s_ == b"MOD2"), "")
+        try:
+            tpl_arma_nif = hkx_to_af.vanilla_file("meshes/" + vm.replace("\\", "/"), sf_data)[0]
+        except SystemExit:
+            tpl_arma_nif = None
+    material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
+    if anchor:
+        shapes = [anchor_shape(binds)] + list(shapes)
+    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{name}", transform)
+    for rel, data in files.items():
+        dst = os.path.join(out, *rel.split("/"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "wb") as fh:
+            fh.write(data)
+    info = sfplugin.header_info(sf_esm)
+    with open(os.path.join(out, PLUGIN), "wb") as fh:
+        fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield armor test", masters=masters))
+    return files, recs, prep, material, model
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield", required=True)
@@ -440,35 +474,10 @@ def main(argv=None):
         print("failed:", e)
         return 1
     shapes, _world, binds = rep.pop("shapes_data"), rep.pop("world"), rep.pop("body_binds")
-    tpl_arma_nif = None
-    sf_esm = os.path.join(sf_data, "Starfield.esm")
-    nif_rel = f"S2S\\{a.name}.nif"
-    masters = ["Starfield.esm"]
-    recs, prep = armor_records(sf_esm, nif_rel, a.name, len(masters), a.full or a.name.replace("_", " "),
-                               [x.strip() for x in a.drop_fields.split(",") if x.strip()])
-    model = next((sfplugin_zstring(d) for s_, d in recs[0][2] if s_ == b"MOD2"), "")
-    vanilla_arma = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if r[3] == int(prep["template_addon"], 16)),
-                        None)
-    if vanilla_arma is not None:
-        vm = next((sfplugin_zstring(d) for s_, d in vanilla_arma[2] if s_ == b"MOD2"), "")
-        try:
-            tpl_arma_nif = hkx_to_af.vanilla_file("meshes/" + vm.replace("\\", "/"), sf_data)[0]
-        except SystemExit:
-            tpl_arma_nif = None
-    material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
-    if a.anchor:
-        shapes = [anchor_shape(binds)] + list(shapes)
-        print("first shape: S2S_Anchor (1 mm, on C_Chest)")
-    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{a.name}",
-                           None if a.no_shape_offset else rep["body_transform"])
-    for rel, data in files.items():
-        dst = os.path.join(a.out, *rel.split("/"))
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        with open(dst, "wb") as fh:
-            fh.write(data)
-    info = sfplugin.header_info(sf_esm)
-    with open(os.path.join(a.out, PLUGIN), "wb") as fh:
-        fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield armor test", masters=masters))
+    files, recs, prep, material, model = write_armor(
+        sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
+        None if a.no_shape_offset else rep["body_transform"], a.anchor,
+        [x.strip() for x in a.drop_fields.split(",") if x.strip()])
     rep.update(records=prep, material=material, files=sorted(files), model=model,
                arma_fields=[(sub.decode("latin-1"), bytes(d)[:80].hex()) for sub, d in recs[0][2]])
     with open(os.path.join(a.out, "armor_test.json"), "w", encoding="utf-8") as fh:
