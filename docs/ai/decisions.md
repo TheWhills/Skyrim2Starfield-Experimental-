@@ -1696,3 +1696,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   BoneData 68 B per bone, shader); their shape translations differ between shapes (1.632 m on some, 0 on others).
   Vanilla extras we lack: LOD1/LOD2 meshes, and a NiIntegersExtraData [1, 201] per shape. Neither explains a bar on
   the first shape only. os_export --anchor puts a 1 mm one-bone triangle first (test and workaround).
+- verified (owner screenshots, same day): with the 1 mm one-bone anchor shape first, the bar is gone and every real
+  shape renders in place. The game mishandles the first shape of our worn NIFs (cause unresolved); the anchor is now
+  the default (--no-anchor to leave it out).

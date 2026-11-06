@@ -422,8 +422,8 @@ def main(argv=None):
     ap.add_argument("--drop-fields", default="", help="ARMA fields not copied from the vanilla template, e.g. FLLD")
     ap.add_argument("--no-shape-offset", action="store_true",
                     help="leave the shapes at 0 instead of the body's own offset (the old behaviour)")
-    ap.add_argument("--anchor", action="store_true",
-                    help="put a 1 mm one-bone triangle first in the NIF (first-shape bar test / workaround)")
+    ap.add_argument("--no-anchor", dest="anchor", action="store_false",
+                    help="leave out the 1 mm one-bone triangle written first (it absorbs the game's first-shape bar)")
     ap.add_argument("--reverse", action="store_true", help="write the shapes in reverse order (spike test)")
     ap.add_argument("--max-residual", type=float, default=0.002, help="metres (default %(default)s)")
     a = ap.parse_args(argv)
