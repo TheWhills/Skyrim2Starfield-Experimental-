@@ -1844,3 +1844,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Neck: Skyrim Neck weights go to C_Neck_Twist (WEIGHT_REMAP; the Starfield body turns its neck with it, C_Neck moves
   no body vertex) so the cowl turns with the head; the neck's gear is squashed in height about the neck joint by the
   Starfield / Skyrim neck length ratio (clamp 0.7-1.0; owner: turtleneck vs Skyrim's half turtleneck).
+- verified (owner, same day): arms show, but break in the middle as if two weight sets (supported: the skin piece cut
+  to 4 weights bends apart from the game's hands mesh, which keeps 8); the cowl neither drops nor turns with the head;
+  chest patches remain (appeared with tessellation). Changes: skyrimhair._mesh writes 8 weights per vertex when a
+  shape needs more (the body's own skin keeps up to 8); gear_fit prints the neck height / ratio and the bones the top
+  tenth of each shape follows; --debug-dir writes the fit as OBJ (Starfield surface, fitted shapes, Skyrim gear / body)
+  plus fit_debug.zip, to render outside the game.

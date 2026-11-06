@@ -530,6 +530,19 @@ def weld(original: np.ndarray, pts: np.ndarray, decimals: int = 5) -> Tuple[np.n
     return out, int((counts[inv] > 1).sum())
 
 
+def top_bones(sky_pts: np.ndarray, weights, share: float = 0.1, n: int = 6) -> Dict[str, float]:
+    """Mean weight per bone of the top tenth of a shape by its Skyrim height (on a coat, the collar): which bones it
+    follows (2026-11-06: does the cowl turn with the head?)."""
+    if not len(sky_pts):
+        return {}
+    sel = np.nonzero(sky_pts[:, 2] >= np.quantile(sky_pts[:, 2], 1.0 - share))[0]
+    acc: Dict[str, float] = {}
+    for v in sel:
+        for b, w in weights[v]:
+            acc[b] = acc.get(b, 0.0) + w / len(sel)
+    return {b: round(w, 3) for b, w in sorted(acc.items(), key=lambda kv: -kv[1])[:n]}
+
+
 def gap_report(sky_pts: np.ndarray, sky_gap: np.ndarray, pts: np.ndarray, sf_pts, sf_tris, sf_nrm) -> Dict:
     """Median gap to the body (mm) in Skyrim and now in Starfield, for the vertices that sat within KEEP_REACH of
     Skyrim's body: all of them and the top tenth by height (on a coat, the collar)."""
@@ -699,6 +712,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
+            "top_bones": top_bones(s.points, w),
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}
     return FitResult(shapes, rep)

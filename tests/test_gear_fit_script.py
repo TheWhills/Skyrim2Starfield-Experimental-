@@ -106,7 +106,17 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(sh.uvs, uvs[:3])
         eight = [[(f"B{k}", 0.125) for k in range(8)]] * 6
         sh8, _u = gear_fit.skin_piece(body, tris, uvs, eight, src, reach=0.2)
-        self.assertTrue(all(len(vw) == 4 and abs(sum(x for _b, x in vw) - 1) < 1e-9 for vw in sh8.weights))
+        self.assertTrue(all(len(vw) == 8 and abs(sum(x for _b, x in vw) - 1) < 1e-9 for vw in sh8.weights))
+        # written with 8 weights per vertex
+        from fo4sf import sfmesh
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        from test_armor_check import bind_for, WORLD
+        bones = {f"B{k}": bind_for(WORLD["A"]) for k in range(8)}
+        sh8.tangents = np.tile([1.0, 0, 0], (3, 1))
+        files = os_export.body_nif_files([sh8], ["m.mat"], bones, "S2S/T")
+        mesh = sfmesh.parse(next(v for k, v in files.items() if k.endswith(".mesh")))
+        self.assertEqual(mesh.weights_per_vertex, 8)
+        self.assertEqual(len(mesh.weights), 8 * 3)
         m = sfmorph.parse(sfmorph.build(6, ["Overweight"], {"Overweight": {1: (0.01, 0, 0), 4: (0.02, 0, 0)}}))
         d, _e = gear_fit.skin_morph(m, used)
         self.assertEqual(list(d["Overweight"]), [1])             # body vertex 1 -> skin vertex 1, exactly
@@ -118,6 +128,19 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(gear_fit.body_skin_shapes(t), {"MaleBodyStormcloak"})
         self.assertEqual(os_export.slot_bits([3, 5, 7]), ((1 << 3) | (1 << 5) | (1 << 7)).to_bytes(8, "little"))
         self.assertEqual(os_export.slot_bits([3], b"\0" * 8 + b"xy")[8:], b"xy")
+
+    def test_debug_meshes(self):
+        import numpy as np
+        import tempfile
+        import zipfile
+        from fo4sf import gearfit, skyrimhair
+        sh = skyrimhair.HairShape(b"Coat", np.zeros((3, 3)), np.zeros((3, 3)), np.zeros((3, 3)), [], [(0, 1, 2)],
+                                  [], -1, -1, -1)
+        sk = gearfit.SkyShape(b"Coat", np.eye(3), np.eye(3), [], [(0, 1, 2)], [], [])
+        with tempfile.TemporaryDirectory() as d:
+            z = gear_fit.debug_meshes(d, [sh], np.eye(4), np.eye(3), np.array([[0, 1, 2]]), [sk], [])
+            self.assertEqual(sorted(zipfile.ZipFile(z).namelist()), ["fit_Coat.obj", "sf_surface.obj", "sky_Coat.obj"])
+            self.assertIn("f 1 2 3", open(os.path.join(d, "fit_Coat.obj")).read())
 
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))

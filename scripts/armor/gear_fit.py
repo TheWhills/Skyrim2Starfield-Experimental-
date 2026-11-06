@@ -135,11 +135,12 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
     tri = new[t]
     nrm = skyrimhair._vertex_face_normals(body_skel, t)[used]
     nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
-    # the body has up to 8 weights per vertex, our writer 4: keep the 4 largest (2026-11-06: more overflowed into
-    # the next vertices' bones and threw the skin piece into shards)
+    # the body's own weights, up to 8 per vertex (the writer stores 8 when needed; 2026-11-06: more than the writer's
+    # slots shifted the next vertices onto wrong bones and threw the skin piece into shards, and 4 bent it apart from
+    # the game's hands mesh)
     w4 = []
     for i in used:
-        top = sorted(body_w[i], key=lambda kv: -kv[1])[:skyrimhair.MAX_WEIGHTS]
+        top = sorted(body_w[i], key=lambda kv: -kv[1])[:8]
         tot = sum(x for _b, x in top)
         w4.append([(b, x / tot) for b, x in top] if tot > 0 else top)
     sh = skyrimhair.HairShape(SKIN_SHAPE, pos, nrm, np.zeros_like(nrm), [body_uvs[i] for i in used],
@@ -362,6 +363,40 @@ def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, 
     return out, rep
 
 
+def write_obj(path: str, pts, tris) -> None:
+    with open(path, "w", encoding="utf-8") as fh:
+        for p in np.asarray(pts, float):
+            fh.write(f"v {p[0]:.5f} {p[1]:.5f} {p[2]:.5f}\n")
+        for t in np.asarray(tris, int).reshape(-1, 3):
+            fh.write(f"f {t[0] + 1} {t[1] + 1} {t[2] + 1}\n")
+
+
+def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_body) -> str:
+    """OBJ files of the fit for a look from outside the game (Starfield skeleton space, metres): the Starfield body /
+    hands / neck surface, every written shape, and the Skyrim gear and body as they came in (Skyrim model space,
+    metres). Zipped into fit_debug.zip; returns its path."""
+    import zipfile
+    os.makedirs(folder, exist_ok=True)
+    names = []
+    write_obj(os.path.join(folder, "sf_surface.obj"), surf_pts, surf_tris)
+    names.append("sf_surface.obj")
+    for sh in shapes:
+        p = np.asarray(sh.positions) @ frame[:3, :3].T + frame[:3, 3]
+        n = "fit_" + sh.name.decode("latin-1", "replace") + ".obj"
+        write_obj(os.path.join(folder, n), p, sh.triangles)
+        names.append(n)
+    for tag, group in (("sky_", sky_gear), ("skybody_", sky_body)):
+        for s in group:
+            n = tag + s.name.decode("latin-1", "replace") + ".obj"
+            write_obj(os.path.join(folder, n), s.points, s.triangles)
+            names.append(n)
+    z = os.path.join(folder, "fit_debug.zip")
+    with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+        for n in names:
+            zf.write(os.path.join(folder, n), n)
+    return z
+
+
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=()):
     """(shapes in mesh space with tangents, binds, report)."""
@@ -420,6 +455,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
+    res.report["_debug"] = (surf_pts, surf_tris, gear, sky_body)
     return shapes, binds, res.report
 
 
@@ -474,6 +510,7 @@ def main(argv=None):
                     help="scale the boots' foot section to Starfield's foot (off: it opened a seam at the ankle)")
     ap.add_argument("--no-skin-piece", action="store_true",
                     help="no own skin piece and the naked body left visible (the old behaviour)")
+    ap.add_argument("--debug-dir", default="", help="also write the meshes as OBJ files (and a zip) into this folder")
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
@@ -516,6 +553,7 @@ def main(argv=None):
                              () if a.no_skin_piece else sorted(body_skin_shapes(textures)))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
+    dbg = rep.pop("_debug", None)
     skin_used = rep.pop("_skin_used", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
@@ -587,9 +625,16 @@ def main(argv=None):
     rep["textures"] = textures
     for n, t in textures.items():
         print(f"textures {n}: {t[0] if t else '-'}")
+    if a.debug_dir and dbg is not None:
+        frame = np.array(rep["frame"], float)
+        print("debug meshes:", debug_meshes(a.debug_dir, shapes, frame, *dbg))
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1, default=str)
+    for b in ("NPC Neck [Neck]", "NPC Head [Head]"):
+        info = rep.get("bones", {}).get(b, {})
+        if info:
+            print(f"{b}: height {info.get('height_mm')} mm, neck height ratio {info.get('neck_height_ratio', '-')}")
     print(f"skeletons: joint rms {rep['joint_rms_m'] * 1000:.0f} mm after the overall fit, "
           f"scale {rep['global_scale']:.4f}")
     b = rep.get("body", {})
@@ -601,6 +646,8 @@ def main(argv=None):
               f"z {r['box_m'][0][2]:.2f}..{r['box_m'][1][2]:.2f} m, "
               f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights, "
               f"{r.get('pulled_in', 0)} pulled in to Skyrim's gap, {r.get('covered', 0)} moved to cover the body")
+        if r.get("top_bones") and not r.get("skin_piece"):
+            print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():
             print(f"     gap to the body ({part}, {g['vertices']} v): Skyrim {g['skyrim']} mm, now {g['starfield']} mm")
     if rep.get("skipped"):

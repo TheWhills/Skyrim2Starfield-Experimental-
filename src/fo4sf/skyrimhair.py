@@ -1679,12 +1679,16 @@ def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
             s, weights = d, weights * 2
     m = convert_static.shape_to_mesh(s, 1.0)
     idx = {b: i for i, b in enumerate(bones)}
-    m.weights_per_vertex = MAX_WEIGHTS
+    # 4 per vertex, or 8 when a vertex needs more (Starfield's own body skin uses 8; 2026-11-06: cutting the body's
+    # arm skin to 4 made it bend apart from the game's hands mesh)
+    k = MAX_WEIGHTS if all(len(vw) <= MAX_WEIGHTS for vw in weights) else 8
+    m.weights_per_vertex = k
     out = []
     for vw in weights:
+        vw = sorted(vw, key=lambda bw: -bw[1])[:k]
         q = [(idx[b], int(round(w * 65535))) for b, w in vw]
         q[0] = (q[0][0], q[0][1] + 65535 - sum(w for _b, w in q))
-        q += [(0, 0)] * (MAX_WEIGHTS - len(q))
+        q += [(0, 0)] * (k - len(q))
         out += q
     m.weights = out
     return m
