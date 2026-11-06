@@ -1667,3 +1667,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   one thin spike rises from the back of the neck far above the head. unresolved: cause. armor_check.py reports body
   bones whose bind disagrees with the skeleton or that move no body vertex, and gear vertices on them or far outside
   the body.
+- verified (owner screenshots + armor_check, same day): the spike follows the FIRST shape in the NIF (all shapes: neck;
+  without the skin piece: neck; without skin piece and coat, boots first: a thick pillar from the left boot past the
+  head), while armor_check finds every vertex inside the body, every triangle index valid and binds matching the
+  skeleton. unresolved: a first-shape special case (writer) vs. data in that shape; os_export --reverse tests it, and
+  the export now lists the ARMA fields copied from the vanilla nightwear (a morph or bone-scale reference there would
+  be applied to our mesh).

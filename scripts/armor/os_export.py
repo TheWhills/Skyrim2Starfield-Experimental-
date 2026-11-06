@@ -298,7 +298,7 @@ def nif_material(nif_bytes: bytes) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ main
-def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.002, skip=()) -> Dict:
+def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.002, skip=(), reverse=False) -> Dict:
     s = os_convert.Session(client, os.path.join(out, "_os_export"))
     rep = {"steps": s.rows}
     status = s("get_status")
@@ -307,6 +307,8 @@ def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.00
     skipped = [n for n in gear if n.lower() in {x.lower() for x in skip}]
     gear = [n for n in gear if n not in skipped]
     rep["skipped"] = skipped
+    if reverse:
+        gear = gear[::-1]
     if not body or not gear:
         raise os_convert.StepFailed("open project has no reference body or no gear: run os_convert.py first")
     counts = vertex_counts(s)
@@ -383,6 +385,7 @@ def main(argv=None):
     ap.add_argument("--url", default=os_probe.DEFAULT_URL)
     ap.add_argument("--token", default="")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out, e.g. MaleBodyStormcloak")
+    ap.add_argument("--reverse", action="store_true", help="write the shapes in reverse order (spike test)")
     ap.add_argument("--max-residual", type=float, default=0.002, help="metres (default %(default)s)")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
@@ -393,7 +396,7 @@ def main(argv=None):
     os.makedirs(a.out, exist_ok=True)
     try:
         rep = export(client, sf_data, a.name, a.out, a.max_residual,
-                     [x.strip() for x in a.skip.split(",") if x.strip()])
+                     [x.strip() for x in a.skip.split(",") if x.strip()], a.reverse)
     except os_convert.StepFailed as e:
         print("failed:", e)
         return 1
@@ -422,7 +425,8 @@ def main(argv=None):
     info = sfplugin.header_info(sf_esm)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield armor test", masters=masters))
-    rep.update(records=prep, material=material, files=sorted(files), model=model)
+    rep.update(records=prep, material=material, files=sorted(files), model=model,
+               arma_fields=[(sub.decode("latin-1"), bytes(d)[:80].hex()) for sub, d in recs[0][2]])
     with open(os.path.join(a.out, "armor_test.json"), "w", encoding="utf-8") as fh:
         json.dump({k: v for k, v in rep.items() if k != "steps"}, fh, indent=1)
     if rep.get("skipped"):
@@ -430,6 +434,8 @@ def main(argv=None):
     print(f"calibration: {rep['calibration']['rms_m'] * 1000:.2f} mm rms, scale {rep['calibration']['scale']:.5f}")
     for g, r in rep["shapes"].items():
         print(f"  {g}: {r['vertices']} vertices, {r['unweighted']} unweighted, {len(r['bones'])} bones")
+    print("shape order:", ", ".join(rep["shapes"]))
+    print("ARMA fields:", " ".join(f for f, _d in rep["arma_fields"]))
     print(f"{PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}), outfit {prep['OTFT']}; material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1  (xx = {PLUGIN}'s load order index)")
     return 0

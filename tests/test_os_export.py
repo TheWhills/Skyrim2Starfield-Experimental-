@@ -214,6 +214,28 @@ class ExportTests(unittest.TestCase):
             with self.assertRaises(E.os_convert.StepFailed):          # nothing left but the body
                 E.export(Fake(real), "data", "X", d, skip=["cuirass"])
 
+    def test_reverse_order(self):
+        real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
+        world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
+        fake = Fake(real)
+        fake.data["Belt"] = dict(fake.data["Cuirass"])
+        orig = fake.call
+
+        def call(name, args):
+            if name == "get_status":
+                return {"content": [{"type": "text", "text": json.dumps(
+                    {"reference": {"shape": "Naked_M:0"}, "outfitShapes": ["Naked_M:0", "Cuirass", "Belt"]})}]}
+            return orig(name, args)
+        fake.call = call
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(E.hkx_to_af, "vanilla_file", lambda p, s: (b"x", p)), \
+                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], SKIN)), \
+                mock.patch.object(E.sfmesh, "parse", lambda b: None), \
+                mock.patch.object(E.facefit, "mesh_arrays", lambda m: (real, [])), \
+                mock.patch.object(E.npc_hair, "skeleton_world", lambda b: world):
+            rep = E.export(fake, "data", "X", d, reverse=True)
+        self.assertEqual([sh.name for sh in rep["shapes_data"]], [b"Belt", b"Cuirass"])
+
     def test_bone_missing_from_body_stops(self):
         real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
         world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
