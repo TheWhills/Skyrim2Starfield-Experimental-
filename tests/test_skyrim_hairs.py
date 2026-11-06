@@ -61,6 +61,26 @@ def skyrim_esms(d):
 
 
 class PartTests(unittest.TestCase):
+    def test_vertex_colours_follow_the_strands(self):
+        from fo4sf import skyrimhair
+        # two cards: one with strands along V, one along U
+        p = np.zeros((8, 3))
+        uv = [(0, 0), (1, 0), (0, 1), (1, 1), (0, 0), (1, 0), (0, 1), (1, 1)]
+        tris = [(0, 1, 2), (1, 3, 2), (4, 5, 6), (5, 7, 6)]
+        sh = skyrimhair.HairShape(b"S", p, np.tile([0, 0, 1.0], (8, 1)), np.tile([1.0, 0, 0], (8, 1)), uv, tris,
+                                  [[("C_Head", 1.0)]] * 8, -1, -1, 0)
+        cols = skyrimhair.strand_colors(sh, along_u=[False] * 4 + [True] * 4)
+        self.assertEqual([c[0] for c in cols[:4]], [70, 70, 232, 232])      # V: root at v 0
+        self.assertEqual([c[0] for c in cols[4:]], [70, 232, 70, 232])      # U
+        self.assertEqual(cols[0][1], cols[1][1])                            # one green per card (+ along it)
+        m = skyrimhair._mesh(sh, ["C_Head"], False)
+        self.assertEqual(len(m.colors), 8)
+        skyrimhair.VERTEX_COLORS = False
+        try:
+            self.assertEqual(skyrimhair._mesh(sh, ["C_Head"], False).colors, [])
+        finally:
+            skyrimhair.VERTEX_COLORS = True
+
     def test_strand_copies(self):
         self.assertEqual(SH.strand_copies(""), SH.STRANDS)
         self.assertEqual([k for k, _l in SH.strand_copies("thin, strandsedge")], ["strandsthin", "strandsedge"])
@@ -677,7 +697,7 @@ class MainTests(unittest.TestCase):
                                     "HairMaleNord01", "--strand-cards", "--merge-plugin",
                                     os.path.join(ks_dir, "S2SHair.esm")])
             self.assertEqual(rc_cards, 0)
-            self.assertEqual(seen, [(0, False), (3, False), (3, True)])                                 # [strands] as before, the thin ones
+            self.assertEqual(seen, [(0, False), (3, False), (3, True), (4, True)])                                 # [strands] as before, the thin ones
             with open(os.path.join(d, "cards", "skyrim_hairs.json")) as fh:
                 cards = json.load(fh)
             row = cards["parts"][1]

@@ -247,20 +247,20 @@ class RoundThreeTests(unittest.TestCase):
 
     def test_short_cards_take_the_strip_tip(self):
         line = np.array([[0, 0.1, 1.6 - 0.01 * k] for k in range(7)])        # 6 cm
-        pos, nrm, uv, tris, wts = HS._ribbon(line, np.tile([0, 1.0, 0], (7, 1)), 0.01, 0.0, (0.0, 0.2, 0.1, 0.8),
-                                             [[("C_Head", 1.0)]] * 7)
+        pos, nrm, uv, tris, wts, cols = HS._ribbon(line, np.tile([0, 1.0, 0], (7, 1)), 0.01, 0.0,
+                                                   (0.0, 0.2, 0.1, 0.8), [[("C_Head", 1.0)]] * 7)
         v = np.asarray(uv)[:, 1]
         self.assertAlmostEqual(v[-1], 0.8)                                  # the tip at the strip's tip
         self.assertAlmostEqual(v[0], 0.8 - 0.6 * 0.06 / HS.STRIP_LENGTH)    # its root inside the strip
         long = np.array([[0, 0.1, 1.6 - 0.04 * k] for k in range(10)])      # 36 cm: the whole strip
-        _p, _n, uv2, _t, _w = HS._ribbon(long, np.tile([0, 1.0, 0], (10, 1)), 0.01, 0.0, (0.0, 0.2, 0.1, 0.8),
+        _p, _n, uv2, _t, _w, _c = HS._ribbon(long, np.tile([0, 1.0, 0], (10, 1)), 0.01, 0.0, (0.0, 0.2, 0.1, 0.8),
                                          [[("C_Head", 1.0)]] * 10)
         self.assertAlmostEqual(np.asarray(uv2)[0, 1], 0.2)
 
     def test_root_grows_out_of_the_scalp(self):
         line = np.array([[0, 0.1, 1.7 - 0.01 * k] for k in range(8)])
-        pos, _n, uv, _t, _w = HS._ribbon(line, np.tile([0, 1.0, 0], (8, 1)), 0.02, 0.004, (0.0, 0.0, 0.2, 1.0),
-                                         [[("C_Head", 1.0)]] * 8)
+        pos, _n, uv, _t, _w, _c = HS._ribbon(line, np.tile([0, 1.0, 0], (8, 1)), 0.02, 0.004,
+                                             (0.0, 0.0, 0.2, 1.0), [[("C_Head", 1.0)]] * 8)
         widths = np.linalg.norm(pos[1::2] - pos[0::2], axis=1)
         self.assertAlmostEqual(widths[0], 0.02 * HS.ROOT_WIDTH)              # narrow at the root
         self.assertAlmostEqual(widths[-1], 0.02)                             # full after ROOT_TAPER
@@ -270,6 +270,40 @@ class RoundThreeTests(unittest.TestCase):
         u = np.asarray(uv)[:, 0]
         self.assertAlmostEqual(u[1] - u[0], 0.2 * HS.ROOT_WIDTH)              # fewer strands, not thinner ones
         self.assertAlmostEqual(u[-1] - u[-2], 0.2)
+
+    def test_idg_card_whole_strip_dark_root(self):
+        line = np.array([[0, 0.1, 1.6 - 0.01 * k] for k in range(7)])        # 6 cm: still the whole strip
+        pos, _n, uv, _t, _w, cols = HS._ribbon(line, np.tile([0, 1.0, 0], (7, 1)), 0.03, 0.0, (0.0, 0.2, 0.1, 0.8),
+                                               [[("C_Head", 1.0)]] * 7, full_strip=True, root_width=1.0, green=90.0)
+        v = np.asarray(uv)[:, 1]
+        self.assertAlmostEqual(v[0], 0.2)                                    # the strip's top: its roots
+        self.assertAlmostEqual(v[-1], 0.8)
+        widths = np.linalg.norm(pos[1::2] - pos[0::2], axis=1)
+        self.assertTrue(np.allclose(widths, 0.03))                           # no taper
+        self.assertEqual(len(cols), len(pos))
+        r = [c[0] for c in cols]
+        self.assertEqual(r[0], 70)                                           # dark root ...
+        self.assertEqual(r[-1], 232)                                         # ... light tip
+        self.assertTrue(all(b >= a for a, b in zip(r[::2], r[2::2])))
+        self.assertEqual(cols[0][1], 90)
+        self.assertEqual(cols[0][2:], (255, 255))
+
+    def test_one_sheet_at_the_hairline(self):
+        t = CardTests()
+        head, guide, scalp = t._cap_guide()
+        strips = HS.strip_layout(strip_texture())
+        hair, rep = HS.grow_cards(H.Hair([shell()], [], {}, {}), head, strips, max_cards=600, layers=3, gap=0.001,
+                                  width=0.035, spacing=0.006, slots=4, head_pts=scalp, hairline=True,
+                                  full_strip=True, root_width=1.0, hairline_backset=0.008)
+        lows = []
+        for sh in hair.shapes:
+            p = np.asarray(sh.positions) - head[:3, 3]
+            root = np.array([c[0] == 70 for c in sh.colors])                 # the cards' root rows
+            front = root & (p[:, 1] > 0.03) & (np.abs(np.degrees(np.arctan2(p[:, 0], p[:, 1]))) < 40) & \
+                (p[:, 2] > 0.05)
+            lows.append(np.percentile(p[front, 2], 5) if front.any() else np.inf)
+            self.assertEqual(len(sh.colors), len(sh.positions))
+        self.assertLess(lows[0], lows[-1] - 0.003)                            # outer layers start further back
 
     def test_root_at_the_hairline(self):
         rng = np.random.default_rng(3)

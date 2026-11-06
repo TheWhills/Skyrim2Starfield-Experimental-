@@ -23,6 +23,7 @@ Read-only on both games' files.
 """
 import argparse
 import copy
+import dataclasses
 import json
 import os
 import re
@@ -83,7 +84,7 @@ DIAGNOSE = (("depth", "old depth offset"),)
 # --strand-cards (owner 2026-11-03: "do we need it to have all the strands like Starfield's" - yes): a looks-menu
 # copy of each hairstyle made of Starfield-style strand cards on a vanilla hair material (fo4sf.hairstrands)
 STRANDS = (("strands", "Starfield strands"), ("strandsthin", "Starfield strands, thin"),
-           ("strandsedge", "Starfield strands, thin, smooth hairline"))
+           ("strandsedge", "Starfield strands, thin, smooth hairline"), ("strandsidg", "Starfield strands, IDG layout"))
 # round 3 (owner 2026-11-04: with the Skyrim hair kept under the cards "it just looks like the originals again"):
 # the cards alone, denser (5 layers, 5 mm apart, 18 mm wide, up to 3500), next to the same over the Skyrim hair
 DENSE_CARDS = dict(layers=5, spacing=0.005, width=0.018, gap=0.0015, max_cards=3500, step=0.010)
@@ -104,6 +105,12 @@ THIN_CARDS = dict(DENSE_CARDS, width=0.007, slots=3)
 # sides of a parting (hairstrands.Guide: per mesh piece, strands running the same way), only combed-back roots are
 # carried to the hairline curve, and the layers 1 mm apart instead of 1.5.
 EDGE_CARDS = dict(THIN_CARDS, hairline=True, gap=0.001)
+# round 10 (owner 2026-11-05, after the IDG study: "do all of them"): IDG's layout. Each card the whole texture strip
+# from its top (roots) stretched over it, no root taper, wide (35 mm) overlapping cards ~6 mm apart at four fixed
+# depths per layer, roots on the smooth hairline curve, one sheet at the hairline (each further layer starts 8 mm
+# further back there), and vertex colours (dark roots, per-card green) as on every card.
+IDG_CARDS = dict(layers=5, spacing=0.006, width=0.035, gap=0.001, max_cards=3500, step=0.010, slots=4,
+                 hairline=True, full_strip=True, root_width=1.0, hairline_backset=0.008)
 # the material most of IDG's hairs use (22 of 50, read from its NIFs 2026-11-03): straight strands (the bob's
 # Medium_Hair_Shared made every card wavy, owner's first strand-card shots)
 STRAND_MATERIAL = "Materials\\Actors\\Human\\Hair\\Long_Straight_Hair_Shared.mat"
@@ -464,7 +471,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
     if any(m is None for m in mats):
         row["reason"] = "a shape has no material"
         return row
-    if variant in ("strands", "strandsbase", "strandsthin", "strandsline", "strandsedge"):   # Starfield-style cards over the
+    if variant in ("strands", "strandsbase", "strandsthin", "strandsline", "strandsedge", "strandsidg"):   # Starfield-style cards over the
         #                                            shaped Skyrim hair
         if not strands:
             row["reason"] = "no strand material / strips (see the report's strand_material)"
@@ -479,6 +486,7 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
                                                                       is not None else None),
                                                             **(DENSE_CARDS if variant in ("strands", "strandsbase")
                                                                else EDGE_CARDS if variant == "strandsedge"
+                                                               else IDG_CARDS if variant == "strandsidg"
                                                                else THIN_CARDS))
         if not cards.shapes:
             row["reason"] = "no strand cards grown"
@@ -499,6 +507,11 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
         else:                                        # the cards alone
             hair = cards
             mats, backs = [strands[0]] * len(cards.shapes), [False] * len(cards.shapes)
+    if not variant or not variant.startswith("strands"):   # vertex colours along Skyrim's strand direction
+        hair = skyrimhair.Hair([dataclasses.replace(sh, colors=skyrimhair.strand_colors(sh, x))
+                                if sh.colors is None and len(x) == len(sh.positions) else sh
+                                for sh, x in zip(hair.shapes, across)] + list(hair.shapes[len(across):]),
+                               hair.bones, hair.host_of_root, hair.report)
     out_name = out_name or f"{OUT_DIR}/{p['edid'].lower()}"
     hair_pack.write_files(staging, skyrimhair.nif_files(hair, mats, None, sf_world, out_name, backs))
     row["_fb"] = (hair, mats, None, out_name, backs)
@@ -559,6 +572,7 @@ def main(argv=None):
     hair_pack.add_shape_args(ap)
     ap.set_defaults(**VANILLA_DEFAULTS)
     a = ap.parse_args(argv)
+    skyrimhair.VERTEX_COLORS = a.vertex_colors
     if not a.skyrim_data:
         sys.exit("--skyrim-data is required")
     out = os.path.abspath(a.out)

@@ -1382,3 +1382,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the shader's input is constant, a candidate for the KS wigs' light / dark bands and the dark outline. Next
   (owner's call): vertex colours on the KS wigs (R from the strand's root-to-tip, G per card), then morph.dat
   (format known) for head shapes.
+- 2026-11-05 owner: "do all of them" (the IDG findings). (1) Vertex colours on every hair mesh we write (KS wigs,
+  Skyrim hairs, strand cards): skyrimhair.strand_colors / strand_vertex_colors, R 70 at a strand's root rising to
+  232 at its tip (STRAND_R, from IDG's per-card profile), G a random 70-130 per card + 15 along it, B = A = 255;
+  the strand's run from the texture (V, or U where Skyrim paints across); --no-vertex-colors for the old meshes.
+  (2) [strandsidg], IDG's card layout: the whole strip from its top (roots) stretched over each card (full_strip),
+  no root taper, 35 mm cards ~6 mm apart at four fixed depths, roots on the smooth hairline curve, one sheet at the
+  hairline (layer L's front cards start L x 8 mm further back), dark-root colours. Supported, not seen in game.

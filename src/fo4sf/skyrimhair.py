@@ -91,6 +91,8 @@ class HairShape:
     shader_ref: int
     alpha_ref: int
     block: int
+    colors: Optional[list] = None    # per vertex (r, g, b, a) 0-255; None: strand_colors when written
+
 
 
 @dataclass
@@ -1623,6 +1625,43 @@ def on_face_bones(hair: Hair, ref_points: np.ndarray, ref_weights: List[List[Tup
     return Hair(shapes, hair.bones, hair.host_of_root, dict(hair.report, face_bones="spread"))
 
 
+# Vertex colours as Starfield's own hair meshes carry them (IDG Elegant Hair, 50 styles, 2026-11-05; ours had none):
+# R rises from ~60-100 at a strand's root to ~230 at its tip, G varies per card (~70-130) and a little along it,
+# B = A = 255. Supported hypothesis: the hair shader darkens / varies the strands by them.
+VERTEX_COLORS = True
+STRAND_R = ((0.0, 0.1, 0.3, 0.6, 1.0), (70.0, 150.0, 200.0, 228.0, 232.0))
+
+
+def strand_vertex_colors(t: np.ndarray, g_base: np.ndarray) -> list:
+    """(r, g, b, a) per vertex from its place along the strand t (0 root - 1 tip) and its card's green."""
+    t = np.clip(np.asarray(t, float), 0.0, 1.0)
+    r = np.interp(t, *STRAND_R)
+    g = np.clip(np.asarray(g_base, float) + 15.0 * t, 0, 255)
+    return [(int(a), int(b), 255, 255) for a, b in zip(np.round(r), np.round(g))]
+
+
+def strand_colors(sh: HairShape, along_u=None, seed: int = 7) -> list:
+    """strand_vertex_colors for a converted shape: per mesh piece (connected triangles) the place along the strand
+    from the texture coordinate the strands run along (V, root at its low end, as KS's and Starfield's textures; U
+    where along_u is set: Skyrim textures painted across), each piece its own green."""
+    from .hairstrands import islands
+    n = len(sh.positions)
+    if not n or not sh.uvs:
+        return [(200, 110, 255, 255)] * n
+    uv = np.asarray(sh.uvs, float)
+    turn = np.zeros(n, bool) if along_u is None else np.asarray(along_u, bool)
+    coord = np.where(turn, uv[:, 0], uv[:, 1])
+    ids = islands(n, sh.triangles)
+    rng = np.random.default_rng(seed)
+    t, g = np.zeros(n), np.zeros(n)
+    for k in range(int(ids.max()) + 1):
+        m = ids == k
+        c = coord[m]
+        t[m] = (c - c.min()) / max(c.max() - c.min(), 1e-9)
+        g[m] = rng.uniform(70.0, 130.0)
+    return strand_vertex_colors(t, g)
+
+
 def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     """(SfMesh, per-vertex weights) of a shape: geometry through convert_static.shape_to_mesh (metres already), then
     4 weights per vertex as (index into `bones`, u16) summing to 65535."""
@@ -1630,7 +1669,8 @@ def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     from .skyrimconvert import with_back_faces
     s = nifmod.Fo4Shape(sh.name, (0.0, 0.0, 0.0), (1, 0, 0, 0, 1, 0, 0, 0, 1), 1.0, sh.shader_ref, sh.alpha_ref, -1,
                         [tuple(map(float, p)) for p in sh.positions], list(sh.uvs),
-                        [tuple(map(float, v)) for v in sh.normals], [tuple(map(float, v)) for v in sh.tangents], [],
+                        [tuple(map(float, v)) for v in sh.normals], [tuple(map(float, v)) for v in sh.tangents],
+                        ((list(sh.colors) if sh.colors is not None else strand_colors(sh)) if VERTEX_COLORS else []),
                         list(sh.triangles), True)
     weights = list(sh.weights)
     if back_faces:

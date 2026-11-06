@@ -389,6 +389,21 @@ def hairline_curve(guide: "Guide", head_pts, head, step: float = 5.0, scalp: flo
     return grid, smooth
 
 
+def is_front_root(line: np.ndarray, curve, head, head_pts, scalp: float = SCALP_REACH,
+                  reach: float = 0.025) -> bool:
+    """Whether the line's root is on the scalp at the front, within `reach` above the hairline curve."""
+    if curve is None:
+        return False
+    grid, height = curve
+    rel = np.asarray(line, float)[0] - np.asarray(head, float)[:3, 3]
+    ang = float(_angles(rel))
+    if abs(ang) > FRONT_ANGLE or rel[1] <= 0.02:
+        return False
+    if np.sqrt(((np.asarray(head_pts, float) - (rel + np.asarray(head, float)[:3, 3])) ** 2).sum(1).min()) > scalp:
+        return False
+    return rel[2] <= float(np.interp(ang, grid, height)) + reach
+
+
 def to_hairline(line: np.ndarray, guide: "Guide", curve, head, head_pts, scalp: float = SCALP_REACH,
                 tolerance: float = 0.003, max_reach: float = 0.06) -> Tuple[Optional[np.ndarray], int]:
     """(the line, -1 cut / 0 kept / +1 carried down) with its root on the hairline curve when the root is on the
@@ -454,10 +469,16 @@ def strip_coverage(opacity, strips) -> List[float]:
 
 
 # ------------------------------------------------------------------------------------------------- cards
-def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, strip, weights_of):
-    """(positions, normals, uvs, triangles, weights) of one card along `line` (k, 3) with surface normals: two
-    vertices per point, `width` across, `offset` out along the normal; u across the strip, v root (v0) to tip (v1)
-    by arc length; the card faces out."""
+def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, strip, weights_of,
+            full_strip: bool = False, root_width: float = None, green: float = 100.0):
+    """(positions, normals, uvs, triangles, weights, colours) of one card along `line` (k, 3) with surface normals:
+    two vertices per point, `width` across, `offset` out along the normal; u across the strip, v root (v0) to tip
+    (v1) by arc length; the card faces out. full_strip: the whole strip from its top (the texture's roots) to its
+    bottom stretched over the card, as IDG's cards (else the strip's last STRIP_LENGTH-scaled part). root_width:
+    the card's width at its root (default ROOT_WIDTH; 1 = no taper). Colours: skyrimhair.strand_vertex_colors (dark
+    root, light tip) with this card's green."""
+    from .skyrimhair import strand_vertex_colors
+    root_width = ROOT_WIDTH if root_width is None else root_width
     k = len(line)
     seg = np.diff(line, axis=0)
     along = np.vstack([seg[:1], (seg[:-1] + seg[1:]) / 2.0, seg[-1:]]) if k > 2 else np.vstack([seg, seg])[:k]
@@ -469,7 +490,7 @@ def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, 
     # hair grows out of the scalp; full width and height after ROOT_TAPER / ROOT_SINK (2026-11-05: the hairline was a
     # row of blunt, card-wide blocks)
     ramp = lambda x, n: 0.5 - 0.5 * np.cos(np.pi * np.clip(arc / n, 0.0, 1.0))   # noqa: E731
-    wscale = ROOT_WIDTH + (1.0 - ROOT_WIDTH) * ramp(arc, ROOT_TAPER)
+    wscale = root_width + (1.0 - root_width) * ramp(arc, ROOT_TAPER)
     centre = line + normals * (offset * (0.25 + 0.75 * ramp(arc, ROOT_SINK)))[:, None]
     pos = np.empty((2 * k, 3))
     pos[0::2] = centre - across * (width * wscale / 2.0)[:, None]
@@ -477,7 +498,7 @@ def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, 
     nrm = np.repeat(normals, 2, axis=0)
     # the strip stands for STRIP_LENGTH of hair, its tip at the bottom: a card takes the strip's last `length` (its
     # tip end wispy as the texture's, its root end inside the strands, no hard cut line where a card starts mid-hair)
-    span = min(1.0, arc[-1] / STRIP_LENGTH)
+    span = 1.0 if full_strip else min(1.0, arc[-1] / STRIP_LENGTH)
     t = (1.0 - span) + span * arc / max(arc[-1], 1e-9)
     u0, v0, u1, v1 = strip
     uc, uh = (u0 + u1) / 2.0, (u1 - u0) / 2.0
@@ -495,14 +516,16 @@ def _ribbon(line: np.ndarray, normals: np.ndarray, width: float, offset: float, 
         if np.dot(np.cross(b - a, c - a), normals[0]) < 0:
             tris = [(x, z, y) for x, y, z in tris]
     wts = [w for w in weights_of for _ in (0, 1)]
-    return pos, nrm, uv, tris, wts
+    frac = np.repeat(arc / max(arc[-1], 1e-9), 2)
+    return pos, nrm, uv, tris, wts, strand_vertex_colors(frac, np.full(len(frac), green))
 
 
 def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float, float, float]],
                layers: int = LAYERS, width: float = CARD_WIDTH, spacing: float = CARD_SPACING,
                gap: float = LAYER_GAP, step: float = CARD_STEP, min_length: float = 0.04, seed: int = 11,
                max_cards: int = MAX_CARDS, dirs=None, coverage=None, densities=None,
-               head_pts=None, slots: int = 0, hairline: bool = False) -> Tuple[Hair, Dict]:
+               head_pts=None, slots: int = 0, hairline: bool = False, full_strip: bool = False,
+               root_width: float = None, hairline_backset: float = 0.0) -> Tuple[Hair, Dict]:
     """Cards over the guide hair, one shape per layer: per layer, random seed points on the guide where it is hair,
     each traced to its root and to its tip and smoothed; a line is kept when most of its points are not within
     `spacing` of a line already kept in that layer (evenly spaced lines); each kept line becomes a ribbon `width`
@@ -513,7 +536,8 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
     (up to gap / 2 further out); n = the cards of a layer take n fixed depths in turn, gap / n apart, so cards that
     overlap sideways mostly lie at clearly different depths instead of crossing each other. hairline (with
     head_pts): the front roots start on one smooth hairline curve (hairline_curve / to_hairline), not trimmed at
-    random. Returns (Hair of the
+    random. full_strip / root_width: _ribbon's. hairline_backset: with the hairline curve, layer L's cards at the
+    front start L * this much further back (one sheet at the hairline, thicker behind: IDG). Returns (Hair of the
     card shapes with the guide's bones, report)."""
     if not strips:
         raise ValueError("no texture strips to map the cards onto")
@@ -542,7 +566,7 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
         down = trace(guide, seeds, +1.0, step)
         cell = spacing
         occupied = set()
-        pos_l, nrm_l, uv_l, tri_l, w_l = [], [], [], [], []
+        pos_l, nrm_l, uv_l, tri_l, w_l, col_l = [], [], [], [], [], []
         kept = n_vert = 0
         for a, b in zip(up, down):
             line = np.vstack([a[::-1], b[1:]])
@@ -556,11 +580,13 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
                 line, flipped = root_at_hairline(line, head_pts, head)
                 turned += flipped
             cut = int(rng.integers(0, int(ROOT_TRIM / step) + 1))
+            front_root = False
             if curve is not None:
                 line, moved = to_hairline(line, guide, curve, head, head_pts)
                 if line is None:
                     hl["dropped"] += 1
                     continue
+                front_root = is_front_root(line, curve, head, head_pts)
                 hl["cut" if moved < 0 else "carried" if moved > 0 else "kept"] += 1
                 if moved:
                     cut = 0                               # on the curve: no random trim
@@ -574,14 +600,23 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
             j, _d = guide.nearest(line)
             pool = dense if layer == 0 else strips
             strip = pool[rng.integers(len(pool))]
-            pos, nrm, uv, tris, wts = _ribbon(line, guide.n[j], width * rng.uniform(0.8, 1.2),
+            if hairline_backset > 0 and layer and front_root:
+                arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(line, axis=0), axis=1))])
+                keep = arc >= layer * hairline_backset
+                if keep.sum() < 3:
+                    continue
+                line = line[keep]
+                j = j[keep]
+            pos, nrm, uv, tris, wts, cols = _ribbon(line, guide.n[j], width * rng.uniform(0.8, 1.2),
                                               gap * (layer + 1) + (kept % slots * gap / slots if slots
                                                                    else rng.uniform(0, gap / 2)), strip,
-                                              [guide.weights[x] for x in j])
+                                              [guide.weights[x] for x in j], full_strip, root_width,
+                                              float(rng.uniform(70.0, 130.0)))
             base = n_vert
             n_vert += len(pos)
             pos_l.append(pos)
             nrm_l.append(nrm)
+            col_l += cols
             uv_l += uv
             tri_l += [(x + base, y + base, z + base) for x, y, z in tris]
             w_l += wts
@@ -593,7 +628,7 @@ def grow_cards(hair: Hair, head: np.ndarray, strips: Sequence[Tuple[float, float
         if kept:
             p = np.vstack(pos_l)
             shapes.append(HairShape(f"Cards{layer}".encode(), p, np.vstack(nrm_l), np.zeros_like(p), uv_l, tri_l,
-                                    w_l, -1, -1, 0))
+                                    w_l, -1, -1, 0, col_l))
     report["cards"] = total
     report["roots_moved_to_the_hairline"] = turned
     if curve is not None:

@@ -938,6 +938,9 @@ def add_shape_args(ap):
     ap.add_argument("--head-parts", action="store_true",
                     help="also add every wig as a hairstyle in the looks menu (a hair head part, which takes the "
                          "character's hair colour; leave out --hair-color then)")
+    ap.add_argument("--no-vertex-colors", dest="vertex_colors", action="store_false",
+                    help="write the hair meshes without vertex colours (dark root to light tip, per-card variation, "
+                         "as Starfield's own hairs carry them; before 2026-11-05 there were none)")
     ap.add_argument("--classic-material", dest="hair_shader", action="store_false",
                     help="the generic converted material (alpha cutout) instead of Starfield's hair shader")
     ap.add_argument("--tint-cutoff", type=int, default=128,
@@ -1001,6 +1004,7 @@ def main(argv=None):
                     help="leave out the in-game controls: each wig's no-physics and head-bone copies and the vanilla control hat")
     ap.add_argument("--slot", type=int, help="biped slot bit for the wigs (default: the template hat's)")
     a = ap.parse_args(argv)
+    skyrimhair.VERTEX_COLORS = a.vertex_colors
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
