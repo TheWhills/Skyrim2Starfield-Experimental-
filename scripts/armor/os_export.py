@@ -385,7 +385,7 @@ SPHERE_MARGIN = 0.15   # metres added to the body's per-bone bounding sphere: th
 
 
 def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], out_name: str,
-                   transform=None) -> Dict[str, bytes]:
+                   transform=None, back_faces=None) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif", "geometries/...mesh"}: the gear skinned with the naked body's own binds (2026-11-06:
     binds from the skeleton's rest world put the gear in tall pillars in game; the positions are calibrated into the
     body mesh's space, so the body's binds are the ones that match). Spheres: the body's, widened by SPHERE_MARGIN."""
@@ -393,7 +393,7 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
     files, skinned = {}, []
     for i, sh in enumerate(shapes):
         bones = sorted({b for vw in sh.weights for b, _w in vw})
-        m = skyrimhair._mesh(sh, bones, False)
+        m = skyrimhair._mesh(sh, bones, bool(back_faces[i]) if back_faces else False)
         data = sfmesh.serialize(m)
         d, f = convert_static.mesh_file_path(data)
         files[f"geometries/{d}/{f}.mesh"] = data
@@ -411,7 +411,7 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
 
 
 def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dict[str, tuple], transform=None,
-                anchor: bool = True, drop=()):
+                anchor: bool = True, drop=(), back_faces=None):
     """Write meshes\\S2S\\<name>.nif + its .mesh files and S2SArmorTest.esm (ARMA / ARMO / OTFT from the vanilla
     template) into the mod folder `out`. shapes in the body mesh's space, weights by Starfield bone name; binds per
     bone. Returns (files, records, record report, material, model path)."""
@@ -430,9 +430,11 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
         except SystemExit:
             tpl_arma_nif = None
     material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
+    back = list(back_faces) if back_faces else [False] * len(shapes)
     if anchor:
         shapes = [anchor_shape(binds)] + list(shapes)
-    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{name}", transform)
+        back = [False] + back
+    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{name}", transform, back)
     for rel, data in files.items():
         dst = os.path.join(out, *rel.split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)

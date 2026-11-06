@@ -34,6 +34,14 @@ def sky_shapes(nif_bytes: bytes):
     return [gearfit.from_skyrim(s) for s in skyrimskin.skinned_shapes(nifmod.parse(nif_bytes))]
 
 
+def double_sided_shapes(nif_bytes: bytes) -> set:
+    """Names of a Skyrim NIF's shapes whose shader is double-sided (Skyrim draws their back faces too)."""
+    from fo4sf import skyrimnif
+    n = nifmod.parse(nif_bytes)
+    return {s.name.decode("latin-1", "replace") for s in skyrimskin.skinned_shapes(n)
+            if skyrimnif.double_sided(n, s.shader_ref)}
+
+
 def shape_textures(nif_bytes: bytes) -> dict:
     """{shape name: its texture set (diffuse first)} of a Skyrim NIF."""
     from fo4sf import skyrimnif
@@ -179,13 +187,20 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     return shapes, binds, res.report
 
 
-def morph_files(shapes, nif_rel: str, body_pts, body_morph) -> dict:
-    """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders."""
+def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=()) -> dict:
+    """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders. A shape
+    written with back faces has its vertices twice (copies after the originals): the copies get the same deltas."""
     out = {}
     for sh in shapes:
+        name = sh.name.decode("latin-1")
+        n = len(sh.positions)
         d, extra = gearfit.morph_deltas(np.asarray(sh.positions), body_pts, body_morph)
-        out[gearfit.morph_path(nif_rel, sh.name.decode("latin-1"))] = sfmorph.build(
-            len(sh.positions), list(body_morph.keys), d, extra)
+        total = n
+        if name in doubled:
+            d = {k: {**v, **{i + n: x for i, x in v.items()}} for k, v in d.items()}
+            extra = {k: {**v, **{i + n: x for i, x in v.items()}} for k, v in extra.items()}
+            total = 2 * n
+        out[gearfit.morph_path(nif_rel, name)] = sfmorph.build(total, list(body_morph.keys), d, extra)
     return out
 
 
@@ -200,6 +215,8 @@ def main(argv=None):
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out")
     ap.add_argument("--keep-skin", action="store_true",
                     help="keep shapes textured with Skyrim's skin (dropped by default: Starfield's own skin shows)")
+    ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
+                    help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
@@ -229,9 +246,10 @@ def main(argv=None):
         else:
             body.append(data)
     gear_bytes = [read(m["mesh"]) for m in meshes]
-    textures = {}
+    textures, double = {}, set()
     for gb in gear_bytes:
         textures.update(shape_textures(gb))
+        double |= double_sided_shapes(gb)
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
                              () if a.keep_skin else sorted(skin_shapes(textures)))
@@ -246,15 +264,20 @@ def main(argv=None):
                   f"box {r['box_m']}")
         print("nothing written: broken shapes (report in gear_fit.json)")
         return 1
+    names = [sh.name.decode("latin-1") for sh in shapes]
+    doubled = set(names) if a.back_faces == "all" else (double & set(names) if a.back_faces == "auto" else set())
     files, _recs, prep, material, _model = os_export.write_armor(
-        sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds)
+        sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
+        back_faces=[n in doubled for n in names])
+    print("double-sided in Skyrim:", ", ".join(sorted(double)) or "none",
+          "| written with back faces:", ", ".join(sorted(doubled)) or "none")
     morphs = {}
     if not a.no_morphs:
         mpath, body_morph = find_body_morph(sf_data, len(body_pts), female)
         if body_morph is None:
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
-            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph)
+            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph, doubled)
             for rel, data in morphs.items():
                 dst = os.path.join(a.out, *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)

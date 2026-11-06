@@ -1765,3 +1765,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   within 2.5 cm of the body now takes the nearest body / hands vertex's weights, blended back to its own Skyrim weights
   by 5 cm (vanilla clothing is skinned like the body under it). Shins: boots are not inside the base body (pushed 0),
   so the slots there are the heavier slider poking through (morph applied weakly or not; unresolved).
+- verified (owner, same day): skin shapes left out (arms / hands now Starfield's), cuffs on the wrists, heel follows
+  the boot when running. The shin slots show at the thinnest AND heaviest slider (worse when heavier) while the boots
+  sit outside the base body (pushed 0), and the earlier Outfit Studio export had the same ovals: supported cause =
+  back faces culled (Skyrim draws SLSF2_Double_Sided shapes from both sides; our material is one-sided). gear_fit
+  --back-faces auto (default) mirrors Skyrim's double-sided shapes (skyrimconvert.with_back_faces), all / none for
+  testing; morph.dat gets the copies' deltas too.

@@ -50,3 +50,20 @@ class MorphFileTests(unittest.TestCase):
         back = sfmorph.parse(out["meshes/morphs/s2s/ralof_outfit/chargen/stormcloak/morph.dat"])
         self.assertEqual(back.num_vertices, 3)
         self.assertIn(0, back.deltas["Overweight"])
+        two = gear_fit.morph_files([sh], "S2S\\Ralof_outfit.nif", body, m, doubled={"StormCloak"})
+        back = sfmorph.parse(two["meshes/morphs/s2s/ralof_outfit/chargen/stormcloak/morph.dat"])
+        self.assertEqual(back.num_vertices, 6)                                  # back-face copies
+        self.assertEqual(back.deltas["Overweight"][3], back.deltas["Overweight"][0])
+
+    def test_back_faces_double_the_mesh(self):
+        import numpy as np
+        from fo4sf import sfmesh, skyrimhair
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        from test_armor_check import bind_for, WORLD
+        sh = skyrimhair.HairShape(b"Boots", np.array([[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0]], float),
+                                  np.tile([0, 0, 1.0], (3, 1)), np.tile([1.0, 0, 0], (3, 1)), [(0, 0), (1, 0), (0, 1)],
+                                  [(0, 1, 2)], [[("A", 1.0)]] * 3, -1, -1, -1)
+        binds = {b: bind_for(WORLD[b]) for b in WORLD}
+        files = os_export.body_nif_files([sh], ["m.mat"], binds, "S2S/T", None, [True])
+        mesh = sfmesh.parse(next(v for k, v in files.items() if k.endswith(".mesh")))
+        self.assertEqual((len(mesh.positions), len(mesh.triangles)), (6, 2))
