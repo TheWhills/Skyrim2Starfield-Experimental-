@@ -298,12 +298,15 @@ def nif_material(nif_bytes: bytes) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ main
-def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.002) -> Dict:
+def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.002, skip=()) -> Dict:
     s = os_convert.Session(client, os.path.join(out, "_os_export"))
     rep = {"steps": s.rows}
     status = s("get_status")
     body = (status.get("reference") or {}).get("shape")
     gear = [n for n in status.get("outfitShapes", []) if n != body]
+    skipped = [n for n in gear if n.lower() in {x.lower() for x in skip}]
+    gear = [n for n in gear if n not in skipped]
+    rep["skipped"] = skipped
     if not body or not gear:
         raise os_convert.StepFailed("open project has no reference body or no gear: run os_convert.py first")
     counts = vertex_counts(s)
@@ -379,6 +382,7 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="a mod folder (outside the repository)")
     ap.add_argument("--url", default=os_probe.DEFAULT_URL)
     ap.add_argument("--token", default="")
+    ap.add_argument("--skip", default="", help="comma-separated shape names to leave out, e.g. MaleBodyStormcloak")
     ap.add_argument("--max-residual", type=float, default=0.002, help="metres (default %(default)s)")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
@@ -388,7 +392,8 @@ def main(argv=None):
     client.initialize()
     os.makedirs(a.out, exist_ok=True)
     try:
-        rep = export(client, sf_data, a.name, a.out, a.max_residual)
+        rep = export(client, sf_data, a.name, a.out, a.max_residual,
+                     [x.strip() for x in a.skip.split(",") if x.strip()])
     except os_convert.StepFailed as e:
         print("failed:", e)
         return 1
@@ -420,6 +425,8 @@ def main(argv=None):
     rep.update(records=prep, material=material, files=sorted(files), model=model)
     with open(os.path.join(a.out, "armor_test.json"), "w", encoding="utf-8") as fh:
         json.dump({k: v for k, v in rep.items() if k != "steps"}, fh, indent=1)
+    if rep.get("skipped"):
+        print("left out:", ", ".join(rep["skipped"]))
     print(f"calibration: {rep['calibration']['rms_m'] * 1000:.2f} mm rms, scale {rep['calibration']['scale']:.5f}")
     for g, r in rep["shapes"].items():
         print(f"  {g}: {r['vertices']} vertices, {r['unweighted']} unweighted, {len(r['bones'])} bones")

@@ -202,6 +202,18 @@ class ExportTests(unittest.TestCase):
         self.assertTrue(np.allclose(got[1], ROT) and np.allclose(got[2], (0, 0, -1.3)))   # the body's bind, as is
         self.assertAlmostEqual(got[0][3], 0.2 + E.SPHERE_MARGIN, places=5)
 
+    def test_skip_leaves_shape_out(self):
+        real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
+        world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(E.hkx_to_af, "vanilla_file", lambda p, s: (b"x", p)), \
+                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], SKIN)), \
+                mock.patch.object(E.sfmesh, "parse", lambda b: None), \
+                mock.patch.object(E.facefit, "mesh_arrays", lambda m: (real, [])), \
+                mock.patch.object(E.npc_hair, "skeleton_world", lambda b: world):
+            with self.assertRaises(E.os_convert.StepFailed):          # nothing left but the body
+                E.export(Fake(real), "data", "X", d, skip=["cuirass"])
+
     def test_bone_missing_from_body_stops(self):
         real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
         world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
