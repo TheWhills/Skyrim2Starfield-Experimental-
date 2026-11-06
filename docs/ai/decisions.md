@@ -1534,3 +1534,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   "Sk = the tone it was painted for" is a reading of the names (supported, not verified). face_fit sets the test
   NPC's Dermaesthetic texture: ethnicity from the Skyrim race (Redguard -> African; Nord / Imperial / Breton / Elder
   -> European), its sex, md1 when present, Sk nearest the STON chosen for the body. faces.json face_colors.face_skin.
+- 2026-11-06 Owner: Nazeem / Saadia still white-faced with STON 8 / 6 and African Dermaesthetic set (faces.json
+  confirms both were written), and they spawned in spacesuits. So the face colour comes from another field of the
+  template (unknown; not STON, not Dermaesthetic). Now each test NPC copies the plain, voiced vanilla NPC of its sex
+  whose STON and Dermaesthetic ethnicity are nearest (pick_template skin=), so the unknown field comes with it; once
+  that works, diff the template against a light one to find the field. Test NPCs drop DOFT / CNTO / COCT (outfit,
+  inventory) as well. Skyrim NPCs without HCLF get their race's usual hair colour (Redguard Black).

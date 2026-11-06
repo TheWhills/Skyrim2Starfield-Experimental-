@@ -123,6 +123,40 @@ class FaceSkinTests(unittest.TestCase):
         self.assertEqual(info["face_skin"]["set"], True)
 
 
+def sf_npc(fid, edid, female, ston, derma, voiced=True, extra=()):
+    acbs = struct.pack("<I", 1 if female else 0) + bytes(12)
+    subs = [(b"EDID", z(edid)), (b"ACBS", acbs), (b"RNAM", struct.pack("<I", 0x7D34)), (b"FMSI", b"\0" * 4),
+            (b"STON", bytes([ston])), (b"TNAM", z("Dermaesthetic")), (b"QNAM", z(derma))] + list(extra)
+    if voiced:
+        subs.append((b"VTCK", b"\1\0\0\0"))
+    return (b"NPC_", b"", subs, fid)
+
+
+class TemplateSkinTests(unittest.TestCase):
+    RECS = [sf_npc(1, "PaleMan", False, 1, "European_Male_Md1_Sk1"),
+            sf_npc(2, "DarkMan", False, 8, "African_Male_Md1_Sk8"),
+            sf_npc(3, "DarkManScripted", False, 8, "African_Male_md1_Sk8", extra=[(b"VMAD", b"x")]),
+            sf_npc(4, "MidWoman", True, 6, "African_Female_md1_Sk6"),
+            sf_npc(5, "PaleWoman", True, 0, "European_Female_md1_Sk1")]
+
+    def test_template_skin(self):
+        self.assertEqual(face_fit.template_skin(self.RECS[1][2]), (8, "african"))
+
+    def test_pick_by_skin(self):
+        pick = lambda f, skin: face_fit.pick_template(self.RECS, 0x7D34, f, None, skin=skin)[3]   # noqa: E731
+        self.assertEqual(pick(False, (8, "african")), 2)                  # not the scripted one
+        self.assertEqual(pick(False, (1, "european")), 1)
+        self.assertEqual(pick(True, (6, "african")), 4)
+        self.assertEqual(pick(True, (1, "european")), 5)
+        self.assertEqual(face_fit.pick_template(self.RECS, 0x7D34, False, None)[3], 1)   # no skin: first voiced
+
+    def test_strip_gear_and_hair_fallback(self):
+        self.assertTrue({b"DOFT", b"CNTO", b"COCT"} <= set(face_fit.STRIP_GEAR))
+        self.assertEqual(R.default_hair_color("RedguardRace", ["Black", "Brown"]), "Black")
+        self.assertIsNone(R.default_hair_color("RedguardRace", ["Brown"]))
+        self.assertIsNone(R.default_hair_color("KhajiitRace", ["Black"]))
+
+
 class RaceHairTests(unittest.TestCase):
     def test_race_default_hair_only_when_none(self):
         real = {"hdpt": {0x30: {"type": 3}, 0x31: {"type": 3}, 0x12: {"type": 6}},

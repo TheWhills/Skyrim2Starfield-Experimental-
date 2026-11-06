@@ -352,3 +352,14 @@ def with_layer_texture(subs, layer: str, texture: str) -> Tuple[list, bool]:
             continue
         out.append((s, d))
     return out, done
+
+
+# Skyrim NPCs without a hair colour (HCLF) of their own (Nazeem, Saadia) show their race's dark default; the test
+# NPC otherwise keeps its template's colour (2026-11-06: Saadia came out brown, dark grey-black in Skyrim)
+RACE_HAIR_COLOR = {"redguard": "Black", "nord": "Brown", "imperial": "BlackBrown", "breton": "Brown"}
+
+
+def default_hair_color(race_edid: str, names) -> Optional[str]:
+    low = (race_edid or "").lower()
+    pick = next((v for k, v in RACE_HAIR_COLOR.items() if k in low), None)
+    return pick if pick in set(names) else None

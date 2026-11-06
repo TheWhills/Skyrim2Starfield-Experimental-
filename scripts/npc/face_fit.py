@@ -130,12 +130,47 @@ def with_face(subs, values):
 
 # Data a test copy must not carry: scripts (VMAD) and companion affinity hooks (QSTA quest, BNAM dialogue)
 STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT", b"SOFT")   # SOFT: space outfit (2026-11-03: Ysolda in a helmeted suit)
+# 2026-11-06: Saadia / Nazeem spawned in a spacesuit from their new templates' default outfit / inventory; the test NPCs
+# wear nothing until clothing is converted
+STRIP_GEAR = (b"DOFT", b"CNTO", b"COCT")
 
 
-def pick_template(npc_recs, race_fid, female, edid=None):
+def template_skin(subs):
+    """(STON, face skin ethnicity) of a Starfield NPC (its Dermaesthetic texture's first word, lower case)."""
+    ston = next((bytes(d)[0] for s, d in subs if s == b"STON" and len(d)), None)
+    layer, eth = None, None
+    for s, d in subs:
+        if s == b"TNAM":
+            layer = fo4land_zstring(d)
+        elif s == b"QNAM" and layer == "Dermaesthetic":
+            m = npc_records.DERMA.match(fo4land_zstring(d))
+            eth = m.group(1).lower() if m else None
+            break
+    return ston, eth
+
+
+def pick_template(npc_recs, race_fid, female, edid=None, skin=None):
     """A vanilla human NPC of the sex to copy: `edid` when given; else one with face dials and no template, preferring
     plain ones (no scripts, no affinity data: a generic NPC rather than a quest character) with a voice type (VTCK:
-    the game's generic greetings, owner 2026-11-05)."""
+    the game's generic greetings, owner 2026-11-05). skin (STON, ethnicity): among those, the one whose skin tone and
+    face skin ethnicity are nearest (2026-11-06: STON + the Dermaesthetic texture changed Nazeem's body, not his face,
+    which kept the light template's colour from a field not yet known)."""
+    if skin is not None and edid is None:
+        voiced = []
+        for r in npc_recs:
+            subs = r[2]
+            sigs = {s for s, _d in subs}
+            acbs = next((bytes(d) for s, d in subs if s == b"ACBS"), b"")
+            is_f = bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1)
+            rnam = next((struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"RNAM"), None)
+            if rnam == race_fid and is_f == female and b"FMSI" in sigs and b"TPLT" not in sigs \
+                    and not (sigs & {b"VMAD", b"QSTA", b"BNAM"}) and b"VTCK" in sigs:
+                ston, eth = template_skin(subs)
+                cost = abs((ston if ston is not None else 4) - (skin[0] if skin[0] is not None else 4)) + \
+                    (0 if eth == skin[1] else 6)
+                voiced.append((cost, sfplugin.edid(subs), r))
+        if voiced:
+            return min(voiced, key=lambda c: (c[0], c[1]))[2]
     best = plain_best = None
     for t, h, subs, fid in npc_recs:
         if edid is not None:
@@ -202,6 +237,9 @@ def npc_dress(subs, n, npcs, real, row) -> list:
     subs = npc_records.with_parts(subs, real["sf_hdpt"], new, drop=drop, part_type=real["part_type"])
     color = real["clfm"].get(src.get("hair_color"))
     name, how = npc_records.match_hair_color(color, real["names"], real["palette"])
+    if not name and color is None:
+        name = npc_records.default_hair_color(real.get("race_edids", {}).get(src.get("race"), ""), real["names"])
+        how = "no Skyrim hair colour: the race's usual" if name else how
     if name:
         subs = real["with_hair_color"](subs, name)
     info["hair_color"] = {"skyrim": (color or {}).get("edid"), "skyrim_rgb": list((color or {}).get("rgba") or [])[:3],
@@ -209,6 +247,15 @@ def npc_dress(subs, n, npcs, real, row) -> list:
     subs, info["face_colors"] = face_colors(subs, src, real, name)
     row["dressed"] = info
     return subs
+
+
+def target_skin(n, npcs, real):
+    """(STON, ethnicity) the converted NPC should have: its Skyrim skin tone tint and race."""
+    faces = skyrimnpc.faces_by_template(npcs)
+    src = npcs.get(faces.get(n["form_id"], n["form_id"]), n)
+    tints, _d = real.get("races", {}).get(src.get("race"), ({}, {}))
+    rgb, _how = npc_records.skyrim_skin_rgb(src, tints)
+    return npc_records.skin_tone(rgb), npc_records.skyrim_ethnicity(real.get("race_edids", {}).get(src.get("race"), ""))
 
 
 def with_race_hair(src, real):
@@ -483,7 +530,8 @@ def main(argv=None):
             if "dials" not in row:
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
-            tpl = pick_template(npc_recs, human, row["female"], want)
+            skin = target_skin(by_edid[row["edid"].lower()], npcs, real) if real is not None else None
+            tpl = pick_template(npc_recs, human, row["female"], want, skin=skin)
             if tpl is None:
                 row["test_npc"] = "no vanilla template NPC of this sex"
                 continue
@@ -493,7 +541,7 @@ def main(argv=None):
                 full = npc_records.npc_name(by_edid[row["edid"].lower()], real["strings"])
             subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}),
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
-                                  b"FULL": sfplugin.zs(full)}, drop=STRIP)
+                                  b"FULL": sfplugin.zs(full)}, drop=STRIP + STRIP_GEAR)
             if real is not None:
                 subs = npc_dress(subs, by_edid[row["edid"].lower()], npcs, real, row)
                 row["name"] = full
