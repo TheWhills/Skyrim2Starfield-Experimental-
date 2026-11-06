@@ -1559,3 +1559,5 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   with a spacesuit. Test plugin now has its own empty outfit (OTFT S2S_NoOutfit, empty INAM) set as DOFT and SOFT of
   every test NPC. Faces with --keep-blend-morphs: still lighter than the body (owner screenshots), maybe less;
   next control: the vanilla template spawned beside the copy, to tell our bug from how Starfield renders faces.
+- 2026-11-06 Owner: no more spacesuits with the empty outfit (verified). faces.json test_npc now also gives the
+  template's FormID and placeatme command (the console's help finds no NPC EditorIDs in Starfield).

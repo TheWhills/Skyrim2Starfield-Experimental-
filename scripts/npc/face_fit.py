@@ -587,6 +587,9 @@ def main(argv=None):
             test_subs[row["edid"]] = len(recs)
             recs.append((b"NPC_", tpl[1], subs, fid))
             row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]),
+                               "template_form_id": f"{tpl[3]:08X}",
+                               "template_console": f"player.placeatme {tpl[3]:X}  (the vanilla NPC it was copied "
+                                                   f"from, to compare in game)",
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
                                           f"order index)"}
         if recs and a.hair:

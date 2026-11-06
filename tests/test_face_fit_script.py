@@ -108,6 +108,7 @@ class FaceFitScriptTests(unittest.TestCase):
                 self.assertLess(sigs.index(b"FMSI"), sigs.index(b"ATTX"))
                 self.assertEqual(dict(subs)[b"FULL"], b"HousecarlWhiterun (S2S)\0")
                 self.assertIn("console", rows["HousecarlWhiterun"]["test_npc"])
+                self.assertEqual(rows["HousecarlWhiterun"]["test_npc"]["template_console"].split()[1], "10001")
                 self.assertEqual(rows["HousecarlWhiterun"]["test_npc"]["template"], "SettlerM01")   # the plain one
                 self.assertNotIn(b"VMAD", sigs)
                 # an empty outfit of our own as default and space outfit (2026-11-06: spacesuits without one)
