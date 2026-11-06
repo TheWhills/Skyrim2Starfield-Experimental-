@@ -181,6 +181,24 @@ class SurfaceTests(unittest.TestCase):
         out2, moved2 = G.cover(gear, -gn, tris, leg, leg_n, gap=0.004)
         self.assertEqual(moved2, 0)
 
+    def test_keep_gap_pulls_back_to_skyrims_gap(self):
+        a = np.linspace(0, 2 * np.pi, 32, endpoint=False)
+        z = np.linspace(0, 1, 6)
+        sf = np.array([[0.1 * np.cos(t), 0.1 * np.sin(t), h] for h in z for t in a])
+        sfn = np.array([[np.cos(t), np.sin(t), 0.0] for _h in z for t in a])
+        tris = []
+        for i in range(5):
+            for j in range(32):
+                a0, a1 = i * 32 + j, i * 32 + (j + 1) % 32
+                tris += [(a0, a1, a0 + 32), (a1, a1 + 32, a0 + 32)]
+        gear = np.array([[0.14, 0.0, 0.5], [0.12, 0.0, 0.5], [0.3, 0.0, 0.5]])
+        sky_gap = np.array([0.01, 0.02, 0.2])              # 1 cm on Skyrim's body, 2 cm, a loose part far away
+        out, n = G.keep_gap(gear, sky_gap, sf, np.array(tris), sfn)
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(np.linalg.norm(out[0][:2]), 0.11, delta=0.002)    # back to a 1 cm gap
+        self.assertTrue(np.allclose(out[1], gear[1]))       # already at its 2 cm
+        self.assertTrue(np.allclose(out[2], gear[2]))       # loose: untouched
+
     def test_outward(self):
         pts, nrm = self.cylinder(0.1)
         self.assertTrue(np.allclose(G.outward(pts, -nrm), nrm))

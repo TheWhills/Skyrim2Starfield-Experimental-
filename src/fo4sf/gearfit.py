@@ -28,6 +28,8 @@ from .skyrimhair import MAX_WEIGHTS, UNIT, HairShape, nearest_surface, _vertex_f
 STRETCH = (0.75, 1.33)          # bone length ratio clamp
 REACH = 0.08                    # m: Skyrim body points farther from Starfield's surface get no offset
 CARRY = 0.10                    # m: gear takes the body offset of Skyrim body points within this distance
+KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body keeps its Skyrim gap on Starfield's
+PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
@@ -483,6 +485,23 @@ def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, b
     return out, int((total > 1e-5).sum())
 
 
+def keep_gap(pts: np.ndarray, sky_gap: np.ndarray, sf_pts: np.ndarray, sf_tris, sf_nrm: np.ndarray, gap: float = GAP,
+             reach: float = KEEP_REACH, most: float = PULL_MAX) -> Tuple[np.ndarray, int]:
+    """Pull gear back in to the gap it had on Skyrim's body (2026-11-06, owner: sleeve hems standing off the arm, the
+    collar thicker than in Skyrim, boot tops off the leg: the fit only ever moves gear outward). sky_gap: each
+    vertex's signed distance outside Skyrim's body; a vertex now farther than that (and than `gap`) outside
+    Starfield's body moves toward it by the excess (at most `most`); push-out and cover run after this."""
+    cp, depth, dist = closest_on_mesh(pts, sf_pts, np.asarray(sf_tris, int).reshape(-1, 3), sf_nrm)
+    target = np.maximum(sky_gap, gap)
+    excess = depth - target
+    ok = (sky_gap > -0.005) & (sky_gap < reach) & (dist < reach + 0.03) & (excess > 0.002) & (depth > 0)
+    out = pts.copy()
+    move = np.minimum(excess[ok], most)
+    toward = (cp[ok] - pts[ok]) / np.maximum(dist[ok], 1e-9)[:, None]
+    out[ok] += toward * move[:, None]
+    return out, int(ok.sum())
+
+
 def push_out(points: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, gap: float = GAP,
              reach: float = PUSH_REACH, tris: Optional[np.ndarray] = None) -> Tuple[np.ndarray, int]:
     """Gear points inside (or within `gap` of) the body moved out to `gap` along the body's outward normal; against
@@ -566,6 +585,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     bp = np.concatenate([p for p, _n in body_moved]) if body_moved else np.zeros((0, 3))
     sky_bp = np.concatenate([s.points for s in sky_body]) if sky_body else np.zeros((0, 3))
     sky_bn = np.concatenate([s.normals for s in sky_body]) if sky_body else np.zeros((0, 3))
+    sky_bt, base = [], 0
+    for s_ in sky_body:
+        sky_bt += [(a + base, b + base, c + base) for a, b, c in s_.triangles]
+        base += len(s_.points)
+    sky_bt = np.array(sky_bt, int).reshape(-1, 3)
     if len(sky_bn):
         sky_bn = outward(sky_bp, sky_bn)
     bn = np.concatenate([n for _p, n in body_moved]) if body_moved else np.zeros((0, 3))
@@ -576,11 +600,18 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     for s in gear:
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
         skin = False
+        sky_gap = None
         if len(sky_bp):
             d, dist, _i = nearest_surface(s.points, sky_bp, sky_bn)
             skin = bool(np.median(np.abs(d)) < SKIN_DEPTH and np.median(dist) < 0.01)
+            if len(sky_bt):
+                _cp, sky_gap, sky_dist = closest_on_mesh(s.points, sky_bp, sky_bt, sky_bn)
+                sky_gap = np.where(sky_dist < KEEP_REACH + 0.03, sky_gap, np.inf)
         shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
         pts = pts + shift
+        pulled = 0
+        if not skin and sky_gap is not None and len(sf_body_pts):
+            pts, pulled = keep_gap(pts, sky_gap, sf_body_pts, sf_body_tris, sf_nrm, gap)
         pushed = 0
         if len(sf_body_pts):
             # skin pieces too, closer: Skyrim paints clothes on body-textured parts (Stormcloak trousers)
@@ -607,7 +638,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "not_finite": int(bad.sum()), "far_outside": far,
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
-            "body_weighted": near, "covered": covered}
+            "body_weighted": near, "covered": covered, "pulled_in": pulled}
     return FitResult(shapes, rep)
 
 

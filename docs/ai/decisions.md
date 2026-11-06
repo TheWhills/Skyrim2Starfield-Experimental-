@@ -1788,3 +1788,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   SkyrimConverter (_shape_material: colour / normal / rough DDS + .mat, alpha test kept; prefix s2s) and packs
   materials / textures as "S2SArmorTest - Main.ba2" / "- Textures.ba2" (hair_pack.pack; loose without Archive2).
   Shapes that fall back keep the nightwear material. texconv default: the owner's xEdit Texconvx64.exe path.
+- verified (owner screenshots + Skyrim reference, same day): with the converted Skyrim textures (SkyrimConverter
+  materials in "S2SArmorTest - Main / Textures.ba2") Ralof's Stormcloak outfit reads as the original in Starfield.
+  Notes: gaps between the sleeve hems and the arm and at part of the boots; the collar thicker than in Skyrim.
+  Supported cause: every fit step moved gear outward only. gearfit.keep_gap now pulls each vertex that sat within
+  6 cm of Skyrim's body back to its Skyrim gap (closest distance on the triangles of both bodies; at most 4 cm), before
+  push-out and cover.
