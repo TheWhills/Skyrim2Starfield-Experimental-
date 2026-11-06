@@ -164,5 +164,53 @@ class StarfieldHeadTests(unittest.TestCase):
         self.assertEqual(rep["vertices_moved_by_face_bones"], 400)
 
 
+RECIPE = "\n".join([
+    "MORESLIDERSFACEBONES\t1", "# comment",
+    "NODE\tmeshes\\skeleton_facebones.nif\tfaceBone_MS_A\tfaceBone_C_Chin\t0\t0\t0",
+    "MESH\tgeometries\\AB12\\CD34.mesh\t3\t3\tdeadbeef",
+    "W\t0\t1\t2\t32768", "W\t1\t1\t2\t65535", "W\t2\t0\t2\t65535",
+    "MESH\tgeometries\\ee\\ff.mesh\t1\t1\t0", "W\t0\t0\t1\t1",
+    "FOLLOW\tmeshes\\beard.nif", "W\t9\t9\t9\t9"])
+
+
+class RecipeTests(unittest.TestCase):
+    """More Sliders' MoreSlidersFaceBones_recipe.txt: weight moves onto the new face bones (owner 2026-11-05)."""
+
+    def test_load_recipe(self):
+        r = F.load_recipe(RECIPE)
+        self.assertEqual(sorted(r), ["ab12/cd34.mesh", "ee/ff.mesh"])
+        b = r["ab12/cd34.mesh"]
+        self.assertEqual((b["vertices"], b["count"], b["checksum"]), (3, 3, "deadbeef"))
+        self.assertEqual(b["moves"], [(0, 1, 2, 32768), (1, 1, 2, 65535), (2, 0, 2, 65535)])
+        self.assertEqual(len(r["ee/ff.mesh"]["moves"]), 1)           # the W after FOLLOW belongs to no block
+        self.assertEqual(F._mesh_key("geometries/AB12/CD34.mesh"), "ab12/cd34.mesh")
+
+    def test_apply_recipe_moves_part_of_the_parent_weight(self):
+        ws = [[(0, 0.5), (1, 0.5)], [(1, 1.0)], [(1, 1.0)]]
+        out, rep = F.apply_recipe(ws, F.load_recipe(RECIPE)["ab12/cd34.mesh"]["moves"])
+        d = [dict(row) for row in out]
+        self.assertAlmostEqual(d[0][1], 0.5 * (1 - 32768 / 65535))
+        self.assertAlmostEqual(d[0][2], 0.5 * 32768 / 65535)
+        self.assertEqual(d[1], {2: 1.0})                              # all of it: the parent drops out
+        self.assertEqual(d[2], {1: 1.0})                              # no weight on bone 0 there: nothing moves
+        self.assertEqual((rep["moves"], rep["skipped"]), (2, 1))
+        for row in out:
+            self.assertAlmostEqual(sum(w for _b, w in row), 1.0)
+
+    def test_moved_weight_makes_the_new_bones_slider_work(self):
+        verts = head_points(300)
+        names = ["faceBone_C_Chin", "faceBone_MS_A"]
+        piv = np.array(BONES["faceBone_C_Chin"])
+        binds = [((0, 0, 0, 0), tuple(np.eye(3).reshape(-1)), tuple(-piv), 1.0)] * 2
+        ws = [[(0, 1.0)] for _ in verts]
+        moves = [(v, 0, 1, 65535) for v in range(len(verts)) if verts[v][2] < -0.05]
+        sl = [F.Slider(1, "new", "Chin", False, True, {"faceBone_MS_A": (np.zeros(9), np.r_[0, 0, 1.0, np.zeros(6)])})]
+        before, _ = F.face_head(verts, ws, names, binds)
+        self.assertTrue(np.allclose(F.deform(before, sl, {1: 1.0}), verts))
+        after, _ = F.face_head(verts, F.apply_recipe(ws, moves)[0], names, binds)
+        moved = np.abs(F.deform(after, sl, {1: 1.0}) - verts).max(1) > 1e-6
+        self.assertEqual(int(moved.sum()), len(moves))
+
+
 if __name__ == "__main__":
     unittest.main()

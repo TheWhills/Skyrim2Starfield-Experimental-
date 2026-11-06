@@ -21,6 +21,10 @@ from typing import Dict, List, Tuple
 from fo4sf import sfplugin
 
 GET_IS_ID = 72
+# INFO ENAM: u16 flags, u16 reset hours (xEdit's Fallout 4 layout, assumed the same in Starfield: supported, not
+# verified). 2026-11-05 owner: Ralof only ever said his first line ('Hmph.', silent): without Random the game takes the
+# first response whose conditions pass
+RANDOM, RANDOM_END = 0x0002, 0x0020
 GREETING_DATA = bytes.fromhex("00077d00")
 
 
@@ -49,11 +53,15 @@ def topic(header: bytes, fid: int, edid: str, quest_fid: int, infos: List[int]):
                               (b"TIFC", struct.pack("<I", len(infos)))], fid)
 
 
-def response(header: bytes, fid: int, text: str, npc_fid: int):
-    return (b"INFO", header, [(b"ENAM", struct.pack("<I", 0)), (b"TRDA", struct.pack("<IIf", 0xFFFFFFFF, 0, 0.0)),
+def response(header: bytes, fid: int, text: str, npc_fid: int, flags: int = RANDOM):
+    return (b"INFO", header, [(b"ENAM", struct.pack("<HH", flags, 0)), (b"TRDA", struct.pack("<IIf", 0xFFFFFFFF, 0, 0.0)),
                               (b"NAM1", sfplugin.zs(text)), (b"NAM2", b"\0"), (b"NAM3", b"\0"), (b"NAM4", b"\0"),
                               (b"NAM9", bytes(8)), (b"CTDA", ctda_get_is_id(npc_fid)), (b"NAM0", b"\0"),
                               (b"INAM", struct.pack("<I", 1))], fid)
+
+
+def _npc_of(info) -> bytes:
+    return next((bytes(d)[12:16] for s, d in info[2] if s == b"CTDA"), b"")
 
 
 def load_lines(voice_dir: str) -> Dict[str, dict]:
@@ -110,6 +118,11 @@ def add_voices(recs: list, npc_index: Dict[str, int], rows: list, voice_dir: str
     if not infos:
         report["voice"] = "no lines with audio for these NPCs"
         return [], {}
+    for k in range(len(infos)):                      # the last of each NPC's random lines: Random End
+        last = k + 1 == len(infos) or _npc_of(infos[k + 1]) != _npc_of(infos[k])
+        if last:
+            t, h, subs, f = infos[k]
+            infos[k] = (t, h, sfplugin.edit(subs, {b"ENAM": struct.pack("<HH", RANDOM | RANDOM_END, 0)}), f)
     children[qfid] = (10, [topic(header, dfid, "S2S_SkyrimGreetings_Hellos", qfid, [i[3] for i in infos])])
     children[dfid] = (7, infos)
     report["voice"] = {"quest": f"{qfid:08X}", "topic": f"{dfid:08X}", "responses": len(infos)}

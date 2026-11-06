@@ -60,7 +60,9 @@ def skyrim_head(data: bytes):
     return None if s is None else np.array(s.positions, float)
 
 
-def starfield_head(sf_data, female, head_nif=None):
+def starfield_head(sf_data, female, head_nif=None, recipe=None):
+    """recipe: facefit.load_recipe of a face-bone mod (More Sliders): its weight moves onto the new bones, which the
+    mod's SFSE plugin makes at load time, are applied to the head's vanilla .mesh here too."""
     nif_bytes, _rel = hkx_to_af.vanilla_file(head_nif or SF_HEADS[female], sf_data)
     paths, skin = facefit.starfield_head_parts(nif_bytes)
     if not paths:
@@ -70,7 +72,23 @@ def starfield_head(sf_data, female, head_nif=None):
     mesh = sfmesh.parse(mesh_bytes)
     pos, ws = facefit.mesh_arrays(mesh)
     bones = [b.decode("latin-1") if isinstance(b, bytes) else b for b in skin.get("bones", [])]
+    rrep = None
+    if recipe is not None:
+        block = recipe.get(facefit._mesh_key(mesh_rel))
+        if block is None:
+            rrep = {"error": f"the recipe has no MESH block for {mesh_rel}"}
+        elif block["vertices"] != len(pos):
+            rrep = {"error": f"recipe expects {block['vertices']} vertices, {mesh_rel} has {len(pos)} (another "
+                             "game version?)"}
+        else:
+            top = max((max(p, c) for _v, p, c, _a in block["moves"]), default=-1)
+            if top >= len(bones):
+                raise SystemExit(f"the recipe names bone {top}, the head NIF has {len(bones)}: use the mod's "
+                                 "_facebones head NIF (--head-nif)")
+            ws, rrep = facefit.apply_recipe(ws, block["moves"])
     head, rep = facefit.face_head(pos, ws, bones, skin.get("binds", []))
+    if rrep is not None:
+        rep["recipe"] = rrep
     head.triangles = np.array([tuple(t) for t in mesh.triangles], int)
     return head, rep
 
@@ -257,6 +275,10 @@ def main(argv=None):
     ap.add_argument("--regions", help="facial bone regions file to use instead of the game's (per sex: give twice, "
                                       "male first)", action="append", default=[])
     ap.add_argument("--head-nif", action="append", default=[], help="head NIF instead of the game's (male, female)")
+    ap.add_argument("--facebones-recipe",
+                    help="a face-bone mod's weight recipe (More Sliders: SFSE\\Plugins\\MoreSlidersFaceBones\\"
+                         "MoreSlidersFaceBones_recipe.txt), with that mod's --regions and --head-nif: its new bones' "
+                         "sliders then move the head in the fit as they do in game")
     ap.add_argument("--pos-unit", type=float, default=0.01, help="metres per regions-file position unit")
     ap.add_argument("--test-plugin", action="store_true")
     ap.add_argument("--template-npc", action="append", default=[],
@@ -327,6 +349,10 @@ def main(argv=None):
     report = {"settings": {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit}, "sexes": {},
               "npcs": []}
     setup = {}
+    recipe = None
+    if a.facebones_recipe:
+        with open(a.facebones_recipe, encoding="utf-8", errors="replace") as fh:
+            recipe = facefit.load_recipe(fh.read())
     for female in (False, True):
         if not any(n["female"] == female for n in chosen):
             continue
@@ -337,7 +363,8 @@ def main(argv=None):
         else:
             text = hkx_to_af.vanilla_file(SF_REGIONS[female], sf_data)[0].decode("utf-8", "replace")
         sliders = facefit.load_regions(text)
-        head, hrep = starfield_head(sf_data, female, a.head_nif[int(female)] if len(a.head_nif) > int(female) else None)
+        head, hrep = starfield_head(sf_data, female, a.head_nif[int(female)] if len(a.head_nif) > int(female) else None,
+                                    recipe)
         base = skyrim_head(hkx_to_af.read_any(SKY_HEADS[female], sky))
         al = facefit.align_heads(base, head.vertices)
         rot_free = facefit.align_heads(base, head.vertices, rotate=False)

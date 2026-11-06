@@ -67,6 +67,9 @@ class VoiceRecordTests(unittest.TestCase):
             ctda = bytes.fromhex(next(x["hex"] for x in info if x["sig"] == "CTDA"))
             self.assertEqual(struct.unpack_from("<fHHI", ctda, 4), (1.0, 72, 0, npc[3]))
             self.assertEqual(next(x["text"] for x in info if x["sig"] == "NAM1"), "Hmph.")
+            enams = [bytes.fromhex(next(x["hex"] for x in i["subs"] if x["sig"] == "ENAM")) for i in t["infos"]]
+            self.assertEqual([struct.unpack("<HH", e) for e in enams], [(NV.RANDOM, 0),
+                                                                        (NV.RANDOM | NV.RANDOM_END, 0)])
             tifl = next(x for x in t["subs"] if x["sig"] == "TIFL")
             self.assertEqual(tifl["size"], 8)
 

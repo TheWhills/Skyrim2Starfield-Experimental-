@@ -70,7 +70,7 @@ class FaceFitScriptTests(unittest.TestCase):
         S.hkx_to_af.read_any = read_any
         S.hkx_to_af.vanilla_file = lambda p, d: (json.dumps(T.REGIONS).encode(), p)
         S.skyrim_head = skyrim_head
-        S.starfield_head = lambda d, f, h=None: (sf_head, {"face_bones": 6})
+        S.starfield_head = lambda d, f, h=None, r=None: (sf_head, {"face_bones": 6})
         S.bsa.SkyrimArchives = lambda d: None
         try:
             with tempfile.TemporaryDirectory() as tmp:

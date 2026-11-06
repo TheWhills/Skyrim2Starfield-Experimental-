@@ -1467,3 +1467,17 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   records)}). Unverified: whether the game plays them (the quest must run; TRDA / NAM9 are filled neutral), whether
   the lip file compiled against S2SVoiceBuild.esm's registered folder plays from ours. Also: the previews were upside
   down (the flared neck read as the wider cranium); the open neck rim now marks the bottom.
+- 2026-11-05 Owner: Ralof only ever shows "Hmph." as a subtitle, silent. "Hmph." is his first converted greeting
+  (lines.json), so our quest / topic / GetIsID response are picked (supported). The INFOs had ENAM 0, so the game
+  always took the first one: they now carry Random (ENAM u16 0x0002), the last of each NPC's lines Random End (0x0020)
+  (xEdit's Fallout 4 ENAM layout, assumed for Starfield: supported, not verified). The silent audio is unresolved:
+  first check that the build's Sound\Voice\S2SFaceTest.esm\<voice type> folder reached the MO2 mod.
+- 2026-11-05 More Sliders (Nexus Starfield 18445, v2.1; owner: more face-shape sliders for the fit). Read on its
+  files: the regions files have 307 sliders per sex (116 move its new faceBone_MS_* bones); its _facebones head NIFs
+  list the vanilla bones first and the new ones after (male 53 + 168, female 50 + 177, binds included) and still point
+  at the vanilla head .mesh; the new bones' weights exist only at load time, made by its SFSE plugin from
+  MoreSlidersFaceBones_recipe.txt (MESH <mesh> <vertices> <moves> <checksum>, then W <vertex> <parent> <child>
+  <alpha16>: alpha16 / 65535 of the parent bone's weight moves to the child, in order). face_fit --facebones-recipe
+  applies the same moves to the vanilla mesh (facefit.load_recipe / apply_recipe), so with the mod's --regions and
+  --head-nif the new sliders move the fit's head as in game. In game the NPCs need the mod (SFSE) installed;
+  whether it reshapes NPCs as well as the player (its ini: PlayerBoneCheck=0) is unverified.

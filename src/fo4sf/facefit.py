@@ -353,6 +353,55 @@ def face_head(mesh_positions: np.ndarray, weights: List[List[Tuple[int, float]]]
                   "vertices": len(V), "vertices_moved_by_face_bones": int(np.sum(W.sum(1) > 1e-3))}
 
 
+# ------------------------------------------------------------------------------- face-bone mods (More Sliders, 18445)
+def _mesh_key(path: str) -> str:
+    p = path.replace("\\", "/").lower()
+    return p[len("geometries/"):] if p.startswith("geometries/") else p
+
+
+def load_recipe(text: str) -> Dict[str, Dict]:
+    """The weight patches of a MoreSlidersFaceBones_recipe.txt (owner 2026-11-05, More Sliders 2.1; read on its file):
+    tab-separated lines; 'MESH <geometries\\...mesh> <vertex count> <W line count> <checksum>' starts a block, each
+    'W <vertex> <parent bone> <child bone> <alpha16>' after it moves alpha16 / 65535 of the vertex's parent-bone weight
+    to the child bone, in order (bone numbers index the mod's _facebones head NIF skin, which lists the vanilla bones
+    first and the new faceBone_MS_* bones after them). Its SFSE plugin does this to the vanilla .mesh at load time, so
+    the game files themselves never carry the new weights. NODE / FOLLOW lines (bones for the skeleton, parts that
+    follow the head) are not needed for a fit and are skipped. Returns {mesh path (lower, '/', no 'geometries/'):
+    {"vertices", "count", "checksum", "moves": [(vertex, parent, child, alpha16)]}}."""
+    out: Dict[str, Dict] = {}
+    cur = None
+    for line in text.splitlines():
+        f = line.rstrip("\r\n").split("\t")
+        if f[0] == "MESH" and len(f) >= 4:
+            cur = {"vertices": int(f[2]), "count": int(f[3]), "checksum": f[4] if len(f) > 4 else "", "moves": []}
+            out[_mesh_key(f[1])] = cur
+        elif f[0] == "W" and cur is not None and len(f) >= 5:
+            cur["moves"].append((int(f[1]), int(f[2]), int(f[3]), int(f[4])))
+        elif f[0] in ("NODE", "FOLLOW", "FOLLOWHEAD"):
+            cur = None
+    return out
+
+
+def apply_recipe(weights: List[List[Tuple[int, float]]], moves) -> Tuple[List[List[Tuple[int, float]]], Dict]:
+    """Per-vertex weights after a recipe block's moves (each vertex's total stays the same)."""
+    ws = [dict() for _ in weights]
+    for v, row in enumerate(weights):
+        for b, w in row:
+            ws[v][b] = ws[v].get(b, 0.0) + w
+    moved = skipped = 0
+    for v, parent, child, alpha in moves:
+        if v >= len(ws) or ws[v].get(parent, 0.0) <= 0.0:
+            skipped += 1
+            continue
+        amount = ws[v][parent] * alpha / 65535.0
+        ws[v][parent] -= amount
+        ws[v][child] = ws[v].get(child, 0.0) + amount
+        moved += 1
+    out = [[(b, w) for b, w in sorted(d.items()) if w > 0.0] for d in ws]
+    return out, {"moves": moved, "skipped": skipped,
+                 "new_bones_weighted": len({c for _v, _p, c, _a in moves})}
+
+
 def mesh_arrays(mesh) -> Tuple[np.ndarray, List[List[Tuple[int, float]]]]:
     """(positions (V, 3) metres, per-vertex [(bone index, weight 0..1)]) of an sfmesh.SfMesh."""
     from . import sfmesh

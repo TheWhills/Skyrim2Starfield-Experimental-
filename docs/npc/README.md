@@ -30,6 +30,9 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
    (`--hair-colors` palette from `scripts/npc/hair_color_probe.py`, else colour words in both games' names), and a
    vanilla template with a voice type (VTCK: the game's generic greetings; which voice is reported). Placed by console.
    Unresolved: what colour each Starfield hair colour name is (the probe looks for it), Skyrim voices.
+   Face-bone mods: with More Sliders (Nexus 18445) give its two regions files and head NIFs (`--regions`,
+   `--head-nif`, male first) and its `--facebones-recipe` (MoreSlidersFaceBones_recipe.txt): 307 sliders per sex
+   instead of the vanilla set; the NPCs then need the mod in game.
 4. NPC placement in the converted world (no schedules): later.
 5. Navmesh, then schedules (AI packages: Skyrim PACK -> Starfield PACK; both from the same engine line). Navmesh is the
    blocker: without it NPCs cannot walk.
