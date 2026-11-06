@@ -1540,3 +1540,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   whose STON and Dermaesthetic ethnicity are nearest (pick_template skin=), so the unknown field comes with it; once
   that works, diff the template against a light one to find the field. Test NPCs drop DOFT / CNTO / COCT (outfit,
   inventory) as well. Skyrim NPCs without HCLF get their race's usual hair colour (Redguard Black).
+- 2026-11-06 Owner: with skin-matched templates Saadia's face still white, both still in spacesuits, and Nazeem
+  "a random black guy with Starfield default hair and beard, not our Nazeem". Supported cause: Starfield template
+  actors: TPTA lists template NPCs and ACBS bytes 14-15 hold the template flags (seen 0x6C13, 0x4C1A, 0x7E7F ...),
+  so the copy took traits (face, hair) and inventory (the spacesuits) from the template's templates. Test NPCs now
+  drop TPLT / TPTA and clear those flags (face_fit.without_templates). Also added: --keep-blend-morphs (test whether
+  BMPN / BMPV, e.g. female_af_md1_Mouth, carry the face skin colour) and scripts/npc/npc_dump.py (our NPC vs its
+  vanilla template, field by field).

@@ -117,14 +117,16 @@ def face_subrecords(values):
     return out
 
 
-def with_face(subs, values):
-    """The NPC's subrecords with face dials replaced by `values` and phenotype / morph-group data removed."""
-    first = next((i for i, (s, _d) in enumerate(subs) if s in FACE_SIGS), None)
-    kept = [(s, d) for s, d in subs if s not in FACE_SIGS]
+def with_face(subs, values, keep=()):
+    """The NPC's subrecords with face dials replaced by `values` and phenotype / morph-group data removed (`keep`:
+    sigs of that data left as they are)."""
+    gone = tuple(s for s in FACE_SIGS if s not in keep)
+    first = next((i for i, (s, _d) in enumerate(subs) if s in gone), None)
+    kept = [(s, d) for s, d in subs if s not in gone]
     if first is None:
         first = next((i for i, (s, _d) in enumerate(kept) if s in (b"ATTX", b"STON", b"HCOL")), len(kept))
     else:
-        first = sum(1 for s, _d in subs[:first] if s not in FACE_SIGS)
+        first = sum(1 for s, _d in subs[:first] if s not in gone)
     return kept[:first] + face_subrecords(values) + kept[first:]
 
 
@@ -133,6 +135,22 @@ STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT", b"SOFT")   # SOFT: space outfit (20
 # 2026-11-06: Saadia / Nazeem spawned in a spacesuit from their new templates' default outfit / inventory; the test NPCs
 # wear nothing until clothing is converted
 STRIP_GEAR = (b"DOFT", b"CNTO", b"COCT")
+# 2026-11-06: Nazeem came out as "a random black guy with Starfield hair and beard" and the test NPCs kept spawning in
+# spacesuits: Starfield NPCs take traits / face / inventory from template NPCs listed in TPTA (2,142 of 2,983 faced
+# humans) when the template flags in ACBS (u16 at bytes 14-15, e.g. 0x6C13) say so; TPLT is the single template.
+STRIP_TEMPLATES = (b"TPLT", b"TPTA")
+
+
+def without_templates(subs) -> list:
+    """subs with TPLT / TPTA dropped and the ACBS template flags (bytes 14-15) cleared."""
+    out = []
+    for s, d in subs:
+        if s in STRIP_TEMPLATES:
+            continue
+        if s == b"ACBS" and len(d) >= 16:
+            d = bytes(d)[:14] + b"\0\0" + bytes(d)[16:]
+        out.append((s, d))
+    return out
 
 
 def template_skin(subs):
@@ -376,6 +394,9 @@ def main(argv=None):
                     help="a face-bone mod's weight recipe (More Sliders: SFSE\\Plugins\\MoreSlidersFaceBones\\"
                          "MoreSlidersFaceBones_recipe.txt), with that mod's --regions and --head-nif: its new bones' "
                          "sliders then move the head in the fit as they do in game")
+    ap.add_argument("--keep-blend-morphs", action="store_true",
+                    help="keep the template's blend morph presets (BMPN / BMPV: female_af_md1_Mouth ...) instead of "
+                         "removing them (2026-11-06 test: does Starfield take the face skin colour from them?)")
     ap.add_argument("--ridge", type=float, default=0.05,
                     help="cost of each dial's size, relative to an average dial's effect (2026-11-05: at 1e-6 More "
                          "Sliders' 307 sliders fought each other at +-1 and Ralof came out deformed; 0 = off)")
@@ -539,9 +560,11 @@ def main(argv=None):
             full = f"{row['edid']} (S2S)"
             if real is not None:
                 full = npc_records.npc_name(by_edid[row["edid"].lower()], real["strings"])
-            subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}),
+            keep = (b"BMPN", b"BMPV") if a.keep_blend_morphs else ()
+            subs = sfplugin.edit(with_face(tpl[2], {int(k): v for k, v in row["dials"].items()}, keep),
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
                                   b"FULL": sfplugin.zs(full)}, drop=STRIP + STRIP_GEAR)
+            subs = without_templates(subs)
             if real is not None:
                 subs = npc_dress(subs, by_edid[row["edid"].lower()], npcs, real, row)
                 row["name"] = full
