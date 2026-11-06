@@ -122,6 +122,25 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(list(d["Overweight"]), [1])             # body vertex 1 -> skin vertex 1, exactly
         self.assertIsNone(gear_fit.skin_piece(body, tris, uvs, w, np.zeros((0, 3)))[0])
 
+    def test_skin_piece_leaves_covered_skin_out(self):
+        import numpy as np
+        from fo4sf import skyrimhair
+        # a flat strip of body (z = 0, normals up): x 0..0.4; gear lies 2 cm above its first half
+        xs = np.linspace(0, 0.4, 9)
+        body = np.array([[x, y, 0.0] for x in xs for y in (0.0, 0.05)])
+        tris = []
+        for i in range(8):
+            a, b = 2 * i, 2 * i + 2
+            tris += [(a, b, a + 1), (b, b + 1, a + 1)]
+        gp = np.array([[-0.05, -0.05, 0.02], [0.2, -0.05, 0.02], [-0.05, 0.1, 0.02], [0.2, 0.1, 0.02]])
+        gear = skyrimhair.HairShape(b"Coat", gp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [], [(0, 1, 2),
+                                    (1, 3, 2)], [], -1, -1, -1)
+        w = [[("C_Chest", 1.0)]] * len(body)
+        sh, used = gear_fit.skin_piece(body, tris, [(0, 0)] * len(body), w, body, reach=0.5, gear=[gear], margin=1)
+        xs_kept = sorted({round(float(body[i][0]), 2) for i in used})
+        self.assertEqual(xs_kept[0], 0.2)           # covered points left out, one ring of overlap under the edge
+        self.assertEqual(xs_kept[-1], 0.4)
+
     def test_body_skin_shapes_and_slots(self):
         t = {"MaleBodyStormcloak": ["textures\\actors\\character\\male\\MaleBody_1.dds"],
              "HandMale": ["textures\\actors\\character\\male\\MaleHands_1.dds"]}

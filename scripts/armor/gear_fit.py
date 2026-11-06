@@ -114,7 +114,33 @@ SKIN_REACH = 0.03       # m: Starfield body vertices this close to a fitted Skyr
 SKIN_SHAPE = b"S2S_Skin"
 
 
-def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH):
+COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
+COVER_MARGIN = 2        # rings of covered vertices kept along the edge of the visible skin (overlap under the gear)
+
+
+def covered_by(body: np.ndarray, body_nrm: np.ndarray, gear, depth: float = COVER_DEPTH) -> np.ndarray:
+    """Which body points have gear straight out from them (closest gear point within `depth`, in the direction of the
+    body's normal): skin there is never seen."""
+    out = np.zeros(len(body), bool)
+    for g in gear:
+        gp = np.asarray(g.positions, float)
+        gt = np.asarray(g.triangles, int).reshape(-1, 3)
+        if not len(gt):
+            continue
+        gn = np.asarray(g.normals, float)
+        lo, hi = gp.min(0) - depth, gp.max(0) + depth
+        cand = np.nonzero(((body >= lo) & (body <= hi)).all(1) & ~out)[0]
+        if not len(cand):
+            continue
+        cp, _s, dist = gearfit.closest_on_mesh(body[cand], gp, gt, gn)
+        dirn = (cp - body[cand]) / np.maximum(dist, 1e-9)[:, None]
+        hit = (dist < depth) & (np.einsum("ij,ij->i", dirn, body_nrm[cand]) > 0.5)
+        out[cand[hit]] = True
+    return out
+
+
+def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH,
+               gear=(), margin: int = COVER_MARGIN):
     """(HairShape in skeleton space, kept body vertex indices) of the Starfield body where Skyrim's bare-skin pieces
     lie after the fit (2026-11-06, owner: Skyrim's bare arm runs up under the sleeve, Starfield's skin starts lower):
     the body vertices within `reach` of them and the triangles among them. None when nothing is kept."""
@@ -125,6 +151,20 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
     _d, dist, _i = skyrimhair.nearest_surface(body_skel, sources, zero)
     keep = dist < reach
     t = np.asarray(body_tris, int).reshape(-1, 3)
+    if len(gear):
+        # only the skin that shows, plus a narrow overlap under the gear's edges (2026-11-06: under the cowl the skin
+        # piece grew past the cowl on heavier bodies and showed through on the chest)
+        bn = skyrimhair._vertex_face_normals(body_skel, t)
+        bn /= np.maximum(np.linalg.norm(bn, axis=1, keepdims=True), 1e-12)
+        cov = covered_by(body_skel, bn, gear) & keep
+        visible = keep & ~cov
+        grow = visible.copy()
+        for _ in range(margin):
+            touch = np.zeros(len(body_skel), bool)
+            on = grow[t].any(1)
+            touch[t[on].reshape(-1)] = True
+            grow |= touch & keep
+        keep = grow
     t = t[keep[t].all(1)]
     used = np.unique(t)
     if not len(used):
@@ -436,7 +476,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         if src:
             uvs, mat = starfield_body_skin(sf_data, female)
             skel_body = pts @ frame[:3, :3].T + frame[:3, 3]
-            skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src))
+            gear_fit_shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)]
+            skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src), gear=gear_fit_shapes)
             if skin is not None:
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used

@@ -1860,3 +1860,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   there: the patches are subdivided faces folded over by neighbours moved apart; the fit's moves are now averaged with
   each vertex's neighbours (3 rounds) and pushed out again. The debug export lost Skyrim shapes with ':' in their name
   (Windows file names). unresolved: in game.
+- verified (owner, red skin test, same day): the skin piece takes the skin tone; on heavier sliders it showed through
+  on the chest (it ran under the cowl where Skyrim's bare-skin piece does). The skin piece now keeps only body points
+  with no gear straight out from them (closest gear point within 6 cm along the body normal), plus 2 rings of overlap
+  under the gear's edges, as vanilla outfit skin pieces cover only visible skin.
