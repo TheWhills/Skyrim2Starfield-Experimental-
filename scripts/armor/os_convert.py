@@ -158,6 +158,12 @@ def bounds(s, shape: str):
     return None
 
 
+def unweighted(validate) -> dict:
+    """{shape: count} of validate_project's "unweighted" errors."""
+    return {e.get("shape"): e.get("count") for e in (validate or {}).get("errors", [])
+            if e.get("check") == "unweighted" and e.get("shape")}
+
+
 def union(bs):
     bs = [b for b in bs if b]
     if not bs:
@@ -216,10 +222,25 @@ def convert(client, body_nif: str, gear_nifs: list, female: bool, out: str, name
         # the gear takes the body's skin transform, its vertices stay where they were fitted (same raw space)
         s("copy_bone_weights", shapes=gear, copySkinTransform=True, transformGeometry=False)
         rep["validate"] = s("validate_project", shapes=gear)
+        # 2026-11-06 third run: 66 (cloak hem) + 51 (boot tips) vertices were beyond the default 10-unit search;
+        # Outfit Studio's hint: copy again with a larger proximityRadius (a long dress needed 25)
+        loose = unweighted(rep["validate"])
+        if loose:
+            s("copy_bone_weights", shapes=sorted(loose), copySkinTransform=True, transformGeometry=False,
+              proximityRadius=25)
+            rep["validate"] = s("validate_project", shapes=gear)
         s("render_view", views=["front", "left", "back"], grid=True, width=1024, height=1024)
         path = os.path.join(out, name + ".nif")
         s("export_file", path=path, shapes=gear, overwrite=True)
         rep["exported"] = path
+        # export_file kept the imported Skyrim shape types (Gamebryo 20.2.0.7, NiTriShape, BSShaderPPLighting): not a
+        # Starfield NIF. BodySlide's build writes the target game's format, so save the set and build it.
+        display = f"S2S {name}"
+        s("save_project", sliderSetFile=f"S2S_{name}.osp", displayName=display, outputFileName=name,
+          outputDataPath=f"meshes\\S2S\\{name}", shapeDataFolder=f"S2S_{name}", shapeDataFile=f"{name}.nif",
+          copyReference=False, overwrite=True)
+        built = s("build_outfits", outfits=[display], targetDir=os.path.join(out, "build"))
+        rep["built"] = built
     except StepFailed as e:
         rep["failed_at"] = str(e)
     return rep

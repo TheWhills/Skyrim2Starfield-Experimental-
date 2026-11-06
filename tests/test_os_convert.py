@@ -86,7 +86,11 @@ class Fake:
         elif name == "delete_shapes":
             self.shapes = [n for n in self.shapes if n not in args["shapes"]]
         elif name == "validate_project":
-            body = {"ok": True, "errors": []}
+            self.validates = getattr(self, "validates", 0) + 1
+            body = {"ok": True, "errors": [{"check": "unweighted", "count": 51, "shape": "boots.nif"}]
+                    if self.validates == 1 else []}
+        elif name == "build_outfits":
+            body = {"files": ["meshes/S2S/x.nif"]}
         return {"content": [{"type": "text", "text": json.dumps(body)}]}
 
 
@@ -101,14 +105,20 @@ class StudioSideTests(unittest.TestCase):
         self.assertEqual(rep["old_body"], ["SkyBody"])
         order = ["new_project", "load_from_archive", "set_reference_shape", "import_from_game", "scale_to_body",
                  "fit_pose_to_shapes", "unpose_shapes", "fit_to_body", "delete_shapes", "copy_bone_weights",
-                 "validate_project", "render_view", "export_file"]
+                 "validate_project", "render_view", "export_file", "save_project", "build_outfits"]
         pos = [names.index(n) for n in order]
         self.assertEqual(pos, sorted(pos))
         args = dict((n, a) for n, a in f.calls)
         self.assertEqual(args["load_from_archive"]["files"], [C.SF_BODY[False]])
         self.assertEqual(args["fit_to_body"]["gapFrom"], ["SkyBody"])
-        self.assertEqual(args["copy_bone_weights"], {"shapes": ["cuirass.nif", "boots.nif"], "copySkinTransform": True,
-                                                     "transformGeometry": False})
+        copies = [a for n, a in f.calls if n == "copy_bone_weights"]
+        self.assertEqual(copies[0], {"shapes": ["cuirass.nif", "boots.nif"], "copySkinTransform": True,
+                                     "transformGeometry": False})
+        self.assertEqual((copies[1]["shapes"], copies[1]["proximityRadius"]), (["boots.nif"], 25))   # the loose ones
+        self.assertEqual(names.count("validate_project"), 2)
+        self.assertEqual(args["save_project"]["copyReference"], False)
+        self.assertEqual(args["build_outfits"]["outfits"], ["S2S Ralof"])
+        self.assertEqual(rep["built"], {"files": ["meshes/S2S/x.nif"]})
         self.assertNotIn("shape_transforms", names)
         self.assertEqual(args["export_file"]["shapes"], ["cuirass.nif", "boots.nif"])
         self.assertTrue(args["export_file"]["path"].endswith("Ralof.nif"))

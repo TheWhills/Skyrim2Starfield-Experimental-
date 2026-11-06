@@ -1628,3 +1628,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (fit_to_body found the body beside the gear, mean moves 2-5) was right in that space, and only the weight copy /
   display missed because the gear had no skin transform. Now: no transform bake; copy_bone_weights with
   copySkinTransform true, transformGeometry false; the run still stops if the scaled figure does not overlap the body.
+- 2026-11-06 Third os_convert run (verified in its render and validate): with copySkinTransform the gear sits on
+  Starfield's body and takes its weights (2,036 vertices cleaned to 8 bones; 66 cloak-hem and 51 boot-tip vertices
+  left unweighted, beyond the default 10-unit search). But export_file wrote a Gamebryo 20.2.0.7 NIF with NiTriShape /
+  BSShaderPPLightingProperty / BSDismemberSkinInstance: the imported Skyrim shape types, not Starfield's BSGeometry +
+  .mesh. Now: shapes still unweighted get a second copy at proximityRadius 25, and the set is saved (save_project,
+  copyReference false) and built with BodySlide (build_outfits into out\build), which should write the target game's
+  format; to check on the next run's file list. Textures are white: Skyrim textures are not in Starfield's Data
+  (materials are ours to make).
