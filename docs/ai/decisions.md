@@ -1771,3 +1771,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   back faces culled (Skyrim draws SLSF2_Double_Sided shapes from both sides; our material is one-sided). gear_fit
   --back-faces auto (default) mirrors Skyrim's double-sided shapes (skyrimconvert.with_back_faces), all / none for
   testing; morph.dat gets the copies' deltas too.
+- verified (owner, same day): --back-faces all changed nothing: the shin / toe gaps are not culled faces. Cause
+  (supported): the Skyrim boots have 202 vertices; every vertex is outside the leg (pushed 0) but the flat faces between
+  them cut through the calf and toes. gearfit.cover now checks the other way: body points coming through a gear face
+  (closest point inside the face, within 4 cm, less than the gap inside) push the 3 nearest gear vertices out along
+  their normals by the shortfall, 4 rounds. Back faces stay opt-in (--back-faces auto = Skyrim's double-sided only).

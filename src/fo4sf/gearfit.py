@@ -395,6 +395,46 @@ def _closest_on_triangles(p, a, b, c) -> np.ndarray:
     return out
 
 
+def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, gap: float = GAP,
+          reach: float = 0.04, iters: int = 4, k: int = 3) -> Tuple[np.ndarray, int]:
+    """Push gear faces out over body points that come through them (2026-11-06, Ralof's boots: 202 vertices, every one
+    outside the leg, yet the flat faces between them cut through the calf and toes). A body point counts when its
+    closest gear point is within `reach`, lies inside a face (the offset runs along the face normal, not off an
+    edge, so the leg above an opening does not drag its rim) and is less than `gap` inside the gear; the k gear
+    vertices nearest that spot move out along their normals by the shortfall (largest kept), repeated."""
+    tris = np.asarray(gear_tris, int).reshape(-1, 3)
+    if not len(tris) or not len(body):
+        return gear, 0
+    out = gear.copy()
+    nrm = gear_nrm / np.maximum(np.linalg.norm(gear_nrm, axis=1, keepdims=True), 1e-12)
+    lo, hi = gear.min(0) - reach, gear.max(0) + reach
+    near_body = body[((body >= lo) & (body <= hi)).all(1)]
+    moved = set()
+    for _ in range(iters):
+        if not len(near_body):
+            break
+        cp, depth, dist = closest_on_mesh(near_body, out, tris, nrm)
+        along = np.abs(depth) >= 0.9 * np.maximum(dist, 1e-9)
+        bad = (dist < reach) & along & (depth > -gap)
+        if not bad.any():
+            break
+        need = depth[bad] + gap                          # how far the gear must move out at that spot
+        push = np.zeros(len(out))
+        gg = (out * out).sum(1)
+        q = cp[bad]
+        d2 = (q * q).sum(1)[:, None] + gg[None, :] - 2.0 * q @ out.T
+        kk = min(k, len(out))
+        idx = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
+        for j in range(len(q)):
+            for v in idx[j]:
+                if need[j] > push[v]:
+                    push[v] = need[j]
+        hit = push > 0
+        out[hit] += push[hit, None] * nrm[hit]
+        moved |= set(np.nonzero(hit)[0].tolist())
+    return out, len(moved)
+
+
 def push_out(points: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, gap: float = GAP,
              reach: float = PUSH_REACH, tris: Optional[np.ndarray] = None) -> Tuple[np.ndarray, int]:
     """Gear points inside (or within `gap` of) the body moved out to `gap` along the body's outward normal; against
@@ -498,6 +538,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # skin pieces too, closer: Skyrim paints clothes on body-textured parts (Stormcloak trousers)
             pts, pushed = push_out(pts, sf_body_pts, sf_nrm, SKIN_GAP if skin else gap,
                                    tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
+        covered = 0
+        if not skin and len(sf_body_pts):
+            pts, covered = cover(pts, nrm, s.triangles, sf_body_pts, gap)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
             lo, hi = sf_body_pts.min(0) - FAR, sf_body_pts.max(0) + FAR
@@ -516,7 +559,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "not_finite": int(bad.sum()), "far_outside": far,
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
-            "body_weighted": near}
+            "body_weighted": near, "covered": covered}
     return FitResult(shapes, rep)
 
 

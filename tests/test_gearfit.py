@@ -160,6 +160,24 @@ class SurfaceTests(unittest.TestCase):
         depth = float((out[0] - (pts[0] + pts[1]) / 2 * np.array([1, 1, 0])) @ face_n)
         self.assertAlmostEqual(depth, 0.004, places=4)
 
+    def test_cover_pushes_flat_faces_over_a_round_leg(self):
+        # a square tube (4 sides, corners at r = 0.1) round a leg of radius 0.09: the corners are outside, the middle
+        # of each face (0.0707 from the axis) cuts 2 cm into the leg
+        a = np.linspace(0, 2 * np.pi, 4, endpoint=False) + np.pi / 4
+        gear = np.array([[0.1 * np.cos(t), 0.1 * np.sin(t), h] for h in (0.0, 1.0) for t in a])
+        gn = gear * [1, 1, 0]
+        gn /= np.linalg.norm(gn, axis=1, keepdims=True)
+        tris = []
+        for j in range(4):
+            a0, a1 = j, (j + 1) % 4
+            tris += [(a0, a1, a0 + 4), (a1, a1 + 4, a0 + 4)]
+        leg, _ = self.cylinder(0.09, n=48, rows=11)
+        out, moved = G.cover(gear, gn, tris, leg, gap=0.004)
+        self.assertEqual(moved, 8)
+        # the face middles now clear the leg: corners pushed so the flat sides sit outside r = 0.09
+        mid = (out[0] + out[1]) / 2
+        self.assertGreater(np.linalg.norm(mid[:2]), 0.09)
+
     def test_outward(self):
         pts, nrm = self.cylinder(0.1)
         self.assertTrue(np.allclose(G.outward(pts, -nrm), nrm))

@@ -300,7 +300,8 @@ def main(argv=None):
         print(f"  {n}: {r['vertices']} v, {'skin piece, ' if r['skin_piece'] else ''}pushed out {r['pushed_out']}, "
               f"body shift up to {r['max_body_shift_mm']:.0f} mm, {len(r['bones'])} bones, "
               f"z {r['box_m'][0][2]:.2f}..{r['box_m'][1][2]:.2f} m, "
-              f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights")
+              f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights, "
+              f"{r.get('covered', 0)} moved to cover the body")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
