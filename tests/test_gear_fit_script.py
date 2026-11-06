@@ -29,6 +29,35 @@ class ScriptTests(unittest.TestCase):
              "HandMale_Big1stperson": ["textures/actors/character/male/MaleHands_1.dds"], "X": []}
         self.assertEqual(gear_fit.skin_shapes(t), {"MaleBodyStormcloak", "HandMale_Big1stperson"})
 
+    def test_find_texconv(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            exe = os.path.join(d, "texconv.exe")
+            open(exe, "wb").close()
+            self.assertEqual(gear_fit.find_texconv(exe), exe)
+        self.assertIn(gear_fit.find_texconv(os.path.join(ROOT, "nope.exe")), ("", gear_fit.find_texconv()))
+
+    def test_shape_materials_falls_back(self):
+        class Conv:
+            neutral = "materials\\neutral.mat"
+            material_errors = {}
+
+            def _shape_material(self, n, s):
+                return self.neutral if s.name == b"A" else "materials\\s2s\\x.mat"
+        import numpy as np
+        from fo4sf import skyrimskin
+        from unittest import mock
+        fake = [mock.Mock(name="a"), mock.Mock(name="b")]
+        fake[0].name, fake[1].name = b"A", b"B"
+        with mock.patch.object(gear_fit.skyrimskin, "skinned_shapes", lambda n: fake), \
+                mock.patch.object(gear_fit.nifmod, "parse", lambda b: None):
+            out = gear_fit.shape_materials(Conv(), b"")
+        self.assertEqual(out, {"A": None, "B": "materials\\s2s\\x.mat"})
+
+    def test_writer_takes_materials(self):
+        import inspect
+        self.assertIn("materials", inspect.signature(os_export.write_armor).parameters)
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 

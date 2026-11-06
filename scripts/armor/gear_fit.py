@@ -34,6 +34,34 @@ def sky_shapes(nif_bytes: bytes):
     return [gearfit.from_skyrim(s) for s in skyrimskin.skinned_shapes(nifmod.parse(nif_bytes))]
 
 
+TEXCONV_DEFAULT = r"C:\Modding\tools\xedit\Edit Scripts\Texconvx64.exe"     # the owner's (overlay_records)
+
+
+def find_texconv(given: str = "") -> str:
+    import shutil
+    for c in (given, TEXCONV_DEFAULT, shutil.which("texconv") or "", shutil.which("texconv.exe") or ""):
+        if c and os.path.isfile(c):
+            return c
+    return ""
+
+
+def shape_materials(conv, nif_bytes: bytes) -> dict:
+    """{shape name: Starfield .mat path} for a Skyrim NIF's skinned shapes, converted by the repo's Skyrim texture
+    pipeline (SkyrimConverter: colour / normal / rough DDS + .mat, alpha test kept); None when it fell back."""
+    n = nifmod.parse(nif_bytes)
+    out = {}
+    for s in skyrimskin.skinned_shapes(n):
+        name = s.name.decode("latin-1", "replace")
+        try:
+            out[name] = conv._shape_material(n, s)
+        except Exception as e:                           # report, keep going: the shape keeps the fallback material
+            conv.material_errors[name] = f"{type(e).__name__}: {e}"
+            out[name] = None
+        if out[name] == conv.neutral:
+            out[name] = None
+    return out
+
+
 def double_sided_shapes(nif_bytes: bytes) -> set:
     """Names of a Skyrim NIF's shapes whose shader is double-sided (Skyrim draws their back faces too)."""
     from fo4sf import skyrimnif
@@ -215,6 +243,11 @@ def main(argv=None):
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out")
     ap.add_argument("--keep-skin", action="store_true",
                     help="keep shapes textured with Skyrim's skin (dropped by default: Starfield's own skin shows)")
+    ap.add_argument("--texconv", default="", help=f"texconv.exe (default: {TEXCONV_DEFAULT} if there)")
+    ap.add_argument("--content-resources", default="",
+                    help="ContentResources.zip (default: <Starfield>\\Tools\\ContentResources.zip)")
+    ap.add_argument("--archive2", default="", help="Archive2.exe (default: <Starfield>\\Tools\\Archive2)")
+    ap.add_argument("--no-textures", action="store_true", help="keep the borrowed nightwear material")
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
@@ -265,10 +298,40 @@ def main(argv=None):
         print("nothing written: broken shapes (report in gear_fit.json)")
         return 1
     names = [sh.name.decode("latin-1") for sh in shapes]
+    mats, conv, staging = {}, None, None
+    if not a.no_textures:
+        texconv = find_texconv(a.texconv)
+        cr = a.content_resources or os.path.join(a.starfield, "Tools", "ContentResources.zip")
+        if not texconv:
+            print("textures: SKIPPED, texconv.exe not found (pass --texconv)")
+        elif not os.path.isfile(cr):
+            print(f"textures: SKIPPED, ContentResources.zip not found: {cr} (pass --content-resources)")
+        else:
+            import shutil
+            from fo4sf import skyrimconvert
+            staging = os.path.join(a.out, "_staging")
+            shutil.rmtree(staging, ignore_errors=True)
+            conv = skyrimconvert.SkyrimConverter(sky, staging, texconv, cr, collision_template=None, prefix="s2s")
+            for gb in gear_bytes:
+                mats.update(shape_materials(conv, gb))
     doubled = set(names) if a.back_faces == "all" else (double & set(names) if a.back_faces == "auto" else set())
     files, _recs, prep, material, _model = os_export.write_armor(
         sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
-        back_faces=[n in doubled for n in names])
+        back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names])
+    if conv is not None:
+        import shutil
+        import hair_pack
+        base = os.path.splitext(os_export.PLUGIN)[0]
+        packed = hair_pack.pack(staging, a.out, a.starfield, a.archive2 or None, f"{base} - Main.ba2",
+                                f"{base} - Textures.ba2")
+        shutil.rmtree(staging, ignore_errors=True)
+        rep["materials"] = {"by_shape": {n: mats.get(n) for n in names}, "packed": packed,
+                            "errors": conv.material_errors}
+        for n in names:
+            print(f"material {n}: {mats.get(n) or 'FALLBACK (nightwear)'}")
+        print("texture files:", packed)
+        for k, e in conv.material_errors.items():
+            print(f"  material error {k}: {e}")
     print("double-sided in Skyrim:", ", ".join(sorted(double)) or "none",
           "| written with back faces:", ", ".join(sorted(doubled)) or "none")
     morphs = {}

@@ -1782,3 +1782,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   smoothing 2 x within 3 cm) so the shin and calf keep their own differences; cover only pushes faces that look away
   from the body (inner layers left), spreads each push over the vertex's neighbours (no spikes) and caps the total at
   2.5 cm. unresolved: in game.
+- verified (owner screenshots, same day): with facing-only shape transfer and the smooth capped cover the Stormcloak
+  outfit covers the legs and feet without bulk (cuffs 315 vertices moved instead of 1730). Fit accepted for now.
+- decision (owner: "add the textures now"): gear_fit converts each kept shape's Skyrim texture set with the repo's
+  SkyrimConverter (_shape_material: colour / normal / rough DDS + .mat, alpha test kept; prefix s2s) and packs
+  materials / textures as "S2SArmorTest - Main.ba2" / "- Textures.ba2" (hair_pack.pack; loose without Archive2).
+  Shapes that fall back keep the nightwear material. texconv default: the owner's xEdit Texconvx64.exe path.

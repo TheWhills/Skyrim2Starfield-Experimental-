@@ -411,7 +411,7 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
 
 
 def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dict[str, tuple], transform=None,
-                anchor: bool = True, drop=(), back_faces=None):
+                anchor: bool = True, drop=(), back_faces=None, materials=None):
     """Write meshes\\S2S\\<name>.nif + its .mesh files and S2SArmorTest.esm (ARMA / ARMO / OTFT from the vanilla
     template) into the mod folder `out`. shapes in the body mesh's space, weights by Starfield bone name; binds per
     bone. Returns (files, records, record report, material, model path)."""
@@ -431,10 +431,12 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
             tpl_arma_nif = None
     material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
     back = list(back_faces) if back_faces else [False] * len(shapes)
+    mats = [m or material for m in materials] if materials else [material] * len(shapes)
     if anchor:
         shapes = [anchor_shape(binds)] + list(shapes)
         back = [False] + back
-    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{name}", transform, back)
+        mats = [material] + mats
+    files = body_nif_files(shapes, mats, binds, f"S2S/{name}", transform, back)
     for rel, data in files.items():
         dst = os.path.join(out, *rel.split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
