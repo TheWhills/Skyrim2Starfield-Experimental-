@@ -1864,3 +1864,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   on the chest (it ran under the cowl where Skyrim's bare-skin piece does). The skin piece now keeps only body points
   with no gear straight out from them (closest gear point within 6 cm along the body normal), plus 2 rings of overlap
   under the gear's edges, as vanilla outfit skin pieces cover only visible skin.
+- verified (owner, same day): our armor does not change size with the body sliders at all (arms, chest), so our
+  morph.dat files are not applied. The path rule was wrong: vanilla nightwear morphs sit under
+  morphs\clothes\outfit_nightwear_01\outfit_nightwear_01_m\chargen\<shape>\ while its NIF is
+  Outfit_Nightwear_LowerBody_01_M.nif; a Nexus article (starfield/articles/268) says morph files are "referenced in esm
+  files". supported: a record field names the morph, and our copied records still name the nightwear's (which also
+  fits the first-shape bar: the nightwear lower body's one-shape morph applied to our shape 0 by vertex number).
+  scripts/armor/morph_ref_probe.py searches every Starfield.esm record for the morph folder name. Neck squash came
+  out 1.0 (Starfield clavicle -> head joint not shorter than Skyrim's): the "5 cm higher" read compared neck regions
+  cut by weights, not comparable; unresolved.
