@@ -56,7 +56,7 @@ def main(argv=None):
         if o is None or t is None:
             rep[r["edid"]] = {"error": "record not found", "ours": o is not None, "template": t is not None}
             continue
-        rep[r["edid"]] = dict(template=r["test_npc"]["template"], **compare(o, t))
+        rep[r["edid"]] = dict(template_edid=r["test_npc"]["template"], **compare(o, t))
         print(f"== {r['edid']} vs {r['test_npc']['template']}")
         print("  only ours:    ", rep[r["edid"]]["only_ours"])
         print("  only template:", rep[r["edid"]]["only_template"])
