@@ -93,7 +93,10 @@ def sf_esm(path):
             (b"ARMO", HDR(b"ARMO"), [(b"EDID", z(E.TEMPLATE_ARMOR)), (b"FULL", struct.pack("<I", 5)),
                                      (b"INDX", b"\0\0"), (b"MODL", struct.pack("<I", 0x1000)),
                                      (b"INDX", b"\1\0"), (b"MODL", struct.pack("<I", 0x1000))], 0x2000),
-            (b"OTFT", HDR(b"OTFT"), [(b"EDID", z("SomeOutfit")), (b"INAM", struct.pack("<I", 0x2000))], 0x3000)]
+            (b"OTFT", HDR(b"OTFT"), [(b"EDID", z("SomeOutfit")), (b"INAM", struct.pack("<I", 0x2000))], 0x3000),
+            (b"ARMA", HDR(b"ARMA"), [(b"EDID", z(E.SKIN_TEMPLATE_ADDON)), (b"BO64", (1 << 13).to_bytes(8, "little")),
+                                     (b"MOD2", z("Clothes\\skin_m.nif")), (b"MOD3", z("Clothes\\skin_f.nif"))],
+             0x1001)]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
 
@@ -145,6 +148,21 @@ class RecordTests(unittest.TestCase):
         self.assertLess(np.ptp(np.asarray(a.positions), axis=0).max(), 0.0011)
         files = E.body_nif_files([a], ["m.mat"], {"C_Chest": SKIN["binds"][0]}, "S2S/A")
         self.assertIn("meshes/S2S/A.nif", files)
+
+    def test_skin_addon(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            sf_esm(p)
+            recs, rep = E.armor_records(p, "S2S\\R.nif", "R", 1, "R", slots=[3, 5, 7], skin_nif_rel="S2S\\R_Skin.nif")
+        self.assertEqual([r[0] for r in recs], [b"ARMA", b"ARMA", b"ARMO", b"OTFT"])
+        skin = dict(recs[1][2])
+        self.assertEqual(skin[b"MOD2"], z("S2S\\R_Skin.nif"))
+        self.assertEqual(skin[b"BO64"][:8], (1 << 13).to_bytes(8, "little"))     # the vanilla skin addon's slot
+        armo = recs[2][2]
+        pairs = [(s, bytes(d)) for s, d in armo if s in (b"INDX", b"MODL")]
+        self.assertEqual(pairs, [(b"INDX", b"\0\0"), (b"MODL", struct.pack("<I", recs[0][3])),
+                                 (b"INDX", b"\1\0"), (b"MODL", struct.pack("<I", recs[1][3]))])
+        self.assertEqual(rep["skin_ARMA"], f"{recs[1][3]:08X}")
 
     def test_field_text(self):
         self.assertEqual(E.field_text(b"\x05\x00Meshes\\a\\morph.dat\x00"), "Meshes\\a\\morph.dat  (21 bytes)")

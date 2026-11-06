@@ -257,7 +257,11 @@ def vertex_counts(s) -> Dict[str, int]:
 
 
 # ------------------------------------------------------------------------------------------------ plugin
-def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=(), slots=None):
+SKIN_TEMPLATE_ADDON = "AA_Clothes_Nightwear_01_Skin"   # vanilla outfit skin addon (slot 13, body material)
+
+
+def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=(), slots=None,
+                  skin_nif_rel: str = None):
     """[ARMA, ARMO, OTFT] copied from the vanilla template armor with the worn model pointed at nif_rel (Data-relative
     under meshes\\), new EditorIDs and FormIDs. Returns (records, report)."""
     recs = {fid: (t, h, subs) for t, h, subs, fid in sfplugin.records(sf_esm, [b"ARMO", b"ARMA", b"OTFT"])}
@@ -278,13 +282,36 @@ def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str,
     if slots is not None:                         # BO64: which body slots the addon covers (3 hides the naked body)
         edits[b"BO64"] = slot_bits(slots, dict(asubs).get(b"BO64"))
     arma = (b"ARMA", ah, sfplugin.edit(asubs, edits), a_fid)
-    osubs, seen = [], False
-    for s, d in armo[1][2]:
-        if s == b"MODL" and len(d) >= 4 and struct.unpack_from("<I", bytes(d), 0)[0] in recs:
-            if seen:
-                continue                        # one addon: ours
-            seen = True
-            d = struct.pack("<I", a_fid) + bytes(d)[4:]
+    skin = None
+    if skin_nif_rel:
+        # the skin piece as its own addon, copied from the vanilla outfit skin addon (2026-11-06: inside the clothing
+        # addon it kept one size and the default skin tone; the vanilla skin addon follows both)
+        tpl = next(((fid, r) for fid, r in recs.items() if r[0] == b"ARMA" and sfplugin.edid(r[2]) ==
+                    SKIN_TEMPLATE_ADDON), None)
+        if tpl is None:
+            raise SystemExit(f"no ARMA {SKIN_TEMPLATE_ADDON} in {sf_esm}")
+        s_fid = sfplugin.new_form_id(3, masters)
+        sm = sfplugin.zs(skin_nif_rel)
+        skin = (b"ARMA", tpl[1][1], sfplugin.edit(list(tpl[1][2]), {b"EDID": sfplugin.zs(f"S2S_{name}_Skin_AA"),
+                                                                     b"MOD2": sm, b"MOD3": sm}), s_fid)
+    # the addon list (INDX + MODL pairs in vanilla ARMOs) rebuilt with ours: the clothing addon, then the skin one
+    addons = [a_fid] + ([skin[3]] if skin is not None else [])
+    src = armo[1][2]
+    has_indx = any(s == b"INDX" for s, _d in src)
+    first_modl = next(bytes(d) for s, d in src if s == b"MODL" and len(d) >= 4
+                      and struct.unpack_from("<I", bytes(d), 0)[0] in recs)
+    osubs, placed = [], False
+    for i, (s, d) in enumerate(src):
+        is_addon = s == b"MODL" and len(d) >= 4 and struct.unpack_from("<I", bytes(d), 0)[0] in recs
+        is_indx = s == b"INDX" and i + 1 < len(src) and src[i + 1][0] == b"MODL"
+        if is_addon or is_indx:
+            if not placed:
+                for k, fid in enumerate(addons):
+                    if has_indx:
+                        osubs.append((b"INDX", struct.pack("<H", k)))
+                    osubs.append((b"MODL", struct.pack("<I", fid) + first_modl[4:]))
+                placed = True
+            continue
         osubs.append((s, d))
     oedits = {b"EDID": sfplugin.zs(f"S2S_{name}"), b"FULL": sfplugin.zs(full)}
     if slots is not None and b"BO64" in dict(osubs):
@@ -295,6 +322,9 @@ def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str,
               t_fid)
     rep = {"template": TEMPLATE_ARMOR, "template_addon": f"{addon:08X}", "ARMA": f"{a_fid:08X}",
            "ARMO": f"{o_fid:08X}", "OTFT": f"{t_fid:08X}", "model": nif_rel}
+    if skin is not None:
+        rep.update(skin_ARMA=f"{skin[3]:08X}", skin_model=skin_nif_rel)
+        return [arma, skin, armor, outfit], rep
     return [arma, armor, outfit], rep
 
 
@@ -425,7 +455,8 @@ def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], o
 
 
 def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dict[str, tuple], transform=None,
-                anchor: bool = True, drop=(), back_faces=None, materials=None, slots=None):
+                anchor: bool = True, drop=(), back_faces=None, materials=None, slots=None, skin_shape=None,
+                skin_material: str = None):
     """Write meshes\\S2S\\<name>.nif + its .mesh files and S2SArmorTest.esm (ARMA / ARMO / OTFT from the vanilla
     template) into the mod folder `out`. shapes in the body mesh's space, weights by Starfield bone name; binds per
     bone. Returns (files, records, record report, material, model path)."""
@@ -433,7 +464,8 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
     sf_esm = os.path.join(sf_data, "Starfield.esm")
     nif_rel = f"S2S\\{name}.nif"
     masters = ["Starfield.esm"]
-    recs, prep = armor_records(sf_esm, nif_rel, name, len(masters), full, list(drop), slots)
+    skin_rel = f"S2S\\{name}_Skin.nif" if skin_shape is not None else None
+    recs, prep = armor_records(sf_esm, nif_rel, name, len(masters), full, list(drop), slots, skin_rel)
     model = next((sfplugin_zstring(d) for s_, d in recs[0][2] if s_ == b"MOD2"), "")
     vanilla_arma = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if r[3] == int(prep["template_addon"], 16)),
                         None)
@@ -451,6 +483,9 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
         back = [False] + back
         mats = [material] + mats
     files = body_nif_files(shapes, mats, binds, f"S2S/{name}", transform, back)
+    if skin_shape is not None:
+        sk = [anchor_shape(binds), skin_shape] if anchor else [skin_shape]
+        files.update(body_nif_files(sk, [skin_material or material] * len(sk), binds, f"S2S/{name}_Skin", transform))
     for rel, data in files.items():
         dst = os.path.join(out, *rel.split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)

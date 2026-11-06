@@ -564,6 +564,8 @@ def main(argv=None):
                   f"box {r['box_m']}")
         print("nothing written: broken shapes (report in gear_fit.json)")
         return 1
+    skin_sh = next((sh for sh in shapes if sh.name == SKIN_SHAPE), None)
+    shapes = [sh for sh in shapes if sh.name != SKIN_SHAPE]
     names = [sh.name.decode("latin-1") for sh in shapes]
     mats, conv, staging = {}, None, None
     if not a.no_textures:
@@ -588,10 +590,12 @@ def main(argv=None):
     slots = None if (a.no_skin_piece or not sp) else HIDE_BODY_SLOTS
     files, _recs, prep, material, _model = os_export.write_armor(
         sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds,
-        back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names], slots=slots)
+        back_faces=[n in doubled for n in names], materials=[mats.get(n) for n in names], slots=slots,
+        skin_shape=skin_sh if slots else None, skin_material=(sp or {}).get("material"))
     if sp:
         print(f"skin piece: {sp['vertices']} Starfield body vertices where {', '.join(sp['from'])} lies, "
-              f"material {sp['material']}; armor slots {slots} (naked body hidden)")
+              f"material {sp['material']}; own addon {prep.get('skin_ARMA')} ({prep.get('skin_model')}) copied from "
+              f"{os_export.SKIN_TEMPLATE_ADDON}; armor slots {slots} (naked body hidden)")
     if conv is not None:
         import shutil
         import hair_pack
@@ -614,7 +618,10 @@ def main(argv=None):
         if body_morph is None:
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
-            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph, doubled, skin_used)
+            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph, doubled)
+            if skin_sh is not None and slots:
+                morphs.update(morph_files([skin_sh], f"S2S\\{a.name}_Skin.nif", body_pts, body_morph, (),
+                                          skin_used))
             for rel, data in morphs.items():
                 dst = os.path.join(a.out, *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -631,6 +638,9 @@ def main(argv=None):
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1, default=str)
+    if rep.get("neck_squash"):
+        print(f"neck: gear around it squashed in height to {rep['neck_squash']['ratio']} above the clavicles "
+              f"({rep['neck_squash']['clavicle_height_m']} m)")
     for b in ("NPC Neck [Neck]", "NPC Head [Head]"):
         info = rep.get("bones", {}).get(b, {})
         if info:

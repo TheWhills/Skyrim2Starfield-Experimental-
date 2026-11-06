@@ -325,6 +325,31 @@ class WeldTests(unittest.TestCase):
         self.assertTrue(np.allclose(out[2], moved[2]))
 
 
+class NeckAndFoldTests(unittest.TestCase):
+    def test_neck_squash(self):
+        params = (0.5, 1.4, np.array([0.0, 0.0]))
+        pts = np.array([[0.0, 0.0, 1.6], [0.3, 0.0, 1.6], [0.0, 0.0, 1.3]])
+        out = G.neck_squash(pts, params)
+        self.assertAlmostEqual(out[0, 2], 1.5)                    # on the neck: halved above the clavicles
+        self.assertAlmostEqual(out[1, 2], 1.6)                    # out at the shoulder: untouched
+        self.assertAlmostEqual(out[2, 2], 1.3)                    # below the clavicles: untouched
+        joints = {"NPC L Clavicle [LClv]": np.eye(4), "NPC Head [Head]": np.eye(4)}
+        joints["NPC Head [Head]"][2, 3] = 0.4
+        world = {"L_Clavicle": np.eye(4), "C_Head": np.eye(4), "C_Neck": np.eye(4)}
+        world["C_Head"][2, 3] = 0.3
+        r, base, _axis = G.neck_squash_params(joints, {"NPC Spine2 [Spn2]": np.eye(4)}, world)
+        self.assertAlmostEqual(r, 0.75)
+
+    def test_smooth_moves(self):
+        base = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]], float)
+        pts = base.copy()
+        pts[0, 2] = 0.04                                          # one vertex pushed alone
+        out = G.smooth_moves(base, pts, [(0, 1, 2), (1, 3, 2)], rounds=1)
+        self.assertLess(out[0, 2], 0.04)
+        self.assertGreater(out[3, 2], -1e-12)
+        self.assertAlmostEqual(out[:, 2].sum(), 0.04 / 3 + 0.04 / 4 * 2, places=6)
+
+
 class BindTests(unittest.TestCase):
     def test_frame_and_binds(self):
         frame = at([0, 0, 1.632])

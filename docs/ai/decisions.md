@@ -1850,3 +1850,13 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   shape needs more (the body's own skin keeps up to 8); gear_fit prints the neck height / ratio and the bones the top
   tenth of each shape follows; --debug-dir writes the fit as OBJ (Starfield surface, fitted shapes, Skyrim gear / body)
   plus fit_debug.zip, to render outside the game.
+- verified (owner + fit_debug OBJ cross-sections, same day): (1) the skin piece kept one size and the default skin
+  tone while the game's hands followed the sliders: it sat inside the clothing addon; it now has its own addon copied
+  from the vanilla AA_Clothes_Nightwear_01_Skin (slot 13) and its own NIF S2S\<name>_Skin.nif + morph.dat, the ARMO
+  listing both (INDX / MODL pairs rebuilt). (2) Mid-sagittal cut: Skyrim's cowl top sits level with the top of the
+  neck region, ours ~5 cm above it (the turtleneck): gear around the neck (full within 7 cm of its axis, none past
+  14 cm) is squashed in height above the clavicles by Starfield / Skyrim (clavicles -> head joint), clamp 0.6-1.0,
+  the moved Skyrim body too. (3) Chest cuts at x 0.03-0.09: the coat lies ~2 cm outside the body, the skin piece is not
+  there: the patches are subdivided faces folded over by neighbours moved apart; the fit's moves are now averaged with
+  each vertex's neighbours (3 rounds) and pushed out again. The debug export lost Skyrim shapes with ':' in their name
+  (Windows file names). unresolved: in game.
