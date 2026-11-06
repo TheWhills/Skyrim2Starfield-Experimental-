@@ -41,8 +41,22 @@ def parse_condition(d: bytes) -> Dict:
     func, = struct.unpack_from("<H", d, 8)
     p1, p2 = struct.unpack_from("<II", d, 12)
     run_on = struct.unpack_from("<I", d, 20)[0] if len(d) >= 24 else 0
+    ref = struct.unpack_from("<I", d, 24)[0] if len(d) >= 28 else 0
     return {"op": typ >> 5, "or": bool(typ & 1), "value": comp, "function": func,
-            "name": FUNCTION_NAMES.get(func, str(func)), "param1": p1, "param2": p2, "run_on": run_on}
+            "name": FUNCTION_NAMES.get(func, str(func)), "param1": p1, "param2": p2, "run_on": run_on,
+            "reference": ref}
+
+
+PLAYER_FORMS = (0x7, 0x14)       # Player (NPC_), PlayerRef
+RUN_ON_TARGET = 1               # CTDA run on: 0 subject, 1 target (the player, in greetings), 2 reference ...
+
+
+def about_player(c: Dict) -> bool:
+    """A condition on the player (run on the target, or naming the player as a parameter or the reference): the
+    player's race ('little elf'), their relationship with the speaker, their quests ... none of which exist the same
+    way in Starfield."""
+    return (c.get("run_on") == RUN_ON_TARGET or c.get("param1") in PLAYER_FORMS or c.get("param2") in PLAYER_FORMS
+            or (c.get("run_on") == 2 and c.get("reference") in PLAYER_FORMS))
 
 
 def parse_info(subs, fid: int) -> Dict:

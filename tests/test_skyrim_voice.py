@@ -28,8 +28,8 @@ def grup(label, gtype, body):
     return struct.pack("<4sI4si", b"GRUP", 24 + len(body), label, gtype) + bytes(8) + body
 
 
-def ctda(func, p1, value=1.0):
-    return bytes([0, 0, 0, 0]) + struct.pack("<fHHIIII", value, func, 0, p1, 0, 0, 0) + struct.pack("<i", 0)
+def ctda(func, p1, value=1.0, run_on=0):
+    return bytes([0, 0, 0, 0]) + struct.pack("<fHHIIII", value, func, 0, p1, 0, run_on, 0) + struct.pack("<i", 0)
 
 
 def trdt(n):
@@ -47,7 +47,10 @@ def skyrim_esm(path):
              + rec(b"INFO", 0xA02, [(b"TRDT", trdt(1)), (b"NAM1", struct.pack("<I", 0x901)),
                                      (b"CTDA", ctda(SD.GET_IS_VOICE_TYPE, VOICE))])
              + rec(b"INFO", 0xA03, [(b"TRDT", trdt(1)), (b"NAM1", struct.pack("<I", 0x902)),
-                                     (b"CTDA", ctda(SD.GET_IS_ID, OTHER))]))
+                                     (b"CTDA", ctda(SD.GET_IS_ID, OTHER))])
+             + rec(b"INFO", 0xA05, [(b"TRDT", trdt(1)), (b"NAM1", struct.pack("<I", 0x903)),
+                                     (b"CTDA", ctda(SD.GET_IS_VOICE_TYPE, VOICE)),
+                                     (b"CTDA", ctda(SD.GET_IS_RACE, 0x13749, run_on=1))]))
     quest = rec(b"DIAL", 0x501, [(b"EDID", b"MQ101Talk\0"), (b"DATA", struct.pack("<BBH", 0, 0, 0)),
                                   (b"SNAM", b"CUST")])
     qinfo = rec(b"INFO", 0xA04, [(b"TRDT", trdt(1)), (b"NAM1", b"Hey, you. You're finally awake.\0"),
@@ -83,9 +86,12 @@ class DialogTests(unittest.TestCase):
             tops = SD.topics(p)
             self.assertEqual([t["edid"] for t in tops], ["HelloTopic", "MQ101Talk"])
             self.assertEqual(tops[0]["subtype_code"], "HELO")
-            self.assertEqual([i["form_id"] for i in tops[0]["infos"]], [0xA01, 0xA02, 0xA03])
+            self.assertEqual([i["form_id"] for i in tops[0]["infos"]], [0xA01, 0xA02, 0xA03, 0xA05])
             hows = [SD.speaks(i, RALOF, VOICE) for i in tops[0]["infos"]]
-            self.assertEqual(hows, ["own", "voice", None])
+            self.assertEqual(hows, ["own", "voice", None, "voice"])
+            self.assertTrue(SD.about_player(tops[0]["infos"][3]["conditions"][1]))     # 'little elf'
+            self.assertFalse(SD.about_player(tops[0]["infos"][1]["conditions"][0]))
+            self.assertTrue(SD.about_player({"run_on": 0, "param1": 0x14}))         # relationship with PlayerRef
             self.assertEqual(tops[1]["infos"][0]["responses"][0]["text"], "Hey, you. You're finally awake.")
 
     def test_strings_fuz_and_voice_index(self):
@@ -131,6 +137,7 @@ class VoiceScriptTests(unittest.TestCase):
             rep = json.load(open(os.path.join(out, "lines.json")))
             lines = rep["npcs"][0]["lines"]
             self.assertEqual(rep["npcs"][0]["voice_type"], "MaleNord")
+            self.assertEqual(rep["npcs"][0]["skipped"], {"about_the_player": 1})
             self.assertEqual([(l["info"], l["how"], l["text"], l["result"]) for l in lines],
                              [("00000A01", "own", "Hello.", "xwm"), ("00000A02", "voice", "Hm?", "xwm")])
             self.assertEqual(open(os.path.join(out, "lines", "MaleNord", "00000A01_1.xwm"), "rb").read(), b"XWM-A01")
@@ -175,3 +182,20 @@ class VoiceScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DialogueProbeTests(unittest.TestCase):
+    def test_probe_dumps_greetings(self):
+        import dialogue_probe as DP
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            skyrim_esm(p)                                        # same record layout: DIAL + child INFO groups
+            rep = DP.probe(p)
+            self.assertEqual([t["edid"] for t in rep["greeting_topics"]], ["HelloTopic"])
+            t = rep["greeting_topics"][0]
+            self.assertEqual(t["info_count"], 4)
+            self.assertEqual(len(t["infos"]), 4)
+            self.assertEqual(t["group_type"], 7)
+            self.assertIn({"sig": "SNAM", "size": 4, "hex": b"HELO".hex(), "u32": "4F4C4548"}, t["subs"])
+            self.assertEqual(rep["infos_total"], 5)
+            self.assertEqual(rep["infos_with_voice_type_condition"], 2)

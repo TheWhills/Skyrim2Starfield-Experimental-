@@ -1428,3 +1428,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   names only. Expected now: Ralof Blonde, Ysolda Auburn. Voice run (verified: 10 of 10 lines got .wem and .ffxanim on
   the owner's PC) but every text was empty: response texts are in .ILSTRINGS, not .DLSTRINGS (descriptions);
   fixed, the lips need rebuilding with the real words.
+- 2026-11-05 owner's voice run (verified, lines.json): 34,427 response strings read, every line has its text, all
+  10 lines got .wem and a lip file built from the words. Seen: Skyrim's generic hellos include lines for a player
+  of a race ('What do you want, little elf?') or relationship ('Every time I look at you my blood boils'). Now lines
+  whose conditions concern the player (run on the target, or naming Player / PlayerRef) are left out
+  (skyrimdialog.about_player; --keep-player-lines), the rest list their other conditions. Next, the Starfield records:
+  dialogue_probe.py (read-only) dumps vanilla greeting topics with their responses, a few voice types and how the
+  generic voice files are named, to copy the real structure.

@@ -81,8 +81,10 @@ def clean_wav(data: bytes):
             + body)
 
 
-def lines_for(npc, topics, texts, voice_edid, scope: str):
-    """The NPC's lines: [{topic, subtype, how, info, number, text}]."""
+def lines_for(npc, topics, texts, voice_edid, scope: str, keep_player_lines: bool = False, skipped=None):
+    """The NPC's lines: [{topic, subtype, how, info, number, text, conditions}]; lines conditioned on the player
+    (skyrimdialog.about_player: 'What do you want, little elf?', a hated player's greeting) left out unless
+    keep_player_lines (counted in skipped)."""
     out = []
     for t in topics:
         if scope == "greetings" and t["subtype_code"] not in GREETING_CODES:
@@ -91,11 +93,17 @@ def lines_for(npc, topics, texts, voice_edid, scope: str):
             how = skyrimdialog.speaks(info, npc["form_id"], npc.get("voice"))
             if how is None or (scope == "own" and how != "own") or (how == "anyone" and scope != "all"):
                 continue
+            if not keep_player_lines and any(skyrimdialog.about_player(c) for c in info["conditions"]):
+                if skipped is not None:
+                    skipped["about_the_player"] = skipped.get("about_the_player", 0) + 1
+                continue
+            conds = sorted({f"{c['name']}@{c['run_on']}" for c in info["conditions"]
+                            if c["function"] not in (skyrimdialog.GET_IS_ID, skyrimdialog.GET_IS_VOICE_TYPE)})
             for r in info["responses"]:
                 text = r["text"] if r["text"] is not None else texts.get(r["text_id"] or -1, "")
                 out.append({"topic": t["edid"], "subtype": t["subtype_code"], "how": how,
                             "info": f"{info['form_id'] & 0xFFFFFF:08X}", "number": r["number"], "text": text,
-                            "voice_type": voice_edid})
+                            "voice_type": voice_edid, "conditions": conds})
     return out
 
 
@@ -154,6 +162,8 @@ def main(argv=None):
     ap.add_argument("--scope", choices=("greetings", "own", "all"), default="greetings")
     ap.add_argument("--limit", type=int, default=0, help="at most this many lines per NPC (0: all)")
     ap.add_argument("--language", default="english")
+    ap.add_argument("--keep-player-lines", action="store_true",
+                    help="also lines conditioned on the player (race, relationship ...), left out by default")
     ap.add_argument("--ffmpeg", help="ffmpeg.exe: .xwm -> .wav")
     ap.add_argument("--starfield", help="Starfield folder (its Tools: the Wwise project, LipGenerator, FaceFX)")
     ap.add_argument("--wwise", nargs="?", const=WWISE_DEFAULT, help="WwiseConsole.exe (default: Wwise 2021.1.14)")
@@ -183,7 +193,8 @@ def main(argv=None):
             continue
         voice = vtyp.get(n.get("voice") or -1, "")
         male = not n["female"]
-        rows = lines_for(n, tops, texts, voice, a.scope)
+        skipped = {}
+        rows = lines_for(n, tops, texts, voice, a.scope, a.keep_player_lines, skipped)
         if a.limit:
             rows = rows[:a.limit]
         folder = os.path.join(out, "lines", voice or "novoice")
@@ -234,7 +245,8 @@ def main(argv=None):
                     row["lips"] = True
                 else:
                     row["lips"] = False
-        report["npcs"].append({"npc": n["edid"], "voice_type": voice, "male": male, "lines": rows})
+        report["npcs"].append({"npc": n["edid"], "voice_type": voice, "male": male, "skipped": skipped,
+                               "lines": rows})
         done = sum(1 for r in rows if r.get("result") in ("xwm", "wav", "wem"))
         print(f"{n['edid']} ({voice}): {len(rows)} lines, {done} with audio")
     shutil.rmtree(scratch, ignore_errors=True)
