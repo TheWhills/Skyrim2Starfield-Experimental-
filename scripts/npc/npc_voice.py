@@ -25,6 +25,10 @@ GET_IS_ID = 72
 # verified). 2026-11-05 owner: Ralof only ever said his first line ('Hmph.', silent): without Random the game takes the
 # first response whose conditions pass
 RANDOM, RANDOM_END = 0x0002, 0x0020
+# TRDA: emotion keyword (none), response number, f32. 2026-11-05 owner: the line showed its subtitle and stayed silent
+# with the files in place; response numbers start at 1 in Skyrim and Fallout 4 (whose voice file names carry it), the
+# first build wrote 0 (hypothesis, not verified)
+RESPONSE_NUMBER = 1
 GREETING_DATA = bytes.fromhex("00077d00")
 
 
@@ -54,7 +58,7 @@ def topic(header: bytes, fid: int, edid: str, quest_fid: int, infos: List[int]):
 
 
 def response(header: bytes, fid: int, text: str, npc_fid: int, flags: int = RANDOM):
-    return (b"INFO", header, [(b"ENAM", struct.pack("<HH", flags, 0)), (b"TRDA", struct.pack("<IIf", 0xFFFFFFFF, 0, 0.0)),
+    return (b"INFO", header, [(b"ENAM", struct.pack("<HH", flags, 0)), (b"TRDA", struct.pack("<IIf", 0xFFFFFFFF, RESPONSE_NUMBER, 0.0)),
                               (b"NAM1", sfplugin.zs(text)), (b"NAM2", b"\0"), (b"NAM3", b"\0"), (b"NAM4", b"\0"),
                               (b"NAM9", bytes(8)), (b"CTDA", ctda_get_is_id(npc_fid)), (b"NAM0", b"\0"),
                               (b"INAM", struct.pack("<I", 1))], fid)

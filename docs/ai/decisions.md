@@ -1481,3 +1481,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   applies the same moves to the vanilla mesh (facefit.load_recipe / apply_recipe), so with the mod's --regions and
   --head-nif the new sliders move the fit's head as in game. In game the NPCs need the mod (SFSE) installed;
   whether it reshapes NPCs as well as the player (its ini: PlayerBoneCheck=0) is unverified.
+- 2026-11-05 Owner: Ralof's voice files are in the mod (Sound\Voice\S2SFaceTest.esm\S2S_MaleNord_Ralof\00000805-807
+  .wem + .ffxanim, the INFO FormIDs without the load-order byte), yet the line is silent. Our INFOs' TRDA carried
+  response number 0; now 1 (Bethesda numbers responses from 1). Hypothesis, to be checked in game; next suspects: the
+  Wwise conversion settings, a missing TROT.
