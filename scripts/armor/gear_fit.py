@@ -183,7 +183,8 @@ def skin_shapes(textures: dict) -> set:
     return {n for n, t in textures.items() if t and t[0].lower().replace("/", "\\").startswith(SKIN_TEXTURES)}
 
 
-def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=()):
+def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
+        size_feet: bool = False):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds, body_w = starfield_body(sf_data, female)
@@ -200,7 +201,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
     sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
-    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w)
+    res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet)
     if skin_names:                           # Skyrim's bare-skin pieces
         drop = {n for n in res.report["shapes"] if n in set(skin_names)}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
@@ -249,6 +250,8 @@ def main(argv=None):
                     help="ContentResources.zip (default: <Starfield>\\Tools\\ContentResources.zip)")
     ap.add_argument("--archive2", default="", help="Archive2.exe (default: <Starfield>\\Tools\\Archive2)")
     ap.add_argument("--no-textures", action="store_true", help="keep the borrowed nightwear material")
+    ap.add_argument("--size-feet", action="store_true",
+                    help="scale the boots' foot section to Starfield's foot (off: it opened a seam at the ankle)")
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
@@ -286,7 +289,7 @@ def main(argv=None):
         double |= double_sided_shapes(gb)
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
-                             () if a.keep_skin else sorted(skin_shapes(textures)))
+                             () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
@@ -366,6 +369,8 @@ def main(argv=None):
               f"z {r['box_m'][0][2]:.2f}..{r['box_m'][1][2]:.2f} m, "
               f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights, "
               f"{r.get('pulled_in', 0)} pulled in to Skyrim's gap, {r.get('covered', 0)} moved to cover the body")
+        for part, g in (r.get("gaps_mm") or {}).items():
+            print(f"     gap to the body ({part}, {g['vertices']} v): Skyrim {g['skyrim']} mm, now {g['starfield']} mm")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
@@ -374,7 +379,7 @@ def main(argv=None):
     feet = rep.get("feet") or {}
     for side, f in feet.items():
         print(f"foot {side}: boot foot scaled {f['scale']} to Starfield's foot")
-    if not feet:
+    if not feet and a.size_feet:
         print("foot sizing: SKIPPED (no Skyrim or Starfield foot region found)")
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1")

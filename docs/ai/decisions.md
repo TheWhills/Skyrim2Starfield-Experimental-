@@ -1794,3 +1794,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Supported cause: every fit step moved gear outward only. gearfit.keep_gap now pulls each vertex that sat within
   6 cm of Skyrim's body back to its Skyrim gap (closest distance on the triangles of both bodies; at most 4 cm), before
   push-out and cover.
+- verified (owner, same day): keep_gap ran (coat 256, boots 30, cuffs 1507 vertices pulled in) but the notes stayed.
+  Supported: the band under the sleeves is Starfield's built-in undershirt (part of the naked body) showing below
+  Ralof's short chainmail sleeves, not a mesh gap; the boot seam at the ankle came from the foot box fit (it moved
+  the foot section only), now off by default (--size-feet). gear_fit prints per shape the median gap to the body in
+  Skyrim and now (all, and the top tenth: the collar) to judge the neck with numbers.

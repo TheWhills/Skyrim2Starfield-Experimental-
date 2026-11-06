@@ -240,6 +240,9 @@ class FitTests(unittest.TestCase):
         self.assertTrue(res.report["shapes"]["Skin"]["skin_piece"])
         self.assertEqual(sorted({b for vw in g.weights for b, _ in vw}), ["C_Spine", "C_Spine1", "C_Spine2"])
         self.assertEqual(res.report["shapes"]["Cuirass"]["far_outside"], 0)
+        g = res.report["shapes"]["Cuirass"]["gaps_mm"]["all"]
+        self.assertAlmostEqual(g["skyrim"], 10.0, delta=1.0)                # 1 cm off the Skyrim body
+        self.assertLess(g["starfield"], 15.0)                                  # kept close on Starfield's
         self.assertEqual(res.report["shapes"]["Cuirass"]["not_finite"], 0)
 
 
@@ -287,7 +290,8 @@ class EnvelopeTests(unittest.TestCase):
                                               (SPN2, "C_Chest"), (NECK, "C_Neck"), (HEAD, "C_Head"),
                                               (THG, "L_Thigh"), (CLF, "L_Calf"), (FT, "L_Foot"), (TOE, "L_Toe"))}
         sf_foot = foot * [1.0, 1.2, 1.0]                            # Starfield's foot 20 % longer
-        res = G.fit([], [body], world, sf_foot, np.array([[0, 1, 2]]), sf_body_weights=[[("L_Foot", 1.0)]] * 40)
+        res = G.fit([], [body], world, sf_foot, np.array([[0, 1, 2]]), sf_body_weights=[[("L_Foot", 1.0)]] * 40,
+                    size_feet=True)
         self.assertAlmostEqual(res.report["feet"]["L"]["scale"][1], 1.2, places=1)
 
 

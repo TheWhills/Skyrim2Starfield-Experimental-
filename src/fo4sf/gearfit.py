@@ -485,6 +485,19 @@ def cover(gear: np.ndarray, gear_nrm: np.ndarray, gear_tris, body: np.ndarray, b
     return out, int((total > 1e-5).sum())
 
 
+def gap_report(sky_pts: np.ndarray, sky_gap: np.ndarray, pts: np.ndarray, sf_pts, sf_tris, sf_nrm) -> Dict:
+    """Median gap to the body (mm) in Skyrim and now in Starfield, for the vertices that sat within KEEP_REACH of
+    Skyrim's body: all of them and the top tenth by height (on a coat, the collar)."""
+    _cp, now, _d = closest_on_mesh(pts, sf_pts, np.asarray(sf_tris, int).reshape(-1, 3), sf_nrm)
+    near = np.isfinite(sky_gap) & (sky_gap > -0.005) & (sky_gap < KEEP_REACH)
+    out = {}
+    for name, sel in (("all", near), ("top", near & (sky_pts[:, 2] >= np.quantile(sky_pts[:, 2], 0.9)))):
+        if sel.any():
+            out[name] = {"skyrim": round(float(np.median(sky_gap[sel])) * 1000, 1),
+                         "starfield": round(float(np.median(now[sel])) * 1000, 1), "vertices": int(sel.sum())}
+    return out
+
+
 def keep_gap(pts: np.ndarray, sky_gap: np.ndarray, sf_pts: np.ndarray, sf_tris, sf_nrm: np.ndarray, gap: float = GAP,
              reach: float = KEEP_REACH, most: float = PULL_MAX) -> Tuple[np.ndarray, int]:
     """Pull gear back in to the gap it had on Skyrim's body (2026-11-06, owner: sleeve hems standing off the arm, the
@@ -553,7 +566,7 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 
 
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
-        sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None) -> FitResult:
+        sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it)."""
     joints: Dict[str, np.ndarray] = {}
@@ -565,7 +578,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     sf_nrm = _vertex_face_normals(sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3))
     sf_nrm = outward(sf_body_pts, sf_nrm / np.maximum(np.linalg.norm(sf_nrm, axis=1, keepdims=True), 1e-12))
     body_moved = [blend(s.points, s.normals, s.bones, s.weights, transforms) for s in sky_body]
-    if sf_body_weights is not None and sky_body:
+    # off by default (2026-11-06, Ralof: scaling only the foot section opened a seam at the ankle; cover keeps the toes in)
+    if size_feet and sf_body_weights is not None and sky_body:
         # feet: the joints alone leave Starfield's longer foot sticking out of the boot (2026-11-06, Ralof running:
         # toes and heels through the boot); fit the moved Skyrim foot's box onto Starfield's foot box
         rep["feet"] = {}
@@ -638,7 +652,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "not_finite": int(bad.sum()), "far_outside": far,
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
-            "body_weighted": near, "covered": covered, "pulled_in": pulled}
+            "body_weighted": near, "covered": covered, "pulled_in": pulled,
+            "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
+                sky_gap is not None and len(sf_body_pts) and not skin) else {}}
     return FitResult(shapes, rep)
 
 
