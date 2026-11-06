@@ -1506,3 +1506,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   writes the file's ID there (still the response FormID without its load-order byte, so file names are unchanged);
   the TRDA "response number" hypothesis was wrong. Vanilla ENAM values seen: 0x0A, 0x02, 0x400, 0x402, 0x308 (info
   groups); the Random reading of 0x02 still stands (lines vary in game).
+- 2026-11-06 Owner, in game: Ralof's and Ysolda's Skyrim greetings play with audio and their mouths move (verified):
+  TRDA audio ID + loose .wem / .ffxanim under Sound\Voice\<plugin>\<voice type>\ works; the lips compiled under the
+  Skyrim line names and renamed still play.
