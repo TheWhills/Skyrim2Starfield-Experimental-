@@ -65,6 +65,14 @@ for _s in "LR":
         INHERIT[f"NPC {_s} Finger{_d}2 [{_s}F{_d}2]"] = f"NPC {_s} Finger{_d}1 [{_s}F{_d}1]"
 
 
+# torso bones: moved onto Starfield's joints only, no turn or stretch (2026-11-06, Ralof: Skyrim's pelvis joint sits
+# level with the spine base, so pelvis -> spine pointed sideways and turned the hips 53 deg; Starfield has four spine
+# bones to Skyrim's three, so segment lengths do not compare and the clamp squashed them to 0.75)
+NO_TURN = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Spine2 [Spn2]", "NPC Root [Root]",
+           "NPC COM [COM ]")
+FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
+
+
 @dataclass
 class SkyShape:
     """A Skyrim skinned shape in metres, Skyrim model space."""
@@ -165,6 +173,11 @@ def bone_transforms(joints: Dict[str, np.ndarray], sf_world: Dict[str, np.ndarra
         return a
 
     for b, f in pairs:
+        if b in NO_TURN:
+            turn[b] = np.eye(3)
+            out[b] = make(b, np.eye(3), 1.0, np.array([0.0, 0.0, 1.0]))
+            rep["bones"][b] = {"to": f, "stretch": 1.0, "turn_deg": 0.0, "torso": True}
+            continue
         c = CHILD.get(b)
         cf = sf_main(c) if c in joints else None
         if c in joints and cf:
@@ -337,12 +350,20 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         pushed = 0
         if not skin and len(sf_body_pts):
             pts, pushed = push_out(pts, sf_body_pts, sf_nrm, gap)
+        bad = ~np.isfinite(pts).all(1)
+        if len(sf_body_pts):
+            lo, hi = sf_body_pts.min(0) - FAR, sf_body_pts.max(0) + FAR
+            far = int((((pts < lo) | (pts > hi)).any(1) & ~bad).sum())
+        else:
+            far = 0
         w = sf_weights(s.bones, s.weights, set(sf_world), follows)
         shapes.append(HairShape(s.name, pts, nrm, np.zeros_like(nrm), list(s.uvs), list(s.triangles), w, -1, -1, -1,
                                 colors=[(255, 255, 255, 255)] * len(pts)))
         rep["shapes"][s.name.decode("latin-1", "replace")] = {
             "vertices": int(len(pts)), "skin_piece": skin, "pushed_out": pushed,
             "max_body_shift_mm": float(np.linalg.norm(shift, axis=1).max() * 1000) if len(shift) else 0.0,
+            "not_finite": int(bad.sum()), "far_outside": far,
+            "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x})}
     return FitResult(shapes, rep)
 

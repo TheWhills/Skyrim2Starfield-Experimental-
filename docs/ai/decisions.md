@@ -1712,3 +1712,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   world) @ the body mesh frame (world @ bind of the game's body, identical for every body bone, armor_check).
 - supported (synthetic tests) / unresolved (in game): the clamp, smoothing and gap values; skin pieces follow the
   body offset without push-out.
+- verified (owner, same day): first gear_fit run rendered nothing and blanked the inventory preview. Report: pelvis
+  turned 53 deg and squashed to the 0.75 clamp, lower spine 0.75 (Skyrim's pelvis joint sits level with the spine
+  base; Starfield has 4 spine bones to Skyrim's 3). Torso bones (pelvis, spine 0-2) now only move onto Starfield's
+  joints. gear_fit writes nothing when a shape has non-finite vertices or vertices > 0.5 m outside the body box.
+  unresolved: whether the blank came from far vertices or something else (armor_check on the next output).

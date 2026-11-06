@@ -68,6 +68,8 @@ class BoneTests(unittest.TestCase):
 
     def test_neck_and_spine_split(self):
         self.assertEqual(self.rep["bones"][SPN1]["to"], "C_Spine1")
+        self.assertTrue(self.rep["bones"][PELV]["torso"])                    # torso: no turn, no stretch
+        self.assertTrue(np.allclose(self.t[PELV][:3, :3], self.t[SPN0][:3, :3]))
         self.assertEqual(self.rep["bones"][HEAD]["turn_from"], NECK)
 
     def test_unmapped_bone_follows_nearest(self):
@@ -149,6 +151,8 @@ class FitTests(unittest.TestCase):
         self.assertFalse(res.report["shapes"]["Cuirass"]["skin_piece"])
         self.assertTrue(res.report["shapes"]["Skin"]["skin_piece"])
         self.assertEqual(sorted({b for vw in g.weights for b, _ in vw}), ["C_Spine", "C_Spine1", "C_Spine2"])
+        self.assertEqual(res.report["shapes"]["Cuirass"]["far_outside"], 0)
+        self.assertEqual(res.report["shapes"]["Cuirass"]["not_finite"], 0)
 
 
 class BindTests(unittest.TestCase):

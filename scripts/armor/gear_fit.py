@@ -97,6 +97,15 @@ def main(argv=None):
     shapes, binds, rep = run([read(m["mesh"]) for m in meshes], read(os_convert.SKYRIM_BODY[female]), sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap)
     os.makedirs(a.out, exist_ok=True)
+    broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
+    if broken:
+        with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
+            json.dump(rep, fh, indent=1, default=str)
+        for n, r in broken.items():
+            print(f"  {n}: {r['not_finite']} vertices not finite, {r['far_outside']} far outside the body, "
+                  f"box {r['box_m']}")
+        print("nothing written: broken shapes (report in gear_fit.json)")
+        return 1
     files, _recs, prep, material, _model = os_export.write_armor(
         sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds)
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files))
@@ -110,6 +119,7 @@ def main(argv=None):
     for n, r in rep["shapes"].items():
         print(f"  {n}: {r['vertices']} v, {'skin piece, ' if r['skin_piece'] else ''}pushed out {r['pushed_out']}, "
               f"body shift up to {r['max_body_shift_mm']:.0f} mm, {len(r['bones'])} bones, "
+              f"z {r['box_m'][0][2]:.2f}..{r['box_m'][1][2]:.2f} m, "
               f"{r['unweighted']} unweighted")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
