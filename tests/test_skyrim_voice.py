@@ -92,6 +92,7 @@ class DialogTests(unittest.TestCase):
             self.assertTrue(SD.about_player(tops[0]["infos"][3]["conditions"][1]))     # 'little elf'
             self.assertFalse(SD.about_player(tops[0]["infos"][1]["conditions"][0]))
             self.assertTrue(SD.about_player({"run_on": 0, "param1": 0x14}))         # relationship with PlayerRef
+            self.assertTrue(SD.about_player({"function": SD.GET_PC_IS_RACE, "run_on": 0, "param1": 0x13749}))
             self.assertEqual(tops[1]["infos"][0]["responses"][0]["text"], "Hey, you. You're finally awake.")
 
     def test_strings_fuz_and_voice_index(self):
@@ -195,7 +196,24 @@ class DialogueProbeTests(unittest.TestCase):
             t = rep["greeting_topics"][0]
             self.assertEqual(t["info_count"], 4)
             self.assertEqual(len(t["infos"]), 4)
-            self.assertEqual(t["group_type"], 7)
+            self.assertEqual(rep["info_group_path"], ["type 0", "type 7"])
             self.assertIn({"sig": "SNAM", "size": 4, "hex": b"HELO".hex(), "u32": "4F4C4548"}, t["subs"])
             self.assertEqual(rep["infos_total"], 5)
             self.assertEqual(rep["infos_with_voice_type_condition"], 2)
+
+    def test_probe_finds_topics_inside_quest_groups(self):
+        import dialogue_probe as DP
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            hello = rec(b"DIAL", 0x500, [(b"EDID", b"GenericHello\0"), (b"SNAM", b"HELO")])
+            info = rec(b"INFO", 0xA01, [(b"TRDT", trdt(1))])
+            quest = rec(b"QUST", 0x600, [(b"EDID", b"DialogueGeneric\0")])
+            inner = grup(struct.pack("<I", 0x600), 10, hello + grup(struct.pack("<I", 0x500), 7, info))
+            tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 0.96, 3, 0x800))])
+            with open(p, "wb") as fh:
+                fh.write(tes4 + grup(b"QUST", 0, quest + inner))
+            rep = DP.probe(p)
+            self.assertEqual(rep["topics_total"], 1)
+            self.assertEqual(rep["greeting_topics"][0]["info_count"], 1)
+            self.assertEqual(rep["greeting_topics"][0]["groups"], ["type 0: QUST", "type 10: 00000600"])
+            self.assertEqual(rep["info_group_path"], ["type 0", "type 10", "type 7"])

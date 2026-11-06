@@ -1435,3 +1435,14 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (skyrimdialog.about_player; --keep-player-lines), the rest list their other conditions. Next, the Starfield records:
   dialogue_probe.py (read-only) dumps vanilla greeting topics with their responses, a few voice types and how the
   generic voice files are named, to copy the real structure.
+- 2026-11-05 owner in game: Ralof's hair "definitely blonde", Ysolda's "a bit dark but still reddish" (verified:
+  colour by Skyrim's colour names works); faces: "not sure their features are being matched to anything or if
+  they're just generic faces" (the fit closes ~22 % of the face difference, rms 4.4 -> 3.4 mm, 3.9 -> 3.1 mm).
+  face_fit --preview: faces_preview\<NPC>.png (Starfield base head, the Skyrim face moved onto it = the fit's target,
+  our fit; front, side and a heat map of the change), to judge how much of the face carries over without the game.
+  Voice lines (owner's run): 'What do you want, little elf / cat / lizard / Imperial?' kept a Skyrim function 130
+  this code had named GetIsSex: it is GetPCIsRace (129-131 GetPCIsClass / Race / Sex), now about the player and left
+  out; world-interaction topics (WI..., 'No! Don't hurt me again!') left out of greetings. dialogue_probe found no
+  topic at the top level: Starfield keeps topics in their quests' child groups; it now walks every depth.
+  Verified there: voice types VTYP (EDID, DNAM u8, ANAM for the two named voices = 000C866C, PNAM u8) and the generic
+  voice files named <8-hex FormID>.wem (sound/voice/starfield.esm/genericmaleeventoned/).

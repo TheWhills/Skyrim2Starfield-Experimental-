@@ -89,6 +89,12 @@ def lines_for(npc, topics, texts, voice_edid, scope: str, keep_player_lines: boo
     for t in topics:
         if scope == "greetings" and t["subtype_code"] not in GREETING_CODES:
             continue
+        if scope == "greetings" and t["edid"].upper().startswith("WI"):
+            # world interactions (WIAssaultRemember...: 'No! Don't hurt me again!') answer something that happened
+            # to the NPC; not a plain greeting
+            if skipped is not None:
+                skipped["world_interaction_topics"] = skipped.get("world_interaction_topics", 0) + len(t["infos"])
+            continue
         for info in t["infos"]:
             how = skyrimdialog.speaks(info, npc["form_id"], npc.get("voice"))
             if how is None or (scope == "own" and how != "own") or (how == "anyone" and scope != "all"):

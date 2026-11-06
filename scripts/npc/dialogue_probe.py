@@ -51,59 +51,61 @@ def is_greeting(subs) -> bool:
 
 
 def probe(esm: str, max_topics: int = 8, max_infos: int = 4) -> dict:
-    topics, quests, vtyp = [], {}, []
-    info_total = info_voice = 0
-    with fo4land.Plugin(esm) as p:
-        for item in fo4land.iter_items(p.buf, p.body, len(p.buf)):
-            if item[0] != "GRUP":
+    """Walks every group at every depth (the owner's first run found no topic at the top level: Starfield keeps its
+    topics inside their quests' child groups); a topic's responses are the INFOs of the type-7 group labelled with
+    its FormID."""
+    topics, by_fid, quests, vtyp = [], {}, {}, []
+    counts = {"info_total": 0, "info_voice": 0, "dial_total": 0, "dial_greeting": 0}
+    where = {}
+
+    def walk(buf, start, end, path):
+        for it in fo4land.iter_items(buf, start, end):
+            if it[0] == "GRUP":
+                label, gtype = it[3], it[4]
+                owner = struct.unpack_from("<I", label, 0)[0] if len(label) == 4 else None
+                walk(buf, it[1] + 24, it[2], path + [(gtype, owner if gtype else label.decode("latin-1"))])
                 continue
-            if item[3] == b"QUST":
-                for it in fo4land.iter_items(p.buf, item[1] + 24, item[2]):
-                    if it[0] != "GRUP" and it[0] == b"QUST":
-                        subs = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, it[1])))
-                        quests[it[3]] = _edid(subs)
-            elif item[3] == b"VTYP":
-                for it in fo4land.iter_items(p.buf, item[1] + 24, item[2]):
-                    if it[0] == b"VTYP":
-                        subs = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, it[1])))
-                        if _edid(subs) in VOICE_TYPES:
-                            vtyp.append({"form_id": f"{it[3]:08X}", "edid": _edid(subs), "subs": dump_subs(subs)})
-            elif item[3] == b"DIAL":
-                last = None
-                for it in fo4land.iter_items(p.buf, item[1] + 24, item[2]):
-                    if it[0] == "GRUP":
-                        infos = []
-                        for r in fo4land.iter_items(p.buf, it[1] + 24, it[2]):
-                            if r[0] != b"INFO":
-                                continue
-                            subs = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, r[1])))
-                            info_total += 1
-                            if any(s == b"CTDA" and len(d) >= 10 and struct.unpack_from("<H", bytes(d), 8)[0] == 426
-                                   for s, d in subs):
-                                info_voice += 1
-                            if last is not None and len(last["infos"]) < max_infos:
-                                last["infos"].append({"form_id": f"{r[3]:08X}", "flags": f"{r[2]:08X}",
-                                                      "subs": dump_subs(subs)})
-                            infos.append(r[3])
-                        if last is not None:
-                            last["info_count"] = len(infos)
-                            last["group_type"] = it[4]
-                        last = None
-                        continue
-                    if it[0] != b"DIAL":
-                        continue
-                    subs = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, it[1])))
-                    if is_greeting(subs) and len(topics) < max_topics:
-                        last = {"form_id": f"{it[3]:08X}", "edid": _edid(subs), "subs": dump_subs(subs),
-                                "infos": []}
-                        topics.append(last)
-                    else:
-                        last = None
+            typ, off, flags, fid = it
+            if typ not in (b"DIAL", b"INFO", b"QUST", b"VTYP"):
+                continue
+            subs = list(fo4land.iter_subrecords(fo4land.record_data(buf, off)))
+            if typ == b"QUST":
+                quests[fid] = _edid(subs)
+            elif typ == b"VTYP":
+                if _edid(subs) in VOICE_TYPES:
+                    vtyp.append({"form_id": f"{fid:08X}", "edid": _edid(subs), "subs": dump_subs(subs)})
+            elif typ == b"DIAL":
+                counts["dial_total"] += 1
+                if is_greeting(subs):
+                    counts["dial_greeting"] += 1
+                    if len(topics) < max_topics:
+                        t = {"form_id": f"{fid:08X}", "edid": _edid(subs), "subs": dump_subs(subs), "infos": [],
+                             "info_count": 0,
+                             "groups": [f"type {g}: {o:08X}" if isinstance(o, int) else f"type {g}: {o}"
+                                        for g, o in path]}
+                        topics.append(t)
+                        by_fid[fid] = t
+            else:
+                counts["info_total"] += 1
+                if any(s == b"CTDA" and len(d) >= 10 and struct.unpack_from("<H", bytes(d), 8)[0] == 426
+                       for s, d in subs):
+                    counts["info_voice"] += 1
+                owner = next((o for g, o in reversed(path) if g == 7), None)
+                t = by_fid.get(owner)
+                if t is not None:
+                    t["info_count"] += 1
+                    if len(t["infos"]) < max_infos:
+                        t["infos"].append({"form_id": f"{fid:08X}", "flags": f"{flags:08X}", "subs": dump_subs(subs)})
+                    where.setdefault("info_group_path", [f"type {g}" for g, _o in path])
+
+    with fo4land.Plugin(esm) as p:
+        walk(p.buf, p.body, len(p.buf), [])
     for t in topics:
         q = next((r.get("u32") for r in t["subs"] if r["sig"] == "QNAM"), None)
         t["quest"] = quests.get(int(q, 16)) if q else None
-    return {"greeting_topics": topics, "infos_total": info_total, "infos_with_voice_type_condition": info_voice,
-            "voice_types": vtyp}
+    return {"greeting_topics": topics, "infos_total": counts["info_total"],
+            "infos_with_voice_type_condition": counts["info_voice"], "topics_total": counts["dial_total"],
+            "greeting_topics_total": counts["dial_greeting"], "voice_types": vtyp, **where}
 
 
 def voice_files(data_dir: str, voice: str = "genericmaleeventoned", limit: int = 30) -> list:

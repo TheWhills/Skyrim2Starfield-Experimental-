@@ -22,9 +22,15 @@ from . import fo4land
 GET_IS_ID = 72               # CTDA function indices (Skyrim)
 GET_IS_VOICE_TYPE = 426
 GET_IS_RACE = 69
-GET_IS_SEX = 130
+GET_IS_SEX = 70
+GET_PC_IS_CLASS, GET_PC_IS_RACE, GET_PC_IS_SEX = 129, 130, 131
+# 2026-11-05 owner's run: 'What do you want, little elf / cat / lizard / Imperial?' carried function 130 run on the
+# subject, which this table had called GetIsSex: it is GetPCIsRace (the player's race), so those lines are about the
+# player too
+PLAYER_FUNCTIONS = (GET_PC_IS_CLASS, GET_PC_IS_RACE, GET_PC_IS_SEX)
 FUNCTION_NAMES = {GET_IS_ID: "GetIsID", GET_IS_VOICE_TYPE: "GetIsVoiceType", GET_IS_RACE: "GetIsRace",
-                  GET_IS_SEX: "GetIsSex"}
+                  GET_IS_SEX: "GetIsSex", GET_PC_IS_CLASS: "GetPCIsClass", GET_PC_IS_RACE: "GetPCIsRace",
+                  GET_PC_IS_SEX: "GetPCIsSex"}
 
 
 def _z(d) -> str:
@@ -55,7 +61,8 @@ def about_player(c: Dict) -> bool:
     """A condition on the player (run on the target, or naming the player as a parameter or the reference): the
     player's race ('little elf'), their relationship with the speaker, their quests ... none of which exist the same
     way in Starfield."""
-    return (c.get("run_on") == RUN_ON_TARGET or c.get("param1") in PLAYER_FORMS or c.get("param2") in PLAYER_FORMS
+    return (c.get("function") in PLAYER_FUNCTIONS or c.get("run_on") == RUN_ON_TARGET
+            or c.get("param1") in PLAYER_FORMS or c.get("param2") in PLAYER_FORMS
             or (c.get("run_on") == 2 and c.get("reference") in PLAYER_FORMS))
 
 

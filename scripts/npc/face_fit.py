@@ -36,6 +36,8 @@ import numpy as np  # noqa: E402
 from fo4sf import bsa, facefit, nif as nifmod, sfmesh, sfplugin, skyrimnpc, skyrimskin  # noqa: E402
 import hkx_to_af  # noqa: E402  (archive helpers)
 import npc_records  # noqa: E402
+import hair_probe  # noqa: E402  (PNG writer)
+from fo4sf import facepreview  # noqa: E402
 
 HUMAN_RACES = {"NordRace", "ImperialRace", "BretonRace", "RedguardRace", "DarkElfRace", "HighElfRace", "WoodElfRace",
                "OrcRace"}
@@ -65,9 +67,12 @@ def starfield_head(sf_data, female, head_nif=None):
         raise SystemExit("head NIF has no geometry reference")
     mesh_rel = "geometries/" + paths[0].replace("\\", "/") + ".mesh"
     mesh_bytes, _ = hkx_to_af.vanilla_file(mesh_rel, sf_data)
-    pos, ws = facefit.mesh_arrays(sfmesh.parse(mesh_bytes))
+    mesh = sfmesh.parse(mesh_bytes)
+    pos, ws = facefit.mesh_arrays(mesh)
     bones = [b.decode("latin-1") if isinstance(b, bytes) else b for b in skin.get("bones", [])]
-    return facefit.face_head(pos, ws, bones, skin.get("binds", []))
+    head, rep = facefit.face_head(pos, ws, bones, skin.get("binds", []))
+    head.triangles = np.array([tuple(t) for t in mesh.triangles], int)
+    return head, rep
 
 
 def race_dials(esm):
@@ -261,6 +266,9 @@ def main(argv=None):
     ap.add_argument("--texconv", help="texconv.exe, for --hair")
     ap.add_argument("--content-resources", help="default: <Starfield>/Tools/ContentResources.zip (for --hair)")
     ap.add_argument("--archive2", help="default: <Starfield>/Tools/Archive2/Archive2.exe")
+    ap.add_argument("--preview", action="store_true",
+                    help="faces_preview\\<NPC>.png per NPC: Starfield's base head, the Skyrim face on it (the fit's "
+                         "target), our fitted face; front, side, and a heat map of each one's change from the base")
     ap.add_argument("--hairs-plugin",
                     help="S2SSkyrimHairs.esm (scripts/npc/skyrim_hairs.py): the NPCs wear its converted looks-menu "
                          "hair / beard of their Skyrim head parts (it becomes a master), get their Skyrim names and the "
@@ -347,6 +355,13 @@ def main(argv=None):
             values, rep = facefit.fit(head, sliders, head.vertices + disp, facefit.face_weights(head),
                                       pos_unit=a.pos_unit)
             names = {s.id: f"{s.region}: {s.name}" for s in sliders}
+            if a.preview and getattr(head, "triangles", None) is not None and len(head.triangles):
+                fitted = facefit.deform(head, sliders, values, pos_unit=a.pos_unit)
+                os.makedirs(os.path.join(out, "faces_preview"), exist_ok=True)
+                png = os.path.join(out, "faces_preview", f"{n['edid']}.png")
+                hair_probe.write_png(png, facepreview.sheet([head.vertices, head.vertices + disp, fitted],
+                                                            head.triangles))
+                row["preview"] = png
             row.update(rep, dials={str(k): round(v, 4) for k, v in sorted(values.items())},
                        dial_names={str(k): names.get(k, "") for k in sorted(values)},
                        skyrim_face_change_m=float(np.sqrt(np.mean(np.sum(disp ** 2, 1)))))
