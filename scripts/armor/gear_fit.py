@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts", "npc"))
 
-from fo4sf import bsa, facefit, gearfit, sfmesh, skyrimarmor, skyrimskin  # noqa: E402
+from fo4sf import ba2, bsa, facefit, gearfit, sfmesh, sfmorph, skyrimarmor, skyrimskin  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 import hkx_to_af  # noqa: E402
 import npc_hair  # noqa: E402
@@ -45,6 +45,29 @@ def starfield_body(sf_data: str, female: bool):
     return pts, tris, binds
 
 
+def find_body_morph(sf_data: str, num_vertices: int, female: bool):
+    """(path, Morph) of the game's chargen morph.dat for the naked body: the one under meshes/morphs/human/<sex>/
+    with exactly the body mesh's vertex count and the Overweight key."""
+    sex = "female" if female else "male"
+    for fn in sorted(os.listdir(sf_data)):
+        low = fn.lower()
+        if not (low.startswith("starfield - ") and low.endswith(".ba2")):
+            continue
+        arc = ba2.Ba2(os.path.join(sf_data, fn))
+        for i, name in enumerate(arc.names):
+            p = name.replace("\\", "/").lower()
+            if not (p.startswith(f"meshes/morphs/human/{sex}/") and p.endswith("morph.dat")):
+                continue
+            data = arc.read(i)
+            try:
+                head = sfmorph.parse(data)
+            except sfmorph.MorphError:
+                continue
+            if head.num_vertices == num_vertices and "Overweight" in head.keys:
+                return p, head
+    return None, None
+
+
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
@@ -62,7 +85,18 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     binds = gearfit.skeleton_binds(bones, world, frame, shapes)
     res.report.update(skipped=skipped, frame=frame.round(6).tolist())
+    res.report["_body_pts"] = pts
     return shapes, binds, res.report
+
+
+def morph_files(shapes, nif_rel: str, body_pts, body_morph) -> dict:
+    """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders."""
+    out = {}
+    for sh in shapes:
+        d, extra = gearfit.morph_deltas(np.asarray(sh.positions), body_pts, body_morph)
+        out[gearfit.morph_path(nif_rel, sh.name.decode("latin-1"))] = sfmorph.build(
+            len(sh.positions), list(body_morph.keys), d, extra)
+    return out
 
 
 def main(argv=None):
@@ -74,6 +108,7 @@ def main(argv=None):
     ap.add_argument("--full", default=None, help="the armor's in-game name")
     ap.add_argument("--out", required=True, help="the mod folder (outside the repository)")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out")
+    ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
@@ -97,6 +132,7 @@ def main(argv=None):
     shapes, binds, rep = run([read(m["mesh"]) for m in meshes], read(os_convert.SKYRIM_BODY[female]), sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap)
     os.makedirs(a.out, exist_ok=True)
+    body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -108,7 +144,21 @@ def main(argv=None):
         return 1
     files, _recs, prep, material, _model = os_export.write_armor(
         sf_data, a.out, a.name, a.full or a.name.replace("_", " "), shapes, binds)
-    rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files))
+    morphs = {}
+    if not a.no_morphs:
+        mpath, body_morph = find_body_morph(sf_data, len(body_pts), female)
+        if body_morph is None:
+            print("no body morph.dat with the body's vertex count found: no slider morphs written")
+        else:
+            morphs = morph_files(shapes, f"S2S\\{a.name}.nif", body_pts, body_morph)
+            for rel, data in morphs.items():
+                dst = os.path.join(a.out, *rel.split("/"))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with open(dst, "wb") as fh:
+                    fh.write(data)
+            rep["body_morph"] = mpath
+            print(f"slider morphs from {mpath} ({', '.join(body_morph.keys)}): {len(morphs)} files")
+    rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1, default=str)
     print(f"skeletons: joint rms {rep['joint_rms_m'] * 1000:.0f} mm after the overall fit, "

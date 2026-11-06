@@ -1728,3 +1728,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   fo4sf.sfmorph reads / writes the layout noted 2026-11-02; scripts/armor/morph_probe.py finds where the game keeps
   clothing and body morphs and checks the reader against them. Also open: a forward bulge at the chest in the side
   view; Starfield hands poking through the gloves (the hands are a separate mesh, not in the push-out surface).
+- verified (morph_probe, same day): vanilla clothing morphs live at meshes/morphs/<NIF path below meshes, no .nif>/
+  chargen/<shape name lower case>/morph.dat (e.g. clothes/outfit_nightwear_01/outfit_nightwear_01_m/chargen/
+  outfit_nightwear_lowerbody_01_m), keys Overweight / Thin / Strong, one entry per mesh vertex; fo4sf.sfmorph reads
+  all 17 found with records in vertex order and vertex counts matching their meshes (nightwear lower body 2792).
+  supported (not yet in game): the rule for our NIF (meshes/morphs/s2s/ralof_outfit/chargen/<shape>/morph.dat).
+  gear_fit now writes one per shape: each gear vertex takes the inverse-distance blend of the 6 nearest body
+  vertices' deltas from the naked body's own chargen morph.dat (found by vertex count under meshes/morphs/human).

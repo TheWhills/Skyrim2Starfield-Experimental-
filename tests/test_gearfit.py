@@ -174,6 +174,26 @@ class FitTests(unittest.TestCase):
         self.assertEqual(res.report["shapes"]["Cuirass"]["not_finite"], 0)
 
 
+class MorphTests(unittest.TestCase):
+    def test_morph_path(self):
+        self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),
+                         "meshes/morphs/s2s/ralof_outfit/chargen/stormcloak/morph.dat")
+        self.assertEqual(G.morph_path("meshes/clothes/naked/naked_m.nif", "Naked_M_Swimsuit:0"),
+                         "meshes/morphs/clothes/naked/naked_m/chargen/naked_m_swimsuit/morph.dat")
+
+    def test_morph_deltas_follow_the_body(self):
+        from fo4sf import sfmorph
+        body = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float)
+        m = sfmorph.parse(sfmorph.build(3, ["Overweight", "Thin"],
+                                        {"Overweight": {0: (0.05, 0, 0), 1: (0.05, 0, 0), 2: (0.05, 0, 0)},
+                                         "Thin": {1: (0, 0.02, 0)}}))
+        d, extra = G.morph_deltas(np.array([[0.01, 0, 0], [0.99, 0.0, 0.0]]), body, m, k=1)
+        self.assertAlmostEqual(d["Overweight"][0][0], 0.05, places=3)
+        self.assertNotIn(0, d["Thin"])
+        self.assertAlmostEqual(d["Thin"][1][1], 0.02, places=3)
+        self.assertEqual(extra["Thin"][1], (0, 0, 0))
+
+
 class BindTests(unittest.TestCase):
     def test_frame_and_binds(self):
         frame = at([0, 0, 1.632])

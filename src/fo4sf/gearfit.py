@@ -421,3 +421,44 @@ def to_mesh_space(shapes: List[HairShape], frame: np.ndarray) -> List[HairShape]
         out.append(HairShape(sh.name, p, n, sh.tangents, sh.uvs, sh.triangles, sh.weights, -1, -1, -1,
                              colors=sh.colors))
     return out
+
+
+def morph_path(nif_rel: str, shape_name: str) -> str:
+    """Where the game looks for a worn shape's body-slider morphs (verified 2026-11-06 from the vanilla layout:
+    meshes/morphs/<NIF path below meshes, no .nif>/chargen/<shape name, lower case, no ':N'>/morph.dat)."""
+    stem = nif_rel.replace("\\", "/").lower()
+    stem = stem[len("meshes/"):] if stem.startswith("meshes/") else stem
+    stem = stem[:-4] if stem.endswith(".nif") else stem
+    shape = shape_name.split(":")[0].lower()
+    return f"meshes/morphs/{stem}/chargen/{shape}/morph.dat"
+
+
+def morph_deltas(points: np.ndarray, body_pts: np.ndarray, body_morph, k: int = 6, chunk: int = 256):
+    """({key: {vertex: delta}}, {key: {vertex: (colour, normal, tangent)}}) for gear points (body mesh space): the
+    inverse-distance blend of the k nearest body vertices' slider deltas, the packed words of the nearest one."""
+    keys = list(body_morph.keys)
+    nb = len(body_pts)
+    dense = {key: np.zeros((nb, 3)) for key in keys}
+    for key in keys:
+        for v, d in body_morph.deltas[key].items():
+            if v < nb:
+                dense[key][v] = d
+    out = {key: {} for key in keys}
+    extra = {key: {} for key in keys}
+    bb = (body_pts * body_pts).sum(1)
+    for c in range(0, len(points), chunk):
+        q = points[c:c + chunk]
+        d2 = (q * q).sum(1)[:, None] + bb[None, :] - 2.0 * q @ body_pts.T
+        kk = min(k, nb)
+        idx = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
+        d = np.sqrt(np.maximum(np.take_along_axis(d2, idx, 1), 0.0))
+        w = 1.0 / np.maximum(d, 1e-3)
+        w /= w.sum(1, keepdims=True)
+        near = idx[np.arange(len(q)), np.argmin(d, axis=1)]
+        for key in keys:
+            blend = (w[:, :, None] * dense[key][idx]).sum(1)
+            for j in range(len(q)):
+                if np.abs(blend[j]).max() > 1e-5:
+                    out[key][c + j] = tuple(float(x) for x in blend[j])
+                    extra[key][c + j] = body_morph.extra[key].get(int(near[j]), (0, 0, 0))
+    return out, extra
