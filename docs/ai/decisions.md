@@ -1655,3 +1655,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   shapes (MaleBodyStormcloak 398 v / 27 bones, StormCloak 699 / 33, Boots 202 / 8, HandMale_Big1stperson 1670 / 18,
   PrisonerCuffs 3630 / 17) fully weighted; S2SArmorTest.esm ARMO 01000801, OTFT 01000802, material borrowed from
   Outfit_Nightwear_LowerBody_01.mat. In-game check pending.
+
+## 2026-11-06 — Converted armor uses the naked body's skin binds (Claude)
+- verified (owner screenshots): os_export's first armor, with binds = inverse of the skeleton NIF's rest world (the hair
+  convention), rendered in game as tall vertical pillars with the hands and cuffs above the head.
+- supported: the gear positions are calibrated into the naked body mesh's own space (0.00 mm rms) and its weights are
+  copied from that body, so the body's binds for the same bones are the ones that match. os_export now writes each
+  bone's bind straight from the body NIF's BSSkin::BoneData (sphere radius +0.15 m) and stops if the gear uses a bone
+  the body is not skinned to. unresolved: in-game result of this change.

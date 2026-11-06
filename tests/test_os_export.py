@@ -151,13 +151,20 @@ class Fake:
         return {"content": [{"type": "text", "text": json.dumps(body)}]}
 
 
+ROT = (0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+SKIN = {"bones": [b"C_Chest", b"C_Spine2", b"C_Pelvis"],
+        "binds": [((0.0, 0.0, 0.1, 0.2), ROT, (0.0, 0.0, -1.3), 1.0),
+                  ((0.0, 0.0, 0.0, 0.3), ROT, (0.0, 0.0, -1.1), 1.0),
+                  ((0.0, 0.0, 0.0, 0.3), ROT, (0.0, 0.0, -0.9), 1.0)]}
+
+
 class ExportTests(unittest.TestCase):
     def test_pull_and_calibrate(self):
         real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
         world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.object(E.hkx_to_af, "vanilla_file", lambda p, s: (b"x", p)), \
-                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], {})), \
+                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], SKIN)), \
                 mock.patch.object(E.sfmesh, "parse", lambda b: None), \
                 mock.patch.object(E.facefit, "mesh_arrays", lambda m: (real, [])), \
                 mock.patch.object(E.npc_hair, "skeleton_world", lambda b: world):
@@ -170,18 +177,17 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(rep["shapes"]["Cuirass"]["unweighted"], 0)
 
     def test_written_files_parse_back(self):
-        from fo4sf import nif as nifmod, skyrimhair
+        from fo4sf import nif as nifmod
         real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
         world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.object(E.hkx_to_af, "vanilla_file", lambda p, s: (b"x", p)), \
-                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], {})), \
+                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], SKIN)), \
                 mock.patch.object(E.sfmesh, "parse", lambda b: None), \
                 mock.patch.object(E.facefit, "mesh_arrays", lambda m: (real, [])), \
                 mock.patch.object(E.npc_hair, "skeleton_world", lambda b: world):
             rep = E.export(Fake(real), "data", "Ralof_outfit", d)
-        files = skyrimhair.nif_files(skyrimhair.Hair(rep["shapes_data"], [], {}, {}), ["Materials\\x.mat"], None,
-                                     rep["world"], "S2S/Ralof_outfit")
+        files = E.body_nif_files(rep["shapes_data"], ["Materials\\x.mat"], rep["body_binds"], "S2S/Ralof_outfit")
         self.assertIn("meshes/S2S/Ralof_outfit.nif", files)
         meshes = [k for k in files if k.endswith(".mesh")]
         self.assertEqual(len(meshes), 1)
@@ -189,12 +195,31 @@ class ExportTests(unittest.TestCase):
         self.assertEqual((len(m.positions), m.weights_per_vertex), (3, 4))
         n = nifmod.parse(files["meshes/S2S/Ralof_outfit.nif"])
         self.assertIn("BSGeometry", [n.type_of(i) for i in range(len(n.blocks))])
+        from fo4sf import sfnif
+        skin = sfnif.parse_skin(n)
+        self.assertEqual(skin["bones"], [b"C_Chest", b"C_Spine2"])           # only the bones the gear uses
+        got = skin["binds"][0]
+        self.assertTrue(np.allclose(got[1], ROT) and np.allclose(got[2], (0, 0, -1.3)))   # the body's bind, as is
+        self.assertAlmostEqual(got[0][3], 0.2 + E.SPHERE_MARGIN, places=5)
+
+    def test_bone_missing_from_body_stops(self):
+        real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
+        world = {"C_Chest": np.eye(4), "C_Spine2": np.eye(4)}
+        skin = {"bones": [b"C_Chest"], "binds": SKIN["binds"][:1]}
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(E.hkx_to_af, "vanilla_file", lambda p, s: (b"x", p)), \
+                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], skin)), \
+                mock.patch.object(E.sfmesh, "parse", lambda b: None), \
+                mock.patch.object(E.facefit, "mesh_arrays", lambda m: (real, [])), \
+                mock.patch.object(E.npc_hair, "skeleton_world", lambda b: world):
+            with self.assertRaises(E.os_convert.StepFailed):
+                E.export(Fake(real), "data", "X", d)
 
     def test_unknown_bone_stops(self):
         real = np.array([[0, 0, 0], [0.2, 0, 0], [0, 0.2, 0.5], [0, 0, 1.5]], float)
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.object(E.hkx_to_af, "vanilla_file", lambda p, s: (b"x", p)), \
-                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], {})), \
+                mock.patch.object(E.facefit, "starfield_head_parts", lambda b: (["aa\\bb"], SKIN)), \
                 mock.patch.object(E.sfmesh, "parse", lambda b: None), \
                 mock.patch.object(E.facefit, "mesh_arrays", lambda m: (real, [])), \
                 mock.patch.object(E.npc_hair, "skeleton_world", lambda b: {"C_Chest": np.eye(4)}):

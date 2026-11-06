@@ -12,8 +12,8 @@ project over MCP and writes them with this repo's skinned-NIF writer (the one th
      run stops when it is over --max-residual.
   2. each gear shape: positions, normals, UVs, triangles (get_shape_geometry), its bones (list_bones) and their
      weights (get_weights all), mapped to metres; at most 4 weights per vertex (the writer's limit), renormalised.
-  3. files: meshes\\S2S\\<name>.nif + geometries\\...\\*.mesh (skyrimhair.nif_files: binds = inverse rest world of each
-     bone from the game's skeleton, as the game's own hairs).
+  3. files: meshes\\S2S\\<name>.nif + geometries\\...\\*.mesh with the naked body's own skin binds for
+     each bone (the gear's weights are copied from that body, and its positions are in that body mesh's space).
   4. S2SArmorTest.esm: ARMO + ARMA copied from vanilla Clothes_Nightwear_01 (the Robes of Oblivion layout, docs/armor/
      robes-of-oblivion-reference.md) with the worn model pointed at our NIF, and an outfit (OTFT) holding it.
      The material is the nightwear's (shape test: textures will look wrong); real materials come next.
@@ -39,6 +39,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts", "npc"))
 
 from fo4sf import facefit, sfmesh, sfplugin, skyrimhair  # noqa: E402
+from fo4sf import nif as nifmod  # noqa: E402
 import hkx_to_af  # noqa: E402
 import npc_hair  # noqa: E402
 import os_convert  # noqa: E402
@@ -336,7 +337,38 @@ def export(client, sf_data: str, name: str, out: str, max_residual: float = 0.00
     unknown = sorted({b for sh in shapes for x in sh.weights for b, _ in x} - set(world))
     if unknown:
         raise os_convert.StepFailed(f"bones not in Starfield's skeleton: {unknown}")
-    return dict(rep, shapes_data=shapes, world=world)
+    body_binds = dict(zip([b.decode("latin-1") for b in _skin.get("bones", [])], _skin.get("binds", [])))
+    unbound = sorted({b for sh in shapes for x in sh.weights for b, _ in x} - set(body_binds))
+    if unbound:
+        raise os_convert.StepFailed(f"bones the body is not skinned to: {unbound}")
+    return dict(rep, shapes_data=shapes, world=world, body_binds=body_binds)
+
+
+SPHERE_MARGIN = 0.15   # metres added to the body's per-bone bounding sphere: the gear sits a little outside the body
+
+
+def body_nif_files(shapes, materials: List[str], body_binds: Dict[str, tuple], out_name: str) -> Dict[str, bytes]:
+    """{"meshes/<out_name>.nif", "geometries/...mesh"}: the gear skinned with the naked body's own binds (2026-11-06:
+    binds from the skeleton's rest world put the gear in tall pillars in game; the positions are calibrated into the
+    body mesh's space, so the body's binds are the ones that match). Spheres: the body's, widened by SPHERE_MARGIN."""
+    from fo4sf import convert_static, sfmesh, sfnif
+    files, skinned = {}, []
+    for i, sh in enumerate(shapes):
+        bones = sorted({b for vw in sh.weights for b, _w in vw})
+        m = skyrimhair._mesh(sh, bones, False)
+        data = sfmesh.serialize(m)
+        d, f = convert_static.mesh_file_path(data)
+        files[f"geometries/{d}/{f}.mesh"] = data
+        binds = []
+        for b in bones:
+            sphere, rot, trans, scale = body_binds[b]
+            binds.append((tuple(sphere[:3]) + (float(sphere[3]) + SPHERE_MARGIN,), tuple(rot), tuple(trans), scale))
+        skinned.append(sfnif.SkinnedShape(sh.name or f"Shape{i}".encode(), f"{d}\\{f}".encode(),
+                                          len(m.triangles) * 3, len(m.positions), materials[i],
+                                          [b.encode("latin-1") for b in bones], binds))
+    n = sfnif.build_skinned_nif(out_name.rsplit("/", 1)[-1].encode(), skinned)
+    files[f"meshes/{out_name}.nif"] = nifmod.serialize(n)
+    return files
 
 
 def main(argv=None):
@@ -360,7 +392,7 @@ def main(argv=None):
     except os_convert.StepFailed as e:
         print("failed:", e)
         return 1
-    shapes, world = rep.pop("shapes_data"), rep.pop("world")
+    shapes, _world, binds = rep.pop("shapes_data"), rep.pop("world"), rep.pop("body_binds")
     tpl_arma_nif = None
     sf_esm = os.path.join(sf_data, "Starfield.esm")
     nif_rel = f"S2S\\{a.name}.nif"
@@ -376,8 +408,7 @@ def main(argv=None):
         except SystemExit:
             tpl_arma_nif = None
     material = nif_material(tpl_arma_nif or b"") or "Materials\\Clothes\\Outfit_Nightwear\\Outfit_Nightwear_01.mat"
-    hair = skyrimhair.Hair(shapes, [], {}, {})
-    files = skyrimhair.nif_files(hair, [material] * len(shapes), None, world, f"S2S/{a.name}")
+    files = body_nif_files(shapes, [material] * len(shapes), binds, f"S2S/{a.name}")
     for rel, data in files.items():
         dst = os.path.join(a.out, *rel.split("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
