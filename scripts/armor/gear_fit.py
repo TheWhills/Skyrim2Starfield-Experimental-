@@ -34,12 +34,13 @@ def sky_shapes(nif_bytes: bytes):
     return [gearfit.from_skyrim(s) for s in skyrimskin.skinned_shapes(nifmod.parse(nif_bytes))]
 
 
-TEXCONV_DEFAULT = r"C:\Modding\tools\xedit\Edit Scripts\Texconvx64.exe"     # the owner's (overlay_records)
+TEXCONV_DEFAULT = r"C:\Modding\tools\texconv.exe"      # the owner's (found 2026-11-06)
+TEXCONV_OTHERS = (r"C:\Modding\tools\xedit\Edit Scripts\Texconvx64.exe",)
 
 
 def find_texconv(given: str = "") -> str:
     import shutil
-    for c in (given, TEXCONV_DEFAULT, shutil.which("texconv") or "", shutil.which("texconv.exe") or ""):
+    for c in (given, TEXCONV_DEFAULT, *TEXCONV_OTHERS, shutil.which("texconv") or "", shutil.which("texconv.exe") or ""):
         if c and os.path.isfile(c):
             return c
     return ""
