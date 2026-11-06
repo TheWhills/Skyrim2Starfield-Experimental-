@@ -1735,3 +1735,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   supported (not yet in game): the rule for our NIF (meshes/morphs/s2s/ralof_outfit/chargen/<shape>/morph.dat).
   gear_fit now writes one per shape: each gear vertex takes the inverse-distance blend of the 6 nearest body
   vertices' deltas from the naked body's own chargen morph.dat (found by vertex count under meshes/morphs/human).
+- verified (owner screenshots, same day): with morph.dat files the coat follows heavier body sliders (supported: the
+  path rule works). Left: orange skin bleeding through the grey Skyrim skin piece (MaleBodyStormcloak, drawn with
+  the borrowed material over Starfield's body), and a chest shelf (body offset up to 68 mm). gear_fit now drops
+  Skyrim bare-skin pieces by default (--keep-skin keeps them); body offsets count only where the moved Skyrim body and
+  the Starfield body face the same way (cos > 0.7) and are capped at 4 cm.

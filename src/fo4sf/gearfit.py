@@ -76,6 +76,8 @@ NO_TURN = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Sp
 AXIAL = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Spine2 [Spn2]", "NPC Neck [Neck]",
          "NPC Head [Head]", "NPC L Thigh [LThg]", "NPC R Thigh [RThg]", "NPC L Calf [LClf]", "NPC R Calf [RClf]",
          "NPC L Foot [Lft ]", "NPC R Foot [Rft ]")
+AGREE = 0.7                     # body offsets: Skyrim and Starfield normals must agree this well (cos)
+CAP = 0.04                      # m: largest body offset
 FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
 
 
@@ -304,10 +306,16 @@ def outward(points: np.ndarray, normals: np.ndarray) -> np.ndarray:
 
 
 def body_offsets(sky_body: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, reach: float = REACH,
-                 smooth: int = 3) -> Tuple[np.ndarray, Dict]:
-    """Per moved-Skyrim-body point the offset onto the Starfield surface (along Starfield's normal), smoothed."""
+                 smooth: int = 3, sky_nrm: Optional[np.ndarray] = None, agree: float = AGREE,
+                 cap: float = CAP) -> Tuple[np.ndarray, Dict]:
+    """Per moved-Skyrim-body point the offset onto the Starfield surface (along Starfield's normal), smoothed. A
+    point counts only when the two surfaces face the same way there (normals within acos(agree)); offsets are capped
+    (2026-11-06, Ralof: unchecked matches moved the chest up to 68 mm into a shelf)."""
     depth, dist, idx = nearest_surface(sky_body, sf_pts, sf_nrm)
     ok = dist < reach
+    if sky_nrm is not None and len(sky_nrm) == len(sky_body):
+        ok &= np.einsum("ij,ij->i", sky_nrm, sf_nrm[idx]) > agree
+    depth = np.clip(depth, -cap, cap)
     off = np.where(ok[:, None], -depth[:, None] * sf_nrm[idx], 0.0)
     for _ in range(smooth):
         off = _knn_mean(sky_body, off, sky_body, 8, 0.05)
@@ -347,7 +355,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     sky_bn = np.concatenate([s.normals for s in sky_body]) if sky_body else np.zeros((0, 3))
     if len(sky_bn):
         sky_bn = outward(sky_bp, sky_bn)
-    off, rep["body"] = body_offsets(bp, sf_body_pts, sf_nrm) if len(bp) else (np.zeros((0, 3)), {})
+    bn = np.concatenate([n for _p, n in body_moved]) if body_moved else np.zeros((0, 3))
+    if len(bn):
+        bn = outward(bp, bn)
+    off, rep["body"] = body_offsets(bp, sf_body_pts, sf_nrm, sky_nrm=bn) if len(bp) else (np.zeros((0, 3)), {})
     shapes, rep["shapes"] = [], {}
     for s in gear:
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)

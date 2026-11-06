@@ -68,7 +68,7 @@ def find_body_morph(sf_data: str, num_vertices: int, female: bool):
     return None, None
 
 
-def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP):
+def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, keep_skin: bool = False):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds = starfield_body(sf_data, female)
@@ -78,6 +78,10 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
     res = gearfit.fit(gear, sky_shapes(body_nif), world, skel_pts, tris, gap)
+    if not keep_skin:                           # Skyrim's bare-skin pieces: Starfield draws its own body there
+        drop = {n for n, r in res.report["shapes"].items() if r["skin_piece"]}
+        res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
+        res.report["dropped_skin_pieces"] = sorted(drop)
     shapes = gearfit.to_mesh_space(res.shapes, frame)
     for i, sh in enumerate(shapes):
         sh.tangents = os_export.tangents(np.asarray(sh.positions), np.asarray(sh.normals), sh.uvs, sh.triangles)
@@ -108,6 +112,8 @@ def main(argv=None):
     ap.add_argument("--full", default=None, help="the armor's in-game name")
     ap.add_argument("--out", required=True, help="the mod folder (outside the repository)")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out")
+    ap.add_argument("--keep-skin", action="store_true",
+                    help="keep Skyrim's bare-skin pieces (dropped by default: Starfield's body shows there)")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
@@ -130,7 +136,8 @@ def main(argv=None):
     print(f"{a.npc} ({o['race']}, {'female' if female else 'male'}):",
           *[f"{m['armor']} {m['mesh']}" for m in meshes], sep="\n  ")
     shapes, binds, rep = run([read(m["mesh"]) for m in meshes], read(os_convert.SKYRIM_BODY[female]), sf_data,
-                             female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap)
+                             female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
+                             a.keep_skin)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
@@ -173,6 +180,8 @@ def main(argv=None):
               f"{r['unweighted']} unweighted")
     if rep.get("skipped"):
         print("left out:", ", ".join(rep["skipped"]))
+    if rep.get("dropped_skin_pieces"):
+        print("bare-skin pieces dropped (Starfield's body shows there):", ", ".join(rep["dropped_skin_pieces"]))
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1")
     return 0

@@ -130,6 +130,15 @@ class SurfaceTests(unittest.TestCase):
         self.assertGreater(out[0, 0], 0.13)
         self.assertTrue(np.allclose(out[1], gear[1]))
 
+    def test_offsets_need_agreeing_normals_and_are_capped(self):
+        sky, sky_n = self.cylinder(0.10)
+        sf, sfn = self.cylinder(0.17)                    # 7 cm wider: capped at 4 cm
+        off, _ = G.body_offsets(sky, sf, sfn, smooth=0, sky_nrm=sky_n)
+        self.assertAlmostEqual(float(np.linalg.norm(off, axis=1).max()), G.CAP, places=6)
+        off, rep = G.body_offsets(sky, sf, sfn, smooth=0, sky_nrm=-sky_n)   # facing the other way: no match
+        self.assertEqual(rep["matched"], 0)
+        self.assertEqual(float(np.abs(off).max()), 0.0)
+
     def test_outward(self):
         pts, nrm = self.cylinder(0.1)
         self.assertTrue(np.allclose(G.outward(pts, -nrm), nrm))
