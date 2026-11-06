@@ -78,6 +78,9 @@ AXIAL = ("NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "NPC Spine1 [Spn1]", "NPC Spin
          "NPC L Foot [Lft ]", "NPC R Foot [Rft ]")
 AGREE = 0.7                     # body offsets: Skyrim and Starfield normals must agree this well (cos)
 CAP = 0.04                      # m: largest body offset
+SKIN_GAP = 0.002                # m: skin pieces (Skyrim body-textured parts, e.g. trousers painted on) pushed this far
+ENVELOPE = {s: ((f"NPC {s} Foot [{s}ft ]", f"NPC {s} Toe0 [{s}Toe]"), (f"{s}_Foot", f"{s}_Toe")) for s in "LR"}
+ENVELOPE_SCALE = (0.9, 1.35)    # per-axis clamp of the foot box fit
 FAR = 0.5                       # m: gear farther than this outside the Starfield body box means a broken transform
 
 
@@ -424,9 +427,27 @@ class FitResult:
     report: Dict
 
 
+def region(points: np.ndarray, bones: List[str], weights, wanted, min_weight: float = 0.5) -> np.ndarray:
+    """The points whose weights on the wanted bones sum to at least min_weight."""
+    keep = [v for v, vw in enumerate(weights)
+            if sum(w for bi, w in vw if 0 <= bi < len(bones) and bones[bi] in wanted) >= min_weight]
+    return points[keep] if keep else np.zeros((0, 3))
+
+
+def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarray:
+    """4x4 taking src's axis-aligned box onto dst's: centre onto centre, per-axis scale (clamped)."""
+    lo_s, hi_s, lo_d, hi_d = src.min(0), src.max(0), dst.min(0), dst.max(0)
+    sc = np.clip((hi_d - lo_d) / np.maximum(hi_s - lo_s, 1e-6), *clamp)
+    m = np.eye(4)
+    m[:3, :3] = np.diag(sc)
+    m[:3, 3] = (lo_d + hi_d) / 2 - sc * (lo_s + hi_s) / 2
+    return m
+
+
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
-        sf_body_tris: np.ndarray, gap: float = GAP) -> FitResult:
-    """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres)."""
+        sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None) -> FitResult:
+    """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
+    sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it)."""
     joints: Dict[str, np.ndarray] = {}
     for s in sky_body + gear:
         for b, w in s.joints.items():
@@ -436,6 +457,23 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     sf_nrm = _vertex_face_normals(sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3))
     sf_nrm = outward(sf_body_pts, sf_nrm / np.maximum(np.linalg.norm(sf_nrm, axis=1, keepdims=True), 1e-12))
     body_moved = [blend(s.points, s.normals, s.bones, s.weights, transforms) for s in sky_body]
+    if sf_body_weights is not None and sky_body:
+        # feet: the joints alone leave Starfield's longer foot sticking out of the boot (2026-11-06, Ralof running:
+        # toes and heels through the boot); fit the moved Skyrim foot's box onto Starfield's foot box
+        rep["feet"] = {}
+        sf_names = sorted({b for vw in sf_body_weights for b, _w in vw})
+        sf_idx = [[(sf_names.index(b), w) for b, w in vw] for vw in sf_body_weights]
+        for side, (sky_b, sf_b) in ENVELOPE.items():
+            src = np.concatenate([region(p, s.bones, s.weights, sky_b) for (p, _n), s in zip(body_moved, sky_body)])
+            dst = region(sf_body_pts[:len(sf_idx)], sf_names, sf_idx, sf_b)
+            if len(src) >= 20 and len(dst) >= 20:
+                c = box_fit(src, dst)
+                for b in sky_b:
+                    if b in transforms:
+                        transforms[b] = c @ transforms[b]
+                rep["feet"][side] = {"scale": np.diag(c)[:3].round(3).tolist(),
+                                     "shift_mm": (c[:3, 3] * 1000).round(0).tolist()}
+        body_moved = [blend(s.points, s.normals, s.bones, s.weights, transforms) for s in sky_body]
     bp = np.concatenate([p for p, _n in body_moved]) if body_moved else np.zeros((0, 3))
     sky_bp = np.concatenate([s.points for s in sky_body]) if sky_body else np.zeros((0, 3))
     sky_bn = np.concatenate([s.normals for s in sky_body]) if sky_body else np.zeros((0, 3))
@@ -455,8 +493,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         shift = _knn_mean(bp, off, pts, 8, CARRY) if len(bp) else np.zeros_like(pts)
         pts = pts + shift
         pushed = 0
-        if not skin and len(sf_body_pts):
-            pts, pushed = push_out(pts, sf_body_pts, sf_nrm, gap, tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
+        if len(sf_body_pts):
+            # skin pieces too, closer: Skyrim paints clothes on body-textured parts (Stormcloak trousers)
+            pts, pushed = push_out(pts, sf_body_pts, sf_nrm, SKIN_GAP if skin else gap,
+                                   tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
             lo, hi = sf_body_pts.min(0) - FAR, sf_body_pts.max(0) + FAR

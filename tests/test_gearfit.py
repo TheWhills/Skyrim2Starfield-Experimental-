@@ -224,6 +224,34 @@ class MorphTests(unittest.TestCase):
         self.assertEqual(extra["Thin"][1], (0, 0, 0))
 
 
+class EnvelopeTests(unittest.TestCase):
+    def test_box_fit_and_region(self):
+        src = np.array([[0, 0, 0], [0.1, 0.25, 0.08]], float)
+        dst = np.array([[0.01, -0.02, -0.01], [0.11, 0.28, 0.07]], float)
+        m = G.box_fit(src, dst)
+        out = src @ m[:3, :3].T + m[:3, 3]
+        self.assertTrue(np.allclose(out, dst, atol=1e-9))
+        big = G.box_fit(src, src * 3)                               # clamped
+        self.assertAlmostEqual(big[0, 0], G.ENVELOPE_SCALE[1])
+        pts = np.arange(9, dtype=float).reshape(3, 3)
+        r = G.region(pts, ["A", "B"], [[(0, 1.0)], [(0, 0.4), (1, 0.6)], [(1, 1.0)]], {"A"})
+        self.assertEqual(len(r), 1)
+
+    def test_feet_reported_in_fit(self):
+        bones = [FT, TOE]
+        joints = {b: at(SKY[b]) for b in (PELV, SPN0, SPN1, SPN2, NECK, HEAD, THG, CLF, FT, TOE)}
+        rng = np.random.default_rng(3)
+        foot = rng.uniform([0.05, -0.05, 0.0], [0.15, 0.2, 0.08], size=(40, 3))
+        body = G.SkyShape(b"Body", foot, np.tile([0, 0, 1.0], (40, 1)), [(0, 0)] * 40, [(0, 1, 2)], bones,
+                          [[(0, 1.0)]] * 40, joints)
+        world = {f: at(SKY[s_]) for s_, f in ((PELV, "C_Hips"), (SPN0, "C_Spine"), (SPN1, "C_Spine1"),
+                                              (SPN2, "C_Chest"), (NECK, "C_Neck"), (HEAD, "C_Head"),
+                                              (THG, "L_Thigh"), (CLF, "L_Calf"), (FT, "L_Foot"), (TOE, "L_Toe"))}
+        sf_foot = foot * [1.0, 1.2, 1.0]                            # Starfield's foot 20 % longer
+        res = G.fit([], [body], world, sf_foot, np.array([[0, 1, 2]]), sf_body_weights=[[("L_Foot", 1.0)]] * 40)
+        self.assertAlmostEqual(res.report["feet"]["L"]["scale"][1], 1.2, places=1)
+
+
 class BindTests(unittest.TestCase):
     def test_frame_and_binds(self):
         frame = at([0, 0, 1.632])

@@ -39,10 +39,12 @@ def starfield_body(sf_data: str, female: bool):
     nif, _ = hkx_to_af.vanilla_file(os_convert.SF_BODY[female], sf_data)
     paths, skin = facefit.starfield_head_parts(nif)
     m = sfmesh.parse(hkx_to_af.vanilla_file("geometries/" + paths[0].replace("\\", "/") + ".mesh", sf_data)[0])
-    pts, _w = facefit.mesh_arrays(m)
+    pts, w = facefit.mesh_arrays(m)
     tris = np.array([tuple(t) for t in m.triangles], int).reshape(-1, 3)
-    binds = dict(zip([b.decode("latin-1") for b in skin.get("bones", [])], skin.get("binds", [])))
-    return pts, tris, binds
+    names = [b.decode("latin-1") for b in skin.get("bones", [])]
+    binds = dict(zip(names, skin.get("binds", [])))
+    weights = [[(names[b], x) for b, x in vw if b < len(names)] for vw in w]
+    return pts, tris, binds, weights
 
 
 HAND_BONES = ("L_Wrist", "R_Wrist", "L_Index", "R_Index")
@@ -113,10 +115,10 @@ def find_body_morph(sf_data: str, num_vertices: int, female: bool):
     return None, None
 
 
-def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, keep_skin: bool = False):
+def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, drop_skin: bool = False):
     """(shapes in mesh space with tangents, binds, report)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
-    pts, tris, body_binds = starfield_body(sf_data, female)
+    pts, tris, body_binds, body_w = starfield_body(sf_data, female)
     frame = gearfit.mesh_frame(body_binds, world)
     skel_pts = pts @ frame[:3, :3].T + frame[:3, 3]
     surf_pts, surf_tris = skel_pts, tris
@@ -127,8 +129,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
-    res = gearfit.fit(gear, sky_shapes(body_nif), world, surf_pts, surf_tris, gap)
-    if not keep_skin:                           # Skyrim's bare-skin pieces: Starfield draws its own body there
+    res = gearfit.fit(gear, sky_shapes(body_nif), world, surf_pts, surf_tris, gap, sf_body_weights=body_w)
+    if drop_skin:                           # Skyrim's body-textured pieces
         drop = {n for n, r in res.report["shapes"].items() if r["skin_piece"]}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
         res.report["dropped_skin_pieces"] = sorted(drop)
@@ -162,8 +164,9 @@ def main(argv=None):
     ap.add_argument("--full", default=None, help="the armor's in-game name")
     ap.add_argument("--out", required=True, help="the mod folder (outside the repository)")
     ap.add_argument("--skip", default="", help="comma-separated shape names to leave out")
-    ap.add_argument("--keep-skin", action="store_true",
-                    help="keep Skyrim's bare-skin pieces (dropped by default: Starfield's body shows there)")
+    ap.add_argument("--drop-skin", action="store_true",
+                    help="leave out Skyrim's body-textured pieces (kept by default: Skyrim paints clothes on them, e.g. "
+                         "the Stormcloak trousers)")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
@@ -187,7 +190,7 @@ def main(argv=None):
           *[f"{m['armor']} {m['mesh']}" for m in meshes], sep="\n  ")
     shapes, binds, rep = run([read(m["mesh"]) for m in meshes], read(os_convert.SKYRIM_BODY[female]), sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
-                             a.keep_skin)
+                             a.drop_skin)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
@@ -232,7 +235,9 @@ def main(argv=None):
         print("left out:", ", ".join(rep["skipped"]))
     print("hands in the push-out surface:", rep.get("hands") or "NOT FOUND")
     if rep.get("dropped_skin_pieces"):
-        print("bare-skin pieces dropped (Starfield's body shows there):", ", ".join(rep["dropped_skin_pieces"]))
+        print("body-textured pieces left out:", ", ".join(rep["dropped_skin_pieces"]))
+    for side, f in (rep.get("feet") or {}).items():
+        print(f"foot {side}: boot foot scaled {f['scale']} to Starfield's foot")
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1")
     return 0

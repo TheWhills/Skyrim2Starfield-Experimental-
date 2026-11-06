@@ -1747,3 +1747,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   vertices) instead of the nearest vertex, which missed points between the shins' and feet's sparse vertices; the
   game's hands mesh (found under meshes/actors/human by name and hand bones) joins the push-out surface.
   unresolved: in-game result.
+- verified (owner screenshots, same day): gloves clean with the hands mesh (hands_3rd_m.nif) in the push-out; chest
+  flat. Still: orange slots in the boot shins (owner: in Skyrim the legs do not show) and toes / heels out of the boots
+  when running. MaleBodyStormcloak is not spare skin: Skyrim paints the trousers on that body-textured piece, so it
+  is kept again by default (--drop-skin leaves such pieces out) and pushed out at 2 mm. Feet: the moved Skyrim foot
+  region's box (vertices >= 0.5 on Foot + Toe0) is fitted per axis onto Starfield's foot box (clamp 0.9-1.35),
+  applied to the Foot / Toe transforms. unresolved: in game.
