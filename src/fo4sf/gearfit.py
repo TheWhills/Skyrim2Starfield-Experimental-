@@ -1173,6 +1173,43 @@ def collar_transplant(sky_pts: np.ndarray, pts: np.ndarray, anchor, scale: float
     return pts + (target - pts) * w[:, None], w
 
 
+FACE_GAP = 0.003    # m: every face's centre at least this far outside the body
+FACE_DEEP = 0.01    # m: a face centre deeper than this is not a dip between outside corners (left alone)
+
+
+def push_faces_out(pts: np.ndarray, tris, body_pts: np.ndarray, body_tris, body_nrm: np.ndarray,
+                   gap: float = FACE_GAP, rounds: int = 3) -> Tuple[np.ndarray, int]:
+    """Faces whose centre dips under the body (all three corners outside it) lifted until the centre is gap out
+    (2026-11-07, verified on the owner's Farengar debug meshes: on the shoulder tops the robe's corners were 4 mm out
+    but face centres down to 1.2 mm inside the body; the whole-body skin piece showed through as skin diamonds).
+    Only faces whose corners are all outside are touched (the neckline and hidden parts stay as they are)."""
+    p = np.asarray(pts, float).copy()
+    t = np.asarray(tris, int).reshape(-1, 3)
+    bt = np.asarray(body_tris, int).reshape(-1, 3)
+    moved = np.zeros(len(p), bool)
+    if not len(t):
+        return p, 0
+    _c, vdep, _d = closest_on_mesh(p, body_pts, bt, body_nrm)
+    out_face = (vdep[t] > 0).all(1)
+    for _ in range(rounds):
+        c = p[t].mean(1)
+        _cp, dep, _dist, nrm = closest_on_mesh(c, body_pts, bt, body_nrm, with_normals=True)
+        need = np.where(out_face & (dep < gap) & (dep > -FACE_DEEP), np.minimum(gap - dep, 0.006), 0.0)  # deeper: no dip
+        if not (need > 1e-5).any():
+            break
+        lift = np.zeros_like(p)
+        amt = np.zeros(len(p))
+        for k in range(3):
+            v = t[:, k]
+            bigger = need > amt[v]
+            np.maximum.at(amt, v, need)
+            lift[v[bigger]] = nrm[bigger]
+        sel = amt > 1e-5
+        p[sel] += lift[sel] * amt[sel, None]
+        moved |= sel
+    return p, int(moved.sum())
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -1533,6 +1570,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                np.asarray(s.points)[:, 2] > sky_clav_z)
             if len(st_):
                 neck_stretch = [round(float(np.percentile(st_, q)), 2) for q in (10, 50, 90)]
+        faces_lifted = 0
+        if not skin and len(sf_body_pts):
+            pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -1577,7 +1617,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,

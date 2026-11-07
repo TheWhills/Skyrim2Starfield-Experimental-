@@ -493,6 +493,21 @@ class TransplantTests(unittest.TestCase):
         self.assertEqual(w.tolist(), [1.0, 0.0])
 
 
+class FaceLiftTests(unittest.TestCase):
+    def test_face_dipping_into_a_bump_is_lifted(self):
+        body = np.array([[-1, -1, 0], [1, -1, 0], [0, 1, 0], [0, 0, 0.02]], float)      # a 2 cm bump in the middle
+        bt = [(0, 1, 3), (1, 2, 3), (2, 0, 3)]
+        bn = np.tile([0, 0, 1.0], (4, 1))
+        gear = np.array([[-0.05, -0.05, 0.022], [0.05, -0.05, 0.022], [0.0, 0.05, 0.022]])   # corners just over it
+        gear[:, :2] *= 6                                                     # a big face over the bump's top
+        gear[:, 2] = [0.016, 0.016, 0.016]                                  # corners 2 mm out, centre 4 mm in
+        out, n = G.push_faces_out(gear, [(0, 1, 2)], body, bt, bn)
+        c = out.mean(0)
+        _cp, dep, _d = G.closest_on_mesh(c[None], body, np.array(bt), bn)
+        self.assertGreater(n, 0)
+        self.assertGreaterEqual(dep[0], G.FACE_GAP - 1e-4)
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

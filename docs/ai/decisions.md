@@ -2043,3 +2043,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   then at most 2 cm from visible skin (supported: five rings on the shoulders' large triangles reached the shoulder
   tops from the neck opening, under robe 5 mm off the body). (2) Gear within 3 cm of the hands mesh takes no
   body-slider move, full by 8 cm (the forearm shrinks under Thin, the separate hands mesh does not).
+- 2026-11-07 (Claude, armor) Shoulder skin diamonds on Farengar found (verified on the debug meshes with the skin
+  piece exported): the skin piece sits exactly on the body; the robe's corners are 4 mm out on the shoulder tops but
+  its face centres dip to 1.2 mm inside the body (convex shoulders, faces wider than the body's), so 21 shoulder-top
+  skin vertices had no robe over them. New step push_faces_out: faces whose corners are all outside and whose centre
+  is under 3 mm out (but not deeper than 1 cm) are lifted along the body normal, up to 6 mm a round, 3 rounds.
+  Offline: 240 vertices lifted, no uncovered shoulder skin left.

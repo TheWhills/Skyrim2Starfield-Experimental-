@@ -984,6 +984,7 @@ def main(argv=None):
               + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else "")
               + (f", {r['inside_neck']} inside the neck line as in Skyrim" if r.get('inside_neck') else "")
               + (f", {r['collar_transplanted']} round the neck copied from Skyrim" if r.get('collar_transplanted') else "")
+              + (f", {r['faces_lifted']} lifted so no face dips into the body" if r.get('faces_lifted') else "")
               + (f", collar brought down by {min(r['collar_drop_mm'])}..{max(r['collar_drop_mm'])} mm"
                  if r.get('collar_drop_mm') else "")
               + (f", {r['skirt_vertices']} on skirt bones (hips + thighs)" if r.get('skirt_vertices') else "")
