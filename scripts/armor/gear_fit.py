@@ -257,7 +257,13 @@ NECK_BONES_SKY = ("NPC Neck [Neck]", "NPC Spine2 [Spn2]")
 NECK_SHARE = 0.3        # head vertices with at least this weight on neck / chest bones count as neck
 
 
-FLAP_ABOVE_NECK = 0.02   # m: head-mesh vertices below the neck joint + this join the surface (the chest / back flap)
+FLAP_ABOVE_NECK = 0.05   # m: head-mesh vertices below the neck joint + this join the surface (the chest / back flap)
+
+
+def is_underwear(name) -> bool:
+    """A Skyrim body NIF's underwear shape (MaleUnderwear_1, FemaleUnderwear), not the body (FemaleUnderwearBody)."""
+    n = (name.decode("latin-1", "replace") if isinstance(name, bytes) else str(name)).lower()
+    return "underwear" in n and "body" not in n
 
 
 def neck_part(points, tris, weights, neck_bones, share: float = NECK_SHARE, low_z=None):
@@ -572,7 +578,10 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
     gear, tess = tessellate_shapes(gear, tessellate, skip=set(skin_names))
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
-    sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
+    # not the underwear shapes (2026-11-07, verified on Ysolda's / Saadia's debug meshes: the dresses' chest panels,
+    # 3-31 mm inside Skyrim's breasts, read as outside the separate bra shape, so they were not kept hidden and showed
+    # as brown patches; Starfield's body has no underwear in the surface either)
+    sky_body = [s for nb in body_nifs for s in sky_shapes(nb) if not is_underwear(s.name)]
     sky_head_full = None
     if sky_head:
         sky_body += skyrim_head_shapes(sky_head)

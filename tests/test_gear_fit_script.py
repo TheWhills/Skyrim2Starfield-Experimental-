@@ -386,3 +386,10 @@ class FlapTests(unittest.TestCase):
         p, t, _w, n = gear_fit.neck_part(pts, [(0, 1, 2), (3, 4, 5)], w, ("C_Neck",), low_z=1.4)
         self.assertEqual((n, len(t)), (3, 1))
         self.assertTrue((p[:, 2] < 1.4).all())
+
+
+class UnderwearTests(unittest.TestCase):
+    def test_is_underwear(self):
+        self.assertTrue(gear_fit.is_underwear(b"FemaleUnderwear"))
+        self.assertTrue(gear_fit.is_underwear("MaleUnderwear_1"))
+        self.assertFalse(gear_fit.is_underwear(b"FemaleUnderwearBody:0"))

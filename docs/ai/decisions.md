@@ -2097,3 +2097,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   head mesh, whose flap covers the upper chest and back but was not in the push-out surface. Changes: keep_hidden
   (last step) puts gear hidden in Skyrim back inside at its Skyrim depth (3 mm-3 cm); the head mesh's vertices below
   the neck joint + 2 cm join the push-out surface. The sleeve-top clip not yet measured.
+- 2026-11-07 (Claude, armor) After keep_hidden (owner): Ysolda's brown still on the chest, Saadia's straps still
+  clipping. Measured on the new debug meshes (verified): the remaining Skyrim-hidden chest-panel vertices (Ysolda 63,
+  Saadia 201, 3-31 mm inside Skyrim's breasts) measured as outside the separate underwear (bra) shape, which was part
+  of the Skyrim body surface; keep_hidden never saw them as hidden. Underwear shapes (name with "underwear", not
+  "body") now left out of the Skyrim body. Saadia: 42 strap vertices up to 4 mm inside the head mesh at 1.45-1.52 m,
+  above the flap band: the head band joined to the surface widened to the neck joint + 5 cm.
