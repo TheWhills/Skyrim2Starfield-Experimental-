@@ -1976,3 +1976,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   its first entry that resolves to armor (every entry when flagged Use All), unresolved outfit items are printed, and
   each piece's Starfield slots come from its Skyrim biped slot (32 body -> 3 + 5, 37 feet -> 7, 33 hands /
   34 forearms -> 8, others 9-12).
+- 2026-11-07 (Claude, armor) Hadvar in game (owner, with Skyrim running shots): cuirass, bracers and boots show; the
+  tassets lift with each leg when running and open round the legs, where Skyrim's hang. Skyrim's skirt chains
+  (Skirt[FBLR]Bone01-03) have no Starfield bones and the nearest-body weights copied the thigh skin's onto them.
+  Now skirt bones split between C_Hips and the thighs (front / back 0.5 + 0.25 + 0.25, sides 0.6 + 0.4 of their
+  own thigh; supported, to tune), and skirt-weighted vertices keep those weights instead of the body's. The run
+  prints how many vertices each piece has on skirt bones (if Skyrim weighted the tassets to the thighs, none).

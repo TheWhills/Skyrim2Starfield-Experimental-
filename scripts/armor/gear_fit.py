@@ -882,6 +882,7 @@ def main(argv=None):
               + (f", {r['neck_wrapped']} wrapped round the neck (up to {r['neck_wrap_mm']} mm)"
                  if r.get('neck_wrapped') else "")
               + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else "")
+              + (f", {r['skirt_vertices']} on skirt bones (hips + thighs)" if r.get('skirt_vertices') else "")
               + (f", {r['draped']} laid on the shoulders as in Skyrim (up to {r['drape_mm']} mm)"
                  if r.get('draped') else ""))
         if r.get("top_bones") and not r.get("skin_piece"):

@@ -402,6 +402,18 @@ class CollarHeightTests(unittest.TestCase):
         self.assertIsNone(G.collar_height_field(sky, hidden, np.zeros(2), 1.80, ours, hidden, np.zeros(2), 1.80))
 
 
+class SkirtTests(unittest.TestCase):
+    def test_skirt_bones_share_hips_and_thighs(self):
+        self.assertEqual(dict(G.skirt_shares("SkirtFBone02")), {"C_Hips": 0.5, "L_Thigh": 0.25, "R_Thigh": 0.25})
+        self.assertEqual(dict(G.skirt_shares("SkirtLBone01")), {"C_Hips": 0.6, "L_Thigh": 0.4})
+        self.assertEqual(G.skirt_shares("NPC L Thigh [LThg]"), [])
+        w = G.sf_weights(["SkirtRBone03", THG], [[(0, 1.0)], [(0, 0.3), (1, 0.7)]], {"C_Hips", "R_Thigh", "L_Thigh"},
+                         {})
+        self.assertEqual(dict(w[0]), {"C_Hips": 0.6, "R_Thigh": 0.4})
+        self.assertEqual(G.skirt_weighted(["SkirtRBone03", THG], [[(0, 1.0)], [(0, 0.3), (1, 0.7)]]).tolist(),
+                         [True, False])
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

@@ -17,6 +17,7 @@ Binds for the writer: bone rest world (skeleton.nif) against the body mesh's fra
 
 Supported hypothesis until the owner's screenshots: the clamp range, the smoothing, the gap.
 """
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -298,6 +299,30 @@ def blend(points: np.ndarray, normals: np.ndarray, bones: List[str], weights, tr
     return pts, nrm
 
 
+# Skyrim's skirt chains (SkirtFBone01..03 etc.) have no Starfield bones; the animations swing them part way with the
+# legs. Shared between the hips and the thighs (2026-11-07, owner: Hadvar's tassets lifted with each leg when running,
+# opening round the legs; they had taken the thigh skin's weights). Front / back plates between both thighs.
+SKIRT_SHARES = {"F": (("C_Hips", 0.5), ("L_Thigh", 0.25), ("R_Thigh", 0.25)),
+                "B": (("C_Hips", 0.5), ("L_Thigh", 0.25), ("R_Thigh", 0.25)),
+                "L": (("C_Hips", 0.6), ("L_Thigh", 0.4)),
+                "R": (("C_Hips", 0.6), ("R_Thigh", 0.4))}
+
+
+def skirt_shares(sky_bone: str) -> List[Tuple[str, float]]:
+    m = re.match(r"Skirt([FBLR])Bone\d+$", sky_bone or "")
+    return list(SKIRT_SHARES[m.group(1)]) if m else []
+
+
+def skirt_weighted(bones: List[str], weights, share: float = 0.5) -> np.ndarray:
+    """Vertices with at least `share` of their Skyrim weight on skirt bones."""
+    sk = np.array([bool(skirt_shares(b)) for b in bones], bool)
+    out = np.zeros(len(weights), bool)
+    for i, vw in enumerate(weights):
+        tot = sum(w for _b, w in vw)
+        out[i] = tot > 0 and sum(w for b, w in vw if 0 <= b < len(sk) and sk[b]) >= share * tot
+    return out
+
+
 def sf_weights(bones: List[str], weights, sf_bones, follows: Dict[str, str]) -> List[List[Tuple[str, float]]]:
     """Skyrim weights renamed to Starfield bones (SPLIT shared, unmapped via the bone they follow), top 4."""
     out = []
@@ -307,7 +332,7 @@ def sf_weights(bones: List[str], weights, sf_bones, follows: Dict[str, str]) -> 
             if not (0 <= bi < len(bones)) or w <= 0:
                 continue
             b = bones[bi]
-            hits = sf_of(b) or sf_of(follows.get(b) or "")
+            hits = skirt_shares(b) or sf_of(b) or sf_of(follows.get(b) or "")
             for f, share in hits:
                 f = WEIGHT_REMAP.get(f, f)
                 if f in sf_bones:
@@ -1197,6 +1222,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             w, near = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
         elif sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
             w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
+        if not skin:
+            # skirt plates hang free of the legs: their own (hips + thighs) weights, not the thigh skin's
+            skirt_v = np.nonzero(skirt_weighted(s.bones, s.weights))[0]
+            for i in skirt_v:
+                w[i] = own[i]
         if not skin and sky_clav_z is not None:
             # above the clavicles the gear keeps its own (Skyrim's) weights: 2026-11-07, owner: Skyrim's cowl sits on
             # the outfit and does not move with the neck or head; with the neck skin's weights its side rose when the
@@ -1222,6 +1252,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
             "buried": buried,
+            "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm,
             "draped": draped, "drape_mm": round(drape_max * 1000, 1),
             "top_bones": top_bones(s.points, w),
