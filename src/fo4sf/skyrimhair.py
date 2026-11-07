@@ -1662,6 +1662,9 @@ def strand_colors(sh: HairShape, along_u=None, seed: int = 7) -> list:
     return strand_vertex_colors(t, g)
 
 
+MORPH_MARGIN = 0.25    # m added to a skinned mesh's position scale (gear_fit caps morph deltas at 0.15 m)
+
+
 def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     """(SfMesh, per-vertex weights) of a shape: geometry through convert_static.shape_to_mesh (metres already), then
     4 weights per vertex as (index into `bones`, u16) summing to 65535."""
@@ -1678,6 +1681,11 @@ def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
         if d is not None:
             s, weights = d, weights * 2
     m = convert_static.shape_to_mesh(s, 1.0)
+    # room for body-slider morphs (2026-11-07, verified in game: with the scale at the largest coordinate, the
+    # outermost vertices' morphed positions overflowed and shot out as pillars; all-zero deltas, or the vanilla body
+    # with its own morph, showed none)
+    m.scale, m.positions = sfmesh.encode_positions([sfmesh.decode_position(p, m.scale) for p in m.positions],
+                                                   MORPH_MARGIN)
     idx = {b: i for i, b in enumerate(bones)}
     # 4 per vertex, or 8 when a vertex needs more (Starfield's own body skin uses 8; 2026-11-06: cutting the body's
     # arm skin to 4 made it bend apart from the game's hands mesh)

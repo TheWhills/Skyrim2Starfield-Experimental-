@@ -590,7 +590,9 @@ def chin_clearance(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_head, sf_head
     if not near.any():
         return pts, 0, 0.0
     g_sf = gap_above(pts, *sf_head)
-    need = np.where(near & np.isfinite(g_sf), np.maximum(0.0, g_sky - g_sf), 0.0)
+    ok = near & np.isfinite(g_sf)
+    need = np.zeros(len(pts))
+    need[ok] = np.maximum(0.0, g_sky[ok] - g_sf[ok])
     if not (need > 0).any():
         return pts, 0, 0.0
     raw = np.zeros_like(pts)

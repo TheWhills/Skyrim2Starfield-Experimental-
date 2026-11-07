@@ -229,3 +229,19 @@ class MorphTestFiles(unittest.TestCase):
         tests = [{"tag": "Zero", "parts": [{"morph_folder": folder + os_export.ZERO_SUFFIX}]}]
         out = gear_fit.test_morph_files(tests, ours, "", "")
         self.assertEqual(list(out), [(folder + os_export.ZERO_SUFFIX).replace("\\", "/").lower() + "/morph.dat"])
+
+
+class MeshMarginTests(unittest.TestCase):
+    def test_skinned_mesh_scale_leaves_room_for_morphs(self):
+        import numpy as np
+        from fo4sf import sfmesh, skyrimhair
+        pos = np.array([[0, 0, -1.26], [0.5, 0, 0.0], [0, 0.3, -0.5]])       # the hem: the largest coordinate
+        sh = skyrimhair.HairShape(b"S", pos, np.tile([0, 0, 1.0], (3, 1)), np.tile([1.0, 0, 0], (3, 1)),
+                                  [(0.0, 0.0)] * 3, [(0, 1, 2)], [[("A", 1.0)]] * 3, -1, -1, -1,
+                                  colors=[(255, 255, 255, 255)] * 3)
+        m = skyrimhair._mesh(sh, ["A"], False)
+        self.assertAlmostEqual(m.scale, 1.26 + skyrimhair.MORPH_MARGIN)
+        self.assertGreaterEqual(skyrimhair.MORPH_MARGIN, gear_fit.MORPH_MAX)   # a capped delta always fits
+        got = np.array([sfmesh.decode_position(p, m.scale) for p in m.positions])
+        self.assertTrue(np.allclose(got, pos, atol=1e-4))
+        self.assertEqual(sfmesh.encode_positions([(0, 0, 2.0)], 0.5)[0], 2.5)

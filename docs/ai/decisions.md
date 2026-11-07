@@ -1914,3 +1914,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   stands up to the chin (owner's screenshot). New step chin_clearance: gear with the Skyrim head within 8 cm straight
   above it keeps that gap (times the skeleton scale) under the Starfield head; lowered only, neighbours follow,
   pushed out again after.
+- 2026-11-07 (Claude, armor) Pillars found (verified by the --morph-test armors in game): [zero morph] none,
+  [vanilla body] and [body our morph] none (records and morph writer fine), our pieces with real deltas: pillars.
+  Cause (supported, fits every sighting): .mesh positions are int16 over a scale equal to the largest coordinate in
+  mesh space (z about -1.6 m at the feet / hem, the mesh frame sits at head height), so the outermost vertices'
+  morphed positions overflow and wrap to the other end: pillars from the coat hem and boot soles straight up.
+  skyrimhair._mesh now adds MORPH_MARGIN 0.25 m to the scale (deltas are capped at 0.15 m); precision cost ~0.01 mm.
+  Also verified: AA_Naked_Body's model is the Starfield undershirt/swimsuit body, not the bare body. Collar: chin
+  clearance lowered 55 coat vertices, up to 76 mm.

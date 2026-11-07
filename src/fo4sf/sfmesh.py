@@ -201,9 +201,10 @@ def decode_position(raw, scale):
     return tuple(c / 32767.0 * scale for c in raw)
 
 
-def encode_positions(points):
-    """float (x,y,z) list -> (scale, raw int16 list). Scale is the largest absolute coordinate."""
-    scale = max((abs(c) for p in points for c in p), default=0.0) or 1.0
+def encode_positions(points, margin: float = 0.0):
+    """float (x,y,z) list -> (scale, raw int16 list). Scale is the largest absolute coordinate plus margin (room for
+    slider morphs: a morphed position past the scale does not fit the int16 range)."""
+    scale = (max((abs(c) for p in points for c in p), default=0.0) + margin) or 1.0
     raw = [tuple(max(-32767, min(32767, round(c / scale * 32767.0))) for c in p) for p in points]
     return scale, raw
 
