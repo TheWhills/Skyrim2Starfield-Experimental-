@@ -1373,6 +1373,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=bt_)
         collar_mm = None
         collar_keep = np.zeros(len(pts), bool)
+        neck_why = {"heads": heads is not None, "wrap": wrap is not None, "sky_clavicles": sky_clav_z is not None,
+                    "sf_clavicles": sf_clav_z is not None, "skin": skin}
         if heads is not None and not skin and sky_gap is not None and sky_clav_z is not None and sf_clav_z is not None \
                 and wrap is not None and len(sf_body_pts):
             bt_ = np.asarray(sf_body_tris, int).reshape(-1, 3)
@@ -1382,6 +1384,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             cfield = collar_height_field(s.points, sky_vis, wrap[2],
                                          float(np.asarray(heads[0][0])[:, 2].max()), pts, vis_now, wrap[3],
                                          float(np.asarray(heads[1][0])[:, 2].max()), rep.get("global_scale", 1.0))
+            ax_s, ax_f = np.asarray(wrap[2], float)[:2], np.asarray(wrap[3], float)[:2]
+            sc_ = rep.get("global_scale", 1.0)
+            neck_why.update(
+                skyrim_visible_near=int((sky_vis & (np.hypot(*(np.asarray(s.points)[:, :2] - ax_s).T) * sc_
+                                                    < COLLAR_RADIUS)).sum()),
+                ours_visible_near=int((vis_now & (np.hypot(*(pts[:, :2] - ax_f).T) < COLLAR_RADIUS)).sum()),
+                skyrim_near=int((np.hypot(*(np.asarray(s.points)[:, :2] - ax_s).T) * sc_ < COLLAR_RADIUS).sum()),
+                ours_near=int((np.hypot(*(pts[:, :2] - ax_f).T) < COLLAR_RADIUS).sum()),
+                axes_mm=[(ax_s * 1000).round(0).tolist(), (ax_f * 1000).round(0).tolist()],
+                field=cfield is not None)
             if cfield is not None:
                 collar_mm = (cfield * 1000).round(0).tolist()
                 lowered_pts = shoulder_drop(pts, cfield, wrap[3][:2], sf_clav_z)
@@ -1485,7 +1497,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "buried": buried, "inside_neck": inside_n,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
-            "collar_drop_mm": collar_mm,
+            "collar_drop_mm": collar_mm, "neck_steps": neck_why,
             "draped": draped, "drape_mm": round(drape_max * 1000, 1),
             "top_bones": top_bones(s.points, w),
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (

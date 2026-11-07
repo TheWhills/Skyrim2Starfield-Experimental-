@@ -897,6 +897,8 @@ def main(argv=None):
               + (f", {r['skirt_hung']} hung round the legs" if r.get('skirt_hung') else "")
               + (f", {r['draped']} laid on the shoulders as in Skyrim (up to {r['drape_mm']} mm)"
                  if r.get('draped') else ""))
+        if r.get("neck_steps") and not r.get("skin_piece") and r["box_m"] and r["box_m"][1][2] > 1.35:
+            print("     neck steps:", ", ".join(f"{k} {v}" for k, v in r["neck_steps"].items()))
         if r.get("top_bones") and not r.get("skin_piece"):
             print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():
