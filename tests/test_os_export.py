@@ -247,6 +247,8 @@ class RecordTests(unittest.TestCase):
         from fo4sf import gearfit
         rel = E.part_nif("Ralof_outfit", "StormCloak")
         self.assertEqual(rel, "S2S\\Ralof_outfit\\StormCloak.nif")
+        self.assertNotEqual(E.part_nif("F", "boots:0"), E.part_nif("F", "boots:1"))   # two shapes, two files
+        self.assertEqual(E.part_nif("F", "boots:1"), "S2S\\F\\boots_1.nif")
         folder = E.morph_folder(rel, "StormCloak").replace("\\", "/").lower()
         self.assertEqual(gearfit.morph_path(rel, "StormCloak"), folder + "/morph.dat")
 

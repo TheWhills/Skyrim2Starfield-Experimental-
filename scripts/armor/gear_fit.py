@@ -890,6 +890,9 @@ def main(argv=None):
               + (f", {r['neck_wrapped']} wrapped round the neck (up to {r['neck_wrap_mm']} mm)"
                  if r.get('neck_wrapped') else "")
               + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else "")
+              + (f", {r['inside_neck']} inside the neck line as in Skyrim" if r.get('inside_neck') else "")
+              + (f", collar brought down by {min(r['collar_drop_mm'])}..{max(r['collar_drop_mm'])} mm"
+                 if r.get('collar_drop_mm') else "")
               + (f", {r['skirt_vertices']} on skirt bones (hips + thighs)" if r.get('skirt_vertices') else "")
               + (f", {r['skirt_hung']} hung round the legs" if r.get('skirt_hung') else "")
               + (f", {r['draped']} laid on the shoulders as in Skyrim (up to {r['drape_mm']} mm)"

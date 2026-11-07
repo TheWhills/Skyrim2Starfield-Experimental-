@@ -335,7 +335,9 @@ PART_SLOTS = ([3, 5], [7], [8], [9], [10], [11], [12])   # gear parts in order; 
 
 
 def part_slug(shape_name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_]+", "_", shape_name.split(":")[0]).strip("_") or "Shape"
+    """A file name for a part. Keeps a ':N' suffix as '_N' (2026-11-07: Farengar's 'boots:0' and 'boots:1' both
+    became boots.nif and one overwrote the other)."""
+    return re.sub(r"[^A-Za-z0-9_]+", "_", shape_name).strip("_") or "Shape"
 
 
 def part_nif(name: str, shape_name: str) -> str:

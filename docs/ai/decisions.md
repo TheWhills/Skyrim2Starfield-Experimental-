@@ -2005,3 +2005,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-07 (Claude, armor) Hadvar skirt shape approved by the owner; in the wide combat stance the thighs still came
   through the middle of the skirt. Skirt gradient now 0.3 -> 0.9 thigh share, rising with the square root of the way
   down (the middle follows the legs sooner).
+- 2026-11-07 (Claude, armor) Farengar (mage robes, owner): robe body fine; the neckline stands up the neck as a band
+  collar where Skyrim's is low at the base of the neck. Measured on the debug meshes: collar_height_field asked for
+  2-3.4 cm down all round, and push-out put it straight back up the neck. Now what the collar step brings down within
+  8.5 cm of the neck axis is not pushed back out (also not by neck_wrap's or bury's push-outs): the neckline is where
+  the cloth meets the skin, as Skyrim's (offline: back of the neck shows again). Also neck_inside (horizontal
+  inside-the-neck gap kept, final step), the collar drop printed, and part file names keep ':N' (Farengar's
+  boots:0 / boots:1 both wrote boots.nif).

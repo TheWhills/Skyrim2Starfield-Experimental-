@@ -867,6 +867,45 @@ def neck_wrap(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surfac
     return out, int((np.abs(step) > 1e-4).sum()), float(np.abs(step).max())
 
 
+def neck_inside(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surface, sky_axis, sf_axis,
+                sky_base: float, sf_base: float, scale: float = 1.0, depth: float = 0.003):
+    """Gear that lies inside Skyrim's neck, measured horizontally from the neck axis (a ray through it, as
+    neck_wrap), put as far inside Starfield's neck (2026-11-07, measured on the owner's Farengar debug meshes: the
+    robe's top closes across inside Skyrim's neck at shoulder height, so its neckline is low and the neck shows;
+    push-out stood those parts up round Starfield's thinner neck as a band collar; bury, which measures depth to the
+    nearest surface, missed them where the nearest surface is the body's open top). Returns (points, moved mask)."""
+    sky_pts, pts = np.asarray(sky_pts, float), np.asarray(pts, float)
+    mask = np.zeros(len(pts), bool)
+    sel = np.nonzero((sky_pts[:, 2] > sky_base) & (pts[:, 2] > sf_base))[0]
+    if not len(sel):
+        return pts, mask
+
+    def radial(p, axis, surface):
+        d = p[:, :2] - np.asarray(axis, float)[:2]
+        r = np.linalg.norm(d, axis=1)
+        u = d / np.maximum(r, 1e-9)[:, None]
+        dirs = np.column_stack([u, np.zeros(len(u))])
+        orig = np.column_stack([np.broadcast_to(np.asarray(axis, float)[:2], (len(p), 2)), p[:, 2]])
+        sp, st = np.asarray(surface[0], float), np.asarray(surface[1], int).reshape(-1, 3)
+        tz = sp[st][:, :, 2]
+        st = st[(tz.max(1) >= p[:, 2].min() - 0.01) & (tz.min(1) <= p[:, 2].max() + 0.01)]
+        return r, ray_hits(orig, dirs, sp, st), dirs
+    r_sky, n_sky, _d = radial(sky_pts[sel], sky_axis, sky_surface)
+    r_sf, n_sf, dirs = radial(pts[sel], sf_axis, sf_surface)
+    gap = (r_sky - n_sky) * scale
+    ok = np.isfinite(n_sky) & np.isfinite(n_sf) & (gap < -depth)
+    if not ok.any():
+        return pts, mask
+    target = np.maximum(n_sf + gap, 0.3 * n_sf)
+    step = np.where(ok, np.minimum(target - r_sf, 0.0), 0.0)        # only inwards
+    out = pts.copy()
+    out[sel] += dirs * step[:, None]
+    mask[sel[ok]] = True
+    soft = smooth_moves(pts, out, tris, rounds=2)
+    soft[mask] = out[mask]
+    return soft, mask
+
+
 BURY = 0.003     # m: gear deeper than this inside Skyrim's neck / head stays inside Starfield's
 
 
@@ -1016,6 +1055,8 @@ def shoulder_drop(pts: np.ndarray, field, axis, clav_z: float) -> np.ndarray:
 
 OWN_WEIGHT_BLEND = 0.03   # m above the clavicles over which gear goes from the body's weights to its own
 COLLAR_SECTORS = 8
+NECKLINE_R = 0.085       # m from the neck axis: lowered collar this close may stay inside the body (the shoulders
+#                          beyond are pushed back out, or skin showed through them)
 COLLAR_RADIUS = 0.13     # m from the neck axis: gear counted as the collar
 COLLAR_DEPTH = (-0.10, 0.0)   # m: clamp of the collar's height correction (never raised)
 
@@ -1331,6 +1372,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 pts = np.where((np.linalg.norm(pushed_ - before, axis=1) > 0)[:, None], pushed_, pts)
             pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=bt_)
         collar_mm = None
+        collar_keep = np.zeros(len(pts), bool)
         if heads is not None and not skin and sky_gap is not None and sky_clav_z is not None and sf_clav_z is not None \
                 and wrap is not None and len(sf_body_pts):
             bt_ = np.asarray(sf_body_tris, int).reshape(-1, 3)
@@ -1343,8 +1385,17 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             if cfield is not None:
                 collar_mm = (cfield * 1000).round(0).tolist()
                 lowered_pts = shoulder_drop(pts, cfield, wrap[3][:2], sf_clav_z)
-                pts = smooth_moves(pts, lowered_pts, s.triangles, rounds=2)
-                pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=bt_)
+                lowered_pts = smooth_moves(pts, lowered_pts, s.triangles, rounds=2)
+                # what came down stays down, even where that is inside the body: the neckline is where the cloth
+                # goes into the skin, as Skyrim's (2026-11-07, measured on the owner's Farengar meshes: the field asked
+                # for 2-3.4 cm down all round, push-out put it straight back up the neck)
+                came_down = ((pts[:, 2] - lowered_pts[:, 2]) > 1e-4) & (
+                    np.hypot(lowered_pts[:, 0] - wrap[3][0], lowered_pts[:, 1] - wrap[3][1]) < NECKLINE_R)
+                pts = lowered_pts
+                rest = np.nonzero(~came_down)[0]
+                if len(rest):
+                    pts[rest], _again = push_out(pts[rest], sf_body_pts, sf_nrm, gap, tris=bt_)
+                collar_keep = came_down
         draped, drape_max = 0, 0.0
         if drape_on and wrap is not None and not skin and sky_clav_z is not None and len(sky_bt):
             pts, draped, drape_max = drape(s.points, pts, s.triangles, (sky_bp, sky_bt),
@@ -1357,8 +1408,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         if wrap_on and wrap is not None and not skin:
             pts, wrapped, wrap_max = neck_wrap(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
             if wrapped and len(sf_body_pts):
-                pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,
-                                       tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
+                rest = np.nonzero(~collar_keep)[0]
+                pts[rest], _again = push_out(pts[rest], sf_body_pts, sf_nrm, gap,
+                                             tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         buried = 0
         if not skin and sky_gap is not None and sky_clav_z is not None and len(sf_body_pts):
             mask = np.isfinite(sky_gap) & (sky_gap < -BURY) & (np.asarray(s.points)[:, 2] > sky_clav_z)
@@ -1377,8 +1429,15 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 pts = smooth_moves(pts, moved_, s.triangles, rounds=2)
                 pts[mask] = head_mapped
             if mask.any():
+                keep_ = pts.copy()
                 pts, buried = bury(pts, sky_gap, mask, s.triangles, sf_body_pts, sf_body_tris, sf_nrm, gap,
                                    rep.get("global_scale", 1.0))
+                lowered_only = collar_keep & ~mask
+                pts[lowered_only] = keep_[lowered_only]          # bury's push-out must not lift the neckline
+        inside_n = 0
+        if wrap_on and wrap is not None and not skin:
+            pts, ins = neck_inside(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
+            inside_n = int(ins.sum())
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -1423,7 +1482,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried,
+            "buried": buried, "inside_neck": inside_n,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm,
