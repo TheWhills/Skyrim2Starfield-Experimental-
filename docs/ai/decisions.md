@@ -1962,3 +1962,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   first placed where Skyrim has it relative to the head (crown and neck axis lined up), then bury: the x=0 cut now
   runs straight across inside the neck as Skyrim's (it had run up into the head). Owner's drawn line (front low on
   the chest, back over the base of the neck) matches.
+- 2026-11-07 (Claude, armor) Head weights for the collar off by default (gear_fit --head-weights turns them on): owner,
+  looking at Skyrim: the cowl sits low on the outfit and does not follow the neck or head at all. Gear near the neck
+  copies the body's / neck part's skin weights, like the skin under it.

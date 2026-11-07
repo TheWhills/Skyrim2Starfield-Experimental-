@@ -460,8 +460,11 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
 
 
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
-        size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=()):
-    """(shapes in mesh space with tangents, binds, report)."""
+        size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
+        head_weights: bool = False):
+    """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
+    weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
+    neck or head; only the body's and neck part's weights are copied)."""
     world = npc_hair.skeleton_world(hkx_to_af.vanilla_file(npc_hair.SF_SKELETON, sf_data)[0])
     pts, tris, body_binds, body_w = starfield_body(sf_data, female)
     frame = gearfit.mesh_frame(body_binds, world)
@@ -477,7 +480,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     try:
         h_pts, h_tris, h_w = starfield_part(sf_data, head_path, world)
         sf_head_full = (h_pts, h_tris)
-        if len(h_w) == len(h_pts):
+        if head_weights and len(h_w) == len(h_pts):
             # weights also from the whole head: the collar's top takes the head's own neck-skin weights (2026-11-06:
             # with only the neck-weighted part, the collar had no C_Head and stayed facing forward when the head turned)
             weight_src = (np.concatenate([surf_pts, h_pts]), np.concatenate([surf_tris, h_tris + len(surf_pts)]),
@@ -650,6 +653,8 @@ def main(argv=None):
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
+    ap.add_argument("--head-weights", action="store_true",
+                    help="gear near the head takes the whole head's weights (turns with the head)")
     ap.add_argument("--morph-test", action="store_true",
                     help="also write [zero morph], [vanilla body] and [body our morph] test armors (slider spikes)")
     ap.add_argument("--test-variants", action="store_true",
@@ -692,7 +697,7 @@ def main(argv=None):
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
                              () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate,
                              sky._read(bsa.norm(SKY_HEADS[female])),
-                             () if a.no_skin_piece else sorted(body_skin_shapes(textures)))
+                             () if a.no_skin_piece else sorted(body_skin_shapes(textures)), a.head_weights)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
