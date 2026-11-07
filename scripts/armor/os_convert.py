@@ -46,7 +46,9 @@ def outfit_armor(esm: str, npc_edid: str) -> dict:
     npcs = {fid: skyrimnpc.parse_npc(s, fid) for _t, _h, s, fid in sfplugin.records(esm, [b"NPC_"])}
     n = next((v for v in npcs.values() if v["edid"].lower() == npc_edid.lower()), None)
     if n is None:
-        raise SystemExit(f"no NPC {npc_edid} in {esm}")
+        near = sorted(v["edid"] for v in npcs.values() if npc_edid.lower() in v["edid"].lower())[:20]
+        hint = (" - EditorIDs containing it: " + ", ".join(near)) if near else ""
+        raise SystemExit(f"no NPC {npc_edid} in {esm}{hint}")
     races = {fid: sfplugin.edid(s) for _t, _h, s, fid in sfplugin.records(esm, [b"RACE"])}
     recs = {fid: (t, s) for t, _h, s, fid in sfplugin.records(esm, [b"OTFT", b"LVLI", b"ARMO"])}
     items = []

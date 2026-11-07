@@ -63,6 +63,9 @@ class SkyrimSideTests(unittest.TestCase):
             self.assertEqual(m[0]["mesh"], "meshes\\armor\\cuirassf_1.nif")          # weight slider: the _1 file
             with self.assertRaises(SystemExit):
                 C.outfit_armor(p, "Nobody")
+            with self.assertRaises(SystemExit) as cm:
+                C.outfit_armor(p, "Hadv")
+            self.assertIn("EditorIDs containing it: Hadvar", str(cm.exception))
             h = C.outfit_armor(p, "Hadvar")
             self.assertEqual(h["armor"], [0x910, 0x911])                  # past the list's empty first entry
             self.assertEqual(h["skipped"], ["00000998 (not an armor or leveled list)"])     # reported
