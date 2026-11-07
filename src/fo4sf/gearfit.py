@@ -313,7 +313,9 @@ def skirt_shares(sky_bone: str) -> List[Tuple[str, float]]:
     return list(SKIRT_SHARES[m.group(1)]) if m else []
 
 
-SKIRT_THIGH = (0.2, 0.8)     # thigh share at the skirt's top (the hips) and at knee height
+SKIRT_THIGH = (0.3, 0.9)     # thigh share at the skirt's top (the hips) and at knee height; it rises with the square
+#                              root of the way down (2026-11-07, owner: in a wide combat stance the thighs still came
+#                              through the middle of the skirt with (0.2, 0.8) rising evenly)
 
 
 def skirt_gradient(points: np.ndarray, joints: Dict[str, np.ndarray]):
@@ -328,7 +330,7 @@ def skirt_gradient(points: np.ndarray, joints: Dict[str, np.ndarray]):
     top, knee = pel[2], (lc[2] + rc[2]) / 2
     p = np.asarray(points, float)
     t = np.clip((top - p[:, 2]) / max(top - knee, 1e-6), 0.0, 1.0)
-    thigh = SKIRT_THIGH[0] + (SKIRT_THIGH[1] - SKIRT_THIGH[0]) * t
+    thigh = SKIRT_THIGH[0] + (SKIRT_THIGH[1] - SKIRT_THIGH[0]) * np.sqrt(t)
     span = lt[0] - rt[0]
     f = np.clip((p[:, 0] - rt[0]) / (span if abs(span) > 1e-6 else 1e-6), 0.0, 1.0)   # 1: left side
     out = []

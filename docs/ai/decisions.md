@@ -2002,3 +2002,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-07 (Claude, armor) Owner's side views (Skyrim vs ours): Skyrim's in-game skirt leaves room in front of the
   thigh and tilts out a little; ours lay on it. hang_skirt now keeps 35 % of the skirt's own outward flare on top
   of the 4 cm gap, both growing from nothing over the first 15 cm below the skirt's top (no step at the belt).
+- 2026-11-07 (Claude, armor) Hadvar skirt shape approved by the owner; in the wide combat stance the thighs still came
+  through the middle of the skirt. Skirt gradient now 0.3 -> 0.9 thigh share, rising with the square root of the way
+  down (the middle follows the legs sooner).

@@ -419,10 +419,10 @@ class SkirtGradientTests(unittest.TestCase):
         j = {PELV: at([0, 0, 1.0]), "NPC L Thigh [LThg]": at([0.1, 0, 0.95]), "NPC R Thigh [RThg]": at([-0.1, 0, 0.95]),
              "NPC L Calf [LClf]": at([0.1, 0, 0.5]), "NPC R Calf [RClf]": at([-0.1, 0, 0.5])}
         w = G.skirt_gradient(np.array([[0, 0, 1.0], [0.15, 0, 0.5], [0, 0.1, 0.75]]), j)
-        self.assertAlmostEqual(dict(w[0])["C_Hips"], 0.8)
-        self.assertAlmostEqual(dict(w[0])["L_Thigh"], 0.1)
+        self.assertAlmostEqual(dict(w[0])["C_Hips"], 1 - G.SKIRT_THIGH[0])
+        self.assertAlmostEqual(dict(w[0])["L_Thigh"], G.SKIRT_THIGH[0] / 2)
         self.assertEqual(sorted(dict(w[1])), ["C_Hips", "L_Thigh"])            # left side, at the knee
-        self.assertAlmostEqual(dict(w[1])["L_Thigh"], 0.8)
+        self.assertAlmostEqual(dict(w[1])["L_Thigh"], G.SKIRT_THIGH[1])
         self.assertAlmostEqual(dict(w[2])["L_Thigh"], dict(w[2])["R_Thigh"])   # front centre: both thighs
         self.assertIsNone(G.skirt_gradient(np.zeros((1, 3)), {}))
 
