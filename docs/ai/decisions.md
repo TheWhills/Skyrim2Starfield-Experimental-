@@ -2012,3 +2012,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the cloth meets the skin, as Skyrim's (offline: back of the neck shows again). Also neck_inside (horizontal
   inside-the-neck gap kept, final step), the collar drop printed, and part file names keep ':N' (Farengar's
   boots:0 / boots:1 both wrote boots.nif).
+- 2026-11-07 (Claude, armor) Farengar: the new "neck steps" report showed wrap False: no Skyrim neck joint among the
+  fitted shapes' bones (robe and body have no neck-weighted vertices), so collar height, neck_wrap, neck_inside and
+  the hidden-part placement were all skipped and push-out stretched the beige collar trim up the neck. wrap_params
+  now falls back to the head joint (same axis).

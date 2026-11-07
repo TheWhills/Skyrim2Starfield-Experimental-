@@ -451,6 +451,16 @@ class HangSkirtTests(unittest.TestCase):
         self.assertLess(out[32, 2], 0.75)                                    # longer than the flared hem
 
 
+class WrapParamsTests(unittest.TestCase):
+    def test_head_joint_stands_in_for_the_neck(self):
+        tri = (np.eye(3), np.array([[0, 1, 2]]))
+        j = {"NPC L Clavicle [LClv]": at([0.05, 0, 1.4]), "NPC Head [Head]": at([0, 0.01, 1.6])}
+        w = {"L_Clavicle": at([0.05, 0, 1.38]), "C_Head": at([0, 0.02, 1.58])}
+        r = G.wrap_params((tri, tri), np.eye(3), [[0, 1, 2]], np.eye(3), [[0, 1, 2]], j, w)
+        self.assertIsNotNone(r)
+        self.assertTrue(np.allclose(r[2], [0, 0.01, 1.6]) and np.allclose(r[3], [0, 0.02, 1.58]))
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

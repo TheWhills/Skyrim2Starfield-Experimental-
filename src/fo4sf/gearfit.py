@@ -723,7 +723,11 @@ def wrap_params(heads, sky_bp, sky_bt, sf_pts, sf_tris, joints, sf_world):
     """neck_wrap's (Skyrim surface, Starfield surface, axes, clavicle heights): the bodies plus the whole heads."""
     sky_clav = [joints[b][:3, 3] for b in ("NPC L Clavicle [LClv]", "NPC R Clavicle [RClv]") if b in joints]
     sf_clav = [sf_world[b][:3, 3] for b in ("L_Clavicle", "R_Clavicle") if b in sf_world]
-    if heads is None or "NPC Neck [Neck]" not in joints or "C_Neck" not in sf_world or not sky_clav or not sf_clav:
+    # the neck joint, else the head joint (same x, y; 2026-11-07, Farengar: his robe and body have no neck-weighted
+    # vertices, so the Skyrim neck joint was unknown and every neck step was skipped)
+    sky_n = next((joints[b] for b in ("NPC Neck [Neck]", "NPC Head [Head]") if b in joints), None)
+    sf_n = next((sf_world[b] for b in ("C_Neck", "C_Head") if b in sf_world), None)
+    if heads is None or sky_n is None or sf_n is None or not sky_clav or not sf_clav:
         return None
     (sh_p, sh_t), (fh_p, fh_t) = heads
 
@@ -732,7 +736,7 @@ def wrap_params(heads, sky_bp, sky_bt, sf_pts, sf_tris, joints, sf_world):
         return (np.concatenate([p1, p2]), np.concatenate([np.asarray(t1, int).reshape(-1, 3),
                                                           np.asarray(t2, int).reshape(-1, 3) + len(p1)]))
     return (join(sky_bp, sky_bt, sh_p, sh_t), join(sf_pts, sf_tris, fh_p, fh_t),
-            joints["NPC Neck [Neck]"][:3, 3], sf_world["C_Neck"][:3, 3],
+            sky_n[:3, 3], sf_n[:3, 3],
             float(np.mean([p[2] for p in sky_clav])), float(np.mean([p[2] for p in sf_clav])))
 
 
