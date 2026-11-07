@@ -1965,3 +1965,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-07 (Claude, armor) Head weights for the collar off by default (gear_fit --head-weights turns them on): owner,
   looking at Skyrim: the cowl sits low on the outfit and does not follow the neck or head at all. Gear near the neck
   copies the body's / neck part's skin weights, like the skin under it.
+- 2026-11-07 (Claude, armor) After collar_height (owner): much better; left: the cowl stands out further than Skyrim's
+  (the x=0 cut showed ours 1-2 cm forward of Skyrim's at the throat: Starfield's throat sits further back) and its
+  side rises when the head turns. Changes: neck_wrap back on by default (keeps Skyrim's horizontal gap from the
+  neck; offline on the 4th debug meshes it brought the front onto Skyrim's line); above the Skyrim clavicles gear
+  keeps its own Skyrim weights instead of the neck skin's (blended in over 3 cm), so it moves like Skyrim's.

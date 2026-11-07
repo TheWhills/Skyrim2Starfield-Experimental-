@@ -255,6 +255,16 @@ class FitTests(unittest.TestCase):
         res2 = G.fit([gear], [body], world, sp, np.array(st),
                      weight_src=(sp, np.array(st), [[("C_Head", 1.0)]] * len(sp)))
         self.assertEqual({b for vw in res2.shapes[0].weights for b, _ in vw}, {"C_Head"})
+        # clavicles known: gear above them keeps its own weights, body weights below
+        j2 = dict(joints, **{"NPC L Clavicle [LClv]": at([0.05, 0, 1.20]), "NPC R Clavicle [RClv]": at([-0.05, 0, 1.20])})
+        body2 = G.SkyShape(b"Body", bp, bn, [(0.0, 0.0)] * len(bp), bt, bones, w, j2)
+        w2 = dict(world, L_Clavicle=at([0.05, 0, 1.20]), R_Clavicle=at([-0.05, 0, 1.20]))
+        res4 = G.fit([gear], [body2], w2, sp, np.array(st), sf_body_weights=[[("C_Chest", 1.0)]] * len(sp))
+        g4 = res4.shapes[0]
+        hi = np.asarray(gear.points)[:, 2] > 1.23
+        lo = np.asarray(gear.points)[:, 2] < 1.20
+        self.assertTrue(all("C_Chest" not in dict(g4.weights[i]) for i in np.nonzero(hi)[0]))
+        self.assertTrue(any("C_Chest" in dict(g4.weights[i]) for i in np.nonzero(lo)[0]))
         # heads given: chin_clearance is not part of the fit any more (it dropped the cowl's back)
         top = gp[:, 2].max()
         cap = lambda z: (np.array([[-1, -1, z], [1, -1, z], [0, 1, z]]), [(0, 1, 2)])   # noqa: E731
