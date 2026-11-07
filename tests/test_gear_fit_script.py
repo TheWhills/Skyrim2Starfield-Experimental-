@@ -293,3 +293,29 @@ class ObjTests(unittest.TestCase):
             self.assertIn("vt 0.25000 1.00000", txt)
             self.assertIn("f 1/1 2/2 3/3", txt)
             self.assertEqual(gear_fit.debug_textures(d, {"a": ["x.dds"]}, lambda p: b"", ""), [])
+
+
+class HandMorphTests(unittest.TestCase):
+    def test_near_hands_factor(self):
+        import numpy as np
+        f = gear_fit.near_hands_factor(np.array([[0, 0, 0.01], [0, 0, 0.055], [0, 0, 0.2]]), np.zeros((1, 3)))
+        self.assertEqual(f.round(2).tolist(), [0.0, 0.5, 1.0])
+        self.assertEqual(gear_fit.near_hands_factor(np.zeros((2, 3)), None).tolist(), [1.0, 1.0])
+
+    def test_skin_overlap_limited_by_distance(self):
+        import numpy as np
+        from fo4sf import skyrimhair
+        xs = np.linspace(0, 0.4, 41)                       # 1 cm steps; gear over x < 0.2
+        body = np.array([[x, y, 0.0] for x in xs for y in (0.0, 0.05)])
+        tris = []
+        for i in range(40):
+            a, b = 2 * i, 2 * i + 2
+            tris += [(a, b, a + 1), (b, b + 1, a + 1)]
+        gp = np.array([[-0.05, -0.05, 0.02], [0.195, -0.05, 0.02], [-0.05, 0.1, 0.02], [0.195, 0.1, 0.02]])
+        gear = skyrimhair.HairShape(b"Coat", gp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [], [(0, 1, 2),
+                                    (1, 3, 2)], [], -1, -1, -1)
+        w = [[("C_Chest", 1.0)]] * len(body)
+        _sh, used = gear_fit.skin_piece(body, tris, [(0, 0)] * len(body), w, body, reach=0.5, gear=[gear],
+                                        margin=10, whole=True)
+        x0 = min(float(body[i][0]) for i in used)
+        self.assertGreaterEqual(x0, 0.2 - gear_fit.COVER_MARGIN_M - 0.011)   # not ten rings, about 2 cm

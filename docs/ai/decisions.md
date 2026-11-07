@@ -2038,3 +2038,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   through the robe at every weight. The copy reached them (11 cm full, 17 cm blend): now 9 cm full, 13 cm blend
   (offline: ring still Skyrim's, front trim slightly wider). Owner also reports a hand clipping on the thinnest body;
   not yet located.
+- 2026-11-07 (Claude, armor) Farengar (owner): skin through the shoulders and the beige trim at all weights, and on
+  the thinnest body the hands through the sleeve cuffs. (1) Skin piece overlap under the gear's edges: one ring,
+  then at most 2 cm from visible skin (supported: five rings on the shoulders' large triangles reached the shoulder
+  tops from the neck opening, under robe 5 mm off the body). (2) Gear within 3 cm of the hands mesh takes no
+  body-slider move, full by 8 cm (the forearm shrinks under Thin, the separate hands mesh does not).

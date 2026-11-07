@@ -117,6 +117,7 @@ SKIN_SHAPE = b"S2S_Skin"
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
 SKIN_UNDER_DEPTH = 0.035   # m: for the whole-body skin piece: skin under looser gear (a hanging skirt) is kept
+COVER_MARGIN_M = 0.02   # m: and at most this far from the visible skin
 COVER_MARGIN = 5        # rings of covered vertices kept along the edge of the visible skin (overlap under the gear;
 #                         2026-11-07: with 2, a strip of bare body showed between the skin piece and the sleeve hems)
 
@@ -165,11 +166,25 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
         cov = covered_by(body_skel, bn, gear, depth) & keep
         visible = keep & ~cov
         grow = visible.copy()
+        ring1 = None
         for _ in range(margin):
             touch = np.zeros(len(body_skel), bool)
             on = grow[t].any(1)
             touch[t[on].reshape(-1)] = True
             grow |= touch & keep
+            if ring1 is None:
+                ring1 = grow.copy()          # always one ring: the edge triangles stay whole
+        if visible.any():
+            # the overlap also limited by distance (2026-11-07, Farengar: on the large triangles of the shoulders,
+            # five rings of overlap from the neck reached the shoulder tops, which then showed through the robe)
+            vis_p = body_skel[visible]
+            near = np.zeros(len(body_skel), bool)
+            cand = np.nonzero(grow & ~visible)[0]
+            for c0 in range(0, len(cand), 512):
+                q = body_skel[cand[c0:c0 + 512]]
+                d2 = ((q[:, None, :] - vis_p[None, :, :]) ** 2).sum(-1).min(1)
+                near[cand[c0:c0 + 512]] = d2 < COVER_MARGIN_M ** 2
+            grow = visible | near | (ring1 if ring1 is not None else visible)
         keep = grow
     t = t[keep[t].all(1)]
     used = np.unique(t)
@@ -587,6 +602,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
+    if hand_pts is not None:          # the hands in the body mesh's space, for the morphs
+        res.report["_hand_pts"] = (np.asarray(hand_pts) - frame[:3, 3]) @ np.linalg.inv(frame[:3, :3]).T
     res.report["collar_anchor_m"] = None if collar_anchor is None else [np.round(c, 3).tolist() for c in collar_anchor]
     res.report["_debug"] = (surf_pts, surf_tris, gear, sky_body, sky_head_full, sf_head_full)
     return shapes, binds, res.report
@@ -626,7 +643,25 @@ def capped(d: dict) -> dict:
     return out
 
 
-def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None, stats=None) -> dict:
+HAND_KEEP = (0.03, 0.08)   # m from the hands mesh: no body-slider move inside the first, full by the second
+
+
+def near_hands_factor(points: np.ndarray, hand_pts) -> np.ndarray:
+    """Per point 0..1: how much of the body-slider move to keep near the hands (2026-11-07, owner: on the thinnest
+    body the robe's cuffs shrank with the forearm onto the hands, which do not shrink, and the hands came through)."""
+    if hand_pts is None or not len(hand_pts):
+        return np.ones(len(points))
+    h = np.asarray(hand_pts, float)
+    out = np.empty(len(points))
+    for c0 in range(0, len(points), 512):
+        q = np.asarray(points[c0:c0 + 512], float)
+        d = np.sqrt(((q[:, None, :] - h[None, :, :]) ** 2).sum(-1).min(1))
+        out[c0:c0 + 512] = np.clip((d - HAND_KEEP[0]) / (HAND_KEEP[1] - HAND_KEEP[0]), 0.0, 1.0)
+    return out
+
+
+def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None, stats=None,
+                hand_pts=None) -> dict:
     """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders. A shape
     written with back faces has its vertices twice (copies after the originals): the copies get the same deltas.
     Deltas over MORPH_MAX are cut to it; stats (a dict) gets morph_stats per shape, before the cut."""
@@ -638,6 +673,9 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
             d, extra = skin_morph(body_morph, skin_used)
         else:
             d, extra = gearfit.morph_deltas(np.asarray(sh.positions), body_pts, body_morph)
+            f = near_hands_factor(np.asarray(sh.positions), hand_pts)
+            if (f < 1).any():
+                d = {k: {i: tuple(np.asarray(x) * f[i]) for i, x in v.items()} for k, v in d.items()}
         if stats is not None:
             stats[name] = morph_stats(d)
         d = capped(d)
@@ -779,6 +817,7 @@ def main(argv=None):
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
     skin_used = rep.pop("_skin_used", None)
+    hand_mesh_pts = rep.pop("_hand_pts", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -872,7 +911,7 @@ def main(argv=None):
             mstats = {}
             for sh in worn:
                 morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], body_pts, body_morph, doubled,
-                                          skin_used, mstats))
+                                          skin_used, mstats, hand_mesh_pts))
             rep["morph_stats"] = mstats
             for n_, st in mstats.items():
                 print(f"  morph {n_}: " + ", ".join(f"{k} {v['vertices']} v max {v['max_mm']} mm"
