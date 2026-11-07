@@ -1936,3 +1936,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   only moves gear that was outside. chin_clearance taken out of the fit (it dropped the cowl's back 7.6 cm under the
   skull, owner's side view: front and back at different heights). Debug export: whole heads added
   (sf_head.obj, skyhead_full.obj) and file names made Windows-safe.
+- 2026-11-07 (Claude, armor) Collar measured on the owner's new fit debug meshes (whole heads, crowns aligned,
+  Skyrim times 0.9365; verified): relative to the crown, Starfield's shoulders lie 3-5 cm lower than Skyrim's at the
+  same distance from the neck (a longer visible neck), and our cowl's sides sat 2.5-3.5 cm closer to the neck and
+  1.5-2 cm higher than Skyrim's, so its sides climbed the neck like a turtleneck; the buried top was fine (all 118
+  buried vertices inside). New step drape (before neck_wrap and bury): gear above the Skyrim clavicles with an
+  upward-facing Skyrim body surface within 10 cm straight below keeps its direction and distance from the neck axis
+  (times scale) and its height above that surface over Starfield's; moves over 10 cm are refused (another surface
+  below). Offline on the same meshes: the cowl's half-width at 22-25 cm below the crown went from 103-127 mm back to
+  119-141 mm (Skyrim 142-193). unresolved in game.

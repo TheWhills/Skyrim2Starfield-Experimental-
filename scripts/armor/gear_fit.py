@@ -847,7 +847,9 @@ def main(argv=None):
                  if r.get('chin_lowered') else "")
               + (f", {r['neck_wrapped']} wrapped round the neck (up to {r['neck_wrap_mm']} mm)"
                  if r.get('neck_wrapped') else "")
-              + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else ""))
+              + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else "")
+              + (f", {r['draped']} laid on the shoulders as in Skyrim (up to {r['drape_mm']} mm)"
+                 if r.get('draped') else ""))
         if r.get("top_bones") and not r.get("skin_piece"):
             print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():

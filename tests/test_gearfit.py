@@ -333,6 +333,36 @@ class BuryTests(unittest.TestCase):
         self.assertTrue((r[~mask] >= 0.05 + G.GAP - 1e-3).all())  # the rest still outside
 
 
+class DrapeTests(unittest.TestCase):
+    @staticmethod
+    def plane(z, half=0.3, n=7):
+        g = np.linspace(-half, half, n)
+        pts = np.array([[x, y, z] for y in g for x in g])
+        tris = []
+        for j in range(n - 1):
+            for i in range(n - 1):
+                a = j * n + i
+                tris += [(a, a + 1, a + n), (a + 1, a + n + 1, a + n)]
+        return pts, np.array(tris)
+
+    def test_surface_below(self):
+        p, t = self.plane(1.0)
+        h, nz = G.surface_below(np.array([[0.05, 0.02, 1.2], [0.0, 0.0, 0.9], [2.0, 0, 1.2]]), p, t)
+        self.assertAlmostEqual(h[0], 1.0)
+        self.assertAlmostEqual(nz[0], 1.0)
+        self.assertTrue(np.isnan(h[1]) and np.isnan(h[2]))
+
+    def test_cowl_follows_lower_shoulders(self):
+        sky_sh = self.plane(1.40)                                 # Skyrim shoulders
+        sf_sh = self.plane(1.36)                                  # Starfield's 4 cm lower
+        sky = np.array([[0.10, 0.0, 1.43], [-0.12, 0.02, 1.44], [0.10, 0.0, 1.60]])   # 3-4 cm up; one far above
+        fitted = sky * [0.8, 0.8, 1.0]                            # where the fit left it: pulled in, same height
+        out, n, _mx = G.drape(sky, fitted, [], sky_sh, sf_sh, np.zeros(3), np.zeros(3), 1.35)
+        self.assertEqual(n, 2)
+        self.assertTrue(np.allclose(out[:2], sky[:2] - [0, 0, 0.04], atol=0.004))   # same spot, 4 cm lower
+        self.assertTrue(np.allclose(out[2], fitted[2]))                              # too far above: kept
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

@@ -711,6 +711,75 @@ def bury(pts: np.ndarray, sky_gap: np.ndarray, mask: np.ndarray, tris, sf_pts: n
     return soft, int((step < -1e-4).sum())
 
 
+DRAPE_REACH = (0.06, 0.10)   # m above the shoulders: fully draped inside the first, not past the second
+DRAPE_MAX = 0.10             # m: a longer move means the surfaces below do not correspond
+DRAPE_UP = 0.3               # a surface counts as shoulder top when its normal's z is above this
+
+
+def surface_below(pts: np.ndarray, mesh_pts: np.ndarray, mesh_tris, chunk: int = 128):
+    """Per point, the first mesh surface straight below it: (height, the triangle normal's |z|); nan, 0 if none."""
+    pts = np.asarray(pts, float)
+    h, nz = np.full(len(pts), np.nan), np.zeros(len(pts))
+    t = np.asarray(mesh_tris, int).reshape(-1, 3)
+    if not len(pts) or not len(t):
+        return h, nz
+    a, b, c = (np.asarray(mesh_pts, float)[t[:, k]] for k in range(3))
+    n = np.cross(b - a, c - a)
+    tz = np.abs(n[:, 2]) / np.maximum(np.linalg.norm(n, axis=1), 1e-12)
+    v0, v1 = (b - a)[:, :2], (c - a)[:, :2]
+    den = v0[:, 0] * v1[:, 1] - v1[:, 0] * v0[:, 1]
+    ok = np.abs(den) > 1e-12
+    a, b, c, v0, v1, den, tz = a[ok], b[ok], c[ok], v0[ok], v1[ok], den[ok], tz[ok]
+    for i in range(0, len(pts), chunk):
+        p = pts[i:i + chunk]
+        q = p[:, None, :2] - a[None, :, :2]
+        u = (q[..., 0] * v1[:, 1] - v1[:, 0] * q[..., 1]) / den
+        v = (v0[:, 0] * q[..., 1] - q[..., 0] * v0[:, 1]) / den
+        z = a[None, :, 2] + u * (b[None, :, 2] - a[None, :, 2]) + v * (c[None, :, 2] - a[None, :, 2])
+        hit = (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (z <= p[:, None, 2])
+        zz = np.where(hit, z, -np.inf)
+        j = zz.argmax(1)
+        got = np.isfinite(zz[np.arange(len(p)), j])
+        h[i:i + chunk] = np.where(got, zz[np.arange(len(p)), j], np.nan)
+        nz[i:i + chunk] = np.where(got, tz[j], 0.0)
+    return h, nz
+
+
+def drape(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surface, sky_axis, sf_axis, sky_base: float,
+          scale: float = 1.0, reach=DRAPE_REACH):
+    """Gear lying on the shoulders round the neck placed on Starfield's shoulders as on Skyrim's (2026-11-07,
+    measured on the owner's fit debug meshes: relative to the crown, Starfield's shoulders start 1.5-3 cm lower and
+    narrower than Skyrim's; the cowl kept its height and was pulled in round the neck, a turtleneck, where Skyrim's
+    lies out on the trapezius 4-6 cm further from the neck). For each gear vertex above the Skyrim clavicles with an
+    upward-facing Skyrim body surface straight below it within reach: its direction and distance (times scale) from
+    the neck axis and its height above that surface are kept over Starfield's (same direction and distance from its
+    neck axis, height above its surface there). Blended out with height; smoothed. Returns (points, moved, largest
+    move in m)."""
+    sky_pts, pts = np.asarray(sky_pts, float), np.asarray(pts, float)
+    sel = np.nonzero(sky_pts[:, 2] > sky_base)[0]
+    if not len(sel):
+        return pts, 0, 0.0
+    sp = sky_pts[sel]
+    h_sky, nz_sky = surface_below(sp, *sky_surface)
+    above = (sp[:, 2] - h_sky) * scale
+    d = (sp[:, :2] - np.asarray(sky_axis, float)[:2]) * scale
+    xy = np.asarray(sf_axis, float)[:2] + d
+    probe = np.column_stack([xy, np.maximum(pts[sel, 2], sp[:, 2]) + 0.05])
+    h_sf, nz_sf = surface_below(probe, *sf_surface)
+    ok = np.isfinite(h_sky) & np.isfinite(h_sf) & (nz_sky > DRAPE_UP) & (nz_sf > DRAPE_UP) & (above > -0.01)
+    w = np.clip((reach[1] - above) / (reach[1] - reach[0]), 0.0, 1.0) * ok
+    w *= np.clip((sp[:, 2] - sky_base) / 0.03, 0.0, 1.0)
+    target = np.column_stack([xy, h_sf + np.where(ok, above, 0.0)])
+    far = ~ok | (np.linalg.norm(np.where(ok[:, None], target, pts[sel]) - pts[sel], axis=1) > DRAPE_MAX)
+    w = np.where(far, 0.0, w)            # another surface below (an arm), not the shoulder: left alone
+    move = np.zeros_like(pts)
+    move[sel] = (np.where(ok[:, None], target, pts[sel]) - pts[sel]) * w[:, None]
+    if not (np.linalg.norm(move, axis=1) > 1e-4).any():
+        return pts, 0, 0.0
+    out = smooth_moves(pts, pts + move, tris, rounds=2)
+    return out, int((np.linalg.norm(move, axis=1) > 1e-4).sum()), float(np.linalg.norm(move, axis=1).max())
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -926,6 +995,14 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         # chin_clearance is not used (2026-11-07: it dropped the cowl's back 7.6 cm under the skull while its front
         # stayed; the real difference was the buried top, see bury)
         lowered, drop = 0, 0.0
+        draped, drape_max = 0, 0.0
+        if wrap is not None and not skin and sky_clav_z is not None and len(sky_bt):
+            pts, draped, drape_max = drape(s.points, pts, s.triangles, (sky_bp, sky_bt),
+                                           (sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3)), wrap[2],
+                                           wrap[3], sky_clav_z, rep.get("global_scale", 1.0))
+            if draped and len(sf_body_pts):
+                pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,
+                                       tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         wrapped, wrap_max = 0, 0.0
         if wrap is not None and not skin:
             pts, wrapped, wrap_max = neck_wrap(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
@@ -963,6 +1040,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
             "buried": buried,
+            "draped": draped, "drape_mm": round(drape_max * 1000, 1),
             "top_bones": top_bones(s.points, w),
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}
