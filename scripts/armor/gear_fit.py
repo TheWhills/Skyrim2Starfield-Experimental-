@@ -832,6 +832,11 @@ def main(argv=None):
         info = rep.get("bones", {}).get(b, {})
         if info:
             print(f"{b}: height {info.get('height_mm')} mm, neck height ratio {info.get('neck_height_ratio', '-')}")
+    if rep.get("shoulder_drop_mm"):
+        d = rep["shoulder_drop_mm"]
+        n = len(d)
+        print(f"shoulders: Starfield's vs the fitted Skyrim body round the neck (mm): front {d[0]}, left {d[n // 4]}, "
+              f"back {d[n // 2]}, right {d[3 * n // 4]}; gear near the neck moved by that")
     print(f"skeletons: joint rms {rep['joint_rms_m'] * 1000:.0f} mm after the overall fit, "
           f"scale {rep['global_scale']:.4f}")
     b = rep.get("body", {})

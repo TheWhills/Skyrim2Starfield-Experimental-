@@ -780,6 +780,60 @@ def drape(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surface, s
     return out, int((np.linalg.norm(move, axis=1) > 1e-4).sum()), float(np.linalg.norm(move, axis=1).max())
 
 
+RELAX_ROUNDS = 8      # rounds of smoothing of the fit's total moves (neighbour averaging over the mesh)
+SHOULDER_RADII = (0.09, 0.11, 0.13)     # m from the neck axis where the shoulder heights are compared
+SHOULDER_ANGLES = 24
+SHOULDER_DROP_LIMITS = (-0.08, 0.03)    # m
+SHOULDER_REACH = (0.16, 0.22)           # m from the neck axis: full drop inside the first, none past the second
+SHOULDER_FADE = (-0.02, 0.02)           # m relative to the clavicles: no drop below the first, full above the second
+
+
+def shoulder_drop_field(sky_pts: np.ndarray, sky_tris, sf_pts: np.ndarray, sf_tris, axis, top: float):
+    """Per direction round the neck (SHOULDER_ANGLES, from +y towards +x), how much lower (negative) Starfield's
+    shoulder top lies than the fitted Skyrim body's, compared straight below points SHOULDER_RADII from the neck
+    axis (upward-facing surfaces only; median over the radii; missing directions filled from their neighbours;
+    clamped; smoothed round). axis: the neck joint (x, y); top: a height above both shoulders. None if unmeasured."""
+    a = np.arange(SHOULDER_ANGLES) * 2 * np.pi / SHOULDER_ANGLES
+    d = np.zeros(SHOULDER_ANGLES)
+    got = np.zeros(SHOULDER_ANGLES, bool)
+    for k, t in enumerate(a):
+        u = np.array([np.sin(t), np.cos(t)])
+        probe = np.array([[axis[0] + r * u[0], axis[1] + r * u[1], top] for r in SHOULDER_RADII])
+        h1, n1 = surface_below(probe, sky_pts, sky_tris)
+        h2, n2 = surface_below(probe, sf_pts, sf_tris)
+        ok = np.isfinite(h1) & np.isfinite(h2) & (n1 > DRAPE_UP) & (n2 > DRAPE_UP)
+        if ok.any():
+            d[k], got[k] = float(np.median(h2[ok] - h1[ok])), True
+    if not got.any():
+        return None
+    idx = np.nonzero(got)[0]
+    ext = np.concatenate([idx - SHOULDER_ANGLES, idx, idx + SHOULDER_ANGLES])
+    d = np.interp(np.arange(SHOULDER_ANGLES), ext, np.tile(d[idx], 3))
+    d = np.clip(d, *SHOULDER_DROP_LIMITS)
+    return (np.roll(d, 1) + 2 * d + np.roll(d, -1)) / 4
+
+
+def shoulder_drop(pts: np.ndarray, field, axis, clav_z: float) -> np.ndarray:
+    """pts moved down (or up) by the field's value for their direction round the neck axis, near the neck (REACH)
+    and above the clavicles (FADE) (2026-11-07, owner: the cowl sat up on the chest as a separate piece where
+    Skyrim's lies low round the base of the neck and the neck shows; measured: Starfield's shoulders 3-5 cm lower
+    than Skyrim's under the head)."""
+    if field is None or not len(pts):
+        return pts
+    p = np.asarray(pts, float)
+    dx, dy = p[:, 0] - axis[0], p[:, 1] - axis[1]
+    t = np.mod(np.arctan2(dx, dy), 2 * np.pi) / (2 * np.pi) * SHOULDER_ANGLES
+    i0 = np.floor(t).astype(int) % SHOULDER_ANGLES
+    f = t - np.floor(t)
+    dz = field[i0] * (1 - f) + field[(i0 + 1) % SHOULDER_ANGLES] * f
+    r = np.hypot(dx, dy)
+    w = np.clip((SHOULDER_REACH[1] - r) / (SHOULDER_REACH[1] - SHOULDER_REACH[0]), 0, 1)
+    w *= np.clip((p[:, 2] - clav_z - SHOULDER_FADE[0]) / (SHOULDER_FADE[1] - SHOULDER_FADE[0]), 0, 1)
+    out = p.copy()
+    out[:, 2] += dz * w
+    return out
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -904,7 +958,8 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
-        weight_src=None, heads=None) -> FitResult:
+        weight_src=None, heads=None, shoulders: bool = True, drape_on: bool = False,
+        wrap_on: bool = False) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
     (points, triangles, weights) gear near it takes its weights from instead of the body surface (the whole head as
@@ -956,6 +1011,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     bn = np.concatenate([n for _p, n in body_moved]) if body_moved else np.zeros((0, 3))
     if len(bn):
         bn = outward(bp, bn)
+    drop_field, drop_axis, sf_clav_z = None, None, None
+    sf_clav = [sf_world[b][2, 3] for b in ("L_Clavicle", "R_Clavicle") if b in sf_world]
+    if shoulders and len(bp) and len(sky_bt) and sf_clav and "C_Neck" in sf_world:
+        sf_clav_z = float(np.mean(sf_clav))
+        drop_axis = sf_world["C_Neck"][:2, 3]
+        drop_field = shoulder_drop_field(bp, sky_bt, sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3),
+                                         drop_axis, float(max(bp[:, 2].max(), sf_body_pts[:, 2].max()) + 0.1))
+        if drop_field is not None:
+            rep["shoulder_drop_mm"] = (drop_field * 1000).round(0).tolist()
+            bp = shoulder_drop(bp, drop_field, drop_axis, sf_clav_z)
     off, rep["body"] = body_offsets(bp, sf_body_pts, sf_nrm, sky_nrm=bn) if len(bp) else (np.zeros((0, 3)), {})
     shapes, rep["shapes"] = [], {}
     neck = neck_squash_params(joints, transforms, sf_world)
@@ -967,6 +1032,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     for s in gear:
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
         pts = neck_squash(pts, neck)
+        pts = shoulder_drop(pts, drop_field, drop_axis, sf_clav_z) if drop_field is not None else pts
         moved_base = pts.copy()
         skin = False
         sky_gap = None
@@ -980,7 +1046,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         pts = pts + shift
         pulled = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
-            pts, pulled = keep_gap(pts, sky_gap, sf_body_pts, sf_body_tris, sf_nrm, gap)
+            # not round the neck (2026-11-07, measured: pulling the cowl to its Skyrim gap from the nearest surface
+            # drew it 2-3 cm in onto Starfield's neck, a tube up the neck where Skyrim's slopes out over the shoulders)
+            kg = sky_gap if sky_clav_z is None else np.where(np.asarray(s.points)[:, 2] > sky_clav_z, np.inf, sky_gap)
+            pts, pulled = keep_gap(pts, kg, sf_body_pts, sf_body_tris, sf_nrm, gap)
         pushed = 0
         if len(sf_body_pts):
             # skin pieces too, closer: Skyrim paints clothes on body-textured parts (Stormcloak trousers)
@@ -995,8 +1064,20 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         # chin_clearance is not used (2026-11-07: it dropped the cowl's back 7.6 cm under the skull while its front
         # stayed; the real difference was the buried top, see bury)
         lowered, drop = 0, 0.0
+        if not skin and RELAX_ROUNDS and len(sf_body_pts):
+            # the moves of all the steps above, smoothed hard over the mesh, then out of the body once more
+            # (2026-11-07, owner: the cloth lines of the texture, smooth curves in Skyrim, wiggled in Starfield: each
+            # step moved single vertices)
+            pts = smooth_moves(moved_base, pts, s.triangles, rounds=RELAX_ROUNDS)
+            bt_ = np.asarray(sf_body_tris, int).reshape(-1, 3)
+            for _ in range(2):           # push-outs spread to the neighbours too, so no single vertex jumps
+                before = pts
+                pushed_, _n = push_out(pts, sf_body_pts, sf_nrm, gap, tris=bt_)
+                pts = smooth_moves(before, pushed_, s.triangles, 2)
+                pts = np.where((np.linalg.norm(pushed_ - before, axis=1) > 0)[:, None], pushed_, pts)
+            pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=bt_)
         draped, drape_max = 0, 0.0
-        if wrap is not None and not skin and sky_clav_z is not None and len(sky_bt):
+        if drape_on and wrap is not None and not skin and sky_clav_z is not None and len(sky_bt):
             pts, draped, drape_max = drape(s.points, pts, s.triangles, (sky_bp, sky_bt),
                                            (sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3)), wrap[2],
                                            wrap[3], sky_clav_z, rep.get("global_scale", 1.0))
@@ -1004,7 +1085,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,
                                        tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         wrapped, wrap_max = 0, 0.0
-        if wrap is not None and not skin:
+        if wrap_on and wrap is not None and not skin:
             pts, wrapped, wrap_max = neck_wrap(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
             if wrapped and len(sf_body_pts):
                 pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,

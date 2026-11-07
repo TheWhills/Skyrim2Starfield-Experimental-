@@ -363,6 +363,20 @@ class DrapeTests(unittest.TestCase):
         self.assertTrue(np.allclose(out[2], fitted[2]))                              # too far above: kept
 
 
+class ShoulderDropTests(unittest.TestCase):
+    def test_field_and_drop(self):
+        sky = DrapeTests.plane(1.40)
+        sf = DrapeTests.plane(1.36)                               # Starfield's shoulders 4 cm lower
+        field = G.shoulder_drop_field(sky[0], sky[1], sf[0], sf[1], np.zeros(2), 2.0)
+        self.assertTrue(np.allclose(field, -0.04, atol=1e-6))
+        pts = np.array([[0.05, 0.0, 1.50], [0.30, 0.0, 1.50], [0.05, 0.0, 1.20]])   # near the neck; far out; low
+        out = G.shoulder_drop(pts, field, np.zeros(2), 1.40)
+        self.assertAlmostEqual(out[0, 2], 1.46)
+        self.assertAlmostEqual(out[1, 2], 1.50)
+        self.assertAlmostEqual(out[2, 2], 1.20)
+        self.assertIsNone(G.shoulder_drop_field(sky[0], sky[1], sf[0], sf[1], np.array([5.0, 5.0]), 2.0))
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

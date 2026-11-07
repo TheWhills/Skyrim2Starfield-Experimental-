@@ -1945,3 +1945,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   (times scale) and its height above that surface over Starfield's; moves over 10 cm are refused (another surface
   below). Offline on the same meshes: the cowl's half-width at 22-25 cm below the crown went from 103-127 mm back to
   119-141 mm (Skyrim 142-193). unresolved in game.
+- 2026-11-07 (Claude, armor) After drape (owner): the cowl still sits up on the chest and runs visibly into the neck,
+  and the texture's cloth lines wiggle where Skyrim's curve smoothly. Measured on the debug meshes: the cowl
+  vertices round the neck sat 2-3.5 cm closer to the neck than Skyrim's (scaled), keep_gap pulling them to their
+  Skyrim gap from whatever surface is nearest (now Starfield's neck wall). Changes: (1) keep_gap off above the Skyrim
+  clavicles; (2) shoulder_drop: per direction round the neck, the height difference between Starfield's shoulder top
+  and the fitted Skyrim body's (9-13 cm from the neck axis; offline on Ralof: about 0 at the front, -1 cm at the
+  sides, -6 cm at the back) moves everything near the neck above the clavicles, body and gear alike, before the
+  surface steps; (3) relax: the fit's total moves smoothed 8 rounds over the mesh, then pushed out with the push
+  spread to neighbours (the per-vertex steps made the wiggles, supported); drape and neck_wrap off by default.
