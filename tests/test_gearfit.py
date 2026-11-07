@@ -427,6 +427,27 @@ class SkirtGradientTests(unittest.TestCase):
         self.assertIsNone(G.skirt_gradient(np.zeros((1, 3)), {}))
 
 
+class HangSkirtTests(unittest.TestCase):
+    def test_hull_radius(self):
+        sq = np.array([[-1, -1], [1, -1], [1, 1], [-1, 1], [0, 0]], float)
+        h = G._hull(sq)
+        self.assertEqual(len(h), 4)
+        r = G._hull_radius(h, np.array([0.0, np.pi / 2, np.pi / 4]))
+        self.assertTrue(np.allclose(r, [1.0, 1.0, np.sqrt(2)]))
+
+    def test_flared_skirt_hangs_at_its_length(self):
+        body, _t = NeckWrapTests.tube(0.15, 0.4, 1.0, n=32, rows=13)     # hips / legs: a 15 cm tube
+        a = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+        ring = lambda r, z: np.column_stack([r * np.sin(a), r * np.cos(a), np.full(16, z)])   # noqa: E731
+        sky = np.concatenate([ring(0.17, 0.95), ring(0.22, 0.85), ring(0.27, 0.75)])   # flared like an A
+        out, n = G.hang_skirt(sky.copy(), np.ones(48, bool), body, np.zeros(3), sky_pts=sky, sky_axis=np.zeros(3))
+        r = np.hypot(out[:, 0], out[:, 1])
+        self.assertEqual(n, 32)                                      # the top ring stays
+        self.assertTrue(np.allclose(r[16:], 0.15 + G.HANG_GAP, atol=0.005))   # hung at the outline
+        L = np.hypot(0.27 - 0.17, 0.20)
+        self.assertTrue(np.allclose(out[32:, 2], 0.95 - np.sqrt(L ** 2 - (0.17 - 0.17) ** 2), atol=0.01))  # longer
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

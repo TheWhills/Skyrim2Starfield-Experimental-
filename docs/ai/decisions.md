@@ -1987,3 +1987,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   skirt-weighted vertices get a gradient instead of fixed shares (C_Hips at the top, thigh share 0.2 -> 0.8 down to
   knee height, split between the thighs by left / right position, supported, to tune), and they are left out of
   cover (push-out still keeps them off the body). Shape not yet measured: needs the debug meshes.
+- 2026-11-07 (Claude, armor) Hadvar skirt measured on the owner's debug meshes (verified): Skyrim's tassets are
+  modelled flared (bind pose an A, 27 cm from the centre at the hem against 20 cm hips, hem ~0.60 m); in game
+  Skyrim's animations turn the skirt bones so it hangs. Starfield has no skirt bones, so ours kept a shortened flare
+  (hem 0.65-0.69 m, the back 6 cm out behind the seat): the tutu. New step hang_skirt: skirt-weighted vertices below
+  the top band go to the convex outline of the body's section (both legs and hips) + 2 cm + their layer (up to 3 cm
+  over the innermost skirt vertex of their band and direction), hanging from the skirt's top ring at their Skyrim
+  distance from it (scaled): in and down. Offline on the same meshes: skirt hangs straight, hem back at ~0.60 m.

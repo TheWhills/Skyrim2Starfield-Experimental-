@@ -338,6 +338,128 @@ def skirt_gradient(points: np.ndarray, joints: Dict[str, np.ndarray]):
     return out
 
 
+HANG_GAP = 0.02      # m: a hanging skirt's distance outside the body's outline (both legs and the hips together)
+HANG_SECTORS = 48
+HANG_BODY_R = 0.22   # m from the hips' axis: the body's section without the hands hanging at its sides
+
+
+def _hull(points2: np.ndarray) -> np.ndarray:
+    """Convex hull (counter-clockwise) of 2-D points."""
+    p = np.unique(np.round(np.asarray(points2, float), 6), axis=0)
+    if len(p) < 3:
+        return p
+    p = p[np.lexsort((p[:, 1], p[:, 0]))]
+
+    def half(pts):
+        h = []
+        for q in pts:
+            while len(h) >= 2 and ((h[-1][0] - h[-2][0]) * (q[1] - h[-2][1])
+                                   - (h[-1][1] - h[-2][1]) * (q[0] - h[-2][0])) <= 0:
+                h.pop()
+            h.append(q)
+        return h
+    lower, upper = half(p), half(p[::-1])
+    return np.array(lower[:-1] + upper[:-1])
+
+
+def _hull_radius(hull: np.ndarray, angles: np.ndarray) -> np.ndarray:
+    """Distance from the origin to the hull boundary along each angle (atan2(x, y) convention); nan if none."""
+    out = np.full(len(angles), np.nan)
+    if len(hull) < 3:
+        return out
+    a, b = hull, np.roll(hull, -1, axis=0)
+    for k, t in enumerate(angles):
+        d = np.array([np.sin(t), np.cos(t)])
+        e = b - a
+        den = d[0] * e[:, 1] - d[1] * e[:, 0]
+        ok = np.abs(den) > 1e-12
+        s_ = np.where(ok, (a[:, 0] * e[:, 1] - a[:, 1] * e[:, 0]) / np.where(ok, den, 1), np.nan)
+        u = np.where(ok, (a[:, 0] * d[1] - a[:, 1] * d[0]) / np.where(ok, den, 1), np.nan)
+        hit = ok & (s_ > 0) & (u >= -1e-9) & (u <= 1 + 1e-9)
+        if hit.any():
+            out[k] = float(np.nanmax(np.where(hit, s_, np.nan)))
+    return out
+
+
+def _ring_radius(r: np.ndarray, sec: np.ndarray, z: np.ndarray, top: float) -> np.ndarray:
+    """Per sector, the median radius of the points within 3 cm of the top (gaps filled round)."""
+    out = np.full(HANG_SECTORS, np.nan)
+    for k in range(HANG_SECTORS):
+        m = (sec == k) & (z > top - 0.03)
+        if m.any():
+            out[k] = np.median(r[m])
+    good = ~np.isnan(out)
+    if not good.any():
+        return out
+    return np.interp(np.arange(HANG_SECTORS), np.nonzero(good)[0], out[good], period=HANG_SECTORS)
+
+
+def _polar(p: np.ndarray, axis) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    d = p[:, :2] - np.asarray(axis, float)[:2]
+    r = np.hypot(d[:, 0], d[:, 1])
+    ang = np.arctan2(d[:, 0], d[:, 1])
+    sec = np.mod(((ang + np.pi) / (2 * np.pi) * HANG_SECTORS).astype(int), HANG_SECTORS)
+    return d, r, ang, sec
+
+
+def hang_skirt(pts: np.ndarray, mask: np.ndarray, body_pts: np.ndarray, axis, gap: float = HANG_GAP,
+               sky_pts=None, sky_axis=None, scale: float = 1.0):
+    """Skirt vertices hung down round the body's outline (2026-11-07, measured on the owner's Hadvar debug meshes:
+    Skyrim's skirt is modelled flared, an A 27 cm from the centre at the hem against 20 cm of hips; Skyrim's
+    animations turn its skirt bones so it hangs; Starfield has none, so ours stood out and up like a tutu). Per 2 cm
+    band the outline is the convex hull of the body's section (both legs and the hips together, so front and back
+    plates hang flat across). Each skirt vertex below the top band goes to the outline + gap (+ its layer: how far
+    it lay outside the innermost skirt vertex of its band and direction, up to 3 cm, so plates stay over the cloth)
+    and hangs from the skirt's top ring at its Skyrim distance from that ring (sky_pts, times scale; else the
+    current one): it swings in and down, as Skyrim's does. Returns (points, vertices moved)."""
+    pts = np.asarray(pts, float).copy()
+    idx = np.nonzero(mask)[0]
+    if not len(idx):
+        return pts, 0
+    ax = np.asarray(axis, float)[:2]
+    body = np.asarray(body_pts, float)
+    sk = pts[idx]
+    d, r, ang, sec = _polar(sk, ax)
+    top = float(sk[:, 2].max())
+    r_top = _ring_radius(r, sec, sk[:, 2], top)
+    if np.isnan(r_top).all():
+        return pts, 0
+    length = np.hypot(r - r_top[sec], top - sk[:, 2])
+    if sky_pts is not None and sky_axis is not None:
+        sp = np.asarray(sky_pts, float)[idx]
+        _d2, r2, _a2, sec2 = _polar(sp, sky_axis)
+        top2 = float(sp[:, 2].max())
+        rt2 = _ring_radius(r2, sec2, sp[:, 2], top2)
+        if not np.isnan(rt2).all():
+            length = np.hypot(r2 - rt2[sec2], top2 - sp[:, 2]) * scale
+    zs = np.round(sk[:, 2] / 0.02) * 0.02
+    outline = np.full(len(sk), np.nan)
+    for z in np.unique(zs):
+        band = body[(np.abs(body[:, 2] - z) < 0.012) & (np.hypot(body[:, 0] - ax[0], body[:, 1] - ax[1]) < HANG_BODY_R)]
+        if len(band) >= 10:
+            sel = np.nonzero(zs == z)[0]
+            outline[sel] = _hull_radius(_hull(band[:, :2] - ax), ang[sel])
+    excess = r - outline
+    layer = np.zeros(len(sk))
+    for z in np.unique(zs):
+        for k in np.unique(sec[zs == z]):
+            m = (zs == z) & (sec == k) & np.isfinite(excess)
+            if m.any():
+                layer[m] = np.clip(excess[m] - excess[m].min(), 0.0, 0.03)
+    moved = 0
+    for j in range(len(sk)):
+        if not np.isfinite(outline[j]) or sk[j, 2] > top - 0.03:
+            continue
+        new_r = outline[j] + gap + layer[j]
+        rt = r_top[sec[j]]
+        dz = np.sqrt(max(length[j] ** 2 - (new_r - rt) ** 2, 0.0))
+        u = d[j] / max(r[j], 1e-9)
+        pts[idx[j], :2] = ax + u * new_r
+        pts[idx[j], 2] = top - dz
+        moved += 1
+    return pts, moved
+
+
 def skirt_weighted(bones: List[str], weights, share: float = 0.5) -> np.ndarray:
     """Vertices with at least `share` of their Skyrim weight on skirt bones."""
     sk = np.array([bool(skirt_shares(b)) for b in bones], bool)
@@ -1178,6 +1300,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         # chin_clearance is not used (2026-11-07: it dropped the cowl's back 7.6 cm under the skull while its front
         # stayed; the real difference was the buried top, see bury)
         lowered, drop = 0, 0.0
+        hung = 0
+        if not skin and len(sf_body_pts) and "C_Hips" in sf_world:
+            hang_mask = skirt_weighted(s.bones, s.weights)
+            if hang_mask.any():
+                pel = joints.get("NPC Pelvis [Pelv]")
+                hung_pts, hung = hang_skirt(pts, hang_mask, sf_body_pts, sf_world["C_Hips"][:3, 3],
+                                            sky_pts=s.points, sky_axis=None if pel is None else pel[:3, 3],
+                                            scale=rep.get("global_scale", 1.0))
+                pts = smooth_moves(pts, hung_pts, s.triangles, rounds=2)
+                pts[hang_mask] = hung_pts[hang_mask]
         if not skin and RELAX_ROUNDS and len(sf_body_pts):
             # the moves of all the steps above, smoothed hard over the mesh, then out of the body once more
             # (2026-11-07, owner: the cloth lines of the texture, smooth curves in Skyrim, wiggled in Starfield: each
@@ -1284,6 +1416,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
             "buried": buried,
+            "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm,
             "draped": draped, "drape_mm": round(drape_max * 1000, 1),
