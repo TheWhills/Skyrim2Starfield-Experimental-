@@ -229,6 +229,20 @@ class RecordTests(unittest.TestCase):
         self.assertIn(b"NAM4", dict(same[0][2]))
         self.assertEqual(len(rep["variants"]), 2)
 
+    def test_morph_tests(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._esm(d)
+            body = (b"ARMA", HDR(b"ARMA"), [(b"EDID", z("AA_Naked_Body")), (b"MOD2", z("Actors\\naked_m.nif"))], 0x5000)
+            recs = list(sfplugin.records(p, [b"ARMA", b"ARMO", b"OTFT"])) + [body]
+            with open(p, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            rows = [{"shape": "Coat", "nif": "S2S\\R\\Coat.nif"}]
+            t = dict((tag, r) for tag, _l, r in E.morph_tests(p, "R", rows, "Meshes\\Morphs\\Body"))
+        self.assertEqual(t["Zero"][0]["morph_folder"], E.morph_folder("S2S\\R\\Coat.nif", "Coat") + E.ZERO_SUFFIX)
+        self.assertEqual((t["Body"][0]["nif"], t["Body"][0]["morph_folder"], t["Body"][0]["slots"]),
+                         ("Actors\\naked_m.nif", "Meshes\\Morphs\\Body", [3]))
+        self.assertEqual(t["BodyOurs"][0]["morph_folder"], "Meshes\\Morphs\\S2S\\R\\BodyOurs")
+
     def test_morph_folder_matches_where_morph_dat_is_written(self):
         from fo4sf import gearfit
         rel = E.part_nif("Ralof_outfit", "StormCloak")

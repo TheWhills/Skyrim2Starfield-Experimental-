@@ -389,7 +389,7 @@ def with_fields(subs, fields: Dict[bytes, bytes]) -> list:
 
 
 def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, drop=(), template_vertices=None,
-                        variants: bool = False):
+                        variants: bool = False, start: int = 0):
     """ARMA + MRPH per part, then ARMO and OTFT. parts: [{"shape", "nif", "vertices", "skin": bool, "slots": list or
     None}]. Gear parts copy the template armor's addon, the skin part AA_Clothes_Nightwear_01_Skin; each part's MRPH
     is a copy of the morph record its template addon names (NAM4), with TCMP pointed at the part's morph folder, and
@@ -407,7 +407,7 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
     skin_tpl = next((fid for fid, r in recs.items() if r[0] == b"ARMA" and sfplugin.edid(r[2]) == SKIN_TEMPLATE_ADDON),
                     None)
     otft = next(r for r in recs.values() if r[0] == b"OTFT")
-    nxt = iter(range(10 ** 6))
+    nxt = iter(range(start, 10 ** 6))
     out, addons, rep = [], [], {"template": TEMPLATE_ARMOR, "template_addon": f"{gear_tpl:08X}", "parts": []}
     gear_i = 0
     for p in parts:
@@ -434,7 +434,7 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
             m_tpl = recs.get(_fid(dict(recs[gear_tpl][2]).get(b"NAM4")))
         if m_tpl is not None and m_tpl[0] == b"MRPH":
             m_fid = sfplugin.new_form_id(next(nxt), masters)
-            folder = morph_folder(p["nif"], p["shape"])
+            folder = p.get("morph_folder") or morph_folder(p["nif"], p["shape"])
             medits = {b"EDID": sfplugin.zs(f"S2S_{name}_{key}_Morph")}
             msubs = dict(m_tpl[2])
             if b"TCMP" in msubs:
@@ -719,8 +719,31 @@ def write_armor(sf_data: str, out: str, name: str, full: str, shapes, binds: Dic
     return files, recs, prep, material, model
 
 
+ZERO_SUFFIX = "_ZeroMorph"
+def morph_tests(sf_esm: str, name: str, rows, body_folder: str) -> list:
+    """Test armors telling apart where slider spikes come from (2026-11-06: thin pillars shoot out of every piece,
+    the skin piece too, whose deltas are the body's own; without NAM4 / NAM6 there are none):
+      zero:      our pieces, each MRPH pointing at a morph.dat of the same layout with every delta 0 (gear_fit writes
+                 them into <folder>_ZeroMorph): pillars here = the layout / record, not the values;
+      body:      the vanilla naked body model (AA_Naked_Body's) with the vanilla body morph folder (body_folder, as
+                 TCMP text): pillars here = our
+                 copied MRPH / ARMA records;
+      bodyours:  the vanilla naked body model with our round-trip copy of the body morph.dat (parsed and rebuilt by
+                 sfmorph; gear_fit writes it): pillars here but not in "body" = our morph.dat writer.
+    [(tag, label, rows)]."""
+    body = next((r for r in sfplugin.records(sf_esm, [b"ARMA"]) if sfplugin.edid(r[2]) == "AA_Naked_Body"), None)
+    out = [("Zero", "zero morph", [dict(r, morph_folder=morph_folder(r["nif"], r["shape"]) + ZERO_SUFFIX)
+                                   for r in rows])]
+    if body is not None:
+        model = sfplugin_zstring(dict(body[2]).get(b"MOD2", b""))
+        b = {"shape": "Body", "nif": model, "slots": [3], "vertices": None}
+        out.append(("Body", "vanilla body", [dict(b, morph_folder=body_folder)]))
+        out.append(("BodyOurs", "body our morph", [dict(b, morph_folder=f"Meshes\\Morphs\\S2S\\{name}\\BodyOurs")]))
+    return out
+
+
 def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds: Dict[str, tuple], transform=None,
-                      drop=(), variants: bool = False):
+                      drop=(), variants: bool = False, morph_test: str = ""):
     """One NIF, ARMA and MRPH per part (see armor_records_parts): meshes\\S2S\\<name>\\<shape>.nif each, and
     S2SArmorTest.esm. parts: [{"shape": HairShape, "material", "back": bool, "skin": bool, "slots": list or None}].
     Returns (files, records, report, template material, {shape name: nif path})."""
@@ -756,6 +779,14 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
         rows.append({"shape": sname, "nif": rel, "skin": bool(p.get("skin")), "slots": p.get("slots"),
                      "vertices": len(sh.positions) * (2 if p.get("back") else 1)})
     recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices, variants)
+    prep["tests"] = []
+    for tag, label, t_rows in (morph_tests(sf_esm, name, rows, morph_test) if morph_test else []):
+        start = max(r[3] & 0xFFFFFF for r in recs) - sfplugin.FIRST_OBJECT + 1
+        t_recs, t_rep = armor_records_parts(sf_esm, f"{name}_{tag}", 1, f"{full} [{label}]", t_rows, list(drop),
+                                            tpl_vertices, start=start)
+        recs += t_recs
+        prep["tests"].append({"tag": tag, "name": f"{full} [{label}]", "ARMO": t_rep["ARMO"],
+                              "parts": t_rep["parts"]})
     prep["template_vertices"] = tpl_vertices
     for rel, data in files.items():
         dst = os.path.join(out, *rel.split("/"))

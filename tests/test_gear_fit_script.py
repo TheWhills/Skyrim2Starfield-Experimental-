@@ -209,3 +209,23 @@ class MorphCapTests(unittest.TestCase):
         c = gear_fit.capped(d)
         self.assertEqual(c["Thin"][0], (0.01, 0.0, 0.0))
         self.assertAlmostEqual(c["Thin"][1][2], gear_fit.MORPH_MAX)
+
+
+class MorphTestFiles(unittest.TestCase):
+    def test_zero_morph_keeps_layout(self):
+        from fo4sf import sfmorph
+        data = sfmorph.build(3, ["A", "B"], {"A": {0: (0.01, 0, 0), 2: (0, 0.02, 0)}, "B": {2: (0, 0, 0.03)}},
+                             {"A": {0: (1, 2, 3)}})
+        z = sfmorph.parse(gear_fit.zero_morph(data))
+        self.assertEqual({k: sorted(v) for k, v in z.deltas.items()}, {"A": [0, 2], "B": [2]})
+        self.assertTrue(all(x == (0.0, 0.0, 0.0) for v in z.deltas.values() for x in v.values()))
+        self.assertEqual(len(gear_fit.zero_morph(data)), len(data))
+
+    def test_zero_files_go_next_to_ours(self):
+        from fo4sf import sfmorph
+        rel = os_export.part_nif("R", "Coat")
+        folder = os_export.morph_folder(rel, "Coat")
+        ours = {folder.replace("\\", "/").lower() + "/morph.dat": sfmorph.build(1, ["A"], {"A": {0: (0.01, 0, 0)}})}
+        tests = [{"tag": "Zero", "parts": [{"morph_folder": folder + os_export.ZERO_SUFFIX}]}]
+        out = gear_fit.test_morph_files(tests, ours, "", "")
+        self.assertEqual(list(out), [(folder + os_export.ZERO_SUFFIX).replace("\\", "/").lower() + "/morph.dat"])

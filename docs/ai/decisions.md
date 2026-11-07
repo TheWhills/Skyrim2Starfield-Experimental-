@@ -1899,3 +1899,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   never showed either; Fallout 4 uses INDX as the armor's variant index; gear_fit prints the template's INDX list to
   verify). (3) Collar weights from the whole Starfield head too (fit weight_src), not only its neck-weighted part:
   the collar had no C_Head weight and did not turn with the head.
+- 2026-11-07 (Claude, armor) In game after INDX 0 (owner's screenshots): boots, cuffs and the skin piece's arms now
+  show (verified: INDX numbering hid every addon but the first). Pillars remain, now from several pieces, one
+  skin-coloured from the skin piece, whose deltas are the body's own records copied verbatim, so the values are
+  unlikely the cause (supported). gear_fit --morph-test adds three test armors: [zero morph] (our layout, all deltas
+  0), [vanilla body] (vanilla naked body model + the game's body morph folder, through our copied ARMA / MRPH) and
+  [body our morph] (vanilla body model + the body morph.dat parsed and rebuilt by sfmorph; the run prints whether the
+  rebuild is byte for byte the game's). unresolved until tested.

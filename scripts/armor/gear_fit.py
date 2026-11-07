@@ -568,6 +568,37 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
     return out
 
 
+def zero_morph(data: bytes) -> bytes:
+    """The same morph.dat layout (vertices, keys, which vertex has a record for which key) with every delta and
+    normal / tangent word 0."""
+    m = sfmorph.parse(data)
+    return sfmorph.build(m.num_vertices, m.keys, {k: {v: (0.0, 0.0, 0.0) for v in d} for k, d in m.deltas.items()})
+
+
+def test_morph_files(tests, morphs: dict, body_path: str, sf_data: str) -> dict:
+    """morph.dat files for os_export.morph_tests' armors: zeroed copies of our pieces' files, and a parse-and-rebuild
+    copy of the body's (printing whether it comes out byte for byte the same as the game's)."""
+    out = {}
+    for t in tests:
+        for r in t["parts"]:
+            dst = r["morph_folder"].replace("\\", "/").lower() + "/morph.dat"
+            if t["tag"] == "Zero":
+                src = dst.replace(os_export.ZERO_SUFFIX.lower() + "/morph.dat", "/morph.dat")
+                if src in morphs:
+                    out[dst] = zero_morph(morphs[src])
+            elif t["tag"] == "BodyOurs":
+                raw = hkx_to_af.vanilla_file(body_path, sf_data)[0]
+                m = sfmorph.parse(raw)
+                ours = sfmorph.build(m.num_vertices, m.keys, m.deltas, m.extra, m.version)
+                same = ours == raw
+                diff = next((i for i in range(min(len(ours), len(raw))) if ours[i] != raw[i]), None)
+                print(f"  body morph rebuilt by our writer: {'byte for byte the same' if same else 'DIFFERENT'} "
+                      f"({len(raw)} bytes game, {len(ours)} ours"
+                      f"{'' if same else f', first difference at byte {diff}'}; layout {m.layout})")
+                out[dst] = ours
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
@@ -594,6 +625,8 @@ def main(argv=None):
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
+    ap.add_argument("--morph-test", action="store_true",
+                    help="also write [zero morph], [vanilla body] and [body our morph] test armors (slider spikes)")
     ap.add_argument("--test-variants", action="store_true",
                     help="also write a [no morph] and a [same slots] copy of the armor, to tell causes apart in game")
     ap.add_argument("--one-nif", action="store_true",
@@ -684,12 +717,21 @@ def main(argv=None):
         parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled} for sh, n in zip(shapes, names)]
         if skin_sh is not None and slots:
             parts.append({"shape": skin_sh, "material": sp["material"], "skin": True})
+        body_folder = ""
+        if a.morph_test and not a.no_morphs:
+            mp, _bm = find_body_morph(sf_data, len(body_pts), female)
+            if mp:
+                body_folder = "\\".join(w.capitalize() for w in mp.rsplit("/", 1)[0].split("/"))
         files, _recs, prep, material, nifs = os_export.write_armor_parts(
-            sf_data, a.out, a.name, a.full or a.name.replace("_", " "), parts, binds, variants=a.test_variants)
+            sf_data, a.out, a.name, a.full or a.name.replace("_", " "), parts, binds, variants=a.test_variants,
+            morph_test=body_folder)
         print(f"one addon + morph record per shape (template model {prep.get('template_vertices')} vertices):")
         for r in prep["parts"]:
             print(f"  {r['shape']}: ARMA {r['ARMA']} slots {r['slots']} -> {r['model']}; MRPH {r['MRPH']} "
                   f"MOBC {r.get('MOBC_template')} -> {r.get('MOBC')}")
+        for t in prep.get("tests", []):
+            print(f"test armor \"{t['name']}\": player.additem xx{int(t['ARMO'], 16) & 0xFFFFFF:06X} 1   "
+                  f"(morph folders: {', '.join(r.get('morph_folder', '-') for r in t['parts'])})")
         for v in prep.get("variants", []):
             print(f"test armor \"{v['name']}\": player.additem xx{int(v['ARMO'], 16) & 0xFFFFFF:06X} 1")
     if sp:
@@ -740,6 +782,8 @@ def main(argv=None):
                           f"{tm.layout['empty_entries_first_running']}")
                 except (SystemExit, Exception) as e:          # report only
                     print(f"  template morph {tpl_morph}: not read ({e})")
+            if prep.get("tests"):
+                morphs.update(test_morph_files(prep["tests"], morphs, mpath, sf_data))
             for rel, data in morphs.items():
                 dst = os.path.join(a.out, *rel.split("/"))
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
