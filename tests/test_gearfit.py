@@ -255,6 +255,13 @@ class FitTests(unittest.TestCase):
         res2 = G.fit([gear], [body], world, sp, np.array(st),
                      weight_src=(sp, np.array(st), [[("C_Head", 1.0)]] * len(sp)))
         self.assertEqual({b for vw in res2.shapes[0].weights for b, _ in vw}, {"C_Head"})
+        # gear inside Skyrim's body but away from any drawn skin shows in Skyrim (the naked body is not drawn):
+        # it is pushed out of Starfield's, not kept hidden
+        ip, _in, it = self.tube(0.095, 1.25, 1.30)
+        inner = G.SkyShape(b"Lining", ip, _in, [(0.0, 0.0)] * len(ip), it, bones, [[(0, 0.5), (1, 0.5)]] * len(ip))
+        res5 = G.fit([inner], [body], world, sp, np.array(st))
+        r5 = np.linalg.norm(np.asarray(res5.shapes[0].positions)[:, :2], axis=1)
+        self.assertGreater(r5.min(), 0.13)
         # clavicles known: gear above them keeps its own weights, body weights below
         j2 = dict(joints, **{"NPC L Clavicle [LClv]": at([0.05, 0, 1.20]), "NPC R Clavicle [RClv]": at([-0.05, 0, 1.20])})
         body2 = G.SkyShape(b"Body", bp, bn, [(0.0, 0.0)] * len(bp), bt, bones, w, j2)

@@ -1252,6 +1252,7 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
     return np.where(outside[:, None], pushed, out)
 
 
+DRAWN_REACH = 0.02    # m: gear inside Skyrim's body this close to its drawn skin counts as hidden by it
 HIDDEN_MIN = 0.003    # m: gear hidden inside Skyrim's body stays at least this deep inside Starfield's
 HIDDEN_MAX = 0.03     # m: and needs to go no deeper than this
 
@@ -1472,6 +1473,19 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     sky_clav_z = float(np.mean(sky_clav)) if sky_clav else None
     if neck is not None:
         rep["neck_squash"] = {"ratio": round(neck[0], 3), "clavicle_height_m": round(neck[1], 3)}
+    # where Skyrim actually draws skin: the outfit's own bare-skin shapes and the head (2026-11-07, verified on
+    # Saadia's / Ysolda's debug meshes: of 411 dress vertices inside Skyrim's full body only 83 lie by drawn skin; the
+    # rest show in Skyrim, because the naked body is not drawn under an outfit; putting them back inside Starfield's
+    # body sank the bodice into the bust and the skin showed over it)
+    drawn = []
+    if len(sky_bp):
+        for s_ in gear:
+            d_, dist_, _i = nearest_surface(s_.points, sky_bp, sky_bn)
+            if np.median(np.abs(d_)) < SKIN_DEPTH and np.median(dist_) < 0.01:
+                drawn.append(np.asarray(s_.points, float))
+    if heads is not None:
+        drawn.append(np.asarray(heads[0][0], float))
+    drawn = np.concatenate(drawn) if drawn else np.zeros((0, 3))
     for s in gear:
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
         pts = neck_squash(pts, neck)
@@ -1485,6 +1499,19 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             if len(sky_bt):
                 _cp, sky_gap, sky_dist = closest_on_mesh(s.points, sky_bp, sky_bt, sky_bn)
                 sky_gap = np.where(sky_dist < KEEP_REACH + 0.03, sky_gap, np.inf)
+        sky_hidden = np.zeros(len(s.points), bool)
+        if sky_gap is not None:
+            sky_hidden = np.isfinite(sky_gap) & (sky_gap < -BURY)
+            if sky_hidden.any():
+                near_drawn = np.zeros(len(s.points), bool)
+                if len(drawn):
+                    hp_ = np.asarray(s.points, float)[sky_hidden]
+                    dd = np.full(len(hp_), np.inf)
+                    for c0 in range(0, len(hp_), 256):
+                        q = hp_[c0:c0 + 256]
+                        dd[c0:c0 + 256] = np.sqrt(((q[:, None, :] - drawn[None, :, :]) ** 2).sum(-1).min(1))
+                    near_drawn[np.nonzero(sky_hidden)[0]] = dd < DRAWN_REACH
+                sky_hidden &= near_drawn
         shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
         pts = pts + shift
         pulled = 0
@@ -1573,7 +1600,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 rest = np.nonzero(~came_down)[0]
                 if len(rest):
                     pts[rest], _again = push_out(pts[rest], sf_body_pts, sf_nrm, gap, tris=bt_)
-                collar_keep = came_down
+                collar_keep = came_down & sky_hidden      # visible parts (straps) are pushed out again
         draped, drape_max = 0, 0.0
         if drape_on and wrap is not None and not skin and sky_clav_z is not None and len(sky_bt):
             pts, draped, drape_max = drape(s.points, pts, s.triangles, (sky_bp, sky_bt),
@@ -1592,7 +1619,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                              tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         buried = 0
         if not skin and sky_gap is not None and sky_clav_z is not None and len(sf_body_pts):
-            mask = np.isfinite(sky_gap) & (sky_gap < -BURY) & (np.asarray(s.points)[:, 2] > sky_clav_z)
+            mask = sky_hidden & (np.asarray(s.points)[:, 2] > sky_clav_z)
             if mask.any() and heads is not None and wrap is not None:
                 # the hidden part first back where Skyrim has it relative to the head (crown and neck axis lined
                 # up, scaled): 2026-11-07, owner looking at the cuts: ours ran up into the head where Skyrim's runs
@@ -1635,7 +1662,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             if len(st_):
                 neck_stretch = [round(float(np.percentile(st_, q)), 2) for q in (10, 50, 90)]
         if not skin and FINAL_ROUNDS and len(sf_body_pts):
-            keep_out = np.ones(len(pts), bool) if sky_gap is None else ~(np.isfinite(sky_gap) & (sky_gap < 0))
+            keep_out = ~sky_hidden
             keep_out &= ~collar_keep
             pts = final_relax(moved_base, pts, s.triangles, sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3),
                               sf_nrm, keep_out, gap=gap)
@@ -1644,7 +1671,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
         rehidden = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
-            pts, rehidden = keep_hidden(pts, sky_gap, sf_body_pts, sf_body_tris, sf_nrm, rep.get("global_scale", 1.0))
+            pts, rehidden = keep_hidden(pts, np.where(sky_hidden, sky_gap, np.inf), sf_body_pts, sf_body_tris, sf_nrm,
+                                        rep.get("global_scale", 1.0))
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):

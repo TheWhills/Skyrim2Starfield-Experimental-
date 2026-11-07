@@ -2109,3 +2109,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   vertex count; body and head merged as one source; the Thin hold near the head dropped when found), and the blend
   is 1/d^2 over the 4 nearest (was 1/d over 6) so gear grows as much as the skin right under it. Bust shape not yet
   measured.
+- 2026-11-07 (Claude, armor) Textured z-buffered render of Saadia's dress with the skin and head drawn as in game
+  (Skyrim: its own skin piece + head; ours: our skin piece + head) showed our skin piece through the bodice top over
+  the bust. Measured (verified): of 411 dress vertices inside Skyrim's full body only 83 lie within 2 cm of skin
+  Skyrim draws (the outfit's bare-skin shapes, the head); the others are visible in Skyrim since the naked body is not
+  drawn under an outfit. keep_hidden had sunk 208 of them into Starfield's bust. "Hidden in Skyrim" now means inside
+  the body AND within 2 cm of drawn skin; it drives keep_hidden, bury, final_relax's exemption and the collar's
+  no-push-out exemption (the latter also left Saadia's visible halter straps inside the skin near the neck).
