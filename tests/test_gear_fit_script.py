@@ -319,3 +319,19 @@ class HandMorphTests(unittest.TestCase):
                                         margin=10, whole=True)
         x0 = min(float(body[i][0]) for i in used)
         self.assertGreaterEqual(x0, 0.2 - gear_fit.COVER_MARGIN_M - 0.011)   # not ten rings, about 2 cm
+
+
+class HeadThinTests(unittest.TestCase):
+    def test_no_thin_shrink_next_to_the_head(self):
+        import numpy as np
+        from fo4sf import sfmorph, skyrimhair
+        body = np.array([[0, 0, 0], [1, 0, 0]], float)
+        m = sfmorph.parse(sfmorph.build(2, ["Thin", "Overweight"], {"Thin": {0: (-0.01, 0, 0), 1: (-0.01, 0, 0)},
+                                                                    "Overweight": {0: (0.01, 0, 0), 1: (0.01, 0, 0)}}))
+        sh = skyrimhair.HairShape(b"Coat", body.copy(), np.zeros((2, 3)), np.zeros((2, 3)), [(0, 0)] * 2, [], [],
+                                  -1, -1, -1)
+        out = gear_fit.morph_files([sh], "S2S\\T\\Coat.nif", body, m, head_pts=np.array([[0, 0, 0.01]]))
+        got = sfmorph.parse(next(iter(out.values())))
+        self.assertAlmostEqual(got.deltas["Thin"].get(0, (0.0,))[0], 0.0, places=4)   # by the head: no shrink
+        self.assertAlmostEqual(got.deltas["Thin"][1][0], -0.01, places=3)        # far: as the body
+        self.assertAlmostEqual(got.deltas["Overweight"][0][0], 0.01, places=3)   # other sliders unchanged

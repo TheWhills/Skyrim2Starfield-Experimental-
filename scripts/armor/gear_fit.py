@@ -602,6 +602,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
+    if sf_head_full is not None:      # the head too: collar parts next to it do not shrink under Thin
+        res.report["_head_pts"] = (np.asarray(sf_head_full[0]) - frame[:3, 3]) @ np.linalg.inv(frame[:3, :3]).T
     if hand_pts is not None:          # the hands in the body mesh's space, for the morphs
         res.report["_hand_pts"] = (np.asarray(hand_pts) - frame[:3, 3]) @ np.linalg.inv(frame[:3, :3]).T
     res.report["collar_anchor_m"] = None if collar_anchor is None else [np.round(c, 3).tolist() for c in collar_anchor]
@@ -661,7 +663,7 @@ def near_hands_factor(points: np.ndarray, hand_pts) -> np.ndarray:
 
 
 def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None, stats=None,
-                hand_pts=None) -> dict:
+                hand_pts=None, head_pts=None) -> dict:
     """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders. A shape
     written with back faces has its vertices twice (copies after the originals): the copies get the same deltas.
     Deltas over MORPH_MAX are cut to it; stats (a dict) gets morph_stats per shape, before the cut."""
@@ -676,6 +678,11 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
             f = near_hands_factor(np.asarray(sh.positions), hand_pts)
             if (f < 1).any():
                 d = {k: {i: tuple(np.asarray(x) * f[i]) for i, x in v.items()} for k, v in d.items()}
+            fh = near_hands_factor(np.asarray(sh.positions), head_pts)
+            if (fh < 1).any() and "Thin" in d:
+                # next to the head (neck) no Thin shrink (2026-11-07, owner: on the thinnest body Farengar's neck
+                # skin came through the collar trim; the head mesh's neck does not shrink with the body's Thin)
+                d["Thin"] = {i: tuple(np.asarray(x) * fh[i]) for i, x in d["Thin"].items()}
         if stats is not None:
             stats[name] = morph_stats(d)
         d = capped(d)
@@ -818,6 +825,7 @@ def main(argv=None):
     dbg = rep.pop("_debug", None)
     skin_used = rep.pop("_skin_used", None)
     hand_mesh_pts = rep.pop("_hand_pts", None)
+    head_mesh_pts = rep.pop("_head_pts", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -911,7 +919,7 @@ def main(argv=None):
             mstats = {}
             for sh in worn:
                 morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], body_pts, body_morph, doubled,
-                                          skin_used, mstats, hand_mesh_pts))
+                                          skin_used, mstats, hand_mesh_pts, head_mesh_pts))
             rep["morph_stats"] = mstats
             for n_, st in mstats.items():
                 print(f"  morph {n_}: " + ", ".join(f"{k} {v['vertices']} v max {v['max_mm']} mm"

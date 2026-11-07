@@ -2049,3 +2049,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   skin vertices had no robe over them. New step push_faces_out: faces whose corners are all outside and whose centre
   is under 3 mm out (but not deeper than 1 cm) are lifted along the body normal, up to 6 mm a round, 3 rounds.
   Offline: 240 vertices lifted, no uncovered shoulder skin left.
+- 2026-11-07 (Claude, armor) Shoulders fixed by push_faces_out (owner). Left: neck skin through Farengar's collar
+  trim, worst on the thinnest body. At default weight none of the trim's visible vertices is inside body or head
+  (verified on the debug meshes), so the slider is the cause (supported): the trim shrinks with the body's Thin, the
+  head mesh's neck does not. Gear within 3 cm of the head mesh now gets no Thin delta (full by 8 cm).
