@@ -291,13 +291,17 @@ def npc_setup(a, sky, esm, sf_esm, npc_recs, report) -> dict:
     race_edids = {fid: sfplugin.edid(rs) for _t, _h, rs, fid in race_recs}
     derma = npc_records.dermaesthetic_names(npc_recs)
     derma_paths = npc_records.dermaesthetic_paths(npc_recs)
-    report["npc_conversion"] = {"hairs_plugin": hp, "masters": masters, "hairstyles_in_it": len(index),
+    beard_map = {}
+    if getattr(a, "beard_map", None):
+        with open(a.beard_map, encoding="utf-8") as fh:
+            beard_map = json.load(fh).get("matches", {})
+    report["npc_conversion"] = {"beard_map": len(beard_map), "hairs_plugin": hp, "masters": masters, "hairstyles_in_it": len(index),
                                 "starfield_hair_colors": sorted(names), "palette": bool(palette),
                                 "skyrim_strings": len(strings)}
     return dict(masters=masters, sf_hdpt=sf_hdpt, hdpt=hdpt, clfm=clfm, names=names, palette=palette,
                 voices=voices, strings=strings, index=index, races=races, race_edids=race_edids,
                 derma=derma, derma_paths=derma_paths, part_type=npc_hair.part_type,
-                npc_parts=npc_hair.npc_parts, with_hair_color=npc_hair.with_hair_color)
+                npc_parts=npc_hair.npc_parts, with_hair_color=npc_hair.with_hair_color, beard_map=beard_map)
 
 
 def npc_dress(subs, n, npcs, real, row) -> list:
@@ -307,8 +311,16 @@ def npc_dress(subs, n, npcs, real, row) -> list:
     src = npcs.get(faces.get(n["form_id"], n["form_id"]), n)          # whose face (and hair) it wears
     parts = real["npc_parts"](with_race_hair(src, real), real["hdpt"])
     new, info = {}, {}
+    beards = real.get("beard_map") or {}
     for kind, (part, _models) in parts.items():
         fid = real["index"].get(part["edid"].lower())
+        if kind == npc_records.FACIAL_HAIR and part["edid"] in beards:
+            # a vanilla Starfield beard matched by shape (beard_match.py; 2026-11-07, owner's choice)
+            m = beards[part["edid"]]
+            fid = int(m["form_id"], 16)
+            info["facial_hair"] = {"skyrim": part["edid"], "starfield": m.get("starfield"), "form_id": m["form_id"]}
+            new[kind] = fid
+            continue
         info[{3: "hair", 4: "facial_hair"}.get(kind, str(kind))] = (
             {"skyrim": part["edid"], "form_id": f"{fid:08X}"} if fid else
             {"skyrim": part["edid"], "missing": "not in the hairs plugin (build it with --facial-hair for beards)"})
@@ -489,6 +501,8 @@ def main(argv=None):
                     help="fit the Skyrim face as it is, not averaged with its mirror image")
     ap.add_argument("--pos-unit", type=float, default=0.01, help="metres per regions-file position unit")
     ap.add_argument("--test-plugin", action="store_true")
+    ap.add_argument("--beard-map", help="beard_match.py's beard_match.json: Skyrim beards worn as the matched vanilla "
+                                        "Starfield beards (with --hairs-plugin)")
     ap.add_argument("--outfits-plugin", help="S2SArmorTest.esm from scripts/armor/gear_fit.py: each test NPC wears the "
                                              "outfit made for it there (gear_fit --name <NPC EditorID>_outfit), as "
                                              "default and space outfit; the plugin becomes a master")

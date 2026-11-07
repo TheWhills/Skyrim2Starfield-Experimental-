@@ -2121,3 +2121,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   fit's placement smoothed (25 rounds) plus Skyrim's own detail (Skyrim shape minus its smoothed self) gave a clean
   bust, Skyrim's lacing and straps. New step detail transfer (before final_relax): the detail is posed by the same
   bone blend as the points (blend(S + L) - blend(S)); skirt-weighted and collar-kept vertices exempt.
+- 2026-11-07 (Claude, npc) Beards (owner's choice): Skyrim beards are worn as the closest-shaped vanilla Starfield
+  beard instead of converted ones. scripts/npc/beard_match.py: Skyrim.esm facial-hair HDPTs (type 4) placed on
+  Starfield's head by skyrimhair.convert, Starfield.esm facial-hair HDPTs read from the game archives, symmetric
+  mean closest-point distance, best first; writes beard_match.json (editable). face_fit --beard-map uses it in
+  npc_dress for the facial-hair head part (unresolved until run: Starfield beard meshes' placement and type ids).

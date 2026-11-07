@@ -141,3 +141,16 @@ class OutfitsPluginTests(unittest.TestCase):
             with open(p, "wb") as fh:
                 fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
             self.assertEqual(face_fit.outfits_by_npc(p, 2), {"ralof": 0x02000809})
+
+
+class BeardMatchTests(unittest.TestCase):
+    def test_rank_picks_the_closest_shape(self):
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "npc"))
+        import beard_match as B
+        chin = np.array([[x, 0.1, z] for x in np.linspace(-0.03, 0.03, 7) for z in np.linspace(1.6, 1.64, 5)])
+        full = np.array([[x, 0.08, z] for x in np.linspace(-0.07, 0.07, 15) for z in np.linspace(1.58, 1.7, 13)])
+        r = B.rank(chin + [0, 0.002, 0], {"Goatee": chin, "FullBeard": full})
+        self.assertEqual(r[0][0], "Goatee")
+        self.assertLess(r[0][1], 0.005)
+        self.assertEqual(B.chamfer(chin, np.zeros((0, 3))), float("inf"))
+        self.assertEqual(len(B.sample(full, 50)), 50)
