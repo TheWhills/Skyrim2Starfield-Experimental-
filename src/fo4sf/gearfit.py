@@ -340,6 +340,9 @@ def skirt_gradient(points: np.ndarray, joints: Dict[str, np.ndarray]):
 
 HANG_GAP = 0.04      # m (2026-11-07, owner: at 2 cm the skirt hugged the legs and they came through in a
 #                      wide stance): a hanging skirt's distance outside the body's outline (both legs and the hips together)
+HANG_KEEP = 0.35     # share of the skirt's own outward flare kept (2026-11-07, owner's side views: Skyrim's in-game
+#                      skirt leaves room in front of the thigh and tilts out a little)
+HANG_RAMP = 0.15     # m below the skirt's top over which the gap (and kept flare) grows from nothing
 HANG_SECTORS = 48
 HANG_BODY_R = 0.22   # m from the hips' axis: the body's section without the hands hanging at its sides
 
@@ -451,7 +454,9 @@ def hang_skirt(pts: np.ndarray, mask: np.ndarray, body_pts: np.ndarray, axis, ga
     for j in range(len(sk)):
         if not np.isfinite(outline[j]) or sk[j, 2] > top - 0.03:
             continue
-        new_r = outline[j] + gap + layer[j]
+        down = float(np.clip((top - sk[j, 2]) / HANG_RAMP, 0.0, 1.0))
+        flare = max(excess[j] - layer[j], 0.0) if np.isfinite(excess[j]) else 0.0
+        new_r = outline[j] + layer[j] + down * (gap + HANG_KEEP * flare)
         rt = r_top[sec[j]]
         dz = np.sqrt(max(length[j] ** 2 - (new_r - rt) ** 2, 0.0))
         u = d[j] / max(r[j], 1e-9)

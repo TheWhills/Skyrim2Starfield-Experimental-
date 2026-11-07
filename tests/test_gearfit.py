@@ -443,9 +443,12 @@ class HangSkirtTests(unittest.TestCase):
         out, n = G.hang_skirt(sky.copy(), np.ones(48, bool), body, np.zeros(3), sky_pts=sky, sky_axis=np.zeros(3))
         r = np.hypot(out[:, 0], out[:, 1])
         self.assertEqual(n, 32)                                      # the top ring stays
-        self.assertTrue(np.allclose(r[16:], 0.15 + G.HANG_GAP, atol=0.005))   # hung at the outline
+        exp_hem = 0.15 + G.HANG_GAP + G.HANG_KEEP * 0.12        # outline + gap + kept share of the 12 cm flare
+        self.assertTrue(np.allclose(r[32:], exp_hem, atol=0.005))
+        self.assertTrue((r[16:32] < 0.22).all() and (r[16:32] > 0.15).all())   # in from the flare, off the legs
         L = np.hypot(0.27 - 0.17, 0.20)
-        self.assertTrue(np.allclose(out[32:, 2], 0.95 - np.sqrt(L ** 2 - (0.17 - 0.17) ** 2), atol=0.01))  # longer
+        self.assertTrue(np.allclose(out[32:, 2], 0.95 - np.sqrt(L ** 2 - (exp_hem - 0.17) ** 2), atol=0.01))
+        self.assertLess(out[32, 2], 0.75)                                    # longer than the flared hem
 
 
 class MorphTests(unittest.TestCase):

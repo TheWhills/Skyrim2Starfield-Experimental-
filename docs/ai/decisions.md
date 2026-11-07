@@ -1999,3 +1999,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   body minus what the body armour itself covers (gear within 3.5 cm straight out, so skin under a hanging skirt
   stays; boots / gauntlets do not remove skin, so the body armour alone keeps its feet and hands-side skin), as
   discussed with the owner: the body armour hides the naked body, so it must bring every bit it does not cover.
+- 2026-11-07 (Claude, armor) Owner's side views (Skyrim vs ours): Skyrim's in-game skirt leaves room in front of the
+  thigh and tilts out a little; ours lay on it. hang_skirt now keeps 35 % of the skirt's own outward flare on top
+  of the 4 cm gap, both growing from nothing over the first 15 cm below the skirt's top (no step at the belt).
