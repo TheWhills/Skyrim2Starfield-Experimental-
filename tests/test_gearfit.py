@@ -520,6 +520,18 @@ class FinalRelaxTests(unittest.TestCase):
         self.assertTrue((out[:, 2] >= G.GAP - 1e-6).all())     # still outside the body
 
 
+class KeepHiddenTests(unittest.TestCase):
+    def test_hidden_panel_put_back_inside(self):
+        body = DrapeTests.plane(0.0, half=0.5, n=11)
+        bn = np.tile([0, 0, 1.0], (len(body[0]), 1))
+        pts = np.array([[0, 0, 0.004], [0.1, 0, 0.004], [0.2, 0, -0.05]])
+        out, n = G.keep_hidden(pts, np.array([-0.01, 0.002, -0.08]), body[0], body[1], bn)
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(out[0, 2], -0.01, places=4)      # back to its Skyrim depth
+        self.assertAlmostEqual(out[1, 2], 0.004)                 # visible in Skyrim: untouched
+        self.assertAlmostEqual(out[2, 2], -0.05)                 # already deep enough: untouched
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

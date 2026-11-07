@@ -1252,6 +1252,28 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
     return np.where(outside[:, None], pushed, out)
 
 
+HIDDEN_MIN = 0.003    # m: gear hidden inside Skyrim's body stays at least this deep inside Starfield's
+HIDDEN_MAX = 0.03     # m: and needs to go no deeper than this
+
+
+def keep_hidden(pts: np.ndarray, sky_gap: np.ndarray, body_pts: np.ndarray, body_tris, body_nrm: np.ndarray,
+                scale: float = 1.0) -> Tuple[np.ndarray, int]:
+    """Gear inside Skyrim's body (sky_gap < -BURY: linings and fill panels the skin hides) put back inside
+    Starfield's at its Skyrim depth (scaled; between HIDDEN_MIN and HIDDEN_MAX) (2026-11-07, verified on Ysolda's
+    debug meshes: 136 of the 219 vertices of the dress's brown chest panel hidden in Skyrim were pushed out by the
+    fit and showed as dark patches in the neckline). Moved inwards only. Returns (points, moved)."""
+    p = np.asarray(pts, float).copy()
+    h = np.nonzero(np.isfinite(sky_gap) & (sky_gap < -BURY))[0]
+    if not len(h):
+        return p, 0
+    _cp, dep, _d, nrm = closest_on_mesh(p[h], body_pts, np.asarray(body_tris, int).reshape(-1, 3), body_nrm,
+                                        with_normals=True)
+    target = -np.clip(-sky_gap[h] * scale, HIDDEN_MIN, HIDDEN_MAX)
+    step = np.minimum(target - dep, 0.0)
+    p[h] += nrm * step[:, None]
+    return p, int((step < -1e-4).sum())
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -1620,6 +1642,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
+        rehidden = 0
+        if not skin and sky_gap is not None and len(sf_body_pts):
+            pts, rehidden = keep_hidden(pts, sky_gap, sf_body_pts, sf_body_tris, sf_nrm, rep.get("global_scale", 1.0))
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -1679,7 +1704,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,

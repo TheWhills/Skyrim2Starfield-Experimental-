@@ -2090,3 +2090,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   detail kept), then everything visible in Skyrim pushed out with the push spread to neighbours; parts hidden in
   Skyrim and the lowered neckline exempt. Offline on Saadia's debug meshes (Skyrim shape as base): strap and bodice
   edge smooth, no visible vertex inside the body.
+- 2026-11-07 (Claude, armor) After final_relax (owner): Ysolda's neckline shows dark brown patches, Saadia's halter
+  straps go under the skin (worse on heavier bodies), and her sleeve top under the arm skin. Measured (verified, on
+  the earlier debug meshes): Ysolda's dress has a brown chest panel 219 of whose upper vertices lie inside Skyrim's
+  body (hidden by the skin); the fit pushed 136 of them out. Saadia: 73 visible strap vertices inside Starfield's
+  head mesh, whose flap covers the upper chest and back but was not in the push-out surface. Changes: keep_hidden
+  (last step) puts gear hidden in Skyrim back inside at its Skyrim depth (3 mm-3 cm); the head mesh's vertices below
+  the neck joint + 2 cm join the push-out surface. The sleeve-top clip not yet measured.

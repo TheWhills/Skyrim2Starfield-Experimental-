@@ -257,11 +257,18 @@ NECK_BONES_SKY = ("NPC Neck [Neck]", "NPC Spine2 [Spn2]")
 NECK_SHARE = 0.3        # head vertices with at least this weight on neck / chest bones count as neck
 
 
-def neck_part(points, tris, weights, neck_bones, share: float = NECK_SHARE):
+FLAP_ABOVE_NECK = 0.02   # m: head-mesh vertices below the neck joint + this join the surface (the chest / back flap)
+
+
+def neck_part(points, tris, weights, neck_bones, share: float = NECK_SHARE, low_z=None):
     """The neck of a head mesh: vertices with >= share of their weight on neck / chest bones, and the triangles
     among them (2026-11-06: with the whole head in the surface, the cover step pushed Ralof's cowl out over the chin and
     jaw). weights: per vertex [(bone name, w)]. Returns (points, triangles, weights, kept vertex count)."""
     keep = np.array([sum(w for b, w in vw if b in neck_bones) >= share for vw in weights], bool)
+    if low_z is not None:
+        # also the head mesh's flap over the upper chest and back (2026-11-07, Saadia / Ysolda: Starfield's female
+        # head reaches down over them; straps fitted to the body only went under it)
+        keep |= np.asarray(points, float)[:, 2] < low_z
     if not keep.any():
         return np.zeros((0, 3)), np.zeros((0, 3), int), [], 0
     new = -np.ones(len(points), int)
@@ -552,7 +559,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
             # with only the neck-weighted part, the collar had no C_Head and stayed facing forward when the head turned)
             weight_src = (np.concatenate([surf_pts, h_pts]), np.concatenate([surf_tris, h_tris + len(surf_pts)]),
                           list(surf_w) + list(h_w))
-        h_pts, h_tris, h_w, h_n = neck_part(h_pts, h_tris, h_w, NECK_BONES_SF)
+        low_z = (world["C_Neck"][2, 3] + FLAP_ABOVE_NECK) if "C_Neck" in world else None
+        h_pts, h_tris, h_w, h_n = neck_part(h_pts, h_tris, h_w, NECK_BONES_SF, low_z=low_z)
         head_path += f" (neck: {h_n} vertices)"
         surf_tris = np.concatenate([surf_tris, h_tris + len(surf_pts)])
         surf_pts = np.concatenate([surf_pts, h_pts])
@@ -1033,6 +1041,7 @@ def main(argv=None):
               + (f", {r['inside_neck']} inside the neck line as in Skyrim" if r.get('inside_neck') else "")
               + (f", {r['collar_transplanted']} round the neck copied from Skyrim" if r.get('collar_transplanted') else "")
               + (f", {r['faces_lifted']} lifted so no face dips into the body" if r.get('faces_lifted') else "")
+              + (f", {r['rehidden']} put back inside the body as in Skyrim" if r.get('rehidden') else "")
               + (f", collar brought down by {min(r['collar_drop_mm'])}..{max(r['collar_drop_mm'])} mm"
                  if r.get('collar_drop_mm') else "")
               + (f", {r['skirt_vertices']} on skirt bones (hips + thighs)" if r.get('skirt_vertices') else "")

@@ -376,3 +376,13 @@ class RawSkinTests(unittest.TestCase):
         m = skyrimhair._mesh(sh, ["A"], False)
         self.assertEqual((m.scale, m.positions, m.normals, m.tangents), (scale, [tuple(r) for r in raw],
                                                                            [123, 456, 789], [11, 22, 33]))
+
+
+class FlapTests(unittest.TestCase):
+    def test_neck_part_takes_the_low_flap(self):
+        import numpy as np
+        pts = np.array([[0, 0, 1.6], [0.1, 0, 1.6], [0, 0.1, 1.6], [0, 0, 1.3], [0.1, 0, 1.3], [0, 0.1, 1.3]])
+        w = [[("C_Head", 1.0)]] * 6
+        p, t, _w, n = gear_fit.neck_part(pts, [(0, 1, 2), (3, 4, 5)], w, ("C_Neck",), low_z=1.4)
+        self.assertEqual((n, len(t)), (3, 1))
+        self.assertTrue((p[:, 2] < 1.4).all())
