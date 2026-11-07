@@ -1954,3 +1954,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   sides, -6 cm at the back) moves everything near the neck above the clavicles, body and gear alike, before the
   surface steps; (3) relax: the fit's total moves smoothed 8 rounds over the mesh, then pushed out with the push
   spread to neighbours (the per-vertex steps made the wiggles, supported); drape and neck_wrap off by default.
+- 2026-11-07 (Claude, armor) shoulder_drop measured +30 mm at the front on Ralof (it compared heights of sloped
+  surfaces at the same x, y; Starfield's throat sits further back) and raised the cowl's front to the chin: now off
+  by default. Replaced by collar_height_field: per direction round the neck, the visible collar top (outside the
+  body and the head) is brought down to Skyrim's distance below the crown (heads lined up at the crown, scaled);
+  never raised. Offline on the owner's 4th debug meshes: front -5 cm, sides -2 to -4 cm, back 0. The buried part is
+  first placed where Skyrim has it relative to the head (crown and neck axis lined up), then bury: the x=0 cut now
+  runs straight across inside the neck as Skyrim's (it had run up into the head). Owner's drawn line (front low on
+  the chest, back over the base of the neck) matches.

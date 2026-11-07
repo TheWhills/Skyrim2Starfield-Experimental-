@@ -377,6 +377,21 @@ class ShoulderDropTests(unittest.TestCase):
         self.assertIsNone(G.shoulder_drop_field(sky[0], sky[1], sf[0], sf[1], np.array([5.0, 5.0]), 2.0))
 
 
+class CollarHeightTests(unittest.TestCase):
+    def test_field_brings_the_top_down_to_skyrims(self):
+        a = np.linspace(0, 2 * np.pi, 32, endpoint=False)
+        ring = lambda z: np.column_stack([0.07 * np.sin(a), 0.07 * np.cos(a), np.full(32, z)])  # noqa: E731
+        sky = np.concatenate([ring(1.55), ring(1.50)])               # Skyrim top 25 cm under a 1.80 crown
+        ours = np.concatenate([ring(1.59), ring(1.50)])              # ours 4 cm higher under the same crown
+        vis = np.ones(64, bool)
+        f = G.collar_height_field(sky, vis, np.zeros(2), 1.80, ours, vis, np.zeros(2), 1.80)
+        self.assertTrue(np.allclose(f, -0.04, atol=1e-6))
+        low = np.concatenate([ring(1.53), ring(1.50)])               # already lower: never raised
+        self.assertTrue(np.allclose(G.collar_height_field(sky, vis, np.zeros(2), 1.80, low, vis, np.zeros(2), 1.80), 0))
+        hidden = np.zeros(64, bool)
+        self.assertIsNone(G.collar_height_field(sky, hidden, np.zeros(2), 1.80, ours, hidden, np.zeros(2), 1.80))
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),
