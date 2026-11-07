@@ -419,12 +419,19 @@ def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, 
     return out, rep
 
 
-def write_obj(path: str, pts, tris) -> None:
+def write_obj(path: str, pts, tris, uvs=None) -> None:
+    """OBJ with optional per-vertex UVs (vt, v flipped to OBJ's bottom-up convention)."""
+    pts = np.asarray(pts, float)
+    uv = None if uvs is None or len(uvs) != len(pts) else np.asarray(uvs, float).reshape(-1, 2)
     with open(path, "w", encoding="utf-8") as fh:
-        for p in np.asarray(pts, float):
+        for p in pts:
             fh.write(f"v {p[0]:.5f} {p[1]:.5f} {p[2]:.5f}\n")
+        if uv is not None:
+            for u, v in uv:
+                fh.write(f"vt {u:.5f} {1.0 - v:.5f}\n")
         for t in np.asarray(tris, int).reshape(-1, 3):
-            fh.write(f"f {t[0] + 1} {t[1] + 1} {t[2] + 1}\n")
+            a, b, c = (int(x) + 1 for x in t)
+            fh.write(f"f {a}/{a} {b}/{b} {c}/{c}\n" if uv is not None else f"f {a} {b} {c}\n")
 
 
 def safe_name(n: str) -> str:
@@ -432,8 +439,35 @@ def safe_name(n: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "_" for c in n)
 
 
+def debug_textures(folder: str, textures: dict, read, texconv: str) -> list:
+    """Each gear shape's diffuse texture as tex_<shape>.png in folder (via texconv), for textured looks at the fit
+    from outside the game (2026-11-07, owner: stretch shows in the texture, e.g. Farengar's beige collar trim).
+    Returns the file names written."""
+    import subprocess
+    import tempfile
+    out = []
+    if not texconv:
+        return out
+    with tempfile.TemporaryDirectory() as tmp:
+        for n, t in textures.items():
+            if not t:
+                continue
+            data = read(t[0])
+            if not data:
+                continue
+            src = os.path.join(tmp, "tex_" + safe_name(n) + ".dds")
+            with open(src, "wb") as fh:
+                fh.write(data)
+            r = subprocess.run([texconv, "-nologo", "-y", "-ft", "png", "-f", "R8G8B8A8_UNORM", "-o", folder, src],
+                               capture_output=True, text=True)
+            png = "tex_" + safe_name(n) + ".png"
+            if r.returncode == 0 and os.path.isfile(os.path.join(folder, png)):
+                out.append(png)
+    return out
+
+
 def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_body, sky_head=None,
-                 sf_head=None) -> str:
+                 sf_head=None, extra=()) -> str:
     """OBJ files of the fit for a look from outside the game (Starfield skeleton space, metres): the Starfield body /
     hands / neck surface, every written shape, and the Skyrim gear and body as they came in (Skyrim model space,
     metres). Zipped into fit_debug.zip; returns its path."""
@@ -449,13 +483,14 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
     for sh in shapes:
         p = np.asarray(sh.positions) @ frame[:3, :3].T + frame[:3, 3]
         n = "fit_" + safe_name(sh.name.decode("latin-1", "replace")) + ".obj"
-        write_obj(os.path.join(folder, n), p, sh.triangles)
+        write_obj(os.path.join(folder, n), p, sh.triangles, sh.uvs)
         names.append(n)
     for tag, group in (("sky_", sky_gear), ("skybody_", sky_body)):
         for s in group:
             n = tag + safe_name(s.name.decode("latin-1", "replace")) + ".obj"
-            write_obj(os.path.join(folder, n), s.points, s.triangles)
+            write_obj(os.path.join(folder, n), s.points, s.triangles, s.uvs)
             names.append(n)
+    names += [n for n in extra if os.path.isfile(os.path.join(folder, n))]
     z = os.path.join(folder, "fit_debug.zip")
     with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
         for n in names:
@@ -858,7 +893,10 @@ def main(argv=None):
         print(f"textures {n}: {t[0] if t else '-'}")
     if a.debug_dir and dbg is not None:
         frame = np.array(rep["frame"], float)
-        print("debug meshes:", debug_meshes(a.debug_dir, shapes, frame, *dbg))
+        os.makedirs(a.debug_dir, exist_ok=True)
+        pngs = debug_textures(a.debug_dir, textures, lambda p: sky._read(bsa.norm(p)), find_texconv(a.texconv))
+        print("debug meshes:", debug_meshes(a.debug_dir, shapes, frame, *dbg, extra=pngs),
+              f"({len(pngs)} textures)")
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1, default=str)
@@ -899,6 +937,8 @@ def main(argv=None):
                  if r.get('draped') else ""))
         if r.get("neck_steps") and not r.get("skin_piece") and r["box_m"] and r["box_m"][1][2] > 1.35:
             print("     neck steps:", ", ".join(f"{k} {v}" for k, v in r["neck_steps"].items()))
+            if r.get("neck_stretch"):
+                print("     above the clavicles, edge length vs Skyrim (10/50/90 %):", r["neck_stretch"])
         if r.get("top_bones") and not r.get("skin_piece"):
             print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():

@@ -1114,6 +1114,21 @@ def collar_height_field(sky_pts, sky_vis, sky_axis, sky_crown, pts, vis, sf_axis
     return (np.roll(f, 1) + 2 * f + np.roll(f, -1)) / 4
 
 
+def edge_stretch(sky_pts: np.ndarray, pts: np.ndarray, tris, scale: float = 1.0, mask=None) -> np.ndarray:
+    """Per edge (of triangles with every vertex in mask, if given): its length now / its Skyrim length times scale.
+    Above 1 the texture is stretched there (2026-11-07, owner: Farengar's beige collar trim came out thick)."""
+    t = np.asarray(tris, int).reshape(-1, 3)
+    if mask is not None:
+        t = t[np.asarray(mask, bool)[t].all(1)]
+    if not len(t):
+        return np.zeros(0)
+    e = np.unique(np.sort(np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]]), axis=1), axis=0)
+    a = np.linalg.norm(np.asarray(sky_pts, float)[e[:, 0]] - np.asarray(sky_pts, float)[e[:, 1]], axis=1) * scale
+    b = np.linalg.norm(np.asarray(pts, float)[e[:, 0]] - np.asarray(pts, float)[e[:, 1]], axis=1)
+    ok = a > 1e-6
+    return b[ok] / a[ok]
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -1454,6 +1469,12 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         if wrap_on and wrap is not None and not skin:
             pts, ins = neck_inside(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
             inside_n = int(ins.sum())
+        neck_stretch = None
+        if not skin and sky_clav_z is not None:
+            st_ = edge_stretch(s.points, pts, s.triangles, rep.get("global_scale", 1.0),
+                               np.asarray(s.points)[:, 2] > sky_clav_z)
+            if len(st_):
+                neck_stretch = [round(float(np.percentile(st_, q)), 2) for q in (10, 50, 90)]
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -1501,7 +1522,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "buried": buried, "inside_neck": inside_n,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
-            "collar_drop_mm": collar_mm, "neck_steps": neck_why,
+            "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,
             "draped": draped, "drape_mm": round(drape_max * 1000, 1),
             "top_bones": top_bones(s.points, w),
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (

@@ -2016,3 +2016,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   fitted shapes' bones (robe and body have no neck-weighted vertices), so collar height, neck_wrap, neck_inside and
   the hidden-part placement were all skipped and push-out stretched the beige collar trim up the neck. wrap_params
   now falls back to the head joint (same axis).
+- 2026-11-07 (Claude, armor) Farengar neckline better after the head-joint fallback; owner: the beige trim is still
+  thicker and stands closer round the neck than Skyrim's (texture shows the stretch). For measuring it: the debug
+  export now writes UVs and each gear shape's diffuse texture as PNG (texconv), and the run prints the edge-length
+  ratio against Skyrim (scaled) above the clavicles (10/50/90 %).

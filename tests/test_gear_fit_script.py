@@ -280,3 +280,16 @@ class SlotTests(unittest.TestCase):
         finally:
             gear_fit.sky_shapes = orig
         self.assertEqual(out, {"Boots": [7], "Cuirass": [3, 5], "Body": [3, 5], "Cuffs": [8], "Belt": [9]})
+
+
+class ObjTests(unittest.TestCase):
+    def test_obj_with_uvs(self):
+        import numpy as np
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "a.obj")
+            gear_fit.write_obj(f, np.eye(3), [(0, 1, 2)], [(0.25, 0.0), (1, 1), (0, 0.5)])
+            txt = open(f).read()
+            self.assertIn("vt 0.25000 1.00000", txt)
+            self.assertIn("f 1/1 2/2 3/3", txt)
+            self.assertEqual(gear_fit.debug_textures(d, {"a": ["x.dds"]}, lambda p: b"", ""), [])

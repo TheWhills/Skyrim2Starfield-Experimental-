@@ -461,6 +461,15 @@ class WrapParamsTests(unittest.TestCase):
         self.assertTrue(np.allclose(r[2], [0, 0.01, 1.6]) and np.allclose(r[3], [0, 0.02, 1.58]))
 
 
+class StretchTests(unittest.TestCase):
+    def test_edge_stretch(self):
+        sky = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float)
+        now = sky * [2.0, 1.0, 1.0]
+        st = sorted(G.edge_stretch(sky, now, [(0, 1, 2)]).round(3).tolist())
+        self.assertEqual(st, [1.0, round(np.sqrt(5) / np.sqrt(2), 3), 2.0])
+        self.assertEqual(len(G.edge_stretch(sky, now, [(0, 1, 2)], mask=[True, True, False])), 0)
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),
