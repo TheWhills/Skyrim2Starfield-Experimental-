@@ -1211,6 +1211,47 @@ def push_faces_out(pts: np.ndarray, tris, body_pts: np.ndarray, body_tris, body_
     return p, int(moved.sum())
 
 
+FINAL_ROUNDS = 12      # neighbour-averaging rounds of the final relax
+
+
+def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray, body_tris, body_nrm: np.ndarray,
+                outside: np.ndarray, rounds: int = FINAL_ROUNDS, gap: float = GAP) -> np.ndarray:
+    """The fit's change from the Skyrim shape (pts - sky_pts) smoothed over the mesh, then the parts that should be
+    outside the body pushed out with the push spread to their neighbours (2026-11-07, owner comparing Saadia's dress
+    with Skyrim's: the halter strap and the bust line came out jagged where Skyrim's curve smoothly; each step moved
+    single vertices). The Skyrim shape's own detail is kept, only the change is smoothed. outside: vertices to keep
+    outside the body (the others, e.g. tucked into the neck, are left where the smoothing puts them)."""
+    sky = np.asarray(sky_pts, float)
+    p = np.asarray(pts, float)
+    t = np.asarray(tris, int).reshape(-1, 3)
+    if not len(t):
+        return p
+    bt = np.asarray(body_tris, int).reshape(-1, 3)
+    out = smooth_moves(sky, p, t, rounds=rounds)
+    outside = np.asarray(outside, bool)
+    nb = _neighbours(len(out), t)
+    for _ in range(4):
+        pushed, n = push_out(out, body_pts, body_nrm, gap, tris=bt)
+        lift = np.where(outside[:, None], pushed - out, 0.0)
+        if not (np.linalg.norm(lift, axis=1) > 1e-5).any():
+            break
+        mag = np.linalg.norm(lift, axis=1)
+        spread = lift.copy()
+        for _r in range(2):                       # neighbours of a lifted vertex rise with it (a soft bump)
+            nxt = spread.copy()
+            for v in range(len(out)):
+                if len(nb[v]):
+                    m = np.linalg.norm(spread[nb[v]], axis=1)
+                    j = int(np.argmax(m))
+                    if m[j] * 0.6 > np.linalg.norm(nxt[v]):
+                        nxt[v] = spread[nb[v][j]] * 0.6
+            spread = nxt
+        spread = np.where((mag > 1e-5)[:, None], lift, spread)
+        out = out + spread
+    pushed, _n = push_out(out, body_pts, body_nrm, gap, tris=bt)
+    return np.where(outside[:, None], pushed, out)
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -1571,6 +1612,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                np.asarray(s.points)[:, 2] > sky_clav_z)
             if len(st_):
                 neck_stretch = [round(float(np.percentile(st_, q)), 2) for q in (10, 50, 90)]
+        if not skin and FINAL_ROUNDS and len(sf_body_pts):
+            keep_out = np.ones(len(pts), bool) if sky_gap is None else ~(np.isfinite(sky_gap) & (sky_gap < 0))
+            keep_out &= ~collar_keep
+            pts = final_relax(moved_base, pts, s.triangles, sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3),
+                              sf_nrm, keep_out, gap=gap)
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)

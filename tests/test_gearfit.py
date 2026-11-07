@@ -508,6 +508,18 @@ class FaceLiftTests(unittest.TestCase):
         self.assertGreaterEqual(dep[0], G.FACE_GAP - 1e-4)
 
 
+class FinalRelaxTests(unittest.TestCase):
+    def test_spike_smoothed_and_kept_outside(self):
+        body = DrapeTests.plane(0.0, half=0.5, n=11)
+        bn = np.tile([0, 0, 1.0], (len(body[0]), 1))
+        sky, st = DrapeTests.plane(0.02, half=0.3, n=7)
+        noisy = sky.copy()
+        noisy[24, 2] += 0.02                                   # one vertex pushed up 2 cm by some step
+        out = G.final_relax(sky, noisy, st, body[0], body[1], bn, np.ones(len(sky), bool))
+        self.assertLess(out[24, 2] - 0.02, 0.01)               # the spike is spread out
+        self.assertTrue((out[:, 2] >= G.GAP - 1e-6).all())     # still outside the body
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

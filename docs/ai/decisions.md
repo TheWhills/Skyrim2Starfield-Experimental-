@@ -2084,3 +2084,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   re-encoded positions (morph margin), recomputed normals / tangents and median-frame binds, did not match the body
   under the head's edge (supported). The skin piece now keeps the vanilla body's own encoding: scale, int16
   positions, packed normals and tangents, and the body's own per-bone binds.
+- 2026-11-07 (Claude, armor) Saadia's dress (owner, textured comparison): the halter strap and the bust line from the
+  white bodice to the dark band jagged where Skyrim's curve smoothly. New last step final_relax (before
+  push_faces_out): the fit's change from the skeleton-blended shape smoothed 12 rounds over the mesh (the shape's own
+  detail kept), then everything visible in Skyrim pushed out with the push spread to neighbours; parts hidden in
+  Skyrim and the lowered neckline exempt. Offline on Saadia's debug meshes (Skyrim shape as base): strap and bodice
+  edge smooth, no visible vertex inside the body.
