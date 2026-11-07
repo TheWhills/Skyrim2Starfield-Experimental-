@@ -543,7 +543,18 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         sky_head_full = skyrim_head_mesh(sky_head)
     if weight_src is not None and len(weight_src[2]) != len(weight_src[0]):
         weight_src = None
+    sky_only = [sh for sh in sky_body if sh.name.decode("latin-1", "replace") not in
+                {h.name.decode("latin-1", "replace") for h in (skyrim_head_shapes(sky_head) if sky_head else [])}]
+    sky_join, sky_tj, base = [], [], 0
+    for sh in sky_only:
+        sky_join.append(np.asarray(sh.points, float))
+        sky_tj.append(np.asarray(sh.triangles, int).reshape(-1, 3) + base)
+        base += len(sh.points)
+    c_sky = gearfit.neck_rim_centre(np.concatenate(sky_join), np.concatenate(sky_tj)) if sky_join else None
+    c_sf = gearfit.neck_rim_centre(skel_pts, tris)
+    collar_anchor = (c_sky, c_sf) if c_sky is not None and c_sf is not None else None
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet,
+                      collar_anchor=collar_anchor,
                       weight_src=weight_src,
                       heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
@@ -576,6 +587,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
+    res.report["collar_anchor_m"] = None if collar_anchor is None else [np.round(c, 3).tolist() for c in collar_anchor]
     res.report["_debug"] = (surf_pts, surf_tris, gear, sky_body, sky_head_full, sf_head_full)
     return shapes, binds, res.report
 
@@ -912,6 +924,8 @@ def main(argv=None):
         n = len(d)
         print(f"shoulders: Starfield's vs the fitted Skyrim body round the neck (mm): front {d[0]}, left {d[n // 4]}, "
               f"back {d[n // 2]}, right {d[3 * n // 4]}; gear near the neck moved by that")
+    if rep.get("collar_anchor_m"):
+        print(f"neck openings (Skyrim, Starfield): {rep['collar_anchor_m'][0]} / {rep['collar_anchor_m'][1]} m")
     print(f"skeletons: joint rms {rep['joint_rms_m'] * 1000:.0f} mm after the overall fit, "
           f"scale {rep['global_scale']:.4f}")
     b = rep.get("body", {})
@@ -929,6 +943,7 @@ def main(argv=None):
                  if r.get('neck_wrapped') else "")
               + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else "")
               + (f", {r['inside_neck']} inside the neck line as in Skyrim" if r.get('inside_neck') else "")
+              + (f", {r['collar_transplanted']} round the neck copied from Skyrim" if r.get('collar_transplanted') else "")
               + (f", collar brought down by {min(r['collar_drop_mm'])}..{max(r['collar_drop_mm'])} mm"
                  if r.get('collar_drop_mm') else "")
               + (f", {r['skirt_vertices']} on skirt bones (hips + thighs)" if r.get('skirt_vertices') else "")

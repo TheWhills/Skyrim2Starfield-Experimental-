@@ -478,6 +478,21 @@ class StretchTests(unittest.TestCase):
         self.assertEqual(len(G.edge_stretch(sky, now, [(0, 1, 2)], mask=[True, True, False])), 0)
 
 
+class TransplantTests(unittest.TestCase):
+    def test_neck_rim_centre(self):
+        body, t = NeckWrapTests.tube(0.06, 1.3, 1.5)               # an open tube: rims at 1.3 and 1.5
+        c = G.neck_rim_centre(body, t, window=0.05)
+        self.assertTrue(np.allclose(c, [0, 0, 1.5], atol=1e-9))
+
+    def test_collar_copied_whole_near_the_opening(self):
+        sky = np.array([[0.05, 0, 1.5], [0.30, 0, 1.3]])
+        fitted = np.array([[0.04, 0, 1.47], [0.31, 0, 1.25]])
+        out, w = G.collar_transplant(sky, fitted, (np.array([0, 0, 1.5]), np.array([0, 0.01, 1.45])))
+        self.assertTrue(np.allclose(out[0], [0.05, 0.01, 1.45]))        # copied: same offset from the opening
+        self.assertTrue(np.allclose(out[1], fitted[1]))                  # far: the fit's
+        self.assertEqual(w.tolist(), [1.0, 0.0])
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

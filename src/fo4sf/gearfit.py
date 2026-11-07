@@ -1136,6 +1136,41 @@ def edge_stretch(sky_pts: np.ndarray, pts: np.ndarray, tris, scale: float = 1.0,
     return b[ok] / a[ok]
 
 
+TRANSPLANT_R = (0.11, 0.17)   # m from the neck opening's centre: the collar copied whole inside, fitted beyond
+
+
+def neck_rim_centre(points: np.ndarray, tris, window: float = 0.18, half_width: float = 0.12):
+    """Centre of a body mesh's neck opening: the open-edge vertices within half_width of x = 0 and window below the
+    highest of them. None if the mesh has no such edge."""
+    t = np.asarray(tris, int).reshape(-1, 3)
+    p = np.asarray(points, float)
+    if not len(t):
+        return None
+    e = np.sort(np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]]), axis=1)
+    u, n = np.unique(e, axis=0, return_counts=True)
+    b = np.unique(u[n == 1])
+    q = p[b]
+    q = q[np.abs(q[:, 0]) < half_width]
+    if not len(q):
+        return None
+    q = q[q[:, 2] > q[:, 2].max() - window]
+    return q.mean(0)
+
+
+def collar_transplant(sky_pts: np.ndarray, pts: np.ndarray, anchor, scale: float = 1.0, r=TRANSPLANT_R):
+    """Gear round the neck opening copied whole from Skyrim, placed by the centres of the two bodies' neck openings
+    (2026-11-07, owner with textured comparisons of Farengar's robe: the beige trim did not go round the neck flat and
+    wide as in Skyrim; each surface step moved single vertices and the band came out stretched and tight; checked
+    offline on his debug meshes: the copied collar matches Skyrim's ring). Full inside r[0] of the opening (Skyrim
+    distance, scaled), blended to the fitted shape by r[1]. Returns (points, weights)."""
+    sky_c, sf_c = (np.asarray(a, float) for a in anchor)
+    rel = (np.asarray(sky_pts, float) - sky_c) * scale
+    w = np.clip((r[1] - np.linalg.norm(rel, axis=1)) / (r[1] - r[0]), 0.0, 1.0)
+    target = sf_c + rel
+    pts = np.asarray(pts, float)
+    return pts + (target - pts) * w[:, None], w
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -1260,7 +1295,7 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
-        weight_src=None, heads=None, shoulders: bool = False, drape_on: bool = False,
+        weight_src=None, heads=None, collar_anchor=None, shoulders: bool = False, drape_on: bool = False,
         wrap_on: bool = True) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
@@ -1479,6 +1514,17 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         if wrap_on and wrap is not None and not skin:
             pts, ins = neck_inside(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
             inside_n = int(ins.sum())
+        transplanted = 0
+        if collar_anchor is not None and not skin:
+            sc_ = rep.get("global_scale", 1.0)
+            tp_pts, tw = collar_transplant(s.points, pts, collar_anchor, sc_)
+            if (tw > 0).any():
+                transplanted = int((tw > 0).sum())
+                vis = (tw > 0) & np.isfinite(sky_gap) & (sky_gap >= 0) if sky_gap is not None else (tw > 0)
+                fixed, _n = keep_gap(tp_pts, np.where(vis, sky_gap * sc_ if sky_gap is not None else np.inf, np.inf),
+                                     sf_body_pts, sf_body_tris, sf_nrm, gap)
+                fixed, _n = push_out(fixed, sf_body_pts, sf_nrm, gap, tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
+                pts = np.where(vis[:, None], fixed, tp_pts)       # what hid inside Skyrim's neck stays hidden
         neck_stretch = None
         if not skin and sky_clav_z is not None:
             st_ = edge_stretch(s.points, pts, s.triangles, rep.get("global_scale", 1.0),
@@ -1529,7 +1575,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n,
+            "buried": buried, "inside_neck": inside_n, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,

@@ -2027,3 +2027,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   band in. neck_wrap now acts only where both rays meet the neck / head mesh itself. Edge-length relaxation tried
   offline (90th percentile stretch 1.72 -> 1.18) but it wrinkled the back; not used. Collar step skipped for shapes
   with nothing above the clavicles (boots had printed a collar drop).
+- 2026-11-07 (Claude, armor) Collar transplant (owner, textured comparison without heads: the beige trim does not go
+  round the neck flat and wide; verified offline on his Farengar debug meshes that a whole-collar copy matches
+  Skyrim's ring): gear within 11 cm of the neck opening (Skyrim distance, scaled; blended out by 17 cm) is copied
+  from Skyrim, placed by the centres of the two bodies' neck openings (open edges near x = 0 at the top of each body
+  mesh; Farengar: Skyrim 1.601 m, Starfield 1.519 m). Parts visible in Skyrim then keep Skyrim's gap to the body and
+  are pushed out; parts hidden inside Skyrim's neck stay hidden. Runs after the other neck steps (which still act
+  beyond its reach).
