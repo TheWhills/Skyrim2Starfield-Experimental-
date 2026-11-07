@@ -2103,3 +2103,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   of the Skyrim body surface; keep_hidden never saw them as hidden. Underwear shapes (name with "underwear", not
   "body") now left out of the Skyrim body. Saadia: 42 strap vertices up to 4 mm inside the head mesh at 1.45-1.52 m,
   above the flap band: the head band joined to the surface widened to the neck joint + 5 cm.
+- 2026-11-07 (Claude, armor) Owner: on his own character Saadia's straps are fine at default weight but sink into
+  the skin on heavier and thinner bodies; her sleeve band sinks into the upper arm on heavy bodies; the bust looks
+  pointed. Slider deltas: gear near the head now takes the head mesh's own morph deltas (its morph.dat found by
+  vertex count; body and head merged as one source; the Thin hold near the head dropped when found), and the blend
+  is 1/d^2 over the 4 nearest (was 1/d over 6) so gear grows as much as the skin right under it. Bust shape not yet
+  measured.

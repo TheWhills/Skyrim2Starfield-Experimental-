@@ -393,3 +393,16 @@ class UnderwearTests(unittest.TestCase):
         self.assertTrue(gear_fit.is_underwear(b"FemaleUnderwear"))
         self.assertTrue(gear_fit.is_underwear("MaleUnderwear_1"))
         self.assertFalse(gear_fit.is_underwear(b"FemaleUnderwearBody:0"))
+
+
+class MergedMorphTests(unittest.TestCase):
+    def test_head_deltas_after_the_body(self):
+        from fo4sf import sfmorph
+        body = sfmorph.parse(sfmorph.build(2, ["Overweight", "Thin"], {"Overweight": {1: (0.01, 0, 0)}}))
+        head = sfmorph.parse(sfmorph.build(3, ["Thin", "Overweight", "Smile"], {"Overweight": {0: (0, 0.02, 0)},
+                                                                               "Smile": {2: (0, 0, 0.1)}}))
+        m = gear_fit.merged_morph(body, head, 2)
+        self.assertEqual(m.keys, ["Overweight", "Thin"])
+        self.assertEqual(m.num_vertices, 5)
+        self.assertEqual(sorted(m.deltas["Overweight"]), [1, 2])
+        self.assertAlmostEqual(m.deltas["Overweight"][2][1], 0.02, places=3)

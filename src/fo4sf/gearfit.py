@@ -1795,7 +1795,7 @@ def morph_path(nif_rel: str, shape_name: str) -> str:
     return f"meshes/morphs/{stem}/chargen/{shape}/morph.dat"
 
 
-def morph_deltas(points: np.ndarray, body_pts: np.ndarray, body_morph, k: int = 6, chunk: int = 256):
+def morph_deltas(points: np.ndarray, body_pts: np.ndarray, body_morph, k: int = 4, chunk: int = 256):
     """({key: {vertex: delta}}, {key: {vertex: (colour, normal, tangent)}}) for gear points (body mesh space): the
     inverse-distance blend of the k nearest body vertices' slider deltas, the packed words of the nearest one."""
     keys = list(body_morph.keys)
@@ -1814,7 +1814,9 @@ def morph_deltas(points: np.ndarray, body_pts: np.ndarray, body_morph, k: int = 
         kk = min(k, nb)
         idx = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
         d = np.sqrt(np.maximum(np.take_along_axis(d2, idx, 1), 0.0))
-        w = 1.0 / np.maximum(d, 1e-3)
+        # inverse squared distance over 4 (was 6, linear): the skin right under the gear dominates, so it grows as
+        # much as that skin (2026-11-07, owner: Saadia's sleeve band sank into the arm on heavy bodies)
+        w = 1.0 / np.maximum(d, 1e-3) ** 2
         w /= w.sum(1, keepdims=True)
         near = idx[np.arange(len(q)), np.argmin(d, axis=1)]
         for key in keys:

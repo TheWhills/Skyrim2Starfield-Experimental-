@@ -347,6 +347,19 @@ def find_hands(sf_data: str, female: bool, world):
     return None, None, None, None
 
 
+def merged_morph(body, head, n_body: int):
+    """One Morph over body vertices then head vertices (index + n_body), with the body's keys."""
+    keys = list(body.keys)
+    d = {k: dict(body.deltas.get(k, {})) for k in keys}
+    e = {k: dict(body.extra.get(k, {})) for k in keys}
+    for k in keys:
+        for v, x in head.deltas.get(k, {}).items():
+            d[k][v + n_body] = x
+        for v, x in head.extra.get(k, {}).items():
+            e[k][v + n_body] = x
+    return sfmorph.Morph(body.version, n_body + head.num_vertices, keys, d, e)
+
+
 def find_body_morph(sf_data: str, num_vertices: int, female: bool):
     """(path, Morph) of the game's chargen morph.dat for the naked body: the one under meshes/morphs/human/<sex>/
     with exactly the body mesh's vertex count and the Overweight key."""
@@ -973,9 +986,20 @@ def main(argv=None):
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
             worn = shapes + ([skin_sh] if skin_sh is not None and slots else [])
+            # the head mesh's own slider deltas too (2026-11-07, owner: Saadia's halter straps sank into the skin on
+            # heavier and thinner bodies, fine at default: they lie over the female head mesh's neck / chest flap,
+            # which follows the head's morph, not the body's)
+            src_pts, src_morph = body_pts, body_morph
+            if head_mesh_pts is not None:
+                hpath, head_morph = find_body_morph(sf_data, len(head_mesh_pts), female)
+                if head_morph is not None:
+                    src_pts = np.concatenate([body_pts, head_mesh_pts])
+                    src_morph = merged_morph(body_morph, head_morph, len(body_pts))
+                    print(f"  slider deltas near the head from {hpath}")
+                    head_mesh_pts = None          # its own deltas now: no Thin hold near it
             mstats = {}
             for sh in worn:
-                morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], body_pts, body_morph, doubled,
+                morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], src_pts, src_morph, doubled,
                                           skin_used, mstats, hand_mesh_pts, head_mesh_pts))
             rep["morph_stats"] = mstats
             for n_, st in mstats.items():
