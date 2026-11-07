@@ -140,6 +140,14 @@ class ScriptTests(unittest.TestCase):
         xs_kept = sorted({round(float(body[i][0]), 2) for i in used})
         self.assertEqual(xs_kept[0], 0.2)           # covered points left out, one ring of overlap under the edge
         self.assertEqual(xs_kept[-1], 0.4)
+        # whole: skin far from Skyrim's bare-skin pieces kept too; looser gear (5 cm off) does not remove skin
+        sh2, used2 = gear_fit.skin_piece(body, tris, [(0, 0)] * len(body), w, body[:1], reach=0.01, gear=[gear],
+                                         margin=1, whole=True)
+        self.assertEqual(sorted({round(float(body[i][0]), 2) for i in used2})[-1], 0.4)
+        gear.positions = gp + [0, 0, 0.03]
+        _sh3, used3 = gear_fit.skin_piece(body, tris, [(0, 0)] * len(body), w, body[:1], gear=[gear], whole=True,
+                                          depth=gear_fit.SKIN_UNDER_DEPTH)
+        self.assertEqual(len(used3), len(body))
 
     def test_body_skin_shapes_and_slots(self):
         t = {"MaleBodyStormcloak": ["textures\\actors\\character\\male\\MaleBody_1.dds"],

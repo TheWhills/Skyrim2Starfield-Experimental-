@@ -1994,3 +1994,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the top band go to the convex outline of the body's section (both legs and hips) + 2 cm + their layer (up to 3 cm
   over the innermost skirt vertex of their band and direction), hanging from the skirt's top ring at their Skyrim
   distance from it (scaled): in and down. Offline on the same meshes: skirt hangs straight, hem back at ~0.60 m.
+- 2026-11-07 (Claude, armor) Hadvar after hang_skirt (owner): skirt shape better but hugs the legs (they come through
+  in a wide stance) and the thigh skin under it shows holes. HANG_GAP 2 -> 4 cm. Skin piece now the WHOLE Starfield
+  body minus what the body armour itself covers (gear within 3.5 cm straight out, so skin under a hanging skirt
+  stays; boots / gauntlets do not remove skin, so the body armour alone keeps its feet and hands-side skin), as
+  discussed with the owner: the body armour hides the naked body, so it must bring every bit it does not cover.

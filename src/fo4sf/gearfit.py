@@ -338,7 +338,8 @@ def skirt_gradient(points: np.ndarray, joints: Dict[str, np.ndarray]):
     return out
 
 
-HANG_GAP = 0.02      # m: a hanging skirt's distance outside the body's outline (both legs and the hips together)
+HANG_GAP = 0.04      # m (2026-11-07, owner: at 2 cm the skirt hugged the legs and they came through in a
+#                      wide stance): a hanging skirt's distance outside the body's outline (both legs and the hips together)
 HANG_SECTORS = 48
 HANG_BODY_R = 0.22   # m from the hips' axis: the body's section without the hands hanging at its sides
 

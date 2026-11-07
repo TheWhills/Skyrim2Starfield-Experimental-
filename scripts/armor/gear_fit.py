@@ -116,6 +116,7 @@ SKIN_SHAPE = b"S2S_Skin"
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
+SKIN_UNDER_DEPTH = 0.035   # m: for the whole-body skin piece: skin under looser gear (a hanging skirt) is kept
 COVER_MARGIN = 5        # rings of covered vertices kept along the edge of the visible skin (overlap under the gear;
 #                         2026-11-07: with 2, a strip of bare body showed between the skin piece and the sleeve hems)
 
@@ -142,23 +143,26 @@ def covered_by(body: np.ndarray, body_nrm: np.ndarray, gear, depth: float = COVE
 
 
 def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH,
-               gear=(), margin: int = COVER_MARGIN):
+               gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH):
     """(HairShape in skeleton space, kept body vertex indices) of the Starfield body where Skyrim's bare-skin pieces
     lie after the fit (2026-11-06, owner: Skyrim's bare arm runs up under the sleeve, Starfield's skin starts lower):
-    the body vertices within `reach` of them and the triangles among them. None when nothing is kept."""
+    the body vertices within `reach` of them and the triangles among them. None when nothing is kept. whole: the
+    whole body instead (2026-11-07, owner: the body armour hides the naked body, so everything it does not cover must
+    come with it: feet without boots, and Hadvar's thighs under the skirt showed holes); gear: the pieces whose
+    cover removes skin (the body armour's own, not boots or gauntlets, which may be taken off)."""
     from fo4sf import skyrimhair
     if not len(sources):
         return None, []
     zero = np.tile([0.0, 0.0, 1.0], (len(sources), 1))
     _d, dist, _i = skyrimhair.nearest_surface(body_skel, sources, zero)
-    keep = dist < reach
+    keep = np.ones(len(body_skel), bool) if whole else dist < reach
     t = np.asarray(body_tris, int).reshape(-1, 3)
     if len(gear):
         # only the skin that shows, plus a narrow overlap under the gear's edges (2026-11-06: under the cowl the skin
         # piece grew past the cowl on heavier bodies and showed through on the chest)
         bn = skyrimhair._vertex_face_normals(body_skel, t)
         bn /= np.maximum(np.linalg.norm(bn, axis=1, keepdims=True), 1e-12)
-        cov = covered_by(body_skel, bn, gear) & keep
+        cov = covered_by(body_skel, bn, gear, depth) & keep
         visible = keep & ~cov
         grow = visible.copy()
         for _ in range(margin):
@@ -461,7 +465,7 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
 
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
-        head_weights: bool = False):
+        head_weights: bool = False, body_piece_names=None):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -514,8 +518,11 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         if src:
             uvs, mat = starfield_body_skin(sf_data, female)
             skel_body = pts @ frame[:3, :3].T + frame[:3, 3]
-            gear_fit_shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)]
-            skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src), gear=gear_fit_shapes)
+            gear_fit_shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)
+                               and (body_piece_names is None or sh.name.decode("latin-1", "replace")
+                                    in set(body_piece_names))]
+            skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src), gear=gear_fit_shapes,
+                                    whole=True, depth=SKIN_UNDER_DEPTH)
             if skin is not None:
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used
@@ -719,7 +726,8 @@ def main(argv=None):
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
                              () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate,
                              sky._read(bsa.norm(SKY_HEADS[female])),
-                             () if a.no_skin_piece else sorted(body_skin_shapes(textures)), a.head_weights)
+                             () if a.no_skin_piece else sorted(body_skin_shapes(textures)), a.head_weights,
+                             [n for n, sl in slots_by_shape(gear_bytes, meshes).items() if 3 in sl])
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
