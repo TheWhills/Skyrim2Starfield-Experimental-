@@ -2069,3 +2069,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   naked-feet slot). Skin piece = the Starfield body where Skyrim's bare-skin shapes lie (with the overlap under gear
   edges), plus the feet (body vertices mostly on Foot / Toe / Ankle bones) when the body armour does not cover
   Skyrim slot 37, so boots stay removable. --whole-skin keeps the whole-body variant.
+- 2026-11-07 (Claude, armor) Owner's next test: Ralof, Ysolda, Nazeem and Saadia in game wearing their own outfits.
+  gear_fit --add keeps the other outfits already in S2SArmorTest.esm (this --name's records replaced) and their
+  converted textures (_staging kept, packed again each run); face_fit --outfits-plugin S2SArmorTest.esm makes it a
+  master and sets each test NPC's DOFT / SOFT to the OTFT named S2S_<NPC EditorID>_outfit_Outfit. Female bodies
+  (Ysolda, Saadia) go through gear_fit for the first time: unresolved.

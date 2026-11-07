@@ -788,6 +788,9 @@ def main(argv=None):
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
+    ap.add_argument("--add", action="store_true",
+                    help="keep the other outfits already in S2SArmorTest.esm (and their textures); this --name's "
+                         "own records are replaced")
     ap.add_argument("--whole-skin", action="store_true",
                     help="skin piece = the whole body minus what the armour covers (default: Skyrim's own bare-skin "
                          "parts, plus the feet when the armour does not cover them, as Skyrim shows them)")
@@ -872,7 +875,8 @@ def main(argv=None):
             import shutil
             from fo4sf import skyrimconvert
             staging = os.path.join(a.out, "_staging")
-            shutil.rmtree(staging, ignore_errors=True)
+            if not a.add:                 # --add: earlier outfits' converted textures stay and are packed again
+                shutil.rmtree(staging, ignore_errors=True)
             conv = skyrimconvert.SkyrimConverter(sky, staging, texconv, cr, collision_template=None, prefix="s2s")
             for gb in gear_bytes:
                 mats.update(shape_materials(conv, gb))
@@ -902,7 +906,9 @@ def main(argv=None):
                 body_folder = "\\".join(w.capitalize() for w in mp.rsplit("/", 1)[0].split("/"))
         files, _recs, prep, material, nifs = os_export.write_armor_parts(
             sf_data, a.out, a.name, a.full or a.name.replace("_", " "), parts, binds, variants=a.test_variants,
-            morph_test=body_folder)
+            morph_test=body_folder, add=a.add)
+        if prep.get("kept_from_plugin"):
+            print(f"kept {prep['kept_from_plugin']} records of other outfits already in {os_export.PLUGIN} (--add)")
         print(f"one addon + morph record per shape (template model {prep.get('template_vertices')} vertices):")
         for r in prep["parts"]:
             print(f"  {r['shape']}: ARMA {r['ARMA']} slots {r['slots']} -> {r['model']}; MRPH {r['MRPH']} "
@@ -921,7 +927,7 @@ def main(argv=None):
         base = os.path.splitext(os_export.PLUGIN)[0]
         packed = hair_pack.pack(staging, a.out, a.starfield, a.archive2 or None, f"{base} - Main.ba2",
                                 f"{base} - Textures.ba2")
-        shutil.rmtree(staging, ignore_errors=True)
+        # the converted textures stay in _staging for later --add runs (packed into the archives each time)
         rep["materials"] = {"by_shape": {n: mats.get(n) for n in names}, "packed": packed,
                             "errors": conv.material_errors}
         for n in names:

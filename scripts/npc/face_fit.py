@@ -444,6 +444,18 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
     return res
 
 
+def outfits_by_npc(path: str, master_index: int) -> dict:
+    """{Skyrim NPC EditorID, lower case: FormID as seen from the plugin that has `path` as master number
+    master_index} of the outfits gear_fit wrote (EDID S2S_<NPC>_outfit_Outfit)."""
+    out = {}
+    for _t, _h, subs, fid in sfplugin.records(path, [b"OTFT"]):
+        e = sfplugin.edid(subs)
+        m = re.match(r"S2S_(.+)_outfit_Outfit$", e, re.I)
+        if m:
+            out[m.group(1).lower()] = (master_index << 24) | (fid & 0xFFFFFF)
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
@@ -477,6 +489,9 @@ def main(argv=None):
                     help="fit the Skyrim face as it is, not averaged with its mirror image")
     ap.add_argument("--pos-unit", type=float, default=0.01, help="metres per regions-file position unit")
     ap.add_argument("--test-plugin", action="store_true")
+    ap.add_argument("--outfits-plugin", help="S2SArmorTest.esm from scripts/armor/gear_fit.py: each test NPC wears the "
+                                             "outfit made for it there (gear_fit --name <NPC EditorID>_outfit), as "
+                                             "default and space outfit; the plugin becomes a master")
     ap.add_argument("--template-npc", action="append", default=[],
                     help="Starfield NPC EditorID the test NPCs copy (male, then female); default: a plain one")
     ap.add_argument("--hair", action="store_true",
@@ -632,6 +647,11 @@ def main(argv=None):
                     names[fn] = ba2.Ba2(os.path.join(sf_data, fn)).names
             baked = baked_face_index(names)
             report["baked_faces"] = len(baked)
+        worn = {}
+        if a.outfits_plugin:
+            masters = list(masters) + [os.path.basename(a.outfits_plugin)]
+            worn = outfits_by_npc(a.outfits_plugin, len(masters) - 1)
+            report["outfits"] = {k: f"{v:08X}" for k, v in worn.items()}
         no_outfit = None
         otft = sfplugin.records(sf_esm, [b"OTFT"])
         if otft:
@@ -658,6 +678,10 @@ def main(argv=None):
             subs = without_templates(subs)
             if no_outfit is not None:
                 subs = sfplugin.edit(subs, {b"DOFT": struct.pack("<I", no_outfit), b"SOFT": struct.pack("<I", no_outfit)})
+            if row["edid"].lower() in worn:
+                o = struct.pack("<I", worn[row["edid"].lower()])
+                subs = sfplugin.edit(subs, {b"DOFT": o, b"SOFT": o})
+                row["outfit"] = f"{worn[row['edid'].lower()]:08X}"
             if real is not None:
                 subs = npc_dress(subs, by_edid[row["edid"].lower()], npcs, real, row)
                 row["name"] = full
@@ -685,6 +709,9 @@ def main(argv=None):
                 if no_outfit is not None:
                     csubs = sfplugin.edit(csubs, {b"DOFT": struct.pack("<I", no_outfit),
                                                   b"SOFT": struct.pack("<I", no_outfit)})
+                if row["edid"].lower() in worn:
+                    o = struct.pack("<I", worn[row["edid"].lower()])
+                    csubs = sfplugin.edit(csubs, {b"DOFT": o, b"SOFT": o})
                 if real is not None:
                     csubs = npc_dress(csubs, by_edid[row["edid"].lower()], npcs, real, dict(row))
                 recs.append((b"NPC_", tpl[1], csubs, cfid))

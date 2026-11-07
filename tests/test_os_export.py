@@ -273,6 +273,19 @@ class RecordTests(unittest.TestCase):
         self.assertEqual([r[0] for r in recs], [b"ARMA", b"ARMA", b"ARMO", b"OTFT"])   # no MRPH in the template
         self.assertEqual([r["MRPH"] for r in rep["parts"]], [None, None])
 
+    def test_kept_records_for_add(self):
+        recs = [(b"ARMO", HDR(b"ARMO"), [(b"EDID", z("S2S_Ralof_outfit"))], 0x01000800),
+                (b"ARMA", HDR(b"ARMA"), [(b"EDID", z("S2S_Ralof_outfit_Coat_AA"))], 0x01000801),
+                (b"ARMO", HDR(b"ARMO"), [(b"EDID", z("S2S_Ysolda_outfit"))], 0x01000802),
+                (b"OTFT", HDR(b"OTFT"), [(b"EDID", z("S2S_Ysolda_outfit_Outfit"))], 0x01000803)]
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, E.PLUGIN)
+            with open(p, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            kept = E.kept_records(p, "Ralof_outfit")
+            self.assertEqual(sorted(sfplugin.edid(r[2]) for r in kept), ["S2S_Ysolda_outfit", "S2S_Ysolda_outfit_Outfit"])
+            self.assertEqual(E.kept_records(os.path.join(d, "none.esm"), "X"), [])
+
     @staticmethod
     def _esm(d):
         p = os.path.join(d, "tpl.esm")

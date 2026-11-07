@@ -745,7 +745,7 @@ def morph_tests(sf_esm: str, name: str, rows, body_folder: str) -> list:
 
 
 def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds: Dict[str, tuple], transform=None,
-                      drop=(), variants: bool = False, morph_test: str = ""):
+                      drop=(), variants: bool = False, morph_test: str = "", add: bool = False):
     """One NIF, ARMA and MRPH per part (see armor_records_parts): meshes\\S2S\\<name>\\<shape>.nif each, and
     S2SArmorTest.esm. parts: [{"shape": HairShape, "material", "back": bool, "skin": bool, "slots": list or None}].
     Returns (files, records, report, template material, {shape name: nif path})."""
@@ -780,7 +780,10 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
                                     rel[:-4].replace("\\", "/"), transform, [bool(p.get("back"))]))
         rows.append({"shape": sname, "nif": rel, "skin": bool(p.get("skin")), "slots": p.get("slots"),
                      "vertices": len(sh.positions) * (2 if p.get("back") else 1)})
-    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices, variants)
+    keep = kept_records(os.path.join(out, PLUGIN), name) if add else []
+    start = (max(r[3] & 0xFFFFFF for r in keep) - sfplugin.FIRST_OBJECT + 1) if keep else 0
+    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices, variants, start=start)
+    prep["kept_from_plugin"] = len(keep)
     prep["tests"] = []
     for tag, label, t_rows in (morph_tests(sf_esm, name, rows, morph_test) if morph_test else []):
         start = max(r[3] & 0xFFFFFF for r in recs) - sfplugin.FIRST_OBJECT + 1
@@ -797,8 +800,24 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
             fh.write(data)
     info = sfplugin.header_info(sf_esm)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
-        fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield armor test", masters=["Starfield.esm"]))
+        fh.write(sfplugin.build(keep + recs, info, author="Skyrim2Starfield armor test", masters=["Starfield.esm"]))
     return files, recs, prep, material, nifs
+
+
+def kept_records(path: str, name: str) -> list:
+    """The records of an existing S2SArmorTest.esm other than this name's own (S2S_<name> and S2S_<name>_*), so
+    several outfits can live in one plugin (2026-11-07: the owner wants Ralof's, Ysolda's, Nazeem's and Saadia's
+    outfits in game at once)."""
+    if not os.path.isfile(path):
+        return []
+    own = f"s2s_{name}".lower()
+    out = []
+    for r in sfplugin.records(path, [b"ARMA", b"MRPH", b"ARMO", b"OTFT"]):
+        e = sfplugin.edid(r[2]).lower()
+        if e == own or e.startswith(own + "_"):
+            continue
+        out.append(r)
+    return out
 
 
 def main(argv=None):

@@ -127,3 +127,17 @@ class FaceFitScriptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutfitsPluginTests(unittest.TestCase):
+    def test_outfits_by_npc(self):
+        import face_fit
+        from fo4sf import sfplugin
+        hdr = struct.pack("<4sIII", b"OTFT", 0, 0, 0) + bytes(8)
+        recs = [(b"OTFT", hdr, [(b"EDID", sfplugin.zs("S2S_Ralof_outfit_Outfit"))], 0x01000809),
+                (b"OTFT", hdr, [(b"EDID", sfplugin.zs("Something"))], 0x0100080A)]
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "S2SArmorTest.esm")
+            with open(p, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            self.assertEqual(face_fit.outfits_by_npc(p, 2), {"ralof": 0x02000809})
