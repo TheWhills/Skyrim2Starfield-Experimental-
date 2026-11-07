@@ -2077,3 +2077,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-07 (Claude, armor) gear_fit --add re-runs keep the outfit's ARMO and OTFT FormIDs (reused by EditorID;
   other new records numbered past every record in the plugin), so test NPCs pointing at an outfit stay dressed after
   an outfit is re-fitted. Owner's first four-NPC test: NPCs spawned without their outfits (cause not yet known).
+- 2026-11-07 (Claude, armor) Ysolda / Saadia in game (owner): thin lines across the chest and an outlined
+  rectangle on the back. Measured on their debug meshes (verified): the lines follow the lower edge of Starfield's
+  female head mesh, which lies exactly on the body (and on our skin piece) over the upper chest and back; the
+  dresses themselves match Skyrim's shape. Low necklines leave that edge uncovered, where our skin piece, with
+  re-encoded positions (morph margin), recomputed normals / tangents and median-frame binds, did not match the body
+  under the head's edge (supported). The skin piece now keeps the vanilla body's own encoding: scale, int16
+  positions, packed normals and tangents, and the body's own per-bone binds.

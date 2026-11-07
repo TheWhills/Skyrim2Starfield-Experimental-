@@ -1686,6 +1686,14 @@ def _mesh(sh: HairShape, bones: List[str], back_faces: bool):
     # with its own morph, showed none)
     m.scale, m.positions = sfmesh.encode_positions([sfmesh.decode_position(p, m.scale) for p in m.positions],
                                                    MORPH_MARGIN)
+    raw = getattr(sh, "raw", None)
+    if raw is not None and not back_faces and len(raw[1]) == len(m.positions):
+        # a copy of a vanilla mesh: its own encoding (scale, int16 positions, packed normals / tangents)
+        m.scale, m.positions = raw[0], [tuple(p) for p in raw[1]]
+        if raw[2] is not None and len(raw[2]) == len(m.positions):
+            m.normals = list(raw[2])
+        if raw[3] is not None and len(raw[3]) == len(m.positions):
+            m.tangents = list(raw[3])
     idx = {b: i for i, b in enumerate(bones)}
     # 4 per vertex, or 8 when a vertex needs more (Starfield's own body skin uses 8; 2026-11-06: cutting the body's
     # arm skin to 4 made it bend apart from the game's hands mesh)

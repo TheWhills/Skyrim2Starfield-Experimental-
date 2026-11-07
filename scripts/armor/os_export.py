@@ -779,7 +779,7 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
         sname = sh.name.decode("latin-1")
         rel = part_nif(name, sname)
         nifs[sname] = rel
-        files.update(body_nif_files([sh], [p.get("material") or material], binds,
+        files.update(body_nif_files([sh], [p.get("material") or material], p.get("binds") or binds,
                                     rel[:-4].replace("\\", "/"), transform, [bool(p.get("back"))]))
         rows.append({"shape": sname, "nif": rel, "skin": bool(p.get("skin")), "slots": p.get("slots"),
                      "vertices": len(sh.positions) * (2 if p.get("back") else 1)})

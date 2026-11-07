@@ -107,7 +107,7 @@ def starfield_body_skin(sf_data: str, female: bool):
     m = sfmesh.parse(hkx_to_af.vanilla_file("geometries/" + paths[0].replace("\\", "/") + ".mesh", sf_data)[0])
     uv = np.array(m.uv1, np.uint16).reshape(-1, 2).view(np.float16).astype(float)
     mat = next((r["material"] for r in slot_probe.model_shapes(nif) if r["material"]), "")
-    return [tuple(map(float, x)) for x in uv], mat
+    return [tuple(map(float, x)) for x in uv], mat, m
 
 
 HIDE_BODY_SLOTS = [3, 5, 7]   # as vanilla outfits: 3 hides the naked body (nightwear upper body 3 + 5, lower 7)
@@ -593,7 +593,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
             src = src or [np.zeros((0, 3))]
             feet = np.array([sum(x for b, x in vw if any(k in b for k in FEET_BONES)) >= 0.5 for vw in body_w], bool) \
                 if feet_skin else None
-            uvs, mat = starfield_body_skin(sf_data, female)
+            uvs, mat, body_mesh = starfield_body_skin(sf_data, female)
             skel_body = pts @ frame[:3, :3].T + frame[:3, 3]
             gear_fit_shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)
                                and (body_piece_names is None or sh.name.decode("latin-1", "replace")
@@ -612,12 +612,21 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     shapes = gearfit.to_mesh_space(res.shapes, frame)
     for i, sh in enumerate(shapes):
         sh.tangents = os_export.tangents(np.asarray(sh.positions), np.asarray(sh.normals), sh.uvs, sh.triangles)
+        if sh.name == SKIN_SHAPE and skin is not None and res.report.get("_skin_used") is not None:
+            # the skin piece is the vanilla body itself: its own packed positions, normals and tangents, bit for bit
+            # (2026-11-07, Ysolda / Saadia: low necklines showed a thin seam where Starfield's head mesh ends on the
+            # chest and back; our re-encoded positions and recomputed normals did not match the body's under it)
+            used = res.report["_skin_used"]
+            sh.raw = (body_mesh.scale, [body_mesh.positions[k] for k in used],
+                      [body_mesh.normals[k] for k in used] if body_mesh.normals else None,
+                      [body_mesh.tangents[k] for k in used] if body_mesh.tangents else None)
         shapes[i] = sh
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     binds = gearfit.skeleton_binds(bones, world, frame, shapes)
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
+    res.report["_body_binds"] = body_binds
     if sf_head_full is not None:      # the head too: collar parts next to it do not shrink under Thin
         res.report["_head_pts"] = (np.asarray(sf_head_full[0]) - frame[:3, 3]) @ np.linalg.inv(frame[:3, :3]).T
     if hand_pts is not None:          # the hands in the body mesh's space, for the morphs
@@ -850,6 +859,7 @@ def main(argv=None):
     dbg = rep.pop("_debug", None)
     skin_used = rep.pop("_skin_used", None)
     hand_mesh_pts = rep.pop("_hand_pts", None)
+    body_binds_v = rep.pop("_body_binds", None)
     head_mesh_pts = rep.pop("_head_pts", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
@@ -898,7 +908,9 @@ def main(argv=None):
         parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled, "slots": piece_slots.get(n)}
                  for sh, n in zip(shapes, names)]
         if skin_sh is not None and slots:
-            parts.append({"shape": skin_sh, "material": sp["material"], "skin": True})
+            parts.append({"shape": skin_sh, "material": sp["material"], "skin": True,
+                          "binds": body_binds_v if body_binds_v and all(
+                              b in body_binds_v for vw in skin_sh.weights for b, _w in vw) else None})
         body_folder = ""
         if a.morph_test and not a.no_morphs:
             mp, _bm = find_body_morph(sf_data, len(body_pts), female)

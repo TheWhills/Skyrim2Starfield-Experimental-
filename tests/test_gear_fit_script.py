@@ -361,3 +361,18 @@ class FeetSkinTests(unittest.TestCase):
         sh, used = gear_fit.skin_piece(body, tris, [(0, 0)] * 6, w, np.zeros((0, 3)), extra=extra)
         self.assertEqual(used, [0, 1, 2])                     # the feet only: legs stay hidden under the robe
         self.assertIsNone(gear_fit.skin_piece(body, tris, [(0, 0)] * 6, w, np.zeros((0, 3)))[0])
+
+
+class RawSkinTests(unittest.TestCase):
+    def test_vanilla_encoding_kept(self):
+        import numpy as np
+        from fo4sf import sfmesh, skyrimhair
+        pos = np.array([[0, 0, 1.0], [0.5, 0, 1.2], [0, 0.3, 0.9]])
+        sh = skyrimhair.HairShape(b"S2S_Skin", pos, np.tile([0, 0, 1.0], (3, 1)), np.tile([1.0, 0, 0], (3, 1)),
+                                  [(0.0, 0.0), (1, 0), (0, 1)], [(0, 1, 2)], [[("A", 1.0)]] * 3, -1, -1, -1,
+                                  colors=[(255, 255, 255, 255)] * 3)
+        scale, raw = sfmesh.encode_positions(pos.tolist())
+        sh.raw = (scale, raw, [123, 456, 789], [11, 22, 33])
+        m = skyrimhair._mesh(sh, ["A"], False)
+        self.assertEqual((m.scale, m.positions, m.normals, m.tangents), (scale, [tuple(r) for r in raw],
+                                                                           [123, 456, 789], [11, 22, 33]))
