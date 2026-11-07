@@ -255,6 +255,16 @@ class FitTests(unittest.TestCase):
         res2 = G.fit([gear], [body], world, sp, np.array(st),
                      weight_src=(sp, np.array(st), [[("C_Head", 1.0)]] * len(sp)))
         self.assertEqual({b for vw in res2.shapes[0].weights for b, _ in vw}, {"C_Head"})
+        # Skyrim's surface detail kept: a ripple round the cuirass survives the push out onto the wider body
+        gp, gn, gt = self.tube(0.11, 1.10, 1.30, n=48, rows=12)
+        a_ = np.arctan2(gp[:, 1], gp[:, 0])
+        rip = gp.copy()
+        rip[:, :2] *= (1 + 0.06 * np.cos(4 * a_))[:, None]
+        rg = G.SkyShape(b"Ripple", rip, gn, [(0.0, 0.0)] * len(rip), gt, bones, [[(0, 0.5), (1, 0.5)]] * len(rip))
+        r6 = np.linalg.norm(np.asarray(G.fit([rg], [body], world, sp, np.array(st)).shapes[0].positions)[:, :2], axis=1)
+        mid = (gp[:, 2] > 1.15) & (gp[:, 2] < 1.25)
+        amp = np.corrcoef(r6[mid], np.cos(4 * a_[mid]))[0, 1]
+        self.assertGreater(amp, 0.5)
         # gear inside Skyrim's body but away from any drawn skin shows in Skyrim (the naked body is not drawn):
         # it is pushed out of Starfield's, not kept hidden
         ip, _in, it = self.tube(0.095, 1.25, 1.30)

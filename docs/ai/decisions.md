@@ -2116,3 +2116,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   drawn under an outfit. keep_hidden had sunk 208 of them into Starfield's bust. "Hidden in Skyrim" now means inside
   the body AND within 2 cm of drawn skin; it drives keep_hidden, bury, final_relax's exemption and the collar's
   no-push-out exemption (the latter also left Saadia's visible halter straps inside the skin near the neck).
+- 2026-11-07 (Claude, armor) Owner on the textured render: Saadia's straps run a different path, the bust is mangled,
+  the shape over the arm differs. Offline on his debug meshes (verified visually, textured z-buffer render): the
+  fit's placement smoothed (25 rounds) plus Skyrim's own detail (Skyrim shape minus its smoothed self) gave a clean
+  bust, Skyrim's lacing and straps. New step detail transfer (before final_relax): the detail is posed by the same
+  bone blend as the points (blend(S + L) - blend(S)); skirt-weighted and collar-kept vertices exempt.

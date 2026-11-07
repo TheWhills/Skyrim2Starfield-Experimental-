@@ -1211,6 +1211,7 @@ def push_faces_out(pts: np.ndarray, tris, body_pts: np.ndarray, body_tris, body_
     return p, int(moved.sum())
 
 
+DETAIL_ROUNDS = 25     # smoothing rounds splitting placement (fit) from detail (Skyrim)
 FINAL_ROUNDS = 12      # neighbour-averaging rounds of the final relax
 
 
@@ -1661,6 +1662,18 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                np.asarray(s.points)[:, 2] > sky_clav_z)
             if len(st_):
                 neck_stretch = [round(float(np.percentile(st_, q)), 2) for q in (10, 50, 90)]
+        if not skin and DETAIL_ROUNDS and len(pts):
+            # Skyrim's own surface detail back (2026-11-07, owner comparing Saadia's dress with Skyrim's: the bust
+            # mangled, the strap's path and the shape over the arm different; checked offline on his debug meshes:
+            # the fit's smooth placement plus Skyrim's detail matched Skyrim's bust, lacing and straps). The detail
+            # is the Skyrim shape minus its smoothed self, posed by the same bone blend as the points.
+            sp_ = np.asarray(s.points, float)
+            lap = sp_ - smooth_moves(np.zeros_like(sp_), sp_, s.triangles, rounds=DETAIL_ROUNDS)
+            posed = blend(sp_ + lap, s.normals, s.bones, s.weights, transforms)[0] - \
+                blend(sp_, s.normals, s.bones, s.weights, transforms)[0]
+            new_pts = smooth_moves(np.zeros_like(pts), pts, s.triangles, rounds=DETAIL_ROUNDS) + posed
+            fixed = skirt_weighted(s.bones, s.weights) | collar_keep
+            pts = np.where(fixed[:, None], pts, new_pts)
         if not skin and FINAL_ROUNDS and len(sf_body_pts):
             keep_out = ~sky_hidden
             keep_out &= ~collar_keep
