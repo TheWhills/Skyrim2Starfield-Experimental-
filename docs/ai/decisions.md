@@ -2034,3 +2034,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   mesh; Farengar: Skyrim 1.601 m, Starfield 1.519 m). Parts visible in Skyrim then keep Skyrim's gap to the body and
   are pushed out; parts hidden inside Skyrim's neck stay hidden. Runs after the other neck steps (which still act
   beyond its reach).
+- 2026-11-07 (Claude, armor) Collar transplant in game (owner): "way closer to Skyrim"; the shoulder tops showed
+  through the robe at every weight. The copy reached them (11 cm full, 17 cm blend): now 9 cm full, 13 cm blend
+  (offline: ring still Skyrim's, front trim slightly wider). Owner also reports a hand clipping on the thinnest body;
+  not yet located.

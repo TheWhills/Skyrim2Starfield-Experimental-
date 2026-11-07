@@ -1136,7 +1136,9 @@ def edge_stretch(sky_pts: np.ndarray, pts: np.ndarray, tris, scale: float = 1.0,
     return b[ok] / a[ok]
 
 
-TRANSPLANT_R = (0.11, 0.17)   # m from the neck opening's centre: the collar copied whole inside, fitted beyond
+TRANSPLANT_R = (0.09, 0.13)   # m from the neck opening's centre: the collar copied whole inside, fitted beyond
+#                               (2026-11-07: with (0.11, 0.17) the copy reached the shoulder tops and they showed
+#                               through at every weight)
 
 
 def neck_rim_centre(points: np.ndarray, tris, window: float = 0.18, half_width: float = 0.12):
