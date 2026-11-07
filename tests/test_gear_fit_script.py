@@ -335,3 +335,17 @@ class HeadThinTests(unittest.TestCase):
         self.assertAlmostEqual(got.deltas["Thin"].get(0, (0.0,))[0], 0.0, places=4)   # by the head: no shrink
         self.assertAlmostEqual(got.deltas["Thin"][1][0], -0.01, places=3)        # far: as the body
         self.assertAlmostEqual(got.deltas["Overweight"][0][0], 0.01, places=3)   # other sliders unchanged
+
+
+class UnderSkinTests(unittest.TestCase):
+    def test_gear_just_under_the_skin_hides_it(self):
+        import numpy as np
+        from fo4sf import skyrimhair
+        body = np.array([[0, 0, 0.0], [0.5, 0, 0.0]])
+        nrm = np.tile([0, 0, 1.0], (2, 1))
+        gp = np.array([[-0.1, -0.1, -0.01], [0.1, -0.1, -0.01], [0.0, 0.1, -0.01]])      # 1 cm under the first
+        gear = skyrimhair.HairShape(b"Neck", gp, np.tile([0, 0, 1.0], (3, 1)), np.zeros((3, 3)), [], [(0, 1, 2)],
+                                    [], -1, -1, -1)
+        self.assertEqual(gear_fit.covered_by(body, nrm, [gear]).tolist(), [True, False])
+        gear.positions = gp - [0, 0, 0.03]                                                # 4 cm under: not
+        self.assertEqual(gear_fit.covered_by(body, nrm, [gear]).tolist(), [False, False])

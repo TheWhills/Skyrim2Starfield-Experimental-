@@ -1064,6 +1064,7 @@ def shoulder_drop(pts: np.ndarray, field, axis, clav_z: float) -> np.ndarray:
     return out
 
 
+HEAD_HUG = (0.01, 0.025)  # m from the head mesh: neck-skin weights inside the first, own weights past the second
 OWN_WEIGHT_BLEND = 0.03   # m above the clavicles over which gear goes from the body's weights to its own
 COLLAR_SECTORS = 8
 NECKLINE_R = 0.085       # m from the neck axis: lowered collar this close may stay inside the body (the shoulders
@@ -1334,7 +1335,7 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
-        weight_src=None, heads=None, collar_anchor=None, shoulders: bool = False, drape_on: bool = False,
+        weight_src=None, heads=None, collar_anchor=None, head_weights_all: bool = True, shoulders: bool = False, drape_on: bool = False,
         wrap_on: bool = True) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
@@ -1582,9 +1583,15 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             far = 0
         w = sf_weights(s.bones, s.weights, set(sf_world), follows)
         own = list(w)
+        w_head_src = None
         near = 0
-        if weight_src is not None and len(pts):
+        if weight_src is not None and len(pts) and head_weights_all:
             w, near = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
+        elif weight_src is not None and len(pts) and sf_body_weights is not None \
+                and len(sf_body_weights) == len(sf_body_pts):
+            w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
+            wh, _n = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
+            w_head_src = wh
         elif sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
             w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
         if not skin:
@@ -1598,10 +1605,19 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # the outfit and does not move with the neck or head; with the neck skin's weights its side rose when the
             # head turned
             zz = np.asarray(s.points)[:, 2] - sky_clav_z
+            hd = np.full(len(pts), np.inf)
+            if heads is not None and not head_weights_all and weight_src is not None:
+                hp_ = np.asarray(heads[1][0], float)
+                for c0 in range(0, len(pts), 512):
+                    q = pts[c0:c0 + 512]
+                    hd[c0:c0 + 512] = np.sqrt(((q[:, None, :] - hp_[None, :, :]) ** 2).sum(-1).min(1))
             for i in np.nonzero(zz > 0)[0]:
                 t = min(1.0, zz[i] / OWN_WEIGHT_BLEND)          # blended in over the first few cm
+                # right against the neck the gear keeps the neck skin's weights (2026-11-07, owner: turning the head,
+                # the neck came through the back of Farengar's collar trim)
+                t *= float(np.clip((hd[i] - HEAD_HUG[0]) / (HEAD_HUG[1] - HEAD_HUG[0]), 0.0, 1.0))
                 mix: Dict[str, float] = {}
-                for b, x in w[i]:
+                for b, x in (w_head_src[i] if w_head_src is not None and hd[i] < HEAD_HUG[1] else w[i]):
                     mix[b] = mix.get(b, 0.0) + (1 - t) * x
                 for b, x in own[i]:
                     mix[b] = mix.get(b, 0.0) + t * x

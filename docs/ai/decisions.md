@@ -2053,3 +2053,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   trim, worst on the thinnest body. At default weight none of the trim's visible vertices is inside body or head
   (verified on the debug meshes), so the slider is the cause (supported): the trim shrinks with the body's Thin, the
   head mesh's neck does not. Gear within 3 cm of the head mesh now gets no Thin delta (full by 8 cm).
+- 2026-11-07 (Claude, armor) Farengar collar trim (owner): no clipping looking straight ahead at default; skin through
+  the trim when the head turns. Above the clavicles the gear kept its own weights (no neck bones), while the neck
+  skin under it turns. Now gear within 1 cm of the head mesh takes the neck skin's weights (blended to its own by
+  2.5 cm); the rest of the collar still keeps its own (the head-weights option stays off by default). Also the
+  skin piece now drops skin with gear up to 1.5 cm under it (the neckline brought down into the body), not only
+  over it. The Thin change of the previous commit stays.

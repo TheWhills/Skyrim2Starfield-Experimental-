@@ -117,6 +117,7 @@ SKIN_SHAPE = b"S2S_Skin"
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
 SKIN_UNDER_DEPTH = 0.035   # m: for the whole-body skin piece: skin under looser gear (a hanging skirt) is kept
+UNDER_SKIN = 0.015      # m: gear this close under the skin also hides it
 COVER_MARGIN_M = 0.02   # m: and at most this far from the visible skin
 COVER_MARGIN = 5        # rings of covered vertices kept along the edge of the visible skin (overlap under the gear;
 #                         2026-11-07: with 2, a strip of bare body showed between the skin piece and the sleeve hems)
@@ -138,7 +139,10 @@ def covered_by(body: np.ndarray, body_nrm: np.ndarray, gear, depth: float = COVE
             continue
         cp, _s, dist = gearfit.closest_on_mesh(body[cand], gp, gt, gn)
         dirn = (cp - body[cand]) / np.maximum(dist, 1e-9)[:, None]
-        hit = (dist < depth) & (np.einsum("ij,ij->i", dirn, body_nrm[cand]) > 0.5)
+        along = np.einsum("ij,ij->i", dirn, body_nrm[cand])
+        # also gear just under the skin (2026-11-07, Farengar: the neckline is brought down into the body on
+        # purpose; the whole-body skin piece then showed over the beige trim)
+        hit = ((dist < depth) & (along > 0.5)) | ((dist < UNDER_SKIN) & (along < -0.5))
         out[cand[hit]] = True
     return out
 
@@ -534,7 +538,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     try:
         h_pts, h_tris, h_w = starfield_part(sf_data, head_path, world)
         sf_head_full = (h_pts, h_tris)
-        if head_weights and len(h_w) == len(h_pts):
+        if len(h_w) == len(h_pts):
             # weights also from the whole head: the collar's top takes the head's own neck-skin weights (2026-11-06:
             # with only the neck-weighted part, the collar had no C_Head and stayed facing forward when the head turned)
             weight_src = (np.concatenate([surf_pts, h_pts]), np.concatenate([surf_tris, h_tris + len(surf_pts)]),
@@ -569,7 +573,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     c_sf = gearfit.neck_rim_centre(skel_pts, tris)
     collar_anchor = (c_sky, c_sf) if c_sky is not None and c_sf is not None else None
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet,
-                      collar_anchor=collar_anchor,
+                      collar_anchor=collar_anchor, head_weights_all=head_weights,
                       weight_src=weight_src,
                       heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
