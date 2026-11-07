@@ -2074,3 +2074,6 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   converted textures (_staging kept, packed again each run); face_fit --outfits-plugin S2SArmorTest.esm makes it a
   master and sets each test NPC's DOFT / SOFT to the OTFT named S2S_<NPC EditorID>_outfit_Outfit. Female bodies
   (Ysolda, Saadia) go through gear_fit for the first time: unresolved.
+- 2026-11-07 (Claude, armor) gear_fit --add re-runs keep the outfit's ARMO and OTFT FormIDs (reused by EditorID;
+  other new records numbered past every record in the plugin), so test NPCs pointing at an outfit stay dressed after
+  an outfit is re-fitted. Owner's first four-NPC test: NPCs spawned without their outfits (cause not yet known).

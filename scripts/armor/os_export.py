@@ -391,7 +391,7 @@ def with_fields(subs, fields: Dict[bytes, bytes]) -> list:
 
 
 def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, drop=(), template_vertices=None,
-                        variants: bool = False, start: int = 0):
+                        variants: bool = False, start: int = 0, reuse=None):
     """ARMA + MRPH per part, then ARMO and OTFT. parts: [{"shape", "nif", "vertices", "skin": bool, "slots": list or
     None}]. Gear parts copy the template armor's addon, the skin part AA_Clothes_Nightwear_01_Skin; each part's MRPH
     is a copy of the morph record its template addon names (NAM4), with TCMP pointed at the part's morph folder, and
@@ -467,6 +467,9 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
         addons.append(a_fid)
         rep["parts"].append(row)
     o_fid, t_fid = (sfplugin.new_form_id(next(nxt), masters) for _ in range(2))
+    reuse = reuse or {}
+    o_fid = reuse.get(f"S2S_{name}", o_fid)
+    t_fid = reuse.get(f"S2S_{name}_Outfit", t_fid)
     src = armo[1][2]
     has_indx = any(s == b"INDX" for s, _d in src)
     first_modl = next(bytes(d) for s, d in src if s == b"MODL" and is_addon(d))
@@ -780,9 +783,14 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
                                     rel[:-4].replace("\\", "/"), transform, [bool(p.get("back"))]))
         rows.append({"shape": sname, "nif": rel, "skin": bool(p.get("skin")), "slots": p.get("slots"),
                      "vertices": len(sh.positions) * (2 if p.get("back") else 1)})
-    keep = kept_records(os.path.join(out, PLUGIN), name) if add else []
-    start = (max(r[3] & 0xFFFFFF for r in keep) - sfplugin.FIRST_OBJECT + 1) if keep else 0
-    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices, variants, start=start)
+    keep, mine = kept_records(os.path.join(out, PLUGIN), name, with_own=True) if add else ([], [])
+    every = keep + mine
+    start = (max(r[3] & 0xFFFFFF for r in every) - sfplugin.FIRST_OBJECT + 1) if every else 0
+    # this outfit's armor and outfit keep their FormIDs across --add runs (2026-11-07: the test NPCs point at the
+    # outfit; a new id each run would leave them undressed until face_fit is run again)
+    reuse = {sfplugin.edid(r[2]): r[3] for r in mine if r[0] in (b"ARMO", b"OTFT")}
+    recs, prep = armor_records_parts(sf_esm, name, 1, full, rows, list(drop), tpl_vertices, variants, start=start,
+                                     reuse=reuse)
     prep["kept_from_plugin"] = len(keep)
     prep["tests"] = []
     for tag, label, t_rows in (morph_tests(sf_esm, name, rows, morph_test) if morph_test else []):
@@ -804,20 +812,18 @@ def write_armor_parts(sf_data: str, out: str, name: str, full: str, parts, binds
     return files, recs, prep, material, nifs
 
 
-def kept_records(path: str, name: str) -> list:
+def kept_records(path: str, name: str, with_own: bool = False):
     """The records of an existing S2SArmorTest.esm other than this name's own (S2S_<name> and S2S_<name>_*), so
     several outfits can live in one plugin (2026-11-07: the owner wants Ralof's, Ysolda's, Nazeem's and Saadia's
     outfits in game at once)."""
     if not os.path.isfile(path):
-        return []
+        return ([], []) if with_own else []
     own = f"s2s_{name}".lower()
-    out = []
+    out, mine = [], []
     for r in sfplugin.records(path, [b"ARMA", b"MRPH", b"ARMO", b"OTFT"]):
         e = sfplugin.edid(r[2]).lower()
-        if e == own or e.startswith(own + "_"):
-            continue
-        out.append(r)
-    return out
+        (mine if e == own or e.startswith(own + "_") else out).append(r)
+    return (out, mine) if with_own else out
 
 
 def main(argv=None):

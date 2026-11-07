@@ -199,6 +199,17 @@ class RecordTests(unittest.TestCase):
                          [struct.pack("<I", out[i][3]) for i in (0, 2, 4)])
         self.assertEqual(dict(out[-1][2])[b"INAM"], struct.pack("<I", out[-2][3]))
         self.assertEqual([bytes(d) for s, d in armo if s == b"INDX"], [b"\0\0"] * 3)     # every addon on variant 0
+        with tempfile.TemporaryDirectory() as d:
+            p2 = os.path.join(d, "Starfield.esm")
+            recs2 = [(t, h, sfplugin.edit(subs, {b"NAM4": struct.pack("<I", 0x4000)})
+                      if sfplugin.edid(subs) == "Nightwear_AA" else subs, fid)
+                     for t, h, subs, fid in sfplugin.records(self._esm(d), [b"ARMA", b"ARMO", b"OTFT"])] + [mrph]
+            with open(p2, "wb") as fh:
+                fh.write(sfplugin.build(recs2, {"hedr_version": 0.96, "form_version": 555}))
+            out2, _r = E.armor_records_parts(p2, "R", 1, "R", parts, start=40,
+                                             reuse={"S2S_R": 0x01000900, "S2S_R_Outfit": 0x01000901})
+        self.assertEqual((out2[-2][3], out2[-1][3]), (0x01000900, 0x01000901))      # kept across --add runs
+        self.assertEqual(dict(out2[-1][2])[b"INAM"], struct.pack("<I", 0x01000900))
         self.assertEqual(rep["template_indx"], [("0000", "00001000"), ("0100", "00001000")])
         self.assertEqual(rep["parts"][0]["template_morph_folder"], "Meshes\\NW\\M")
 
@@ -285,6 +296,8 @@ class RecordTests(unittest.TestCase):
             kept = E.kept_records(p, "Ralof_outfit")
             self.assertEqual(sorted(sfplugin.edid(r[2]) for r in kept), ["S2S_Ysolda_outfit", "S2S_Ysolda_outfit_Outfit"])
             self.assertEqual(E.kept_records(os.path.join(d, "none.esm"), "X"), [])
+            keep, mine = E.kept_records(p, "Ralof_outfit", with_own=True)
+            self.assertEqual(sorted(sfplugin.edid(r[2]) for r in mine), ["S2S_Ralof_outfit", "S2S_Ralof_outfit_Coat_AA"])
 
     @staticmethod
     def _esm(d):
