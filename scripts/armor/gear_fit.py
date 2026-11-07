@@ -946,7 +946,8 @@ def main(argv=None):
         frame = np.array(rep["frame"], float)
         os.makedirs(a.debug_dir, exist_ok=True)
         pngs = debug_textures(a.debug_dir, textures, lambda p: sky._read(bsa.norm(p)), find_texconv(a.texconv))
-        print("debug meshes:", debug_meshes(a.debug_dir, shapes, frame, *dbg, extra=pngs),
+        print("debug meshes:", debug_meshes(a.debug_dir, shapes + ([skin_sh] if skin_sh is not None else []),
+                                            frame, *dbg, extra=pngs),
               f"({len(pngs)} textures)")
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
