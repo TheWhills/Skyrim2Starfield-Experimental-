@@ -2063,3 +2063,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   behind the arm stops short of the chainmail sleeve and the gap shows. The whole-body skin piece now drops skin only
   under gear within 1.2 cm (was 3.5 cm): under looser gear (sleeve backs, hems) the skin stays, so nothing is seen
   through. Poke-through under tight gear is still prevented by the drop and push_faces_out.
+- 2026-11-07 (Claude, armor) Skin piece back to Skyrim's own rule (owner asked whether Skyrim hides the legs under a
+  robe; verified from the runs: Farengar's robe NIF brings only an 86-vertex neck/chest skin shape, robes_skin, and
+  his robe's slots are 31, 32, 42, not 37: under the robe Skyrim shows no legs, and the feet come from its separate
+  naked-feet slot). Skin piece = the Starfield body where Skyrim's bare-skin shapes lie (with the overlap under gear
+  edges), plus the feet (body vertices mostly on Foot / Toe / Ankle bones) when the body armour does not cover
+  Skyrim slot 37, so boots stay removable. --whole-skin keeps the whole-body variant.

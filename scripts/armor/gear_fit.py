@@ -119,6 +119,7 @@ COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from
 SKIN_UNDER_DEPTH = 0.012   # m: for the whole-body skin piece: skin is dropped only under gear this tight; under
 #                            looser gear it is kept (2026-11-07, Ralof from behind: the arm stopped short of the
 #                            looser back of the sleeve and the gap showed; with 3.5 cm)
+FEET_BONES = ("Foot", "Toe", "Ankle")    # Starfield bone name parts: the feet Skyrim shows under a robe
 UNDER_SKIN = 0.015      # m: gear this close under the skin also hides it
 COVER_MARGIN_M = 0.05   # m: and at most this far from the visible skin (2 cm left a bare gap under Ralof's sleeve
 #                         hems; the shoulder diamonds that 2 cm was for were dips, fixed by push_faces_out)
@@ -151,19 +152,24 @@ def covered_by(body: np.ndarray, body_nrm: np.ndarray, gear, depth: float = COVE
 
 
 def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH,
-               gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH):
+               gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH, extra=None):
     """(HairShape in skeleton space, kept body vertex indices) of the Starfield body where Skyrim's bare-skin pieces
     lie after the fit (2026-11-06, owner: Skyrim's bare arm runs up under the sleeve, Starfield's skin starts lower):
-    the body vertices within `reach` of them and the triangles among them. None when nothing is kept. whole: the
+    the body vertices within `reach` of them and the triangles among them, plus `extra` (the feet when the Skyrim
+    armour does not cover them: Skyrim shows its own naked feet there). None when nothing is kept. whole: the
     whole body instead (2026-11-07, owner: the body armour hides the naked body, so everything it does not cover must
     come with it: feet without boots, and Hadvar's thighs under the skirt showed holes); gear: the pieces whose
     cover removes skin (the body armour's own, not boots or gauntlets, which may be taken off)."""
     from fo4sf import skyrimhair
-    if not len(sources):
+    extra = np.zeros(len(body_skel), bool) if extra is None else np.asarray(extra, bool)
+    if not len(sources) and not extra.any() and not whole:
         return None, []
-    zero = np.tile([0.0, 0.0, 1.0], (len(sources), 1))
-    _d, dist, _i = skyrimhair.nearest_surface(body_skel, sources, zero)
-    keep = np.ones(len(body_skel), bool) if whole else dist < reach
+    if len(sources):
+        zero = np.tile([0.0, 0.0, 1.0], (len(sources), 1))
+        _d, dist, _i = skyrimhair.nearest_surface(body_skel, sources, zero)
+    else:
+        dist = np.full(len(body_skel), np.inf)
+    keep = np.ones(len(body_skel), bool) if whole else (dist < reach) | extra
     t = np.asarray(body_tris, int).reshape(-1, 3)
     if len(gear):
         # only the skin that shows, plus a narrow overlap under the gear's edges (2026-11-06: under the cowl the skin
@@ -522,7 +528,7 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
 
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
-        head_weights: bool = False, body_piece_names=None):
+        head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -580,17 +586,20 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                       weight_src=weight_src,
                       heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
-    if body_skin_names:                      # our own skin piece where Skyrim's body-skin pieces lie
+    if body_skin_names or feet_skin:          # our own skin piece where Skyrim's body-skin pieces lie
         src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
                in set(body_skin_names)]
-        if src:
+        if src or feet_skin:
+            src = src or [np.zeros((0, 3))]
+            feet = np.array([sum(x for b, x in vw if any(k in b for k in FEET_BONES)) >= 0.5 for vw in body_w], bool) \
+                if feet_skin else None
             uvs, mat = starfield_body_skin(sf_data, female)
             skel_body = pts @ frame[:3, :3].T + frame[:3, 3]
             gear_fit_shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)
                                and (body_piece_names is None or sh.name.decode("latin-1", "replace")
                                     in set(body_piece_names))]
             skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src), gear=gear_fit_shapes,
-                                    whole=True, depth=SKIN_UNDER_DEPTH)
+                                    whole=whole_skin, depth=SKIN_UNDER_DEPTH, extra=feet)
             if skin is not None:
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used
@@ -779,6 +788,9 @@ def main(argv=None):
     ap.add_argument("--back-faces", choices=("auto", "all", "none"), default="auto",
                     help="add back faces: to Skyrim's double-sided shapes (auto), to every shape, or none")
     ap.add_argument("--no-morphs", action="store_true", help="write no body-slider morph.dat files")
+    ap.add_argument("--whole-skin", action="store_true",
+                    help="skin piece = the whole body minus what the armour covers (default: Skyrim's own bare-skin "
+                         "parts, plus the feet when the armour does not cover them, as Skyrim shows them)")
     ap.add_argument("--head-weights", action="store_true",
                     help="gear near the head takes the whole head's weights (turns with the head)")
     ap.add_argument("--morph-test", action="store_true",
@@ -826,7 +838,10 @@ def main(argv=None):
                              () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate,
                              sky._read(bsa.norm(SKY_HEADS[female])),
                              () if a.no_skin_piece else sorted(body_skin_shapes(textures)), a.head_weights,
-                             [n for n, sl in slots_by_shape(gear_bytes, meshes).items() if 3 in sl])
+                             [n for n, sl in slots_by_shape(gear_bytes, meshes).items() if 3 in sl],
+                             feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
+                                           for m in meshes),
+                             whole_skin=a.whole_skin)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)

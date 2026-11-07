@@ -349,3 +349,15 @@ class UnderSkinTests(unittest.TestCase):
         self.assertEqual(gear_fit.covered_by(body, nrm, [gear]).tolist(), [True, False])
         gear.positions = gp - [0, 0, 0.03]                                                # 4 cm under: not
         self.assertEqual(gear_fit.covered_by(body, nrm, [gear]).tolist(), [False, False])
+
+
+class FeetSkinTests(unittest.TestCase):
+    def test_extra_skin_without_sources(self):
+        import numpy as np
+        body = np.array([[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0], [1, 1, 1], [1.1, 1, 1], [1, 1.1, 1]], float)
+        tris = [(0, 1, 2), (3, 4, 5)]
+        w = [[("L_Foot", 1.0)]] * 3 + [[("L_Thigh", 1.0)]] * 3
+        extra = np.array([True] * 3 + [False] * 3)
+        sh, used = gear_fit.skin_piece(body, tris, [(0, 0)] * 6, w, np.zeros((0, 3)), extra=extra)
+        self.assertEqual(used, [0, 1, 2])                     # the feet only: legs stay hidden under the robe
+        self.assertIsNone(gear_fit.skin_piece(body, tris, [(0, 0)] * 6, w, np.zeros((0, 3)))[0])
