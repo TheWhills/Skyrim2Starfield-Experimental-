@@ -834,7 +834,7 @@ def ray_hits(origins: np.ndarray, dirs: np.ndarray, mesh_pts: np.ndarray, mesh_t
 
 
 def neck_wrap(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surface, sky_axis, sf_axis,
-              sky_base: float, sf_base: float, scale: float = 1.0, reach=WRAP_REACH):
+              sky_base: float, sf_base: float, scale: float = 1.0, reach=WRAP_REACH, necks=None):
     """Collar wrapped round the Starfield neck as it wraps Skyrim's (2026-11-07, Ralof: the cowl stood off the back
     and sides of the neck, not rounding it). Above the clavicles, each gear vertex's horizontal distance out from the
     neck surface (a ray from the neck axis at its height, through it) is measured in Skyrim; where that gap is small
@@ -860,6 +860,13 @@ def neck_wrap(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surfac
     r_sf, n_sf, dirs = radial(pts[sel], sf_axis, sf_surface)
     gap = (r_sky - n_sky) * scale
     ok = np.isfinite(n_sky) & np.isfinite(n_sf) & (gap < reach[1]) & (gap >= 0.0)   # inside: bury's
+    if necks is not None:
+        # only where both rays meet the neck itself, not the shoulders (2026-11-07, measured on the owner's Farengar
+        # textured debug meshes: at the back the Skyrim ray met the shoulders, Starfield's (whose shoulders lie lower
+        # under the head) the thinner neck, and the beige trim was pulled 2-5 cm in and up round the neck)
+        _r1, h_sky, _x = radial(sky_pts[sel], sky_axis, necks[0])
+        _r2, h_sf, _y = radial(pts[sel], sf_axis, necks[1])
+        ok &= np.isfinite(h_sky) & (np.abs(h_sky - n_sky) < 0.002) & np.isfinite(h_sf) & (np.abs(h_sf - n_sf) < 0.002)
     w = np.clip((reach[1] - gap) / (reach[1] - reach[0]), 0.0, 1.0) * ok
     target = n_sf + np.maximum(np.where(ok, gap, 0.0), WRAP_MIN)
     step = np.where(ok, (target - r_sf) * w, 0.0)
@@ -1413,6 +1420,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 ours_near=int((np.hypot(*(pts[:, :2] - ax_f).T) < COLLAR_RADIUS).sum()),
                 axes_mm=[(ax_s * 1000).round(0).tolist(), (ax_f * 1000).round(0).tolist()],
                 field=cfield is not None)
+            if cfield is not None and not (np.asarray(s.points)[:, 2] > sky_clav_z).any():
+                cfield = None                   # nothing above the clavicles (boots): no collar
             if cfield is not None:
                 collar_mm = (cfield * 1000).round(0).tolist()
                 lowered_pts = shoulder_drop(pts, cfield, wrap[3][:2], sf_clav_z)
@@ -1437,7 +1446,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                        tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         wrapped, wrap_max = 0, 0.0
         if wrap_on and wrap is not None and not skin:
-            pts, wrapped, wrap_max = neck_wrap(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
+            pts, wrapped, wrap_max = neck_wrap(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0),
+                                               necks=heads)
             if wrapped and len(sf_body_pts):
                 rest = np.nonzero(~collar_keep)[0]
                 pts[rest], _again = push_out(pts[rest], sf_body_pts, sf_nrm, gap,

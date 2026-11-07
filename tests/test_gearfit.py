@@ -322,6 +322,14 @@ class NeckWrapTests(unittest.TestCase):
         self.assertEqual(n, len(collar))
         self.assertTrue(np.allclose(r, 0.06, atol=0.003))          # 1 cm off the Starfield neck again
         self.assertTrue(np.allclose(out[:, 2], loose[:, 2]))        # horizontal only
+        # necks given and the Skyrim ray meets something else first (the shoulders): left alone
+        shoulders = self.tube(0.065, 1.3, 1.6)
+        out3, n3, _m = G.neck_wrap(collar, loose, ct, shoulders, sf_neck, np.zeros(3), np.zeros(3), 1.2, 1.2,
+                                   necks=(sky_neck, sf_neck))
+        self.assertEqual(n3, 0)
+        out4, n4, _m = G.neck_wrap(collar, loose, ct, sky_neck, sf_neck, np.zeros(3), np.zeros(3), 1.2, 1.2,
+                                   necks=(sky_neck, sf_neck))
+        self.assertEqual(n4, len(collar))
         far = collar * [1.8, 1.8, 1.0]                             # Skyrim's own gap too big: left alone
         out2, n2, _m = G.neck_wrap(far, far, ct, sky_neck, sf_neck, np.zeros(3), np.zeros(3), 1.2, 1.2)
         self.assertEqual(n2, 0)

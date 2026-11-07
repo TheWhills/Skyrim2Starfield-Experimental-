@@ -2020,3 +2020,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   thicker and stands closer round the neck than Skyrim's (texture shows the stretch). For measuring it: the debug
   export now writes UVs and each gear shape's diffuse texture as PNG (texconv), and the run prints the edge-length
   ratio against Skyrim (scaled) above the clavicles (10/50/90 %).
+- 2026-11-07 (Claude, armor) Farengar textured comparison (debug meshes with UVs and the robe texture, crowns lined
+  up, verified): the beige trim's band at the back lies 54-123 mm from the neck axis in Skyrim but 32-69 mm in ours,
+  ~1 cm higher; front and sides match within ~1 cm. Cause (supported): neck_wrap measured Skyrim's gap from the
+  shoulders at that height and Starfield's from the neck (Starfield's shoulders sit lower under the head), pulling the
+  band in. neck_wrap now acts only where both rays meet the neck / head mesh itself. Edge-length relaxation tried
+  offline (90th percentile stretch 1.72 -> 1.18) but it wrinkled the back; not used. Collar step skipped for shapes
+  with nothing above the clavicles (boots had printed a collar drop).
