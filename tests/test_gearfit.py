@@ -255,6 +255,36 @@ class FitTests(unittest.TestCase):
         res2 = G.fit([gear], [body], world, sp, np.array(st),
                      weight_src=(sp, np.array(st), [[("C_Head", 1.0)]] * len(sp)))
         self.assertEqual({b for vw in res2.shapes[0].weights for b, _ in vw}, {"C_Head"})
+        # heads: a Skyrim head 2 cm over the cuirass top, the Starfield one level with it: the top comes down
+        top = gp[:, 2].max()
+        cap = lambda z: (np.array([[-1, -1, z], [1, -1, z], [0, 1, z]]), [(0, 1, 2)])   # noqa: E731
+        res3 = G.fit([gear], [body], world, sp, np.array(st), heads=(cap(top + 0.02), cap(top + 0.005)))
+        r3 = res3.report["shapes"]["Cuirass"]
+        self.assertGreater(r3["chin_lowered"], 0)
+        self.assertGreater(np.asarray(res.shapes[0].positions)[:, 2].max(),
+                           np.asarray(res3.shapes[0].positions)[:, 2].max())
+
+
+class ChinTests(unittest.TestCase):
+    def test_gap_above(self):
+        mp = np.array([[-1, -1, 1.0], [1, -1, 1.0], [0, 1, 1.0]])
+        g = G.gap_above(np.array([[0, 0, 0.5], [5, 5, 0.5], [0, 0, 1.5]]), mp, [(0, 1, 2)])
+        self.assertAlmostEqual(g[0], 0.5)
+        self.assertTrue(np.isinf(g[1]) and np.isinf(g[2]))
+
+    def test_chin_clearance_lowers_to_skyrims_gap(self):
+        sky_head = (np.array([[-1, -1, 1.0], [1, -1, 1.0], [0, 1, 1.0]]), [(0, 1, 2)])
+        sf_head = (np.array([[-1, -1, 0.97], [1, -1, 0.97], [0, 1, 0.97]]), [(0, 1, 2)])   # chin 3 cm lower
+        sky = np.array([[0, 0, 0.95], [0.1, 0, 0.95], [3, 3, 0.95]])     # 5 cm under the Skyrim chin; one far
+        pts = sky.copy()
+        out, n, drop = G.chin_clearance(sky, pts, [(0, 1, 2)], sky_head, sf_head)
+        self.assertEqual(n, 2)
+        self.assertAlmostEqual(drop, 0.03)
+        self.assertAlmostEqual(out[0, 2], 0.92)                        # 5 cm under the Starfield chin again
+        self.assertLess(out[2, 2], 0.95)                               # its neighbour follows a little
+        self.assertTrue(np.allclose(out[:, :2], pts[:, :2]))            # only down
+        same, n0, _d = G.chin_clearance(sky, pts, [(0, 1, 2)], sky_head, sky_head)
+        self.assertEqual(n0, 0)
 
 
 class MorphTests(unittest.TestCase):

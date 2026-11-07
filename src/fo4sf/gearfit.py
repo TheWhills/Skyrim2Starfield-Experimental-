@@ -551,6 +551,55 @@ def neck_squash(pts: np.ndarray, params) -> np.ndarray:
     return out
 
 
+CHIN_REACH = 0.08     # m: gear with the Skyrim head this close straight above it keeps that clearance under the head
+
+
+def gap_above(pts: np.ndarray, mesh_pts: np.ndarray, mesh_tris, chunk: int = 256) -> np.ndarray:
+    """Per point, the distance straight up (+z) to the mesh (inf: no triangle above it)."""
+    pts = np.asarray(pts, float)
+    out = np.full(len(pts), np.inf)
+    t = np.asarray(mesh_tris, int).reshape(-1, 3)
+    if not len(pts) or not len(t):
+        return out
+    a, b, c = (np.asarray(mesh_pts, float)[t[:, k]] for k in range(3))
+    v0, v1 = (b - a)[:, :2], (c - a)[:, :2]
+    den = v0[:, 0] * v1[:, 1] - v1[:, 0] * v0[:, 1]
+    ok = np.abs(den) > 1e-12
+    a, b, c, v0, v1, den = a[ok], b[ok], c[ok], v0[ok], v1[ok], den[ok]
+    for i in range(0, len(pts), chunk):
+        p = pts[i:i + chunk]
+        q = p[:, None, :2] - a[None, :, :2]
+        u = (q[..., 0] * v1[:, 1] - v1[:, 0] * q[..., 1]) / den
+        v = (v0[:, 0] * q[..., 1] - q[..., 0] * v0[:, 1]) / den
+        inside = (u >= 0) & (v >= 0) & (u + v <= 1)
+        z = a[None, :, 2] + u * (b[None, :, 2] - a[None, :, 2]) + v * (c[None, :, 2] - a[None, :, 2])
+        d = np.where(inside & (z > p[:, None, 2]), z - p[:, None, 2], np.inf)
+        out[i:i + chunk] = d.min(1)
+    return out
+
+
+def chin_clearance(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_head, sf_head, scale: float = 1.0,
+                   reach: float = CHIN_REACH):
+    """Gear lowered so the gap straight up to the Starfield head is at least its gap to the Skyrim head in Skyrim
+    (times scale) (2026-11-07, Ralof: the cowl's front stood up to the chin, a turtleneck where Skyrim's folds below
+    it; the clavicle-to-head ratio is 1.0, so the neck squash does nothing). sky_head / sf_head: (points, triangles)
+    in the same space as sky_pts / pts. Neighbours follow (smoothed), never less than each vertex's own need.
+    Returns (points, vertices lowered, largest drop in m)."""
+    g_sky = gap_above(sky_pts, *sky_head) * scale
+    near = g_sky < reach
+    if not near.any():
+        return pts, 0, 0.0
+    g_sf = gap_above(pts, *sf_head)
+    need = np.where(near & np.isfinite(g_sf), np.maximum(0.0, g_sky - g_sf), 0.0)
+    if not (need > 0).any():
+        return pts, 0, 0.0
+    raw = np.zeros_like(pts)
+    raw[:, 2] = -need
+    soft = smooth_moves(pts, pts + raw, tris, rounds=4) - pts
+    d = np.minimum(raw, soft)
+    return pts + d, int((need > 0).sum()), float(need.max())
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -675,11 +724,12 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
-        weight_src=None) -> FitResult:
+        weight_src=None, heads=None) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
     (points, triangles, weights) gear near it takes its weights from instead of the body surface (the whole head as
-    well, so a collar under the jaw turns with the head as the head's own neck skin does)."""
+    well, so a collar under the jaw turns with the head as the head's own neck skin does). heads: ((Skyrim head points
+    in Skyrim space, triangles), (Starfield head points in skeleton space, triangles)) for chin_clearance."""
     joints: Dict[str, np.ndarray] = {}
     for s in sky_body + gear:
         for b, w in s.joints.items():
@@ -759,6 +809,13 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # smooth the moves (no folded faces), then make sure nothing came back inside the body
             pts = smooth_moves(moved_base, pts, s.triangles)
             pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
+        lowered, drop = 0, 0.0
+        if heads is not None and not skin:
+            pts, lowered, drop = chin_clearance(s.points, pts, s.triangles, heads[0], heads[1],
+                                                rep.get("global_scale", 1.0))
+            if lowered and len(sf_body_pts):
+                pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,
+                                       tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -781,6 +838,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "box_m": [np.nanmin(pts, 0).round(3).tolist(), np.nanmax(pts, 0).round(3).tolist()] if len(pts) else [],
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
+            "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "top_bones": top_bones(s.points, w),
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}

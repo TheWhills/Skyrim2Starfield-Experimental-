@@ -1906,3 +1906,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   0), [vanilla body] (vanilla naked body model + the game's body morph folder, through our copied ARMA / MRPH) and
   [body our morph] (vanilla body model + the body morph.dat parsed and rebuilt by sfmorph; the run prints whether the
   rebuild is byte for byte the game's). unresolved until tested.
+- 2026-11-07 (Claude, armor) --morph-test run: our writer rebuilds the game's body morph.dat byte for byte
+  (verified), the nightwear morph has no empty entries, and our pieces' deltas are all finite and under 81 mm
+  (verified from the printed stats). So our morph.dat files are well formed; the pillars come from how the game
+  applies them to our pieces (unresolved: waiting for which of [zero morph] / [vanilla body] / [body our morph] show
+  pillars). Collar: the clavicle-to-head ratio is 1.0, so the neck squash does nothing, but the cowl's front still
+  stands up to the chin (owner's screenshot). New step chin_clearance: gear with the Skyrim head within 8 cm straight
+  above it keeps that gap (times the skeleton scale) under the Starfield head; lowered only, neighbours follow,
+  pushed out again after.

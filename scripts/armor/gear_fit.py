@@ -255,6 +255,16 @@ def skyrim_head_shapes(nif_bytes: bytes):
                              [tuple(map(int, x)) for x in t], s.bones, [s.weights[i] for i in keep], s.joints)]
 
 
+def skyrim_head_mesh(nif_bytes: bytes):
+    """(points, triangles) of the whole Skyrim head shape in Skyrim space, or None."""
+    from fo4sf import skyrimnpc
+    h = skyrimnpc.head_shape(skyrimskin.skinned_shapes(nifmod.parse(nif_bytes)))
+    if h is None:
+        return None
+    s = gearfit.from_skyrim(h)
+    return np.asarray(s.points, float), np.asarray(s.triangles, int).reshape(-1, 3)
+
+
 def find_hands(sf_data: str, female: bool, world):
     """(path, points in skeleton space, triangles) of the game's hands mesh (a separate mesh from the naked body, so
     the push-out must see it too; 2026-11-06: Starfield fingers poked through the converted gloves), or (None, ...)."""
@@ -452,9 +462,10 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
         surf_w += hand_w if len(hand_w) == len(hand_pts) else [[] for _ in hand_pts]
     head_path = SF_HEADS[female]
-    weight_src = None
+    weight_src, sf_head_full = None, None
     try:
         h_pts, h_tris, h_w = starfield_part(sf_data, head_path, world)
+        sf_head_full = (h_pts, h_tris)
         if len(h_w) == len(h_pts):
             # weights also from the whole head: the collar's top takes the head's own neck-skin weights (2026-11-06:
             # with only the neck-weighted part, the collar had no C_Head and stayed facing forward when the head turned)
@@ -473,12 +484,15 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear, tess = tessellate_shapes(gear, tessellate, skip=set(skin_names))
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
     sky_body = [s for nb in body_nifs for s in sky_shapes(nb)]
+    sky_head_full = None
     if sky_head:
         sky_body += skyrim_head_shapes(sky_head)
+        sky_head_full = skyrim_head_mesh(sky_head)
     if weight_src is not None and len(weight_src[2]) != len(weight_src[0]):
         weight_src = None
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet,
-                      weight_src=weight_src)
+                      weight_src=weight_src,
+                      heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
     if body_skin_names:                      # our own skin piece where Skyrim's body-skin pieces lie
         src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
@@ -817,7 +831,9 @@ def main(argv=None):
               f"body shift up to {r['max_body_shift_mm']:.0f} mm, {len(r['bones'])} bones, "
               f"z {r['box_m'][0][2]:.2f}..{r['box_m'][1][2]:.2f} m, "
               f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights, "
-              f"{r.get('pulled_in', 0)} pulled in to Skyrim's gap, {r.get('covered', 0)} moved to cover the body")
+              f"{r.get('pulled_in', 0)} pulled in to Skyrim's gap, {r.get('covered', 0)} moved to cover the body"
+              + (f", {r['chin_lowered']} lowered under the chin (up to {r['chin_drop_mm']} mm)"
+                 if r.get('chin_lowered') else ""))
         if r.get("top_bones") and not r.get("skin_piece"):
             print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():
