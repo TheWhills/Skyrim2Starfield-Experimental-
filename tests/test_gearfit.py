@@ -414,6 +414,19 @@ class SkirtTests(unittest.TestCase):
                          [True, False])
 
 
+class SkirtGradientTests(unittest.TestCase):
+    def test_hips_at_top_thighs_below_split_by_side(self):
+        j = {PELV: at([0, 0, 1.0]), "NPC L Thigh [LThg]": at([0.1, 0, 0.95]), "NPC R Thigh [RThg]": at([-0.1, 0, 0.95]),
+             "NPC L Calf [LClf]": at([0.1, 0, 0.5]), "NPC R Calf [RClf]": at([-0.1, 0, 0.5])}
+        w = G.skirt_gradient(np.array([[0, 0, 1.0], [0.15, 0, 0.5], [0, 0.1, 0.75]]), j)
+        self.assertAlmostEqual(dict(w[0])["C_Hips"], 0.8)
+        self.assertAlmostEqual(dict(w[0])["L_Thigh"], 0.1)
+        self.assertEqual(sorted(dict(w[1])), ["C_Hips", "L_Thigh"])            # left side, at the knee
+        self.assertAlmostEqual(dict(w[1])["L_Thigh"], 0.8)
+        self.assertAlmostEqual(dict(w[2])["L_Thigh"], dict(w[2])["R_Thigh"])   # front centre: both thighs
+        self.assertIsNone(G.skirt_gradient(np.zeros((1, 3)), {}))
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

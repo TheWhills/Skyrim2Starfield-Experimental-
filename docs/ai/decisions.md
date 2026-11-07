@@ -1982,3 +1982,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Now skirt bones split between C_Hips and the thighs (front / back 0.5 + 0.25 + 0.25, sides 0.6 + 0.4 of their
   own thigh; supported, to tune), and skirt-weighted vertices keep those weights instead of the body's. The run
   prints how many vertices each piece has on skirt bones (if Skyrim weighted the tassets to the thighs, none).
+- 2026-11-07 (Claude, armor) Hadvar after skirt shares (owner): running better; at rest the tassets stand out and up
+  like a tutu where Skyrim's hang straight down, and in a wide combat stance the thighs show through them. Changes:
+  skirt-weighted vertices get a gradient instead of fixed shares (C_Hips at the top, thigh share 0.2 -> 0.8 down to
+  knee height, split between the thighs by left / right position, supported, to tune), and they are left out of
+  cover (push-out still keeps them off the body). Shape not yet measured: needs the debug meshes.

@@ -313,6 +313,31 @@ def skirt_shares(sky_bone: str) -> List[Tuple[str, float]]:
     return list(SKIRT_SHARES[m.group(1)]) if m else []
 
 
+SKIRT_THIGH = (0.2, 0.8)     # thigh share at the skirt's top (the hips) and at knee height
+
+
+def skirt_gradient(points: np.ndarray, joints: Dict[str, np.ndarray]):
+    """Per point [(Starfield bone, weight)]: hips at the top, more and more thigh down to knee height, split between
+    the thighs by how far left or right the point is (2026-11-07, owner: with fixed hips / thigh shares Hadvar's
+    tassets stood out like a tutu and the thighs showed through them in a wide combat stance; Skyrim's skirt bones
+    are swung by the animations, Starfield has none). None without pelvis, thigh and calf joints."""
+    need = ("NPC Pelvis [Pelv]", "NPC L Thigh [LThg]", "NPC R Thigh [RThg]", "NPC L Calf [LClf]", "NPC R Calf [RClf]")
+    if any(b not in joints for b in need):
+        return None
+    pel, lt, rt, lc, rc = (np.asarray(joints[b], float)[:3, 3] for b in need)
+    top, knee = pel[2], (lc[2] + rc[2]) / 2
+    p = np.asarray(points, float)
+    t = np.clip((top - p[:, 2]) / max(top - knee, 1e-6), 0.0, 1.0)
+    thigh = SKIRT_THIGH[0] + (SKIRT_THIGH[1] - SKIRT_THIGH[0]) * t
+    span = lt[0] - rt[0]
+    f = np.clip((p[:, 0] - rt[0]) / (span if abs(span) > 1e-6 else 1e-6), 0.0, 1.0)   # 1: left side
+    out = []
+    for h, fl in zip(thigh, f):
+        vw = [("C_Hips", 1.0 - h), ("L_Thigh", h * fl), ("R_Thigh", h * (1.0 - fl))]
+        out.append(sorted(((b, float(x)) for b, x in vw if x > 1e-4), key=lambda bx: -bx[1]))
+    return out
+
+
 def skirt_weighted(bones: List[str], weights, share: float = 0.5) -> np.ndarray:
     """Vertices with at least `share` of their Skyrim weight on skirt bones."""
     sk = np.array([bool(skirt_shares(b)) for b in bones], bool)
@@ -1140,7 +1165,13 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                    tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         covered = 0
         if not skin and len(sf_body_pts):
+            before_cover = pts
             pts, covered = cover(pts, nrm, s.triangles, sf_body_pts, sf_nrm, gap)
+            hang = skirt_weighted(s.bones, s.weights)
+            if hang.any():
+                # skirt plates hang: cover's outward pull flared them (2026-11-07, owner: Hadvar's tassets stood out
+                # like a tutu where Skyrim's hang straight down); push-out still keeps them off the thighs
+                pts = np.where(hang[:, None], before_cover, pts)
             # smooth the moves (no folded faces), then make sure nothing came back inside the body
             pts = smooth_moves(moved_base, pts, s.triangles)
             pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
@@ -1225,8 +1256,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         if not skin:
             # skirt plates hang free of the legs: their own (hips + thighs) weights, not the thigh skin's
             skirt_v = np.nonzero(skirt_weighted(s.bones, s.weights))[0]
-            for i in skirt_v:
-                w[i] = own[i]
+            grad = skirt_gradient(np.asarray(s.points)[skirt_v], joints) if len(skirt_v) else None
+            for k, i in enumerate(skirt_v):
+                w[i] = [(b, x) for b, x in grad[k] if b in sf_world] if grad is not None else own[i]
         if not skin and sky_clav_z is not None:
             # above the clavicles the gear keeps its own (Skyrim's) weights: 2026-11-07, owner: Skyrim's cowl sits on
             # the outfit and does not move with the neck or head; with the neck skin's weights its side rose when the
