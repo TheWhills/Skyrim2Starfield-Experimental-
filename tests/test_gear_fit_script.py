@@ -257,3 +257,18 @@ class MeshMarginTests(unittest.TestCase):
         got = np.array([sfmesh.decode_position(p, m.scale) for p in m.positions])
         self.assertTrue(np.allclose(got, pos, atol=1e-4))
         self.assertEqual(sfmesh.encode_positions([(0, 0, 2.0)], 0.5)[0], 2.5)
+
+
+class SlotTests(unittest.TestCase):
+    def test_slots_by_skyrim_slot(self):
+        import numpy as np
+        from fo4sf import gearfit
+        shapes = {b"Boots": [b"Boots"], b"Cuirass": [b"Cuirass", b"Body"], b"Cuffs": [b"Cuffs"], b"Belt": [b"Belt"]}
+        orig = gear_fit.sky_shapes
+        gear_fit.sky_shapes = lambda gb: [gearfit.SkyShape(n, np.eye(3), np.eye(3), [], [], [], []) for n in shapes[gb]]
+        try:
+            out = gear_fit.slots_by_shape([b"Boots", b"Cuirass", b"Cuffs", b"Belt"],
+                                          [{"slots": [37]}, {"slots": [32, 38]}, {"slots": [34]}, {"slots": [48]}])
+        finally:
+            gear_fit.sky_shapes = orig
+        self.assertEqual(out, {"Boots": [7], "Cuirass": [3, 5], "Body": [3, 5], "Cuffs": [8], "Belt": [9]})

@@ -35,7 +35,14 @@ def esm(path):
                                  (b"MODL", u32(0x902))], 0x911),
         (b"LVLI", HDR(b"LVLI"), [(b"EDID", z("LItemBoots")),
                                  (b"LVLO", struct.pack("<HHIHH", 1, 0, 0x911, 1, 0))], 0x920),
+        (b"LVLI", HDR(b"LVLI"), [(b"EDID", z("LItemNothingFirst")),      # first entry gives no armor
+                                 (b"LVLO", struct.pack("<HHIHH", 1, 0, 0x999, 1, 0)),
+                                 (b"LVLO", struct.pack("<HHIHH", 1, 0, 0x910, 1, 0))], 0x921),
         (b"OTFT", HDR(b"OTFT"), [(b"EDID", z("RalofOutfit")), (b"INAM", u32(0x910) + u32(0x920))], 0x930),
+        (b"OTFT", HDR(b"OTFT"), [(b"EDID", z("HadvarOutfit")), (b"INAM", u32(0x921) + u32(0x920) + u32(0x998))],
+         0x931),
+        (b"NPC_", HDR(b"NPC_"), [(b"EDID", z("Hadvar")), (b"ACBS", bytes(24)), (b"RNAM", u32(0x13746)),
+                                 (b"DOFT", u32(0x931))], 0x2BF9E),
         (b"NPC_", HDR(b"NPC_"), [(b"EDID", z("Ralof")), (b"ACBS", bytes(24)), (b"RNAM", u32(0x13746)),
                                  (b"DOFT", u32(0x930))], 0x2BF9D),
     ]
@@ -56,6 +63,9 @@ class SkyrimSideTests(unittest.TestCase):
             self.assertEqual(m[0]["mesh"], "meshes\\armor\\cuirassf_1.nif")          # weight slider: the _1 file
             with self.assertRaises(SystemExit):
                 C.outfit_armor(p, "Nobody")
+            h = C.outfit_armor(p, "Hadvar")
+            self.assertEqual(h["armor"], [0x910, 0x911])                  # past the list's empty first entry
+            self.assertEqual(h["skipped"], ["00000998 (not an armor or leveled list)"])     # reported
 
 
 class Fake:

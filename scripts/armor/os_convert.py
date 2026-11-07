@@ -56,22 +56,36 @@ def outfit_armor(esm: str, npc_edid: str) -> dict:
             if sig == b"INAM":
                 d = bytes(d)
                 items += [struct.unpack_from("<I", d, i)[0] for i in range(0, len(d) - 3, 4)]
-    armor, seen = [], set()
+    armor, seen, skipped = [], set(), []
 
-    def follow(fid, depth=0):
+    def follow(fid, depth=0) -> bool:
+        """Adds the armor an outfit item gives; True if it gave any. A leveled list gives its first entry that
+        resolves to armor (2026-11-07: Hadvar's cuirass sat behind a list whose first entry gave nothing, only his
+        boots came through), or every entry when flagged Use All (LVLF bit 2)."""
         if fid in seen or depth > 8 or fid not in recs:
-            return
+            return False
         seen.add(fid)
         typ, subs = recs[fid]
         if typ == b"ARMO":
             armor.append(fid)
-        elif typ == b"LVLI":
-            first = next((bytes(d) for s, d in subs if s == b"LVLO" and len(d) >= 8), None)
-            if first:
-                follow(struct.unpack_from("<I", first, 4)[0], depth + 1)
+            return True
+        if typ == b"LVLI":
+            flags = next((bytes(d)[0] for s, d in subs if s == b"LVLF" and len(d) >= 1), 0)
+            entries = [struct.unpack_from("<I", bytes(d), 4)[0] for s, d in subs if s == b"LVLO" and len(d) >= 8]
+            got = False
+            for e in entries:
+                if follow(e, depth + 1):
+                    got = True
+                    if not flags & 4:
+                        break
+            return got
+        return False
     for fid in items:
-        follow(fid)
-    return {"npc": n, "race": races.get(n.get("race"), ""), "armor": armor}
+        if not follow(fid):
+            t = recs.get(fid)
+            skipped.append(f"{fid:08X} {t[0].decode('latin-1')} {sfplugin.edid(t[1])}".strip() if t
+                           else f"{fid:08X} (not an armor or leveled list)")
+    return {"npc": n, "race": races.get(n.get("race"), ""), "armor": armor, "skipped": skipped}
 
 
 def worn_meshes(inv: dict, armor_fids, race_edid: str, female: bool) -> list:

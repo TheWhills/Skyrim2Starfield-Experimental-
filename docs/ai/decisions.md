@@ -1970,3 +1970,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   side rises when the head turns. Changes: neck_wrap back on by default (keeps Skyrim's horizontal gap from the
   neck; offline on the 4th debug meshes it brought the front onto Skyrim's line); above the Skyrim clavicles gear
   keeps its own Skyrim weights instead of the neck skin's (blended in over 3 cm), so it moves like Skyrim's.
+- 2026-11-07 (Claude, armor) Hadvar (owner, verified from the run): only ArmorImperialLightBoots came out of his
+  default outfit (os_convert.outfit_armor followed each leveled list's first entry only), and the boots, as the
+  first piece, took the body's slots 3 + 5: the naked body vanished with nothing over it. Now a leveled list gives
+  its first entry that resolves to armor (every entry when flagged Use All), unresolved outfit items are printed, and
+  each piece's Starfield slots come from its Skyrim biped slot (32 body -> 3 + 5, 37 feet -> 7, 33 hands /
+  34 forearms -> 8, others 9-12).

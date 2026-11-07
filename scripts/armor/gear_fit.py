@@ -596,6 +596,26 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
     return out
 
 
+# Skyrim biped slot -> Starfield addon slots (2026-11-07: by position, Hadvar's boots, his only piece, took the
+# body's slots 3 + 5 and hid the naked body with nothing over it)
+SKY_TO_SF_SLOTS = {32: [3, 5], 37: [7], 33: [8], 34: [8]}
+SPARE_SLOTS = (9, 10, 11, 12)
+
+
+def slots_by_shape(gear_bytes, meshes) -> dict:
+    """{shape name: Starfield slots} from each Skyrim armor's biped slots (its body slot first: 32 body, 37 feet,
+    33 hands, 34 forearms); pieces with none of those get spare slots in turn."""
+    out, spare = {}, list(SPARE_SLOTS)
+    for gb, m in zip(gear_bytes, meshes):
+        sky = list(m.get("slots") or [])
+        sf = next((SKY_TO_SF_SLOTS[x] for x in (32, 37, 33, 34) if x in sky), None)
+        if sf is None:
+            sf = [spare.pop(0)] if spare else [SPARE_SLOTS[-1]]
+        for sh in sky_shapes(gb):
+            out.setdefault(sh.name.decode("latin-1"), sf)
+    return out
+
+
 def zero_morph(data: bytes) -> bytes:
     """The same morph.dat layout (vertices, keys, which vertex has a record for which key) with every delta and
     normal / tangent word 0."""
@@ -680,7 +700,9 @@ def main(argv=None):
             sys.exit(f"not in Skyrim's archives: {p}")
         return data
     print(f"{a.npc} ({o['race']}, {'female' if female else 'male'}):",
-          *[f"{m['armor']} {m['mesh']}" for m in meshes], sep="\n  ")
+          *[f"{m['armor']} {m['mesh']} (Skyrim slots {m.get('slots')})" for m in meshes], sep="\n  ")
+    for x in o.get("skipped", []):
+        print(f"  outfit item without wearable armor (skipped): {x}")
     body = [read(os_convert.SKYRIM_BODY[female])]
     for p in SKYRIM_LIMBS[female]:
         data = sky._read(bsa.norm(p))
@@ -744,7 +766,9 @@ def main(argv=None):
         if skin_sh is not None and slots:
             nifs[SKIN_SHAPE.decode()] = f"S2S\\{a.name}_Skin.nif"
     else:
-        parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled} for sh, n in zip(shapes, names)]
+        piece_slots = slots_by_shape(gear_bytes, meshes)
+        parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled, "slots": piece_slots.get(n)}
+                 for sh, n in zip(shapes, names)]
         if skin_sh is not None and slots:
             parts.append({"shape": skin_sh, "material": sp["material"], "skin": True})
         body_folder = ""
