@@ -2059,3 +2059,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   2.5 cm); the rest of the collar still keeps its own (the head-weights option stays off by default). Also the
   skin piece now drops skin with gear up to 1.5 cm under it (the neckline brought down into the body), not only
   over it. The Thin change of the previous commit stays.
+- 2026-11-07 (Claude, armor) Ralof re-run with everything since (owner): collar much better from the front; from
+  behind the arm stops short of the chainmail sleeve and the gap shows. The whole-body skin piece now drops skin only
+  under gear within 1.2 cm (was 3.5 cm): under looser gear (sleeve backs, hems) the skin stays, so nothing is seen
+  through. Poke-through under tight gear is still prevented by the drop and push_faces_out.

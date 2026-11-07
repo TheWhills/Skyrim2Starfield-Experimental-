@@ -116,7 +116,9 @@ SKIN_SHAPE = b"S2S_Skin"
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
-SKIN_UNDER_DEPTH = 0.035   # m: for the whole-body skin piece: skin under looser gear (a hanging skirt) is kept
+SKIN_UNDER_DEPTH = 0.012   # m: for the whole-body skin piece: skin is dropped only under gear this tight; under
+#                            looser gear it is kept (2026-11-07, Ralof from behind: the arm stopped short of the
+#                            looser back of the sleeve and the gap showed; with 3.5 cm)
 UNDER_SKIN = 0.015      # m: gear this close under the skin also hides it
 COVER_MARGIN_M = 0.05   # m: and at most this far from the visible skin (2 cm left a bare gap under Ralof's sleeve
 #                         hems; the shoulder diamonds that 2 cm was for were dips, fixed by push_faces_out)
