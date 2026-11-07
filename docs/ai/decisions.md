@@ -1922,3 +1922,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   skyrimhair._mesh now adds MORPH_MARGIN 0.25 m to the scale (deltas are capped at 0.15 m); precision cost ~0.01 mm.
   Also verified: AA_Naked_Body's model is the Starfield undershirt/swimsuit body, not the bare body. Collar: chin
   clearance lowered 55 coat vertices, up to 76 mm.
+- 2026-11-07 (Claude, armor) In game after the scale margin (owner): no pillars, every piece follows the weight
+  slider (verified). Left: the cowl stands off the back and sides of the neck instead of rounding it, and a strip of
+  bare body shows between the skin piece and the sleeve hems. New step neck_wrap: above the clavicles, each gear
+  vertex's horizontal gap out from the neck / head surface (a ray from the neck joint's axis) in Skyrim is kept over
+  Starfield's (gaps under 2.5 cm fully, none past 4.5 cm; at least 4 mm), moved horizontally, smoothed, pushed out
+  again. Skin piece: COVER_MARGIN 2 -> 5 rings kept under the gear's edges.

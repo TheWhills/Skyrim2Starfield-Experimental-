@@ -116,7 +116,8 @@ SKIN_SHAPE = b"S2S_Skin"
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
-COVER_MARGIN = 2        # rings of covered vertices kept along the edge of the visible skin (overlap under the gear)
+COVER_MARGIN = 5        # rings of covered vertices kept along the edge of the visible skin (overlap under the gear;
+#                         2026-11-07: with 2, a strip of bare body showed between the skin piece and the sleeve hems)
 
 
 def covered_by(body: np.ndarray, body_nrm: np.ndarray, gear, depth: float = COVER_DEPTH) -> np.ndarray:
@@ -833,7 +834,9 @@ def main(argv=None):
               f"{r['unweighted']} unweighted, {r.get('body_weighted', 0)} on body weights, "
               f"{r.get('pulled_in', 0)} pulled in to Skyrim's gap, {r.get('covered', 0)} moved to cover the body"
               + (f", {r['chin_lowered']} lowered under the chin (up to {r['chin_drop_mm']} mm)"
-                 if r.get('chin_lowered') else ""))
+                 if r.get('chin_lowered') else "")
+              + (f", {r['neck_wrapped']} wrapped round the neck (up to {r['neck_wrap_mm']} mm)"
+                 if r.get('neck_wrapped') else ""))
         if r.get("top_bones") and not r.get("skin_piece"):
             print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():

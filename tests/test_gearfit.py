@@ -287,6 +287,39 @@ class ChinTests(unittest.TestCase):
         self.assertEqual(n0, 0)
 
 
+class NeckWrapTests(unittest.TestCase):
+    @staticmethod
+    def tube(r, z0, z1, n=24, rows=6):
+        a = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        pts = np.array([[r * np.cos(t), r * np.sin(t), h] for h in np.linspace(z0, z1, rows) for t in a])
+        tris = []
+        for i in range(rows - 1):
+            for j in range(n):
+                a0, a1 = i * n + j, i * n + (j + 1) % n
+                tris += [(a0, a1, a0 + n), (a1, a1 + n, a0 + n)]
+        return pts, np.array(tris)
+
+    def test_ray_hits(self):
+        p, t = self.tube(0.05, 1.3, 1.6)
+        d = G.ray_hits(np.array([[0, 0, 1.45], [0, 0, 2.0]]), np.array([[1.0, 0, 0], [1.0, 0, 0]]), p, t)
+        self.assertAlmostEqual(d[0], 0.05, delta=0.002)
+        self.assertTrue(np.isinf(d[1]))
+
+    def test_collar_follows_the_thinner_neck(self):
+        sky_neck = self.tube(0.06, 1.3, 1.6)
+        sf_neck = self.tube(0.05, 1.3, 1.6)                       # Starfield's neck 1 cm thinner
+        collar, ct = self.tube(0.07, 1.4, 1.5, rows=3)          # 1 cm off Skyrim's neck
+        loose = collar * [1.3, 1.3, 1.0]                          # where the fit left it: standing off
+        out, n, mx = G.neck_wrap(collar, loose, ct, sky_neck, sf_neck, np.zeros(3), np.zeros(3), 1.2, 1.2)
+        r = np.linalg.norm(out[:, :2], axis=1)
+        self.assertEqual(n, len(collar))
+        self.assertTrue(np.allclose(r, 0.06, atol=0.003))          # 1 cm off the Starfield neck again
+        self.assertTrue(np.allclose(out[:, 2], loose[:, 2]))        # horizontal only
+        far = collar * [1.8, 1.8, 1.0]                             # Skyrim's own gap too big: left alone
+        out2, n2, _m = G.neck_wrap(far, far, ct, sky_neck, sf_neck, np.zeros(3), np.zeros(3), 1.2, 1.2)
+        self.assertEqual(n2, 0)
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

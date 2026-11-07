@@ -539,6 +539,23 @@ def neck_squash_params(joints: Dict[str, np.ndarray], transforms: Dict[str, np.n
     return r, sf_base, np.asarray(axis, float)
 
 
+def wrap_params(heads, sky_bp, sky_bt, sf_pts, sf_tris, joints, sf_world):
+    """neck_wrap's (Skyrim surface, Starfield surface, axes, clavicle heights): the bodies plus the whole heads."""
+    sky_clav = [joints[b][:3, 3] for b in ("NPC L Clavicle [LClv]", "NPC R Clavicle [RClv]") if b in joints]
+    sf_clav = [sf_world[b][:3, 3] for b in ("L_Clavicle", "R_Clavicle") if b in sf_world]
+    if heads is None or "NPC Neck [Neck]" not in joints or "C_Neck" not in sf_world or not sky_clav or not sf_clav:
+        return None
+    (sh_p, sh_t), (fh_p, fh_t) = heads
+
+    def join(p1, t1, p2, t2):
+        p1, p2 = np.asarray(p1, float).reshape(-1, 3), np.asarray(p2, float).reshape(-1, 3)
+        return (np.concatenate([p1, p2]), np.concatenate([np.asarray(t1, int).reshape(-1, 3),
+                                                          np.asarray(t2, int).reshape(-1, 3) + len(p1)]))
+    return (join(sky_bp, sky_bt, sh_p, sh_t), join(sf_pts, sf_tris, fh_p, fh_t),
+            joints["NPC Neck [Neck]"][:3, 3], sf_world["C_Neck"][:3, 3],
+            float(np.mean([p[2] for p in sky_clav])), float(np.mean([p[2] for p in sf_clav])))
+
+
 def neck_squash(pts: np.ndarray, params) -> np.ndarray:
     if params is None or not len(pts):
         return pts
@@ -600,6 +617,74 @@ def chin_clearance(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_head, sf_head
     soft = smooth_moves(pts, pts + raw, tris, rounds=4) - pts
     d = np.minimum(raw, soft)
     return pts + d, int((need > 0).sum()), float(need.max())
+
+
+WRAP_REACH = (0.025, 0.045)   # m: Skyrim gap to the neck fully kept inside the first, not at all past the second
+WRAP_MIN = 0.004              # m: closest the wrapped collar comes to the neck
+
+
+def ray_hits(origins: np.ndarray, dirs: np.ndarray, mesh_pts: np.ndarray, mesh_tris, chunk: int = 32) -> np.ndarray:
+    """Per ray, the distance to its first hit on the mesh (either side), inf if none (Moller-Trumbore)."""
+    o, dv = np.asarray(origins, float), np.asarray(dirs, float)
+    out = np.full(len(o), np.inf)
+    t = np.asarray(mesh_tris, int).reshape(-1, 3)
+    if not len(o) or not len(t):
+        return out
+    mp = np.asarray(mesh_pts, float)
+    a = mp[t[:, 0]]
+    e1, e2 = mp[t[:, 1]] - a, mp[t[:, 2]] - a
+    for i in range(0, len(o), chunk):
+        oo, dd = o[i:i + chunk, None, :], dv[i:i + chunk, None, :]
+        p = np.cross(dd, e2[None])
+        det = np.einsum("ijk,jk->ij", p, e1)
+        good = np.abs(det) > 1e-12
+        inv = np.where(good, 1.0 / np.where(good, det, 1.0), 0.0)
+        s = oo - a[None]
+        u = np.einsum("ijk,ijk->ij", s, p) * inv
+        q = np.cross(s, e1[None])
+        v = np.einsum("ijk,ijk->ij", np.broadcast_to(dd, q.shape), q) * inv
+        tt = np.einsum("ijk,jk->ij", q, e2) * inv
+        hit = good & (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (tt > 1e-6)   # edges count
+        out[i:i + chunk] = np.where(hit, tt, np.inf).min(1)
+    return out
+
+
+def neck_wrap(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surface, sky_axis, sf_axis,
+              sky_base: float, sf_base: float, scale: float = 1.0, reach=WRAP_REACH):
+    """Collar wrapped round the Starfield neck as it wraps Skyrim's (2026-11-07, Ralof: the cowl stood off the back
+    and sides of the neck, not rounding it). Above the clavicles, each gear vertex's horizontal distance out from the
+    neck surface (a ray from the neck axis at its height, through it) is measured in Skyrim; where that gap is small
+    (reach), the vertex is moved in or out horizontally to the same gap (times scale, at least WRAP_MIN) over the
+    Starfield neck / head. surfaces: (points, triangles); axes: neck joint x, y. Returns (points, moved, largest move
+    in m)."""
+    sky_pts, pts = np.asarray(sky_pts, float), np.asarray(pts, float)
+    sel = np.nonzero((sky_pts[:, 2] > sky_base) & (pts[:, 2] > sf_base))[0]
+    if not len(sel):
+        return pts, 0, 0.0
+
+    def radial(p, axis, surface):
+        d = p[:, :2] - np.asarray(axis, float)[:2]
+        r = np.linalg.norm(d, axis=1)
+        u = d / np.maximum(r, 1e-9)[:, None]
+        dirs = np.column_stack([u, np.zeros(len(u))])
+        orig = np.column_stack([np.broadcast_to(np.asarray(axis, float)[:2], (len(p), 2)), p[:, 2]])
+        sp, st = np.asarray(surface[0], float), np.asarray(surface[1], int).reshape(-1, 3)
+        tz = sp[st][:, :, 2]                             # only triangles spanning the rays' heights
+        st = st[(tz.max(1) >= p[:, 2].min() - 0.01) & (tz.min(1) <= p[:, 2].max() + 0.01)]
+        return r, ray_hits(orig, dirs, sp, st), dirs
+    r_sky, n_sky, _d = radial(sky_pts[sel], sky_axis, sky_surface)
+    r_sf, n_sf, dirs = radial(pts[sel], sf_axis, sf_surface)
+    gap = (r_sky - n_sky) * scale
+    ok = np.isfinite(n_sky) & np.isfinite(n_sf) & (gap < reach[1]) & (gap > -reach[0])
+    w = np.clip((reach[1] - gap) / (reach[1] - reach[0]), 0.0, 1.0) * ok
+    target = n_sf + np.maximum(np.where(ok, gap, 0.0), WRAP_MIN)
+    step = np.where(ok, (target - r_sf) * w, 0.0)
+    move = np.zeros_like(pts)
+    move[sel] = dirs * step[:, None]
+    if not (np.abs(step) > 1e-4).any():
+        return pts, 0, 0.0
+    out = smooth_moves(pts, pts + move, tris, rounds=2)
+    return out, int((np.abs(step) > 1e-4).sum()), float(np.abs(step).max())
 
 
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
@@ -781,6 +866,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     off, rep["body"] = body_offsets(bp, sf_body_pts, sf_nrm, sky_nrm=bn) if len(bp) else (np.zeros((0, 3)), {})
     shapes, rep["shapes"] = [], {}
     neck = neck_squash_params(joints, transforms, sf_world)
+    wrap = wrap_params(heads, sky_bp, sky_bt, sf_body_pts, sf_body_tris, joints, sf_world)
     if neck is not None:
         rep["neck_squash"] = {"ratio": round(neck[0], 3), "clavicle_height_m": round(neck[1], 3)}
     for s in gear:
@@ -818,6 +904,12 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             if lowered and len(sf_body_pts):
                 pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,
                                        tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
+        wrapped, wrap_max = 0, 0.0
+        if wrap is not None and not skin:
+            pts, wrapped, wrap_max = neck_wrap(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
+            if wrapped and len(sf_body_pts):
+                pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap,
+                                       tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -841,6 +933,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "unweighted": sum(1 for x in w if not x), "bones": sorted({b for x in w for b, _ in x}),
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
+            "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
             "top_bones": top_bones(s.points, w),
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}
