@@ -423,7 +423,13 @@ def write_obj(path: str, pts, tris) -> None:
             fh.write(f"f {t[0] + 1} {t[1] + 1} {t[2] + 1}\n")
 
 
-def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_body) -> str:
+def safe_name(n: str) -> str:
+    """A file name part without characters Windows refuses (':' in 'MaleUnderwearBody:0' wrote an empty file)."""
+    return "".join(c if c.isalnum() or c in "-_." else "_" for c in n)
+
+
+def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_body, sky_head=None,
+                 sf_head=None) -> str:
     """OBJ files of the fit for a look from outside the game (Starfield skeleton space, metres): the Starfield body /
     hands / neck surface, every written shape, and the Skyrim gear and body as they came in (Skyrim model space,
     metres). Zipped into fit_debug.zip; returns its path."""
@@ -432,14 +438,18 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
     names = []
     write_obj(os.path.join(folder, "sf_surface.obj"), surf_pts, surf_tris)
     names.append("sf_surface.obj")
+    for n, h in (("sf_head.obj", sf_head), ("skyhead_full.obj", sky_head)):    # whole heads (Skyrim: its space)
+        if h is not None:
+            write_obj(os.path.join(folder, n), *h)
+            names.append(n)
     for sh in shapes:
         p = np.asarray(sh.positions) @ frame[:3, :3].T + frame[:3, 3]
-        n = "fit_" + sh.name.decode("latin-1", "replace") + ".obj"
+        n = "fit_" + safe_name(sh.name.decode("latin-1", "replace")) + ".obj"
         write_obj(os.path.join(folder, n), p, sh.triangles)
         names.append(n)
     for tag, group in (("sky_", sky_gear), ("skybody_", sky_body)):
         for s in group:
-            n = tag + s.name.decode("latin-1", "replace") + ".obj"
+            n = tag + safe_name(s.name.decode("latin-1", "replace")) + ".obj"
             write_obj(os.path.join(folder, n), s.points, s.triangles)
             names.append(n)
     z = os.path.join(folder, "fit_debug.zip")
@@ -521,7 +531,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
-    res.report["_debug"] = (surf_pts, surf_tris, gear, sky_body)
+    res.report["_debug"] = (surf_pts, surf_tris, gear, sky_body, sky_head_full, sf_head_full)
     return shapes, binds, res.report
 
 
@@ -836,7 +846,8 @@ def main(argv=None):
               + (f", {r['chin_lowered']} lowered under the chin (up to {r['chin_drop_mm']} mm)"
                  if r.get('chin_lowered') else "")
               + (f", {r['neck_wrapped']} wrapped round the neck (up to {r['neck_wrap_mm']} mm)"
-                 if r.get('neck_wrapped') else ""))
+                 if r.get('neck_wrapped') else "")
+              + (f", {r['buried']} kept inside the neck as in Skyrim" if r.get('buried') else ""))
         if r.get("top_bones") and not r.get("skin_piece"):
             print("     top tenth follows:", ", ".join(f"{b} {w:.2f}" for b, w in r["top_bones"].items()))
         for part, g in (r.get("gaps_mm") or {}).items():

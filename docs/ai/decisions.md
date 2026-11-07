@@ -1928,3 +1928,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   vertex's horizontal gap out from the neck / head surface (a ray from the neck joint's axis) in Skyrim is kept over
   Starfield's (gaps under 2.5 cm fully, none past 4.5 cm; at least 4 mm), moved horizontally, smoothed, pushed out
   again. Skin piece: COVER_MARGIN 2 -> 5 rings kept under the gear's edges.
+- 2026-11-07 (Claude, armor) Collar compared on the owner's fit_debug_2 meshes (verified): Skyrim's Stormcloak cowl
+  top rim lies 19-33 mm from the neck's axis (the neck is ~50 mm in radius), 115 of its vertices inside Skyrim's
+  neck, up to 48 mm deep: the top is buried in the neck and only the lower part shows (the half turtleneck). Our
+  push-out lifted the whole rim out round the neck. New step bury: gear above the Skyrim clavicles deeper than 3 mm
+  inside Skyrim's neck / head stays inside Starfield's at the same depth (times the skeleton scale); neck_wrap now
+  only moves gear that was outside. chin_clearance taken out of the fit (it dropped the cowl's back 7.6 cm under the
+  skull, owner's side view: front and back at different heights). Debug export: whole heads added
+  (sf_head.obj, skyhead_full.obj) and file names made Windows-safe.

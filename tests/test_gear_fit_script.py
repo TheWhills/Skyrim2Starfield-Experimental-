@@ -161,6 +161,18 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(sorted(zipfile.ZipFile(z).namelist()), ["fit_Coat.obj", "sf_surface.obj", "sky_Coat.obj"])
             self.assertIn("f 1 2 3", open(os.path.join(d, "fit_Coat.obj")).read())
 
+    def test_debug_meshes_heads_and_safe_names(self):
+        import numpy as np
+        import tempfile
+        import zipfile
+        from fo4sf import gearfit
+        sk = gearfit.SkyShape(b"MaleUnderwearBody:0", np.eye(3), np.eye(3), [], [(0, 1, 2)], [], [])
+        head = (np.eye(3), np.array([[0, 1, 2]]))
+        with tempfile.TemporaryDirectory() as d:
+            z = gear_fit.debug_meshes(d, [], np.eye(4), np.eye(3), np.array([[0, 1, 2]]), [], [sk], head, head)
+            self.assertEqual(sorted(zipfile.ZipFile(z).namelist()),
+                             ["sf_head.obj", "sf_surface.obj", "skybody_MaleUnderwearBody_0.obj", "skyhead_full.obj"])
+
     def test_shared_writer(self):
         self.assertTrue(callable(os_export.write_armor))
 

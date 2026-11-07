@@ -255,14 +255,11 @@ class FitTests(unittest.TestCase):
         res2 = G.fit([gear], [body], world, sp, np.array(st),
                      weight_src=(sp, np.array(st), [[("C_Head", 1.0)]] * len(sp)))
         self.assertEqual({b for vw in res2.shapes[0].weights for b, _ in vw}, {"C_Head"})
-        # heads: a Skyrim head 2 cm over the cuirass top, the Starfield one level with it: the top comes down
+        # heads given: chin_clearance is not part of the fit any more (it dropped the cowl's back)
         top = gp[:, 2].max()
         cap = lambda z: (np.array([[-1, -1, z], [1, -1, z], [0, 1, z]]), [(0, 1, 2)])   # noqa: E731
         res3 = G.fit([gear], [body], world, sp, np.array(st), heads=(cap(top + 0.02), cap(top + 0.005)))
-        r3 = res3.report["shapes"]["Cuirass"]
-        self.assertGreater(r3["chin_lowered"], 0)
-        self.assertGreater(np.asarray(res.shapes[0].positions)[:, 2].max(),
-                           np.asarray(res3.shapes[0].positions)[:, 2].max())
+        self.assertEqual(res3.report["shapes"]["Cuirass"]["chin_lowered"], 0)
 
 
 class ChinTests(unittest.TestCase):
@@ -318,6 +315,22 @@ class NeckWrapTests(unittest.TestCase):
         far = collar * [1.8, 1.8, 1.0]                             # Skyrim's own gap too big: left alone
         out2, n2, _m = G.neck_wrap(far, far, ct, sky_neck, sf_neck, np.zeros(3), np.zeros(3), 1.2, 1.2)
         self.assertEqual(n2, 0)
+
+
+class BuryTests(unittest.TestCase):
+    def test_hidden_rim_stays_inside(self):
+        neck = NeckWrapTests.tube(0.05, 1.3, 1.6, n=32, rows=8)
+        nrm = neck[0].copy()
+        nrm[:, 2] = 0
+        nrm /= np.linalg.norm(nrm, axis=1, keepdims=True)
+        rim, rt = NeckWrapTests.tube(0.07, 1.40, 1.50, rows=3)    # a collar: bottom row outside, top row pushed out
+        sky_gap = np.repeat([0.02, 0.0, -0.02], 24)               # in Skyrim the top row was 2 cm inside the neck
+        mask = sky_gap < -G.BURY
+        out, n = G.bury(rim, sky_gap, mask, rt, neck[0], neck[1], nrm)
+        r = np.linalg.norm(out[:, :2], axis=1)
+        self.assertEqual(n, 24)
+        self.assertTrue(np.allclose(r[mask], 0.03, atol=0.002))   # 2 cm inside the 5 cm neck
+        self.assertTrue((r[~mask] >= 0.05 + G.GAP - 1e-3).all())  # the rest still outside
 
 
 class MorphTests(unittest.TestCase):
