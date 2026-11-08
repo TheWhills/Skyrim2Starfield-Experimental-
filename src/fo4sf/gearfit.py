@@ -1668,12 +1668,14 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     covers = (np.concatenate(cp_), np.concatenate(ct_)) if cp_ else None
     steps_ = {}                                  # per shape, the points after each group of steps (debug)
     rep["_steps"] = steps_
+    rep["_body_posed"] = (np.asarray(bp, float).copy(), np.asarray(off, float).copy())
     for s in gear:
         steps_[s.name.decode("latin-1", "replace")] = {}
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
         pts = neck_squash(pts, neck)
         pts = shoulder_drop(pts, drop_field, drop_axis, sf_clav_z) if drop_field is not None else pts
         moved_base = pts.copy()
+        steps_[s.name.decode("latin-1", "replace")]["0_posed"] = pts.copy()
         skin = False
         sky_gap = None
         if len(sky_bp):

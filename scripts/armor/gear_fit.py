@@ -986,6 +986,7 @@ def main(argv=None):
     body_tris_v = rep.pop("_body_tris", None)
     head_tris_v = rep.pop("_head_tris", None)
     fit_steps = rep.pop("_steps", {})
+    body_posed = rep.pop("_body_posed", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -1157,6 +1158,11 @@ def main(argv=None):
                 for step, p_ in fit_steps.get(nm, {}).items():
                     if len(p_) == len(sh.positions):
                         slider_objs.append((f"fit_{safe_name(nm)}@step{step}.obj", p_, sh.triangles, sh.uvs, True))
+        if a.debug_steps and body_posed is not None:
+            # Skyrim's body on Starfield's skeleton and its offsets to Starfield's body (points, skeleton space)
+            bp_, off_ = body_posed
+            slider_objs.append(("skybody_posed.obj", bp_, np.zeros((0, 3), int), None, True))
+            slider_objs.append(("skybody_posed_to_sf.obj", bp_ + off_, np.zeros((0, 3), int), None, True))
         for n_, p_, t_, uv_, *raw_ in slider_objs:
             if raw_:
                 write_obj(os.path.join(a.debug_dir, n_), p_, t_, uv_)
