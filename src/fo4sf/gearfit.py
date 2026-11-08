@@ -1370,6 +1370,19 @@ def ring_restore(base: np.ndarray, pts: np.ndarray, tris, centres, band: float =
                     seen.add(u)
                     stack.append(u)
         loops.append(np.array(comp))
+    par = np.arange(len(b))
+
+    def find(x):
+        while par[x] != x:
+            par[x] = par[par[x]]
+            x = par[x]
+        return x
+    for x, y, z in st:                         # connected parts (union-find)
+        for u, v in ((x, y), (y, z)):
+            ru, rv = find(u), find(v)
+            if ru != rv:
+                par[ru] = rv
+    comp_ = np.array([find(i) for i in range(len(b))])[canon]
     moved = np.zeros(len(p), bool)
     for c in centres:
         c = np.asarray(c, float)
@@ -1379,6 +1392,11 @@ def ring_restore(base: np.ndarray, pts: np.ndarray, tris, centres, band: float =
                 continue
             if arm is not None and float(np.mean(np.asarray(arm)[L])) > 0.5:
                 continue                       # a sleeve's edge, not the body armour's armhole
+            other = comp_ != comp_[L[0]]
+            if other.any():
+                dd_ = np.sqrt(((b[L][:, None, :] - b[other][None]) ** 2).sum(-1)).min(1)
+                if (dd_ < 0.015).mean() > 0.3:
+                    continue                   # a sleeve (another part) is attached along it, as on Ralof's tunic
             d = float(np.linalg.norm(p[L] - c, axis=1).mean())     # the loop round the joint, closest all round
             if d < reach and (best is None or d < best[0]):
                 best = (d, L)
@@ -1990,6 +2008,13 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                                   for vw in s.weights]), s.points)
             k_ = np.clip((own_arm - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)[:, None]
             shift = (1 - k_) * body_shift(~body_arm) + k_ * body_shift(body_arm)
+            # where a sleeve joins the body armour both sides take the same, unsplit offsets (2026-11-08, verified on
+            # Ralof's debug meshes: with split offsets the mail sleeve's edge moved 10 mm down and out with the arm,
+            # the tunic's edge next to it 4 mm in with the torso, and they parted)
+            kj_ = join_keep(np.array([arm_share([(s.bones[b], x) for b, x in vw]) for vw in s.weights]),
+                            np.asarray(s.points, float))[:, None]
+            if (kj_ > 0).any():
+                shift = kj_ * body_shift(np.ones(len(bp), bool)) + (1 - kj_) * shift
         else:
             shift = body_shift(np.ones(len(bp), bool)) if len(bp) else np.zeros_like(pts)
         bust = np.zeros(len(pts), bool)
