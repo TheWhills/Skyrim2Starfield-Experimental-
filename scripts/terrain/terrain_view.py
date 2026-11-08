@@ -126,11 +126,13 @@ def main(argv=None):
     r, c = np.unravel_index(np.argmax(np.abs(bump)), bump.shape)
     print(f"largest bump {bump[r, c]:+.3f} m at ({xs[c]:.2f}, {ys[r]:.2f}); samples over 0.15 m: "
           f"{int(np.sum(np.abs(bump) > 0.15))}; {len(objs)} objects in the window")
+    summary = (f"Game vs Skyrim: largest difference {np.nanmax(np.abs(diff)):.3f} m. " if diff is not None else "") + \
+        f"Largest bump {np.abs(bump).max():.3f} m."
     rnd = lambda m: None if m is None else [[None if not np.isfinite(v) else round(float(v), 3) for v in row]  # noqa
                                             for row in m]
     data = {"x0": x0, "y0": y0, "step": s, "rows": h.shape[0], "cols": h.shape[1], "player": [x, y, here],
             "game": rnd(h), "skyrim": rnd(sky), "diff": rnd(diff), "bump": rnd(bump), "objects": objs,
-            "offset": hoff}
+            "offset": hoff, "summary": summary}
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
     with open(a.out, "w", encoding="utf-8") as fh:
         fh.write(PAGE.replace("__DATA__", json.dumps(data)))
@@ -158,17 +160,19 @@ function relief(h){const out=[];for(let r=0;r<R;r++){out.push([]);for(let c=0;c<
  if(a===null){out[r].push(null);continue}const e=h[r][Math.min(C-1,c+1)]??a,n=h[Math.min(R-1,r+1)][c]??a;
  const dx=(e-a)/D.step,dy=(n-a)/D.step;const l=Math.max(0,Math.min(1,0.6+(-dx*0.7+dy*0.7)*0.8));out[r].push(l)}}return out}
 function colour(v,m){if(v===null)return[60,0,60];if(m==='game'||m==='skyrim'){const g=Math.round(40+v*200);return[g,g,g]}
- const lim=m==='diff'?1.0:0.3,t=Math.max(-1,Math.min(1,v/lim));return t<0?[Math.round(255*(1+t)),Math.round(255*(1+t)),255]
- :[255,Math.round(255*(1-t)),Math.round(255*(1-t))]}
+ const lim=m==='diff'?1.0:0.3,t=Math.max(-1,Math.min(1,v/lim)),g=110;   // grey = no difference / flat
+ return t<0?[Math.round(g*(1+t)),Math.round(g*(1+t)),Math.round(g+(255-g)*-t)]:[Math.round(g+(255-g)*t),Math.round(g*(1-t)),Math.round(g*(1-t))]}
 function draw(){const src=mode==='game'?relief(D.game):mode==='skyrim'?(D.skyrim?relief(D.skyrim):null):D[mode];
  ctx.fillStyle='#000';ctx.fillRect(0,0,640,640);if(!src){ctx.fillStyle='#ddd';ctx.fillText('no Skyrim data (run with --skyrim)',20,20);return}
  for(let r=0;r<R;r++)for(let c=0;c<C;c++){const [a,b,d]=colour(src[r][c],mode);ctx.fillStyle=`rgb(${a},${b},${d})`;
  ctx.fillRect(c*S,(R-1-r)*S,Math.ceil(S),Math.ceil(S))}
- if(document.getElementById('showobj').checked){ctx.fillStyle='#ffd400';for(const o of D.objects){const [px,py]=toPx(o.x,o.y);
- ctx.fillRect(px-2,py-2,4,4)}}
+ if(document.getElementById('showobj').checked){for(const o of D.objects){const [px,py]=toPx(o.x,o.y);
+ if(o.name.toLowerCase().includes('water')){const w=16*(o.scale||1)/D.step*S;ctx.strokeStyle='#3d8bff';ctx.lineWidth=1;ctx.strokeRect(px-w/2,py-w/2,w,w)}
+ else{ctx.fillStyle='#ffd400';ctx.fillRect(px-2,py-2,4,4)}}}
  const [qx,qy]=toPx(D.player[0],D.player[1]);ctx.strokeStyle='#00e0ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(qx,qy,7,0,7);ctx.stroke();
- document.getElementById('legend').textContent=mode==='diff'?'blue: game lower than Skyrim, red: higher (full colour at 1 m)':
- mode==='bump'?'red: sample above its neighbours, blue: below (full colour at 0.3 m)':'cyan ring: your position; yellow: objects'}
+ document.getElementById('legend').textContent=(mode==='diff'?'grey: same as Skyrim; blue: game lower, red: higher (full colour at 1 m). ':
+ mode==='bump'?'grey: smooth; red: sample above its neighbours, blue: below (full colour at 0.3 m). ':'')+
+ 'Cyan ring: your position; yellow dots: objects; blue squares: water pieces. '+D.summary}
 function toPx(x,y){return[(x-D.x0)/D.step*S,(R-1-(y-D.y0)/D.step)*S]}
 cv.onmousemove=e=>{const b=cv.getBoundingClientRect(),c=Math.floor((e.clientX-b.left)/S),r=R-1-Math.floor((e.clientY-b.top)/S);
  if(r<0||r>=R||c<0||c>=C)return;const x=D.x0+c*D.step,y=D.y0+r*D.step;let best=null,bd=1e9;
