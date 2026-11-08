@@ -866,8 +866,11 @@ def neck_wrap(sky_pts: np.ndarray, pts: np.ndarray, tris, sky_surface, sf_surfac
         # under the head) the thinner neck, and the beige trim was pulled 2-5 cm in and up round the neck)
         _r1, h_sky, _x = radial(sky_pts[sel], sky_axis, necks[0])
         _r2, h_sf, _y = radial(pts[sel], sf_axis, necks[1])
-        ok &= np.isfinite(h_sky) & (np.abs(h_sky - n_sky) < 0.002) & np.isfinite(h_sf) & (np.abs(h_sf - n_sf) < 0.002)
-    w = np.clip((reach[1] - gap) / (reach[1] - reach[0]), 0.0, 1.0) * ok
+        with np.errstate(invalid="ignore"):            # rays that miss: inf - inf, masked out by ok
+            ok &= np.isfinite(h_sky) & np.isfinite(h_sf) & (np.abs(np.where(np.isfinite(h_sky), h_sky - n_sky, 1.0))
+                                                             < 0.002) \
+                & (np.abs(np.where(np.isfinite(h_sf), h_sf - n_sf, 1.0)) < 0.002)
+    w = np.where(ok, np.clip((reach[1] - np.where(ok, gap, 0.0)) / (reach[1] - reach[0]), 0.0, 1.0), 0.0)
     target = n_sf + np.maximum(np.where(ok, gap, 0.0), WRAP_MIN)
     step = np.where(ok, (target - r_sf) * w, 0.0)
     move = np.zeros_like(pts)
