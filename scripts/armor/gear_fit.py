@@ -541,6 +541,9 @@ def debug_textures(folder: str, textures: dict, read, texconv: str) -> list:
     return out
 
 
+HEAD_SLOTS = {30, 31, 41, 42, 43}   # Skyrim biped slots: head, hair, long hair, circlet, ears
+
+
 def armor_by_edid(inv: dict, edids) -> tuple:
     """([ARMO FormIDs], [not found]) of Skyrim armor records by EditorID (case-insensitive)."""
     by = {a["edid"].lower(): fid for fid, a in inv["armo"].items() if a.get("edid")}
@@ -899,6 +902,8 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--npc", required=True, help="Skyrim NPC EditorID (its default outfit is converted; with --armor "
                                                  "only its race and sex are used)")
+    ap.add_argument("--helmets", action="store_true",
+                    help="also convert head gear (Skyrim slots 30 / 31 / 41-43); left out by default")
     ap.add_argument("--armor", action="append", default=[],
                     help="Skyrim armor EditorID to convert instead of the NPC's outfit (repeatable), e.g. "
                          "ArmorIronCuirass")
@@ -963,6 +968,13 @@ def main(argv=None):
         # armor now, the iron armor")
         o["armor"], o["skipped"] = armor_by_edid(inv, a.armor)
     meshes = os_convert.worn_meshes(inv, o["armor"], o["race"], female)
+    if not a.helmets:
+        # helmets / hoods / circlets are a separate step, worn the way Starfield's hats are (2026-11-08, owner: the
+        # iron helmet's neck steps wrapped it round the head, and its eye-shadow shape showed as a band over the eyes)
+        heads_ = [m for m in meshes if set(m.get("slots") or []) & HEAD_SLOTS and 32 not in (m.get("slots") or [])]
+        for m in heads_:
+            print(f"  head gear left out (a separate step; --helmets to include): {m['armor']} {m['mesh']}")
+        meshes = [m for m in meshes if m not in heads_]
     if not meshes:
         sys.exit(f"{a.npc}: no worn armor meshes in the default outfit")
     sky = bsa.SkyrimArchives(a.skyrim_data)

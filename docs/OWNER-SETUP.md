@@ -55,7 +55,7 @@ A Skyrim armor set instead of an NPC's outfit (the NPC only gives race and sex; 
 `player.additem`, the id is printed at the end):
 
 ```powershell
-python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Ralof --armor ArmorIronCuirass --armor ArmorIronGauntlets --armor ArmorIronBoots --armor ArmorIronHelmet --name IronArmor --full "Iron Armor (S2S)" --out $armor --add --debug-dir C:\Modding\work\debug_iron
+python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Ralof --armor ArmorIronCuirass --armor ArmorIronGauntlets --armor ArmorIronBoots --name IronArmor --full "Iron Armor (S2S)" --out $armor --add --debug-dir C:\Modding\work\debug_iron
 ```
 
 Test NPCs with their faces, converted hair, Starfield beards and their outfits:
