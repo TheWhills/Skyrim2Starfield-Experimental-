@@ -17,7 +17,11 @@ $face="$mods\S2S Face Test"
 $hairs="$mods\S2S Skyrim Hairs\S2SSkyrimHairs.esm"
 $ms="$mods\More-Sliders Complete"
 $cs="$ms\meshes\actors\human\characterassets"
+function notify($msg) { try { Invoke-RestMethod -Method Post -Uri "https://ntfy.sh/skyrim-conversion-tj-92841" -Body $msg | Out-Null } catch {} }
 ```
+
+`notify "..."` sends a phone notification (ntfy app, topic skyrim-conversion-tj-92841). End long runs with it, e.g.
+`...; notify "builds done"`. The cloud session cannot reach ntfy.sh itself (its network allowlist blocks it).
 
 Starfield must be closed while a script writes into the mods folders.
 
