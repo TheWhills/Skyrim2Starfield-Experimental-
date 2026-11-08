@@ -674,10 +674,17 @@ foreach (var note in lightNotes) Console.WriteLine($"  light note: {note}");
 mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 var sfData = Environment.GetEnvironmentVariable("STARFIELD_DATA") ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder");
-mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
-    .WithKnownMasters(new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
-        .Select(k => new KeyedMasterStyle(k!.Value, MasterStyle.Full)).ToArray())
-    .Write();
+var knownMasters = new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
+    .Select(k => new KeyedMasterStyle(k!.Value, MasterStyle.Full)).ToArray();
+if (extKey == null)
+    mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
+        .WithKnownMasters(knownMasters).Write();
+else
+    // with the exterior overrides: the masters' load order given (as TerrainOverlays writes its planet plugin); the
+    // header-master route only knew Starfield.esm and threw on the exterior plugin's records
+    mod.BeginWrite.ToPath(path).WithLoadOrder(new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
+            .Select(k => k!.Value).ToArray())
+        .WithKnownMasters(knownMasters).Write();
 File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value),
     new JsonSerializerOptions { WriteIndented = true }));
 File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));
