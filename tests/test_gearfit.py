@@ -809,9 +809,12 @@ class ArmWeightsTests(unittest.TestCase):
         pts = np.array([[0.005, 0.01, 0.0], [0.005, 0.01, 0.0]])
         own = [[("L_Arm", 0.7), ("L_Clavicle", 0.3)], [("C_Spine2", 1.0)]]
         out, n = G.body_weights_near(pts, own, body, nrm, bw, {"C_Chest", "L_Arm", "L_Clavicle", "C_Spine2"})
-        self.assertGreater(dict(out[0]).get("L_Arm", 0), 0.95)       # sleeve: the arm's skin
-        self.assertNotIn("C_Chest", dict(out[0]))
+        self.assertGreater(dict(out[0]).get("L_Arm", 0), 0.75)       # sleeve: mostly the arm's skin
         self.assertEqual(dict(out[1]), {"C_Chest": 1.0})     # bodice: the chest's skin
+        # an armhole rim Skyrim weights half to the arm: half the arm's skin, half the chest's
+        out2, _n = G.body_weights_near(pts[:1], [[("L_Arm", 0.5), ("C_Spine2", 0.5)]], body, nrm, bw,
+                                       {"C_Chest", "L_Arm", "C_Spine2"})
+        self.assertAlmostEqual(dict(out2[0]).get("L_Arm", 0), 0.5, places=1)
 
 
 class SmoothPoseTests(unittest.TestCase):

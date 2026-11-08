@@ -2189,6 +2189,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     return FitResult(shapes, rep)
 
 
+ARM_MIX = (0.2, 0.8)   # own arm share: torso skin weights at or under the first, arm skin weights at or over the second
 ARM_BONES = ("arm", "elbow", "bicep", "forearm", "wrist", "hand", "deltoid", "finger", "thumb", "pinky", "index",
              "middle", "ring", "upperarm", "shoulder")
 
@@ -2208,21 +2209,31 @@ def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.n
     _d, dist, idx = nearest_surface(pts, body_pts, body_nrm)
     # a sleeve takes the arm's skin weights, not the chest's or the back's next to the armpit (2026-11-08, owner:
     # Saadia's sleeve tops "give out" and fold at the front of the armpit with the arms down, smooth in the bind
-    # pose): gear whose own weights are mostly arm bones looks only at body vertices weighted to the arm, and the
-    # rest of the gear only at the others
-    own_arm = np.array([arm_share(vw) > 0.5 for vw in own])
+    # pose); and gear that Skyrim weights partly to the arm (an armhole's rim) mixes the arm's and the torso's skin
+    # weights the same way (2026-11-08, owner: the iron cuirass's armhole tore at the armpit when aiming; its rim
+    # had only the torso's): the nearest arm vertex and the nearest torso vertex, mixed by the gear's own arm share
+    own_s = np.clip((np.array([arm_share(vw) for vw in own]) - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)
     body_arm = np.array([arm_share(bw) > 0.5 for bw in body_w])
-    for want in (True, False):
-        g = np.nonzero(own_arm == want)[0]
-        b = np.nonzero(body_arm == want)[0]
-        if len(g) and len(b) and len(b) < len(body_arm):
-            _d2, dist2, j2 = nearest_surface(np.asarray(pts, float)[g], np.asarray(body_pts, float)[b],
-                                             np.asarray(body_nrm, float)[b])
-            dist[g], idx[g] = dist2, b[j2]
+    mix_idx = None
+    if body_arm.any() and not body_arm.all():
+        bpa, bna = np.asarray(body_pts, float), np.asarray(body_nrm, float)
+        ia, it_ = np.nonzero(body_arm)[0], np.nonzero(~body_arm)[0]
+        _d1, da, ja = nearest_surface(np.asarray(pts, float), bpa[ia], bna[ia])
+        _d2, dt, jt = nearest_surface(np.asarray(pts, float), bpa[it_], bna[it_])
+        mix_idx = (ia[ja], it_[jt])
+        dist = own_s * da + (1 - own_s) * dt
     t = np.clip((dist - near[0]) / max(near[1] - near[0], 1e-6), 0.0, 1.0)
     out, n = [], 0
     for v, vw in enumerate(own):
-        bw = [(b, x) for b, x in body_w[idx[v]] if b in bones]
+        if mix_idx is not None:
+            acc_: Dict[str, float] = {}
+            for src, share in ((mix_idx[0][v], own_s[v]), (mix_idx[1][v], 1 - own_s[v])):
+                if share > 0:
+                    for b, x in body_w[src]:
+                        acc_[b] = acc_.get(b, 0.0) + share * x
+            bw = [(b, x) for b, x in acc_.items() if b in bones]
+        else:
+            bw = [(b, x) for b, x in body_w[idx[v]] if b in bones]
         if t[v] >= 1.0 or not bw:
             out.append(vw)
             continue
