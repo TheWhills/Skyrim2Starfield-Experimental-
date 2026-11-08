@@ -409,13 +409,27 @@ TESSELLATE = 3                 # low-poly gear split n x n before the fit
 TESSELLATE_BELOW = 2000        # vertices: only shapes smaller than this
 
 
-def flat_subdivide(points, normals, uvs, tris, weights, n: int):
+CURVE = 0.6           # Phong-tessellation share for --curved (0: flat)
+CURVE_CAP = 0.12      # its bulge at most this share of the triangle's longest edge
+
+
+def flat_subdivide(points, normals, uvs, tris, weights, n: int, curve: float = 0.0):
     """Every triangle split n x n on its own flat plane (no curved patch: on Ralof's cowl the PN patches ballooned
     the folds and opened the chest, 2026-11-06). Points on shared edges are shared (same position and UV); UVs,
     normals and weights {bone index: w} interpolated. Returns (points, normals, uvs, tris, weights)."""
     P, N, U = np.asarray(points, float), np.asarray(normals, float), np.asarray(uvs, float)
     W = [dict(vw) for vw in weights]
     pos, nrm, uv, wts, index = [], [], [], [], {}
+    if curve > 0:
+        # curved (2026-11-08, owner: Saadia's bust "jagged and not rounded": flat splits keep Skyrim's low-poly
+        # outline): Phong tessellation on normals averaged over vertices at one position (no cracks at UV seams),
+        # the bulge capped so folds do not balloon as PN patches did on Ralof's cowl
+        key_ = np.round(P, 5)
+        _u, inv_ = np.unique(key_, axis=0, return_inverse=True)
+        inv_ = inv_.reshape(-1)
+        acc = np.zeros((len(_u), 3))
+        np.add.at(acc, inv_, N)
+        Ns = acc[inv_] / np.maximum(np.linalg.norm(acc[inv_], axis=1, keepdims=True), 1e-12)
 
     def point(t, i, j):
         a, b, c = t
@@ -429,6 +443,13 @@ def flat_subdivide(points, normals, uvs, tris, weights, n: int):
         if key in index:
             return index[key]
         p_ = ba * P[a] + bb * P[b] + bc * P[c]
+        if curve > 0 and len(corners) > 1:
+            proj = sum(w * (p_ - np.dot(p_ - P[x], Ns[x]) * Ns[x]) for x, w in ((a, ba), (b, bb), (c, bc)))
+            d_ = (proj - p_) * curve
+            cap = CURVE_CAP * max(np.linalg.norm(P[a] - P[b]), np.linalg.norm(P[b] - P[c]),
+                                  np.linalg.norm(P[c] - P[a]))
+            m_ = np.linalg.norm(d_)
+            p_ = p_ + (d_ * (cap / m_) if m_ > cap else d_)
         n_ = ba * N[a] + bb * N[b] + bc * N[c]
         u_ = ba * U[a] + bb * U[b] + bc * U[c]
         w_ = {}
@@ -456,7 +477,7 @@ def flat_subdivide(points, normals, uvs, tris, weights, n: int):
     return np.array(pos), np.array(nrm), uv, out_t, wts
 
 
-def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, skip=()):
+def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, skip=(), curve: float = 0.0):
     """Low-poly Skyrim shapes split into n x n smaller flat triangles before the fit (flat_subdivide) so the fit can
     shape them around Starfield's differently shaped body (2026-11-06, Ralof's boots: 202 vertices; covering the calf
     pushed the flat faces 2.5 cm looser than in Skyrim). Shapes named in skip (dropped skin pieces) are left.
@@ -467,7 +488,7 @@ def tessellate_shapes(gear, n: int = TESSELLATE, below: int = TESSELLATE_BELOW, 
         if n < 2 or len(s.points) >= below or name in skip:
             out.append(s)
             continue
-        p, nr, uv, tr, w = flat_subdivide(s.points, s.normals, s.uvs, s.triangles, s.weights, n)
+        p, nr, uv, tr, w = flat_subdivide(s.points, s.normals, s.uvs, s.triangles, s.weights, n, curve)
         out.append(gearfit.SkyShape(s.name, p, nr, uv, tr, list(s.bones), w, s.joints))
         rep[name] = [len(s.points), len(p)]
     return out, rep
@@ -564,7 +585,7 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
         head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
-        round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP):
+        round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -599,7 +620,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     gear = [s for nb in gear_nifs for s in sky_shapes(nb)]
     skipped = [s.name.decode("latin-1") for s in gear if s.name.decode("latin-1").lower() in {x.lower() for x in skip}]
     gear = [s for s in gear if s.name.decode("latin-1") not in skipped]
-    gear, tess = tessellate_shapes(gear, tessellate, skip=set(skin_names))
+    gear, tess = tessellate_shapes(gear, tessellate, skip=set(skin_names), curve=CURVE if curved else 0.0)
     body_nifs = body_nif if isinstance(body_nif, (list, tuple)) else [body_nif]
     # not the underwear shapes (2026-11-07, verified on Ysolda's / Saadia's debug meshes: the dresses' chest panels,
     # 3-31 mm inside Skyrim's breasts, read as outside the separate bra shape, so they were not kept hidden and showed
@@ -896,6 +917,8 @@ def main(argv=None):
     ap.add_argument("--strap-gap", type=float, default=gearfit.STRAP_GAP,
                     help="metres off the skin for visible gear round the neck and shoulders (default %(default)s; "
                          "0 = the normal --gap)")
+    ap.add_argument("--curved", action="store_true",
+                    help="split low-poly gear into a rounded surface (Phong tessellation) instead of flat triangles")
     ap.add_argument("--round-bust", action="store_true",
                     help="the front of the chest keeps Skyrim's rounder shape where it stands off Starfield's bust")
     ap.add_argument("--head-weights", action="store_true",
@@ -949,7 +972,7 @@ def main(argv=None):
                              feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
                                            for m in meshes),
                              whole_skin=a.whole_skin, round_bust=a.round_bust,
-                             strap_gap=a.strap_gap)
+                             strap_gap=a.strap_gap, curved=a.curved)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)

@@ -435,3 +435,26 @@ class ShiftedTests(unittest.TestCase):
         import numpy as np
         p = gear_fit.shifted([[0, 0, 0], [1, 1, 1]], {1: (0.5, 0, -1), 7: (9, 9, 9)})
         self.assertTrue(np.allclose(p, [[0, 0, 0], [1.5, 1, 0]]))
+
+
+class CurvedSubdivideTests(unittest.TestCase):
+    def test_curved_split_of_a_low_poly_sphere_is_rounder_and_crack_free(self):
+        import numpy as np
+        # octahedron (unit sphere's 6 points), with every vertex duplicated per face like a UV-seamed mesh
+        c = np.array([[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], float)
+        faces = [(0, 2, 4), (2, 1, 4), (1, 3, 4), (3, 0, 4), (2, 0, 5), (1, 2, 5), (3, 1, 5), (0, 3, 5)]
+        pts, tris = [], []
+        for f in faces:
+            tris.append(tuple(range(len(pts), len(pts) + 3)))
+            pts += [c[i] for i in f]
+        pts = np.array(pts)
+        uvs = [(0.0, 0.0)] * len(pts)
+        w = [[(0, 1.0)]] * len(pts)
+        fp, _n, _u, _t, _w = gear_fit.flat_subdivide(pts, pts, uvs, tris, w, 4)
+        cp, _n, _u, _t, _w = gear_fit.flat_subdivide(pts, pts, uvs, tris, w, 4, gear_fit.CURVE)
+        err = lambda q: np.abs(np.linalg.norm(q, axis=1) - 1).mean()     # noqa: E731
+        self.assertLess(err(cp), 0.6 * err(fp))
+        # points at one position on shared edges stay together (no cracks across the duplicated vertices)
+        key = np.round(cp, 6)
+        _u2, cnt = np.unique(np.round(fp, 6), axis=0, return_counts=True)
+        self.assertEqual(len(np.unique(key, axis=0)), len(_u2))
