@@ -965,3 +965,22 @@ class PartLinkTests(unittest.TestCase):
         self.assertLess(abs(sm[6:12, 2].mean() - sm[12:18, 2].mean()), 0.005)   # the facing rows move together
         st0, _c = G.seam_tris(pts, tris, join=False)
         self.assertEqual(len(st0), len(tris))
+
+
+class JoinWeightsTests(unittest.TestCase):
+    def test_both_sides_of_a_join_share_weights(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        a = np.array([[x, 0.0, 0.0] for x in np.linspace(0, 0.1, 6)] + [[x, 0.01, 0.0] for x in np.linspace(0, 0.1, 6)])
+        pts = np.concatenate([a, a + [0, 0.015, 0]])
+        tris = []
+        for off in (0, 12):
+            for i in range(5):
+                tris += [(off + i, off + i + 1, off + 6 + i), (off + i + 1, off + 7 + i, off + 6 + i)]
+        w = [[("C_Chest", 1.0)]] * 12 + [[("L_Biceps", 1.0)]] * 12
+        out = G.join_weights(pts, tris, w)
+        for i in range(6, 12):                       # the torso part's edge row and the sleeve's facing row
+            self.assertAlmostEqual(dict(out[i]).get("L_Biceps", 0), dict(out[i + 6]).get("L_Biceps", 0), places=6)
+        # one ring away it fades back towards its own weights
+        self.assertGreater(dict(out[23]).get("L_Biceps", 0), dict(out[17]).get("L_Biceps", 0))
+        self.assertGreater(dict(out[0]).get("C_Chest", 0), dict(out[6]).get("C_Chest", 0))

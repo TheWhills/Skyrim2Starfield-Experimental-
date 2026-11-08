@@ -1720,6 +1720,47 @@ def seam_tris(points: np.ndarray, tris, decimals: int = 5, join: bool = True) ->
     return st, canon
 
 
+def join_weights(rest: np.ndarray, tris, w: list, rounds: int = 2) -> list:
+    """Weights [(bone, w)] per vertex made equal across the links between separate parts (part_links): both ends of a
+    link take their average, then rounds of spreading half of it to their mesh neighbours, so the join bends as one."""
+    t = np.asarray(tris, int).reshape(-1, 3)
+    if not len(t):
+        return w
+    st, canon = seam_tris(rest, t, join=False)
+    links = part_links(np.asarray(rest, float), st, canon)
+    if not len(links):
+        return w
+    groups: Dict[int, List[int]] = {}
+    for i, c in enumerate(canon):
+        groups.setdefault(int(c), []).append(i)
+    out = list(w)
+    for a, b in links:
+        avg = blend_weights(out[groups[int(a)][0]], out[groups[int(b)][0]], 0.5)
+        for i in groups[int(a)] + groups[int(b)]:
+            out[i] = avg
+    nb = _neighbours(len(rest), st)
+    ring = set(int(x) for x in links.ravel())
+    done = set(ring)
+    for r in range(rounds):
+        nxt = set()
+        for v in ring:
+            for u in nb[v]:
+                u = int(u)
+                if u not in done:
+                    nxt.add(u)
+        f = 0.5 / (r + 1)
+        for u in nxt:
+            src = [v for v in nb[u] if int(v) in done]
+            if src:
+                mean = out[groups[int(src[0])][0]]
+                new_ = blend_weights(mean, out[groups[u][0]] if u in groups else out[u], f)
+                for i in groups.get(u, [u]):
+                    out[i] = new_
+        done |= nxt
+        ring = nxt
+    return out
+
+
 PART_JOIN = 0.012   # m: vertices of separate parts of one shape this close are smoothed together
 
 
@@ -2402,6 +2443,12 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 for b, x in own[i]:
                     mix[b] = mix.get(b, 0.0) + t * x
                 w[i] = sorted(((b, x) for b, x in mix.items() if x > 0), key=lambda bx: -bx[1])
+        if not skin and len(w) == len(s.points):
+            # separate parts that meet (a sleeve and the tunic) share their weights at the join, so they bend together
+            # (2026-11-08, owner: with the sleeve reattached, a sliver of armpit skin still showed between Ralof's
+            # mail sleeve and the tunic when aiming; the bind-pose gap was at Skyrim's, the two sides took different
+            # skin weights)
+            w = join_weights(np.asarray(s.points, float), s.triangles, w)
         shapes.append(HairShape(s.name, pts, nrm, np.zeros_like(nrm), list(s.uvs), list(s.triangles), w, -1, -1, -1,
                                 colors=[(255, 255, 255, 255)] * len(pts)))
         rep["shapes"][s.name.decode("latin-1", "replace")] = {
