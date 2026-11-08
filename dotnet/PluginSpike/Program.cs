@@ -497,7 +497,7 @@ if (extDir != null && extDoorsPath != null)
     var topLast = wLast.TopCell ?? wg.TopCell!;
     var tco = topLast.DeepCopy(new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false });
     wo.TopCell = tco;
-    var cellMask = new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false, Landscape = false, NavigationMeshes = false };
+    var cellMask = new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false, NavigationMeshes = false };
     var doorsJson = JsonDocument.Parse(File.ReadAllText(extDoorsPath)).RootElement.Clone();
     var want = new Dictionary<FormKey, (string src, JsonElement tele)>();
     foreach (var d in doorsJson.GetProperty("doors").EnumerateArray())
