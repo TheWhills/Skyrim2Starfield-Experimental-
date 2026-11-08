@@ -444,10 +444,12 @@ def pick_cells(src: Source, names=(), find="", connected_from="", depth=1, limit
     return out[:limit] if limit > 0 else out
 
 
-def link_load_doors(exports: list) -> dict:
+def link_load_doors(exports: list, exterior: bool = False) -> dict:
     """Pair the batch's load doors: a door whose Skyrim teleport lands at a door placed in another cell of the batch
     gets "teleport" {door, cell, pos, rot, flags} (Skyrim form key and units; PluginSpike maps them). Returns counts:
-    linked, and unlinked by reason (to the worldspace, to a cell outside the batch, destination door unknown)."""
+    linked, and unlinked by reason (to the worldspace, to a cell outside the batch, destination door unknown). exterior:
+    doors to the worldspace get "teleport" with cell "exterior" too (counted as to_exterior)."""
+    linked_out = 0
     where = {}
     for e in exports:
         for r in e["refs"]:
@@ -460,6 +462,13 @@ def link_load_doors(exports: list) -> dict:
             if not t or r["type"] != "Door":
                 continue
             dest = where.get(t["door"])
+            if dest is None and t.get("cell") == "exterior" and exterior:
+                # to the worldspace: PluginSpike links it to the exterior plugin's door (EXTERIOR_DIR) when that door
+                # was placed there as a load door (make_skyrim_objects.py stage --interiors)
+                r["teleport"] = {"door": t["door"], "cell": "exterior", "pos": t["pos"], "rot": t["rot"],
+                                 "flags": t.get("flags", 0)}
+                linked_out += 1
+                continue
             if dest is not None:
                 r["teleport"] = {"door": t["door"], "cell": dest, "pos": t["pos"], "rot": t["rot"],
                                  "flags": t.get("flags", 0)}
@@ -470,7 +479,23 @@ def link_load_doors(exports: list) -> dict:
                    "destination door not found" if t.get("cell") is None else
                    f"to a cell outside the batch ({t['cell']})")
             unlinked[why] = unlinked.get(why, 0) + 1
-    return {"linked": linked, "unlinked": unlinked}
+    return {"linked": linked, "to_exterior": linked_out, "unlinked": unlinked}
+
+
+def exterior_doors(src, exports: list) -> list:
+    """The worldspace's load doors that lead into a door placed in the batch: [{"src": exterior door form key,
+    "teleport": {"door", "cell", "pos", "rot", "flags"}}] (Skyrim form keys and units). make_skyrim_objects.py stage
+    --interiors places these as load doors; PluginSpike (EXTERIOR_DOORS) sets their teleports."""
+    where = {r["formkey"]: e["cell"] for e in exports for r in e["refs"] if r["type"] == "Door"}
+    out = []
+    for fid, (cfid, x) in sorted(src.doors().items()):
+        if cfid is not None:
+            continue
+        dest = skyrimrefs.formkey(x[0], src.plugin_name)
+        if dest in where:
+            out.append({"src": skyrimrefs.formkey(fid, src.plugin_name),
+                        "teleport": {"door": dest, "cell": where[dest], "pos": x[1], "rot": x[2], "flags": x[3]}})
+    return out
 
 
 def plugin_cell(export: dict, selected_refs: list, batch_navmeshes=None) -> dict:

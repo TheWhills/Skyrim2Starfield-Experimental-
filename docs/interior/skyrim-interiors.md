@@ -215,3 +215,22 @@ whether Alva's stairs and door are fixed. Exterior objects converted with `--sta
   `stairramp.py` finds flights of 3+ steps in the collision and native collision adds a ramp body through the nosings
   on layer 31 (stair helper: only actors collide). `--stair-ramp-layer 1` puts it on the static layer if 31 does not
   work in Starfield, `0` turns it off. The manifest lists the models that got ramps (`stair_ramps`).
+
+## Doors between the exterior and the interiors (2026-11-08; offline, C# not compiled yet)
+Owner: "get the Riverwood inn connected to Riverwood" (the Tamriel exterior is already on the planet). Until now doors
+to the worldspace stayed scenery. Three builds, in this order:
+1. `make_skyrim_interior.py batch ... --exterior`: doors to the worldspace keep their teleport (cell "exterior", Skyrim
+   exterior units) and `exterior_doors.json` lists the worldspace load doors that lead into the batch (Skyrim refs,
+   with their XTEL into the interior).
+2. `make_skyrim_objects.py stage ... --interiors <batch work>`: those exterior references become load doors in the
+   exterior plugin: a `<base>_LoadDoor` DOOR (no animation graph, as the interior load doors verified in game) and the
+   reference persistent (the world's persistent cell + record flag 0x400). TerrainOverlays' `formids.json` now also
+   has the world's and its persistent cell's FormIDs. The rest of the exterior is unchanged (FormIDs after the new base
+   shift by one: a rebuilt exterior, not a patch to an old one).
+3. PluginSpike with `EXTERIOR_DIR=<staged exterior>` and `EXTERIOR_DOORS=<batch work>\exterior_doors.json`: interior
+   doors to the exterior get XTEL to the exterior plugin's door, landing point in the overlay frame (Skyrim / 70 -
+   origin_cw_m, z + height_offset_m, as to_local); the exterior doors get their XTEL to our interior doors through an
+   override in FO4Port.esm of the world, its persistent cell and the door references (copied from the exterior plugin;
+   OFST / CLSZ left out of the override). FO4Port.esm then has the exterior plugin as a master.
+Unresolved until built and run: the C# (written without a compiler), whether the world override keeps the exterior
+intact in game (only record fields are copied; cells stay in the exterior plugin), and the landing heights.

@@ -691,6 +691,31 @@ def collision_kind(item):
     return c.get("source") or "none"
 
 
+def mark_load_doors(objects: dict, interiors: str) -> tuple:
+    """The references make_skyrim_interior.py batch --exterior listed (exterior_doors.json: Skyrim worldspace load
+    doors leading into the batch's interiors) become load doors: "persistent" (in the world's persistent cell, record
+    flag 0x400, as every vanilla load door: scripts/interior/door_survey.py) on a "load_door" base of their model (a
+    DOOR record without an animation graph, as PluginSpike's interior load doors, verified in game 2026-10-23).
+    PluginSpike (EXTERIOR_DIR / EXTERIOR_DOORS) then sets their teleports in FO4Port.esm. Returns (marked, [missing])."""
+    path = interiors if interiors.lower().endswith(".json") else os.path.join(interiors, "exterior_doors.json")
+    want = {d["src"] for d in load(path)["doors"]}
+    door_base = {}
+    marked, seen = 0, set()
+    for r in objects["refs"]:
+        if r["src"] not in want:
+            continue
+        b = r["base"]
+        if b not in door_base:
+            src_base = objects["bases"][b]
+            objects["bases"].append(dict(src_base, edid=(src_base["edid"] + "_LoadDoor")[:200], load_door=True))
+            door_base[b] = len(objects["bases"]) - 1
+        r["base"] = door_base[b]
+        r["persistent"] = True
+        marked += 1
+        seen.add(r["src"])
+    return marked, sorted(want - seen)
+
+
 def cmd_stage(a):
     t0 = time.time()
     prm, ov = terrain_overlay(a.terrain)
@@ -725,6 +750,10 @@ def cmd_stage(a):
     objects = {"world": ov["world"], "edid_prefix": EDID_PREFIX,
                "bases": [{k: b[k] for k in ("edid", "model", "source", "collision") if k in b} for b in bases],
                "refs": [{k: p[k] for k in ("src", "base", "cell", "pos", "rot", "scale", "disabled")} for p in placed]}
+    if a.interiors:
+        n_ld, missing = mark_load_doors(objects, a.interiors)
+        print(f"load doors into the interiors: {n_ld} placed as persistent DOOR references"
+              + (f"; not placed here (outside the region or not converted): {missing}" if missing else ""))
     grass_json = os.path.join(a.work, "grass", "grass.json")
     if os.path.isfile(grass_json) and not a.no_grass:     # make_skyrim_objects.py grass: merged patches, appended
         gr = load(grass_json)
@@ -944,6 +973,9 @@ def main(argv=None):
     ap.add_argument("--no-large-refs", action="store_true",
                     help="lod: do not list the LOD references as the world's large references (WRLD RNAM)")
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
+    ap.add_argument("--interiors", default="",
+                    help="stage: make_skyrim_interior.py batch --exterior work folder (or its exterior_doors.json): "
+                         "the worldspace doors into those interiors become persistent load doors")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
     a = ap.parse_args(argv)

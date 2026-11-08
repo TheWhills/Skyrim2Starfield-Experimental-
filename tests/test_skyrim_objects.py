@@ -541,3 +541,25 @@ class TexturePathTests(unittest.TestCase):
         s, = skyrimnif.trishapes(src)
         self.assertEqual(skyrimnif.texture_set(src, s.shader_ref)[:2],
                          ["textures\\plants\\thistle01.dds", "textures\\plants\\thistle01_n.dds"])
+
+
+class LoadDoorStageTests(unittest.TestCase):
+    def test_exterior_doors_into_interiors_become_persistent_load_doors(self):
+        import json
+        import tempfile
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "terrain"))
+        import make_skyrim_objects as mso
+        objects = {"bases": [{"edid": "SKY_WRInnDoor", "model": "a.nif"}, {"edid": "SKY_Rock", "model": "r.nif"}],
+                   "refs": [{"src": "004001:Skyrim.esm", "base": 0}, {"src": "009999:Skyrim.esm", "base": 0},
+                            {"src": "005000:Skyrim.esm", "base": 1}]}
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "exterior_doors.json"), "w") as f:
+                json.dump({"doors": [{"src": "004001:Skyrim.esm"}, {"src": "00ABCD:Skyrim.esm"}]}, f)
+            n, missing = mso.mark_load_doors(objects, d)
+        self.assertEqual((n, missing), (1, ["00ABCD:Skyrim.esm"]))
+        door = objects["refs"][0]
+        self.assertTrue(door["persistent"])
+        self.assertTrue(objects["bases"][door["base"]]["load_door"])
+        self.assertEqual(objects["bases"][door["base"]]["edid"], "SKY_WRInnDoor_LoadDoor")
+        self.assertEqual(objects["refs"][1]["base"], 0)                   # the same model elsewhere stays a static
+        self.assertNotIn("persistent", objects["refs"][1])

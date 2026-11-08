@@ -447,9 +447,50 @@ foreach (var cellPath in cellPaths)
     Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}{navNote}");
 }
 
-int teleLinked = 0, teleLost = 0;
+// ---- exterior load doors (2026-11-08, owner: "get the Riverwood inn connected to Riverwood") -------------------------
+// EXTERIOR_DIR: the staged exterior objects (make_skyrim_objects.py stage --interiors): formids.json (Skyrim ref -> our
+// FormID, the world and its persistent cell), overlays_params.json (the overlay frame) and the exterior plugin itself.
+// A batch door with teleport cell "exterior" gets XTEL to the exterior plugin's door, its landing point converted to
+// the overlay frame as make_skyrim_objects.py to_local does (Skyrim units / 70 - origin_cw_m, z + height_offset_m).
+// EXTERIOR_DOORS: make_skyrim_interior.py batch --exterior's exterior_doors.json: those exterior doors get their XTEL
+// to our interior doors through an override (in FO4Port.esm) of the world, its persistent cell and the door refs.
+// Written without a compiler (no NuGet in the cloud workspace); Mutagen names as used elsewhere in this file.
+var extDir = Environment.GetEnvironmentVariable("EXTERIOR_DIR");
+JsonElement extIds = default;
+ModKey? extKey = null;
+float extOx = 0, extOy = 0, extOz = 0;
+if (extDir != null)
+{
+    extIds = JsonDocument.Parse(File.ReadAllText(Path.Combine(extDir, "formids.json"))).RootElement.Clone();
+    extKey = ModKey.FromNameAndExtension(extIds.GetProperty("plugin").GetString()!);
+    var ovp = JsonDocument.Parse(File.ReadAllText(Path.Combine(extDir, "overlays_params.json"))).RootElement.GetProperty("overlays")[0];
+    extOx = ovp.GetProperty("origin_cw_m")[0].GetSingle();
+    extOy = ovp.GetProperty("origin_cw_m")[1].GetSingle();
+    extOz = ovp.TryGetProperty("height_offset_m", out var hoj) && hoj.ValueKind == JsonValueKind.Number ? hoj.GetSingle() : 0f;
+}
+FormKey? ExtRef(string skyrimRef) =>
+    extKey != null && extIds.GetProperty("refs").TryGetProperty(skyrimRef, out var v)
+        ? new FormKey(extKey.Value, Convert.ToUInt32(v.GetString(), 16)) : null;
+P3Float ExtPos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre - extOx, p[1].GetSingle() / UnitsPerMetre - extOy,
+                                     p[2].GetSingle() / UnitsPerMetre + extOz);
+
+int teleLinked = 0, teleLost = 0, teleOut = 0, teleOutLost = 0;
 foreach (var (obj, t) in pendingTeleports)
 {
+    if (t.TryGetProperty("cell", out var tc) && tc.GetString() == "exterior")
+    {
+        var ext = ExtRef(t.GetProperty("door").GetString()!);
+        if (ext == null) { teleOutLost++; continue; }               // no EXTERIOR_DIR, or the door not placed out there
+        obj.TeleportDestination = new TeleportDestination
+        {
+            Door = new FormLink<IPlacedObjectGetter>(ext.Value),
+            Position = ExtPos(t.GetProperty("pos")),
+            Rotation = Rot(t.GetProperty("rot")),
+            Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
+        };
+        teleOut++;
+        continue;
+    }
     if (!placedAll.TryGetValue(t.GetProperty("door").GetString()!, out var dest)) { teleLost++; continue; }   // its model failed
     obj.TeleportDestination = new TeleportDestination
     {
@@ -459,6 +500,48 @@ foreach (var (obj, t) in pendingTeleports)
         Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
     };
     teleLinked++;
+}
+if (teleOut + teleOutLost > 0)
+    Console.WriteLine($"doors out to the exterior: {teleOut} linked, {teleOutLost} not (" +
+                      (extDir == null ? "no EXTERIOR_DIR" : "door not in the exterior plugin's formids.json") + ")");
+int extIn = 0, extInLost = 0;
+if (extDir != null && Environment.GetEnvironmentVariable("EXTERIOR_DOORS") is string extDoorsPath)
+{
+    var extPath = Path.Combine(extDir, extKey!.Value.FileName);
+    using var ext = StarfieldMod.CreateFromBinaryOverlay(extPath, release);
+    var worldId = Convert.ToUInt32(extIds.GetProperty("world_form_id").GetString(), 16);
+    var wg = ext.Worldspaces.First(w => w.FormKey.ID == worldId);
+    // the world and its persistent cell, copied without their cells / references (an override replaces the record,
+    // so every other field stays as the exterior plugin has it). OFST / CLSZ (world_offsets.py) index the exterior
+    // file's own layout and are left out of the override.
+    var wo = wg.DeepCopy(new Worldspace.TranslationMask(defaultOn: true) { SubCells = false, TopCell = false });
+    wo.OffsetData = null;
+    wo.CellSizeData = null;
+    var tco = wg.TopCell!.DeepCopy(new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false });
+    wo.TopCell = tco;
+    using var edoc = JsonDocument.Parse(File.ReadAllText(extDoorsPath));
+    foreach (var d in edoc.RootElement.GetProperty("doors").EnumerateArray())
+    {
+        var key = ExtRef(d.GetProperty("src").GetString()!);
+        var t = d.GetProperty("teleport");
+        if (key == null || !placedAll.TryGetValue(t.GetProperty("door").GetString()!, out var dest)) { extInLost++; continue; }
+        var orig = wg.TopCell.Persistent.FirstOrDefault(r => r.FormKey == key.Value) as IPlacedObjectGetter;
+        if (orig == null) { extInLost++; continue; }                 // not persistent there (stage without --interiors)
+        var o = (PlacedObject)orig.DeepCopy();
+        o.MajorRecordFlagsRaw |= 0x400;
+        o.TeleportDestination = new TeleportDestination
+        {
+            Door = new FormLink<IPlacedObjectGetter>(dest.FormKey),
+            Position = Pos(t.GetProperty("pos")),               // the landing point inside: interior units / 70
+            Rotation = Rot(t.GetProperty("rot")),
+            Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
+        };
+        tco.Persistent.Add(o);
+        extIn++;
+    }
+    mod.Worldspaces.Add(wo);
+    Console.WriteLine($"exterior doors into the interiors: {extIn} linked (override of {wg.EditorID} in {extKey}), {extInLost} not " +
+                      "(not placed as a load door out there, or its interior door not placed)");
 }
 if (pendingTeleports.Count > 0)
     Console.WriteLine($"load doors: {teleLinked} linked, {teleLost} lost (destination door not placed); {loadDoorBases.Count} door models");
@@ -498,7 +581,9 @@ mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 var sfData = Environment.GetEnvironmentVariable("STARFIELD_DATA") ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder");
 mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
-    .WithKnownMasters(new KeyedMasterStyle(sfEsm, MasterStyle.Full))
+    .WithKnownMasters(extKey == null
+        ? new[] { new KeyedMasterStyle(sfEsm, MasterStyle.Full) }
+        : new[] { new KeyedMasterStyle(sfEsm, MasterStyle.Full), new KeyedMasterStyle(extKey.Value, MasterStyle.Full) })
     .Write();
 File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value),
     new JsonSerializerOptions { WriteIndented = true }));

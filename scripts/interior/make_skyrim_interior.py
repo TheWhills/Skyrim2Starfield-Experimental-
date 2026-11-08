@@ -147,7 +147,8 @@ def cmd_batch(a):
         if not picked:
             sys.exit("no interior cell matches (--cells / --find / --connected-from)")
         exports = [src.export(n) for n in picked]
-    doors = skyriminterior.link_load_doors(exports)
+        ext_doors = skyriminterior.exterior_doors(src, exports) if a.exterior else []
+    doors = skyriminterior.link_load_doors(exports, exterior=a.exterior)
     batch_nav = {n["formkey"] for e in exports for n in e["navmeshes"]}
     by_model, rows, cell_files = {}, [], []
     for e in exports:
@@ -170,6 +171,11 @@ def cmd_batch(a):
     save(os.path.join(work, "convert_input.json"), {"schema_version": 2, "cell": "batch", "refs": models})
     with open(os.path.join(work, "cells.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(cell_files) + "\n")
+    if a.exterior:
+        save(os.path.join(work, "exterior_doors.json"), {"doors": ext_doors})
+        print(f"exterior: {len(ext_doors)} worldspace load doors lead into the batch "
+              f"({', '.join(d['src'] for d in ext_doors[:6])}); {doors['to_exterior']} batch doors lead out -> "
+              f"{os.path.join(work, 'exterior_doors.json')}")
     rep = {"cells": rows, "models": len(models), "load_doors": doors}
     save(os.path.join(work, "batch.json"), rep)
     for r in rows:
@@ -253,6 +259,9 @@ def parser():
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")
     ap.add_argument("--depth", type=int, default=1, help="batch with --connected-from: doors to follow (default 1)")
     ap.add_argument("--limit", type=int, default=0, help="batch: at most this many cells (0: all)")
+    ap.add_argument("--exterior", action="store_true",
+                    help="batch: link doors to the worldspace too (writes exterior_doors.json for make_skyrim_objects.py "
+                         "stage --interiors and PluginSpike's EXTERIOR_DOORS)")
     ap.add_argument("--smallest-linked-pair", action="store_true",
                     help="batch: also the two smallest rooms Skyrim joins by a load door (a cheap door test)")
     ap.add_argument("--max", type=int, default=200, help="list: rows to print")

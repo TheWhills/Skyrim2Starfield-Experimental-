@@ -325,6 +325,21 @@ if (Has(prm, "objects"))
             continue;
         }
         var model = b.GetProperty("model").GetString()!;
+        if (b.TryGetProperty("load_door", out var ldj) && ldj.ValueKind == JsonValueKind.True)
+        {
+            // load door into a converted interior (make_skyrim_objects.py stage --interiors): a DOOR without an
+            // animation graph, as PluginSpike's interior load doors (Skyrim load doors load, they do not swing; verified
+            // in game for interiors 2026-10-23). PluginSpike sets the teleport in FO4Port.esm (an override of the ref).
+            var ld = new Door(NewKey(), release)
+            {
+                EditorID = edid, Model = new Model { File = model }, Name = "Door", SoundLevel = SoundLevel.Normal,
+            };
+            mod.Doors.Add(ld);
+            baseKeys.Add(ld.FormKey);
+            baseIds[edid] = ld.FormKey.ID.ToString("X6");
+            nDoor++;
+            continue;
+        }
         if (b.TryGetProperty("door", out var d) && d.ValueKind == JsonValueKind.Object)
         {
             // hinged door rigged like the vanilla template door (as PluginSpike and TerrainExp2): graph, skeleton, bounds
@@ -396,7 +411,13 @@ if (Has(prm, "objects"))
             obj.MajorRecordFlagsRaw |= 0x800;                                // Initially Disabled, as in FO4
             nDisabled++;
         }
-        cell.Temporary.Add(obj);
+        if (r.TryGetProperty("persistent", out var pj) && pj.ValueKind == JsonValueKind.True)
+        {
+            // load doors: the world's persistent cell and the record flag, as every vanilla load door (door_survey.py)
+            obj.MajorRecordFlagsRaw |= 0x400;
+            worlds.First(x => x.World.EditorID == world).World.TopCell!.Persistent.Add(obj);
+        }
+        else cell.Temporary.Add(obj);
         if (r.TryGetProperty("large_cells", out var lc))
             foreach (var g in lc.EnumerateArray())
             {
@@ -423,7 +444,10 @@ if (Has(prm, "objects"))
         }
         Console.WriteLine($"{world}: {large.Values.Sum(l => l.Count):N0} large-reference entries in {large.Count:N0} cells (RNAM)");
     }
-    var ids = new Dictionary<string, object> { ["plugin"] = modKey.FileName.String, ["world"] = world, ["bases"] = baseIds, ["refs"] = refIds };
+    var ww = worlds.First(x => x.World.EditorID == world).World;
+    var ids = new Dictionary<string, object> { ["plugin"] = modKey.FileName.String, ["world"] = world, ["bases"] = baseIds, ["refs"] = refIds,
+        // for PluginSpike's exterior load doors (an override of the world, its persistent cell and the door refs)
+        ["world_form_id"] = ww.FormKey.ID.ToString("X6"), ["top_cell_form_id"] = ww.TopCell!.FormKey.ID.ToString("X6") };
     File.WriteAllText(Path.Combine(outDir, "formids.json"), JsonSerializer.Serialize(ids));
 }
 // Optional "ltex_overrides": [{"form_id", "material", ...}] (make_skyrim_overlay.py build --skyrim-ground,

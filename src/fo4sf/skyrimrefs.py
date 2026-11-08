@@ -60,7 +60,7 @@ def read_bases(p: fo4land.Plugin, wanted_sigs=tuple(SIG_TYPES)) -> dict:
 
 
 def _parse_ref(data: bytes):
-    r = {"base": None, "pos": None, "rot": None, "scale": 1.0, "xesp": None}
+    r = {"base": None, "pos": None, "rot": None, "scale": 1.0, "xesp": None, "xtel": None}
     for sig, d in fo4land.iter_subrecords(data):
         if sig == b"NAME" and len(d) >= 4:
             r["base"] = struct.unpack_from("<I", d)[0]
@@ -72,6 +72,9 @@ def _parse_ref(data: bytes):
         elif sig == b"XESP" and len(d) >= 5:
             parent, flags = struct.unpack_from("<IB", d)
             r["xesp"] = (parent, flags)
+        elif sig == b"XTEL" and len(d) >= 28:            # load door: destination door, landing pos / rot, flags
+            door, *pr = struct.unpack_from("<I6f", d)
+            r["xtel"] = (door, list(pr[:3]), list(pr[3:]), struct.unpack_from("<I", d, 28)[0] if len(d) >= 32 else 0)
     return r
 
 
@@ -133,6 +136,9 @@ def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str 
                          "exterior_cell": list(xy),
                          "enable_parent": None if r["xesp"] is None else
                          {"reference": formkey(r["xesp"][0], plugin_name), "flags": r["xesp"][1]}}
+                if r["xtel"] is not None:
+                    entry["teleport_destination"] = {"door": formkey(r["xtel"][0], plugin_name), "pos": r["xtel"][1],
+                                                     "rot": r["xtel"][2], "flags": r["xtel"][3]}
                 if typ == b"ACHR":
                     entry["reason"] = "placed actor: NPCs are not translated (terrain and objects only)"
                     deferred.append(entry)

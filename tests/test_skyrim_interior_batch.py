@@ -162,6 +162,21 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(stats["linked"], 0)
         self.assertNotIn("teleport", down)
 
+    def test_exterior_links(self):
+        with fo4land.Plugin(self.esm) as p:
+            src = self.source(p)
+            exports = [src.export(n) for n in ("RiverwoodInn", "RiverwoodInnCellar")]
+            ext = skyriminterior.exterior_doors(src, exports)
+        self.assertEqual([d["src"] for d in ext], ["004001:Skyrim.esm"])         # the world's inn door, not the house's
+        self.assertEqual(ext[0]["teleport"]["door"], "003001:Skyrim.esm")
+        self.assertEqual(ext[0]["teleport"]["cell"], "RiverwoodInn")
+        stats = skyriminterior.link_load_doors(exports, exterior=True)
+        self.assertEqual(stats["to_exterior"], 1)
+        out = next(r for r in exports[0]["refs"] if r["formkey"] == "003001:Skyrim.esm")
+        self.assertEqual(out["teleport"]["cell"], "exterior")
+        self.assertEqual(out["teleport"]["door"], "004001:Skyrim.esm")
+        self.assertEqual(out["teleport"]["pos"], [50.0, 0.0, 0.0])              # its XTEL landing point, as written
+
     def test_batch_navmesh_cut_uses_the_whole_batch(self):
         with fo4land.Plugin(self.esm) as p:
             src = self.source(p)
