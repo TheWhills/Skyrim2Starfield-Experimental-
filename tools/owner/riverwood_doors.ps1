@@ -4,6 +4,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1
 param(
     [string]$Cells = "RiverwoodSleepingGiantInn",
+    [string]$Find = "",          # a regex of interior EditorIDs instead of -Cells, e.g. "^Riverwood"
     [string]$Exterior = "C:\Modding\staging\skyrim_all",
     [string]$Work = "C:\Modding\work\s2s\riverwood_doors",
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
@@ -26,7 +27,8 @@ if (-not (Test-Path $Texconv)) {
 $nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 Step "1. interior batch with doors to the exterior"
-$args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--cells", $Cells, "--work", $Work, "--exterior")
+$args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--work", $Work, "--exterior")
+if ($Find) { $args1 += @("--find", $Find) } else { $args1 += @("--cells", $Cells) }
 if ($nav) { $args1 += @("--navmesh-defaults", $nav.FullName) }
 python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }

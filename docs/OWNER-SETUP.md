@@ -95,3 +95,9 @@ installed exterior's door, install; Starfield closed):
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1
 ```
+
+All of Riverwood's interiors (every interior cell whose EditorID starts with Riverwood):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood"
+```
