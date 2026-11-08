@@ -27,7 +27,7 @@ Once per PC:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-New-Item -ItemType File -Force $PROFILE | Out-Null
+if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Force $PROFILE | Out-Null }
 Add-Content $PROFILE '. "$HOME\Skyrim2Starfield-Experimental-\tools\owner\notify-profile.ps1"'
 ```
 
