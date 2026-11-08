@@ -1275,10 +1275,11 @@ def seen_from_outside(query: np.ndarray, pts: np.ndarray, tris, views=VIS_VIEWS,
     out = np.zeros(len(q), bool)
     if not len(q) or not len(t):
         return ~out
-    lo, hi = q.min(0) - 0.25, q.max(0) + 0.25
-    keep = ((p[t] >= lo) & (p[t] <= hi)).all(2).any(1)
-    t = t[keep]
-    c = (lo + hi) / 2
+    # no 3-D crop round the query (2026-11-07, verified on Ysolda's debug meshes: cropping at 25 cm above the
+    # dress's top dropped the crown of the head, and the lining tucked inside the neck counted as seen from above
+    # through the open top; it was then pushed 3 cm out behind the neck as a brown flap); faces are cropped per view
+    # to the query's screen square instead
+    c = (q.min(0) + q.max(0)) / 2
     for az, el in views:
         a, e = np.radians(az), np.radians(el)
         r = np.array([[np.cos(a), np.sin(a), 0.0],
@@ -1292,7 +1293,8 @@ def seen_from_outside(query: np.ndarray, pts: np.ndarray, tris, views=VIS_VIEWS,
         X = (pp[:, 0] + half) / pixel
         Y = (pp[:, 1] + half) / pixel
         Z = pp[:, 2]
-        for f in t:
+        on = ((X[t].max(1) >= 0) & (X[t].min(1) <= n) & (Y[t].max(1) >= 0) & (Y[t].min(1) <= n))
+        for f in t[on]:
             x, y = X[f], Y[f]
             x0, x1 = max(0, int(np.floor(x.min()))), min(n - 1, int(np.ceil(x.max())))
             y0, y1 = max(0, int(np.floor(y.min()))), min(n - 1, int(np.ceil(y.max())))
@@ -1331,6 +1333,29 @@ def keep_hidden(pts: np.ndarray, sky_gap: np.ndarray, body_pts: np.ndarray, body
                                         with_normals=True)
     target = -np.clip(-sky_gap[h] * scale, HIDDEN_MIN, HIDDEN_MAX)
     step = np.minimum(target - dep, 0.0)
+    p[h] += nrm * step[:, None]
+    return p, int((step < -1e-4).sum())
+
+
+TUCK_MIN = 0.0015    # m: hidden gear drawn in no closer to the body than this (visible gear sits at GAP, further out)
+
+
+def keep_tucked(pts: np.ndarray, sky_gap: np.ndarray, tucked: np.ndarray, body_pts: np.ndarray, body_tris,
+                body_nrm: np.ndarray, scale: float = 1.0) -> Tuple[np.ndarray, int]:
+    """Gear Skyrim keeps out of sight (tucked: not seen from outside the Skyrim outfit + skin + head, whether or not
+    inside Skyrim's body) drawn in to no further out than its Skyrim gap (scaled; at least TUCK_MIN, so under the visible gear the
+    push-out leaves at GAP) (2026-11-07, verified on
+    the owner's Ysolda debug meshes: a lining tab at the back of the collar sat 1.5 mm off Skyrim's neck and hidden
+    under the collar, but 40 mm off Starfield's after the fit and showed as a brown flap; the front lining of the
+    V-neck 8-20 mm out showed as a pale strip). Moved inwards only. Returns (points, moved)."""
+    p = np.asarray(pts, float).copy()
+    h = np.nonzero(np.asarray(tucked, bool) & np.isfinite(sky_gap))[0]
+    if not len(h):
+        return p, 0
+    _cp, dep, _d, nrm = closest_on_mesh(p[h], body_pts, np.asarray(body_tris, int).reshape(-1, 3), body_nrm,
+                                        with_normals=True)
+    cap = np.maximum(sky_gap[h] * scale, TUCK_MIN)
+    step = np.where(dep > cap, cap - dep, 0.0)
     p[h] += nrm * step[:, None]
     return p, int((step < -1e-4).sum())
 
@@ -1591,13 +1616,17 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 _cp, sky_gap, sky_dist = closest_on_mesh(s.points, sky_bp, sky_bt, sky_bn)
                 sky_gap = np.where(sky_dist < KEEP_REACH + 0.03, sky_gap, np.inf)
         sky_hidden = np.zeros(len(s.points), bool)
+        sky_tucked = np.zeros(len(s.points), bool)
+        if sky_gap is not None and covers is not None:
+            near_ = np.nonzero(np.isfinite(sky_gap))[0]
+            sky_tucked[near_] = ~seen_from_outside(np.asarray(s.points, float)[near_], *covers)
         if sky_gap is not None:
             sky_hidden = np.isfinite(sky_gap) & (sky_gap < -BURY)
             if sky_hidden.any():
                 under = np.zeros(len(s.points), bool)
                 hi_ = np.nonzero(sky_hidden)[0]
                 if covers is not None:
-                    under[hi_] = ~seen_from_outside(np.asarray(s.points, float)[hi_], *covers)
+                    under[hi_] = sky_tucked[hi_]
                 sky_hidden &= under
         shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
         pts = pts + shift
@@ -1773,6 +1802,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
+        tucked = 0
+        if not skin and sky_gap is not None and len(sf_body_pts) and sky_tucked.any():
+            free = sky_tucked & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
+            pts, tucked = keep_tucked(pts, sky_gap, free, sf_body_pts, sf_body_tris, sf_nrm,
+                                      rep.get("global_scale", 1.0))
         rehidden = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
             pts, rehidden = keep_hidden(pts, np.where(sky_hidden, sky_gap, np.inf), sf_body_pts, sf_body_tris, sf_nrm,
@@ -1836,7 +1870,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,

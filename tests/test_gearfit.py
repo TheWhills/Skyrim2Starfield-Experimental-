@@ -689,3 +689,36 @@ class BindTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeepTuckedTests(unittest.TestCase):
+    def test_hidden_tab_drawn_in_to_its_skyrim_gap_visible_left(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        g = np.linspace(-0.3, 0.3, 7)
+        body = np.array([[x, y, 0.0] for y in g for x in g])
+        bt = []
+        for j in range(6):
+            for i in range(6):
+                a = j * 7 + i
+                bt += [(a, a + 1, a + 7), (a + 1, a + 8, a + 7)]
+        bn = np.tile([0.0, 0.0, 1.0], (len(body), 1))
+        pts = np.array([[0, 0, 0.04], [0.05, 0, 0.04], [0, 0.05, 0.001]])
+        sky_gap = np.array([0.0015, 0.0015, 0.0015])
+        tucked = np.array([True, False, True])
+        out, n = G.keep_tucked(pts, sky_gap, tucked, body, bt, bn)
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(out[0, 2], G.TUCK_MIN, places=4)      # under gear left at GAP
+        self.assertAlmostEqual(out[1, 2], 0.04)                          # seen in Skyrim: untouched
+        self.assertAlmostEqual(out[2, 2], 0.001)                         # never pushed out
+
+
+class SeenFromOutsideTests(unittest.TestCase):
+    def test_a_lid_far_above_the_query_still_hides_it(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        # a closed box 0.6 m tall; the query point sits low inside it; its lid is far above the query
+        c = np.array([[x, y, z] for z in (0.0, 0.6) for y in (-0.1, 0.1) for x in (-0.1, 0.1)])
+        quads = [(0, 1, 3, 2), (4, 5, 7, 6), (0, 1, 5, 4), (2, 3, 7, 6), (0, 2, 6, 4), (1, 3, 7, 5)]
+        tris = [t for a, b, cc, d in quads for t in ((a, b, cc), (a, cc, d))]
+        self.assertFalse(G.seen_from_outside(np.array([[0.0, 0.0, 0.05]]), c, tris)[0])

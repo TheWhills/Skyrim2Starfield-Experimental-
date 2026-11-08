@@ -727,7 +727,7 @@ def slider_clearance(points, tris, deltas: dict, body_pts, body_tris, body_morph
     """deltas ({key: {vertex: delta}}) raised where, with one slider at its extreme, gear that is outside the body
     and head at default would sink in (2026-11-07, owner: Saadia's straps clipped on heavy and thin bodies, fine at
     default). Per key: body + its deltas, gear + its deltas; a vertex under gap gets the shortfall along the morphed
-    surface's normal added to its delta. Returns (deltas, {key: vertices raised})."""
+    surface's normal added to its delta. Returns (deltas, {key: (vertices raised, largest raise m)})."""
     from fo4sf import gearfit
     p0 = np.asarray(points, float)
     bp = np.asarray(body_pts, float)
@@ -754,7 +754,7 @@ def slider_clearance(points, tris, deltas: dict, body_pts, body_tris, body_morph
             fix = np.where((np.linalg.norm(fix, axis=1) > np.linalg.norm(soft, axis=1))[:, None], fix, soft)
         gd = gd + fix
         out[key] = {int(v): tuple(map(float, gd[v])) for v in np.nonzero(np.abs(gd).max(1) > 1e-5)[0]}
-        rep[key] = int((need > 0).sum())
+        rep[key] = (int((need > 0).sum()), float(np.linalg.norm(fix, axis=1).max()) if len(fix) else 0.0)
     return out, rep
 
 
@@ -785,8 +785,8 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
                 for i in v:
                     extra.setdefault(k, {}).setdefault(i, (0, 0, 0))
             if stats is not None:
-                stats[name + " slider clearance"] = {k: {"vertices": n, "max_mm": 0, "not_finite": 0,
-                                                         "over_cap": 0} for k, n in raised.items()}
+                stats[name + " slider clearance"] = {k: {"vertices": n, "max_mm": round(m * 1000, 1), "not_finite": 0,
+                                                         "over_cap": 0} for k, (n, m) in raised.items()}
         if stats is not None:
             stats[name] = morph_stats(d)
         d = capped(d)
@@ -1130,6 +1130,7 @@ def main(argv=None):
               + (f", {r['collar_transplanted']} round the neck copied from Skyrim" if r.get('collar_transplanted') else "")
               + (f", {r['faces_lifted']} lifted so no face dips into the body" if r.get('faces_lifted') else "")
               + (f", {r['rehidden']} put back inside the body as in Skyrim" if r.get('rehidden') else "")
+              + (f", {r['tucked']} hidden as in Skyrim drawn back in" if r.get('tucked') else "")
               + (f", collar brought down by {min(r['collar_drop_mm'])}..{max(r['collar_drop_mm'])} mm"
                  if r.get('collar_drop_mm') else "")
               + (f", {r['skirt_vertices']} on skirt bones (hips + thighs)" if r.get('skirt_vertices') else "")

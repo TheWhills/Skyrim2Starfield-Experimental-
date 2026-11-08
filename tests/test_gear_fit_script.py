@@ -425,5 +425,6 @@ class SliderClearanceTests(unittest.TestCase):
         gear = np.array([[0, 0, 0.003], [0.05, 0, 0.003], [0, 0.05, 0.003]])
         d = {"Overweight": {i: (0, 0, 0.005) for i in range(3)}}
         out, rep = gear_fit.slider_clearance(gear, [(0, 1, 2)], d, body, bt, m)
-        self.assertEqual(rep["Overweight"], 3)
+        self.assertEqual(rep["Overweight"][0], 3)
+        self.assertAlmostEqual(rep["Overweight"][1], 0.004, places=3)
         self.assertTrue(all(out["Overweight"][i][2] >= 0.01 + gear_fit.SLIDER_GAP - 0.003 - 1e-4 for i in range(3)))
