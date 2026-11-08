@@ -2126,3 +2126,10 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Starfield's head by skyrimhair.convert, Starfield.esm facial-hair HDPTs read from the game archives, symmetric
   mean closest-point distance, best first; writes beard_match.json (editable). face_fit --beard-map uses it in
   npc_dress for the facial-hair head part (unresolved until run: Starfield beard meshes' placement and type ids).
+- 2026-11-07 (Claude, armor) The 2 cm-from-drawn-skin-vertices rule (previous commit) made half of Ysolda's brown
+  chest panel count as visible (the Skyrim skin pieces are low-poly, and part of the panel lies under the dress's own
+  outer layer), so it was pushed out and showed. "Hidden in Skyrim" is now computed by rendering: z-buffers of what
+  Skyrim draws (all the outfit's shapes, including its skin pieces, plus the head) from 18 views (8 azimuths at 0
+  and 35 degrees, 2 from above; none from below), a point hidden if inside Skyrim's body and behind something by
+  more than 1 mm in every view. Checked on the debug meshes: Ysolda's remaining "seen" brown is the corset band under
+  the bust, visible in Skyrim's render too.

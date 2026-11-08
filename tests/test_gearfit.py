@@ -549,6 +549,17 @@ class KeepHiddenTests(unittest.TestCase):
         self.assertAlmostEqual(out[2, 2], -0.05)                 # already deep enough: untouched
 
 
+class VisibilityTests(unittest.TestCase):
+    def test_seen_from_outside(self):
+        box, bt = NeckWrapTests.tube(0.10, 1.0, 1.2, n=24, rows=5)          # an open tube (a sleeve)
+        q = np.array([[0.0, 0.0, 1.1],          # inside the tube, middle: hidden from the side views
+                      [0.13, 0.0, 1.1]])        # outside it: seen
+        seen = G.seen_from_outside(q, box, bt, views=[(az, 0) for az in range(0, 360, 45)])
+        self.assertEqual(seen.tolist(), [False, True])
+        top = G.seen_from_outside(q, box, bt, views=[(0, 89)])                # down the open end
+        self.assertTrue(top[0])
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

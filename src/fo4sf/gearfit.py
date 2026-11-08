@@ -1253,9 +1253,68 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
     return np.where(outside[:, None], pushed, out)
 
 
-DRAWN_REACH = 0.02    # m: gear inside Skyrim's body this close to its drawn skin counts as hidden by it
+DRAWN_REACH = 0.05    # m: gear inside Skyrim's body and under its drawn skin within this counts as hidden by it
 HIDDEN_MIN = 0.003    # m: gear hidden inside Skyrim's body stays at least this deep inside Starfield's
 HIDDEN_MAX = 0.03     # m: and needs to go no deeper than this
+
+
+VIS_PIXEL = 0.003     # m per pixel of the visibility renders
+VIS_TOL = 0.001       # m: a point this close behind the nearest surface still counts as seen
+VIS_VIEWS = [(az, el) for el in (0, 35) for az in range(0, 360, 45)] + [(0, 70), (180, 70)]   # not from below
+
+
+def seen_from_outside(query: np.ndarray, pts: np.ndarray, tris, views=VIS_VIEWS, pixel: float = VIS_PIXEL,
+                      tol: float = VIS_TOL) -> np.ndarray:
+    """Which query points can be seen from outside the mesh (points, tris), in any of the orthographic views
+    (azimuth, elevation in degrees): a z-buffer of the mesh per view, a point seen if nothing lies more than tol in
+    front of it at its pixel (2026-11-07: Skyrim draws the outfit plus its own skin pieces and the head, never the
+    naked body, so what Skyrim hides is what none of those let you see)."""
+    q = np.asarray(query, float)
+    p = np.asarray(pts, float)
+    t = np.asarray(tris, int).reshape(-1, 3)
+    out = np.zeros(len(q), bool)
+    if not len(q) or not len(t):
+        return ~out
+    lo, hi = q.min(0) - 0.25, q.max(0) + 0.25
+    keep = ((p[t] >= lo) & (p[t] <= hi)).all(2).any(1)
+    t = t[keep]
+    c = (lo + hi) / 2
+    for az, el in views:
+        a, e = np.radians(az), np.radians(el)
+        r = np.array([[np.cos(a), np.sin(a), 0.0],
+                      [-np.sin(a) * np.sin(e), np.cos(a) * np.sin(e), np.cos(e)],
+                      [np.sin(a) * np.cos(e), -np.cos(a) * np.cos(e), np.sin(e)]])
+        pp = (p - c) @ r.T
+        qq = (q - c) @ r.T
+        half = float(np.abs(np.concatenate([qq[:, :2], [[0.3, 0.3]]])).max()) + 0.05
+        n = int(2 * half / pixel) + 1
+        zb = np.full((n, n), -np.inf)
+        X = (pp[:, 0] + half) / pixel
+        Y = (pp[:, 1] + half) / pixel
+        Z = pp[:, 2]
+        for f in t:
+            x, y = X[f], Y[f]
+            x0, x1 = max(0, int(np.floor(x.min()))), min(n - 1, int(np.ceil(x.max())))
+            y0, y1 = max(0, int(np.floor(y.min()))), min(n - 1, int(np.ceil(y.max())))
+            if x0 > x1 or y0 > y1:
+                continue
+            den = (y[1] - y[2]) * (x[0] - x[2]) + (x[2] - x[1]) * (y[0] - y[2])
+            if abs(den) < 1e-12:
+                continue
+            gx, gy = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
+            w0 = ((y[1] - y[2]) * (gx - x[2]) + (x[2] - x[1]) * (gy - y[2])) / den
+            w1 = ((y[2] - y[0]) * (gx - x[2]) + (x[0] - x[2]) * (gy - y[2])) / den
+            w2 = 1 - w0 - w1
+            m = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            if not m.any():
+                continue
+            z = w0 * Z[f[0]] + w1 * Z[f[1]] + w2 * Z[f[2]]
+            sub = zb[y0:y1 + 1, x0:x1 + 1]
+            np.maximum(sub, np.where(m, z, -np.inf), out=sub)
+        ix = np.clip(((qq[:, 0] + half) / pixel).astype(int), 0, n - 1)
+        iy = np.clip(((qq[:, 1] + half) / pixel).astype(int), 0, n - 1)
+        out |= qq[:, 2] >= zb[iy, ix] - tol
+    return out
 
 
 def keep_hidden(pts: np.ndarray, sky_gap: np.ndarray, body_pts: np.ndarray, body_tris, body_nrm: np.ndarray,
@@ -1478,15 +1537,32 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     # Saadia's / Ysolda's debug meshes: of 411 dress vertices inside Skyrim's full body only 83 lie by drawn skin; the
     # rest show in Skyrim, because the naked body is not drawn under an outfit; putting them back inside Starfield's
     # body sank the bodice into the bust and the skin showed over it)
-    drawn = []
+    # as a surface (2026-11-07: as a point cloud, the low-poly Skyrim skin pieces' vertices lay too far apart and
+    # Ysolda's brown chest panel under hers no longer counted as hidden)
+    dp, dt, base_ = [], [], 0
     if len(sky_bp):
         for s_ in gear:
             d_, dist_, _i = nearest_surface(s_.points, sky_bp, sky_bn)
-            if np.median(np.abs(d_)) < SKIN_DEPTH and np.median(dist_) < 0.01:
-                drawn.append(np.asarray(s_.points, float))
+            if np.median(np.abs(d_)) < SKIN_DEPTH and np.median(dist_) < 0.01 and len(s_.triangles):
+                dp.append(np.asarray(s_.points, float))
+                dt.append(np.asarray(s_.triangles, int).reshape(-1, 3) + base_)
+                base_ += len(s_.points)
     if heads is not None:
-        drawn.append(np.asarray(heads[0][0], float))
-    drawn = np.concatenate(drawn) if drawn else np.zeros((0, 3))
+        dp.append(np.asarray(heads[0][0], float))
+        dt.append(np.asarray(heads[0][1], int).reshape(-1, 3) + base_)
+    drawn = with_normals(np.concatenate(dp), np.concatenate(dt)) if dp else None
+    # everything Skyrim draws: its skin pieces (in the gear list), the head and all the gear (2026-11-07, Ysolda: half her brown
+    # chest panel lies under the dress's own outer layer, not under skin)
+    cp_, ct_, b2 = [], [], 0
+    for s_ in gear:
+        if len(s_.triangles):
+            cp_.append(np.asarray(s_.points, float))
+            ct_.append(np.asarray(s_.triangles, int).reshape(-1, 3) + b2)
+            b2 += len(s_.points)
+    if heads is not None:
+        cp_.append(np.asarray(heads[0][0], float))
+        ct_.append(np.asarray(heads[0][1], int).reshape(-1, 3) + b2)
+    covers = (np.concatenate(cp_), np.concatenate(ct_)) if cp_ else None
     for s in gear:
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
         pts = neck_squash(pts, neck)
@@ -1504,15 +1580,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         if sky_gap is not None:
             sky_hidden = np.isfinite(sky_gap) & (sky_gap < -BURY)
             if sky_hidden.any():
-                near_drawn = np.zeros(len(s.points), bool)
-                if len(drawn):
-                    hp_ = np.asarray(s.points, float)[sky_hidden]
-                    dd = np.full(len(hp_), np.inf)
-                    for c0 in range(0, len(hp_), 256):
-                        q = hp_[c0:c0 + 256]
-                        dd[c0:c0 + 256] = np.sqrt(((q[:, None, :] - drawn[None, :, :]) ** 2).sum(-1).min(1))
-                    near_drawn[np.nonzero(sky_hidden)[0]] = dd < DRAWN_REACH
-                sky_hidden &= near_drawn
+                under = np.zeros(len(s.points), bool)
+                hi_ = np.nonzero(sky_hidden)[0]
+                if covers is not None:
+                    under[hi_] = ~seen_from_outside(np.asarray(s.points, float)[hi_], *covers)
+                sky_hidden &= under
         shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
         pts = pts + shift
         pulled = 0
