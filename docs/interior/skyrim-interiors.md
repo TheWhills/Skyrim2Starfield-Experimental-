@@ -242,3 +242,6 @@ inn's door: the exterior's static copy of the door gets Initially Disabled, and 
 with the same model, bounds and placement) with XTEL into the inn takes its place. Step 2 (`stage --interiors`) is only
 for a future exterior rebuild; if the door is already persistent there, PluginSpike just overrides it with the XTEL.
 Owner's one command: `tools\owner\riverwood_doors.ps1` (batch, convert --resume, check, PluginSpike, reinstall FO4Port).
+**Verified in game (owner, 2026-11-08):** with `tools\owner\riverwood_doors.ps1` (three PluginSpike fixes on the way:
+no Landscape on Starfield cells, master styles to read the exterior plugins, an explicit load order to write) the owner
+walked from Riverwood into the Sleeping Giant Inn and back out through the linked doors.
