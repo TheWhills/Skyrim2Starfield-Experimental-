@@ -829,3 +829,20 @@ class SmoothPoseTests(unittest.TestCase):
         self.assertLess(np.ptp(err[inner, 2]), 0.002)                          # the dents gone
         self.assertLess(np.abs(err[inner] - err[inner].mean(0)).max(), 0.002)  # the smooth move kept
         self.assertTrue(np.allclose(G.smooth_pose(rest, rest + move, tris, rounds=0), rest + move))
+
+
+class ArmTopGapTests(unittest.TestCase):
+    def test_top_of_the_upper_arm_gets_the_arm_gap_fading_to_gap(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+
+        def at_(p):
+            m = np.eye(4)
+            m[:3, 3] = p
+            return m
+        world = {"L_Biceps": at_([0.15, 0, 1.40]), "L_Forearm": at_([0.35, 0, 1.20])}
+        pts = np.array([[0.18, 0.04, 1.37], [0.30, 0.04, 1.25], [0.18, 0.04, 1.37]])
+        target, mask = G.arm_top_gap(pts, np.array([0.9, 0.9, 0.1]), world)
+        self.assertTrue(mask[0] and not mask[2])                      # a sleeve near the shoulder; not the bodice
+        self.assertAlmostEqual(target[0], G.ARM_GAP)
+        self.assertFalse(mask[1] and target[1] > G.GAP)               # down the arm: the normal gap

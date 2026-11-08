@@ -1304,6 +1304,40 @@ def smooth_pose(rest: np.ndarray, posed: np.ndarray, tris, rounds: int = POSE_RO
     return rest + with_seams(d, canon)
 
 
+ARM_GAP = 0.008       # m: gear round the top of the upper arm (by the armpit) stays this far off the skin
+ARM_TOP = (0.35, 0.6)  # share of the way shoulder -> elbow: ARM_GAP above the first, GAP past the second
+
+
+def w_arm_share(bones, weights, sf_world, follows) -> np.ndarray:
+    """Per vertex, the share of its (Skyrim) weights on arm bones, by the Starfield names they map to."""
+    return np.array([arm_share(vw) for vw in sf_weights(bones, weights, set(sf_world), follows)])
+
+
+def arm_top_gap(pts: np.ndarray, share: np.ndarray, sf_world, gap: float = GAP) -> Tuple[np.ndarray, np.ndarray]:
+    """(target gap per vertex, mask): gear mostly on arm bones (share > 0.5) near the top of the upper arm, from the
+    shoulder joint to ARM_TOP of the way to the elbow, gets ARM_GAP, fading to gap."""
+    p = np.asarray(pts, float)
+    target = np.full(len(p), gap)
+    mask = np.zeros(len(p), bool)
+    for side in ("L", "R"):
+        up = next((sf_world[b] for b in (f"{side}_Biceps", f"{side}_Bicep", f"{side}_UpperArm") if b in sf_world),
+                  None)
+        lo = sf_world.get(f"{side}_Forearm")
+        if up is None or lo is None:
+            continue
+        a, b = np.asarray(up)[:3, 3], np.asarray(lo)[:3, 3]
+        ab = b - a
+        L2 = float(ab @ ab)
+        if L2 < 1e-8:
+            continue
+        t = ((p - a) @ ab) / L2
+        on = (share > 0.5) & (t > -0.3) & (t < ARM_TOP[1])
+        ramp = np.clip((t - ARM_TOP[0]) / (ARM_TOP[1] - ARM_TOP[0]), 0.0, 1.0)
+        target = np.where(on, ARM_GAP + (gap - ARM_GAP) * ramp, target)
+        mask |= on
+    return target, mask
+
+
 SMOOTH_ROUNDS = 30    # rounds of the last smoothing of the fit's moves
 SMOOTH_FLOOR = 0.75   # gear that was outside the body and sinks under this share of GAP in it is pushed back out to it
 
@@ -1917,13 +1951,23 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                          with_seams(keep_out, canon2), gap=gap), canon2)
         steps_[s.name.decode("latin-1", "replace")]['6_final_relax'] = np.array(pts, float).copy()
         strapped = 0
+        target = np.full(len(pts), gap)
+        mask = np.zeros(len(pts), bool)
+        if not skin and len(sf_body_pts):
+            # sleeves round the top of the upper arm a few mm farther off it (2026-11-08, owner: with the arms down the
+            # skin comes through Saadia's sleeve top at the back of the arm by the armpit, "slightly noticed it in the
+            # same place in the other outfits")
+            ta, ma = arm_top_gap(pts, w_arm_share(s.bones, s.weights, sf_world, follows), sf_world, gap)
+            ma &= ~sky_hidden & ~collar_keep
+            target = np.where(ma, np.maximum(target, ta), target)
+            mask |= ma
         if not skin and sky_clav_z is not None and len(sf_body_pts) and strap_gap > gap:
             # straps and collars a few mm farther off the skin (2026-11-08, owner's Saadia in game: the halter straps
             # 3-4 mm off the skin in the fit were covered by skin at every slider, also after they took the skin's
             # weights; "straps are still too close to body")
             below = sky_clav_z - np.asarray(s.points)[:, 2]
             ramp = np.clip((below - STRAP_RAMP[0]) / (STRAP_RAMP[1] - STRAP_RAMP[0]), 0.0, 1.0)
-            target = strap_gap + (gap - strap_gap) * ramp
+            target_s = strap_gap + (gap - strap_gap) * ramp
             if heads is not None:
                 # not the collar hugging the neck (2026-11-08, owner: a brown band round Ralof's neck; on his debug
                 # meshes the cowl's inner rim, 6-11 cm from the neck's axis, was lifted 8 mm off the neck and the
@@ -1934,8 +1978,11 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 if len(ring_):
                     rad = np.hypot(*(pts[:, :2] - ring_[:, :2].mean(0)).T)
                     near_neck = np.clip((rad - STRAP_NECK[0]) / (STRAP_NECK[1] - STRAP_NECK[0]), 0.0, 1.0)
-                    target = gap + (target - gap) * near_neck
-            mask = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
+                    target_s = gap + (target_s - gap) * near_neck
+            ms = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
+            target = np.where(ms, np.maximum(target, target_s), target)
+            mask |= ms
+        if mask.any():
             pts, strapped = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
         tucked = 0
         if not skin and sky_gap is not None and len(sf_body_pts) and sky_tucked.any():
