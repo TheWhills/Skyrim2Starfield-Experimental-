@@ -291,6 +291,19 @@ class FitTests(unittest.TestCase):
         far = hi & (d5 > G.SKIN_HUG[1])
         self.assertTrue(far.any(), np.round(d5, 3))
         self.assertTrue(all("C_Chest" not in dict(g5.weights[i]) for i in np.nonzero(far)[0]))
+        # round_bust: the front of the chest below the clavicles is not pulled in onto Starfield's body
+        # (a Skyrim body wider than Starfield's: the cloth, 2.5 cm off it, is pulled in onto Starfield's)
+        wp, wn, wt = self.tube(0.15, 1.05, 1.35)
+        wide = G.SkyShape(b"Body", wp, wn, [(0.0, 0.0)] * len(wp), wt, bones, [[(0, 0.5), (1, 0.5)]] * len(wp), j2)
+        lp, ln2, lt2 = self.tube(0.175, 1.10, 1.30)
+        cloth = G.SkyShape(b"Bodice", lp, ln2, [(0.0, 0.0)] * len(lp), lt2, bones, [[(0, 0.5), (1, 0.5)]] * len(lp))
+        r_in = np.linalg.norm(np.asarray(G.fit([cloth], [wide], w2, sp, np.array(st)).shapes[0].positions)[:, :2], axis=1)
+        r_out = np.linalg.norm(np.asarray(G.fit([cloth], [wide], w2, sp, np.array(st), round_bust=True)
+                                          .shapes[0].positions)[:, :2], axis=1)
+        front = (lp[:, 1] > 0.14) & (lp[:, 2] < 1.15)
+        back = (lp[:, 1] < -0.14) & (lp[:, 2] < 1.15)
+        self.assertGreaterEqual(r_out[front].mean(), r_in[front].mean() - 1e-3)   # never drawn in further
+        self.assertAlmostEqual(r_out[back].mean(), r_in[back].mean(), places=2)  # the back about as without it
         # heads given: chin_clearance is not part of the fit any more (it dropped the cowl's back)
         top = gp[:, 2].max()
         cap = lambda z: (np.array([[-1, -1, z], [1, -1, z], [0, 1, z]]), [(0, 1, 2)])   # noqa: E731
@@ -758,3 +771,24 @@ class SmoothFinalTests(unittest.TestCase):
         pinned[0] = True
         out2, _n = G.smooth_final(base, pts, tris, body, tris, bn, fixed=pinned)
         self.assertTrue(np.allclose(out2[0], pts[0]))
+
+
+class LiftToTests(unittest.TestCase):
+    def test_masked_points_lifted_to_their_own_gap_outward_only(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        g = np.linspace(-0.3, 0.3, 7)
+        body = np.array([[x, y, 0.0] for y in g for x in g])
+        bt = []
+        for j in range(6):
+            for i in range(6):
+                a = j * 7 + i
+                bt += [(a, a + 1, a + 7), (a + 1, a + 8, a + 7)]
+        bn = np.tile([0.0, 0.0, 1.0], (len(body), 1))
+        pts = np.array([[0, 0, 0.003], [0.05, 0, 0.003], [0, 0.05, 0.02], [0.05, 0.05, -0.004]])
+        out, n = G.lift_to(pts, np.full(4, 0.008), np.array([True, False, True, True]), body, bt, bn)
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(out[0, 2], 0.008)
+        self.assertAlmostEqual(out[1, 2], 0.003)     # not masked
+        self.assertAlmostEqual(out[2, 2], 0.02)      # already farther out
+        self.assertAlmostEqual(out[3, 2], -0.004)    # inside: left

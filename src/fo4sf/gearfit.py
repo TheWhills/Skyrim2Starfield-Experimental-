@@ -1254,6 +1254,27 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
     return np.where(outside[:, None], pushed, out)
 
 
+BUST_FRONT = 0.5      # body normal's forward (+y) share above which a point counts as the front of the chest
+BUST_Z = (0.04, 0.30)  # m below Starfield's clavicles: the bust band for round_bust
+STRAP_GAP = 0.008     # m: visible gear round the neck and shoulders stays this far off the skin
+STRAP_RAMP = (0.02, 0.06)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second
+
+
+def lift_to(pts: np.ndarray, target: np.ndarray, mask: np.ndarray, body_pts: np.ndarray, body_tris,
+            body_nrm: np.ndarray) -> Tuple[np.ndarray, int]:
+    """Masked points closer to the body than their target gap (per point) moved out to it along the body's normal;
+    outward only, points inside the body left alone."""
+    p = np.asarray(pts, float).copy()
+    h = np.nonzero(np.asarray(mask, bool))[0]
+    if not len(h):
+        return p, 0
+    _c, dep, dist, nrm = closest_on_mesh(p[h], body_pts, np.asarray(body_tris, int).reshape(-1, 3), body_nrm,
+                                         with_normals=True)
+    need = np.where((dep >= 0) & (dist < 0.05), np.maximum(np.asarray(target, float)[h] - dep, 0.0), 0.0)
+    p[h] += nrm * need[:, None]
+    return p, int((need > 1e-4).sum())
+
+
 SMOOTH_ROUNDS = 30    # rounds of the last smoothing of the fit's moves
 SMOOTH_FLOOR = 0.75   # gear that was outside the body and sinks under this share of GAP in it is pushed back out to it
 
@@ -1541,7 +1562,7 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
         weight_src=None, heads=None, collar_anchor=None, head_weights_all: bool = True, shoulders: bool = False, drape_on: bool = False,
-        wrap_on: bool = True) -> FitResult:
+        wrap_on: bool = True, round_bust: bool = False) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
     (points, triangles, weights) gear near it takes its weights from instead of the body surface (the whole head as
@@ -1671,12 +1692,24 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                     under[hi_] = sky_tucked[hi_]
                 sky_hidden &= under
         shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
+        bust = np.zeros(len(pts), bool)
+        if round_bust and sf_clav_z is not None and len(sf_body_pts) and not skin:
+            # the front of the chest keeps Skyrim's rounder shape where Starfield's bust is smaller: not carried
+            # inward with the body's change, not pulled in to Skyrim's gap (2026-11-08, owner drew the bust line
+            # Skyrim's cloth follows; an option for A/B)
+            _c_, _d_, _x_, bn_ = closest_on_mesh(pts, sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3),
+                                                 sf_nrm, with_normals=True)
+            zf = pts[:, 2]
+            bust = (bn_[:, 1] > BUST_FRONT) & (zf < sf_clav_z - BUST_Z[0]) & (zf > sf_clav_z - BUST_Z[1])
+            inward = np.minimum((shift * bn_).sum(1), 0.0)
+            shift = np.where(bust[:, None], shift - bn_ * inward[:, None], shift)
         pts = pts + shift
         pulled = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
             # not round the neck (2026-11-07, measured: pulling the cowl to its Skyrim gap from the nearest surface
             # drew it 2-3 cm in onto Starfield's neck, a tube up the neck where Skyrim's slopes out over the shoulders)
             kg = sky_gap if sky_clav_z is None else np.where(np.asarray(s.points)[:, 2] > sky_clav_z, np.inf, sky_gap)
+            kg = np.where(bust, np.inf, kg)
             pts, pulled = keep_gap(pts, kg, sf_body_pts, sf_body_tris, sf_nrm, gap)
         pushed = 0
         if len(sf_body_pts):
@@ -1849,6 +1882,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                                sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
                                                with_seams(fixed3, canon3), gap=gap)
             pts = with_seams(sm, canon3)
+        strapped = 0
+        if not skin and sky_clav_z is not None and len(sf_body_pts):
+            # straps and collars a few mm farther off the skin (2026-11-08, owner's Saadia in game: the halter straps
+            # 3-4 mm off the skin in the fit were covered by skin at every slider, also after they took the skin's
+            # weights; "straps are still too close to body")
+            below = sky_clav_z - np.asarray(s.points)[:, 2]
+            ramp = np.clip((below - STRAP_RAMP[0]) / (STRAP_RAMP[1] - STRAP_RAMP[0]), 0.0, 1.0)
+            target = STRAP_GAP + (gap - STRAP_GAP) * ramp
+            mask = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
+            pts, strapped = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
@@ -1928,7 +1971,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "strapped": strapped, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,

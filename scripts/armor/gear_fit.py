@@ -563,7 +563,8 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
 
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
-        head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False):
+        head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
+        round_bust: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -621,7 +622,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     c_sf = gearfit.neck_rim_centre(skel_pts, tris)
     collar_anchor = (c_sky, c_sf) if c_sky is not None and c_sf is not None else None
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet,
-                      collar_anchor=collar_anchor, head_weights_all=head_weights,
+                      collar_anchor=collar_anchor, head_weights_all=head_weights, round_bust=round_bust,
                       weight_src=weight_src,
                       heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
@@ -891,6 +892,8 @@ def main(argv=None):
     ap.add_argument("--whole-skin", action="store_true",
                     help="skin piece = the whole body minus what the armour covers (default: Skyrim's own bare-skin "
                          "parts, plus the feet when the armour does not cover them, as Skyrim shows them)")
+    ap.add_argument("--round-bust", action="store_true",
+                    help="the front of the chest keeps Skyrim's rounder shape where it stands off Starfield's bust")
     ap.add_argument("--head-weights", action="store_true",
                     help="gear near the head takes the whole head's weights (turns with the head)")
     ap.add_argument("--morph-test", action="store_true",
@@ -941,7 +944,7 @@ def main(argv=None):
                              [n for n, sl in slots_by_shape(gear_bytes, meshes).items() if 3 in sl],
                              feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
                                            for m in meshes),
-                             whole_skin=a.whole_skin)
+                             whole_skin=a.whole_skin, round_bust=a.round_bust)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
@@ -1157,6 +1160,7 @@ def main(argv=None):
               + (f", {r['collar_transplanted']} round the neck copied from Skyrim" if r.get('collar_transplanted') else "")
               + (f", {r['faces_lifted']} lifted so no face dips into the body" if r.get('faces_lifted') else "")
               + (f", {r['rehidden']} put back inside the body as in Skyrim" if r.get('rehidden') else "")
+              + (f", {r['strapped']} round the neck / shoulders lifted to the strap gap" if r.get('strapped') else "")
               + (f", {r['tucked']} hidden as in Skyrim drawn back in" if r.get('tucked') else "")
               + (f", collar brought down by {min(r['collar_drop_mm'])}..{max(r['collar_drop_mm'])} mm"
                  if r.get('collar_drop_mm') else "")
