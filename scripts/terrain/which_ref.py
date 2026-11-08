@@ -25,7 +25,7 @@ def describe(r, bases, fid_of, dist=None):
     x, y, z = r["pos"]
     return (f"{fid_of.get(r['src'], '??????'):>8}  {r['src']:<22} {b.get('edid', '?'):<34} "
             f"pos {x:9.2f} {y:9.2f} {z:8.2f}" + (f"  dist {dist:6.2f}" if dist is not None else "")
-            + f"  scale {r.get('scale', 1)}  {b.get('source', b.get('model', ''))}")
+            + f"  scale {r.get('scale', 1)}  collision {b.get('collision', '?')}  {b.get('source', b.get('model', ''))}")
 
 
 def main(argv=None):

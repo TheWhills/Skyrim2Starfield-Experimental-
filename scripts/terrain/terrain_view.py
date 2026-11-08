@@ -112,7 +112,8 @@ def main(argv=None):
             if abs(px - x) <= a.radius and abs(py - y) <= a.radius:
                 b = bases[r["base"]] if isinstance(r.get("base"), int) else {}
                 objs.append({"x": round(px, 2), "y": round(py, 2), "z": round(pz, 2), "name": b.get("edid", "?"),
-                             "src": r["src"], "model": b.get("source", ""), "scale": r.get("scale", 1)})
+                             "src": r["src"], "model": b.get("source", ""), "scale": r.get("scale", 1),
+                             "collision": b.get("collision", "?")})
     except FileNotFoundError:
         pass
     cx, cy = int(round((x - x0) / s)), int(round((y - y0) / s))
@@ -168,18 +169,18 @@ function draw(){const src=mode==='game'?relief(D.game):mode==='skyrim'?(D.skyrim
  ctx.fillRect(c*S,(R-1-r)*S,Math.ceil(S),Math.ceil(S))}
  if(document.getElementById('showobj').checked){for(const o of D.objects){const [px,py]=toPx(o.x,o.y);
  if(o.name.toLowerCase().includes('water')){const w=16*(o.scale||1)/D.step*S;ctx.strokeStyle='#3d8bff';ctx.lineWidth=1;ctx.strokeRect(px-w/2,py-w/2,w,w)}
- else{ctx.fillStyle='#ffd400';ctx.fillRect(px-2,py-2,4,4)}}}
+ else{ctx.fillStyle=/boxes|columns|voxels|surfaces/.test(o.collision)?'#ff3b3b':'#ffd400';ctx.fillRect(px-2,py-2,4,4)}}}
  const [qx,qy]=toPx(D.player[0],D.player[1]);ctx.strokeStyle='#00e0ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(qx,qy,7,0,7);ctx.stroke();
  document.getElementById('legend').textContent=(mode==='diff'?'grey: same as Skyrim; blue: game lower, red: higher (full colour at 1 m). ':
  mode==='bump'?'grey: smooth; red: sample above its neighbours, blue: below (full colour at 0.3 m). ':'')+
- 'Cyan ring: your position; yellow dots: objects; blue squares: water pieces. '+D.summary}
+ 'Cyan ring: your position; yellow dots: objects; red dots: objects whose collision is rebuilt as boxes (an approximation); blue squares: water pieces. '+D.summary}
 function toPx(x,y){return[(x-D.x0)/D.step*S,(R-1-(y-D.y0)/D.step)*S]}
 cv.onmousemove=e=>{const b=cv.getBoundingClientRect(),c=Math.floor((e.clientX-b.left)/S),r=R-1-Math.floor((e.clientY-b.top)/S);
  if(r<0||r>=R||c<0||c>=C)return;const x=D.x0+c*D.step,y=D.y0+r*D.step;let best=null,bd=1e9;
  for(const o of D.objects){const d=Math.hypot(o.x-x,o.y-y);if(d<bd){bd=d;best=o}}
  const f=v=>v===null||v===undefined?'-':v.toFixed(3);
  document.getElementById('info').textContent=`x ${x.toFixed(2)}  y ${y.toFixed(2)}\ngame ${f(D.game[r][c])} m   Skyrim ${D.skyrim?f(D.skyrim[r][c]):'-'} m   diff ${D.diff?f(D.diff[r][c]):'-'}   bump ${f(D.bump[r][c])}\n`+
- (best?`nearest object ${bd.toFixed(1)} m: ${best.name} (${best.src}) z ${best.z}\n  ${best.model}`:'')};
+ (best?`nearest object ${bd.toFixed(1)} m: ${best.name} (${best.src}) z ${best.z}, collision ${best.collision}\n  ${best.model}`:'')};
 for(const b of document.querySelectorAll('button'))b.onclick=()=>{mode=b.dataset.m;for(const x of document.querySelectorAll('button'))x.classList.toggle('on',x===b);draw();paint3d()};
 document.getElementById('showobj').onchange=draw;draw();
 // 3-D
