@@ -2278,9 +2278,14 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             w, near = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
         elif weight_src is not None and len(pts) and sf_body_weights is not None \
                 and len(sf_body_weights) == len(sf_body_pts):
-            w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world),
-                                        arm_s=smooth_share_near(np.array([arm_share(vw) for vw in w]),
-                                                                s.points))
+            own_w = list(w)
+            w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
+            # where a sleeve meets the body armour Skyrim's own weights, made for that join, are kept, fading to the
+            # skin's by JOIN_KEEP[1] (2026-11-08, owner: Ralof's mail sleeve parted from the tunic under the arm with
+            # the skin's arm / torso weights, and with them averaged in space the sleeve stood off the arm running)
+            kj = join_keep(np.array([arm_share(vw) for vw in own_w]), np.asarray(s.points, float))
+            if (kj > 0).any():
+                w = [blend_weights(own_w[i], w[i], kj[i]) if kj[i] > 0 else w[i] for i in range(len(w))]
             wh, _n = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
             w_head_src = wh
         elif sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
@@ -2344,6 +2349,44 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
 
 
 SHARE_RADIUS = 0.035   # m: the arm share averaged over gear points this close (across separate parts too)
+
+
+JOIN_KEEP = (0.03, 0.07)   # m from the arm / torso join of the gear's own weights: own weights, fading to skin's
+
+
+def join_keep(share: np.ndarray, pts: np.ndarray, keep=JOIN_KEEP, chunk: int = 512) -> np.ndarray:
+    """Per gear vertex, how much of its own (Skyrim) weights to keep: 1 within keep[0] of a vertex whose own arm share
+    is between 0.05 and 0.95 or of the boundary between arm and torso vertices (closer than 1.5 cm across), 0 past
+    keep[1]."""
+    p = np.asarray(pts, float)
+    sh = np.asarray(share, float)
+    arm, tor = sh >= 0.95, sh <= 0.05
+    seam = ~arm & ~tor
+    if arm.any() and tor.any():
+        pa, pt = p[arm], p[tor]
+        for c in range(0, len(pa), chunk):
+            d2 = ((pa[c:c + chunk, None, :] - pt[None]) ** 2).sum(-1).min(1)
+            idx = np.nonzero(arm)[0][c:c + chunk]
+            seam[idx[d2 < 0.015 ** 2]] = True
+    out = np.zeros(len(p))
+    if not seam.any():
+        return out
+    sp = p[seam]
+    for c in range(0, len(p), chunk):
+        d = np.sqrt(((p[c:c + chunk, None, :] - sp[None]) ** 2).sum(-1).min(1))
+        out[c:c + chunk] = np.clip((keep[1] - d) / (keep[1] - keep[0]), 0.0, 1.0)
+    return out
+
+
+def blend_weights(a, b, t: float) -> list:
+    """t * a + (1 - t) * b of two [(bone, w)] lists, top MAX_WEIGHTS, renormalised."""
+    acc: Dict[str, float] = {}
+    for vw, f in ((a, t), (b, 1 - t)):
+        for bn_, x in vw:
+            acc[bn_] = acc.get(bn_, 0.0) + f * x
+    top = sorted(acc.items(), key=lambda kv: -kv[1])[:MAX_WEIGHTS]
+    tot = sum(x for _b, x in top)
+    return [(bn_, x / tot) for bn_, x in top if x > 0] if tot > 0 else list(a)
 
 
 def smooth_share_near(share: np.ndarray, pts, radius: float = SHARE_RADIUS, chunk: int = 512) -> np.ndarray:

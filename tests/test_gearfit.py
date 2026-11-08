@@ -930,3 +930,16 @@ class SmoothShareNearTests(unittest.TestCase):
         self.assertLess(abs(out[0] - out[1]), 0.1)                          # no jump across the join
         self.assertGreater(out[0], 0.3)
         self.assertAlmostEqual(out[2], 1.0)
+
+
+class JoinKeepTests(unittest.TestCase):
+    def test_own_weights_kept_at_the_sleeve_tunic_join(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        pts = np.array([[0.0, 0, 0], [0.01, 0, 0], [0.05, 0, 0], [0.2, 0, 0]])
+        k = G.join_keep(np.array([0.0, 1.0, 1.0, 1.0]), pts)    # tunic | sleeve touching it | sleeve | far down
+        self.assertEqual(k[0], 1.0)
+        self.assertEqual(k[1], 1.0)
+        self.assertTrue(0 < k[2] < 1)
+        self.assertEqual(k[3], 0.0)
+        self.assertEqual(dict(G.blend_weights([("A", 1.0)], [("B", 1.0)], 0.25)), {"A": 0.25, "B": 0.75})
