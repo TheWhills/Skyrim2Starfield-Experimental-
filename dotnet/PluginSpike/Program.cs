@@ -448,42 +448,167 @@ foreach (var cellPath in cellPaths)
 }
 
 // ---- exterior load doors (2026-11-08, owner: "get the Riverwood inn connected to Riverwood") -------------------------
-// EXTERIOR_DIR: the staged exterior objects (make_skyrim_objects.py stage --interiors): formids.json (Skyrim ref -> our
-// FormID, the world and its persistent cell), overlays_params.json (the overlay frame) and the exterior plugin itself.
-// A batch door with teleport cell "exterior" gets XTEL to the exterior plugin's door, its landing point converted to
-// the overlay frame as make_skyrim_objects.py to_local does (Skyrim units / 70 - origin_cw_m, z + height_offset_m).
-// EXTERIOR_DOORS: make_skyrim_interior.py batch --exterior's exterior_doors.json: those exterior doors get their XTEL
-// to our interior doors through an override (in FO4Port.esm) of the world, its persistent cell and the door refs.
-// Written without a compiler (no NuGet in the cloud workspace); Mutagen names as used elsewhere in this file.
+// EXTERIOR_DIR: the staged exterior that is installed (owner: C:\Modding\staging\skyrim_all): formids.json (Skyrim ref ->
+// our FormID in the exterior plugin, the world), overlays_params.json (the overlay frame, the planet plugin) and the
+// plugins themselves. EXTERIOR_DOORS: make_skyrim_interior.py batch --exterior's exterior_doors.json.
+// No exterior rebuild: FO4Port.esm (mastering the exterior and planet plugins) overrides the world, its persistent cell
+// and the cells of the doors: the exterior's static door reference is disabled (an override with Initially Disabled)
+// and a persistent load door of ours (a DOOR with the static's model, at its place) is added to the persistent cell
+// with XTEL to our interior door; our interior door gets XTEL back to it, its landing point converted to the overlay
+// frame as make_skyrim_objects.py to_local does (Skyrim units / 70 - origin_cw_m, z + height_offset_m). If the exterior
+// was staged with --interiors (already a persistent load door there), that reference is overridden with the XTEL instead.
+// Written without a compiler (no NuGet in the cloud workspace); Mutagen names as used elsewhere in this file and in
+// dotnet/TerrainOverlays.
 var extDir = Environment.GetEnvironmentVariable("EXTERIOR_DIR");
+var extDoorsPath = Environment.GetEnvironmentVariable("EXTERIOR_DOORS");
 JsonElement extIds = default;
-ModKey? extKey = null;
+ModKey? extKey = null, planetKey = null;
 float extOx = 0, extOy = 0, extOz = 0;
+var extDoorFor = new Dictionary<string, FormKey>();          // Skyrim exterior door ref -> the load door the interior uses
 if (extDir != null)
 {
     extIds = JsonDocument.Parse(File.ReadAllText(Path.Combine(extDir, "formids.json"))).RootElement.Clone();
     extKey = ModKey.FromNameAndExtension(extIds.GetProperty("plugin").GetString()!);
-    var ovp = JsonDocument.Parse(File.ReadAllText(Path.Combine(extDir, "overlays_params.json"))).RootElement.GetProperty("overlays")[0];
+    var prmRoot = JsonDocument.Parse(File.ReadAllText(Path.Combine(extDir, "overlays_params.json"))).RootElement.Clone();
+    var ovp = prmRoot.GetProperty("overlays")[0];
     extOx = ovp.GetProperty("origin_cw_m")[0].GetSingle();
     extOy = ovp.GetProperty("origin_cw_m")[1].GetSingle();
     extOz = ovp.TryGetProperty("height_offset_m", out var hoj) && hoj.ValueKind == JsonValueKind.Number ? hoj.GetSingle() : 0f;
+    if (prmRoot.TryGetProperty("mars", out var mj) && mj.ValueKind == JsonValueKind.Object
+        && File.Exists(Path.Combine(extDir, mj.GetProperty("plugin").GetString()!)))
+        planetKey = ModKey.FromNameAndExtension(mj.GetProperty("plugin").GetString()!);
 }
-FormKey? ExtRef(string skyrimRef) =>
-    extKey != null && extIds.GetProperty("refs").TryGetProperty(skyrimRef, out var v)
-        ? new FormKey(extKey.Value, Convert.ToUInt32(v.GetString(), 16)) : null;
 P3Float ExtPos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre - extOx, p[1].GetSingle() / UnitsPerMetre - extOy,
                                      p[2].GetSingle() / UnitsPerMetre + extOz);
+int extIn = 0, extInLost = 0;
+if (extDir != null && extDoorsPath != null)
+{
+    using var ext = StarfieldMod.CreateFromBinaryOverlay(Path.Combine(extDir, extKey!.Value.FileName), release);
+    using var planet = planetKey == null ? null : StarfieldMod.CreateFromBinaryOverlay(Path.Combine(extDir, planetKey.Value.FileName), release);
+    var worldEdid = extIds.GetProperty("world").GetString();
+    var wg = ext.Worldspaces.First(w => w.EditorID == worldEdid);
+    // the world record and its persistent cell from the last plugin that has them (the planet plugin overrides the
+    // persistent cell: landing pad, map marker), copied without cells / references: an override replaces the record,
+    // other plugins' references stay. OFST / CLSZ index the exterior file's own layout: left out of the override.
+    var wLast = (IWorldspaceGetter?)planet?.Worldspaces.FirstOrDefault(w => w.FormKey == wg.FormKey) ?? wg;
+    var wo = wLast.DeepCopy(new Worldspace.TranslationMask(defaultOn: true) { SubCells = false, TopCell = false });
+    wo.OffsetData = null;
+    wo.CellSizeData = null;
+    var topLast = wLast.TopCell ?? wg.TopCell!;
+    var tco = topLast.DeepCopy(new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false });
+    wo.TopCell = tco;
+    var cellMask = new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false, Landscape = false, NavigationMeshes = false };
+    var doorsJson = JsonDocument.Parse(File.ReadAllText(extDoorsPath)).RootElement.Clone();
+    var want = new Dictionary<FormKey, (string src, JsonElement tele)>();
+    foreach (var d in doorsJson.GetProperty("doors").EnumerateArray())
+    {
+        var src = d.GetProperty("src").GetString()!;
+        if (extIds.GetProperty("refs").TryGetProperty(src, out var v))
+            want[new FormKey(extKey.Value, Convert.ToUInt32(v.GetString(), 16))] = (src, d.GetProperty("teleport"));
+        else extInLost++;                                        // not placed out there (outside the region / not converted)
+    }
+    var cellOverrides = new Dictionary<FormKey, Cell>();
+    var blocksO = new Dictionary<(int, int), WorldspaceBlock>();
+    var subsO = new Dictionary<(int, int), WorldspaceSubBlock>();
+    var newDoorBases = new Dictionary<string, FormKey>(StringComparer.OrdinalIgnoreCase);
+    void Link(PlacedObject o, JsonElement t)
+    {
+        o.TeleportDestination = new TeleportDestination
+        {
+            Door = new FormLink<IPlacedObjectGetter>(placedAll[t.GetProperty("door").GetString()!].FormKey),
+            Position = Pos(t.GetProperty("pos")),            // the landing point inside: interior units / 70
+            Rotation = Rot(t.GetProperty("rot")),
+            Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
+        };
+    }
+    // already a persistent load door out there (exterior staged with --interiors): override it with the teleport
+    foreach (var r in wg.TopCell!.Persistent)
+        if (want.TryGetValue(r.FormKey, out var w1) && r is IPlacedObjectGetter pg && placedAll.ContainsKey(w1.tele.GetProperty("door").GetString()!))
+        {
+            var o = (PlacedObject)pg.DeepCopy();
+            o.MajorRecordFlagsRaw |= 0x400;
+            Link(o, w1.tele);
+            tco.Persistent.Add(o);
+            extDoorFor[w1.src] = o.FormKey;
+            want.Remove(r.FormKey);
+            extIn++;
+        }
+    // a static door in an exterior cell: disabled, and our persistent load door put in its place
+    foreach (var blk in wg.SubCells)
+        foreach (var sb in blk.Items)
+            foreach (var c in sb.Items)
+                foreach (var r in c.Temporary)
+                {
+                    if (!want.TryGetValue(r.FormKey, out var w2) || r is not IPlacedObjectGetter sg) continue;
+                    if (!placedAll.ContainsKey(w2.tele.GetProperty("door").GetString()!)) { extInLost++; continue; }
+                    FormKey dkey;
+                    if (ext.Doors.Any(x => x.FormKey == sg.Base.FormKey)) dkey = sg.Base.FormKey;   // already a DOOR there
+                    else
+                    {
+                        var stat = ext.Statics.FirstOrDefault(x => x.FormKey == sg.Base.FormKey);
+                        var model = stat?.Model?.File?.ToString();
+                        if (stat == null || model == null) { extInLost++; continue; }   // not one of our bases
+                        if (!newDoorBases.TryGetValue(model, out dkey))
+                        {
+                            var drec = new Door(Id("EXTDOOR:" + model), release)
+                            {
+                                EditorID = "LD_Ext_" + (stat.EditorID ?? "Door"),
+                                Model = new Model { File = model }, Name = "Door", SoundLevel = SoundLevel.Normal,
+                            };
+                            if (stat.ObjectBounds != null) drec.ObjectBounds = stat.ObjectBounds.DeepCopy();
+                            mod.Doors.Add(drec);
+                            newDoorBases[model] = dkey = drec.FormKey;
+                        }
+                    }
+                    var nd = new PlacedObject(Id("EXTREF:" + w2.src), release)
+                    {
+                        Base = new FormLinkNullable<IPlaceableObjectGetter>(dkey),
+                        Position = sg.Position, Rotation = sg.Rotation,
+                    };
+                    if (sg.Scale is float sc && Math.Abs(sc - 1f) > 1e-4) nd.Scale = sc;
+                    nd.MajorRecordFlagsRaw |= 0x400;                        // persistent, as every vanilla load door
+                    Link(nd, w2.tele);
+                    tco.Persistent.Add(nd);
+                    extDoorFor[w2.src] = nd.FormKey;
+                    // the exterior's static copy of it: Initially Disabled, in an override of its cell
+                    if (!cellOverrides.TryGetValue(c.FormKey, out var co))
+                    {
+                        if (!blocksO.TryGetValue((blk.BlockNumberX, blk.BlockNumberY), out var bo))
+                        {
+                            bo = new WorldspaceBlock { BlockNumberX = blk.BlockNumberX, BlockNumberY = blk.BlockNumberY, GroupType = GroupTypeEnum.ExteriorCellBlock };
+                            blocksO[(blk.BlockNumberX, blk.BlockNumberY)] = bo;
+                            wo.SubCells.Add(bo);
+                        }
+                        if (!subsO.TryGetValue((sb.BlockNumberX, sb.BlockNumberY), out var so_))
+                        {
+                            so_ = new WorldspaceSubBlock { BlockNumberX = sb.BlockNumberX, BlockNumberY = sb.BlockNumberY, GroupType = GroupTypeEnum.ExteriorCellSubBlock };
+                            subsO[(sb.BlockNumberX, sb.BlockNumberY)] = so_;
+                            bo.Items.Add(so_);
+                        }
+                        co = c.DeepCopy(cellMask);
+                        so_.Items.Add(co);
+                        cellOverrides[c.FormKey] = co;
+                    }
+                    var off = (PlacedObject)sg.DeepCopy();
+                    off.MajorRecordFlagsRaw |= 0x800;                         // Initially Disabled
+                    co.Temporary.Add(off);
+                    want.Remove(r.FormKey);
+                    extIn++;
+                }
+    extInLost += want.Count;                                         // listed, placed, but not found in the world
+    mod.Worldspaces.Add(wo);
+    Console.WriteLine($"exterior doors into the interiors: {extIn} made load doors (override of {wg.EditorID}), {extInLost} not");
+}
 
 int teleLinked = 0, teleLost = 0, teleOut = 0, teleOutLost = 0;
 foreach (var (obj, t) in pendingTeleports)
 {
     if (t.TryGetProperty("cell", out var tc) && tc.GetString() == "exterior")
     {
-        var ext = ExtRef(t.GetProperty("door").GetString()!);
-        if (ext == null) { teleOutLost++; continue; }               // no EXTERIOR_DIR, or the door not placed out there
+        if (!extDoorFor.TryGetValue(t.GetProperty("door").GetString()!, out var outDoor)) { teleOutLost++; continue; }
         obj.TeleportDestination = new TeleportDestination
         {
-            Door = new FormLink<IPlacedObjectGetter>(ext.Value),
+            Door = new FormLink<IPlacedObjectGetter>(outDoor),
             Position = ExtPos(t.GetProperty("pos")),
             Rotation = Rot(t.GetProperty("rot")),
             Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
@@ -503,46 +628,7 @@ foreach (var (obj, t) in pendingTeleports)
 }
 if (teleOut + teleOutLost > 0)
     Console.WriteLine($"doors out to the exterior: {teleOut} linked, {teleOutLost} not (" +
-                      (extDir == null ? "no EXTERIOR_DIR" : "door not in the exterior plugin's formids.json") + ")");
-int extIn = 0, extInLost = 0;
-if (extDir != null && Environment.GetEnvironmentVariable("EXTERIOR_DOORS") is string extDoorsPath)
-{
-    var extPath = Path.Combine(extDir, extKey!.Value.FileName);
-    using var ext = StarfieldMod.CreateFromBinaryOverlay(extPath, release);
-    var worldId = Convert.ToUInt32(extIds.GetProperty("world_form_id").GetString(), 16);
-    var wg = ext.Worldspaces.First(w => w.FormKey.ID == worldId);
-    // the world and its persistent cell, copied without their cells / references (an override replaces the record,
-    // so every other field stays as the exterior plugin has it). OFST / CLSZ (world_offsets.py) index the exterior
-    // file's own layout and are left out of the override.
-    var wo = wg.DeepCopy(new Worldspace.TranslationMask(defaultOn: true) { SubCells = false, TopCell = false });
-    wo.OffsetData = null;
-    wo.CellSizeData = null;
-    var tco = wg.TopCell!.DeepCopy(new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false });
-    wo.TopCell = tco;
-    using var edoc = JsonDocument.Parse(File.ReadAllText(extDoorsPath));
-    foreach (var d in edoc.RootElement.GetProperty("doors").EnumerateArray())
-    {
-        var key = ExtRef(d.GetProperty("src").GetString()!);
-        var t = d.GetProperty("teleport");
-        if (key == null || !placedAll.TryGetValue(t.GetProperty("door").GetString()!, out var dest)) { extInLost++; continue; }
-        var orig = wg.TopCell.Persistent.FirstOrDefault(r => r.FormKey == key.Value) as IPlacedObjectGetter;
-        if (orig == null) { extInLost++; continue; }                 // not persistent there (stage without --interiors)
-        var o = (PlacedObject)orig.DeepCopy();
-        o.MajorRecordFlagsRaw |= 0x400;
-        o.TeleportDestination = new TeleportDestination
-        {
-            Door = new FormLink<IPlacedObjectGetter>(dest.FormKey),
-            Position = Pos(t.GetProperty("pos")),               // the landing point inside: interior units / 70
-            Rotation = Rot(t.GetProperty("rot")),
-            Flags = (TeleportDestination.Flag)t.GetProperty("flags").GetInt32(),
-        };
-        tco.Persistent.Add(o);
-        extIn++;
-    }
-    mod.Worldspaces.Add(wo);
-    Console.WriteLine($"exterior doors into the interiors: {extIn} linked (override of {wg.EditorID} in {extKey}), {extInLost} not " +
-                      "(not placed as a load door out there, or its interior door not placed)");
-}
+                      (extDir == null ? "no EXTERIOR_DIR / EXTERIOR_DOORS" : "its exterior door was not made a load door") + ")");
 if (pendingTeleports.Count > 0)
     Console.WriteLine($"load doors: {teleLinked} linked, {teleLost} lost (destination door not placed); {loadDoorBases.Count} door models");
 
@@ -581,9 +667,8 @@ mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 var sfData = Environment.GetEnvironmentVariable("STARFIELD_DATA") ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder");
 mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
-    .WithKnownMasters(extKey == null
-        ? new[] { new KeyedMasterStyle(sfEsm, MasterStyle.Full) }
-        : new[] { new KeyedMasterStyle(sfEsm, MasterStyle.Full), new KeyedMasterStyle(extKey.Value, MasterStyle.Full) })
+    .WithKnownMasters(new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
+        .Select(k => new KeyedMasterStyle(k!.Value, MasterStyle.Full)).ToArray())
     .Write();
 File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value),
     new JsonSerializerOptions { WriteIndented = true }));

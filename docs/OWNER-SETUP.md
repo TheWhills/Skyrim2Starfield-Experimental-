@@ -48,6 +48,10 @@ Starfield must be closed while a script writes into the mods folders.
 | More Sliders (face-bone mod) | `$mods\More-Sliders Complete` (`$ms`, `$cs`) |
 | Beard matches (beard_match.json) | `C:\Modding\work\beards` |
 | Outfit debug meshes (fit_debug.zip per NPC) | `C:\Modding\work\debug_<npc>` (ralof, ysolda, nazeem, saadia) |
+| Installed exterior (Tamriel on the planet; matches the game's SkyrimTerrainTamriel.esm, height offset 385 m) | `C:\Modding\staging\skyrim_all` |
+| Other exterior builds (older) | `C:\Modding\staging\skyrim_objects`, `C:\Modding\staging\skyrim_tamriel` |
+| Interior batches (checklist step 11, Oct 23) | `C:\Modding\work\s2s\interiors`, `C:\Modding\work\s2s\checklist` |
+| Riverwood <-> inn door build | `C:\Modding\work\s2s\riverwood_doors` |
 | Voice lines (skyrim_voice.py --out: lines.json + .wem / .ffxanim) | `C:\Modding\work\voice` |
 | Voice files as installed (face_fit copies them) | `$face\Sound\Voice\S2SFaceTest.esm\S2S_<voice type>_<NPC>` |
 
@@ -83,4 +87,11 @@ Beard matches (rerun only when the matcher changes):
 
 ```powershell
 python -I scripts\npc\beard_match.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\beards
+```
+
+Riverwood <-> Sleeping Giant Inn load doors (interior batch with --exterior, convert, FO4Port.esm overriding the
+installed exterior's door, install; Starfield closed):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1
 ```
