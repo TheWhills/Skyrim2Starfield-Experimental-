@@ -2133,3 +2133,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   and 35 degrees, 2 from above; none from below), a point hidden if inside Skyrim's body and behind something by
   more than 1 mm in every view. Checked on the debug meshes: Ysolda's remaining "seen" brown is the corset band under
   the bust, visible in Skyrim's render too.
+- 2026-11-07 (Claude, armor) Owner on the detail-transfer preview: gaps along Ysolda's sleeve seam and at the trim.
+  Cause (verified offline): smoothing ran on the mesh as stored, where UV seams are separate vertex copies, so each
+  side of a seam was smoothed apart. Detail transfer and final_relax now smooth over seam-joined triangles
+  (seam_tris: one vertex per Skyrim position) and copy the result back to the copies; offline the seam and trim close.

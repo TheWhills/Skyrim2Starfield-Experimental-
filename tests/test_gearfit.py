@@ -560,6 +560,19 @@ class VisibilityTests(unittest.TestCase):
         self.assertTrue(top[0])
 
 
+class SeamTests(unittest.TestCase):
+    def test_seam_copies_smoothed_together(self):
+        pts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]], float)   # vertex 3 copies 1
+        tris = [(0, 1, 2), (3, 4, 2)]
+        st, canon = G.seam_tris(pts, tris)
+        self.assertEqual(canon.tolist(), [0, 1, 2, 1, 4])
+        self.assertEqual(st.tolist(), [[0, 1, 2], [1, 4, 2]])
+        moved = pts.copy()
+        moved[4, 2] = 1.0
+        out = G.with_seams(G.smooth_moves(pts, G.with_seams(moved, canon), st, rounds=2), canon)
+        self.assertTrue(np.allclose(out[1], out[3]))                      # both sides of the seam alike
+
+
 class MorphTests(unittest.TestCase):
     def test_morph_path(self):
         self.assertEqual(G.morph_path("S2S\\Ralof_outfit.nif", "StormCloak"),

@@ -1335,6 +1335,20 @@ def keep_hidden(pts: np.ndarray, sky_gap: np.ndarray, body_pts: np.ndarray, body
     return p, int((step < -1e-4).sum())
 
 
+def seam_tris(points: np.ndarray, tris, decimals: int = 5) -> np.ndarray:
+    """Triangles re-indexed to one vertex per Skyrim position (UV-seam copies joined), for smoothing across seams
+    (2026-11-07, owner: the Skyrim-detail step opened gaps along Ysolda's sleeve seam and at the trim; each side of a
+    seam was smoothed on its own). The copies keep the result of the vertex they map to: use with_seams after."""
+    key = np.round(np.asarray(points, float), decimals)
+    _u, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
+    canon = first[inv.reshape(-1)]
+    return canon[np.asarray(tris, int).reshape(-1, 3)], canon
+
+
+def with_seams(arr: np.ndarray, canon: np.ndarray) -> np.ndarray:
+    return np.asarray(arr)[canon]
+
+
 def smooth_moves(base: np.ndarray, pts: np.ndarray, tris, rounds: int = 3) -> np.ndarray:
     """The fit's moves (pts - base) averaged with each vertex's neighbours: neighbours pushed apart (pull-in,
     push-out, cover each moving single vertices) folded the small subdivided faces over, and folded faces are not
@@ -1740,17 +1754,22 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # the fit's smooth placement plus Skyrim's detail matched Skyrim's bust, lacing and straps). The detail
             # is the Skyrim shape minus its smoothed self, posed by the same bone blend as the points.
             sp_ = np.asarray(s.points, float)
-            lap = sp_ - smooth_moves(np.zeros_like(sp_), sp_, s.triangles, rounds=DETAIL_ROUNDS)
+            st_, canon = seam_tris(sp_, s.triangles)
+            lap = sp_ - with_seams(smooth_moves(np.zeros_like(sp_), sp_, st_, rounds=DETAIL_ROUNDS), canon)
             posed = blend(sp_ + lap, s.normals, s.bones, s.weights, transforms)[0] - \
                 blend(sp_, s.normals, s.bones, s.weights, transforms)[0]
-            new_pts = smooth_moves(np.zeros_like(pts), pts, s.triangles, rounds=DETAIL_ROUNDS) + posed
+            posed = with_seams(posed, canon)
+            new_pts = with_seams(smooth_moves(np.zeros_like(pts), with_seams(pts, canon), st_, rounds=DETAIL_ROUNDS),
+                                 canon) + posed
             fixed = skirt_weighted(s.bones, s.weights) | collar_keep
             pts = np.where(fixed[:, None], pts, new_pts)
         if not skin and FINAL_ROUNDS and len(sf_body_pts):
             keep_out = ~sky_hidden
             keep_out &= ~collar_keep
-            pts = final_relax(moved_base, pts, s.triangles, sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3),
-                              sf_nrm, keep_out, gap=gap)
+            st2, canon2 = seam_tris(s.points, s.triangles)
+            pts = with_seams(final_relax(with_seams(moved_base, canon2), with_seams(pts, canon2), st2, sf_body_pts,
+                                         np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
+                                         with_seams(keep_out, canon2), gap=gap), canon2)
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
