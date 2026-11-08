@@ -151,8 +151,30 @@ def covered_by(body: np.ndarray, body_nrm: np.ndarray, gear, depth: float = COVE
     return out
 
 
+ARMPIT_REACH = 0.08   # m round the arm / torso seam of the body's weights kept in the skin piece
+
+
+def armpits(body_skel: np.ndarray, body_w, reach: float = ARMPIT_REACH) -> np.ndarray:
+    """Body vertices within reach of where the skin's weights pass from the torso to the arm (arm share 0.1-0.9)
+    (2026-11-08, owner: sky seen through the iron cuirass's armpit when aiming and a see-through seam under Ralof's
+    arm; verified on the debug meshes: the body round the armpit was left out of the skin piece because the gear
+    covers it with the arms out, and raising the arm opens the armhole over it)."""
+    share = np.array([gearfit.arm_share(vw) for vw in body_w])
+    seam = (share > 0.1) & (share < 0.9)
+    out = np.zeros(len(body_skel), bool)
+    if not seam.any():
+        return out
+    sp = np.asarray(body_skel, float)[seam]
+    p = np.asarray(body_skel, float)
+    for c in range(0, len(p), 512):
+        q = p[c:c + 512]
+        out[c:c + 512] = ((q[:, None, :] - sp[None]) ** 2).sum(-1).min(1) < reach ** 2
+    return out
+
+
 def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH,
-               gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH, extra=None):
+               gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH, extra=None,
+               always=None):
     """(HairShape in skeleton space, kept body vertex indices) of the Starfield body where Skyrim's bare-skin pieces
     lie after the fit (2026-11-06, owner: Skyrim's bare arm runs up under the sleeve, Starfield's skin starts lower):
     the body vertices within `reach` of them and the triangles among them, plus `extra` (the feet when the Skyrim
@@ -199,6 +221,8 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
                 near[cand[c0:c0 + 512]] = d2 < COVER_MARGIN_M ** 2
             grow = visible | near | (ring1 if ring1 is not None else visible)
         keep = grow
+    if always is not None:
+        keep = keep | np.asarray(always, bool)       # skin under the gear that movement uncovers (armpits)
     t = t[keep[t].all(1)]
     used = np.unique(t)
     if not len(used):
@@ -675,7 +699,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                                and (body_piece_names is None or sh.name.decode("latin-1", "replace")
                                     in set(body_piece_names))]
             skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src), gear=gear_fit_shapes,
-                                    whole=whole_skin, depth=SKIN_UNDER_DEPTH, extra=feet)
+                                    whole=whole_skin, depth=SKIN_UNDER_DEPTH, extra=feet,
+                                    always=armpits(skel_body, body_w))
             if skin is not None:
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used

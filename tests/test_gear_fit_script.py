@@ -468,3 +468,11 @@ class ArmorByEdidTests(unittest.TestCase):
         self.assertEqual(len(missing), 1)
         with self.assertRaises(SystemExit):
             gear_fit.armor_by_edid(inv, ["ArmorNope"])
+
+
+class ArmpitsTests(unittest.TestCase):
+    def test_body_round_the_arm_torso_seam(self):
+        import numpy as np
+        pts = np.array([[0.0, 0, 1.3], [0.15, 0, 1.3], [0.20, 0, 1.3], [0.45, 0, 1.3]])
+        w = [[("C_Chest", 1.0)], [("C_Chest", 0.5), ("L_Biceps", 0.5)], [("L_Biceps", 1.0)], [("L_Forearm", 1.0)]]
+        self.assertEqual(gear_fit.armpits(pts, w).tolist(), [False, True, True, False])

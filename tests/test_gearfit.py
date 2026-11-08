@@ -896,3 +896,26 @@ class CollarSpreadTests(unittest.TestCase):
         ours = ring(np.where(a < np.pi / 4, 1.55, 1.42))          # one sector 13 cm too high, the rest 2 cm
         f = G.collar_height_field(sky, np.ones(64, bool), (0, 0), 1.6, ours, np.ones(64, bool), (0, 0), 1.6)
         self.assertGreaterEqual(f.min(), np.median(f) - G.COLLAR_SPREAD - 0.01)
+
+
+class RingRestoreTests(unittest.TestCase):
+    def test_a_pinched_opening_gets_its_round_shape_back(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        # an annulus (the armhole's rim area) round (0, 0, 0)
+        a = np.linspace(0, 2 * np.pi, 32, endpoint=False)
+        rings = [0.05, 0.06, 0.07, 0.09]
+        base = np.array([[r * np.cos(t), r * np.sin(t), 0.0] for r in rings for t in a])
+        tris = []
+        for j in range(len(rings) - 1):
+            for i in range(32):
+                p0, p1, q0, q1 = j * 32 + i, j * 32 + (i + 1) % 32, (j + 1) * 32 + i, (j + 1) * 32 + (i + 1) % 32
+                tris += [(p0, p1, q0), (p1, q1, q0)]
+        pinched = base.copy()
+        pinched[:32, 1] *= np.where(base[:32, 1] < 0, 0.4, 1.0)            # the rim squeezed at the bottom
+        out, n = G.ring_restore(base, pinched, tris, [(0.0, 0.0, 0.0)])
+        r = np.linalg.norm(out[:32] - out[:32].mean(0), axis=1)
+        self.assertGreater(n, 0)
+        self.assertLess(np.ptp(r), 0.25 * np.ptp(np.linalg.norm(pinched[:32] - pinched[:32].mean(0), axis=1)))
+        out2, n2 = G.ring_restore(base, pinched, tris, [(0.0, 0.0, 0.0)], arm=np.ones(len(base)))
+        self.assertEqual(n2, 0)                                           # a sleeve's edge: left alone

@@ -1331,6 +1331,79 @@ def skin_through(pts: np.ndarray, tris, mask: np.ndarray, body_pts: np.ndarray, 
     return p, int((np.linalg.norm(p - start, axis=1) > 1e-4).sum())
 
 
+RING_BAND = 0.05      # m from an armhole's rim over which its Skyrim shape is restored (fading out)
+
+
+def ring_restore(base: np.ndarray, pts: np.ndarray, tris, centres, band: float = RING_BAND,
+                 reach: float = 0.14, arm=None) -> Tuple[np.ndarray, int]:
+    """Openings of the gear near the given centres (the shoulder joints) given back their posed Skyrim shape: the
+    open-edge loop's posed points (base) fitted onto where the fit put it by a similarity transform (Procrustes),
+    applied to the loop and, fading out over band, to the gear round it (2026-11-08, owner: the iron cuirass's
+    armhole pinched into a teardrop with a notch at the armpit, his drawing showed the round path it should take;
+    the per-point steps pull the rim into the armpit crease). arm: per-vertex arm share; loops mostly on the arm
+    (sleeve edges) are left. Returns (points, vertices moved)."""
+    b = np.asarray(base, float)
+    p = np.asarray(pts, float).copy()
+    t = np.asarray(tris, int).reshape(-1, 3)
+    st, canon = seam_tris(b, t)
+    cnt: Dict[Tuple[int, int], int] = {}
+    for x, y, z in st:
+        for e in ((x, y), (y, z), (z, x)):
+            k = (min(e), max(e))
+            cnt[k] = cnt.get(k, 0) + 1
+    adj: Dict[int, List[int]] = {}
+    for (x, y), n in cnt.items():
+        if n == 1:
+            adj.setdefault(x, []).append(y)
+            adj.setdefault(y, []).append(x)
+    seen, loops = set(), []
+    for v0 in adj:
+        if v0 in seen:
+            continue
+        comp, stack = [], [v0]
+        seen.add(v0)
+        while stack:
+            v = stack.pop()
+            comp.append(v)
+            for u in adj[v]:
+                if u not in seen:
+                    seen.add(u)
+                    stack.append(u)
+        loops.append(np.array(comp))
+    moved = np.zeros(len(p), bool)
+    for c in centres:
+        c = np.asarray(c, float)
+        best = None
+        for L in loops:
+            if len(L) < 8:
+                continue
+            if arm is not None and float(np.mean(np.asarray(arm)[L])) > 0.5:
+                continue                       # a sleeve's edge, not the body armour's armhole
+            d = float(np.linalg.norm(p[L] - c, axis=1).mean())     # the loop round the joint, closest all round
+            if d < reach and (best is None or d < best[0]):
+                best = (d, L)
+        if best is None:
+            continue
+        L = best[1]
+        A, B = b[L], p[L]
+        ca, cb = A.mean(0), B.mean(0)
+        A0, B0 = A - ca, B - cb
+        U, S_, Vt = np.linalg.svd(A0.T @ B0)
+        dd = np.sign(np.linalg.det(U @ Vt))
+        D = np.diag([1.0, 1.0, dd])
+        R = (U @ D @ Vt).T
+        sc = float((S_ * np.diag(D)).sum() / max((A0 ** 2).sum(), 1e-12))
+        target = (b - ca) @ R.T * sc + cb
+        dist = np.sqrt(((b[:, None, :] - A[None]) ** 2).sum(-1).min(1)) if len(b) < 20000 else None
+        if dist is None:
+            continue
+        w = np.clip(1 - dist / band, 0.0, 1.0) ** 2
+        w = with_seams(w, canon)
+        p = p + (target - p) * w[:, None]
+        moved |= w > 0
+    return p, int(moved.sum())
+
+
 END_BONES = ("foot", "toe", "hand", "finger", "thumb")   # feet and hands: pinned in smooth_pose
 
 
@@ -2111,6 +2184,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                          np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
                                          with_seams(keep_out, canon2), gap=gap), canon2)
         steps_[s.name.decode("latin-1", "replace")]['6_final_relax'] = np.array(pts, float).copy()
+        ringed = 0
+        if not skin and len(sf_body_pts):
+            cen = [np.asarray(sf_world[b_])[:3, 3] for b_ in ("L_Biceps", "R_Biceps") if b_ in sf_world]
+            if cen:
+                arm_v = np.array([arm_share([(s.bones[b], x) for b, x in vw]) for vw in s.weights])
+                rp, ringed = ring_restore(moved_base, pts, s.triangles, cen, arm=arm_v)
+                if ringed:
+                    vis_ = ~sky_hidden & ~sky_tucked
+                    pts, _pp = conform_push(rp, s.triangles, vis_, sf_body_pts, sf_body_tris, sf_nrm, gap,
+                                            sky_pts=s.points)
         strapped = 0
         target = np.full(len(pts), gap)
         mask = np.zeros(len(pts), bool)
@@ -2249,7 +2332,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "skin_through": through, "strapped": strapped, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "armholes_restored": ringed, "skin_through": through, "strapped": strapped, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,
