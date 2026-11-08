@@ -116,3 +116,11 @@ Where Skyrim sits on the planet (sun path; show, then move: latitude, longitude 
 python -I scripts\terrain\set_planet_latlon.py --staging C:\Modding\staging\skyrim_all
 python -I scripts\terrain\set_planet_latlon.py --staging C:\Modding\staging\skyrim_all --latlon 0.3 0 --starfield $sf
 ```
+
+Which converted exterior object is this (console FormID of a clicked object, or everything near a spot from
+`player.getpos x` / `y`):
+
+```powershell
+python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --ref <FormID>
+python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --near <x> <y> --radius 6
+```
