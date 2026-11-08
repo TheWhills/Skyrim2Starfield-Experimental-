@@ -862,3 +862,25 @@ class EndShareTests(unittest.TestCase):
         bones = ["NPC L Calf [LClf]", "NPC L Foot [Lft ]", "NPC L Toe0 [LToe]", "NPC R Hand [RHnd]"]
         sh = G.end_share(bones, [[(0, 1.0)], [(0, 0.5), (1, 0.5)], [(2, 1.0)], [(3, 0.2), (0, 0.8)]])
         self.assertEqual([round(x, 2) for x in sh], [0.0, 0.5, 1.0, 0.2])
+
+
+class SkinThroughTests(unittest.TestCase):
+    def test_a_bump_through_the_gear_pushes_it_out(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        n = 15
+        g = np.linspace(-0.05, 0.05, n)
+        gear = np.array([[x, y, 0.004] for y in g for x in g])
+        tris = []
+        for j in range(n - 1):
+            for i in range(n - 1):
+                a = j * n + i
+                tris += [(a, a + 1, a + n), (a + 1, a + n + 1, a + n)]
+        body = np.array([[0.0, 0.0, 0.010], [0.04, 0.04, 0.0]])        # a toe tip 6 mm through the gear's middle
+        bn = np.tile([0.0, 0.0, 1.0], (2, 1))
+        out, moved = G.skin_through(gear, tris, np.ones(len(gear), bool), body, bn, rounds=8)
+        A, B, C = G.with_normals(out, tris)
+        _c, d, _x = G.closest_on_mesh(body[:1], A, B, C)
+        self.assertLess(d[0], 0.0)                                       # under the gear now
+        self.assertGreater(moved, 0)
+        self.assertLess(np.abs(out[:, 2] - 0.004).max(), 0.03)          # a local bump, not a jump

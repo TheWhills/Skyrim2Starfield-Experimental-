@@ -1282,6 +1282,51 @@ def lift_to(pts: np.ndarray, target: np.ndarray, mask: np.ndarray, body_pts: np.
 POSE_ROUNDS = 40      # rounds of smoothing the move from Skyrim's skeleton onto Starfield's (0: off)
 
 
+def skin_through(pts: np.ndarray, tris, mask: np.ndarray, body_pts: np.ndarray, body_nrm: np.ndarray,
+                 gap: float = GAP, rounds: int = 6, reach: float = 0.03) -> Tuple[np.ndarray, int]:
+    """Body points that come out through the gear (or lie within gap under it) push the nearest masked gear vertices
+    out along the body's normal, the push spread to their neighbours (2026-11-08, verified on the owner's iron and
+    Stormcloak boots: no boot vertex inside the foot, yet the toe tip stood up to 2 cm out through the sole between
+    them; push-out only moves gear vertices that are inside the body). Returns (points, vertices moved)."""
+    p = np.asarray(pts, float).copy()
+    t = np.asarray(tris, int).reshape(-1, 3)
+    m = np.asarray(mask, bool)
+    if not m.any() or not len(t):
+        return p, 0
+    bp, bn = np.asarray(body_pts, float), np.asarray(body_nrm, float)
+    lo, hi = p[m].min(0) - reach, p[m].max(0) + reach
+    sel = np.nonzero(((bp >= lo) & (bp <= hi)).all(1))[0]
+    if not len(sel):
+        return p, 0
+    start = p.copy()
+    st, canon = seam_tris(p, t)
+    e = np.unique(np.sort(np.concatenate([st[:, [0, 1]], st[:, [1, 2]], st[:, [2, 0]]]), 1), axis=0)
+    deg = np.bincount(e.ravel(), minlength=len(p)).astype(float)
+    idx_m = np.nonzero(m)[0]
+    for _ in range(rounds):
+        gp, gt, gn = with_normals(p, t)
+        cp_, d, dist, gnn = closest_on_mesh(bp[sel], gp, gt, gn, with_normals=True)
+        bad = (d > -gap) & (dist < reach)
+        if not bad.any():
+            break
+        # the gear moves along its own outward normal there (not the body's: at the sole that points down)
+        push = np.zeros_like(p)
+        for q, n_, amt in zip(cp_[bad], gnn[bad], np.minimum(d[bad] + gap, 0.006)):
+            j = idx_m[np.argsort(np.linalg.norm(p[idx_m] - q, axis=1))[:4]]
+            for v in j:
+                if amt > np.dot(push[v], n_):
+                    push[v] = n_ * amt
+        peak = np.linalg.norm(push, axis=1)
+        for _r in range(3):                     # spread smoothly, the pushed vertices keep their push
+            acc = push.copy()
+            np.add.at(acc, e[:, 0], push[e[:, 1]])
+            np.add.at(acc, e[:, 1], push[e[:, 0]])
+            sm = acc / (1 + deg)[:, None]
+            push = np.where((peak > 0)[:, None], push, sm * m[:, None])
+        p = p + with_seams(push, canon)
+    return p, int((np.linalg.norm(p - start, axis=1) > 1e-4).sum())
+
+
 END_BONES = ("foot", "toe", "hand", "finger", "thumb")   # feet and hands: pinned in smooth_pose
 
 
@@ -2111,6 +2156,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts, rehidden = keep_hidden(pts, np.where(sky_hidden, sky_gap, np.inf), sf_body_pts, sf_body_tris, sf_nrm,
                                         rep.get("global_scale", 1.0))
         steps_[s.name.decode("latin-1", "replace")]['10_hidden'] = np.array(pts, float).copy()
+        through = 0
+        if not skin and len(sf_body_pts):
+            # boots and gloves: no toe or finger out through them (checked from the body's side)
+            pts, through = skin_through(pts, s.triangles, ends_, sf_body_pts, sf_nrm, gap)
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -2126,7 +2175,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             w, near = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
         elif weight_src is not None and len(pts) and sf_body_weights is not None \
                 and len(sf_body_weights) == len(sf_body_pts):
-            w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world))
+            w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world),
+                                        arm_s=smooth_share(np.array([arm_share(vw) for vw in w]), s.points,
+                                                           s.triangles))
             wh, _n = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
             w_head_src = wh
         elif sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
@@ -2178,7 +2229,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "strapped": strapped, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "skin_through": through, "strapped": strapped, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,
@@ -2187,6 +2238,25 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}
     return FitResult(shapes, rep)
+
+
+def smooth_share(share: np.ndarray, rest, tris, rounds: int = 8) -> np.ndarray:
+    """A per-vertex value averaged with its neighbours (UV seams joined) (2026-11-08, owner: a seam across the
+    Stormcloak sleeve after the arm / torso weight split; where Skyrim's arm share jumps between neighbours they took
+    skin weights from different limbs)."""
+    t = np.asarray(tris, int).reshape(-1, 3)
+    if not len(t):
+        return share
+    st, canon = seam_tris(np.asarray(rest, float), t)
+    e = np.unique(np.sort(np.concatenate([st[:, [0, 1]], st[:, [1, 2]], st[:, [2, 0]]]), 1), axis=0)
+    deg = np.bincount(e.ravel(), minlength=len(share)).astype(float)
+    x = with_seams(np.asarray(share, float), canon)
+    for _ in range(rounds):
+        acc = x.copy()
+        np.add.at(acc, e[:, 0], x[e[:, 1]])
+        np.add.at(acc, e[:, 1], x[e[:, 0]])
+        x = acc / (1 + deg)
+    return with_seams(x, canon)
 
 
 ARM_MIX = (0.2, 0.8)   # own arm share: torso skin weights at or under the first, arm skin weights at or over the second
@@ -2202,7 +2272,7 @@ def arm_share(vw) -> float:
 
 
 def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.ndarray, body_w, bones,
-                      near=NEAR_WEIGHTS) -> Tuple[list, int]:
+                      near=NEAR_WEIGHTS, arm_s=None) -> Tuple[list, int]:
     """Gear lying on the body takes the nearest body vertex's weights (fully within near[0], blended to its own by
     near[1]), so it bends exactly like the skin under it (2026-11-06, Ralof running: boot heels and the Starfield
     heel moved apart with Skyrim's own weights)."""
@@ -2212,7 +2282,8 @@ def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.n
     # pose); and gear that Skyrim weights partly to the arm (an armhole's rim) mixes the arm's and the torso's skin
     # weights the same way (2026-11-08, owner: the iron cuirass's armhole tore at the armpit when aiming; its rim
     # had only the torso's): the nearest arm vertex and the nearest torso vertex, mixed by the gear's own arm share
-    own_s = np.clip((np.array([arm_share(vw) for vw in own]) - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)
+    raw_s = np.array([arm_share(vw) for vw in own]) if arm_s is None else np.asarray(arm_s, float)
+    own_s = np.clip((raw_s - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)
     body_arm = np.array([arm_share(bw) > 0.5 for bw in body_w])
     mix_idx = None
     if body_arm.any() and not body_arm.all():
