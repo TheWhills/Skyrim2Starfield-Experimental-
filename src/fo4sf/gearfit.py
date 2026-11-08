@@ -1562,7 +1562,7 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
         weight_src=None, heads=None, collar_anchor=None, head_weights_all: bool = True, shoulders: bool = False, drape_on: bool = False,
-        wrap_on: bool = True, round_bust: bool = False) -> FitResult:
+        wrap_on: bool = True, round_bust: bool = False, strap_gap: float = STRAP_GAP) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
     (points, triangles, weights) gear near it takes its weights from instead of the body surface (the whole head as
@@ -1883,13 +1883,13 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                                with_seams(fixed3, canon3), gap=gap)
             pts = with_seams(sm, canon3)
         strapped = 0
-        if not skin and sky_clav_z is not None and len(sf_body_pts):
+        if not skin and sky_clav_z is not None and len(sf_body_pts) and strap_gap > gap:
             # straps and collars a few mm farther off the skin (2026-11-08, owner's Saadia in game: the halter straps
             # 3-4 mm off the skin in the fit were covered by skin at every slider, also after they took the skin's
             # weights; "straps are still too close to body")
             below = sky_clav_z - np.asarray(s.points)[:, 2]
             ramp = np.clip((below - STRAP_RAMP[0]) / (STRAP_RAMP[1] - STRAP_RAMP[0]), 0.0, 1.0)
-            target = STRAP_GAP + (gap - STRAP_GAP) * ramp
+            target = strap_gap + (gap - strap_gap) * ramp
             mask = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
             pts, strapped = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
         faces_lifted = 0
