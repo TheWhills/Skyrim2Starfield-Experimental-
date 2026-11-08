@@ -36,7 +36,8 @@ Starfield must be closed while a script writes into the mods folders.
 | More Sliders (face-bone mod) | `$mods\More-Sliders Complete` (`$ms`, `$cs`) |
 | Beard matches (beard_match.json) | `C:\Modding\work\beards` |
 | Outfit debug meshes (fit_debug.zip per NPC) | `C:\Modding\work\debug_<npc>` (ralof, ysolda, nazeem, saadia) |
-| Voice lines (skyrim_voice.py --out) | unknown: ask the owner, then fill in |
+| Voice lines (skyrim_voice.py --out: lines.json + .wem / .ffxanim) | `C:\Modding\work\voice` |
+| Voice files as installed (face_fit copies them) | `$face\Sound\Voice\S2SFaceTest.esm\S2S_<voice type>_<NPC>` |
 
 ## Working commands
 
@@ -53,10 +54,10 @@ use: `--debug-steps` (the outfit after each fit step, in the zip), `--conform` (
 Test NPCs with their faces, converted hair, Starfield beards and their outfits:
 
 ```powershell
-python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json
+python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice
 ```
 
-(Add `--voice-lines <voice folder>` once that folder is known.) The NPCs' ids for `player.placeatme` are in
+ The NPCs' ids for `player.placeatme` are in
 `$face\faces.json`.
 
 Beard matches (rerun only when the matcher changes):
