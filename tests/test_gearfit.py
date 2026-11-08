@@ -807,3 +807,25 @@ class ArmWeightsTests(unittest.TestCase):
         self.assertGreater(dict(out[0]).get("L_Arm", 0), 0.95)       # sleeve: the arm's skin
         self.assertNotIn("C_Chest", dict(out[0]))
         self.assertEqual(dict(out[1]), {"C_Chest": 1.0})     # bodice: the chest's skin
+
+
+class SmoothPoseTests(unittest.TestCase):
+    def test_weight_dents_smoothed_the_skeletons_move_kept(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        n = 21
+        g = np.linspace(-0.1, 0.1, n)
+        rest = np.array([[x, y, 0.0] for y in g for x in g])
+        tris = []
+        for j in range(n - 1):
+            for i in range(n - 1):
+                a = j * n + i
+                tris += [(a, a + 1, a + n), (a + 1, a + n + 1, a + n)]
+        move = rest * 0.05 + [0.0, 0.02, 0.03]                                  # the skeletons' (smooth) move
+        dent = np.where((np.arange(len(rest)) % 2)[:, None] == 1, [0.0, 0.0, 0.01], 0.0)   # weights' dents
+        out = G.smooth_pose(rest, rest + move + dent, tris)
+        inner = (np.abs(rest[:, 0]) < 0.06) & (np.abs(rest[:, 1]) < 0.06)
+        err = out - (rest + move)
+        self.assertLess(np.ptp(err[inner, 2]), 0.002)                          # the dents gone
+        self.assertLess(np.abs(err[inner] - err[inner].mean(0)).max(), 0.002)  # the smooth move kept
+        self.assertTrue(np.allclose(G.smooth_pose(rest, rest + move, tris, rounds=0), rest + move))
