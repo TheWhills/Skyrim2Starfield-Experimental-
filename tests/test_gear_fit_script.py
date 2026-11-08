@@ -406,3 +406,24 @@ class MergedMorphTests(unittest.TestCase):
         self.assertEqual(m.num_vertices, 5)
         self.assertEqual(sorted(m.deltas["Overweight"]), [1, 2])
         self.assertAlmostEqual(m.deltas["Overweight"][2][1], 0.02, places=3)
+
+
+class SliderClearanceTests(unittest.TestCase):
+    def test_gear_raised_where_the_body_grows_past_it(self):
+        import numpy as np
+        from fo4sf import sfmorph
+        g = np.linspace(-0.3, 0.3, 7)
+        body = np.array([[x, y, 0.0] for y in g for x in g])
+        bt = []
+        for j in range(6):
+            for i in range(6):
+                a = j * 7 + i
+                bt += [(a, a + 1, a + 7), (a + 1, a + 8, a + 7)]
+        # Overweight lifts the body 1 cm; the gear, 3 mm over it, gets only 0.5 cm from its own deltas
+        m = sfmorph.parse(sfmorph.build(len(body), ["Overweight"], {"Overweight": {i: (0, 0, 0.01)
+                                                                                   for i in range(len(body))}}))
+        gear = np.array([[0, 0, 0.003], [0.05, 0, 0.003], [0, 0.05, 0.003]])
+        d = {"Overweight": {i: (0, 0, 0.005) for i in range(3)}}
+        out, rep = gear_fit.slider_clearance(gear, [(0, 1, 2)], d, body, bt, m)
+        self.assertEqual(rep["Overweight"], 3)
+        self.assertTrue(all(out["Overweight"][i][2] >= 0.01 + gear_fit.SLIDER_GAP - 0.003 - 1e-4 for i in range(3)))

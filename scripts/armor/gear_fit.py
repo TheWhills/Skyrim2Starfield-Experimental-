@@ -656,6 +656,9 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts
+    res.report["_body_tris"] = tris
+    if sf_head_full is not None:
+        res.report["_head_tris"] = np.asarray(sf_head_full[1], int).reshape(-1, 3)
     res.report["_body_binds"] = body_binds
     if sf_head_full is not None:      # the head too: collar parts next to it do not shrink under Thin
         res.report["_head_pts"] = (np.asarray(sf_head_full[0]) - frame[:3, 3]) @ np.linalg.inv(frame[:3, :3]).T
@@ -717,8 +720,46 @@ def near_hands_factor(points: np.ndarray, hand_pts) -> np.ndarray:
     return out
 
 
+SLIDER_GAP = 0.002     # m: gear visible at default stays this far outside the body / head at each slider's extreme
+
+
+def slider_clearance(points, tris, deltas: dict, body_pts, body_tris, body_morph, gap: float = SLIDER_GAP):
+    """deltas ({key: {vertex: delta}}) raised where, with one slider at its extreme, gear that is outside the body
+    and head at default would sink in (2026-11-07, owner: Saadia's straps clipped on heavy and thin bodies, fine at
+    default). Per key: body + its deltas, gear + its deltas; a vertex under gap gets the shortfall along the morphed
+    surface's normal added to its delta. Returns (deltas, {key: vertices raised})."""
+    from fo4sf import gearfit
+    p0 = np.asarray(points, float)
+    bp = np.asarray(body_pts, float)
+    bt = np.asarray(body_tris, int).reshape(-1, 3)
+    _c, d0, dist0 = gearfit.closest_on_mesh(p0, *gearfit.with_normals(bp, bt))
+    outside = (d0 > 0.0005) & (dist0 < 0.15)
+    out, rep = {}, {}
+    for key, dv in deltas.items():
+        bd = np.zeros_like(bp)
+        for v, x in body_morph.deltas.get(key, {}).items():
+            if v < len(bp):
+                bd[v] = x
+        gd = np.zeros_like(p0)
+        for v, x in dv.items():
+            gd[v] = x
+        mb = gearfit.with_normals(bp + bd, bt)
+        _c, dk, distk, nk = gearfit.closest_on_mesh(p0 + gd, *mb, with_normals=True)
+        need = np.where(outside & (dk < gap) & (distk < 0.15), gap - dk, 0.0)
+        fix = nk * need[:, None]
+        if tris is not None and len(tris) and (need > 0).any():
+            st, canon = gearfit.seam_tris(p0, tris)
+            soft = gearfit.with_seams(gearfit.smooth_moves(np.zeros_like(fix), gearfit.with_seams(fix, canon), st,
+                                                           rounds=2), canon)
+            fix = np.where((np.linalg.norm(fix, axis=1) > np.linalg.norm(soft, axis=1))[:, None], fix, soft)
+        gd = gd + fix
+        out[key] = {int(v): tuple(map(float, gd[v])) for v in np.nonzero(np.abs(gd).max(1) > 1e-5)[0]}
+        rep[key] = int((need > 0).sum())
+    return out, rep
+
+
 def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_used=None, stats=None,
-                hand_pts=None, head_pts=None) -> dict:
+                hand_pts=None, head_pts=None, body_tris=None) -> dict:
     """{path: morph.dat bytes} per shape: its vertices move with the nearest body vertices under the sliders. A shape
     written with back faces has its vertices twice (copies after the originals): the copies get the same deltas.
     Deltas over MORPH_MAX are cut to it; stats (a dict) gets morph_stats per shape, before the cut."""
@@ -738,6 +779,14 @@ def morph_files(shapes, nif_rel: str, body_pts, body_morph, doubled=(), skin_use
                 # next to the head (neck) no Thin shrink (2026-11-07, owner: on the thinnest body Farengar's neck
                 # skin came through the collar trim; the head mesh's neck does not shrink with the body's Thin)
                 d["Thin"] = {i: tuple(np.asarray(x) * fh[i]) for i, x in d["Thin"].items()}
+        if body_tris is not None and sh.name != SKIN_SHAPE:
+            d, raised = slider_clearance(np.asarray(sh.positions), sh.triangles, d, body_pts, body_tris, body_morph)
+            for k, v in d.items():                     # packed words for vertices newly given a delta
+                for i in v:
+                    extra.setdefault(k, {}).setdefault(i, (0, 0, 0))
+            if stats is not None:
+                stats[name + " slider clearance"] = {k: {"vertices": n, "max_mm": 0, "not_finite": 0,
+                                                         "over_cap": 0} for k, n in raised.items()}
         if stats is not None:
             stats[name] = morph_stats(d)
         d = capped(d)
@@ -891,6 +940,8 @@ def main(argv=None):
     hand_mesh_pts = rep.pop("_hand_pts", None)
     body_binds_v = rep.pop("_body_binds", None)
     head_mesh_pts = rep.pop("_head_pts", None)
+    body_tris_v = rep.pop("_body_tris", None)
+    head_tris_v = rep.pop("_head_tris", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -990,9 +1041,12 @@ def main(argv=None):
             # heavier and thinner bodies, fine at default: they lie over the female head mesh's neck / chest flap,
             # which follows the head's morph, not the body's)
             src_pts, src_morph = body_pts, body_morph
+            src_tris = body_tris_v
             if head_mesh_pts is not None:
                 hpath, head_morph = find_body_morph(sf_data, len(head_mesh_pts), female)
                 if head_morph is not None:
+                    if head_tris_v is not None and body_tris_v is not None:
+                        src_tris = np.concatenate([body_tris_v, head_tris_v + len(body_pts)])
                     src_pts = np.concatenate([body_pts, head_mesh_pts])
                     src_morph = merged_morph(body_morph, head_morph, len(body_pts))
                     print(f"  slider deltas near the head from {hpath}")
@@ -1000,7 +1054,8 @@ def main(argv=None):
             mstats = {}
             for sh in worn:
                 morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], src_pts, src_morph, doubled,
-                                          skin_used, mstats, hand_mesh_pts, head_mesh_pts))
+                                          skin_used, mstats, hand_mesh_pts, head_mesh_pts,
+                                          src_tris if sh.name != SKIN_SHAPE else None))
             rep["morph_stats"] = mstats
             for n_, st in mstats.items():
                 print(f"  morph {n_}: " + ", ".join(f"{k} {v['vertices']} v max {v['max_mm']} mm"

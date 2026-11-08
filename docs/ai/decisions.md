@@ -2137,3 +2137,7 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   Cause (verified offline): smoothing ran on the mesh as stored, where UV seams are separate vertex copies, so each
   side of a seam was smoothed apart. Detail transfer and final_relax now smooth over seam-joined triangles
   (seam_tris: one vertex per Skyrim position) and copy the result back to the copies; offline the seam and trim close.
+
+## 2026-11-07 — Gear kept outside the body at each slider's extreme (slider_clearance)
+- Owner: straps on Saadia/Ysolda fine at default weight, clip at heavy/thin. Gear deltas were 1/d² blends of body deltas, so where gear sat 1–3 mm over the skin a slider that grows the body faster than its nearest-vertex blend let skin through. (supported — matches in-game reports; synthetic test reproduces it)
+- gear_fit.morph_files now checks each slider key: morphed gear vs morphed body+head. A vertex outside at default (>0.5 mm) that sinks under SLIDER_GAP 2 mm gets the shortfall added along the morphed normal, spread to neighbours over 2 seam-aware rounds. Skin piece exempt. Printed as "<name> slider clearance". (verified by unittest; in-game unresolved)
