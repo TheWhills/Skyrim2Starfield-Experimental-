@@ -34,6 +34,7 @@ def main(argv=None):
     ap.add_argument("--ref", action="append", default=[], help="console FormID (load-order byte ignored)")
     ap.add_argument("--near", type=float, nargs=2, metavar=("X", "Y"), help="console position, metres")
     ap.add_argument("--radius", type=float, default=5.0, help="--near: metres (default 5)")
+    ap.add_argument("--closest", type=int, default=10, help="--near: also list this many closest objects")
     a = ap.parse_args(argv)
     objs = load(os.path.join(a.staging, "objects.json"))
     ids = load(os.path.join(a.staging, "formids.json"))
@@ -55,12 +56,15 @@ def main(argv=None):
         found += 1
     if a.near:
         x, y = a.near
-        near = sorted((math.hypot(r["pos"][0] - x, r["pos"][1] - y), r) for r in refs
-                      if abs(r["pos"][0] - x) <= a.radius and abs(r["pos"][1] - y) <= a.radius)
-        near = [(d, r) for d, r in near if d <= a.radius]
+        dist = sorted(((math.hypot(r["pos"][0] - x, r["pos"][1] - y), i) for i, r in enumerate(refs)))
+        near = [(d, refs[i]) for d, i in dist if d <= a.radius]
         print(f"{len(near)} objects within {a.radius} m of {x}, {y}:")
         for d, r in near:
             print(describe(r, bases, fid_of, d))
+        if len(near) < a.closest:
+            print(f"the {a.closest} closest of all {len(refs):,} objects:")
+            for d, i in dist[:a.closest]:
+                print(describe(refs[i], bases, fid_of, d))
         found += len(near)
     return 0 if found or not (a.ref or a.near) else 1
 
