@@ -331,3 +331,8 @@ Sun path: at the pole (--latlon -1.5707963 0) the owner found the sun's position
 hypothesis: at a pole the sun circles near the horizon instead of rising in the east and setting in the west). With
 the all-ocean biome map (--land-px 0) the pole is no longer needed, so the next test moves the overlay to lat 45 deg N
 (--latlon 0.7853982 0); make_planet.py now warns about a non-pole latitude only when a land disc is used.
+Owner, 2026-11-08, on the installed exterior: the sun "never really gets above you in the sky" (the pole's sun path,
+if the build is still at -1.5707963). `scripts/terrain/set_planet_latlon.py` shows the planet record's master
+worldspace entry (latitude / longitude) and moves it in place (planet plugin in the staging folder, the installed copy
+when it is the same file, overlays_params.json), no rebuild: sea all round needs the all-ocean biome map (installed
+Nirn: --land-px 0). Unresolved: whether the planet template (Jemison) has an axial tilt that also moves the noon sun.

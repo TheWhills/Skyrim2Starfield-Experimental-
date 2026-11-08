@@ -109,3 +109,10 @@ with the comparison (`C:\Modding\work\s2s\riverwood_doors\navmesh\compare.html`)
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh
 ```
+
+Where Skyrim sits on the planet (sun path; show, then move: latitude, longitude in radians; Starfield closed):
+
+```powershell
+python -I scripts\terrain\set_planet_latlon.py --staging C:\Modding\staging\skyrim_all
+python -I scripts\terrain\set_planet_latlon.py --staging C:\Modding\staging\skyrim_all --latlon 0.3 0 --starfield $sf
+```
