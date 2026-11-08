@@ -26,9 +26,13 @@ class WhichRefTests(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(W.main(["--staging", d, "--ref", "0A00A123", "--near", "11", "20", "--radius", "3"]), 0)
                 self.assertEqual(W.main(["--staging", d, "--ref", "FF0185CB"]), 1)
+                with open(os.path.join(d, "overlays_params.json"), "w") as fh:
+                    json.dump({"overlays": [{"spawn": [11.0, 20.0, 400.0]}]}, fh)
+                self.assertEqual(W.main(["--staging", d, "--near", "1", "2", "--spawn-at", "1", "2", "--radius", "1"]), 0)
             text = out.getvalue()
             self.assertIn("roadchunk01.nif", text)
             self.assertIn("1 objects within 3.0 m", text)
+            self.assertIn("-> exterior frame (11.00, 20.00)", text)
             self.assertIn("runtime reference", text)
 
 

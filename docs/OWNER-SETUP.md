@@ -122,8 +122,12 @@ Which converted exterior object is this (console FormID of a clicked object, or 
 
 ```powershell
 python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --ref <FormID>
-python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --near <x> <y> --radius 6
+python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --near <x> <y> --radius 6 --spawn-at 225.70 -627.74
 ```
+
+The game reports positions in the planet's merged grid, not the exterior's own frame: `--spawn-at` is
+`player.getpos x` / `y` right after `coc SKY_TamrielRiverwoodSpawn` (225.70, -627.74 on 2026-11-08; z 184.15 there
+while the exterior's own height is about 382 m). terrain_view.py takes the same `--spawn-at`.
 
 Terrain around a spot (the game's BTD heights vs Skyrim's ground, bumps, objects, water; 2-D map and 3-D view):
 

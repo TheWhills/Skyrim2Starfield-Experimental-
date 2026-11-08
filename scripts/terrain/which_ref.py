@@ -34,6 +34,9 @@ def main(argv=None):
     ap.add_argument("--ref", action="append", default=[], help="console FormID (load-order byte ignored)")
     ap.add_argument("--near", type=float, nargs=2, metavar=("X", "Y"), help="console position, metres")
     ap.add_argument("--radius", type=float, default=5.0, help="--near: metres (default 5)")
+    ap.add_argument("--spawn-at", type=float, nargs=2, metavar=("X", "Y"),
+                    help="player.getpos x / y right after coc SKY_TamrielRiverwoodSpawn: the game reports positions "
+                         "in the planet's merged grid, this gives the shift to the exterior's own frame (as ground_at)")
     ap.add_argument("--closest", type=int, default=10, help="--near: also list this many closest objects")
     a = ap.parse_args(argv)
     objs = load(os.path.join(a.staging, "objects.json"))
@@ -56,6 +59,11 @@ def main(argv=None):
         found += 1
     if a.near:
         x, y = a.near
+        if a.spawn_at:
+            with open(os.path.join(a.staging, "overlays_params.json"), encoding="utf-8") as fh:
+                sx, sy = json.load(fh)["overlays"][0]["spawn"][:2]
+            x, y = x - a.spawn_at[0] + sx, y - a.spawn_at[1] + sy
+            print(f"game ({a.near[0]}, {a.near[1]}) -> exterior frame ({x:.2f}, {y:.2f})")
         dist = sorted(((math.hypot(r["pos"][0] - x, r["pos"][1] - y), i) for i, r in enumerate(refs)))
         near = [(d, refs[i]) for d, i in dist if d <= a.radius]
         print(f"{len(near)} objects within {a.radius} m of {x}, {y}:")
