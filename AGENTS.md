@@ -56,5 +56,6 @@ Optimization is ongoing work, not a one-off. Speed, memory, model/token usage an
 - Live game control (deploy, cycle, input automation) belongs to Claude (handoff). Others don't send game input.
 
 ## Where things are
+- Owner's folders and working commands: docs/OWNER-SETUP.md (read before giving the owner a command; keep it current).
 - Plan and history: docs/PLAN.md, docs/JOURNAL.md, docs/spikes/. Team status: docs/CODEX-HANDOFF.md, #32.
 - Local AI team: docs/ai/ (architecture, decisions, research log, known unknowns, agent status), tools/ai-team/README.md.
