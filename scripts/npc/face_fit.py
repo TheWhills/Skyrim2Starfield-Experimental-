@@ -544,6 +544,10 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.hair and not (a.test_plugin and a.texconv):
         sys.exit("--hair needs --test-plugin and --texconv")
+    if a.beard_map and not a.hairs_plugin:
+        sys.exit("--beard-map works with --hairs-plugin (the NPCs' converted hair / beard): add it")
+    if a.beard_map and not os.path.isfile(a.beard_map):
+        sys.exit(f"--beard-map not found: {a.beard_map}")
     if a.hairs_plugin and a.hair:
         sys.exit("--hairs-plugin and --hair both give the NPCs hair: pick one")
     if a.hairs_plugin and not os.path.isfile(a.hairs_plugin):
