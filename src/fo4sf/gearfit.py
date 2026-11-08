@@ -2201,8 +2201,13 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # sleeves round the top of the upper arm a few mm farther off it (2026-11-08, owner: with the arms down the
             # skin comes through Saadia's sleeve top at the back of the arm by the armpit, "slightly noticed it in the
             # same place in the other outfits")
-            ta, ma = arm_top_gap(pts, w_arm_share(s.bones, s.weights, sf_world, follows), sf_world, gap)
+            share_ = w_arm_share(s.bones, s.weights, sf_world, follows)
+            ta, ma = arm_top_gap(pts, share_, sf_world, gap)
             ma &= ~sky_hidden & ~collar_keep
+            # not where a sleeve joins the body armour (2026-11-08, verified on Ralof's debug meshes: the gap between
+            # his mail sleeves and the tunic grew from 8-14 mm to 13-21 mm when this lift came in, and in game the
+            # sleeve no longer met the body under the arm)
+            ma &= join_keep(share_, np.asarray(s.points, float)) < 0.5
             target = np.where(ma, np.maximum(target, ta), target)
             mask |= ma
         if not skin and sky_clav_z is not None and len(sf_body_pts) and strap_gap > gap:
