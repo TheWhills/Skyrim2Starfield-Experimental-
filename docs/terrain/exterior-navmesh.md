@@ -53,6 +53,10 @@ stay inside their cell.
 * Outdoor triangle height: the median is FLT_MAX (nothing above) (verified); vertex unknown 1, tail (12, 8).
 * NAVI: Starfield.esm's 000FF1 has 56,631 entries; ShatteredSpace.esm overrides the same record with 29,270, i.e.
   its own only, so the game merges overrides (strongly supported). 79 % of vanilla NVMI end 00 00000000.
+  Flags: 0x20 on 54,549 entries, exactly the ones with island data (54,549); the other 2,082 have flags 0 and no
+  island, which is what we write (no island, no traversals). Vanilla also carries 590,922 precomputed traversals
+  (jumps / climbs); ours have none, so converted NPCs walk only. Whether a navmesh without island data paths as well
+  as one with it is unresolved (2,082 vanilla ones do without).
 * Grid bounds are not the vertex bounding box in any of the 400 (unresolved; the survey now records samples, rerun
   with `-Resurvey`).
 * Edge links whose leaving edge is not a full edge of the target triangle: Skyrim's own navmeshes have the same
