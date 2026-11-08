@@ -1345,7 +1345,7 @@ def ring_restore(base: np.ndarray, pts: np.ndarray, tris, centres, band: float =
     b = np.asarray(base, float)
     p = np.asarray(pts, float).copy()
     t = np.asarray(tris, int).reshape(-1, 3)
-    st, canon = seam_tris(b, t)
+    st, canon = seam_tris(b, t, join=False)
     cnt: Dict[Tuple[int, int], int] = {}
     for x, y, z in st:
         for e in ((x, y), (y, z), (z, x)):
@@ -1705,14 +1705,58 @@ def keep_tucked(pts: np.ndarray, sky_gap: np.ndarray, tucked: np.ndarray, body_p
     return p, int((step < -1e-4).sum())
 
 
-def seam_tris(points: np.ndarray, tris, decimals: int = 5) -> np.ndarray:
+def seam_tris(points: np.ndarray, tris, decimals: int = 5, join: bool = True) -> np.ndarray:
     """Triangles re-indexed to one vertex per Skyrim position (UV-seam copies joined), for smoothing across seams
     (2026-11-07, owner: the Skyrim-detail step opened gaps along Ysolda's sleeve seam and at the trim; each side of a
     seam was smoothed on its own). The copies keep the result of the vertex they map to: use with_seams after."""
     key = np.round(np.asarray(points, float), decimals)
     _u, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
     canon = first[inv.reshape(-1)]
-    return canon[np.asarray(tris, int).reshape(-1, 3)], canon
+    st = canon[np.asarray(tris, int).reshape(-1, 3)]
+    if join and len(st):
+        links = part_links(np.asarray(points, float), st, canon)
+        if len(links):
+            st = np.concatenate([st, np.column_stack([links[:, 0], links[:, 1], links[:, 1]])])
+    return st, canon
+
+
+PART_JOIN = 0.012   # m: vertices of separate parts of one shape this close are smoothed together
+
+
+def part_links(points: np.ndarray, st: np.ndarray, canon: np.ndarray, reach: float = PART_JOIN,
+               chunk: int = 512) -> np.ndarray:
+    """[(a, b)] links between each (canonical) vertex and the nearest vertex of another connected part within reach
+    (2026-11-08, verified on Ralof's --debug-steps meshes: his mail sleeves and the tunic are separate parts of one
+    shape; every smoothing step smoothed each part on its own and the gap between them grew from 7 to 20 mm, the
+    detail-transfer step alone from 11 to 20 mm; in game the sleeves stood clear of the tunic)."""
+    p = np.asarray(points, float)
+    n = len(p)
+    par = np.arange(n)
+
+    def find(x):
+        while par[x] != x:
+            par[x] = par[par[x]]
+            x = par[x]
+        return x
+    for x, y, z in st:
+        for u, v in ((x, y), (y, z)):
+            ru, rv = find(u), find(v)
+            if ru != rv:
+                par[ru] = rv
+    used = np.unique(st)
+    comp = np.array([find(i) for i in range(n)])
+    if len(np.unique(comp[used])) < 2:
+        return np.zeros((0, 2), int)
+    q = p[used]
+    cu = comp[used]
+    out = []
+    for c in range(0, len(used), chunk):
+        d2 = ((q[c:c + chunk, None, :] - q[None]) ** 2).sum(-1)
+        d2[cu[c:c + chunk, None] == cu[None, :]] = np.inf
+        j = d2.argmin(1)
+        ok = d2[np.arange(len(j)), j] < reach ** 2
+        out += [(used[c + i], used[j[i]]) for i in np.nonzero(ok)[0]]
+    return np.array(out, int).reshape(-1, 2)
 
 
 def with_seams(arr: np.ndarray, canon: np.ndarray) -> np.ndarray:

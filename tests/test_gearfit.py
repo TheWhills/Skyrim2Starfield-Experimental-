@@ -944,3 +944,24 @@ class JoinKeepTests(unittest.TestCase):
         self.assertTrue(0 < k[2] < 1)
         self.assertEqual(k[3], 0.0)
         self.assertEqual(dict(G.blend_weights([("A", 1.0)], [("B", 1.0)], 0.25)), {"A": 0.25, "B": 0.75})
+
+
+class PartLinkTests(unittest.TestCase):
+    def test_separate_parts_smoothed_together(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        # two strips side by side, 5 mm apart, not joined by any triangle
+        a = np.array([[x, 0.0, 0.0] for x in np.linspace(0, 0.1, 6)] + [[x, 0.01, 0.0] for x in np.linspace(0, 0.1, 6)])
+        b = a + [0, 0.015, 0]
+        pts = np.concatenate([a, b])
+        tris = []
+        for off in (0, 12):
+            for i in range(5):
+                tris += [(off + i, off + i + 1, off + 6 + i), (off + i + 1, off + 7 + i, off + 6 + i)]
+        st, canon = G.seam_tris(pts, tris)
+        moved = pts.copy()
+        moved[12:, 2] += 0.02                                   # the second part moved, the first not
+        sm = G.with_seams(G.smooth_moves(pts, moved, st, rounds=20), canon)
+        self.assertLess(abs(sm[6:12, 2].mean() - sm[12:18, 2].mean()), 0.005)   # the facing rows move together
+        st0, _c = G.seam_tris(pts, tris, join=False)
+        self.assertEqual(len(st0), len(tris))
