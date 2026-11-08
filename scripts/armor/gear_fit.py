@@ -541,6 +541,16 @@ def debug_textures(folder: str, textures: dict, read, texconv: str) -> list:
     return out
 
 
+def armor_by_edid(inv: dict, edids) -> tuple:
+    """([ARMO FormIDs], [not found]) of Skyrim armor records by EditorID (case-insensitive)."""
+    by = {a["edid"].lower(): fid for fid, a in inv["armo"].items() if a.get("edid")}
+    found = [by[e.lower()] for e in edids if e.lower() in by]
+    missing = [f"{e}: no ARMO with this EditorID" for e in edids if e.lower() not in by]
+    if missing and not found:
+        sys.exit("; ".join(missing))
+    return found, missing
+
+
 def shifted(points, deltas: dict) -> np.ndarray:
     """Points moved by a {vertex: (dx, dy, dz)} morph."""
     p = np.asarray(points, float).copy()
@@ -887,7 +897,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
     ap.add_argument("--starfield", required=True)
-    ap.add_argument("--npc", required=True, help="Skyrim NPC EditorID (its default outfit is converted)")
+    ap.add_argument("--npc", required=True, help="Skyrim NPC EditorID (its default outfit is converted; with --armor "
+                                                 "only its race and sex are used)")
+    ap.add_argument("--armor", action="append", default=[],
+                    help="Skyrim armor EditorID to convert instead of the NPC's outfit (repeatable), e.g. "
+                         "ArmorIronCuirass")
     ap.add_argument("--name", required=True, help="file / record name, e.g. Ralof_outfit")
     ap.add_argument("--full", default=None, help="the armor's in-game name")
     ap.add_argument("--out", required=True, help="the mod folder (outside the repository)")
@@ -943,7 +957,12 @@ def main(argv=None):
     esm = os.path.join(a.skyrim_data, "Skyrim.esm")
     o = os_convert.outfit_armor(esm, a.npc)
     female = o["npc"]["female"]
-    meshes = os_convert.worn_meshes(skyrimarmor.read_armor(esm), o["armor"], o["race"], female)
+    inv = skyrimarmor.read_armor(esm)
+    if a.armor:
+        # given armor pieces, worn by the NPC's race and sex, instead of its outfit (2026-11-08, owner: "lets try an
+        # armor now, the iron armor")
+        o["armor"], o["skipped"] = armor_by_edid(inv, a.armor)
+    meshes = os_convert.worn_meshes(inv, o["armor"], o["race"], female)
     if not meshes:
         sys.exit(f"{a.npc}: no worn armor meshes in the default outfit")
     sky = bsa.SkyrimArchives(a.skyrim_data)

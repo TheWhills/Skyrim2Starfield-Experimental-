@@ -51,6 +51,13 @@ Same for `Ralof`, `Ysolda`, `Nazeem` (`--name <NPC>_outfit`, `--debug-dir C:\Mod
 use: `--debug-steps` (the outfit after each fit step, in the zip), `--conform` (new fit method, A/B), `--curved`,
 `--strap-gap <m>` (0 = off), `--round-bust` (female only; looked worse, off).
 
+A Skyrim armor set instead of an NPC's outfit (the NPC only gives race and sex; add it in game with
+`player.additem`, the id is printed at the end):
+
+```powershell
+python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Ralof --armor ArmorIronCuirass --armor ArmorIronGauntlets --armor ArmorIronBoots --armor ArmorIronHelmet --name IronArmor --full "Iron Armor (S2S)" --out $armor --add --debug-dir C:\Modding\work\debug_iron
+```
+
 Test NPCs with their faces, converted hair, Starfield beards and their outfits:
 
 ```powershell

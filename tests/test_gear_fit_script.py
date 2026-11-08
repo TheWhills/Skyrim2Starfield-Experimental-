@@ -458,3 +458,13 @@ class CurvedSubdivideTests(unittest.TestCase):
         key = np.round(cp, 6)
         _u2, cnt = np.unique(np.round(fp, 6), axis=0, return_counts=True)
         self.assertEqual(len(np.unique(key, axis=0)), len(_u2))
+
+
+class ArmorByEdidTests(unittest.TestCase):
+    def test_armor_found_by_editor_id_case_insensitive(self):
+        inv = {"armo": {0x12E49: {"edid": "ArmorIronCuirass"}, 0x12E4B: {"edid": "ArmorIronBoots"}}}
+        found, missing = gear_fit.armor_by_edid(inv, ["armorironcuirass", "ArmorIronBoots", "ArmorNope"])
+        self.assertEqual(found, [0x12E49, 0x12E4B])
+        self.assertEqual(len(missing), 1)
+        with self.assertRaises(SystemExit):
+            gear_fit.armor_by_edid(inv, ["ArmorNope"])
