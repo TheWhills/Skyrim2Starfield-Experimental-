@@ -1304,6 +1304,64 @@ def smooth_pose(rest: np.ndarray, posed: np.ndarray, tris, rounds: int = POSE_RO
     return rest + with_seams(d, canon)
 
 
+CONFORM_SIGMA = 0.04   # m: width of the smooth field of body offsets (conform)
+CONFORM_ROUNDS = 15    # push-and-smooth rounds clearing the body (conform)
+
+
+def conform_field(body_pts: np.ndarray, body_nrm: np.ndarray, off: np.ndarray, pts: np.ndarray,
+                  sigma: float = CONFORM_SIGMA, chunk: int = 512) -> np.ndarray:
+    """The body's change (Skyrim body point -> Starfield body) as one smooth field at the gear's points: a Gaussian
+    (sigma) average over the body points the gear point lies outside of (facing weight), so arms take the arm's change
+    and the chest the chest's (2026-11-08, conform: the whole outfit bent at once, Skyrim's folds and edges kept)."""
+    bp, bn, of = np.asarray(body_pts, float), np.asarray(body_nrm, float), np.asarray(off, float)
+    p = np.asarray(pts, float)
+    out = np.zeros_like(p)
+    if not len(bp):
+        return out
+    for c in range(0, len(p), chunk):
+        q = p[c:c + chunk]
+        d = q[:, None, :] - bp[None]
+        r = np.linalg.norm(d, axis=2)
+        face = np.sqrt(np.clip((d * bn[None]).sum(2) / np.maximum(r, 1e-9), 0.0, 1.0))
+        w = np.exp(-(r / sigma) ** 2) * face
+        w[r > 3 * sigma] = 0.0
+        sw = w.sum(1, keepdims=True)
+        out[c:c + chunk] = np.where(sw > 1e-9, (w @ of) / np.maximum(sw, 1e-12), 0.0)
+    return out
+
+
+def conform_push(pts: np.ndarray, tris, mask: np.ndarray, body_pts: np.ndarray, body_tris, body_nrm: np.ndarray,
+                 gap: float = GAP, rounds: int = CONFORM_ROUNDS, sky_pts=None) -> Tuple[np.ndarray, int]:
+    """Masked points closer to the body than gap pushed out, the push smoothed over the mesh each round (UV seams
+    joined) so the cloth rises round a bump instead of single vertices jumping; a last direct push to FACE_GAP for
+    what is left. Returns (points, vertices moved)."""
+    p = np.asarray(pts, float)
+    t = np.asarray(tris, int).reshape(-1, 3)
+    bt = np.asarray(body_tris, int).reshape(-1, 3)
+    st, canon = seam_tris(np.asarray(sky_pts if sky_pts is not None else p, float), t)
+    e = np.unique(np.sort(np.concatenate([st[:, [0, 1]], st[:, [1, 2]], st[:, [2, 0]]]), 1), axis=0)
+    deg = np.bincount(e.ravel(), minlength=len(p)).astype(float)
+    m = np.asarray(mask, bool)
+    push = np.zeros_like(p)
+    for _ in range(rounds):
+        _c, dep, dist, nrm = closest_on_mesh(p + push, body_pts, bt, body_nrm, with_normals=True)
+        need = np.where(m & (dist < 0.08) & (dep > -0.06), np.maximum(gap - dep, 0.0), 0.0)
+        if need.max() < 5e-4:
+            break
+        push = push + nrm * need[:, None]
+        for _r in range(4):
+            acc = push.copy()
+            np.add.at(acc, e[:, 0], push[e[:, 1]])
+            np.add.at(acc, e[:, 1], push[e[:, 0]])
+            push = acc / (1 + deg)[:, None]
+        push = with_seams(push, canon)
+    out = p + push
+    _c, dep, dist, nrm = closest_on_mesh(out, body_pts, bt, body_nrm, with_normals=True)
+    need = np.where(m & (dist < 0.08) & (dep > -0.06), np.maximum(FACE_GAP - dep, 0.0), 0.0)
+    out = out + nrm * need[:, None]
+    return out, int((np.linalg.norm(out - p, axis=1) > 1e-4).sum())
+
+
 ARM_GAP = 0.008       # m: gear round the top of the upper arm (by the armpit) stays this far off the skin
 ARM_TOP = (0.35, 0.6)  # share of the way shoulder -> elbow: ARM_GAP above the first, GAP past the second
 
@@ -1625,7 +1683,8 @@ def box_fit(src: np.ndarray, dst: np.ndarray, clamp=ENVELOPE_SCALE) -> np.ndarra
 def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.ndarray], sf_body_pts: np.ndarray,
         sf_body_tris: np.ndarray, gap: float = GAP, sf_body_weights=None, size_feet: bool = False,
         weight_src=None, heads=None, collar_anchor=None, head_weights_all: bool = True, shoulders: bool = False, drape_on: bool = False,
-        wrap_on: bool = True, round_bust: bool = False, strap_gap: float = STRAP_GAP) -> FitResult:
+        wrap_on: bool = True, round_bust: bool = False, strap_gap: float = STRAP_GAP,
+        conform: bool = False) -> FitResult:
     """The gear in Starfield skeleton space. sf_body_pts: the Starfield body in skeleton space (metres);
     sf_body_weights: its per-vertex [(Starfield bone name, weight)] (feet box fit; None skips it). weight_src:
     (points, triangles, weights) gear near it takes its weights from instead of the body surface (the whole head as
@@ -1761,7 +1820,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 if covers is not None:
                     under[hi_] = sky_tucked[hi_]
                 sky_hidden &= under
-        shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
+        if conform and not skin:
+            shift = conform_field(bp, bn, off, pts) if len(bp) else np.zeros_like(pts)
+        else:
+            shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
         bust = np.zeros(len(pts), bool)
         if round_bust and sf_clav_z is not None and len(sf_body_pts) and not skin:
             # the front of the chest keeps Skyrim's rounder shape where Starfield's bust is smaller: not carried
@@ -1776,7 +1838,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         pts = pts + shift
         steps_[s.name.decode("latin-1", "replace")]['1_shift'] = np.array(pts, float).copy()
         pulled = 0
-        if not skin and sky_gap is not None and len(sf_body_pts):
+        if not skin and sky_gap is not None and len(sf_body_pts) and not conform:
             # not round the neck (2026-11-07, measured: pulling the cowl to its Skyrim gap from the nearest surface
             # drew it 2-3 cm in onto Starfield's neck, a tube up the neck where Skyrim's slopes out over the shoulders)
             kg = sky_gap if sky_clav_z is None else np.where(np.asarray(s.points)[:, 2] > sky_clav_z, np.inf, sky_gap)
@@ -1784,12 +1846,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts, pulled = keep_gap(pts, kg, sf_body_pts, sf_body_tris, sf_nrm, gap)
         steps_[s.name.decode("latin-1", "replace")]['2_keep_gap'] = np.array(pts, float).copy()
         pushed = 0
-        if len(sf_body_pts):
+        if conform and not skin and len(sf_body_pts):
+            # conform: out of the body with the push spread smoothly; what Skyrim hid stays where the bend put it
+            pts, pushed = conform_push(pts, s.triangles, ~sky_tucked & ~sky_hidden, sf_body_pts, sf_body_tris,
+                                       sf_nrm, gap, sky_pts=s.points)
+        elif len(sf_body_pts):
             # skin pieces too, closer: Skyrim paints clothes on body-textured parts (Stormcloak trousers)
             pts, pushed = push_out(pts, sf_body_pts, sf_nrm, SKIN_GAP if skin else gap,
                                    tris=np.asarray(sf_body_tris, int).reshape(-1, 3))
         covered = 0
-        if not skin and len(sf_body_pts):
+        if not skin and len(sf_body_pts) and not conform:
             before_cover = pts
             pts, covered = cover(pts, nrm, s.triangles, sf_body_pts, sf_nrm, gap)
             hang = skirt_weighted(s.bones, s.weights)
@@ -1813,7 +1879,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                             scale=rep.get("global_scale", 1.0))
                 pts = smooth_moves(pts, hung_pts, s.triangles, rounds=2)
                 pts[hang_mask] = hung_pts[hang_mask]
-        if not skin and RELAX_ROUNDS and len(sf_body_pts):
+        if not skin and RELAX_ROUNDS and len(sf_body_pts) and not conform:
             # the moves of all the steps above, smoothed hard over the mesh, then out of the body once more
             # (2026-11-07, owner: the cloth lines of the texture, smooth curves in Skyrim, wiggled in Starfield: each
             # step moved single vertices)
@@ -1926,7 +1992,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                np.asarray(s.points)[:, 2] > sky_clav_z)
             if len(st_):
                 neck_stretch = [round(float(np.percentile(st_, q)), 2) for q in (10, 50, 90)]
-        if not skin and DETAIL_ROUNDS and len(pts):
+        if not skin and DETAIL_ROUNDS and len(pts) and not conform:
             # Skyrim's own surface detail back (2026-11-07, owner comparing Saadia's dress with Skyrim's: the bust
             # mangled, the strap's path and the shape over the arm different; checked offline on his debug meshes:
             # the fit's smooth placement plus Skyrim's detail matched Skyrim's bust, lacing and straps). The detail
@@ -1942,7 +2008,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             fixed = skirt_weighted(s.bones, s.weights) | collar_keep
             pts = np.where(fixed[:, None], pts, new_pts)
         steps_[s.name.decode("latin-1", "replace")]['5_detail'] = np.array(pts, float).copy()
-        if not skin and FINAL_ROUNDS and len(sf_body_pts):
+        if not skin and FINAL_ROUNDS and len(sf_body_pts) and not conform:
             keep_out = ~sky_hidden
             keep_out &= ~collar_keep
             st2, canon2 = seam_tris(s.points, s.triangles)

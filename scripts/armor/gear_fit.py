@@ -585,7 +585,8 @@ def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_
 def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = gearfit.GAP, skin_names=(),
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
         head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
-        round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False):
+        round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False,
+        conform: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -644,7 +645,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     collar_anchor = (c_sky, c_sf) if c_sky is not None and c_sf is not None else None
     res = gearfit.fit(gear, sky_body, world, surf_pts, surf_tris, gap, sf_body_weights=surf_w, size_feet=size_feet,
                       collar_anchor=collar_anchor, head_weights_all=head_weights, round_bust=round_bust,
-                      strap_gap=strap_gap,
+                      strap_gap=strap_gap, conform=conform,
                       weight_src=weight_src,
                       heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
@@ -919,6 +920,9 @@ def main(argv=None):
                          f"{gearfit.STRAP_GAP} on female outfits, off on male ones; 0 = the normal --gap)")
     ap.add_argument("--debug-steps", action="store_true",
                     help="with --debug-dir: also the gear after each group of fit steps (fit_<shape>@step<n>.obj)")
+    ap.add_argument("--conform", action="store_true",
+                    help="new fit: bend the whole outfit by a smooth field of the body's change, then push it out of "
+                         "the body smoothly (keeps Skyrim's folds and edges); the collar steps and the rest stay")
     ap.add_argument("--curved", action="store_true",
                     help="split low-poly gear into a rounded surface (Phong tessellation) instead of flat triangles")
     ap.add_argument("--round-bust", action="store_true",
@@ -975,7 +979,8 @@ def main(argv=None):
                                            for m in meshes),
                              whole_skin=a.whole_skin, round_bust=a.round_bust and female,
                              strap_gap=(a.strap_gap if a.strap_gap is not None else
-                                        (gearfit.STRAP_GAP if female else 0.0)), curved=a.curved)
+                                        (gearfit.STRAP_GAP if female else 0.0)), curved=a.curved,
+                             conform=a.conform)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)

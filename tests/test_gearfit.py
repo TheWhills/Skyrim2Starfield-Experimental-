@@ -304,6 +304,11 @@ class FitTests(unittest.TestCase):
         back = (lp[:, 1] < -0.14) & (lp[:, 2] < 1.15)
         self.assertGreaterEqual(r_out[front].mean(), r_in[front].mean() - 1e-3)   # never drawn in further
         self.assertAlmostEqual(r_out[back].mean(), r_in[back].mean(), places=2)  # the back about as without it
+        # conform: the whole cloth bent by the body's change, out of the body, Skyrim's ripple kept
+        rc = np.asarray(G.fit([rg], [body], world, sp, np.array(st), conform=True).shapes[0].positions)
+        r7 = np.linalg.norm(rc[:, :2], axis=1)
+        self.assertGreater(r7[mid].min(), 0.13 * np.cos(np.pi / 16) + G.FACE_GAP - 1e-3)   # (the body tube is faceted)
+        self.assertGreater(np.corrcoef(r7[mid], np.cos(4 * a_[mid]))[0, 1], 0.5)
         # heads given: chin_clearance is not part of the fit any more (it dropped the cowl's back)
         top = gp[:, 2].max()
         cap = lambda z: (np.array([[-1, -1, z], [1, -1, z], [0, 1, z]]), [(0, 1, 2)])   # noqa: E731
