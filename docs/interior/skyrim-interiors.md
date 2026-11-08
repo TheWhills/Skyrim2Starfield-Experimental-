@@ -245,3 +245,8 @@ Owner's one command: `tools\owner\riverwood_doors.ps1` (batch, convert --resume,
 **Verified in game (owner, 2026-11-08):** with `tools\owner\riverwood_doors.ps1` (three PluginSpike fixes on the way:
 no Landscape on Starfield cells, master styles to read the exterior plugins, an explicit load order to write) the owner
 walked from Riverwood into the Sleeping Giant Inn and back out through the linked doors.
+
+## Pathing registration (2026-11-08)
+tes4skyrim found that Skyrim's pathfinder ignores navmeshes not listed in the NAVI record and treats load doors without
+XNDP as no pathing node; our interior navmeshes had neither. PluginSpike now writes both for every navmesh it writes
+(docs/terrain/exterior-navmesh.md "What tes4skyrim found"). `$env:NAVI="off"` leaves the NAVI out. Unresolved in game.

@@ -23,7 +23,9 @@ from . import terrain_grid as tg
 UNITS = 70.0                     # Skyrim units per metre (the repo's object scale)
 SKY_CELL = 4096.0
 FLT_MAX = 3.4028234663852886e38  # vanilla interior triangles with nothing above them have this height (survey)
-GRID_ORDERS = ("yx", "xy")       # grid cell index = row * divisor + column; "yx": rows along y (unverified: survey)
+GRID_ORDERS = ("yx", "xy")       # grid cell index = row * divisor + column; "yx": rows along y (Skyrim: verified by
+                                 # tes4skyrim on 300 Skyrim.esm navmeshes; Starfield: navmesh_survey.py --exterior)
+LINK_PORTAL = 0                  # edge-link type of a seam between navmeshes (0 Portal, 1 Ledge Up, 2 Ledge Down)
 
 
 # ------------------------------------------------------------------------------------------------------------ reading
@@ -107,9 +109,29 @@ def centroid(verts, tri):
 
 
 # ------------------------------------------------------------------------------------------------------------ grid
+def tri_overlaps_rect(xs, ys, x0, y0, x1, y1) -> bool:
+    """Does the triangle (plan view) overlap the rectangle? Touching counts. Separating axes: the rectangle's two and
+    the triangle's three edge normals."""
+    if max(xs) < x0 or min(xs) > x1 or max(ys) < y0 or min(ys) > y1:
+        return False
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    for k in range(3):
+        ax, ay = xs[k], ys[k]
+        nx, ny = ys[(k + 1) % 3] - ay, ax - xs[(k + 1) % 3]
+        inner = nx * (xs[(k + 2) % 3] - ax) + ny * (ys[(k + 2) % 3] - ay)
+        if inner == 0:
+            continue                                    # degenerate triangle: no axis from this edge
+        if all((nx * (px - ax) + ny * (py - ay)) * inner < 0 for px, py in corners):
+            return False
+    return True
+
+
 def build_grid(verts, tris, divisor: int, order: str = "yx") -> Dict:
     """The navmesh search grid: the vertices' bounding box split into divisor x divisor cells, each listing (in order)
-    the triangles whose bounding box overlaps it. order "yx": index = row (y) * divisor + column (x); "xy" the other."""
+    every triangle that overlaps it. The game looks only in the grid cell under a point, so a triangle missing from a
+    cell it covers is not found there (tes4skyrim, docs/reference/navmesh_engine_contracts.md: Skyrim lists each
+    triangle in every cell it truly overlaps; that rule reproduced 91,109 of 91,574 vanilla lists).
+    order "yx": index = row (y) * divisor + column (x); "xy" the other."""
     divisor = max(1, int(divisor))
     if not verts:
         return {"divisor": divisor, "size": (0.0, 0.0), "bounds": (0.0,) * 6, "cells": [[] for _ in range(divisor ** 2)]}
@@ -127,10 +149,14 @@ def build_grid(verts, tris, divisor: int, order: str = "yx") -> Dict:
 
     for ti, t in enumerate(tris):
         p = [verts[i] for i in t["v"]]
-        x0, x1 = span(min(q[0] for q in p), max(q[0] for q in p), b[0], sx)
-        y0, y1 = span(min(q[1] for q in p), max(q[1] for q in p), b[1], sy)
+        txs, tys = [q[0] for q in p], [q[1] for q in p]
+        x0, x1 = span(min(txs), max(txs), b[0], sx)
+        y0, y1 = span(min(tys), max(tys), b[1], sy)
         for iy in range(y0, y1 + 1):
             for ix in range(x0, x1 + 1):
+                if sx > 0 and sy > 0 and not tri_overlaps_rect(txs, tys, b[0] + ix * sx, b[1] + iy * sy,
+                                                               b[0] + (ix + 1) * sx, b[1] + (iy + 1) * sy):
+                    continue
                 cells[iy * divisor + ix if order == "yx" else ix * divisor + iy].append(ti)
     return {"divisor": divisor, "size": (sx, sy), "bounds": b, "cells": cells}
 
@@ -147,23 +173,22 @@ def grid_agreement(sf: Dict, order: str) -> float:
     return len(a & b) / max(1, len(a | b))
 
 
-def piece_divisor(divisor: int, part: int, whole: int) -> int:
-    """A smaller divisor for a piece holding `part` of the navmesh's `whole` triangles (same triangles per grid cell)."""
-    if whole <= 0:
-        return max(1, divisor)
-    return max(1, min(divisor, int(math.ceil(divisor * math.sqrt(part / whole)))))
+def piece_divisor(divisor: int, cell_size, piece_span) -> int:
+    """Divisor for a piece of a navmesh: grid cells as large as the source navmesh's (cell_size = its grid's (x, y)
+    size), over the piece's (x, y) span; at least 1, at most the source's divisor."""
+    want = max((s / c) if c > 0 else 1.0 for s, c in zip(piece_span, cell_size))
+    return max(1, min(max(1, int(divisor)), int(round(want))))
 
 
 # ------------------------------------------------------------------------------------------------------------ split
-def split_to_cells(navs: List[Dict], split: bool = True, order: str = "yx", link_type: Optional[int] = None) -> Dict:
+def split_to_cells(navs: List[Dict], split: bool = True, order: str = "yx", link_type: int = LINK_PORTAL) -> Dict:
     """navs: [{formkey, geometry}] (Starfield frame, Skyrim units). Returns {"navmeshes": [{key, cell, source,
     geometry}], "stats"}: one navmesh per (source navmesh, Starfield cell of its triangles' centres); with split=False
     each navmesh goes whole to the cell of its vertices' bounding-box centre. Edge links are re-pointed at the pieces,
     links to navmeshes not in `navs` are cut (edge opened), an inner edge between two pieces becomes a pair of links
-    (type `link_type`, default the most common type of the existing links). Door links follow their triangle."""
+    of `link_type` (Portal, the type of Skyrim's own cell-seam links). Door links follow their triangle."""
     by_key = collections.OrderedDict((n["formkey"], n["geometry"]) for n in navs)
-    types = collections.Counter(l["type"] for g in by_key.values() for l in g["edge_links"])
-    lt = link_type if link_type is not None else (types.most_common(1)[0][0] if types else 0)
+    lt = link_type
     cell_of = {}
     for k, g in by_key.items():
         V = g["vertices"]
@@ -240,7 +265,8 @@ def split_to_cells(navs: List[Dict], split: bool = True, order: str = "yx", link
         if whole:
             grid = g["grid"]
         else:
-            grid = build_grid(verts, tris, piece_divisor(g["grid"]["divisor"], len(tlist), len(g["triangles"])), order)
+            span = (max(v[0] for v in verts) - min(v[0] for v in verts), max(v[1] for v in verts) - min(v[1] for v in verts))
+            grid = build_grid(verts, tris, piece_divisor(g["grid"]["divisor"], g["grid"]["size"], span), order)
         geo = dict(g, vertices=verts, triangles=tris, edge_links=links, door_links=doors, grid=grid)
         out.append({"key": pk, "cell": [c[0], c[1]], "source": k, "geometry": geo})
     return {"navmeshes": out, "stats": stats}
@@ -357,3 +383,72 @@ def read_starfield_exterior(esm: str, limit: Optional[int] = None):
                     n += 1
                     if limit is not None and n >= limit:
                         return
+
+
+# ------------------------------------------------------------------------------------------------------------ NAVI
+def parse_nvmi(d: bytes) -> Dict:
+    """One Starfield NVMI (navmesh info, in the NAVI record; xEdit wbDefinitionsSF1): navmesh, flags, approx location,
+    preferred %, edge-link navmeshes, preferred edge links, door links, traversals, optional island data, pathing cell
+    (world + grid Y, X, or 0 + cell), then one unknown byte and a u32-counted array ("tail")."""
+    r = skyrimnavmesh._R(bytes(d))
+    nav, flags = r.take("II")
+    loc = r.take("3f")
+    pref, = r.take("f")
+    edges = [r.take("I")[0] for _ in range(r.count())]
+    preferred = [r.take("I")[0] for _ in range(r.count())]
+    doors = [r.take("II") for _ in range(r.count())]
+    trav = [r.take("III3f3f3fIII") for _ in range(r.count())]
+    island, = r.take("B")
+    if island:
+        r.take("6f")
+        for _ in range(r.count()):
+            r.take("3H")
+        for _ in range(r.count()):
+            r.take("3f")
+    crc, world = r.take("II")
+    if world:
+        gy, gx = r.take("hh")
+        parent = {"world": world, "grid": (gx, gy)}
+    else:
+        parent = {"cell": r.take("I")[0]}
+    tail = bytes(r.d[r.p:])
+    return {"navmesh": nav, "flags": flags, "location": loc, "preferred_pct": pref, "edge_links": edges,
+            "preferred_edge_links": preferred, "door_links": doors, "traversals": len(trav), "island": bool(island),
+            "crc": crc, "parent": parent, "tail": tail.hex()}
+
+
+def iter_records(esm: str, types):
+    """Yield (type, form id, record flags, subrecords list) for every record of the given types, anywhere in the file
+    (top-level groups and nested world / cell children)."""
+    types = set(types)
+    with fo4land.Plugin(esm) as p:
+        stack = [(p.body, len(p.buf))]
+        while stack:
+            start, end = stack.pop()
+            for it in fo4land.iter_items(p.buf, start, end):
+                if it[0] == "GRUP":
+                    stack.append((it[1] + 24, it[2]))
+                    continue
+                typ, off, flags, fid = it
+                if typ in types:
+                    yield typ, fid, flags, [(sig, bytes(d)) for sig, d in
+                                            fo4land.iter_subrecords(fo4land.record_data(p.buf, off))]
+
+
+def read_navi(esm: str) -> List[Dict]:
+    """The NAVI records of a Starfield plugin: [{form, version, infos: [parse_nvmi or {"error"}], has_nvpp}]."""
+    out = []
+    for _typ, fid, _flags, subs in iter_records(esm, (b"NAVI",)):
+        rec = {"form": fid, "version": None, "infos": [], "has_nvpp": False}
+        for sig, d in subs:
+            if sig == b"NVER" and len(d) >= 4:
+                rec["version"] = struct.unpack_from("<I", d)[0]
+            elif sig == b"NVMI":
+                try:
+                    rec["infos"].append(parse_nvmi(d))
+                except skyrimnavmesh.NavmeshError as ex:
+                    rec["infos"].append({"error": str(ex)})
+            elif sig == b"NVPP":
+                rec["has_nvpp"] = True
+        out.append(rec)
+    return out

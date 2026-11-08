@@ -80,6 +80,8 @@ class SplitTests(unittest.TestCase):
         self.assertEqual(len(got[n1 + "@0,0"]["geometry"]["triangles"]), 4)
         s = res["stats"]
         self.assertEqual((s["links_cut"], s["links_added"], s["links_kept"], s["doors"]), (1, 2, 2, 1))
+        seam = [l for l in got[n1 + "@0,0"]["geometry"]["edge_links"] if l["navmesh"] == n1 + "@1,0"]
+        self.assertEqual([l["type"] for l in seam], [E.LINK_PORTAL])
         # the door stays on its triangle (3, first piece); the outside link is an open edge now
         self.assertEqual(got[n1 + "@0,0"]["geometry"]["door_links"][0]["triangle"], 3)
         t1 = got[n1 + "@0,0"]["geometry"]["triangles"][1]
@@ -127,7 +129,12 @@ class SplitTests(unittest.TestCase):
         sf = {"vertices": [v + (0,) for v in verts], "triangles": tris, "grid": E.build_grid(verts, tris, 2, "xy")}
         self.assertEqual(E.grid_agreement(sf, "xy"), 1.0)
         self.assertLess(E.grid_agreement(sf, "yx"), 1.0)
-        self.assertEqual(E.piece_divisor(8, 25, 100), 4)
+        self.assertEqual(E.piece_divisor(8, (10.0, 10.0), (40.0, 20.0)), 4)     # same 10-unit grid cells
+        # exact overlap, not the bounding box: the north-east half-square's bbox covers the south-west quarter, the
+        # triangle does not (its long edge x + y = 110 passes the quarter's corner at 50, 50)
+        half = [(0, 0, 0), (10, 100, 0), (100, 100, 0), (100, 10, 0)]
+        g = E.build_grid(half, [{"v": (1, 2, 3)}], 2, "yx")["cells"]
+        self.assertEqual(g, [[], [0], [0], [0]])
 
 
 def skyrim_esm(path):
@@ -141,6 +148,15 @@ def skyrim_esm(path):
         cell, grup(0x500, 6, [grup(0x500, 9, navs)])])])])])
     with open(path, "wb") as fh:
         fh.write(tes4 + body)
+
+
+def nvmi(nav, world, grid, edges, doors, tail=b"\0\0\0\0\0"):
+    """A Starfield NVMI body (xEdit SF1 layout) as PluginSpike writes it."""
+    out = struct.pack("<II3ff", nav, 0, 1.0, 2.0, 3.0, 0.0)
+    out += struct.pack("<I", len(edges)) + b"".join(struct.pack("<I", e) for e in edges) + struct.pack("<I", 0)
+    out += struct.pack("<I", len(doors)) + b"".join(struct.pack("<II", N.PATHING_DOOR, d) for d in doors)
+    out += struct.pack("<IB", 0, 0) + struct.pack("<IIhh", N.PATHING_CELL, world, grid[1], grid[0])
+    return out + tail
 
 
 def starfield_plugin(path, export, ids):
@@ -160,7 +176,19 @@ def starfield_plugin(path, export, ids):
     for i, (xy, navs) in enumerate(sorted(cells.items())):
         cf = 0x05000700 + i
         items += [rec(b"CELL", cf, [(b"XCLC", struct.pack("<iiI", xy[0], xy[1], 0))]), grup(cf, 6, [grup(cf, 9, navs)])]
-    body = grup(b"WRLD", 0, [world, grup(0x01000800, 1, [grup(0, 4, [grup(0, 5, items)])])])
+    # NAVI: one entry per navmesh; a load door with XNDP at the door's triangle
+    infos = []
+    for n in export["navmeshes"]:
+        g = n["geometry"]
+        infos.append((b"NVMI", nvmi(ids[n["key"]], 0x01000800, n["cell"],
+                                    sorted({ids[l["navmesh"]] for l in g["edge_links"]} - {ids[n["key"]]}),
+                                    [0x05000900] * bool(g["door_links"]))))
+        if g["door_links"]:
+            xndp = struct.pack("<Ihh", ids[n["key"]], g["door_links"][0]["triangle"], 0)
+    navi = grup(b"NAVI", 0, [rec(b"NAVI", 0x00000ABC, [(b"NVER", struct.pack("<I", 12))] + infos)])
+    door = rec(b"REFR", 0x05000900, [(b"NAME", struct.pack("<I", 0x123)), (b"XTEL", b"\0" * 36), (b"XNDP", xndp)])
+    items.append(door)
+    body = navi + grup(b"WRLD", 0, [world, grup(0x01000800, 1, [grup(0, 4, [grup(0, 5, items)])])])
     with open(path, "wb") as fh:
         fh.write(tes4 + body)
 
@@ -205,6 +233,10 @@ class ScriptTests(unittest.TestCase):
             h = rep["height_above_terrain_m"]
             self.assertAlmostEqual(h["ours"]["median"], h["skyrim"]["median"], places=3)
             self.assertTrue(os.path.getsize(os.path.join(work, "compare.html")) > 1000)
+            pth = rep["pathing"]
+            self.assertEqual((pth["navi"]["ours_listed"], pth["navi"]["mismatch"]), (3, 0))
+            self.assertEqual((pth["xndp"]["load_doors"], pth["xndp"]["to_door_triangle"]), (1, 1))
+            self.assertEqual(pth["xndp"]["navmeshes_without_navi"], 0)
 
     def test_survey_exterior(self):
         import navmesh_survey as S
@@ -235,6 +267,8 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(rep["outside_own_cell"]["navmeshes_over_5pct"], 0)
             self.assertEqual(dflt["tail"], [12, 8])
             self.assertIn(dflt["grid_order"], E.GRID_ORDERS)
+            navi = rep["navi"]["Starfield.esm"][0]
+            self.assertEqual((navi["entries"], navi["crc_ok"], navi["exterior"], navi["tails"]), (3, 3, 3, [["0000000000", 3]]))
 
 
 if __name__ == "__main__":

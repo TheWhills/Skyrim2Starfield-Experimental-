@@ -19,6 +19,23 @@ installed exterior: the navmeshes go into FO4Port.esm, in overrides of the exter
   and `navmesh_defaults_exterior.json` (fields Skyrim lacks, triangle height outdoors, grid order).
 * Owner: `tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh` (survey once, export, build, compare, install).
 
+## What tes4skyrim found for Skyrim (owner's pointer, 2026-11-08)
+bryantmh/tes4skyrim converts Oblivion's / Morrowind's pathing into Skyrim navmeshes and read the rules out of Skyrim's
+pathfinder (its docs/reference/navmesh_engine_contracts.md and docs/commentary/tes5_import_navmesh.md; method only,
+no code copied). What we took:
+* **NAVI registration.** The pathfinder uses a navmesh only if it is listed in the Navmesh Info Map: one NAVI record in
+  the master that every plugin (and DLC) overrides with entries for its own navmeshes, the game merging them. Each NVMI
+  lists the navmeshes its edge links name (self excluded), its door triangles' doors, its pathing cell, a centre.
+  Without it no NPC paths at all, even inside one connected navmesh. **Our interior navmeshes never had this.**
+  PluginSpike now overrides Starfield.esm's NAVI (NVER and NVPP kept) with one NVMI per navmesh, interiors and exterior.
+* **XNDP on load doors** (door -> the navmesh triangle in front of it): without it a load door is not a pathing node and
+  an NPC never goes through it. 99 % of Skyrim's teleport doors carry it (ours: Starfield 576 of 619). Now set on every
+  load door of ours that a navmesh's door triangle names.
+* **The search grid**: row-major with rows along Y; a triangle is listed in every grid cell it truly overlaps (not its
+  bounding box, not only its centre's cell). `build_grid` now does that.
+* Cell-seam edge links are type 0 (Portal) and reciprocal; the split's seam links are Portal.
+* Lookup: the game searches the navmeshes of the cell the point is in, so a navmesh's triangles belong in its cell.
+
 ## Why split
 A Skyrim cell is 58.5 m, a Starfield cell 100 m, so most Skyrim navmeshes straddle 2-4 Starfield cells. A navmesh
 belongs to one cell (its parent), and the game presumably looks for an actor's triangle in the navmeshes of the cell
@@ -37,8 +54,12 @@ stay inside their cell.
   checks vanilla navmeshes (`parent_grid_vs_xclc`).
 * Triangle height outdoors (interiors: the clear space above, median 4.63 m; FLT_MAX = nothing above): the survey's
   median for exterior navmeshes, else FLT_MAX.
-* NAVI (navmesh info map): not written, as for the interiors. If NPCs walk within a cell but will not path across
-  cells, NAVI is the next thing to try.
+* NAVI merge: we override Starfield.esm's NAVI with entries for our navmeshes only, relying on the game merging the
+  overrides as Skyrim's does. If Starfield took only the winning override, vanilla pathing would break while FO4Port.esm
+  is loaded. The survey's `navi` section (with `--navi-esm ShatteredSpace.esm`) shows whether the DLC's own override
+  carries only its own entries (then the game must merge). `$env:NAVI="off"` builds without it.
+* The NVMI tail (one byte and a u32-counted array after the pathing cell) is copied from Starfield's most common one,
+  read from Starfield.esm at build time.
 * In game: a spawned NPC told to walk (`<ref>.pathtoreference player 1`) across Riverwood, over a cell line.
 
 ## What compare reports

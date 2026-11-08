@@ -12,7 +12,9 @@ export   the NAVM records of the Skyrim cells around --around, moved into the ex
 compare  reads the navmeshes back out of the built plugin and Skyrim's again: vertex offsets against Skyrim's (moved into
          the frame), triangle counts, parent cell (the navmesh's grid against its CELL's XCLC), triangles outside
          their cell, edge links that do not meet the triangle they name, door links, the height above the terrain
-         (Skyrim's LAND + height_offset_m, which the exterior's BTD is built from) on both sides
+         (Skyrim's LAND + height_offset_m, which the exterior's BTD is built from) on both sides; and the pathing
+         registration: each navmesh's NAVI entry (present, same parent / edge-link navmeshes / doors as its NVNM)
+         and each load door's XNDP (names a navmesh triangle that lists that door)
          -> <work>/compare.json and <work>/compare.html (top-down: Skyrim's navmesh, ours, the cell grids, problems).
 Everything this writes stays outside the repo (derived game data).
 """
@@ -21,6 +23,7 @@ import html
 import json
 import math
 import os
+import struct
 import sys
 import time
 
@@ -158,6 +161,7 @@ def cmd_compare(a):
     sky, _bad = en.read_skyrim(a.skyrim, a.world_edid, rect)
     sky_moved = {n["formkey"]: en.frame_shift(n["geometry"], origin, hoff) for n in sky}
     ours = {}
+    raw = {}                    # our key -> (navmesh FormID, parent, edge-link FormIDs, door FormIDs, door triangles)
     parent_bad, parse_bad = [], []
     for r in en.read_starfield_exterior(a.plugin):
         key = key_of.get(r["navmesh"] & 0xFFFFFF, f"{r['navmesh']:08X}")
@@ -168,6 +172,8 @@ def cmd_compare(a):
         par = nm["parent"]
         if "grid" not in par or tuple(par["grid"]) != tuple(r["cell_xy"] or ()):
             parent_bad.append({"navmesh": key, "parent": par.get("grid"), "cell_xclc": r["cell_xy"]})
+        raw[key] = (r["navmesh"], par, {l["navmesh"] for l in nm["edge_links"]} - {r["navmesh"]},
+                    {d["door"] for d in nm["door_links"]}, {(d["door"], d["triangle"]) for d in nm["door_links"]})
         for l in nm["edge_links"]:
             l["navmesh"] = key_of.get(l["navmesh"] & 0xFFFFFF, f"{l['navmesh']:08X}")
         ours[key] = dict(nm, cell=r["cell_xy"])
@@ -203,6 +209,7 @@ def cmd_compare(a):
                        "plugin": sum(len(g["door_links"]) for g in ours.values())},
         "height_above_terrain_m": {"skyrim": dist([h / U for h in sky_h]), "ours": dist([h / U for h in our_h])},
     }
+    rep["pathing"] = pathing_checks(a.plugin, raw)
     with open(os.path.join(a.work, "compare.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)
     write_html(os.path.join(a.work, "compare.html"), sky_moved, ours_u, rep, rect, origin)
@@ -214,8 +221,68 @@ def cmd_compare(a):
           f"{rep['edge_links']['skyrim']['mismatch']}; door links {rep['door_links']['skyrim']} / "
           f"{rep['door_links']['plugin']}; height above ground median Skyrim "
           f"{(rep['height_above_terrain_m']['skyrim'] or {}).get('median')} m, ours "
-          f"{(rep['height_above_terrain_m']['ours'] or {}).get('median')} m -> {a.work}\\compare.html")
+          f"{(rep['height_above_terrain_m']['ours'] or {}).get('median')} m; NAVI entries "
+          f"{rep['pathing']['navi']['ours_listed']} / {len(raw)} (wrong {rep['pathing']['navi']['mismatch']}); load doors "
+          f"with XNDP to a door triangle {rep['pathing']['xndp']['to_door_triangle']} / {rep['pathing']['xndp']['load_doors']} "
+          f"-> {a.work}\\compare.html")
     return 0
+
+
+def pathing_checks(plugin, raw):
+    """NAVI entries and load-door XNDP of the built plugin against its navmeshes (raw FormIDs as written)."""
+    navi = en.read_navi(plugin)
+    infos = {i["navmesh"]: i for r in navi for i in r["infos"] if "error" not in i}
+    by_id = {v[0]: k for k, v in raw.items()}
+    listed, mismatch, examples = 0, 0, []
+    for key, (fid, par, edges, doors, _dt) in raw.items():
+        i = infos.get(fid)
+        if i is None:
+            continue
+        listed += 1
+        problems = []
+        if i["parent"] != ({"world": par["world"], "grid": tuple(par["grid"])} if "grid" in par else par):
+            problems.append(f"parent {i['parent']} vs NVNM {par}")
+        if set(i["edge_links"]) | set(i["preferred_edge_links"]) != edges:
+            problems.append(f"edge links {len(i['edge_links'])} vs NVNM {len(edges)} navmeshes")
+        if {d for _c, d in i["door_links"]} != doors:
+            problems.append(f"doors {len(i['door_links'])} vs NVNM {len(doors)}")
+        if i["crc"] != skyrimnavmesh.PATHING_CELL:
+            problems.append(f"pathing cell CRC {i['crc']:08X}")
+        if problems:
+            mismatch += 1
+            if len(examples) < 10:
+                examples.append({"navmesh": key, "problems": problems})
+    door_tris, all_navs = {}, set()           # every navmesh of the plugin (interiors too): door -> (navmesh, triangle)
+    for _t, nfid, _flags, subs in en.iter_records(plugin, (b"NAVM",)):
+        data = next((d for sig, d in subs if sig == b"NVNM"), None)
+        try:
+            nm = skyrimnavmesh.parse_starfield(data or b"")
+        except skyrimnavmesh.NavmeshError:
+            continue
+        all_navs.add(nfid)
+        for dl in nm["door_links"]:
+            door_tris.setdefault(dl["door"], set()).add((nfid, dl["triangle"]))
+    x = {"load_doors": 0, "with_xndp": 0, "to_our_navmesh": 0, "to_door_triangle": 0, "examples": []}
+    for _t, fid, _flags, subs in en.iter_records(plugin, (b"REFR",)):
+        sigs = {sig: d for sig, d in subs}
+        if b"XTEL" not in sigs:
+            continue
+        x["load_doors"] += 1
+        d = sigs.get(b"XNDP")
+        if d is None or len(d) < 6:
+            continue
+        x["with_xndp"] += 1
+        nav, tri = struct.unpack_from("<Ih", d)
+        if nav in all_navs:
+            x["to_our_navmesh"] += 1
+        if (nav, tri) in door_tris.get(fid, ()):
+            x["to_door_triangle"] += 1
+        elif len(x["examples"]) < 10:
+            x["examples"].append({"door": f"{fid:08X}", "navmesh": by_id.get(nav, f"{nav:08X}"), "triangle": tri})
+    x["navmeshes_in_plugin"] = len(all_navs)
+    x["navmeshes_without_navi"] = len(all_navs - set(infos))
+    return {"navi": {"records": [f"{r['form']:08X}" for r in navi], "entries": sum(len(r["infos"]) for r in navi),
+                     "ours_listed": listed, "mismatch": mismatch, "examples": examples}, "xndp": x}
 
 
 def tg_cell_units():

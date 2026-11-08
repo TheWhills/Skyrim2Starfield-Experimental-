@@ -38,6 +38,9 @@ var ids = File.Exists(mapPath)
 var next = ids.Count == 0 ? FirstId : ids.Values.Max() + 1;
 var usedThisRun = new HashSet<string>();
 var sourceMap = new SortedDictionary<string, string>();      // source form key -> new FormKey (source_map.json)
+// every navmesh written (interiors and exterior), for the NAVI entries and the load doors' XNDP: its key, geometry and
+// parent (world + grid, or cell)
+var navInfos = new List<(FormKey nav, NavmeshGeometry geo, FormKey? world, short gx, short gy, FormKey? cell)>();
 FormKey Id(string key)
 {
     if (!usedThisRun.Add(key)) throw new InvalidOperationException($"duplicate identity key {key}");
@@ -260,6 +263,7 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
             door => placedBySource.TryGetValue(door, out var placedDoor) ? placedDoor : null);
         triangles += t; doorsKept += dk; doorsLost += dl;
         cell.NavigationMeshes.Add(new NavigationMesh(keys[src], release) { NavmeshGeometry = geo });
+        navInfos.Add((keys[src], geo, null, 0, 0, cell.FormKey));
         written++;
     }
     return written == 0 ? "" : $"; navmeshes {written} ({triangles} triangles, door links {doorsKept} kept / {doorsLost} to doors not placed)";
@@ -479,6 +483,7 @@ JsonElement extIds = default;
 ModKey? extKey = null, planetKey = null;
 float extOx = 0, extOy = 0, extOz = 0;
 var extDoorFor = new Dictionary<string, FormKey>();          // Skyrim exterior door ref -> the load door the interior uses
+var extLoadDoors = new List<PlacedObject>();                  // those load doors (for XNDP)
 if (extDir != null)
 {
     extIds = JsonDocument.Parse(File.ReadAllText(Path.Combine(extDir, "formids.json"))).RootElement.Clone();
@@ -573,6 +578,7 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
             Link(o, w1.tele);
             tco.Persistent.Add(o);
             extDoorFor[w1.src] = o.FormKey;
+            extLoadDoors.Add(o);
             want.Remove(r.FormKey);
             extIn++;
         }
@@ -613,6 +619,7 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
                     Link(nd, w2.tele);
                     tco.Persistent.Add(nd);
                     extDoorFor[w2.src] = nd.FormKey;
+                    extLoadDoors.Add(nd);
                     // the exterior's static copy of it: Initially Disabled, in an override of its cell
                     var co = CellOverride(blk, sb, c);
                     var off = (PlacedObject)sg.DeepCopy();
@@ -663,6 +670,7 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
             var (geo, t, dk, dl) = NavGeometry(n.GetProperty("geometry"), parent, navKeys,
                 door => extDoorFor.TryGetValue(door, out var ourDoor) ? ourDoor : null);
             CellOverride(at.blk, at.sb, at.c).NavigationMeshes.Add(new NavigationMesh(navKeys[k], release) { NavmeshGeometry = geo });
+            navInfos.Add((navKeys[k], geo, wg.FormKey, (short)cx, (short)cy, null));
             navWritten++; navTris += t; navDoorsKept += dk; navDoorsLost += dl;
             navCells.Add((cx, cy));
         }
@@ -735,20 +743,154 @@ if (Environment.GetEnvironmentVariable("FO4PORT_DOORTEST") is string testDoor)
 if (lightBases.Count > 0) Console.WriteLine($"{lightBases.Count} Starfield lights made from Skyrim lights");
 foreach (var note in lightNotes) Console.WriteLine($"  light note: {note}");
 
+// ---- pathing registration (2026-11-08; method from tes4skyrim's Skyrim findings, docs/terrain/exterior-navmesh.md) --------
+// Skyrim's pathfinder only uses a navmesh that is also listed in the Navmesh Info Map (NAVI, one record in the master,
+// which every plugin overrides with entries for its own navmeshes; the game merges the overrides), and a load door is
+// a pathing node only with XNDP (door -> the navmesh triangle in front of it). Starfield has both (xEdit SF1; door_survey:
+// 576 of 619 vanilla load doors carry XNDP). Assumed to work the same in Starfield (supported); NAVI=off skips it.
+// XNDP: each load door of ours that a navmesh's door triangle names.
+var doorTri = new Dictionary<FormKey, (FormKey nav, short tri)>();
+foreach (var ni in navInfos)
+    foreach (var dt in ni.geo.DoorTriangles)
+        doorTri.TryAdd(dt.Door.FormKey, (ni.nav, dt.TriangleBeforeDoor));
+int xndp = 0;
+foreach (var o in placedAll.Values.Concat(extLoadDoors))
+    if (o.TeleportDestination != null && doorTri.TryGetValue(o.FormKey, out var nt))
+    {
+        o.NavigationDoorLink = new NavigationDoorLink { NavMesh = new FormLink<INavigationMeshGetter>(nt.nav), TeleportMarkerTriangle = nt.tri };
+        xndp++;
+    }
+if (navInfos.Count > 0) Console.WriteLine($"XNDP (door -> navmesh) on {xndp} load doors");
+// NAVI: an override of Starfield.esm's NAVI (its version and precomputed pathing NVPP kept) holding one NVMI per navmesh
+// of ours: flags 0, approx location = the vertices' mean, edge links = the other navmeshes its edge links name, door
+// links = its door triangles' doors, no traversals / island, the pathing cell, then the unknown tail Starfield's own
+// entries end with most often (read from them here). Mutagen keeps the part after the door links as raw bytes, so the
+// pathing cell's FormIDs are written by hand with the master index of the written file (second pass below).
+NavigationMeshInfoMap? naviO = null;
+var naviBody = new List<(NavigationMapInfo info, (FormKey nav, NavmeshGeometry geo, FormKey? world, short gx, short gy, FormKey? cell) ni)>();
+byte[] naviTail = new byte[] { 0, 0, 0, 0, 0 };
+if (navInfos.Count > 0 && Environment.GetEnvironmentVariable("NAVI") != "off" && sfData0 != null)
+{
+    using var sfm = StarfieldMod.CreateFromBinaryOverlay(Path.Combine(sfData0, "Starfield.esm"), release);
+    var vn = sfm.NavigationMeshInfoMaps.FirstOrDefault();
+    if (vn == null) Console.WriteLine("NAVI: Starfield.esm has none; not written");
+    else
+    {
+        var tails = new Dictionary<string, int>();
+        int read = 0, layoutOk = 0;
+        foreach (var mi in vn.MapInfos.Take(20000))
+        {
+            read++;
+            var u = mi.Unknown.ToArray();
+            int p = 0;
+            if (u.Length < 5) continue;
+            p = 4 + (int)BitConverter.ToUInt32(u, 0) * 60;                   // traversals, 60 bytes each
+            if (p >= u.Length) continue;
+            if (u[p++] != 0) continue;                                        // island data: skip those
+            if (p + 12 > u.Length || BitConverter.ToUInt32(u, p) != 0xA5E9A03C) continue;
+            p += 12;                                                          // CRC, world, grid or cell
+            layoutOk++;
+            var tail = Convert.ToHexString(u, p, u.Length - p);
+            tails[tail] = tails.GetValueOrDefault(tail) + 1;
+        }
+        if (tails.Count > 0) naviTail = Convert.FromHexString(tails.OrderByDescending(kv => kv.Value).First().Key);
+        Console.WriteLine($"NAVI: vanilla {vn.FormKey}, {read} entries read, {layoutOk} with the expected layout; tail " +
+                          $"{Convert.ToHexString(naviTail)} ({(tails.Count > 0 ? tails.Values.Max() : 0)} of them)");
+        naviO = (NavigationMeshInfoMap)vn.DeepCopy();
+        naviO.MapInfos.Clear();                                       // ours only: the game merges the overrides
+        foreach (var ni in navInfos)
+        {
+            float sx = 0, sy = 0, sz = 0;
+            foreach (var v in ni.geo.Vertices) { sx += v.Point.X; sy += v.Point.Y; sz += v.Point.Z; }
+            int nv = Math.Max(1, ni.geo.Vertices.Count);
+            var data = new byte[20];
+            BitConverter.GetBytes(sx / nv).CopyTo(data, 4);
+            BitConverter.GetBytes(sy / nv).CopyTo(data, 8);
+            BitConverter.GetBytes(sz / nv).CopyTo(data, 12);
+            var info = new NavigationMapInfo { NavigationMesh = new FormLink<INavigationMeshGetter>(ni.nav), Data = data };
+            foreach (var m in ni.geo.EdgeLinks.Select(l => l.Mesh.FormKey).Where(m => m != ni.nav).Distinct().OrderBy(m => m.ID))
+                info.MergedTo.Add(new FormLink<INavigationMeshGetter>(m));
+            foreach (var d in ni.geo.DoorTriangles.Select(dt => dt.Door.FormKey).Distinct().OrderBy(d => d.ID))
+                info.LinkedDoors.Add(new LinkedDoor { Type = 0xE48B73F3, Door = new FormLink<IPlacedObjectGetter>(d) });
+            naviO.MapInfos.Add(info);
+            naviBody.Add((info, ni));
+        }
+        mod.NavigationMeshInfoMaps.Add(naviO);
+    }
+}
+// the raw part of each NVMI: no traversals, no island, pathing cell (FormIDs with the written file's master indices)
+void FillNavi(IReadOnlyList<ModKey> masters)
+{
+    uint Raw(FormKey k)
+    {
+        int idx = k.ModKey == modKey ? masters.Count : masters.ToList().IndexOf(k.ModKey);
+        if (idx < 0) throw new InvalidOperationException($"NAVI: {k.ModKey} is not a master of {modKey}");
+        return ((uint)idx << 24) | (k.ID & 0xFFFFFF);
+    }
+    foreach (var (info, ni) in naviBody)
+    {
+        var u = new List<byte>();
+        u.AddRange(BitConverter.GetBytes(0u));                    // traversals
+        u.Add(0);                                                 // no island data
+        u.AddRange(BitConverter.GetBytes(0xA5E9A03Cu));           // PathingCell
+        if (ni.world is FormKey w)
+        {
+            u.AddRange(BitConverter.GetBytes(Raw(w)));
+            u.AddRange(BitConverter.GetBytes(ni.gy));             // grid Y, then X (as in NVNM)
+            u.AddRange(BitConverter.GetBytes(ni.gx));
+        }
+        else
+        {
+            u.AddRange(BitConverter.GetBytes(0u));
+            u.AddRange(BitConverter.GetBytes(Raw(ni.cell!.Value)));
+        }
+        u.AddRange(naviTail);
+        info.Unknown = u.ToArray();
+    }
+}
+// MAST entries of a written plugin, in order (its TES4 header's subrecords)
+List<ModKey> MastersOf(string file)
+{
+    var b = File.ReadAllBytes(file);
+    var res = new List<ModKey>();
+    int size = BitConverter.ToInt32(b, 4), p = 24, end = 24 + size;
+    while (p + 6 <= end)
+    {
+        var sig = System.Text.Encoding.ASCII.GetString(b, p, 4);
+        int len = BitConverter.ToUInt16(b, p + 4);
+        if (sig == "MAST") res.Add(ModKey.FromNameAndExtension(System.Text.Encoding.UTF8.GetString(b, p + 6, len).TrimEnd('\0')));
+        p += 6 + len;
+    }
+    return res;
+}
+if (naviO != null) FillNavi(new[] { sfEsm, extKey, planetKey }.Where(k => k != null).Select(k => k!.Value).ToList());
+
 mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 var sfData = Environment.GetEnvironmentVariable("STARFIELD_DATA") ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder");
 var knownMasters = new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
     .Select(k => new KeyedMasterStyle(k!.Value, MasterStyle.Full)).ToArray();
-if (extKey == null)
-    mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
-        .WithKnownMasters(knownMasters).Write();
-else
-    // with the exterior overrides: the masters' load order given (as TerrainOverlays writes its planet plugin); the
-    // header-master route only knew Starfield.esm and threw on the exterior plugin's records
-    mod.BeginWrite.ToPath(path).WithLoadOrder(new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
-            .Select(k => k!.Value).ToArray())
-        .WithKnownMasters(knownMasters).Write();
+void WriteMod()
+{
+    if (extKey == null)
+        mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
+            .WithKnownMasters(knownMasters).Write();
+    else
+        // with the exterior overrides: the masters' load order given (as TerrainOverlays writes its planet plugin); the
+        // header-master route only knew Starfield.esm and threw on the exterior plugin's records
+        mod.BeginWrite.ToPath(path).WithLoadOrder(new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
+                .Select(k => k!.Value).ToArray())
+            .WithKnownMasters(knownMasters).Write();
+}
+WriteMod();
+if (naviO != null)
+{
+    // second pass: the NVMI pathing cells with the master indices the written file really has
+    var written = MastersOf(path);
+    FillNavi(written);
+    WriteMod();
+    Console.WriteLine($"NAVI override: {naviBody.Count} navmeshes registered (masters {string.Join(", ", written)})");
+}
 File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value),
     new JsonSerializerOptions { WriteIndented = true }));
 File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));

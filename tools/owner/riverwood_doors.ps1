@@ -4,6 +4,8 @@
 #   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1
 # -Navmesh: also Skyrim's exterior navmesh around Riverwood (-NavAround, -NavRadius Skyrim cells each side) in the
 # same FO4Port.esm, then make_skyrim_navmesh.py compare (<Work>\navmesh\compare.html). docs/terrain/exterior-navmesh.md
+# Every build now also registers its navmeshes (interiors too) in a NAVI override and gives load doors XNDP;
+# $env:NAVI="off" before running leaves the NAVI out.
 param(
     [string]$Cells = "RiverwoodSleepingGiantInn",
     [string]$Find = "",          # a regex of interior EditorIDs instead of -Cells, e.g. "^Riverwood"
@@ -48,7 +50,9 @@ if ($Navmesh) {
     Step "2b. exterior navmesh around $NavAround"
     $navDef = Join-Path $navWork "survey\navmesh_defaults_exterior.json"
     if (-not (Test-Path $navDef)) {
-        python -I scripts\interior\navmesh_survey.py --esm "$SF\Data\Starfield.esm" --out (Join-Path $navWork "survey") --exterior --max 400
+        $sv = @("--esm", "$SF\Data\Starfield.esm", "--out", (Join-Path $navWork "survey"), "--exterior", "--max", "400")
+        if (Test-Path "$SF\Data\ShatteredSpace.esm") { $sv += @("--navi-esm", "$SF\Data\ShatteredSpace.esm") }
+        python -I scripts\interior\navmesh_survey.py @sv
         if ($LASTEXITCODE -ne 0) { Fail "navmesh survey" }
     }
     python -I scripts\terrain\make_skyrim_navmesh.py export --skyrim "$SKY\Skyrim.esm" --exterior $Exterior --out $navWork --around $NavAround --radius $NavRadius --navmesh-defaults $navDef

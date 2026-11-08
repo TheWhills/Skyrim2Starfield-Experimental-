@@ -14,8 +14,10 @@ make_skyrim_interior.py export --navmesh-defaults reads.
 needs to know (docs/terrain/exterior-navmesh.md): whether the parent grid in NVNM is (Y, X) as xEdit reads it (against
 the cell's XCLC), how many triangles lie outside their 100 m cell, which grid cell order rebuilds the game's own grids
 (exteriornavmesh.grid_agreement), whether the grid bounds are the vertices' bounding box, divisor against triangle
-count. Writes navmesh_survey_exterior.json and navmesh_defaults_exterior.json (make_skyrim_navmesh.py export
---navmesh-defaults).
+count; and the NAVI (navmesh info map) records that register navmeshes with the pathfinder (form, entry count, the
+unknown tail after the pathing cell, flags, islands; --navi-esm adds other plugins, e.g. the DLC, to see whether an
+override carries only its own entries). Writes navmesh_survey_exterior.json and navmesh_defaults_exterior.json
+(make_skyrim_navmesh.py export --navmesh-defaults).
 """
 import argparse
 import collections
@@ -166,22 +168,45 @@ def survey_exterior(esm, limit):
     return report, defaults
 
 
+def survey_navi(esms):
+    """{plugin: [{form, version, entries, errors, flags, tails, islands, traversals, interior, exterior}]}"""
+    out = {}
+    for esm in esms:
+        recs = []
+        for r in exteriornavmesh.read_navi(esm):
+            infos = [i for i in r["infos"] if "error" not in i]
+            recs.append({"form": f"{r['form']:08X}", "version": r["version"], "entries": len(r["infos"]),
+                         "errors": [i["error"] for i in r["infos"] if "error" in i][:5],
+                         "crc_ok": sum(i["crc"] == skyrimnavmesh.PATHING_CELL for i in infos),
+                         "flags": [[k, v] for k, v in collections.Counter(i["flags"] for i in infos).most_common(6)],
+                         "tails": [[k, v] for k, v in collections.Counter(i["tail"] for i in infos).most_common(6)],
+                         "islands": sum(i["island"] for i in infos), "traversals": sum(i["traversals"] for i in infos),
+                         "exterior": sum("grid" in i["parent"] for i in infos),
+                         "interior": sum("cell" in i["parent"] for i in infos), "has_nvpp": r["has_nvpp"]})
+        out[os.path.basename(esm)] = recs
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--esm", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--max", type=int, default=300)
     ap.add_argument("--exterior", action="store_true", help="survey exterior (worldspace) navmeshes instead")
+    ap.add_argument("--navi-esm", action="append", default=[],
+                    help="--exterior: another plugin whose NAVI to survey too (repeatable; e.g. the DLC's esm)")
     a = ap.parse_args(argv)
     os.makedirs(a.out, exist_ok=True)
     if a.exterior:
         report, defaults = survey_exterior(a.esm, a.max)
+        report["navi"] = survey_navi([a.esm] + a.navi_esm)
         for name, obj in (("navmesh_survey_exterior.json", report), ("navmesh_defaults_exterior.json", defaults)):
             with open(os.path.join(a.out, name), "w", encoding="utf-8") as fh:
                 json.dump(obj, fh, indent=1)
         print(f"{report['navmeshes']} exterior navmeshes, {report['triangles']} triangles; parent grid vs XCLC "
               f"{report['parent_grid_vs_xclc']}; outside their cell {report['outside_own_cell']}; grid order "
-              f"{report['grid_agreement']}; bounds {report['grid_bounds']}; defaults {defaults}")
+              f"{report['grid_agreement']}; bounds {report['grid_bounds']}; defaults {defaults}; NAVI "
+              f"{ {k: [(r['form'], r['entries'], r['tails'][:1]) for r in v] for k, v in report['navi'].items()} }")
         return 0
     report, defaults = survey(a.esm, a.max)
     with open(os.path.join(a.out, "navmesh_survey.json"), "w", encoding="utf-8") as fh:
