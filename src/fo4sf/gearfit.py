@@ -1065,6 +1065,7 @@ def shoulder_drop(pts: np.ndarray, field, axis, clav_z: float) -> np.ndarray:
 
 
 HEAD_HUG = (0.01, 0.025)  # m from the head mesh: neck-skin weights inside the first, own weights past the second
+SKIN_HUG = (0.006, 0.015)  # m from the body: skin weights inside the first, own weights (above the clavicles) past
 OWN_WEIGHT_BLEND = 0.03   # m above the clavicles over which gear goes from the body's weights to its own
 COLLAR_SECTORS = 8
 NECKLINE_R = 0.085       # m from the neck axis: lowered collar this close may stay inside the body (the shoulders
@@ -1897,8 +1898,16 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 for c0 in range(0, len(pts), 512):
                     q = pts[c0:c0 + 512]
                     hd[c0:c0 + 512] = np.sqrt(((q[:, None, :] - hp_[None, :, :]) ** 2).sum(-1).min(1))
+            # gear lying on the skin keeps the skin's weights (2026-11-08, owner's Saadia in game: the halter straps
+            # 3-4 mm over the skin in the bind pose were covered by skin at every slider in the standing pose; above
+            # the clavicles they had Skyrim's own weights, so with the arms down they moved apart from the skin)
+            bd = np.full(len(pts), np.inf)
+            if len(sf_body_pts):
+                _c, _dep, bd = closest_on_mesh(pts, sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3),
+                                               sf_nrm)
             for i in np.nonzero(zz > 0)[0]:
                 t = min(1.0, zz[i] / OWN_WEIGHT_BLEND)          # blended in over the first few cm
+                t *= float(np.clip((bd[i] - SKIN_HUG[0]) / (SKIN_HUG[1] - SKIN_HUG[0]), 0.0, 1.0))
                 # right against the neck the gear keeps the neck skin's weights (2026-11-07, owner: turning the head,
                 # the neck came through the back of Farengar's collar trim)
                 t *= float(np.clip((hd[i] - HEAD_HUG[0]) / (HEAD_HUG[1] - HEAD_HUG[0]), 0.0, 1.0))

@@ -280,8 +280,17 @@ class FitTests(unittest.TestCase):
         g4 = res4.shapes[0]
         hi = np.asarray(gear.points)[:, 2] > 1.23
         lo = np.asarray(gear.points)[:, 2] < 1.20
-        self.assertTrue(all("C_Chest" not in dict(g4.weights[i]) for i in np.nonzero(hi)[0]))
+        # gear lying on the skin keeps the skin's weights above the clavicles too (it must move with the skin)
+        self.assertTrue(all("C_Chest" in dict(g4.weights[i]) for i in np.nonzero(hi)[0]))
         self.assertTrue(any("C_Chest" in dict(g4.weights[i]) for i in np.nonzero(lo)[0]))
+        # gear standing off the skin (a cowl) keeps its own weights above them
+        lp, ln_, lt = self.tube(0.16, 1.10, 1.30)
+        loose = G.SkyShape(b"Cowl", lp, ln_, [(0.0, 0.0)] * len(lp), lt, bones, [[(0, 0.5), (1, 0.5)]] * len(lp))
+        g5 = G.fit([loose], [body2], w2, sp, np.array(st), sf_body_weights=[[("C_Chest", 1.0)]] * len(sp)).shapes[0]
+        d5 = np.linalg.norm(np.asarray(g5.positions)[:, :2], axis=1) - 0.13
+        far = hi & (d5 > G.SKIN_HUG[1])
+        self.assertTrue(far.any(), np.round(d5, 3))
+        self.assertTrue(all("C_Chest" not in dict(g5.weights[i]) for i in np.nonzero(far)[0]))
         # heads given: chin_clearance is not part of the fit any more (it dropped the cowl's back)
         top = gp[:, 2].max()
         cap = lambda z: (np.array([[-1, -1, z], [1, -1, z], [0, 1, z]]), [(0, 1, 2)])   # noqa: E731
