@@ -1999,7 +1999,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             if conform and not skin:
                 return conform_field(bp[sel], bn[sel], off[sel], pts)
             return _knn_mean_facing(bp[sel], bn[sel], off[sel], pts, nrm, 24, CARRY)
-        if len(bp) and len(body_arm) == len(bp) and body_arm.any() and not body_arm.all() and not skin:
+        if LIMB_MATCH and len(bp) and len(body_arm) == len(bp) and body_arm.any() and not body_arm.all() \
+                and not skin:
             # limb to limb (2026-11-08, owner: the iron cuirass's armhole pinched into a teardrop at the armpit,
             # verified on the debug steps right after this shift: the rim took the offsets of the arm's skin, which
             # Starfield has thicker and closer to the chest): gear takes the torso's or the arm's body offsets by
@@ -2313,7 +2314,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # where a sleeve meets the body armour Skyrim's own weights, made for that join, are kept, fading to the
             # skin's by JOIN_KEEP[1] (2026-11-08, owner: Ralof's mail sleeve parted from the tunic under the arm with
             # the skin's arm / torso weights, and with them averaged in space the sleeve stood off the arm running)
-            kj = join_keep(np.array([arm_share(vw) for vw in own_w]), np.asarray(s.points, float))
+            kj = join_keep(np.array([arm_share(vw) for vw in own_w]), np.asarray(s.points, float)) if LIMB_MATCH \
+                else np.zeros(len(w))
             if (kj > 0).any():
                 w = [blend_weights(own_w[i], w[i], kj[i]) if kj[i] > 0 else w[i] for i in range(len(w))]
             wh, _n = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
@@ -2453,6 +2455,10 @@ def smooth_share(share: np.ndarray, rest, tris, rounds: int = 8) -> np.ndarray:
     return with_seams(x, canon)
 
 
+# limb-matched skin weights and body offsets (sleeves from the arm, the rest from the torso): OFF by default
+# (2026-11-08, owner: Ralof's mail sleeves stood clear of the tunic in game with it, "this was NOT an issue before";
+# the 11:38 build without it was fine). gear_fit --limb-match turns it on.
+LIMB_MATCH = False
 ARM_MIX = (0.2, 0.8)   # own arm share: torso skin weights at or under the first, arm skin weights at or over the second
 ARM_BONES = ("arm", "elbow", "bicep", "forearm", "wrist", "hand", "deltoid", "finger", "thumb", "pinky", "index",
              "middle", "ring", "upperarm", "shoulder")
@@ -2466,7 +2472,7 @@ def arm_share(vw) -> float:
 
 
 def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.ndarray, body_w, bones,
-                      near=NEAR_WEIGHTS, arm_s=None) -> Tuple[list, int]:
+                      near=NEAR_WEIGHTS, arm_s=None, limb: bool = None) -> Tuple[list, int]:
     """Gear lying on the body takes the nearest body vertex's weights (fully within near[0], blended to its own by
     near[1]), so it bends exactly like the skin under it (2026-11-06, Ralof running: boot heels and the Starfield
     heel moved apart with Skyrim's own weights)."""
@@ -2479,6 +2485,8 @@ def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.n
     raw_s = np.array([arm_share(vw) for vw in own]) if arm_s is None else np.asarray(arm_s, float)
     own_s = np.clip((raw_s - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)
     body_arm = np.array([arm_share(bw) > 0.5 for bw in body_w])
+    if not (LIMB_MATCH if limb is None else limb):
+        body_arm = np.zeros(len(body_w), bool)      # off: the nearest skin vertex, whatever limb it is on
     mix_idx = None
     if body_arm.any() and not body_arm.all():
         bpa, bna = np.asarray(body_pts, float), np.asarray(body_nrm, float)

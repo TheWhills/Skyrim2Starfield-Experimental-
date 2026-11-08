@@ -927,6 +927,8 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--npc", required=True, help="Skyrim NPC EditorID (its default outfit is converted; with --armor "
                                                  "only its race and sex are used)")
+    ap.add_argument("--limb-match", action="store_true",
+                    help="sleeves take the arm skin's weights / offsets and the rest the torso's (off: nearest skin)")
     ap.add_argument("--helmets", action="store_true",
                     help="also convert head gear (Skyrim slots 30 / 31 / 41-43); left out by default")
     ap.add_argument("--armor", action="append", default=[],
@@ -981,6 +983,7 @@ def main(argv=None):
                     help="the old layout: all gear in one NIF and addon (its morph record is the nightwear's)")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
+    gearfit.LIMB_MATCH = bool(a.limb_match)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
     sf_data = os.path.join(a.starfield, "Data")
