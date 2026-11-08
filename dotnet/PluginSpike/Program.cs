@@ -13,6 +13,7 @@
 using System.Text.Json;
 using System.Globalization;
 using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins.Binary.Parameters;
 using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Plugins.Records;
 using Mutagen.Bethesda.Starfield;
@@ -483,8 +484,15 @@ P3Float ExtPos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre - extOx, p
 int extIn = 0, extInLost = 0;
 if (extDir != null && extDoorsPath != null)
 {
-    using var ext = StarfieldMod.CreateFromBinaryOverlay(Path.Combine(extDir, extKey!.Value.FileName), release);
-    using var planet = planetKey == null ? null : StarfieldMod.CreateFromBinaryOverlay(Path.Combine(extDir, planetKey.Value.FileName), release);
+    // their masters' styles (Mutagen needs them to read a plugin with masters; as dotnet/ReferenceLinks/PluginReader.cs):
+    // Starfield.esm, and for the planet plugin the exterior plugin; both full masters (TerrainOverlays sets the flag)
+    var extMasters = new Cache<IModMasterStyledGetter, ModKey>(x => x.ModKey);
+    extMasters.Set(new KeyedMasterStyle(sfEsm, MasterStyle.Full));
+    extMasters.Set(new KeyedMasterStyle(extKey!.Value, MasterStyle.Full));
+    var readParams = new BinaryReadParameters { MasterFlagsLookup = extMasters };
+    using var ext = StarfieldMod.CreateFromBinaryOverlay(Path.Combine(extDir, extKey.Value.FileName), release, readParams);
+    using var planet = planetKey == null ? null
+        : StarfieldMod.CreateFromBinaryOverlay(Path.Combine(extDir, planetKey.Value.FileName), release, readParams);
     var worldEdid = extIds.GetProperty("world").GetString();
     var wg = ext.Worldspaces.First(w => w.EditorID == worldEdid);
     // the world record and its persistent cell from the last plugin that has them (the planet plugin overrides the
