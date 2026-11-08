@@ -1875,14 +1875,6 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts = with_seams(final_relax(with_seams(moved_base, canon2), with_seams(pts, canon2), st2, sf_body_pts,
                                          np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
                                          with_seams(keep_out, canon2), gap=gap), canon2)
-        smoothed_pushed = 0
-        if not skin and SMOOTH_ROUNDS and len(sf_body_pts):
-            st3, canon3 = seam_tris(s.points, s.triangles)
-            fixed3 = sky_hidden | collar_keep | skirt_weighted(s.bones, s.weights)
-            sm, smoothed_pushed = smooth_final(with_seams(moved_base, canon3), with_seams(pts, canon3), st3,
-                                               sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
-                                               with_seams(fixed3, canon3), gap=gap)
-            pts = with_seams(sm, canon3)
         strapped = 0
         if not skin and sky_clav_z is not None and len(sf_body_pts) and strap_gap > gap:
             # straps and collars a few mm farther off the skin (2026-11-08, owner's Saadia in game: the halter straps
@@ -1904,14 +1896,29 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                     target = gap + (target - gap) * near_neck
             mask = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
             pts, strapped = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
-        faces_lifted = 0
-        if not skin and len(sf_body_pts):
-            pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
         tucked = 0
         if not skin and sky_gap is not None and len(sf_body_pts) and sky_tucked.any():
             free = sky_tucked & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
             pts, tucked = keep_tucked(pts, sky_gap, free, sf_body_pts, sf_body_tris, sf_nrm,
                                       rep.get("global_scale", 1.0))
+        smoothed_pushed = 0
+        if not skin and SMOOTH_ROUNDS and len(sf_body_pts):
+            st3, canon3 = seam_tris(s.points, s.triangles)
+            fixed3 = sky_hidden | collar_keep | skirt_weighted(s.bones, s.weights)
+            sm, smoothed_pushed = smooth_final(with_seams(moved_base, canon3), with_seams(pts, canon3), st3,
+                                               sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
+                                               with_seams(fixed3, canon3), gap=gap)
+            pts = with_seams(sm, canon3)
+            # the last word on smoothness (2026-11-08, owner comparing our renders with Skyrim's: the bodice's top
+            # trim, the bust's side outline and the sleeve tops still jagged; smoothing the debug result once more
+            # took it out, so the steps that moved single vertices (strap lift, tuck) now run before it)
+            if strapped:
+                pts, _s2 = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
+        faces_lifted = 0
+        if not skin and len(sf_body_pts):
+            pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
+        if not skin and sky_gap is not None and len(sf_body_pts) and sky_tucked.any():
+            pts, _t2 = keep_tucked(pts, sky_gap, free, sf_body_pts, sf_body_tris, sf_nrm, rep.get("global_scale", 1.0))
         rehidden = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
             pts, rehidden = keep_hidden(pts, np.where(sky_hidden, sky_gap, np.inf), sf_body_pts, sf_body_tris, sf_nrm,

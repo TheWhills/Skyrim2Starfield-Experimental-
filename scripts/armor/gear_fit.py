@@ -914,9 +914,9 @@ def main(argv=None):
     ap.add_argument("--whole-skin", action="store_true",
                     help="skin piece = the whole body minus what the armour covers (default: Skyrim's own bare-skin "
                          "parts, plus the feet when the armour does not cover them, as Skyrim shows them)")
-    ap.add_argument("--strap-gap", type=float, default=gearfit.STRAP_GAP,
-                    help="metres off the skin for visible gear round the neck and shoulders (default %(default)s; "
-                         "0 = the normal --gap)")
+    ap.add_argument("--strap-gap", type=float, default=None,
+                    help=f"metres off the skin for visible gear round the neck and shoulders (default: "
+                         f"{gearfit.STRAP_GAP} on female outfits, off on male ones; 0 = the normal --gap)")
     ap.add_argument("--curved", action="store_true",
                     help="split low-poly gear into a rounded surface (Phong tessellation) instead of flat triangles")
     ap.add_argument("--round-bust", action="store_true",
@@ -972,7 +972,8 @@ def main(argv=None):
                              feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
                                            for m in meshes),
                              whole_skin=a.whole_skin, round_bust=a.round_bust and female,
-                             strap_gap=a.strap_gap, curved=a.curved)
+                             strap_gap=(a.strap_gap if a.strap_gap is not None else
+                                        (gearfit.STRAP_GAP if female else 0.0)), curved=a.curved)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
