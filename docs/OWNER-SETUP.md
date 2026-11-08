@@ -124,3 +124,9 @@ Which converted exterior object is this (console FormID of a clicked object, or 
 python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --ref <FormID>
 python -I scripts\terrain\which_ref.py --staging C:\Modding\staging\skyrim_all --near <x> <y> --radius 6
 ```
+
+Terrain around a spot (the game's BTD heights vs Skyrim's ground, bumps, objects, water; 2-D map and 3-D view):
+
+```powershell
+python -I scripts\terrain\terrain_view.py --terrain C:\Modding\staging\skyrim_all --skyrim "$sky\Skyrim.esm" --pos <x> <y> --radius 40 --out C:\Modding\work\terrain_view.html
+```
