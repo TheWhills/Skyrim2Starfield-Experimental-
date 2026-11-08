@@ -2,6 +2,8 @@
 # planet) and the converted inn (docs/interior/skyrim-interiors.md "Doors between the exterior and the interiors").
 # No exterior rebuild: FO4Port.esm overrides the exterior's door. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1
+# -Navmesh: also Skyrim's exterior navmesh around Riverwood (-NavAround, -NavRadius Skyrim cells each side) in the
+# same FO4Port.esm, then make_skyrim_navmesh.py compare (<Work>\navmesh\compare.html). docs/terrain/exterior-navmesh.md
 param(
     [string]$Cells = "RiverwoodSleepingGiantInn",
     [string]$Find = "",          # a regex of interior EditorIDs instead of -Cells, e.g. "^Riverwood"
@@ -10,7 +12,10 @@ param(
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$Texconv = "C:\Modding\tools\texconv.exe",
-    [switch]$NoInstall
+    [switch]$NoInstall,
+    [switch]$Navmesh,
+    [string]$NavAround = "Riverwood",
+    [int]$NavRadius = 2
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -38,16 +43,35 @@ python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-d
 if ($LASTEXITCODE -ne 0) { Fail "convert" }
 python -I scripts\interior\make_skyrim_interior.py check --work $Work
 
+$navWork = Join-Path $Work "navmesh"
+if ($Navmesh) {
+    Step "2b. exterior navmesh around $NavAround"
+    $navDef = Join-Path $navWork "survey\navmesh_defaults_exterior.json"
+    if (-not (Test-Path $navDef)) {
+        python -I scripts\interior\navmesh_survey.py --esm "$SF\Data\Starfield.esm" --out (Join-Path $navWork "survey") --exterior --max 400
+        if ($LASTEXITCODE -ne 0) { Fail "navmesh survey" }
+    }
+    python -I scripts\terrain\make_skyrim_navmesh.py export --skyrim "$SKY\Skyrim.esm" --exterior $Exterior --out $navWork --around $NavAround --radius $NavRadius --navmesh-defaults $navDef
+    if ($LASTEXITCODE -ne 0) { Fail "navmesh export" }
+}
+
 Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
 $env:STARFIELD_DATA = "$SF\Data"
 $env:EXTERIOR_DIR = $Exterior
 $env:EXTERIOR_DOORS = Join-Path $Work "exterior_doors.json"
+if ($Navmesh) { $env:EXTERIOR_NAVMESH = Join-Path $navWork "exterior_navmesh.json" }
 dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
 $rc = $LASTEXITCODE
-Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS -ErrorAction SilentlyContinue
+Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH -ErrorAction SilentlyContinue
 if ($rc -ne 0) { Fail "PluginSpike (paste its output: compile errors name the Mutagen property)" }
 
+if ($Navmesh) {
+    Step "3b. compare the navmesh in FO4Port.esm with Skyrim's"
+    python -I scripts\terrain\make_skyrim_navmesh.py compare --skyrim "$SKY\Skyrim.esm" --work $navWork --plugin (Join-Path $staging "FO4Port.esm")
+    if ($LASTEXITCODE -ne 0) { Fail "navmesh compare" }
+    Write-Host "open $navWork\compare.html in a browser" -ForegroundColor Green
+}
 if ($NoInstall) { Write-Host "built in $staging (not installed: -NoInstall)"; exit 0 }
 Step "4. install (replaces the Oct 23 FO4Port test)"
 if (Test-Path "$SF\Data\FO4Port.deploy.json") { python -I scripts\deploy_starfield.py uninstall --starfield $SF }

@@ -255,71 +255,83 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
     foreach (var n in navs.EnumerateArray())
     {
         var src = n.GetProperty("formkey").GetString()!;
-        var g = n.GetProperty("geometry");
-        var geo = new NavmeshGeometry
-        {
-            NavmeshVersion = 17,
-            CrcHash = 0xA5E9A03C,                                                      // PathingCell
-            Parent = new CellNavmeshParent { Parent = new FormLink<ICellGetter>(cell.FormKey) },
-        };
-        foreach (var v in g.GetProperty("vertices").EnumerateArray())
-            geo.Vertices.Add(new NavmeshVertex
-            {
-                Point = new P3Float(v[0].GetSingle() / UnitsPerMetre, v[1].GetSingle() / UnitsPerMetre, v[2].GetSingle() / UnitsPerMetre),
-                Unknown = unchecked((int)v[3].GetUInt32()),
-            });
-        foreach (var t in g.GetProperty("triangles").EnumerateArray())
-        {
-            var tv = t.GetProperty("v"); var te = t.GetProperty("e");
-            geo.Triangles.Add(new NavmeshTriangle
-            {
-                Vertices = new P3Int16(unchecked((short)tv[0].GetUInt16()), unchecked((short)tv[1].GetUInt16()), unchecked((short)tv[2].GetUInt16())),
-                EdgeLink_0_1 = unchecked((short)te[0].GetUInt16()),
-                EdgeLink_1_2 = unchecked((short)te[1].GetUInt16()),
-                EdgeLink_2_0 = unchecked((short)te[2].GetUInt16()),
-                Height = t.GetProperty("height").GetSingle(),
-                Unknown = t.GetProperty("unknown").GetByte(),
-                Flags = (NavmeshTriangle.Flag)t.GetProperty("flags").GetInt32(),
-                CoverFlags = t.GetProperty("cover").GetUInt16(),
-            });
-            triangles++;
-        }
-        foreach (var l in g.GetProperty("edge_links").EnumerateArray())
-            geo.EdgeLinks.Add(new EdgeLink
-            {
-                Unknown = l.GetProperty("type").GetInt32(),
-                Mesh = new FormLink<INavigationMeshGetter>(keys[l.GetProperty("navmesh").GetString()!]),
-                TriangleIndex = l.GetProperty("triangle").GetInt16(),
-                Unknown2 = (sbyte)l.GetProperty("edge").GetInt32(),
-            });
-        foreach (var d in g.GetProperty("door_links").EnumerateArray())
-        {
-            var door = d.GetProperty("door").GetString() ?? "";
-            if (!placedBySource.TryGetValue(door, out var doorKey)) { doorsLost++; continue; }
-            geo.DoorTriangles.Add(new DoorTriangle
-            {
-                TriangleBeforeDoor = d.GetProperty("triangle").GetInt16(),
-                Unknown = unchecked((int)0xE48B73F3),                                      // PathingDoor
-                Door = new FormLink<IPlacedObjectGetter>(doorKey),
-            });
-            doorsKept++;
-        }
-        var grid = g.GetProperty("grid");
-        geo.GridSize = grid.GetProperty("divisor").GetUInt32();
-        var size = grid.GetProperty("size"); var b = grid.GetProperty("bounds");
-        geo.GridMaxDistance = new P2Float(size[0].GetSingle() / UnitsPerMetre, size[1].GetSingle() / UnitsPerMetre);
-        geo.GridMin = new P3Float(b[0].GetSingle() / UnitsPerMetre, b[1].GetSingle() / UnitsPerMetre, b[2].GetSingle() / UnitsPerMetre);
-        geo.GridMax = new P3Float(b[3].GetSingle() / UnitsPerMetre, b[4].GetSingle() / UnitsPerMetre, b[5].GetSingle() / UnitsPerMetre);
-        // Mutagen's Starfield GridArrays is not per cell: one flat Int16 run (each cell's u32 count as two Int16, then its
-        // triangles) read to the end, then Int32 Unknown3. cell.json carries that run ("grid_raw", skyrimnavmesh.grid_shorts).
-        var gridRun = new NavmeshGridArray();
-        foreach (var x in g.GetProperty("grid_raw").EnumerateArray()) gridRun.GridCell.Add(x.GetInt16());
-        geo.GridArrays.Add(gridRun);
-        geo.Unknown3 = g.GetProperty("tail_int32").GetInt32();
+        var (geo, t, dk, dl) = NavGeometry(n.GetProperty("geometry"),
+            new CellNavmeshParent { Parent = new FormLink<ICellGetter>(cell.FormKey) }, keys,
+            door => placedBySource.TryGetValue(door, out var placedDoor) ? placedDoor : null);
+        triangles += t; doorsKept += dk; doorsLost += dl;
         cell.NavigationMeshes.Add(new NavigationMesh(keys[src], release) { NavmeshGeometry = geo });
         written++;
     }
     return written == 0 ? "" : $"; navmeshes {written} ({triangles} triangles, door links {doorsKept} kept / {doorsLost} to doors not placed)";
+}
+
+// One navmesh's geometry from its JSON (positions in Skyrim units -> metres, links -> `keys`, doors -> doorOf or lost).
+// Shared by the interiors (cell parent) and the exterior (world + grid parent, EXTERIOR_NAVMESH).
+(NavmeshGeometry geo, int triangles, int doorsKept, int doorsLost) NavGeometry(JsonElement g, ANavmeshParent parent,
+    Dictionary<string, FormKey> keys, Func<string, FormKey?> doorOf)
+{
+    int triangles = 0, doorsKept = 0, doorsLost = 0;
+    var geo = new NavmeshGeometry
+    {
+        NavmeshVersion = 17,
+        CrcHash = 0xA5E9A03C,                                                      // PathingCell
+        Parent = parent,
+    };
+    foreach (var v in g.GetProperty("vertices").EnumerateArray())
+        geo.Vertices.Add(new NavmeshVertex
+        {
+            Point = new P3Float(v[0].GetSingle() / UnitsPerMetre, v[1].GetSingle() / UnitsPerMetre, v[2].GetSingle() / UnitsPerMetre),
+            Unknown = unchecked((int)v[3].GetUInt32()),
+        });
+    foreach (var t in g.GetProperty("triangles").EnumerateArray())
+    {
+        var tv = t.GetProperty("v"); var te = t.GetProperty("e");
+        geo.Triangles.Add(new NavmeshTriangle
+        {
+            Vertices = new P3Int16(unchecked((short)tv[0].GetUInt16()), unchecked((short)tv[1].GetUInt16()), unchecked((short)tv[2].GetUInt16())),
+            EdgeLink_0_1 = unchecked((short)te[0].GetUInt16()),
+            EdgeLink_1_2 = unchecked((short)te[1].GetUInt16()),
+            EdgeLink_2_0 = unchecked((short)te[2].GetUInt16()),
+            Height = t.GetProperty("height").GetSingle(),
+            Unknown = t.GetProperty("unknown").GetByte(),
+            Flags = (NavmeshTriangle.Flag)t.GetProperty("flags").GetInt32(),
+            CoverFlags = t.GetProperty("cover").GetUInt16(),
+        });
+        triangles++;
+    }
+    foreach (var l in g.GetProperty("edge_links").EnumerateArray())
+        geo.EdgeLinks.Add(new EdgeLink
+        {
+            Unknown = l.GetProperty("type").GetInt32(),
+            Mesh = new FormLink<INavigationMeshGetter>(keys[l.GetProperty("navmesh").GetString()!]),
+            TriangleIndex = l.GetProperty("triangle").GetInt16(),
+            Unknown2 = (sbyte)l.GetProperty("edge").GetInt32(),
+        });
+    foreach (var d in g.GetProperty("door_links").EnumerateArray())
+    {
+        var door = d.GetProperty("door").GetString() ?? "";
+        if (doorOf(door) is not FormKey doorKey) { doorsLost++; continue; }
+        geo.DoorTriangles.Add(new DoorTriangle
+        {
+            TriangleBeforeDoor = d.GetProperty("triangle").GetInt16(),
+            Unknown = unchecked((int)0xE48B73F3),                                      // PathingDoor
+            Door = new FormLink<IPlacedObjectGetter>(doorKey),
+        });
+        doorsKept++;
+    }
+    var grid = g.GetProperty("grid");
+    geo.GridSize = grid.GetProperty("divisor").GetUInt32();
+    var size = grid.GetProperty("size"); var b = grid.GetProperty("bounds");
+    geo.GridMaxDistance = new P2Float(size[0].GetSingle() / UnitsPerMetre, size[1].GetSingle() / UnitsPerMetre);
+    geo.GridMin = new P3Float(b[0].GetSingle() / UnitsPerMetre, b[1].GetSingle() / UnitsPerMetre, b[2].GetSingle() / UnitsPerMetre);
+    geo.GridMax = new P3Float(b[3].GetSingle() / UnitsPerMetre, b[4].GetSingle() / UnitsPerMetre, b[5].GetSingle() / UnitsPerMetre);
+    // Mutagen's Starfield GridArrays is not per cell: one flat Int16 run (each cell's u32 count as two Int16, then its
+    // triangles) read to the end, then Int32 Unknown3. cell.json carries that run ("grid_raw", skyrimnavmesh.grid_shorts).
+    var gridRun = new NavmeshGridArray();
+    foreach (var x in g.GetProperty("grid_raw").EnumerateArray()) gridRun.GridCell.Add(x.GetInt16());
+    geo.GridArrays.Add(gridRun);
+    geo.Unknown3 = g.GetProperty("tail_int32").GetInt32();
+    return (geo, triangles, doorsKept, doorsLost);
 }
 
 // ---- load doors -------------------------------------------------------------------------------------------------------
@@ -462,6 +474,7 @@ foreach (var cellPath in cellPaths)
 // dotnet/TerrainOverlays.
 var extDir = Environment.GetEnvironmentVariable("EXTERIOR_DIR");
 var extDoorsPath = Environment.GetEnvironmentVariable("EXTERIOR_DOORS");
+var extNavPath = Environment.GetEnvironmentVariable("EXTERIOR_NAVMESH");   // make_skyrim_navmesh.py export's exterior_navmesh.json
 JsonElement extIds = default;
 ModKey? extKey = null, planetKey = null;
 float extOx = 0, extOy = 0, extOz = 0;
@@ -482,7 +495,7 @@ if (extDir != null)
 P3Float ExtPos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre - extOx, p[1].GetSingle() / UnitsPerMetre - extOy,
                                      p[2].GetSingle() / UnitsPerMetre + extOz);
 int extIn = 0, extInLost = 0;
-if (extDir != null && extDoorsPath != null)
+if (extDir != null && (extDoorsPath != null || extNavPath != null))
 {
     // their masters' styles (Mutagen needs them to read a plugin with masters; as dotnet/ReferenceLinks/PluginReader.cs):
     // Starfield.esm, and for the planet plugin the exterior plugin; both full masters (TerrainOverlays sets the flag)
@@ -506,9 +519,9 @@ if (extDir != null && extDoorsPath != null)
     var tco = topLast.DeepCopy(new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false });
     wo.TopCell = tco;
     var cellMask = new Cell.TranslationMask(defaultOn: true) { Persistent = false, Temporary = false, NavigationMeshes = false };
-    var doorsJson = JsonDocument.Parse(File.ReadAllText(extDoorsPath)).RootElement.Clone();
     var want = new Dictionary<FormKey, (string src, JsonElement tele)>();
-    foreach (var d in doorsJson.GetProperty("doors").EnumerateArray())
+    if (extDoorsPath != null)
+    foreach (var d in JsonDocument.Parse(File.ReadAllText(extDoorsPath)).RootElement.Clone().GetProperty("doors").EnumerateArray())
     {
         var src = d.GetProperty("src").GetString()!;
         if (extIds.GetProperty("refs").TryGetProperty(src, out var v))
@@ -519,6 +532,28 @@ if (extDir != null && extDoorsPath != null)
     var blocksO = new Dictionary<(int, int), WorldspaceBlock>();
     var subsO = new Dictionary<(int, int), WorldspaceSubBlock>();
     var newDoorBases = new Dictionary<string, FormKey>(StringComparer.OrdinalIgnoreCase);
+    // an override of an exterior cell (without its references / navmeshes: ours are added to it), in override copies of
+    // its block and sub-block; one per cell, shared by the doors and the navmeshes
+    Cell CellOverride(IWorldspaceBlockGetter blk, IWorldspaceSubBlockGetter sb, ICellGetter c)
+    {
+        if (cellOverrides.TryGetValue(c.FormKey, out var co)) return co;
+        if (!blocksO.TryGetValue((blk.BlockNumberX, blk.BlockNumberY), out var bo))
+        {
+            bo = new WorldspaceBlock { BlockNumberX = blk.BlockNumberX, BlockNumberY = blk.BlockNumberY, GroupType = GroupTypeEnum.ExteriorCellBlock };
+            blocksO[(blk.BlockNumberX, blk.BlockNumberY)] = bo;
+            wo.SubCells.Add(bo);
+        }
+        if (!subsO.TryGetValue((sb.BlockNumberX, sb.BlockNumberY), out var so_))
+        {
+            so_ = new WorldspaceSubBlock { BlockNumberX = sb.BlockNumberX, BlockNumberY = sb.BlockNumberY, GroupType = GroupTypeEnum.ExteriorCellSubBlock };
+            subsO[(sb.BlockNumberX, sb.BlockNumberY)] = so_;
+            bo.Items.Add(so_);
+        }
+        co = c.DeepCopy(cellMask);
+        so_.Items.Add(co);
+        cellOverrides[c.FormKey] = co;
+        return co;
+    }
     void Link(PlacedObject o, JsonElement t)
     {
         o.TeleportDestination = new TeleportDestination
@@ -579,24 +614,7 @@ if (extDir != null && extDoorsPath != null)
                     tco.Persistent.Add(nd);
                     extDoorFor[w2.src] = nd.FormKey;
                     // the exterior's static copy of it: Initially Disabled, in an override of its cell
-                    if (!cellOverrides.TryGetValue(c.FormKey, out var co))
-                    {
-                        if (!blocksO.TryGetValue((blk.BlockNumberX, blk.BlockNumberY), out var bo))
-                        {
-                            bo = new WorldspaceBlock { BlockNumberX = blk.BlockNumberX, BlockNumberY = blk.BlockNumberY, GroupType = GroupTypeEnum.ExteriorCellBlock };
-                            blocksO[(blk.BlockNumberX, blk.BlockNumberY)] = bo;
-                            wo.SubCells.Add(bo);
-                        }
-                        if (!subsO.TryGetValue((sb.BlockNumberX, sb.BlockNumberY), out var so_))
-                        {
-                            so_ = new WorldspaceSubBlock { BlockNumberX = sb.BlockNumberX, BlockNumberY = sb.BlockNumberY, GroupType = GroupTypeEnum.ExteriorCellSubBlock };
-                            subsO[(sb.BlockNumberX, sb.BlockNumberY)] = so_;
-                            bo.Items.Add(so_);
-                        }
-                        co = c.DeepCopy(cellMask);
-                        so_.Items.Add(co);
-                        cellOverrides[c.FormKey] = co;
-                    }
+                    var co = CellOverride(blk, sb, c);
                     var off = (PlacedObject)sg.DeepCopy();
                     off.MajorRecordFlagsRaw |= 0x800;                         // Initially Disabled
                     co.Temporary.Add(off);
@@ -604,8 +622,54 @@ if (extDir != null && extDoorsPath != null)
                     extIn++;
                 }
     extInLost += want.Count;                                         // listed, placed, but not found in the world
+    if (extDoorsPath != null)
+        Console.WriteLine($"exterior doors into the interiors: {extIn} made load doors (override of {wg.EditorID}), {extInLost} not");
+
+    // ---- exterior navmeshes (2026-11-08, owner: "convert the exterior mesh"; docs/terrain/exterior-navmesh.md) -------
+    // make_skyrim_navmesh.py export: Skyrim's navmeshes around a place, in the overlay frame (Skyrim units), split at the
+    // 100 m Starfield cells, each piece with its Starfield cell. Each goes into an override of that exterior cell, parent
+    // = the world + the cell's grid. NVNM stores the grid as Y then X (xEdit wbDefinitionsSF1 / TES5: 'Grid Y', 'Grid X')
+    // and Mutagen's P2Int16 Coordinates reads the first short as X, so Coordinates = (Y, X) to write the bytes as the
+    // game does (supported; make_skyrim_navmesh.py compare checks the written bytes against the cell's XCLC, and
+    // navmesh_survey.py --exterior checks the order on vanilla navmeshes). Door links -> the load doors made above.
+    if (extNavPath != null)
+    {
+        var cellAt = new Dictionary<(int, int), (IWorldspaceBlockGetter blk, IWorldspaceSubBlockGetter sb, ICellGetter c)>();
+        foreach (var blk in wg.SubCells)
+            foreach (var sb in blk.Items)
+                foreach (var c in sb.Items)
+                    if (c.Grid != null) cellAt[(c.Grid.Point.X, c.Grid.Point.Y)] = (blk, sb, c);
+        var navRoot = JsonDocument.Parse(File.ReadAllText(extNavPath)).RootElement.Clone();
+        var navKeys = new Dictionary<string, FormKey>();
+        foreach (var n in navRoot.GetProperty("navmeshes").EnumerateArray())
+        {
+            var k = n.GetProperty("key").GetString()!;
+            navKeys[k] = Id("EXTNAVM:" + k);
+            sourceMap[k] = navKeys[k].ToString();
+        }
+        int navWritten = 0, navTris = 0, navNoCell = 0, navDoorsKept = 0, navDoorsLost = 0;
+        var navCells = new HashSet<(int, int)>();
+        foreach (var n in navRoot.GetProperty("navmeshes").EnumerateArray())
+        {
+            var k = n.GetProperty("key").GetString()!;
+            var cxy = n.GetProperty("cell");
+            int cx = cxy[0].GetInt32(), cy = cxy[1].GetInt32();
+            if (!cellAt.TryGetValue((cx, cy), out var at)) { navNoCell++; continue; }   // outside the exterior's cells
+            var parent = new WorldspaceNavmeshParent
+            {
+                Parent = new FormLink<IWorldspaceGetter>(wg.FormKey),
+                Coordinates = new P2Int16((short)cy, (short)cx),
+            };
+            var (geo, t, dk, dl) = NavGeometry(n.GetProperty("geometry"), parent, navKeys,
+                door => extDoorFor.TryGetValue(door, out var ourDoor) ? ourDoor : null);
+            CellOverride(at.blk, at.sb, at.c).NavigationMeshes.Add(new NavigationMesh(navKeys[k], release) { NavmeshGeometry = geo });
+            navWritten++; navTris += t; navDoorsKept += dk; navDoorsLost += dl;
+            navCells.Add((cx, cy));
+        }
+        Console.WriteLine($"exterior navmeshes: {navWritten} in {navCells.Count} cells ({navTris} triangles; door links {navDoorsKept} " +
+                          $"to our load doors, {navDoorsLost} to other doors dropped), {navNoCell} outside the exterior's cells");
+    }
     mod.Worldspaces.Add(wo);
-    Console.WriteLine($"exterior doors into the interiors: {extIn} made load doors (override of {wg.EditorID}), {extInLost} not");
 }
 
 int teleLinked = 0, teleLost = 0, teleOut = 0, teleOutLost = 0;

@@ -52,6 +52,7 @@ Starfield must be closed while a script writes into the mods folders.
 | Other exterior builds (older) | `C:\Modding\staging\skyrim_objects`, `C:\Modding\staging\skyrim_tamriel` |
 | Interior batches (checklist step 11, Oct 23) | `C:\Modding\work\s2s\interiors`, `C:\Modding\work\s2s\checklist` |
 | Riverwood <-> inn door build | `C:\Modding\work\s2s\riverwood_doors` |
+| Exterior navmesh (export, survey, compare.html) | `C:\Modding\work\s2s\riverwood_doors\navmesh` |
 | Voice lines (skyrim_voice.py --out: lines.json + .wem / .ffxanim) | `C:\Modding\work\voice` |
 | Voice files as installed (face_fit copies them) | `$face\Sound\Voice\S2SFaceTest.esm\S2S_<voice type>_<NPC>` |
 
@@ -100,4 +101,11 @@ All of Riverwood's interiors (every interior cell whose EditorID starts with Riv
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood"
+```
+
+Riverwood's interiors plus Skyrim's exterior navmesh around Riverwood (5 x 5 Skyrim cells; `-NavRadius` to change),
+with the comparison (`C:\Modding\work\s2s\riverwood_doors\navmesh\compare.html`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh
 ```
