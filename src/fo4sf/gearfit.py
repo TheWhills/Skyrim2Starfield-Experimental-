@@ -1257,6 +1257,7 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
 BUST_FRONT = 0.5      # body normal's forward (+y) share above which a point counts as the front of the chest
 BUST_Z = (0.04, 0.30)  # m below Starfield's clavicles: the bust band for round_bust
 STRAP_GAP = 0.008     # m: visible gear round the neck and shoulders stays this far off the skin
+STRAP_NECK = (0.085, 0.105)  # m from the neck's axis: no strap lift inside the first, full past the second
 STRAP_RAMP = (0.02, 0.06)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second
 
 
@@ -1890,6 +1891,17 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             below = sky_clav_z - np.asarray(s.points)[:, 2]
             ramp = np.clip((below - STRAP_RAMP[0]) / (STRAP_RAMP[1] - STRAP_RAMP[0]), 0.0, 1.0)
             target = strap_gap + (gap - strap_gap) * ramp
+            if heads is not None:
+                # not the collar hugging the neck (2026-11-08, owner: a brown band round Ralof's neck; on his debug
+                # meshes the cowl's inner rim, 6-11 cm from the neck's axis, was lifted 8 mm off the neck and the
+                # cowl's inside showed through the gap; --strap-gap 0 removed it in game)
+                hp_ = np.asarray(heads[1][0], float)
+                top_ = hp_[:, 2].max()
+                ring_ = hp_[(hp_[:, 2] < top_ - 0.24) & (hp_[:, 2] > top_ - 0.26)]
+                if len(ring_):
+                    rad = np.hypot(*(pts[:, :2] - ring_[:, :2].mean(0)).T)
+                    near_neck = np.clip((rad - STRAP_NECK[0]) / (STRAP_NECK[1] - STRAP_NECK[0]), 0.0, 1.0)
+                    target = gap + (target - gap) * near_neck
             mask = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
             pts, strapped = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
         faces_lifted = 0

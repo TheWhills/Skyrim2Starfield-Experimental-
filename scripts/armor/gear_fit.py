@@ -971,7 +971,7 @@ def main(argv=None):
                              [n for n, sl in slots_by_shape(gear_bytes, meshes).items() if 3 in sl],
                              feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
                                            for m in meshes),
-                             whole_skin=a.whole_skin, round_bust=a.round_bust,
+                             whole_skin=a.whole_skin, round_bust=a.round_bust and female,
                              strap_gap=a.strap_gap, curved=a.curved)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
