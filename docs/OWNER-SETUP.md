@@ -134,3 +134,9 @@ Terrain around a spot (the game's BTD heights vs Skyrim's ground, bumps, objects
 ```powershell
 python -I scripts\terrain\terrain_view.py --terrain C:\Modding\staging\skyrim_all --skyrim "$sky\Skyrim.esm" --pos <x> <y> --radius 40 --out C:\Modding\work\terrain_view.html
 ```
+
+How Skyrim's collision for a model compares with the visible mesh and with our box collision (3-D + top-down excess):
+
+```powershell
+python -I scripts\terrain\collision_view.py --skyrim-data $sky --model meshes\Landscape\Roads\RoadStraightLongRamp01.nif --out C:\Modding\work\collision_view.html
+```

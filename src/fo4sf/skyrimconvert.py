@@ -29,6 +29,7 @@ UNIT = 1.0 / 70.0
 # boxes FO4 architecture uses (thin walls, floors and arches stay open)
 LANDSCAPE_RE = re.compile(r"[\\/]landscape[\\/]|rock|cliff|mountain|boulder|glacier|iceberg", re.I)
 COLUMN_MIN_BOXES, COLUMN_MAX_BOXES = 128, 512
+TOP_TOL = 0.1           # m: tops of the columns merged into one box differ by at most this (a step the player walks)
 
 
 def column_budget(points) -> int:
@@ -84,25 +85,29 @@ def column_boxes(points, triangles, max_boxes=None, cell=None, report=None):
         # solid from the piece's lowest point: Skyrim rock collision is often open underneath (sunk into the
         # ground); a column then still blocks from below, and merging depends on the tops only
         cols = {(int(x), int(y)): (float(lo[2]), float(b)) for x, y, b in zip(cx, cy, zmax)}
-        tol = max(0.1, 0.3 * cell)
-        runs = []                                   # merge along x into runs, then equal x spans along y
+        # merge only columns whose tops ALL lie within TOP_TOL of each other (a merged box takes the highest top):
+        # until 2026-11-08 each column was compared with the run's running maximum, so on a long slope the top crept
+        # up column by column and a road ramp became a ledge up to 2 m above Skyrim's surface (owner: an invisible
+        # hump on Riverwood's RoadStraightLongRamp01, gone with the road disabled; collision_view.py measures it)
+        tol = TOP_TOL
+        runs = []                                   # [x0, x1, bottom, top, y0, y1, lowest top]
         for y in sorted({k[1] for k in cols}):
             cur = None
             for x in sorted(k[0] for k in cols if k[1] == y):
                 z0, z1 = cols[(x, y)]
-                if cur and x == cur[1] + 1 and abs(z0 - cur[2]) <= tol and abs(z1 - cur[3]) <= tol:
-                    cur = [cur[0], x, min(cur[2], z0), max(cur[3], z1), y, y]
+                if cur and x == cur[1] + 1 and abs(z0 - cur[2]) <= tol and max(cur[3], z1) - min(cur[6], z1) <= tol:
+                    cur = [cur[0], x, min(cur[2], z0), max(cur[3], z1), y, y, min(cur[6], z1)]
                 else:
                     if cur:
                         runs.append(cur)
-                    cur = [x, x, z0, z1, y, y]
+                    cur = [x, x, z0, z1, y, y, z1]
             if cur:
                 runs.append(cur)
         merged, open_ = [], {}
         for r in sorted(runs, key=lambda r: (r[4], r[0])):
             o = open_.get((r[0], r[1]))
-            if o and r[4] == o[5] + 1 and abs(r[2] - o[2]) <= tol and abs(r[3] - o[3]) <= tol:
-                o[2], o[3], o[5] = min(o[2], r[2]), max(o[3], r[3]), r[4]
+            if o and r[4] == o[5] + 1 and abs(r[2] - o[2]) <= tol and max(o[3], r[3]) - min(o[6], r[6]) <= tol:
+                o[2], o[3], o[5], o[6] = min(o[2], r[2]), max(o[3], r[3]), r[4], min(o[6], r[6])
             else:
                 if o:
                     merged.append(o)
@@ -110,7 +115,7 @@ def column_boxes(points, triangles, max_boxes=None, cell=None, report=None):
         merged += open_.values()
         if len(merged) <= budget:
             boxes = []
-            for x0, x1, z0, z1, y0, y1 in merged:
+            for x0, x1, z0, z1, y0, y1, _lowest in merged:
                 bl = (lo[0] + x0 * cell, lo[1] + y0 * cell, z0)
                 bh = (min(lo[0] + (x1 + 1) * cell, hi[0]), min(lo[1] + (y1 + 1) * cell, hi[1]), max(z1, z0 + 0.05))
                 boxes.append((tuple((bl[k] + bh[k]) / 2 for k in range(3)), tuple((bh[k] - bl[k]) / 2 for k in range(3))))
