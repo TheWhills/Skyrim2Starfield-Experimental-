@@ -328,7 +328,9 @@ string WriteNavmeshes(Cell cell, string cellName, JsonElement root, Dictionary<s
     var size = grid.GetProperty("size"); var b = grid.GetProperty("bounds");
     geo.GridMaxDistance = new P2Float(size[0].GetSingle() / UnitsPerMetre, size[1].GetSingle() / UnitsPerMetre);
     geo.GridMin = new P3Float(b[0].GetSingle() / UnitsPerMetre, b[1].GetSingle() / UnitsPerMetre, b[2].GetSingle() / UnitsPerMetre);
-    geo.GridMax = new P3Float(b[3].GetSingle() / UnitsPerMetre, b[4].GetSingle() / UnitsPerMetre, b[5].GetSingle() / UnitsPerMetre);
+    // FLT_MAX (vanilla exterior grids' top, "nothing above") stays FLT_MAX instead of being scaled
+    float M(float v) => v >= 3.0e38f ? float.MaxValue : v / UnitsPerMetre;
+    geo.GridMax = new P3Float(M(b[3].GetSingle()), M(b[4].GetSingle()), M(b[5].GetSingle()));
     // Mutagen's Starfield GridArrays is not per cell: one flat Int16 run (each cell's u32 count as two Int16, then its
     // triangles) read to the end, then Int32 Unknown3. cell.json carries that run ("grid_raw", skyrimnavmesh.grid_shorts).
     var gridRun = new NavmeshGridArray();

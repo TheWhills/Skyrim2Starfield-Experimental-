@@ -184,7 +184,7 @@ def serialize_starfield(sf: Dict, scale: float = 1.0, form_map=None) -> bytes:
     out.append(struct.pack("<I", len(sf["waypoints"])))
     out += [struct.pack("<3fHI", w[0] * scale, w[1] * scale, w[2] * scale, w[3], w[4]) for w in sf["waypoints"]]
     g = sf["grid"]
-    out.append(struct.pack("<I2f6f", g["divisor"], *(s * scale for s in g["size"]), *(b * scale for b in g["bounds"])))
+    out.append(struct.pack("<I2f6f", g["divisor"], *(s * scale for s in g["size"]), *(b if b >= 3e38 else b * scale for b in g["bounds"])))
     for c in g["cells"]:
         out.append(struct.pack("<I", len(c)) + struct.pack(f"<{len(c)}h", *c))
     out.append(struct.pack("<HH", *sf["tail"]))

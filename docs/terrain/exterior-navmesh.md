@@ -57,8 +57,9 @@ stay inside their cell.
   island, which is what we write (no island, no traversals). Vanilla also carries 590,922 precomputed traversals
   (jumps / climbs); ours have none, so converted NPCs walk only. Whether a navmesh without island data paths as well
   as one with it is unresolved (2,082 vanilla ones do without).
-* Grid bounds are not the vertex bounding box in any of the 400 (unresolved; the survey now records samples, rerun
-  with `-Resurvey`).
+* Grid bounds: the vertices' bounding box except the top (max z), which is FLT_MAX ("nothing above"), in every
+  sample (verified on 8 samples; 17 of 400 are whole-cell squares, the same way). The export sets the top to FLT_MAX
+  and PluginSpike keeps FLT_MAX unscaled.
 * Edge links whose leaving edge is not a full edge of the target triangle: Skyrim's own navmeshes have the same
   count as ours (615), so they come from Skyrim (seams that meet at T-junctions), not from the split; the check now
   measures the gap along the edge instead.

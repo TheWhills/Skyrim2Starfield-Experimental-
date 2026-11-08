@@ -136,7 +136,9 @@ def survey_exterior(esm, limit):
             vb = [min(v[i] for v in nm["vertices"]) for i in range(3)] + [max(v[i] for v in nm["vertices"])
                                                                           for i in range(3)]
             gb = nm["grid"]["bounds"]
-            kind = "bbox" if max(abs(a - b) for a, b in zip(vb, gb)) < 0.01 else "other"
+            kind = "bbox" if max(abs(a - b) for a, b in zip(vb, gb)) < 0.01 else \
+                "bbox, top FLT_MAX" if max(abs(a - b) for a, b in zip(vb[:5], gb[:5])) < 0.01 and gb[5] > 3e38 \
+                else "other"
             if kind == "other" and xy and abs(gb[0] - xy[0] * 100.0) < 0.01 and abs(gb[1] - xy[1] * 100.0) < 0.01 \
                     and abs(gb[3] - gb[0] - 100.0) < 0.01:
                 kind = "cell square"

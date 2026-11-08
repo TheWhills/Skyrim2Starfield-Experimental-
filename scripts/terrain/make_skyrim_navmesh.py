@@ -84,6 +84,12 @@ def cmd_export(a):
         g["triangles"] = [dict(t, height=height) for t in g["triangles"]]
         moved.append({"formkey": n["formkey"], "geometry": g})
     res = en.split_to_cells(moved, split=not a.no_split, order=order)
+    # vanilla exterior grids: bounds = the vertices' box except the top, which is FLT_MAX (navmesh_survey.py
+    # grid_bounds_samples, 2026-11-08: 8 of 8 samples, the rest "cell square" ones the same way)
+    for p in res["navmeshes"]:
+        b = list(p["geometry"]["grid"]["bounds"])
+        if len(b) == 6:
+            p["geometry"]["grid"] = dict(p["geometry"]["grid"], bounds=tuple(b[:5]) + (en.FLT_MAX,))
     with open(os.path.join(a.exterior, "formids.json"), encoding="utf-8") as fh:
         world = json.load(fh).get("world")
     out = {"schema": 1, "world": world, "frame": {"origin_cw_m": origin, "height_offset_m": hoff},

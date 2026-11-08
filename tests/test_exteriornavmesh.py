@@ -215,6 +215,7 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(n["vertices"][0][2], 10 + 385 * 70.0)               # lifted by the height offset
             self.assertEqual(n["triangles"][0]["height"], E.FLT_MAX)
             self.assertIn("grid_raw", n)
+            self.assertEqual(n["grid"]["bounds"][5], E.FLT_MAX)                  # vanilla exterior grids' top
             ids = {p["key"]: 0x05000A00 + i for i, p in enumerate(exp["navmeshes"])}
             plugin = os.path.join(d, "FO4Port.esm")
             starfield_plugin(plugin, exp, ids)
