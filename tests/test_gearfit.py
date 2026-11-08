@@ -722,3 +722,30 @@ class SeenFromOutsideTests(unittest.TestCase):
         quads = [(0, 1, 3, 2), (4, 5, 7, 6), (0, 1, 5, 4), (2, 3, 7, 6), (0, 2, 6, 4), (1, 3, 7, 5)]
         tris = [t for a, b, cc, d in quads for t in ((a, b, cc), (a, cc, d))]
         self.assertFalse(G.seen_from_outside(np.array([[0.0, 0.0, 0.05]]), c, tris)[0])
+
+
+class SmoothFinalTests(unittest.TestCase):
+    def test_ripples_from_the_fit_smoothed_and_kept_outside(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        n = 25
+        g = np.linspace(-0.12, 0.12, n)
+        grid = np.array([[x, y, 0.0] for y in g for x in g])
+        tris = []
+        for j in range(n - 1):
+            for i in range(n - 1):
+                a = j * n + i
+                tris += [(a, a + 1, a + n), (a + 1, a + n + 1, a + n)]
+        body = grid.copy()
+        bn = np.tile([0.0, 0.0, 1.0], (len(body), 1))
+        base = grid + [0, 0, 0.006]
+        pts = base.copy()
+        pts[:, 2] += 0.004 * np.sign(np.sin(grid[:, 0] * 160))       # the fit's moves: a 4 mm ripple every 2 cm
+        out, _n = G.smooth_final(base, pts, tris, body, tris, bn)
+        inner = (np.abs(grid[:, 0]) < 0.08) & (np.abs(grid[:, 1]) < 0.08)
+        self.assertLess(np.ptp(out[inner, 2]), 0.25 * np.ptp(pts[inner, 2]))
+        self.assertTrue((out[:, 2] >= G.GAP * G.SMOOTH_FLOOR - 1e-6).all())
+        pinned = np.zeros(len(pts), bool)
+        pinned[0] = True
+        out2, _n = G.smooth_final(base, pts, tris, body, tris, bn, fixed=pinned)
+        self.assertTrue(np.allclose(out2[0], pts[0]))

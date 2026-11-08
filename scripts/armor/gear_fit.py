@@ -520,6 +520,15 @@ def debug_textures(folder: str, textures: dict, read, texconv: str) -> list:
     return out
 
 
+def shifted(points, deltas: dict) -> np.ndarray:
+    """Points moved by a {vertex: (dx, dy, dz)} morph."""
+    p = np.asarray(points, float).copy()
+    for i, x in deltas.items():
+        if i < len(p):
+            p[i] += x
+    return p
+
+
 def debug_meshes(folder: str, shapes, frame, surf_pts, surf_tris, sky_gear, sky_body, sky_head=None,
                  sf_head=None, extra=()) -> str:
     """OBJ files of the fit for a look from outside the game (Starfield skeleton space, metres): the Starfield body /
@@ -1031,6 +1040,7 @@ def main(argv=None):
     print("double-sided in Skyrim:", ", ".join(sorted(double)) or "none",
           "| written with back faces:", ", ".join(sorted(doubled)) or "none")
     morphs = {}
+    slider_objs = []
     if not a.no_morphs:
         mpath, body_morph = find_body_morph(sf_data, len(body_pts), female)
         if body_morph is None:
@@ -1057,6 +1067,21 @@ def main(argv=None):
                                           skin_used, mstats, hand_mesh_pts, head_mesh_pts,
                                           src_tris if sh.name != SKIN_SHAPE else None))
             rep["morph_stats"] = mstats
+            if a.debug_dir:
+                # every worn shape and the head at each slider's full extreme, to look for skin coming through
+                # outside the game (2026-11-08, owner: "do we need to model these at the different size extremes")
+                for sh in worn:
+                    rel = gearfit.morph_path(nifs[sh.name.decode("latin-1")], sh.name.decode("latin-1"))
+                    if rel in morphs:
+                        m_ = sfmorph.parse(morphs[rel])
+                        for k in m_.keys:
+                            slider_objs.append((f"fit_{safe_name(sh.name.decode('latin-1', 'replace'))}@{k}.obj",
+                                                shifted(sh.positions, m_.deltas.get(k, {})), sh.triangles, sh.uvs))
+                if len(src_pts) > len(body_pts) and head_tris_v is not None:
+                    hp = src_pts[len(body_pts):]
+                    for k in src_morph.keys:
+                        d_ = {i - len(body_pts): x for i, x in src_morph.deltas.get(k, {}).items() if i >= len(body_pts)}
+                        slider_objs.append((f"sf_head@{k}.obj", shifted(hp, d_), head_tris_v, None))
             for n_, st in mstats.items():
                 print(f"  morph {n_}: " + ", ".join(f"{k} {v['vertices']} v max {v['max_mm']} mm"
                                                     + (f" ({v['over_cap']} over cap)" if v['over_cap'] else "")
@@ -1090,8 +1115,10 @@ def main(argv=None):
         frame = np.array(rep["frame"], float)
         os.makedirs(a.debug_dir, exist_ok=True)
         pngs = debug_textures(a.debug_dir, textures, lambda p: sky._read(bsa.norm(p)), find_texconv(a.texconv))
+        for n_, p_, t_, uv_ in slider_objs:
+            write_obj(os.path.join(a.debug_dir, n_), np.asarray(p_) @ frame[:3, :3].T + frame[:3, 3], t_, uv_)
         print("debug meshes:", debug_meshes(a.debug_dir, shapes + ([skin_sh] if skin_sh is not None else []),
-                                            frame, *dbg, extra=pngs),
+                                            frame, *dbg, extra=pngs + [n_ for n_, *_r in slider_objs]),
               f"({len(pngs)} textures)")
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:

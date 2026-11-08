@@ -428,3 +428,10 @@ class SliderClearanceTests(unittest.TestCase):
         self.assertEqual(rep["Overweight"][0], 3)
         self.assertAlmostEqual(rep["Overweight"][1], 0.004, places=3)
         self.assertTrue(all(out["Overweight"][i][2] >= 0.01 + gear_fit.SLIDER_GAP - 0.003 - 1e-4 for i in range(3)))
+
+
+class ShiftedTests(unittest.TestCase):
+    def test_points_moved_by_their_deltas_only(self):
+        import numpy as np
+        p = gear_fit.shifted([[0, 0, 0], [1, 1, 1]], {1: (0.5, 0, -1), 7: (9, 9, 9)})
+        self.assertTrue(np.allclose(p, [[0, 0, 0], [1.5, 1, 0]]))

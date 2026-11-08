@@ -1253,6 +1253,47 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
     return np.where(outside[:, None], pushed, out)
 
 
+SMOOTH_ROUNDS = 30    # rounds of the last smoothing of the fit's moves
+SMOOTH_FLOOR = 0.75   # gear that was outside the body and sinks under this share of GAP in it is pushed back out to it
+
+
+def smooth_final(base: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray, body_tris, body_nrm: np.ndarray,
+                 fixed: np.ndarray = None, rounds: int = SMOOTH_ROUNDS, gap: float = GAP) -> Tuple[np.ndarray, int]:
+    """The fit's moves (pts - base) smoothed once more over the mesh, fixed vertices pinned; gear that was outside the
+    body and sinks under SMOOTH_FLOOR * gap pushed back out to that, no further (2026-11-08, owner's side view of
+    Saadia's dress, "how unsmooth the breast area is"; verified on the debug meshes: the top fold of the blouse went
+    up and down by 4-5 mm every 1-2 cm across the bust and bumped up over the cleavage where Skyrim's is one smooth
+    curve. Keeping Skyrim's gap and pushing out to GAP, vertex by vertex against two faceted bodies, printed the
+    facets of both into the cloth; pushing out to the full GAP again after smoothing put them back). Returns
+    (points, vertices pushed back out)."""
+    base = np.asarray(base, float)
+    p = np.asarray(pts, float)
+    t = np.asarray(tris, int).reshape(-1, 3)
+    if not len(t) or not rounds:
+        return p, 0
+    e = np.concatenate([t[:, [0, 1]], t[:, [1, 2]], t[:, [2, 0]]])
+    e = np.unique(np.sort(e, 1), axis=0)
+    deg = np.bincount(e.ravel(), minlength=len(p)).astype(float)
+    pin = np.zeros(len(p), bool) if fixed is None else np.asarray(fixed, bool)
+    d0 = p - base
+    d = d0.copy()
+    for _ in range(rounds):
+        acc = d.copy()
+        np.add.at(acc, e[:, 0], d[e[:, 1]])
+        np.add.at(acc, e[:, 1], d[e[:, 0]])
+        d = acc / (1 + deg)[:, None]
+        d[pin] = d0[pin]
+    out = base + d
+    bt = np.asarray(body_tris, int).reshape(-1, 3)
+    _c, dep0, _d = closest_on_mesh(p, body_pts, bt, body_nrm)
+    _c, dep, _d = closest_on_mesh(out, body_pts, bt, body_nrm)
+    low = (dep0 >= 0) & (dep < gap * SMOOTH_FLOOR) & ~pin
+    if low.any():
+        pushed, _n = push_out(out[low], body_pts, body_nrm, gap * SMOOTH_FLOOR, tris=bt)
+        out[low] = pushed
+    return out, int(low.sum())
+
+
 DRAWN_REACH = 0.05    # m: gear inside Skyrim's body and under its drawn skin within this counts as hidden by it
 HIDDEN_MIN = 0.003    # m: gear hidden inside Skyrim's body stays at least this deep inside Starfield's
 HIDDEN_MAX = 0.03     # m: and needs to go no deeper than this
@@ -1799,6 +1840,14 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts = with_seams(final_relax(with_seams(moved_base, canon2), with_seams(pts, canon2), st2, sf_body_pts,
                                          np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
                                          with_seams(keep_out, canon2), gap=gap), canon2)
+        smoothed_pushed = 0
+        if not skin and SMOOTH_ROUNDS and len(sf_body_pts):
+            st3, canon3 = seam_tris(s.points, s.triangles)
+            fixed3 = sky_hidden | collar_keep | skirt_weighted(s.bones, s.weights)
+            sm, smoothed_pushed = smooth_final(with_seams(moved_base, canon3), with_seams(pts, canon3), st3,
+                                               sf_body_pts, np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
+                                               with_seams(fixed3, canon3), gap=gap)
+            pts = with_seams(sm, canon3)
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
@@ -1870,7 +1919,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "body_weighted": near, "covered": covered, "pulled_in": pulled, "welded": welded,
             "chin_lowered": lowered, "chin_drop_mm": round(drop * 1000, 1),
             "neck_wrapped": wrapped, "neck_wrap_mm": round(wrap_max * 1000, 1),
-            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "collar_transplanted": transplanted,
+            "buried": buried, "inside_neck": inside_n, "faces_lifted": faces_lifted, "rehidden": rehidden, "tucked": tucked, "smoothed_pushed": smoothed_pushed, "collar_transplanted": transplanted,
             "skirt_hung": hung,
             "skirt_vertices": int(len(skirt_v)) if not skin else 0,
             "collar_drop_mm": collar_mm, "neck_steps": neck_why, "neck_stretch": neck_stretch,
