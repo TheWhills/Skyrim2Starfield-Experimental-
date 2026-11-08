@@ -851,3 +851,11 @@ class ArmTopGapTests(unittest.TestCase):
         self.assertTrue(mask[0] and not mask[2])                      # a sleeve near the shoulder; not the bodice
         self.assertAlmostEqual(target[0], G.ARM_GAP)
         self.assertFalse(mask[1] and target[1] > G.GAP)               # down the arm: the normal gap
+
+
+class EndShareTests(unittest.TestCase):
+    def test_share_on_foot_and_hand_bones(self):
+        from fo4sf import gearfit as G
+        bones = ["NPC L Calf [LClf]", "NPC L Foot [Lft ]", "NPC L Toe0 [LToe]", "NPC R Hand [RHnd]"]
+        sh = G.end_share(bones, [[(0, 1.0)], [(0, 0.5), (1, 0.5)], [(2, 1.0)], [(3, 0.2), (0, 0.8)]])
+        self.assertEqual([round(x, 2) for x in sh], [0.0, 0.5, 1.0, 0.2])

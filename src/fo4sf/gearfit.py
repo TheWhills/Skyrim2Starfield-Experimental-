@@ -1282,7 +1282,21 @@ def lift_to(pts: np.ndarray, target: np.ndarray, mask: np.ndarray, body_pts: np.
 POSE_ROUNDS = 40      # rounds of smoothing the move from Skyrim's skeleton onto Starfield's (0: off)
 
 
-def smooth_pose(rest: np.ndarray, posed: np.ndarray, tris, rounds: int = POSE_ROUNDS) -> np.ndarray:
+END_BONES = ("foot", "toe", "hand", "finger", "thumb")   # feet and hands: pinned in smooth_pose
+
+
+def end_share(bones, weights) -> np.ndarray:
+    """Per vertex, the share of its weights (bone index, w) on foot / toe / hand / finger bones."""
+    end = {i for i, b in enumerate(bones) if any(k in str(b).lower() for k in END_BONES)}
+    out = np.zeros(len(weights))
+    for v, vw in enumerate(weights):
+        tot = sum(x for _b, x in vw)
+        out[v] = sum(x for b, x in vw if b in end) / tot if tot > 0 else 0.0
+    return out
+
+
+def smooth_pose(rest: np.ndarray, posed: np.ndarray, tris, rounds: int = POSE_ROUNDS,
+                pin: np.ndarray = None) -> np.ndarray:
     """The move each vertex made from Skyrim's skeleton onto Starfield's (posed - rest) smoothed over the mesh, UV
     seams joined (2026-11-08, verified on Saadia's debug meshes, step 0: the outfit only posed on Starfield's skeleton,
     before any fitting, already had the jagged top trim, the bumpy bust and the dented sleeve tops the owner pointed
@@ -1298,12 +1312,16 @@ def smooth_pose(rest: np.ndarray, posed: np.ndarray, tris, rounds: int = POSE_RO
     st, canon = seam_tris(rest, t)
     e = np.unique(np.sort(np.concatenate([st[:, [0, 1]], st[:, [1, 2]], st[:, [2, 0]]]), 1), axis=0)
     deg = np.bincount(e.ravel(), minlength=len(rest)).astype(float)
-    d = with_seams(np.asarray(posed, float) - rest, canon)
+    d0 = with_seams(np.asarray(posed, float) - rest, canon)
+    d = d0.copy()
+    pn = None if pin is None else with_seams(np.asarray(pin, bool), canon)
     for _ in range(rounds):
         acc = d.copy()
         np.add.at(acc, e[:, 0], d[e[:, 1]])
         np.add.at(acc, e[:, 1], d[e[:, 0]])
         d = acc / (1 + deg)[:, None]
+        if pn is not None:
+            d[pn] = d0[pn]
     return rest + with_seams(d, canon)
 
 
@@ -1725,7 +1743,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 rep["feet"][side] = {"scale": np.diag(c)[:3].round(3).tolist(),
                                      "shift_mm": (c[:3, 3] * 1000).round(0).tolist()}
         body_moved = [blend(s.points, s.normals, s.bones, s.weights, transforms) for s in sky_body]
-    body_moved = [(smooth_pose(s.points, p, s.triangles), n) for (p, n), s in zip(body_moved, sky_body)]
+    # feet and hands pinned: their bones move them far apart from the leg / arm (2026-11-08, owner: toes through the
+    # bottom of the boots again, on Ralof's, the female outfits' and the iron boots, after smooth_pose)
+    body_moved = [(smooth_pose(s.points, p, s.triangles, pin=end_share(s.bones, s.weights) > 0.3), n)
+                  for (p, n), s in zip(body_moved, sky_body)]
     body_moved = [(neck_squash(p, neck_squash_params(joints, transforms, sf_world)), n) for p, n in body_moved]
     bp = np.concatenate([p for p, _n in body_moved]) if body_moved else np.zeros((0, 3))
     sky_bp = np.concatenate([s.points for s in sky_body]) if sky_body else np.zeros((0, 3))
@@ -1797,7 +1818,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     for s in gear:
         steps_[s.name.decode("latin-1", "replace")] = {}
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
-        pts = smooth_pose(s.points, pts, s.triangles)
+        pts = smooth_pose(s.points, pts, s.triangles, pin=end_share(s.bones, s.weights) > 0.3)
         pts = neck_squash(pts, neck)
         pts = shoulder_drop(pts, drop_field, drop_axis, sf_clav_z) if drop_field is not None else pts
         moved_base = pts.copy()
@@ -1823,6 +1844,12 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 if covers is not None:
                     under[hi_] = sky_tucked[hi_]
                 sky_hidden &= under
+        # never on the feet or hands (2026-11-08, owner: toes through the bottom of the boots again, on Ralof's, the
+        # female outfits' and the iron boots; verified on Saadia's debug steps: keep_hidden put 107 more shoe vertices
+        # up to 15 mm inside Starfield's foot. The views never look from below, so the soles counted as hidden)
+        ends_ = end_share(s.bones, s.weights) > 0.3
+        sky_hidden &= ~ends_
+        sky_tucked &= ~ends_
         if conform and not skin:
             shift = conform_field(bp, bn, off, pts) if len(bp) else np.zeros_like(pts)
         else:
