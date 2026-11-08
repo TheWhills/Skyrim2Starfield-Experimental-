@@ -917,6 +917,8 @@ def main(argv=None):
     ap.add_argument("--strap-gap", type=float, default=None,
                     help=f"metres off the skin for visible gear round the neck and shoulders (default: "
                          f"{gearfit.STRAP_GAP} on female outfits, off on male ones; 0 = the normal --gap)")
+    ap.add_argument("--debug-steps", action="store_true",
+                    help="with --debug-dir: also the gear after each group of fit steps (fit_<shape>@step<n>.obj)")
     ap.add_argument("--curved", action="store_true",
                     help="split low-poly gear into a rounded surface (Phong tessellation) instead of flat triangles")
     ap.add_argument("--round-bust", action="store_true",
@@ -983,6 +985,7 @@ def main(argv=None):
     head_mesh_pts = rep.pop("_head_pts", None)
     body_tris_v = rep.pop("_body_tris", None)
     head_tris_v = rep.pop("_head_tris", None)
+    fit_steps = rep.pop("_steps", {})
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
         with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
@@ -1147,10 +1150,20 @@ def main(argv=None):
         frame = np.array(rep["frame"], float)
         os.makedirs(a.debug_dir, exist_ok=True)
         pngs = debug_textures(a.debug_dir, textures, lambda p: sky._read(bsa.norm(p)), find_texconv(a.texconv))
-        for n_, p_, t_, uv_ in slider_objs:
+        if a.debug_steps:
+            # the points after each group of fit steps (Starfield skeleton space), to see which step does what
+            for sh in shapes:
+                nm = sh.name.decode("latin-1", "replace")
+                for step, p_ in fit_steps.get(nm, {}).items():
+                    if len(p_) == len(sh.positions):
+                        slider_objs.append((f"fit_{safe_name(nm)}@step{step}.obj", p_, sh.triangles, sh.uvs, True))
+        for n_, p_, t_, uv_, *raw_ in slider_objs:
+            if raw_:
+                write_obj(os.path.join(a.debug_dir, n_), p_, t_, uv_)
+                continue
             write_obj(os.path.join(a.debug_dir, n_), np.asarray(p_) @ frame[:3, :3].T + frame[:3, 3], t_, uv_)
         print("debug meshes:", debug_meshes(a.debug_dir, shapes + ([skin_sh] if skin_sh is not None else []),
-                                            frame, *dbg, extra=pngs + [n_ for n_, *_r in slider_objs]),
+                                            frame, *dbg, extra=pngs + [o[0] for o in slider_objs]),
               f"({len(pngs)} textures)")
     rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:

@@ -1666,7 +1666,10 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         cp_.append(np.asarray(heads[0][0], float))
         ct_.append(np.asarray(heads[0][1], int).reshape(-1, 3) + b2)
     covers = (np.concatenate(cp_), np.concatenate(ct_)) if cp_ else None
+    steps_ = {}                                  # per shape, the points after each group of steps (debug)
+    rep["_steps"] = steps_
     for s in gear:
+        steps_[s.name.decode("latin-1", "replace")] = {}
         pts, nrm = blend(s.points, s.normals, s.bones, s.weights, transforms)
         pts = neck_squash(pts, neck)
         pts = shoulder_drop(pts, drop_field, drop_axis, sf_clav_z) if drop_field is not None else pts
@@ -1705,6 +1708,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             inward = np.minimum((shift * bn_).sum(1), 0.0)
             shift = np.where(bust[:, None], shift - bn_ * inward[:, None], shift)
         pts = pts + shift
+        steps_[s.name.decode("latin-1", "replace")]['1_shift'] = np.array(pts, float).copy()
         pulled = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
             # not round the neck (2026-11-07, measured: pulling the cowl to its Skyrim gap from the nearest surface
@@ -1712,6 +1716,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             kg = sky_gap if sky_clav_z is None else np.where(np.asarray(s.points)[:, 2] > sky_clav_z, np.inf, sky_gap)
             kg = np.where(bust, np.inf, kg)
             pts, pulled = keep_gap(pts, kg, sf_body_pts, sf_body_tris, sf_nrm, gap)
+        steps_[s.name.decode("latin-1", "replace")]['2_keep_gap'] = np.array(pts, float).copy()
         pushed = 0
         if len(sf_body_pts):
             # skin pieces too, closer: Skyrim paints clothes on body-textured parts (Stormcloak trousers)
@@ -1754,6 +1759,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                 pts = smooth_moves(before, pushed_, s.triangles, 2)
                 pts = np.where((np.linalg.norm(pushed_ - before, axis=1) > 0)[:, None], pushed_, pts)
             pts, _again = push_out(pts, sf_body_pts, sf_nrm, gap, tris=bt_)
+        steps_[s.name.decode("latin-1", "replace")]['3_push_cover_relax'] = np.array(pts, float).copy()
         collar_mm = None
         collar_keep = np.zeros(len(pts), bool)
         neck_why = {"heads": heads is not None, "wrap": wrap is not None, "sky_clavicles": sky_clav_z is not None,
@@ -1832,6 +1838,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                    rep.get("global_scale", 1.0))
                 lowered_only = collar_keep & ~mask
                 pts[lowered_only] = keep_[lowered_only]          # bury's push-out must not lift the neckline
+        steps_[s.name.decode("latin-1", "replace")]['4_collar'] = np.array(pts, float).copy()
         inside_n = 0
         if wrap_on and wrap is not None and not skin:
             pts, ins = neck_inside(s.points, pts, s.triangles, *wrap, rep.get("global_scale", 1.0))
@@ -1868,6 +1875,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                                  canon) + posed
             fixed = skirt_weighted(s.bones, s.weights) | collar_keep
             pts = np.where(fixed[:, None], pts, new_pts)
+        steps_[s.name.decode("latin-1", "replace")]['5_detail'] = np.array(pts, float).copy()
         if not skin and FINAL_ROUNDS and len(sf_body_pts):
             keep_out = ~sky_hidden
             keep_out &= ~collar_keep
@@ -1875,6 +1883,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             pts = with_seams(final_relax(with_seams(moved_base, canon2), with_seams(pts, canon2), st2, sf_body_pts,
                                          np.asarray(sf_body_tris, int).reshape(-1, 3), sf_nrm,
                                          with_seams(keep_out, canon2), gap=gap), canon2)
+        steps_[s.name.decode("latin-1", "replace")]['6_final_relax'] = np.array(pts, float).copy()
         strapped = 0
         if not skin and sky_clav_z is not None and len(sf_body_pts) and strap_gap > gap:
             # straps and collars a few mm farther off the skin (2026-11-08, owner's Saadia in game: the halter straps
@@ -1901,6 +1910,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             free = sky_tucked & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
             pts, tucked = keep_tucked(pts, sky_gap, free, sf_body_pts, sf_body_tris, sf_nrm,
                                       rep.get("global_scale", 1.0))
+        steps_[s.name.decode("latin-1", "replace")]['7_strap_tuck'] = np.array(pts, float).copy()
         smoothed_pushed = 0
         if not skin and SMOOTH_ROUNDS and len(sf_body_pts):
             st3, canon3 = seam_tris(s.points, s.triangles)
@@ -1914,15 +1924,18 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # took it out, so the steps that moved single vertices (strap lift, tuck) now run before it)
             if strapped:
                 pts, _s2 = lift_to(pts, target, mask, sf_body_pts, sf_body_tris, sf_nrm)
+        steps_[s.name.decode("latin-1", "replace")]['8_smooth_final'] = np.array(pts, float).copy()
         faces_lifted = 0
         if not skin and len(sf_body_pts):
             pts, faces_lifted = push_faces_out(pts, s.triangles, sf_body_pts, sf_body_tris, sf_nrm)
         if not skin and sky_gap is not None and len(sf_body_pts) and sky_tucked.any():
             pts, _t2 = keep_tucked(pts, sky_gap, free, sf_body_pts, sf_body_tris, sf_nrm, rep.get("global_scale", 1.0))
+        steps_[s.name.decode("latin-1", "replace")]['9_faces_tuck'] = np.array(pts, float).copy()
         rehidden = 0
         if not skin and sky_gap is not None and len(sf_body_pts):
             pts, rehidden = keep_hidden(pts, np.where(sky_hidden, sky_gap, np.inf), sf_body_pts, sf_body_tris, sf_nrm,
                                         rep.get("global_scale", 1.0))
+        steps_[s.name.decode("latin-1", "replace")]['10_hidden'] = np.array(pts, float).copy()
         pts, welded = weld(s.points, pts)
         bad = ~np.isfinite(pts).all(1)
         if len(sf_body_pts):
@@ -2001,12 +2014,36 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     return FitResult(shapes, rep)
 
 
+ARM_BONES = ("arm", "elbow", "bicep", "forearm", "wrist", "hand", "deltoid", "finger", "thumb", "pinky", "index",
+             "middle", "ring", "upperarm", "shoulder")
+
+
+def arm_share(vw) -> float:
+    """The share of a vertex's weights [(bone name, w)] on arm bones (upper arm down to the fingers)."""
+    tot = sum(x for _b, x in vw)
+    arm = sum(x for b, x in vw if any(k in str(b).lower() for k in ARM_BONES) and "clavicle" not in str(b).lower())
+    return arm / tot if tot > 0 else 0.0
+
+
 def body_weights_near(pts: np.ndarray, own, body_pts: np.ndarray, body_nrm: np.ndarray, body_w, bones,
                       near=NEAR_WEIGHTS) -> Tuple[list, int]:
     """Gear lying on the body takes the nearest body vertex's weights (fully within near[0], blended to its own by
     near[1]), so it bends exactly like the skin under it (2026-11-06, Ralof running: boot heels and the Starfield
     heel moved apart with Skyrim's own weights)."""
     _d, dist, idx = nearest_surface(pts, body_pts, body_nrm)
+    # a sleeve takes the arm's skin weights, not the chest's or the back's next to the armpit (2026-11-08, owner:
+    # Saadia's sleeve tops "give out" and fold at the front of the armpit with the arms down, smooth in the bind
+    # pose): gear whose own weights are mostly arm bones looks only at body vertices weighted to the arm, and the
+    # rest of the gear only at the others
+    own_arm = np.array([arm_share(vw) > 0.5 for vw in own])
+    body_arm = np.array([arm_share(bw) > 0.5 for bw in body_w])
+    for want in (True, False):
+        g = np.nonzero(own_arm == want)[0]
+        b = np.nonzero(body_arm == want)[0]
+        if len(g) and len(b) and len(b) < len(body_arm):
+            _d2, dist2, j2 = nearest_surface(np.asarray(pts, float)[g], np.asarray(body_pts, float)[b],
+                                             np.asarray(body_nrm, float)[b])
+            dist[g], idx[g] = dist2, b[j2]
     t = np.clip((dist - near[0]) / max(near[1] - near[0], 1e-6), 0.0, 1.0)
     out, n = [], 0
     for v, vw in enumerate(own):

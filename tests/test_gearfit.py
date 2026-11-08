@@ -792,3 +792,18 @@ class LiftToTests(unittest.TestCase):
         self.assertAlmostEqual(out[1, 2], 0.003)     # not masked
         self.assertAlmostEqual(out[2, 2], 0.02)      # already farther out
         self.assertAlmostEqual(out[3, 2], -0.004)    # inside: left
+
+
+class ArmWeightsTests(unittest.TestCase):
+    def test_sleeve_by_the_armpit_takes_the_arms_skin_weights(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        body = np.array([[0.0, 0.0, 0.0], [0.03, 0.0, 0.0]])          # a chest vertex nearer, an arm vertex farther
+        nrm = np.array([[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
+        bw = [[("C_Chest", 1.0)], [("L_Arm", 1.0)]]
+        pts = np.array([[0.005, 0.01, 0.0], [0.005, 0.01, 0.0]])
+        own = [[("L_Arm", 0.7), ("L_Clavicle", 0.3)], [("C_Spine2", 1.0)]]
+        out, n = G.body_weights_near(pts, own, body, nrm, bw, {"C_Chest", "L_Arm", "L_Clavicle", "C_Spine2"})
+        self.assertGreater(dict(out[0]).get("L_Arm", 0), 0.95)       # sleeve: the arm's skin
+        self.assertNotIn("C_Chest", dict(out[0]))
+        self.assertEqual(dict(out[1]), {"C_Chest": 1.0})     # bodice: the chest's skin
