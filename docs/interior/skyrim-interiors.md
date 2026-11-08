@@ -234,3 +234,11 @@ to the worldspace stayed scenery. Three builds, in this order:
    OFST / CLSZ left out of the override). FO4Port.esm then has the exterior plugin as a master.
 Unresolved until built and run: the C# (written without a compiler), whether the world override keeps the exterior
 intact in game (only record fields are copied; cells stay in the exterior plugin), and the landing heights.
+**Changed the same day: no exterior rebuild needed.** The installed exterior is `C:\Modding\staging\skyrim_all` (its
+SkyrimTerrainTamriel.esm matches the game's byte for byte in size and date; height offset 385 m). PluginSpike with
+`EXTERIOR_DIR` / `EXTERIOR_DOORS` now overrides, in FO4Port.esm, the world and its persistent cell (copied from the
+planet plugin when it overrides them, as make_planet.py does for the landing pad) and the exterior cell holding the
+inn's door: the exterior's static copy of the door gets Initially Disabled, and a persistent load door of ours (a DOOR
+with the same model, bounds and placement) with XTEL into the inn takes its place. Step 2 (`stage --interiors`) is only
+for a future exterior rebuild; if the door is already persistent there, PluginSpike just overrides it with the XTEL.
+Owner's one command: `tools\owner\riverwood_doors.ps1` (batch, convert --resume, check, PluginSpike, reinstall FO4Port).
