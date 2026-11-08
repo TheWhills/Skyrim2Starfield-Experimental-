@@ -1986,8 +1986,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # verified on the debug steps right after this shift: the rim took the offsets of the arm's skin, which
             # Starfield has thicker and closer to the chest): gear takes the torso's or the arm's body offsets by
             # its own (smoothed) arm share
-            own_arm = smooth_share(np.array([arm_share([(s.bones[b], x) for b, x in vw]) for vw in s.weights]),
-                                   s.points, s.triangles)
+            own_arm = smooth_share_near(np.array([arm_share([(s.bones[b], x) for b, x in vw])
+                                                  for vw in s.weights]), s.points)
             k_ = np.clip((own_arm - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)[:, None]
             shift = (1 - k_) * body_shift(~body_arm) + k_ * body_shift(body_arm)
         else:
@@ -2279,8 +2279,8 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         elif weight_src is not None and len(pts) and sf_body_weights is not None \
                 and len(sf_body_weights) == len(sf_body_pts):
             w, near = body_weights_near(pts, w, sf_body_pts, sf_nrm, sf_body_weights, set(sf_world),
-                                        arm_s=smooth_share(np.array([arm_share(vw) for vw in w]), s.points,
-                                                           s.triangles))
+                                        arm_s=smooth_share_near(np.array([arm_share(vw) for vw in w]),
+                                                                s.points))
             wh, _n = body_weights_near(pts, w, w_pts, w_nrm, w_w, set(sf_world))
             w_head_src = wh
         elif sf_body_weights is not None and len(sf_body_weights) == len(sf_body_pts) and len(pts):
@@ -2341,6 +2341,24 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             "gaps_mm": gap_report(s.points, sky_gap, pts, sf_body_pts, sf_body_tris, sf_nrm) if (
                 sky_gap is not None and len(sf_body_pts) and not skin) else {}}
     return FitResult(shapes, rep)
+
+
+SHARE_RADIUS = 0.035   # m: the arm share averaged over gear points this close (across separate parts too)
+
+
+def smooth_share_near(share: np.ndarray, pts, radius: float = SHARE_RADIUS, chunk: int = 512) -> np.ndarray:
+    """A per-vertex value averaged (Gaussian) over the gear's points within about radius, whether or not the mesh
+    joins them (2026-11-08, owner: a gap under Ralof's arm where the mail sleeve meets the tunic, both in one shape
+    but separate parts: Skyrim's arm share jumps from ~0 to ~1 across the join, the mesh smoothing did not cross it,
+    so the sleeve took the arm's skin weights and the tunic the torso's and they moved apart)."""
+    p = np.asarray(pts, float)
+    x = np.asarray(share, float)
+    out = np.empty(len(p))
+    for c in range(0, len(p), chunk):
+        d2 = ((p[c:c + chunk, None, :] - p[None]) ** 2).sum(-1)
+        w = np.exp(-d2 / (radius / 2) ** 2) * (d2 < radius ** 2)
+        out[c:c + chunk] = (w @ x) / np.maximum(w.sum(1), 1e-12)
+    return out
 
 
 def smooth_share(share: np.ndarray, rest, tris, rounds: int = 8) -> np.ndarray:

@@ -919,3 +919,14 @@ class RingRestoreTests(unittest.TestCase):
         self.assertLess(np.ptp(r), 0.25 * np.ptp(np.linalg.norm(pinched[:32] - pinched[:32].mean(0), axis=1)))
         out2, n2 = G.ring_restore(base, pinched, tris, [(0.0, 0.0, 0.0)], arm=np.ones(len(base)))
         self.assertEqual(n2, 0)                                           # a sleeve's edge: left alone
+
+
+class SmoothShareNearTests(unittest.TestCase):
+    def test_share_blends_across_separate_parts(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        pts = np.array([[0.0, 0, 0], [0.005, 0, 0], [0.5, 0, 0]])         # two parts touching, one far away
+        out = G.smooth_share_near(np.array([0.0, 1.0, 1.0]), pts)
+        self.assertLess(abs(out[0] - out[1]), 0.1)                          # no jump across the join
+        self.assertGreater(out[0], 0.3)
+        self.assertAlmostEqual(out[2], 1.0)
