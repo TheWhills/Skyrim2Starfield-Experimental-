@@ -1075,6 +1075,7 @@ NECKLINE_R = 0.085       # m from the neck axis: lowered collar this close may s
 #                          beyond are pushed back out, or skin showed through them)
 COLLAR_RADIUS = 0.13     # m from the neck axis: gear counted as the collar
 COLLAR_DEPTH = (-0.10, 0.0)   # m: clamp of the collar's height correction (never raised)
+COLLAR_SPREAD = 0.03     # m: no direction's correction more than this below the median one
 
 
 def with_normals(points, tris):
@@ -1123,6 +1124,9 @@ def collar_height_field(sky_pts, sky_vis, sky_axis, sky_crown, pts, vis, sf_axis
     centres = (np.arange(SHOULDER_ANGLES) + 0.5) / SHOULDER_ANGLES * COLLAR_SECTORS - 0.5
     f = np.interp(centres, ext, np.tile(d[idx], 3))
     f = np.clip(f, *COLLAR_DEPTH)
+    # no single direction far below the rest (2026-11-08, owner: skin through the iron cuirass's shoulder; one
+    # sector's correction hit the 10 cm clamp and dragged the shoulder piece into the body)
+    f = np.maximum(f, np.median(f) - COLLAR_SPREAD)
     return (np.roll(f, 1) + 2 * f + np.roll(f, -1)) / 4
 
 
@@ -1804,6 +1808,9 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
     if len(sky_bn):
         sky_bn = outward(sky_bp, sky_bn)
     bn = np.concatenate([n for _p, n in body_moved]) if body_moved else np.zeros((0, 3))
+    # which Skyrim body points are arm (for limb-matched offsets, see the shift below)
+    body_arm = np.concatenate([np.array([arm_share([(s_.bones[b], x) for b, x in vw]) > 0.5 for vw in s_.weights], bool)
+                               for s_ in sky_body]) if sky_body else np.zeros(0, bool)
     if len(bn):
         bn = outward(bp, bn)
     drop_field, drop_axis = None, None
@@ -1895,10 +1902,23 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
         ends_ = end_share(s.bones, s.weights) > 0.3
         sky_hidden &= ~ends_
         sky_tucked &= ~ends_
-        if conform and not skin:
-            shift = conform_field(bp, bn, off, pts) if len(bp) else np.zeros_like(pts)
+        def body_shift(sel):
+            if not sel.any():
+                return np.zeros_like(pts)
+            if conform and not skin:
+                return conform_field(bp[sel], bn[sel], off[sel], pts)
+            return _knn_mean_facing(bp[sel], bn[sel], off[sel], pts, nrm, 24, CARRY)
+        if len(bp) and len(body_arm) == len(bp) and body_arm.any() and not body_arm.all() and not skin:
+            # limb to limb (2026-11-08, owner: the iron cuirass's armhole pinched into a teardrop at the armpit,
+            # verified on the debug steps right after this shift: the rim took the offsets of the arm's skin, which
+            # Starfield has thicker and closer to the chest): gear takes the torso's or the arm's body offsets by
+            # its own (smoothed) arm share
+            own_arm = smooth_share(np.array([arm_share([(s.bones[b], x) for b, x in vw]) for vw in s.weights]),
+                                   s.points, s.triangles)
+            k_ = np.clip((own_arm - ARM_MIX[0]) / (ARM_MIX[1] - ARM_MIX[0]), 0.0, 1.0)[:, None]
+            shift = (1 - k_) * body_shift(~body_arm) + k_ * body_shift(body_arm)
         else:
-            shift = _knn_mean_facing(bp, bn, off, pts, nrm, 24, CARRY) if len(bp) else np.zeros_like(pts)
+            shift = body_shift(np.ones(len(bp), bool)) if len(bp) else np.zeros_like(pts)
         bust = np.zeros(len(pts), bool)
         if round_bust and sf_clav_z is not None and len(sf_body_pts) and not skin:
             # the front of the chest keeps Skyrim's rounder shape where Starfield's bust is smaller: not carried

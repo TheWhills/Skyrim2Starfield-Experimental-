@@ -884,3 +884,15 @@ class SkinThroughTests(unittest.TestCase):
         self.assertLess(d[0], 0.0)                                       # under the gear now
         self.assertGreater(moved, 0)
         self.assertLess(np.abs(out[:, 2] - 0.004).max(), 0.03)          # a local bump, not a jump
+
+
+class CollarSpreadTests(unittest.TestCase):
+    def test_one_direction_not_dragged_far_below_the_rest(self):
+        import numpy as np
+        from fo4sf import gearfit as G
+        a = np.linspace(0, 2 * np.pi, 64, endpoint=False)
+        ring = lambda z: np.column_stack([0.1 * np.sin(a), 0.1 * np.cos(a), z])     # noqa: E731
+        sky = ring(np.full(64, 1.4))                              # 20 cm below a 1.6 m crown all round
+        ours = ring(np.where(a < np.pi / 4, 1.55, 1.42))          # one sector 13 cm too high, the rest 2 cm
+        f = G.collar_height_field(sky, np.ones(64, bool), (0, 0), 1.6, ours, np.ones(64, bool), (0, 0), 1.6)
+        self.assertGreaterEqual(f.min(), np.median(f) - G.COLLAR_SPREAD - 0.01)
