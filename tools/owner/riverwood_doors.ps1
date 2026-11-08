@@ -17,7 +17,8 @@ param(
     [switch]$NoInstall,
     [switch]$Navmesh,
     [string]$NavAround = "Riverwood",
-    [int]$NavRadius = 2
+    [int]$NavRadius = 2,
+    [switch]$Resurvey          # redo the vanilla navmesh survey (it is kept between runs)
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -49,7 +50,7 @@ $navWork = Join-Path $Work "navmesh"
 if ($Navmesh) {
     Step "2b. exterior navmesh around $NavAround"
     $navDef = Join-Path $navWork "survey\navmesh_defaults_exterior.json"
-    if (-not (Test-Path $navDef)) {
+    if ($Resurvey -or -not (Test-Path $navDef)) {
         $sv = @("--esm", "$SF\Data\Starfield.esm", "--out", (Join-Path $navWork "survey"), "--exterior", "--max", "400")
         if (Test-Path "$SF\Data\ShatteredSpace.esm") { $sv += @("--navi-esm", "$SF\Data\ShatteredSpace.esm") }
         python -I scripts\interior\navmesh_survey.py @sv

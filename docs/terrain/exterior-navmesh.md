@@ -46,6 +46,21 @@ are cut (open edge); a navmesh wholly inside one Starfield cell is kept as it is
 `--no-split` keeps every navmesh whole (A/B). The survey's `outside_own_cell` says whether vanilla Starfield navmeshes
 stay inside their cell.
 
+## Measured on the owner's PC (2026-11-08, 400 vanilla exterior navmeshes, Starfield.esm + ShatteredSpace.esm NAVI)
+* Parent grid is stored Y then X: 400 of 400 match their cell's XCLC (verified). Ours: 103 of 103 (compare).
+* Vanilla exterior navmeshes keep every triangle centre inside their own 100 m cell (max 0.0): the split is right.
+* Grid order "yx" (rows along Y): agreement 0.9998 (381 exact) against 0.5994 for "xy" (verified).
+* Outdoor triangle height: the median is FLT_MAX (nothing above) (verified); vertex unknown 1, tail (12, 8).
+* NAVI: Starfield.esm's 000FF1 has 56,631 entries; ShatteredSpace.esm overrides the same record with 29,270, i.e.
+  its own only, so the game merges overrides (strongly supported). 79 % of vanilla NVMI end 00 00000000.
+* Grid bounds are not the vertex bounding box in any of the 400 (unresolved; the survey now records samples, rerun
+  with `-Resurvey`).
+* Edge links whose leaving edge is not a full edge of the target triangle: Skyrim's own navmeshes have the same
+  count as ours (615), so they come from Skyrim (seams that meet at T-junctions), not from the split; the check now
+  measures the gap along the edge instead.
+* First build: 103 navmeshes in 15 cells, 11,256 triangles, vertex offsets 0.0 m, NAVI 103 of 103, XNDP on 14 load
+  doors, all pointing at a door triangle. The first NAVI tail was 0F00000000 (wrong inference in PluginSpike), fixed.
+
 ## Unresolved (the survey and compare answer most of it on the PC)
 * Grid order (cell index = row * divisor + column, rows along y or x): `grid_agreement` against vanilla grids; the
   export takes the survey's `grid_order` (default "yx").

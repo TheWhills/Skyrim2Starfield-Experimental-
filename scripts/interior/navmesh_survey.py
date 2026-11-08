@@ -114,6 +114,7 @@ def survey_exterior(esm, limit):
     parent = collections.Counter()
     outside, heights, agree, bounds_ok, div_pairs, errors = [], [], {o: [] for o in exteriornavmesh.GRID_ORDERS}, \
         collections.Counter(), collections.Counter(), []
+    bounds_samples = []
     link_types, vertex_u, tri_u, tails, count, tris = (collections.Counter(), collections.Counter(),
                                                        collections.Counter(), collections.Counter(), 0, 0)
     for r in exteriornavmesh.read_starfield_exterior(esm, limit):
@@ -134,7 +135,16 @@ def survey_exterior(esm, limit):
         if nm["vertices"]:
             vb = [min(v[i] for v in nm["vertices"]) for i in range(3)] + [max(v[i] for v in nm["vertices"])
                                                                           for i in range(3)]
-            bounds_ok["bbox" if max(abs(a - b) for a, b in zip(vb, nm["grid"]["bounds"])) < 0.01 else "other"] += 1
+            gb = nm["grid"]["bounds"]
+            kind = "bbox" if max(abs(a - b) for a, b in zip(vb, gb)) < 0.01 else "other"
+            if kind == "other" and xy and abs(gb[0] - xy[0] * 100.0) < 0.01 and abs(gb[1] - xy[1] * 100.0) < 0.01 \
+                    and abs(gb[3] - gb[0] - 100.0) < 0.01:
+                kind = "cell square"
+            bounds_ok[kind] += 1
+            if len(bounds_samples) < 8:
+                bounds_samples.append({"cell": xy, "bounds": [round(x, 2) for x in gb],
+                                       "vertex_bbox": [round(x, 2) for x in vb], "divisor": nm["grid"]["divisor"],
+                                       "size": [round(x, 3) for x in nm["grid"]["size"]]})
         div_pairs[(nm["grid"]["divisor"], min(len(nm["triangles"]) // 50 * 50, 2000))] += 1
         tails[str(nm["tail"])] += 1
         for t in nm["triangles"]:
@@ -152,7 +162,7 @@ def survey_exterior(esm, limit):
               "outside_own_cell": {"mean": mean(outside), "max": max(outside, default=None),
                                    "navmeshes_over_5pct": sum(o > 0.05 for o in outside)},
               "grid_agreement": {o: {"mean": mean(v), "exact": sum(x == 1.0 for x in v)} for o, v in agree.items()},
-              "grid_bounds": dict(bounds_ok),
+              "grid_bounds": dict(bounds_ok), "grid_bounds_samples": bounds_samples,
               "divisor_by_triangles": sorted([[d, t, n] for (d, t), n in div_pairs.items()]),
               "edge_link_types": [[k, v] for k, v in link_types.most_common(8)],
               "triangle_height": {"min": min(heights, default=None), "max": max(heights, default=None),

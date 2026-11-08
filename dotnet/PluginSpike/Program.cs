@@ -764,7 +764,7 @@ if (navInfos.Count > 0) Console.WriteLine($"XNDP (door -> navmesh) on {xndp} loa
 // NAVI: an override of Starfield.esm's NAVI (its version and precomputed pathing NVPP kept) holding one NVMI per navmesh
 // of ours: flags 0, approx location = the vertices' mean, edge links = the other navmeshes its edge links name, door
 // links = its door triangles' doors, no traversals / island, the pathing cell, then the unknown tail Starfield's own
-// entries end with most often (read from them here). Mutagen keeps the part after the door links as raw bytes, so the
+// entries end with most often (navmesh_survey.py). Mutagen keeps the part after the door links as raw bytes, so the
 // pathing cell's FormIDs are written by hand with the master index of the written file (second pass below).
 NavigationMeshInfoMap? naviO = null;
 var naviBody = new List<(NavigationMapInfo info, (FormKey nav, NavmeshGeometry geo, FormKey? world, short gx, short gy, FormKey? cell) ni)>();
@@ -776,26 +776,10 @@ if (navInfos.Count > 0 && Environment.GetEnvironmentVariable("NAVI") != "off" &&
     if (vn == null) Console.WriteLine("NAVI: Starfield.esm has none; not written");
     else
     {
-        var tails = new Dictionary<string, int>();
-        int read = 0, layoutOk = 0;
-        foreach (var mi in vn.MapInfos.Take(20000))
-        {
-            read++;
-            var u = mi.Unknown.ToArray();
-            int p = 0;
-            if (u.Length < 5) continue;
-            p = 4 + (int)BitConverter.ToUInt32(u, 0) * 60;                   // traversals, 60 bytes each
-            if (p >= u.Length) continue;
-            if (u[p++] != 0) continue;                                        // island data: skip those
-            if (p + 12 > u.Length || BitConverter.ToUInt32(u, p) != 0xA5E9A03C) continue;
-            p += 12;                                                          // CRC, world, grid or cell
-            layoutOk++;
-            var tail = Convert.ToHexString(u, p, u.Length - p);
-            tails[tail] = tails.GetValueOrDefault(tail) + 1;
-        }
-        if (tails.Count > 0) naviTail = Convert.FromHexString(tails.OrderByDescending(kv => kv.Value).First().Key);
-        Console.WriteLine($"NAVI: vanilla {vn.FormKey}, {read} entries read, {layoutOk} with the expected layout; tail " +
-                          $"{Convert.ToHexString(naviTail)} ({(tails.Count > 0 ? tails.Values.Max() : 0)} of them)");
+        // tail after the pathing cell: navmesh_survey.py --exterior parsed Starfield.esm's 56,631 NVMI (xEdit layout):
+        // 44,710 end 00 00000000 (unknown byte 0, empty array); ShatteredSpace.esm the same (22,249 of 29,270).
+        // (Reading it here from Mutagen's raw Unknown matched the layout in only 748 of 20,000 and gave 0F00000000.)
+        Console.WriteLine($"NAVI: vanilla {vn.FormKey} ({vn.MapInfos.Count} entries); ours end {Convert.ToHexString(naviTail)}");
         naviO = (NavigationMeshInfoMap)vn.DeepCopy();
         naviO.MapInfos.Clear();                                       // ours only: the game merges the overrides
         foreach (var ni in navInfos)

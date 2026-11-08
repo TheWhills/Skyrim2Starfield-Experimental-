@@ -94,10 +94,12 @@ def cmd_export(a):
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "exterior_navmesh.json"), "w", encoding="utf-8") as fh:
         json.dump(out, fh)
-    links = en.edge_link_problems({p["key"]: p["geometry"] for p in res["navmeshes"]}, tol=1.0)
+    links = en.edge_link_problems({p["key"]: p["geometry"] for p in res["navmeshes"]}, tol=2.0)
+    before = en.edge_link_problems({n["formkey"]: n["geometry"] for n in moved}, tol=2.0)   # Skyrim's own, unsplit
     report = {"skyrim_cells": list(rect), "skyrim_navmeshes": len(navs), "unreadable": bad,
               "problems": {n["formkey"]: n["problems"] for n in navs if n["problems"]},
               "stats": res["stats"], "edge_links_after_split": dict(links, examples=links["examples"][:5]),
+              "edge_links_skyrim": dict(before, examples=before["examples"][:5]),
               "triangles": sum(len(p["geometry"]["triangles"]) for p in res["navmeshes"]),
               "cells": sorted({tuple(p["cell"]) for p in res["navmeshes"]}), "seconds": round(time.time() - t0, 1)}
     with open(os.path.join(a.out, "export_report.json"), "w", encoding="utf-8") as fh:
@@ -105,8 +107,11 @@ def cmd_export(a):
     s = res["stats"]
     print(f"{len(navs)} Skyrim navmeshes in cells {rect} -> {s['navmeshes']} Starfield navmeshes in {s['cells']} cells "
           f"({s['split']} split; links kept {s['links_kept']}, added {s['links_added']}, cut at the region edge "
-          f"{s['links_cut']}; door links {s['doors']}); {report['triangles']} triangles; edge links that do not meet "
-          f"their triangle: {links['mismatch']}; unreadable {len(bad)} -> {a.out}\\exterior_navmesh.json")
+          f"{s['links_cut']}; door links {s['doors']}); {report['triangles']} triangles; edge links more than 2 units "
+          f"off their triangle: ours {links['mismatch']} of {links['links']} (split seams "
+          f"{links['by_kind']['seam']['mismatch']} of {links['by_kind']['seam']['links']}), Skyrim's own "
+          f"{before['mismatch']} of {before['links']} (gap median {before['gaps']['median']}, max "
+          f"{before['gaps']['max']}); unreadable {len(bad)} -> {a.out}\\exterior_navmesh.json")
     return 0
 
 
@@ -246,6 +251,8 @@ def pathing_checks(plugin, raw):
             problems.append(f"edge links {len(i['edge_links'])} vs NVNM {len(edges)} navmeshes")
         if {d for _c, d in i["door_links"]} != doors:
             problems.append(f"doors {len(i['door_links'])} vs NVNM {len(doors)}")
+        if i["tail"] != "0000000000":                 # what 79 % of vanilla NVMI end with (survey)
+            problems.append(f"tail {i['tail']}")
         if i["crc"] != skyrimnavmesh.PATHING_CELL:
             problems.append(f"pathing cell CRC {i['crc']:08X}")
         if problems:

@@ -273,11 +273,26 @@ def split_to_cells(navs: List[Dict], split: bool = True, order: str = "yx", link
 
 
 # ------------------------------------------------------------------------------------------------------------ checks
+def _seg_dist(p, a, b):
+    """Distance from point p to the segment ab (3-D)."""
+    d = [b[i] - a[i] for i in range(3)]
+    dd = sum(x * x for x in d)
+    t = 0.0 if dd == 0 else max(0.0, min(1.0, sum((p[i] - a[i]) * d[i] for i in range(3)) / dd))
+    return math.dist(p[:3], [a[i] + t * d[i] for i in range(3)])
+
+
 def edge_link_problems(navs: Dict[str, Dict], tol: float = 1.0) -> Dict:
-    """Do the edge links join triangles that really share that edge? navs = {key: geometry} (any units; tol in the same
-    units). For each link: the two vertices of the leaving edge must both be vertices of the target triangle.
-    Returns {"links", "outside" (target navmesh not in navs), "bad_index", "mismatch", "examples"}."""
-    out = {"links": 0, "outside": 0, "bad_index": 0, "mismatch": 0, "examples": []}
+    """Do the edge links join triangles that really touch along that edge? navs = {key: geometry} (any units; tol in the
+    same units). For each link, the leaving edge AB against the target triangle's three edges CD: "shared" when A and
+    B are both target vertices (within tol); otherwise the gap = the smallest, over CD, of the distance from AB's
+    middle to CD or from CD's middle to AB (0 for edges on one line that overlap, as at a T-junction across a seam).
+    A gap over tol is a mismatch. Links between pieces of one source navmesh (keys "<source>@x,y") count as "seam",
+    the rest as "between". Returns counts, the gap distribution of the non-shared links, and examples."""
+    out = {"links": 0, "outside": 0, "bad_index": 0, "shared": 0, "mismatch": 0,
+           "by_kind": {"seam": {"links": 0, "mismatch": 0}, "between": {"links": 0, "mismatch": 0}},
+           "gaps": [], "examples": []}
+    src = lambda k: str(k).split("@")[0]                                   # noqa: E731
+    gaps = []
     for key, g in navs.items():
         V = g["vertices"]
         for ti, t in enumerate(g["triangles"]):
@@ -296,14 +311,30 @@ def edge_link_problems(navs: Dict[str, Dict], tol: float = 1.0) -> Dict:
                 if not 0 <= l["triangle"] < len(h["triangles"]):
                     out["bad_index"] += 1
                     continue
+                kind = "seam" if src(l["navmesh"]) == src(key) and l["navmesh"] != key else "between"
+                out["by_kind"][kind]["links"] += 1
                 a, b = V[t["v"][kk]], V[t["v"][(kk + 1) % 3]]
                 other = [h["vertices"][i] for i in h["triangles"][l["triangle"]]["v"]]
                 near = lambda p: min(math.dist(p[:3], q[:3]) for q in other)      # noqa: E731
-                if near(a) > tol or near(b) > tol:
+                if near(a) <= tol and near(b) <= tol:
+                    out["shared"] += 1
+                    continue
+                mab = [(a[i] + b[i]) / 2 for i in range(3)]
+                gap = math.inf
+                for j in range(3):
+                    c, d = other[j], other[(j + 1) % 3]
+                    mcd = [(c[i] + d[i]) / 2 for i in range(3)]
+                    gap = min(gap, _seg_dist(mab, c, d), _seg_dist(mcd, a, b))
+                gaps.append(gap)
+                if gap > tol:
                     out["mismatch"] += 1
+                    out["by_kind"][kind]["mismatch"] += 1
                     if len(out["examples"]) < 10:
                         out["examples"].append({"navmesh": key, "triangle": ti, "edge": kk, "to": l["navmesh"],
-                                                "to_triangle": l["triangle"], "gap": round(max(near(a), near(b)), 3)})
+                                                "to_triangle": l["triangle"], "gap": round(gap, 3)})
+    gaps.sort()
+    q = lambda f: round(gaps[min(len(gaps) - 1, int(f * (len(gaps) - 1)))], 3) if gaps else None   # noqa: E731
+    out["gaps"] = {"n": len(gaps), "median": q(0.5), "p95": q(0.95), "max": q(1.0)}
     return out
 
 
