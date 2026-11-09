@@ -58,6 +58,32 @@ Starfield must be closed while a script writes into the mods folders.
 | Voice lines (skyrim_voice.py --out: lines.json + .wem / .ffxanim) | `C:\Modding\work\voice` |
 | Voice files as installed (face_fit copies them) | `$face\Sound\Voice\S2SFaceTest.esm\S2S_<voice type>_<NPC>` |
 
+## Queue for the next session (written 2026-11-09, in this order)
+
+Each step says what to send back. A: read-only, Starfield may stay open; B: builds, Starfield closed; C: in game.
+
+1. `git pull`
+2. A: race probe (checks the new head transfer): command under "Race probe" below. Send race_probe.json and screenshots of
+   race_view.html (Orc, High Elf, Imperial). Expect: no scalp cracks, no strip behind the ears, the orc's open
+   underbite.
+3. A: mouth probe and beast probe (commands below). Send mouth_probe.json, beast_probe.json and screenshots of
+   mouth_view.html (orc, heads off) and beast_view.html (a Khajiit's jaw-weight column).
+4. B: Embry's outfit, then the faces of all seven test NPCs (the head transfer changed, so every face changes):
+   ```powershell
+   python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Embry --name Embry_outfit --out $armor --add --debug-dir C:\Modding\work\debug_embry
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice
+   ```
+   Send faces.json (and gear_fit.json if Embry's run complains).
+5. B: the Riverwood build with the scheduled NPCs (always after a face_fit run: its ids move):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
+   ```
+6. C: in game: Embry's shirt shows, Delphine's dress does not clip at the shoulders, the faces (compare with Skyrim),
+   Orgnar still at the bar. Screenshots.
+7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
+   NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
+   the control, rerun with `--race-head` and look again.
+
 ## Working commands
 
 Converted outfit for a test NPC (one per NPC; `--add` keeps the other outfits in the plugin):
