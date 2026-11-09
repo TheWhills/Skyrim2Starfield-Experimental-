@@ -24,9 +24,9 @@ Z = lambda s: s.encode() + b"\0"                                     # noqa: E73
 I = lambda v: struct.pack("<I", v)                                  # noqa: E731
 
 
-def tri(base, morphs=(), stats=()):
+def tri(base, morphs=(), stats=(), tris=((0, 1, 2),)):
     V = len(base)
-    tris = [(0, 1, 2)]
+    tris = [tuple(t) for t in tris]
     head = b"FRTRI003" + struct.pack("<10i", V, len(tris), 0, 0, 0, 0, 0, len(morphs), len(stats), 0) + bytes(16)
     body = np.asarray(base, "<f4").tobytes() + np.asarray(tris, "<i4").tobytes()
     for name, scale, deltas in morphs:

@@ -35,7 +35,7 @@ sys.path.insert(0, HERE)
 
 import numpy as np  # noqa: E402
 
-from fo4sf import bsa, facefit, nif as nifmod, sfmesh, sfplugin, skyrimnpc, skyrimskin  # noqa: E402
+from fo4sf import bsa, facefit, headcorr, nif as nifmod, sfmesh, sfplugin, skyrimnpc, skyrimskin  # noqa: E402
 import hkx_to_af  # noqa: E402  (archive helpers)
 import npc_records  # noqa: E402
 import hair_probe  # noqa: E402  (PNG writer)
@@ -65,6 +65,12 @@ def skyrim_head(data: bytes, model: bool = False):
         return None
     p = np.array(s.positions, float)
     return facefit.apply4(facefit.skin_to_model_matrix(s.skin_transform), p) if model else p
+
+
+def skyrim_head_triangles(data: bytes):
+    """(T, 3) triangles of the head shape in a Skyrim head NIF (None without one)."""
+    s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(nifmod.parse(data)))
+    return None if s is None else np.asarray(s.triangles, int).reshape(-1, 3)
 
 
 def skyrim_head_matrix(data: bytes):
@@ -529,6 +535,9 @@ def main(argv=None):
     ap.add_argument("--legacy-alignment", action="store_true",
                     help="the old Skyrim -> Starfield head alignment (ICP on the raw mesh, 90 degrees off; 2026-11-09) "
                          "instead of model space through the head's node transform, to compare")
+    ap.add_argument("--transfer", choices=["surface", "nearest"], default="surface",
+                    help="Skyrim face -> Starfield head: surface (a point on the Skyrim surface per Starfield vertex, "
+                         "seams welded; fo4sf.headcorr, 2026-11-09) or nearest (the old 4-nearest-vertex average)")
     ap.add_argument("--regions", help="facial bone regions file to use instead of the game's (per sex: give twice, "
                                       "male first)", action="append", default=[])
     ap.add_argument("--head-nif", action="append", default=[], help="head NIF instead of the game's (male, female)")
@@ -652,13 +661,22 @@ def main(argv=None):
         sliders = facefit.load_regions(text)
         head, hrep = starfield_head(sf_data, female, a.head_nif[int(female)] if len(a.head_nif) > int(female) else None,
                                     recipe)
-        base, al, model_space = head_alignment(head, hkx_to_af.read_any(SKY_HEADS[female], sky),
-                                               legacy=a.legacy_alignment)
-        setup[female] = (sliders, head, base, al, model_space)
+        base_bytes = hkx_to_af.read_any(SKY_HEADS[female], sky)
+        base, al, model_space = head_alignment(head, base_bytes, legacy=a.legacy_alignment)
+        corr = None
+        if a.transfer == "surface" and getattr(head, "triangles", None) is not None and len(head.triangles):
+            s_, R_, t_ = al[:3]
+            node = getattr(head, "model_xf", None)
+            corr = headcorr.correspond(s_ * base @ R_.T + t_, skyrim_head_triangles(base_bytes), head.vertices,
+                                       head.triangles, to_model=np.asarray(node, float) if model_space and
+                                       node is not None else None)
+        setup[female] = (sliders, head, base, al, model_space, corr)
         report["sexes"]["female" if female else "male"] = dict(
             hrep, sliders=len(sliders), skyrim_base_vertices=len(base), alignment_scale=al[0],
             alignment_rms_m=al[3], alignment_rotated=bool(not np.allclose(al[1], np.eye(3))),
-            alignment="model space via the head node (2026-11-09)" if model_space else "legacy ICP on the mesh")
+            alignment="model space via the head node (2026-11-09)" if model_space else "legacy ICP on the mesh",
+            transfer="surface (headcorr)" if corr is not None else "nearest vertices",
+            correspondence=corr.report if corr is not None else None)
     dial_ids = race_dials(os.path.join(sf_data, "Starfield.esm"))
     for female, (sliders, *_rest) in setup.items():
         ids = {s.id for s in sliders}
@@ -667,16 +685,19 @@ def main(argv=None):
             "count": len(rd), "also_slider_ids": len(rd & ids), "slider_ids_not_dials": len(ids - rd)}
 
     for n in chosen:
-        sliders, head, base, al, model_space = setup[n["female"]]
+        sliders, head, base, al, model_space, corr = setup[n["female"]]
         row = {"edid": n["edid"], "form_id": f"{n['form_id']:08X}", "female": n["female"]}
         try:
             fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
                              model=model_space)
             if fg is None or len(fg) != len(base):
                 raise ValueError(f"FaceGen head has {0 if fg is None else len(fg)} vertices, base head {len(base)}")
-            disp = facefit.transfer(base, fg, al, head.vertices)
-            if a.smooth and getattr(head, "triangles", None) is not None and len(head.triangles):
-                disp = facefit.smooth_field(disp, head.triangles, a.smooth)
+            if corr is not None:
+                disp = corr.transfer((fg - base) @ al[1].T * al[0], a.smooth)
+            else:
+                disp = facefit.transfer(base, fg, al, head.vertices)
+                if a.smooth and getattr(head, "triangles", None) is not None and len(head.triangles):
+                    disp = facefit.smooth_field(disp, head.triangles, a.smooth)
             if not a.no_symmetry:
                 disp = facefit.symmetrize(disp, head.vertices)
             values, rep = facefit.fit(head, sliders, head.vertices + disp, facefit.face_weights(head),

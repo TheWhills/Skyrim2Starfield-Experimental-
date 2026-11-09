@@ -11,8 +11,9 @@ Starfield's head (offline; no game). Read-only.
 2. HumanRace by name in Starfield.esm: conditions with HumanRace as a parameter (by condition function, e.g. 69
    GetIsRace) and every other field holding its FormID, by record type and field: what a separate race per Skyrim race
    would have to match (armor race / subgraph race / keywords cover the rest).
-3. Each Skyrim race morph (MaleHeadRaces.tri / FemaleHeadRaces.tri) moved onto Starfield's head (face_fit's alignment
-   and transfer, smoothed over the head's triangles): per race and region how far it moves Starfield's head, and how
+3. Each Skyrim race morph (MaleHeadRaces.tri / FemaleHeadRaces.tri) moved onto Starfield's head (face_fit's alignment;
+   --transfer surface, the default: fo4sf.headcorr's point on the Skyrim surface per Starfield vertex, seams welded,
+   smoothed; --transfer nearest: the old 4-nearest-vertex average, to compare): per race and region how far it moves Starfield's head, and how
    much falls outside every region. Writes race_morphs_<sex>.npz (per race, (V, 3) metres) for the next step, and
    race_view.html: both heads with the race morphs to switch through (three.js).
 Writes <out>\\race_probe.json.
@@ -35,7 +36,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 
-from fo4sf import bsa, facefit, fo4land, packages, sfmorph, skyrimtri  # noqa: E402
+from fo4sf import bsa, facefit, fo4land, headcorr, packages, sfmorph, skyrimtri  # noqa: E402
 
 SEXES = {False: "male", True: "female"}
 SF_MORPH = "meshes/morphs/human/{sex}/chargen/{part}/morph.dat"
@@ -152,7 +153,7 @@ def human_race_refs(esm):
 
 
 # ----------------------------------------------------------------------------------- 3. race morphs onto Starfield
-def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False):
+def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="surface"):
     head, _rep = face_fit.starfield_head(sf_data, female)
     tri_base = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_HEAD_TRI[female], sky))
     races = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_RACE_TRI[female], sky), deltas=True)
@@ -173,10 +174,21 @@ def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False):
             m["deltas"] = deltas[m["name"]]
     rep["alignment"] = {"scale": al[0], "rms_m": al[3], "model_space": model_space}
     out = {}
+    corr = None
+    if method == "surface":
+        s, R, t = al[:3]
+        node = getattr(head, "model_xf", None)
+        corr = headcorr.correspond(s * base @ R.T + t, races["faces"], head.vertices, head.triangles,
+                                   to_model=np.asarray(node, float) if model_space and node is not None else None)
+        rep["correspondence"] = corr.report
+    rep["transfer"] = method
     for m in races["morphs"]:
-        disp = facefit.transfer(base, base + m["deltas"], al, head.vertices)
-        if smooth:
-            disp = facefit.smooth_field(disp, head.triangles, iterations=smooth)
+        if corr is not None:
+            disp = corr.transfer(m["deltas"] @ al[1].T * al[0], smooth)
+        else:
+            disp = facefit.transfer(base, base + m["deltas"], al, head.vertices)
+            if smooth:
+                disp = facefit.smooth_field(disp, head.triangles, iterations=smooth)
         out[m["name"]] = disp
         rep.setdefault("races", {})[m["name"]] = {
             "skyrim_max_m": round(float(np.linalg.norm(m["deltas"], axis=1).max()) * al[0], 4),
@@ -261,6 +273,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--smooth", type=int, default=4, help="smoothing passes over Starfield's head (0 = none)")
     ap.add_argument("--legacy-alignment", action="store_true", help="the old alignment (to compare)")
+    ap.add_argument("--transfer", choices=["surface", "nearest"], default="surface",
+                    help="surface: a point on the Skyrim surface per Starfield vertex (fo4sf.headcorr); nearest: the "
+                         "old 4-nearest-vertex average (to compare)")
     ap.add_argument("--skip", action="append", default=[], choices=["morphs", "refs", "transfer"])
     a = ap.parse_args(argv)
     import face_fit                                     # heavy imports only when run
@@ -305,7 +320,7 @@ def main(argv=None):
         views = {}
         for female in (False, True):
             head, base, races, al, disp, rep = race_transfer(sky, sf_data, female, a.smooth, face_fit,
-                                                             legacy=a.legacy_alignment)
+                                                             legacy=a.legacy_alignment, method=a.transfer)
             if regions.get(female):
                 for name, d in disp.items():
                     rep["races"][name]["regions"] = per_region(d, regions[female], len(head.vertices))
@@ -315,7 +330,8 @@ def main(argv=None):
             views[SEXES[female]] = (head, base, races, al, disp)
             print(f"{SEXES[female]}: Skyrim {rep['skyrim_vertices']} -> Starfield {rep['starfield_vertices']} "
                   f"vertices, alignment rms {rep['alignment']['rms_m']:.4f} m "
-                  f"({'model space' if rep['alignment']['model_space'] else 'legacy'})")
+                  f"({'model space' if rep['alignment']['model_space'] else 'legacy'}); transfer {rep['transfer']} "
+                  f"{rep.get('correspondence', '')}")
             for name, x in rep["races"].items():
                 reg = x.get("regions", {})
                 top = sorted(((k, v["max_m"]) for k, v in reg.items() if k != "outside"), key=lambda kv: -kv[1])[:3]

@@ -125,6 +125,73 @@ class FaceFitScriptTests(unittest.TestCase):
              S.bsa.SkyrimArchives) = saved
 
 
+def egg_mesh(nu=48, nv=28):
+    """test_facefit's egg head as a closed UV-sphere mesh (vertices, triangles): the surface transfer needs triangles."""
+    th, ph = np.meshgrid(np.linspace(0, 2 * np.pi, nu, endpoint=False), np.linspace(0, np.pi, nv + 1)[1:-1])
+    ring = np.stack([np.sin(ph) * np.cos(th), np.sin(ph) * np.sin(th), np.cos(ph)], -1).reshape(-1, 3)
+    p = np.concatenate([[(0, 0, 1)], ring, [(0, 0, -1)]]) * np.array([0.075, 0.1, 0.12])
+    nose = np.exp(-((p[:, 0] / 0.012) ** 2 + (p[:, 2] / 0.03) ** 2)) * (p[:, 1] > 0)
+    brow = np.exp(-(((p[:, 2] - 0.045) / 0.01) ** 2)) * (p[:, 1] > 0.05) * (np.abs(p[:, 0]) < 0.05)
+    p[:, 1] += 0.025 * nose + 0.008 * brow
+    tris = []
+    for i in range(nu):
+        j = (i + 1) % nu
+        tris.append((0, 1 + i, 1 + j))
+        for r in range(nv - 2):
+            a, b, c, d = 1 + r * nu + i, 1 + r * nu + j, 1 + (r + 1) * nu + i, 1 + (r + 1) * nu + j
+            tris += [(a, c, d), (a, d, b)]
+        last = 1 + (nv - 2) * nu
+        tris.append((last + i, len(p) - 1, last + j))
+    return p, np.array(tris, int)
+
+
+class SurfaceTransferTests(unittest.TestCase):
+    def test_surface_transfer_recovers_dials(self):
+        sliders = facefit.load_regions(json.dumps(T.REGIONS))
+        sf_v, sf_t = egg_mesh(64, 36)                       # Starfield: finer
+        sky_v, sky_t = egg_mesh(32, 18)                     # Skyrim: coarser, in its units (x 70)
+        sf_head = T.make_head(sf_v)
+        sf_head.triangles = sf_t
+        sky_head = T.make_head(sky_v)
+        sky_base = sky_v * 70.0
+        faces = {k: facefit.deform(sky_head, sliders, v) * 70.0 for k, v in TRUTH.items()}
+        ids = {"0A2C94": "HousecarlWhiterun", "013BAB": "Ysolda"}
+
+        def read_any(path, _sky=None):
+            return ("face:" + ids[path[-10:-4].upper()]).encode() if "facegeom" in path.lower() else b"base"
+        saved = (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head, S.bsa.SkyrimArchives,
+                 S.skyrim_head_triangles)
+        S.hkx_to_af.read_any = read_any
+        S.hkx_to_af.vanilla_file = lambda p, d: (json.dumps(T.REGIONS).encode(), p)
+        S.skyrim_head = lambda data, model=False: (sky_base.copy() if data == b"base"
+                                                   else faces[data.decode().split(":")[1]])
+        S.skyrim_head_triangles = lambda data: sky_t
+        S.starfield_head = lambda d, f, h=None, r=None: (sf_head, {"face_bones": 6})
+        S.bsa.SkyrimArchives = lambda d: None
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                sky = os.path.join(tmp, "sky")
+                sf = os.path.join(tmp, "sf")
+                os.makedirs(sky)
+                os.makedirs(os.path.join(sf, "Data"))
+                skyrim_esm(os.path.join(sky, "Skyrim.esm"))
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+                out = os.path.join(tmp, "out")
+                self.assertEqual(S.main(["--skyrim-data", sky, "--starfield", sf, "--out", out, "--count", "2"]), 0)
+                with open(os.path.join(out, "faces.json"), encoding="utf-8") as fh:
+                    rep = json.load(fh)
+        finally:
+            (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head, S.bsa.SkyrimArchives,
+             S.skyrim_head_triangles) = saved
+        self.assertEqual(rep["sexes"]["male"]["transfer"], "surface (headcorr)")
+        self.assertEqual(rep["sexes"]["male"]["correspondence"]["src_triangles"], len(sky_t))
+        rows = {r["edid"]: r for r in rep["npcs"]}
+        for edid, truth in TRUTH.items():
+            got = {int(k): v for k, v in rows[edid]["dials"].items()}
+            for k, v in truth.items():
+                self.assertAlmostEqual(got.get(k, 0.0), v, delta=0.15, msg=(edid, got))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -134,3 +134,26 @@ which fits the separate-races design; hair / brows / lashes then need the same k
   without rotation, the longer Starfield neck left out); face_fit and race_probe use it (--legacy-alignment for the
   old one). To check: the probe's new rms (skyrimhair measured 6.7 mm on the cranium this way) and the faces after a
   face_fit rerun.
+
+## Second probe run (owner, 2026-11-09): alignment fixed; transfer reworked
+- Alignment (verified): rms 0.82 cm male / 0.80 cm female in model space (was 2.3 / 1.7 cm); the viewer shows both
+  heads upright and facing; elf ears and the orc jaw land on Starfield's ears and jaw.
+- Three faults in the transferred shapes (owner's screenshots; measured on the run's race_view.html data, which holds
+  both aligned heads and every race's deltas):
+  1. Cracks on the scalp: 464 vertex pairs of Starfield's head sit at the same spot (split along UV seams); the
+     smoothing treated them as unrelated and moved them apart by up to 6.4 mm (orc male).
+  2. A white strip behind the ears and folds on the cheeks: the 4-nearest-vertex average cannot tell the front of an
+     ear from its back, and jumps where the set of 4 nearest changes (move field up to 3.9x as steep as the surface).
+  3. The orc's mouth closed: Starfield lip vertices averaged Skyrim's upper and lower lip, losing the underbite.
+- Topology (verified): Skyrim's head has a mouth hole (12 vertices male, 20 female); the female head also has 37 loose
+  single triangles inside the lips. Starfield's head has one open edge only (the bust): its mouth is a closed pocket,
+  the lips joined through the inner mouth, so the mouth opens without tearing.
+- New transfer, fo4sf/headcorr.py: each Starfield vertex takes one point on the Skyrim surface (triangle +
+  barycentrics) out of its 8 nearest triangles facing the same way, chosen so that mesh neighbours' points are close
+  along the Skyrim surface (edge geodesics) and the lip side matches (surface distance to a point above vs below the
+  mouth, the same measure on both heads); moves are averaged over seam-split vertices and smoothed on the welded mesh.
+  Checked on the owner's data: identical to the prototype; seam splits 0; the orc's open underbite and the elf / orc
+  ears come out whole (renders compared side by side with Skyrim's). Weak spot left: a small fold at each mouth
+  corner (both lips meet there, the side is ambiguous on both heads). About 20 s per sex.
+- race_probe and face_fit use it by default (--transfer nearest for the old average). face_fit's faces change with it
+  (and with the alignment); a rerun and a look in game are needed.

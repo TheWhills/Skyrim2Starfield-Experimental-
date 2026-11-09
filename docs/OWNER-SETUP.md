@@ -95,8 +95,12 @@ Race probe (read-only: Starfield's head morphs and regions, HumanRace-by-name co
 Starfield's head; opens as C:\Modding\work\races\race_view.html):
 
 ```powershell
-python -I scripts\npc\race_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
+python -I scripts\npc\race_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races --skip refs
 ```
+
+`--skip refs` leaves out the HumanRace counts (unchanged since the first run). The transfer is the surface one
+(fo4sf/headcorr.py, about 20 s per sex); `--transfer nearest` gives the old average to compare. face_fit uses the same
+transfer (also `--transfer nearest` there).
 
 Beard matches (rerun only when the matcher changes):
 

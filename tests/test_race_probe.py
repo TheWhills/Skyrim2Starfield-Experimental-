@@ -93,12 +93,56 @@ class RaceProbeTests(unittest.TestCase):
                                                                                          head.model_xf), True),
             hkx_to_af=types.SimpleNamespace(read_any=lambda p, sky: files["races"] if "races" in p else
                                             files["head"] if p.endswith(".tri") else b""))
-        head, b, races, al, out, rep = P.race_transfer(None, "", False, 0, ff)
+        head, b, races, al, out, rep = P.race_transfer(None, "", False, 0, ff, method="nearest")
+        self.assertEqual(rep["transfer"], "nearest")
         self.assertLess(rep["alignment"]["rms_m"], 1e-6)
         self.assertTrue(rep["alignment"]["model_space"])
         np.testing.assert_allclose(out["HighElfRace"][-1], (0.1, 0, 0), atol=1e-6)    # up = local +x
         self.assertLess(float(np.abs(out["HighElfRace"][:-1]).max()), 1e-6)
         self.assertAlmostEqual(rep["races"]["HighElfRace"]["skyrim_max_m"], 0.1, places=5)
+
+    def test_transfer_surface(self):
+        # the same set-up on a closed mesh (a UV sphere head): the surface transfer, through the node rotation
+        from test_race_survey import tri
+        import types
+        from fo4sf import facefit
+        nu, nv = 24, 12
+        th, ph = np.meshgrid(np.linspace(0, 2 * np.pi, nu, endpoint=False), np.linspace(0, np.pi, nv + 1)[1:-1])
+        ring = np.stack([np.sin(ph) * np.cos(th), np.sin(ph) * np.sin(th), np.cos(ph)], -1).reshape(-1, 3)
+        unit = np.concatenate([[(0, 0, 1)], ring, [(0, 0, -1)]])
+        tris = []
+        for i in range(nu):
+            j = (i + 1) % nu
+            tris.append((0, 1 + j, 1 + i))
+            for r in range(nv - 2):
+                a, b, c, d = 1 + r * nu + i, 1 + r * nu + j, 1 + (r + 1) * nu + i, 1 + (r + 1) * nu + j
+                tris += [(a, b, d), (a, d, c)]
+            last = 1 + (nv - 2) * nu
+            tris.append((last + i, last + j, len(unit) - 1))
+        base = unit * [60, 70, 80] + [0, 0, 120]
+        delta = np.zeros((len(base), 3), int)
+        delta[0] = (0, 0, 7)                                  # the crown up 7 units
+        files = {"races": tri(base, [("HighElfRace", 1.0, delta)], tris=tris), "head": tri(base, tris=tris)}
+        node = np.eye(4)
+        node[:3, :3] = [[0, 0, -1], [0, 1, 0], [1, 0, 0]]
+        node[:3, 3] = (0, 0, 1.5)
+
+        class H:
+            vertices = facefit.apply4(np.linalg.inv(node), base / 70.0)
+            triangles = np.array(tris)
+            model_xf = node
+        ff = types.SimpleNamespace(
+            starfield_head=lambda sf, female: (H(), {}), SKY_HEADS={False: "nif", True: "nif"},
+            skyrim_head=lambda d, model=False: base, skyrim_head_matrix=lambda d: np.eye(4),
+            head_alignment=lambda head, d, legacy=False: (base, facefit.align_to_local(base, head.vertices,
+                                                                                         head.model_xf), True),
+            hkx_to_af=types.SimpleNamespace(read_any=lambda p, sky: files["races"] if "races" in p else
+                                            files["head"] if p.endswith(".tri") else b""))
+        head, b, races, al, out, rep = P.race_transfer(None, "", False, 0, ff)
+        self.assertEqual(rep["transfer"], "surface")
+        self.assertIsNone(rep["correspondence"]["mouth"])      # no mouth on a sphere
+        np.testing.assert_allclose(out["HighElfRace"][0], (0.1, 0, 0), atol=1e-6)      # up = local +x
+        self.assertLess(float(np.abs(out["HighElfRace"][nu + 1:]).max()), 1e-6)       # below the first ring: still
 
     def test_viewer(self):
         class H:
