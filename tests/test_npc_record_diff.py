@@ -20,6 +20,7 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(rows[b"FULL"][0], "only B")
         self.assertEqual(rows[b"MWGT"][0], "differs")
         self.assertIn("[0.2, 0.5, 0.3]", rows[b"MWGT"][1])
+        self.assertIn("floats [0, 0.7", D.show(b"SNAM", struct.pack("<3f", 0, 0.7, 0)))
 
 
 if __name__ == "__main__":

@@ -114,3 +114,9 @@ Owner, minutes later: moved, the vanilla lab works in the inn. So the spot decid
 between the hearth's stone edge and a pillar. Reading (supported): Starfield checks room around the workbench marker
 before it plays the entry; our lab's Skyrim marker faces a tabletop pushed against the wall. Next: our copy on open
 floor; if it works there, give crafting markers the clearance Starfield's own labs have (measured like the bar shift).
+Our copy on open floor (owner, same evening): E does nothing either; in first person E moves the camera to the lab
+(just above the alembic, at table height) looking away from it, and no menu comes up. So the player does enter our
+marker, but stands at the tabletop's height (the marker z is set to 0 = the reference's height, the table top for a
+tabletop station) and faces away. Reading (supported, not verified): the Skyrim marker's height and / or heading do not
+fit the Starfield chem bench's entry, which then never reaches its menu. Checking the vanilla bench's SNAM against ours
+(npc_record_diff --type FURN --pair) and the Skyrim marker in furniture.json before changing it.
