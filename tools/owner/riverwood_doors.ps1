@@ -20,6 +20,8 @@ param(
     [int]$NavRadius = 2,
     [switch]$Resurvey,         # redo the vanilla navmesh survey (it is kept between runs)
     [string[]]$Actors = @(),   # Skyrim NPCs to place in their converted cell with their AI packages, e.g. -Actors Orgnar
+    [switch]$Furniture,        # chairs / benches / beds / lean counters / idle markers as Starfield furniture NPCs use
+    [ValidateSet("floor", "skyrim")][string]$MarkerZ = "floor",   # furniture marker height (docs/npc/furniture.md)
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json"
 )
 $ErrorActionPreference = "Stop"
@@ -72,6 +74,12 @@ if ($Actors.Count -gt 0) {
     if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }
 }
 
+if ($Furniture) {
+    Step "2d. furniture NPCs can use"
+    python -I scripts\interior\make_furniture.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --work $Work --marker-z $MarkerZ
+    if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }
+}
+
 Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
 $env:STARFIELD_DATA = "$SF\Data"
@@ -79,9 +87,10 @@ $env:EXTERIOR_DIR = $Exterior
 $env:EXTERIOR_DOORS = Join-Path $Work "exterior_doors.json"
 if ($Navmesh) { $env:EXTERIOR_NAVMESH = Join-Path $navWork "exterior_navmesh.json" }
 if ($Actors.Count -gt 0) { $env:ACTORS = Join-Path $Work "actors.json" }
+if ($Furniture) { $env:FURNITURE = Join-Path $Work "furniture.json" }
 dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
 $rc = $LASTEXITCODE
-Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS -ErrorAction SilentlyContinue
+Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS, Env:FURNITURE -ErrorAction SilentlyContinue
 if ($rc -ne 0) { Fail "PluginSpike (paste its output: compile errors name the Mutagen property)" }
 
 if ($Navmesh) {

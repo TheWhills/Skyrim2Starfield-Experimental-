@@ -540,6 +540,92 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
     foreach (var n in notes) Console.WriteLine("  " + n);
 }
 
+// ---- furniture (2026-11-08, owner: NPC packages run but "without markers and anims its harder to tell"; docs/npc/furniture.md)
+// FURNITURE = scripts/interior/make_furniture.py's furniture.json: per Skyrim FURN / IDLM base a vanilla Starfield furniture
+// to copy (its keywords pick the animation: AnimFurnChair, AnimFurnBed, AnimFurnRailLeanHands, AnimFurnStanding_Sweep ...),
+// our converted model (or the template's invisible one) and the markers (SNAM: offset m, rotation degrees as Mutagen
+// exposes it, entry / exit sides; FNPR one per marker as the template's; MNAM interaction points 0..n-1). Its references
+// replace the cell.json static of the same Skyrim reference.
+var furnPath = Environment.GetEnvironmentVariable("FURNITURE");
+JsonElement? furnRoot = furnPath == null ? null : JsonDocument.Parse(File.ReadAllText(furnPath)).RootElement.Clone();
+var furnRefs = new HashSet<string>();
+if (furnRoot is JsonElement fr0)
+    foreach (var r in fr0.GetProperty("refs").EnumerateArray()) furnRefs.Add(r.GetProperty("formkey").GetString()!);
+var furnBases = new Dictionary<string, FormKey?>();
+var furnNotes = new SortedSet<string>();
+Furniture.EntryParameterType Sides(JsonElement arr)
+{
+    Furniture.EntryParameterType t = 0;
+    foreach (var e in arr.EnumerateArray())
+        t |= e.GetString() switch
+        {
+            "Front" => Furniture.EntryParameterType.Front, "Rear" => Furniture.EntryParameterType.Behind,
+            "Right" => Furniture.EntryParameterType.Right, "Left" => Furniture.EntryParameterType.Left,
+            _ => Furniture.EntryParameterType.Other,
+        };
+    return t;
+}
+FormKey? FurnitureBase(string key)
+{
+    if (furnBases.TryGetValue(key, out var have)) return have;
+    var b = furnRoot!.Value.GetProperty("bases").GetProperty(key);
+    var bedid = b.GetProperty("edid").GetString()!;
+    var tk = new FormKey(sfEsm, Convert.ToUInt32(b.GetProperty("template").GetString(), 16) & 0xFFFFFF);
+    if (!SfCache().TryResolve<IFurnitureGetter>(tk, out var tpl))
+    {
+        furnNotes.Add($"{bedid}: template {tk} is not a FURN in Starfield.esm; left out");
+        return furnBases[key] = null;
+    }
+    var f = (Furniture)tpl.Duplicate(Id("FURN:" + key));
+    f.EditorID = "S2S_Furn_" + bedid;
+    f.VirtualMachineAdapter = null;
+    var modelNote = "template's model";
+    if (b.GetProperty("model").ValueKind == JsonValueKind.String)
+    {
+        var src = "meshes\\" + b.GetProperty("model").GetString()!.TrimStart('\\');
+        if (itemBySource.TryGetValue(src, out var it)) { f.Model = new Model { File = it.model }; modelNote = it.model; }
+        else modelNote = $"template's model ({src} not converted)";
+    }
+    var ms = b.GetProperty("markers");
+    var nMk = ms.GetArrayLength();
+    if (nMk > 0)
+    {
+        var t0 = tpl.MarkerParameters?.FirstOrDefault();
+        var e0 = tpl.MarkerEntryPoints.FirstOrDefault();
+        var allSides = t0?.EntryTypes ?? (Furniture.EntryParameterType)0x1F;
+        f.MarkerParameters = new ExtendedList<FurnitureMarkerParameters>();
+        f.MarkerEntryPoints.Clear();
+        foreach (var m in ms.EnumerateArray())
+        {
+            var o = m.GetProperty("offset_m");
+            var sides = Sides(m.GetProperty("entry"));
+            if (sides == 0) sides = allSides;
+            var mp = new FurnitureMarkerParameters
+            {
+                Offset = new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle()),
+                RotationZ = m.GetProperty("rot_deg").GetSingle(),
+                EntryTypes = sides, ExitTypes = sides,
+            };
+            if (t0 != null) mp.Keyword.SetTo(t0.Keyword.FormKeyNullable);
+            f.MarkerParameters.Add(mp);
+            if (e0 != null)
+                f.MarkerEntryPoints.Add(new FurnitureMarkerEntryPoints
+                    { Type = e0.Type, EntryPoints = (Furniture.EntryPointType)((int)sides & 0x0F) });
+        }
+        // MNAM: interaction points 0..n-1 (low 20 bits), the template's flags kept. Set through reflection: the flags enum's
+        // type name is not used anywhere else here
+        var pi = typeof(Furniture).GetProperty("MarkerFlags")!;
+        var et = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
+        var old = pi.GetValue(f) is object ov ? Convert.ToUInt64(ov) : 0UL;
+        pi.SetValue(f, Enum.ToObject(et, (old & ~0xFFFFFUL) | ((1UL << Math.Min(nMk, 20)) - 1)));
+    }
+    mod.Furniture.Add(f);
+    if (furnBases.Count < 40)
+        furnNotes.Add($"{f.EditorID} {f.FormKey}: copy of {tpl.EditorID} ({b.GetProperty("kind").GetString()}), {modelNote}, " +
+                      (nMk > 0 ? $"{nMk} markers from Skyrim" : "the template's markers"));
+    return furnBases[key] = f.FormKey;
+}
+
 var cellPaths = args.Skip(2).SelectMany(a => a.StartsWith('@')
     ? File.ReadAllLines(a[1..]).Select(l => l.Trim()).Where(l => l.Length > 0)
     : new[] { a }).ToList();
@@ -586,6 +672,7 @@ foreach (var cellPath in cellPaths)
             obj = new PlacedObject(Id($"REFR:{cellName}:{src}"), release) { Base = new FormLinkNullable<IPlaceableObjectGetter>(lightBase), Position = pos };
             lights++;
         }
+        else if (furnRefs.Contains(src)) continue;                  // placed below as furniture
         else
         {
             var srcModel = "meshes\\" + model.TrimStart('\\');
@@ -626,6 +713,27 @@ foreach (var cellPath in cellPaths)
     }
     if (root.TryGetProperty("cell_formkey", out var cfk) && cfk.ValueKind == JsonValueKind.String)
         sourceMap[cfk.GetString()!] = cell.FormKey.ToString();
+    int furnPlaced = 0;
+    if (furnRoot is JsonElement frc)
+        foreach (var r in frc.GetProperty("refs").EnumerateArray())
+        {
+            if (r.GetProperty("cell").GetString() != src4) continue;
+            var fb = FurnitureBase(r.GetProperty("base").GetString()!);
+            if (fb is not FormKey fbk) continue;
+            var src = r.GetProperty("formkey").GetString()!;
+            var fo = new PlacedObject(Id($"REFR:{cellName}:{src}"), release)
+                { Base = new FormLinkNullable<IPlaceableObjectGetter>(fbk), Position = Pos(r.GetProperty("pos")), Rotation = Rot(r.GetProperty("rot")) };
+            var sc = r.GetProperty("scale").GetSingle();
+            if (Math.Abs(sc - 1f) > 1e-4) fo.Scale = sc;
+            // a reference an NPC package names is persistent, as package targets are (XMarker above)
+            if (r.GetProperty("persistent").GetBoolean()) { fo.MajorRecordFlagsRaw |= 0x400; cell.Persistent.Add(fo); }
+            else cell.Temporary.Add(fo);
+            placedBySource[src] = fo.FormKey;
+            placedAll[src] = fo;
+            sourceMap[src] = fo.FormKey.ToString();
+            furnPlaced++;
+        }
+    if (furnPlaced > 0) Console.WriteLine($"  furniture: {furnPlaced} references");
     var navNote = WriteNavmeshes(cell, cellName, root, placedBySource);
     if (actorsRoot is JsonElement ar)
         foreach (var ac in ar.GetProperty("actors").EnumerateArray())
@@ -1054,4 +1162,5 @@ if (naviO != null)
 File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value),
     new JsonSerializerOptions { WriteIndented = true }));
 File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));
+foreach (var fnote in furnNotes) Console.WriteLine("furniture: " + fnote);
 Console.WriteLine($"wrote {path} ({new FileInfo(path).Length:N0} bytes); {ids.Count} stable FormIDs in {mapPath}; source_map.json");

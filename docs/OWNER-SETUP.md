@@ -169,3 +169,10 @@ Furniture survey (read-only; Skyrim's chairs / beds / lean spots in the batch an
 ```powershell
 python -I scripts\interior\furniture_survey.py --skyrim "$sky\Skyrim.esm" --skyrim-data "$sky" --starfield "$sf\Data\Starfield.esm" --work C:\Modding\work\s2s\riverwood_doors --out C:\Modding\work\furniture
 ```
+
+Furniture NPCs can use (chairs, benches, beds, lean counters, sweeping spots) in the same build (Starfield closed):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
+```
+`-MarkerZ skyrim` puts the markers at Skyrim's seat height instead of the floor.

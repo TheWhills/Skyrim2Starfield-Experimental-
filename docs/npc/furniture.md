@@ -26,3 +26,29 @@ marker kinds, closest name). Decides between two plans:
   keyword / FNPR / MNAM from the matching vanilla furniture.
 - B: keep the Skyrim model as a static and place a vanilla marker-only Starfield furniture at each Skyrim marker
   (world position and heading), if Starfield has marker-only chairs / beds / lean spots.
+
+## Survey results (owner's run 2026-11-08: Riverwood's 6 interiors; Starfield.esm)
+Skyrim (verified from the files): 26 FURN bases + 4 IDLM. Chairs (CommonChair01 F/L/R/FL/FR/LR variants differ only in
+disabled entry sides, WoodenChair01, NobleChair01): one Sit marker at seat height 34 units (0.486 m), heading 0. Table
+benches (FarmTableBench01 2, CommonTableOneBench 3, CommonTableTwoBenches 6 markers): seats at y +-83..86 units facing
+the table. Beds (CommonBed01 L/R, CommonBedDouble01 2, NobleBedSingle01): Sleep at (0, -11, 37) units. Marker-only
+CounterBarLeanMarker / CounterLeanMarker / LeanTableMarker / HammerTableMarker / InvisibleChairMarker*: Sit at the
+origin, the animation chosen by keywords (isBarCounter, FurnitureCounterLeanMarker, isLeanTable, isHammerTable). Crafting:
+CraftingCookingPotSm, alchemy / enchanting workbenches. IDLM: SweepIdleMarker x17, WarmHands x2, CrossedArms, Browse.
+Starfield (verified): 899 FURN, 18 IDLM. The animation is picked by KWDA keywords (AnimFurnChair 9174 uses, AnimFurnBench
+4838, AnimFurnStanding 4118, AnimFurnBed 1239, AnimFurnSitTable, AnimFurnRailLeanHands, AnimFurnStanding_Sweep, ...);
+FNPR is Sit or absent (beds use FNPR Sit + MNAM Is Sleep Furniture); SNAM has 1 marker in 762 bases, its keyword is
+null in all but a few scene ones, z = 0 in every base but one. Marker-only furniture (record flag Is Marker, model
+Markers\InvisibleGeneric01.nif) covers chairs (NPCInvChairSit_Free), benches (NPCInvBenchSit), leaning on rails
+(NPCRailLeanHands / Front / Back, offset y -0.3 m: the rail is at the origin), sweeping (NPCSweeping), arms crossed,
+window shopping, standing. Skyrim-style idles are these furniture markers, not IDLM.
+
+## Step 2: make_furniture.py + PluginSpike FURNITURE (2026-11-08)
+Per Skyrim base, a copy of a vanilla Starfield furniture (make_furniture.TEMPLATES): chair -> NPCInvChairSit_Free,
+bench -> NPCInvBenchSit, bed -> FoundCanvasCot01, lean counter / lean table -> NPCRailLeanHands, hammer table ->
+NPCRepair_ToolStanding_Hammer, sweep -> NPCSweeping, arms crossed / browse / warm hands -> NPCStanding flavours. Real
+furniture keeps our converted model; markers from the Skyrim NIF (x / y in metres, heading, z 0 like vanilla;
+--marker-z skyrim to try Skyrim's seat height) with Skyrim's entry sides. Marker-type ones keep the template's markers
+and invisible model. Crafting stations and quest furniture stay statics. The furniture reference replaces the static of
+the same Skyrim reference; one an NPC package names is persistent. Unverified in game: seat / bed height, the lean
+stand-off, rotation sign of SNAM (Mutagen exposes degrees).
