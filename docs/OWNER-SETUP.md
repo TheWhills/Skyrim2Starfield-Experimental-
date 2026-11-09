@@ -68,6 +68,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    underbite.
 3. A: mouth probe and beast probe (commands below). Send mouth_probe.json, beast_probe.json and screenshots of
    mouth_view.html (orc, heads off) and beast_view.html (a Khajiit's jaw-weight column).
+3b. A: which Riverwood NPCs can get their schedules now (every NPC placed in the batch's interiors, each package
+   converted or why not, the furniture they use):
+   ```powershell
+   python -I scripts\npc\schedule_readiness.py --skyrim "$sky\Skyrim.esm" --starfield "$sf\Data\Starfield.esm" --work C:\Modding\work\s2s\riverwood_doors --faces "$face\faces.json" --out C:\Modding\work\packages
+   ```
+   Send readiness.md.
 4. B: Embry's outfit, then the faces of all seven test NPCs (the head transfer changed, so every face changes):
    ```powershell
    python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Embry --name Embry_outfit --out $armor --add --debug-dir C:\Modding\work\debug_embry

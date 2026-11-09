@@ -123,3 +123,11 @@ copied from CF_KlaudiaSwist (picked by skin tone), Ysolda's from ChargenPresetFe
 weight sliders. face_fit now gives every test NPC the body (MWGT, MRSV) of ChargenPresetFemale04_Swap (male) /
 ChargenPresetFemale04 (female), the bodies the outfits were checked on (--body-npc to choose, 'none' for the
 template's). In game unverified.
+
+## Readiness across the batch (2026-11-09; offline checks only)
+scripts/npc/schedule_readiness.py runs make_schedule's own package conversion as a dry run for every NPC placed in
+the batch's cells: per NPC the packages converted or left out and why (conditions / quest-owned, a location outside
+the converted cells, no Starfield template, ...), the furniture kinds its packages point at (make_furniture's
+kinds, "static" when there is none), whether face_fit made its face-test NPC (a faces.json `test_npc` that is a
+string is the reason none was made), a status (ready / partial / blocked) and the -Actors list for
+riverwood_doors.ps1. Writes readiness.json / readiness.md. To scale from three NPCs to the whole of Riverwood.
