@@ -128,3 +128,4 @@ stand-off. So crafting stations now keep the template's markers (make_furniture 
 If the lab still opens nothing, FLLD is the next suspect.
 Owner, 2026-11-09 after the rebuild (verified in game): E on the alchemy lab opens Starfield's Pharmaceutical Lab menu
 (Starfield's medical recipes). FLLD not needed. Next: Skyrim's own recipes (COBJ by bench type) as the menu's content.
+The enchanter (WorkbenchIndustrial copy) opens its menu too (owner, verified). No cooking pot in the Sleeping Giant.
