@@ -38,6 +38,21 @@ FORCE = {"eat": {"alloweating": True, "allowsitting": True}}
 # whose Skyrim inputs allow only furniture / idle markers has nothing to do inside its radius, and the NPC leaves it
 # (owner 2026-11-08: Orgnar stood behind the bar for a moment, then walked off): let it wander inside the radius
 NO_FURNITURE = {"allowwandering": True}
+# Skyrim's sandbox Energy is 0-100 (vanilla 50); Starfield's is 0-1 (ShopkeeperSchedules.esm, working Starfield
+# sandboxes: 0.1-0.8 in 186 of 191; supported, not verified)
+ENERGY_SCALE = 0.01
+
+
+def sf_schedule(s):
+    """A Skyrim PSDT schedule as Starfield's: xEdit (wbDefinitionsCommon wbPackagePSDTMonthValueToStr) stores the month
+    one higher in records of form version >= 122 (Starfield's are 582): Skyrim's -1 "any" is Starfield's 0, and a -1
+    written into a Starfield package is no month at all (verified against ShopkeeperSchedules.esm: all 297 packages,
+    the always-on ones too, have month 0). Day of week, date, hour, minute, duration carry over."""
+    if not s:
+        return s
+    out = dict(s)
+    out["month"] = s["month"] + 1 if s["month"] >= -1 else 0
+    return out
 
 
 def norm(name):
@@ -94,7 +109,10 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
         if t == "bool":
             inputs[str(target)] = {"kind": "bool", "value": bool(v), "skyrim": name}
         elif t == "float":
-            inputs[str(target)] = {"kind": "float", "value": float(v), "skyrim": name}
+            f = float(v)
+            if norm(name) == "energy":
+                f = round(min(max(f * ENERGY_SCALE, 0.0), 1.0), 4)
+            inputs[str(target)] = {"kind": "float", "value": f, "skyrim": name}
         elif t in ("int", "integer"):
             inputs[str(target)] = {"kind": "int", "value": int(v), "skyrim": name}
         elif t == "location" and isinstance(v, dict):
@@ -134,7 +152,8 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
             inputs[str(by_name[k])] = {"kind": "bool", "value": val, "skyrim": f"({sf_names.get(by_name[k])} set)"}
     if skipped:
         notes.append(f"{p['edid']}: inputs without a Starfield counterpart kept vanilla: {skipped}")
-    return {"edid": "S2S_" + p["edid"], "skyrim": p["edid"], "schedule": p["schedule"], "speed": p["speed"],
+    return {"edid": "S2S_" + p["edid"], "skyrim": p["edid"], "schedule": sf_schedule(p["schedule"]),
+            "skyrim_schedule": p["schedule"], "speed": p["speed"],
             "skyrim_template": tname, "sf_template": sf_name, "sf_template_form": f"{sf['form']:08X}",
             "conditions_dropped": p["conditions"], "inputs": inputs}
 

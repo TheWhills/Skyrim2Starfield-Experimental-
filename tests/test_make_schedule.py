@@ -39,6 +39,12 @@ B = lambda v: (b"CNAM", bytes([v]))                                   # noqa: E7
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_sf_schedule(self):
+        s = {"month": -1, "day_of_week": -1, "date": 0, "hour": 6, "minute": 0, "duration_min": 60}
+        self.assertEqual(M.sf_schedule(s), dict(s, month=0))
+        self.assertEqual(M.sf_schedule(dict(s, month=0))["month"], 1)       # Skyrim January -> Starfield 1
+        self.assertIsNone(M.sf_schedule(None))
+
     def test_orgnar(self):
         with tempfile.TemporaryDirectory() as d:
             tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))])
@@ -51,12 +57,15 @@ class ScheduleTests(unittest.TestCase):
                          [(0, "Location")])
             eat = pack(0x203, "OrgnarEat7x1", 18, 0x204, (7, 0, 60), [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 512))], [0])
             tpl = pack(0x201, "SandboxWorking", 19, 0, None,
-                       [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0)), ("Bool", *B(0)), ("Bool", *B(0))],
-                       [0, 14, 1], [(0, "Location"), (1, "Allow Eating"), (14, "Unlock On Arrival?"), (25, "Prefered Path Only?")],
+                       [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0)), ("Bool", *B(0)), ("Bool", *B(0)),
+                        ("Float", b"CNAM", struct.pack("<f", 50))],
+                       [0, 14, 1, 7], [(0, "Location"), (1, "Allow Eating"), (14, "Unlock On Arrival?"),
+                                       (25, "Prefered Path Only?"), (7, "Energy")],
                        [("Procedure", "Sandbox")])
             pk = pack(0x200, "OrgnarWorkInn0x24", 18, 0x201, (-1, -1, 0),
-                      [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 256)), ("Bool", *B(0)), ("Bool", *B(1))],
-                      [0, 14, 1])
+                      [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 256)), ("Bool", *B(0)), ("Bool", *B(1)),
+                       ("Float", b"CNAM", struct.pack("<f", 50))],
+                      [0, 14, 1, 7])
             cell = rec(b"CELL", 0x500, [(b"EDID", Z("RiverwoodSleepingGiantInn"))])
             achr = rec(b"ACHR", 0x600, [(b"NAME", struct.pack("<I", 0x100)), (b"DATA", struct.pack("<6f", -1312.8, 18.3, 0, 0, 0, 1.5))])
             marker = rec(b"REFR", 0x601, [(b"NAME", struct.pack("<I", 0x3B)), (b"DATA", struct.pack("<6f", -1250, 40, 0, 0, 0, 0))])
@@ -70,8 +79,10 @@ class ScheduleTests(unittest.TestCase):
             with open(sf, "wb") as fh:
                 fh.write(tes4 + grup(b"PACK", 0, [pack(
                     0x2CB1, "Sandbox", 19, 0, None,
-                    [("Location", b"PLDT", struct.pack("<iIfI", 3, 0, 0, 0)), ("Bool", *B(0)), ("Bool", *B(0))],
-                    [2, 12, 5], [(0, "Location"), (2, "Location"), (5, "Allow Eating"), (12, "Unlock on Arrival?")],
+                    [("Location", b"PLDT", struct.pack("<iIfI", 3, 0, 0, 0)), ("Bool", *B(0)), ("Bool", *B(0)),
+                     ("Float", b"CNAM", struct.pack("<f", 0.5))],
+                    [2, 12, 5, 18], [(0, "Location"), (2, "Location"), (5, "Allow Eating"), (12, "Unlock on Arrival?"),
+                                     (18, "Energy")],
                     [("Procedure", "Sandbox")])]))
             work = os.path.join(d, "work")
             os.makedirs(work)
@@ -95,6 +106,11 @@ class ScheduleTests(unittest.TestCase):
             p = ac["packages"][0]
             self.assertEqual((p["sf_template"], p["sf_template_form"], p["edid"]), ("Sandbox", "00002CB1", "S2S_OrgnarWorkInn0x24"))
             self.assertEqual(p["schedule"]["hour"], -1)
+            # Skyrim's month -1 ("any") is Starfield's 0 (form version >= 122 stores month + 1); the Skyrim one kept
+            self.assertEqual((p["schedule"]["month"], p["skyrim_schedule"]["month"]), (0, -1))
+            self.assertEqual(ac["packages"][1]["schedule"]["month"], 0)
+            # Skyrim Energy 50 (0-100) -> Starfield 0.5 (0-1)
+            self.assertAlmostEqual(p["inputs"]["18"]["value"], 0.5)
             ins = p["inputs"]
             self.assertEqual(ins["2"]["type"], "near_reference")
             self.assertEqual(ins["2"]["source"], "000601:Skyrim.esm")

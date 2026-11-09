@@ -77,7 +77,24 @@ console. Verified: his package does not run. The Sandbox template's Sandbox and 
 (survey PKC2), the one we fill. Next build: the vanilla package copied is preferably one located "near editor
 location", and is also added unchanged after ours as an A/B (ACTOR_AB=0 to leave out): vanilla runs -> our edits break
 ours; neither runs -> the NPC copy (a ChargenPreset NPC) does not run packages.
-Control (owner, New Atlantis): a vanilla guard (NAGuard05Ref) reports `getcurrentaiprocedure` 11, so the command works
-and Orgnar's -1 means no AI procedure at all (verified), with even the unchanged vanilla package appended. Suspect: the
+Control (owner, New Atlantis): a vanilla guard (NAGuard05Ref) reports `getcurrentaiprocedure` 11. Correction (same
+day): a vanilla bartender who keeps to her bar (Nyssa Marcano) also reports -1, so -1 is not evidence of "no AI
+procedure"; the earlier "verified" was wrong. `getiscurrentpackage <id>` is the check that stands. Suspect: the
 NPC copied is a ChargenPreset record (flag IsCharGenFacePreset 0x4; maybe SimpleActor). PluginSpike now clears both on
 the copy and prints the flags before / after, the template-actor flags and the default template.
+
+## Cause found: the schedule month (2026-11-08)
+Compared with NPC Routines Expanded (ShopkeeperSchedules.esm, owner's attachment: 297 working Starfield packages on 117
+vanilla NPC overrides, added to their PKID lists). Every one of its packages, the always-on ones too, has PSDT month 0,
+day of week -1, date 0; the always-on ones hour -1, minute -1, duration 0 (ours had the same apart from the month).
+xEdit (wbDefinitionsCommon.pas wbPackagePSDTMonthValueToStr / wbPACKDateAfterLoad) stores the month one higher in records
+of form version >= 122: 0 = any month, 1 = January. Starfield records are version 582 (the mod's PACK / NPC_ headers);
+Skyrim's are below 122, where -1 = any. Mutagen writes ScheduleMonth raw (Package.xml Int8). So we wrote Skyrim's -1
+into Starfield packages, which is no month at all, and none of our packages could ever be picked (verified: format and
+the mod; the in-game result is the next test). That fits what the owner saw: every NPC fell through to the unchanged
+vanilla package appended after ours (a near-editor-location sandbox), i.e. walked around the room.
+Fixed: make_schedule.sf_schedule writes month + 1 (Skyrim's kept as skyrim_schedule); PluginSpike prints the month it
+wrote next to the vanilla package's. Also Energy: the mod's sandboxes use 0.1-0.8 (186 of 191), Skyrim's scale is 0-100
+(vanilla 50), so Skyrim's value x 0.01 (supported).
+In game: Orgnar selected, `getiscurrentpackage 05000E64` should now be 1; before the rebuild `getiscurrentpackage
+0000268B` (the appended vanilla one) should be 1, which would confirm the fall-through.

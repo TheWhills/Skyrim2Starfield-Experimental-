@@ -510,7 +510,9 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
         }
         mod.Packages.Add(pk);
         npc.Packages.Add(new FormLink<IPackageGetter>(pk.FormKey));
-        notes.Add($"{edid} {pk.FormKey} (copy of vanilla {vp.EditorID} {vp.FormKey})");
+        // PSDT month as written: Starfield's 0 = any month (make_schedule.sf_schedule); vanilla's for comparison
+        notes.Add($"{edid} {pk.FormKey} (copy of vanilla {vp.EditorID} {vp.FormKey}); schedule month {pk.ScheduleMonth} "
+            + $"(vanilla {vp.ScheduleMonth}) hour {pk.ScheduleHour} for {pk.ScheduleDurationInMinutes} min");
         sourceMap["PACK:" + edid] = pk.FormKey.ToString();
     }
     // A/B (2026-11-08: Orgnar's package never ran: GetIsCurrentPackage 0, GetCurrentAIProcedure -1): after ours, the
