@@ -149,6 +149,11 @@ made before the iron-armour changes. Of those, the 2026-11-08 armpit change matc
 unverified): gear_fit.armpits kept every body vertex within 8 cm of the torso / arm weight seam in the skin piece, and
 that seam rings the whole shoulder, so the shoulder top was skin under a tight sleeve. Now only the lower half of each
 side's seam and the body no higher than it.
+Refit with that (owner, 2026-11-09): shoulder tops clean; a jagged bare patch left on the back of the upper arm under
+the sleeve, still the armpit band. Now armpit skin on the arm (body arm share >= 0.5) is dropped where gear lies
+tight over it (SKIN_UNDER_DEPTH or under the skin): a sleeve moves with the arm, so nothing opens there; the
+torso-side armpit stays for armholes.
+
 
 
 

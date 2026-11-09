@@ -208,6 +208,13 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
         # piece grew past the cowl on heavier bodies and showed through on the chest)
         bn = skyrimhair._vertex_face_normals(body_skel, t)
         bn /= np.maximum(np.linalg.norm(bn, axis=1, keepdims=True), 1e-12)
+        if always is not None:
+            # armpit skin on the arm under a tight sleeve: the sleeve moves with the arm, so raising it uncovers
+            # nothing there (2026-11-09, owner: after the shoulder tops, a jagged bare patch on the back of Delphine's
+            # upper arm, under her sleeve); torso-side armpit skin stays (the iron cuirass's armhole opens over it)
+            on_arm = np.array([gearfit.arm_share(vw) >= 0.5 for vw in body_w], bool)
+            tight = covered_by(body_skel, bn, gear, SKIN_UNDER_DEPTH)
+            always = np.asarray(always, bool) & ~(on_arm & tight)
         cov = covered_by(body_skel, bn, gear, depth) & keep
         visible = keep & ~cov
         grow = visible.copy()

@@ -149,6 +149,28 @@ class ScriptTests(unittest.TestCase):
                                           depth=gear_fit.SKIN_UNDER_DEPTH)
         self.assertEqual(len(used3), len(body))
 
+    def test_armpit_skin_under_a_tight_sleeve_left_out(self):
+        """2026-11-09 (Delphine's upper arm): armpit skin kept only where the gear over it is not a tight fit on the
+        arm; torso-side armpit skin stays even under tight gear (a cuirass's armhole opens when the arm rises)."""
+        import numpy as np
+        from fo4sf import skyrimhair
+        xs = np.linspace(0, 0.4, 9)
+        body = np.array([[x, y, 0.0] for x in xs for y in (0.0, 0.05)])
+        tris = []
+        for i in range(8):
+            a, b = 2 * i, 2 * i + 2
+            tris += [(a, b, a + 1), (b, b + 1, a + 1)]
+        gp = np.array([[-0.05, -0.05, 0.005], [0.5, -0.05, 0.005], [-0.05, 0.1, 0.005], [0.5, 0.1, 0.005]])
+        gear = skyrimhair.HairShape(b"Dress", gp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [],
+                                    [(0, 1, 2), (1, 3, 2)], [], -1, -1, -1)
+        w = [[("L_Biceps", 1.0)] if p[0] >= 0.2 else [("C_Chest", 1.0)] for p in body]
+        always = np.ones(len(body), bool)
+        _sh, used = gear_fit.skin_piece(body, tris, [(0, 0)] * len(body), w, body[:1], reach=0.001, gear=[gear],
+                                        margin=1, always=always)
+        xs_kept = sorted({round(float(body[i][0]), 2) for i in used})
+        self.assertEqual(xs_kept[-1], 0.15)          # the arm half (x >= 0.2) under the tight dress left out
+        self.assertEqual(xs_kept[0], 0.0)
+
     def test_body_skin_shapes_and_slots(self):
         t = {"MaleBodyStormcloak": ["textures\\actors\\character\\male\\MaleBody_1.dds"],
              "HandMale": ["textures\\actors\\character\\male\\MaleHands_1.dds"]}

@@ -82,7 +82,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    something, rebuild with `-NoCrafting`.) Screenshots.
 6b. B + C: Delphine's shoulders. The refit (today's code) kept the round bare patches; Ysolda's dress was fitted before
    the 2026-11-08 armpit change. Cause: the skin piece kept the whole shoulder seam as "armpit", top included, and it
-   showed through the tight sleeves; now only the underside. Refit, faces, build (Starfield closed):
+   showed through the tight sleeves; now only the underside, and none on the arm under a tight sleeve (a bare patch
+   on the back of her upper arm after the first refit). Refit, faces, build (Starfield closed):
    ```powershell
    python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Delphine --name Delphine_outfit --out $armor --add --debug-dir C:\Modding\work\debug_delphine
    ```
