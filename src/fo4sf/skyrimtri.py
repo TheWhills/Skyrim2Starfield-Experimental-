@@ -48,7 +48,10 @@ def parse(d: bytes, deltas: bool = False) -> Dict:
         raise TriError("bad header counts")
     p = HEADER
     base = np.frombuffer(d, "<f4", (V + K) * 3, p).reshape(-1, 3)
-    p += (V + K) * 12 + T * 12 + Q * 16
+    p += (V + K) * 12
+    tris = np.frombuffer(d, "<i4", T * 3, p).reshape(-1, 3)
+    quads = np.frombuffer(d, "<i4", Q * 4, p + T * 12).reshape(-1, 4)
+    p += T * 12 + Q * 16
     for _ in range(LV):
         p += 4
         _n, p = _name(d, p)
@@ -79,4 +82,6 @@ def parse(d: bytes, deltas: bool = False) -> Dict:
         out["stat_morphs"].append({"name": name, "vertices": L})
     out["complete"] = p == len(d)
     out["base"] = base[:V]
+    # faces as triangles (quads split along 0-2)
+    out["faces"] = np.concatenate([tris, quads[:, [0, 1, 2]], quads[:, [0, 2, 3]]]) if Q else tris
     return out

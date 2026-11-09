@@ -91,6 +91,13 @@ Race survey (read-only; every Skyrim race against Starfield's character system; 
 python -I scripts\npc\race_survey.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
 ```
 
+Race probe (read-only: Starfield's head morphs and regions, HumanRace-by-name counts, Skyrim race morphs moved onto
+Starfield's head; opens as C:\Modding\work\races\race_view.html):
+
+```powershell
+python -I scripts\npc\race_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
+```
+
 Beard matches (rerun only when the matcher changes):
 
 ```powershell

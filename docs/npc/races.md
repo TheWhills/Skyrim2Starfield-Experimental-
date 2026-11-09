@@ -82,7 +82,20 @@ per region, blended per region in chargen. So:
    skin part (spring bone modifiers for sway); hands / feet from the Skyrim skin addons. Unknowns: whether chargen
    takes a non-human head (dials / regions file per race) and the beast skeleton's tail bones.
 
+## Decision (owner, 2026-11-09): separate races, thin over HumanRace
+For a long-term conversion Skyrim's content checks race constantly (dialogue, quests, racial powers, vampires), so
+each Skyrim race becomes its own RACE, but derived from HumanRace: armor race = HumanRace (gear fits), subgraph
+template race = HumanRace (animations), morph race = HumanRace (shared head morphs / sliders; its effect in game
+unverified), HumanRace's keywords (anything asking "human actor" passes). Its chargen lists only its own phenotypes;
+it carries height, skin tones, eyes, voices. The phenotype work (race shapes as region-keyed head morphs) is needed
+either way and comes first. To prove early: the player side (setrace + showlooksmenu on such a race).
+Constraint found 2026-11-09: a morph.dat holds at most 128 keys (128-bit key mask per vertex, sfmorph). 12 humanoid
+races x 9 regions = 108 keys on top of the vanilla head's would not fit; race_probe reports the vanilla head's count.
+If it does not fit, the Skyrim races get a head part of their own (same mesh, own morph.dat with their phenotypes),
+which fits the separate-races design; hair / brows / lashes then need the same keys in their morph.dat to follow.
+
 ## Next steps
+0. scripts/npc/race_probe.py (2026-11-09): items 1 and 2 below plus HumanRace-by-name counts in Starfield.esm.
 1. Read Starfield's head morph.dat (keys, which vertices each region key moves) and the regions files: confirms the
    phenotype = region keys model and gives the region masks.
 2. Offline transfer: Skyrim race morph -> Starfield head (correspondence from face_fit's alignment), split by region;
