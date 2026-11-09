@@ -48,6 +48,7 @@ Starfield must be closed while a script writes into the mods folders.
 | More Sliders (face-bone mod) | `$mods\More-Sliders Complete` (`$ms`, `$cs`) |
 | Beard matches (beard_match.json) | `C:\Modding\work\beards` |
 | Outfit debug meshes (fit_debug.zip per NPC) | `C:\Modding\work\debug_<npc>` (ralof, ysolda, nazeem, saadia) |
+| Exterior objects work folder (export / convert for skyrim_all, Oct 16) | `C:\Modding\work\sky_all` |
 | Installed exterior (Tamriel on the planet; matches the game's SkyrimTerrainTamriel.esm, height offset 385 m) | `C:\Modding\staging\skyrim_all` |
 | Other exterior builds (older) | `C:\Modding\staging\skyrim_objects`, `C:\Modding\staging\skyrim_tamriel` |
 | Interior batches (checklist step 11, Oct 23) | `C:\Modding\work\s2s\interiors`, `C:\Modding\work\s2s\checklist` |
@@ -139,4 +140,11 @@ How Skyrim's collision for a model compares with the visible mesh and with our b
 
 ```powershell
 python -I scripts\terrain\collision_view.py --skyrim-data $sky --model meshes\Landscape\Roads\RoadStraightLongRamp01.nif --out C:\Modding\work\collision_view.html
+```
+
+The installed exterior with Skyrim's own collision instead of boxes (reconverts every outdoor model, then swaps the
+meshes in the staging and reinstalls; long; Starfield closed):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\owner\exterior_collision.ps1
 ```
