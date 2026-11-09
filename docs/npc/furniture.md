@@ -83,3 +83,4 @@ Starfield's bar animations fit Skyrim's counters as they are. make_furniture.DEF
 lean_counter markers 0.30 m forward.
 Verified in game (owner, 2026-11-08, after the shift and the real chair / bench templates): Orgnar on the bar; the player
 can sit on chairs and benches and use the beds.
+With -Furniture, riverwood_doors.ps1 passes make_schedule --keep-furniture-only: Skyrim's Allow Wandering kept (Orgnar's is off).

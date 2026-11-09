@@ -70,6 +70,9 @@ if ($Actors.Count -gt 0) {
     $sa = @("--skyrim", "$SKY\Skyrim.esm", "--starfield", "$SF\Data\Starfield.esm", "--work", $Work)
     # with -File, "-Actors A,B,C" arrives as one string: split it
     foreach ($n in ($Actors -join ",").Split(",")) { if ($n.Trim()) { $sa += @("--npc", $n.Trim()) } }
+    # with -Furniture the sandboxes have chairs / the bar / beds to use: keep Skyrim's own Allow Wandering (Orgnar: off,
+    # so he stays at the bar) instead of forcing it on
+    if ($Furniture) { $sa += @("--keep-furniture-only") }
     if (Test-Path $Faces) { $sa += @("--faces", $Faces) } else { Write-Host "no faces.json at $Faces" -ForegroundColor Yellow }
     python -I scripts\npc\make_schedule.py @sa
     if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }
