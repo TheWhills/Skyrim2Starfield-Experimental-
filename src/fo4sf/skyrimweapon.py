@@ -39,6 +39,25 @@ IRON_SET: List[Dict] = [
 ]
 
 
+# Skyrim WEAP DNAM animation type (wbDefinitionsTES5: 0 HandToHand, 1 OneHandSword, 2 OneHandDagger, 3 OneHandAxe,
+# 4 OneHandMace, 5 TwoHandSword, 6 TwoHandAxe, 7 Bow, 8 Staff, 9 Crossbow) -> our moveset type (stance_plugin
+# WEAPON_TYPES); swords keep the vanilla sword sets (None). Type 6 is battleaxes and warhammers both: the keyword
+# WeapTypeWarhammer tells them apart.
+MOVESET_BY_ANIM_TYPE = {2: "Dagger", 3: "WarAxe", 4: "Mace", 5: "Greatsword", 6: "Battleaxe"}
+MOVESET_BY_KEY = {"dagger": "Dagger", "waraxe": "WarAxe", "mace": "Mace", "greatsword": "Greatsword",
+                  "battleaxe": "Battleaxe", "warhammer": "Warhammer"}
+
+
+def moveset_type(anim_type=None, keyword_names=(), key: str = None):
+    """The moveset type of a Skyrim weapon (by the iron set key, else its animation type and keywords), or None."""
+    if key and key.lower() in MOVESET_BY_KEY:
+        return MOVESET_BY_KEY[key.lower()]
+    t = MOVESET_BY_ANIM_TYPE.get(anim_type)
+    if t == "Battleaxe" and any(k.lower() == "weaptypewarhammer" for k in keyword_names):
+        return "Warhammer"
+    return t
+
+
 def _qrot(q, v):
     x, y, z, w = q
     ux, uy, uz = x, y, z

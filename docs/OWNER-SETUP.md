@@ -127,6 +127,18 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    If it looks right, step 4's face_fit command takes `--items-plugin "$mods\S2S Clothes\S2SClothes.esm"` (before
    `--outfits-plugin`) and the test NPCs wear their converted Skyrim outfit, shared by everyone with that outfit.
 
+10. B + C: weapon types with their own movesets (docs/armor/animation-port.md, "weapon types"). Install the two
+   zips I sent (SkyrimMelee_LoreRim_greatsword_type.zip, SkyrimMelee_LoreRim_waraxe_type.zip) as MO2 mods, keep the
+   sword stance pack v15 enabled, then (use your stance and iron weapon mod folders if they are named differently):
+   ```powershell
+   python -I scripts\armor\stance_plugin.py --starfield $sf --out "$mods\S2S Stances"
+   python -I scripts\armor\weapon_test_pack.py --skyrim-data $sky --starfield $sf --texconv C:\Modding\tools\texconv.exe --out "$mods\S2S Iron Weapons" --stances-plugin "$mods\S2S Stances\S2SStances.esm"
+   ```
+   Then the Creation Kit cache run (docs/armor/animation-port.md, "The Creation Kit cache run"). In game: additem the
+   iron greatsword, war axe and sword (`help "(Skyrim)" 4`). Greatsword = LoreRim's greatsword swings with both hands on
+   the handle; war axe = its axe swings; sword unchanged; the stance keys change each. If greatsword and axe still swing
+   like the sword, send weapon_test_pack.json and stance_plugin.json (in those mod folders).
+
 ## Working commands
 
 Converted outfit for a test NPC (one per NPC; `--add` keeps the other outfits in the plugin):

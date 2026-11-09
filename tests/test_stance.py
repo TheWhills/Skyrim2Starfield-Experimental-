@@ -18,6 +18,7 @@ except ImportError:                                   # pragma: no cover
     PK = None
 
 PLAYER, MELEE1H, GUN = 0x000A0010, 0x000A0011, 0x000A0012
+z_ = sfplugin.zs
 
 
 def entry(actor, target, graph, paths):
@@ -162,6 +163,60 @@ class StanceTableTests(unittest.TestCase):
         self.assertEqual(subgraph.parse(out2)[0]["paths"][0:2], [SP.stance_folder("High"),
                                                                  "actors\\human\\animations\\melee\\onehanded\\player\\sword"])
 
+    def test_weapon_type_entries_come_first(self):
+        """A converted greatsword keeps AnimSword and carries S2S_AnimGreatsword: its entries (one keyword more on the
+        weapon side) put the type folder first, per stance its stance folder before that (owner 2026-11-09)."""
+        ids = {"animarchetypeplayer": PLAYER, "animonehanded": MELEE1H, "animsword": 0x000A0020}
+        subs = [(b"EDID", b"HumanRace\0")] + entry([PLAYER], [GUN], "Gun.agx", ["gun"])
+        rows = SP.player_weapon_rows(SP.parse_table(TABLE))
+        gs, axe = 0x0100080B, 0x01000809
+        out, rep = SP.race_with_stances(subs, {"High": 0x01000800}, table_rows=rows, keyword_ids=ids,
+                                        types={"Greatsword": gs, "WarAxe": axe})
+        ents = subgraph.parse(out)
+        self.assertEqual(rep["type_entries"], 4)                    # 2 types x (1 stance + neutral), one row
+        self.assertEqual(rep["added_entries"], 4 + 1 + 1)
+        e = ents[0]
+        self.assertEqual(e["actor_keywords"], [PLAYER, 0x01000800])
+        self.assertEqual(e["target_keywords"], [MELEE1H, 0x000A0020, gs])
+        self.assertEqual(e["paths"][:3], [SP.type_folder("Greatsword", "High"), SP.type_folder("Greatsword"),
+                                          SP.common_folder()])
+        self.assertEqual(e["paths"][3:], rows[0]["paths"])           # then the vanilla sword folders
+        self.assertEqual(ents[1]["target_keywords"][-1], axe)
+        neutral_gs = ents[2]
+        self.assertEqual((neutral_gs["actor_keywords"], neutral_gs["target_keywords"][-1]), ([PLAYER], gs))
+        self.assertEqual(neutral_gs["paths"][0], "actors\\human\\animations\\melee\\s2s_types\\greatsword")
+        self.assertEqual(ents[4]["paths"][0], SP.stance_folder("High"))     # the sword stances after the types
+        self.assertEqual(ents[-1]["graph"], "Gun.agx")
+
+    def test_build_writes_type_keywords_after_the_stances(self):
+        table = TABLE.replace("AnimArchetypePlayer, Female", "AnimArchetypePlayer")
+        with tempfile.TemporaryDirectory() as d:
+            esm = os.path.join(d, "Starfield.esm")
+            starfield_esm(esm)
+            with open(esm, "rb") as fh:
+                raw = fh.read()
+            hdr = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)  # noqa: E731
+            recs = sfplugin.records(esm, [b"KYWD", b"RACE"])
+            recs += [(b"KYWD", hdr(b"KYWD"), [(b"EDID", z_(n))], fid) for n, fid in
+                     (("AnimArchetypePlayer", PLAYER), ("AnimOneHanded", MELEE1H), ("AnimSword", 0x000A0020))]
+            with open(esm, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
+            self.assertTrue(raw)
+            data, rep = SP.build(esm, stances=SP.STANCES_DUAL, table_text=table)
+            data2, rep2 = SP.build(esm, stances=SP.STANCES, table_text=table)
+            out = os.path.join(d, SP.PLUGIN)
+            with open(out, "wb") as fh:
+                fh.write(data)
+            kw = {sfplugin.edid(s): fid for _t, _h, s, fid in sfplugin.records(out, [b"KYWD"])}
+            _d, rep3 = SP.build(esm, table_text=table, weapon_types=())
+        self.assertEqual(kw["S2S_AnimGreatsword"], sfplugin.new_form_id(SP.TYPE_INDEX + 3))
+        self.assertEqual(kw["S2S_StanceHigh"], sfplugin.new_form_id(0))
+        self.assertEqual(rep["type_keywords"], rep2["type_keywords"])     # the same ids with or without Dual
+        self.assertEqual(len(rep["type_keywords"]), len(SP.WEAPON_TYPES))
+        # 2 player rows x 6 types x (4 stances + neutral)
+        self.assertEqual(rep["type_entries"], 2 * 6 * 5)
+        self.assertEqual((rep3["type_keywords"], rep3["type_entries"]), ({}, 0))
+
     def test_build_with_a_table_whose_keywords_are_missing_stops(self):
         with tempfile.TemporaryDirectory() as d:
             esm = os.path.join(d, "Starfield.esm")
@@ -250,6 +305,45 @@ class StancePackPlanTests(unittest.TestCase):
             self.assertEqual(PK._move_into_stance(os.path.join(d, "tmp"), folder, os.path.join(d, "out"), "High"), 2)
             dst = os.path.join(d, "out", "meshes", *SP.stance_folder("High").split("\\"))
             self.assertEqual(sorted(os.listdir(dst)), ["MeleeAttack_A.af", "MeleeAttack_A.afx"])
+
+    def test_weapon_type_pack_folders_and_fixed_ring(self):
+        """A type pack moves every stance (Neutral too) into the type's folders and keeps the installed graph's ring:
+        the tags and power hosts depend on the ring size alone."""
+        self.assertEqual(PK.dest_folder("Neutral", "Greatsword"), SP.type_folder("Greatsword"))
+        self.assertEqual(PK.dest_folder("High", "Greatsword"), SP.type_folder("Greatsword", "High"))
+        self.assertEqual(PK.dest_folder("High"), SP.stance_folder("High"))
+        with tempfile.TemporaryDirectory() as d:
+            anims = os.path.join(d, "anims")
+            folders = ["melee/onehanded/player/sword", "melee/onehanded/player"]
+            for f in folders:
+                fdir = os.path.join(anims, *"meshes/actors/human/animations".split("/"), *f.split("/"))
+                os.makedirs(fdir, exist_ok=True)
+                for stem in ["meleeattack_a", "meleeattack_b", "meleeattack_c", "meleeattackpower_a"] + \
+                        PK.animslots.HOSTS[:4]:
+                    open(os.path.join(fdir, stem + ".afx"), "w").close()
+            m = os.path.join(d, "Neutral")
+            os.makedirs(m)
+            for k in range(1, 4):
+                open(os.path.join(m, f"mco_attack{k}.hkx"), "wb").close()
+            free, n_free, _t, _p = PK.plan({"Neutral": m}, folders, anims)
+            p, n, tags, _ps = PK.plan({"Neutral": m}, folders, anims, exact=5, neutral_vanilla=False)
+            self.assertEqual((n_free, n), (3, 5))
+            self.assertEqual(p["Neutral"]["sequence"], [1, 2, 3, 1, 2])        # the short chain round the ring
+            self.assertEqual(p["Neutral"]["folders"][0], folders[0])
+            self.assertTrue(all(folders[0] in r for r in p["Neutral"]["replace"]))   # one folder only
+            self.assertGreater(len(free["Neutral"]["replace"]), 3)              # the plain pack fills both
+            p6, n6, tags6, _ = PK.plan({"Neutral": m}, folders, anims, exact=5)
+            self.assertEqual(tags6, tags)                                        # same ring, same tags
+            with self.assertRaises(SystemExit):
+                PK.plan({"Neutral": m}, folders, anims, exact=40)
+            src = os.path.join(d, "tmp", *PK.bfco_pack.ANIMS.split("/"), *folders[0].split("/"))
+            os.makedirs(src)
+            open(os.path.join(src, "MeleeAttack_A.af"), "w").close()
+            self.assertEqual(PK._move_into_stance(os.path.join(d, "tmp"), folders[0], os.path.join(d, "out"), "Neutral",
+                                                  "Greatsword"), 1)
+            self.assertTrue(os.path.isfile(os.path.join(d, "out", "meshes", *SP.type_folder("Greatsword").split("\\"),
+                                                        "MeleeAttack_A.af")))
+
 
 if __name__ == "__main__":
     unittest.main()

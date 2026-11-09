@@ -1370,3 +1370,28 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   fragment Fragments\S2SSamTest\ (animations.txt with the two files, tables\anim_actions.xtbl with the tag). No
   offsets / event info yet. Success in game = the first attack plays the overhead power swing; the 2026-10-23 dodge
   (same idea without SAM) snapped back.
+
+## 2026-11-09: weapon types play their own movesets (built, untested in game)
+Owner: converted weapons all use the one-handed sword moves; can a greatsword use the greatsword animations, axes
+theirs? No SAM needed: the stance mechanism already does it (verified 2026-10-23: an esm subgraph entry with one keyword
+more than a generated-table row wins; the table itself tells AnimSword from AnimKnife weapons the same way).
+* **S2SStances.esm** (`stance_plugin.py`, on by default, `--no-types` off): six weapon keywords S2S_AnimDagger /
+  WarAxe / Mace / Greatsword / Battleaxe / Warhammer (fixed FormIDs from index 8, after the stance keywords). Per
+  player one-handed table row, per type: one entry per stance (stance keyword on the actor, type keyword added to the
+  row's weapon keywords; folders `s2s_types\<type>\<stance>`, `s2s_types\<type>`, the shared common folder, then the
+  row's) and one neutral entry (`s2s_types\<type>` first). They go before the sword stance entries (most keywords).
+  Swords carry no type keyword and keep the sword stances.
+* **Weapons** (`weapon_test_pack.py --stances-plugin <S2SStances.esm>`): each iron weapon keeps the template's
+  AnimSword / AnimOneHanded and gets its type keyword (`skyrimweapon.moveset_type`: iron-set key, else Skyrim's DNAM
+  animation type 2-6, WeapTypeWarhammer splitting type 6); S2SStances.esm becomes a master, so our records move to
+  index 2.
+* **Clips** (`stance_pack.py --weapon-type <Type> --ring 6 --no-graph`): every stance, Neutral too, flat into the
+  type's folders; `--ring` keeps the installed graph's ring (the sword stance pack v15's: 6 slots), since the tags and
+  power hosts follow from the ring size alone, and no graph is written. Built from LoreRim (scratch, delivered):
+  greatsword 9051000-9054000 with `--two-hand-grip` (48 clips, grip error after IK at most 1.4 cm, read-back rotation
+  error at most 0.0154) and war axe 9031000-9034000 (48 clips, at most 0.0097); tags and hosts checked identical to the
+  v15 sword high folder.
+* Needs the Creation Kit cache run after (new folders). Supported, not verified: a weapon keyword matches like an actor
+  keyword; the type folder found before the sword folders. Not covered: sprint attacks (stance packs fill only the
+  sword folder: the sword's / vanilla's), two-handed idle / walk / block / equip (vanilla Skyrim clips, later), NPCs
+  (NPC_Melee rows), stats (template's).

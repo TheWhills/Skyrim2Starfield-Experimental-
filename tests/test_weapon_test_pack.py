@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "armor"))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 sys.path.insert(0, os.path.join(ROOT, "tests"))
+sys.path.insert(0, os.path.join(ROOT, "scripts", "npc"))
 from fo4sf import bsa, fo4land, nif, retarget as R, sfmesh, sfnif, sfplugin, skeletonmap as M, skyrimnif  # noqa: E402
 from fo4sf import skyrimweapon as W, textures  # noqa: E402
 import skyrim_fixtures as F  # noqa: E402
@@ -449,6 +450,60 @@ class PackTests(unittest.TestCase):
                 elif abs(float(along.max() - along.min()) - 70 * W.UNIT) < 0.01:
                     kinds.append("left")                                           # left blade: the wrist grip's +Z
             self.assertEqual(sorted(kinds), ["left", "left", "right"])   # worn (skinned) + pair (rigid) left
+
+
+    def test_weapon_types_get_their_moveset_keyword(self):
+        """--stances-plugin: the greatsword carries S2S_AnimGreatsword from S2SStances.esm (a master now), the sword no
+        type keyword; our own records move to index 2 (owner 2026-11-09: weapon types play their own movesets)."""
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(textures, "texconv", lambda *a, **k: None):
+            sky = os.path.join(d, "Skyrim", "Data")
+            os.makedirs(sky)
+            with open(os.path.join(sky, "Skyrim - Meshes0.bsa"), "wb") as fh:
+                fh.write(bsa.build({"meshes\\weapons\\iron\\longsword.nif": sword_nif(),
+                                    "meshes\\weapons\\iron\\greatsword.nif": sword_nif()}))
+            tex = {t: F.rgba_dds() for t in ("textures\\weapons\\iron\\sword.dds", "textures\\weapons\\iron\\sword_n.dds")}
+            with open(os.path.join(sky, "Skyrim - Textures0.bsa"), "wb") as fh:
+                fh.write(bsa.build(tex, compress=False, embed_names=True))
+            skyrim_esm(os.path.join(sky, "Skyrim.esm"))
+            sf = os.path.join(d, "Starfield")
+            os.makedirs(os.path.join(sf, "Data"))
+            os.makedirs(os.path.join(sf, "Tools"))
+            starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+            F.content_resources(os.path.join(sf, "Tools", "ContentResources.zip"))
+            kh = struct.pack("<4sIII", b"KYWD", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+            stances = os.path.join(d, "S2SStances.esm")
+            with open(stances, "wb") as fh:
+                fh.write(sfplugin.build([(b"KYWD", kh, [(b"EDID", b"S2S_StanceHigh\0")], 0x01000800),
+                                         (b"KYWD", kh, [(b"EDID", b"S2S_AnimGreatsword\0")], 0x0100080B)],
+                                        {"hedr_version": 0.96, "form_version": 555}))
+            self.assertEqual(P.type_keywords(stances, 1), {"Greatsword": 0x0100080B})
+            out = os.path.join(d, "mod")
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = P.main(["--skyrim-data", sky, "--starfield", sf, "--texconv", "texconv.exe", "--out", out,
+                                 "--only", "sword,greatsword", "--left-blade", "", "--stances-plugin", stances])
+            finally:
+                P.OWN = 1
+            self.assertEqual(rc, 0)
+            plugin = os.path.join(out, "S2SWeapons.esm")
+            import npc_records
+            self.assertEqual(npc_records.plugin_masters(plugin), ["Starfield.esm", "S2SStances.esm"])
+            weaps = {sfplugin.edid(r[2]): r for r in sfplugin.records(plugin, [b"WEAP"])}
+            self.assertIn(0x0100080B, sfplugin.keywords(weaps["S2S_IronGreatsword"][2]))
+            self.assertIn(0x000A0001, sfplugin.keywords(weaps["S2S_IronGreatsword"][2]))     # AnimSword kept
+            self.assertNotIn(0x0100080B, sfplugin.keywords(weaps["S2S_IronSword"][2]))
+            self.assertTrue(all(r[3] >> 24 == 2 for r in weaps.values()))                    # after both masters
+            rep = json.load(open(os.path.join(out, "weapon_test_pack.json")))
+            self.assertEqual({w["key"]: w.get("moveset") for w in rep["weapons"]}, {"sword": None,
+                                                                                    "greatsword": "Greatsword"})
+
+    def test_moveset_type(self):
+        self.assertEqual(W.moveset_type(key="waraxe"), "WarAxe")
+        self.assertEqual(W.moveset_type(5), "Greatsword")
+        self.assertEqual(W.moveset_type(6), "Battleaxe")
+        self.assertEqual(W.moveset_type(6, ["WeapMaterialIron", "WeapTypeWarhammer"]), "Warhammer")
+        self.assertIsNone(W.moveset_type(1))                                                # swords: vanilla sets
+        self.assertIsNone(W.moveset_type(7))
 
 
 if __name__ == "__main__":

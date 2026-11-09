@@ -48,14 +48,16 @@ def unroll(routing: dict, n: int, start: int = 1) -> list:
     return out
 
 
-def ring_slots(chains: dict, folders, anims: str, starfield_data=None, limit=None):
-    """(N, {folder: {slot: (stem, tag, rekey)}}): N = the longest chain (distinct attacks) that every folder can hold."""
+def ring_slots(chains: dict, folders, anims: str, starfield_data=None, limit=None, exact=None):
+    """(N, {folder: {slot: (stem, tag, rekey)}}): N = the longest chain (distinct attacks) that every folder can hold;
+    exact: N itself (a pack that adds clips under a graph another pack wrote must use that graph's ring: the tags and
+    power hosts follow from N alone; shorter chains repeat round it)."""
     want = max(len(c) for c in chains.values())
     if limit:
         want = min(want, limit)
     stems_of = {f: [s for s in animslots.HOSTS + [c for c, _t in animslots.COMBO]
                     if bfco_pack.exists(bfco_pack.anim_path(anims, f, s), starfield_data)] for f in folders}
-    for n in range(want, 0, -1):
+    for n in ([exact] if exact else range(want, 0, -1)):
         try:
             slots = {f: animslots.allocate(n, stems_of[f]) for f in folders}
         except animslots.SlotError:
@@ -64,7 +66,7 @@ def ring_slots(chains: dict, folders, anims: str, starfield_data=None, limit=Non
         if len({tuple(sorted(t.items())) for t in tags.values()}) != 1:
             raise SystemExit(f"the folders give the slots different tags: {tags}")
         return n, slots
-    raise SystemExit("no attack slots in the folders")
+    raise SystemExit(f"a ring of {exact} slots does not fit the folders" if exact else "no attack slots in the folders")
 
 
 def power_slots(n: int, folders, anims: str, starfield_data=None):
@@ -87,16 +89,16 @@ def power_slots(n: int, folders, anims: str, starfield_data=None):
     return {j: (free[j - 1][0], tags[j - 1], free[j - 1][1]) for j in range(1, m + 1)}
 
 
-def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None):
+def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None, exact=None, neutral_vanilla=True):
     """({stance: {"sequence", "wrap", "replace": [hkx_to_af --replace specs], "folders", "powers"}}, N, tags {slot: tag},
     power {j: (host, tag, folder)}); "folders": the vanilla folders whose converted clips a stance moves into its
-    stance folder."""
+    stance folder. neutral_vanilla False (a weapon-type pack): the neutral moveset is moved into its own folder too."""
     chains = {s: bfco_combo.routing_of(f) for s, f in stances.items()}
     after = {s: bfco_combo.routes_of(f).get("attack_power", {}) for s, f in stances.items()}
     empty = [s for s, c in chains.items() if not c]
     if empty:
         raise SystemExit(f"no BFCO_AttackN / mco_attackN clips for {', '.join(empty)}")
-    n, slots = ring_slots(chains, folders, anims, starfield_data, limit)
+    n, slots = ring_slots(chains, folders, anims, starfield_data, limit, exact)
     pslots = power_slots(n, folders, anims, starfield_data)
     out = {}
     for stance, folder in stances.items():
@@ -105,7 +107,7 @@ def plan(stances: dict, folders, anims: str, starfield_data=None, limit=None):
         seq = unroll(chains[stance], n)
         nxt = chains[stance].get(seq[-1])
         wrap = None if nxt == seq[0] else {"after": seq[-1], "chain_next": nxt, "ring_next": seq[0]}
-        use = folders if stance == NEUTRAL else folders[:1]       # stances: one folder's worth, moved later
+        use = folders if stance == NEUTRAL and neutral_vanilla else folders[:1]   # stances: one folder's worth, moved
         replace = []
         for f in use:
             for j, (stem, tag, rekey) in slots[f].items():
@@ -153,12 +155,19 @@ def power_routing(n: int, pslots: dict) -> dict:
             "event": bfco_combo.POWER_EVENT, "cancel_event": "ActionInterrupt"}
 
 
-def _move_into_stance(tmp: str, folder: str, out: str, stance: str) -> int:
+def dest_folder(stance: str, weapon_type: str = None) -> str:
+    """Where a stance's clips go: its stance folder, or for a weapon-type pack the type's (neutral) / type\\stance."""
+    if weapon_type:
+        return stance_plugin.type_folder(weapon_type, None if stance == NEUTRAL else stance)
+    return stance_plugin.stance_folder(stance)
+
+
+def _move_into_stance(tmp: str, folder: str, out: str, stance: str, weapon_type: str = None) -> int:
     """Move the converted clips of `folder` (Data-relative under meshes/actors/human/animations) into the stance's
     folder of the pack (flat: the stance entries list that folder first, owner's run 2026-10-23 showed a subfolder is
     not searched); returns how many files."""
     src = os.path.join(tmp, *bfco_pack.ANIMS.split("/"), *folder.split("/"))
-    dst = os.path.join(out, "meshes", *stance_plugin.stance_folder(stance).split("\\"))
+    dst = os.path.join(out, "meshes", *dest_folder(stance, weapon_type).split("\\"))
     os.makedirs(dst, exist_ok=True)
     n = 0
     for fn in os.listdir(src) if os.path.isdir(src) else []:
@@ -178,6 +187,11 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--slots", type=int, help="at most this many attack slots in the ring")
     ap.add_argument("--starfield-data")
+    ap.add_argument("--weapon-type", help="a Skyrim weapon type's pack (" + ", ".join(stance_plugin.WEAPON_TYPES)
+                    + "): every stance, Neutral too, into stance_plugin.type_folder (S2SStances.esm's type entries)")
+    ap.add_argument("--ring", type=int, help="exactly this many attack slots: the ring of the graph already "
+                                             "installed (the sword stance pack's: 6)")
+    ap.add_argument("--no-graph", action="store_true", help="write no MeleeAttacks.agx (another pack's serves)")
     a, rest = ap.parse_known_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -189,7 +203,13 @@ def main(argv=None):
         if name != NEUTRAL and name not in stance_plugin.STANCES_DUAL or not os.path.isdir(folder):
             sys.exit(f"--stance wants NAME=FOLDER with NAME {NEUTRAL} or one of {stance_plugin.STANCES_DUAL}; got {spec}")
         stances[name] = folder
-    p, n, tags, pslots = plan(stances, a.folder, a.anims, a.starfield_data, a.slots)
+    wt = None
+    if a.weapon_type:
+        wt = next((t for t in stance_plugin.WEAPON_TYPES if t.lower() == a.weapon_type.lower()), None)
+        if wt is None:
+            sys.exit(f"--weapon-type: one of {', '.join(stance_plugin.WEAPON_TYPES)}")
+    p, n, tags, pslots = plan(stances, a.folder, a.anims, a.starfield_data, a.slots, a.ring,
+                              neutral_vanilla=wt is None)
     print(f"ring of {n} slots: " + ", ".join(f"{j}:{t}" for j, t in sorted(tags.items())))
     print(f"power slots: " + (", ".join(f"after {j}: {t} (on {h})" for j, (h, t, _f) in sorted(pslots.items()))
                               or "none (no free hosts): the vanilla power attack after every slot"))
@@ -201,13 +221,16 @@ def main(argv=None):
                  f"{st['wrap']['ring_next']})" if st["wrap"] else ""))
         base = ["--weapon-in-hand", "--bfco"] + (["--starfield-data", a.starfield_data] if a.starfield_data else [])
         specs = [x for r in st["replace"] for x in ("--replace", r)]
-        if stance == NEUTRAL:
+        if stance == NEUTRAL and wt is None:
             rc |= hkx_to_af.main(rest + ["--out", out] + base + specs)
         else:
             with tempfile.TemporaryDirectory() as tmp:
                 rc |= hkx_to_af.main(rest + ["--out", tmp] + base + specs)
-                moved = sum(_move_into_stance(tmp, f, out, stance) for f in st["folders"])
-            print(f"{stance}: {moved} files in {stance_plugin.stance_folder(stance)}")
+                moved = sum(_move_into_stance(tmp, f, out, stance, wt) for f in st["folders"])
+            print(f"{stance}: {moved} files in {dest_folder(stance, wt)}")
+    if a.no_graph:
+        print(f"no graph written: the installed MeleeAttacks.agx must have this ring ({n} slots)")
+        return rc
     with open(a.graph, "rb") as fh:
         data, added = bfco_combo.build(fh.read(), {j: j % n + 1 for j in range(1, n + 1)}, tags,
                                        power_routing(n, pslots))

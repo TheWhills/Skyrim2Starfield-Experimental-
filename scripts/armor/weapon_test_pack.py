@@ -28,6 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, HERE)
 
 from fo4sf import bsa, sfnif, sfplugin, skyrimconvert, skyrimweapon  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
@@ -37,6 +38,25 @@ MAIN_BA2 = "S2SWeapons - Main.ba2"
 TEX_BA2 = "S2SWeapons - Textures.ba2"
 PREFIX = "s2s"
 TEMPLATE_KEYWORDS = ("AnimSword", "WeaponTypeMelee1H", "AnimOneHanded")
+
+
+OWN = 1                  # this plugin's index in its own FormIDs: after its masters (2 with --stances-plugin)
+
+
+def new_fid(index: int) -> int:
+    return sfplugin.new_form_id(index, OWN)
+
+
+def type_keywords(stances_plugin: str, master_index: int) -> dict:
+    """{moveset type: keyword FormID as seen from our plugin} of S2SStances.esm's S2S_Anim<Type> keywords."""
+    import stance_plugin
+    by = {sfplugin.edid(subs).lower(): fid for _t, _h, subs, fid in sfplugin.records(stances_plugin, [b"KYWD"])}
+    out = {}
+    for t in stance_plugin.WEAPON_TYPES:
+        fid = by.get(stance_plugin.type_keyword_edid(t).lower())
+        if fid is not None:
+            out[t] = (master_index << 24) | (fid & 0xFFFFFF)
+    return out
 
 
 def skyrim_weapons(skyrim_data: str, weapons=skyrimweapon.IRON_SET) -> list:
@@ -81,7 +101,7 @@ def weapon_record(template, index: int, edid: str, name: str, model: str):
     typ, header, subs, _fid = template
     new = sfplugin.edit(subs, {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name), b"MODL": sfplugin.zs(model)},
                         drop=(b"DESC",))
-    return (typ, header, new, sfplugin.new_form_id(index))
+    return (typ, header, new, new_fid(index))
 
 
 APPAREL_TEMPLATE = r"^Clothes_Nightwear_01$"    # a vanilla outfit community mods copy successfully (robes reference)
@@ -262,7 +282,7 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
     covering both slots."""
     import struct
     ta, ha, sa, fa = arma_t
-    new_arma = sfplugin.new_form_id(first_index)
+    new_arma = new_fid(first_index)
     m = sfplugin.zs(model)
     sa2 = sfplugin.edit(sa, {b"EDID": sfplugin.zs(edid + "_AA"), **{k: m for k in MODEL_SIGS if any(s == k for s, _ in sa)}})
     to, ho, so, _fo = armo_t
@@ -273,10 +293,10 @@ def left_blade_records(armo_t, arma_t, first_index: int, edid: str, name: str, m
         so2 = with_keyword(so2, keyword)
     if slot is not None:
         sa2, so2 = with_slot(sa2, slot), with_slot(so2, slot)
-    armo = (to, ho, so2, sfplugin.new_form_id(first_index + 1))
+    armo = (to, ho, so2, new_fid(first_index + 1))
     if suit_slot is None:
         return (ta, ha, sa2, new_arma), armo
-    suit_arma = sfplugin.new_form_id(first_index + 2)
+    suit_arma = new_fid(first_index + 2)
     sa3 = with_slot(sfplugin.edit(sa2, {b"EDID": sfplugin.zs(edid + "_SS_AA")}), suit_slot)
     so3 = []
     for s_, d in so2:                         # the second addon right after the first (INDX 0 + MODL, as the first)
@@ -336,7 +356,7 @@ def tag_blade(ao, next_index: int, kywd_t):
     """(ARMO with its own keyword, the KYWD record) for one left blade. The keyword's EditorID carries the ARMO's
     local FormID (BLADE_TAG), so S2SCombat finds it from the ARMO without reading keyword lists (owner's run
     2026-10-27: Papyrus Actor.IsEquipped on the blade never answered yes); `next_index` is where the KYWD goes."""
-    kid = sfplugin.new_form_id(next_index)
+    kid = new_fid(next_index)
     rec = (b"KYWD", kywd_t[1], sfplugin.edit(kywd_t[2], {b"EDID": sfplugin.zs(BLADE_TAG.format(ao[3] & 0xFFFFFF))},
                                              drop=(b"FULL", b"DESC")), kid)
     return (ao[0], ao[1], with_keyword(ao[2], kid), ao[3]), rec
@@ -500,6 +520,9 @@ def main(argv=None):
                          "of all its weapons (repeatable)")
     ap.add_argument("--left-bone", default="L_Wrist", choices=["L_Wrist", "WeaponLeft"],
                     help="bone the left blade is skinned to: L_Wrist (stays in the hand in every clip) or WeaponLeft")
+    ap.add_argument("--stances-plugin", metavar="S2SStances.esm",
+                    help="give each weapon its type's moveset keyword (S2S_Anim<Type>) from this stance plugin, "
+                         "which becomes a master: greatswords play the greatsword pack, axes the war-axe pack, ...")
     ap.add_argument("--apparel-template", default=APPAREL_TEMPLATE,
                     help="EditorID regex of the vanilla outfit whose ARMO / ARMA the left blade copies")
     a = ap.parse_args(argv)
@@ -517,6 +540,16 @@ def main(argv=None):
         if not os.path.isfile(p):
             sys.exit(f"{what} not found: {p}")
 
+    global OWN
+    masters, movesets = ["Starfield.esm"], {}
+    if a.stances_plugin:
+        if not os.path.isfile(a.stances_plugin):
+            sys.exit(f"--stances-plugin not found: {a.stances_plugin}")
+        masters.append(os.path.basename(a.stances_plugin))
+        movesets = type_keywords(a.stances_plugin, len(masters) - 1)
+        if not movesets:
+            sys.exit(f"{a.stances_plugin}: no S2S_Anim<Type> keywords (rebuild it with stance_plugin.py)")
+    OWN = len(masters)
     weapons = skyrim_weapons(a.skyrim_data)
     if a.only:
         keep = {k.strip().lower() for k in a.only.split(",")}
@@ -544,6 +577,10 @@ def main(argv=None):
         if res["ok"]:
             model = res["out_name"].replace("/", "\\") + ".nif"
             rec = weapon_record(template, len(recs), "S2S_" + w["edid"], w["name"] + " (Skyrim)", model)
+            mt = skyrimweapon.moveset_type(w["skyrim"].get("anim_type"), key=w["key"])
+            if mt in movesets:
+                rec = (rec[0], rec[1], with_keyword(rec[2], movesets[mt]), rec[3])
+                row["moveset"] = mt
             recs.append(rec)
             row.update(starfield_model=model, form_id_in_plugin=f"{rec[3] & 0xFFFFFF:06X}",
                        editor_id="S2S_" + w["edid"], name=w["name"] + " (Skyrim)", test_with_pack=w["pack"])
@@ -564,7 +601,7 @@ def main(argv=None):
             edid = "S2S_" + lw["edid"] + "_Left"
             name = lw["name"] + " (Skyrim, left hand)"
             kywd_t = next(r for r in sf if r[0] == b"KYWD")
-            kw_fid = sfplugin.new_form_id(len(recs))
+            kw_fid = new_fid(len(recs))
             recs.append((b"KYWD", kywd_t[1], sfplugin.edit(kywd_t[2], {b"EDID": sfplugin.zs(LEFT_BLADE_KEYWORD)},
                                                            drop=(b"FULL", b"DESC")), kw_fid))
             apparel = [r for r in sf if r[0] in (b"ARMO", b"ARMA")]
@@ -607,7 +644,7 @@ def main(argv=None):
                     row = {"key": lw["key"] + "_pair", "ok": False, "reason": rigid.get("reason")}
         report["weapons"].append(row)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
-        fh.write(sfplugin.build(recs, info))
+        fh.write(sfplugin.build(recs, info, masters=masters))
     report["packing"] = pack(staging, out, a.starfield, a.archive2)
     report["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
     with open(os.path.join(out, "weapon_test_pack.json"), "w", encoding="utf-8") as fh:
@@ -618,7 +655,8 @@ def main(argv=None):
              "Weapon            FormID ending   test with pack"]
     for r in report["weapons"]:
         if r["ok"]:
-            lines.append(f"  {r['name']:<24} ..{r['form_id_in_plugin'][-3:]}          {r['test_with_pack']}")
+            lines.append(f"  {r['name']:<24} ..{r['form_id_in_plugin'][-3:]}          {r['test_with_pack']}"
+                         + (f"   (moveset: {r['moveset']}, S2SStances.esm)" if r.get("moveset") else ""))
         else:
             lines.append(f"  {r['key']}: not converted ({r['reason']})")
     if any(r.get("worn") for r in report["weapons"]):
