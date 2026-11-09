@@ -49,3 +49,10 @@ Patrol (default). make_schedule.py now: leaves out packages with conditions or a
 not converted, and the first matching package wins: unconditioned quest packages would take over;
 `--keep-conditioned` keeps them); leaves out packages whose location is outside the batch's interiors (Embry's daytime
 loiter outside, until NPCs go outdoors); Skyrim Eat (no Starfield template) -> Sandbox with Allow Eating / Sitting on.
+
+## First build with packages (owner's run 2026-11-08)
+PluginSpike compiled and wrote Orgnar (1 package), Delphine (5: Eat 6 / 18, InnServices 6-18 SandboxAndKeepEyeOn,
+Sleep 0-6, default sandbox) and Embry (4: Sleep 0-7, Eat 7-8, inn 17-1, Patrol default) into FO4Port.esm.
+**Verified:** Starfield's PLDT radius is a float: the vanilla packages copied hold raw bits 40A00000 (5.0) and 40400000
+(3.0). Vanilla NPC copies: ChargenPresetFemale04_Swap (030764, Ralof's face_fit template) for the men,
+ChargenPresetFemale04 (050569) for Delphine. In-game behaviour: unverified.
