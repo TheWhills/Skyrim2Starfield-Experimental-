@@ -185,7 +185,7 @@ def main(argv=None):
     sky = packages.Index(a.skyrim)
     actors, notes = [], []
     try:
-        for edid in a.npc:
+        for edid in [e.strip() for n in a.npc for e in n.split(",") if e.strip()]:
             fid = sky.find_edid(b"NPC_", edid)
             if fid is None:
                 notes.append(f"{edid}: no such Skyrim NPC")

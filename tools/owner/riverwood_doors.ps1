@@ -65,7 +65,8 @@ if ($Navmesh) {
 if ($Actors.Count -gt 0) {
     Step "2c. NPCs with their schedules: $($Actors -join ', ')"
     $sa = @("--skyrim", "$SKY\Skyrim.esm", "--starfield", "$SF\Data\Starfield.esm", "--work", $Work)
-    foreach ($n in $Actors) { $sa += @("--npc", $n) }
+    # with -File, "-Actors A,B,C" arrives as one string: split it
+    foreach ($n in ($Actors -join ",").Split(",")) { if ($n.Trim()) { $sa += @("--npc", $n.Trim()) } }
     if (Test-Path $Faces) { $sa += @("--faces", $Faces) } else { Write-Host "no faces.json at $Faces" -ForegroundColor Yellow }
     python -I scripts\npc\make_schedule.py @sa
     if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }
