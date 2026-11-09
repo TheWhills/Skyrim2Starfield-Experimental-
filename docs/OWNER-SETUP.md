@@ -43,6 +43,7 @@ Starfield must be closed while a script writes into the mods folders.
 | MO2 mods folder | `$env:LOCALAPPDATA\ModOrganizer\Starfield\mods` (`$mods`) |
 | Converted outfits: S2SArmorTest.esm, meshes, morphs, `gear_fit.json` | `$mods\S2S Armor Test` (`$armor`) |
 | Test NPCs: S2SFaceTest.esm, `faces.json` (NPC ids), face textures | `$mods\S2S Face Test` (`$face`) |
+| Race heads test: S2SRaceTest.esm, head morph.dat, `race_heads.json` (NPC ids) | `$mods\S2S Race Test` |
 | Converted hair / beards: S2SSkyrimHairs.esm | `$mods\S2S Skyrim Hairs` (`$hairs`) |
 | Voice test (a second S2SFaceTest.esm under Sound\Voice) | `$mods\S2S Voice Swap Test` |
 | More Sliders (face-bone mod) | `$mods\More-Sliders Complete` (`$ms`, `$cs`) |
@@ -97,6 +98,17 @@ Starfield's head; opens as C:\Modding\work\races\race_view.html):
 ```powershell
 python -I scripts\npc\race_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races --skip refs
 ```
+
+Race heads test (Skyrim race shapes as head morph keys, NPCs to spawn; then enable "S2S Race Test" and
+S2SRaceTest.esm in MO2, spawn with the console lines it prints, xx = the plugin's load order index):
+
+```powershell
+python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test"
+```
+
+Default races HighElfRace, OrcRace, WoodElfRace, DarkElfRace (at most 4: one morph.dat holds 128 keys); `--races`
+to pick others. If the race NPCs look like the control NPC (plain face), rerun with `--race-head` (HumanRace then uses
+our head part and lists our keys; vanilla faces stay as they are since our morph.dat keeps every vanilla key).
 
 `--skip refs` leaves out the HumanRace counts (unchanged since the first run). The transfer is the surface one
 (fo4sf/headcorr.py, about 20 s per sex); `--transfer nearest` gives the old average to compare. face_fit uses the same

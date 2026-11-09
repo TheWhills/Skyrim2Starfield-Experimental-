@@ -163,3 +163,22 @@ which fits the separate-races design; hair / brows / lashes then need the same k
   read; unresolved whether Skyrim shares it on purpose).
 - race_probe and face_fit use it by default (--transfer nearest for the old average). face_fit's faces change with it
   (and with the alignment); a rerun and a look in game are needed.
+
+## Race heads test (2026-11-09; offline checks only)
+- How vanilla NPCs name head morph keys (verified on the owner's npc_dump of vanilla NPCs): BMPN (blend name) =
+  a morph.dat key such as male_eu_ol1_Mouth, BMPV its intensity; FMRI (the race's phenotype index, e.g. 12 =
+  male_eu_md2) + FMRG / FMRS is the chargen's record per phenotype and region, and does not always match the blends
+  (Ralof's template: male_af_ol1_Nose 0.25 only in BMPN, male_eu_ol1_Mouth 0.62 vs 0.34). So BMPN looks like what
+  the head is built from (supported).
+- A head part names its morph record (HDPT MNAM -> MRPH); the MRPH's TCMP is the folder holding morph.dat (xEdit;
+  verified for armor 2026-11-06).
+- scripts/npc/race_heads.py: per sex one morph.dat = the vanilla head's 84 keys + 9 region keys per Skyrim race
+  (<sex>_sk_<code>_<Region>; 4 races fit in 128 keys), a race's shape split over the regions by how far the vanilla
+  phenotype keys move each vertex (normalised; unmoved vertices take their neighbours' weights; seams welded), so the
+  9 keys at 1.0 add up to the whole shape. A frame check (vanilla Overweight must point outward along the head's
+  normals) guards the assumption that morph.dat deltas are in the head mesh's frame. S2SRaceTest.esm: MRPH + HDPT
+  copies of the vanilla head's, one NPC per race and sex with our head part (PNAM) and the race's keys as BMPN 1.0, a
+  control NPC; --race-head adds a HumanRace override (our head part as its Face part, our keys in its morph groups).
+- To learn in game: (1) the control NPC looks plain (our head part and morph.dat load); (2) the race NPCs show the
+  race (BMPN applies new keys from an NPC's own head part); else (3) with --race-head. Then setrace /
+  showlooksmenu with a thin race (step 4 of the decision).
