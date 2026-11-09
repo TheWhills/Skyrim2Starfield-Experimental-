@@ -37,7 +37,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 Skeleton map (Skyrim bone -> Starfield bone(s), rest-pose offsets, length ratios) from the fetched skeletons; then the
 armor fitting path (re-pose + body correction field, or body-surface weight transfer), then .hkx track decoding.
 
-## Clothing as items, both sexes (plan, owner 2026-11-09)
+## Clothing as items, both sexes (owner 2026-11-09; built, untested in game)
 Owner: today Ysolda's outfit is "Ysolda's outfit" for whoever wears it; eventually each Skyrim clothing piece is one
 converted item, with the right ids, worn by every NPC who should wear it, male or female, each seeing its own version.
 How both games do it (xEdit wbDefinitionsTES5 / wbDefinitionsSF1, verified field layout): an ARMO lists ARMA addons;
@@ -57,3 +57,22 @@ Plan:
    do not split the same way, addons per sex (one model filled) - whether an ARMA with only MOD2 shows nothing on a
    female is to check in game.
 Test when built: Ysolda's dress item on a female and a male test NPC, each in their own fitted version.
+
+Built (2026-11-09, `scripts/armor/item_convert.py`, synthetic tests in tests/test_item_convert.py; not run on game
+data yet, owner queue step 9):
+- `gear_fit.py --stage --sex male|female --armor <ARMO>` fits one item for one sex (the race's addon, NordRace by
+  default; the male model when the addon has no female one) and writes only the part NIFs, morphs and textures
+  (meshes\S2S\Items\<ARMO>_M|F\) and the parts list (gear_fit_<name>.json); no plugin.
+- item_convert.py runs that for both sexes of every item (--armor, --outfit, or --npc for its default outfit), pairs
+  the parts (skin piece with skin piece, then same shape name, then same slots; slots then made distinct over the
+  pairs) and writes S2SClothes.esm with os_export.item_records: per pair one ARMA (MOD2 + NAM4 male, MOD3 + NAM6
+  female, a MRPH per sex), per item an ARMO with Skyrim's name (S2S_<ARMO EditorID>), per outfit an OTFT
+  (S2S_<OTFT EditorID>, one u32 per item in INAM; the per-NPC outfits held one), and with --test-npcs a male and a
+  female NPC (copies of face_fit's body NPCs) wearing it. A part one sex lacks gets an ARMA with that sex's fields
+  only (unresolved: what the other sex shows).
+- Ids: S2SClothes_ids.json keeps every FormID by EditorID (never reused) and which records each Skyrim item / outfit
+  wrote; rerunning an item replaces only its records, other items stay (--replace-all drops them).
+- `face_fit.py --items-plugin S2SClothes.esm`: a test NPC wears the converted OTFT its Skyrim default outfit became
+  (before --outfits-plugin's per-NPC outfit), so NPCs sharing a Skyrim outfit share the items.
+- Open: skin pieces of two items in one outfit both sit on the skin template's slot (13), so only one may show;
+  leveled outfit entries resolve as gear_fit does (first entry giving armor, all with Use All).

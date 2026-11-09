@@ -113,6 +113,19 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    below them), draw a one-handed melee weapon, attack once. The overhead power swing = SAM made our new tag play;
    a snap or nothing = it did not. Send a short clip or what you saw, and SFSE\Plugins\SfAnimIndexLoader.log (MO2:
    in the SAM mod folder or Overwrite).
+9. B + C: clothing as items, both sexes (docs/armor/README.md, "Clothing as items"). Ysolda's outfit, each piece one
+   item with a male and a female version, in its own mod "S2S Clothes" (S2SClothes.esm):
+   ```powershell
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ysolda --out "$mods\S2S Clothes" --dry-run
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ysolda --out "$mods\S2S Clothes" --test-npcs
+   ```
+   The first lists the meshes each sex uses (nothing written). The second fits every piece twice (male body, female
+   body; a few minutes per piece) and prints `player.placeatme` for a male and a female test NPC wearing the outfit
+   and `player.additem` per piece. Enable "S2S Clothes" in MO2, spawn both: each should wear Ysolda's clothes fitted
+   to their own body; also additem the dress on the player. Lines marked "(male only)" / "(female only)" are parts
+   one sex does not have: look at what the other sex shows there. Send item_convert.json and screenshots.
+   If it looks right, step 4's face_fit command takes `--items-plugin "$mods\S2S Clothes\S2SClothes.esm"` (before
+   `--outfits-plugin`) and the test NPCs wear their converted Skyrim outfit, shared by everyone with that outfit.
 
 ## Working commands
 

@@ -1,7 +1,7 @@
 """Skyrim armor and clothing records (ARMO / ARMA) as an inventory for the armor conversion. Read-only.
 
 Layouts follow xEdit's wbDefinitionsTES5.pas (dev-4.1.6, read 2026-10-15):
-* ARMO: EDID, MOD2 / MOD4 (male / female WORLD model), BODT or BOD2 (biped flags u32, [BODT only: general flags u8 +
+* ARMO: EDID, FULL (a u32 string-table id in a localized plugin such as Skyrim.esm, else text), MOD2 / MOD4 (male / female WORLD model), BODT or BOD2 (biped flags u32, [BODT only: general flags u8 +
   3 unused], armor type u32: 0 light, 1 heavy, 2 clothing), RNAM race, MODL x n (the ARMA list), DATA (value i32,
   weight f32), DNAM armor rating i32 / 100, TNAM template armor (enchanted / variant copies point at their base).
 * ARMA: EDID, BODT / BOD2, RNAM race, DNAM (male priority u8, female priority u8, weight slider male u8, female u8,
@@ -66,10 +66,14 @@ def read_armor(esm: str) -> dict:
         for fid, rflags, fields in _records(p, b"ARMO"):
             a = {"edid": "", "slots": [], "armor_type": None, "world_model": "", "world_model_female": "",
                  "race": None, "addons": [], "value": None, "weight": None, "rating": None, "template": None,
-                 "non_playable": bool(rflags & NON_PLAYABLE_RECORD)}
+                 "non_playable": bool(rflags & NON_PLAYABLE_RECORD), "full": None, "full_id": None}
             for s, d in fields:
                 if s == b"EDID":
                     a["edid"] = fo4land.zstring(d)
+                elif s == b"FULL" and len(d) == 4:
+                    a["full_id"] = struct.unpack_from("<I", d)[0]      # localized plugin (as skyrimnpc's FULL)
+                elif s == b"FULL":
+                    a["full"] = fo4land.zstring(d)
                 elif s in (b"BODT", b"BOD2"):
                     flags, kind, general = _body_template(s, d)
                     a["slots"], a["armor_type"] = slots(flags), ARMOR_TYPES.get(kind, kind)

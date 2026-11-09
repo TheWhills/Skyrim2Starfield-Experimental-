@@ -525,6 +525,22 @@ def outfits_by_npc(path: str, master_index: int) -> dict:
     return out
 
 
+def item_outfits(path: str, master_index: int) -> dict:
+    """{our OTFT EditorID, lower case: FormID as seen from the plugin that has `path` as master number master_index}
+    of item_convert.py's outfits (S2S_<Skyrim OTFT EditorID>)."""
+    return {sfplugin.edid(subs).lower(): (master_index << 24) | (fid & 0xFFFFFF)
+            for _t, _h, subs, fid in sfplugin.records(path, [b"OTFT"]) if sfplugin.edid(subs)}
+
+
+def npc_item_outfit(npc: dict, sky_otft: dict, items: dict):
+    """(FormID, Skyrim OTFT EditorID) of the converted outfit a Skyrim NPC's default outfit became, or (None, why)."""
+    e = sky_otft.get(npc.get("outfit"))
+    if not e:
+        return None, "no default outfit in Skyrim"
+    fid = items.get(f"s2s_{e}".lower())
+    return (fid, e) if fid is not None else (None, f"{e} not converted (item_convert.py --npc {npc.get('edid')})")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
@@ -566,6 +582,9 @@ def main(argv=None):
     ap.add_argument("--test-plugin", action="store_true")
     ap.add_argument("--beard-map", help="beard_match.py's beard_match.json: Skyrim beards worn as the matched vanilla "
                                         "Starfield beards (with --hairs-plugin)")
+    ap.add_argument("--items-plugin", help="S2SClothes.esm from scripts/armor/item_convert.py: each test NPC wears "
+                                           "the converted outfit its Skyrim default outfit became (before "
+                                           "--outfits-plugin's per-NPC outfit); the plugin becomes a master")
     ap.add_argument("--outfits-plugin", help="S2SArmorTest.esm from scripts/armor/gear_fit.py: each test NPC wears the "
                                              "outfit made for it there (gear_fit --name <NPC EditorID>_outfit), as "
                                              "default and space outfit; the plugin becomes a master")
@@ -742,7 +761,11 @@ def main(argv=None):
                     names[fn] = ba2.Ba2(os.path.join(sf_data, fn)).names
             baked = baked_face_index(names)
             report["baked_faces"] = len(baked)
-        worn = {}
+        worn, items, sky_otft = {}, {}, {}
+        if a.items_plugin:
+            masters = list(masters) + [os.path.basename(a.items_plugin)]
+            items = item_outfits(a.items_plugin, len(masters) - 1)
+            sky_otft = {fid: sfplugin.edid(s_) for _t, _h, s_, fid in sfplugin.records(esm, [b"OTFT"])}
         if a.outfits_plugin:
             masters = list(masters) + [os.path.basename(a.outfits_plugin)]
             worn = outfits_by_npc(a.outfits_plugin, len(masters) - 1)
@@ -773,7 +796,15 @@ def main(argv=None):
             subs = without_templates(subs)
             if no_outfit is not None:
                 subs = sfplugin.edit(subs, {b"DOFT": struct.pack("<I", no_outfit), b"SOFT": struct.pack("<I", no_outfit)})
-            if row["edid"].lower() in worn:
+            item_fid = None
+            if items:
+                item_fid, why = npc_item_outfit(by_edid[row["edid"].lower()], sky_otft, items)
+                row["item_outfit"] = why if item_fid is None else f"S2S_{why}"
+            if item_fid is not None:
+                o = struct.pack("<I", item_fid)
+                subs = sfplugin.edit(subs, {b"DOFT": o, b"SOFT": o})
+                row["outfit"] = f"{item_fid:08X}"
+            elif row["edid"].lower() in worn:
                 o = struct.pack("<I", worn[row["edid"].lower()])
                 subs = sfplugin.edit(subs, {b"DOFT": o, b"SOFT": o})
                 row["outfit"] = f"{worn[row['edid'].lower()]:08X}"
@@ -814,8 +845,8 @@ def main(argv=None):
                 if no_outfit is not None:
                     csubs = sfplugin.edit(csubs, {b"DOFT": struct.pack("<I", no_outfit),
                                                   b"SOFT": struct.pack("<I", no_outfit)})
-                if row["edid"].lower() in worn:
-                    o = struct.pack("<I", worn[row["edid"].lower()])
+                if item_fid is not None or row["edid"].lower() in worn:
+                    o = struct.pack("<I", item_fid if item_fid is not None else worn[row["edid"].lower()])
                     csubs = sfplugin.edit(csubs, {b"DOFT": o, b"SOFT": o})
                 if real is not None:
                     csubs = npc_dress(csubs, by_edid[row["edid"].lower()], npcs, real, dict(row))

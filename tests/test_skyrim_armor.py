@@ -42,10 +42,10 @@ def armor_esm():
                              dnam(0, 0), (b"MOD2", z("Armor\\Iron\\Male\\HelmetKhajiit.nif"))]),
     ]
     armo = [
-        rec(b"ARMO", 0x200, [(b"EDID", z("ArmorIronCuirass")), (b"MOD2", z("Armor\\Iron\\Male\\CuirassGND.nif")),
+        rec(b"ARMO", 0x200, [(b"EDID", z("ArmorIronCuirass")), (b"FULL", struct.pack("<I", 0x1234)), (b"MOD2", z("Armor\\Iron\\Male\\CuirassGND.nif")),
                              bod2(0x4, 1), (b"RNAM", struct.pack("<I", NORD)), (b"MODL", struct.pack("<I", 0x100)),
                              (b"DATA", struct.pack("<if", 125, 30.0)), (b"DNAM", struct.pack("<i", 2500))]),
-        rec(b"ARMO", 0x201, [(b"EDID", z("ArmorIronHelmet")), (b"BODT", struct.pack("<IB3xI", 0x2, 0, 1)),
+        rec(b"ARMO", 0x201, [(b"EDID", z("ArmorIronHelmet")), (b"FULL", z("Iron Helmet")), (b"BODT", struct.pack("<IB3xI", 0x2, 0, 1)),
                              (b"MODL", struct.pack("<I", 0x101)), (b"MODL", struct.pack("<I", 0x102)),
                              (b"DATA", struct.pack("<if", 60, 5.0)), (b"DNAM", struct.pack("<i", 1500))]),
         rec(b"ARMO", 0x202, [(b"EDID", z("EnchArmorIronCuirassHealth01")), bod2(0x4, 1),
@@ -74,7 +74,9 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual((cu["edid"], cu["slots"], cu["armor_type"], cu["rating"], cu["value"], cu["weight"]),
                          ("ArmorIronCuirass", [32], "heavy", 25.0, 125, 30.0))
         self.assertEqual((cu["world_model"], cu["race"], cu["addons"]), ("Armor\\Iron\\Male\\CuirassGND.nif", "NordRace", [0x100]))
+        self.assertEqual((cu["full_id"], cu["full"]), (0x1234, None))  # localized name: a string-table id
         helm = inv["armo"][0x201]                                      # older BODT form
+        self.assertEqual((helm["full"], helm["full_id"]), ("Iron Helmet", None))
         self.assertEqual((helm["slots"], helm["armor_type"], helm["addons"]), ([31], "heavy", [0x101, 0x102]))
         self.assertEqual(inv["armo"][0x202]["template"], 0x200)
         self.assertTrue(inv["armo"][0x203]["non_playable"])

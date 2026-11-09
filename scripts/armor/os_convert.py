@@ -51,9 +51,15 @@ def outfit_armor(esm: str, npc_edid: str) -> dict:
         raise SystemExit(f"no NPC {npc_edid} in {esm}{hint}")
     races = {fid: sfplugin.edid(s) for _t, _h, s, fid in sfplugin.records(esm, [b"RACE"])}
     recs = {fid: (t, s) for t, _h, s, fid in sfplugin.records(esm, [b"OTFT", b"LVLI", b"ARMO"])}
+    armor, skipped = outfit_items(recs, n.get("outfit"))
+    return {"npc": n, "race": races.get(n.get("race"), ""), "armor": armor, "skipped": skipped}
+
+
+def outfit_items(recs: dict, outfit_fid) -> tuple:
+    """([ARMO FormIDs], [skipped items]) an outfit gives. recs: {fid: (type, subrecords)} of OTFT / LVLI / ARMO."""
     items = []
-    if n.get("outfit") in recs:
-        _t, subs = recs[n["outfit"]]
+    if outfit_fid in recs:
+        _t, subs = recs[outfit_fid]
         for sig, d in subs:
             if sig == b"INAM":
                 d = bytes(d)
@@ -87,7 +93,7 @@ def outfit_armor(esm: str, npc_edid: str) -> dict:
             t = recs.get(fid)
             skipped.append(f"{fid:08X} {t[0].decode('latin-1')} {sfplugin.edid(t[1])}".strip() if t
                            else f"{fid:08X} (not an armor or leveled list)")
-    return {"npc": n, "race": races.get(n.get("race"), ""), "armor": armor, "skipped": skipped}
+    return armor, skipped
 
 
 def worn_meshes(inv: dict, armor_fids, race_edid: str, female: bool) -> list:

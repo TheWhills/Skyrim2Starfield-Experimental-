@@ -952,8 +952,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
     ap.add_argument("--starfield", required=True)
-    ap.add_argument("--npc", required=True, help="Skyrim NPC EditorID (its default outfit is converted; with --armor "
-                                                 "only its race and sex are used)")
+    ap.add_argument("--npc", default="", help="Skyrim NPC EditorID (its default outfit is converted; with --armor "
+                                              "only its race and sex are used)")
+    ap.add_argument("--sex", choices=("male", "female"), default="",
+                    help="with --armor and no --npc: fit the armor's model for this sex onto Starfield's body of this "
+                         "sex (item_convert.py runs both)")
+    ap.add_argument("--race", default="NordRace", help="with --sex: the Skyrim race whose addon is used")
+    ap.add_argument("--stage", action="store_true",
+                    help="write the part NIFs, morphs and converted textures only (no plugin, no archives), and the "
+                         "parts in gear_fit_<name>.json, for item_convert.py to make the records of both sexes")
     ap.add_argument("--limb-match", action="store_true",
                     help="sleeves take the arm skin's weights / offsets and the rest the torso's (off: nearest skin)")
     ap.add_argument("--helmets", action="store_true",
@@ -1010,12 +1017,21 @@ def main(argv=None):
                     help="the old layout: all gear in one NIF and addon (its morph record is the nightwear's)")
     ap.add_argument("--gap", type=float, default=gearfit.GAP, help="metres outside the body (default %(default)s)")
     a = ap.parse_args(argv)
+    if not a.npc and not (a.sex and a.armor):
+        ap.error("--npc, or --sex with --armor")
+    if a.stage and (a.one_nif or a.morph_test or a.test_variants):
+        ap.error("--stage writes parts only (no --one-nif / --morph-test / --test-variants)")
     gearfit.LIMB_MATCH = bool(a.limb_match)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
     sf_data = os.path.join(a.starfield, "Data")
     esm = os.path.join(a.skyrim_data, "Skyrim.esm")
-    o = os_convert.outfit_armor(esm, a.npc)
+    if a.npc:
+        o = os_convert.outfit_armor(esm, a.npc)
+    else:
+        o = {"npc": {"female": a.sex == "female"}, "race": a.race, "armor": [], "skipped": []}
+    who = a.npc or f"{a.race} {a.sex}"
+    report_name = f"gear_fit_{safe_name(a.name)}.json" if a.stage else "gear_fit.json"
     female = o["npc"]["female"]
     inv = skyrimarmor.read_armor(esm)
     if a.armor:
@@ -1031,7 +1047,7 @@ def main(argv=None):
             print(f"  head gear left out (a separate step; --helmets to include): {m['armor']} {m['mesh']}")
         meshes = [m for m in meshes if m not in heads_]
     if not meshes:
-        sys.exit(f"{a.npc}: no worn armor meshes in the default outfit")
+        sys.exit(f"{who}: no worn armor meshes" + (" in the default outfit" if not a.armor else ""))
     sky = bsa.SkyrimArchives(a.skyrim_data)
 
     def read(p):
@@ -1039,7 +1055,7 @@ def main(argv=None):
         if data is None:
             sys.exit(f"not in Skyrim's archives: {p}")
         return data
-    print(f"{a.npc} ({o['race']}, {'female' if female else 'male'}):",
+    print(f"{who} ({o['race']}, {'female' if female else 'male'}):",
           *[f"{m['armor']} {m['mesh']} (Skyrim slots {m.get('slots')})" for m in meshes], sep="\n  ")
     for x in o.get("skipped", []):
         print(f"  outfit item without wearable armor (skipped): {x}")
@@ -1080,12 +1096,12 @@ def main(argv=None):
     body_posed = rep.pop("_body_posed", None)
     broken = {n: r for n, r in rep["shapes"].items() if r["not_finite"] or r["far_outside"]}
     if broken:
-        with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(a.out, report_name), "w", encoding="utf-8") as fh:
             json.dump(rep, fh, indent=1, default=str)
         for n, r in broken.items():
             print(f"  {n}: {r['not_finite']} vertices not finite, {r['far_outside']} far outside the body, "
                   f"box {r['box_m']}")
-        print("nothing written: broken shapes (report in gear_fit.json)")
+        print(f"nothing written: broken shapes (report in {report_name})")
         return 1
     skin_sh = next((sh for sh in shapes if sh.name == SKIN_SHAPE), None)
     shapes = [sh for sh in shapes if sh.name != SKIN_SHAPE]
@@ -1102,7 +1118,7 @@ def main(argv=None):
             import shutil
             from fo4sf import skyrimconvert
             staging = os.path.join(a.out, "_staging")
-            if not a.add:                 # --add: earlier outfits' converted textures stay and are packed again
+            if not (a.add or a.stage):    # --add: earlier outfits' converted textures stay and are packed again
                 shutil.rmtree(staging, ignore_errors=True)
             conv = skyrimconvert.SkyrimConverter(sky, staging, texconv, cr, collision_template=None, prefix="s2s")
             for gb in gear_bytes:
@@ -1120,6 +1136,21 @@ def main(argv=None):
         nifs = {n: f"S2S\\{a.name}.nif" for n in names}
         if skin_sh is not None and slots:
             nifs[SKIN_SHAPE.decode()] = f"S2S\\{a.name}_Skin.nif"
+    elif a.stage:
+        piece_slots, slot_notes = distinct_slots(slots_by_shape(gear_bytes, meshes), names)
+        rep["slot_moves"] = slot_notes
+        parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled, "slots": piece_slots.get(n)}
+                 for sh, n in zip(shapes, names)]
+        if skin_sh is not None and slots:
+            parts.append({"shape": skin_sh, "material": sp["material"], "skin": True,
+                          "binds": body_binds_v if body_binds_v and all(
+                              b in body_binds_v for vw in skin_sh.weights for b, _w in vw) else None})
+        material, _tv = os_export.template_model(sf_data)
+        files, stage_rows, nifs = os_export.write_part_files(a.out, a.name, parts, binds, material)
+        prep = {"parts": [], "stage": stage_rows}
+        for r in stage_rows:
+            r["morph_folder"] = os_export.morph_folder(r["nif"], r["shape"])
+            print(f"  part {r['shape']}: slots {r['slots'] or 'skin template'} -> {r['nif']}")
     else:
         piece_slots, slot_notes = distinct_slots(slots_by_shape(gear_bytes, meshes), names)
         for sn in slot_notes:
@@ -1153,7 +1184,10 @@ def main(argv=None):
     if sp:
         print(f"skin piece: {sp['vertices']} Starfield body vertices where {', '.join(sp['from'])} lies, "
               f"material {sp['material']}; armor slots {slots} (naked body hidden)")
-    if conv is not None:
+    if conv is not None and a.stage:
+        rep["materials"] = {"by_shape": {n: mats.get(n) for n in names}, "staging": staging,
+                            "errors": conv.material_errors}
+    elif conv is not None:
         import shutil
         import hair_pack
         base = os.path.splitext(os_export.PLUGIN)[0]
@@ -1265,8 +1299,9 @@ def main(argv=None):
         print("debug meshes:", debug_meshes(a.debug_dir, shapes + ([skin_sh] if skin_sh is not None else []),
                                             frame, *dbg, extra=pngs + [o[0] for o in slider_objs]),
               f"({len(pngs)} textures)")
-    rep.update(npc=a.npc, meshes=meshes, records=prep, material=material, files=sorted(files) + sorted(morphs))
-    with open(os.path.join(a.out, "gear_fit.json"), "w", encoding="utf-8") as fh:
+    rep.update(npc=a.npc, sex="female" if female else "male", race=o["race"], meshes=meshes, records=prep,
+               material=material, files=sorted(files) + sorted(morphs))
+    with open(os.path.join(a.out, report_name), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1, default=str)
     if rep.get("neck_squash"):
         print(f"neck: gear around it squashed in height to {rep['neck_squash']['ratio']} above the clavicles "
@@ -1331,6 +1366,9 @@ def main(argv=None):
         print(f"foot {side}: boot foot scaled {f['scale']} to Starfield's foot")
     if not feet and a.size_feet:
         print("foot sizing: SKIPPED (no Skyrim or Starfield foot region found)")
+    if a.stage:
+        print(f"parts of {a.name}: {len(prep['stage'])} (records: item_convert.py) -> {report_name}")
+        return 0
     print(f"{os_export.PLUGIN}: ARMO {prep['ARMO']} (S2S_{a.name}); material {material}")
     print(f"in game: player.additem xx{int(prep['ARMO'], 16) & 0xFFFFFF:06X} 1   (xx: S2SArmorTest.esm's load order "
           f"index; or find them all with: help \"S2S_{a.name}\" 4)")
