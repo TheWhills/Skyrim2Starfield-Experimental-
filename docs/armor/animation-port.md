@@ -1337,8 +1337,18 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   Meshes\AnimTextData, fingerprinted (rebuilt only when a fragment changes; another mod's file it replaces is backed
   up; a dry-run mode exists; MO2's usvfs recognised). It hooks BSAnimationGraphDBData::Load / the tag registry so new
   tags exist before the first graph loads ("les tags neufs resteront muets" otherwise), and the event / sync tables at
-  load. A fragment counts only while a plugin named after its folder is active (FarAwayMovesets.esm / .esp / .esl).
-  Allowed clip extensions: .af, .afx, .rig. **It does not merge graphs** (.agx).
+  load. Allowed clip extensions: .af, .afx, .rig. **It does not merge graphs** (.agx).
+  **Correction (owner's copy of the SAM page, 2026-11-09):** no plugin is needed: SAM applies every fragment present in
+  Data\Meshes\AnimTextData\Fragments and does not read Plugins.txt (the "plugin attendu" header in Far Away Movesets'
+  animations.txt is from an older SAM; the old Fragments\<Name>_animations.txt and [Graph] sections are no longer
+  read). Also from the page: the game reads anim_actions / anim_states.xtbl only from its own archive (never loose), so
+  SAM adds new tags in memory when the first graph loads and writes no .xtbl; animations.txt (or animations_all.txt) adds
+  each clip to every list that already uses its folder, animations_<number>.txt to that list only (a new folder needs
+  one); animationoffsets / animeventinfo fragments hold only the added entries; do not ship animationfiles.txt /
+  animationfiledata (SAM makes them); a full loose index from another mod becomes SAM's base (our CK-generated loose
+  index included); merged output goes to MO2's Overwrite (Vortex: Data\Meshes\AnimTextData); log
+  SFSE\Plugins\SfAnimIndexLoader.log; Steam version only; uninstall = disable the fragment mods, start the game once,
+  then remove SAM.
 * **Far Away Movesets 1.4** uses it: 16 new action tags (MeleeAttack_F, MeleeAttackRecover_A-F, MeleeAttackMove_A-F,
   MeleeBlock_HitReaction_A-C) and one new event (HitDeflection, both hands), wired into its own **full** MeleeActions.agx
   (iSFBMStyle 343 times there: the style choice moved from one switch into conditions) and Player_Melee.agx overrides;
@@ -1349,7 +1359,7 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   host tags (sneak / zero-g descriptors; "more attacks than spare hosts would need an SFSE plugin", above), (2) mods'
   clip lists and offsets merged instead of one owner's AnimationFileData. Still needed: the CK GenerateAnimInfo run (or
   our own writer) for the offsets files, and a graph that uses the new tags (a graph override; merging graphs stays
-  ours to solve, e.g. with agx.py). Costs: a closed DLL tied to game versions, a plugin per fragment folder.
+  ours to solve, e.g. with agx.py). Costs: a closed DLL tied to game versions (Steam only).
   Next (owner decides): a one-tag test fragment (S2SAnimTest: one new tag + one converted clip + a minimal graph route)
   to see SAM declare and play it on the owner's install; if it works, a `--fragment` output for hkx_to_af / the
   stance packs (Fragments\S2S<Pack>\ with anim_actions.xtbl + clip list + the CK's offsets), retiring the spare-host
