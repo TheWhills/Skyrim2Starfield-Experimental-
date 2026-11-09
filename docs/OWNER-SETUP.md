@@ -110,6 +110,13 @@ Default races HighElfRace, OrcRace, WoodElfRace, DarkElfRace (at most 4: one mor
 to pick others. If the race NPCs look like the control NPC (plain face), rerun with `--race-head` (HumanRace then uses
 our head part and lists our keys; vanilla faces stay as they are since our morph.dat keeps every vanilla key).
 
+Mouth probe (read-only: Skyrim's human / orc mouths placed on Starfield's head, jaw part marked, weights copied
+from Starfield's teeth; opens as C:\Modding\work\races\mouth_view.html):
+
+```powershell
+python -I scripts\npc\mouth_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
+```
+
 `--skip refs` leaves out the HumanRace counts (unchanged since the first run). The transfer is the surface one
 (fo4sf/headcorr.py, about 20 s per sex); `--transfer nearest` gives the old average to compare. face_fit uses the same
 transfer (also `--transfer nearest` there).

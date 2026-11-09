@@ -182,3 +182,16 @@ which fits the separate-races design; hair / brows / lashes then need the same k
 - To learn in game: (1) the control NPC looks plain (our head part and morph.dat load); (2) the race NPCs show the
   race (BMPN applies new keys from an NPC's own head part); else (3) with --race-head. Then setrace /
   showlooksmenu with a thin race (step 4 of the decision).
+
+## Mouths and tusks (2026-11-09; offline checks only)
+- Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
+  MouthHumanF.NIF (141 vertices) for humans and elves, MouthOrc.nif / MouthOrcFemale.nif (348) for orcs, Khajiit and
+  Argonian mouths; each with an expression tri (Aah, BigAah, phonemes, moods) and no race morph (the orc mouth is made
+  for the orc head). Starfield: teeth are a head part too (HDPT type Teeth: Human_Male_Teeth -> Teeth.nif), skinned to
+  face bones, so a Skyrim race can get its own Teeth part.
+- scripts/npc/mouth_probe.py: places the Skyrim mouths with the head alignment, marks the jaw part by Aah (vertices
+  that drop when the mouth opens), copies bone weights from the nearest Starfield tooth on the same side (Starfield's
+  side from its bone names: unverified which bone the lower teeth use; the report lists them), and compares each
+  mouth vertex's distance to the head surface in Skyrim (orc head) and Starfield (head + transferred orc shape):
+  the tusks should stand out of the lips by the same amount. Viewer: mouth_view.html. Next, if it checks out: the
+  orc Teeth head part (converted mesh + weights, textures from the mouth's material) for the orc race.
