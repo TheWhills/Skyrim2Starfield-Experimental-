@@ -82,8 +82,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    something, rebuild with `-NoCrafting`.) Screenshots.
 6b. Done 2026-11-09: Delphine's shoulders fixed (armpit skin limited to the underside, none under tight sleeves).
    The iron armour was converted with the old armpit: refit it when it is next tested and check its armpit when aiming.
-6c. C: crafting stations. Alchemy lab and enchanter done 2026-11-09 (both open a Starfield menu). Still: a cooking pot
-   (none in the Sleeping Giant; Sven's house has one: `coc FO4Port_RiverwoodSvensHouse`): menu? where do you stand?
+6c. Done 2026-11-09: crafting stations. Alchemy lab, enchanter and cooking pot each open a Starfield menu (Starfield's
+   recipes; Skyrim's own recipes are a later step).
 7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
    NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
    the control, rerun with `--race-head` and look again.
