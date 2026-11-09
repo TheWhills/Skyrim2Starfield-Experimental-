@@ -121,9 +121,18 @@ def actor_targets(work):
             for v in p.get("inputs", {}).values() if isinstance(v, dict) and v.get("type") == "near_reference"}
 
 
+# Measured with furniture_standoff.py on each game's own placements (owner's run 2026-11-08): Skyrim's bar-lean markers
+# stand 0.32 m (CounterBarLeanMarker, 24 refs) / 0.31 m (CounterLeanMarker) from the counter's face; Starfield's
+# bartender / bartop-lean markers stand AT the face (0.00-0.03 m on straight counters; medians -0.12 / -0.04 with
+# hits inside big L-shaped counter boxes). Counter tops are the same in both games: 1.10 m. So these markers move
+# 0.30 m forward, onto the counter face where Starfield's animation expects it.
+DEFAULT_SHIFT = {"bartender": [0.0, 0.30, 0.0], "lean_counter": [0.0, 0.30, 0.0]}
+
+
 def parse_shift(items):
-    """["bartender=0,0.2,0", ...] -> {kind: [dx, dy, dz]} (metres, in the furniture's own frame: +y = its facing)."""
-    out = {}
+    """["bartender=0,0.2,0", ...] -> {kind: [dx, dy, dz]} (metres, in the furniture's own frame: +y = its facing),
+    on top of DEFAULT_SHIFT (a kind given here replaces its default; "bartender=0,0,0" turns it off)."""
+    out = {k: list(v) for k, v in DEFAULT_SHIFT.items()}
     for it in items or []:
         k, _, v = it.partition("=")
         xyz = [float(x) for x in v.split(",")]

@@ -98,7 +98,7 @@ class MakeFurnitureTests(unittest.TestCase):
             self.assertEqual((byref["000600:Skyrim.esm"]["scale"], byref["000600:Skyrim.esm"]["rot"][2]), (1.1, 1.5))
             self.assertEqual([k for k, v in byref.items() if v["persistent"]], ["000601:Skyrim.esm"])
             self.assertIn("chair -> FoundCanvasChair01_Free: CommonChair01R x1", buf.getvalue())
-            self.assertNotIn("shift_m", ln)
+            self.assertEqual(ln["shift_m"], [0.0, 0.30, 0.0])          # measured default: onto the counter face
 
             with contextlib.redirect_stdout(io.StringIO()):
                 M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work, "--marker-z", "skyrim",
@@ -108,6 +108,7 @@ class MakeFurnitureTests(unittest.TestCase):
             self.assertEqual(r2["bases"]["000020:Skyrim.esm"]["markers"][0]["offset_m"][2], 0.0)
             self.assertEqual(r2["bases"]["000021:Skyrim.esm"]["shift_m"], [0.0, 0.25, 0.0])
             self.assertNotIn("shift_m", r2["bases"]["000020:Skyrim.esm"])
+            self.assertEqual(M.parse_shift(["bartender=0,0,0"])["bartender"], [0.0, 0.0, 0.0])
             with self.assertRaises(ValueError):
                 M.parse_shift(["nosuchkind=0,0,0"])
 

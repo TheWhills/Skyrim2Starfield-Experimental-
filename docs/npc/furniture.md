@@ -76,3 +76,8 @@ alchemy / enchanting, hammer at the anvil, warming hands, eating at the table) w
   marker's facing ray against the object bounds of the references around it, on each game's own placements (Starfield
   bartenders vs Skyrim's bar-lean markers). The difference goes into make_furniture.py --shift
   (riverwood_doors.ps1 -FurnShift "bartender=0,<dy>,0"), applied in PluginSpike to the template's markers.
+Measured (owner's run 2026-11-08, furniture_standoff.py; verified on each game's data): Starfield's NPCBartender_Standing
+(69 refs) and NPCLeaningBartopFront (57) stand at the counter face (0.00-0.03 m on straight counters), Skyrim's
+CounterBarLeanMarker (24) / CounterLeanMarker (83) 0.32 / 0.31 m back from it; counter tops 1.10 m in both games, so
+Starfield's bar animations fit Skyrim's counters as they are. make_furniture.DEFAULT_SHIFT moves bartender and
+lean_counter markers 0.30 m forward.
