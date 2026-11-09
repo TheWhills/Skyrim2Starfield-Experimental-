@@ -85,6 +85,12 @@ python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face
  The NPCs' ids for `player.placeatme` are in
 `$face\faces.json`.
 
+Race survey (read-only; every Skyrim race against Starfield's character system; docs/npc/races.md):
+
+```powershell
+python -I scripts\npc\race_survey.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
+```
+
 Beard matches (rerun only when the matcher changes):
 
 ```powershell
