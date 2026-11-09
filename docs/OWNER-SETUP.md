@@ -80,15 +80,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Orgnar still at the bar. New in this build: cooking pots, the alchemy lab and the enchanter are Starfield
    crafting furniture: does anyone cook at a pot, and what does E on a pot / the alchemy lab open? (If it breaks
    something, rebuild with `-NoCrafting`.) Screenshots.
-6b. B + C: Delphine's shoulders. The refit (today's code) kept the round bare patches; Ysolda's dress was fitted before
-   the 2026-11-08 armpit change. Cause: the skin piece kept the whole shoulder seam as "armpit", top included, and it
-   showed through the tight sleeves; now only the underside, and none on the arm under a tight sleeve (a bare patch
-   on the back of her upper arm after the first refit). Refit, faces, build (Starfield closed):
-   ```powershell
-   python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Delphine --name Delphine_outfit --out $armor --add --debug-dir C:\Modding\work\debug_delphine
-   ```
-   then step 4's face_fit command and step 5. Expect clean shoulder tops like Ysolda's; raise her arm (or watch her
-   work) to check no gap opens in the armpit. Screenshot.
+6b. Done 2026-11-09: Delphine's shoulders fixed (armpit skin limited to the underside, none under tight sleeves).
+   The iron armour was converted with the old armpit: refit it when it is next tested and check its armpit when aiming.
 7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
    NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
    the control, rerun with `--race-head` and look again.

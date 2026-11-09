@@ -153,6 +153,7 @@ Refit with that (owner, 2026-11-09): shoulder tops clean; a jagged bare patch le
 the sleeve, still the armpit band. Now armpit skin on the arm (body arm share >= 0.5) is dropped where gear lies
 tight over it (SKIN_UNDER_DEPTH or under the skin): a sleeve moves with the arm, so nothing opens there; the
 torso-side armpit stays for armholes.
+Owner, 2026-11-09 after that refit: Delphine's outfit fixed (verified in game).
 
 
 
