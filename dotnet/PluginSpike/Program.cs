@@ -591,7 +591,7 @@ FormKey? FurnitureBase(string key)
     if (nMk > 0)
     {
         var t0 = tpl.MarkerParameters?.FirstOrDefault();
-        var e0 = tpl.MarkerEntryPoints.FirstOrDefault();
+        var e0 = tpl.MarkerEntryPoints?.FirstOrDefault();
         var allSides = t0?.EntryTypes ?? (Furniture.EntryParameterType)0x1F;
         f.MarkerParameters = new ExtendedList<FurnitureMarkerParameters>();
         f.MarkerEntryPoints.Clear();
@@ -616,8 +616,9 @@ FormKey? FurnitureBase(string key)
         // type name is not used anywhere else here
         var pi = typeof(Furniture).GetProperty("MarkerFlags")!;
         var et = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
-        var old = pi.GetValue(f) is object ov ? Convert.ToUInt64(ov) : 0UL;
-        pi.SetValue(f, Enum.ToObject(et, (old & ~0xFFFFFUL) | ((1UL << Math.Min(nMk, 20)) - 1)));
+        // as Int64: an int-backed enum with bit 31 (Is Sleep Furniture, beds) is negative; ToUInt64 would throw
+        var old = pi.GetValue(f) is object ov ? Convert.ToInt64(ov) : 0L;
+        pi.SetValue(f, Enum.ToObject(et, (old & ~0xFFFFFL) | ((1L << Math.Min(nMk, 20)) - 1)));
     }
     mod.Furniture.Add(f);
     if (furnBases.Count < 40)
