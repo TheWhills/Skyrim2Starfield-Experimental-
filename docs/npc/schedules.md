@@ -129,6 +129,12 @@ shoulders, now with the same body (MWGT of ChargenPresetFemale04) as Ysolda, so 
 faces.json). The bare areas follow the stitched patches of the texture, not the body's shape: reading (supported, not
 verified): the diffuse alpha is low in those patches and our material keeps Skyrim's alpha test, or Delphine's outfit
 is a different mesh / texture variant than Ysolda's. scripts/armor/outfit_probe.py measures both (queue step 6b).
+outfit_probe (owner's run, verified): both wear ClothesFarmClothes04, the same robef_1.nif, the same texture, no
+alpha test, no alpha under the threshold anywhere: the texture hypothesis is dropped too. What differs is where each
+was seen: Ysolda spawned from S2SFaceTest.esm, Delphine as FO4Port.esm's copy of her face-test NPC (Mutagen DeepCopy
+in dotnet/PluginSpike at build time). Reading (supported): that copy is from before the body fix (Riverwood not rebuilt
+after face_fit) or does not carry the body fields through. scripts/npc/npc_record_diff.py compares the two records.
+
 
 ## Readiness across the batch (2026-11-09; offline checks only)
 scripts/npc/schedule_readiness.py runs make_schedule's own package conversion as a dry run for every NPC placed in
