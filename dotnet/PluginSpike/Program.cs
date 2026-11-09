@@ -464,7 +464,12 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
     }
     Npc npc;
     if (faceNpc != null)
-        npc = mod.Npcs.GetOrAddAsOverride(faceNpc);          // keeps its FormKey: face, hair, outfit, voice, greetings
+    {
+        // an override: a deep copy with the same FormKey (face, hair, outfit, voice, greetings stay its own). DeepCopy, as
+        // the worldspace override below; GetOrAddAsOverride is not reachable from this file's usings (2026-11-08 build)
+        npc = (Npc)faceNpc.DeepCopy();
+        mod.Npcs.Add(npc);
+    }
     else
     {
         var tplKey = new FormKey(sfEsm, Convert.ToUInt32(ac.GetProperty("template_npc").GetString(), 16) & 0xFFFFFF);
