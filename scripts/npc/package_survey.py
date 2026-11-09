@@ -148,6 +148,13 @@ def main(argv=None):
             print(f"  {p['edid']:40} template {tpl!s:28} hour {s.get('hour')} for {s.get('duration_min')} min; "
                   f"Starfield: {'same name' if m.get('same_edid') else ', '.join(c['edid'] for c in m.get('close', [])) or '-'}")
     if a.starfield:
+        used = {(p.get("template") or {}).get("edid", "").lower() for n in npcs for p in n.get("packages", [])}
+        for t in report["starfield_templates"]:
+            if (t["edid"] or "").lower() in used | {"sandbox"}:
+                names = {i["index"]: i["name"] for i in t["inputs"] if i["name"]}
+                print(f"  Starfield {t['edid']}: " + "; ".join(
+                    f"{b}/{pr}: {[f'{i} {names.get(i)}' for i in ins]}" for b, pr, ins in t["procedure_inputs"] if ins))
+    if a.starfield:
         print(f"Starfield: {len(report['starfield_templates'])} package templates; most used: "
               + ", ".join(f"{t['edid']} ({t['used_by']})" for t in report["starfield_templates"][:12]))
     print(f"-> {os.path.join(a.out, 'package_survey.json')} ({time.time() - t0:.0f} s)")
