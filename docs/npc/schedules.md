@@ -138,6 +138,13 @@ npc_record_diff (owner's run, verified): FO4Port.esm's Delphine has MWGT [0.22, 
 S2SFaceTest.esm now has [0.09, 0, 0] (ChargenPresetFemale04's), and both her and Orgnar's face dials (FMSI / FMRS)
 differ: the Riverwood build is from the face_fit run before. The copy itself carries MWGT through (PKID differs as
 expected: the build adds the packages). Fix: rebuild Riverwood after every face_fit run (as documented).
+After the rebuild (owner, 2026-11-09, verified in game): Delphine still bare on the shoulder tops, Ysolda next to
+her clean. Same Skyrim outfit (0009D5DF), mesh and texture, same body now; but each NPC has its own gear_fit
+conversion in S2SArmorTest.esm (S2S_Ysolda_outfit_Outfit 03000811, S2S_Delphine_outfit_Outfit 030009C1), made in
+different runs with different fit code. Next: refit Delphine's with today's gear_fit (as Embry's, which fixed his
+shirt); outfit_probe now also lists each shape's openings and whether Skyrim's own body piece lies under them.
+Lasting fix: step 9's clothes as items, one conversion per Skyrim outfit shared by everyone wearing it.
+
 
 
 

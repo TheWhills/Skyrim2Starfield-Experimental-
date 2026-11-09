@@ -1,4 +1,4 @@
-"""outfit_probe: diffuse alpha under Skyrim's alpha-test threshold at a shape's shoulders (owner, 2026-11-09:
+"""outfit_probe: openings (open-edge loops) and diffuse alpha under Skyrim's alpha-test threshold at a shape's shoulders (owner, 2026-11-09:
 Delphine's dress showed skin through its shoulder patches)."""
 import os
 import struct
@@ -51,3 +51,24 @@ class AlphaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OpeningTests(unittest.TestCase):
+    def test_boundary_loops_weld_seams(self):
+        # a 2x2 grid of quads, the middle column's vertices duplicated (a UV seam): one opening (the rim), not three
+        pts, tris = [], []
+        for y in range(3):
+            for x in range(3):
+                pts.append((x, y, 0))
+        dup = {1: 9, 4: 10, 7: 11}
+        pts += [pts[1], pts[4], pts[7]]
+        for y in range(2):
+            for x in range(2):
+                a, b, c, d = y * 3 + x, y * 3 + x + 1, (y + 1) * 3 + x, (y + 1) * 3 + x + 1
+                if x == 1:
+                    a, c = dup.get(a, a), dup.get(c, c)
+                tris += [(a, b, d), (a, d, c)]
+        loops, wid = P.boundary_loops(np.array(pts, float), tris)
+        self.assertEqual(len(loops), 1)
+        self.assertEqual(len(loops[0]), 8)
+        self.assertEqual(len(set(wid.tolist())), 9)

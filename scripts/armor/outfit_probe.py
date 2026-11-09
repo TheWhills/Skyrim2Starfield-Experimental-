@@ -9,7 +9,10 @@ and per shape of each mesh: the texture set, Skyrim's NiAlphaProperty (test / bl
 diffuse texture's format and alpha: share of texels under the alpha-test threshold over the whole texture, at the
 shape's vertices, and at its shoulder vertices (weighted mostly to clavicle / upper-arm bones). The Starfield cutout
 keeps Skyrim's alpha test (pipeline: opacity map + AlphaTestThreshold), so a dress whose diffuse alpha is low at the
-shoulders comes out with holes there. Writes outfit_probe.json.
+shoulders comes out with holes there. 2026-11-09 (owner's run: no alpha anywhere, Delphine still bare at the shoulders
+after the rebuild): also the openings of each shape (open-edge loops, welded across UV seams), whether they sit on the
+shoulders and whether the outfit's own Skyrim body piece lies under them (then Skyrim shows skin there too).
+Writes outfit_probe.json.
 """
 import argparse
 import json
@@ -83,10 +86,78 @@ def shoulder_vertices(shape) -> np.ndarray:
     return np.array(out, int)
 
 
+def boundary_loops(pts: np.ndarray, tris, weld: float = 0.01) -> list:
+    """[[welded vertex ids in loop order]] of a mesh's open edges (edges of one triangle), vertices welded by position
+    first (UV seams split them without opening the surface). Returns (loops, welded id per vertex)."""
+    pts = np.asarray(pts, float)
+    key = np.round(pts / weld).astype(np.int64)
+    _u, wid = np.unique(key, axis=0, return_inverse=True)
+    wid = wid.reshape(-1)
+    count = {}
+    for t in tris:
+        a, b, c = (int(wid[i]) for i in t)
+        for e in ((a, b), (b, c), (c, a)):
+            if e[0] != e[1]:
+                k = (min(e), max(e))
+                count[k] = count.get(k, 0) + 1
+    nxt = {}
+    for (a, b), c in count.items():
+        if c == 1:
+            nxt.setdefault(a, []).append(b)
+            nxt.setdefault(b, []).append(a)
+    loops, seen = [], set()
+    for start in nxt:
+        if start in seen:
+            continue
+        loop, cur, prev = [], start, None
+        while cur not in seen:
+            seen.add(cur)
+            loop.append(cur)
+            cand = [x for x in nxt[cur] if x != prev and x not in seen]
+            if not cand:
+                break
+            prev, cur = cur, cand[0]
+        loops.append(loop)
+    return loops, wid
+
+
+def holes(shape, M, skin_pts, shoulder) -> list:
+    """Per open-edge loop of a shape (model space, Skyrim units, z up): vertices, centre, size, share of its vertices
+    weighted to the shoulders, share with skin (the outfit's own body piece) within 3 units: a dress opening over
+    skin is drawn as bare skin in Skyrim too."""
+    from fo4sf import facefit
+    pts = facefit.apply4(M, np.asarray(shape.positions, float))
+    loops, wid = boundary_loops(pts, shape.triangles)
+    first = {}
+    for v, w in enumerate(wid):
+        first.setdefault(int(w), v)
+    sh = set(int(wid[v]) for v in shoulder)
+    out = []
+    for lp in sorted(loops, key=len, reverse=True)[:12]:
+        lv = np.array([first[w] for w in lp], int)
+        P = pts[lv]
+        row = {"vertices": len(lp), "centre": [round(float(x), 1) for x in P.mean(0)],
+               "size": [round(float(x), 1) for x in P.max(0) - P.min(0)],
+               "shoulder_share": round(sum(w in sh for w in lp) / len(lp), 2)}
+        if skin_pts is not None and len(skin_pts):
+            d = np.sqrt(((P[:, None, :] - skin_pts[None, :, :]) ** 2).sum(-1)).min(1)
+            row["skin_within_3_units"] = round(float((d < 3.0).mean()), 2)
+        out.append(row)
+    return out
+
+
 def shape_rows(nif_bytes: bytes, read) -> list:
+    from fo4sf import facefit
     n = nifmod.parse(nif_bytes)
     rows = []
-    for s in skyrimskin.skinned_shapes(n):
+    shapes = skyrimskin.skinned_shapes(n)
+    skin_pts = []
+    for s in shapes:
+        tex = skyrimnif.texture_set(n, s.shader_ref) or []
+        if tex and tex[0] and "actors\\character" in tex[0].lower().replace("/", "\\"):
+            skin_pts.append(facefit.apply4(facefit.skyrim_model_matrix(n, s), np.asarray(s.positions, float)))
+    skin_pts = np.concatenate(skin_pts) if skin_pts else None
+    for s in shapes:
         tex = skyrimnif.texture_set(n, s.shader_ref) or []
         test, blend, thr = skyrimnif.alpha_test(n, s.alpha_ref)
         row = {"shape": s.name.decode("latin-1", "replace"), "vertices": len(s.positions),
@@ -114,6 +185,11 @@ def shape_rows(nif_bytes: bytes, read) -> list:
                         if len(sh):
                             row["shoulder_under_threshold"] = round(float((at[sh] < thr).mean()), 4)
                             row["shoulder_alpha_min_median"] = [int(at[sh].min()), int(np.median(at[sh]))]
+        if s.triangles:
+            try:
+                row["openings"] = holes(s, facefit.skyrim_model_matrix(n, s), skin_pts, shoulder_vertices(s))
+            except Exception as e:                       # report, keep going
+                row["openings"] = f"? {type(e).__name__}: {e}"
         rows.append(row)
     return rows
 
@@ -147,6 +223,9 @@ def main(argv=None):
                 print(f"    {s['shape']}: {s['diffuse']}  test={s['alpha_test']} thr={s['alpha_threshold']} "
                       f"{s.get('diffuse_format', '')}  under thr: texture {s.get('texture_under_threshold')}, "
                       f"shoulders {s.get('shoulder_under_threshold')} ({s.get('shoulder_vertices')} vertices)")
+                for o in s.get("openings") or [] if isinstance(s.get("openings"), list) else []:
+                    print(f"      opening: {o['vertices']} vertices at {o['centre']} size {o['size']}, shoulder "
+                          f"{o['shoulder_share']}, skin under it {o.get('skin_within_3_units')}")
     os.makedirs(a.out, exist_ok=True)
     path = os.path.join(a.out, "outfit_probe.json")
     with open(path, "w", encoding="utf-8") as fh:
