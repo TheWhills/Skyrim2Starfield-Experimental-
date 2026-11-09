@@ -139,6 +139,17 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    the handle; war axe = its axe swings; sword unchanged; the stance keys change each. If greatsword and axe still swing
    like the sword, send weapon_test_pack.json and stance_plugin.json (in those mod folders).
 
+11. B + C: race proportions test (docs/npc/races.md, "Race proportions"). Extract Racial Body Morphs - Extreme into
+   its own folder (e.g. C:\Modding\work\rbm), then (`--calumi`: the CALUMI.Animation.dll hkx_to_af uses; optional):
+   ```powershell
+   python -I scripts\npc\skeleton_probe.py --starfield-data "$sf\Data" --race-mod C:\Modding\work\rbm --out C:\Modding\work\skeleton_probe --calumi <CALUMI.Animation.dll> --test-pack Orc --pack-out "$mods\S2S Skeleton Test"
+   ```
+   Enable "S2S Skeleton Test" (it replaces the human skeleton, so EVERY human, you too, gets Orc male / female
+   proportions: upper body about 10 % bigger, wider shoulders, smaller head, shorter forearms). Look at yourself and
+   NPCs standing, walking, running and swinging a weapon, clothes and armour on; then disable it and compare. Send
+   skeleton_probe.md and screenshots of both. Normal-looking with it on = Starfield ignores the helpers (SFSE route);
+   broken or crash = disable it and tell me.
+
 ## Working commands
 
 Converted outfit for a test NPC (one per NPC; `--add` keeps the other outfits in the plugin):

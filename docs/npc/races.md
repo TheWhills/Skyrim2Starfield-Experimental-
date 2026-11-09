@@ -217,3 +217,23 @@ thin-plate warp onto Skyrim's human head (distance to its surface reported), fac
 (nearest compatible point; headcorr with mu 0, which now skips the surface-distance table), the Aah check (jaw
 weight on the vertices Aah drops vs those it leaves), slider counts, the tail's bones, the beast skeleton's extra
 nodes, Starfield's MRPH BMPP values. Viewer: beast_view.html.
+
+## Race proportions from per-race skeletons (2026-11-09, Racial Body Morphs - Extreme, Nexus 65047)
+Owner: will a mod like this work with our races? What it is (verified from its files): 21 XPMSE-style skeletons, one
+per race and sex, and a plugin overriding 26 RACE records' ANAM (skeleton per sex); no body or armour meshes. Between
+a bone and its child bone XPMSE has helper nodes no clip animates ("CME ..."); the mod scales / moves the inner one
+(Orc male: hips and upper body x1.106, clavicles x1.08, forearms x0.94, head x0.9; Altmer male: upper body x0.92, hips
+8.6 cm up, calves 8.7 cm further down the thigh). Everything skinned below follows, bodies and armour alike, which is
+why the mod needs no clothes of its own.
+* Starfield's human skeleton has no such helpers (skeleton_probe.py on an extracted copy, 2026-11-09: rig 97 bones,
+  82 animated + 15 twist; of the 57-58 NIF nodes outside the rig only HumanExportRoot sits above animated bones, the
+  rest are leaves: CalfMass, Deltoid, Butt, Pecs ... the chargen bone modifiers). So the proportions need helpers
+  inserted as XPMSE did: `fo4sf/racebones.py` reads the CME values (composed helper chain per bone, in the parent
+  bone's frame), maps them onto Starfield bones (skeletonmap; offsets through character space, both games Z up / +Y
+  forward / +X left, checked on hands, feet, head) and inserts S2S_RB_<bone> NiNodes (scale, offset; the bone's own
+  local transform unchanged).
+* `scripts/npc/skeleton_probe.py` writes the per-race table and, with --test-pack RACE, a loose override of the human
+  skeleton.nif (male and female) with that race's helpers: every human then has those proportions. Unresolved, the
+  test answers it: whether Starfield's animation keeps a non-rig parent node's scale / offset (as Skyrim does). If yes:
+  per race a skeleton copy on its RACE (the separate-races design above); if not: an SFSE step re-applying the scales
+  after animation. Tails (Khajiit / Argonian) and rotations in helper chains are left out for now.
