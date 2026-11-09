@@ -74,6 +74,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\npc\schedule_readiness.py --skyrim "$sky\Skyrim.esm" --starfield "$sf\Data\Starfield.esm" --work C:\Modding\work\s2s\riverwood_doors --faces "$face\faces.json" --out C:\Modding\work\packages
    ```
    Send readiness.md.
+3c. A: magic survey (Skyrim's spells against Starfield's powers; docs/magic/README.md):
+   ```powershell
+   python -I scripts\magic\magic_survey.py --skyrim "$sky\Skyrim.esm" --starfield "$sf\Data\Starfield.esm" --out C:\Modding\work\magic
+   ```
+   Send magic_survey.md (and magic_survey.json).
 4. B: Embry's outfit, then the faces of all seven test NPCs (the head transfer changed, so every face changes):
    ```powershell
    python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Embry --name Embry_outfit --out $armor --add --debug-dir C:\Modding\work\debug_embry
