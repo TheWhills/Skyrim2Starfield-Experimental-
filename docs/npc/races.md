@@ -109,3 +109,28 @@ which fits the separate-races design; hair / brows / lashes then need the same k
    so sliders still work; skin colours (grey, gold, green) as skin tone sets; eye textures.
 3. Beast races: a Starfield race with its own head (Creature Head part, or a Face part with its own morph.dat and
    facial bone regions) and tail; research whether the chargen system takes a non-human head with dials.
+
+## race_probe results (owner's run 2026-11-09; verified from the game files)
+- Starfield head morph.dat (both sexes): 15,370 vertices, 84 keys = 9 phenotypes x 9 regions (Cheeks, Chin, Ears,
+  Eyes, Forehead, Jaw, Mouth, Neck, Nose) + Overweight / Thin / Strong; 44 of 128 key slots free. 12 Skyrim races x 9
+  regions = 108 do not fit: as planned, the Skyrim races get a head part of their own (same mesh, own morph.dat).
+  Regions overlap a lot (Eyes 6354 vertices, Cheeks & Eyes share 1395): soft regions, so a race shape is split by
+  weights (how much each region's vanilla keys move a vertex), not hard masks.
+- Parts carry the phenotype keys of the regions that touch them: brows (Eyes / Forehead / Nose, female + Cheeks),
+  lashes (Eyes), hair (cropped_m: 54 keys; choppy_bob_f 40) plus Overweight / Thin / Strong; no chargen morph.dat for
+  teeth (nor male eyes_tears) at those paths.
+- Facial bone regions: 49 dials per sex = 9 phenotype dials + 40 sculpt dials (Nose 9, Mouth 4, Eyes 4, Head Shapes 4,
+  Ears 3, Jaw 3, Eyebrows 3, Cheeks 3, Chin 3, Neck 2, Forehead 2).
+- HumanRace (0000347D) by name in Starfield.esm: GetIsRace in only 19 conditions (14 INFO, 2 IDLE, 2 CNDF, 1 CPTH);
+  armor race (RNAM) on 586 ARMA / 539 ARMO (a race with armor race = HumanRace is covered); NPC_ RNAM (their own
+  race), ATKR 372; two RACE records already point at HumanRace as armor race (RNAM) and subgraph template (SRAC):
+  Bethesda's own thin races. FLST 2, QUST script 1, GBFM 3. So separate races risk little (the 19 conditions and the
+  2 lists can be patched to include them).
+- The transfer of this run is NOT usable: the Skyrim head was aligned 90 degrees off (rms 2.3 cm male / 1.7 female;
+  the viewer showed the heads crossed). Cause (verified on the run's data): Starfield's head .mesh is stored in
+  C_Head's rotated frame (x up; hair_pack.game_mesh_of already applies the shape node for that), and the ICP started
+  from the identity. face_fit used the same alignment, so every fitted face so far was fitted through it.
+  Fixed: facefit.align_to_local (Skyrim model space, Starfield through the head shape's node transform, scale + shift
+  without rotation, the longer Starfield neck left out); face_fit and race_probe use it (--legacy-alignment for the
+  old one). To check: the probe's new rms (skyrimhair measured 6.7 mm on the cranium this way) and the faces after a
+  face_fit rerun.

@@ -283,6 +283,68 @@ def align_heads(src: np.ndarray, dst: np.ndarray, iters: int = 40, rotate: bool 
     return s, R, t, rms
 
 
+def skin_to_model_matrix(skin_transform) -> np.ndarray:
+    """4x4 taking a Skyrim skinned shape's vertices (stored in skin space) to model space: the inverse of its NiSkinData
+    overall transform (fo4sf.skyrimhair.skin_to_model as a matrix; identity without one)."""
+    m = np.eye(4)
+    if skin_transform is None:
+        return m
+    rs = np.array(skin_transform.rotation, float).reshape(3, 3)
+    ts = np.array(skin_transform.translation, float)
+    sc = float(skin_transform.scale) or 1.0
+    m[:3, :3] = rs.T / sc
+    m[:3, 3] = -rs.T @ ts / sc
+    return m
+
+
+def apply4(m: np.ndarray, pts: np.ndarray) -> np.ndarray:
+    return np.asarray(pts, float) @ m[:3, :3].T + m[:3, 3]
+
+
+def align_to_local(sky_model: np.ndarray, sf_local: np.ndarray, sf_node: np.ndarray, iters: int = 40):
+    """(s, R, t, rms) taking Skyrim head points in Skyrim MODEL space (units) onto a Starfield head's MESH-LOCAL frame
+    (the frame its .mesh vertices, binds and morph.dat deltas are in), for transfer().
+    2026-11-09: the Starfield heads store their mesh in C_Head's rotated frame (x up; hair_pack.game_mesh_of applies
+    the shape node's transform for that), and an ICP from the identity (align_heads on the raw mesh) settled 90 degrees
+    off (race_probe, owner's run: rms 2.3 cm). Both games' model spaces share axes (+Y forward, +Z up; skyrimhair, rms
+    6.7 mm on the cranium), so: Starfield points to model space with the node transform sf_node (4x4, local -> model),
+    a scale-and-shift ICP without rotation there (Starfield points below the lowest moved Skyrim point left out each
+    round: its neck is longer), then back to the local frame."""
+    dst = apply4(sf_node, sf_local)
+    src = np.asarray(sky_model, float)
+    # start: tops together (the neck lengths differ), size from the spread across (x, y) of the part of the Starfield
+    # head as tall as the Skyrim one
+    s = math.sqrt(np.mean(np.sum((dst[:, :2] - dst[:, :2].mean(0)) ** 2, 1))
+                  / np.mean(np.sum((src[:, :2] - src[:, :2].mean(0)) ** 2, 1)))
+    for _ in range(3):
+        top = dst[dst[:, 2] >= dst[:, 2].max() - s * np.ptp(src[:, 2])]
+        s = math.sqrt(np.mean(np.sum((top[:, :2] - top[:, :2].mean(0)) ** 2, 1))
+                      / np.mean(np.sum((src[:, :2] - src[:, :2].mean(0)) ** 2, 1)))
+    t = np.array([*(top[:, :2].mean(0) - s * src[:, :2].mean(0)), dst[:, 2].max() - s * src[:, 2].max()])
+    rms = float("inf")
+    for _ in range(iters):
+        moved = s * src + t
+        d_use = dst[dst[:, 2] >= moved[:, 2].min() - 0.005]
+        j, d = _nearest(d_use, moved, 1)
+        i, e = _nearest(moved, d_use, 1)
+        new_rms = float(np.sqrt((np.sum(d ** 2) + np.sum(e ** 2)) / (len(d) + len(e))))
+        a = np.concatenate([src, src[i[:, 0]]])
+        b = np.concatenate([d_use[j[:, 0]], d_use])
+        ac, bc = a - a.mean(0), b - b.mean(0)
+        s = float(np.sum(ac * bc) / np.sum(ac * ac))
+        t = b.mean(0) - s * a.mean(0)
+        if abs(rms - new_rms) < 1e-9:
+            rms = new_rms
+            break
+        rms = new_rms
+    fit = np.eye(4)
+    fit[:3, :3] *= s
+    fit[:3, 3] = t
+    total = np.linalg.inv(sf_node) @ fit                 # Skyrim model -> Starfield local
+    k = float(np.cbrt(np.linalg.det(total[:3, :3])))
+    return k, total[:3, :3] / k, total[:3, 3], rms
+
+
 def transfer(src_base: np.ndarray, src_face: np.ndarray, alignment, dst_vertices: np.ndarray, k: int = 4):
     """Displacement (M, 3) for the dst head's vertices: the src face's displacement from its base head, moved into
     the dst frame (scaled and rotated by the alignment) and averaged over the k nearest src vertices (1 / distance)."""

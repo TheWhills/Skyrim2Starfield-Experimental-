@@ -244,3 +244,39 @@ class RecipeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelSpaceAlignmentTests(unittest.TestCase):
+    def test_skin_to_model_matrix(self):
+        import types
+        from fo4sf import skyrimhair
+        st = types.SimpleNamespace(rotation=[0, -1, 0, 1, 0, 0, 0, 0, 1], translation=[3.0, -2.0, 5.0], scale=2.0)
+        shape = types.SimpleNamespace(skin_transform=st)
+        pts = np.random.default_rng(2).normal(size=(5, 3)) * 10
+        f, _r = skyrimhair.skin_to_model(shape)
+        np.testing.assert_allclose(F.apply4(F.skin_to_model_matrix(st), pts), f(pts), atol=1e-9)
+        np.testing.assert_allclose(F.skin_to_model_matrix(None), np.eye(4))
+
+    def test_align_to_local_through_node(self):
+        # Starfield head = Skyrim head x 0.015 in model space, stored rotated (x up) with a longer neck below;
+        # the alignment must recover the scale, give ~0 rms, and map into the local frame
+        def ellipsoid(n_u, n_v):
+            u, v = np.meshgrid(np.linspace(0, 2 * np.pi, n_u, endpoint=False), np.linspace(0.05, np.pi - 0.05, n_v))
+            return np.column_stack([60 * np.sin(v).ravel() * np.cos(u).ravel(), 70 * np.sin(v).ravel() *
+                                    np.sin(u).ravel(), 80 * np.cos(v).ravel()]) + [0, 0, 100]
+        sky = ellipsoid(30, 20)
+        model = ellipsoid(90, 60) * 0.015 + [0.01, -0.02, 1.6]
+        zlow = model[:, 2].min()
+        rng = np.random.default_rng(3)
+        neck = np.column_stack([rng.normal(size=(150, 2)) * 0.3, zlow - 0.05 - rng.random(150) * 1.5])
+        node = np.eye(4)
+        node[:3, :3] = [[0, 0, -1], [0, 1, 0], [1, 0, 0]]
+        node[:3, 3] = (0, 0, 1.5)
+        local = F.apply4(np.linalg.inv(node), np.concatenate([model, neck]))
+        s, R, t, rms = F.align_to_local(sky, local, node)
+        self.assertAlmostEqual(s / 0.015, 1.0, places=2)
+        self.assertLess(rms, 0.08)          # the sparse 30 x 20 sampling (~0.18 m apart) sets the floor; neck left out
+        moved = F.apply4(node, s * sky @ R.T + t)
+        np.testing.assert_allclose(moved.mean(0), model.mean(0), atol=0.01)
+        # up in Skyrim model space is +x in the local frame
+        np.testing.assert_allclose(R @ [0, 0, 1], [1, 0, 0], atol=1e-9)

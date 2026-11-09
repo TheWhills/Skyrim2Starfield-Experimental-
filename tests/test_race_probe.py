@@ -67,28 +67,38 @@ class RaceProbeTests(unittest.TestCase):
             self.assertEqual(r["fields"], [{"record": "ARMA", "field": "RNAM", "count": 1}])
 
     def test_transfer(self):
-        # the "Starfield head" is the Skyrim head scaled by 1/70 (metres): the race morph comes over 1:1 / 70
+        # the Starfield head stores its mesh x-up (C_Head's frame); in model space it is the Skyrim head / 70 (metres).
+        # The race morph (+7 units up at the crown vertex) must arrive as +0.1 m along the LOCAL x axis.
         from test_race_survey import tri
         import types
-        base = np.array([(0, 0, 0), (70, 0, 0), (0, 70, 0), (70, 70, 0), (35, 35, 35)], float)
-        delta = np.zeros((5, 3), int)
-        delta[4] = (0, 0, 7)
+        from fo4sf import facefit
+        rng = np.random.default_rng(1)
+        base = rng.normal(size=(300, 3)) * [60, 70, 80] + [0, 0, 100]
+        base[-1] = (0, 0, 200)
+        delta = np.zeros((300, 3), int)
+        delta[-1] = (0, 0, 7)
         files = {"races": tri(base, [("HighElfRace", 1.0, delta)]), "head": tri(base)}
+        node = np.eye(4)
+        node[:3, :3] = [[0, 0, -1], [0, 1, 0], [1, 0, 0]]      # columns: local x (up) -> model z, local z -> model -x
+        node[:3, 3] = (0, 0, 1.5)
 
         class H:
-            vertices = base / 70.0
-            triangles = np.array([[0, 1, 4], [1, 3, 4], [3, 2, 4], [2, 0, 4]])
+            vertices = facefit.apply4(np.linalg.inv(node), base / 70.0)
+            triangles = np.array([[0, 1, 2]])
+            model_xf = node
         ff = types.SimpleNamespace(
             starfield_head=lambda sf, female: (H(), {}), SKY_HEADS={False: "nif", True: "nif"},
-            skyrim_head=lambda d: base,
+            skyrim_head=lambda d, model=False: base, skyrim_head_matrix=lambda d: np.eye(4),
+            head_alignment=lambda head, d, legacy=False: (base, facefit.align_to_local(base, head.vertices,
+                                                                                         head.model_xf), True),
             hkx_to_af=types.SimpleNamespace(read_any=lambda p, sky: files["races"] if "races" in p else
                                             files["head"] if p.endswith(".tri") else b""))
         head, b, races, al, out, rep = P.race_transfer(None, "", False, 0, ff)
-        self.assertAlmostEqual(al[0], 1 / 70.0, places=6)
-        self.assertAlmostEqual(float(out["HighElfRace"][4, 2]), 0.1, places=4)       # 7 units = 0.1 m
-        self.assertLess(float(np.abs(out["HighElfRace"][:4]).max()), 1e-6)
-        self.assertAlmostEqual(rep["races"]["HighElfRace"]["skyrim_max_m"], 0.1, places=4)
-        self.assertEqual(rep["tri_vs_nif_max_units"], 0.0)
+        self.assertLess(rep["alignment"]["rms_m"], 1e-6)
+        self.assertTrue(rep["alignment"]["model_space"])
+        np.testing.assert_allclose(out["HighElfRace"][-1], (0.1, 0, 0), atol=1e-6)    # up = local +x
+        self.assertLess(float(np.abs(out["HighElfRace"][:-1]).max()), 1e-6)
+        self.assertAlmostEqual(rep["races"]["HighElfRace"]["skyrim_max_m"], 0.1, places=5)
 
     def test_viewer(self):
         class H:

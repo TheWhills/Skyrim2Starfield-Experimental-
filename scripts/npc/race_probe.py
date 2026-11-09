@@ -152,7 +152,7 @@ def human_race_refs(esm):
 
 
 # ----------------------------------------------------------------------------------- 3. race morphs onto Starfield
-def race_transfer(sky, sf_data, female, smooth, face_fit):
+def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False):
     head, _rep = face_fit.starfield_head(sf_data, female)
     tri_base = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_HEAD_TRI[female], sky))
     races = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_RACE_TRI[female], sky), deltas=True)
@@ -162,11 +162,16 @@ def race_transfer(sky, sf_data, female, smooth, face_fit):
            "tri_vs_nif_max_units": float(np.abs(base - nif_base).max()) if nif_base is not None and
            len(nif_base) == len(base) else None,
            "races_tri_vs_head_tri_max_units": float(np.abs(base - tri_base["base"]).max())}
-    al = facefit.align_heads(base, head.vertices)
-    rot_free = facefit.align_heads(base, head.vertices, rotate=False)
-    if rot_free[3] <= al[3] * 1.05:
-        al = rot_free
-    rep["alignment"] = {"scale": al[0], "rms_m": al[3]}
+    nif_bytes = face_fit.hkx_to_af.read_any(face_fit.SKY_HEADS[female], sky)
+    _b, al, model_space = face_fit.head_alignment(head, nif_bytes, legacy=legacy)
+    deltas = {m["name"]: m["deltas"] for m in races["morphs"]}
+    if model_space:                     # the .tri is in the head NIF's skin space, as its vertices: to model space
+        M = face_fit.skyrim_head_matrix(nif_bytes)
+        base = facefit.apply4(M, base)
+        deltas = {k: v @ M[:3, :3].T for k, v in deltas.items()}
+        for m in races["morphs"]:
+            m["deltas"] = deltas[m["name"]]
+    rep["alignment"] = {"scale": al[0], "rms_m": al[3], "model_space": model_space}
     out = {}
     for m in races["morphs"]:
         disp = facefit.transfer(base, base + m["deltas"], al, head.vertices)
@@ -204,11 +209,15 @@ def viewer(path, sexes):
     payload = {}
     for sex, (head, base, races, al, disp) in sexes.items():
         s, R, t = al[:3]
-        sky_v = (s * base @ R.T + t)
-        payload[sex] = {"sf_v": b64(head.vertices, "<f4"), "sf_f": b64(head.triangles, "<u4"),
+        node = getattr(head, "model_xf", None)
+        node = np.eye(4) if node is None else np.asarray(node, float)
+        rot = node[:3, :3]
+        show = lambda p: facefit.apply4(node, p)        # noqa: E731  shown in model space (+Z up, +Y forward)
+        sky_v = show(s * base @ R.T + t)
+        payload[sex] = {"sf_v": b64(show(head.vertices), "<f4"), "sf_f": b64(head.triangles, "<u4"),
                         "sky_v": b64(sky_v, "<f4"), "sky_f": b64(races["faces"], "<u4"),
-                        "names": list(disp), "sf_d": {k: b64(v, "<f4") for k, v in disp.items()},
-                        "sky_d": {m["name"]: b64(m["deltas"] * s @ R.T, "<f4") for m in races["morphs"]}}
+                        "names": list(disp), "sf_d": {k: b64(v @ rot.T, "<f4") for k, v in disp.items()},
+                        "sky_d": {m["name"]: b64(m["deltas"] * s @ R.T @ rot.T, "<f4") for m in races["morphs"]}}
     html = """<!doctype html><html><head><meta charset="utf-8"><title>Race morphs</title>
 <style>body{margin:0;font:14px sans-serif;background:#222;color:#ddd}#ui{position:absolute;top:8px;left:8px;
 background:#000a;padding:8px;border-radius:6px}select,label{margin-right:8px}</style></head><body>
@@ -233,7 +242,7 @@ function build(){meshes.forEach(m=>sc.remove(m));const d=P[sex.value];
 const sv=f32(d.sf_v),kv=f32(d.sky_v);let c=[0,0,0];for(let i=0;i<sv.length;i+=3){c[0]+=sv[i];c[1]+=sv[i+1];c[2]+=sv[i+2]}
 c=c.map(x=>x/(sv.length/3));meshes=[mk(sv,u32(d.sf_f),-0.13,0xd8b8a0),mk(kv,u32(d.sky_f),0.13,0xa0b8d8)];
 meshes.forEach(m=>{m.position.y=-c[1];m.position.z=-c[2]});
-race.innerHTML=d.names.map(n=>'<option>'+n+'</option>').join('');cam.position.set(0,-0.9,0.05);ctl.target.set(0,0,0);apply()}
+race.innerHTML=d.names.map(n=>'<option>'+n+'</option>').join('');cam.position.set(0,0.9,0.05);ctl.target.set(0,0,0);apply()}
 function apply(){const d=P[sex.value],a=+amt.value,n=race.value;[[meshes[0],d.sf_d[n]],[meshes[1],d.sky_d[n]]].forEach(([m,s])=>{
 const b=m.userData.base,dd=f32(s),p=m.geometry.attributes.position.array;for(let i=0;i<p.length;i++)p[i]=b[i]+a*dd[i];
 m.geometry.attributes.position.needsUpdate=true;m.geometry.computeVertexNormals()});info.textContent=n}
@@ -251,6 +260,7 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True, help="Starfield install folder")
     ap.add_argument("--out", required=True)
     ap.add_argument("--smooth", type=int, default=4, help="smoothing passes over Starfield's head (0 = none)")
+    ap.add_argument("--legacy-alignment", action="store_true", help="the old alignment (to compare)")
     ap.add_argument("--skip", action="append", default=[], choices=["morphs", "refs", "transfer"])
     a = ap.parse_args(argv)
     import face_fit                                     # heavy imports only when run
@@ -294,7 +304,8 @@ def main(argv=None):
         sky = bsa.SkyrimArchives(a.skyrim_data)
         views = {}
         for female in (False, True):
-            head, base, races, al, disp, rep = race_transfer(sky, sf_data, female, a.smooth, face_fit)
+            head, base, races, al, disp, rep = race_transfer(sky, sf_data, female, a.smooth, face_fit,
+                                                             legacy=a.legacy_alignment)
             if regions.get(female):
                 for name, d in disp.items():
                     rep["races"][name]["regions"] = per_region(d, regions[female], len(head.vertices))
@@ -303,7 +314,8 @@ def main(argv=None):
                                 **{k: v.astype(np.float32) for k, v in disp.items()})
             views[SEXES[female]] = (head, base, races, al, disp)
             print(f"{SEXES[female]}: Skyrim {rep['skyrim_vertices']} -> Starfield {rep['starfield_vertices']} "
-                  f"vertices, alignment rms {rep['alignment']['rms_m']:.4f} m")
+                  f"vertices, alignment rms {rep['alignment']['rms_m']:.4f} m "
+                  f"({'model space' if rep['alignment']['model_space'] else 'legacy'})")
             for name, x in rep["races"].items():
                 reg = x.get("regions", {})
                 top = sorted(((k, v["max_m"]) for k, v in reg.items() if k != "outside"), key=lambda kv: -kv[1])[:3]

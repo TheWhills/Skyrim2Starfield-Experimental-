@@ -63,7 +63,7 @@ class FaceFitScriptTests(unittest.TestCase):
                 return ("face:" + ids[path[-10:-4].upper()]).encode()
             return b"base"
 
-        def skyrim_head(data):
+        def skyrim_head(data, model=False):
             d = data.decode()
             return sky_base.copy() if d == "base" else faces[d.split(":")[1]]
 

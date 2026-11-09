@@ -56,10 +56,44 @@ FACE_SIGS = (b"FMSI", b"FMRS", b"FMRI", b"FMRG", b"BMPN", b"BMPV")
 PLUGIN = "S2SFaceTest.esm"
 
 
-def skyrim_head(data: bytes):
+def skyrim_head(data: bytes, model: bool = False):
+    """The head shape's vertices (Skyrim units): as stored (skin space), or with model=True in model space (its
+    NiSkinData overall transform undone: what facefit.align_to_local expects)."""
     shapes = skyrimskin.skinned_shapes(nifmod.parse(data))
     s = skyrimnpc.head_shape(shapes)
-    return None if s is None else np.array(s.positions, float)
+    if s is None:
+        return None
+    p = np.array(s.positions, float)
+    return facefit.apply4(facefit.skin_to_model_matrix(s.skin_transform), p) if model else p
+
+
+def skyrim_head_matrix(data: bytes):
+    """4x4 skin -> model space of the head shape in a Skyrim head NIF (identity without NiSkinData)."""
+    s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(nifmod.parse(data)))
+    return facefit.skin_to_model_matrix(s.skin_transform if s is not None else None)
+
+
+def starfield_head_node(nif_bytes):
+    """4x4 (local -> model) of the head NIF's first BSGeometry: its .mesh vertices are in that shape's frame."""
+    from fo4sf import sfweaponleft, skyrimhair
+    shapes = sfweaponleft.shapes_in_model(nifmod.parse(nif_bytes))
+    return skyrimhair.xf_matrix(shapes[0][1]) if shapes else None
+
+
+def head_alignment(head, sky_base_bytes, legacy=False):
+    """(Skyrim base head points, alignment onto head.vertices, model space used): the Skyrim head in model space
+    aligned through the Starfield head's node transform (facefit.align_to_local); legacy: the old ICP on the raw
+    mesh-local points (90 degrees off for Starfield's heads, 2026-11-09), kept for comparison."""
+    node = getattr(head, "model_xf", None)
+    if node is not None and not legacy:
+        base = skyrim_head(sky_base_bytes, model=True)
+        return base, facefit.align_to_local(base, head.vertices, node), True
+    base = skyrim_head(sky_base_bytes)
+    al = facefit.align_heads(base, head.vertices)
+    rot_free = facefit.align_heads(base, head.vertices, rotate=False)
+    if rot_free[3] <= al[3] * 1.05:
+        al = rot_free
+    return base, al, False
 
 
 def starfield_head(sf_data, female, head_nif=None, recipe=None):
@@ -92,6 +126,7 @@ def starfield_head(sf_data, female, head_nif=None, recipe=None):
     if rrep is not None:
         rep["recipe"] = rrep
     head.triangles = np.array([tuple(t) for t in mesh.triangles], int)
+    head.model_xf = starfield_head_node(nif_bytes)
     return head, rep
 
 
@@ -491,6 +526,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--npc", action="append", default=[], help="Skyrim NPC EditorID (repeatable)")
     ap.add_argument("--count", type=int, default=12, help="sample size without --npc")
+    ap.add_argument("--legacy-alignment", action="store_true",
+                    help="the old Skyrim -> Starfield head alignment (ICP on the raw mesh, 90 degrees off; 2026-11-09) "
+                         "instead of model space through the head's node transform, to compare")
     ap.add_argument("--regions", help="facial bone regions file to use instead of the game's (per sex: give twice, "
                                       "male first)", action="append", default=[])
     ap.add_argument("--head-nif", action="append", default=[], help="head NIF instead of the game's (male, female)")
@@ -614,15 +652,13 @@ def main(argv=None):
         sliders = facefit.load_regions(text)
         head, hrep = starfield_head(sf_data, female, a.head_nif[int(female)] if len(a.head_nif) > int(female) else None,
                                     recipe)
-        base = skyrim_head(hkx_to_af.read_any(SKY_HEADS[female], sky))
-        al = facefit.align_heads(base, head.vertices)
-        rot_free = facefit.align_heads(base, head.vertices, rotate=False)
-        if rot_free[3] <= al[3] * 1.05:                 # same facing within 5 %: no rotation (both games face +Y, Z up)
-            al = rot_free
-        setup[female] = (sliders, head, base, al)
+        base, al, model_space = head_alignment(head, hkx_to_af.read_any(SKY_HEADS[female], sky),
+                                               legacy=a.legacy_alignment)
+        setup[female] = (sliders, head, base, al, model_space)
         report["sexes"]["female" if female else "male"] = dict(
             hrep, sliders=len(sliders), skyrim_base_vertices=len(base), alignment_scale=al[0],
-            alignment_rms_m=al[3], alignment_rotated=bool(not np.allclose(al[1], np.eye(3))))
+            alignment_rms_m=al[3], alignment_rotated=bool(not np.allclose(al[1], np.eye(3))),
+            alignment="model space via the head node (2026-11-09)" if model_space else "legacy ICP on the mesh")
     dial_ids = race_dials(os.path.join(sf_data, "Starfield.esm"))
     for female, (sliders, *_rest) in setup.items():
         ids = {s.id for s in sliders}
@@ -631,10 +667,11 @@ def main(argv=None):
             "count": len(rd), "also_slider_ids": len(rd & ids), "slider_ids_not_dials": len(ids - rd)}
 
     for n in chosen:
-        sliders, head, base, al = setup[n["female"]]
+        sliders, head, base, al, model_space = setup[n["female"]]
         row = {"edid": n["edid"], "form_id": f"{n['form_id']:08X}", "female": n["female"]}
         try:
-            fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky))
+            fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
+                             model=model_space)
             if fg is None or len(fg) != len(base):
                 raise ValueError(f"FaceGen head has {0 if fg is None else len(fg)} vertices, base head {len(base)}")
             disp = facefit.transfer(base, fg, al, head.vertices)
