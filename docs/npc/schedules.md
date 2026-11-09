@@ -98,3 +98,6 @@ wrote next to the vanilla package's. Also Energy: the mod's sandboxes use 0.1-0.
 (vanilla 50), so Skyrim's value x 0.01 (supported).
 In game: Orgnar selected, `getiscurrentpackage 05000E64` should now be 1; before the rebuild `getiscurrentpackage
 0000268B` (the appended vanilla one) should be 1, which would confirm the fall-through.
+Verified in game (owner, 2026-11-08 rebuild, build printed "schedule month 0"): Orgnar behind the bar,
+`getiscurrentpackage 05000E64` = 1. The month was the cause. Next: furniture / idle markers (bar-lean marker, chairs,
+beds) so the packages have something to use and the NPCs animate.
