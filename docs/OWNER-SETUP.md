@@ -154,3 +154,9 @@ NPC schedules, step 1 (read-only survey of an NPC's AI packages and Starfield's 
 ```powershell
 python -I scripts\npc\package_survey.py --skyrim "$sky\Skyrim.esm" --npc Orgnar --starfield "$sf\Data\Starfield.esm" --out C:\Modding\work\packages
 ```
+
+NPCs placed in their converted interior with their Skyrim AI packages (step 2 of docs/npc/schedules.md; Starfield closed):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar
+```

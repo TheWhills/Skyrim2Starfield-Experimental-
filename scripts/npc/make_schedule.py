@@ -1,0 +1,222 @@
+"""A Skyrim NPC's AI packages as Starfield packages, and the NPC placed in its converted interior (docs/npc/schedules.md).
+
+    python -I scripts\\npc\\make_schedule.py --skyrim "<Skyrim SE>\\Data\\Skyrim.esm" --starfield "<Starfield>\\Data\\Starfield.esm" ^
+        --npc Orgnar --work C:\\Modding\\work\\s2s\\riverwood_doors --faces "<S2S Face Test>\\faces.json"
+
+Writes <work>\\actors.json, which PluginSpike reads (ACTORS=<that file>) while it builds the interiors into FO4Port.esm.
+Per NPC: its name, sex, the Skyrim cell (must be one of the batch's: <work>\\cells.txt lists them), its Skyrim position /
+rotation (units, as cell.json), the vanilla Starfield NPC to copy (the template face_fit.py used for that NPC, from
+faces.json; else one of the same sex there), and its packages in order. Each package: same schedule; the Starfield
+package template for the Skyrim one (SKY_TO_SF, else the same EditorID); and the inputs that carry over, matched by input
+NAME between the two templates (a template lists its inputs as UNAM index + BNAM name; a package's values come in the
+order of its own UNAM indexes). Locations: "near reference" keeps the Skyrim reference (PluginSpike points at our placed
+copy, or places a Starfield XMarker at its spot when we did not place it) with the radius in metres; "in cell" becomes
+our cell. Inputs Starfield's template has and Skyrim's does not keep the values of the vanilla package PluginSpike copies.
+"""
+import argparse
+import json
+import os
+import re
+import struct
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(REPO, "src"))
+
+from fo4sf import packages, skyrimnpc, skyrimrefs  # noqa: E402
+
+U = 70.0
+# Skyrim package templates -> Starfield's (owner's package_survey.py 2026-11-08: Starfield has Sandbox (577 uses),
+# Travel, Sit, Sleep, ...; Skyrim's SandboxWorking = travel, unlock doors, sandbox: Starfield's Sandbox procedure list)
+SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep", "travel": "Travel", "sit": "Sit"}
+
+
+def norm(name):
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+
+
+def value_indexes(p):
+    """The UNAM index of each data input value of a parsed package / template, in value order."""
+    return [n["index"] for n in p["input_names"] if n["name"] is None][:len(p["inputs"])]
+
+
+def definitions(p):
+    """{UNAM index: name} of a template's inputs."""
+    return {n["index"]: n["name"] for n in p["input_names"] if n["name"] is not None}
+
+
+def ref_place(ix, fid):
+    """(position units, rotation radians) of a placed reference."""
+    d = next((d for s, d in ix.subs(fid) if s == b"DATA" and len(d) >= 24), None)
+    if d is None:
+        return None, None
+    v = struct.unpack_from("<6f", d)
+    return [round(c, 3) for c in v[:3]], [round(c, 5) for c in v[3:]]
+
+
+def convert_package(sky, sf_tpls, pack_fid, cell_names, notes):
+    p = packages.parse_pack(sky.subs(pack_fid))
+    tpl = packages.parse_pack(sky.subs(p["template"])) if p["template"] else None
+    tname = (tpl or {}).get("edid") or ""
+    sf_name = SKY_TO_SF.get(tname.lower(), tname)
+    sf = sf_tpls.get(sf_name.lower())
+    if sf is None:
+        notes.append(f"{p['edid']}: Skyrim template {tname!r} has no Starfield template {sf_name!r}; left out")
+        return None
+    sky_names = definitions(tpl) if tpl else {}
+    sf_names = definitions(sf["pack"])
+    sf_values = value_indexes(sf["pack"])
+    by_name = {}
+    for i in sf_values:
+        by_name.setdefault(norm(sf_names.get(i)), i)
+    inputs, skipped = {}, []
+    for k, (inp, idx) in enumerate(zip(p["inputs"], value_indexes(p))):
+        name = sky_names.get(idx)
+        target = by_name.get(norm(name))
+        v = inp["value"]
+        if target is None:
+            skipped.append(f"{name or idx} ({inp['type']})")
+            continue
+        t = inp["type"].lower()
+        if t == "bool":
+            inputs[str(target)] = {"kind": "bool", "value": bool(v), "skyrim": name}
+        elif t == "float":
+            inputs[str(target)] = {"kind": "float", "value": float(v), "skyrim": name}
+        elif t in ("int", "integer"):
+            inputs[str(target)] = {"kind": "int", "value": int(v), "skyrim": name}
+        elif t == "location" and isinstance(v, dict):
+            loc = {"kind": "location", "radius_m": round((v.get("radius") or 0) / U, 3), "skyrim": name}
+            if v["type"] == 0 and v["value"]:
+                pos, rot = ref_place(sky, v["value"])
+                info = sky.name_of(v["value"])
+                loc.update(type="near_reference", source=skyrimrefs.formkey(v["value"], "Skyrim.esm"), pos=pos, rot=rot,
+                           base=(info.get("base") or {}).get("edid"),
+                           cell=(info.get("cell") or {}).get("edid"))
+            elif v["type"] == 1 and v["value"]:
+                e = sky.edid(v["value"])
+                if e not in cell_names:
+                    notes.append(f"{p['edid']}: location cell {e} is not in the batch; input left as the vanilla value")
+                    continue
+                loc.update(type="in_cell", cell=e)
+            elif v["type"] in (2, 3, 12):
+                loc.update(type={2: "near_package_start", 3: "near_editor_location", 12: "near_self"}[v["type"]])
+            else:
+                notes.append(f"{p['edid']}: location type {v['type_name']} not translated yet; vanilla value kept")
+                continue
+            inputs[str(target)] = loc
+        else:
+            skipped.append(f"{name or idx} ({inp['type']})")
+    if skipped:
+        notes.append(f"{p['edid']}: inputs without a Starfield counterpart kept vanilla: {skipped}")
+    return {"edid": "S2S_" + p["edid"], "skyrim": p["edid"], "schedule": p["schedule"], "speed": p["speed"],
+            "skyrim_template": tname, "sf_template": sf_name, "sf_template_form": f"{sf['form']:08X}",
+            "conditions_dropped": p["conditions"], "inputs": inputs}
+
+
+def load_sf_templates(path):
+    ix = packages.Index(path)
+    out = {}
+    try:
+        for fid in ix.by_type.get(b"PACK", []):
+            p = packages.parse_pack(ix.subs(fid), starfield=True)
+            if p["type"] == packages.TEMPLATE and p["edid"]:
+                out.setdefault(p["edid"].lower(), {"form": fid, "pack": p})
+    finally:
+        ix.close()
+    return out
+
+
+def pick_template(faces, edid, female):
+    rows = [r for r in (faces or {}).get("npcs", []) if isinstance(r.get("test_npc"), dict)
+            and r["test_npc"].get("template_form_id")]
+    for r in rows:
+        if r.get("edid", "").lower() == edid.lower():
+            return r["test_npc"]["template_form_id"], f"faces.json: {edid}'s own template"
+    for r in rows:
+        if bool(r.get("female")) == female:
+            return r["test_npc"]["template_form_id"], f"faces.json: {r.get('edid')}'s template (same sex)"
+    return None, "no template in faces.json"
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--skyrim", required=True)
+    ap.add_argument("--starfield", required=True)
+    ap.add_argument("--npc", action="append", required=True)
+    ap.add_argument("--work", required=True, help="the interior batch work folder (cells.txt; actors.json is written there)")
+    ap.add_argument("--faces", default="", help="face_fit.py's faces.json (vanilla template NPC per test NPC)")
+    ap.add_argument("--template-npc", default="", help="Starfield NPC FormID to copy instead (hex)")
+    a = ap.parse_args(argv)
+    cells_txt = os.path.join(a.work, "cells.txt")
+    cell_names = set()
+    if os.path.exists(cells_txt):
+        with open(cells_txt, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    with open(line, encoding="utf-8") as c:
+                        cell_names.add(json.load(c)["cell"])
+    faces = None
+    if a.faces:
+        with open(a.faces, encoding="utf-8") as fh:
+            faces = json.load(fh)
+    sf_tpls = load_sf_templates(a.starfield)
+    sky = packages.Index(a.skyrim)
+    actors, notes = [], []
+    try:
+        for edid in a.npc:
+            fid = sky.find_edid(b"NPC_", edid)
+            if fid is None:
+                notes.append(f"{edid}: no such Skyrim NPC")
+                continue
+            npc = skyrimnpc.parse_npc(sky.subs(fid), fid)
+            src = npc
+            if npc["template"] and npc["template_flags"] & skyrimnpc.TEMPLATE_AI_PACKAGES and \
+                    sky.kind(npc["template"]) == "NPC_":
+                src = skyrimnpc.parse_npc(sky.subs(npc["template"]), npc["template"])
+            placed = []
+            for r in sky.by_type.get(b"ACHR", []):
+                if next((struct.unpack_from("<I", d)[0] for s, d in sky.subs(r) if s == b"NAME" and len(d) == 4),
+                        None) == fid:
+                    placed.append(r)
+            spot = None
+            for r in placed:
+                c = sky.edid(sky.cell_of.get(r, 0) or 0)
+                if c in cell_names:
+                    pos, rot = ref_place(sky, r)
+                    spot = {"cell": c, "pos": pos, "rot": rot, "source": skyrimrefs.formkey(r, "Skyrim.esm")}
+                    break
+            if spot is None:
+                notes.append(f"{edid}: not placed in any cell of the batch ({sorted(cell_names)}); left out")
+                continue
+            tpl, why = (a.template_npc, "--template-npc") if a.template_npc else \
+                pick_template(faces, edid, npc["female"])
+            if not tpl:
+                notes.append(f"{edid}: {why}; give --faces or --template-npc")
+                continue
+            pk = [convert_package(sky, sf_tpls, p, cell_names, notes) for p in src["packages"]]
+            name = npc.get("full_name") or edid
+            actors.append({"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
+                           "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]})
+    finally:
+        sky.close()
+    out = os.path.join(a.work, "actors.json")
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump({"actors": actors, "notes": notes}, fh, indent=1)
+    for ac in actors:
+        print(f"{ac['skyrim']} in {ac['cell']} at {ac['pos']} (copy of Starfield NPC {ac['template_npc']}: "
+              f"{ac['template_why']}):")
+        for p in ac["packages"]:
+            s = p["schedule"] or {}
+            ins = ", ".join(f"{v['skyrim']}={v.get('value', v.get('type'))}" for v in p["inputs"].values())
+            print(f"  {p['edid']}: {p['skyrim_template']} -> {p['sf_template']}, hour {s.get('hour')} for "
+                  f"{s.get('duration_min')} min; inputs {ins}")
+    for n in notes:
+        print("  note: " + n)
+    print(f"-> {out}")
+    return 0 if actors else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -20,3 +20,23 @@ the first package whose schedule and conditions fit wins.
 3. Place Orgnar in the converted inn (ACHR in FO4Port.esm, his face / outfit from the test NPC pipeline).
 4. Furniture: the inn's beds / chairs / counter are statics in our conversion; sleeping, sitting and leaning need
    Starfield furniture (FURN with markers) or idle markers. Sandbox alone works without them.
+
+## Orgnar (survey 2026-11-08, owner's run)
+One package, OrgnarWorkInn0x24, all day (no schedule), Skyrim template SandboxWorking (travel, unlock doors, sandbox),
+speed Run(2), values in UNAM order [0, 14, 1, 3, 4, 5, 6, 31, 7, 25, 27, 29]: Location = near XMarker 000BD056
+(in the inn) radius 256 units (3.66 m); Unlock On Arrival no; Allow Eating yes; Sleeping no; Conversation yes; Idle
+Markers yes; Sitting no; Special Furniture yes; Wandering no; Preferred Path no; Ride Horse no; Energy 1.0. Placed at
+(-1312.8, 18.3, 0) in RiverwoodSleepingGiantInn; owns CounterBarLeanMarker (FURN) 0006DEB4.
+Starfield: 122 package templates; Sandbox (00002CB1, 577 uses) has the same procedures (Travel, UnlockDoors, Sandbox)
+and inputs by name (Location at 2, Unlock on Arrival? 12, Allow Eating 5, ... Energy 18).
+
+## Step 2 (2026-11-08): make_schedule.py + PluginSpike ACTORS
+`scripts/npc/make_schedule.py` writes <work>/actors.json: Skyrim template -> Starfield (SKY_TO_SF, else same EditorID),
+inputs matched by normalized name, near-reference locations with the Skyrim ref and its spot. PluginSpike (ACTORS env):
+a copy of the first vanilla package using that template (all other inputs keep vanilla values), schedule / speed from
+Skyrim, conditions / quest / scripts dropped; the referenced ref -> our placed copy, else a Starfield XMarker (0x3B,
+assumed as in Skyrim / FO4: unverified) placed persistent at its spot; radius written as float bits (xEdit SF1 says float;
+Mutagen keeps u32; PluginSpike prints the vanilla value both ways). NPC: copy of face_fit's vanilla template for that NPC
+(faces.json), name, packages = ours, AI-package template flag cleared, scripts dropped; placed as a persistent ACHR.
+Not yet: his face / hair / outfit (the test NPC lives in S2SFaceTest.esm, an MO2 plugin), furniture (the bar-lean
+marker is a static here), dialogue / vendor. `riverwood_doors.ps1 -Actors Orgnar` runs it.

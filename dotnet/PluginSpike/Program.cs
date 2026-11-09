@@ -375,6 +375,114 @@ static bool tele0(JsonElement r) => r.TryGetProperty("teleport", out var t) && t
 P3Float Pos(JsonElement p) => new(p[0].GetSingle() / UnitsPerMetre, p[1].GetSingle() / UnitsPerMetre, p[2].GetSingle() / UnitsPerMetre);
 P3Float Rot(JsonElement o) => new(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle());
 
+// ---- NPCs with their schedules (2026-11-08, owner: "try an NPC with their schedule"; docs/npc/schedules.md) -----------
+// ACTORS = scripts/npc/make_schedule.py's actors.json: per NPC a vanilla Starfield NPC to copy (face_fit's template for
+// it), the Skyrim cell and spot, and its packages translated to Starfield templates. Each package is a copy of a vanilla
+// package that uses the same template (so every input the template has keeps a valid vanilla value), with the Skyrim
+// schedule and speed and the translated inputs (by UNAM index). The NPC copy gets those packages only (AI-package template
+// flag cleared, its scripts dropped) and is placed in the cell as a persistent ACHR.
+var actorsPath = Environment.GetEnvironmentVariable("ACTORS");
+JsonElement? actorsRoot = actorsPath == null ? null : JsonDocument.Parse(File.ReadAllText(actorsPath)).RootElement.Clone();
+var sfActors = actorsPath == null ? null : StarfieldMod.CreateFromBinaryOverlay(
+    Path.Combine(sfData0 ?? throw new InvalidOperationException("ACTORS needs STARFIELD_DATA"), "Starfield.esm"), release);
+var vanillaPackage = new Dictionary<FormKey, IPackageGetter>();      // package template -> first vanilla package using it
+if (sfActors != null)
+    foreach (var vp in sfActors.Packages)
+        if (vp.Type == Package.Types.Package && !vp.PackageTemplate.IsNull && !vanillaPackage.ContainsKey(vp.PackageTemplate.FormKey))
+            vanillaPackage[vp.PackageTemplate.FormKey] = vp;
+var xMarker = new FormKey(sfEsm, 0x00003B);                       // XMarker (as Skyrim's and FO4's 0x3B; unverified in Starfield)
+
+void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource)
+{
+    var sk = ac.GetProperty("skyrim").GetString()!;
+    var tplKey = new FormKey(sfEsm, Convert.ToUInt32(ac.GetProperty("template_npc").GetString(), 16) & 0xFFFFFF);
+    var vnpc = sfActors!.Npcs.FirstOrDefault(n => n.FormKey == tplKey);
+    if (vnpc == null) { Console.WriteLine($"actor {sk}: template NPC {tplKey} not in Starfield.esm; not placed"); return; }
+    var npc = (Npc)vnpc.Duplicate(Id("NPC_:" + sk));
+    npc.EditorID = "S2S_" + sk;
+    npc.Name = ac.GetProperty("name").GetString();
+    npc.VirtualMachineAdapter = null;
+    npc.UseTemplateActors &= ~Npc.TemplateActorType.AiPackages;
+    npc.Packages.Clear();
+    var notes = new List<string>();
+    foreach (var pj in ac.GetProperty("packages").EnumerateArray())
+    {
+        var edid = pj.GetProperty("edid").GetString()!;
+        var tkey = new FormKey(sfEsm, Convert.ToUInt32(pj.GetProperty("sf_template_form").GetString(), 16) & 0xFFFFFF);
+        if (!vanillaPackage.TryGetValue(tkey, out var vp)) { notes.Add($"{edid}: no vanilla package uses template {tkey}"); continue; }
+        var pk = (Package)vp.Duplicate(Id("PACK:" + edid));
+        pk.EditorID = edid;
+        pk.VirtualMachineAdapter = null;
+        pk.OwnerQuest.SetToNull();
+        pk.Conditions.Clear();
+        var sch = pj.GetProperty("schedule");
+        pk.ScheduleMonth = (sbyte)sch.GetProperty("month").GetInt32();
+        pk.ScheduleDayOfWeek = (Package.DayOfWeek)sch.GetProperty("day_of_week").GetInt32();
+        pk.ScheduleDate = (byte)sch.GetProperty("date").GetInt32();
+        pk.ScheduleHour = (sbyte)sch.GetProperty("hour").GetInt32();
+        pk.ScheduleMinute = (sbyte)sch.GetProperty("minute").GetInt32();
+        pk.ScheduleDurationInMinutes = sch.GetProperty("duration_min").GetInt32();
+        pk.PreferredSpeed = (Package.Speed)pj.GetProperty("speed").GetInt32();
+        foreach (var ip in pj.GetProperty("inputs").EnumerateObject())
+        {
+            var idx = sbyte.Parse(ip.Name);
+            var v = ip.Value;
+            if (!pk.Data.TryGetValue(idx, out var d)) { notes.Add($"{edid}: input {idx} not in the vanilla package"); continue; }
+            switch (v.GetProperty("kind").GetString())
+            {
+                case "bool" when d is PackageDataBool b: b.Data = v.GetProperty("value").GetBoolean(); break;
+                case "float" when d is PackageDataFloat f: f.Data = v.GetProperty("value").GetSingle(); break;
+                case "int" when d is PackageDataInt i: i.Data = (uint)v.GetProperty("value").GetInt32(); break;
+                case "location" when d is PackageDataLocation l:
+                {
+                    var old = l.Location.Radius;
+                    ALocationTarget target;
+                    switch (v.GetProperty("type").GetString())
+                    {
+                        case "near_reference":
+                            var srcRef = v.GetProperty("source").GetString()!;
+                            if (!placedBySource.TryGetValue(srcRef, out var refKey))
+                            {
+                                // not placed by us (an editor marker): a Starfield XMarker at its spot, persistent as package targets are
+                                var m = new PlacedObject(Id($"REFR:{cellName}:{srcRef}:marker"), release)
+                                    { Base = new FormLinkNullable<IPlaceableObjectGetter>(xMarker), Position = Pos(v.GetProperty("pos")), Rotation = Rot(v.GetProperty("rot")) };
+                                m.MajorRecordFlagsRaw |= 0x400;
+                                cell.Persistent.Add(m);
+                                placedBySource[srcRef] = refKey = m.FormKey;
+                                sourceMap[srcRef] = m.FormKey.ToString();
+                            }
+                            target = new LocationTarget { Link = new FormLink<IPlacedGetter>(refKey) };
+                            break;
+                        case "in_cell": target = new LocationCell { Link = new FormLink<ICellGetter>(cell.FormKey) }; break;
+                        case "near_package_start": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearPackageStart }; break;
+                        case "near_editor_location": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearEditorLocation }; break;
+                        case "near_self": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearSelf }; break;
+                        default: notes.Add($"{edid}: location {v.GetProperty("type").GetString()} not handled"); continue;
+                    }
+                    // Starfield's PLDT radius is a float (xEdit SF1); Mutagen keeps the raw u32
+                    var r = v.GetProperty("radius_m").GetSingle();
+                    notes.Add($"{edid}: location radius {r} m (the vanilla value's raw bits {old:X8} = {BitConverter.UInt32BitsToSingle(old)} as a float)");
+                    l.Location = new LocationTargetRadius { Target = target, Radius = BitConverter.SingleToUInt32Bits(r), CollectionIndex = l.Location.CollectionIndex };
+                    break;
+                }
+                default: notes.Add($"{edid}: input {idx} is {d.GetType().Name}, not {v.GetProperty("kind").GetString()}; vanilla kept"); break;
+            }
+        }
+        mod.Packages.Add(pk);
+        npc.Packages.Add(new FormLink<IPackageGetter>(pk.FormKey));
+        sourceMap["PACK:" + edid] = pk.FormKey.ToString();
+    }
+    mod.Npcs.Add(npc);
+    var achr = new PlacedNpc(Id($"ACHR:{cellName}:{sk}"), release)
+        { Base = new FormLinkNullable<INpcGetter>(npc.FormKey), Position = Pos(ac.GetProperty("pos")), Rotation = Rot(ac.GetProperty("rot")) };
+    achr.MajorRecordFlagsRaw |= 0x400;
+    cell.Persistent.Add(achr);
+    sourceMap[ac.GetProperty("source").GetString()!] = achr.FormKey.ToString();
+    sourceMap["NPC_:" + sk] = npc.FormKey.ToString();
+    Console.WriteLine($"actor {sk}: NPC {npc.FormKey} (copy of {vnpc.EditorID} {tplKey}), {npc.Packages.Count} packages, placed {achr.FormKey} in {cellName}");
+    foreach (var n in notes) Console.WriteLine("  " + n);
+}
+
 var cellPaths = args.Skip(2).SelectMany(a => a.StartsWith('@')
     ? File.ReadAllLines(a[1..]).Select(l => l.Trim()).Where(l => l.Length > 0)
     : new[] { a }).ToList();
@@ -457,6 +565,9 @@ foreach (var cellPath in cellPaths)
     if (root.TryGetProperty("cell_formkey", out var cfk) && cfk.ValueKind == JsonValueKind.String)
         sourceMap[cfk.GetString()!] = cell.FormKey.ToString();
     var navNote = WriteNavmeshes(cell, cellName, root, placedBySource);
+    if (actorsRoot is JsonElement ar)
+        foreach (var ac in ar.GetProperty("actors").EnumerateArray())
+            if (ac.GetProperty("cell").GetString() == src4) PlaceActor(cell, cellName, ac, placedBySource);
     var cid = cell.FormKey.ID;
     var block = new CellBlock { BlockNumber = (int)(cid % 10), GroupType = GroupTypeEnum.InteriorCellBlock };
     var sub = new CellSubBlock { BlockNumber = (int)((cid / 10) % 10), GroupType = GroupTypeEnum.InteriorCellSubBlock };

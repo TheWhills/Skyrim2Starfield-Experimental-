@@ -18,7 +18,9 @@ param(
     [switch]$Navmesh,
     [string]$NavAround = "Riverwood",
     [int]$NavRadius = 2,
-    [switch]$Resurvey          # redo the vanilla navmesh survey (it is kept between runs)
+    [switch]$Resurvey,         # redo the vanilla navmesh survey (it is kept between runs)
+    [string[]]$Actors = @(),   # Skyrim NPCs to place in their converted cell with their AI packages, e.g. -Actors Orgnar
+    [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json"
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -60,15 +62,25 @@ if ($Navmesh) {
     if ($LASTEXITCODE -ne 0) { Fail "navmesh export" }
 }
 
+if ($Actors.Count -gt 0) {
+    Step "2c. NPCs with their schedules: $($Actors -join ', ')"
+    $sa = @("--skyrim", "$SKY\Skyrim.esm", "--starfield", "$SF\Data\Starfield.esm", "--work", $Work)
+    foreach ($n in $Actors) { $sa += @("--npc", $n) }
+    if (Test-Path $Faces) { $sa += @("--faces", $Faces) } else { Write-Host "no faces.json at $Faces" -ForegroundColor Yellow }
+    python -I scripts\npc\make_schedule.py @sa
+    if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }
+}
+
 Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
 $env:STARFIELD_DATA = "$SF\Data"
 $env:EXTERIOR_DIR = $Exterior
 $env:EXTERIOR_DOORS = Join-Path $Work "exterior_doors.json"
 if ($Navmesh) { $env:EXTERIOR_NAVMESH = Join-Path $navWork "exterior_navmesh.json" }
+if ($Actors.Count -gt 0) { $env:ACTORS = Join-Path $Work "actors.json" }
 dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
 $rc = $LASTEXITCODE
-Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH -ErrorAction SilentlyContinue
+Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS -ErrorAction SilentlyContinue
 if ($rc -ne 0) { Fail "PluginSpike (paste its output: compile errors name the Mutagen property)" }
 
 if ($Navmesh) {

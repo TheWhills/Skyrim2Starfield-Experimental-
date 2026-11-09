@@ -32,12 +32,12 @@ TEMPLATE_AI_PACKAGES = skyrimnpc.TEMPLATE_AI_PACKAGES
 
 def describe_inputs(ix, pack):
     out = []
-    names = {n["index"]: n["name"] for n in pack["input_names"]}
+    idx = [n["index"] for n in pack["input_names"] if n["name"] is None]     # a package's values in UNAM order
     for i, inp in enumerate(pack["inputs"]):
         v = inp["value"]
         if isinstance(v, dict) and v.get("is_form") and v.get("value"):
             v = dict(v, form=ix.name_of(v["value"]))
-        out.append({"index": i, "name": names.get(i), "type": inp["type"], "value": v})
+        out.append({"index": idx[i] if i < len(idx) else None, "type": inp["type"], "value": v})
     return out
 
 
