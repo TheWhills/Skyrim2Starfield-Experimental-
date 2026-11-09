@@ -34,6 +34,10 @@ SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep"
 # inputs set on the Starfield side whatever Skyrim had (by normalized Starfield input name): Starfield has no Eat
 # template; its NPCs eat while sandboxing (Allow Eating / Allow Sitting)
 FORCE = {"eat": {"alloweating": True, "allowsitting": True}}
+# until furniture / idle markers are converted (beds, chairs, the bar-lean marker are statics in our interiors) a sandbox
+# whose Skyrim inputs allow only furniture / idle markers has nothing to do inside its radius, and the NPC leaves it
+# (owner 2026-11-08: Orgnar stood behind the bar for a moment, then walked off): let it wander inside the radius
+NO_FURNITURE = {"allowwandering": True}
 
 
 def norm(name):
@@ -59,7 +63,7 @@ def ref_place(ix, fid):
     return [round(c, 3) for c in v[:3]], [round(c, 5) for c in v[3:]]
 
 
-def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=False):
+def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=False, keep_furniture_only=False):
     p = packages.parse_pack(sky.subs(pack_fid))
     if not keep_conditioned and (p["conditions"] or p["owner_quest"]):
         notes.append(f"{p['edid']}: left out (quest / conditions decide when Skyrim runs it: "
@@ -122,9 +126,12 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
     if drop:
         notes.append(f"{p['edid']}: left out: {drop} (NPCs outside the converted interiors come later)")
         return None
-    for k, val in FORCE.get(tname.lower(), {}).items():
+    extra = dict(FORCE.get(tname.lower(), {}))
+    if sf_name.lower().startswith("sandbox") and not keep_furniture_only:
+        extra.update(NO_FURNITURE)
+    for k, val in extra.items():
         if k in by_name:
-            inputs[str(by_name[k])] = {"kind": "bool", "value": val, "skyrim": f"(set for {tname})"}
+            inputs[str(by_name[k])] = {"kind": "bool", "value": val, "skyrim": f"({sf_names.get(by_name[k])} set)"}
     if skipped:
         notes.append(f"{p['edid']}: inputs without a Starfield counterpart kept vanilla: {skipped}")
     return {"edid": "S2S_" + p["edid"], "skyrim": p["edid"], "schedule": p["schedule"], "speed": p["speed"],
@@ -171,6 +178,8 @@ def main(argv=None):
     ap.add_argument("--faces", default="", help="face_fit.py's faces.json (vanilla template NPC per test NPC)")
     ap.add_argument("--keep-conditioned", action="store_true",
                     help="keep packages with conditions / an owner quest (their conditions are not converted)")
+    ap.add_argument("--keep-furniture-only", action="store_true",
+                    help="keep Skyrim's Allow Wandering off on sandboxes (only once furniture / idle markers are converted)")
     ap.add_argument("--template-npc", default="", help="Starfield NPC FormID to copy instead (hex)")
     a = ap.parse_args(argv)
     notes = []
@@ -223,7 +232,8 @@ def main(argv=None):
             if not tpl:
                 notes.append(f"{edid}: {why}; give --faces or --template-npc")
                 continue
-            pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned) for p in src["packages"]]
+            pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned,
+                                  a.keep_furniture_only) for p in src["packages"]]
             name = npc.get("full_name") or edid
             actors.append({"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
                            "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]})

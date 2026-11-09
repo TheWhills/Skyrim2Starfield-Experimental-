@@ -66,3 +66,8 @@ no owner quest / scripts / conditions / alias inputs (prints which), make_schedu
 Starfield.esm. Also: the inn's room doors were solid statics NPCs walked into (navmesh passes through); non-load doors
 are now left out (open doorways; INNER_DOORS=static keeps them) until doors that open are converted.
 In game check: select the NPC, `getiscurrentpackage <package id>` (ids printed by the build).
+Owner, same evening: Orgnar "stood behind the bar for a second and then left". Reading (supported): his package ran,
+but with wandering off and only furniture / idle markers allowed, his sandbox found nothing to use within 3.66 m (the
+bar-lean marker and every chair / bed are statics here), so he left it. make_schedule.py now turns Allow Wandering on
+for Starfield sandbox packages (inside their radius) until furniture is converted (`--keep-furniture-only` to keep
+Skyrim's setting).
