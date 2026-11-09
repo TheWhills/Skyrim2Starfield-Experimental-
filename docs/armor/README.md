@@ -36,3 +36,24 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 ## Next, once the reports are in
 Skeleton map (Skyrim bone -> Starfield bone(s), rest-pose offsets, length ratios) from the fetched skeletons; then the
 armor fitting path (re-pose + body correction field, or body-surface weight transfer), then .hkx track decoding.
+
+## Clothing as items, both sexes (plan, owner 2026-11-09)
+Owner: today Ysolda's outfit is "Ysolda's outfit" for whoever wears it; eventually each Skyrim clothing piece is one
+converted item, with the right ids, worn by every NPC who should wear it, male or female, each seeing its own version.
+How both games do it (xEdit wbDefinitionsTES5 / wbDefinitionsSF1, verified field layout): an ARMO lists ARMA addons;
+an ARMA holds a MALE and a FEMALE model (MOD2 / MOD3; first person MOD4 / MOD5) and the engine picks by the wearer's
+sex. Starfield adds a body-slider morph per sex (NAM4 male world, NAM6 female world; NAM5 / NAM7 first person). Our
+writer (os_export) now puts the same fitted model in MOD2 and MOD3 and the same MRPH in NAM4 and NAM6.
+Plan:
+1. Convert by record, not by NPC: per Skyrim ARMO one Starfield ARMO, per Skyrim ARMA its addon(s) with the Skyrim
+   MALE model fitted to Starfield's male body in MOD2 + its morph in NAM4, the FEMALE model fitted to the female body in
+   MOD3 + NAM6 (Skyrim ARMAs with one model for both: fitted twice). Fit bodies: the fixed per-sex ones (face_fit
+   BODY_NPC) until outfits follow every body through the weight morphs.
+2. Skyrim OTFT -> Starfield OTFT of the converted ARMOs (leveled lists later); a converted NPC's DOFT -> its Skyrim
+   outfit's converted OTFT, so every NPC sharing an outfit wears the same items.
+3. Stable ids: a mapping file (Skyrim form key -> our FormID) kept across rebuilds, so plugins referencing the items
+   (NPCs, FO4Port.esm) do not move (face_fit's ids moving each run is the cautionary case).
+4. Parts per biped slot (gear_fit.distinct_slots) decided once per ARMA for both sexes; when the male and female NIFs
+   do not split the same way, addons per sex (one model filled) - whether an ARMA with only MOD2 shows nothing on a
+   female is to check in game.
+Test when built: Ysolda's dress item on a female and a male test NPC, each in their own fitted version.
