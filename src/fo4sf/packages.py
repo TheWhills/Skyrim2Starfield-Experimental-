@@ -109,9 +109,12 @@ def parse_pack(subs, starfield: bool = False) -> Dict:
             p["group"] = d[0]
             section = "tree"
         elif sig == b"ANAM" and section == "tree":
-            p["procedures"].append({"branch": d.rstrip(b"\0").decode("utf-8", "replace"), "procedure": None})
+            p["procedures"].append({"branch": d.rstrip(b"\0").decode("utf-8", "replace"), "procedure": None,
+                                    "inputs": []})
         elif sig == b"PNAM" and section == "tree" and p["procedures"] and len(d) > 4:
             p["procedures"][-1]["procedure"] = d.rstrip(b"\0").decode("utf-8", "replace")
+        elif sig == b"PKC2" and section == "tree" and p["procedures"] and len(d) >= 1:
+            p["procedures"][-1]["inputs"].append(d[0])          # the data inputs (UNAM index) this branch uses
         elif sig == b"INAM" and len(d) == 4:
             v = struct.unpack_from("<I", d)[0]
             if v:

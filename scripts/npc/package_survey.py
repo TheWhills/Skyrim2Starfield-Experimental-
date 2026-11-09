@@ -95,6 +95,7 @@ def starfield_templates(ix):
             uses[p["template"]] += 1
     return [{"form": f"{f:08X}", "edid": p["edid"], "inputs": p["input_names"],
              "input_types": [i["type"] for i in p["inputs"]], "procedures": [x["procedure"] for x in p["procedures"]],
+             "procedure_inputs": [[x["branch"], x["procedure"], x["inputs"]] for x in p["procedures"]],
              "group": p["group"], "used_by": uses[f]} for f, p in sorted(tpls.items(), key=lambda kv: -uses[kv[0]])]
 
 
