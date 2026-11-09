@@ -117,6 +117,13 @@ from Starfield's teeth; opens as C:\Modding\work\races\mouth_view.html):
 python -I scripts\npc\mouth_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
 ```
 
+Beast probe (read-only: Khajiit / Argonian heads warped onto the human one and given Starfield's face-bone weights,
+their sliders, tail and skeleton bones, Starfield's morph records; opens as C:\Modding\work\races\beast_view.html):
+
+```powershell
+python -I scripts\npc\beast_probe.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\races
+```
+
 `--skip refs` leaves out the HumanRace counts (unchanged since the first run). The transfer is the surface one
 (fo4sf/headcorr.py, about 20 s per sex); `--transfer nearest` gives the old average to compare. face_fit uses the same
 transfer (also `--transfer nearest` there).

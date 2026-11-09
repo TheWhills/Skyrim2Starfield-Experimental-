@@ -223,6 +223,7 @@ def correspond(src_v: np.ndarray, src_f: np.ndarray, dst_v: np.ndarray, dst_f: n
     fn = np.cross(b - a, c - a)
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
     C = min(candidates, len(sf))
+    chunk = max(8, min(chunk, int(4e6 // max(len(sf), 1))))     # (chunk x triangles) arrays: ~100 MB at most
     T = np.zeros((nw, C), int)
     B = np.zeros((nw, C, 3))
     D2 = np.zeros((nw, C))
@@ -260,16 +261,17 @@ def correspond(src_v: np.ndarray, src_f: np.ndarray, dst_v: np.ndarray, dst_f: n
             report["mouth"] = None
     # neighbour agreement along the src surface
     rep = sf[T, np.argmax(B, -1)]                                  # (nw, C) the candidate's strongest corner
-    used_v = np.unique(rep)
-    G_used = edge_geodesics(src_v, sf, used_v)
-    col = np.full(len(src_v), -1)
-    col[used_v] = np.arange(len(used_v))
-    ew = edges(wf)
-    ea, eb = np.concatenate([ew[:, 0], ew[:, 1]]), np.concatenate([ew[:, 1], ew[:, 0]])
     lab = U.argmin(1)
     rng = np.random.default_rng(seed)
     it, changed = 0, 0
-    for it in range(1, iters + 1):
+    if mu > 0:                                                     # (mu 0: nearest compatible point, no table)
+        used_v = np.unique(rep)
+        G_used = edge_geodesics(src_v, sf, used_v)
+        col = np.full(len(src_v), -1)
+        col[used_v] = np.arange(len(used_v))
+        ew = edges(wf)
+        ea, eb = np.concatenate([ew[:, 0], ew[:, 1]]), np.concatenate([ew[:, 1], ew[:, 0]])
+    for it in range(1, iters + 1 if mu > 0 else 1):
         nb = rep[eb, lab[eb]]                                      # neighbour's chosen corner, per directed edge
         g = G_used[col[rep[ea]], nb[:, None]]                       # (E, C) surface distance candidate -> neighbour
         g = np.where(np.isfinite(g), g, 1e3 * h)

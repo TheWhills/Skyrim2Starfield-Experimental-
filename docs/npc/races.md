@@ -199,3 +199,21 @@ which fits the separate-races design; hair / brows / lashes then need the same k
   mouth vertex's distance to the head surface in Skyrim (orc head) and Starfield (head + transferred orc shape):
   the tusks should stand out of the lips by the same amount. Viewer: mouth_view.html. Next, if it checks out: the
   orc Teeth head part (converted mesh + weights, textures from the mouth's material) for the orc race.
+
+## Beast races: plan and probe (owner 2026-11-09: "yes"; offline checks only)
+Skyrim (verified, race_survey): own heads (Khajiit 1356 / 1342 vertices, Argonian 1219) with expression tris of the
+same names as the human head's (Aah, Blink, Brow, Squint, Look, phonemes, moods) and chargen tris of 52 sliders (36
+continuous + nose / eye / lip presets); the mouth and eyes have chargen tris too (they follow the sliders);
+skeletonBeast.nif; tails (slot 40); the human body with beast hands / feet and textures.
+Plan: (1) probe; (2) the beast head as its own Face head part on Starfield's face bones, weights from Starfield's
+head through a landmark warp (beast -> Skyrim human head) and the existing human -> Starfield matching, checked
+against the beast's own Aah; (3) all sliders as keys in the head's own morph.dat (fits 128), presets as morph-group
+entries, continuous sliders as bone dials (as face_fit fits faces) if the chargen takes a per-head dial file
+(MRPH BMPP "Bone Morph Definition File": the probe lists what vanilla puts there); (4) a separate RACE over HumanRace
+with its skin tones, eyes, hair / horns (hair converter), mouths; (5) tails: fixed to the pelvis first, sway later
+(tail bones in the skeleton or spring bones: unknown).
+scripts/npc/beast_probe.py does (1): landmarks (eye centres, mouth-hole corners, nose tip, crown, back, sides), a
+thin-plate warp onto Skyrim's human head (distance to its surface reported), face-bone weights from Starfield's head
+(nearest compatible point; headcorr with mu 0, which now skips the surface-distance table), the Aah check (jaw
+weight on the vertices Aah drops vs those it leaves), slider counts, the tail's bones, the beast skeleton's extra
+nodes, Starfield's MRPH BMPP values. Viewer: beast_view.html.
