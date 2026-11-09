@@ -18,3 +18,8 @@ Starfield has it and uses it: what can be carried over as data (effects, project
 
 Next, once the survey is in: one Skyrim spell end to end (Flames or Firebolt) as the first test, by the cheapest
 route the survey supports (a power with the Skyrim effect / projectile, then hand casting through the cast slots).
+
+On hold (owner, 2026-11-09): spells as hand-equipped weapons (own weapon-type moveset, Skyrim casting clips, hand
+flames from the fire conversion, magicka / both hands / dual cast in S2SCombat) is the preferred route over Starborn
+powers, but the first spell test waits until the effects are known: the fire survey (Skyrim flame cards, particles)
+and the magic survey (queue steps 3c / 3d) come first. Open then: a melee or a gun weapon as the spell's template.
