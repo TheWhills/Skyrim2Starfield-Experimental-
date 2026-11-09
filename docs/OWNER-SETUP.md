@@ -148,3 +148,9 @@ meshes in the staging and reinstalls; long; Starfield closed):
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\exterior_collision.ps1
 ```
+
+NPC schedules, step 1 (read-only survey of an NPC's AI packages and Starfield's package templates):
+
+```powershell
+python -I scripts\npc\package_survey.py --skyrim "$sky\Skyrim.esm" --npc Orgnar --starfield "$sf\Data\Starfield.esm" --out C:\Modding\work\packages
+```
