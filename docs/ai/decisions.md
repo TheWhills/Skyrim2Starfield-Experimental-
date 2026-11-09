@@ -2209,3 +2209,4 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-08 Verified: Starfield PACK PLDT radius is a float (vanilla raw bits 40A00000 = 5.0, 40400000 = 3.0). First NPC-with-packages build compiled (Orgnar, Delphine, Embry).
 - 2026-11-08 Owner: inn NPCs wander instead of following packages; room doors do not open. Fix attempt: clean vanilla package copies (no quest / scripts / conditions / alias inputs), XMarker looked up; room (non-load) doors left out as open doorways (INNER_DOORS=static to keep).
 - 2026-11-08 Verified in game: Orgnar's converted package does not run (GetIsCurrentPackage 0, GetCurrentAIProcedure -1). A/B added: the vanilla package copied is appended unchanged after ours.
+- 2026-11-08 Verified: Starfield's getcurrentaiprocedure works (vanilla guard 11); Orgnar (-1) runs no procedure. Clearing IsCharGenFacePreset / SimpleActor on the NPC copy (the ChargenPreset base) as the next test.

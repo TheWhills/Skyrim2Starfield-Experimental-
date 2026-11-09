@@ -77,3 +77,7 @@ console. Verified: his package does not run. The Sandbox template's Sandbox and 
 (survey PKC2), the one we fill. Next build: the vanilla package copied is preferably one located "near editor
 location", and is also added unchanged after ours as an A/B (ACTOR_AB=0 to leave out): vanilla runs -> our edits break
 ours; neither runs -> the NPC copy (a ChargenPreset NPC) does not run packages.
+Control (owner, New Atlantis): a vanilla guard (NAGuard05Ref) reports `getcurrentaiprocedure` 11, so the command works
+and Orgnar's -1 means no AI procedure at all (verified), with even the unchanged vanilla package appended. Suspect: the
+NPC copied is a ChargenPreset record (flag IsCharGenFacePreset 0x4; maybe SimpleActor). PluginSpike now clears both on
+the copy and prints the flags before / after, the template-actor flags and the default template.

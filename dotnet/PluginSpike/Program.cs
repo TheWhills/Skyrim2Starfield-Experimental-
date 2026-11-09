@@ -437,6 +437,12 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
     npc.Name = ac.GetProperty("name").GetString();
     npc.VirtualMachineAdapter = null;
     npc.UseTemplateActors &= ~Npc.TemplateActorType.AiPackages;
+    // the vanilla NPC face_fit copies is a character-creation preset (ChargenPreset...): its "IsCharGenFacePreset" flag
+    // (and "SimpleActor", if set) are cleared so it is a normal AI actor. 2026-11-08: Orgnar copied from one ran no AI
+    // procedure at all (GetCurrentAIProcedure -1; a vanilla New Atlantis guard reports 11), not even a vanilla package.
+    var oldFlags = npc.Flags;
+    npc.Flags &= ~(Npc.Flag.IsCharGenFacePreset | Npc.Flag.SimpleActor);
+    var npcNote = $"flags {oldFlags} -> {npc.Flags}; template actors {npc.UseTemplateActors}; default template {(npc.DefaultTemplate.IsNull ? "none" : npc.DefaultTemplate.FormKey.ToString())}";
     npc.Packages.Clear();
     var notes = new List<string>();
     foreach (var pj in ac.GetProperty("packages").EnumerateArray())
@@ -528,6 +534,7 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
     sourceMap[ac.GetProperty("source").GetString()!] = achr.FormKey.ToString();
     sourceMap["NPC_:" + sk] = npc.FormKey.ToString();
     Console.WriteLine($"actor {sk}: NPC {npc.FormKey} (copy of {vnpc.EditorID} {tplKey}), {npc.Packages.Count} packages, placed {achr.FormKey} in {cellName}");
+    Console.WriteLine("  " + npcNote);
     foreach (var n in notes) Console.WriteLine("  " + n);
 }
 
