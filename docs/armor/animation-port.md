@@ -1326,3 +1326,31 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   place, without subgraph entries or re-equip, and works per actor by design. Our Skyrim combos reuse spare host tags
   (sneak / zero-g descriptors) where it declares new tags through SAM. Both ship loose Player_Melee / MeleeActions
   overrides, so the two cannot be installed together without a graph merge.
+
+## 2026-11-09: Starfield Animation Merger (SAM, Nexus 18674), Far Away Movesets 1.4, SFBM blocking fix (owner uploads; read for the format only, nothing run)
+* **SAM = `SFSE\Plugins\SfAnimIndexLoader.dll`** (closed source, French messages; from its strings, so supported, not
+  verified): an SFSE preload plugin (Address Library, MinHook) that reads the vanilla animation index from
+  `Starfield - Animations.ba2` (meshes/animtextdata/animationfiledata: global list + per-graph `animations_<num>.txt`
+  lists), merges every mod's **fragments** (`Meshes\AnimTextData\Fragments\<Mod>\`: animations.txt /
+  animations_<num>.txt clip lists, animationoffsets (CK cache V5), animeventinfo (V2), tables\anim_actions.xtbl (new
+  action TAGS), anim_events.xtbl / anim_states.xtbl / anim_syncs.xtbl) and writes the merged index as loose output under
+  Meshes\AnimTextData, fingerprinted (rebuilt only when a fragment changes; another mod's file it replaces is backed
+  up; a dry-run mode exists; MO2's usvfs recognised). It hooks BSAnimationGraphDBData::Load / the tag registry so new
+  tags exist before the first graph loads ("les tags neufs resteront muets" otherwise), and the event / sync tables at
+  load. A fragment counts only while a plugin named after its folder is active (FarAwayMovesets.esm / .esp / .esl).
+  Allowed clip extensions: .af, .afx, .rig. **It does not merge graphs** (.agx).
+* **Far Away Movesets 1.4** uses it: 16 new action tags (MeleeAttack_F, MeleeAttackRecover_A-F, MeleeAttackMove_A-F,
+  MeleeBlock_HitReaction_A-C) and one new event (HitDeflection, both hands), wired into its own **full** MeleeActions.agx
+  (iSFBMStyle 343 times there: the style choice moved from one switch into conditions) and Player_Melee.agx overrides;
+  2,064 clips.
+* **SFBM blocking fix / Mojo tweaks**: the replace route: vanilla one-handed player clips and descriptors overwritten
+  (.afx timing: rampout, Blocking flag, bCanComboAttack / bNoLeftHandIK windows), as our bfco.py already writes.
+* **For us:** SAM removes our two limits for adding (not replacing) animations: (1) new tags instead of hijacking spare
+  host tags (sneak / zero-g descriptors; "more attacks than spare hosts would need an SFSE plugin", above), (2) mods'
+  clip lists and offsets merged instead of one owner's AnimationFileData. Still needed: the CK GenerateAnimInfo run (or
+  our own writer) for the offsets files, and a graph that uses the new tags (a graph override; merging graphs stays
+  ours to solve, e.g. with agx.py). Costs: a closed DLL tied to game versions, a plugin per fragment folder.
+  Next (owner decides): a one-tag test fragment (S2SAnimTest: one new tag + one converted clip + a minimal graph route)
+  to see SAM declare and play it on the owner's install; if it works, a `--fragment` output for hkx_to_af / the
+  stance packs (Fragments\S2S<Pack>\ with anim_actions.xtbl + clip list + the CK's offsets), retiring the spare-host
+  reuse.
