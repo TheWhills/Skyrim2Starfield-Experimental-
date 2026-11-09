@@ -134,6 +134,11 @@ alpha test, no alpha under the threshold anywhere: the texture hypothesis is dro
 was seen: Ysolda spawned from S2SFaceTest.esm, Delphine as FO4Port.esm's copy of her face-test NPC (Mutagen DeepCopy
 in dotnet/PluginSpike at build time). Reading (supported): that copy is from before the body fix (Riverwood not rebuilt
 after face_fit) or does not carry the body fields through. scripts/npc/npc_record_diff.py compares the two records.
+npc_record_diff (owner's run, verified): FO4Port.esm's Delphine has MWGT [0.22, 0, 0] (CF_KlaudiaSwist's body) where
+S2SFaceTest.esm now has [0.09, 0, 0] (ChargenPresetFemale04's), and both her and Orgnar's face dials (FMSI / FMRS)
+differ: the Riverwood build is from the face_fit run before. The copy itself carries MWGT through (PKID differs as
+expected: the build adds the packages). Fix: rebuild Riverwood after every face_fit run (as documented).
+
 
 
 ## Readiness across the batch (2026-11-09; offline checks only)

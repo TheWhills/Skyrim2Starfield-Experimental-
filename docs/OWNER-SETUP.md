@@ -80,13 +80,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Orgnar still at the bar. New in this build: cooking pots, the alchemy lab and the enchanter are Starfield
    crafting furniture: does anyone cook at a pot, and what does E on a pot / the alchemy lab open? (If it breaks
    something, rebuild with `-NoCrafting`.) Screenshots.
-6b. A: Delphine's shoulders. outfit_probe (done): same dress, mesh and texture as Ysolda, no transparency. Next,
-   compare Delphine's Riverwood copy with her face-test NPC (read-only):
-   ```powershell
-   python -I scripts\npc\npc_record_diff.py --a "$mods\S2S Face Test\S2SFaceTest.esm" --b C:\Modding\work\s2s\riverwood_doors\convert\FO4Port.esm --npc Delphine --npc Orgnar
-   ```
-   In game: `player.placeatme xx000806` (xx = S2SFaceTest.esm's load order index) spawns her face-test NPC next to
-   the Riverwood one: clean shoulders on the spawned one = the Riverwood copy is the problem. Send the printed lines.
+6b. Done 2026-11-09: Delphine's shoulders. Same dress as Ysolda; the Riverwood build was from before the last
+   face_fit run (her old body MWGT 0.22, old face dials). Rerun step 5, then look at her again (step 6).
 7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
    NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
    the control, rerun with `--race-head` and look again.
