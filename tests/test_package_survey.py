@@ -46,7 +46,10 @@ class PackageTests(unittest.TestCase):
                   [("Procedure", "Sandbox")])
         q = packages.parse_pack(list(_subs(sf)), starfield=True)
         self.assertEqual(q["inputs"][0]["value"]["radius"], 2.5)
-        self.assertEqual(q["procedures"], [{"branch": "Procedure", "procedure": "Sandbox"}])
+        self.assertEqual(q["procedures"], [{"branch": "Procedure", "procedure": "Sandbox", "inputs": []}])
+        # PKC2 after a branch: the inputs it uses
+        r = packages.parse_pack(list(_subs(sf)) + [(b"PKC2", b"\x02")], starfield=True)
+        self.assertEqual(r["procedures"][0]["inputs"], [2])
 
     def test_survey(self):
         with tempfile.TemporaryDirectory() as d:
