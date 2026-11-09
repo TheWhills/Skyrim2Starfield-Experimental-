@@ -102,3 +102,7 @@ Markers: the Skyrim NIF's (x / y / heading, z 0), except the marker-only hammer 
 A station whose NIF has no marker stays a static (reported). To see in game: NPCs using the pots; what E on a pot /
 alchemy lab opens (the copies keep the Starfield workbench data: likely Starfield's cooking / chem menus with
 Starfield's recipes; Skyrim recipes are a later step).
+Owner, 2026-11-09 (in game): the Sleeping Giant's alchemy lab shows "Pharmaceutical Lab", Use (E); pressing E does
+nothing, no animation. Orgnar works behind the bar (bartender marker). Open: record (copy without VMAD / workbench
+data) vs model / markers (Skyrim's one marker, wall-side table) vs reach; console A/B queued: vanilla WorkbenchChem
+placed in the inn, and our copy placed on open floor.
