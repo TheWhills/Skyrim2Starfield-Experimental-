@@ -13,9 +13,14 @@ How it works (verified from the source and the DLL strings):
   forge ...), weather refilling and firming it over game hours; snow is raised and trenched, other surfaces pressed.
 * Per landscape texture a surface profile (Surfaces.ini, one folder per mod, patches last): depth, radius, rim,
   decay, clearance, type (snow, ash, sand, mud ...), keyed by texture file name.
-* The Fallout 4 build (DLL only, no source) adds what a deferred renderer needs: G-buffer outputs, the sun's shadow
-  maps displaced too, grass pushed down with the ground. Fallout 4 and Starfield both draw terrain into a G-buffer, so
-  that build is the closer model for Starfield's renderer; the Skyrim source is what can be read.
+* The Fallout 4 port (source too, owner upload 2026-11-09: CommonLibF4, still D3D11, about 19,100 lines, GPL-3.0-only)
+  adds what a deferred renderer needs: it hooks the world's G-buffer pass (DrawWorld::DeferredPrePass), keeps near
+  terrain out of the depth pre-pass so displaced depth is not culled by flat depth, displaces the sun's shadow maps,
+  pushes grass down with the ground, and adds ground decals, indoor prints, snow on objects and a winter look. Every
+  engine address sits in one table (Offsets.h, per runtime, from a PDB-named Ghidra project) and engine layouts in
+  GameLayouts.h, with in-game test scripts (tools/ingame). Fallout 4 and Starfield both draw terrain into a G-buffer,
+  so this port is the template for a Starfield one: its renderer-side structure carries over, the D3D11 calls become
+  D3D12 and the offsets / layouts are Starfield's.
 
 For Starfield (supported plan, not started):
 * Not convertible: it is renderer code tied to Skyrim's D3D11 renderer and engine offsets. Starfield is D3D12 with a
