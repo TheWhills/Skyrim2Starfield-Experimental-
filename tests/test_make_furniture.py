@@ -88,7 +88,7 @@ class MakeFurnitureTests(unittest.TestCase):
             self.assertEqual(ch["markers"][1]["entry"], ["Front"])
             ln = b["000021:Skyrim.esm"]
             self.assertEqual((ln["kind"], ln["template_edid"], ln["model"], ln["markers"]),
-                             ("lean_counter", "NPCRailLeanHands", None, []))
+                             ("bartender", "NPCBartender_Standing", None, []))
             self.assertEqual((b["000030:Skyrim.esm"]["kind"], b["000030:Skyrim.esm"]["template_edid"]),
                              ("sweep", "NPCSweeping"))
             self.assertNotIn("000022:Skyrim.esm", b)                  # crafting station: left as it is
@@ -109,6 +109,9 @@ class MakeFurnitureTests(unittest.TestCase):
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "FarmTableBench01", "keywords": ["IsTable"],
                                     "entry_points": [{"type": "Sit"}]}), "bench")
         self.assertIsNone(M.kind_of({"type": "FURN", "edid": "MQ203_EsbernTable", "keywords": []}))
+        self.assertEqual(M.kind_of({"type": "FURN", "edid": "CounterLeanMarker", "keywords": ["FurnitureCounterLeanMarker"]}),
+                         "lean_counter")
+        self.assertEqual(M.kind_of({"type": "FURN", "edid": "LeanTableMarker", "keywords": ["isLeanTable"]}), "lean_table")
         self.assertEqual(M.kind_of({"type": "IDLM", "edid": "X", "animations": ["IdleOffsetArmsCrossedStart"]}), "arms_crossed")
         self.assertEqual(M.kind_of({"type": "IDLM", "edid": "X", "animations": ["IdleSomething"]}), "stand")
 

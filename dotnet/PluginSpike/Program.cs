@@ -583,7 +583,16 @@ FormKey? FurnitureBase(string key)
     if (b.GetProperty("model").ValueKind == JsonValueKind.String)
     {
         var src = "meshes\\" + b.GetProperty("model").GetString()!.TrimStart('\\');
-        if (itemBySource.TryGetValue(src, out var it)) { f.Model = new Model { File = it.model }; modelNote = it.model; }
+        if (itemBySource.TryGetValue(src, out var it))
+        {
+            f.Model = new Model { File = it.model };
+            modelNote = it.model;
+            // the marker-only templates (NPCInvChairSit_Free, NPCInvBenchSit) carry the record flag Is Marker (0x800000), and
+            // the game does not draw markers: owner 2026-11-08, the benches were missing. Bounds as our statics (none) instead
+            // of the invisible marker's.
+            f.MajorRecordFlagsRaw &= ~0x800000;
+            f.ObjectBounds = new ObjectBounds();
+        }
         else modelNote = $"template's model ({src} not converted)";
     }
     var ms = b.GetProperty("markers");

@@ -52,3 +52,16 @@ furniture keeps our converted model; markers from the Skyrim NIF (x / y in metre
 and invisible model. Crafting stations and quest furniture stay statics. The furniture reference replaces the static of
 the same Skyrim reference; one an NPC package names is persistent. Unverified in game: seat / bed height, the lean
 stand-off, rotation sign of SNAM (Mutagen exposes degrees).
+
+## First in-game look (owner, 2026-11-08)
+- Benches on the inn's tables missing. Cause (verified from the survey: record flags 10802010 on NPCInvBenchSit /
+  NPCInvChairSit_Free): the copied marker-only templates keep the record flag Is Marker (0x800000), and markers are not
+  drawn. Fixed: cleared (and the marker's bounds dropped) when our model replaces the template's.
+- Orgnar leaned with the rail-lean animation at the counter's end, hands on the lower shelf. Starfield has bar furniture:
+  NPCBartender_Standing (AnimFurnBartender) and NPCLeaningBartopFront / Back / Left / Right (AnimFurnLeaningBartop*),
+  NPCDeskLean (AnimFurnDeskLean), all marker at the origin like Skyrim's. Now: isBarCounter -> bartender,
+  FurnitureCounterLeanMarker -> bartop front, isLeanTable -> desk lean.
+- `set gamehour to 2` is not a Starfield console variable (Unknown variable 'gamehour'); waiting needs a seat or bed.
+Open question (owner): put Skyrim's own furniture animations through the animation converter. Use Starfield's where a
+close one exists (sit, bench, bed, bartender, bartop lean, sweep); convert the Skyrim-only ones (stirring the cook pot,
+alchemy / enchanting, hammer at the anvil, warming hands, eating at the table) when positions and heights are right.

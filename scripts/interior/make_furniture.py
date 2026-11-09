@@ -42,7 +42,11 @@ TEMPLATES = {
     "chair": ("0005B0A6", "NPCInvChairSit_Free"),                  # AnimFurnChair, AnimFurnAllowEating; marker-only
     "bench": ("000858F1", "NPCInvBenchSit"),                       # AnimFurnBench (66 uses); marker-only
     "bed": ("001FEE01", "FoundCanvasCot01"),                       # AnimFurnBed, IsSleepFurniture (100 uses)
-    "lean_counter": ("001AE51A", "NPCRailLeanHands"),              # AnimFurnRailLeanHands (260 uses)
+    # bar counters (owner 2026-11-08: the rail lean put Orgnar's hands on the counter's lower shelf, off the bar):
+    # Starfield's own bar furniture, marker at the origin like Skyrim's
+    "bartender": ("0025ECE1", "NPCBartender_Standing"),            # AnimFurnBartender, behind the bar (69 uses)
+    "lean_counter": ("0005151F", "NPCLeaningBartopFront"),         # AnimFurnLeaningBartopFront, a patron (57 uses)
+    "lean_table": ("0002C326", "NPCDeskLean"),                     # AnimFurnDeskLean (71 uses)
     "hammer": ("0000A4B0", "NPCRepair_ToolStanding_Hammer"),       # AnimFurnRepair_Tool_HammerStanding
     "sweep": ("00190D67", "NPCSweeping"),                          # AnimFurnStanding_Sweep (326 uses)
     "arms_crossed": ("0003A05E", "NPCStanding_AnimFlavorArmsCrossedCasual"),
@@ -50,7 +54,7 @@ TEMPLATES = {
     "arms_front": ("003E9211", "NPCStanding_AnimFlavorArmsFrontCasual"),
     "stand": ("0021FE54", "NPCStanding"),                          # AnimFurnStanding (787 uses)
 }
-SPECIAL = {"lean_counter", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand"}
+SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand"}
 # Skyrim idle-marker animations (IDLE EditorIDs, lower case) -> kind
 IDLE_KINDS = [("sweep", "sweep"), ("armscrossed", "arms_crossed"), ("examine", "browse"), ("study", "browse"),
               ("warmhands", "arms_front")]
@@ -66,8 +70,12 @@ def kind_of(rec):
     if re.match(r"MQ\d", edid):
         return None                                            # quest furniture
     kw = {k.lower() for k in rec.get("keywords") or []}
-    if kw & {"furniturecounterleanmarker", "isbarcounter", "isleantable"}:
+    if "isbarcounter" in kw:
+        return "bartender"
+    if "furniturecounterleanmarker" in kw:
         return "lean_counter"
+    if "isleantable" in kw:
+        return "lean_table"
     if "ishammertable" in kw:
         return "hammer"
     if kw & {"craftingcookpot", "issmallcookingpot", "wicraftingalchemy", "wicraftingenchanting", "isalchemy",
