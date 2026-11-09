@@ -106,3 +106,7 @@ Owner, 2026-11-09 (in game): the Sleeping Giant's alchemy lab shows "Pharmaceuti
 nothing, no animation. Orgnar works behind the bar (bartender marker). Open: record (copy without VMAD / workbench
 data) vs model / markers (Skyrim's one marker, wall-side table) vs reach; console A/B queued: vanilla WorkbenchChem
 placed in the inn, and our copy placed on open floor.
+A/B result (owner, same day): Starfield's own WorkbenchChem (player.placeatme 2B6A61) on the inn's open floor also
+does nothing on E, while chairs, benches and beds there work for the player (2026-11-08). So not our copy, model or
+markers: workbenches in this session (verified), cause open (the cell vs the character started by coc from the main
+menu). Next A/B: the same placeatme in a vanilla cell, then from a normal save.
