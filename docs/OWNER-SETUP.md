@@ -80,6 +80,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Orgnar still at the bar. New in this build: cooking pots, the alchemy lab and the enchanter are Starfield
    crafting furniture: does anyone cook at a pot, and what does E on a pot / the alchemy lab open? (If it breaks
    something, rebuild with `-NoCrafting`.) Screenshots.
+6b. A: Delphine's shoulders (owner 2026-11-09: Embry's outfit good; Delphine's dress still shows skin through the
+   stitched patches on both shoulders with the same body as Ysolda). Read-only, Skyrim side:
+   ```powershell
+   python -I scripts\armor\outfit_probe.py --skyrim-data "$sky" --npc Delphine --npc Ysolda --out C:\Modding\work\outfits
+   ```
+   Send outfit_probe.json (and the printed lines). It shows whether the two wear the same mesh / texture and how much
+   of each diffuse's alpha is under Skyrim's alpha-test threshold at the shoulders.
 7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
    NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
    the control, rerun with `--race-head` and look again.

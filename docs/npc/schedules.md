@@ -124,6 +124,12 @@ weight sliders. face_fit now gives every test NPC the body (MWGT, MRSV) of Charg
 ChargenPresetFemale04 (female), the bodies the outfits were checked on (--body-npc to choose, 'none' for the
 template's). In game unverified.
 
+Second look (owner, 2026-11-09, after the fixed body): Embry's outfit good. Delphine's dress still shows skin on both
+shoulders, now with the same body (MWGT of ChargenPresetFemale04) as Ysolda, so the body is ruled out (verified,
+faces.json). The bare areas follow the stitched patches of the texture, not the body's shape: reading (supported, not
+verified): the diffuse alpha is low in those patches and our material keeps Skyrim's alpha test, or Delphine's outfit
+is a different mesh / texture variant than Ysolda's. scripts/armor/outfit_probe.py measures both (queue step 6b).
+
 ## Readiness across the batch (2026-11-09; offline checks only)
 scripts/npc/schedule_readiness.py runs make_schedule's own package conversion as a dry run for every NPC placed in
 the batch's cells: per NPC the packages converted or left out and why (conditions / quest-owned, a location outside
