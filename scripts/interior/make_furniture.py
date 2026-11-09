@@ -17,7 +17,11 @@ furniture of the same kind: its keywords / flags / entry sides, our model, and p
 Markers: chairs, benches, beds ("regular") take the Skyrim marker's x / y (units / 70) and heading, z 0 (--marker-z
 skyrim keeps Skyrim's seat height instead); Skyrim's special markers (lean counters, the hammer table, idle markers),
 whose own animation does the stand-off, take the Starfield template's offsets as they are. Crafting stations
-(cooking pot, alchemy, enchanting) and quest furniture stay statics for now.
+(2026-11-09, CRAFTING; --no-crafting keeps them statics): Skyrim's cooking pots become a copy of Starfield's
+invisible galley workbench (AnimFurnGalleyWorkbench + WorkbenchCookingKeyword, so E may open Starfield's cooking menu)
+with the pot's model, alchemy labs the chem bench, the enchanter / forge / smelter the industrial bench (no script; the
+research bench has one), the grindstone the weapon bench, the armor table the armor bench, the anvil the hammering
+marker, the tanning rack the wall-wipe marker. Markers from the Skyrim NIF as for chairs. Quest furniture stays.
 Entry sides: Skyrim's (FNPR / NIF entry points minus the record's disabled ones; Behind -> Rear, Up -> Other), else the
 template's. References a converted NPC's package names (actors.json "near_reference") are made persistent.
 """
@@ -55,15 +59,43 @@ TEMPLATES = {
     "browse": ("003E921A", "NPCStanding_AnimFlavorWindowShopping"),
     "arms_front": ("003E9211", "NPCStanding_AnimFlavorArmsFrontCasual"),
     "stand": ("0021FE54", "NPCStanding"),                          # AnimFurnStanding (787 uses)
+    # crafting stations (owner's survey 2026-11-08; Starfield keywords in the comments)
+    "cook": ("000EFC6F", "Invisible_GalleyWorkbench01"),           # AnimFurnGalleyWorkbench, WorkbenchCookingKeyword
+    "alchemy": ("002B6A61", "WorkbenchChem"),                      # AnimFurnPharmaWorkbench, chem lab recipes
+    "workbench": ("001F50AD", "WorkbenchIndustrial"),              # AnimFurnIndustrialWorkbench (enchanter, forge,
+                                                                   # smelter); WorkbenchResearch has a script
+    "weapon_bench": ("002B6A63", "WorkbenchWeapon"),               # AnimFurnWeaponWorkbench (grindstone)
+    "armor_bench": ("002B6A62", "WorkbenchArmor"),                 # AnimFurnArmorWorkbench (armor table)
+    "scrape": ("0003C420", "NPCStanding_WipeWall"),                # AnimFurnStanding_WipeWall (tanning rack)
 }
-SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand"}
+SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
+           "scrape"}
+# Skyrim crafting stations: keyword (lower case) or EditorID part -> kind
+CRAFTING = [(("craftingcookpot", "issmallcookingpot", "cookingspit", "cookingpot"), "cook"),
+            (("isalchemy", "wicraftingalchemy", "craftingalchemy"), "alchemy"),
+            (("isenchanting", "wicraftingenchanting", "craftingenchanting"), "workbench"),
+            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "weapon_bench"),
+            (("craftingsmithingarmortable", "armortable"), "armor_bench"),
+            (("craftingtanningrack", "tanningrack"), "scrape"),
+            (("craftingsmithinganvil", "anvil"), "hammer"),
+            (("craftingsmithingforge", "craftingsmelter", "forge", "smelter"), "workbench")]
 # Skyrim idle-marker animations (IDLE EditorIDs, lower case) -> kind
 IDLE_KINDS = [("sweep", "sweep"), ("armscrossed", "arms_crossed"), ("examine", "browse"), ("study", "browse"),
               ("warmhands", "arms_front")]
 SIDES = {"Front": "Front", "Behind": "Rear", "Right": "Right", "Left": "Left", "Up": "Other"}
 
 
-def kind_of(rec):
+def crafting_kind(rec):
+    """The kind of a Skyrim crafting station (CRAFTING: by keyword, else by a part of its EditorID), or None."""
+    kw = {k.lower() for k in rec.get("keywords") or []}
+    edid = (rec.get("edid") or "").lower()
+    for keys, kind in CRAFTING:
+        if kw & set(keys) or any(k in edid for k in keys):
+            return kind
+    return None
+
+
+def kind_of(rec, crafting=True):
     """Which Starfield template a Skyrim FURN / IDLM becomes; None = left as it is (a static, or nothing)."""
     edid = rec.get("edid") or ""
     if rec["type"] == "IDLM":
@@ -80,9 +112,9 @@ def kind_of(rec):
         return "lean_table"
     if "ishammertable" in kw:
         return "hammer"
-    if kw & {"craftingcookpot", "issmallcookingpot", "wicraftingalchemy", "wicraftingenchanting", "isalchemy",
-             "isenchanting"}:
-        return None             # crafting stations: their Skyrim animation stands off the model; no Starfield match yet
+    craft = crafting_kind(rec)
+    if craft is not None or (rec.get("bench_type") or 0) > 0:
+        return craft if crafting else None      # --no-crafting: crafting stations stay statics
     anims = {m.get("anim") for m in rec.get("nif_markers") or [] if isinstance(m, dict)}
     anims |= {e["type"] for e in rec.get("entry_points") or []}
     if "Sleep" in anims or "Has Sleep Marker" in (rec.get("mnam") or {}).get("flags", []):
@@ -142,7 +174,7 @@ def parse_shift(items):
     return out
 
 
-def build(ix, cells, archives, marker_z="floor", targets=(), shift=None):
+def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True):
     cell_ids = {}
     for c in cells:
         f = ix.find_edid(b"CELL", c)
@@ -175,7 +207,7 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None):
                      "persistent": key in targets})
     bases, skipped = {}, []
     for b, rec in base_recs.items():
-        kind = kind_of(rec)
+        kind = kind_of(rec, crafting)
         key = skyrimrefs.formkey(b, "Skyrim.esm")
         if kind is None:
             skipped.append(f"{rec['edid']}: no Starfield furniture for it (left as a static)")
@@ -204,6 +236,8 @@ def main(argv=None):
     ap.add_argument("--shift", action="append", default=[], metavar="KIND=DX,DY,DZ",
                     help="move every marker of a kind, metres in the furniture's frame (+y forward), e.g. "
                          "bartender=0,0.2,0 (furniture_standoff.py measures how far)")
+    ap.add_argument("--no-crafting", action="store_true",
+                    help="leave crafting stations (cooking pots, alchemy, enchanting, smithing) as statics")
     a = ap.parse_args(argv)
     try:
         shift = parse_shift(a.shift)
@@ -216,7 +250,7 @@ def main(argv=None):
     archives = bsa.SkyrimArchives(a.skyrim_data)
     ix = packages.Index(a.skyrim)
     try:
-        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift)
+        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting)
     finally:
         ix.close()
     path = os.path.join(a.work, "furniture.json")

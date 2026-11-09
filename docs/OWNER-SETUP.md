@@ -79,7 +79,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
    ```
 6. C: in game: Embry's shirt shows, Delphine's dress does not clip at the shoulders, the faces (compare with Skyrim),
-   Orgnar still at the bar. Screenshots.
+   Orgnar still at the bar. New in this build: cooking pots, the alchemy lab and the enchanter are Starfield
+   crafting furniture: does anyone cook at a pot, and what does E on a pot / the alchemy lab open? (If it breaks
+   something, rebuild with `-NoCrafting`.) Screenshots.
 7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
    NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
    the control, rerun with `--race-head` and look again.

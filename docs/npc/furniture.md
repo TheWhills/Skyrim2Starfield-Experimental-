@@ -84,3 +84,21 @@ lean_counter markers 0.30 m forward.
 Verified in game (owner, 2026-11-08, after the shift and the real chair / bench templates): Orgnar on the bar; the player
 can sit on chairs and benches and use the beds.
 With -Furniture, riverwood_doors.ps1 passes make_schedule --keep-furniture-only: Skyrim's Allow Wandering kept (Orgnar's is off).
+
+## Crafting stations (2026-11-09; offline checks only)
+Riverwood's interiors hold 5 cooking pots (Sven's, Faendal's, the Trader, ...), an alchemy lab and an enchanter (the
+Sleeping Giant; owner's furniture survey). make_furniture now turns crafting stations into Starfield furniture
+(--no-crafting / riverwood_doors.ps1 -NoCrafting keeps the old statics):
+| Skyrim | Starfield template | animation keyword |
+|---|---|---|
+| cooking pot / spit | Invisible_GalleyWorkbench01 000EFC6F (marker-only; our pot as its model) | AnimFurnGalleyWorkbench, WorkbenchCookingKeyword |
+| alchemy lab | WorkbenchChem 002B6A61 | AnimFurnPharmaWorkbench |
+| enchanter, forge, smelter | WorkbenchIndustrial 001F50AD (no script; WorkbenchResearch has one) | AnimFurnIndustrialWorkbench |
+| grindstone | WorkbenchWeapon 002B6A63 | AnimFurnWeaponWorkbench |
+| armor table | WorkbenchArmor 002B6A62 | AnimFurnArmorWorkbench |
+| anvil | NPCRepair_ToolStanding_Hammer 0000A4B0 (as the hammer table) | AnimFurnRepair_Tool_HammerStanding |
+| tanning rack | NPCStanding_WipeWall 0003C420 (marker-only) | AnimFurnStanding_WipeWall |
+Markers: the Skyrim NIF's (x / y / heading, z 0), except the marker-only hammer / wall-wipe, which keep the template's.
+A station whose NIF has no marker stays a static (reported). To see in game: NPCs using the pots; what E on a pot /
+alchemy lab opens (the copies keep the Starfield workbench data: likely Starfield's cooking / chem menus with
+Starfield's recipes; Skyrim recipes are a later step).

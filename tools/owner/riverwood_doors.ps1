@@ -23,6 +23,7 @@ param(
     [switch]$Furniture,        # chairs / benches / beds / lean counters / idle markers as Starfield furniture NPCs use
     [ValidateSet("floor", "skyrim")][string]$MarkerZ = "floor",   # furniture marker height (docs/npc/furniture.md)
     [string[]]$FurnShift = @(),   # move a furniture kind's markers, e.g. -FurnShift "bartender=0,0.2,0"
+    [switch]$NoCrafting,       # with -Furniture: leave crafting stations (cooking pots, alchemy, smithing) as statics
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json"
 )
 $ErrorActionPreference = "Stop"
@@ -83,6 +84,7 @@ if ($Furniture) {
     $fa = @("--skyrim", "$SKY\Skyrim.esm", "--skyrim-data", $SKY, "--work", $Work, "--marker-z", $MarkerZ)
     # several kinds: separate with ";" ("bartender=0,0.2,0;lean_counter=0,0.1,0")
     foreach ($sh in ($FurnShift -join ";").Split(";")) { if ($sh.Trim()) { $fa += @("--shift", $sh.Trim()) } }
+    if ($NoCrafting) { $fa += @("--no-crafting") }
     python -I scripts\interior\make_furniture.py @fa
     if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }
 }
