@@ -16,6 +16,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "npc"))
 import mouth_probe as M  # noqa: E402
+M_ = M
+from fo4sf import facefit  # noqa: E402
 
 
 def sphere(n=24, m=12, r=1.0):
@@ -111,7 +113,8 @@ class MainTests(unittest.TestCase):
         sys.modules["race_probe"] = fake_rp
         M.race_heads_archives = lambda d: None
         M.skyrim_mesh = lambda data: (mouth, mt, mouth, np.eye(4))
-        M.sf_teeth = lambda sf, female, ff, hp: (mv + (0, 0.8, 0), tw, mt, "meshes/teeth.nif")
+        M.sf_teeth = lambda sf, female, ff, hp, node=None, head_pts=None: (
+            mv + (0, 0.8, 0), tw, mt, "meshes/teeth.nif", {"matrix": np.eye(4), "report": {"used": "stub"}})
         face_fit.hkx_to_af.read_any = lambda p, sky: b"x"
         M.skyrimtri.parse = lambda d, deltas=False: tri
         try:
@@ -188,6 +191,52 @@ class ModelSpaceTests(unittest.TestCase):
             rep = M.teeth_morphs(sf, False, ff, teeth)
         self.assertEqual(seen, ["meshes/morphs/teeth/perf/morph.dat"])
         keys = rep["folders"]["TMPP"]["per_key"]
-        self.assertEqual(keys["JawOpen"], {"vertices": 2, "lower_mean_drop_m": 0.01})
+        self.assertEqual(keys["JawOpen"], {"vertices": 2, "lower_mean_drop_m": 0.01,
+                                           "lower_mean_delta_m": [0.0, 0.0, -0.01]})
         self.assertEqual(rep["MRPH"], "MORPH_Teeth")
         self.assertIn("error", M.teeth_morphs(os.path.join(d, "nope"), False, ff))
+
+    def test_teeth_placed_through_the_c_head_binds(self):
+        """2026-11-09 owner run: Starfield's teeth 1.6 m below the mouths. Their .mesh is in C_Head's frame (x up);
+        the head's node takes the head to model space, and the two C_Head binds relate the teeth to the head."""
+        R = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]], float)        # C_Head frame x up -> model z up
+        H = np.eye(4)
+        H[:3, :3], H[:3, 3] = R, (0, 0, 1.6)
+        head_local = np.array([[x, y, z] for x in (-0.12, 0.12) for y in (-0.1, 0.1) for z in (-0.1, 0.1)])
+        head_model = facefit.apply4(H, head_local)
+        bind = lambda t: ((0, 0, 0, 0.2), (1, 0, 0, 0, 1, 0, 0, 0, 1), t, 1.0)       # noqa: E731
+        skin = lambda t: {"bones": [b"C_Head"], "binds": [bind(t)]}                    # noqa: E731
+        teeth_local = np.array([[-0.5, 0.05, 0.0], [-0.52, 0.06, 0.01]])  # 0.5 m off in its own mesh frame
+        M, rep = M_.teeth_placement(teeth_local, H, skin((0, 0, 0)), skin((0.45, 0, 0)), head_model, np.eye(4))
+        self.assertEqual(rep["used"], "C_Head binds + head node")
+        got = facefit.apply4(M, teeth_local)
+        self.assertTrue(np.allclose(got, facefit.apply4(H, teeth_local + (0.45, 0, 0))))
+        self.assertFalse(rep["candidates"]["head node"]["inside_head_box"])
+        self.assertFalse(rep["candidates"]["teeth node"]["inside_head_box"])
+        M2, rep2 = M_.teeth_placement(teeth_local + (0.45, 0, 0), H, {}, {}, head_model)   # no binds: the head node
+        self.assertEqual(rep2["used"], "head node")
+        self.assertTrue(np.allclose(M2, H))
+
+    def test_teeth_morph_deltas_turned_into_model_space(self):
+        """jawOpen moves the lower teeth along C_Head's x (up in its frame): reported as a drop once turned."""
+        from fo4sf import sfmorph, sfplugin
+        hdr = lambda t: __import__("struct").pack("<4sIII", t, 0, 0, 0) + bytes(8)      # noqa: E731
+        tcmp = __import__("struct").pack("<H", 26) + b"Meshes\\Morphs\\Teeth\\Perf" + b"\0"
+        with tempfile.TemporaryDirectory() as d:
+            sf = os.path.join(d, "Data")
+            os.makedirs(sf)
+            with open(os.path.join(sf, "Starfield.esm"), "wb") as fh:
+                fh.write(sfplugin.build([
+                    (b"MRPH", hdr(b"MRPH"), [(b"EDID", sfplugin.zs("MORPH_Teeth")), (b"TMPP", tcmp)], 0x5000),
+                    (b"HDPT", hdr(b"HDPT"), [(b"EDID", sfplugin.zs(M_.SF_TEETH_PART[False])),
+                                             (b"MNAM", (0x5000).to_bytes(4, "little"))], 0x5001)],
+                    {"hedr_version": 0.96, "form_version": 555}))
+            teeth = np.array([[0, 0, 1.70], [0.01, 0, 1.70], [0, 0, 1.66], [0.01, 0, 1.66]])
+            md = sfmorph.build(4, ["jawOpen"], {"jawOpen": {2: (-0.01, 0, 0), 3: (-0.01, 0, 0)}})
+            ff = types.SimpleNamespace(hkx_to_af=types.SimpleNamespace(vanilla_file=lambda rel, data: (md, rel)))
+            T = np.eye(4)
+            T[:3, :3], T[:3, 3] = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]], float), (0, 0, 1.6)
+            raw = M_.teeth_morphs(sf, False, ff, teeth)
+            turned = M_.teeth_morphs(sf, False, ff, teeth, T)
+        self.assertEqual(raw["folders"]["TMPP"]["per_key"]["jawOpen"]["lower_mean_drop_m"], 0.0)
+        self.assertEqual(turned["folders"]["TMPP"]["per_key"]["jawOpen"]["lower_mean_drop_m"], 0.01)

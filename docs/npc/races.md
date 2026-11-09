@@ -254,3 +254,12 @@ why the mod needs no clothes of its own.
 * **Beast probe:** the same bone-space fault put the eye landmarks (and the whole male Argonian head) 120 units
   low, so the male Argonian warp failed (median 128 units); fixed with the head / eye model matrix above. Khajiit
   jaw weights already separated (moving 0.29 / 0.22 vs still 0.01 / 0.002). Rerun needed.
+* **Rerun, same evening.** Beast probe fixed: Argonian male warp median ~0.9 units (was 128); Khajiit jaw moving
+  0.31 / 0.28 vs still 0.02; Argonian jaw weaker (0.088 / 0.035 vs 0.013 / 0.024). Mouth probe: the Skyrim mouths
+  now sit right (orc mouth vs head surface difference p95 3.9 cm, was 9.9 cm) but Starfield's teeth stayed 1.58 m
+  off: the teeth's own node was the wrong fix. Their .mesh is in C_Head's frame (x up) and the probe placed only the
+  head through the head's node. Now teeth -> head mesh through the two C_Head binds (inv(B_head) B_teeth), then the
+  head's node (mouth_probe.teeth_placement; candidates reported, the first inside the head's box used). The teeth
+  morph deltas are in the same frame: jawLeft / jawRight showed on z and jawOpen ~0, so the drops are now measured
+  after that rotation. Rerun needed.
+

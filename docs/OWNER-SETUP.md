@@ -63,29 +63,12 @@ Starfield must be closed while a script writes into the mods folders.
 Each step says what to send back. A: read-only, Starfield may stay open; B: builds, Starfield closed; C: in game.
 
 1. `git pull`
-2. A: race probe (checks the new head transfer): command under "Race probe" below. Send race_probe.json and screenshots of
-   race_view.html (Orc, High Elf, Imperial). Expect: no scalp cracks, no strip behind the ears, the orc's open
-   underbite.
-3. A: mouth probe and beast probe (commands below). Send mouth_probe.json, beast_probe.json and screenshots of
-   mouth_view.html (orc, heads off) and beast_view.html (a Khajiit's jaw-weight column).
-3b. A: which Riverwood NPCs can get their schedules now (every NPC placed in the batch's interiors, each package
-   converted or why not, the furniture they use):
-   ```powershell
-   python -I scripts\npc\schedule_readiness.py --skyrim "$sky\Skyrim.esm" --starfield "$sf\Data\Starfield.esm" --work C:\Modding\work\s2s\riverwood_doors --faces "$face\faces.json" --out C:\Modding\work\packages
-   ```
-   Send readiness.md.
-3c. A: magic survey (Skyrim's spells against Starfield's powers; docs/magic/README.md):
-   ```powershell
-   python -I scripts\magic\magic_survey.py --skyrim "$sky\Skyrim.esm" --starfield "$sf\Data\Starfield.esm" --out C:\Modding\work\magic
-   ```
-   Send magic_survey.md (and magic_survey.json).
-3d. A: fire survey (how Skyrim builds candles / hearths / their light in the converted interiors, and what Starfield
-   can draw; docs/interior/skyrim-interiors.md "Fires and candles"):
-   ```powershell
-   python -I scripts\interior\fire_survey.py --skyrim "$sky\Skyrim.esm" --skyrim-data "$sky" --starfield $sf --work C:\Modding\work\s2s\riverwood_doors --out C:\Modding\work\fire
-   ```
-   Send fire_survey.md and fire_survey.json (a minute or two: it counts placements over all of Skyrim.esm;
-   `--no-global` skips that).
+2. Done 2026-11-09: race probe (good), beast probe (fixed), readiness, magic and fire surveys (docs/npc/races.md,
+   "Owner's run of the probes").
+3. A: mouth probe only (the teeth are now placed through their C_Head bind): command under "Mouth probe" below.
+   Send mouth_probe.json and a screenshot of mouth_view.html (orc, heads off). Expect `nearest_tooth_m_median` in
+   millimetres to a couple of centimetres (was 1.58 m) and `starfield_teeth.placement.used` naming the C_Head binds;
+   jawOpen in `morphs` should now show a lower_mean_drop_m above zero. Can run alongside steps 4-6.
 4. B: Embry's outfit, then the faces of all seven test NPCs (the head transfer changed, so every face changes):
    ```powershell
    python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Embry --name Embry_outfit --out $armor --add --debug-dir C:\Modding\work\debug_embry

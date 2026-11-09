@@ -188,9 +188,62 @@ onresize=()=>{cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();r.s
 
 
 # ------------------------------------------------------------------------------------------------------- main
-def sf_teeth(sf_data, female, face_fit, hair_pack):
-    """(points model space, weights [(bone, w)], triangles, model path) of the race's vanilla teeth head part."""
-    from fo4sf import sfplugin
+def bind_matrix(bind, transpose=False):
+    """4x4 of a Starfield skin bind (sphere, rot 9, trans 3, scale): mesh point -> bone space, s R v + t (transpose:
+    the 9 floats read column-major, facefit._bind_pivot_frame's other convention)."""
+    _sphere, rot, trans, scale = bind
+    R = np.array(rot, float).reshape(3, 3)
+    m = np.eye(4)
+    m[:3, :3] = (R.T if transpose else R) * (float(scale) or 1.0)
+    m[:3, 3] = trans
+    return m
+
+
+def _bone_bind(skin, name):
+    bones = [b.decode("latin-1") if isinstance(b, bytes) else b for b in skin.get("bones", [])]
+    binds = skin.get("binds", [])
+    i = next((k for k, b in enumerate(bones) if b.lower() == name.lower()), None)
+    return binds[i] if i is not None and i < len(binds) else None
+
+
+def teeth_placement(teeth_local, head_node, head_skin, teeth_skin, head_model_pts, own_node=None):
+    """(4x4 teeth mesh -> the head's model space, report). 2026-11-09 owner run: the teeth came out 1.6 m below the
+    mouths: their .mesh is in C_Head's frame (weighted to C_Head only) and the probe placed only the head through its
+    node. Both meshes skin to C_Head, so a teeth point v sits on the head's mesh at inv(B_head) B_teeth v (B: the
+    C_Head bind, mesh -> bone), then the head's node takes it to model space. Candidates in that order (both bind
+    conventions), then the head's node alone, then the teeth's own node; the first whose centroid lies inside the
+    head's box is used; every candidate's centroid offset from the head box centre is reported."""
+    H = np.asarray(head_node if head_node is not None else np.eye(4), float)
+    hp = np.asarray(head_model_pts, float)
+    lo, hi = hp.min(0), hp.max(0)
+    centre = (lo + hi) / 2
+    bh, bt = _bone_bind(head_skin or {}, "C_Head"), _bone_bind(teeth_skin or {}, "C_Head")
+    cands = []
+    if bh is not None and bt is not None:
+        for tr in (False, True):
+            cands.append((f"C_Head binds{' (transposed)' if tr else ''} + head node",
+                          H @ np.linalg.inv(bind_matrix(bh, tr)) @ bind_matrix(bt, tr)))
+    cands.append(("head node", H))
+    if own_node is not None:
+        cands.append(("teeth node", np.asarray(own_node, float)))
+    rep, chosen = {"candidates": {}}, None
+    for name, M in cands:
+        c = facefit.apply4(M, teeth_local).mean(0)
+        inside = bool(np.all(c >= lo) and np.all(c <= hi))
+        rep["candidates"][name] = {"centroid_from_head_centre_m": [round(float(x), 4) for x in c - centre],
+                                   "inside_head_box": inside}
+        if inside and chosen is None:
+            chosen = (name, M)
+    if chosen is None:
+        chosen = cands[0]
+    rep["used"] = chosen[0]
+    return chosen[1], rep
+
+
+def sf_teeth(sf_data, female, face_fit, hair_pack, head_node=None, head_model_pts=None):
+    """(points in the head's model space, weights [(bone, w)], triangles, model path, placement {matrix: mesh ->
+    model, report}) of the race's vanilla teeth head part; head_model_pts: the Starfield head as the probe draws it."""
+    from fo4sf import nif as nifmod, sfnif, sfplugin
     recs = sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])
     part = next((r for r in recs if sfplugin.edid(r[2]) == SF_TEETH_PART[female]), None)
     if part is None:
@@ -205,16 +258,22 @@ def sf_teeth(sf_data, female, face_fit, hair_pack):
     if got is None:
         return None
     pts, _nrm, ws, tris = got
-    node = face_fit.starfield_head_node(raw)        # mesh-local -> model, as the head (2026-11-09: teeth came out
-    if node is not None:                            # 1.6 m below the mouths without it)
-        pts = facefit.apply4(np.asarray(node, float), pts)
-    return pts, ws, np.asarray(tris, int).reshape(-1, 3), rel
+    own = face_fit.starfield_head_node(raw)          # game_mesh_of applied it: undo, back to the .mesh frame
+    local = facefit.apply4(np.linalg.inv(np.asarray(own, float)), pts) if own is not None else np.asarray(pts, float)
+    head_raw, _ = face_fit.hkx_to_af.vanilla_file(face_fit.SF_HEADS[female], sf_data)
+    _paths, head_skin = facefit.starfield_head_parts(head_raw)
+    hp = head_model_pts if head_model_pts is not None else pts
+    M, prep = teeth_placement(local, head_node, head_skin, sfnif.parse_skin(nifmod.parse(raw)), hp, own)
+    return facefit.apply4(M, local), ws, np.asarray(tris, int).reshape(-1, 3), rel, {"matrix": M, "report": prep}
 
 
-def teeth_morphs(sf_data, female, face_fit, teeth_pts=None):
+def teeth_morphs(sf_data, female, face_fit, teeth_pts=None, to_model=None):
     """How Starfield moves its teeth: the teeth head part's morph record (MNAM -> MRPH: TMPP performance and TCMP
     chargen folders) and, per folder that has a morph.dat, its keys with the vertices each moves and, with
-    teeth_pts, the mean drop (-z) of the lower half's moved vertices (a jaw-open key drops them)."""
+    teeth_pts (model space, z up), the mean drop (-z) and mean delta of the lower / upper half's moved vertices (a
+    jaw-open key drops the lower ones). to_model: the teeth's mesh -> model 4x4 (sf_teeth): morph.dat deltas are in
+    the .mesh frame (C_Head's, x up: the owner's run showed jawLeft / jawRight on z and jawOpen ~0) and are turned
+    with its rotation."""
     import re
     from fo4sf import sfmorph, sfplugin
     try:
@@ -237,6 +296,10 @@ def teeth_morphs(sf_data, female, face_fit, teeth_pts=None):
         return max(runs, key=len).decode("latin-1") if runs else ""
     out = {"MRPH": sfplugin.edid(m[2]), "folders": {}}
     lower = None
+    rot = None
+    if to_model is not None:
+        A = np.asarray(to_model, float)[:3, :3]
+        rot = A / (abs(np.linalg.det(A)) ** (1 / 3) or 1.0)         # rotation only: deltas keep their metres
     if teeth_pts is not None:
         z = np.asarray(teeth_pts, float)[:, 2]
         lower = z < np.median(z)
@@ -258,12 +321,15 @@ def teeth_morphs(sf_data, female, face_fit, teeth_pts=None):
             kr = {"vertices": len(d)}
             if lower is not None and d:
                 idx = np.array([i for i in d if i < len(lower)], int)
-                dz = np.array([d[i][2] for i in idx], float)
+                dv = np.array([d[i] for i in idx], float).reshape(-1, 3)
+                if rot is not None:
+                    dv = dv @ rot.T
                 lo = lower[idx]
-                if lo.any():
-                    kr["lower_mean_drop_m"] = round(float(-dz[lo].mean()), 4)
-                if (~lo).any():
-                    kr["upper_mean_drop_m"] = round(float(-dz[~lo].mean()), 4)
+                for side, sel in (("lower", lo), ("upper", ~lo)):
+                    if sel.any():
+                        mean = dv[sel].mean(0)
+                        kr[f"{side}_mean_drop_m"] = round(float(-mean[2]), 4)
+                        kr[f"{side}_mean_delta_m"] = [round(float(x), 4) for x in mean]
             keys[k] = kr
         row.update(vertices=md.num_vertices, keys=len(md.keys), per_key=keys)
         out["folders"][sig.decode()] = row
@@ -296,15 +362,16 @@ def main(argv=None):
         sky_race = next((m for m in races["morphs"] if m["name"] == a.race), None)
         sky_head = to_sf(base + (sky_race["deltas"] if sky_race is not None else 0.0))
         srep = {"alignment_rms_m": trep["alignment"]["rms_m"], "race": a.race, "mouths": {}}
-        teeth = sf_teeth(sf_data, female, face_fit, hair_pack)
+        teeth = sf_teeth(sf_data, female, face_fit, hair_pack, node, sf_head)
         if teeth is not None:
-            tp, tw, tt, trel = teeth
+            tp, tw, tt, trel, tplace = teeth
             tjaw = side_of(tw)
             bones = sorted({b for row in tw for b, _w in row})
             srep["starfield_teeth"] = {"model": trel, "vertices": int(len(tp)), "bones": bones,
                                        "jaw_vertices": int(tjaw.sum()),
                                        "jaw_bones": [b for b in bones if is_jaw_bone(b)],
-                                       "morphs": teeth_morphs(sf_data, female, face_fit, tp)}
+                                       "placement": tplace["report"],
+                                       "morphs": teeth_morphs(sf_data, female, face_fit, tp, tplace["matrix"])}
             print(f"{sex} Starfield teeth: bones {bones}; morphs {json.dumps(srep['starfield_teeth']['morphs'])[:600]}")
         cols = [(f"Skyrim {a.race}", []), (f"Starfield + {a.race}", [])]
         cols[0][1].append((sky_head, races["faces"], 0xa0b8d8, None, True))
