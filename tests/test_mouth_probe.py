@@ -140,3 +140,54 @@ class MainTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelSpaceTests(unittest.TestCase):
+    def test_bone_route_when_the_overall_transform_is_identity(self):
+        """2026-11-09: vanilla eyesmale.nif / maleheadargonian.nif have an identity NiSkinData overall transform with
+        vertices in bone space; the model position is bone world x skin->bone."""
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        import skyrim_fixtures as F
+        from fo4sf import facefit, nif as nifmod, skyrimskin
+        n = F.SseNif()
+        root, head = n.reserve("NiNode"), n.reserve("NiNode")
+        n.node(root, b"NPC Root [Root]", [head])
+        n.node(head, b"NPC Head [Head]", [], t=(0, 0, 120))
+        nf = nifmod.parse(n.bytes())
+        ident = skyrimskin.Bind((1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)
+        shape = types.SimpleNamespace(bones=[b"NPC Head [Head]"], binds=[skyrimskin.Bind((1, 0, 0, 0, 1, 0, 0, 0, 1),
+                                                                                       (0, 0, 2), 1.0)],
+                                      weights=[[(0, 1.0)]], skin_transform=ident)
+        m = facefit.skyrim_model_matrix(nf, shape)
+        self.assertTrue(np.allclose(facefit.apply4(m, np.array([[1.0, 0, 0]])), [[1, 0, 122]]))
+        shape.bones = [b"Missing"]                                        # no node: the overall transform
+        self.assertTrue(np.allclose(facefit.skyrim_model_matrix(nf, shape), np.eye(4)))
+
+    def test_teeth_morphs_report_the_jaw_key(self):
+        from fo4sf import sfmorph, sfplugin
+        hdr = lambda t: __import__("struct").pack("<4sIII", t, 0, 0, 0) + bytes(8)      # noqa: E731
+        tcmp = __import__("struct").pack("<H", 26) + b"Meshes\\Morphs\\Teeth\\Perf" + b"\0"
+        with tempfile.TemporaryDirectory() as d:
+            sf = os.path.join(d, "Data")
+            os.makedirs(sf)
+            with open(os.path.join(sf, "Starfield.esm"), "wb") as fh:
+                fh.write(sfplugin.build([
+                    (b"MRPH", hdr(b"MRPH"), [(b"EDID", sfplugin.zs("MORPH_Teeth")), (b"TMPP", tcmp)], 0x5000),
+                    (b"HDPT", hdr(b"HDPT"), [(b"EDID", sfplugin.zs(M.SF_TEETH_PART[False])),
+                                             (b"MNAM", (0x5000).to_bytes(4, "little"))], 0x5001)],
+                    {"hedr_version": 0.96, "form_version": 555}))
+            teeth = np.array([[0, 0, 1.70], [0.01, 0, 1.70], [0, 0, 1.66], [0.01, 0, 1.66]])
+            md = sfmorph.build(4, ["JawOpen", "Smile"], {"JawOpen": {2: (0, 0, -0.01), 3: (0, 0, -0.01)},
+                                                         "Smile": {0: (0.002, 0, 0)}})
+            seen = []
+
+            def vf(rel, data):
+                seen.append(rel)
+                return md, rel
+            ff = types.SimpleNamespace(hkx_to_af=types.SimpleNamespace(vanilla_file=vf))
+            rep = M.teeth_morphs(sf, False, ff, teeth)
+        self.assertEqual(seen, ["meshes/morphs/teeth/perf/morph.dat"])
+        keys = rep["folders"]["TMPP"]["per_key"]
+        self.assertEqual(keys["JawOpen"], {"vertices": 2, "lower_mean_drop_m": 0.01})
+        self.assertEqual(rep["MRPH"], "MORPH_Teeth")
+        self.assertIn("error", M.teeth_morphs(os.path.join(d, "nope"), False, ff))

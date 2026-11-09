@@ -237,3 +237,20 @@ why the mod needs no clothes of its own.
   test answers it: whether Starfield's animation keeps a non-rig parent node's scale / offset (as Skyrim does). If yes:
   per race a skeleton copy on its RACE (the separate-races design above); if not: an SFSE step re-applying the scales
   after animation. Tails (Khajiit / Argonian) and rotations in helper chains are left out for now.
+
+## Owner's run of the probes, 2026-11-09 evening
+* **Race probe (surface transfer): verified good.** Alignment rms 8.2 / 8.0 mm, correspondence settles in 16 / 18
+  iterations, mouth hole found (12 / 20 vertices). Orc male on Starfield's head (race_view, rendered here): ears,
+  brow, underbite and open jaw all come through. Largest moves where expected: elf / orc ears 3-5.6 cm; outside the
+  region masks at most 3.1 cm (Bosmer / Dunmer / Altmer male, 4-6 % of the total), fine for the region split.
+* **Mouth probe: two frame faults, fixed.** (1) Starfield's teeth came out 1.59 m from the mouths: their .mesh
+  points are in the teeth shape's frame and need its node transform (as the head). (2) Some Skyrim shapes have an
+  identity NiSkinData overall transform while their vertices are in bone space (checked on vanilla eyesmale.nif
+  and maleheadargonian.nif: 120 units low); facefit.skyrim_model_matrix now goes through the most-weighted bone
+  (bone world x skin->bone), equal to the old route on human heads (0.0 difference on malehead.nif). Found too:
+  **Starfield's teeth are weighted to C_Head only** (no jaw bone), so they open with the face through morphs, not
+  bones; the probe now reports the teeth morph record's performance / chargen morph.dat keys and which drop the
+  lower teeth (the jaw keys a Skyrim mouth would need).
+* **Beast probe:** the same bone-space fault put the eye landmarks (and the whole male Argonian head) 120 units
+  low, so the male Argonian warp failed (median 128 units); fixed with the head / eye model matrix above. Khajiit
+  jaw weights already separated (moving 0.29 / 0.22 vs still 0.01 / 0.002). Rerun needed.

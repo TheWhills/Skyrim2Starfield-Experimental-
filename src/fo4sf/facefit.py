@@ -297,6 +297,36 @@ def skin_to_model_matrix(skin_transform) -> np.ndarray:
     return m
 
 
+def skyrim_model_matrix(nif_file, shape) -> np.ndarray:
+    """4x4 skin -> model space of a Skyrim skinned shape, from its most-weighted bone: the bone node's bind-pose
+    world transform in the NIF times that bone's skin -> bone transform (NiSkinData). 2026-11-09 (owner's beast and
+    mouth probes, checked on vanilla eyesmale.nif and maleheadargonian.nif): some shapes' NiSkinData overall transform
+    is the identity while their vertices are not in model space (eyes and the Argonian male head came out 120 units
+    low), and the bone route puts them on the head; for the human heads both routes agree exactly. Falls back to
+    skin_to_model_matrix when the NIF has no node for that bone."""
+    from . import nif as nifmod, skyrimnif
+    if not shape.binds or not shape.bones:
+        return skin_to_model_matrix(shape.skin_transform)
+    tot = np.zeros(len(shape.bones))
+    for vw in shape.weights or []:
+        for b, w in vw:
+            tot[b] += w
+    k = int(tot.argmax())
+    bi = next((i for i in range(len(nif_file.blocks)) if nif_file.type_of(i).endswith("Node")
+               and skyrimnif._name(nif_file, nif_file.blocks[i]) == shape.bones[k]), None)
+    if bi is None:
+        return skin_to_model_matrix(shape.skin_transform)
+    t, r, sc = nifmod.world_transforms(nif_file)(bi)
+    w4 = np.eye(4)
+    w4[:3, :3] = np.array(r, float).reshape(3, 3) * sc
+    w4[:3, 3] = t
+    b = shape.binds[k]
+    b4 = np.eye(4)
+    b4[:3, :3] = np.array(b.rotation, float).reshape(3, 3) * b.scale
+    b4[:3, 3] = b.translation
+    return w4 @ b4
+
+
 def apply4(m: np.ndarray, pts: np.ndarray) -> np.ndarray:
     return np.asarray(pts, float) @ m[:3, :3].T + m[:3, 3]
 

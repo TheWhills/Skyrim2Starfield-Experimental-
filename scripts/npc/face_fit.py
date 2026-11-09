@@ -59,12 +59,12 @@ PLUGIN = "S2SFaceTest.esm"
 def skyrim_head(data: bytes, model: bool = False):
     """The head shape's vertices (Skyrim units): as stored (skin space), or with model=True in model space (its
     NiSkinData overall transform undone: what facefit.align_to_local expects)."""
-    shapes = skyrimskin.skinned_shapes(nifmod.parse(data))
-    s = skyrimnpc.head_shape(shapes)
+    n = nifmod.parse(data)
+    s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(n))
     if s is None:
         return None
     p = np.array(s.positions, float)
-    return facefit.apply4(facefit.skin_to_model_matrix(s.skin_transform), p) if model else p
+    return facefit.apply4(facefit.skyrim_model_matrix(n, s), p) if model else p
 
 
 def skyrim_head_triangles(data: bytes):
@@ -74,9 +74,11 @@ def skyrim_head_triangles(data: bytes):
 
 
 def skyrim_head_matrix(data: bytes):
-    """4x4 skin -> model space of the head shape in a Skyrim head NIF (identity without NiSkinData)."""
-    s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(nifmod.parse(data)))
-    return facefit.skin_to_model_matrix(s.skin_transform if s is not None else None)
+    """4x4 skin -> model space of the head shape in a Skyrim head NIF (facefit.skyrim_model_matrix; identity without
+    a head shape)."""
+    n = nifmod.parse(data)
+    s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(n))
+    return facefit.skyrim_model_matrix(n, s) if s is not None else np.eye(4)
 
 
 def starfield_head_node(nif_bytes):

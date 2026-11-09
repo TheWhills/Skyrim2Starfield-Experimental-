@@ -115,8 +115,20 @@ def nif_effects(data):
     return out
 
 
+FIRE_TEXTURE = re.compile(r"fire|flame|smoke|ember|spark|glow|candle|torch|burn|heat", re.I)
+MARKER_MODEL = re.compile(r"(^|\\)markers?\\|marker", re.I)
+
+
+def fire_card(shape):
+    """An effect shape that looks like fire / glow: a fire-ish texture, or one animated by a controller (flame
+    cards scroll / flicker). 2026-11-09 (owner's run): editor markers, knives and forks carry one static
+    effect-shader shape each (no fire)."""
+    return bool(any(FIRE_TEXTURE.search(t) for t in shape.get("textures") or []) or shape.get("controllers"))
+
+
 def has_effects(e):
-    return bool(e and (e["effect_shapes"] or e["particle_blocks"] or e["refraction_shapes"] or e["addon_indices"]))
+    return bool(e and (any(fire_card(c) for c in e["effect_shapes"]) or e["particle_blocks"]
+                       or e["refraction_shapes"] or e["addon_indices"]))
 
 
 # ------------------------------------------------------------------------------------------- Skyrim records
@@ -194,6 +206,8 @@ def skyrim_side(ix, archives, cells, global_counts=True):
             rows.append({"edid": ix.edid(b), "type": ix.kind(b), "model": model, "error": e["error"]})
             continue
         named_fire = bool(FIRE_WORDS.search((ix.edid(b) or "") + " " + (model or "")))
+        if model and MARKER_MODEL.search(model) and not named_fire:
+            continue                                   # editor markers: not drawn in game
         if not (has_effects(e) or named_fire or ix.kind(b) == "LIGH"):
             continue
         row = {"edid": ix.edid(b), "form": f"{b:08X}", "type": ix.kind(b), "model": model, "placed": len(where),
@@ -360,7 +374,7 @@ def main(argv=None):
     print(f"Skyrim: {len(sk['models'])} fire / light / effect models in {len(sk['cells'])} cells; {len(fx)} carry effects")
     for m in fx[:15]:
         print(f"  {m['edid']}: placed {m['placed']} here, {m.get('placed_in_skyrim', '?')} in Skyrim; "
-              f"cards {len(m['effects']['effect_shapes'])}, particles {m['effects']['particle_blocks']}, "
+              f"cards {sum(fire_card(c) for c in m['effects']['effect_shapes'])}, particles {m['effects']['particle_blocks']}, "
               f"add-ons {[x['addn'] for x in m.get('addons', [])]}")
     if "starfield" in report:
         sf = report["starfield"]

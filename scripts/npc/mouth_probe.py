@@ -21,6 +21,7 @@ Teeth.nif), skinned to face bones. Per sex this probe:
 import argparse
 import base64
 import json
+import struct
 import os
 import sys
 import time
@@ -50,11 +51,12 @@ def skyrim_mesh(data):
     4x4) of every skinned shape of a NIF, concatenated (skin -> model per shape, as face_fit.skyrim_head)."""
     from fo4sf import nif as nifmod, skyrimskin
     pts, tris, raw, first = [], [], [], None
-    for s in skyrimskin.skinned_shapes(nifmod.parse(data)):
+    n = nifmod.parse(data)
+    for s in skyrimskin.skinned_shapes(n):
         p = np.array(s.positions, float)
         if not len(p):
             continue
-        m = facefit.skin_to_model_matrix(s.skin_transform)
+        m = facefit.skyrim_model_matrix(n, s)
         first = m if first is None else first
         tris.append(np.asarray(s.triangles, int).reshape(-1, 3) + sum(len(x) for x in pts))
         pts.append(facefit.apply4(m, p))
@@ -203,7 +205,69 @@ def sf_teeth(sf_data, female, face_fit, hair_pack):
     if got is None:
         return None
     pts, _nrm, ws, tris = got
+    node = face_fit.starfield_head_node(raw)        # mesh-local -> model, as the head (2026-11-09: teeth came out
+    if node is not None:                            # 1.6 m below the mouths without it)
+        pts = facefit.apply4(np.asarray(node, float), pts)
     return pts, ws, np.asarray(tris, int).reshape(-1, 3), rel
+
+
+def teeth_morphs(sf_data, female, face_fit, teeth_pts=None):
+    """How Starfield moves its teeth: the teeth head part's morph record (MNAM -> MRPH: TMPP performance and TCMP
+    chargen folders) and, per folder that has a morph.dat, its keys with the vertices each moves and, with
+    teeth_pts, the mean drop (-z) of the lower half's moved vertices (a jaw-open key drops them)."""
+    import re
+    from fo4sf import sfmorph, sfplugin
+    try:
+        recs = sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT", b"MRPH"])
+    except OSError as e:
+        return {"error": f"Starfield.esm not read: {e}"}
+    part = next((r for r in recs if r[0] == b"HDPT" and sfplugin.edid(r[2]) == SF_TEETH_PART[female]), None)
+    if part is None:
+        return {"error": f"no HDPT {SF_TEETH_PART[female]}"}
+    mn = bytes(dict(part[2]).get(b"MNAM", b""))
+    if len(mn) < 4:
+        return {"error": "teeth head part has no MNAM"}
+    fid = struct.unpack_from("<I", mn)[0]
+    m = next((r for r in recs if r[0] == b"MRPH" and r[3] == fid), None)
+    if m is None:
+        return {"MNAM": f"{fid:08X}", "error": "MRPH not found"}
+
+    def text(d):
+        runs = re.findall(rb"[ -~]{3,}", bytes(d))
+        return max(runs, key=len).decode("latin-1") if runs else ""
+    out = {"MRPH": sfplugin.edid(m[2]), "folders": {}}
+    lower = None
+    if teeth_pts is not None:
+        z = np.asarray(teeth_pts, float)[:, 2]
+        lower = z < np.median(z)
+    for sig in (b"TMPP", b"TCMP"):
+        folder = text(dict(m[2]).get(sig, b""))
+        if not folder:
+            continue
+        rel = folder.replace("\\", "/").lower() + "/morph.dat"
+        row = {"folder": folder}
+        try:
+            md = sfmorph.parse(face_fit.hkx_to_af.vanilla_file(rel, sf_data)[0])
+        except (SystemExit, sfmorph.MorphError, KeyError) as e:
+            row["error"] = f"no morph.dat read: {e}"
+            out["folders"][sig.decode()] = row
+            continue
+        keys = {}
+        for k in md.keys:
+            d = md.deltas.get(k, {})
+            kr = {"vertices": len(d)}
+            if lower is not None and d:
+                idx = np.array([i for i in d if i < len(lower)], int)
+                dz = np.array([d[i][2] for i in idx], float)
+                lo = lower[idx]
+                if lo.any():
+                    kr["lower_mean_drop_m"] = round(float(-dz[lo].mean()), 4)
+                if (~lo).any():
+                    kr["upper_mean_drop_m"] = round(float(-dz[~lo].mean()), 4)
+            keys[k] = kr
+        row.update(vertices=md.num_vertices, keys=len(md.keys), per_key=keys)
+        out["folders"][sig.decode()] = row
+    return out
 
 
 def main(argv=None):
@@ -239,7 +303,9 @@ def main(argv=None):
             bones = sorted({b for row in tw for b, _w in row})
             srep["starfield_teeth"] = {"model": trel, "vertices": int(len(tp)), "bones": bones,
                                        "jaw_vertices": int(tjaw.sum()),
-                                       "jaw_bones": [b for b in bones if is_jaw_bone(b)]}
+                                       "jaw_bones": [b for b in bones if is_jaw_bone(b)],
+                                       "morphs": teeth_morphs(sf_data, female, face_fit, tp)}
+            print(f"{sex} Starfield teeth: bones {bones}; morphs {json.dumps(srep['starfield_teeth']['morphs'])[:600]}")
         cols = [(f"Skyrim {a.race}", []), (f"Starfield + {a.race}", [])]
         cols[0][1].append((sky_head, races["faces"], 0xa0b8d8, None, True))
         cols[1][1].append((sf_head, head.triangles, 0xd8b8a0, None, True))

@@ -61,6 +61,15 @@ def hearth_nif():
     return b.bytes()
 
 
+def knife_nif():
+    """A static effect-shader shape with a non-fire texture (2026-11-09: knives, forks and markers carried one)."""
+    b = SseNif()
+    root = b.reserve("NiNode")
+    effect_block(b, "textures\\weapons\\iron\\knife_e.dds")
+    b.node(root, b"Knife", [])
+    return b.bytes()
+
+
 def light(fid, edid, model=None, radius=280, color=(255, 160, 80), flicker=True):
     d = struct.pack("<iI", -1, radius) + bytes(color) + b"\0" + I(0x8 if flicker else 0) + struct.pack("<6f", 1, 90, 0, 0.3, 0.2, 0) + bytes(8)
     f = [(b"EDID", Z(edid))] + ([(b"MODL", Z(model))] if model else []) + [(b"DATA", d), (b"FNAM", struct.pack("<f", 1.5))]
@@ -76,23 +85,27 @@ def skyrim(d):
     os.makedirs(data)
     with open(os.path.join(data, "Skyrim - Meshes0.bsa"), "wb") as fh:
         fh.write(bsa.build({"meshes\\clutter\\candle01.nif": candle_nif(), "meshes\\effects\\candleflame01.nif": flame_nif(),
-                            "meshes\\clutter\\hearth01.nif": hearth_nif()}, version=105, compress=False))
+                            "meshes\\clutter\\hearth01.nif": hearth_nif(), "meshes\\clutter\\knife01.nif": knife_nif(),
+                            "meshes\\markers\\xmarkerheading.nif": flame_nif()}, version=105, compress=False))
     tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))])
     lights = [light(0x100, "CandleLight01", "Clutter\\Candle01.nif", 120), light(0x101, "FireLight", None, 560)]
     stat = rec(b"STAT", 0x110, [(b"EDID", Z("Hearth01")), (b"MODL", Z("Clutter\\Hearth01.nif"))])
     chair = rec(b"STAT", 0x111, [(b"EDID", Z("Chair")), (b"MODL", Z("Furniture\\Chair.nif"))])
+    knife = rec(b"MISC", 0x112, [(b"EDID", Z("BasicKnife01")), (b"MODL", Z("Clutter\\Knife01.nif"))])
+    marker = rec(b"STAT", 0x113, [(b"EDID", Z("XMarkerHeading")), (b"MODL", Z("Markers\\XMarkerHeading.nif"))])
     addn = rec(b"ADDN", 0x120, [(b"EDID", Z("FXCandleFlameAddon")), (b"MODL", Z("Effects\\CandleFlame01.nif")),
                                 (b"DATA", I(7))])
     inn = rec(b"CELL", 0x500, [(b"EDID", Z("RiverwoodSleepingGiantInn"))])
     other = rec(b"CELL", 0x510, [(b"EDID", Z("WhiterunBanneredMare"))])
     in_inn = [ref(0x600, 0x100, (0, 0, 0)), ref(0x601, 0x100, (100, 0, 0)), ref(0x602, 0x110, (500, 0, 0)),
-              ref(0x603, 0x101, (500, 70, 0)), ref(0x604, 0x111, (10, 10, 0))]
+              ref(0x603, 0x101, (500, 70, 0)), ref(0x604, 0x111, (10, 10, 0)), ref(0x605, 0x112, (20, 0, 0)),
+              ref(0x606, 0x113, (30, 0, 0))]
     in_other = [ref(0x700, 0x100, (0, 0, 0)), ref(0x701, 0x110, (0, 0, 0))]
     cells = grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [inn, grup(0x500, 6, [grup(0x500, 8, in_inn)]),
                                                       other, grup(0x510, 6, [grup(0x510, 8, in_other)])])])])
     esm = os.path.join(data, "Skyrim.esm")
     with open(esm, "wb") as fh:
-        fh.write(tes4 + grup(b"LIGH", 0, lights) + grup(b"STAT", 0, [stat, chair]) + grup(b"ADDN", 0, [addn]) + cells)
+        fh.write(tes4 + grup(b"LIGH", 0, lights) + grup(b"STAT", 0, [stat, chair, marker]) + grup(b"MISC", 0, [knife]) + grup(b"ADDN", 0, [addn]) + cells)
     return data, esm
 
 
@@ -146,6 +159,8 @@ class FireTests(unittest.TestCase):
                 md = fh.read()
         by = {m["edid"]: m for m in r["skyrim"]["models"]}
         self.assertNotIn("Chair", by)                                     # no effects, not fire: left out
+        self.assertNotIn("BasicKnife01", by)                              # a static non-fire effect card
+        self.assertNotIn("XMarkerHeading", by)                            # editor marker (even with a flame card)
         c = by["CandleLight01"]
         self.assertEqual((c["placed"], c["placed_in_skyrim"], c["type"]), (2, 3, "LIGH"))
         self.assertEqual(c["light"]["radius_m"], 1.714)                       # 120 units
