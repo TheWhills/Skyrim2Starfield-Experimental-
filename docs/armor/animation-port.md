@@ -1395,3 +1395,21 @@ more than a generated-table row wins; the table itself tells AnimSword from Anim
   keyword; the type folder found before the sword folders. Not covered: sprint attacks (stance packs fill only the
   sword folder: the sword's / vanilla's), two-handed idle / walk / block / equip (vanilla Skyrim clips, later), NPCs
   (NPC_Melee rows), stats (template's).
+
+## 2026-11-09: Animation Injector (Nexus SE 197945, 1.0.7, owner upload; read for the format only, GPL-3, nothing run)
+* **What it is (verified from its files):** an SKSE plugin (AnimationInjector.dll, CommonLibSSE-NG) plus mods' XML in
+  Data\SKSE\Plugins\AnimationInjector\<Mod>\*.xml. Each `<AnimationSet>` declares `<Start>`s (key / game control /
+  animation event, with conditions: weapon, movement direction, stamina, race, last hit taken ...) and `<Action>`s (one
+  HKX each, windows: `<IFrame>`, `<HyperArmor>`, `<Cost>`, `<Transition>` on key / event / end / release / move,
+  `<MoveCancel>`, `<Vanilla to=Attack|Block|...>` cancel windows, `<Rotate>`, `<TimeScale>`), event features (`strike`,
+  `ragdoll`, `fireArrow`, `magic`, `sound`, `shake` ...), `AI.Command|values` HKX annotations, pairs, carrying, QTEs.
+  From its strings: at load it adds states and clips to the in-memory Havok behaviour graph (hkbBehaviorGraph /
+  hkbStateMachine, a state-id base, clip registration in the animation data), so no Nemesis / Pandora run; it can
+  renumber node ids past 65,535.
+* **For us:** (1) mods made for it are data (XML + HKX), so they convert: clips through hkx_to_af, the XML read into
+  our own action format. (2) Its vocabulary is a ready spec for what S2SCombat's actions need (dodges, stances, combos:
+  start conditions, i-frame / armor / cost / cancel windows, chained transitions); a Starfield runtime that reads the
+  same format would play converted Animation Injector mods 1:1. (3) The runtime graph injection is the Starfield
+  equivalent of solving graph merges (our packs and Far Away Movesets each ship whole Player_Melee / MeleeActions
+  overrides); in Starfield that means editing the loaded .agx graph from SFSE (unexplored), while SAM covers only
+  tags and clip lists. GPL-3: read for ideas; copying its code would make S2SCombat GPL.
