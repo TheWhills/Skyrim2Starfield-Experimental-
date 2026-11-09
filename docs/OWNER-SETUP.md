@@ -99,14 +99,17 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    in the SAM mod folder or Overwrite).
 9. Done 2026-11-09: clothing as items. Ysolda's FarmClothesOutfit04 (dress, boots) in S2S Clothes, male and female
    versions; both test NPCs wear it, and the player's dress follows the body sliders in character creation.
-9b. B + C: the face-test NPCs wear the shared items (Delphine shares Ysolda's Skyrim outfit). Starfield closed:
+9b. Done 2026-11-09: Delphine (and Ysolda) wear the shared S2S_FarmClothesOutfit04 in the Riverwood build (in game:
+   showinventory lists S2S_ClothesFarmClothes04 / S2S_ClothesFarmBoots04 worn from that outfit; shoulders clean).
+9c. B + C: the other test NPCs' outfits as items (Orgnar and Saadia share BarkeepClothes01). Starfield closed:
    ```powershell
-   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice
-   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
+   cd C:\Users\elija\Skyrim2Starfield-Experimental-
+   git pull origin skyrim/armor
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ralof --npc Nazeem --npc Saadia --npc Orgnar --npc Embry --out "$mods\S2S Clothes" --dry-run
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ralof --npc Nazeem --npc Saadia --npc Orgnar --npc Embry --out "$mods\S2S Clothes"
    ```
-   faces.json shows per NPC which outfit it got (an S2S Clothes one for Ysolda and Delphine; the others keep their
-   S2SArmorTest outfit until their outfits are converted as items). In game: Delphine's dress, shoulders and arms;
-   the light band at the upper chest seen on the female item test NPC (skin piece vs neck), if it shows on her.
+   then 9b's face_fit command and the Riverwood build. Send item_convert.json, faces.json and screenshots (Orgnar,
+   Embry in the inn; the others via their face-test NPCs).
 
 10. B + C: weapon types with their own movesets (docs/armor/animation-port.md, "weapon types"). Install the two
    zips I sent (SkyrimMelee_LoreRim_greatsword_type.zip, SkyrimMelee_LoreRim_waraxe_type.zip) as MO2 mods, keep the
