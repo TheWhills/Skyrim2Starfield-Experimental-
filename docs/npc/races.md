@@ -155,5 +155,11 @@ which fits the separate-races design; hair / brows / lashes then need the same k
   Checked on the owner's data: identical to the prototype; seam splits 0; the orc's open underbite and the elf / orc
   ears come out whole (renders compared side by side with Skyrim's). Weak spot left: a small fold at each mouth
   corner (both lips meet there, the side is ambiguous on both heads). About 20 s per sex.
+- Measured, all races, old -> new (male; female similar): seam split max 8.3 mm -> 0; distance from the moved
+  Starfield head to the moved Skyrim head, change vs the base heads, p95: about halved (Nord 0.55 -> 0.25 mm, Imperial
+  0.68 -> 0.37, Orc 2.60 -> 1.60); the bust edge (where the head meets the body) moved up to 1.2 mm under the old
+  average (elves), 0 now. Steepest local change rises (orc 3.9 -> 28.7 x the edge length): the lips separating, which is
+  the open underbite, wanted. Female DremoraRace's morph equals HighElfRace's to the digit (in FemaleHeadRaces.tri as
+  read; unresolved whether Skyrim shares it on purpose).
 - race_probe and face_fit use it by default (--transfer nearest for the old average). face_fit's faces change with it
   (and with the alignment); a rerun and a look in game are needed.
