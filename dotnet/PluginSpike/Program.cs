@@ -385,12 +385,38 @@ var actorsPath = Environment.GetEnvironmentVariable("ACTORS");
 JsonElement? actorsRoot = actorsPath == null ? null : JsonDocument.Parse(File.ReadAllText(actorsPath)).RootElement.Clone();
 var sfActors = actorsPath == null ? null : StarfieldMod.CreateFromBinaryOverlay(
     Path.Combine(sfData0 ?? throw new InvalidOperationException("ACTORS needs STARFIELD_DATA"), "Starfield.esm"), release);
-var vanillaPackage = new Dictionary<FormKey, IPackageGetter>();      // package template -> first vanilla package using it
+// package template -> a vanilla package using it to copy: one without an owner quest, scripts or conditions, and with no
+// input that names a quest alias (2026-11-08: the first build copied the first user of each template; in game all three
+// NPCs wandered the room instead of following their packages, as an NPC does when none of its packages can run)
+var vanillaPackage = new Dictionary<FormKey, IPackageGetter>();
+bool CleanPackage(IPackageGetter vp)
+{
+    if (!vp.OwnerQuest.IsNull || vp.VirtualMachineAdapter != null || vp.Conditions.Count > 0) return false;
+    foreach (var d in vp.Data.Values)
+    {
+        if (d is IPackageDataTargetGetter t && t.Target is IPackageTargetAliasGetter) return false;
+        if (d is IPackageDataLocationGetter l && l.Location.Target is ILocationFallbackGetter fb
+            && fb.Type is LocationTargetRadius.LocationType.AliasForReference or LocationTargetRadius.LocationType.AliasForLocation
+                or LocationTargetRadius.LocationType.AliasForCollection) return false;
+    }
+    return true;
+}
 if (sfActors != null)
+{
+    var fallback = new Dictionary<FormKey, IPackageGetter>();
     foreach (var vp in sfActors.Packages)
-        if (vp.Type == Package.Types.Package && !vp.PackageTemplate.IsNull && !vanillaPackage.ContainsKey(vp.PackageTemplate.FormKey))
-            vanillaPackage[vp.PackageTemplate.FormKey] = vp;
-var xMarker = new FormKey(sfEsm, 0x00003B);                       // XMarker (as Skyrim's and FO4's 0x3B; unverified in Starfield)
+    {
+        if (vp.Type != Package.Types.Package || vp.PackageTemplate.IsNull) continue;
+        var tk = vp.PackageTemplate.FormKey;
+        fallback.TryAdd(tk, vp);
+        if (!vanillaPackage.ContainsKey(tk) && CleanPackage(vp)) vanillaPackage[tk] = vp;
+    }
+    foreach (var (tk, vp) in fallback)
+        if (vanillaPackage.TryAdd(tk, vp)) Console.WriteLine($"package template {tk}: no clean vanilla package; copying {vp.EditorID}");
+}
+// XMarker: make_schedule.py looks it up in Starfield.esm ("xmarker" in actors.json); 0x3B as Skyrim's / FO4's otherwise
+var xMarker = new FormKey(sfEsm, actorsRoot is JsonElement axr && axr.TryGetProperty("xmarker", out var xmj) && xmj.ValueKind == JsonValueKind.String
+    ? Convert.ToUInt32(xmj.GetString(), 16) & 0xFFFFFF : 0x00003B);
 
 void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource)
 {
@@ -470,6 +496,7 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
         }
         mod.Packages.Add(pk);
         npc.Packages.Add(new FormLink<IPackageGetter>(pk.FormKey));
+        notes.Add($"{edid} {pk.FormKey} (copy of vanilla {vp.EditorID} {vp.FormKey})");
         sourceMap["PACK:" + edid] = pk.FormKey.ToString();
     }
     mod.Npcs.Add(npc);
@@ -507,7 +534,7 @@ foreach (var cellPath in cellPaths)
         SkyrimAmbient(cell, src4, skyLighting, new FormKey(sfEsm, Convert.ToUInt32(ltHex, 16)));
     var lit = new List<P3Float>();
     var placedBySource = new Dictionary<string, FormKey>();               // Skyrim / FO4 ref -> its new reference
-    int lights = 0, placed = 0, skipped = 0, disabled = 0;
+    int lights = 0, placed = 0, skipped = 0, disabled = 0, innerDoors = 0;
     foreach (var r in root.GetProperty("refs").EnumerateArray())
     {
         var src = r.GetProperty("formkey").GetString()!;
@@ -534,6 +561,11 @@ foreach (var cellPath in cellPaths)
             var srcModel = "meshes\\" + model.TrimStart('\\');
             if (model.Length == 0 || !bySource.TryGetValue(srcModel, out var bas)) { skipped++; continue; }
             var tele = r.TryGetProperty("teleport", out var tj) && tj.ValueKind == JsonValueKind.Object;
+            // a Skyrim door that is not a load door (room doors) would be a solid static here: it cannot open, and NPCs
+            // walk into it, the navmesh passing through (owner 2026-11-08, Sleeping Giant Inn). Left out: an open
+            // doorway, until doors that open are converted. INNER_DOORS=static keeps them.
+            if (!tele && r.GetProperty("type").GetString() == "Door" && Setting(src4, "INNER_DOORS", "open") != "static")
+            { innerDoors++; continue; }
             if (tele) bas = (LoadDoorBase(srcModel, bas.key), bas.offset);
             var scale = r.GetProperty("scale").GetSingle();
             var rot = Rot(r.GetProperty("rot"));
@@ -574,7 +606,8 @@ foreach (var cellPath in cellPaths)
     sub.Cells.Add(cell);
     block.SubBlocks.Add(sub);
     mod.Cells.Records.Add(block);
-    Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}{navNote}");
+    Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}"
+        + (innerDoors > 0 ? $", {innerDoors} room doors left out (open doorways)" : "") + navNote);
 }
 
 // ---- exterior load doors (2026-11-08, owner: "get the Riverwood inn connected to Riverwood") -------------------------

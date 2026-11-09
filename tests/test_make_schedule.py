@@ -90,6 +90,7 @@ class ScheduleTests(unittest.TestCase):
             with open(os.path.join(work, "actors.json")) as fh:
                 r = json.load(fh)
             ac = r["actors"][0]
+            self.assertIsNone(r["xmarker"])                       # the synthetic Starfield.esm has none
             self.assertEqual((ac["cell"], ac["template_npc"], ac["pos"][0]), ("RiverwoodSleepingGiantInn", "0001ABCD", -1312.8))
             p = ac["packages"][0]
             self.assertEqual((p["sf_template"], p["sf_template_form"], p["edid"]), ("Sandbox", "00002CB1", "S2S_OrgnarWorkInn0x24"))

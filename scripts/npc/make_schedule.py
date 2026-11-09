@@ -133,16 +133,21 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
 
 
 def load_sf_templates(path):
+    """({template EditorID lower: {form, pack}}, XMarker STAT FormID or None) of Starfield.esm."""
     ix = packages.Index(path)
-    out = {}
+    out, xmarker = {}, None
     try:
         for fid in ix.by_type.get(b"PACK", []):
             p = packages.parse_pack(ix.subs(fid), starfield=True)
             if p["type"] == packages.TEMPLATE and p["edid"]:
                 out.setdefault(p["edid"].lower(), {"form": fid, "pack": p})
+        if ix.kind(0x3B) == "STAT" and (ix.edid(0x3B) or "").lower() == "xmarker":
+            xmarker = 0x3B
+        else:
+            xmarker = ix.find_edid(b"STAT", "XMarker")
     finally:
         ix.close()
-    return out
+    return out, xmarker
 
 
 def pick_template(faces, edid, female):
@@ -168,6 +173,7 @@ def main(argv=None):
                     help="keep packages with conditions / an owner quest (their conditions are not converted)")
     ap.add_argument("--template-npc", default="", help="Starfield NPC FormID to copy instead (hex)")
     a = ap.parse_args(argv)
+    notes = []
     cells_txt = os.path.join(a.work, "cells.txt")
     cell_names = set()
     if os.path.exists(cells_txt):
@@ -181,9 +187,11 @@ def main(argv=None):
     if a.faces:
         with open(a.faces, encoding="utf-8") as fh:
             faces = json.load(fh)
-    sf_tpls = load_sf_templates(a.starfield)
+    sf_tpls, xmarker = load_sf_templates(a.starfield)
+    if xmarker is None:
+        notes.append("Starfield.esm has no STAT XMarker: package locations near Skyrim markers will not work")
     sky = packages.Index(a.skyrim)
-    actors, notes = [], []
+    actors = []
     try:
         for edid in [e.strip() for n in a.npc for e in n.split(",") if e.strip()]:
             fid = sky.find_edid(b"NPC_", edid)
@@ -223,7 +231,8 @@ def main(argv=None):
         sky.close()
     out = os.path.join(a.work, "actors.json")
     with open(out, "w", encoding="utf-8") as fh:
-        json.dump({"actors": actors, "notes": notes}, fh, indent=1)
+        json.dump({"actors": actors, "notes": notes,
+                   "xmarker": None if xmarker is None else f"{xmarker:08X}"}, fh, indent=1)
     for ac in actors:
         print(f"{ac['skyrim']} in {ac['cell']} at {ac['pos']} (copy of Starfield NPC {ac['template_npc']}: "
               f"{ac['template_why']}):")
@@ -234,6 +243,7 @@ def main(argv=None):
                   f"{s.get('duration_min')} min; inputs {ins}")
     for n in notes:
         print("  note: " + n)
+    print(f"XMarker in Starfield.esm: {'none' if xmarker is None else f'{xmarker:08X}'}")
     print(f"-> {out}")
     return 0 if actors else 1
 

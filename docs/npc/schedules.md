@@ -56,3 +56,13 @@ Sleep 0-6, default sandbox) and Embry (4: Sleep 0-7, Eat 7-8, inn 17-1, Patrol d
 **Verified:** Starfield's PLDT radius is a float: the vanilla packages copied hold raw bits 40A00000 (5.0) and 40400000
 (3.0). Vanilla NPC copies: ChargenPresetFemale04_Swap (030764, Ralof's face_fit template) for the men,
 ChargenPresetFemale04 (050569) for Delphine. In-game behaviour: unverified.
+
+## First in-game look (owner, 2026-11-08)
+All three NPCs walked around the room; Orgnar did not keep to the bar. Reading: none of their packages ran, so each
+fell back to its vanilla copy's default (an NPC wanders when no package in its list can run) (supported). Suspects:
+the vanilla packages copied were the first users of each template, some owned by quests with alias inputs, made
+invalid when the quest was dropped; and the XMarker 0x3B, assumed. Changed: PluginSpike copies a vanilla package with
+no owner quest / scripts / conditions / alias inputs (prints which), make_schedule.py looks XMarker up in
+Starfield.esm. Also: the inn's room doors were solid statics NPCs walked into (navmesh passes through); non-load doors
+are now left out (open doorways; INNER_DOORS=static keeps them) until doors that open are converted.
+In game check: select the NPC, `getiscurrentpackage <package id>` (ids printed by the build).
