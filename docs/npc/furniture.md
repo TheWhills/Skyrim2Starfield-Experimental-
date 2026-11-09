@@ -65,3 +65,14 @@ stand-off, rotation sign of SNAM (Mutagen exposes degrees).
 Open question (owner): put Skyrim's own furniture animations through the animation converter. Use Starfield's where a
 close one exists (sit, bench, bed, bartender, bartop lean, sweep); convert the Skyrim-only ones (stirring the cook pot,
 alchemy / enchanting, hammer at the anvil, warming hands, eating at the table) when positions and heights are right.
+
+## Second look (owner, 2026-11-08) and the next measurements
+- Benches back (Is Marker fix verified). Orgnar with NPCBartender_Standing: "not quite on the bar, closer".
+- Chairs and benches could not be used by the player. Changed: chairs and benches now copy real vanilla furniture
+  (FoundCanvasChair01_Free 001BF52D, Bench_UtilityA02 001E426C: record flags 10000000, drawn and used everywhere)
+  instead of the marker-only ones. A/B if they still cannot be used: FURNITURE_MODEL=vanilla keeps the vanilla model (a
+  problem with our NIF: collision layer, no marker nodes) vs ours.
+- How far a marker stands from the counter in front of it is measured, not guessed: furniture_standoff.py casts the
+  marker's facing ray against the object bounds of the references around it, on each game's own placements (Starfield
+  bartenders vs Skyrim's bar-lean markers). The difference goes into make_furniture.py --shift
+  (riverwood_doors.ps1 -FurnShift "bartender=0,<dy>,0"), applied in PluginSpike to the template's markers.

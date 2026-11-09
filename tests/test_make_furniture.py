@@ -81,7 +81,7 @@ class MakeFurnitureTests(unittest.TestCase):
                 r = json.load(fh)
             b = r["bases"]
             ch = b["000020:Skyrim.esm"]
-            self.assertEqual((ch["kind"], ch["template"], ch["model"]), ("chair", "0005B0A6", "Furniture\\CommonChair01.nif"))
+            self.assertEqual((ch["kind"], ch["template"], ch["model"]), ("chair", "001BF52D", "Furniture\\CommonChair01.nif"))
             # NIF marker 0: (1.5, -20, 0) units, heading pi, entry Front+Left minus the record's disabled Left
             self.assertEqual(ch["markers"][0], {"offset_m": [round(1.5 / 70, 3), round(-20 / 70, 3), 0.0],
                                                 "rot_deg": 180.0, "entry": ["Front"]})
@@ -97,12 +97,19 @@ class MakeFurnitureTests(unittest.TestCase):
             self.assertEqual(sorted(byref), ["000600:Skyrim.esm", "000601:Skyrim.esm", "000602:Skyrim.esm"])
             self.assertEqual((byref["000600:Skyrim.esm"]["scale"], byref["000600:Skyrim.esm"]["rot"][2]), (1.1, 1.5))
             self.assertEqual([k for k, v in byref.items() if v["persistent"]], ["000601:Skyrim.esm"])
-            self.assertIn("chair -> NPCInvChairSit_Free: CommonChair01R x1", buf.getvalue())
+            self.assertIn("chair -> FoundCanvasChair01_Free: CommonChair01R x1", buf.getvalue())
+            self.assertNotIn("shift_m", ln)
 
             with contextlib.redirect_stdout(io.StringIO()):
-                M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work, "--marker-z", "skyrim"])
+                M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work, "--marker-z", "skyrim",
+                        "--shift", "bartender=0,0.25,0"])
             with open(os.path.join(work, "furniture.json")) as fh:
-                self.assertEqual(json.load(fh)["bases"]["000020:Skyrim.esm"]["markers"][0]["offset_m"][2], 0.0)
+                r2 = json.load(fh)
+            self.assertEqual(r2["bases"]["000020:Skyrim.esm"]["markers"][0]["offset_m"][2], 0.0)
+            self.assertEqual(r2["bases"]["000021:Skyrim.esm"]["shift_m"], [0.0, 0.25, 0.0])
+            self.assertNotIn("shift_m", r2["bases"]["000020:Skyrim.esm"])
+            with self.assertRaises(ValueError):
+                M.parse_shift(["nosuchkind=0,0,0"])
 
     def test_kinds(self):
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "CommonBed01", "keywords": [], "mnam": {"flags": ["Has Sleep Marker"]}}), "bed")

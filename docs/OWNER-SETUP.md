@@ -175,4 +175,10 @@ Furniture NPCs can use (chairs, benches, beds, lean counters, sweeping spots) in
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
 ```
-`-MarkerZ skyrim` puts the markers at Skyrim's seat height instead of the floor.
+`-MarkerZ skyrim` puts the markers at Skyrim's seat height instead of the floor. `-FurnShift "bartender=0,0.2,0"` moves a kind's markers
+(metres, +y = facing); furniture_standoff.py measures how far (vanilla placements vs Skyrim's):
+
+```powershell
+python -I scripts\interior\furniture_standoff.py --esm "$sf\Data\Starfield.esm" --base NPCBartender_Standing --base NPCLeaningBartopFront --out C:\Modding\work\furniture\standoff_sf.json
+python -I scripts\interior\furniture_standoff.py --esm "$sky\Skyrim.esm" --base CounterBarLeanMarker --base CounterLeanMarker --units 70 --out C:\Modding\work\furniture\standoff_sky.json
+```

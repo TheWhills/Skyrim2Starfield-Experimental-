@@ -39,8 +39,10 @@ import furniture_survey as survey  # noqa: E402
 U = 70.0
 # Starfield.esm furniture to copy (owner's survey 2026-11-08: form, EditorID, uses in Starfield.esm, keywords)
 TEMPLATES = {
-    "chair": ("0005B0A6", "NPCInvChairSit_Free"),                  # AnimFurnChair, AnimFurnAllowEating; marker-only
-    "bench": ("000858F1", "NPCInvBenchSit"),                       # AnimFurnBench (66 uses); marker-only
+    # real (drawn, player-usable) vanilla furniture, not the marker-only NPCInvChairSit_Free / NPCInvBenchSit (owner
+    # 2026-11-08: chairs and benches made from those could not be used)
+    "chair": ("001BF52D", "FoundCanvasChair01_Free"),              # AnimFurnChair, AnimFurnAllowEating (240 uses)
+    "bench": ("001E426C", "Bench_UtilityA02"),                     # AnimFurnBench (203 uses)
     "bed": ("001FEE01", "FoundCanvasCot01"),                       # AnimFurnBed, IsSleepFurniture (100 uses)
     # bar counters (owner 2026-11-08: the rail lean put Orgnar's hands on the counter's lower shelf, off the bar):
     # Starfield's own bar furniture, marker at the origin like Skyrim's
@@ -119,7 +121,19 @@ def actor_targets(work):
             for v in p.get("inputs", {}).values() if isinstance(v, dict) and v.get("type") == "near_reference"}
 
 
-def build(ix, cells, archives, marker_z="floor", targets=()):
+def parse_shift(items):
+    """["bartender=0,0.2,0", ...] -> {kind: [dx, dy, dz]} (metres, in the furniture's own frame: +y = its facing)."""
+    out = {}
+    for it in items or []:
+        k, _, v = it.partition("=")
+        xyz = [float(x) for x in v.split(",")]
+        if k not in TEMPLATES or len(xyz) != 3:
+            raise ValueError(f"--shift {it!r}: want <kind>=dx,dy,dz with kind one of {sorted(TEMPLATES)}")
+        out[k] = xyz
+    return out
+
+
+def build(ix, cells, archives, marker_z="floor", targets=(), shift=None):
     cell_ids = {}
     for c in cells:
         f = ix.find_edid(b"CELL", c)
@@ -165,6 +179,8 @@ def build(ix, cells, archives, marker_z="floor", targets=()):
         real_model = rec["type"] == "FURN" and not rec["is_marker"]
         bases[key] = {"edid": rec["edid"], "type": rec["type"], "kind": kind, "template": form, "template_edid": tedid,
                       "model": rec.get("model") if real_model else None, "markers": markers(rec, kind, marker_z)}
+        if (shift or {}).get(kind):
+            bases[key]["shift_m"] = shift[kind]
     refs = [r for r in refs if r["base"] in bases]
     return {"bases": bases, "refs": refs, "skipped": skipped, "marker_z": marker_z}
 
@@ -176,7 +192,14 @@ def main(argv=None):
     ap.add_argument("--work", required=True, help="interior batch work folder (cells.txt; furniture.json is written there)")
     ap.add_argument("--marker-z", choices=("floor", "skyrim"), default="floor",
                     help="marker height: floor (as every vanilla Starfield SNAM) or Skyrim's seat height")
+    ap.add_argument("--shift", action="append", default=[], metavar="KIND=DX,DY,DZ",
+                    help="move every marker of a kind, metres in the furniture's frame (+y forward), e.g. "
+                         "bartender=0,0.2,0 (furniture_standoff.py measures how far)")
     a = ap.parse_args(argv)
+    try:
+        shift = parse_shift(a.shift)
+    except ValueError as e:
+        ap.error(str(e))
     cells = survey.batch_cells(a.work, [])
     if not cells:
         ap.error(f"no cells.txt in {a.work}")
@@ -184,7 +207,7 @@ def main(argv=None):
     archives = bsa.SkyrimArchives(a.skyrim_data)
     ix = packages.Index(a.skyrim)
     try:
-        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work))
+        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift)
     finally:
         ix.close()
     path = os.path.join(a.work, "furniture.json")

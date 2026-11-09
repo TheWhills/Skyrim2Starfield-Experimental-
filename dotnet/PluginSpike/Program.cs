@@ -580,7 +580,9 @@ FormKey? FurnitureBase(string key)
     f.EditorID = "S2S_Furn_" + bedid;
     f.VirtualMachineAdapter = null;
     var modelNote = "template's model";
-    if (b.GetProperty("model").ValueKind == JsonValueKind.String)
+    // FURNITURE_MODEL=vanilla (A/B): keep the vanilla template's own model, to tell a problem with our converted NIF
+    // (collision layer, no marker nodes) from one with the record (owner 2026-11-08: chairs / benches could not be used)
+    if (b.GetProperty("model").ValueKind == JsonValueKind.String && Environment.GetEnvironmentVariable("FURNITURE_MODEL") != "vanilla")
     {
         var src = "meshes\\" + b.GetProperty("model").GetString()!.TrimStart('\\');
         if (itemBySource.TryGetValue(src, out var it))
@@ -629,6 +631,10 @@ FormKey? FurnitureBase(string key)
         var old = pi.GetValue(f) is object ov ? Convert.ToInt64(ov) : 0L;
         pi.SetValue(f, Enum.ToObject(et, (old & ~0xFFFFFL) | ((1L << Math.Min(nMk, 20)) - 1)));
     }
+    // shift_m (make_furniture.py --shift): every marker moved in the furniture's frame (furniture_standoff.py measures it)
+    if (b.TryGetProperty("shift_m", out var sh) && f.MarkerParameters != null)
+        foreach (var smp in f.MarkerParameters)
+            smp.Offset = new P3Float(smp.Offset.X + sh[0].GetSingle(), smp.Offset.Y + sh[1].GetSingle(), smp.Offset.Z + sh[2].GetSingle());
     mod.Furniture.Add(f);
     if (furnBases.Count < 40)
         furnNotes.Add($"{f.EditorID} {f.FormKey}: copy of {tpl.EditorID} ({b.GetProperty("kind").GetString()}), {modelNote}, " +
