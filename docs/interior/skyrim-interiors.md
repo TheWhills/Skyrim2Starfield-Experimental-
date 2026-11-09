@@ -250,3 +250,17 @@ walked from Riverwood into the Sleeping Giant Inn and back out through the linke
 tes4skyrim found that Skyrim's pathfinder ignores navmeshes not listed in the NAVI record and treats load doors without
 XNDP as no pathing node; our interior navmeshes had neither. PluginSpike now writes both for every navmesh it writes
 (docs/terrain/exterior-navmesh.md "What tes4skyrim found"). `$env:NAVI="off"` leaves the NAVI out. Unresolved in game.
+
+## Fires and candles (2026-11-09, owner: convert Skyrim's own effects rather than borrow Starfield's)
+Three parts: (1) the light: already Skyrim's own (each LIGH -> a Starfield light with its colour, radius, fade,
+flicker; settled defaults above); (2) the flame you see: effect-shader cards (crossed planes playing an animated
+atlas such as FXFireAtlas04.dds) and glows, dropped by the converter today (fire = logs + ash); candle flames are
+often not in the candle's model but an add-on (a BSValueNode "AddOnNode<n>" in the model -> the ADDN record with DATA
+index n, whose model is the flame); (3) particles (sparks, embers, smoke) and the heat-haze refraction plane.
+Direction (owner, supported): convert Skyrim's own flame cards (one converted asset covers every placement of it) as
+Starfield emissive materials playing Skyrim's atlas, particles by the route Starfield allows (its own particle system
+if models can carry one, else simple cards or a Starfield effect for sparks / smoke only), haze last.
+Unknowns the survey answers: which effect assets the interiors use and how often Skyrim reuses them, how they animate,
+which light sits next to each; whether Starfield models carry particle blocks; which material components Starfield's
+database has (a flipbook / emissive component and its fields = animated glowing materials can be written like our
+other .mat files). scripts/interior/fire_survey.py (read-only) writes fire_survey.json / .md.

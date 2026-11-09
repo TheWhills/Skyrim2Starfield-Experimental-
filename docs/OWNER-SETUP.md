@@ -79,6 +79,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\magic\magic_survey.py --skyrim "$sky\Skyrim.esm" --starfield "$sf\Data\Starfield.esm" --out C:\Modding\work\magic
    ```
    Send magic_survey.md (and magic_survey.json).
+3d. A: fire survey (how Skyrim builds candles / hearths / their light in the converted interiors, and what Starfield
+   can draw; docs/interior/skyrim-interiors.md "Fires and candles"):
+   ```powershell
+   python -I scripts\interior\fire_survey.py --skyrim "$sky\Skyrim.esm" --skyrim-data "$sky" --starfield $sf --work C:\Modding\work\s2s\riverwood_doors --out C:\Modding\work\fire
+   ```
+   Send fire_survey.md and fire_survey.json (a minute or two: it counts placements over all of Skyrim.esm;
+   `--no-global` skips that).
 4. B: Embry's outfit, then the faces of all seven test NPCs (the head transfer changed, so every face changes):
    ```powershell
    python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --npc Embry --name Embry_outfit --out $armor --add --debug-dir C:\Modding\work\debug_embry
