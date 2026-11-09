@@ -120,3 +120,9 @@ marker, but stands at the tabletop's height (the marker z is set to 0 = the refe
 tabletop station) and faces away. Reading (supported, not verified): the Skyrim marker's height and / or heading do not
 fit the Starfield chem bench's entry, which then never reaches its menu. Checking the vanilla bench's SNAM against ours
 (npc_record_diff --type FURN --pair) and the Skyrim marker in furniture.json before changing it.
+Result (owner's npc_record_diff, verified): WorkbenchChem's SNAM is offset (0, -0.728, 0), rotation 0, entry / exit all
+sides; ours (0, 0, 0), entry / exit Rear only. Workbench data equal; ours lacks FLLD (01000000, Mutagen did not
+write it; unknown use). The owner's furniture_survey (2026-11-08) shows every Skyrim crafting NIF with one marker at the
+origin, heading 0, entry Behind (cooking pot, alchemy lab and tabletop, enchanter): Skyrim's crafting animations do the
+stand-off. So crafting stations now keep the template's markers (make_furniture SPECIAL), as the bar and idle markers do.
+If the lab still opens nothing, FLLD is the next suspect.

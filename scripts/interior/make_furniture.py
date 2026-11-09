@@ -21,7 +21,8 @@ whose own animation does the stand-off, take the Starfield template's offsets as
 invisible galley workbench (AnimFurnGalleyWorkbench + WorkbenchCookingKeyword, so E may open Starfield's cooking menu)
 with the pot's model, alchemy labs the chem bench, the enchanter / forge / smelter the industrial bench (no script; the
 research bench has one), the grindstone the weapon bench, the armor table the armor bench, the anvil the hammering
-marker, the tanning rack the wall-wipe marker. Markers from the Skyrim NIF as for chairs. Quest furniture stays.
+marker, the tanning rack the wall-wipe marker. Markers: the template's (Skyrim's crafting markers sit at the origin and its
+animations do the stand-off; 2026-11-09, in game: Skyrim's put the player inside the lab, no menu). Quest furniture stays.
 Entry sides: Skyrim's (FNPR / NIF entry points minus the record's disabled ones; Behind -> Rear, Up -> Other), else the
 template's. References a converted NPC's package names (actors.json "near_reference") are made persistent.
 """
@@ -69,7 +70,14 @@ TEMPLATES = {
     "scrape": ("0003C420", "NPCStanding_WipeWall"),                # AnimFurnStanding_WipeWall (tanning rack)
 }
 SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
-           "scrape"}
+           "scrape",
+           # crafting stations (2026-11-09, owner: E on our alchemy lab put the player inside it facing away, no menu;
+           # Starfield's own chem bench, same record but its own marker, worked): Skyrim's crafting NIFs all hold one
+           # marker at the origin, heading 0, entry Behind (owner's furniture survey: cooking pot, alchemy lab and
+           # tabletop, enchanter): Skyrim's crafting animations do the stand-off themselves. Starfield's benches stand
+           # the player in front (WorkbenchChem: 0, -0.728, 0, every side), so they keep the template's markers.
+           "cook", "alchemy", "workbench", "weapon_bench", "armor_bench"}
+CRAFT_KINDS = {"cook", "alchemy", "workbench", "weapon_bench", "armor_bench"}   # still need their NIF (a real model)
 # Skyrim crafting stations: keyword (lower case) or EditorID part -> kind
 CRAFTING = [(("craftingcookpot", "issmallcookingpot", "cookingspit", "cookingpot"), "cook"),
             (("isalchemy", "wicraftingalchemy", "craftingalchemy"), "alchemy"),
@@ -214,7 +222,7 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
             continue
         form, tedid = TEMPLATES[kind]
         nm = rec.get("nif_markers")
-        if kind not in SPECIAL and not nm:
+        if (kind not in SPECIAL or kind in CRAFT_KINDS) and not nm:
             skipped.append(f"{rec['edid']}: {kind} but no marker positions in its NIF (no --skyrim-data?); left as a static")
             continue
         real_model = rec["type"] == "FURN" and not rec["is_marker"]

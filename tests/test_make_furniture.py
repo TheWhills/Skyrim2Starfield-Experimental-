@@ -141,7 +141,12 @@ class MakeFurnitureTests(unittest.TestCase):
         for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench", "scrape"):
             self.assertIn(k, M.TEMPLATES)
         self.assertIn("scrape", M.SPECIAL)                                      # the wall-wipe marker's own offset
-        self.assertNotIn("cook", M.SPECIAL)                                     # the pot's Skyrim marker
+        # 2026-11-09: Skyrim's crafting markers sit at the origin (its animations stand off): the template's markers
+        sky = {"type": "FURN", "edid": "CraftingAlchemyWorkbenchTabletop", "keywords": ["isAlchemy"], "bench_type": 5,
+               "nif_markers": [{"offset": [0.0, 0.0, 0.0], "heading_deg": -0.0, "entry": ["Behind"]}]}
+        for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench"):
+            self.assertIn(k, M.SPECIAL)
+            self.assertEqual(M.markers(sky, k, "floor"), [])
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "HammerTableMarker", "keywords": ["isHammerTable"]}),
                          "hammer")
 
