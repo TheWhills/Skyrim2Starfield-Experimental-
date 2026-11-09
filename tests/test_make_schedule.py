@@ -39,6 +39,16 @@ B = lambda v: (b"CNAM", bytes([v]))                                   # noqa: E7
 
 
 class ScheduleTests(unittest.TestCase):
+    def test_face_npc(self):
+        faces = {"npcs": [{"edid": "Ralof", "test_npc": {"form_id": "03000805", "template_form_id": "0001ABCD"}},
+                          {"edid": "Orgnar", "test_npc": "no vanilla template NPC of this sex"}]}
+        p = os.path.join("C:", "Mods", "S2S Face Test", "faces.json")
+        f = M.face_npc(faces, "ralof", p)
+        self.assertEqual((f["plugin"], f["form_id"]), ("S2SFaceTest.esm", "03000805"))
+        self.assertEqual(os.path.dirname(f["path"]), os.path.dirname(os.path.abspath(p)))
+        self.assertIsNone(M.face_npc(faces, "Orgnar", p))
+        self.assertEqual(M.face_npc(faces, "Ralof", p, "X/Other.esm")["plugin"], "Other.esm")
+
     def test_sf_schedule(self):
         s = {"month": -1, "day_of_week": -1, "date": 0, "hour": 6, "minute": 0, "duration_min": 60}
         self.assertEqual(M.sf_schedule(s), dict(s, month=0))
@@ -118,6 +128,9 @@ class ScheduleTests(unittest.TestCase):
             self.assertEqual(ins["2"]["pos"], [-1250.0, 40.0, 0.0])
             self.assertEqual((ins["12"]["value"], ins["5"]["value"]), (False, True))
             self.assertIn("Orgnar in RiverwoodSleepingGiantInn", out.getvalue())
+            # no face-test NPC of its own: generic copy, said so
+            self.assertNotIn("face_npc", ac)
+            self.assertTrue(any("Orgnar: no face-test NPC" in n for n in r["notes"]))
             # the quest-conditioned package is left out; Eat becomes Sandbox near the editor location, eating allowed
             self.assertEqual([q["skyrim"] for q in ac["packages"]], ["OrgnarWorkInn0x24", "OrgnarEat7x1"])
             self.assertTrue(any("MQSomething: left out" in n for n in r["notes"]))

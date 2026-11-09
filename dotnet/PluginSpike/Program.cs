@@ -426,15 +426,56 @@ if (sfActors != null)
 var xMarker = new FormKey(sfEsm, actorsRoot is JsonElement axr && axr.TryGetProperty("xmarker", out var xmj) && xmj.ValueKind == JsonValueKind.String
     ? Convert.ToUInt32(xmj.GetString(), 16) & 0xFFFFFF : 0x00003B);
 
+// Face-test NPCs (2026-11-08, owner: "get them working like the others. with their voices"): face_fit.py --test-plugin's
+// S2SFaceTest.esm holds each fitted NPC (face, Skyrim hair, outfit, name, voice type; its Skyrim greetings are conditioned
+// GetIsID on THAT record, scripts/npc/npc_voice.py). So the NPC is not copied: FO4Port.esm overrides it (packages, AI
+// flags) and places it; the face plugin and its masters become FO4Port's masters (all full masters: sfplugin writes
+// them so). ACTOR_LOOK=generic: the earlier generic copy of the vanilla template instead (A/B).
+var faceMods = new Dictionary<string, IStarfieldModGetter>(StringComparer.OrdinalIgnoreCase);
+var extraMasters = new List<ModKey>();                 // face plugins and their masters, for the write's load order
+IStarfieldModGetter? FacePlugin(string path)
+{
+    if (faceMods.TryGetValue(path, out var have)) return have;
+    if (!File.Exists(path)) return null;
+    var masters = MastersOf(path);
+    var lookup = new Cache<IModMasterStyledGetter, ModKey>(x => x.ModKey);
+    foreach (var mk in masters) lookup.Set(new KeyedMasterStyle(mk, MasterStyle.Full));
+    var fm = StarfieldMod.CreateFromBinaryOverlay(path, release, new BinaryReadParameters { MasterFlagsLookup = lookup });
+    foreach (var mk in masters.Append(fm.ModKey))
+        if (mk != sfEsm && !extraMasters.Contains(mk)) extraMasters.Add(mk);
+    return faceMods[path] = fm;
+}
+
 void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource)
 {
     var sk = ac.GetProperty("skyrim").GetString()!;
-    var tplKey = new FormKey(sfEsm, Convert.ToUInt32(ac.GetProperty("template_npc").GetString(), 16) & 0xFFFFFF);
-    var vnpc = sfActors!.Npcs.FirstOrDefault(n => n.FormKey == tplKey);
-    if (vnpc == null) { Console.WriteLine($"actor {sk}: template NPC {tplKey} not in Starfield.esm; not placed"); return; }
-    var npc = (Npc)vnpc.Duplicate(Id("NPC_:" + sk));
-    npc.EditorID = "S2S_" + sk;
-    npc.Name = ac.GetProperty("name").GetString();
+    INpcGetter? faceNpc = null;
+    var lookNote = "";
+    if (ac.TryGetProperty("face_npc", out var fnj) && fnj.ValueKind == JsonValueKind.Object
+        && Environment.GetEnvironmentVariable("ACTOR_LOOK") != "generic")
+    {
+        var fpath = fnj.GetProperty("path").GetString()!;
+        var fkey = new FormKey(ModKey.FromNameAndExtension(Path.GetFileName(fpath)),
+                               Convert.ToUInt32(fnj.GetProperty("form_id").GetString(), 16) & 0xFFFFFF);
+        var fm = FacePlugin(fpath);
+        faceNpc = fm?.Npcs.FirstOrDefault(n => n.FormKey == fkey);
+        lookNote = faceNpc != null ? $"its face-test NPC {faceNpc.EditorID} {fkey}, overridden"
+            : fm == null ? $"{fpath} not found: generic copy" : $"no NPC {fkey} in {fpath}: generic copy";
+    }
+    Npc npc;
+    if (faceNpc != null)
+        npc = mod.Npcs.GetOrAddAsOverride(faceNpc);          // keeps its FormKey: face, hair, outfit, voice, greetings
+    else
+    {
+        var tplKey = new FormKey(sfEsm, Convert.ToUInt32(ac.GetProperty("template_npc").GetString(), 16) & 0xFFFFFF);
+        var vnpc = sfActors!.Npcs.FirstOrDefault(n => n.FormKey == tplKey);
+        if (vnpc == null) { Console.WriteLine($"actor {sk}: template NPC {tplKey} not in Starfield.esm; not placed"); return; }
+        npc = (Npc)vnpc.Duplicate(Id("NPC_:" + sk));
+        npc.EditorID = "S2S_" + sk;
+        npc.Name = ac.GetProperty("name").GetString();
+        lookNote = (lookNote.Length > 0 ? lookNote + "; " : "") + $"copy of {vnpc.EditorID} {tplKey}";
+        mod.Npcs.Add(npc);
+    }
     npc.VirtualMachineAdapter = null;
     npc.UseTemplateActors &= ~Npc.TemplateActorType.AiPackages;
     // the vanilla NPC face_fit copies is a character-creation preset (ChargenPreset...): its "IsCharGenFacePreset" flag
@@ -528,14 +569,13 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                 notes.Add($"A/B: vanilla {vp0.EditorID} {vp0.FormKey} added unchanged after ours (console: getiscurrentpackage 00{vp0.FormKey.ID:X6})");
             }
         }
-    mod.Npcs.Add(npc);
     var achr = new PlacedNpc(Id($"ACHR:{cellName}:{sk}"), release)
         { Base = new FormLinkNullable<INpcGetter>(npc.FormKey), Position = Pos(ac.GetProperty("pos")), Rotation = Rot(ac.GetProperty("rot")) };
     achr.MajorRecordFlagsRaw |= 0x400;
     cell.Persistent.Add(achr);
     sourceMap[ac.GetProperty("source").GetString()!] = achr.FormKey.ToString();
     sourceMap["NPC_:" + sk] = npc.FormKey.ToString();
-    Console.WriteLine($"actor {sk}: NPC {npc.FormKey} (copy of {vnpc.EditorID} {tplKey}), {npc.Packages.Count} packages, placed {achr.FormKey} in {cellName}");
+    Console.WriteLine($"actor {sk}: NPC {npc.FormKey} ({lookNote}), {npc.Packages.Count} packages, placed {achr.FormKey} in {cellName}");
     Console.WriteLine("  " + npcNote);
     foreach (var n in notes) Console.WriteLine("  " + n);
 }
@@ -1152,18 +1192,19 @@ if (naviO != null) FillNavi(new[] { sfEsm, extKey, planetKey }.Where(k => k != n
 mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 var sfData = Environment.GetEnvironmentVariable("STARFIELD_DATA") ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder");
-var knownMasters = new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
-    .Select(k => new KeyedMasterStyle(k!.Value, MasterStyle.Full)).ToArray();
+var loadOrder = new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null).Select(k => k!.Value)
+    .Concat(extraMasters).Distinct().ToArray();
+var knownMasters = loadOrder.Select(k => new KeyedMasterStyle(k, MasterStyle.Full)).ToArray();
 void WriteMod()
 {
-    if (extKey == null)
+    if (extKey == null && extraMasters.Count == 0)
         mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
             .WithKnownMasters(knownMasters).Write();
     else
         // with the exterior overrides: the masters' load order given (as TerrainOverlays writes its planet plugin); the
         // header-master route only knew Starfield.esm and threw on the exterior plugin's records
-        mod.BeginWrite.ToPath(path).WithLoadOrder(new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null)
-                .Select(k => k!.Value).ToArray())
+        // the face-test plugins live in MO2's mods folder, not Data: their load order is given, not read from Data
+        mod.BeginWrite.ToPath(path).WithLoadOrder(loadOrder)
             .WithKnownMasters(knownMasters).Write();
 }
 WriteMod();

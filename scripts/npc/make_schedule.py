@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 from fo4sf import packages, skyrimnpc, skyrimrefs  # noqa: E402
 
 U = 70.0
+FACE_PLUGIN = "S2SFaceTest.esm"           # face_fit.py --test-plugin's output, next to its faces.json
 # Skyrim package templates -> Starfield's (owner's package_survey.py 2026-11-08: Starfield has Sandbox (577 uses),
 # Travel, Sit, Sleep, ...; Skyrim's SandboxWorking = travel, unlock doors, sandbox: Starfield's Sandbox procedure list)
 SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep", "travel": "Travel", "sit": "Sit",
@@ -188,6 +189,17 @@ def pick_template(faces, edid, female):
     return None, "no template in faces.json"
 
 
+def face_npc(faces, edid, faces_path, plugin=""):
+    """The NPC's own face-test NPC (face_fit.py --test-plugin: face, Skyrim hair, outfit, name, voice type and greetings):
+    {"plugin", "path", "form_id"}; None when faces.json has no test NPC of its own for it."""
+    for r in (faces or {}).get("npcs", []):
+        t = r.get("test_npc")
+        if r.get("edid", "").lower() == edid.lower() and isinstance(t, dict) and t.get("form_id"):
+            path = plugin or os.path.join(os.path.dirname(os.path.abspath(faces_path)), FACE_PLUGIN)
+            return {"plugin": os.path.basename(path), "path": path, "form_id": t["form_id"]}
+    return None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True)
@@ -200,6 +212,7 @@ def main(argv=None):
     ap.add_argument("--keep-furniture-only", action="store_true",
                     help="keep Skyrim's Allow Wandering off on sandboxes (only once furniture / idle markers are converted)")
     ap.add_argument("--template-npc", default="", help="Starfield NPC FormID to copy instead (hex)")
+    ap.add_argument("--face-plugin", default="", help="the face-test plugin (default: S2SFaceTest.esm next to --faces)")
     a = ap.parse_args(argv)
     notes = []
     cells_txt = os.path.join(a.work, "cells.txt")
@@ -254,8 +267,15 @@ def main(argv=None):
             pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned,
                                   a.keep_furniture_only) for p in src["packages"]]
             name = npc.get("full_name") or edid
-            actors.append({"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
-                           "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]})
+            ac = {"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
+                  "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]}
+            fn = face_npc(faces, edid, a.faces, a.face_plugin) if a.faces else None
+            if fn:
+                ac["face_npc"] = fn
+            else:
+                notes.append(f"{edid}: no face-test NPC of its own in faces.json (run face_fit.py with --npc {edid}); "
+                             "a generic copy of the template")
+            actors.append(ac)
     finally:
         sky.close()
     out = os.path.join(a.work, "actors.json")
@@ -263,8 +283,9 @@ def main(argv=None):
         json.dump({"actors": actors, "notes": notes,
                    "xmarker": None if xmarker is None else f"{xmarker:08X}"}, fh, indent=1)
     for ac in actors:
-        print(f"{ac['skyrim']} in {ac['cell']} at {ac['pos']} (copy of Starfield NPC {ac['template_npc']}: "
-              f"{ac['template_why']}):")
+        look = (f"its face-test NPC {ac['face_npc']['form_id']} in {ac['face_npc']['plugin']}" if ac.get("face_npc")
+                else f"copy of Starfield NPC {ac['template_npc']}: {ac['template_why']}")
+        print(f"{ac['skyrim']} in {ac['cell']} at {ac['pos']} ({look}):")
         for p in ac["packages"]:
             s = p["schedule"] or {}
             ins = ", ".join(f"{v['skyrim']}={v.get('value', v.get('type'))}" for v in p["inputs"].values())

@@ -175,6 +175,12 @@ Furniture NPCs can use (chairs, benches, beds, lean counters, sweeping spots) in
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
 ```
+Scheduled NPCs with their own face, hair, outfit and voice: fit them first (outfit, voice lines, face-test NPC; the
+face_fit run must list every NPC wanted, old and new, since it rewrites S2SFaceTest.esm), then the build above. The
+build overrides each NPC's face-test record (FO4Port.esm masters S2SFaceTest.esm: in MO2's plugin list FO4Port.esm must
+sit below it). Rebuild FO4Port.esm after every face_fit run (face_fit's ids move). `$env:ACTOR_LOOK="generic"` = the
+old generic copies.
+
 `-MarkerZ skyrim` puts the markers at Skyrim's seat height instead of the floor. `-FurnShift "bartender=0,0.2,0"` moves a kind's markers
 (metres, +y = facing); furniture_standoff.py measures how far (vanilla placements vs Skyrim's):
 

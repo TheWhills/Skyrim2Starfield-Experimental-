@@ -101,3 +101,13 @@ In game: Orgnar selected, `getiscurrentpackage 05000E64` should now be 1; before
 Verified in game (owner, 2026-11-08 rebuild, build printed "schedule month 0"): Orgnar behind the bar,
 `getiscurrentpackage 05000E64` = 1. The month was the cause. Next: furniture / idle markers (bar-lean marker, chairs,
 beds) so the packages have something to use and the NPCs animate.
+
+## Their own faces, hair, outfits and voices (2026-11-08)
+Owner: "get them working like the others. with their voices, and see them in their schedules spots". face_fit.py
+--test-plugin already makes each fitted NPC a real record in S2SFaceTest.esm (face dials, Skyrim hair / beard from
+S2SSkyrimHairs.esm, outfit from S2SArmorTest.esm, Skyrim name, voice type with its Skyrim greetings; the greetings are
+conditioned GetIsID on that record, npc_voice.py). A copy would lose the greetings (new FormID), so PluginSpike now
+OVERRIDES that record (packages, AI flags as before) and places it; make_schedule.py writes "face_npc" (plugin, path,
+form id from faces.json) when the NPC has its own test NPC, else notes it and the generic copy stays. ACTOR_LOOK=generic
+for the old copy (A/B). FO4Port.esm then masters S2SFaceTest.esm and its masters (MO2 mods: FO4Port.esm must load after
+them). face_fit numbers its NPCs by position: rebuild FO4Port.esm after every face_fit run.
