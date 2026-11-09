@@ -158,17 +158,27 @@ def armpits(body_skel: np.ndarray, body_w, reach: float = ARMPIT_REACH) -> np.nd
     """Body vertices within reach of where the skin's weights pass from the torso to the arm (arm share 0.1-0.9)
     (2026-11-08, owner: sky seen through the iron cuirass's armpit when aiming and a see-through seam under Ralof's
     arm; verified on the debug meshes: the body round the armpit was left out of the skin piece because the gear
-    covers it with the arms out, and raising the arm opens the armhole over it)."""
+    covers it with the arms out, and raising the arm opens the armhole over it).
+    2026-11-09 (owner: Delphine's dress, refitted with this, showed round bare patches on top of both shoulders;
+    Ysolda's, fitted before it, did not): that seam rings the whole shoulder, so the top of the shoulder came into the
+    skin piece too and showed through tight sleeves. Only the lower half of each side's seam (z up, sides by x) and
+    the body no higher than it count as the armpit now."""
     share = np.array([gearfit.arm_share(vw) for vw in body_w])
     seam = (share > 0.1) & (share < 0.9)
-    out = np.zeros(len(body_skel), bool)
+    p = np.asarray(body_skel, float)
+    out = np.zeros(len(p), bool)
     if not seam.any():
         return out
-    sp = np.asarray(body_skel, float)[seam]
-    p = np.asarray(body_skel, float)
-    for c in range(0, len(p), 512):
-        q = p[c:c + 512]
-        out[c:c + 512] = ((q[:, None, :] - sp[None]) ** 2).sum(-1).min(1) < reach ** 2
+    for side in (p[:, 0] < 0, p[:, 0] >= 0):
+        sp = p[seam & side]
+        if not len(sp):
+            continue
+        zcut = sp[:, 2].min() + 0.5 * (sp[:, 2].max() - sp[:, 2].min())
+        sp = sp[sp[:, 2] <= zcut + 1e-9]
+        cand = np.where(side & (p[:, 2] <= zcut + 1e-9))[0]
+        for c in range(0, len(cand), 512):
+            idx = cand[c:c + 512]
+            out[idx] = ((p[idx][:, None, :] - sp[None]) ** 2).sum(-1).min(1) < reach ** 2
     return out
 
 

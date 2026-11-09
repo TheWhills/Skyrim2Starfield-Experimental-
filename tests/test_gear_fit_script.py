@@ -485,3 +485,9 @@ class ArmpitsTests(unittest.TestCase):
         pts = np.array([[0.0, 0, 1.3], [0.15, 0, 1.3], [0.20, 0, 1.3], [0.45, 0, 1.3]])
         w = [[("C_Chest", 1.0)], [("C_Chest", 0.5), ("L_Biceps", 0.5)], [("L_Biceps", 1.0)], [("L_Forearm", 1.0)]]
         self.assertEqual(gear_fit.armpits(pts, w).tolist(), [False, True, True, False])
+        # 2026-11-09 (Delphine's shoulders): the seam rings the shoulder; its top half and the body above it stay out
+        ring = np.array([[0.18, 0, 1.40], [0.18, 0, 1.30], [0.20, 0, 1.42], [0.17, 0, 1.31], [0.12, 0, 1.45],
+                         [-0.18, 0, 1.30], [-0.18, 0, 1.40]])
+        rw = [[("C_Chest", 0.5), ("L_Biceps", 0.5)]] * 4 + [[("C_Chest", 1.0)]] + \
+             [[("C_Chest", 0.5), ("R_Biceps", 0.5)]] * 2
+        self.assertEqual(gear_fit.armpits(ring, rw).tolist(), [False, True, False, True, False, True, False])

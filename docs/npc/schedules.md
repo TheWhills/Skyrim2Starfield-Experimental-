@@ -144,6 +144,12 @@ conversion in S2SArmorTest.esm (S2S_Ysolda_outfit_Outfit 03000811, S2S_Delphine_
 different runs with different fit code. Next: refit Delphine's with today's gear_fit (as Embry's, which fixed his
 shirt); outfit_probe now also lists each shape's openings and whether Skyrim's own body piece lies under them.
 Lasting fix: step 9's clothes as items, one conversion per Skyrim outfit shared by everyone wearing it.
+Refit with today's code (owner, 2026-11-09): still round bare patches on the shoulder tops. Owner: Ysolda's dress was
+made before the iron-armour changes. Of those, the 2026-11-08 armpit change matches (verified in code, in game
+unverified): gear_fit.armpits kept every body vertex within 8 cm of the torso / arm weight seam in the skin piece, and
+that seam rings the whole shoulder, so the shoulder top was skin under a tight sleeve. Now only the lower half of each
+side's seam and the body no higher than it.
+
 
 
 
