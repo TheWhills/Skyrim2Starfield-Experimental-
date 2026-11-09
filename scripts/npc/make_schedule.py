@@ -29,7 +29,11 @@ from fo4sf import packages, skyrimnpc, skyrimrefs  # noqa: E402
 U = 70.0
 # Skyrim package templates -> Starfield's (owner's package_survey.py 2026-11-08: Starfield has Sandbox (577 uses),
 # Travel, Sit, Sleep, ...; Skyrim's SandboxWorking = travel, unlock doors, sandbox: Starfield's Sandbox procedure list)
-SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep", "travel": "Travel", "sit": "Sit"}
+SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep", "travel": "Travel", "sit": "Sit",
+             "eat": "Sandbox"}
+# inputs set on the Starfield side whatever Skyrim had (by normalized Starfield input name): Starfield has no Eat
+# template; its NPCs eat while sandboxing (Allow Eating / Allow Sitting)
+FORCE = {"eat": {"alloweating": True, "allowsitting": True}}
 
 
 def norm(name):
@@ -55,8 +59,12 @@ def ref_place(ix, fid):
     return [round(c, 3) for c in v[:3]], [round(c, 5) for c in v[3:]]
 
 
-def convert_package(sky, sf_tpls, pack_fid, cell_names, notes):
+def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=False):
     p = packages.parse_pack(sky.subs(pack_fid))
+    if not keep_conditioned and (p["conditions"] or p["owner_quest"]):
+        notes.append(f"{p['edid']}: left out (quest / conditions decide when Skyrim runs it: "
+                     f"{p['conditions']} conditions" + (", owned by a quest" if p["owner_quest"] else "") + ")")
+        return None
     tpl = packages.parse_pack(sky.subs(p["template"])) if p["template"] else None
     tname = (tpl or {}).get("edid") or ""
     sf_name = SKY_TO_SF.get(tname.lower(), tname)
@@ -70,7 +78,7 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes):
     by_name = {}
     for i in sf_values:
         by_name.setdefault(norm(sf_names.get(i)), i)
-    inputs, skipped = {}, []
+    inputs, skipped, drop = {}, [], None
     for k, (inp, idx) in enumerate(zip(p["inputs"], value_indexes(p))):
         name = sky_names.get(idx)
         target = by_name.get(norm(name))
@@ -90,13 +98,17 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes):
             if v["type"] == 0 and v["value"]:
                 pos, rot = ref_place(sky, v["value"])
                 info = sky.name_of(v["value"])
+                where = (info.get("cell") or {}).get("edid")
+                if where not in cell_names:
+                    drop = f"its location {name} is near a reference in {where or 'the exterior'}, outside the batch"
+                    continue
                 loc.update(type="near_reference", source=skyrimrefs.formkey(v["value"], "Skyrim.esm"), pos=pos, rot=rot,
                            base=(info.get("base") or {}).get("edid"),
                            cell=(info.get("cell") or {}).get("edid"))
             elif v["type"] == 1 and v["value"]:
                 e = sky.edid(v["value"])
                 if e not in cell_names:
-                    notes.append(f"{p['edid']}: location cell {e} is not in the batch; input left as the vanilla value")
+                    drop = f"its location {name} is the cell {e}, outside the batch"
                     continue
                 loc.update(type="in_cell", cell=e)
             elif v["type"] in (2, 3, 12):
@@ -107,6 +119,12 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes):
             inputs[str(target)] = loc
         else:
             skipped.append(f"{name or idx} ({inp['type']})")
+    if drop:
+        notes.append(f"{p['edid']}: left out: {drop} (NPCs outside the converted interiors come later)")
+        return None
+    for k, val in FORCE.get(tname.lower(), {}).items():
+        if k in by_name:
+            inputs[str(by_name[k])] = {"kind": "bool", "value": val, "skyrim": f"(set for {tname})"}
     if skipped:
         notes.append(f"{p['edid']}: inputs without a Starfield counterpart kept vanilla: {skipped}")
     return {"edid": "S2S_" + p["edid"], "skyrim": p["edid"], "schedule": p["schedule"], "speed": p["speed"],
@@ -146,6 +164,8 @@ def main(argv=None):
     ap.add_argument("--npc", action="append", required=True)
     ap.add_argument("--work", required=True, help="the interior batch work folder (cells.txt; actors.json is written there)")
     ap.add_argument("--faces", default="", help="face_fit.py's faces.json (vanilla template NPC per test NPC)")
+    ap.add_argument("--keep-conditioned", action="store_true",
+                    help="keep packages with conditions / an owner quest (their conditions are not converted)")
     ap.add_argument("--template-npc", default="", help="Starfield NPC FormID to copy instead (hex)")
     a = ap.parse_args(argv)
     cells_txt = os.path.join(a.work, "cells.txt")
@@ -195,7 +215,7 @@ def main(argv=None):
             if not tpl:
                 notes.append(f"{edid}: {why}; give --faces or --template-npc")
                 continue
-            pk = [convert_package(sky, sf_tpls, p, cell_names, notes) for p in src["packages"]]
+            pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned) for p in src["packages"]]
             name = npc.get("full_name") or edid
             actors.append({"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
                            "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]})

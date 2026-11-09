@@ -43,7 +43,13 @@ class ScheduleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))])
             npc = rec(b"NPC_", 0x100, [(b"EDID", Z("Orgnar")), (b"FULL", Z("Orgnar")), (b"ACBS", bytes(24)),
-                                       (b"PKID", struct.pack("<I", 0x200))])
+                                       (b"PKID", struct.pack("<I", 0x202)), (b"PKID", struct.pack("<I", 0x200)),
+                                       (b"PKID", struct.pack("<I", 0x203))])
+            quest = rec(b"PACK", 0x202, [(b"EDID", Z("MQSomething")), (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
+                                         (b"CTDA", bytes(32)), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
+            eat_t = pack(0x204, "Eat", 19, 0, None, [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0))], [0],
+                         [(0, "Location")])
+            eat = pack(0x203, "OrgnarEat7x1", 18, 0x204, (7, 0, 60), [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 512))], [0])
             tpl = pack(0x201, "SandboxWorking", 19, 0, None,
                        [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0)), ("Bool", *B(0)), ("Bool", *B(0))],
                        [0, 14, 1], [(0, "Location"), (1, "Allow Eating"), (14, "Unlock On Arrival?"), (25, "Prefered Path Only?")],
@@ -55,7 +61,7 @@ class ScheduleTests(unittest.TestCase):
             achr = rec(b"ACHR", 0x600, [(b"NAME", struct.pack("<I", 0x100)), (b"DATA", struct.pack("<6f", -1312.8, 18.3, 0, 0, 0, 1.5))])
             marker = rec(b"REFR", 0x601, [(b"NAME", struct.pack("<I", 0x3B)), (b"DATA", struct.pack("<6f", -1250, 40, 0, 0, 0, 0))])
             xm = rec(b"STAT", 0x3B, [(b"EDID", Z("XMarker"))])
-            body = (grup(b"STAT", 0, [xm]) + grup(b"NPC_", 0, [npc]) + grup(b"PACK", 0, [pk, tpl])
+            body = (grup(b"STAT", 0, [xm]) + grup(b"NPC_", 0, [npc]) + grup(b"PACK", 0, [pk, tpl, quest, eat_t, eat])
                     + grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [cell, grup(0x500, 6, [grup(0x500, 8, [achr, marker])])])])]))
             sky = os.path.join(d, "Skyrim.esm")
             with open(sky, "wb") as fh:
@@ -95,6 +101,12 @@ class ScheduleTests(unittest.TestCase):
             self.assertEqual(ins["2"]["pos"], [-1250.0, 40.0, 0.0])
             self.assertEqual((ins["12"]["value"], ins["5"]["value"]), (False, True))
             self.assertIn("Orgnar in RiverwoodSleepingGiantInn", out.getvalue())
+            # the quest-conditioned package is left out; Eat becomes Sandbox near the editor location, eating allowed
+            self.assertEqual([q["skyrim"] for q in ac["packages"]], ["OrgnarWorkInn0x24", "OrgnarEat7x1"])
+            self.assertTrue(any("MQSomething: left out" in n for n in r["notes"]))
+            e = ac["packages"][1]
+            self.assertEqual((e["sf_template"], e["inputs"]["2"]["type"], e["inputs"]["5"]["value"]),
+                             ("Sandbox", "near_editor_location", True))
 
 
 if __name__ == "__main__":

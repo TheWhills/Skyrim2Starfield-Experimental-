@@ -40,3 +40,12 @@ Mutagen keeps u32; PluginSpike prints the vanilla value both ways). NPC: copy of
 (faces.json), name, packages = ours, AI-package template flag cleared, scripts dropped; placed as a persistent ACHR.
 Not yet: his face / hair / outfit (the test NPC lives in S2SFaceTest.esm, an MO2 plugin), furniture (the bar-lean
 marker is a static here), dialogue / vendor. `riverwood_doors.ps1 -Actors Orgnar` runs it.
+
+## Delphine and Embry (survey 2026-11-08) and the rules that came from them
+Delphine: 14 packages, the first ones from the main quest (Sky Haven Temple practice / sandbox / sleep, return to
+Riverwood) before her inn routine (DelphineInnServices6x18 SandboxAndKeepEyeOn, Eat 6 and 18, DelphineSleep0x6,
+DefaultSandboxEditorLocation512NoWeapons). Embry: Sleep 0-7, Eat 7-8, Loiter 8-17 (Sandbox), inn 17-1 (Sandbox),
+Patrol (default). make_schedule.py now: leaves out packages with conditions or an owner quest (their conditions are
+not converted, and the first matching package wins: unconditioned quest packages would take over;
+`--keep-conditioned` keeps them); leaves out packages whose location is outside the batch's interiors (Embry's daytime
+loiter outside, until NPCs go outdoors); Skyrim Eat (no Starfield template) -> Sandbox with Allow Eating / Sitting on.
