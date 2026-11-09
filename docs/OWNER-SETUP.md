@@ -163,3 +163,9 @@ powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "
 
 In game, NPC selected in the console: `getiscurrentpackage <id>` (1 = running; ids are printed by the build, FO4Port's
 load slot is 05, e.g. `getiscurrentpackage 05000E64`). `getcurrentaiprocedure` is not a reliable check (vanilla NPCs show -1).
+
+Furniture survey (read-only; Skyrim's chairs / beds / lean spots in the batch and Starfield's furniture; docs/npc/furniture.md):
+
+```powershell
+python -I scripts\interior\furniture_survey.py --skyrim "$sky\Skyrim.esm" --skyrim-data "$sky" --starfield "$sf\Data\Starfield.esm" --work C:\Modding\work\s2s\riverwood_doors --out C:\Modding\work\furniture
+```
