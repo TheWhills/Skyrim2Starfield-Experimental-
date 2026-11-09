@@ -404,13 +404,21 @@ bool CleanPackage(IPackageGetter vp)
 if (sfActors != null)
 {
     var fallback = new Dictionary<FormKey, IPackageGetter>();
+    var clean = new Dictionary<FormKey, IPackageGetter>();
     foreach (var vp in sfActors.Packages)
     {
         if (vp.Type != Package.Types.Package || vp.PackageTemplate.IsNull) continue;
         var tk = vp.PackageTemplate.FormKey;
         fallback.TryAdd(tk, vp);
-        if (!vanillaPackage.ContainsKey(tk) && CleanPackage(vp)) vanillaPackage[tk] = vp;
+        if (!CleanPackage(vp)) continue;
+        clean.TryAdd(tk, vp);
+        // best: clean AND its location is "near editor location" (works for any NPC where it is placed): the A/B test
+        // below gives the NPC this vanilla package unchanged as a fallback after ours
+        if (!vanillaPackage.ContainsKey(tk) && vp.Data.Values.Any(d => d is IPackageDataLocationGetter l
+                && l.Location.Target is ILocationFallbackGetter fb && fb.Type == LocationTargetRadius.LocationType.NearEditorLocation))
+            vanillaPackage[tk] = vp;
     }
+    foreach (var (tk, vp) in clean) vanillaPackage.TryAdd(tk, vp);
     foreach (var (tk, vp) in fallback)
         if (vanillaPackage.TryAdd(tk, vp)) Console.WriteLine($"package template {tk}: no clean vanilla package; copying {vp.EditorID}");
 }
@@ -499,6 +507,19 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
         notes.Add($"{edid} {pk.FormKey} (copy of vanilla {vp.EditorID} {vp.FormKey})");
         sourceMap["PACK:" + edid] = pk.FormKey.ToString();
     }
+    // A/B (2026-11-08: Orgnar's package never ran: GetIsCurrentPackage 0, GetCurrentAIProcedure -1): after ours, the
+    // vanilla package ours was copied from, unchanged. If the NPC then runs that one, the NPC is fine and our edits make
+    // ours invalid; if it runs neither, the NPC copy itself does not run packages. ACTOR_AB=0 leaves it out.
+    if (Environment.GetEnvironmentVariable("ACTOR_AB") != "0")
+        foreach (var pj in ac.GetProperty("packages").EnumerateArray())
+        {
+            var tkey = new FormKey(sfEsm, Convert.ToUInt32(pj.GetProperty("sf_template_form").GetString(), 16) & 0xFFFFFF);
+            if (vanillaPackage.TryGetValue(tkey, out var vp0) && !npc.Packages.Any(l => l.FormKey == vp0.FormKey))
+            {
+                npc.Packages.Add(new FormLink<IPackageGetter>(vp0.FormKey));
+                notes.Add($"A/B: vanilla {vp0.EditorID} {vp0.FormKey} added unchanged after ours (console: getiscurrentpackage 00{vp0.FormKey.ID:X6})");
+            }
+        }
     mod.Npcs.Add(npc);
     var achr = new PlacedNpc(Id($"ACHR:{cellName}:{sk}"), release)
         { Base = new FormLinkNullable<INpcGetter>(npc.FormKey), Position = Pos(ac.GetProperty("pos")), Rotation = Rot(ac.GetProperty("rot")) };

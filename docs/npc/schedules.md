@@ -71,3 +71,9 @@ but with wandering off and only furniture / idle markers allowed, his sandbox fo
 bar-lean marker and every chair / bed are statics here), so he left it. make_schedule.py now turns Allow Wandering on
 for Starfield sandbox packages (inside their radius) until furniture is converted (`--keep-furniture-only` to keep
 Skyrim's setting).
+In game (owner, 2026-11-08, Orgnar selected): `getiscurrentpackage 05000E64` (our package) = 0, `getdistance` to the
+bar marker 4.86 m, `getcurrentaiprocedure` = -1 (no procedure); `getcurrentaipackage` does not exist in Starfield's
+console. Verified: his package does not run. The Sandbox template's Sandbox and Travel branches both read input 2
+(survey PKC2), the one we fill. Next build: the vanilla package copied is preferably one located "near editor
+location", and is also added unchanged after ours as an A/B (ACTOR_AB=0 to leave out): vanilla runs -> our edits break
+ours; neither runs -> the NPC copy (a ChargenPreset NPC) does not run packages.
