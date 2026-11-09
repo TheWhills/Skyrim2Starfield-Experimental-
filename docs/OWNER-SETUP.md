@@ -104,6 +104,16 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
    the control, rerun with `--race-head` and look again.
 
+8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
+   SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
+   ```powershell
+   python -I scripts\armor\sam_test_pack.py --starfield-data "$sf\Data" --out "$mods\S2S SAM Test"
+   ```
+   Enable "S2S SAM Test" last (it ships MeleeAttacks.agx: disable our stance / combo packs for the test, or keep it
+   below them), draw a one-handed melee weapon, attack once. The overhead power swing = SAM made our new tag play;
+   a snap or nothing = it did not. Send a short clip or what you saw, and SFSE\Plugins\SfAnimIndexLoader.log (MO2:
+   in the SAM mod folder or Overwrite).
+
 ## Working commands
 
 Converted outfit for a test NPC (one per NPC; `--add` keeps the other outfits in the plugin):

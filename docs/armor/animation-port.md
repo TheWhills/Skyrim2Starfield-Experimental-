@@ -1364,3 +1364,9 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   to see SAM declare and play it on the owner's install; if it works, a `--fragment` output for hkx_to_af / the
   stance packs (Fragments\S2S<Pack>\ with anim_actions.xtbl + clip list + the CK's offsets), retiring the spare-host
   reuse.
+* **One-tag test (2026-11-09, scripts/armor/sam_test_pack.py; offline checks only):** the vanilla one-handed power
+  attack written again as S2S_SamTest.af / .afx in melee\onehanded\player (descriptor retagged, variant fields
+  dropped), MeleeAttacks.agx's combo state MeleeAttack_A retagged to S2S_SamTest (nothing else changed), and the
+  fragment Fragments\S2SSamTest\ (animations.txt with the two files, tables\anim_actions.xtbl with the tag). No
+  offsets / event info yet. Success in game = the first attack plays the overhead power swing; the 2026-10-23 dodge
+  (same idea without SAM) snapped back.
