@@ -110,3 +110,7 @@ A/B result (owner, same day): Starfield's own WorkbenchChem (player.placeatme 2B
 does nothing on E, while chairs, benches and beds there work for the player (2026-11-08). So not our copy, model or
 markers: workbenches in this session (verified), cause open (the cell vs the character started by coc from the main
 menu). Next A/B: the same placeatme in a vanilla cell, then from a normal save.
+Owner, minutes later: moved, the vanilla lab works in the inn. So the spot decides (verified): the first one stood
+between the hearth's stone edge and a pillar. Reading (supported): Starfield checks room around the workbench marker
+before it plays the entry; our lab's Skyrim marker faces a tabletop pushed against the wall. Next: our copy on open
+floor; if it works there, give crafting markers the clearance Starfield's own labs have (measured like the bar shift).
