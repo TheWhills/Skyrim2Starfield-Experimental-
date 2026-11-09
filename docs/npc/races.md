@@ -153,8 +153,12 @@ which fits the separate-races design; hair / brows / lashes then need the same k
   along the Skyrim surface (edge geodesics) and the lip side matches (surface distance to a point above vs below the
   mouth, the same measure on both heads); moves are averaged over seam-split vertices and smoothed on the welded mesh.
   Checked on the owner's data: identical to the prototype; seam splits 0; the orc's open underbite and the elf / orc
-  ears come out whole (renders compared side by side with Skyrim's). Weak spot left: a small fold at each mouth
-  corner (both lips meet there, the side is ambiguous on both heads). About 20 s per sex.
+  ears come out whole (renders compared side by side with Skyrim's). The "fold" at the mouth corners
+  (measured on the owner's data, female orc): the stretched edges (tiny 0.1-0.3 mm edges stretched up to 15x, to ~2 mm)
+  lie 2-9 mm behind the lip front with normals facing sideways / back: Starfield's inner-mouth pocket, which the
+  opened lips expose at the corners (the viewer draws it in skin colour; in game it carries the mouth's own texture
+  and the teeth sit in front). Tighter neighbour settings (slack 0.3-1.5, mu 1-4) and easing the moves toward Skyrim's
+  corner within 4-8 mm changed nothing visible: not a transfer fault (supported; to see in game with the orc mouth). About 20 s per sex.
 - Measured, all races, old -> new (male; female similar): seam split max 8.3 mm -> 0; distance from the moved
   Starfield head to the moved Skyrim head, change vs the base heads, p95: about halved (Nord 0.55 -> 0.25 mm, Imperial
   0.68 -> 0.37, Orc 2.60 -> 1.60); the bust edge (where the head meets the body) moved up to 1.2 mm under the old
