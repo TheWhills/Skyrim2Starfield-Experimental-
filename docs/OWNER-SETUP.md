@@ -97,19 +97,16 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    below them), draw a one-handed melee weapon, attack once. The overhead power swing = SAM made our new tag play;
    a snap or nothing = it did not. Send a short clip or what you saw, and SFSE\Plugins\SfAnimIndexLoader.log (MO2:
    in the SAM mod folder or Overwrite).
-9. B + C: clothing as items, both sexes (docs/armor/README.md, "Clothing as items"). Ysolda's outfit, each piece one
-   item with a male and a female version, in its own mod "S2S Clothes" (S2SClothes.esm):
+9. Done 2026-11-09: clothing as items. Ysolda's FarmClothesOutfit04 (dress, boots) in S2S Clothes, male and female
+   versions; both test NPCs wear it, and the player's dress follows the body sliders in character creation.
+9b. B + C: the face-test NPCs wear the shared items (Delphine shares Ysolda's Skyrim outfit). Starfield closed:
    ```powershell
-   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ysolda --out "$mods\S2S Clothes" --dry-run
-   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ysolda --out "$mods\S2S Clothes" --test-npcs
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
    ```
-   The first lists the meshes each sex uses (nothing written). The second fits every piece twice (male body, female
-   body; a few minutes per piece) and prints `player.placeatme` for a male and a female test NPC wearing the outfit
-   and `player.additem` per piece. Enable "S2S Clothes" in MO2, spawn both: each should wear Ysolda's clothes fitted
-   to their own body; also additem the dress on the player. Lines marked "(male only)" / "(female only)" are parts
-   one sex does not have: look at what the other sex shows there. Send item_convert.json and screenshots.
-   If it looks right, step 4's face_fit command takes `--items-plugin "$mods\S2S Clothes\S2SClothes.esm"` (before
-   `--outfits-plugin`) and the test NPCs wear their converted Skyrim outfit, shared by everyone with that outfit.
+   faces.json shows per NPC which outfit it got (an S2S Clothes one for Ysolda and Delphine; the others keep their
+   S2SArmorTest outfit until their outfits are converted as items). In game: Delphine's dress, shoulders and arms;
+   the light band at the upper chest seen on the female item test NPC (skin piece vs neck), if it shows on her.
 
 10. B + C: weapon types with their own movesets (docs/armor/animation-port.md, "weapon types"). Install the two
    zips I sent (SkyrimMelee_LoreRim_greatsword_type.zip, SkyrimMelee_LoreRim_waraxe_type.zip) as MO2 mods, keep the

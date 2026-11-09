@@ -76,3 +76,11 @@ data yet, owner queue step 9):
   (before --outfits-plugin's per-NPC outfit), so NPCs sharing a Skyrim outfit share the items.
 - Open: skin pieces of two items in one outfit both sit on the skin template's slot (13), so only one may show;
   leveled outfit entries resolve as gear_fit does (first entry giving armor, all with Use All).
+
+### Clothing as items, first run (owner, 2026-11-09; verified in game)
+item_convert on Ysolda: FarmClothesOutfit04 -> ClothesFarmClothes04 (S2S_Skin slot 13 + dress slots 3 / 5) and
+ClothesFarmBoots04 (slot 7), male and female meshes per part, one OTFT. The male and female test NPCs each wear their
+own sex's version; the player's dress in character creation follows the weight sliders (muscular / heavy). Seen: a
+lighter band at the female test NPC's upper chest (skin piece against the neck; open), the dress's side slits as in
+Skyrim's mesh. Next: face_fit --items-plugin so every NPC with this Skyrim outfit (Ysolda, Delphine) shares it.
+
