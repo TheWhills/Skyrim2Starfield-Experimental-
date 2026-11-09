@@ -890,6 +890,33 @@ def slots_by_shape(gear_bytes, meshes) -> dict:
     return out
 
 
+# Starfield's "Vis Only" biped slots not used by the parts above (xEdit wbDefinitionsSF1 wbBipedObjectFlags: 10-12
+# Upper Body 1-3, 14-15 Misc 2-3; 13 Misc 1 is the skin piece's, 9 is Head)
+EXTRA_SLOTS = (10, 11, 12, 14, 15)
+
+
+def distinct_slots(slots: dict, names) -> tuple:
+    """Each written part on slots of its own: a part whose slots another part (earlier in `names`) already holds moves
+    to the next free EXTRA_SLOTS slot. 2026-11-08, Embry: his Skyrim farm clothes are one armor with two shapes, shirt
+    (robemorph) and Pants, both given that armor's slots [3, 5]; in game the pants showed and the shirt did not (one
+    addon per biped slot, supported: Orgnar's outfit, one shape on [3, 5], showed whole). Returns (slots, notes)."""
+    used, out, notes = set(), {}, []
+    asked = {x for n in names for x in (slots.get(n) or [])}
+    free = [x for x in EXTRA_SLOTS if x not in asked]          # not a slot another part asks for itself
+    for n in names:
+        sl = slots.get(n)
+        if sl is None:
+            continue
+        if used & set(sl):
+            free = [x for x in free if x not in used]
+            new = [free.pop(0)] if free else list(sl)
+            notes.append(f"{n}: slots {sl} already worn by another part -> {new}")
+            sl = new
+        used |= set(sl)
+        out[n] = sl
+    return out, notes
+
+
 def zero_morph(data: bytes) -> bytes:
     """The same morph.dat layout (vertices, keys, which vertex has a record for which key) with every delta and
     normal / tangent word 0."""
@@ -1094,7 +1121,10 @@ def main(argv=None):
         if skin_sh is not None and slots:
             nifs[SKIN_SHAPE.decode()] = f"S2S\\{a.name}_Skin.nif"
     else:
-        piece_slots = slots_by_shape(gear_bytes, meshes)
+        piece_slots, slot_notes = distinct_slots(slots_by_shape(gear_bytes, meshes), names)
+        for sn in slot_notes:
+            print("  " + sn)
+        rep["slot_moves"] = slot_notes
         parts = [{"shape": sh, "material": mats.get(n), "back": n in doubled, "slots": piece_slots.get(n)}
                  for sh, n in zip(shapes, names)]
         if skin_sh is not None and slots:

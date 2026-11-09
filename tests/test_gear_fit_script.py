@@ -282,6 +282,15 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(out, {"Boots": [7], "Cuirass": [3, 5], "Body": [3, 5], "Cuffs": [8], "Belt": [9]})
 
 
+    def test_distinct_slots(self):
+        # Embry: one Skyrim armor, two shapes on [3, 5]: the second moves to a free Vis Only slot; order kept
+        out, notes = gear_fit.distinct_slots({"robemorph": [3, 5], "Pants": [3, 5], "Boots": [7], "Belt": [10]},
+                                             ["robemorph", "Pants", "Boots", "Belt", "Missing"])
+        self.assertEqual(out, {"robemorph": [3, 5], "Pants": [11], "Boots": [7], "Belt": [10]})
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Pants", notes[0])
+
+
 class ObjTests(unittest.TestCase):
     def test_obj_with_uvs(self):
         import numpy as np

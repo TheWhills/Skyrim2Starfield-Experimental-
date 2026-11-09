@@ -129,6 +129,21 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class BodyTests(unittest.TestCase):
+    def test_with_body(self):
+        import struct as st
+        tpl = [(b"EDID", b"T\0"), (b"MWGT", st.pack("<3f", 0.1, 0.8, 0.1)), (b"MRSV", st.pack("<5f", *[0.9] * 5)),
+               (b"FMSI", b"\0" * 4)]
+        body = [(b"EDID", b"B\0"), (b"MWGT", st.pack("<3f", 0.3, 0.3, 0.4)), (b"MRSV", st.pack("<5f", *[0.5] * 5))]
+        out, got = S.with_body(tpl, body)
+        self.assertEqual(got, ["MRSV", "MWGT"])
+        self.assertEqual([s for s, _d in out], [b"EDID", b"MWGT", b"MRSV", b"FMSI"])        # order kept
+        self.assertEqual(dict(out)[b"MWGT"], st.pack("<3f", 0.3, 0.3, 0.4))
+        # a field the template lacks is not added (it would land after EDID, out of order)
+        out2, got2 = S.with_body([(b"EDID", b"T\0"), (b"MWGT", b"x" * 12)], body)
+        self.assertEqual((got2, [s for s, _d in out2]), (["MWGT"], [b"EDID", b"MWGT"]))
+
+
 class OutfitsPluginTests(unittest.TestCase):
     def test_outfits_by_npc(self):
         import face_fit

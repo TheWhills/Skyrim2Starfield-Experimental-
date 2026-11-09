@@ -111,3 +111,15 @@ OVERRIDES that record (packages, AI flags as before) and places it; make_schedul
 form id from faces.json) when the NPC has its own test NPC, else notes it and the generic copy stays. ACTOR_LOOK=generic
 for the old copy (A/B). FO4Port.esm then masters S2SFaceTest.esm and its masters (MO2 mods: FO4Port.esm must load after
 them). face_fit numbers its NPCs by position: rebuild FO4Port.esm after every face_fit run.
+
+## First look with their own looks (owner, 2026-11-08)
+Orgnar's outfit good. Embry: shirt missing (bare chest cut where the skin piece ends), pants / boots / bracers show.
+gear_fit.json (verified): his Skyrim farm clothes are one armor (farmerrobe_1.nif) with two shapes, robemorph (shirt)
+and Pants, and both got that armor's Starfield slots [3, 5]; Orgnar's one-shape torso on [3, 5] showed whole.
+Reading (supported): one addon per biped slot, the later one wins. gear_fit now gives each written part slots of its
+own (distinct_slots: a part whose slots are taken moves to a free Vis Only slot 10-12 / 14-15).
+Delphine: the dress Ysolda wears cleanly came through at the shoulders. faces.json (verified): Delphine's test NPC was
+copied from CF_KlaudiaSwist (picked by skin tone), Ysolda's from ChargenPresetFemale04; outfits follow only the three
+weight sliders. face_fit now gives every test NPC the body (MWGT, MRSV) of ChargenPresetFemale04_Swap (male) /
+ChargenPresetFemale04 (female), the bodies the outfits were checked on (--body-npc to choose, 'none' for the
+template's). In game unverified.

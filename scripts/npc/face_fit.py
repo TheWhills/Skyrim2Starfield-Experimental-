@@ -137,6 +137,22 @@ STRIP = (b"VMAD", b"QSTA", b"BNAM", b"SHRT", b"SOFT")   # SOFT: space outfit (20
 # 2026-11-06: Saadia / Nazeem spawned in a spacesuit from their new templates' default outfit / inventory; the test NPCs
 # wear nothing until clothing is converted
 STRIP_GEAR = (b"DOFT", b"CNTO", b"COCT")
+# The body every test NPC gets, by sex (male, female): its weight triangle (MWGT thin / muscular / fat) and body morph
+# region values (MRSV), whatever template the face came from (2026-11-08, owner: Delphine's outfit, the one Ysolda wears
+# cleanly, came through at the shoulders; her template, picked by skin tone, is CF_KlaudiaSwist, Ysolda's
+# ChargenPresetFemale04). Converted outfits follow only the three weight sliders, so the bodies they were checked on are
+# used: ChargenPresetFemale04_Swap (Ralof, Orgnar, Embry) and ChargenPresetFemale04 (Ysolda). --body-npc none keeps
+# each template's own body.
+BODY_NPC = ("ChargenPresetFemale04_Swap", "ChargenPresetFemale04")
+BODY_SIGS = (b"MWGT", b"MRSV")
+
+
+def with_body(subs, body_subs):
+    """subs with body_subs' MWGT / MRSV in place of its own (only where subs has the field: a missing one would land
+    after EDID, out of the record's order). Returns (subs, [sigs replaced])."""
+    have = {s for s, _d in subs}
+    rep = {s: bytes(d) for s, d in body_subs if s in BODY_SIGS and s in have}
+    return (sfplugin.edit(subs, rep) if rep else subs), sorted(s.decode() for s in rep)
 # 2026-11-06: Nazeem came out as "a random black guy with Starfield hair and beard" and the test NPCs kept spawning in
 # spacesuits: Starfield NPCs take traits / face / inventory from template NPCs listed in TPTA (2,142 of 2,983 faced
 # humans) when the template flags in ACBS (u16 at bytes 14-15, e.g. 0x6C13) say so; TPLT is the single template.
@@ -506,6 +522,9 @@ def main(argv=None):
     ap.add_argument("--outfits-plugin", help="S2SArmorTest.esm from scripts/armor/gear_fit.py: each test NPC wears the "
                                              "outfit made for it there (gear_fit --name <NPC EditorID>_outfit), as "
                                              "default and space outfit; the plugin becomes a master")
+    ap.add_argument("--body-npc", action="append", default=[],
+                    help="Starfield NPC EditorID whose body (MWGT / MRSV) the test NPCs get (male, then female; "
+                         f"default {BODY_NPC[0]}, {BODY_NPC[1]}; 'none' keeps each template's)")
     ap.add_argument("--template-npc", action="append", default=[],
                     help="Starfield NPC EditorID the test NPCs copy (male, then female); default: a plain one")
     ap.add_argument("--hair", action="store_true",
@@ -705,6 +724,16 @@ def main(argv=None):
                 row["name"] = full
                 vt = next((struct.unpack_from("<I", bytes(d), 0)[0] for sg, d in subs if sg == b"VTCK"), None)
                 row["voice_type"] = real["voices"].get(vt, f"{vt:08X}" if vt else None)
+            body_names = (list(a.body_npc) + list(BODY_NPC)[len(a.body_npc):])[:2]
+            body_name = body_names[int(row["female"])]
+            body_note = "template's own"
+            if body_name.lower() != "none":
+                body = next((r for r in npc_recs if sfplugin.edid(r[2]).lower() == body_name.lower()), None)
+                if body is None:
+                    body_note = f"{body_name} not in Starfield.esm: template's own"
+                else:
+                    subs, got = with_body(subs, body[2])
+                    body_note = f"{body_name} ({', '.join(got) or 'no MWGT / MRSV on the template: unchanged'})"
             test_subs[row["edid"]] = len(recs)
             recs.append((b"NPC_", tpl[1], subs, fid))
             row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]),
@@ -712,7 +741,7 @@ def main(argv=None):
                                "template_console": f"player.placeatme {tpl[3]:X}  (the vanilla NPC it was copied "
                                                    f"from, to compare in game)",
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
-                                          f"order index)"}
+                                          f"order index)", "body": body_note}
             if baked and tpl[3] in baked:
                 row["test_npc"]["baked_face_textures"] = [os.path.basename(p) for p in
                                                           write_baked_face(baked, tpl[3], fid, sf_data, out)]
