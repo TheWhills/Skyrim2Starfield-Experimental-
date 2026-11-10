@@ -231,6 +231,9 @@ Owner's first look (2026-11-09, verified in game): the race exists (getisrace na
 the Orc head but stand in the reference pose, arms out, no animation; player.setrace 1600080F left the player
 HumanRace (getisrace 0). Change: the copy no longer carries HumanRace's own subgraph entries (SADD / SAKD / STKD /
 SGNM / SAPT / SRAF) and takes them through SRAC alone, as MannequinRace does. Setrace on the player to retry after.
+Second look (owner): no change: both NPCs still in the reference pose (and a hand shows at the groin), the player
+still not the race. So the subgraph entries were not it. Next: the whole record of MannequinRace and HumanCorpseRace
+(vanilla thin races whose NPCs animate) against HumanRace and ours (npc_record_diff --show) before changing more.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /

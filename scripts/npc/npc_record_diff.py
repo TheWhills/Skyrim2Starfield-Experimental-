@@ -39,9 +39,31 @@ def show(sig, d):
     if sig == b"SNAM" and len(d) % 4 == 0 and len(d) <= 64:      # FURN marker: offset, rotation, keyword, sides
         f = struct.unpack(f"<{len(d) // 4}f", d)
         return "floats [" + ", ".join(f"{x:.4g}" for x in f) + "] hex " + d.hex()
+    if len(d) == 4 and sig not in FLOATS:
+        return f"{struct.unpack('<I', d)[0]:08X}"
+    if d and d[-1:] == b"\0" and all(32 <= c < 127 for c in d[:-1]):
+        return repr(d[:-1].decode("latin-1"))[:80]
     if sig in FLOATS and len(d) % 4 == 0 and len(d) <= 64:
         return "[" + ", ".join(f"{x:.4g}" for x in struct.unpack(f"<{len(d) // 4}f", d)) + "]"
     return f"{len(d)} bytes {d[:24].hex()}{'...' if len(d) > 24 else ''}"
+
+
+def outline(subs, keep=6):
+    """Lines for a record's subrecords in order, a run of one signature longer than `keep` as one line."""
+    out, i = [], 0
+    subs = [(s, bytes(d)) for s, d in subs]
+    while i < len(subs):
+        j = i
+        while j + 1 < len(subs) and subs[j + 1][0] == subs[i][0]:
+            j += 1
+        n = j - i + 1
+        sig = subs[i][0].decode("latin-1")
+        if n > keep:
+            out.append(f"{sig} x{n}: {show(subs[i][0], subs[i][1])} ... {show(subs[j][0], subs[j][1])}")
+        else:
+            out += [f"{sig}: {show(s, d)}" for s, d in subs[i:j + 1]]
+        i = j + 1
+    return out
 
 
 def diff(a_subs, b_subs):
@@ -71,9 +93,21 @@ def main(argv=None):
     ap.add_argument("--npc", action="append", default=[], help="EditorID (repeat)")
     ap.add_argument("--pair", action="append", default=[], help="EDID_A=EDID_B: two records with different EditorIDs")
     ap.add_argument("--type", default="NPC_", help="record type (default NPC_; e.g. FURN)")
+    ap.add_argument("--show", action="append", default=[],
+                    help="EDID: list that record's subrecords in order from --a (or --b if not there), runs of one "
+                         "signature collapsed (2026-11-09: S2S_OrcRace against MannequinRace / HumanRace)")
     a = ap.parse_args(argv)
     rtype = a.type.encode("ascii")[:4].ljust(4, b"_")
     A, B = npc_by_edid(a.a, rtype), npc_by_edid(a.b, rtype)
+    for e in a.show:
+        k = e.lower()
+        src = A.get(k) or B.get(k)
+        if src is None:
+            print(f"{e}: not found")
+            continue
+        print(f"{e} {src[0]:08X}: {len(src[1])} subrecords")
+        for line in outline(src[1]):
+            print("  " + line)
     for pair in a.pair:
         ka, _, kb = pair.partition("=")
         ka, kb = ka.strip().lower(), kb.strip().lower()

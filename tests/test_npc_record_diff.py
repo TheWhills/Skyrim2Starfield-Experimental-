@@ -20,7 +20,13 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(rows[b"FULL"][0], "only B")
         self.assertEqual(rows[b"MWGT"][0], "differs")
         self.assertIn("[0.2, 0.5, 0.3]", rows[b"MWGT"][1])
-        self.assertIn("floats [0, 0.7", D.show(b"SNAM", struct.pack("<3f", 0, 0.7, 0)))
+        self.assertIn("floats [0, 0.7", D.show(b"SNAM", struct.pack("<3f", 0, 0.7, 0) + bytes(4)))
+
+    def test_outline(self):
+        subs = [(b"EDID", b"Race\0"), (b"SRAC", struct.pack("<I", 0x347D))] + [(b"SAPT", b"x\0")] * 9
+        lines = D.outline(subs)
+        self.assertEqual(lines[:2], ["EDID: 'Race'", "SRAC: 0000347D"])
+        self.assertEqual(lines[2], "SAPT x9: 'x' ... 'x'")
 
 
 if __name__ == "__main__":
