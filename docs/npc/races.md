@@ -216,6 +216,7 @@ Fifth run (owner): with the mean the females' good, pointed ear came out rounded
 side and had lost it on the other, and the mean halved it. Now per vertex pair the side that moved more is kept and
 mirrored (--symmetry stronger, the default; mean / none). The lost side points at the correspondence (headcorr)
 around one ear: to look at if other parts show one-sided losses.
+Owner, 2026-11-09 after that run: the females look better now (verified in game).
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
