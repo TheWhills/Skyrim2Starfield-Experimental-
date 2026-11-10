@@ -414,3 +414,9 @@ why the mod needs no clothes of its own.
   followed through their LNAM / VNAM entries; every eye head part on HeadPartsHumanRace with its NAM2 colour mapping
   (AVMD) and TNAM texture set; the same for each --plugin (the Star Wars aliens mod with the green skin the owner used:
   how a mod adds tones). Unverified which names resolve; the run shows it.
+
+- 2026-11-10 Races roadmap A (docs/npc/races-roadmap.md): race_heads keeps a FormID ledger (`race_formids.json` in
+  --out, EditorID -> object id; rebuilds reuse it, so S2S_OrcRace and the rest keep their FormIDs for saved games;
+  the first ledger run allocates in the same order as before). Every FLST holding HumanRace gets our races (was:
+  only the head parts' valid-race lists). GetIsRace(69) HumanRace conditions in CNDF / IDLE / CPTH overridden to take
+  our races (race_condition_patches; race_heads.json: race_condition_patches). The 14 INFO conditions remain.

@@ -111,7 +111,7 @@ class RecordTests(unittest.TestCase):
                 "morph_folders": {"TMPP": "meshes\\morphs\\s2s\\races\\orc\\mouth_m\\performance"}}
         ids = iter(range(0x01000900, 0x01000a00))
         copies = {}
-        recs = H.mouth_records(by, info, "Orc", False, 0x01000850, copies, lambda: next(ids))
+        recs = H.mouth_records(by, info, "Orc", False, 0x01000850, copies, lambda _edid: next(ids))
         (t1, _h1, m_subs, m_fid), (t2, _h2, p_subs, p_fid) = recs
         self.assertEqual((t1, t2), (b"MRPH", b"HDPT"))
         md, pd = dict(m_subs), dict(p_subs)

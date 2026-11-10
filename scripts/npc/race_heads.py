@@ -762,12 +762,13 @@ def race_part_records(recs_all, name, race_fid, parts, new_fid, mouths=None):
     parts: [(vanilla FormID, female, MODL)]."""
     by = {fid: (h, sb) for t, h, sb, fid in recs_all if t in (b"HDPT", b"FLST", b"MRPH")}
     src_list = next((v for v in by.values() if sfplugin.edid(v[1]) == HUMAN_PART_LIST), None)
-    l_fid = new_fid()
+    l_fid = new_fid(f"S2S_HeadParts{name}Race")
     recs = [(b"FLST", src_list[0] if src_list else b"", [(b"EDID", sfplugin.zs(f"S2S_HeadParts{name}Race")),
                                                         (b"LNAM", struct.pack("<I", race_fid))], l_fid)]
     copies = {}
     for vfid, female, _modl in parts:
-        copies.setdefault(female, {})[vfid] = new_fid()
+        copies.setdefault(female, {})[vfid] = new_fid(
+            f"S2S_{name}Race_{sfplugin.edid(by[vfid][1])}_{'F' if female else 'M'}")
     for vfid, female, modl in parts:
         h, sb = by[vfid]
         ed = {b"EDID": sfplugin.zs(f"S2S_{name}Race_{sfplugin.edid(sb)}_{'F' if female else 'M'}"),
@@ -807,7 +808,7 @@ def mouth_records(by, info, name, female, l_fid, copies, new_fid):
             for i in os_export.u32_offsets(mobc, int(info["vanilla_vertices"])):
                 struct.pack_into("<I", b, i, int(info["vertices"]))
             ed[b"MOBC"] = bytes(b)
-        new_m = new_fid()
+        new_m = new_fid(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}_Morph")
         out.append((b"MRPH", mrph[0], sfplugin.edit(list(mrph[1]), ed), new_m))
     h, sb = allrecs[t_fid]
     ed = {b"EDID": sfplugin.zs(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}"), b"MODL": sfplugin.zs(info["model"]),
@@ -817,7 +818,7 @@ def mouth_records(by, info, name, female, l_fid, copies, new_fid):
     fl = dict(sb).get(b"DATA")
     if fl:
         ed[b"DATA"] = bytes([(fl[0] & ~0x6) | (4 if female else 2)]) + bytes(fl[1:])
-    p_fid = new_fid()
+    p_fid = new_fid(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}")
     out.append((b"HDPT", h, sfplugin.edit(list(sb), ed), p_fid))
     for v in set(info.get("replaces", [])) | {t_fid}:
         copies[v] = p_fid
@@ -831,7 +832,7 @@ def human_only_parts(recs_all, vanilla_fids, new_fid):
     src = next(((h, sb) for t, h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == HUMAN_PART_LIST), None)
     if src is None:
         return []
-    l_fid = new_fid()
+    l_fid = new_fid("S2S_HeadPartsHumanOnly")
     out = [(b"FLST", src[0], [(b"EDID", sfplugin.zs("S2S_HeadPartsHumanOnly"))] +
             [(s_, d) for s_, d in src[1] if s_ != b"EDID" and len(d) == 4], l_fid)]
     for t, h, sb, fid in recs_all:
@@ -870,13 +871,89 @@ def with_races(flst_subs, human_fid, race_fids):
     return list(flst_subs[:at]) + add + list(flst_subs[at:])
 
 
+class FormIds:
+    """Stable FormIDs per EditorID across rebuilds (2026-11-10, races roadmap A: a rebuild must not move S2S_OrcRace
+    or a saved game loses it). The ledger (race_formids.json in --out) maps each EditorID to its object id; a new
+    EditorID takes the next id after every id ever used (ids of dropped records are never reused)."""
+
+    def __init__(self, path=None, masters=1):
+        self.path, self.masters, self.ids, self.new = path, masters, {}, []
+        if path and os.path.isfile(path):
+            with open(path, encoding="utf-8") as fh:
+                self.ids = {k: int(v, 16) for k, v in json.load(fh).get("ids", {}).items()}
+        self.next = max(list(self.ids.values()) + [sfplugin.FIRST_OBJECT - 1]) + 1
+
+    def take(self, edid: str) -> int:
+        if edid not in self.ids:
+            self.ids[edid] = self.next
+            self.next += 1
+            self.new.append(edid)
+        return (self.masters << 24) | self.ids[edid]
+
+    def save(self):
+        if self.path:
+            with open(self.path, "w", encoding="utf-8") as fh:
+                json.dump({"note": "EditorID -> object id of our records; keep this file: rebuilds reuse it so "
+                                   "FormIDs stay the same (saved games)",
+                           "ids": {k: f"{v:06X}" for k, v in sorted(self.ids.items(), key=lambda kv: kv[1])}},
+                          fh, indent=1)
+
+
+LEDGER = "race_formids.json"
+GET_IS_RACE_SF = 69        # Starfield's condition function index for GetIsRace (race_probe counted 19 on HumanRace)
+CONDITION_TYPES = (b"CNDF", b"IDLE", b"CPTH")       # top-level records whose CTDAs we patch (INFOs: later)
+
+
+def with_race_conditions(subs, human_fid, race_fids):
+    """(subs, changed) with each 'GetIsRace HumanRace' condition widened to our races (2026-11-10, races roadmap A):
+    'is HumanRace' (== 1 / != 0) becomes an OR group with one GetIsRace per race of ours; 'is not HumanRace'
+    (== 0 / != 1) gets one 'is not' per race ANDed after it (skipped when it sits in an OR group). CTDA: u8 flags
+    (bit 0 OR, operator in the top 3 bits), f32 value, u16 function, param 1 at 12."""
+    out, changed = [], 0
+    for s_, d in subs:
+        d = bytes(d)
+        if s_ != b"CTDA" or len(d) < 16 or struct.unpack_from("<H", d, 8)[0] != GET_IS_RACE_SF \
+                or struct.unpack_from("<I", d, 12)[0] != human_fid or d[0] & 0x04:
+            out.append((s_, d))
+            continue
+        op, val = d[0] >> 5, struct.unpack_from("<f", d, 4)[0]
+        positive = (op == 0 and val == 1.0) or (op == 1 and val == 0.0)
+        negative = (op == 0 and val == 0.0) or (op == 1 and val == 1.0)
+        copies = [d[:12] + struct.pack("<I", r) + d[16:] for r in race_fids]
+        if positive:
+            orig_or = d[0] & 1
+            seq = [d] + copies
+            for i, c in enumerate(seq):
+                flag = 1 if i < len(seq) - 1 else orig_or
+                out.append((s_, bytes([(c[0] & ~1) | flag]) + c[1:]))
+            changed += 1
+        elif negative and not d[0] & 1:
+            out += [(s_, d)] + [(s_, c) for c in copies]
+            changed += 1
+        else:
+            out.append((s_, d))
+    return out, changed
+
+
+def race_condition_patches(recs_all, human_fid, race_fids):
+    """[(type, header, subs, FormID)] overrides of the CONDITION_TYPES records whose conditions ask GetIsRace
+    HumanRace, widened to our races."""
+    out = []
+    for t, h, s_, fid in recs_all:
+        if t in CONDITION_TYPES:
+            new, n = with_race_conditions(s_, human_fid, race_fids)
+            if n:
+                out.append((t, h, new, fid))
+    return out
+
+
 def head_part_race_lists(recs_all, human_fid, race_fids):
-    """[(header, subs, FormID)]: each form list a head part names as its valid races (HDPT RNAM) that holds
-    HumanRace, with race_fids added, so the looks menu and NPCs of our races can use the human head parts."""
-    named = {_u32(dict(s).get(b"RNAM", b"\0\0\0\0")) for t, _h, s, _f in recs_all if t == b"HDPT"}
+    """[(header, subs, FormID)]: each form list that holds HumanRace (the head parts' valid races, HDPT RNAM, and since
+    2026-11-10 every other: races roadmap A, conditions asking IsInList of such a list), with race_fids added, so
+    the looks menu, NPCs and conditions take our races as human."""
     out = []
     for t, h, s, fid in recs_all:
-        if t == b"FLST" and fid in named:
+        if t == b"FLST":
             new = with_races(s, human_fid, race_fids)
             if new is not None:
                 out.append((h, new, fid))
@@ -884,7 +961,7 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
-                 race_parts=None, heights=None, mouths=None):
+                 race_parts=None, heights=None, mouths=None, ids=None):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -892,7 +969,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     race_models = race_models or {}
     import face_fit
     info = sfplugin.header_info(sf_esm)
-    recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST"])
+    recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST", *CONDITION_TYPES])
     if strings:                       # our plugins are not localized: copies carry text, not string ids
         recs_all = [(t, h, delocalize(sb, strings), fid) for t, h, sb, fid in recs_all]
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
@@ -901,12 +978,12 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     human = next((fid for t, _h, s, fid in recs_all if t == b"RACE" and sfplugin.edid(s) == "HumanRace"), None)
     npc_recs = [r for r in recs_all if r[0] == b"NPC_"]
     masters = 1
-    nxt = iter(range(10 ** 6))
+    ids = ids or FormIds(None, masters)
     recs, rep = [], {"npcs": [], "head_parts": {}}
     otft = next((r for r in recs_all if r[0] == b"OTFT"), None)
     no_outfit = None
     if otft is not None:
-        no_outfit = sfplugin.new_form_id(next(nxt), masters)
+        no_outfit = ids.take("S2S_NoOutfit")
         recs.append((b"OTFT", otft[1], [(b"EDID", sfplugin.zs("S2S_NoOutfit")), (b"INAM", b"")], no_outfit))
     heads = {}
     for female, m in made.items():
@@ -918,12 +995,12 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
         if mrph is None or mrph[0] != b"MRPH":
             raise SystemExit(f"{HEAD_PART[female]} has no morph record (MNAM)")
         import os_export
-        m_fid = sfplugin.new_form_id(next(nxt), masters)
+        m_fid = ids.take(f"S2S_SkyrimRaces_{sex}_HeadMorph")
         tcmp_old = dict(mrph[2]).get(b"TCMP", b"")
         msubs = sfplugin.edit(list(mrph[2]), {b"EDID": sfplugin.zs(f"S2S_SkyrimRaces_{sex}_HeadMorph"),
                                               b"TCMP": os_export.replace_text(tcmp_old, m["folder"])})
         recs.append((b"MRPH", mrph[1], msubs, m_fid))
-        h_fid = sfplugin.new_form_id(next(nxt), masters)
+        h_fid = ids.take(f"S2S_SkyrimRaces_{sex}_Head")
         hsubs = sfplugin.edit(list(part[2]), {b"EDID": sfplugin.zs(f"S2S_SkyrimRaces_{sex}_Head"),
                                               b"MNAM": struct.pack("<I", m_fid)})
         recs.append((b"HDPT", part[1], hsubs, h_fid))
@@ -934,8 +1011,8 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
         if tpl is None:
             raise SystemExit(f"no plain vanilla {sex} NPC to copy")
         for race, keys in [(None, [])] + list(m["keys_by_race"].items()):
-            fid = sfplugin.new_form_id(next(nxt), masters)
             label = NAMES[race] if race else "Control"
+            fid = ids.take(f"S2SRace_{label}_{sex}")
             subs = face_fit.with_face(list(tpl[2]), {})
             subs = sfplugin.edit(subs, {b"EDID": sfplugin.zs(f"S2SRace_{label}_{sex}"),
                                         b"FULL": sfplugin.zs(f"{label} {sex} (S2S race test)")},
@@ -978,13 +1055,13 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                     # the vanilla head part with only its model changed: its own (vanilla) morph record, so the
                     # race's chargen is exactly the human one on top of the baked shape
                     src_h = next(r for r in recs_all if r[0] == b"HDPT" and sfplugin.edid(r[2]) == HEAD_PART[f])
-                    h_fid = sfplugin.new_form_id(next(nxt), masters)
+                    h_fid = ids.take(f"S2S_{NAMES[race]}Race_{SEXES[f]}_Head")
                     recs.append((b"HDPT", src_h[1], sfplugin.edit(list(src_h[2]), {
                         b"EDID": sfplugin.zs(f"S2S_{NAMES[race]}Race_{SEXES[f]}_Head"),
                         b"MODL": sfplugin.zs(modl)}), h_fid))
                     rheads[f] = h_fid
                 race_heads[race] = rheads
-            r_fid = sfplugin.new_form_id(next(nxt), masters)
+            r_fid = ids.take(f"S2S_{NAMES[race]}Race")
             rsubs, rrep = new_race((human, by_fid[human][2]), mann, NAMES[race], rheads, per, part_types)
             if heights and race in heights and HEIGHT_REFERENCE in heights:
                 fac = tuple(heights[race][i] / (heights[HEIGHT_REFERENCE][i] or 1.0) for i in (0, 1))
@@ -996,7 +1073,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                       for f, h in rheads.items()}
             if race_parts and race_parts.get(race):
                 prs, copies, _l = race_part_records(recs_all, NAMES[race], r_fid, race_parts[race],
-                                                    lambda: sfplugin.new_form_id(next(nxt), masters),
+                                                    ids.take,
                                                     (mouths or {}).get(race))
                 recs += prs
                 rsubs = swap_race_heads(rsubs, copies)
@@ -1015,8 +1092,8 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             if race is None or n["race"] == "control":
                 continue
             src = next(r for r in recs if r[0] == b"NPC_" and r[3] == int(n["form_id"], 16))
-            fid = sfplugin.new_form_id(next(nxt), masters)
             edid = f"S2SRace_{NAMES[race]}Race_{n['sex']}"
+            fid = ids.take(edid)
             subs = sfplugin.edit(list(src[2]), {b"EDID": sfplugin.zs(edid), b"RNAM": struct.pack("<I", race_fids[race]),
                                                 b"FULL": sfplugin.zs(f"{NAMES[race]} {n['sex']} (S2S race)")})
             if race in race_heads:          # the shape is in the head: the race's head part, no race blends
@@ -1040,9 +1117,12 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             for h_, s_, f_ in lists:
                 recs.append((b"FLST", h_, s_, f_))
             rep["head_part_race_lists"] = [f"{sfplugin.edid(s_)} {f_:08X}" for _h, s_, f_ in lists]
+            conds = race_condition_patches(recs_all, human, list(race_fids.values()))
+            recs += conds
+            rep["race_condition_patches"] = [f"{t_.decode()} {sfplugin.edid(s_)} {f_:08X}" for t_, _h, s_, f_ in conds]
         baked = {v for c in part_copies.values() for per in c.values() for v in per}
         if baked:
-            ho = human_only_parts(recs_all, baked, lambda: sfplugin.new_form_id(next(nxt), masters))
+            ho = human_only_parts(recs_all, baked, ids.take)
             recs += ho
             rep["human_only_parts"] = len(ho) - 1
         rep["_player_parts"] = (heads, part_types, next(((h_, s) for t, h_, s, fid in recs_all
@@ -1217,12 +1297,15 @@ def main(argv=None):
     if wanted and a.race_height == "skyrim" and os.path.isfile(sky_esm):
         heights = skyrim_heights(sky_esm, wanted)
         report["skyrim_heights"] = {r: [round(x, 3) for x in h] for r, h in heights.items()}
+    ids = FormIds(os.path.join(a.out, LEDGER))       # stable FormIDs across rebuilds (saved games)
     strings = load_lstrings(sf_data)
     report["localized_strings"] = {k: len(v) for k, v in strings.items()}
     if not strings:
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models, strings, rparts, heights, mouths)
+                                    wanted, models, strings, rparts, heights, mouths, ids)
+    ids.save()
+    report["formids"] = {"ledger": os.path.join(a.out, LEDGER), "new": ids.new}
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)

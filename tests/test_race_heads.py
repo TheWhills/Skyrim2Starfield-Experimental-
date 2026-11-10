@@ -163,6 +163,37 @@ def string_table(texts):
 
 
 class PluginTests(unittest.TestCase):
+    def test_formids_stable_across_rebuilds(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, H.LEDGER)
+            ids = H.FormIds(path)
+            a, b = ids.take("S2S_OrcRace"), ids.take("S2S_AltmerRace")
+            self.assertEqual((a, b), (0x01000800, 0x01000801))
+            self.assertEqual(ids.take("S2S_OrcRace"), a)
+            ids.save()
+            again = H.FormIds(path)                    # a rebuild that makes a new record first: no id moves
+            self.assertEqual(again.take("S2S_NewThing"), 0x01000802)
+            self.assertEqual(again.take("S2S_AltmerRace"), b)
+            self.assertEqual(again.new, ["S2S_NewThing"])
+
+    def test_race_conditions(self):
+        def ctda(op, val, p1, or_=False):
+            return struct.pack("<B3xfHHIIIIi", (op << 5) | int(or_), val, 69, 0, p1, 0, 0, 0, -1)
+        subs = [(b"EDID", Z("IsHuman")), (b"CTDA", ctda(0, 1.0, 0x347D)), (b"CTDA", ctda(0, 1.0, 0x55))]
+        out, n = H.with_race_conditions(subs, 0x347D, [0x01000900, 0x01000901])
+        self.assertEqual(n, 1)
+        c = [bytes(d) for s_, d in out if s_ == b"CTDA"]
+        self.assertEqual([struct.unpack_from("<I", x, 12)[0] for x in c], [0x347D, 0x01000900, 0x01000901, 0x55])
+        self.assertEqual([x[0] & 1 for x in c], [1, 1, 0, 0])                    # one OR group, then AND as before
+        neg = [(b"CTDA", ctda(0, 0.0, 0x347D))]                                  # 'not human': and not ours either
+        out, n = H.with_race_conditions(neg, 0x347D, [0x01000900])
+        self.assertEqual([(x[0] & 1, struct.unpack_from("<I", x, 12)[0]) for _s, x in out],
+                         [(0, 0x347D), (0, 0x01000900)])
+        out, n = H.with_race_conditions([(b"CTDA", ctda(0, 0.0, 0x347D, or_=True))], 0x347D, [1])
+        self.assertEqual(n, 0)                                                    # inside an OR group: left alone
+        recs = [(b"CNDF", b"h", subs, 0x77), (b"IDLE", b"h", [(b"CTDA", ctda(0, 1.0, 0x55))], 0x78)]
+        self.assertEqual([r[3] for r in H.race_condition_patches(recs, 0x347D, [0x01000900])], [0x77])
+
     def test_race_names(self):
         self.assertEqual(H.race_names("Orc, Altmer,HighElfRace,woodelf"), ["OrcRace", "HighElfRace", "HighElfRace",
                                                                            "WoodElfRace"])
@@ -349,12 +380,12 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual(sig_o.index(b"RPRF"), sig_o.index(b"NNAM", sig_o.index(b"FNAM")) + 1)
                 self.assertEqual(sig_o.count(b"FDSI"), 3)
                 # 2026-11-10 (owner: looks menu crash on facial hair): the head parts' valid-race list holds our
-                # race too; a list no head part names is left alone
+                # race too; since the races roadmap (A) every list holding HumanRace does
                 fl = {r[3]: r[2] for r in sfplugin.records(os.path.join(out, H.PLUGIN), [b"FLST"])}
-                self.assertEqual(list(fl), [0x24A])
+                self.assertEqual(sorted(fl), [0x24A, 0x24B])
                 self.assertEqual([struct.unpack("<I", d_)[0] for s_, d_ in fl[0x24A] if s_ == b"LNAM"],
                                  [0x347D, orc[2]])
-                self.assertEqual(rep["head_part_race_lists"], ["HeadPartsHumanRace 0000024A"])
+                self.assertEqual(rep["head_part_race_lists"], ["HeadPartsHumanRace 0000024A", "OtherList 0000024B"])
                 # the player patch: the Player record (00000007) of the new race with our head part
                 pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
                 self.assertEqual([r[3] for r in pp], [0x7])
@@ -536,6 +567,11 @@ class PluginTests(unittest.TestCase):
                 self.assertIn(by3["S2S_OrcRace_Mouth_M"][1] & 0xFFFFFF, [struct.unpack("<I", d_)[0] & 0xFFFFFF
                                                                           for s_, d_ in pp[0][2] if s_ == b"PNAM"])
                 self.assertEqual(rep["mouths"]["OrcRace male"]["vertices"], 348)
+                # the FormID ledger: kept in --out, the race's id in it (a rebuild reuses it)
+                with open(os.path.join(out, H.LEDGER)) as fh:
+                    led = json.load(fh)["ids"]
+                self.assertEqual(int(led["S2S_OrcRace"], 16), by["S2S_OrcRace"][2] & 0xFFFFFF)
+                self.assertIn("S2S_OrcRace", rep["formids"]["new"])
         finally:
             if saved[0] is None:
                 sys.modules.pop("race_probe", None)

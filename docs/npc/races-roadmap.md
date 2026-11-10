@@ -27,9 +27,12 @@ first).
   patch plugin (getisrace 1.00); head-part valid-race list fix (no crash on facial hair).
 - **built:** every race at once (`--new-races all`), heights from Skyrim, race names resolved from Starfield's string
   tables, presets in RPRM / RPRF.
-- **open:** stable FormIDs (a FormID ledger kept per build, so a rebuild never moves S2S_OrcRace and saves keep
-  working); the 19 vanilla GetIsRace HumanRace conditions and 2 lists patched to include our races (races.md);
-  HumanRace's keywords on our races (anything asking "human" passes; already copied, to verify).
+- **built (2026-11-10):** stable FormIDs: `race_formids.json` in the race mod folder maps every EditorID of ours to its
+  object id; rebuilds reuse it, new records take ids after every id ever used (keep that file). Every form list
+  holding HumanRace now holds our races too; 'GetIsRace HumanRace' conditions in CNDF / IDLE / CPTH records widened to
+  our races ('is human' -> an OR group with ours, 'is not human' -> also not ours; inside an OR group left alone).
+- **open:** the 14 INFO conditions of the 19 (dialogue lines; INFOs sit inside quest / topic groups, which the race
+  build does not write yet); HumanRace's keywords on our races (copied with the record, to verify in game).
 - **research:** vampire / child variants (Skyrim has NordRaceVampire ...): later, as their own races or a keyword.
 
 ### B. Head look
