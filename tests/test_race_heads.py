@@ -231,6 +231,20 @@ class PluginTests(unittest.TestCase):
         subs = [(b"PNAM", struct.pack("<I", f)) for f in (1, 2, 3, 4)] + [(b"EDID", b"x\0")]
         self.assertEqual([struct.unpack("<I", d)[0] for s_, d in H.without_hair(subs, types_) if s_ == b"PNAM"], [1, 4])
 
+    def test_symmetric_race_shape_any_frame(self):
+        """2026-11-09 (owner: one ear better than the other): the race shape is made mirror-symmetric across the head's
+        own lateral axis, which in a Starfield head .mesh (C_Head's frame) need not be X."""
+        from fo4sf import facefit
+        rng = np.random.default_rng(1)
+        half = rng.uniform([0.01, -0.1, 0.0], [0.08, 0.1, 0.2], (200, 3))       # x across, then put across on z
+        both = np.vstack([half, half * [-1, 1, 1]])[:, [1, 2, 0]]
+        self.assertEqual(facefit.lateral_axis(both), 2)
+        field = np.zeros_like(both)
+        field[:200, 2] = 0.01                                                  # one ear out, the other unmoved
+        sym = facefit.symmetrize(field, both, 2)
+        self.assertTrue(np.allclose(sym[:200, 2], 0.005))
+        self.assertTrue(np.allclose(sym[200:, 2], -0.005))                     # mirrored: outward on the other side
+
     def test_short_hair(self):
         """2026-11-09 (owner: the race-default hair came back and hid the ears): the closest-cropped vanilla hair."""
         def hd(e, flags):

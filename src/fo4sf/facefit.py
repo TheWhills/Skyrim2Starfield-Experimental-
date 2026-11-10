@@ -202,22 +202,43 @@ def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weight
                     "max_change_m": float(moved.max()) if len(moved) else 0.0}
 
 
-def mirror_index(vertices: np.ndarray) -> np.ndarray:
-    """For each vertex the index of the vertex nearest its mirror image across the head's middle (x = median x;
-    both games' heads face +Y with X across)."""
+def mirror_index(vertices: np.ndarray, axis: int = 0) -> np.ndarray:
+    """For each vertex the index of the vertex nearest its mirror image across the head's middle (median along
+    `axis`; both games' heads in model space face +Y with X across)."""
     v = np.asarray(vertices, float)
-    c = float(np.median(v[:, 0]))
+    c = float(np.median(v[:, axis]))
     m = v.copy()
-    m[:, 0] = 2 * c - m[:, 0]
+    m[:, axis] = 2 * c - m[:, axis]
     return _nearest(v, m)[0][:, 0]
 
 
-def symmetrize(field: np.ndarray, vertices: np.ndarray) -> np.ndarray:
+def lateral_axis(vertices: np.ndarray) -> int:
+    """The axis a head mesh is mirror-symmetric across (2026-11-09: Starfield's head .mesh files are in C_Head's
+    frame, not model space, so X is not always across): the one whose mirror image lands closest to the mesh."""
+    v = np.asarray(vertices, float)
+    ext = v.max(0) - v.min(0)
+    best = None
+    for ax in range(3):
+        if ext[ax] < 0.25 * ext.max():          # a flat axis mirrors onto itself: not "across"
+            continue
+        c = float(np.median(v[:, ax]))
+        m = v.copy()
+        m[:, ax] = 2 * c - m[:, ax]
+        _i, d = _nearest(v, m[::max(1, len(v) // 2000)])
+        score = float(np.mean(d))
+        if best is None or score < best[0]:
+            best = (score, ax)
+    return best[1]
+
+
+def symmetrize(field: np.ndarray, vertices: np.ndarray, axis: int = 0) -> np.ndarray:
     """The mean of a displacement field and its mirror image (2026-11-05: with More Sliders' left / right sliders the
     fit chased the transfer's left-right noise: Ralof came out deformed)."""
-    m = mirror_index(vertices)
-    flipped = field[m] * np.array([-1.0, 1.0, 1.0])
-    return 0.5 * (field + flipped)
+    m = mirror_index(vertices, axis)
+    flip = np.ones(3)
+    flip[axis] = -1.0
+    flipped = np.asarray(field)[m] * flip
+    return 0.5 * (np.asarray(field) + flipped)
 
 
 # ------------------------------------------------------------------------------------------------ Skyrim -> Starfield

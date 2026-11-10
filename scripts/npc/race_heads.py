@@ -42,7 +42,7 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 
-from fo4sf import headcorr, sfmorph, sfplugin  # noqa: E402
+from fo4sf import facefit, headcorr, sfmorph, sfplugin  # noqa: E402
 
 PLUGIN = "S2SRaceTest.esm"
 SEXES = {False: "male", True: "female"}
@@ -369,6 +369,7 @@ def main(argv=None):
     ap.add_argument("--race-head", action="store_true",
                     help="also override HumanRace: our head part as its Face part, our keys in its morph groups")
     ap.add_argument("--force", action="store_true", help="write even if the frame check fails")
+    ap.add_argument("--no-symmetry", action="store_true", help="keep the transfer's left / right differences")
     ap.add_argument("--keep-hair", action="store_true", help="keep the template's hair and beard (default: none, so "
                     "the ears and the sides of the face show)")
     ap.add_argument("--no-baked-face-textures", dest="baked_face_textures", action="store_false",
@@ -390,6 +391,11 @@ def main(argv=None):
         data, rel = face_fit.hkx_to_af.vanilla_file(race_probe.SF_MORPH.format(sex=sex, part="head"), sf_data)
         morph = sfmorph.parse(data)
         head, _base, _races, _al, disp, trep = race_probe.race_transfer(sky, sf_data, female, a.smooth, face_fit)
+        if not a.no_symmetry:
+            # 2026-11-09 (owner: one ear looked better than the other on every NPC, the other side for each sex):
+            # the transfer's left / right noise; Skyrim's race heads are symmetric
+            ax = facefit.lateral_axis(head.vertices)
+            disp = {r: facefit.symmetrize(np.asarray(d, float), head.vertices, ax) for r, d in disp.items()}
         nv = len(head.vertices)
         if morph.num_vertices != nv:
             raise SystemExit(f"{sex}: head morph.dat has {morph.num_vertices} vertices, the head mesh {nv}")

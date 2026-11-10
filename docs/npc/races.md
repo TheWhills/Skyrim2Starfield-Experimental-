@@ -207,6 +207,11 @@ Third run (owner, same evening, verified in game): skin colour right on every ra
 Bosmer and Dunmer; the Orc's mouth hangs open as a dark hole (the race shape opens the lips; Starfield's teeth and
 mouth do not follow: the mouth converter, "Mouths and tusks"). The race-default hair still hides the ears and the
 head's outline, so the test NPCs now get the closest-cropped vanilla hair (EditorID with bald / shaved / buzz).
+Fourth run (owner, verified in game): cropped hair (a vanilla mohawk), ears and head outline visible on every race.
+The ears differ left / right: on the females the viewer's-left ear looks better, on the males the right. Skyrim's
+race heads are symmetric, so this is the transfer's left / right noise; race_heads now averages each race shape with
+its mirror image across the head mesh's own lateral axis (facefit.lateral_axis: the .mesh is in C_Head's frame, so
+X is not always across; --no-symmetry keeps the raw transfer).
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
