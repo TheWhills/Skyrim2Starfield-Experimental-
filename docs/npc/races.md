@@ -234,6 +234,14 @@ SGNM / SAPT / SRAF) and takes them through SRAC alone, as MannequinRace does. Se
 Second look (owner): no change: both NPCs still in the reference pose (and a hand shows at the groin), the player
 still not the race. So the subgraph entries were not it. Next: the whole record of MannequinRace and HumanCorpseRace
 (vanilla thin races whose NPCs animate) against HumanRace and ours (npc_record_diff --show) before changing more.
+Record dump (owner's run, verified): S2S_OrcRace = HumanRace exactly, plus RNAM at the top, our phenotype (FMRI /
+FMRU / FMRN / FMRS) and group entries; the second build was the same as the first (MannequinRace has no SRAC, so the
+code added none and dropped nothing). MannequinRace: its own root graph, rig and one subgraph entry, RNAM (HumanRace)
+after the last BSTT / HSTT right before the subgraph entries. HumanCorpseRace: HumanRace's graph and rig, RNAM in the
+same place, no subgraph entries. Reading (supported, Fallout 4's rule: a race's animation data is precomputed per race
+from its subgraph entries, so a new race reuses another's with SRAC "subgraph template race"): ours now has RNAM +
+SRAC (both HumanRace) where HumanRace's 400 entries began, and none of the entries; the phenotype's name (FMRN, a
+string id in vanilla) is "Orc".
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /

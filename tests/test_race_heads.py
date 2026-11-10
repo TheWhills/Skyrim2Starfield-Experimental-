@@ -142,13 +142,15 @@ class PluginTests(unittest.TestCase):
         """2026-11-09 (owner: "yes" to the Orc race): a RACE copied from HumanRace, armor race and subgraph race
         HumanRace (as MannequinRace), our head part, its own phenotype per sex and only its keys added."""
         human = [(b"EDID", Z("HumanRace")), (b"FULL", I(77)), (b"KWDA", I(5)), (b"ANAM", Z("skel")),
-                 (b"SAKD", I(9)), (b"SGNM", Z("x.agx")), (b"SAPT", Z("common")), (b"SRAF", I(0x10001)),
                  (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
                  (b"FMRI", I(0)), (b"FMRU", Z("male_as_md1")), (b"FMRN", Z("a")),
                  (b"FMRI", I(1)), (b"FMRU", Z("male_eu_md2")), (b"FMRN", Z("b")),
                  (b"FDSI", I(1)), (b"INDX", I(0)), (b"HEAD", I(0x510)),
                  (b"FNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("female_eu_md1_Nose")),
-                 (b"FMRI", I(0)), (b"FMRU", Z("female_eu_md1")), (b"FDSI", I(1)), (b"INDX", I(0)), (b"HEAD", I(0x511))]
+                 (b"FMRI", I(0)), (b"FMRU", Z("female_eu_md1")), (b"FDSI", I(1)), (b"BSTT", Z("F_Skin")),
+                 (b"SAKD", I(9)), (b"SGNM", Z("y.agx")), (b"SAPT", Z("common")), (b"SRAF", I(0)),
+                 (b"SAKD", I(8)), (b"SGNM", Z("z.agx")), (b"SRAF", I(0)), (b"PTOP", I(1)),
+                 (b"INDX", I(0)), (b"HEAD", I(0x511))]
         mannequin = [(b"EDID", Z("MannequinRace")), (b"KWDA", I(5)), (b"SRAC", I(0x347D)), (b"RNAM", I(0x347D))]
         out, rep = H.new_race((0x347D, human), mannequin, "Orc", {False: 0x900, True: 0x901},
                               {False: {"Nose": ["male_sk_or1_Nose"]}, True: {"Nose": ["female_sk_or1_Nose"]}},
@@ -158,22 +160,23 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(d[b"EDID"], Z("S2S_OrcRace"))
         self.assertEqual(d[b"FULL"], Z("Orc"))
         self.assertEqual((d[b"RNAM"], d[b"SRAC"]), (I(0x347D), I(0x347D)))
-        self.assertLess(sig.index(b"SRAC"), sig.index(b"MNAM"))                    # in the race's top section
-        self.assertEqual(sig.index(b"SRAC"), sig.index(b"KWDA") + 1)              # where MannequinRace has it
+        # where the vanilla thin races carry RNAM: where HumanRace's subgraph entries began (after the skin tones)
+        self.assertEqual(sig[sig.index(b"BSTT") + 1:sig.index(b"BSTT") + 4], [b"RNAM", b"SRAC", b"PTOP"])
+        self.assertEqual(sig.count(b"RNAM"), 1)
         heads = [struct.unpack("<I", d_)[0] for s_, d_ in out if s_ == b"HEAD"]
         self.assertEqual(heads, [0x900, 0x901])
         mp = [bytes(d_).split(b"\0")[0].decode() for s_, d_ in out if s_ == b"MPGM"]
         self.assertEqual(mp, ["male_eu_md1_Nose", "male_sk_or1_Nose", "female_eu_md1_Nose", "female_sk_or1_Nose"])
         fm = [(struct.unpack("<I", d_)[0] if s_ == b"FMRI" else bytes(d_).split(b"\0")[0].decode())
               for s_, d_ in out if s_ in (b"FMRI", b"FMRU", b"FMRN")]
-        self.assertEqual(fm, [0, "male_as_md1", "a", 1, "male_eu_md2", "b", 2, "male_sk_or1", "b",
-                              0, "female_eu_md1", 1, "female_sk_or1"])           # a copy of the eu_md entry
+        self.assertEqual(fm, [0, "male_as_md1", "a", 1, "male_eu_md2", "b", 2, "male_sk_or1", "Orc",
+                              0, "female_eu_md1", 1, "female_sk_or1"])           # a copy of the eu_md entry, named
         self.assertLess(sig.index(b"FDSI"), len(sig))
         self.assertEqual(rep["male"]["phenotype_index"], 2)
-        self.assertEqual(rep["subgraph_race"], "HumanRace (as MannequinRace)")
+        self.assertEqual(rep["subgraph_race"], "HumanRace")
         for gone in (b"SAKD", b"SGNM", b"SAPT", b"SRAF"):                          # HumanRace's through SRAC only
             self.assertNotIn(gone, sig)
-        self.assertEqual(rep["subgraph_subrecords_dropped"], 4)
+        self.assertEqual(rep["subgraph_subrecords_dropped"], 7)                      # two entries
         self.assertEqual(human[0], (b"EDID", Z("HumanRace")))                      # HumanRace itself untouched
 
     def test_end_to_end(self):

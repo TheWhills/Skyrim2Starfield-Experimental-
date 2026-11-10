@@ -195,7 +195,7 @@ def phenotype_blocks(subs, female):
     return blocks + [(starts[-1], end)]
 
 
-def add_phenotype(subs, female, pid, like="eu_md"):
+def add_phenotype(subs, female, pid, like="eu_md", label=None):
     """(subrecords, new FMRI index) with one more chargen phenotype for one sex: a copy of the vanilla entry whose id
     has `like` (its textures and settings), index = the largest + 1, FMRU = pid (e.g. male_sk_or1)."""
     blocks = phenotype_blocks(subs, female)
@@ -208,8 +208,10 @@ def add_phenotype(subs, female, pid, like="eu_md"):
     pick = next((i for i, u in enumerate(ids) if like in u.lower()), 0)
     a, b = blocks[pick]
     index = max(_u32(subs[x][1]) for x, _y in blocks) + 1
-    block = [(b"FMRI", struct.pack("<I", index)) if s == b"FMRI" else
-             ((b"FMRU", sfplugin.zs(pid)) if s == b"FMRU" else (s, d)) for s, d in subs[a:b]]
+    names = {b"FMRI": struct.pack("<I", index), b"FMRU": sfplugin.zs(pid)}
+    if label:
+        names[b"FMRN"] = sfplugin.zs(label)      # the chargen's name for it (vanilla: a string id; ours is not localized)
+    block = [(s, names.get(s, d)) for s, d in subs[a:b]]
     end = blocks[-1][1]
     return subs[:end] + block + subs[end:], index
 
@@ -217,42 +219,34 @@ def add_phenotype(subs, female, pid, like="eu_md"):
 def new_race(human, mannequin, name, heads, keys, part_types):
     """A Skyrim race as a RACE of its own, thin over HumanRace (docs/npc/races.md, "Decision"): a copy of HumanRace
     (skeleton, behaviour, chargen, bone modifiers, keywords) named `name`, armor race (RNAM) HumanRace so every
-    HumanRace gear piece fits, and the subgraph race (SRAC) HumanRace when the vanilla thin race carries one
-    (MannequinRace / HumanCorpseRace name HumanRace in RNAM and SRAC: owner's race_probe, 2026-11-09). Per sex: our head
+    HumanRace gear piece fits, and HumanRace as its subgraph template race (SRAC), without subgraph entries of its own
+    (see below). `mannequin` is unused (kept for the call). Per sex: our head
     part as its Face part, a phenotype of its own (a copy of the eu_md one, FMRU <sex>_sk_<code>) and that phenotype's
     keys added to the morph groups. heads: {female: HDPT FormID}; keys: {female: {region: [keys]}} for this race.
     Returns (subrecords, report)."""
     human_fid, hsubs = human
     subs = sfplugin.edit(list(hsubs), {b"EDID": sfplugin.zs(f"S2S_{name}Race"), b"FULL": sfplugin.zs(name)})
-    first_sex = next((i for i, (s, d) in enumerate(subs) if s in (b"MNAM", b"FNAM") and len(d) == 0), len(subs))
-    top, rest = subs[:first_sex], subs[first_sex:]
-    hr = struct.pack("<I", human_fid)
-    rep = {"armor_race": "HumanRace"}
-    if any(s == b"RNAM" for s, _d in top):
-        top = [(s, hr if s == b"RNAM" else d) for s, d in top]
-    else:
-        top = top + [(b"RNAM", hr)]
-    if mannequin is not None and any(s == b"SRAC" for s, _d in mannequin):
-        top = [(s, d) for s, d in top if s != b"SRAC"]
-        msigs = [s for s, _d in mannequin]
-        before = msigs[msigs.index(b"SRAC") - 1] if msigs.index(b"SRAC") else None
-        at = next((i + 1 for i, (s, _d) in enumerate(top) if s == before), len(top))
-        top = top[:at] + [(b"SRAC", hr)] + top[at:]
-        rep["subgraph_race"] = "HumanRace (as MannequinRace)"
-    # 2026-11-09 (owner: both Orc NPCs of the new race stood in the reference pose, arms out, no animation): the copy
-    # carried HumanRace's own subgraph entries (subgraph.FIELDS: which graph / animation folders per keyword), which
-    # the game did not run for a race of ours. MannequinRace has none and takes HumanRace's through SRAC alone.
+    # Where the race names its armor race and subgraphs (owner's record dump 2026-11-09, verified on the vanilla
+    # records): MannequinRace / HumanCorpseRace carry RNAM (armor race = HumanRace) after the last skin-tone section
+    # (BSTT / HSTT), right where HumanRace's 400 subgraph entries (subgraph.FIELDS) begin, before PTOP. A copy of those
+    # entries under a race of our own did not animate (owner: its NPCs in the reference pose; first build had RNAM at
+    # the top and the entries copied): the precomputed animation data is per race, so, as Fallout 4 races do, ours
+    # names HumanRace as its subgraph template race (SRAC) and carries no entries of its own.
     from fo4sf import subgraph
-    if any(s == b"SRAC" for s, _d in top):
-        before = len(top) + len(rest)
-        top = [(s, d) for s, d in top if s not in subgraph.FIELDS]
-        rest = [(s, d) for s, d in rest if s not in subgraph.FIELDS]
-        rep["subgraph_subrecords_dropped"] = before - len(top) - len(rest)
-    subs = top + rest
+    hr = struct.pack("<I", human_fid)
+    rep = {"armor_race": "HumanRace", "subgraph_race": "HumanRace"}
+    subs = [(s, d) for s, d in subs if s not in (b"RNAM", b"SRAC")]
+    at = next((i for i, (s, _d) in enumerate(subs) if s in subgraph.FIELDS), None)
+    if at is None:
+        at = next((i for i, (s, _d) in enumerate(subs) if s == b"PTOP"), len(subs))
+    before = len(subs)
+    tail = [(s, d) for s, d in subs[at:] if s not in subgraph.FIELDS]
+    subs = subs[:at] + [(b"RNAM", hr), (b"SRAC", hr)] + tail
+    rep["subgraph_subrecords_dropped"] = before - at - len(tail)
     for female, h_fid in heads.items():
         subs, counts = race_override(subs, h_fid, keys.get(female, {}), part_types, female)
         code = next((PHENO_KEY.match(k).group(3) for ks in keys.get(female, {}).values() for k in ks), None)
-        subs, index = add_phenotype(subs, female, f"{SEXES[female]}_sk_{code}") if code else (subs, None)
+        subs, index = add_phenotype(subs, female, f"{SEXES[female]}_sk_{code}", label=name) if code else (subs, None)
         rep[SEXES[female]] = dict(counts, phenotype_index=index)
     return subs, rep
 
