@@ -359,3 +359,16 @@ why the mod needs no clothes of its own.
   presets go in RPRM / RPRF, and the baked race head part is the vanilla head part with only its model changed
   (vanilla morph record), so the race's chargen is the human one. Whether the locked pads came from (2) or from
   elsewhere: rerun and look.
+
+- 2026-11-10 Face parts follow the race head (owner: "hard to test ... without the eyebrows, eyes, beards, and teeth
+  with baking"). race_heads (--race-shape baked) now bakes every face head part HumanRace offers (HDPT types right /
+  left eye, eyelashes, eyebrows, facial hair, teeth, jewelry, per xEdit's SF1 enum; plus their extra parts) per sex
+  and race: `meshes\s2s\races\<race>\parts\<part>_M|F.nif` + meshes. Each part's frame is found through its skin
+  binds (inv(B_head) B_part for a shared bone, C_Head first, both conventions, the one closest to the head surface;
+  identity if unskinned), every part point moves like its nearest head vertex, LODs by nearest LOD 0 vertex; shapes
+  more than 0.25 m (median) from the head are left. Records: copies S2S_<Race>Race_<part>_M|F (this sex only) on the
+  list S2S_HeadParts<Race>Race; the race's default head parts and its NPCs / the player patch use the copies; the
+  vanilla face parts now name S2S_HeadPartsHumanOnly (HeadPartsHumanRace's vanilla entries) so our race offers only
+  its copies; hair and the other types stay shared (HeadPartsHumanRace with our race added). Per-part frame and
+  distance in race_heads.json (baked_heads.<race>.<sex>.parts). Not yet: eye textures / colours per race, tusks.
+  Note: races of other mods added to HeadPartsHumanRace lose the vanilla face parts while this plugin is loaded.

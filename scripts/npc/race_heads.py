@@ -26,6 +26,10 @@ What it writes (under --out):
     (meshes\\s2s\\races\\<race>\\<sex>head.nif, src/fo4sf/headbake.py) and a head part per sex using it, so every
     face of the race starts from that shape and HumanRace's chargen (blends, sliders) works on top; the race's chargen
     lists stay HumanRace's. --race-shape blend: the earlier way (the shape as an extra chargen phenotype).
+    Face parts (2026-11-10): every eye, eyelash, eyebrow, beard, teeth and jewelry head part HumanRace offers gets a race
+    copy per sex baked the same way (headbake.baked_part_files: each part point moves like its nearest head vertex,
+    the part's frame found through the skin binds), on a list of the race's own (S2S_HeadParts<race>Race); the vanilla
+    ones move to a humans-only list (S2S_HeadPartsHumanOnly); hair and the rest stay shared. --no-bake-parts: off.
   race_heads.json: per race the console command, the weights, a frame check.
 Unverified in game: whether an NPC's own Face head part replaces the race's (Skyrim does), and whether BMPN alone
 applies a key (A/B: --race-head).
@@ -282,13 +286,57 @@ def race_model_path(name, female):
     return f"S2S\\Races\\{name}\\{SEXES[female].capitalize()}Head.nif"
 
 
-def write_race_heads(sf_data, out, made, races):
+# Head part types (HDPT PNAM, xEdit wbDefinitionsSF1) that sit on the face and get race copies baked with the race shape
+# (2026-11-10): right eye, facial hair, jewelry, eyebrows, teeth, left eye, eyelashes. Hair, scars, meatcaps and the rest
+# stay shared with HumanRace (the race is added to their valid-race list).
+FACE_PART_TYPES = {2: "right eye", 4: "facial hair", 7: "jewelry", 6: "eyebrows", 9: "teeth", 12: "left eye",
+                   13: "eyelashes"}
+HUMAN_PART_LIST = "HeadPartsHumanRace"
+
+
+def face_parts(recs_all, types=FACE_PART_TYPES):
+    """[(FormID, EditorID, MODL, sexes [female...])] of the head parts HumanRace offers (RNAM = HeadPartsHumanRace)
+    of the face types, plus their extra parts (HNAM), recursively; sexes from DATA (bit 1 male, bit 2 female; neither
+    or both: both)."""
+    lst = next((fid for t, _h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == HUMAN_PART_LIST), None)
+    hd = {fid: sb for t, _h, sb, fid in recs_all if t == b"HDPT"}
+    want = [fid for fid, sb in hd.items() if lst is not None and _u32(dict(sb).get(b"RNAM", bytes(4))) == lst
+            and _u32(dict(sb).get(b"PNAM", bytes(4))) in types]
+    seen, order = set(), []
+    while want:
+        fid = want.pop(0)
+        if fid in seen or fid not in hd:
+            continue
+        seen.add(fid)
+        order.append(fid)
+        want += [_u32(d) for sg, d in hd[fid] if sg == b"HNAM"]
+    out = []
+    for fid in order:
+        sb = dict(hd[fid])
+        modl = text_of(sb[b"MODL"]) if b"MODL" in sb else ""
+        if not modl:
+            continue
+        fl = sb.get(b"DATA", b"\0")[0]
+        sexes = [f for f, bit in ((False, 2), (True, 4)) if fl & bit] or [False, True]
+        out.append((fid, sfplugin.edid(hd[fid]), modl, sexes))
+    return out
+
+
+def race_part_model(name, edid, female):
+    return f"S2S\\Races\\{name}\\Parts\\{edid}_{'F' if female else 'M'}.nif"
+
+
+def write_race_heads(sf_data, out, made, races, parts=True):
     """Per race and sex: the vanilla head part's NIF with the race shape baked into its head meshes
-    (headbake.baked_head_files), written under out. Returns ({race: {female: MODL}}, report)."""
+    (headbake.baked_head_files), and (parts) every face head part HumanRace offers baked the same way
+    (headbake.baked_part_files), written under out. Returns ({race: {female: MODL}}, {race: [(part FormID, female,
+    MODL)]}, report)."""
     from fo4sf import headbake
     import face_fit
+    import time
     esm = os.path.join(sf_data, "Starfield.esm")
-    models, rep = {}, {}
+    models, race_parts, rep = {}, {}, {}
+    plist = face_parts(sfplugin.records(esm, [b"HDPT", b"FLST"])) if parts else []
     for female, m in made.items():
         modl = vanilla_head_model(esm, female)
         nif_bytes, _rel = face_fit.hkx_to_af.vanilla_file("meshes/" + modl.replace("\\", "/"), sf_data)
@@ -311,7 +359,41 @@ def write_race_heads(sf_data, out, made, races):
             rep.setdefault(race, {})[SEXES[female]] = {"from": modl, "model": mp, "files": len(files),
                                                        "max_move_m": round(float(np.linalg.norm(
                                                            m["disp"][race], axis=1).max()), 4)}
-    return models, rep
+        if not plist:
+            continue
+        head_raw, _ = face_fit.hkx_to_af.vanilla_file(face_fit.SF_HEADS[female], sf_data)
+        _p, head_skin = facefit.starfield_head_parts(head_raw)
+        for race in races:
+            if race not in m.get("disp", {}):
+                continue
+            t0, prep, done = time.time(), {}, 0
+            for fid, edid, modl, sexes in plist:
+                if female not in sexes:
+                    continue
+                try:
+                    nb, _r = face_fit.hkx_to_af.vanilla_file("meshes/" + modl.replace("\\", "/"), sf_data)
+                except (SystemExit, KeyError, OSError) as e:
+                    prep[edid] = {"error": f"model not found: {e}"}
+                    continue
+                mp = race_part_model(NAMES[race], edid, female)
+                try:
+                    files, frep = headbake.baked_part_files(
+                        nb, lambda r: face_fit.hkx_to_af.vanilla_file(r, sf_data)[0], m["vertices"],
+                        m["disp"][race], head_skin, "meshes/" + mp.replace("\\", "/").lower())
+                except (SystemExit, KeyError, ValueError, OSError) as e:
+                    prep[edid] = {"error": str(e)[:200]}
+                    continue
+                for rel, data in files.items():
+                    path = os.path.join(out, *rel.split("/"))
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    with open(path, "wb") as fh:
+                        fh.write(data)
+                race_parts.setdefault(race, []).append((fid, female, mp))
+                prep[edid] = frep
+                done += 1
+            rep[race][SEXES[female]]["parts"] = prep
+            print(f"  {race} {SEXES[female]}: {done} face parts baked ({time.time() - t0:.0f} s)")
+    return models, race_parts, rep
 
 
 def neutral_extra(morph):
@@ -448,7 +530,68 @@ def delocalize(subs, tables):
     return out
 
 
-def player_patch(player_subs, race_fid, heads, part_types):
+def swap_parts(subs, mapping, sig=b"PNAM"):
+    """subs with each sig FormID found in mapping replaced (head parts: vanilla -> the race's baked copy)."""
+    return [(s_, struct.pack("<I", mapping[_u32(d)]) if s_ == sig and len(d) == 4 and _u32(d) in mapping else d)
+            for s_, d in subs]
+
+
+def swap_race_heads(subs, by_sex):
+    """RACE subrecords with each default head part (HEAD) swapped per sex section (the empty MNAM / FNAM markers):
+    by_sex {female: {vanilla FormID: copy FormID}}."""
+    sex, out = None, []
+    for s_, d in subs:
+        if s_ in (b"MNAM", b"FNAM") and len(d) == 0:
+            sex = (s_ == b"FNAM")
+        elif s_ == b"HEAD" and len(d) == 4 and sex is not None and _u32(d) in by_sex.get(sex, {}):
+            d = struct.pack("<I", by_sex[sex][_u32(d)])
+        out.append((s_, d))
+    return out
+
+
+def race_part_records(recs_all, name, race_fid, parts, new_fid):
+    """(records, {female: {vanilla FormID: copy FormID}}, list FormID): the race's valid-race list (FLST
+    S2S_HeadParts<name>Race, holding the race) and a copy of each baked face part (EDID S2S_<name>Race_<part>_M/F,
+    MODL the baked model, RNAM that list, DATA this sex only, extra parts HNAM -> their copies of the same sex).
+    parts: [(vanilla FormID, female, MODL)]."""
+    by = {fid: (h, sb) for t, h, sb, fid in recs_all if t in (b"HDPT", b"FLST")}
+    src_list = next((v for v in by.values() if sfplugin.edid(v[1]) == HUMAN_PART_LIST), None)
+    l_fid = new_fid()
+    recs = [(b"FLST", src_list[0] if src_list else b"", [(b"EDID", sfplugin.zs(f"S2S_HeadParts{name}Race")),
+                                                        (b"LNAM", struct.pack("<I", race_fid))], l_fid)]
+    copies = {}
+    for vfid, female, _modl in parts:
+        copies.setdefault(female, {})[vfid] = new_fid()
+    for vfid, female, modl in parts:
+        h, sb = by[vfid]
+        ed = {b"EDID": sfplugin.zs(f"S2S_{name}Race_{sfplugin.edid(sb)}_{'F' if female else 'M'}"),
+              b"MODL": sfplugin.zs(modl), b"RNAM": struct.pack("<I", l_fid)}
+        fl = dict(sb).get(b"DATA")
+        if fl:                              # this sex only (DATA is required on vanilla parts; not added if missing)
+            ed[b"DATA"] = bytes([(fl[0] & ~0x6) | (4 if female else 2)]) + bytes(fl[1:])
+        sub = sfplugin.edit(list(sb), ed)
+        sub = swap_parts(sub, copies[female], sig=b"HNAM")
+        recs.append((b"HDPT", h, sub, copies[female][vfid]))
+    return recs, copies, l_fid
+
+
+def human_only_parts(recs_all, vanilla_fids, new_fid):
+    """(records): a list S2S_HeadPartsHumanOnly holding HeadPartsHumanRace's vanilla entries, and an override of each
+    vanilla face part that has race copies with its valid races (RNAM) set to it, so a race of ours (in
+    HeadPartsHumanRace for the shared parts: hair, ...) is offered its own copies only."""
+    src = next(((h, sb) for t, h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == HUMAN_PART_LIST), None)
+    if src is None:
+        return []
+    l_fid = new_fid()
+    out = [(b"FLST", src[0], [(b"EDID", sfplugin.zs("S2S_HeadPartsHumanOnly"))] +
+            [(s_, d) for s_, d in src[1] if s_ != b"EDID" and len(d) == 4], l_fid)]
+    for t, h, sb, fid in recs_all:
+        if t == b"HDPT" and fid in vanilla_fids:
+            out.append((b"HDPT", h, sfplugin.edit(list(sb), {b"RNAM": struct.pack("<I", l_fid)}), fid))
+    return out
+
+
+def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
     """The vanilla Player record (NPC_ 00000007) with its race (RNAM) set to ours and its Face head part ours, as
     the Exo Race mod's player patch does (Nexus 7992: ExoRacePlayer.esm edits the player record; 2026-11-09, owner's
     setrace on the player left getisrace 0)."""
@@ -457,6 +600,8 @@ def player_patch(player_subs, race_fid, heads, part_types):
     subs = sfplugin.edit(list(player_subs), {b"RNAM": struct.pack("<I", race_fid)})
     if female in heads:
         subs = with_head_part(subs, heads[female], part_types)
+    if part_copies and female in part_copies:
+        subs = swap_parts(subs, part_copies[female])
     return subs
 
 
@@ -489,7 +634,8 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
     return out
 
 
-def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None):
+def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
+                 race_parts=None):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -564,7 +710,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                 "template_form_id": f"{tpl[3]:08X}", "blends": len(keys),
                                 "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s load order "
                                            f"index)"})
-    race_fids, race_heads = {}, {}
+    race_fids, race_heads, part_copies = {}, {}, {}
     if new_races and human is not None:
         mann = next((s for t, _h, s, fid in recs_all if t == b"RACE" and sfplugin.edid(s) == "MannequinRace"), None)
         rep["new_races"] = {}
@@ -595,6 +741,13 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                 rrep["shape"] = "baked into its head model"
                 rrep["head_parts"] = {SEXES[f]: {"HDPT": f"{h:08X}", "MODL": race_models[race][f]}
                                       for f, h in rheads.items()}
+            if race_parts and race_parts.get(race):
+                prs, copies, _l = race_part_records(recs_all, NAMES[race], r_fid, race_parts[race],
+                                                    lambda: sfplugin.new_form_id(next(nxt), masters))
+                recs += prs
+                rsubs = swap_race_heads(rsubs, copies)
+                part_copies[race] = copies
+                rrep["face_parts"] = {SEXES[f]: len(c) for f, c in copies.items()}
             recs.append((b"RACE", by_fid[human][1], rsubs, r_fid))
             race_fids[race] = r_fid
             rrep.update(form_id=f"{r_fid:08X}", setrace=f"player.setrace xx{r_fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s "
@@ -615,6 +768,8 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             if race in race_heads:          # the shape is in the head: the race's head part, no race blends
                 subs = with_head_part([x for x in subs if x[0] not in (b"BMPN", b"BMPV")],
                                       race_heads[race][n["sex"] == "female"], part_types)
+            if race in part_copies:
+                subs = swap_parts(subs, part_copies[race].get(n["sex"] == "female", {}))
             recs.append((b"NPC_", src[1], subs, fid))
             rep["npcs"].append(dict(n, edid=edid, form_id=f"{fid:08X}", race_record=f"S2S_{NAMES[race]}Race",
                                     blends=0 if race in race_heads else n["blends"],
@@ -631,8 +786,14 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             for h_, s_, f_ in lists:
                 recs.append((b"FLST", h_, s_, f_))
             rep["head_part_race_lists"] = [f"{sfplugin.edid(s_)} {f_:08X}" for _h, s_, f_ in lists]
+        baked = {v for c in part_copies.values() for per in c.values() for v in per}
+        if baked:
+            ho = human_only_parts(recs_all, baked, lambda: sfplugin.new_form_id(next(nxt), masters))
+            recs += ho
+            rep["human_only_parts"] = len(ho) - 1
         rep["_player_parts"] = (heads, part_types, next(((h_, s) for t, h_, s, fid in recs_all
-                                                         if t == b"NPC_" and fid == 0x7), None), race_heads)
+                                                         if t == b"NPC_" and fid == 0x7), None), race_heads,
+                                part_copies)
     if race_head and human is not None:
         _t, rh, rs = by_fid[human]
         rep["race_override"] = {"form_id": f"{human:08X}"}
@@ -691,6 +852,9 @@ def main(argv=None):
                     help="new races (--new-races): their shape baked into a head model of their own, so every face "
                          "of the race has it and HumanRace's chargen works on top (default, 2026-11-10), or an extra "
                          "chargen blend option (the faces have to pick it)")
+    ap.add_argument("--no-bake-parts", action="store_true",
+                    help="--race-shape baked: no race copies of the face head parts (eyes, brows, beards, teeth, "
+                         "lashes, jewelry); the race then uses HumanRace's (2026-11-10 default: baked copies)")
     ap.add_argument("--symmetry", choices=("stronger", "mean", "none"), default="stronger",
                     help="left / right: per vertex pair the side that moved more (default), their mean, or as "
                          "transferred")
@@ -776,9 +940,9 @@ def main(argv=None):
         for race, x in srep.get("races", {}).items():
             print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
     wanted = [r if r.endswith("Race") else r + "Race" for r in (x.strip() for x in a.new_races.split(",")) if r]
-    models = None
+    models, rparts = None, None
     if wanted and a.race_shape == "baked":
-        models, report["baked_heads"] = write_race_heads(sf_data, a.out, made, wanted)
+        models, rparts, report["baked_heads"] = write_race_heads(sf_data, a.out, made, wanted, not a.no_bake_parts)
         for race, per in report["baked_heads"].items():
             for sex, x in per.items():
                 print(f"  {race} {sex}: shape baked into {x['model']} ({x['files'] - 1} meshes)")
@@ -787,7 +951,7 @@ def main(argv=None):
     if not strings:
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models, strings)
+                                    wanted, models, strings, rparts)
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
@@ -800,12 +964,14 @@ def main(argv=None):
         if r is None or "form_id" not in r or parts is None or parts[2] is None:
             print(f"  player patch: {race} not built (needs --new-races {a.player_race}) or no Player record")
         else:
-            heads_, part_types_, player, race_heads_ = parts
+            heads_, part_types_, player, race_heads_, part_copies_ = parts
             heads_ = race_heads_.get(race, heads_)
+            pcopies = {f: {v: (c & 0xFFFFFF) | 0x01000000 for v, c in per.items()}
+                       for f, per in part_copies_.get(race, {}).items()}
             # our plugin's own forms are 01xxxxxx (master 0 Starfield.esm); in the patch S2SRaceTest.esm is master 1
             race_fid = (int(r["form_id"], 16) & 0xFFFFFF) | 0x01000000
             pheads = {f: (h & 0xFFFFFF) | 0x01000000 for f, h in heads_.items()}
-            psubs = player_patch(player[1], race_fid, pheads, part_types_)
+            psubs = player_patch(player[1], race_fid, pheads, part_types_, pcopies)
             name = f"S2S{NAMES[race]}Player.esm"
             with open(os.path.join(a.out, name), "wb") as fh:
                 fh.write(sfplugin.build([(b"NPC_", player[0], psubs, 0x7)], info,

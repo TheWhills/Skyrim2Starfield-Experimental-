@@ -114,3 +114,128 @@ def baked_head_files(nif_bytes: bytes, read: Callable[[str], bytes], head_mesh_p
         raise ValueError(f"no BSGeometry with LOD 0 {head_mesh_path} in the head NIF")
     files[out_nif] = nifmod.serialize(n)
     return files
+
+
+# --- head parts (2026-11-10, owner: "hard to test without the eyebrows, eyes, beards, and teeth with baking") -------
+# A face head part (eyes, brows, beard, teeth, lashes, jewelry) is skinned to the head's bones; its .mesh is in its own
+# frame (the teeth: C_Head's frame, docs/npc/races.md 2026-11-09). A point v of it sits on the head mesh at
+# inv(B_head) B_part v for a bone both skin to (B: that bone's bind, mesh -> bone). The candidate frame whose points
+# lie closest to the head surface (median distance to the nearest head vertex) is used; each part point then moves
+# like its nearest head vertex.
+
+def bind_matrix(bind, transpose: bool = False) -> np.ndarray:
+    """4x4 of a Starfield skin bind (sphere, rot 9, trans 3, scale): mesh point -> bone space, s R v + t (transpose:
+    the 9 floats read column-major); as mouth_probe.bind_matrix."""
+    _sphere, rot, trans, scale = bind
+    R = np.array(rot, float).reshape(3, 3)
+    m = np.eye(4)
+    m[:3, :3] = (R.T if transpose else R) * (float(scale) or 1.0)
+    m[:3, 3] = trans
+    return m
+
+
+def geometry_skin(n, g) -> dict:
+    """{"bones": [names], "binds": [...]} of one BSGeometry: bone names from its SkinAttach extra data, binds from
+    the BoneData its BSSkin::Instance names. {} if unskinned."""
+    import struct
+    out = {}
+    for r in g.extra_refs:
+        if 0 <= r < len(n.blocks) and n.type_of(r) == "SkinAttach":
+            b = n.blocks[r]
+            cnt, = struct.unpack_from("<I", b, 4)
+            p, names = 8, []
+            for _ in range(cnt):
+                ln, = struct.unpack_from("<I", b, p)
+                names.append(b[p + 4:p + 4 + ln])
+                p += 4 + ln
+            out["bones"] = names
+    if 0 <= g.skin < len(n.blocks) and n.type_of(g.skin) == "BSSkin::Instance":
+        _root, data, _nb = struct.unpack_from("<iiI", n.blocks[g.skin], 0)
+        if 0 <= data < len(n.blocks) and n.type_of(data) == "BSSkin::BoneData":
+            b = n.blocks[data]
+            cnt, = struct.unpack_from("<I", b, 0)
+            out["binds"] = [(v[:4], v[4:13], v[13:16], v[16]) for v in
+                            (struct.unpack_from("<17f", b, 4 + 68 * k) for k in range(cnt))]
+    return out
+
+
+def _binds_by_name(skin):
+    bones = [b.decode("latin-1").lower() if isinstance(b, bytes) else str(b).lower() for b in skin.get("bones", [])]
+    return dict(zip(bones, skin.get("binds", [])))
+
+
+def apply4(M, pts):
+    pts = np.asarray(pts, float)
+    return pts @ M[:3, :3].T + M[:3, 3]
+
+
+def part_to_head(part_pts, part_skin, head_skin, head_pts, max_bones: int = 8):
+    """(4x4 part mesh -> head mesh, report): candidates identity and, per bone both skin to (C_Head first),
+    inv(B_head) B_part in both bind conventions; the one with the smallest median distance to the head's vertices."""
+    head_pts = np.asarray(head_pts, float)
+    sample = np.asarray(part_pts, float)
+    if len(sample) > 2000:
+        sample = sample[np.linspace(0, len(sample) - 1, 2000).astype(int)]
+    hb, pb = _binds_by_name(head_skin or {}), _binds_by_name(part_skin or {})
+    shared = sorted(set(hb) & set(pb), key=lambda b: (b != "c_head", b))[:max_bones]
+    cands = [("identity", np.eye(4))]
+    for b in shared:
+        for tr in (False, True):
+            try:
+                M = np.linalg.inv(bind_matrix(hb[b], tr)) @ bind_matrix(pb[b], tr)
+            except np.linalg.LinAlgError:
+                continue
+            cands.append((f"{b} binds{' (transposed)' if tr else ''}", M))
+    best, rep = None, {}
+    for name, M in cands:
+        p = apply4(M, sample)
+        d = np.linalg.norm(head_pts[nearest(head_pts, p)] - p, axis=1)
+        med = float(np.median(d))
+        rep[name] = round(med, 4)
+        if best is None or med < best[0]:
+            best = (med, name, M)
+    return best[2], {"used": best[1], "median_to_head_m": round(best[0], 4), "candidates": rep}
+
+
+def part_displacement(part_pts, M, head_pts, head_disp):
+    """Per part vertex (its own frame): the displacement of the nearest head vertex, taken back through M."""
+    p = apply4(M, part_pts)
+    d_head = np.asarray(head_disp, float)[nearest(np.asarray(head_pts, float), p)]
+    return d_head @ np.linalg.inv(M[:3, :3]).T
+
+
+def baked_part_files(nif_bytes: bytes, read: Callable[[str], bytes], head_pts, head_disp, head_skin,
+                     out_nif: str):
+    """({out_nif: NIF, "geometries/<d>/<f>.mesh": meshes}, report) of a head part with every skinned or unskinned
+    BSGeometry baked: LOD 0 moved per vertex like its nearest head vertex (part_to_head's frame), the other LOD slots
+    by nearest LOD 0 vertex. Shapes whose LOD 0 lies farther than 0.25 m (median) from the head are left as they are."""
+    n = nifmod.parse(nif_bytes)
+    files: Dict[str, bytes] = {}
+    rep = {"shapes": []}
+    for i, b in enumerate(n.blocks):
+        if n.type_of(i) != "BSGeometry":
+            continue
+        g = sfnif.parse_bsgeometry(b)
+        refs = [m for m in g.meshes if m is not None]
+        if not refs:
+            continue
+        lod0 = sfmesh.parse(read("geometries/" + refs[0].path.decode("latin-1").replace("\\", "/") + ".mesh"))
+        pts = np.array([sfmesh.decode_position(p, lod0.scale) for p in lod0.positions], float)
+        M, frame = part_to_head(pts, geometry_skin(n, g), head_skin, head_pts)
+        srep = {"vertices": len(pts), **frame}
+        rep["shapes"].append(srep)
+        if frame["median_to_head_m"] > 0.25:
+            srep["left"] = "far from the head"
+            continue
+        disp = part_displacement(pts, M, head_pts, head_disp)
+        srep["max_move_m"] = round(float(np.linalg.norm(disp, axis=1).max(initial=0.0)), 4)
+        for m in refs:
+            rel = "geometries/" + m.path.decode("latin-1").replace("\\", "/") + ".mesh"
+            mesh = lod0 if m is refs[0] else sfmesh.parse(read(rel))
+            data = sfmesh.serialize(baked_mesh(mesh, pts, disp))
+            d, f = mesh_file_path(data)
+            files[f"geometries/{d}/{f}.mesh"] = data
+            m.path = f"{d}\\{f}".encode("latin-1")
+        n.blocks[i] = sfnif.build_bsgeometry(g)
+    files[out_nif] = nifmod.serialize(n)
+    return files, rep

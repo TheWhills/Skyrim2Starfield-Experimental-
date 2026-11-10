@@ -105,8 +105,8 @@ def starfield_esm(path):
         (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Female_Head")), (b"MODL", Z("Actors\\Human\\FemaleHead.nif")),
                                (b"DATA", b"\x01"), (b"PNAM", I(1)), (b"MNAM", I(0x701))], 0x511),
         (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Teeth")), (b"PNAM", I(9))], 0x512),
-        (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Beard_Goatee")), (b"PNAM", I(4)), (b"RNAM", I(0x24A)),
-                               (b"MNAM", I(0x700))], 0x513),
+        (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Beard_Goatee")), (b"MODL", Z("Actors\\Human\\Goatee.nif")),
+                               (b"PNAM", I(4)), (b"RNAM", I(0x24A)), (b"MNAM", I(0x700))], 0x513),
         (b"FLST", h(b"FLST"), [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D))], 0x24A),
         (b"FLST", h(b"FLST"), [(b"EDID", Z("OtherList")), (b"LNAM", I(0x347D))], 0x24B),
         (b"RACE", h(b"RACE"), [(b"EDID", Z("HumanRace")),
@@ -136,6 +136,10 @@ def starfield_esm(path):
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
 
+def _u(d):
+    return struct.unpack("<I", bytes(d)[:4])[0]
+
+
 def string_table(texts):
     """A Starfield / Skyrim .STRINGS table: count, data size, (id, offset) pairs, zero-terminated strings."""
     data, index = b"", b""
@@ -146,6 +150,24 @@ def string_table(texts):
 
 
 class PluginTests(unittest.TestCase):
+    def test_swap_race_heads_per_sex(self):
+        subs = [(b"MNAM", b""), (b"HEAD", I(5)), (b"HEAD", I(6)), (b"FNAM", b""), (b"HEAD", I(5)), (b"PNAM", I(5))]
+        out = H.swap_race_heads(subs, {False: {5: 50}, True: {5: 51}})
+        self.assertEqual([_u(d) for s_, d in out if s_ == b"HEAD"], [50, 6, 51])
+        self.assertEqual(H.swap_parts(subs, {5: 9})[-1], (b"PNAM", I(9)))
+
+    def test_face_parts_with_extras(self):
+        recs = [(b"FLST", b"", [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(1))], 0x24A),
+                (b"HDPT", b"", [(b"EDID", Z("Brow")), (b"MODL", Z("b.nif")), (b"DATA", b"\x05"), (b"PNAM", I(6)),
+                                (b"HNAM", I(0x22)), (b"RNAM", I(0x24A))], 0x21),
+                (b"HDPT", b"", [(b"EDID", Z("BrowExtra")), (b"MODL", Z("e.nif")), (b"PNAM", I(0))], 0x22),
+                (b"HDPT", b"", [(b"EDID", Z("Hair")), (b"MODL", Z("h.nif")), (b"PNAM", I(3)), (b"RNAM", I(0x24A))],
+                 0x23),
+                (b"HDPT", b"", [(b"EDID", Z("AlienBrow")), (b"MODL", Z("a.nif")), (b"PNAM", I(6)), (b"RNAM", I(9))],
+                 0x24)]
+        self.assertEqual(H.face_parts(recs), [(0x21, "Brow", "b.nif", [True]), (0x22, "BrowExtra", "e.nif",
+                                                                                   [False, True])])
+
     def test_delocalize(self):
         tables = {"strings": {7: "Nose"}, "dlstrings": {9: "A race."}}
         subs = [(b"FDSL", I(7)), (b"DESC", I(9)), (b"FDSL", I(8)), (b"EDID", I(7)), (b"FULL", I(0))]
@@ -416,6 +438,24 @@ class PluginTests(unittest.TestCase):
                 on = by["S2SRace_OrcRace_male"][1]
                 self.assertNotIn(b"BMPN", [s_ for s_, _d in on])
                 self.assertIn(struct.pack("<I", oh[2]), [d_ for s_, d_ in on if s_ == b"PNAM"])
+                # the face parts: a baked copy per sex on the race's own list; the vanilla one for humans only
+                recs2 = sfplugin.records(os.path.join(out, H.PLUGIN), [b"HDPT", b"FLST"])
+                by2 = {sfplugin.edid(s_): (s_, fid) for _t, _h, s_, fid in recs2}
+                self.assertIn("S2S_OrcRace_Human_Male_Beard_Goatee_M", by2, json.dumps(rep.get("baked_heads"))[:3000])
+                bm = dict(by2["S2S_OrcRace_Human_Male_Beard_Goatee_M"][0])
+                self.assertIn("S2S_OrcRace_Human_Male_Beard_Goatee_F", by2)
+                self.assertEqual(H.text_of(bm[b"MODL"]), "S2S\\Races\\Orc\\Parts\\Human_Male_Beard_Goatee_M.nif")
+                self.assertEqual(_u(bm[b"RNAM"]), by2["S2S_HeadPartsOrcRace"][1])
+                self.assertNotIn(b"DATA", bm)
+                self.assertEqual([_u(d_) for s_, d_ in by2["S2S_HeadPartsOrcRace"][0] if s_ == b"LNAM"],
+                                 [by["S2S_OrcRace"][2]])
+                van = dict(by2["Human_Male_Beard_Goatee"][0])                       # override of 0x513
+                self.assertEqual(by2["Human_Male_Beard_Goatee"][1], 0x513)
+                self.assertEqual(_u(van[b"RNAM"]), by2["S2S_HeadPartsHumanOnly"][1])
+                self.assertEqual([_u(d_) for s_, d_ in by2["S2S_HeadPartsHumanOnly"][0] if s_ == b"LNAM"], [0x347D])
+                self.assertTrue(os.path.isfile(os.path.join(out, "meshes", "s2s", "races", "orc", "parts",
+                                                            "human_male_beard_goatee_m.nif")))
+                self.assertEqual(rep["new_races"]["OrcRace"]["face_parts"], {"male": 1, "female": 1})
                 pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
                 pheads = [struct.unpack("<I", d_)[0] & 0xFFFFFF for s_, d_ in pp[0][2] if s_ == b"PNAM"]
                 self.assertIn(oh[2] & 0xFFFFFF, pheads)

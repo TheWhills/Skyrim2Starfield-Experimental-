@@ -108,6 +108,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Its output lists the baked head files; the mod folder gains meshes\s2s\races\orc and geometries\.
    Owner: Orc head shows; face rows garbled ("U", "Z"), shape pads and eye shape locked, eyebrows clip, mouth open.
    Fixed the row names (localized labels) and the presets (they had been added as face dials); same command again.
+   Then: the face parts (eyes, lashes, brows, beards, teeth, jewelry) baked per race and sex too (same command; the
+   output prints how many parts and how long; --no-bake-parts to skip).
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
