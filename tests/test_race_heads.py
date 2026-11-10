@@ -110,7 +110,7 @@ def starfield_esm(path):
         (b"FLST", h(b"FLST"), [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D))], 0x24A),
         (b"FLST", h(b"FLST"), [(b"EDID", Z("OtherList")), (b"LNAM", I(0x347D))], 0x24B),
         (b"RACE", h(b"RACE"), [(b"EDID", Z("HumanRace")),
-                               (b"FULL", I(0x5000)),
+                               (b"FULL", I(0x5000)), (b"DAT2", struct.pack("<2f", 1.0, 0.98) + bytes(8)),
                                (b"MNAM", b""), (b"NAM0", b""), (b"NNAM", bytes(12)), (b"RPRM", I(0x800)),
                                (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
                                (b"MPGN", Z("Eyes")), (b"MPGM", Z("male_eu_md1_Eyes")), (b"FDSI", I(1)),
@@ -136,6 +136,15 @@ def starfield_esm(path):
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
 
+def skyrim_esm(path, heights):
+    """A Skyrim.esm with RACE records whose DATA carries (male, female) height at 16 / 20."""
+    h = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 44, 0)    # noqa: E731
+    recs = [(b"RACE", h(b"RACE"), [(b"EDID", Z(r)), (b"DATA", bytes(16) + struct.pack("<2f", *hh) + bytes(20))],
+             0x1300 + i) for i, (r, hh) in enumerate(heights.items())]
+    with open(path, "wb") as fh:
+        fh.write(sfplugin.build(recs, {"hedr_version": 1.7, "form_version": 44}, masters=()))
+
+
 def _u(d):
     return struct.unpack("<I", bytes(d)[:4])[0]
 
@@ -150,6 +159,21 @@ def string_table(texts):
 
 
 class PluginTests(unittest.TestCase):
+    def test_race_names(self):
+        self.assertEqual(H.race_names("Orc, Altmer,HighElfRace,woodelf"), ["OrcRace", "HighElfRace", "HighElfRace",
+                                                                           "WoodElfRace"])
+        self.assertEqual(H.race_names("all"), list(H.CODES))
+        with self.assertRaises(SystemExit):
+            H.race_names("Khajiit")
+
+    def test_with_heights(self):
+        dat2 = struct.pack("<2f", 1.0, 0.98) + b"rest"
+        out = H.with_heights([(b"EDID", Z("X")), (b"DAT2", dat2)], (1.045, 1.1))
+        hm, hf = struct.unpack_from("<2f", out[1][1], 0)
+        self.assertAlmostEqual(hm, 1.045, places=6)
+        self.assertAlmostEqual(hf, 0.98 * 1.1, places=6)
+        self.assertEqual(out[1][1][8:], b"rest")
+
     def test_swap_race_heads_per_sex(self):
         subs = [(b"MNAM", b""), (b"HEAD", I(5)), (b"HEAD", I(6)), (b"FNAM", b""), (b"HEAD", I(5)), (b"PNAM", I(5))]
         out = H.swap_race_heads(subs, {False: {5: 50}, True: {5: 51}})
@@ -403,9 +427,12 @@ class PluginTests(unittest.TestCase):
                 with open(os.path.join(sf, "Data", "Strings", "starfield_en.strings"), "wb") as fh:
                     fh.write(string_table({0x5000: "Human", 0x5001: "Forehead", 0x5002: "Ears", 0x5003: "Nose"}))
                 out = os.path.join(d, "out")
+                skyrim_esm(os.path.join(d, "Skyrim.esm"), {"ImperialRace": (1.0, 1.0), "OrcRace": (1.045, 1.045),
+                                                            "WoodElfRace": (0.98, 1.0)})
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out, "--races",
-                                             "HighElfRace,OrcRace", "--new-races", "Orc", "--player-race", "Orc",
+                                             "HighElfRace,OrcRace", "--new-races", "Orc,Bosmer", "--player-race",
+                                             "Orc",
                                              "--symmetry", "none"]), 0)
                 with open(os.path.join(out, "race_heads.json")) as fh:
                     rep = json.load(fh)
@@ -445,6 +472,12 @@ class PluginTests(unittest.TestCase):
                 heads_ = [struct.unpack("<I", d_)[0] for s_, d_ in orc if s_ == b"HEAD"]
                 self.assertIn(oh[2], heads_)
                 self.assertEqual(rep["new_races"]["OrcRace"]["shape"], "baked into its head model")
+                # 2026-11-10: baked races need not be in --races (Bosmer was not); heights from Skyrim
+                self.assertIn("form_id", rep["new_races"]["WoodElfRace"])
+                hm, hf = struct.unpack_from("<2f", dict(orc)[b"DAT2"], 0)
+                self.assertAlmostEqual(hm, 1.045, places=5)
+                self.assertAlmostEqual(hf, 0.98 * 1.045, places=5)
+                self.assertEqual(rep["new_races"]["WoodElfRace"]["height_factor"], {"male": 0.98, "female": 1.0})
                 on = by["S2SRace_OrcRace_male"][1]
                 self.assertNotIn(b"BMPN", [s_ for s_, _d in on])
                 self.assertIn(struct.pack("<I", oh[2]), [d_ for s_, d_ in on if s_ == b"PNAM"])

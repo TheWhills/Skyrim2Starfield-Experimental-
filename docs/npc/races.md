@@ -385,3 +385,10 @@ why the mod needs no clothes of its own.
     shape (headbake.rigid_displacement; turn_deg / scale per eye in race_heads.json), instead of per-vertex moves
     that bend the eyeball. Next: compare with Skyrim's own race eyes (its eye models' race morph, if any) and the
     eye textures per race.
+
+- 2026-11-10 (owner away): race_heads --new-races takes any known race with the baked shape (no need to be in
+  --races, which only picks the morph keys and the test NPCs), short names too (Orc, HighElf, Altmer) or `all` (the
+  ten: Nord, Imperial, Breton, Redguard, Altmer, Bosmer, Dunmer, Orc, Elder, Dremora). Each new race's height (RACE
+  DAT2 male / female, xEdit SF1) = HumanRace's x Skyrim's height for the race / Skyrim's ImperialRace
+  (race_heads.skyrim_heights reads Skyrim.esm's RACE DATA at 16 / 20 like race_survey; --race-height human to keep
+  HumanRace's). race_heads.json: skyrim_heights, new_races.<race>.height_factor.

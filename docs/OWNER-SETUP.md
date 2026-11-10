@@ -110,6 +110,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Fixed the row names (localized labels) and the presets (they had been added as face dials); same command again.
    Then: the face parts (eyes, lashes, brows, beards, teeth, jewelry) baked per race and sex too (same command; the
    output prints how many parts and how long; --no-bake-parts to skip).
+   All ten races at once (each its own race, baked head + parts, Skyrim height); --player-race picks which one you
+   play (Orc, Altmer, Bosmer, Dunmer, Nord, ...):
+   ```powershell
+   python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races all --player-race Orc
+   ```
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:

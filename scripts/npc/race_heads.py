@@ -224,6 +224,56 @@ def add_phenotype(subs, female, pid, like="eu_md", label=None):
     return subs[:end] + block + subs[end:], index
 
 
+HEIGHT_REFERENCE = "ImperialRace"      # Skyrim's plain human (1.0 / 1.0): Starfield's HumanRace heights stand for it
+
+
+def race_names(text):
+    """Skyrim race EditorIDs from a comma list of EditorIDs, short names (Orc, HighElf) or our names (Altmer); 'all':
+    every known race."""
+    if text.strip().lower() == "all":
+        return list(CODES)
+    by_name = {v.lower(): k for k, v in NAMES.items()}
+    out = []
+    for x in (y.strip() for y in text.split(",")):
+        if not x:
+            continue
+        r = by_name.get(x.lower()) or (x if x.endswith("Race") else x + "Race")
+        r = next((k for k in CODES if k.lower() == r.lower()), r)
+        if r not in CODES:
+            raise SystemExit(f"unknown race {x!r}; known: {', '.join(CODES)} (or {', '.join(NAMES.values())})")
+        out.append(r)
+    return out
+
+
+def skyrim_heights(sky_esm, races, reference=HEIGHT_REFERENCE):
+    """{race: (male, female)} heights from Skyrim's RACE DATA (floats at 16 and 20, as race_survey reads them; owner's
+    survey: Nord 1.03, Altmer 1.08, Orc 1.045, Bosmer 0.98 / 1.0 ...), for races and the reference race."""
+    from fo4sf import packages
+    ix = packages.Index(sky_esm)
+    try:
+        out = {}
+        for r in set(races) | {reference}:
+            fid = ix.find_edid(b"RACE", r)
+            d = next((bytes(x) for sg, x in ix.subs(fid) if sg == b"DATA"), b"") if fid is not None else b""
+            if len(d) >= 24:
+                out[r] = struct.unpack_from("<2f", d, 16)
+        return out
+    finally:
+        ix.close()
+
+
+def with_heights(subs, factors):
+    """RACE subrecords with DAT2's male / female height (floats at 0 and 4, xEdit SF1 RACE DAT2) multiplied by
+    factors (male, female). 2026-11-10: a race's height relative to Skyrim's plain human (the Orc 1.045)."""
+    out = []
+    for sg, d in subs:
+        if sg == b"DAT2" and len(d) >= 8 and factors:
+            hm, hf = struct.unpack_from("<2f", d, 0)
+            d = struct.pack("<2f", hm * factors[0], hf * factors[1]) + bytes(d[8:])
+        out.append((sg, d))
+    return out
+
+
 def new_race(human, mannequin, name, heads, keys, part_types):
     """A Skyrim race as a RACE of its own, thin over HumanRace (docs/npc/races.md, "Decision"): a copy of HumanRace
     (skeleton, behaviour, chargen, bone modifiers, keywords) named `name`, armor race (RNAM) HumanRace so every
@@ -675,7 +725,7 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
-                 race_parts=None):
+                 race_parts=None, heights=None):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -759,7 +809,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             for f, m in made.items():
                 for k in m["keys_by_race"].get(race, []):
                     per[f].setdefault(PHENO_KEY.match(k).group(4), []).append(k)
-            if not any(per.values()):
+            if not any(per.values()) and race not in race_models:
                 rep["new_races"][race] = {"note": "no keys (not in --races)"}
                 continue
             rheads = heads
@@ -777,6 +827,10 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                 race_heads[race] = rheads
             r_fid = sfplugin.new_form_id(next(nxt), masters)
             rsubs, rrep = new_race((human, by_fid[human][2]), mann, NAMES[race], rheads, per, part_types)
+            if heights and race in heights and HEIGHT_REFERENCE in heights:
+                fac = tuple(heights[race][i] / (heights[HEIGHT_REFERENCE][i] or 1.0) for i in (0, 1))
+                rsubs = with_heights(rsubs, fac)
+                rrep["height_factor"] = {"male": round(fac[0], 4), "female": round(fac[1], 4)}
             if race in race_models:
                 rrep["shape"] = "baked into its head model"
                 rrep["head_parts"] = {SEXES[f]: {"HDPT": f"{h:08X}", "MODL": race_models[race][f]}
@@ -887,11 +941,14 @@ def main(argv=None):
                          "Exo Race mod's player patch")
     ap.add_argument("--new-races", default="",
                     help="Skyrim races to also make a RACE of their own, thin over HumanRace, e.g. Orc (comma list; "
-                         "each must be in --races)")
+                         "with --race-shape blend each must be in --races; baked: any of the known races, 'all' for "
+                         "every one)")
     ap.add_argument("--race-shape", choices=("baked", "blend"), default="baked",
                     help="new races (--new-races): their shape baked into a head model of their own, so every face "
                          "of the race has it and HumanRace's chargen works on top (default, 2026-11-10), or an extra "
                          "chargen blend option (the faces have to pick it)")
+    ap.add_argument("--race-height", choices=("skyrim", "human"), default="skyrim",
+                    help="new races' height: Skyrim's relative to its Imperial (default; Orc x1.045) or HumanRace's")
     ap.add_argument("--no-bake-parts", action="store_true",
                     help="--race-shape baked: no race copies of the face head parts (eyes, brows, beards, teeth, "
                          "lashes, jewelry); the race then uses HumanRace's (2026-11-10 default: baked copies)")
@@ -979,7 +1036,7 @@ def main(argv=None):
         print(f"  {len(keys)} keys -> {rel_out}")
         for race, x in srep.get("races", {}).items():
             print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
-    wanted = [r if r.endswith("Race") else r + "Race" for r in (x.strip() for x in a.new_races.split(",")) if r]
+    wanted = race_names(a.new_races)
     models, rparts = None, None
     if wanted and a.race_shape == "baked":
         models, rparts, report["baked_heads"] = write_race_heads(sf_data, a.out, made, wanted, not a.no_bake_parts)
@@ -987,12 +1044,17 @@ def main(argv=None):
             for sex, x in per.items():
                 print(f"  {race} {sex}: shape baked into {x['model']} ({x['files']} files; _facebones twin: "
                       f"{'yes' if x.get('facebones_twin') else 'NOT FOUND'})")
+    heights = {}
+    sky_esm = os.path.join(a.skyrim_data, "Skyrim.esm")
+    if wanted and a.race_height == "skyrim" and os.path.isfile(sky_esm):
+        heights = skyrim_heights(sky_esm, wanted)
+        report["skyrim_heights"] = {r: [round(x, 3) for x in h] for r, h in heights.items()}
     strings = load_lstrings(sf_data)
     report["localized_strings"] = {k: len(v) for k, v in strings.items()}
     if not strings:
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models, strings, rparts)
+                                    wanted, models, strings, rparts, heights)
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
@@ -1000,7 +1062,7 @@ def main(argv=None):
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
     parts = report.pop("_player_parts", None)
     if a.player_race:
-        race = a.player_race if a.player_race.endswith("Race") else a.player_race + "Race"
+        race = race_names(a.player_race)[0]
         r = (report.get("new_races") or {}).get(race)
         if r is None or "form_id" not in r or parts is None or parts[2] is None:
             print(f"  player patch: {race} not built (needs --new-races {a.player_race}) or no Player record")
