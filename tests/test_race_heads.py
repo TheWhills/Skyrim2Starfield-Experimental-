@@ -110,12 +110,15 @@ def starfield_esm(path):
         (b"FLST", h(b"FLST"), [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D))], 0x24A),
         (b"FLST", h(b"FLST"), [(b"EDID", Z("OtherList")), (b"LNAM", I(0x347D))], 0x24B),
         (b"RACE", h(b"RACE"), [(b"EDID", Z("HumanRace")),
-                               (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
+                               (b"FULL", I(0x5000)),
+                               (b"MNAM", b""), (b"NAM0", b""), (b"NNAM", bytes(12)), (b"RPRM", I(0x800)),
+                               (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
                                (b"MPGN", Z("Eyes")), (b"MPGM", Z("male_eu_md1_Eyes")), (b"FDSI", I(1)),
-                               (b"FDSL", I(0x800)), (b"FDSI", I(4)), (b"FDSL", I(0x800)),
+                               (b"FDSL", I(0x5001)), (b"FDSI", I(4)), (b"FDSL", I(0x5002)),
                                (b"INDX", I(0)), (b"HEAD", I(0x510)), (b"INDX", I(1)), (b"HEAD", I(0x512)),
-                               (b"FNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("female_eu_md1_Nose")),
-                               (b"FDSI", I(0)), (b"FDSL", I(0x801)),
+                               (b"FNAM", b""), (b"NAM0", b""), (b"NNAM", bytes(12)),
+                               (b"MPGN", Z("Nose")), (b"MPGM", Z("female_eu_md1_Nose")),
+                               (b"FDSI", I(0)), (b"FDSL", I(0x5003)),
                                (b"INDX", I(0)), (b"HEAD", I(0x511))], 0x347D),
         (b"NPC_", h(b"NPC_"), [(b"EDID", Z("Player")), (b"ACBS", bytes(16)), (b"RNAM", I(0x347D)),
                                (b"DNAM", bytes(8)), (b"PNAM", I(0x510)), (b"PNAM", I(0x512))], 0x7),
@@ -133,7 +136,30 @@ def starfield_esm(path):
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
 
+def string_table(texts):
+    """A Starfield / Skyrim .STRINGS table: count, data size, (id, offset) pairs, zero-terminated strings."""
+    data, index = b"", b""
+    for sid, t in texts.items():
+        index += struct.pack("<II", sid, len(data))
+        data += t.encode() + b"\0"
+    return struct.pack("<II", len(texts), len(data)) + index + data
+
+
 class PluginTests(unittest.TestCase):
+    def test_delocalize(self):
+        tables = {"strings": {7: "Nose"}, "dlstrings": {9: "A race."}}
+        subs = [(b"FDSL", I(7)), (b"DESC", I(9)), (b"FDSL", I(8)), (b"EDID", I(7)), (b"FULL", I(0))]
+        self.assertEqual(H.delocalize(subs, tables), [(b"FDSL", Z("Nose")), (b"DESC", Z("A race.")), (b"FDSL", Z("")),
+                                                      (b"EDID", I(7)), (b"FULL", I(0))])
+        self.assertEqual(H.delocalize(subs, {}), subs)
+
+    def test_presets_in_race_preset_lists(self):
+        subs = [(b"MNAM", b""), (b"NAM0", b""), (b"NNAM", bytes(12)), (b"RPRM", I(1)), (b"MPGN", Z("Nose")),
+                (b"FNAM", b""), (b"NAM0", b""), (b"NNAM", bytes(12)), (b"MPGN", Z("Nose"))]
+        out = H.add_presets(subs, {False: [5], True: [6, 7]})
+        self.assertEqual(out[3:5], [(b"RPRM", I(1)), (b"RPRM", I(5))])
+        self.assertEqual(out[8:11], [(b"NNAM", bytes(12)), (b"RPRF", I(6)), (b"RPRF", I(7))])
+
     def test_with_races(self):
         subs = [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D)), (b"LNAM", I(0x55))]
         out = H.with_races(subs, 0x347D, [0x900, 0x55])
@@ -263,12 +289,14 @@ class PluginTests(unittest.TestCase):
                 onpc = dict(by["S2SRace_OrcRace_male"][1])
                 self.assertEqual(struct.unpack("<I", onpc[b"RNAM"])[0], orc[2])
                 self.assertIn("player.setrace xx", rep["new_races"]["OrcRace"]["setrace"])
-                # chargen presets: the race's own NPCs after each sex's vanilla presets, indices continuing
-                fds = [(s_, struct.unpack("<I", d_)[0]) for s_, d_ in orc[1] if s_ in (b"FDSI", b"FDSL")]
+                # race presets (RPRM / RPRF): the race's own NPCs after each sex's vanilla ones; the face dials
+                # (FDSI / FDSL) untouched (2026-11-10: the first version added its presets there as dials)
+                pre = [(s_, struct.unpack("<I", d_)[0]) for s_, d_ in orc[1] if s_ in (b"RPRM", b"RPRF")]
                 om, of = by["S2SRace_OrcRace_male"][2], by["S2SRace_OrcRace_female"][2]
-                self.assertEqual(fds, [(b"FDSI", 1), (b"FDSL", 0x800), (b"FDSI", 4), (b"FDSL", 0x800),
-                                       (b"FDSI", 5), (b"FDSL", om), (b"FDSI", 0), (b"FDSL", 0x801),
-                                       (b"FDSI", 1), (b"FDSL", of)])
+                self.assertEqual(pre, [(b"RPRM", 0x800), (b"RPRM", om), (b"RPRF", of)])
+                sig_o = [s_ for s_, _d in orc[1]]
+                self.assertEqual(sig_o.index(b"RPRF"), sig_o.index(b"NNAM", sig_o.index(b"FNAM")) + 1)
+                self.assertEqual(sig_o.count(b"FDSI"), 3)
                 # 2026-11-10 (owner: looks menu crash on facial hair): the head parts' valid-race list holds our
                 # race too; a list no head part names is left alone
                 fl = {r[3]: r[2] for r in sfplugin.records(os.path.join(out, H.PLUGIN), [b"FLST"])}
@@ -348,6 +376,9 @@ class PluginTests(unittest.TestCase):
                 sf = os.path.join(d, "sf")
                 os.makedirs(os.path.join(sf, "Data"))
                 starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+                os.makedirs(os.path.join(sf, "Data", "Strings"))
+                with open(os.path.join(sf, "Data", "Strings", "starfield_en.strings"), "wb") as fh:
+                    fh.write(string_table({0x5000: "Human", 0x5001: "Forehead", 0x5002: "Ears", 0x5003: "Nose"}))
                 out = os.path.join(d, "out")
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out, "--races",
@@ -371,8 +402,11 @@ class PluginTests(unittest.TestCase):
                 by = {sfplugin.edid(s): (t_, s, fid) for t_, _h, s, fid in recs}
                 oh = by["S2S_OrcRace_male_Head"]
                 self.assertEqual(H.text_of(dict(oh[1])[b"MODL"]), "S2S\\Races\\Orc\\MaleHead.nif")
-                self.assertEqual(dict(oh[1])[b"MNAM"], dict(by["S2S_SkyrimRaces_male_Head"][1])[b"MNAM"])
+                self.assertEqual(dict(oh[1])[b"MNAM"], I(0x700))                     # the vanilla morph record
                 orc = by["S2S_OrcRace"][1]
+                # the face dial labels as text (2026-11-10: copied string ids showed as "U", "Z")
+                self.assertEqual([bytes(d_) for s_, d_ in orc if s_ == b"FDSL"], [Z("Forehead"), Z("Ears"), Z("Nose")])
+                self.assertEqual(rep["localized_strings"], {"strings": 4})
                 mp = [bytes(d_).split(b"\0")[0].decode() for s_, d_ in orc if s_ == b"MPGM"]
                 self.assertEqual(mp, ["male_eu_md1_Nose", "male_eu_md1_Eyes", "female_eu_md1_Nose"])  # as HumanRace's
                 self.assertFalse([d_ for s_, d_ in orc if s_ == b"FMRU" and b"_sk_" in bytes(d_)])  # no phenotype

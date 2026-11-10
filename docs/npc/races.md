@@ -346,3 +346,16 @@ why the mod needs no clothes of its own.
   entries). The S2SRace_OrcRace_* NPCs use that head without blends; the player patch gives the player that head.
   Rerun needed. Open: whether an existing save's player takes the new head part from the patch (the save may keep
   its own head part list), skin tone, tusks, eyes.
+
+- 2026-11-10 First look at the baked Orc head (owner, screenshots): the preset gives the Orc head (the owner added a
+  green skin tone from a Star Wars aliens mod). Open: the face rows read "U", "Z" or a single mark, their region
+  shape pads and the eye shape do not move (colours do), vanilla eyebrows clip into the Orc brow, the mouth hangs
+  open over human teeth. No "More Sliders" plugin or head morph.dat override found in the owner's MO2 mods.
+  Found (xEdit wbDefinitionsSF1, RACE "Chargen and Skintones"): per sex NAM0, NNAM, RPRM / RPRF "Race Presets" (NPC
+  FormIDs), morph groups, phenotypes (FMRN localized), FDDS, then FDSI / FDSL "Face Dials" (index + localized
+  label). So (1) copied localized labels in our non-localized plugin are read as text: the garbled row names; (2)
+  race_heads' presets went in as FDSI / FDSL, i.e. extra face dials labelled with NPC FormIDs. Fixed: copies get
+  their text from Starfield's string tables (race_heads.load_lstrings / delocalize: FULL, DESC, FMRN, FDSL, MPPN),
+  presets go in RPRM / RPRF, and the baked race head part is the vanilla head part with only its model changed
+  (vanilla morph record), so the race's chargen is the human one. Whether the locked pads came from (2) or from
+  elsewhere: rerun and look.

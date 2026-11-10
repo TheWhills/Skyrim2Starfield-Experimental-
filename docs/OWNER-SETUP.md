@@ -106,6 +106,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Owner: no crash any more, but not Orc-looking and several Face controls locked. Now the Orc shape is baked into
    the race's own head (default --race-shape baked); rerun the command above (same command), then the looks menu.
    Its output lists the baked head files; the mod folder gains meshes\s2s\races\orc and geometries\.
+   Owner: Orc head shows; face rows garbled ("U", "Z"), shape pads and eye shape locked, eyebrows clip, mouth open.
+   Fixed the row names (localized labels) and the presets (they had been added as face dials); same command again.
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:

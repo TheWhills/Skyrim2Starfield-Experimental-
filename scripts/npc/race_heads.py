@@ -376,34 +376,76 @@ def with_blends(subs, blends):
     return subs[:at] + add + subs[at:]
 
 
+PRESET_SIG = {False: b"RPRM", True: b"RPRF"}
+
+
 def add_presets(subs, presets):
-    """RACE subrecords with chargen face presets added per sex (FDSI index + FDSL NPC FormID after the sex's last
-    FDSL; index = the sex's largest + 1). presets: {female: [NPC FormIDs]} (2026-11-09: so picking a preset in
-    showlooksmenu gives the whole Orc face at once; Starfield's presets are these lists of NPCs)."""
-    out, sex = [], None
-    last = {}
-    for i, (s, d) in enumerate(subs):
-        if s in (b"MNAM", b"FNAM") and len(d) == 0:
-            sex = (s == b"FNAM")
-        elif s == b"FDSL" and sex is not None:
+    """RACE subrecords with chargen race presets added per sex: RPRM (male) / RPRF (female) NPC FormIDs after the
+    sex's last one, or after its chargen marker block (NAM0 / NNAM) when it has none. presets: {female: [NPC FormIDs]}.
+    2026-11-10: the first version appended FDSI / FDSL pairs, which are the Face Dials (index + localized label;
+    xEdit wbDefinitionsSF1 RACE "Chargen": NAM0, NNAM, RPRM/RPRF "Race Presets", morph groups, phenotypes, FDDS,
+    FDSI/FDSL "Face Dials"), so they showed up as extra, unnamed face rows."""
+    sex, last, anchor = None, {}, {}
+    for i, (s_, d) in enumerate(subs):
+        if s_ in (b"MNAM", b"FNAM") and len(d) == 0:
+            sex = (s_ == b"FNAM")
+        elif sex is not None and s_ == PRESET_SIG[sex]:
             last[sex] = i
-    top = {f: max([_u32(d) for k, (s, d) in enumerate(subs) if s == b"FDSI" and k <= last.get(f, -1)
-                   and _section_sex(subs, k) == f] or [-1]) for f in presets}
+        elif sex is not None and s_ in (b"NAM0", b"NNAM") and sex not in last:
+            anchor[sex] = i
+    at = {f: last.get(f, anchor.get(f)) for f in presets}
+    out = []
     for i, sd in enumerate(subs):
         out.append(sd)
         for f, fids in presets.items():
-            if last.get(f) == i:
-                for n, fid in enumerate(fids):
-                    out += [(b"FDSI", struct.pack("<I", top[f] + 1 + n)), (b"FDSL", struct.pack("<I", fid))]
+            if at.get(f) == i:
+                out += [(PRESET_SIG[f], struct.pack("<I", fid)) for fid in fids]
     return out
 
 
-def _section_sex(subs, k):
-    sex = None
-    for s, d in subs[:k + 1]:
-        if s in (b"MNAM", b"FNAM") and len(d) == 0:
-            sex = (s == b"FNAM")
-    return sex
+LSTRING_SIGS = {b"FULL": "strings", b"DESC": "dlstrings", b"FMRN": "strings", b"FDSL": "strings",
+                b"MPPN": "strings"}
+
+
+def load_lstrings(sf_data, language="en"):
+    """{"strings" / "dlstrings" / "ilstrings": {id: text}} of Starfield.esm: loose Data\\Strings\\starfield_<lang>.*
+    or from the localization archives. {} if none found."""
+    from fo4sf import ba2, skyrimdialog
+    out = {}
+    for ext in ("strings", "dlstrings", "ilstrings"):
+        name = f"strings/starfield_{language}.{ext}"
+        raw = None
+        loose = os.path.join(sf_data, "Strings", f"starfield_{language}.{ext}")
+        if os.path.isfile(loose):
+            with open(loose, "rb") as fh:
+                raw = fh.read()
+        else:
+            for fn in sorted(os.listdir(sf_data)) if os.path.isdir(sf_data) else []:
+                if fn.lower().startswith("starfield - localization") and fn.lower().endswith(".ba2"):
+                    arc = ba2.Ba2(os.path.join(sf_data, fn))
+                    i = arc.find(name)
+                    if i is not None:
+                        raw = arc.read(i)
+                        break
+        if raw:
+            out[ext] = skyrimdialog.read_lstrings(raw, ext != "strings")
+    return out
+
+
+def delocalize(subs, tables):
+    """Subrecords with localized string ids (Starfield.esm is localized; our plugins are not, so a copied id shows as
+    garbage, 2026-11-10: the Orc race's face rows read "U", "Z") replaced by their text from tables (load_lstrings).
+    An id not in the table becomes an empty string."""
+    if not tables:
+        return subs
+    out = []
+    for s_, d in subs:
+        t = LSTRING_SIGS.get(s_)
+        if t and len(d) == 4 and t in tables:
+            sid = _u32(d)
+            d = sfplugin.zs(tables[t].get(sid, "")) if sid else d
+        out.append((s_, d))
+    return out
 
 
 def player_patch(player_subs, race_fid, heads, part_types):
@@ -447,7 +489,7 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
     return out
 
 
-def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None):
+def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -456,6 +498,8 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     import face_fit
     info = sfplugin.header_info(sf_esm)
     recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST"])
+    if strings:                       # our plugins are not localized: copies carry text, not string ids
+        recs_all = [(t, h, delocalize(sb, strings), fid) for t, h, sb, fid in recs_all]
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
     part_types = {fid: _u32(dict(s).get(b"PNAM", b"\0\0\0\0")) for t, h, s, fid in recs_all if t == b"HDPT"}
     hdpts = {fid: s for t, h, s, fid in recs_all if t == b"HDPT"}
@@ -536,7 +580,9 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             if race in race_models:
                 rheads, per = {}, {}
                 for f, modl in race_models[race].items():
-                    src_h = next(r for r in recs if r[0] == b"HDPT" and r[3] == heads[f])
+                    # the vanilla head part with only its model changed: its own (vanilla) morph record, so the
+                    # race's chargen is exactly the human one on top of the baked shape
+                    src_h = next(r for r in recs_all if r[0] == b"HDPT" and sfplugin.edid(r[2]) == HEAD_PART[f])
                     h_fid = sfplugin.new_form_id(next(nxt), masters)
                     recs.append((b"HDPT", src_h[1], sfplugin.edit(list(src_h[2]), {
                         b"EDID": sfplugin.zs(f"S2S_{NAMES[race]}Race_{SEXES[f]}_Head"),
@@ -736,8 +782,12 @@ def main(argv=None):
         for race, per in report["baked_heads"].items():
             for sex, x in per.items():
                 print(f"  {race} {sex}: shape baked into {x['model']} ({x['files'] - 1} meshes)")
+    strings = load_lstrings(sf_data)
+    report["localized_strings"] = {k: len(v) for k, v in strings.items()}
+    if not strings:
+        print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models)
+                                    wanted, models, strings)
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
