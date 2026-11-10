@@ -808,6 +808,13 @@ def main(argv=None):
     for n in chosen:
         sliders, head, base, al, model_space, corr = setup[n["female"]]
         row = {"edid": n["edid"], "form_id": f"{n['form_id']:08X}", "female": n["female"]}
+        if "child" in races.get(n["race"], "").lower():
+            # 2026-11-10: Skyrim's children (ChildRace: their own head, body and skeleton) would come out as adults
+            # on the adult template; they wait for the child path (races-roadmap.md, children)
+            row["error"] = f"child ({races.get(n['race'])}): not converted yet (Starfield's child race pending)"
+            report["npcs"].append(row)
+            print({k: v for k, v in row.items()})
+            continue
         try:
             fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
                              model=model_space)

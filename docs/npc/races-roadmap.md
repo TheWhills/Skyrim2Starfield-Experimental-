@@ -91,6 +91,16 @@ facial bone regions file), makeup layers, skin tones.
   colour) and fits only the NPC's own features: its FaceGen head minus Skyrim's base head WITH the race morph, so
   the race shape is not applied twice (owner, 2026-11-10: Faendal with the Bosmer head).
 
+### I2. Children
+Skyrim's children are one race, ChildRace, whatever their family's race, with their own head, body and smaller
+skeleton (Riverwood: Dorthe, Frodnar). Starfield has its own child race (Starfield.esm holds a HeadPartsChildRace
+list, 0001550F; the race record itself not yet read). **built (2026-11-10):** face_fit skips ChildRace NPCs with a
+note (they would come out adult-sized on an adult template). **open:** read Starfield's child race (head, body,
+skeleton, chargen, its vanilla child NPCs: race_survey / look_probe), fit Skyrim child faces onto Starfield's child
+head (a child-to-child alignment), a vanilla child NPC as template, children's clothes fitted to Starfield's child
+body (gear_fit targets the adult body today), child voices. Whether a child keeps a hint of its family's race (an
+elf child's ears) is Skyrim's choice too: ChildRace has one head, so no.
+
 ### J. Beast races (Khajiit, Argonian)
 - **open:** own heads (1356 / 1219 vertices) converted as the race's Face part, skinned to Starfield's face bones
   (weights carried over by region: mouth, jaw, eyes, brows) for lip sync; their 52 chargen morphs in their own
