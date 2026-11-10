@@ -71,13 +71,28 @@ def read_any(path, skyrim=None):
     return d
 
 
-def starfield_find(data_dir, rx, prefixes=("starfield - meshes", "starfield - animations")):
+_ARCHIVES = {}       # archive path -> opened Ba2 (its name table parsed once per run, not once per file read)
+
+
+def _archives(data_dir, prefixes):
+    """The game's .ba2 archives whose names start with one of prefixes, in name order, each opened once per run
+    (2026-11-10: race_heads' face-part baking reads a few thousand files; reopening every archive per file made the
+    run look stuck after the mouths)."""
+    out = []
     for fn in sorted(os.listdir(data_dir)):
         if fn.lower().startswith(prefixes) and fn.lower().endswith(".ba2"):
-            arc = ba2.Ba2(os.path.join(data_dir, fn))
-            for i, n in enumerate(arc.names):
-                if rx.search(n.replace("\\", "/")):
-                    return n, arc.read(i)
+            path = os.path.join(data_dir, fn)
+            if path not in _ARCHIVES:
+                _ARCHIVES[path] = ba2.Ba2(path)
+            out.append(_ARCHIVES[path])
+    return out
+
+
+def starfield_find(data_dir, rx, prefixes=("starfield - meshes", "starfield - animations")):
+    for arc in _archives(data_dir, prefixes):
+        for i, n in enumerate(arc.names):
+            if rx.search(n.replace("\\", "/")):
+                return n, arc.read(i)
     return None, None
 
 
@@ -92,8 +107,12 @@ def vanilla_file(path, starfield_data):
             return fh.read(), rel
     if not starfield_data:
         raise SystemExit(f"not a file and no --starfield-data to look in: {path}")
-    _n, data = starfield_find(starfield_data, re.compile("^" + re.escape(rel) + "$", re.I),
-                              ("starfield - animations", "starfield - meshes", "shatteredspace", "sfbgs"))
+    data = None
+    for arc in _archives(starfield_data, ("starfield - animations", "starfield - meshes", "shatteredspace", "sfbgs")):
+        i = arc.find(rel)                 # exact name, any case or slash direction (the archive's own index)
+        if i is not None:
+            data = arc.read(i)
+            break
     if data is None:
         raise SystemExit(f"not in the game's archives: {rel}")
     return data, rel

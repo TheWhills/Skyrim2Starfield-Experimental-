@@ -39,6 +39,27 @@ class VanillaFileTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 H.vanilla_file("meshes/actors/human/animations/missing.afx", None)
 
+    def test_archive_opened_once(self):
+        """2026-11-10: race_heads' face-part baking reads thousands of files; each read reopened every archive."""
+        with tempfile.TemporaryDirectory() as tmp:
+            F.starfield_meshes_ba2(os.path.join(tmp, "Starfield - Meshes01.ba2"), {
+                "meshes\\a.nif": b"A", "geometries\\x\\y.mesh": b"M"})
+            real, opened = H.ba2.Ba2, []
+
+            def counting(path):
+                opened.append(path)
+                return real(path)
+            H.ba2.Ba2 = counting
+            try:
+                for _ in range(3):
+                    self.assertEqual(H.vanilla_file("meshes/A.nif", tmp)[0], b"A")
+                    self.assertEqual(H.vanilla_file("geometries/x/y.mesh", tmp)[0], b"M")
+                with self.assertRaises(SystemExit):
+                    H.vanilla_file("meshes/missing.nif", tmp)
+            finally:
+                H.ba2.Ba2 = real
+            self.assertEqual(len(opened), 1)
+
 
 
 

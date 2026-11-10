@@ -428,3 +428,8 @@ why the mod needs no clothes of its own.
   features go into the dials; in S2SFaceTest.esm it gets RNAM = S2S_<Race>Race and its head parts swapped for the
   race's (head, baked face parts by vanilla EditorID, the race mouth for teeth); S2SRaceTest.esm becomes a master.
   faces.json: per NPC `race`. Unverified: the Riverwood build (PluginSpike) with NPCs whose race is in another plugin.
+- 2026-11-10, owner's first Orc run stopped printing after the two mouth lines (no error): the face-part baking came
+  next with no progress output, and every vanilla file read (hkx_to_af.vanilla_file) reopened and searched every
+  mesh archive's name table - thousands of reads for the parts, their `_facebones` twins and LODs. Archives are now
+  opened once per run (exact-name lookup in the archive's own index), and the baking prints "baking N face parts"
+  and a count every 25.

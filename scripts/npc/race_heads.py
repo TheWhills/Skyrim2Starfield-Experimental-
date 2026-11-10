@@ -564,9 +564,15 @@ def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=
             if race not in m.get("disp", {}):
                 continue
             t0, prep, done = time.time(), {}, 0
+            todo = sum(1 for x in plist if female in x[3])
+            print(f"  {race} {SEXES[female]}: baking {todo} face parts ...", flush=True)
+            seen = 0
             for fid, edid, modl, sexes, ptype in plist:
                 if female not in sexes:
                     continue
+                seen += 1
+                if seen % 25 == 0:
+                    print(f"    {seen} / {todo} ({time.time() - t0:.0f} s)", flush=True)
                 if ptype == TEETH_TYPE and female in mouths.get(race, {}):
                     continue                # the race's own mouth replaces the teeth (write_mouths)
                 try:
