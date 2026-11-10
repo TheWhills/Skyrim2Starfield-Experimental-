@@ -118,6 +118,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    The Orc race now also gets Skyrim's orc mouth (teeth + tusks) as its teeth; the run uses texconv and
    <Starfield>\Tools\ContentResources.zip for its texture (--texconv / --content-resources if elsewhere). Check in
    game: tusks show, sit in the mouth, and drop with the jaw when talking.
+   Looks probe (read-only; send look_probe.md): skin tones and eye colours, and how the aliens mod adds its green skin
+   (its .esm path from MO2; leave --plugin out if unsure):
+   ```powershell
+   python -I scripts\npc\look_probe.py --starfield $sf --out C:\Modding\work\races --plugin "<aliens mod>.esm"
+   ```
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:

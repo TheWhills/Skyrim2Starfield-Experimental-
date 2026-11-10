@@ -407,3 +407,10 @@ why the mod needs no clothes of its own.
   vertex count ours) and of the teeth part (S2S_OrcRace_Mouth_M|F) on the race's list; every vanilla teeth part of
   that sex maps to it (race defaults, NPCs, player patch); the baked teeth copies are skipped for that race / sex.
   race_heads.json: mouths. Unverified in game (does the game take a performance morph.dat of our own for teeth?).
+
+- 2026-11-10 scripts/npc/look_probe.py (read-only, owner away): how Starfield stores skin tones and eye colours, for
+  per-race tones (Orc green, Dunmer grey ...) and eyes (Dunmer red, Altmer gold). HumanRace's per-sex chargen strings
+  (FDDS skin tone AVMS subtype, BSTT / HSTT / FSTT, FCTP; xEdit SF1), the AVMD ("AVMS Data") records they name,
+  followed through their LNAM / VNAM entries; every eye head part on HeadPartsHumanRace with its NAM2 colour mapping
+  (AVMD) and TNAM texture set; the same for each --plugin (the Star Wars aliens mod with the green skin the owner used:
+  how a mod adds tones). Unverified which names resolve; the run shows it.
