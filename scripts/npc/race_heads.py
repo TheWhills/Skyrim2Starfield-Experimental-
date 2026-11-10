@@ -269,7 +269,8 @@ def build_plugin(sf_esm, made, race_head=False):
                 subs = with_blends(subs, {k: 1.0 for k in keys})
             recs.append((b"NPC_", tpl[1], subs, fid))
             rep["npcs"].append({"race": race or "control", "sex": sex, "edid": f"S2SRace_{label}_{sex}",
-                                "form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]), "blends": len(keys),
+                                "form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]),
+                                "template_form_id": f"{tpl[3]:08X}", "blends": len(keys),
                                 "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s load order "
                                            f"index)"})
     if race_head and human is not None:
@@ -280,6 +281,27 @@ def build_plugin(sf_esm, made, race_head=False):
             rep["race_override"][SEXES[female]] = counts
         recs.append((b"RACE", rh, rs, human))
     return recs, info, rep
+
+
+def bake_faces(npcs, sf_data, out):
+    """The template's pre-built face textures under each test NPC's FormID, as face_fit does (2026-11-09, owner: the
+    race NPCs, without them, came out dark red with light nose / lips / eyelids; the control, also without, was a
+    plain light face: the runtime face texture follows the morph blends, and ours name no textures). The shape stays
+    the runtime one (morph keys). Returns the count written per NPC."""
+    import face_fit
+    from fo4sf import ba2
+    names = {}
+    for fn in sorted(os.listdir(sf_data)):
+        if fn.lower().startswith("starfield - textures") and fn.lower().endswith(".ba2"):
+            names[fn] = ba2.Ba2(os.path.join(sf_data, fn)).names
+    index = face_fit.baked_face_index(names)
+    done = {}
+    for n in npcs:
+        tpl, fid = int(n["template_form_id"], 16), int(n["form_id"], 16)
+        written = face_fit.write_baked_face(index, tpl, fid, sf_data, out, PLUGIN) if tpl in index else []
+        n["baked_face_textures"] = [os.path.basename(p) for p in written]
+        done[n["edid"]] = len(written)
+    return done
 
 
 # ----------------------------------------------------------------------------------------------------- main
@@ -299,6 +321,8 @@ def main(argv=None):
     ap.add_argument("--race-head", action="store_true",
                     help="also override HumanRace: our head part as its Face part, our keys in its morph groups")
     ap.add_argument("--force", action="store_true", help="write even if the frame check fails")
+    ap.add_argument("--no-baked-face-textures", dest="baked_face_textures", action="store_false",
+                    help="leave the NPCs without the template's pre-built face textures (the game builds them)")
     a = ap.parse_args(argv)
     races = [r.strip() for r in a.races.split(",") if r.strip()]
     bad = [r for r in races if r not in CODES]
@@ -367,6 +391,8 @@ def main(argv=None):
             print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head)
     report.update(prep)
+    if a.baked_face_textures:
+        report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
     with open(os.path.join(a.out, "race_heads.json"), "w", encoding="utf-8") as fh:

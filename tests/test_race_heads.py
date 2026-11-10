@@ -218,6 +218,26 @@ class PluginTests(unittest.TestCase):
                 sys.modules["race_probe"] = saved[0]
             face_fit.hkx_to_af.vanilla_file, H.bsa_archives = saved[1], saved[2]
 
+    def test_baked_faces_from_the_template(self):
+        """2026-11-09 (owner: race NPCs dark red, nose / lips light; control plain): each test NPC gets its template's
+        pre-built face textures under its own FormID, as face_fit's NPCs do."""
+        import face_fit
+        from unittest import mock
+        npcs = [{"edid": "S2SRace_Orc_male", "form_id": "01000805", "template_form_id": "00030764"},
+                {"edid": "S2SRace_Control_male", "form_id": "01000804", "template_form_id": "00099999"}]
+        calls = []
+
+        def write(index, tpl, fid, data, out, plugin):
+            calls.append((tpl, fid, plugin))
+            return [f"{fid & 0xFFFFFF:08x}_color.dds"]
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(face_fit, "baked_face_index", lambda names: {0x30764: {"color": ("a", "b")}}), \
+                mock.patch.object(face_fit, "write_baked_face", write):
+            done = H.bake_faces(npcs, d, d)
+        self.assertEqual(done, {"S2SRace_Orc_male": 1, "S2SRace_Control_male": 0})   # no baked face: none
+        self.assertEqual(calls, [(0x30764, 0x01000805, H.PLUGIN)])
+        self.assertEqual(npcs[0]["baked_face_textures"], ["00000805_color.dds"])
+
     def test_key_limit(self):
         with tempfile.TemporaryDirectory():
             self.assertEqual(H.MAX_KEYS, 128)

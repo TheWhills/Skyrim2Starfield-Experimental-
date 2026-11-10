@@ -84,9 +84,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    The iron armour was converted with the old armpit: refit it when it is next tested and check its armpit when aiming.
 6c. Done 2026-11-09: crafting stations. Alchemy lab, enchanter and cooking pot each open a Starfield menu (Starfield's
    recipes; Skyrim's own recipes are a later step).
-7. B + C: race heads test (command under "Race heads test" below), enable "S2S Race Test" in MO2, spawn the control
-   NPC, then the Altmer / Orc / Bosmer / Dunmer ones. Screenshots of each next to the control. If they all look like
-   the control, rerun with `--race-head` and look again.
+7. B + C: race heads test, second run (2026-11-09 first run: control plain, race faces dark red; now with the
+   template's pre-built face textures). Command under "Race heads test" below; then the race NPCs from the front and
+   from the side (ears, brow, cheekbones) next to the control.
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:

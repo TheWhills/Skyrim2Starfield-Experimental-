@@ -187,6 +187,14 @@ which fits the separate-races design; hair / brows / lashes then need the same k
   race (BMPN applies new keys from an NPC's own head part); else (3) with --race-head. Then setrace /
   showlooksmenu with a thin race (step 4 of the decision).
 
+### Owner's race heads run (2026-11-09, in game)
+Control NPCs: a plain light face (our head part and morph.dat load). Altmer, Bosmer, Dunmer (and the others): the face
+dark red with the nose, lips and eyelids light, ears not visibly pointed in the front shots. Reading (supported, not
+verified): with no pre-built face textures the game builds the face texture at runtime, and it follows the morph
+blends (BMPN); our new keys name no textures, the vanilla ones do (the control, with no blends, came out plain).
+race_heads now copies the template's pre-built face textures under each test NPC's FormID, as face_fit does for its
+NPCs (bake_faces). Next look: the shape (side view: ears, brow, cheekbones), now that the colour is the template's.
+
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
   MouthHumanF.NIF (141 vertices) for humans and elves, MouthOrc.nif / MouthOrcFemale.nif (348) for orcs, Khajiit and
