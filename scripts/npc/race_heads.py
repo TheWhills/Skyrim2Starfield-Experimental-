@@ -176,6 +176,78 @@ def race_override(race_subs, head_fid, keys_by_region, part_types, female):
     return out, {"head_parts_replaced": head_n, "morph_group_entries_added": added}
 
 
+def phenotype_blocks(subs, female):
+    """[(start, end)] index ranges of one sex's chargen phenotype entries (FMRI + the subrecords it carries, up to the
+    next FMRI; the last entry ends at the first signature no earlier entry carried)."""
+    sex, starts = None, []
+    for i, (s, d) in enumerate(subs):
+        if s in (b"MNAM", b"FNAM") and len(d) == 0:
+            sex = (s == b"FNAM")
+        elif s == b"FMRI" and sex == female:
+            starts.append(i)
+    if not starts:
+        return []
+    blocks = [(a, b) for a, b in zip(starts, starts[1:])]
+    inner = {subs[k][0] for a, b in blocks for k in range(a, b)} or {b"FMRI", b"FMRU"}
+    end = starts[-1] + 1
+    while end < len(subs) and subs[end][0] in inner and subs[end][0] != b"FMRI":
+        end += 1
+    return blocks + [(starts[-1], end)]
+
+
+def add_phenotype(subs, female, pid, like="eu_md"):
+    """(subrecords, new FMRI index) with one more chargen phenotype for one sex: a copy of the vanilla entry whose id
+    has `like` (its textures and settings), index = the largest + 1, FMRU = pid (e.g. male_sk_or1)."""
+    blocks = phenotype_blocks(subs, female)
+    if not blocks:
+        return subs, None
+    ids = []
+    for a, b in blocks:
+        u = next((bytes(d).split(b"\0", 1)[0].decode("latin-1") for s, d in subs[a:b] if s == b"FMRU"), "")
+        ids.append(u)
+    pick = next((i for i, u in enumerate(ids) if like in u.lower()), 0)
+    a, b = blocks[pick]
+    index = max(_u32(subs[x][1]) for x, _y in blocks) + 1
+    block = [(b"FMRI", struct.pack("<I", index)) if s == b"FMRI" else
+             ((b"FMRU", sfplugin.zs(pid)) if s == b"FMRU" else (s, d)) for s, d in subs[a:b]]
+    end = blocks[-1][1]
+    return subs[:end] + block + subs[end:], index
+
+
+def new_race(human, mannequin, name, heads, keys, part_types):
+    """A Skyrim race as a RACE of its own, thin over HumanRace (docs/npc/races.md, "Decision"): a copy of HumanRace
+    (skeleton, behaviour, chargen, bone modifiers, keywords) named `name`, armor race (RNAM) HumanRace so every
+    HumanRace gear piece fits, and the subgraph race (SRAC) HumanRace when the vanilla thin race carries one
+    (MannequinRace / HumanCorpseRace name HumanRace in RNAM and SRAC: owner's race_probe, 2026-11-09). Per sex: our head
+    part as its Face part, a phenotype of its own (a copy of the eu_md one, FMRU <sex>_sk_<code>) and that phenotype's
+    keys added to the morph groups. heads: {female: HDPT FormID}; keys: {female: {region: [keys]}} for this race.
+    Returns (subrecords, report)."""
+    human_fid, hsubs = human
+    subs = sfplugin.edit(list(hsubs), {b"EDID": sfplugin.zs(f"S2S_{name}Race"), b"FULL": sfplugin.zs(name)})
+    first_sex = next((i for i, (s, d) in enumerate(subs) if s in (b"MNAM", b"FNAM") and len(d) == 0), len(subs))
+    top, rest = subs[:first_sex], subs[first_sex:]
+    hr = struct.pack("<I", human_fid)
+    rep = {"armor_race": "HumanRace"}
+    if any(s == b"RNAM" for s, _d in top):
+        top = [(s, hr if s == b"RNAM" else d) for s, d in top]
+    else:
+        top = top + [(b"RNAM", hr)]
+    if mannequin is not None and any(s == b"SRAC" for s, _d in mannequin):
+        top = [(s, d) for s, d in top if s != b"SRAC"]
+        msigs = [s for s, _d in mannequin]
+        before = msigs[msigs.index(b"SRAC") - 1] if msigs.index(b"SRAC") else None
+        at = next((i + 1 for i, (s, _d) in enumerate(top) if s == before), len(top))
+        top = top[:at] + [(b"SRAC", hr)] + top[at:]
+        rep["subgraph_race"] = "HumanRace (as MannequinRace)"
+    subs = top + rest
+    for female, h_fid in heads.items():
+        subs, counts = race_override(subs, h_fid, keys.get(female, {}), part_types, female)
+        code = next((PHENO_KEY.match(k).group(3) for ks in keys.get(female, {}).values() for k in ks), None)
+        subs, index = add_phenotype(subs, female, f"{SEXES[female]}_sk_{code}") if code else (subs, None)
+        rep[SEXES[female]] = dict(counts, phenotype_index=index)
+    return subs, rep
+
+
 def vanilla_head_tcmp(sf_esm, female):
     """The TCMP text of the vanilla head part's morph record."""
     recs = sfplugin.records(sf_esm, [b"HDPT", b"MRPH"])
@@ -251,7 +323,7 @@ def with_blends(subs, blends):
     return subs[:at] + add + subs[at:]
 
 
-def build_plugin(sf_esm, made, race_head=False, keep_hair=False):
+def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=()):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     Returns (records, info, report)."""
     import face_fit
@@ -321,6 +393,39 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False):
                                 "template_form_id": f"{tpl[3]:08X}", "blends": len(keys),
                                 "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s load order "
                                            f"index)"})
+    race_fids = {}
+    if new_races and human is not None:
+        mann = next((s for t, _h, s, fid in recs_all if t == b"RACE" and sfplugin.edid(s) == "MannequinRace"), None)
+        rep["new_races"] = {}
+        for race in new_races:
+            per = {f: {} for f in made}
+            for f, m in made.items():
+                for k in m["keys_by_race"].get(race, []):
+                    per[f].setdefault(PHENO_KEY.match(k).group(4), []).append(k)
+            if not any(per.values()):
+                rep["new_races"][race] = {"note": "no keys (not in --races)"}
+                continue
+            r_fid = sfplugin.new_form_id(next(nxt), masters)
+            rsubs, rrep = new_race((human, by_fid[human][2]), mann, NAMES[race], heads, per, part_types)
+            recs.append((b"RACE", by_fid[human][1], rsubs, r_fid))
+            race_fids[race] = r_fid
+            rrep.update(form_id=f"{r_fid:08X}", setrace=f"player.setrace xx{r_fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s "
+                                                        f"load order index; then showlooksmenu player 1)")
+            rep["new_races"][race] = rrep
+        # an NPC of each new race and sex: the race test NPC with its race (RNAM) set to ours
+        for n in list(rep["npcs"]):
+            race = next((r for r in race_fids if NAMES[r] == n["edid"].split("_")[1]), None)
+            if race is None or n["race"] == "control":
+                continue
+            src = next(r for r in recs if r[0] == b"NPC_" and r[3] == int(n["form_id"], 16))
+            fid = sfplugin.new_form_id(next(nxt), masters)
+            edid = f"S2SRace_{NAMES[race]}Race_{n['sex']}"
+            subs = sfplugin.edit(list(src[2]), {b"EDID": sfplugin.zs(edid), b"RNAM": struct.pack("<I", race_fids[race]),
+                                                b"FULL": sfplugin.zs(f"{NAMES[race]} {n['sex']} (S2S race)")})
+            recs.append((b"NPC_", src[1], subs, fid))
+            rep["npcs"].append(dict(n, edid=edid, form_id=f"{fid:08X}", race_record=f"S2S_{NAMES[race]}Race",
+                                    console=f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s load order "
+                                            f"index)"))
     if race_head and human is not None:
         _t, rh, rs = by_fid[human]
         rep["race_override"] = {"form_id": f"{human:08X}"}
@@ -369,6 +474,9 @@ def main(argv=None):
     ap.add_argument("--race-head", action="store_true",
                     help="also override HumanRace: our head part as its Face part, our keys in its morph groups")
     ap.add_argument("--force", action="store_true", help="write even if the frame check fails")
+    ap.add_argument("--new-races", default="",
+                    help="Skyrim races to also make a RACE of their own, thin over HumanRace, e.g. Orc (comma list; "
+                         "each must be in --races)")
     ap.add_argument("--symmetry", choices=("stronger", "mean", "none"), default="stronger",
                     help="left / right: per vertex pair the side that moved more (default), their mean, or as "
                          "transferred")
@@ -452,7 +560,9 @@ def main(argv=None):
         print(f"  {len(keys)} keys -> {rel_out}")
         for race, x in srep.get("races", {}).items():
             print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
-    recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair)
+    wanted = [r.strip() for r in a.new_races.split(",") if r.strip()]
+    recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
+                                    [r if r.endswith("Race") else r + "Race" for r in wanted])
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
@@ -464,6 +574,8 @@ def main(argv=None):
           "the template's)")
     for n in report["npcs"]:
         print(f"  {n['edid']}: {n['console']}")
+    for race, r in (report.get("new_races") or {}).items():
+        print(f"  race {race}: {r.get('setrace') or r.get('note')}")
     print(f"-> {os.path.join(a.out, PLUGIN)}, race_heads.json ({time.time() - t0:.0f} s)")
     return 0
 

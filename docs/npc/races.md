@@ -218,6 +218,16 @@ mirrored (--symmetry stronger, the default; mean / none). The lost side points a
 around one ear: to look at if other parts show one-sided losses.
 Owner, 2026-11-09 after that run: the females look better now (verified in game).
 
+### First Skyrim race of its own: Orc (2026-11-09, owner: "yes"; offline checks only)
+race_heads --new-races Orc adds S2S_OrcRace to S2SRaceTest.esm: a copy of HumanRace (skeleton, behaviour graphs,
+chargen, dials, bone modifiers, keywords: anything asking for a human passes) named "Orc", armor race (RNAM)
+HumanRace so every HumanRace gear piece fits, subgraph race (SRAC) HumanRace placed where MannequinRace has it
+(MannequinRace and HumanCorpseRace are vanilla thin races over HumanRace: RNAM + SRAC, owner's race_probe). Per sex:
+our head part as its Face part, a chargen phenotype of its own (a copy of the eu_md entry, FMRU <sex>_sk_or1, the
+next FMRI index) and the Orc keys added to the morph groups; plus an Orc NPC per sex of that race (RNAM). Not yet:
+height (Skyrim Orc 1.045), skin tones, eyes, the mouth. To learn in game: setrace on the player (no crash, gear on,
+animations), showlooksmenu (does the Orc phenotype show in each region's blend, does it apply), the Orc NPCs.
+
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
   MouthHumanF.NIF (141 vertices) for humans and elves, MouthOrc.nif / MouthOrcFemale.nif (348) for orcs, Khajiit and

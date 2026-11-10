@@ -87,6 +87,15 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
 7. Done 2026-11-09: race heads in game. Altmer / Bosmer / Dunmer / Orc shapes on Starfield's head, pointed ears both
    sides (stronger-side symmetry), normal skin. Open: the Orc mouth hangs open (teeth / mouth do not follow).
 
+7b. B + C: the Orc race (S2S_OrcRace, thin over HumanRace). Starfield closed:
+   ```powershell
+   git pull origin skyrim/armor
+   python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races Orc
+   ```
+   In game (on a test save): the printed `player.setrace xx......` line, then `showlooksmenu player 1`. Does the game
+   keep running, do your clothes / suit fit, do you walk and run normally, does each face region's blend offer the
+   new phenotype and does it change the face; then the two "Orc ... (S2S race)" NPCs. Screenshots.
+
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
    ```powershell

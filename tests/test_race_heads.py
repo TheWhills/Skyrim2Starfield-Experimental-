@@ -138,6 +138,40 @@ class PluginTests(unittest.TestCase):
                                  (b"MPGN", "Nose"), (b"HEAD", 6)])       # the female section untouched
         self.assertEqual(n, {"head_parts_replaced": 1, "morph_group_entries_added": 3})
 
+    def test_new_race_thin_over_human(self):
+        """2026-11-09 (owner: "yes" to the Orc race): a RACE copied from HumanRace, armor race and subgraph race
+        HumanRace (as MannequinRace), our head part, its own phenotype per sex and only its keys added."""
+        human = [(b"EDID", Z("HumanRace")), (b"FULL", I(77)), (b"KWDA", I(5)), (b"ANAM", Z("skel")),
+                 (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
+                 (b"FMRI", I(0)), (b"FMRU", Z("male_as_md1")), (b"FMRN", Z("a")),
+                 (b"FMRI", I(1)), (b"FMRU", Z("male_eu_md2")), (b"FMRN", Z("b")),
+                 (b"FDSI", I(1)), (b"INDX", I(0)), (b"HEAD", I(0x510)),
+                 (b"FNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("female_eu_md1_Nose")),
+                 (b"FMRI", I(0)), (b"FMRU", Z("female_eu_md1")), (b"FDSI", I(1)), (b"INDX", I(0)), (b"HEAD", I(0x511))]
+        mannequin = [(b"EDID", Z("MannequinRace")), (b"KWDA", I(5)), (b"SRAC", I(0x347D)), (b"RNAM", I(0x347D))]
+        out, rep = H.new_race((0x347D, human), mannequin, "Orc", {False: 0x900, True: 0x901},
+                              {False: {"Nose": ["male_sk_or1_Nose"]}, True: {"Nose": ["female_sk_or1_Nose"]}},
+                              {0x510: 1, 0x511: 1})
+        sig = [s_ for s_, _d in out]
+        d = dict(out)
+        self.assertEqual(d[b"EDID"], Z("S2S_OrcRace"))
+        self.assertEqual(d[b"FULL"], Z("Orc"))
+        self.assertEqual((d[b"RNAM"], d[b"SRAC"]), (I(0x347D), I(0x347D)))
+        self.assertLess(sig.index(b"SRAC"), sig.index(b"MNAM"))                    # in the race's top section
+        self.assertEqual(sig.index(b"SRAC"), sig.index(b"KWDA") + 1)              # where MannequinRace has it
+        heads = [struct.unpack("<I", d_)[0] for s_, d_ in out if s_ == b"HEAD"]
+        self.assertEqual(heads, [0x900, 0x901])
+        mp = [bytes(d_).split(b"\0")[0].decode() for s_, d_ in out if s_ == b"MPGM"]
+        self.assertEqual(mp, ["male_eu_md1_Nose", "male_sk_or1_Nose", "female_eu_md1_Nose", "female_sk_or1_Nose"])
+        fm = [(struct.unpack("<I", d_)[0] if s_ == b"FMRI" else bytes(d_).split(b"\0")[0].decode())
+              for s_, d_ in out if s_ in (b"FMRI", b"FMRU", b"FMRN")]
+        self.assertEqual(fm, [0, "male_as_md1", "a", 1, "male_eu_md2", "b", 2, "male_sk_or1", "b",
+                              0, "female_eu_md1", 1, "female_sk_or1"])           # a copy of the eu_md entry
+        self.assertLess(sig.index(b"FDSI"), len(sig))
+        self.assertEqual(rep["male"]["phenotype_index"], 2)
+        self.assertEqual(rep["subgraph_race"], "HumanRace (as MannequinRace)")
+        self.assertEqual(human[0], (b"EDID", Z("HumanRace")))                      # HumanRace itself untouched
+
     def test_end_to_end(self):
         v, t = strip_mesh()
         nv = len(v)
@@ -162,7 +196,8 @@ class PluginTests(unittest.TestCase):
                 out = os.path.join(d, "out")
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out,
-                                             "--races", "HighElfRace,OrcRace", "--race-head"]), 0)
+                                             "--races", "HighElfRace,OrcRace", "--race-head", "--new-races",
+                                             "Orc"]), 0)
                 with open(os.path.join(out, "race_heads.json")) as fh:
                     rep = json.load(fh)
                 mfile = os.path.join(out, "meshes", "morphs", "s2s", "races", "male", "chargen", "head", "morph.dat")
@@ -201,7 +236,12 @@ class PluginTests(unittest.TestCase):
                 self.assertIn("male_sk_he1_Nose", mp)
                 self.assertIn("female_sk_or1_Nose", mp)
                 self.assertEqual(rep["race_override"]["male"]["head_parts_replaced"], 1)
-                self.assertEqual(len(rep["npcs"]), 6)                                   # control + 2 races, x 2
+                self.assertEqual(len(rep["npcs"]), 8)            # control + 2 races, x 2; + the Orc race's NPCs
+                orc = by["S2S_OrcRace"]
+                self.assertEqual(dict(orc[1])[b"RNAM"], struct.pack("<I", 0x347D))
+                onpc = dict(by["S2SRace_OrcRace_male"][1])
+                self.assertEqual(struct.unpack("<I", onpc[b"RNAM"])[0], orc[2])
+                self.assertIn("player.setrace xx", rep["new_races"]["OrcRace"]["setrace"])
                 # a morph whose Overweight points into the head (another frame): nothing written without --force
                 head.triangles = t[:, [0, 2, 1]]
                 out2 = os.path.join(d, "out2")
