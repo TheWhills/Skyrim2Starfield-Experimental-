@@ -1,7 +1,9 @@
 # Loose items as real items (plan, 2026-11-10)
 
 Owner: "in the inn all the wine is a static object but it needs to be an item with physics ... when you can run into
-it, drop it, it moves". Today every placed Skyrim item (MiscItem, Ingestible, Weapon, Ammunition, Armor, books ...)
+it, drop it, it moves". Then: "we'd get them to work the same way as any aid / food item in Starfield ... items that you can
+pick up, drop, have physics / gravity": Starfield's own item behaviour, which comes with an item record (Take, the
+inventory, Drop) and a world model whose body is dynamic (gravity, knocked over, thrown). Today every placed Skyrim item (MiscItem, Ingestible, Weapon, Ammunition, Armor, books ...)
 goes through the static converter (src/fo4sf/exterior.py CONVERT_TYPES: "they become plain statics here, visuals
 only"): the model with a fixed box collision, no item record. Status words as in docs/npc/races-roadmap.md.
 
@@ -30,7 +32,8 @@ only"): the model with a fixed box collision, no item record. Status words as in
    tables), value, weight, keywords, the converted world model. Gold -> credits (a rate to choose).
 4. **Placement:** the interior / exterior builders place a REFR of the item base instead of a static (ownership
    carried over, "don't havok settle" flags kept so items do not jump at load).
-5. **Effects: Starfield's own.** Owner 2026-11-10: food and drink work like any Starfield aid / food item. So each
+5. **Effects: Starfield's own** (proposal; the owner's "work the same way as any aid / food item in Starfield" meant
+   picking up, dropping and physics, steps 1-4). Each
    Skyrim ALCH / INGR is matched to a vanilla Starfield item of the same kind (wine -> a vanilla wine / alcohol,
    mead / ale -> a vanilla beer, bread / cheese / meat / vegetables -> vanilla foods of that kind, healing / stamina /
    magicka potions -> Starfield aid items by strength) and copied from it WITH its effects (heal over time, buffs,
