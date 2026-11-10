@@ -104,7 +104,11 @@ def starfield_esm(path):
                                (b"DATA", b"\x01"), (b"PNAM", I(1)), (b"MNAM", I(0x700))], 0x510),
         (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Female_Head")), (b"MODL", Z("Actors\\Human\\FemaleHead.nif")),
                                (b"DATA", b"\x01"), (b"PNAM", I(1)), (b"MNAM", I(0x701))], 0x511),
-        (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Teeth")), (b"PNAM", I(9))], 0x512),
+        (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Teeth")), (b"MODL", Z("Actors\\Human\\Teeth.nif")),
+                               (b"PNAM", I(9)), (b"MNAM", I(0x702))], 0x512),
+        (b"MRPH", h(b"MRPH"), [(b"EDID", Z("HumanMaleTeethMorph")),
+                               (b"TMPP", tcmp("Meshes\\Morphs\\Human\\Male\\Performance\\Teeth")),
+                               (b"MOBC", struct.pack("<I", 21))], 0x702),
         (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Beard_Goatee")), (b"MODL", Z("Actors\\Human\\Goatee.nif")),
                                (b"PNAM", I(4)), (b"RNAM", I(0x24A)), (b"MNAM", I(0x700))], 0x513),
         (b"FLST", h(b"FLST"), [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D))], 0x24A),
@@ -411,13 +415,24 @@ class PluginTests(unittest.TestCase):
             return data, low
         fake_rp = types.SimpleNamespace(
             SF_MORPH="meshes/morphs/human/{sex}/chargen/{part}/morph.dat",
-            race_transfer=lambda sky, sf, female, smooth, ff: (head, None, None, None, dict(disp),
+            race_transfer=lambda sky, sf, female, smooth, ff: (head, None, None, (1.0, np.eye(3), np.zeros(3)),
+                                                               dict(disp),
                                                                {"transfer": "surface", "alignment": {"rms_m": 0.008}}))
         import face_fit
         saved = (sys.modules.get("race_probe"), face_fit.hkx_to_af.vanilla_file, H.bsa_archives)
         sys.modules["race_probe"] = fake_rp
         face_fit.hkx_to_af.vanilla_file = vanilla
-        H.bsa_archives = lambda d: None
+        H.bsa_archives = lambda d: object()                 # a Skyrim source: the Orc mouth is converted
+        import race_mouths
+        saved_cm = race_mouths.convert_mouth
+        calls = []
+
+        def fake_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, t_nif, t_morphs, base, material):
+            calls.append((sky_path, base, sorted(t_morphs)))
+            return ({base + ".nif": b"nif"}, {"vertices": 348, "jaw_vertices": 120, "vanilla_vertices": 21,
+                                              "model": base[len("meshes/"):].replace("/", "\\") + ".nif",
+                                              "morph_folders": {"TMPP": "meshes\\morphs\\x\\performance"}})
+        race_mouths.convert_mouth = fake_mouth
         try:
             with tempfile.TemporaryDirectory() as d:
                 sf = os.path.join(d, "sf")
@@ -498,16 +513,36 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual([_u(d_) for s_, d_ in by2["S2S_HeadPartsHumanOnly"][0] if s_ == b"LNAM"], [0x347D])
                 self.assertTrue(os.path.isfile(os.path.join(out, "meshes", "s2s", "races", "orc", "parts",
                                                             "human_male_beard_goatee_m.nif")))
-                self.assertEqual(rep["new_races"]["OrcRace"]["face_parts"], {"male": 1, "female": 1})
+                self.assertEqual(rep["new_races"]["OrcRace"]["face_parts"], {"male": 2, "female": 1}, rep["mouths"])
                 pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
                 pheads = [struct.unpack("<I", d_)[0] & 0xFFFFFF for s_, d_ in pp[0][2] if s_ == b"PNAM"]
                 self.assertIn(oh[2] & 0xFFFFFF, pheads)
+                # the Orc mouth (race_mouths, here faked): its own teeth part + morph record on the race's list,
+                # in the race's defaults and on the player instead of the vanilla teeth
+                self.assertEqual([c[1] for c in calls], ["meshes/s2s/races/orc/mouth_m"])
+                self.assertIn("no HDPT Human_Female_Teeth", rep["mouths"]["OrcRace female"]["error"])
+                self.assertEqual(calls[0][2], ["TMPP"])
+                recs3 = sfplugin.records(os.path.join(out, H.PLUGIN), [b"HDPT", b"MRPH", b"RACE"])
+                by3 = {sfplugin.edid(s_): (s_, fid) for _t, _h, s_, fid in recs3}
+                mouth = dict(by3["S2S_OrcRace_Mouth_M"][0])
+                self.assertEqual(H.text_of(mouth[b"MODL"]), "s2s\\races\\orc\\mouth_m.nif")
+                self.assertEqual(_u(mouth[b"MNAM"]), by3["S2S_OrcRace_Mouth_M_Morph"][1])
+                mm = dict(by3["S2S_OrcRace_Mouth_M_Morph"][0])
+                self.assertEqual(H.text_of(mm[b"TMPP"]), "Meshes\\morphs\\x\\performance")
+                self.assertEqual(_u(mm[b"MOBC"]), 348)
+                rheads = [_u(d_) for s_, d_ in by3["S2S_OrcRace"][0] if s_ == b"HEAD"]
+                self.assertIn(by3["S2S_OrcRace_Mouth_M"][1], rheads)
+                self.assertNotIn(0x512, rheads)
+                self.assertIn(by3["S2S_OrcRace_Mouth_M"][1] & 0xFFFFFF, [struct.unpack("<I", d_)[0] & 0xFFFFFF
+                                                                          for s_, d_ in pp[0][2] if s_ == b"PNAM"])
+                self.assertEqual(rep["mouths"]["OrcRace male"]["vertices"], 348)
         finally:
             if saved[0] is None:
                 sys.modules.pop("race_probe", None)
             else:
                 sys.modules["race_probe"] = saved[0]
             face_fit.hkx_to_af.vanilla_file, H.bsa_archives = saved[1], saved[2]
+            race_mouths.convert_mouth = saved_cm
 
     def test_new_keys_carry_no_change_words(self):
         """2026-11-09: our race keys' records take the vanilla head's colour word and zero normal / tangent deltas."""

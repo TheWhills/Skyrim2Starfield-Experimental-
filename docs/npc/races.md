@@ -392,3 +392,18 @@ why the mod needs no clothes of its own.
   DAT2 male / female, xEdit SF1) = HumanRace's x Skyrim's height for the race / Skyrim's ImperialRace
   (race_heads.skyrim_heights reads Skyrim.esm's RACE DATA at 16 / 20 like race_survey; --race-height human to keep
   HumanRace's). race_heads.json: skyrim_heights, new_races.<race>.height_factor.
+
+- 2026-11-10 Orc teeth and tusks (owner: "yes" to the tusks; races plan step 3; plan from the 2026-11-09 mouth probe
+  run in decisions.md). scripts/npc/race_mouths.py: Skyrim's MouthOrc.nif / MouthOrcFemale.nif shapes merged into one
+  (one morph record drives one shape), placed with race_heads' head alignment (the Skyrim orc mouth belongs to the
+  Skyrim orc head, which our race head carries), taken into the vanilla teeth's mesh frame through the C_Head binds
+  (headbake.part_to_head), jaw / upper per vertex from Skyrim's Aah; every key of the vanilla teeth's performance
+  (TMPP) and chargen (TCMP) morph.dat copied from the nearest vanilla tooth vertex on the same side (jaw -> the
+  vertices jawOpen moves), so the lower teeth and tusks drop when the mouth opens. NIF like the vanilla teeth (C_Head
+  with its bind and node), material from Skyrim's texture set (SkyrimConverter: needs texconv and the Creation Kit's
+  ContentResources.zip; else the vanilla teeth material, which will not fit the orc UVs). race_heads (--race-shape
+  baked, races in race_mouths.RACE_MOUTHS = Orc) writes `meshes\s2s\races\orc\mouth_m|f.nif`, morphs under
+  `meshes\morphs\s2s\races\orc\mouth_m|f\performance`, a copy of the vanilla teeth's MRPH (TMPP / TCMP ours, MOBC
+  vertex count ours) and of the teeth part (S2S_OrcRace_Mouth_M|F) on the race's list; every vanilla teeth part of
+  that sex maps to it (race defaults, NPCs, player patch); the baked teeth copies are skipped for that race / sex.
+  race_heads.json: mouths. Unverified in game (does the game take a performance morph.dat of our own for teeth?).

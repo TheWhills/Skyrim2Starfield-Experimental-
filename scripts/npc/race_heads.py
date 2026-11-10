@@ -342,6 +342,7 @@ def race_model_path(name, female):
 FACE_PART_TYPES = {2: "right eye", 4: "facial hair", 7: "jewelry", 6: "eyebrows", 9: "teeth", 12: "left eye",
                    13: "eyelashes"}
 HUMAN_PART_LIST = "HeadPartsHumanRace"
+TEETH_TYPE = 9
 RIGID_TYPES = {2, 12}      # eyes: moved as one piece with their socket (headbake.rigid_displacement)
 
 
@@ -401,7 +402,118 @@ def race_part_model(name, edid, female):
     return f"S2S\\Races\\{name}\\Parts\\{edid}_{'F' if female else 'M'}.nif"
 
 
-def write_race_heads(sf_data, out, made, races, parts=True):
+TEXCONV_CANDIDATES = (r"C:\Modding\tools\texconv.exe", r"C:\Modding\tools\xedit\Edit Scripts\Texconvx64.exe")
+
+
+def mouth_converter(sky, out, starfield, texconv="", content_resources=""):
+    """(SkyrimConverter, staging folder) for the mouth's material, or (None, why) without texconv / ContentResources."""
+    import shutil
+    from fo4sf import skyrimconvert
+    tc = next((c for c in (texconv, *TEXCONV_CANDIDATES, shutil.which("texconv") or "") if c and os.path.isfile(c)),
+              "")
+    cr = content_resources or os.path.join(starfield, "Tools", "ContentResources.zip")
+    if not tc or not os.path.isfile(cr):
+        return None, f"no texconv ({tc or 'not found'}) or ContentResources.zip ({cr})"
+    staging = os.path.join(out, "_mouth_staging")
+    shutil.rmtree(staging, ignore_errors=True)
+    return skyrimconvert.SkyrimConverter(sky, staging, tc, cr, collision_template=None, prefix="s2s"), staging
+
+
+def vanilla_teeth(recs, sf_data, female, face_fit):
+    """(HDPT FormID, NIF bytes, {"TMPP" / "TCMP": Morph or None}, MRPH FormID, vanilla vertex count) of the default
+    teeth part of a sex (mouth_probe.SF_TEETH_PART)."""
+    import mouth_probe
+    hd = {fid: sb for t, _h, sb, fid in recs if t == b"HDPT"}
+    mr = {fid: sb for t, _h, sb, fid in recs if t == b"MRPH"}
+    fid = next((f for f, sb in hd.items() if sfplugin.edid(sb) == mouth_probe.SF_TEETH_PART[female]), None)
+    if fid is None:
+        raise ValueError(f"no HDPT {mouth_probe.SF_TEETH_PART[female]}")
+    sb = dict(hd[fid])
+    nb = face_fit.hkx_to_af.vanilla_file("meshes/" + text_of(sb[b"MODL"]).replace("\\", "/"), sf_data)[0]
+    m_fid = _u32(sb.get(b"MNAM", bytes(4)))
+    morphs = {}
+    for sig in (b"TMPP", b"TCMP"):
+        folder = text_of(dict(mr.get(m_fid, [])).get(sig, b"")) if m_fid in mr else ""
+        if not folder:
+            continue
+        try:
+            morphs[sig.decode()] = sfmorph.parse(face_fit.hkx_to_af.vanilla_file(
+                folder.replace("\\", "/").lower() + "/morph.dat", sf_data)[0])
+        except (SystemExit, KeyError, OSError, sfmorph.MorphError):
+            morphs[sig.decode()] = None
+    return fid, nb, morphs, m_fid
+
+
+def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit):
+    """{race: {female: info}} of the races in race_mouths.RACE_MOUTHS: Skyrim's mouth converted as the race's teeth
+    (race_mouths.convert_mouth), files under out; info carries the vanilla teeth part / morph record it replaces."""
+    import shutil
+    import mouth_probe
+    import race_mouths
+    want = [r for r in races if r in race_mouths.RACE_MOUTHS]
+    if not want or sky is None:
+        return {}, {}
+    conv, staging = mouth_converter(sky, out, *conv_args)
+    rep, done = {}, {}
+    teeth_types = {fid for t, _h, sb, fid in recs if t == b"HDPT" and _u32(dict(sb).get(b"PNAM", bytes(4))) ==
+                   race_mouths.TEETH_TYPE}
+    for race in want:
+        for female, m in made.items():
+            key = f"{race} {SEXES[female]}"
+            if "align" not in m:
+                rep[key] = {"error": "no head alignment"}
+                continue
+            sky_path = mouth_probe.SKY_MOUTHS[female][race_mouths.RACE_MOUTHS[race]]
+            try:
+                t_fid, t_nif, t_morphs, m_fid = vanilla_teeth(recs, sf_data, female, face_fit)
+                head_raw = face_fit.hkx_to_af.vanilla_file(face_fit.SF_HEADS[female], sf_data)[0]
+                _p, head_skin = facefit.starfield_head_parts(head_raw)
+                material = None
+                if conv is not None:
+                    from fo4sf import nif as nifmod, skyrimskin
+                    sn = nifmod.parse(face_fit.hkx_to_af.read_any(sky_path, sky))
+                    shp = next(iter(skyrimskin.skinned_shapes(sn)), None)
+                    material = conv._shape_material(sn, shp) if shp is not None else None
+                    if material == conv.neutral:
+                        material = None
+                base = f"meshes/s2s/races/{NAMES[race].lower()}/mouth_{'f' if female else 'm'}"
+                files, info = race_mouths.convert_mouth(
+                    lambda p: face_fit.hkx_to_af.read_any(p, sky),
+                    lambda p: face_fit.hkx_to_af.vanilla_file(p, sf_data)[0], sky_path, m["align"], m["vertices"],
+                    head_skin, t_nif, t_morphs, base, material)
+            except (SystemExit, KeyError, ValueError, OSError) as e:
+                rep[key] = {"error": str(e)[:300]}
+                continue
+            _write_files(out, files)
+            info.update(part_fid=t_fid, mrph_fid=m_fid, material_converted=material is not None,
+                        replaces=sorted(f for f in teeth_types if f in _sex_parts(recs, female)))
+            done.setdefault(race, {})[female] = info
+            rep[key] = {k: v for k, v in info.items() if k not in ("replaces",)}
+            print(f"  {key}: mouth {info['vertices']} vertices ({info['jaw_vertices']} on the jaw), material "
+                  f"{'converted' if material else 'vanilla teeth (no texconv / ContentResources)'}")
+    if conv is not None:
+        for d in ("materials", "textures"):
+            if os.path.isdir(os.path.join(staging, d)):
+                shutil.copytree(os.path.join(staging, d), os.path.join(out, d), dirs_exist_ok=True)
+        shutil.rmtree(staging, ignore_errors=True)
+    elif want:
+        rep["material"] = staging
+    return done, rep
+
+
+def _sex_parts(recs, female):
+    """FormIDs of HDPTs usable by a sex (DATA bit 1 male, bit 2 female; neither = both)."""
+    out = set()
+    for t, _h, sb, fid in recs:
+        if t != b"HDPT":
+            continue
+        fl = dict(sb).get(b"DATA", b"\0")[0]
+        if not fl & 6 or fl & (4 if female else 2):
+            out.add(fid)
+    return out
+
+
+def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=("", "", "")):
     """Per race and sex: the vanilla head part's NIF with the race shape baked into its head meshes
     (headbake.baked_head_files), and (parts) every face head part HumanRace offers baked the same way
     (headbake.baked_part_files), written under out. Returns ({race: {female: MODL}}, {race: [(part FormID, female,
@@ -411,7 +523,9 @@ def write_race_heads(sf_data, out, made, races, parts=True):
     import time
     esm = os.path.join(sf_data, "Starfield.esm")
     models, race_parts, rep = {}, {}, {}
-    plist = face_parts(sfplugin.records(esm, [b"HDPT", b"FLST"])) if parts else []
+    precs = sfplugin.records(esm, [b"HDPT", b"FLST", b"MRPH"])
+    plist = face_parts(precs) if parts else []
+    mouths, mrep = write_mouths(sf_data, out, made, races, precs, sky, conv_args, face_fit) if parts else ({}, {})
     for female, m in made.items():
         modl = vanilla_head_model(esm, female)
         nif_bytes, _rel = face_fit.hkx_to_af.vanilla_file("meshes/" + modl.replace("\\", "/"), sf_data)
@@ -453,6 +567,8 @@ def write_race_heads(sf_data, out, made, races, parts=True):
             for fid, edid, modl, sexes, ptype in plist:
                 if female not in sexes:
                     continue
+                if ptype == TEETH_TYPE and female in mouths.get(race, {}):
+                    continue                # the race's own mouth replaces the teeth (write_mouths)
                 try:
                     nb, _r = face_fit.hkx_to_af.vanilla_file("meshes/" + modl.replace("\\", "/"), sf_data)
                 except (SystemExit, KeyError, OSError) as e:
@@ -483,7 +599,7 @@ def write_race_heads(sf_data, out, made, races, parts=True):
                 done += 1
             rep[race][SEXES[female]]["parts"] = prep
             print(f"  {race} {SEXES[female]}: {done} face parts baked ({time.time() - t0:.0f} s)")
-    return models, race_parts, rep
+    return models, race_parts, rep, mouths, mrep
 
 
 def neutral_extra(morph):
@@ -639,12 +755,12 @@ def swap_race_heads(subs, by_sex):
     return out
 
 
-def race_part_records(recs_all, name, race_fid, parts, new_fid):
+def race_part_records(recs_all, name, race_fid, parts, new_fid, mouths=None):
     """(records, {female: {vanilla FormID: copy FormID}}, list FormID): the race's valid-race list (FLST
     S2S_HeadParts<name>Race, holding the race) and a copy of each baked face part (EDID S2S_<name>Race_<part>_M/F,
     MODL the baked model, RNAM that list, DATA this sex only, extra parts HNAM -> their copies of the same sex).
     parts: [(vanilla FormID, female, MODL)]."""
-    by = {fid: (h, sb) for t, h, sb, fid in recs_all if t in (b"HDPT", b"FLST")}
+    by = {fid: (h, sb) for t, h, sb, fid in recs_all if t in (b"HDPT", b"FLST", b"MRPH")}
     src_list = next((v for v in by.values() if sfplugin.edid(v[1]) == HUMAN_PART_LIST), None)
     l_fid = new_fid()
     recs = [(b"FLST", src_list[0] if src_list else b"", [(b"EDID", sfplugin.zs(f"S2S_HeadParts{name}Race")),
@@ -662,7 +778,50 @@ def race_part_records(recs_all, name, race_fid, parts, new_fid):
         sub = sfplugin.edit(list(sb), ed)
         sub = swap_parts(sub, copies[female], sig=b"HNAM")
         recs.append((b"HDPT", h, sub, copies[female][vfid]))
+    for female, info in (mouths or {}).items():
+        recs += mouth_records(by, info, name, female, l_fid, copies.setdefault(female, {}), new_fid)
     return recs, copies, l_fid
+
+
+def mouth_records(by, info, name, female, l_fid, copies, new_fid):
+    """The race's mouth (race_mouths.convert_mouth info): a copy of the vanilla teeth's morph record (TMPP / TCMP ->
+    our folders, its vertex count in MOBC -> ours) and of the vanilla teeth part (MODL ours, MNAM that record, RNAM
+    the race's list, this sex only); every vanilla teeth part of the sex maps to it (copies)."""
+    import os_export
+    allrecs = by
+    out = []
+    t_fid, m_fid = info["part_fid"], info["mrph_fid"]
+    mrph = allrecs.get(m_fid)
+    new_m = None
+    if mrph is not None:
+        msubs = dict(mrph[1])
+        ed = {b"EDID": sfplugin.zs(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}_Morph")}
+        for sig in (b"TMPP", b"TCMP"):
+            folder = info["morph_folders"].get(sig.decode())
+            if folder and sig in msubs:
+                ed[sig] = os_export.replace_text(msubs[sig], "Meshes\\" + folder.split("\\", 1)[1]
+                                                 if folder.lower().startswith("meshes\\") else folder)
+        mobc = bytes(msubs.get(b"MOBC", b""))
+        if mobc and info.get("vanilla_vertices"):
+            b = bytearray(mobc)
+            for i in os_export.u32_offsets(mobc, int(info["vanilla_vertices"])):
+                struct.pack_into("<I", b, i, int(info["vertices"]))
+            ed[b"MOBC"] = bytes(b)
+        new_m = new_fid()
+        out.append((b"MRPH", mrph[0], sfplugin.edit(list(mrph[1]), ed), new_m))
+    h, sb = allrecs[t_fid]
+    ed = {b"EDID": sfplugin.zs(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}"), b"MODL": sfplugin.zs(info["model"]),
+          b"RNAM": struct.pack("<I", l_fid)}
+    if new_m is not None:
+        ed[b"MNAM"] = struct.pack("<I", new_m)
+    fl = dict(sb).get(b"DATA")
+    if fl:
+        ed[b"DATA"] = bytes([(fl[0] & ~0x6) | (4 if female else 2)]) + bytes(fl[1:])
+    p_fid = new_fid()
+    out.append((b"HDPT", h, sfplugin.edit(list(sb), ed), p_fid))
+    for v in set(info.get("replaces", [])) | {t_fid}:
+        copies[v] = p_fid
+    return out
 
 
 def human_only_parts(recs_all, vanilla_fids, new_fid):
@@ -725,7 +884,7 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
-                 race_parts=None, heights=None):
+                 race_parts=None, heights=None, mouths=None):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -837,11 +996,12 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                       for f, h in rheads.items()}
             if race_parts and race_parts.get(race):
                 prs, copies, _l = race_part_records(recs_all, NAMES[race], r_fid, race_parts[race],
-                                                    lambda: sfplugin.new_form_id(next(nxt), masters))
+                                                    lambda: sfplugin.new_form_id(next(nxt), masters),
+                                                    (mouths or {}).get(race))
                 recs += prs
                 rsubs = swap_race_heads(rsubs, copies)
                 part_copies[race] = copies
-                rrep["face_parts"] = {SEXES[f]: len(c) for f, c in copies.items()}
+                rrep["face_parts"] = {SEXES[f]: len(set(c.values())) for f, c in copies.items()}
             recs.append((b"RACE", by_fid[human][1], rsubs, r_fid))
             race_fids[race] = r_fid
             rrep.update(form_id=f"{r_fid:08X}", setrace=f"player.setrace xx{r_fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s "
@@ -949,6 +1109,10 @@ def main(argv=None):
                          "chargen blend option (the faces have to pick it)")
     ap.add_argument("--race-height", choices=("skyrim", "human"), default="skyrim",
                     help="new races' height: Skyrim's relative to its Imperial (default; Orc x1.045) or HumanRace's")
+    ap.add_argument("--texconv", default="", help="texconv.exe for the converted mouths' textures (default: the "
+                                                  "usual places; without it the race mouth uses the vanilla teeth "
+                                                  "material)")
+    ap.add_argument("--content-resources", default="", help="default <Starfield>/Tools/ContentResources.zip")
     ap.add_argument("--no-bake-parts", action="store_true",
                     help="--race-shape baked: no race copies of the face head parts (eyes, brows, beards, teeth, "
                          "lashes, jewelry); the race then uses HumanRace's (2026-11-10 default: baked copies)")
@@ -976,6 +1140,7 @@ def main(argv=None):
         data, rel = face_fit.hkx_to_af.vanilla_file(race_probe.SF_MORPH.format(sex=sex, part="head"), sf_data)
         morph = sfmorph.parse(data)
         head, _base, _races, _al, disp, trep = race_probe.race_transfer(sky, sf_data, female, a.smooth, face_fit)
+        align = tuple(_al[:3]) if _al is not None else None
         if a.symmetry != "none":
             # 2026-11-09 (owner: one ear looked better than the other on every NPC, the other side for each sex):
             # the transfer lost the point on one side; Skyrim's race heads are symmetric. "stronger" keeps, per
@@ -1026,6 +1191,8 @@ def main(argv=None):
         folder = tcmp_folder(vanilla_head_tcmp(os.path.join(sf_data, "Starfield.esm"), female), sex)
         made[female] = {"folder": folder, "keys_by_race": by_race, "keys_by_region": by_region,
                         "vertices": np.asarray(head.vertices, float), "disp": disp}
+        if align is not None:
+            made[female]["align"] = align
         rel_out = folder.replace("\\", "/").lower() + "/morph.dat"
         path = os.path.join(a.out, *rel_out.split("/"))
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1037,9 +1204,10 @@ def main(argv=None):
         for race, x in srep.get("races", {}).items():
             print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
     wanted = race_names(a.new_races)
-    models, rparts = None, None
+    models, rparts, mouths = None, None, None
     if wanted and a.race_shape == "baked":
-        models, rparts, report["baked_heads"] = write_race_heads(sf_data, a.out, made, wanted, not a.no_bake_parts)
+        models, rparts, report["baked_heads"], mouths, report["mouths"] = write_race_heads(
+            sf_data, a.out, made, wanted, not a.no_bake_parts, sky, (a.starfield, a.texconv, a.content_resources))
         for race, per in report["baked_heads"].items():
             for sex, x in per.items():
                 print(f"  {race} {sex}: shape baked into {x['model']} ({x['files']} files; _facebones twin: "
@@ -1054,7 +1222,7 @@ def main(argv=None):
     if not strings:
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models, strings, rparts, heights)
+                                    wanted, models, strings, rparts, heights, mouths)
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
