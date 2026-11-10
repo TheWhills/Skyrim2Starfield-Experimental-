@@ -119,8 +119,13 @@ Steps:
    Starfield's child head (the adult correspondence after a child-to-child alignment), written as that NPC's own head
    part (headbake). No sliders needed for NPCs, and it works whether or not the child skeleton has face bones.
 4. **Body:** Starfield's child skeleton and body (vanilla ChildRace's), height from Skyrim's ChildRace.
-5. **Clothes:** Skyrim's children's clothes through gear_fit onto the child body (source: Skyrim's child body, target:
-   the body on the child skeleton); hairs through the hair converter onto the child head.
+5. **Clothes:** in Starfield a child's outfit is an ADULT-sized mesh on the normal human bones, shrunk by the child
+   skeleton (Playable Children's Cora Coe outfit, read 2026-11-10: 11,470 vertices, 1.52 m tall, z -1.632..-0.114 m,
+   the same space and +1.632 m lift as the vanilla adult outfits; its addon lists ChildRace 00034FB1 among its races;
+   the child skin is the adult Naked_M / Naked_F on that skeleton). So gear_fit's output already is the right kind of
+   mesh: Skyrim's children's clothes are fitted with Skyrim's CHILD body as the source and Starfield's adult body as
+   the target, and their addons list ChildRace / S2S_ChildRace. Hairs through the hair converter onto the child head.
+   (The owner's second mod, Cora Coe Outfits, is one recoloured texture: nothing about the mechanics.)
 6. **Voices:** MaleChild / FemaleChild lines through the voice pipeline (start-of-game filter included), a child voice
    type as template.
 7. **AI:** their packages through the schedule converter; Starfield's human animations on the child skeleton (as
