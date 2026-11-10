@@ -208,6 +208,28 @@ def without_hair(subs, part_types):
     return [(s, d) for s, d in subs if not (s == b"PNAM" and len(d) == 4 and part_types.get(_u32(d)) in HAIR_TYPES)]
 
 
+SHORT_HAIR = ("bald", "shaved", "shaven", "buzz")
+
+
+def short_hair(hdpts, part_types, female):
+    """(FormID, EditorID) of the closest-cropped vanilla hair for the sex, or None (2026-11-09, owner: with no hair
+    part the race's default hair came back and still hid the ears and the head's shape): a hair head part whose
+    EditorID says bald / shaved / buzz, the sex's own first (DATA flags: 0x2 male, 0x4 female, as npc_hair)."""
+    want = 0x4 if female else 0x2
+    hits = []
+    for fid, subs in hdpts.items():
+        e = sfplugin.edid(subs)
+        if part_types.get(fid) != HAIR_TYPES[0] or not any(w in e.lower() for w in SHORT_HAIR):
+            continue
+        flags = (dict(subs).get(b"DATA") or b"\0")[0]
+        rank = next(i for i, w in enumerate(SHORT_HAIR) if w in e.lower())
+        hits.append((not (flags & want), rank, e, fid))
+    if not hits:
+        return None
+    best = min(hits)
+    return best[3], best[2]
+
+
 def with_head_part(subs, head_fid, part_types):
     """NPC subrecords with Face-type head parts (PNAM) dropped and head_fid added after the last PNAM (or after DNAM /
     DATA when there is none)."""
@@ -237,6 +259,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False):
     recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT"])
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
     part_types = {fid: _u32(dict(s).get(b"PNAM", b"\0\0\0\0")) for t, h, s, fid in recs_all if t == b"HDPT"}
+    hdpts = {fid: s for t, h, s, fid in recs_all if t == b"HDPT"}
     human = next((fid for t, _h, s, fid in recs_all if t == b"RACE" and sfplugin.edid(s) == "HumanRace"), None)
     npc_recs = [r for r in recs_all if r[0] == b"NPC_"]
     masters = 1
@@ -286,6 +309,10 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False):
             subs = with_head_part(subs, h_fid, part_types)
             if not keep_hair:
                 subs = without_hair(subs, part_types)
+                cropped = short_hair(hdpts, part_types, female)
+                if cropped is not None:
+                    subs = subs + [(b"PNAM", struct.pack("<I", cropped[0]))]
+                    rep.setdefault("hair", {})[sex] = cropped[1]
             if keys:
                 subs = with_blends(subs, {k: 1.0 for k in keys})
             recs.append((b"NPC_", tpl[1], subs, fid))
@@ -423,6 +450,8 @@ def main(argv=None):
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
     with open(os.path.join(a.out, "race_heads.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)
+    print("  hair on the test NPCs:", report.get("hair") or "none cropped found (the race's default; --keep-hair: "
+          "the template's)")
     for n in report["npcs"]:
         print(f"  {n['edid']}: {n['console']}")
     print(f"-> {os.path.join(a.out, PLUGIN)}, race_heads.json ({time.time() - t0:.0f} s)")

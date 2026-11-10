@@ -203,6 +203,10 @@ format, in game unverified): each morph.dat record carries a colour word and pac
 race keys were written with zeros there, i.e. a normal delta of -511 on every axis wherever a race key moves the
 face, which lights it black-red (the nose and lips, mostly unmoved, stayed light). sfmorph.build now writes the
 no-change words by default; race_heads uses the vanilla head's own colour word for its new keys.
+Third run (owner, same evening, verified in game): skin colour right on every race. Pointed ears show on the Orc,
+Bosmer and Dunmer; the Orc's mouth hangs open as a dark hole (the race shape opens the lips; Starfield's teeth and
+mouth do not follow: the mouth converter, "Mouths and tusks"). The race-default hair still hides the ears and the
+head's outline, so the test NPCs now get the closest-cropped vanilla hair (EditorID with bald / shaved / buzz).
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /

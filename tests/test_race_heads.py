@@ -231,6 +231,17 @@ class PluginTests(unittest.TestCase):
         subs = [(b"PNAM", struct.pack("<I", f)) for f in (1, 2, 3, 4)] + [(b"EDID", b"x\0")]
         self.assertEqual([struct.unpack("<I", d)[0] for s_, d in H.without_hair(subs, types_) if s_ == b"PNAM"], [1, 4])
 
+    def test_short_hair(self):
+        """2026-11-09 (owner: the race-default hair came back and hid the ears): the closest-cropped vanilla hair."""
+        def hd(e, flags):
+            return [(b"EDID", e.encode() + b"\0"), (b"DATA", bytes([flags]))]
+        hdpts = {1: hd("Human_Hair_Male_Buzzcut", 0x2), 2: hd("Human_Hair_Female_Bald", 0x4),
+                 3: hd("Human_Hair_Long", 0x2), 4: hd("Human_Hair_Male_Bald", 0x2), 5: hd("Beard_Buzz", 0x2)}
+        types_ = {1: 3, 2: 3, 3: 3, 4: 3, 5: 4}
+        self.assertEqual(H.short_hair(hdpts, types_, False), (4, "Human_Hair_Male_Bald"))
+        self.assertEqual(H.short_hair(hdpts, types_, True), (2, "Human_Hair_Female_Bald"))
+        self.assertIsNone(H.short_hair({3: hdpts[3]}, types_, False))
+
     def test_baked_faces_from_the_template(self):
         """2026-11-09 (owner: race NPCs dark red, nose / lips light; control plain): each test NPC gets its template's
         pre-built face textures under its own FormID, as face_fit's NPCs do."""
