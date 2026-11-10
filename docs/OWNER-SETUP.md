@@ -144,8 +144,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\npc\npc_record_diff.py --type RACE --a "$sf\Data\Starfield.esm" --b "$sf\Data\Starfield.esm" --find child --show ChildRace > child_race.txt
    python -I scripts\npc\npc_record_diff.py --type HDPT --a "$sf\Data\Starfield.esm" --b "$sf\Data\Starfield.esm" --find child --show child_head > child_parts.txt
    python -I scripts\npc\npc_record_diff.py --type RACE --a "$sky\Skyrim.esm" --b "$sky\Skyrim.esm" --find child --show ChildRace > sky_child_race.txt
+   python -I scripts\npc\npc_record_diff.py --type ARMA --a "$sf\Data\Starfield.esm" --b "$sf\Data\Starfield.esm" --find child --show coracoe > child_outfit.txt
    ```
-   Send the three .txt files.
+   Then, with the outfit's model path from child_outfit.txt (its MOD3 line, the female model):
+   `python -I scripts\tools\model_bounds.py --sf-data "$sf\Data" --model "<that path>"` (does a vanilla child outfit
+   stand ~1.5 m tall like an adult's, or child height?). Send the four .txt files and that output.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
