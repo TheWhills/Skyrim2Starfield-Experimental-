@@ -100,7 +100,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    2026-11-10: the patch works on an existing save (getisrace 1.00), but showlooksmenu crashes when hovering facial
    hair. Open: is it our race or the looks menu itself - the same save with S2SOrcPlayer.esm off (human player),
    other categories (hair, eyebrows) as the Orc, and what a vanilla beard head part names
-   (`npc_record_diff.py --type HDPT --find beard --show beard`).
+   (`npc_record_diff.py --type HDPT --find beard --show beard`). The dump: every beard names its valid races as
+   FLST HeadPartsHumanRace (0024A024), without our race. Fixed: race_heads adds the new races to that list; rerun
+   the command above, then the looks menu again.
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:

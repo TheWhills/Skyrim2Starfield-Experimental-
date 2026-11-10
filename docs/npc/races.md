@@ -329,3 +329,10 @@ why the mod needs no clothes of its own.
   morph deltas are in the same frame: jawLeft / jawRight showed on z and jawOpen ~0, so the drops are now measured
   after that rotation. Rerun needed.
 
+
+- 2026-11-10 showlooksmenu as the Orc player (S2SOrcPlayer.esm on an existing save) crashed when hovering facial
+  hair. Owner's dump (`npc_record_diff.py --type HDPT --find beard --show beard`): the 19 vanilla beards each name
+  `RNAM 0024A024` = FLST HeadPartsHumanRace, their valid races; S2S_OrcRace was not in it. race_heads now writes an
+  override of that list (each head-part race list holding HumanRace) with the new races added
+  (`head_part_race_lists` in race_heads.json). Rerun needed. If it still crashes: the beard's own morph
+  (MNAM 00160B9E) may lack the Orc phenotype keys.

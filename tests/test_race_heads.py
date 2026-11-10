@@ -105,6 +105,10 @@ def starfield_esm(path):
         (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Female_Head")), (b"MODL", Z("Actors\\Human\\FemaleHead.nif")),
                                (b"DATA", b"\x01"), (b"PNAM", I(1)), (b"MNAM", I(0x701))], 0x511),
         (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Teeth")), (b"PNAM", I(9))], 0x512),
+        (b"HDPT", h(b"HDPT"), [(b"EDID", Z("Human_Male_Beard_Goatee")), (b"PNAM", I(4)), (b"RNAM", I(0x24A)),
+                               (b"MNAM", I(0x700))], 0x513),
+        (b"FLST", h(b"FLST"), [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D))], 0x24A),
+        (b"FLST", h(b"FLST"), [(b"EDID", Z("OtherList")), (b"LNAM", I(0x347D))], 0x24B),
         (b"RACE", h(b"RACE"), [(b"EDID", Z("HumanRace")),
                                (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
                                (b"MPGN", Z("Eyes")), (b"MPGM", Z("male_eu_md1_Eyes")), (b"FDSI", I(1)),
@@ -130,6 +134,12 @@ def starfield_esm(path):
 
 
 class PluginTests(unittest.TestCase):
+    def test_with_races(self):
+        subs = [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D)), (b"LNAM", I(0x55))]
+        out = H.with_races(subs, 0x347D, [0x900, 0x55])
+        self.assertEqual(out, subs + [(b"LNAM", I(0x900))])                    # once, after the last entry
+        self.assertIsNone(H.with_races([(b"EDID", Z("X")), (b"LNAM", I(0x55))], 0x347D, [0x900]))
+
     def test_override_groups_and_head(self):
         subs = [(b"EDID", Z("HumanRace")), (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("a")),
                 (b"MPGN", Z("Eyes")), (b"MPGM", Z("b")), (b"MPGM", Z("c")), (b"INDX", I(0)), (b"HEAD", I(5)),
@@ -259,6 +269,13 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual(fds, [(b"FDSI", 1), (b"FDSL", 0x800), (b"FDSI", 4), (b"FDSL", 0x800),
                                        (b"FDSI", 5), (b"FDSL", om), (b"FDSI", 0), (b"FDSL", 0x801),
                                        (b"FDSI", 1), (b"FDSL", of)])
+                # 2026-11-10 (owner: looks menu crash on facial hair): the head parts' valid-race list holds our
+                # race too; a list no head part names is left alone
+                fl = {r[3]: r[2] for r in sfplugin.records(os.path.join(out, H.PLUGIN), [b"FLST"])}
+                self.assertEqual(list(fl), [0x24A])
+                self.assertEqual([struct.unpack("<I", d_)[0] for s_, d_ in fl[0x24A] if s_ == b"LNAM"],
+                                 [0x347D, orc[2]])
+                self.assertEqual(rep["head_part_race_lists"], ["HeadPartsHumanRace 0000024A"])
                 # the player patch: the Player record (00000007) of the new race with our head part
                 pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
                 self.assertEqual([r[3] for r in pp], [0x7])

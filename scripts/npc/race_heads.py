@@ -368,12 +368,41 @@ def player_patch(player_subs, race_fid, heads, part_types):
     return subs
 
 
+def with_races(flst_subs, human_fid, race_fids):
+    """A form list (FLST) with race_fids appended after its last HumanRace-or-other 4-byte entry, in the entries'
+    own signature, or None if it does not hold HumanRace. 2026-11-10 (owner: showlooksmenu as S2S_OrcRace crashes
+    when hovering facial hair): every vanilla beard names its valid races as a list (HDPT RNAM 0024A024 =
+    HeadPartsHumanRace), which our race was not in."""
+    entries = [i for i, (sg, d) in enumerate(flst_subs) if sg != b"EDID" and len(d) == 4]
+    hits = [i for i in entries if _u32(flst_subs[i][1]) == human_fid]
+    if not hits:
+        return None
+    sig = flst_subs[hits[0]][0]
+    have = {_u32(flst_subs[i][1]) for i in entries}
+    add = [(sig, struct.pack("<I", f)) for f in race_fids if f not in have]
+    at = entries[-1] + 1
+    return list(flst_subs[:at]) + add + list(flst_subs[at:])
+
+
+def head_part_race_lists(recs_all, human_fid, race_fids):
+    """[(header, subs, FormID)]: each form list a head part names as its valid races (HDPT RNAM) that holds
+    HumanRace, with race_fids added, so the looks menu and NPCs of our races can use the human head parts."""
+    named = {_u32(dict(s).get(b"RNAM", b"\0\0\0\0")) for t, _h, s, _f in recs_all if t == b"HDPT"}
+    out = []
+    for t, h, s, fid in recs_all:
+        if t == b"FLST" and fid in named:
+            new = with_races(s, human_fid, race_fids)
+            if new is not None:
+                out.append((h, new, fid))
+    return out
+
+
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=()):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     Returns (records, info, report)."""
     import face_fit
     info = sfplugin.header_info(sf_esm)
-    recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT"])
+    recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST"])
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
     part_types = {fid: _u32(dict(s).get(b"PNAM", b"\0\0\0\0")) for t, h, s, fid in recs_all if t == b"HDPT"}
     hdpts = {fid: s for t, h, s, fid in recs_all if t == b"HDPT"}
@@ -479,6 +508,11 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=()):
             t_, h_, rsubs, rf = recs[k]
             recs[k] = (t_, h_, add_presets(rsubs, per), rf)
             rep["new_races"][race]["presets"] = {SEXES[f]: [f"{x:08X}" for x in v] for f, v in per.items()}
+        if race_fids:
+            lists = head_part_race_lists(recs_all, human, list(race_fids.values()))
+            for h_, s_, f_ in lists:
+                recs.append((b"FLST", h_, s_, f_))
+            rep["head_part_race_lists"] = [f"{sfplugin.edid(s_)} {f_:08X}" for _h, s_, f_ in lists]
         rep["_player_parts"] = (heads, part_types, next(((h_, s) for t, h_, s, fid in recs_all
                                                          if t == b"NPC_" and fid == 0x7), None))
     if race_head and human is not None:
