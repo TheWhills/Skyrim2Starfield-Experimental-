@@ -28,6 +28,11 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(lines[:2], ["EDID: 'Race'", "SRAC: 0000347D"])
         self.assertEqual(lines[2], "SAPT x9: 'x' ... 'x'")
 
+    def test_find(self):
+        recs = {"human_male_beard_full": (1, []), "human_male_hair_buzz": (2, []), "beard_short": (3, [])}
+        self.assertEqual(D.find(recs, "Beard"), ["beard_short", "human_male_beard_full"])
+        self.assertEqual(D.find(recs, "nothing"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

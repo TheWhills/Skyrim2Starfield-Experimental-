@@ -11,6 +11,11 @@ workbench it copies (WorkbenchChem in Starfield.esm, works once moved to open fl
 
     python -I scripts\\npc\\npc_record_diff.py --type FURN --a "$sf\\Data\\Starfield.esm" --b C:\\Modding\\work\\s2s\\riverwood_doors\\convert\\FO4Port.esm --pair WorkbenchChem=S2S_Furn_CraftingAlchemyWorkbenchTabletop
 
+2026-11-10: --find SUBSTR lists the EditorIDs of --type in --a that contain it, and --show falls back to the first
+such match (the showlooksmenu crash when hovering facial hair as S2S_OrcRace: what a vanilla beard head part names):
+
+    python -I scripts\\npc\\npc_record_diff.py --type HDPT --a "$sf\\Data\\Starfield.esm" --b "$sf\\Data\\Starfield.esm" --find beard --show beard
+
 Matches records by EditorID (the face-test NPCs' EditorIDs; FO4Port.esm keeps them in its override). Per
 signature: only in A, only in B, or different (count and bytes; MWGT is printed as floats). Writes nothing.
 """
@@ -86,6 +91,11 @@ def diff(a_subs, b_subs):
     return rows
 
 
+def find(recs, sub):
+    """EditorIDs (lower case) in recs containing sub, sorted."""
+    return sorted(e for e in recs if sub.lower() in e)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--a", required=True)
@@ -96,12 +106,23 @@ def main(argv=None):
     ap.add_argument("--show", action="append", default=[],
                     help="EDID: list that record's subrecords in order from --a (or --b if not there), runs of one "
                          "signature collapsed (2026-11-09: S2S_OrcRace against MannequinRace / HumanRace)")
+    ap.add_argument("--find", action="append", default=[],
+                    help="SUBSTR: list the EditorIDs of --type in --a containing it (2026-11-10)")
     a = ap.parse_args(argv)
     rtype = a.type.encode("ascii")[:4].ljust(4, b"_")
     A, B = npc_by_edid(a.a, rtype), npc_by_edid(a.b, rtype)
+    for f in a.find:
+        hits = find(A, f)
+        print(f"{a.type} containing {f!r}: {len(hits)}")
+        for e in hits[:60]:
+            print(f"  {A[e][0]:08X} {e}")
     for e in a.show:
         k = e.lower()
         src = A.get(k) or B.get(k)
+        if src is None and find(A, e):
+            k = find(A, e)[0]
+            src = A[k]
+            e = k
         if src is None:
             print(f"{e}: not found")
             continue

@@ -97,6 +97,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    S2SOrcPlayer.esm lands in the S2S Race Test mod folder: tick it in MO2's plugin list after S2SRaceTest.esm (off
    = human player as before). In game: a NEW game (character creation as an Orc: presets, the Orc blend in each
    region), then a test save: `player.getisrace xx00080F` and `showlooksmenu player 1`. Screenshots.
+   2026-11-10: the patch works on an existing save (getisrace 1.00), but showlooksmenu crashes when hovering facial
+   hair. Open: is it our race or the looks menu itself - the same save with S2SOrcPlayer.esm off (human player),
+   other categories (hair, eyebrows) as the Orc, and what a vanilla beard head part names
+   (`npc_record_diff.py --type HDPT --find beard --show beard`).
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
