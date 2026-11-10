@@ -67,6 +67,15 @@ class ProbeTests(unittest.TestCase):
         md = L.markdown(rep)
         self.assertIn("AVMD Tone01", md)
 
+    def test_missing_plugin_message(self):
+        """2026-11-10: the owner's --plugin "<aliens mod>.esm" (the placeholder) gave an OSError traceback."""
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "Data"))
+            esm(os.path.join(d, "Data", "Starfield.esm"), [])
+            with self.assertRaises(SystemExit) as cm:
+                L.main(["--starfield", d, "--out", d, "--plugin", "<aliens mod>.esm"])
+            self.assertIn("plugin not found: <aliens mod>.esm", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

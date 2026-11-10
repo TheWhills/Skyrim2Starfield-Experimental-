@@ -1011,6 +1011,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                               b"MNAM": struct.pack("<I", m_fid)})
         recs.append((b"HDPT", part[1], hsubs, h_fid))
         heads[female] = h_fid
+        part_types[h_fid] = 1           # ours too: with_head_part must drop it when an NPC gets another head
         rep["head_parts"][sex] = {"HDPT": f"{h_fid:08X}", "MRPH": f"{m_fid:08X}", "template": HEAD_PART[female],
                                   "template_morph_folder": text_of(tcmp_old), "morph_folder": m["folder"]}
         tpl = face_fit.pick_template(npc_recs, human, female)
@@ -1066,6 +1067,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                         b"EDID": sfplugin.zs(f"S2S_{NAMES[race]}Race_{SEXES[f]}_Head"),
                         b"MODL": sfplugin.zs(modl)}), h_fid))
                     rheads[f] = h_fid
+                    part_types[h_fid] = 1
                 race_heads[race] = rheads
             r_fid = ids.take(f"S2S_{NAMES[race]}Race")
             rsubs, rrep = new_race((human, by_fid[human][2]), mann, NAMES[race], rheads, per, part_types)

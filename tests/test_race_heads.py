@@ -527,6 +527,11 @@ class PluginTests(unittest.TestCase):
                 on = by["S2SRace_OrcRace_male"][1]
                 self.assertNotIn(b"BMPN", [s_ for s_, _d in on])
                 self.assertIn(struct.pack("<I", oh[2]), [d_ for s_, d_ in on if s_ == b"PNAM"])
+                # 2026-11-10 (owner's Orc NPCs showed a human head): the copied test NPC kept its own (blend) head
+                # part ahead of the race's; only the race's Face part may remain
+                face_ids = {fid for _t, _h, s_, fid in recs if _t == b"HDPT" and dict(s_).get(b"PNAM") == I(1)}
+                face_ids |= {by[e][2] for e in by if e.startswith("S2S_SkyrimRaces_")}
+                self.assertEqual([_u(d_) for s_, d_ in on if s_ == b"PNAM" and _u(d_) in face_ids], [oh[2]])
                 # the face parts: a baked copy per sex on the race's own list; the vanilla one for humans only
                 recs2 = sfplugin.records(os.path.join(out, H.PLUGIN), [b"HDPT", b"FLST"])
                 by2 = {sfplugin.edid(s_): (s_, fid) for _t, _h, s_, fid in recs2}

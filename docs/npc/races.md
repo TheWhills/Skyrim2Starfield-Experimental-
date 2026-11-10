@@ -433,3 +433,10 @@ why the mod needs no clothes of its own.
   mesh archive's name table - thousands of reads for the parts, their `_facebones` twins and LODs. Archives are now
   opened once per run (exact-name lookup in the archive's own index), and the baking prints "baking N face parts"
   and a count every 25.
+- 2026-11-10, owner's first in-game look at the baked Orc: the player (setrace) has the baked head (pointed ears,
+  wider jaw) and the converted tusks; the Orc NPCs (S2SRace_OrcRace_male / female) had a plain human head, the mouth
+  standing in front of their lips. Cause: the race NPCs are copies of the blend test NPCs, whose Face part is our own
+  S2S_SkyrimRaces_<sex>_Head; with_head_part only knew vanilla parts' types, so the copy kept that head ahead of the
+  race's. Our head parts are now Face-typed too (the end-to-end test checks a single Face part). Open, to look at
+  after the rebuild: on the player the inner lips look pulled into vertical strands around the teeth (the bake's lip
+  area or the mouth mesh), the tusks are pink in the looks menu and dark in the world (material).

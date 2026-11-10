@@ -203,6 +203,10 @@ def main(argv=None):
     ap.add_argument("--depth", type=int, default=2, help="AVMD links followed this deep")
     a = ap.parse_args(argv)
     plugins = [os.path.join(a.starfield, "Data", "Starfield.esm")] + list(a.plugin)
+    missing = [p for p in plugins if not os.path.isfile(p)]
+    if missing:
+        raise SystemExit(f"plugin not found: {', '.join(missing)} (--plugin takes the full path of a race mod's "
+                         f".esm; leave it out to read Starfield.esm only)")
     rep = probe(plugins, a.depth)
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "look_probe.json"), "w", encoding="utf-8") as fh:
