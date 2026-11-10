@@ -103,18 +103,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    showinventory lists S2S_ClothesFarmClothes04 / S2S_ClothesFarmBoots04 worn from that outfit; shoulders clean).
 9c. Done 2026-11-09: the other test NPCs' outfits as items (Ralof, Nazeem, Saadia + Orgnar, Embry), Riverwood rebuilt.
    Orgnar: skin through his shirt while wearing the barkeeper shoes, fine without them (owner).
-9d. B + C: rebuild only the items whose skin piece took the shirt's slot (fixed 2026-11-09). List them (items with an
-   S2S_Skin part that do not cover the body, slot 3):
-   ```powershell
-   (Get-Content "$mods\S2S Clothes\item_convert.json" -Raw | ConvertFrom-Json).records.items | ? { $_.parts.key -contains 'S2S_Skin' -and $_.slots -notcontains 3 } | % { $_.edid }
-   ```
-   then, Starfield closed, one --armor per name it prints (the rest of the plugin and the outfits stay; no face_fit
-   or Riverwood rebuild needed, the FormIDs do not change):
-   ```powershell
-   git pull origin skyrim/armor
-   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --armor ClothesBarKeeperShoes --out "$mods\S2S Clothes"
-   ```
-   In game: Orgnar with shoes on, Saadia; Ralof if his cuffs were listed.
+9d. Done 2026-11-09: ClothesBarKeeperShoes and ClothesFineBoots02 rebuilt alone (--armor); Orgnar, Saadia, Nazeem
+   right in game. All seven test NPCs wear shared item outfits.
 
 10. B + C: weapon types with their own movesets (docs/armor/animation-port.md, "weapon types"). Install the two
    zips I sent (SkyrimMelee_LoreRim_greatsword_type.zip, SkyrimMelee_LoreRim_waraxe_type.zip) as MO2 mods, keep the

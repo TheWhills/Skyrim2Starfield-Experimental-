@@ -91,4 +91,4 @@ piece used the vanilla skin addon's slot 13, so the shoes' skin piece (Skyrim's 
 the shirt's skin slot; and the armpit band (gear_fit.armpits) was added to every skin piece, shoes included, and
 showed through the shirt. Now a skin piece on an item that does not cover the body (slot 3) takes the item's own
 slots (os_export.item_records), and only body gear gets the armpit band (gear_fit.armpit_skin).
-
+Owner, 2026-11-09 after rebuilding only the shoes and Nazeem's boots: all working (verified in game).
