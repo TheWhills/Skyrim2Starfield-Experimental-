@@ -473,10 +473,23 @@ def apply_planet(prm, a):
     world's biome (and a climate) and the location's parent (--biome / --climate / --location-parent, hex FormIDs;
     owner's SfInspect dumps: LC172World carries Mars biome 2A3777, its location sits under SSol_PMars_Surface 01B736).
     --template-* still swap whole templates. The probe plan stays in the overlay's own frame."""
+    if not prm.get("mars"):
+        # --no-mars (a city built --like Tamriel): registered later with the others (register_worlds.py); the planet's
+        # world templates, biome / climate and location parent still apply
+        tpl = {k: v for k, v in (("world", a.template_world), ("block", a.template_block),
+                                 ("location", a.template_location)) if v}
+        if tpl:
+            prm["templates"] = tpl
+        wo = {k: v for k, v in (("biome", a.biome), ("climate", a.climate)) if v}
+        if wo:
+            prm["world_overrides"] = wo
+        if a.location_parent:
+            prm["location_parent"] = a.location_parent
+        print(f"overlays_params.json: {a.planet}'s templates {tpl or 'Mars'}, world {wo or 'unchanged'}; no planet "
+              f"registration here (--no-mars: register_worlds.py)")
+        return
     if not a.latlon:
         sys.exit("--planet needs --latlon LAT LON (radians)")
-    if not prm.get("mars"):
-        sys.exit("--planet with --no-mars: nothing registers the overlay")
     prm["mars"]["planet"] = a.planet
     prm["mars"]["hypothesis"] = (f"registered on {a.planet} at lat {a.latlon[0]} lon {a.latlon[1]} rad (owner's choice, "
                                  "away from the planet's own locations); not verified in game")
@@ -517,6 +530,85 @@ def join_coordinates(argv):
     return out
 
 
+# --like: options of another build that say nothing about which land it is (2026-11-10, owner: "get the worldspace for
+# the cities"; a city must match the installed Tamriel: its height offset, ground textures, water, biome / climate)
+LIKE_DROP = {"--world-edid": 1, "--out": 1, "--cells": 4, "--tile": 1, "--arrival": 1, "--landmark": 1, "--frame": 1,
+             "--display-name": 1, "--latlon": 2, "--world": 1, "--plugin": 1, "--mars-plugin": 1, "--coc": 1,
+             "--experiment": 1, "--prefix": 1, "--like": 1, "--no-mars": 0}
+
+
+def split_cmdline(line: str):
+    """A Windows command line (subprocess.list2cmdline) back into its arguments (CommandLineToArgvW rules)."""
+    args, cur, i, quoted, have = [], [], 0, False, False
+    while i < len(line):
+        c = line[i]
+        if c == "\\":
+            j = i
+            while j < len(line) and line[j] == "\\":
+                j += 1
+            n = j - i
+            if j < len(line) and line[j] == '"':
+                cur.append("\\" * (n // 2))
+                if n % 2:
+                    cur.append('"')
+                    i = j + 1
+                else:
+                    i = j
+                have = True
+                continue
+            cur.append("\\" * n)
+            i, have = j, True
+            continue
+        if c == '"':
+            quoted, have = not quoted, True
+        elif c in " \t" and not quoted:
+            if have:
+                args.append("".join(cur))
+            cur, have = [], False
+        else:
+            cur.append(c)
+            have = True
+        i += 1
+    if have:
+        args.append("".join(cur))
+    return args
+
+
+def like_args(staging: str):
+    """The options of the build in `staging` (its build_command.txt) minus those that pick the land and its names
+    (LIKE_DROP): a city built --like the installed Tamriel gets the same height offset, ground, water, biome."""
+    path = os.path.join(staging, "build_command.txt")
+    if not os.path.isfile(path):
+        sys.exit(f"--like: no {path} (a make_skyrim_overlay.py build folder)")
+    with open(path, encoding="utf-8") as f:
+        args = split_cmdline(f.read().strip())
+    k = next((i for i, x in enumerate(args) if x == "build"), None)
+    if k is None:
+        sys.exit(f"--like: {path} is not a build command")
+    args, out, i = args[k + 1:], [], 0
+    while i < len(args):
+        name = args[i].split("=", 1)[0]
+        if name in LIKE_DROP:
+            i += 1 + (0 if "=" in args[i] else LIKE_DROP[name])
+            continue
+        out.append(args[i])
+        i += 1
+    return out
+
+
+def expand_like(raw):
+    """raw with --like <staging> replaced by that build's options (ours after them, so ours win)."""
+    if "--like" not in raw:
+        return raw, None
+    k = raw.index("--like")
+    if k + 1 >= len(raw):
+        sys.exit("--like needs a staging folder")
+    staging = raw[k + 1]
+    rest = raw[:k] + raw[k + 2:]
+    cmd = [x for x in rest[:1]]
+    return cmd + like_args(staging) + rest[1:], staging
+
+
 def main(argv=None):
     # allow_abbrev=False: options this parser does not know (e.g. --world) must reach make_cw_overlays unchanged,
     # not be taken as an abbreviation of one of ours (--world-edid)
@@ -525,6 +617,7 @@ def main(argv=None):
     ap.add_argument("cmd", choices=("info", "worlds", "build", "check"))
     ap.add_argument("--skyrim", help="Skyrim.esm (Special Edition; read-only)")
     ap.add_argument("--world-edid", default=skyrimland.WORLD, help="source worldspace EditorID (default Tamriel)")
+    ap.add_argument("--like", default=None, help=argparse.SUPPRESS)        # expanded before parsing (expand_like)
     ap.add_argument("--sf-data", default="", help="Starfield Data folder (build: LTEX template BTD; check)")
     ap.add_argument("--out", help="staging folder outside the repo, e.g. C:\\Modding\\staging\\skyrim_tamriel")
     ap.add_argument("--cells", type=int, nargs=4, metavar=("X0", "X1", "Y0", "Y1"),
@@ -621,8 +714,10 @@ def main(argv=None):
     ap.add_argument("--content-resources", default="", help="build --skyrim-ground: Starfield Tools\\ContentResources.zip")
     ap.add_argument("--ltex-mapping", default="", help="build: an edited ltex_mapping.json to override the automatic picks")
     raw = sys.argv[1:] if argv is None else list(argv)
+    raw, like = expand_like(raw)
     a, rest = ap.parse_known_args(join_coordinates(raw))
     a.raw_argv = raw
+    a.like = like
     if a.cmd in ("info", "worlds", "build") and not a.skyrim:
         sys.exit("--skyrim <Skyrim.esm> is required")
     if a.cmd in ("build", "check") and not (a.out and a.sf_data):

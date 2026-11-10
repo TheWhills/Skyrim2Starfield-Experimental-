@@ -39,10 +39,25 @@ Each city gets its own names (`SKY_WhiterunWorld`, `SkyrimTerrainWhiterunWorld.e
 
 The arrival defaults to the city's centre (`--arrival <cell EditorID or X,Y>` to choose).
 
+## Next to the installed Tamriel (2026-11-10)
+Owner: "get the worldspace for the cities like Whiterun, Solitude, Windhelm" and chose separate spaces, like Skyrim.
+Offline only so far (synthetic tests), not run:
+
+* `make_skyrim_overlay.py build --like <Tamriel staging>` reuses that build's options (its `build_command.txt`: height
+  offset, ground textures, water, planet biome / climate / location parent) minus the ones that pick the land and its
+  names (`LIKE_DROP`); with `--no-mars` the city writes no planet plugin of its own (the planet options still set its
+  world's biome / climate).
+* `scripts/terrain/register_worlds.py`: ONE registration plugin (`SkyrimWorlds_Register.esm`, loads last) overriding
+  the main build's planet record (Nirn, in SkyrimTerrainTamriel_Mars.esm) with Tamriel's CNAM entry kept and one per
+  city appended (Tamriel's latitude, longitude + 0.02 rad per city: about 150 km apart on the 7,484 km Nirn, so no
+  overlap), and each city's location parented to the planet's surface location.
+* `tools\owner\cities.ps1`: per city terrain (--like Tamriel, --no-mars), export / select / convert / stage / check,
+  then register_worlds and a copy into the MO2 mod folder "S2S Skyrim Cities". Reach a city with `coc` (printed).
+
+Next: gates (Tamriel <-> city load doors, both ways: PluginSpike's exterior-door override for two exteriors), the
+cities' interiors (houses, Dragonsreach: the interior batch with `--exterior` pointed at the city), their navmesh.
+
 ## Limits
-* **One experiment installed at a time.** Every Mars plugin overrides MarsPlanetData (as every terrain experiment so
-  far), so a city and Tamriel cannot be installed together yet; that needs one plugin holding several overlays and
-  one registration listing them all (TerrainOverlays supports several overlays; `objects.json` holds one world).
-* **No gates.** Skyrim enters a city through load doors; doors here are plain statics and lead nowhere (the FO4
-  project's load-door work, PR #50, is not on this branch). Reach a city with `coc`.
+* **Gates not linked yet** (above); the planet registration of several worlds is unverified in game (vanilla Mars
+  lists 10 master worldspaces, so the record allows it).
 * Interiors (houses, Dragonsreach, the palaces) are interior cells, not part of these worldspaces: not converted.
