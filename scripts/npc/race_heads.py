@@ -239,6 +239,15 @@ def new_race(human, mannequin, name, heads, keys, part_types):
         at = next((i + 1 for i, (s, _d) in enumerate(top) if s == before), len(top))
         top = top[:at] + [(b"SRAC", hr)] + top[at:]
         rep["subgraph_race"] = "HumanRace (as MannequinRace)"
+    # 2026-11-09 (owner: both Orc NPCs of the new race stood in the reference pose, arms out, no animation): the copy
+    # carried HumanRace's own subgraph entries (subgraph.FIELDS: which graph / animation folders per keyword), which
+    # the game did not run for a race of ours. MannequinRace has none and takes HumanRace's through SRAC alone.
+    from fo4sf import subgraph
+    if any(s == b"SRAC" for s, _d in top):
+        before = len(top) + len(rest)
+        top = [(s, d) for s, d in top if s not in subgraph.FIELDS]
+        rest = [(s, d) for s, d in rest if s not in subgraph.FIELDS]
+        rep["subgraph_subrecords_dropped"] = before - len(top) - len(rest)
     subs = top + rest
     for female, h_fid in heads.items():
         subs, counts = race_override(subs, h_fid, keys.get(female, {}), part_types, female)

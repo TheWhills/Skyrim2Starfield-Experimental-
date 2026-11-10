@@ -142,6 +142,7 @@ class PluginTests(unittest.TestCase):
         """2026-11-09 (owner: "yes" to the Orc race): a RACE copied from HumanRace, armor race and subgraph race
         HumanRace (as MannequinRace), our head part, its own phenotype per sex and only its keys added."""
         human = [(b"EDID", Z("HumanRace")), (b"FULL", I(77)), (b"KWDA", I(5)), (b"ANAM", Z("skel")),
+                 (b"SAKD", I(9)), (b"SGNM", Z("x.agx")), (b"SAPT", Z("common")), (b"SRAF", I(0x10001)),
                  (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
                  (b"FMRI", I(0)), (b"FMRU", Z("male_as_md1")), (b"FMRN", Z("a")),
                  (b"FMRI", I(1)), (b"FMRU", Z("male_eu_md2")), (b"FMRN", Z("b")),
@@ -170,6 +171,9 @@ class PluginTests(unittest.TestCase):
         self.assertLess(sig.index(b"FDSI"), len(sig))
         self.assertEqual(rep["male"]["phenotype_index"], 2)
         self.assertEqual(rep["subgraph_race"], "HumanRace (as MannequinRace)")
+        for gone in (b"SAKD", b"SGNM", b"SAPT", b"SRAF"):                          # HumanRace's through SRAC only
+            self.assertNotIn(gone, sig)
+        self.assertEqual(rep["subgraph_subrecords_dropped"], 4)
         self.assertEqual(human[0], (b"EDID", Z("HumanRace")))                      # HumanRace itself untouched
 
     def test_end_to_end(self):

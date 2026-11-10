@@ -227,6 +227,10 @@ our head part as its Face part, a chargen phenotype of its own (a copy of the eu
 next FMRI index) and the Orc keys added to the morph groups; plus an Orc NPC per sex of that race (RNAM). Not yet:
 height (Skyrim Orc 1.045), skin tones, eyes, the mouth. To learn in game: setrace on the player (no crash, gear on,
 animations), showlooksmenu (does the Orc phenotype show in each region's blend, does it apply), the Orc NPCs.
+Owner's first look (2026-11-09, verified in game): the race exists (getisrace names S2S_OrcRace); its two NPCs show
+the Orc head but stand in the reference pose, arms out, no animation; player.setrace 1600080F left the player
+HumanRace (getisrace 0). Change: the copy no longer carries HumanRace's own subgraph entries (SADD / SAKD / STKD /
+SGNM / SAPT / SRAF) and takes them through SRAC alone, as MannequinRace does. Setrace on the player to retry after.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
