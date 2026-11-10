@@ -81,10 +81,14 @@ def clean_wav(data: bytes):
             + body)
 
 
-def lines_for(npc, topics, texts, voice_edid, scope: str, keep_player_lines: bool = False, skipped=None):
-    """The NPC's lines: [{topic, subtype, how, info, number, text, conditions}]; lines conditioned on the player
-    (skyrimdialog.about_player: 'What do you want, little elf?', a hated player's greeting) left out unless
-    keep_player_lines (counted in skipped)."""
+def lines_for(npc, topics, texts, voice_edid, scope: str, keep_player_lines: bool = False, skipped=None,
+              world=None):
+    """The NPC's lines: [{topic, subtype, how, info, number, text, conditions, start, why}]. With world
+    (skyrimdialog.World, 2026-11-10: Delphine spoke of the dragon mounds, Embry as if romanced): only lines that
+    would play at the start of a new Skyrim game (skyrimdialog.verdict: the topic's quest running, the conditions
+    passing; 'ambient' ones, under time / weather / place conditions, kept; with keep_player_lines also those under
+    the player's race / sex / class). Without world: the older rule, lines conditioned on the player left out
+    (skyrimdialog.about_player) unless keep_player_lines. Left-out lines are counted in skipped."""
     out = []
     for t in topics:
         if scope == "greetings" and t["subtype_code"] not in GREETING_CODES:
@@ -99,7 +103,21 @@ def lines_for(npc, topics, texts, voice_edid, scope: str, keep_player_lines: boo
             how = skyrimdialog.speaks(info, npc["form_id"], npc.get("voice"))
             if how is None or (scope == "own" and how != "own") or (how == "anyone" and scope != "all"):
                 continue
-            if not keep_player_lines and any(skyrimdialog.about_player(c) for c in info["conditions"]):
+            start, why = "keep", []
+            if world is not None:
+                lenient = {"ambient", "player"} if keep_player_lines else {"ambient"}
+                start, why = skyrimdialog.verdict(info, npc, world, t.get("quest"), lenient)
+                if start == "drop":
+                    if skipped is not None:
+                        skipped["not_at_game_start"] = skipped.get("not_at_game_start", 0) + 1
+                        ex = skipped.setdefault("examples", [])
+                        if len(ex) < 12:
+                            r0 = info["responses"][0] if info["responses"] else {}
+                            ex.append({"topic": t["edid"], "text": (r0.get("text") or
+                                                                    texts.get(r0.get("text_id") or -1, ""))[:80],
+                                       "why": why[:3]})
+                    continue
+            elif not keep_player_lines and any(skyrimdialog.about_player(c) for c in info["conditions"]):
                 if skipped is not None:
                     skipped["about_the_player"] = skipped.get("about_the_player", 0) + 1
                 continue
@@ -109,7 +127,7 @@ def lines_for(npc, topics, texts, voice_edid, scope: str, keep_player_lines: boo
                 text = r["text"] if r["text"] is not None else texts.get(r["text_id"] or -1, "")
                 out.append({"topic": t["edid"], "subtype": t["subtype_code"], "how": how,
                             "info": f"{info['form_id'] & 0xFFFFFF:08X}", "number": r["number"], "text": text,
-                            "voice_type": voice_edid, "conditions": conds})
+                            "voice_type": voice_edid, "conditions": conds, "start": start, "why": why[:4]})
     return out
 
 
@@ -170,6 +188,11 @@ def main(argv=None):
     ap.add_argument("--language", default="english")
     ap.add_argument("--keep-player-lines", action="store_true",
                     help="also lines conditioned on the player (race, relationship ...), left out by default")
+    ap.add_argument("--any-state", action="store_true",
+                    help="every line regardless of the story (the older rule); default: only lines that would play "
+                         "at the start of a new Skyrim game (2026-11-10)")
+    ap.add_argument("--reconvert", action="store_true",
+                    help="convert the audio again even when the .wem / .ffxanim of a line is already in --out")
     ap.add_argument("--ffmpeg", help="ffmpeg.exe: .xwm -> .wav")
     ap.add_argument("--starfield", help="Starfield folder (its Tools: the Wwise project, LipGenerator, FaceFX)")
     ap.add_argument("--wwise", nargs="?", const=WWISE_DEFAULT, help="WwiseConsole.exe (default: Wwise 2021.1.14)")
@@ -187,6 +210,7 @@ def main(argv=None):
     vtyp = {fid: sfplugin.edid(s) for _t, _h, s, fid in sfplugin.records(esm, [b"VTYP"])}
     by_edid = {n["edid"].lower(): n for n in npcs.values()}
     tops = skyrimdialog.topics(esm)
+    world = None if a.any_state else skyrimdialog.world_from(esm, npcs)
     texts = skyrimdialog.response_texts(sky, a.language)
     names = [n for arc in sky.archives for n in arc.names if n.startswith("sound\\voice\\")]
     files = skyrimdialog.voice_index(names)
@@ -200,7 +224,7 @@ def main(argv=None):
         voice = vtyp.get(n.get("voice") or -1, "")
         male = not n["female"]
         skipped = {}
-        rows = lines_for(n, tops, texts, voice, a.scope, a.keep_player_lines, skipped)
+        rows = lines_for(n, tops, texts, voice, a.scope, a.keep_player_lines, skipped, world)
         if a.limit:
             rows = rows[:a.limit]
         folder = os.path.join(out, "lines", voice or "novoice")
@@ -213,6 +237,12 @@ def main(argv=None):
                 row["result"] = "no voice file"
                 continue
             stem = f"{row['info']}_{row['number']}"
+            if not a.reconvert and os.path.isfile(os.path.join(folder, stem + ".wem")):
+                # converted by an earlier run (Wwise and lips are the slow part): reused
+                row["result"] = "wem"
+                if os.path.isfile(os.path.join(folder, stem + ".ffxanim")):
+                    row["lips"] = True
+                continue
             raw = sky._read(path)
             try:
                 xwm = skyrimdialog.unpack_fuz(raw)[1] if path.endswith(".fuz") else raw

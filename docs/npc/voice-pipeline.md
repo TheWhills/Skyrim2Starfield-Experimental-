@@ -87,3 +87,24 @@ The `.wem` lands somewhere under `<outdir>` (search for it recursively). The enc
   `Data\Sound\Voice\S2SVoiceBuild.esm\NPCMBarrett|NPCFSarahMorgan` (UNITY compiled into its own plugin's folder of
   those names); whether the plugin folder name matters is unverified.
 - Not yet: the Starfield records (voice type, greeting topics and responses), the first in-game check.
+
+## Lines that fit the story (2026-11-10)
+
+Owner: Delphine spoke of the dragon mounds before the main quest, Embry as if the player had romanced him. The
+converted greetings carried only "GetIsID the NPC"; Skyrim's own conditions were dropped. skyrim_voice.py now keeps a
+line only if it would play at the start of a new Skyrim game (`skyrimdialog.verdict`, `--any-state` for the old rule):
+
+- its topic's quest runs from the start (QUST DNAM flag 0x1), and that quest's dialogue conditions pass;
+- its conditions (AND of OR groups, as the engine reads them) pass with the start-of-game world: quests at stage 0,
+  nothing done or completed, nobody dead, no crime, no followers, misc stats 0, relationship rank 0 with the player,
+  global variables at their GLOB value, the speaker's own factions / ranks / race / sex / voice from its NPC record,
+  the player's factions from the Player record;
+- conditions that change in play without the story (time, weather, chance, place, combat, what the NPC is doing)
+  are kept ("ambient"); the player's race / sex / class are unknown until character creation (dropped;
+  `--keep-player-lines` keeps them); quest aliases and relationships between other NPCs are unknown (dropped).
+
+lines.json: per line `start` (keep / ambient) and `why`; per NPC `skipped.not_at_game_start` with examples. Lines
+already converted to .wem are reused on a rerun (`--reconvert` to redo them). Next steps, not done: the ambient
+conditions as Starfield conditions (GetCurrentTime, IsRaining, location) so they gate in game; lines in the
+matching Starfield topic types (idle chatter, combat ...) instead of all as greetings; story lines back once
+quests convert (their stages as conditions).

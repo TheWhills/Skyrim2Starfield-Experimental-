@@ -48,7 +48,7 @@ def parse_condition(d: bytes) -> Dict:
     p1, p2 = struct.unpack_from("<II", d, 12)
     run_on = struct.unpack_from("<I", d, 20)[0] if len(d) >= 24 else 0
     ref = struct.unpack_from("<I", d, 24)[0] if len(d) >= 28 else 0
-    return {"op": typ >> 5, "or": bool(typ & 1), "value": comp, "function": func,
+    return {"op": typ >> 5, "or": bool(typ & 1), "use_global": use_global, "value": comp, "function": func,
             "name": FUNCTION_NAMES.get(func, str(func)), "param1": p1, "param2": p2, "run_on": run_on,
             "reference": ref}
 
@@ -202,3 +202,203 @@ def voice_index(names: Iterable[str], plugin: str = "skyrim.esm") -> Dict[Tuple[
             if key not in out or m.group(4) == "fuz":
                 out[key] = n
     return out
+
+
+# ---------------------------------------------------------------------------------------- the world at game start
+# 2026-11-10 (owner: converted NPCs say lines whose conditions were never met: Delphine about the dragon mounds before
+# the main quest, Embry as if the player had romanced him). Starfield has none of Skyrim's quests, globals or
+# relationships, so a line keeps its Skyrim conditions only as a decision made here: would it pass at the start of a
+# new Skyrim game? Function indices from xEdit's wbDefinitionsTES5 condition table.
+F = {"GetDistance": 1, "GetCurrentTime": 18, "GetDead": 46, "GetItemCount": 47, "GetQuestRunning": 56,
+     "GetStage": 58, "GetStageDone": 59, "IsRaining": 62, "GetInCell": 67, "GetIsRace": 69, "GetIsSex": 70,
+     "GetInFaction": 71, "GetIsID": 72, "GetFactionRank": 73, "GetGlobalValue": 74, "IsSnowing": 75,
+     "GetRandomPercent": 77, "GetQuestVariable": 79, "GetLevel": 80, "GetDeadCount": 84, "GetCurrentAIPackage": 110,
+     "IsGuard": 125, "GetPCIsClass": 129, "GetPCIsRace": 130, "GetPCIsSex": 131, "GetPCInFaction": 132,
+     "IsTalking": 141, "GetCurrentAIProcedure": 143, "IsTrespassing": 145, "GetIsCurrentWeather": 149,
+     "GetDayOfWeek": 170, "IsPCSleeping": 175, "IsPCAMurderer": 176, "GetEquipped": 182, "HasMagicEffect": 214,
+     "IsInDialogueWithPlayer": 249, "GetLocationCleared": 250, "IsWeaponOut": 263, "IsHorseStolen": 282,
+     "IsSneaking": 286, "IsInCombat": 289, "IsInInterior": 300, "GetInWorldspace": 310, "GetPCMiscStat": 312,
+     "GetWithinPackageLocation": 325, "IsActor": 353, "GetInCurrentLoc": 359, "GetInCurrentLocAlias": 360,
+     "IsChild": 365, "IsInList": 372, "GetCrimeGoldViolent": 375, "GetCrimeGoldNonviolent": 376,
+     "IsBribedbyPlayer": 402, "GetRelationshipRank": 403, "GetIsVoiceType": 426, "GetHealthPercentage": 430,
+     "HasPerk": 448, "GetPlayerTeammate": 453, "GetPlayerTeammateCount": 454, "GetCrimeGold": 459,
+     "GetKeywordItemCount": 465, "GetQuestCompleted": 543, "HasKeyword": 560, "LocationHasKeyword": 562,
+     "GetIsEditorLocation": 565, "GetIsAliasRef": 566, "IsInSameCurrentLocAsRef": 603,
+     "IsInSameCurrentLocAsRefAlias": 604, "LocAliasHasKeyword": 610, "GetVMQuestVariable": 629,
+     "WornHasKeyword": 682, "GetActorValue": 14}
+NAME_OF = {v: k for k, v in F.items()}
+# what changes during play without the story moving: time, weather, chance, where the NPC stands, combat, what it is
+# doing. A line under these plays when they happen to hold; kept by default (verdict 'ambient')
+AMBIENT = {F[n] for n in ("GetDistance", "GetCurrentTime", "IsRaining", "IsSnowing", "GetRandomPercent", "GetInCell",
+                          "GetCurrentAIPackage", "IsTalking", "GetCurrentAIProcedure", "GetIsCurrentWeather",
+                          "GetDayOfWeek", "IsWeaponOut", "IsSneaking", "IsInCombat", "IsInInterior",
+                          "GetInWorldspace", "GetWithinPackageLocation", "GetInCurrentLoc", "LocationHasKeyword",
+                          "IsInDialogueWithPlayer", "GetHealthPercentage", "IsPCSleeping", "IsInSameCurrentLocAsRef",
+                          "HasMagicEffect", "GetIsEditorLocation")}
+# what is 0 / false at the start of a new game: quests not begun, nobody dead, no crime, no followers, no misc stats
+START_ZERO = {F[n] for n in ("GetStage", "GetStageDone", "GetQuestCompleted", "GetDead", "GetDeadCount",
+                             "GetLocationCleared", "GetCrimeGold", "GetCrimeGoldViolent", "GetCrimeGoldNonviolent",
+                             "IsPCAMurderer", "IsBribedbyPlayer", "GetPCMiscStat", "GetPlayerTeammate",
+                             "GetPlayerTeammateCount", "IsHorseStolen", "IsTrespassing", "GetQuestVariable",
+                             "GetVMQuestVariable")}
+STORY_ALIAS = {F[n] for n in ("GetIsAliasRef", "GetInCurrentLocAlias", "IsInSameCurrentLocAsRefAlias",
+                              "LocAliasHasKeyword")}
+OPS = {0: lambda a, b: a == b, 1: lambda a, b: a != b, 2: lambda a, b: a > b, 3: lambda a, b: a >= b,
+       4: lambda a, b: a < b, 5: lambda a, b: a <= b}
+QUEST_START_ENABLED = 0x0001
+
+
+class World:
+    """Skyrim at the start of a new game: quests that run from the start (QUST DNAM flag 0x1), global values (GLOB
+    FLTV), each NPC's factions / race / sex / voice (skyrimnpc.parse_npc rows by FormID), form lists (FLST LNAM),
+    quest dialogue conditions (QUST CTDA before NEXT)."""
+
+    def __init__(self, quests=None, globals_=None, npcs=None, lists=None, quest_conditions=None):
+        self.quests = quests or {}                  # {fid: flags}
+        self.globals = globals_ or {}               # {fid: value}
+        self.npcs = npcs or {}                      # {fid: parse_npc row}
+        self.lists = lists or {}                    # {fid: [fids]}
+        self.quest_conditions = quest_conditions or {}
+
+    def running(self, quest_fid) -> bool:
+        return bool(self.quests.get(quest_fid, 0) & QUEST_START_ENABLED)
+
+
+def world_from(esm_path: str, npcs: Optional[Dict[int, Dict]] = None) -> World:
+    from . import sfplugin
+    quests, qconds, globs, lists = {}, {}, {}, {}
+    for t, _h, subs, fid in sfplugin.records(esm_path, [b"QUST", b"GLOB", b"FLST"]):
+        if t == b"QUST":
+            conds = []
+            for s, d in subs:
+                d = bytes(d)
+                if s == b"DNAM" and len(d) >= 2:
+                    quests[fid] = struct.unpack_from("<H", d, 0)[0]
+                elif s == b"CTDA":
+                    c = parse_condition(d)
+                    if c:
+                        conds.append(c)
+                elif s == b"NEXT":
+                    break                         # the story manager's conditions follow
+            quests.setdefault(fid, 0)
+            if conds:
+                qconds[fid] = conds
+        elif t == b"GLOB":
+            v = next((bytes(d) for s, d in subs if s == b"FLTV" and len(d) >= 4), None)
+            if v is not None:
+                globs[fid] = struct.unpack_from("<f", v, 0)[0]
+        else:
+            lists[fid] = [struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"LNAM" and len(d) >= 4]
+    return World(quests, globs, npcs or {}, lists, qconds)
+
+
+def _actor(c, speaker, world):
+    """The NPC row a condition is run on: the speaker (subject), the player (target, in greetings) or a named
+    reference to the player; None otherwise."""
+    run_on = c.get("run_on", 0)
+    if run_on == 0:
+        return speaker
+    if run_on == RUN_ON_TARGET or (run_on == 2 and c.get("reference") in PLAYER_FORMS):
+        return world.npcs.get(0x7, {"form_id": 0x7, "factions": [], "player": True})
+    return None
+
+
+def evaluate(c: Dict, speaker: Dict, world: World) -> Tuple[Optional[bool], str]:
+    """(True / False / None, kind) of one condition at the start of a new game; kind 'start' (decided), 'ambient'
+    (varies in play, AMBIENT), 'player' (the player's race / sex / class: chosen later), 'story' (quest aliases,
+    relationships with others: unknown), 'unknown' (a function not modelled)."""
+    f = c.get("function")
+    op = OPS.get(c.get("op", 0), OPS[0])
+    want = c.get("value")
+    if c.get("use_global"):
+        want = world.globals.get(int(want))
+        if want is None:
+            return None, "unknown"
+    p1 = c.get("param1")
+    if f in AMBIENT:
+        return None, "ambient"
+    if f in (F["GetPCIsRace"], F["GetPCIsSex"], F["GetPCIsClass"]):
+        return None, "player"
+    if f in START_ZERO:
+        return op(0.0, want), "start"
+    if f in STORY_ALIAS:
+        return None, "story"
+    who = _actor(c, speaker, world)
+    if f == F["GetQuestRunning"]:
+        return op(1.0 if world.running(p1) else 0.0, want), "start"
+    if f == F["GetGlobalValue"]:
+        if p1 not in world.globals:
+            return None, "unknown"
+        return op(world.globals[p1], want), "start"
+    if f == F["IsActor"]:
+        return op(1.0 if who is not None else 0.0, want), "start"
+    if who is None:
+        return None, "story"
+    player = bool(who.get("player")) or who.get("form_id") == 0x7
+    if f == F["GetIsID"]:
+        return op(1.0 if who.get("form_id") == p1 else 0.0, want), "start"
+    if f == F["GetIsVoiceType"]:
+        if player:
+            return None, "player"
+        vts = world.lists.get(p1, [p1])
+        return op(1.0 if who.get("voice") in vts else 0.0, want), "start"
+    if f in (F["GetIsRace"], F["GetIsSex"]):
+        if player:
+            return None, "player"
+        have = who.get("race") == p1 if f == F["GetIsRace"] else int(bool(who.get("female"))) == p1
+        return op(1.0 if have else 0.0, want), "start"
+    if f in (F["GetInFaction"], F["GetFactionRank"], F["GetPCInFaction"]):
+        if f == F["GetPCInFaction"]:
+            who = world.npcs.get(0x7, {"factions": []})
+        ranks = dict(who.get("factions", []))
+        if f == F["GetFactionRank"]:
+            return op(float(ranks.get(p1, -1)), want), "start"
+        return op(1.0 if p1 in ranks else 0.0, want), "start"
+    if f == F["GetRelationshipRank"]:
+        if player or p1 in PLAYER_FORMS:
+            return op(0.0, want), "start"           # strangers: acquaintance (0) with everyone at the start
+        return None, "story"
+    if f == F["IsInList"]:
+        if p1 not in world.lists:
+            return None, "unknown"
+        return op(1.0 if who.get("form_id") in world.lists[p1] else 0.0, want), "start"
+    if f == F["HasPerk"] and player:
+        return op(0.0, want), "start"
+    if f == F["GetLevel"] and player:
+        return op(1.0, want), "start"
+    return None, "unknown"
+
+
+def verdict(info: Dict, speaker: Dict, world: World, quest: Optional[int] = None,
+            lenient=frozenset({"ambient"})) -> Tuple[str, List[str]]:
+    """('keep' | 'ambient' | 'drop', reasons) of an INFO said by speaker at the start of a new game: its topic's quest
+    must run from the start, and the quest's dialogue conditions with the INFO's own (AND of OR groups, as the
+    engine reads them: a condition with the OR flag joins the next one) must pass. Undecided groups: 'ambient' when
+    only ambient conditions are undecided (kept: they hold some of the time), else 'drop'."""
+    reasons = []
+    if quest is not None and not world.running(quest):
+        return "drop", [f"quest {quest:08X} not running at the start"]
+    conds = list(world.quest_conditions.get(quest, [])) + list(info.get("conditions", []))
+    groups, cur = [], []
+    for c in conds:
+        cur.append(c)
+        if not c.get("or"):
+            groups.append(cur)
+            cur = []
+    if cur:
+        groups.append(cur)
+    undecided = set()
+    for g in groups:
+        vals = [(evaluate(c, speaker, world), c) for c in g]
+        if any(v is True for (v, _k), _c in vals):
+            continue
+        open_ = [(k, c) for (v, k), c in vals if v is None]
+        if not open_:
+            c = g[0]
+            reasons.append(f"{NAME_OF.get(c['function'], c['function'])}({c.get('param1', 0):08X}) fails at start")
+            return "drop", reasons
+        undecided |= {k for k, _c in open_}
+        reasons += [f"{NAME_OF.get(c['function'], c['function'])} {k}" for k, c in open_]
+    if not undecided:
+        return "keep", reasons
+    return ("ambient", reasons) if undecided <= set(lenient) else ("drop", reasons)

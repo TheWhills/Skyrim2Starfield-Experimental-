@@ -61,8 +61,9 @@ def skyrim_esm(path):
                                (b"VTCK", struct.pack("<I", VOICE))])
     vt = rec(b"VTYP", VOICE, [(b"EDID", b"MaleNord\0")])
     tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 5, 0x800))])
+    qust = rec(b"QUST", 0x600, [(b"EDID", b"DialogueRiverwood\0"), (b"DNAM", struct.pack("<HBB", 1, 50, 0) + bytes(8))])
     with open(path, "wb") as fh:
-        fh.write(tes4 + grup(b"NPC_", 0, npc) + grup(b"VTYP", 0, vt) + dial)
+        fh.write(tes4 + grup(b"NPC_", 0, npc) + grup(b"VTYP", 0, vt) + grup(b"QUST", 0, qust) + dial)
 
 
 def dlstrings(entries):
@@ -107,6 +108,48 @@ class DialogTests(unittest.TestCase):
         self.assertEqual(set(idx), {("malenord", 0xA01, 1), ("malenord", 0xA02, 1)})
 
 
+def cond(name, p1=0, value=1.0, op=0, run_on=0, or_=False, use_global=False):
+    return {"function": SD.F[name], "param1": p1, "value": value, "op": op, "run_on": run_on, "or": or_,
+            "use_global": use_global, "reference": 0}
+
+
+class StartStateTests(unittest.TestCase):
+    """2026-11-10 (owner: Delphine spoke of the dragon mounds before the main quest, Embry as if romanced): a line
+    plays only if it would at the start of a new Skyrim game."""
+
+    def setUp(self):
+        self.world = SD.World(quests={0x600: 1, 0x601: 0}, globals_={0x700: 1.0, 0x701: 0.0},
+                              npcs={0x7: {"form_id": 0x7, "factions": [(0xDB1, 0)]}},
+                              lists={0x800: [0x2BF9F]}, quest_conditions={0x602: [cond("GetGlobalValue", 0x701)]})
+        self.ralof = {"form_id": 0x2BF9F, "factions": [(0x1111, 2)], "race": 0x13746, "female": False, "voice": 5}
+        self.v = lambda conds, quest=0x600: SD.verdict({"conditions": conds}, self.ralof, self.world, quest)[0]
+
+    def test_story_lines_dropped(self):
+        self.assertEqual(self.v([cond("GetIsID", 0x2BF9F)]), "keep")
+        self.assertEqual(self.v([cond("GetIsID", 0x2BF9F)], quest=0x601), "drop")       # its quest not started
+        self.assertEqual(self.v([cond("GetStage", 0x601, 10.0, op=3)]), "drop")          # GetStage MQ >= 10
+        self.assertEqual(self.v([cond("GetStage", 0x601, 10.0, op=4)]), "keep")          # < 10: before it
+        self.assertEqual(self.v([cond("GetRelationshipRank", 0x14, 4.0, op=3)]), "drop")  # lover of the player
+        self.assertEqual(self.v([cond("GetInFaction", 0x2222)]), "drop")                  # e.g. married to the player
+        self.assertEqual(self.v([cond("GetFactionRank", 0x1111, 2.0, op=3)]), "keep")
+        self.assertEqual(self.v([cond("GetGlobalValue", 0x700)]), "keep")
+        self.assertEqual(self.v([cond("GetIsID", 0x2BF9F)], quest=0x602), "drop")       # quest dialogue conditions
+        self.assertEqual(self.v([cond("GetDead", 0x9999, 0.0)]), "keep")
+        self.assertEqual(self.v([cond("IsInList", 0x800)]), "keep")
+        self.assertEqual(self.v([cond("GetGlobalValue", 0x700, 0x701, use_global=True)]), "drop")   # 1 == 0?
+
+    def test_or_groups_and_ambient(self):
+        # (GetStage MQ >= 10 OR GetIsID Ralof) AND GetCurrentTime < 12
+        conds = [cond("GetStage", 0x601, 10.0, op=3, or_=True), cond("GetIsID", 0x2BF9F),
+                 cond("GetCurrentTime", 0, 12.0, op=4)]
+        self.assertEqual(self.v(conds), "ambient")
+        self.assertEqual(self.v([cond("GetPCIsRace", 0x13749)]), "drop")
+        self.assertEqual(SD.verdict({"conditions": [cond("GetPCIsRace", 0x13749)]}, self.ralof, self.world, 0x600,
+                                    {"ambient", "player"})[0], "ambient")
+        self.assertEqual(self.v([cond("GetPCInFaction", 0xDB1)]), "keep")
+        self.assertEqual(self.v([cond("GetIsAliasRef", 3)]), "drop")
+
+
 class VoiceScriptTests(unittest.TestCase):
     def test_wsources_ffxcproj_and_wav(self):
         with tempfile.TemporaryDirectory() as d:
@@ -138,10 +181,18 @@ class VoiceScriptTests(unittest.TestCase):
             rep = json.load(open(os.path.join(out, "lines.json")))
             lines = rep["npcs"][0]["lines"]
             self.assertEqual(rep["npcs"][0]["voice_type"], "MaleNord")
-            self.assertEqual(rep["npcs"][0]["skipped"], {"about_the_player": 1})
+            sk = rep["npcs"][0]["skipped"]
+            self.assertEqual(sk["not_at_game_start"], 1)                    # 'little elf': the player's race
+            self.assertEqual(sk["examples"][0]["why"], ["GetIsRace player"])
             self.assertEqual([(l["info"], l["how"], l["text"], l["result"]) for l in lines],
                              [("00000A01", "own", "Hello.", "xwm"), ("00000A02", "voice", "Hm?", "xwm")])
             self.assertEqual(open(os.path.join(out, "lines", "MaleNord", "00000A01_1.xwm"), "rb").read(), b"XWM-A01")
+            # a line converted before (its .wem there) is reused, not converted again (2026-11-10)
+            with open(os.path.join(out, "lines", "MaleNord", "00000A01_1.wem"), "wb") as fh:
+                fh.write(b"WEM")
+            SV.main(["--skyrim-data", data, "--npc", "Ralof", "--out", out])
+            lines = json.load(open(os.path.join(out, "lines.json")))["npcs"][0]["lines"]
+            self.assertEqual([l["result"] for l in lines], ["wem", "xwm"])
             # own scope: his quest line too (no voice file here)
             SV.main(["--skyrim-data", data, "--npc", "Ralof", "--out", out, "--scope", "own"])
             lines = json.load(open(os.path.join(out, "lines.json")))["npcs"][0]["lines"]

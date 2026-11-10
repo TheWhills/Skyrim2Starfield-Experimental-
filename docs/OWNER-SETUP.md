@@ -118,6 +118,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    The Orc race now also gets Skyrim's orc mouth (teeth + tusks) as its teeth; the run uses texconv and
    <Starfield>\Tools\ContentResources.zip for its texture (--texconv / --content-resources if elsewhere). Check in
    game: tusks show, sit in the mouth, and drop with the jaw when talking.
+   Dialogue that fits the story (2026-11-10: lines whose Skyrim conditions do not hold at the start of a new game -
+   Delphine's dragon mounds, Embry's romance lines - are left out; docs/npc/voice-pipeline.md). Rerun the voice
+   step (lines already converted are reused, so only new ones go through Wwise / lips), then face_fit (step 4's
+   command) and the Riverwood build (step 5):
+   ```powershell
+   python -I scripts\npc\skyrim_voice.py --skyrim-data $sky --out C:\Modding\work\voice --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --ffmpeg <ffmpeg.exe> --starfield $sf --wwise --lips
+   ```
    Looks probe (read-only; send look_probe.md): skin tones and eye colours, and how the aliens mod adds its green skin
    (its .esm path from MO2; leave --plugin out if unsure):
    ```powershell
