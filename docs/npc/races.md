@@ -242,6 +242,8 @@ same place, no subgraph entries. Reading (supported, Fallout 4's rule: a race's 
 from its subgraph entries, so a new race reuses another's with SRAC "subgraph template race"): ours now has RNAM +
 SRAC (both HumanRace) where HumanRace's 400 entries began, and none of the entries; the phenotype's name (FMRN, a
 string id in vanilla) is "Orc".
+Third build (owner, 2026-11-09, verified in game): both S2S_OrcRace NPCs stand in a normal idle, arms down: the race
+animates through SRAC. Player setrace / chargen still to check.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
