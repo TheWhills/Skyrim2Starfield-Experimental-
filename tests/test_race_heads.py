@@ -218,7 +218,7 @@ class PluginTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out,
                                              "--races", "HighElfRace,OrcRace", "--race-head", "--new-races",
-                                             "Orc", "--player-race", "Orc"]), 0)
+                                             "Orc", "--player-race", "Orc", "--race-shape", "blend"]), 0)
                 with open(os.path.join(out, "race_heads.json")) as fh:
                     rep = json.load(fh)
                 mfile = os.path.join(out, "meshes", "morphs", "s2s", "races", "male", "chargen", "head", "morph.dat")
@@ -297,6 +297,94 @@ class PluginTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out2, "--races",
                                              "OrcRace", "--force"]), 0)
+        finally:
+            if saved[0] is None:
+                sys.modules.pop("race_probe", None)
+            else:
+                sys.modules["race_probe"] = saved[0]
+            face_fit.hkx_to_af.vanilla_file, H.bsa_archives = saved[1], saved[2]
+
+    def test_end_to_end_baked(self):
+        """2026-11-10 (owner: "Why arent we adding the changes we made to this race"; the player of S2S_OrcRace kept
+        a human face): the default --race-shape baked writes the race's shape into a head NIF + meshes of its own,
+        the race uses that head part with HumanRace's chargen lists unchanged (no phenotype, no extra morph-group
+        entries), its NPCs carry no race blends, and the player patch takes the race's head."""
+        from fo4sf import nif as nifmod, sfmesh, sfnif
+        from fo4sf.convert_static import mesh_file_path
+        v, t = strip_mesh()
+        nv = len(v)
+        m = vanilla_morph(nv, {"Nose": [0, 1, 2], "Eyes": [2, 3]})
+        data = sfmorph.build(nv, m.keys, m.deltas)
+        disp = {r: np.tile([0.0, 0.0, 0.004 * (i + 1)], (nv, 1)) for i, r in enumerate(H.CODES)}
+        head = types.SimpleNamespace(vertices=v, triangles=t)
+        scale, raw = sfmesh.encode_positions([tuple(p) for p in v], margin=0.02)
+        mesh = sfmesh.SfMesh(triangles=[tuple(x) for x in t], scale=scale, positions=raw, uv1=[(0, 0)] * nv,
+                             normals=[sfmesh.encode_packed(0, 0, 1)] * nv, lods=[])
+        sfmesh.build_meshlets(mesh)
+        mesh_bytes = sfmesh.serialize(mesh)
+        d_, f_ = mesh_file_path(mesh_bytes)
+        shape = sfnif.SkinnedShape(b"Head", f"{d_}\\{f_}".encode(), len(t) * 3, nv, "x.mat", [b"C_Head"],
+                                   [((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])
+        nif_bytes = nifmod.serialize(sfnif.build_skinned_nif(b"Head", [shape]))
+
+        def vanilla(p, _d):
+            low = p.replace("\\", "/").lower()
+            if low.endswith(".nif"):
+                return nif_bytes, low
+            if low.endswith(".mesh"):
+                return mesh_bytes, low
+            return data, low
+        fake_rp = types.SimpleNamespace(
+            SF_MORPH="meshes/morphs/human/{sex}/chargen/{part}/morph.dat",
+            race_transfer=lambda sky, sf, female, smooth, ff: (head, None, None, None, dict(disp),
+                                                               {"transfer": "surface", "alignment": {"rms_m": 0.008}}))
+        import face_fit
+        saved = (sys.modules.get("race_probe"), face_fit.hkx_to_af.vanilla_file, H.bsa_archives)
+        sys.modules["race_probe"] = fake_rp
+        face_fit.hkx_to_af.vanilla_file = vanilla
+        H.bsa_archives = lambda d: None
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                sf = os.path.join(d, "sf")
+                os.makedirs(os.path.join(sf, "Data"))
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+                out = os.path.join(d, "out")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out, "--races",
+                                             "HighElfRace,OrcRace", "--new-races", "Orc", "--player-race", "Orc",
+                                             "--symmetry", "none"]), 0)
+                with open(os.path.join(out, "race_heads.json")) as fh:
+                    rep = json.load(fh)
+                nif_path = os.path.join(out, "meshes", "s2s", "races", "orc", "malehead.nif")
+                self.assertTrue(os.path.isfile(nif_path))
+                with open(nif_path, "rb") as fh:
+                    n = nifmod.parse(fh.read())
+                g = next(sfnif.parse_bsgeometry(b) for i, b in enumerate(n.blocks) if n.type_of(i) == "BSGeometry")
+                gpath = os.path.join(out, "geometries", *g.meshes[0].path.decode().split("\\")) + ".mesh"
+                with open(gpath, "rb") as fh:
+                    baked = sfmesh.parse(fh.read())
+                z = np.array([sfmesh.decode_position(p, baked.scale)[2] for p in baked.positions])
+                orc_i = list(H.CODES).index("OrcRace")
+                self.assertLess(np.abs(z - 0.004 * (orc_i + 1)).max(), 1e-5)             # the Orc shape, baked
+                self.assertEqual(rep["baked_heads"]["OrcRace"]["male"]["model"], "S2S\\Races\\Orc\\MaleHead.nif")
+                recs = sfplugin.records(os.path.join(out, H.PLUGIN), [b"HDPT", b"NPC_", b"RACE"])
+                by = {sfplugin.edid(s): (t_, s, fid) for t_, _h, s, fid in recs}
+                oh = by["S2S_OrcRace_male_Head"]
+                self.assertEqual(H.text_of(dict(oh[1])[b"MODL"]), "S2S\\Races\\Orc\\MaleHead.nif")
+                self.assertEqual(dict(oh[1])[b"MNAM"], dict(by["S2S_SkyrimRaces_male_Head"][1])[b"MNAM"])
+                orc = by["S2S_OrcRace"][1]
+                mp = [bytes(d_).split(b"\0")[0].decode() for s_, d_ in orc if s_ == b"MPGM"]
+                self.assertEqual(mp, ["male_eu_md1_Nose", "male_eu_md1_Eyes", "female_eu_md1_Nose"])  # as HumanRace's
+                self.assertFalse([d_ for s_, d_ in orc if s_ == b"FMRU" and b"_sk_" in bytes(d_)])  # no phenotype
+                heads_ = [struct.unpack("<I", d_)[0] for s_, d_ in orc if s_ == b"HEAD"]
+                self.assertIn(oh[2], heads_)
+                self.assertEqual(rep["new_races"]["OrcRace"]["shape"], "baked into its head model")
+                on = by["S2SRace_OrcRace_male"][1]
+                self.assertNotIn(b"BMPN", [s_ for s_, _d in on])
+                self.assertIn(struct.pack("<I", oh[2]), [d_ for s_, d_ in on if s_ == b"PNAM"])
+                pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
+                pheads = [struct.unpack("<I", d_)[0] & 0xFFFFFF for s_, d_ in pp[0][2] if s_ == b"PNAM"]
+                self.assertIn(oh[2] & 0xFFFFFF, pheads)
         finally:
             if saved[0] is None:
                 sys.modules.pop("race_probe", None)

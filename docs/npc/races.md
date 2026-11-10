@@ -336,3 +336,13 @@ why the mod needs no clothes of its own.
   override of that list (each head-part race list holding HumanRace) with the new races added
   (`head_part_race_lists` in race_heads.json). Rerun needed. If it still crashes: the beard's own morph
   (MNAM 00160B9E) may lack the Orc phenotype keys.
+
+- 2026-11-10 Rerun after the list fix: no crash on facial hair (owner). But the player did not look Orc (a race
+  change keeps the face recipe; the Orc shape was only an extra blend option), and "many of the sliders cant be
+  changed now" (screenshot: the Face tab's head-shape row had no name). Owner: "Why arent we adding the changes we
+  made to this race". Changed: the race shape is now baked into the race's own head (race_heads --race-shape baked,
+  the default): `meshes\s2s\races\orc\<sex>head.nif` + its meshes under `geometries\`, head parts
+  S2S_OrcRace_<sex>_Head, the race's chargen lists left as HumanRace's (no Orc phenotype or extra morph-group
+  entries). The S2SRace_OrcRace_* NPCs use that head without blends; the player patch gives the player that head.
+  Rerun needed. Open: whether an existing save's player takes the new head part from the patch (the save may keep
+  its own head part list), skin tone, tusks, eyes.

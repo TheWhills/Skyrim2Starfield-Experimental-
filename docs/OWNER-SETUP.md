@@ -103,6 +103,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    (`npc_record_diff.py --type HDPT --find beard --show beard`). The dump: every beard names its valid races as
    FLST HeadPartsHumanRace (0024A024), without our race. Fixed: race_heads adds the new races to that list; rerun
    the command above, then the looks menu again.
+   Owner: no crash any more, but not Orc-looking and several Face controls locked. Now the Orc shape is baked into
+   the race's own head (default --race-shape baked); rerun the command above (same command), then the looks menu.
+   Its output lists the baked head files; the mod folder gains meshes\s2s\races\orc and geometries\.
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
