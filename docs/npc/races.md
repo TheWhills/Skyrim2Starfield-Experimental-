@@ -250,6 +250,8 @@ saves that strips the old human head parts. Same route here: race_heads --player
 the Player record (00000007) with RNAM = S2S_OrcRace and our head part, masters Starfield.esm + S2SRaceTest.esm.
 A face's recipe (blends, sliders) stays human after any race change, so the race now also lists its two Orc NPCs as
 chargen face presets (FDSI / FDSL after each sex's vanilla presets): one pick gives the whole Orc face.
+Owner, 2026-11-10 (verified in game): with S2SOrcPlayer.esm on, an existing save's player is S2S_OrcRace
+(getisrace 1.00), still looks and animates as before (the face recipe is unchanged). Chargen next.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
