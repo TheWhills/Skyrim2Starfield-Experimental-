@@ -108,9 +108,13 @@ def starfield_esm(path):
         (b"RACE", h(b"RACE"), [(b"EDID", Z("HumanRace")),
                                (b"MNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("male_eu_md1_Nose")),
                                (b"MPGN", Z("Eyes")), (b"MPGM", Z("male_eu_md1_Eyes")), (b"FDSI", I(1)),
+                               (b"FDSL", I(0x800)), (b"FDSI", I(4)), (b"FDSL", I(0x800)),
                                (b"INDX", I(0)), (b"HEAD", I(0x510)), (b"INDX", I(1)), (b"HEAD", I(0x512)),
                                (b"FNAM", b""), (b"MPGN", Z("Nose")), (b"MPGM", Z("female_eu_md1_Nose")),
+                               (b"FDSI", I(0)), (b"FDSL", I(0x801)),
                                (b"INDX", I(0)), (b"HEAD", I(0x511))], 0x347D),
+        (b"NPC_", h(b"NPC_"), [(b"EDID", Z("Player")), (b"ACBS", bytes(16)), (b"RNAM", I(0x347D)),
+                               (b"DNAM", bytes(8)), (b"PNAM", I(0x510)), (b"PNAM", I(0x512))], 0x7),
         (b"NPC_", h(b"NPC_"), [(b"EDID", Z("PlainM")), (b"ACBS", bytes(16)), (b"RNAM", I(0x347D)),
                                (b"VTCK", I(1)), (b"DNAM", bytes(8)), (b"PNAM", I(0x510)), (b"PNAM", I(0x512)),
                                (b"FMSI", I(3)), (b"FMRS", struct.pack("<f", 0.5)), (b"FMRI", I(12)),
@@ -204,7 +208,7 @@ class PluginTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out,
                                              "--races", "HighElfRace,OrcRace", "--race-head", "--new-races",
-                                             "Orc"]), 0)
+                                             "Orc", "--player-race", "Orc"]), 0)
                 with open(os.path.join(out, "race_heads.json")) as fh:
                     rep = json.load(fh)
                 mfile = os.path.join(out, "meshes", "morphs", "s2s", "races", "male", "chargen", "head", "morph.dat")
@@ -249,6 +253,24 @@ class PluginTests(unittest.TestCase):
                 onpc = dict(by["S2SRace_OrcRace_male"][1])
                 self.assertEqual(struct.unpack("<I", onpc[b"RNAM"])[0], orc[2])
                 self.assertIn("player.setrace xx", rep["new_races"]["OrcRace"]["setrace"])
+                # chargen presets: the race's own NPCs after each sex's vanilla presets, indices continuing
+                fds = [(s_, struct.unpack("<I", d_)[0]) for s_, d_ in orc[1] if s_ in (b"FDSI", b"FDSL")]
+                om, of = by["S2SRace_OrcRace_male"][2], by["S2SRace_OrcRace_female"][2]
+                self.assertEqual(fds, [(b"FDSI", 1), (b"FDSL", 0x800), (b"FDSI", 4), (b"FDSL", 0x800),
+                                       (b"FDSI", 5), (b"FDSL", om), (b"FDSI", 0), (b"FDSL", 0x801),
+                                       (b"FDSI", 1), (b"FDSL", of)])
+                # the player patch: the Player record (00000007) of the new race with our head part
+                pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
+                self.assertEqual([r[3] for r in pp], [0x7])
+                pd = pp[0][2]
+                self.assertEqual(struct.unpack("<I", dict(pd)[b"RNAM"])[0], orc[2])
+                heads_ = [struct.unpack("<I", d_)[0] for s_, d_ in pd if s_ == b"PNAM"]
+                self.assertIn(int(rep["head_parts"]["male"]["HDPT"], 16), heads_)
+                self.assertNotIn(0x510, heads_)
+                with open(os.path.join(out, "S2SOrcPlayer.esm"), "rb") as fh:
+                    tes4 = fh.read(4096)
+                self.assertIn(b"MAST\x0e\x00Starfield.esm\x00", tes4)                  # masters in order
+                self.assertLess(tes4.index(b"Starfield.esm"), tes4.index(H.PLUGIN.encode()))
                 # a morph whose Overweight points into the head (another frame): nothing written without --force
                 head.triangles = t[:, [0, 2, 1]]
                 out2 = os.path.join(d, "out2")

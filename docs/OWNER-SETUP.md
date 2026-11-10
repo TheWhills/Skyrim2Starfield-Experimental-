@@ -87,14 +87,16 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
 7. Done 2026-11-09: race heads in game. Altmer / Bosmer / Dunmer / Orc shapes on Starfield's head, pointed ears both
    sides (stronger-side symmetry), normal skin. Open: the Orc mouth hangs open (teeth / mouth do not follow).
 
-7b. B + C: the Orc race (S2S_OrcRace, thin over HumanRace). Starfield closed:
+7b. B + C: the Orc race. Done: S2S_OrcRace exists and its NPCs animate (2026-11-09). Now the player side: the race
+   lists two Orc face presets, and an optional player patch (S2SOrcPlayer.esm) makes the player an Orc, as the Exo
+   Race mod does (setrace on the player did not take). Starfield closed:
    ```powershell
    git pull origin skyrim/armor
-   python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races Orc
+   python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races Orc --player-race Orc
    ```
-   In game (on a test save): the printed `player.setrace xx......` line, then `showlooksmenu player 1`. Does the game
-   keep running, do your clothes / suit fit, do you walk and run normally, does each face region's blend offer the
-   new phenotype and does it change the face; then the two "Orc ... (S2S race)" NPCs. Screenshots.
+   S2SOrcPlayer.esm lands in the S2S Race Test mod folder: tick it in MO2's plugin list after S2SRaceTest.esm (off
+   = human player as before). In game: a NEW game (character creation as an Orc: presets, the Orc blend in each
+   region), then a test save: `player.getisrace xx00080F` and `showlooksmenu player 1`. Screenshots.
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:

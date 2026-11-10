@@ -244,6 +244,12 @@ SRAC (both HumanRace) where HumanRace's 400 entries began, and none of the entri
 string id in vanilla) is "Orc".
 Third build (owner, 2026-11-09, verified in game): both S2S_OrcRace NPCs stand in a normal idle, arms down: the race
 animates through SRAC. Player setrace / chargen still to check.
+The player (2026-11-09): setrace on the player left getisrace 0, and no Starfield race mod found uses it; the Exo
+Race mod (Nexus 7992) ships a player patch (ExoRacePlayer.esm edits the Player record) plus an item for existing
+saves that strips the old human head parts. Same route here: race_heads --player-race Orc writes S2SOrcPlayer.esm,
+the Player record (00000007) with RNAM = S2S_OrcRace and our head part, masters Starfield.esm + S2SRaceTest.esm.
+A face's recipe (blends, sliders) stays human after any race change, so the race now also lists its two Orc NPCs as
+chargen face presets (FDSI / FDSL after each sex's vanilla presets): one pick gives the whole Orc face.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /

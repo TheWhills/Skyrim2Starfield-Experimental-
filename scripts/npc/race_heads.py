@@ -326,6 +326,48 @@ def with_blends(subs, blends):
     return subs[:at] + add + subs[at:]
 
 
+def add_presets(subs, presets):
+    """RACE subrecords with chargen face presets added per sex (FDSI index + FDSL NPC FormID after the sex's last
+    FDSL; index = the sex's largest + 1). presets: {female: [NPC FormIDs]} (2026-11-09: so picking a preset in
+    showlooksmenu gives the whole Orc face at once; Starfield's presets are these lists of NPCs)."""
+    out, sex = [], None
+    last = {}
+    for i, (s, d) in enumerate(subs):
+        if s in (b"MNAM", b"FNAM") and len(d) == 0:
+            sex = (s == b"FNAM")
+        elif s == b"FDSL" and sex is not None:
+            last[sex] = i
+    top = {f: max([_u32(d) for k, (s, d) in enumerate(subs) if s == b"FDSI" and k <= last.get(f, -1)
+                   and _section_sex(subs, k) == f] or [-1]) for f in presets}
+    for i, sd in enumerate(subs):
+        out.append(sd)
+        for f, fids in presets.items():
+            if last.get(f) == i:
+                for n, fid in enumerate(fids):
+                    out += [(b"FDSI", struct.pack("<I", top[f] + 1 + n)), (b"FDSL", struct.pack("<I", fid))]
+    return out
+
+
+def _section_sex(subs, k):
+    sex = None
+    for s, d in subs[:k + 1]:
+        if s in (b"MNAM", b"FNAM") and len(d) == 0:
+            sex = (s == b"FNAM")
+    return sex
+
+
+def player_patch(player_subs, race_fid, heads, part_types):
+    """The vanilla Player record (NPC_ 00000007) with its race (RNAM) set to ours and its Face head part ours, as
+    the Exo Race mod's player patch does (Nexus 7992: ExoRacePlayer.esm edits the player record; 2026-11-09, owner's
+    setrace on the player left getisrace 0)."""
+    acbs = next((bytes(d) for s, d in player_subs if s == b"ACBS"), b"")
+    female = bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1)
+    subs = sfplugin.edit(list(player_subs), {b"RNAM": struct.pack("<I", race_fid)})
+    if female in heads:
+        subs = with_head_part(subs, heads[female], part_types)
+    return subs
+
+
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=()):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     Returns (records, info, report)."""
@@ -415,7 +457,9 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=()):
             rrep.update(form_id=f"{r_fid:08X}", setrace=f"player.setrace xx{r_fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s "
                                                         f"load order index; then showlooksmenu player 1)")
             rep["new_races"][race] = rrep
-        # an NPC of each new race and sex: the race test NPC with its race (RNAM) set to ours
+        # an NPC of each new race and sex: the race test NPC with its race (RNAM) set to ours (also its chargen
+        # face preset)
+        race_npcs = {}
         for n in list(rep["npcs"]):
             race = next((r for r in race_fids if NAMES[r] == n["edid"].split("_")[1]), None)
             if race is None or n["race"] == "control":
@@ -429,6 +473,14 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=()):
             rep["npcs"].append(dict(n, edid=edid, form_id=f"{fid:08X}", race_record=f"S2S_{NAMES[race]}Race",
                                     console=f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s load order "
                                             f"index)"))
+            race_npcs.setdefault(race, {}).setdefault(n["sex"] == "female", []).append(fid)
+        for race, per in race_npcs.items():
+            k = next(i for i, r in enumerate(recs) if r[0] == b"RACE" and r[3] == race_fids[race])
+            t_, h_, rsubs, rf = recs[k]
+            recs[k] = (t_, h_, add_presets(rsubs, per), rf)
+            rep["new_races"][race]["presets"] = {SEXES[f]: [f"{x:08X}" for x in v] for f, v in per.items()}
+        rep["_player_parts"] = (heads, part_types, next(((h_, s) for t, h_, s, fid in recs_all
+                                                         if t == b"NPC_" and fid == 0x7), None))
     if race_head and human is not None:
         _t, rh, rs = by_fid[human]
         rep["race_override"] = {"form_id": f"{human:08X}"}
@@ -477,6 +529,9 @@ def main(argv=None):
     ap.add_argument("--race-head", action="store_true",
                     help="also override HumanRace: our head part as its Face part, our keys in its morph groups")
     ap.add_argument("--force", action="store_true", help="write even if the frame check fails")
+    ap.add_argument("--player-race", default="",
+                    help="also write S2S<Name>Player.esm: the player record set to that new race (e.g. Orc), as the "
+                         "Exo Race mod's player patch")
     ap.add_argument("--new-races", default="",
                     help="Skyrim races to also make a RACE of their own, thin over HumanRace, e.g. Orc (comma list; "
                          "each must be in --races)")
@@ -571,6 +626,24 @@ def main(argv=None):
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
+    parts = report.pop("_player_parts", None)
+    if a.player_race:
+        race = a.player_race if a.player_race.endswith("Race") else a.player_race + "Race"
+        r = (report.get("new_races") or {}).get(race)
+        if r is None or "form_id" not in r or parts is None or parts[2] is None:
+            print(f"  player patch: {race} not built (needs --new-races {a.player_race}) or no Player record")
+        else:
+            heads_, part_types_, player = parts
+            # our plugin's own forms are 01xxxxxx (master 0 Starfield.esm); in the patch S2SRaceTest.esm is master 1
+            race_fid = (int(r["form_id"], 16) & 0xFFFFFF) | 0x01000000
+            pheads = {f: (h & 0xFFFFFF) | 0x01000000 for f, h in heads_.items()}
+            psubs = player_patch(player[1], race_fid, pheads, part_types_)
+            name = f"S2S{NAMES[race]}Player.esm"
+            with open(os.path.join(a.out, name), "wb") as fh:
+                fh.write(sfplugin.build([(b"NPC_", player[0], psubs, 0x7)], info,
+                                        author="Skyrim2Starfield races", masters=["Starfield.esm", PLUGIN]))
+            report["player_patch"] = {"plugin": name, "race": f"S2S_{NAMES[race]}Race"}
+            print(f"  player patch: {name} (load it after {PLUGIN}; the player starts as S2S_{NAMES[race]}Race)")
     with open(os.path.join(a.out, "race_heads.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)
     print("  hair on the test NPCs:", report.get("hair") or "none cropped found (the race's default; --keep-hair: "
