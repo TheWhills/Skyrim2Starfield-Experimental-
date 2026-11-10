@@ -81,6 +81,94 @@ def skyrim_head_matrix(data: bytes):
     return facefit.skyrim_model_matrix(n, s) if s is not None else np.eye(4)
 
 
+# ------------------------------------------------------------------------- NPCs on their converted race (2026-11-10)
+# Owner: Faendal (Bosmer) should show up with the Bosmer head. With --races-plugin (race_heads.py's S2SRaceTest.esm,
+# its race_heads.json next to it) an NPC whose Skyrim race was converted gets that race, its head and its face parts,
+# and the fit takes only what is the NPC's own: its FaceGen head minus Skyrim's base head WITH the race's morph
+# (Maleheadraces.tri / Femaleheadraces.tri), so the race shape (already in the race head) is not fitted twice.
+
+def race_delta(sky, female, race_edid, base_bytes, model_space, cache):
+    """Skyrim's race morph for race_edid on the base head's vertices (Skyrim units; model space when model_space, as
+    skyrim_head gives the base), or None if the races .tri has no such morph. The .tri's vertices are matched to the
+    NIF's by position (the same head)."""
+    key = (female, race_edid, model_space)
+    if key in cache:
+        return cache[key]
+    import race_probe
+    from fo4sf import skyrimtri
+    tri = cache.get(("tri", female))
+    if tri is None:
+        tri = cache[("tri", female)] = skyrimtri.parse(hkx_to_af.read_any(race_probe.SKY_RACE_TRI[female], sky),
+                                                       deltas=True)
+    m = next((x for x in tri["morphs"] if x["name"].lower() == race_edid.lower()), None)
+    if m is None:
+        cache[key] = None
+        return None
+    nif_skin = skyrim_head(base_bytes, model=False)
+    tri_base = np.asarray(tri["base"], float)
+    j, _d = facefit._nearest(tri_base, np.asarray(nif_skin, float), 1)
+    d = np.asarray(m["deltas"], float)[j[:, 0]]
+    if model_space:
+        d = d @ skyrim_head_matrix(base_bytes)[:3, :3].T
+    cache[key] = d
+    return d
+
+
+def converted_races(races_plugin):
+    """{Skyrim race EditorID: {"name", "form_id" (local), "parts": {female: {vanilla HDPT EditorID: local FormID}},
+    "head": {female: local FormID}, "mouth": {female: local FormID}}} from the race plugin and its race_heads.json."""
+    folder = os.path.dirname(os.path.abspath(races_plugin))
+    with open(os.path.join(folder, "race_heads.json"), encoding="utf-8") as fh:
+        rep = json.load(fh)
+    hd = {sfplugin.edid(sb): fid & 0xFFFFFF for _t, _h, sb, fid in sfplugin.records(races_plugin, [b"HDPT"])}
+    out = {}
+    for race, r in (rep.get("new_races") or {}).items():
+        if "form_id" not in r:
+            continue
+        if not r.get("edid"):
+            continue                                  # a race_heads.json from before 2026-11-10: rebuild the races
+        name = re.sub(r"^S2S_|Race$", "", r["edid"])
+        pre = f"S2S_{name}Race_"
+        parts = {False: {}, True: {}}
+        for e, fid in hd.items():
+            mm = re.match(re.escape(pre) + r"(.+)_([MF])$", e)
+            if mm and not mm.group(1).startswith("Mouth"):
+                parts[mm.group(2) == "F"][mm.group(1)] = fid
+        out[race] = {"name": name, "form_id": int(r["form_id"], 16) & 0xFFFFFF, "parts": parts,
+                     "head": {f: hd[f"{pre}{SEX}_Head"] for f, SEX in ((False, "male"), (True, "female"))
+                              if f"{pre}{SEX}_Head" in hd},
+                     "mouth": {f: hd[f"{pre}Mouth_{c}"] for f, c in ((False, "M"), (True, "F"))
+                               if f"{pre}Mouth_{c}" in hd}}
+    return out
+
+
+def on_race(subs, conv, female, index, sf_hdpt, part_type):
+    """NPC subrecords on its converted race: RNAM the race, each head part (PNAM) swapped for the race's copy (by the
+    vanilla part's EditorID), the Face part for the race head, the teeth for the race mouth. index: the race plugin's
+    master index. Returns (subs, swapped count)."""
+    full = lambda fid: (index << 24) | fid                                        # noqa: E731
+    out, n = [], 0
+    for sg, d in subs:
+        if sg == b"RNAM" and len(d) == 4:
+            d = struct.pack("<I", full(conv["form_id"]))
+        elif sg == b"PNAM" and len(d) == 4:
+            v = struct.unpack("<I", bytes(d))[0]
+            rec = sf_hdpt.get(v)
+            typ = part_type(rec) if rec is not None else None
+            new = None
+            if typ == 1 and female in conv["head"]:
+                new = conv["head"][female]
+            elif typ == 9 and female in conv["mouth"]:
+                new = conv["mouth"][female]
+            elif rec is not None:
+                new = conv["parts"][female].get(sfplugin.edid(rec[2]))
+            if new is not None:
+                d = struct.pack("<I", full(new))
+                n += 1
+        out.append((sg, d))
+    return out, n
+
+
 def starfield_head_node(nif_bytes):
     """4x4 (local -> model) of the head NIF's first BSGeometry: its .mesh vertices are in that shape's frame."""
     from fo4sf import sfweaponleft, skyrimhair
@@ -609,6 +697,9 @@ def main(argv=None):
     ap.add_argument("--preview", action="store_true",
                     help="faces_preview\\<NPC>.png per NPC: Starfield's base head, the Skyrim face on it (the fit's "
                          "target), our fitted face; front, side, and a heat map of each one's change from the base")
+    ap.add_argument("--races-plugin", help="race_heads.py's S2SRaceTest.esm (race_heads.json beside it): NPCs of a "
+                                           "converted Skyrim race go on that race, with its head and face parts, and "
+                                           "only their own features are fitted (2026-11-10)")
     ap.add_argument("--hairs-plugin",
                     help="S2SSkyrimHairs.esm (scripts/npc/skyrim_hairs.py): the NPCs wear its converted looks-menu "
                          "hair / beard of their Skyrim head parts (it becomes a master), get their Skyrim names and the "
@@ -652,6 +743,9 @@ def main(argv=None):
     faces = skyrimnpc.faces_by_template(npcs)
     by_edid = {n["edid"].lower(): n for n in npcs.values()}
     chosen = [by_edid[e.lower()] for e in (a.npc or SAMPLE) if e.lower() in by_edid]
+    missing = [e for e in (a.npc or []) if e.lower() not in by_edid]
+    if missing:
+        print(f"not in Skyrim.esm (EditorIDs, check the spelling): {', '.join(missing)}")
     if not a.npc:
         for n in sorted(npcs.values(), key=lambda n: n["edid"]):
             if len(chosen) >= a.count:
@@ -667,6 +761,11 @@ def main(argv=None):
               "npcs": []}
     setup = {}
     recipe = None
+    base_bytes_of, race_cache = {}, {}
+    conv_races = converted_races(a.races_plugin) if a.races_plugin else {}
+    if conv_races:
+        report["races_plugin"] = {"plugin": os.path.basename(a.races_plugin),
+                                  "races": {k: f"S2S_{v['name']}Race" for k, v in conv_races.items()}}
     if a.facebones_recipe:
         with open(a.facebones_recipe, encoding="utf-8", errors="replace") as fh:
             recipe = facefit.load_recipe(fh.read())
@@ -683,6 +782,7 @@ def main(argv=None):
         head, hrep = starfield_head(sf_data, female, a.head_nif[int(female)] if len(a.head_nif) > int(female) else None,
                                     recipe)
         base_bytes = hkx_to_af.read_any(SKY_HEADS[female], sky)
+        base_bytes_of[female] = base_bytes
         base, al, model_space = head_alignment(head, base_bytes, legacy=a.legacy_alignment)
         corr = None
         if a.transfer == "surface" and getattr(head, "triangles", None) is not None and len(head.triangles):
@@ -713,10 +813,18 @@ def main(argv=None):
                              model=model_space)
             if fg is None or len(fg) != len(base):
                 raise ValueError(f"FaceGen head has {0 if fg is None else len(fg)} vertices, base head {len(base)}")
+            ref = base
+            sky_race = races.get(n["race"], "")
+            if conv_races and sky_race in conv_races:
+                rd = race_delta(sky, n["female"], sky_race, base_bytes_of[n["female"]], model_space, race_cache)
+                if rd is not None and len(rd) == len(base):
+                    ref = base + rd                       # only the NPC's own features are fitted
+                    row["race"] = {"skyrim": sky_race, "converted": f"S2S_{conv_races[sky_race]['name']}Race",
+                                   "fitted_against": "Skyrim base head + race morph"}
             if corr is not None:
-                disp = corr.transfer((fg - base) @ al[1].T * al[0], a.smooth)
+                disp = corr.transfer((fg - ref) @ al[1].T * al[0], a.smooth)
             else:
-                disp = facefit.transfer(base, fg, al, head.vertices)
+                disp = facefit.transfer(ref, fg, al, head.vertices)
                 if a.smooth and getattr(head, "triangles", None) is not None and len(head.triangles):
                     disp = facefit.smooth_field(disp, head.triangles, a.smooth)
             if not a.no_symmetry:
@@ -768,6 +876,11 @@ def main(argv=None):
             masters = list(masters) + [os.path.basename(a.items_plugin)]
             items = item_outfits(a.items_plugin, len(masters) - 1)
             sky_otft = {fid: sfplugin.edid(s_) for _t, _h, s_, fid in sfplugin.records(esm, [b"OTFT"])}
+        race_index = None
+        if conv_races:
+            masters = list(masters) + [os.path.basename(a.races_plugin)]
+            race_index = len(masters) - 1
+            sf_hdpt_all = {r[3]: r for r in sfplugin.records(sf_esm, [b"HDPT"])}
         if a.outfits_plugin:
             masters = list(masters) + [os.path.basename(a.outfits_plugin)]
             worn = outfits_by_npc(a.outfits_plugin, len(masters) - 1)
@@ -815,6 +928,13 @@ def main(argv=None):
                 row["name"] = full
                 vt = next((struct.unpack_from("<I", bytes(d), 0)[0] for sg, d in subs if sg == b"VTCK"), None)
                 row["voice_type"] = real["voices"].get(vt, f"{vt:08X}" if vt else None)
+            sky_race = races.get(by_edid[row["edid"].lower()]["race"], "")
+            if race_index is not None and sky_race in conv_races:
+                subs, swapped = on_race(subs, conv_races[sky_race], row["female"], race_index, sf_hdpt_all,
+                                        lambda rec: struct.unpack("<I", bytes(dict(rec[2]).get(b"PNAM", bytes(4)))[0])
+                                        if rec is not None else None)
+                row.setdefault("race", {}).update(npc_race=f"S2S_{conv_races[sky_race]['name']}Race",
+                                                  parts_swapped=swapped)
             body_names = (list(a.body_npc) + list(BODY_NPC)[len(a.body_npc):])[:2]
             body_name = body_names[int(row["female"])]
             body_note = "template's own"

@@ -420,3 +420,11 @@ why the mod needs no clothes of its own.
   the first ledger run allocates in the same order as before). Every FLST holding HumanRace gets our races (was:
   only the head parts' valid-race lists). GetIsRace(69) HumanRace conditions in CNDF / IDLE / CPTH overridden to take
   our races (race_condition_patches; race_heads.json: race_condition_patches). The 14 INFO conditions remain.
+
+- 2026-11-10 NPCs on their converted race (races roadmap I; owner: Faendal with the Bosmer head). face_fit
+  `--races-plugin "$mods\S2S Race Test\S2SRaceTest.esm"` (race_heads.json beside it; race_heads now writes each new
+  race's EditorID there): an NPC whose Skyrim race was converted is fitted against Skyrim's base head WITH its race
+  morph (Maleheadraces.tri / Femaleheadraces.tri, .tri vertices matched to the NIF's by position), so only its own
+  features go into the dials; in S2SFaceTest.esm it gets RNAM = S2S_<Race>Race and its head parts swapped for the
+  race's (head, baked face parts by vanilla EditorID, the race mouth for teeth); S2SRaceTest.esm becomes a master.
+  faces.json: per NPC `race`. Unverified: the Riverwood build (PluginSpike) with NPCs whose race is in another plugin.

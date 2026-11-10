@@ -87,7 +87,7 @@ facial bone regions file), makeup layers, skin tones.
 4. **open:** war paint / dirt as Starfield face makeup layers (textures remapped from Skyrim's head UVs).
 
 ### I. NPCs on their races
-- **open:** face_fit puts each NPC on its converted race (RNAM, the race's head and face parts, its skin tone and eye
+- **built (2026-11-10):** face_fit --races-plugin (races.md log). Earlier wording: face_fit puts each NPC on its converted race (RNAM, the race's head and face parts, its skin tone and eye
   colour) and fits only the NPC's own features: its FaceGen head minus Skyrim's base head WITH the race morph, so
   the race shape is not applied twice (owner, 2026-11-10: Faendal with the Bosmer head).
 

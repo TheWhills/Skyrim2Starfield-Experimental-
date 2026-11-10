@@ -236,3 +236,58 @@ class BeardMatchTests(unittest.TestCase):
         self.assertLess(r[0][1], 0.005)
         self.assertEqual(B.chamfer(chin, np.zeros((0, 3))), float("inf"))
         self.assertEqual(len(B.sample(full, 50)), 50)
+
+
+class RaceNpcTests(unittest.TestCase):
+    """2026-11-10 (owner: Faendal with the Bosmer head): NPCs of a converted race go on it, and only their own
+    features are fitted."""
+
+    def test_race_delta_matches_by_position(self):
+        import types
+        base_skin = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float)
+        tri = {"base": base_skin[[2, 0, 1]], "morphs": [{"name": "WoodElfRace",
+                                                          "deltas": np.array([[0, 0, 3], [0, 0, 1], [0, 0, 2]], float)}]}
+        saved = (S.skyrim_head, S.skyrim_head_matrix)
+        S.skyrim_head = lambda data, model=False: base_skin
+        S.skyrim_head_matrix = lambda data: np.diag([1.0, 1.0, -1.0, 1.0])
+        try:
+            cache = {("tri", False): tri}
+            d = S.race_delta(None, False, "WoodElfRace", b"", False, cache)
+            self.assertEqual(d[:, 2].tolist(), [1, 2, 3])                 # NIF order, not the .tri's
+            dm = S.race_delta(None, False, "WoodElfRace", b"", True, cache)
+            self.assertEqual(dm[:, 2].tolist(), [-1, -2, -3])             # into model space
+            self.assertIsNone(S.race_delta(None, False, "NordRace", b"", False, cache))
+        finally:
+            S.skyrim_head, S.skyrim_head_matrix = saved
+
+    def test_converted_races_and_on_race(self):
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        I = lambda v: struct.pack("<I", v)                                              # noqa: E731
+        h = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)   # noqa: E731
+        with tempfile.TemporaryDirectory() as d:
+            plug = os.path.join(d, "S2SRaceTest.esm")
+            recs = [(b"HDPT", h(b"HDPT"), [(b"EDID", Z(e))], f) for e, f in (
+                ("S2S_BosmerRace_male_Head", 0x01000810), ("S2S_BosmerRace_Human_Male_Eyes_M", 0x01000811),
+                ("S2S_BosmerRace_Human_Male_Eyes_F", 0x01000812), ("S2S_BosmerRace_Mouth_M", 0x01000813))]
+            with open(plug, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            with open(os.path.join(d, "race_heads.json"), "w") as fh:
+                json.dump({"new_races": {"WoodElfRace": {"form_id": "0100080F", "edid": "S2S_BosmerRace"},
+                                         "OldRace": {"form_id": "01000900"}}}, fh)
+            conv = S.converted_races(plug)
+        self.assertEqual(list(conv), ["WoodElfRace"])
+        c = conv["WoodElfRace"]
+        self.assertEqual((c["name"], c["form_id"], c["head"], c["mouth"]),
+                         ("Bosmer", 0x80F, {False: 0x810}, {False: 0x813}))
+        self.assertEqual(c["parts"], {False: {"Human_Male_Eyes": 0x811}, True: {"Human_Male_Eyes": 0x812}})
+        sf_hdpt = {0x510: (b"HDPT", b"", [(b"EDID", Z("Human_Male_Head")), (b"PNAM", I(1))], 0x510),
+                   0x520: (b"HDPT", b"", [(b"EDID", Z("Human_Male_Eyes")), (b"PNAM", I(2))], 0x520),
+                   0x530: (b"HDPT", b"", [(b"EDID", Z("Human_Male_Teeth")), (b"PNAM", I(9))], 0x530),
+                   0x540: (b"HDPT", b"", [(b"EDID", Z("Hair_X")), (b"PNAM", I(3))], 0x540)}
+        ptype = lambda rec: struct.unpack("<I", dict(rec[2])[b"PNAM"])[0]               # noqa: E731
+        subs = [(b"RNAM", I(0x347D)), (b"PNAM", I(0x510)), (b"PNAM", I(0x520)), (b"PNAM", I(0x530)),
+                (b"PNAM", I(0x540))]
+        out, n = S.on_race(subs, c, False, 3, sf_hdpt, ptype)
+        self.assertEqual([struct.unpack("<I", d_)[0] for _s, d_ in out],
+                         [0x0300080F, 0x03000810, 0x03000811, 0x03000813, 0x540])
+        self.assertEqual(n, 3)

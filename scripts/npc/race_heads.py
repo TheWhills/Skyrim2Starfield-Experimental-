@@ -1081,7 +1081,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                 rrep["face_parts"] = {SEXES[f]: len(set(c.values())) for f, c in copies.items()}
             recs.append((b"RACE", by_fid[human][1], rsubs, r_fid))
             race_fids[race] = r_fid
-            rrep.update(form_id=f"{r_fid:08X}", setrace=f"player.setrace xx{r_fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s "
+            rrep.update(form_id=f"{r_fid:08X}", edid=f"S2S_{NAMES[race]}Race", setrace=f"player.setrace xx{r_fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s "
                                                         f"load order index; then showlooksmenu player 1)")
             rep["new_races"][race] = rrep
         # an NPC of each new race and sex: the race test NPC with its race (RNAM) set to ours (also its chargen

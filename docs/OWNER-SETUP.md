@@ -131,6 +131,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\npc\look_probe.py --starfield $sf --out C:\Modding\work\races --plugin "<aliens mod>.esm"
    ```
 
+7d. B + C: Riverwood's NPCs on their own races (Faendal a Bosmer, the rest Nords, the Valerius siblings
+   Imperials). After the race build with all races (step 7b's command with `--new-races all`), face_fit with
+   `--races-plugin` (EditorIDs it cannot find are printed: tell me and I fix the list), then the Riverwood build:
+   ```powershell
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Dorthe --npc Hod --npc Gerdur --npc Frodnar --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm"
+   ```
+   In game: placeatme Faendal's test NPC (faces.json): Bosmer head and ears, his own face on top; a Nord looks like
+   before. S2SRaceTest.esm must load before S2SFaceTest.esm.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
