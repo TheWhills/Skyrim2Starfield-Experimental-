@@ -11,7 +11,7 @@ only"): the model with a fixed box collision, no item record. Status words as in
 | Base record | MISC (clutter, gems, ingots), ALCH (food, drink: the inn's wine and mead), INGR (ingredients), BOOK, WEAP, AMMO, ARMO, KEYM, SLGM | MISC, ALCH (food / drink / aid), BOOK (notes, slates), WEAP, AMMO, ARMO, KEYM; INGR and soul gems have no direct twin (MISC or ALCH with keywords) |
 | World model | its NIF with a dynamic rigid body (bhkRigidBody: mass, motion system, convex / box shape) | NIF + bhkNPCollisionObject whose body is DYNAMIC (motion type, mass properties) |
 | Inventory data | name, value, weight, keywords, pickup / drop sounds | the same fields (FULL, DATA value / weight, KWDA, pickup / putdown sounds) |
-| Effects | ALCH / INGR magic effects (restore health, fortify ...) | ALCH effects mapped to Starfield's (or none at first) |
+| Effects | ALCH / INGR magic effects (restore health, fortify ...) | those of the matching vanilla Starfield food / drink / aid item |
 | Placement | REFR of the item, often owned (XOWN: the innkeeper's wine) | REFR of the item, ownership kept so taking it is stealing |
 
 ## Steps
@@ -30,8 +30,12 @@ only"): the model with a fixed box collision, no item record. Status words as in
    tables), value, weight, keywords, the converted world model. Gold -> credits (a rate to choose).
 4. **Placement:** the interior / exterior builders place a REFR of the item base instead of a static (ownership
    carried over, "don't havok settle" flags kept so items do not jump at load).
-5. **Effects (later):** ALCH / INGR effects onto Starfield's (restore health -> its heal effect ...); until then food and
-   drink have none.
+5. **Effects: Starfield's own.** Owner 2026-11-10: food and drink work like any Starfield aid / food item. So each
+   Skyrim ALCH / INGR is matched to a vanilla Starfield item of the same kind (wine -> a vanilla wine / alcohol,
+   mead / ale -> a vanilla beer, bread / cheese / meat / vegetables -> vanilla foods of that kind, healing / stamina /
+   magicka potions -> Starfield aid items by strength) and copied from it WITH its effects (heal over time, buffs,
+   alcohol), keeping only the Skyrim name, model, value and weight. A table Skyrim item -> vanilla template, built
+   from keywords and names, editable by hand; unmatched items get the plainest vanilla food / drink of their kind.
 6. **Containers (later):** barrels, chests, sacks as CONT with their Skyrim inventory lists (LVLI -> leveled lists).
 7. **In game:** the Sleeping Giant Inn: knock the wine bottles over, pick one up (the steal warning), drop it, drink it.
 
