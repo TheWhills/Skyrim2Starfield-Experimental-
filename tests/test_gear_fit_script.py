@@ -149,6 +149,15 @@ class ScriptTests(unittest.TestCase):
                                           depth=gear_fit.SKIN_UNDER_DEPTH)
         self.assertEqual(len(used3), len(body))
 
+    def test_armpit_skin_only_for_body_gear(self):
+        """2026-11-09 (Orgnar's shoes): boots / gloves bring no armpit skin; body gear (or unknown) does."""
+        import numpy as np
+        pts = np.array([[0.18, 0, 1.30], [0.0, 0, 1.0]])
+        w = [[("C_Chest", 0.5), ("L_Biceps", 0.5)], [("C_Chest", 1.0)]]
+        self.assertIsNone(gear_fit.armpit_skin(pts, w, []))
+        self.assertEqual(gear_fit.armpit_skin(pts, w, ["Shirt"]).tolist(), [True, False])
+        self.assertEqual(gear_fit.armpit_skin(pts, w, None).tolist(), [True, False])
+
     def test_armpit_skin_under_a_tight_sleeve_left_out(self):
         """2026-11-09 (Delphine's upper arm): armpit skin kept only where the gear over it is not a tight fit on the
         arm; torso-side armpit skin stays even under tight gear (a cuirass's armhole opens when the arm rises)."""

@@ -182,6 +182,15 @@ def armpits(body_skel: np.ndarray, body_w, reach: float = ARMPIT_REACH) -> np.nd
     return out
 
 
+def armpit_skin(body_skel, body_w, body_piece_names):
+    """armpits() for gear that covers the body (body_piece_names: its shapes on slot 3; None = unknown, taken as body
+    gear); None for boots, gloves and the like (2026-11-09, owner: Orgnar's barkeeper shoes, whose Skyrim mesh has a
+    bit of skin, brought the armpit band along, and it showed through his shirt)."""
+    if body_piece_names is not None and not list(body_piece_names):
+        return None
+    return armpits(body_skel, body_w)
+
+
 def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH,
                gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH, extra=None,
                always=None):
@@ -717,7 +726,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                                     in set(body_piece_names))]
             skin, used = skin_piece(skel_body, tris, uvs, body_w, np.concatenate(src), gear=gear_fit_shapes,
                                     whole=whole_skin, depth=SKIN_UNDER_DEPTH, extra=feet,
-                                    always=armpits(skel_body, body_w))
+                                    always=armpit_skin(skel_body, body_w, body_piece_names))
             if skin is not None:
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used

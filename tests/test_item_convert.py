@@ -139,6 +139,26 @@ class RecordTests(unittest.TestCase):
         part = next(p for p in rep["items"][0]["parts"] if p["key"] == "Belt_F")
         self.assertEqual(part["one_sex"], "female")
 
+    def test_skin_piece_of_shoes_keeps_their_slot(self):
+        """2026-11-09 (Orgnar): a skin piece on an item that does not cover the body takes the item's slots, not the
+        vanilla skin addon's 13, which the shirt's skin piece holds."""
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            sf_esm(p)
+            ids = IC.IdMap(os.path.join(d, IC.IDS))
+            shoes = IC.pair_parts([row("Shoes", "male", (7,), item="Shoes"),
+                                   row("S2S_Skin", "male", skin=True, item="Shoes")], [])[0]
+            shirt = IC.pair_parts([row("Shirt", "male", (3, 5), item="Shirt"),
+                                   row("S2S_Skin", "male", skin=True, item="Shirt")], [])[0]
+            recs, rep = E.item_records(p, [{"edid": "Shoes", "pairs": shoes}, {"edid": "Shirt", "pairs": shirt}],
+                                       [], ids, template_vertices=2792)
+        by = {i["edid"]: i for i in rep["items"]}
+        self.assertEqual(by["Shoes"]["slots"], [7])
+        self.assertEqual(next(p_ for p_ in by["Shoes"]["parts"] if p_["key"] == "S2S_Skin")["slots"], [7])
+        skin = next(p_ for p_ in by["Shirt"]["parts"] if p_["key"] == "S2S_Skin")
+        self.assertNotEqual(skin["slots"], [3, 5])                    # the body item's skin keeps the skin addon's
+        self.assertFalse(set(by["Shoes"]["slots"]) & set(by["Shirt"]["slots"]))
+
     def test_ids_stable_across_runs(self):
         with tempfile.TemporaryDirectory() as d:
             (recs, _r), ids = self.records(d)

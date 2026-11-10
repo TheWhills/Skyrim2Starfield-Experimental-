@@ -84,3 +84,11 @@ own sex's version; the player's dress in character creation follows the weight s
 lighter band at the female test NPC's upper chest (skin piece against the neck; open), the dress's side slits as in
 Skyrim's mesh. Next: face_fit --items-plugin so every NPC with this Skyrim outfit (Ysolda, Delphine) shares it.
 
+### Skin pieces on boots and gloves (2026-11-09; in game unverified)
+Owner: Orgnar in the converted barkeeper clothes showed skin through his shirt with the barkeeper shoes on, not
+without them. Two causes in the code (verified by reading it; the owner's item_convert.json not seen): every skin
+piece used the vanilla skin addon's slot 13, so the shoes' skin piece (Skyrim's shoe mesh has a bit of skin) claimed
+the shirt's skin slot; and the armpit band (gear_fit.armpits) was added to every skin piece, shoes included, and
+showed through the shirt. Now a skin piece on an item that does not cover the body (slot 3) takes the item's own
+slots (os_export.item_records), and only body gear gets the armpit band (gear_fit.armpit_skin).
+

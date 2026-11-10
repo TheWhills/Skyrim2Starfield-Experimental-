@@ -101,15 +101,20 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    versions; both test NPCs wear it, and the player's dress follows the body sliders in character creation.
 9b. Done 2026-11-09: Delphine (and Ysolda) wear the shared S2S_FarmClothesOutfit04 in the Riverwood build (in game:
    showinventory lists S2S_ClothesFarmClothes04 / S2S_ClothesFarmBoots04 worn from that outfit; shoulders clean).
-9c. B + C: the other test NPCs' outfits as items (Orgnar and Saadia share BarkeepClothes01). Starfield closed:
+9c. Done 2026-11-09: the other test NPCs' outfits as items (Ralof, Nazeem, Saadia + Orgnar, Embry), Riverwood rebuilt.
+   Orgnar: skin through his shirt while wearing the barkeeper shoes, fine without them (owner).
+9d. B + C: rebuild only the items whose skin piece took the shirt's slot (fixed 2026-11-09). List them (items with an
+   S2S_Skin part that do not cover the body, slot 3):
    ```powershell
-   cd C:\Users\elija\Skyrim2Starfield-Experimental-
-   git pull origin skyrim/armor
-   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ralof --npc Nazeem --npc Saadia --npc Orgnar --npc Embry --out "$mods\S2S Clothes" --dry-run
-   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --npc Ralof --npc Nazeem --npc Saadia --npc Orgnar --npc Embry --out "$mods\S2S Clothes"
+   (Get-Content "$mods\S2S Clothes\item_convert.json" -Raw | ConvertFrom-Json).records.items | ? { $_.parts.key -contains 'S2S_Skin' -and $_.slots -notcontains 3 } | % { $_.edid }
    ```
-   then 9b's face_fit command and the Riverwood build. Send item_convert.json, faces.json and screenshots (Orgnar,
-   Embry in the inn; the others via their face-test NPCs).
+   then, Starfield closed, one --armor per name it prints (the rest of the plugin and the outfits stay; no face_fit
+   or Riverwood rebuild needed, the FormIDs do not change):
+   ```powershell
+   git pull origin skyrim/armor
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --armor ClothesBarKeeperShoes --out "$mods\S2S Clothes"
+   ```
+   In game: Orgnar with shoes on, Saadia; Ralof if his cuffs were listed.
 
 10. B + C: weapon types with their own movesets (docs/armor/animation-port.md, "weapon types"). Install the two
    zips I sent (SkyrimMelee_LoreRim_greatsword_type.zip, SkyrimMelee_LoreRim_waraxe_type.zip) as MO2 mods, keep the

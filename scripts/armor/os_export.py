@@ -258,6 +258,7 @@ def vertex_counts(s) -> Dict[str, int]:
 
 # ------------------------------------------------------------------------------------------------ plugin
 SKIN_TEMPLATE_ADDON = "AA_Clothes_Nightwear_01_Skin"   # vanilla outfit skin addon (slot 13, body material)
+BODY_SLOT = 3                                          # the Starfield slot that hides the naked body
 
 
 def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=(), slots=None,
@@ -562,8 +563,15 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
     for it in items:
         base = f"S2S_{it['edid']}"
         addons, rows = [], []
+        gear_slots = sorted({b for pr in it["pairs"] if not pr.get("skin") for b in (pr.get("slots") or [])})
         for pr in it["pairs"]:
             tpl = t["skin"] if pr.get("skin") else t["gear"]
+            if pr.get("skin") and pr.get("slots") is None and gear_slots and BODY_SLOT not in gear_slots:
+                # 2026-11-09 (owner: Orgnar in the barkeeper clothes and shoes showed skin through the shirt; without
+                # the shoes it was right): every skin piece took the vanilla skin addon's slot 13, so a pair of shoes
+                # with a bit of skin claimed the shirt's skin slot. An item that does not cover the body keeps its
+                # skin piece in its own slots.
+                pr = dict(pr, slots=gear_slots)
             if tpl is None:
                 raise SystemExit(f"no ARMA {SKIN_TEMPLATE_ADDON} in {sf_esm}")
             _t, ah, asubs = recs[tpl]
