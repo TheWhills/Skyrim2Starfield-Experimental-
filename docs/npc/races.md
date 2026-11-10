@@ -212,6 +212,10 @@ The ears differ left / right: on the females the viewer's-left ear looks better,
 race heads are symmetric, so this is the transfer's left / right noise; race_heads now averages each race shape with
 its mirror image across the head mesh's own lateral axis (facefit.lateral_axis: the .mesh is in C_Head's frame, so
 X is not always across; --no-symmetry keeps the raw transfer).
+Fifth run (owner): with the mean the females' good, pointed ear came out rounded: the transfer had the point on one
+side and had lost it on the other, and the mean halved it. Now per vertex pair the side that moved more is kept and
+mirrored (--symmetry stronger, the default; mean / none). The lost side points at the correspondence (headcorr)
+around one ear: to look at if other parts show one-sided losses.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /

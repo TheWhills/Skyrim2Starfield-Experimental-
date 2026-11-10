@@ -231,14 +231,20 @@ def lateral_axis(vertices: np.ndarray) -> int:
     return best[1]
 
 
-def symmetrize(field: np.ndarray, vertices: np.ndarray, axis: int = 0) -> np.ndarray:
-    """The mean of a displacement field and its mirror image (2026-11-05: with More Sliders' left / right sliders the
-    fit chased the transfer's left-right noise: Ralof came out deformed)."""
+def symmetrize(field: np.ndarray, vertices: np.ndarray, axis: int = 0, mode: str = "mean") -> np.ndarray:
+    """A displacement field made mirror-symmetric (2026-11-05: with More Sliders' left / right sliders the fit chased
+    the transfer's left-right noise: Ralof came out deformed). mode "mean": the mean of the field and its mirror
+    image; "stronger": per vertex the larger of the two (2026-11-09, owner: with the mean the race heads' ears came out
+    half-pointed: one side of the transfer had the point, the other had lost it)."""
     m = mirror_index(vertices, axis)
     flip = np.ones(3)
     flip[axis] = -1.0
-    flipped = np.asarray(field)[m] * flip
-    return 0.5 * (np.asarray(field) + flipped)
+    f = np.asarray(field, float)
+    flipped = f[m] * flip
+    if mode == "stronger":
+        own = np.linalg.norm(f, axis=1) >= np.linalg.norm(flipped, axis=1)
+        return np.where(own[:, None], f, flipped)
+    return 0.5 * (f + flipped)
 
 
 # ------------------------------------------------------------------------------------------------ Skyrim -> Starfield

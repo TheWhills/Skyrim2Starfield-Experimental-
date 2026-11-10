@@ -244,6 +244,9 @@ class PluginTests(unittest.TestCase):
         sym = facefit.symmetrize(field, both, 2)
         self.assertTrue(np.allclose(sym[:200, 2], 0.005))
         self.assertTrue(np.allclose(sym[200:, 2], -0.005))                     # mirrored: outward on the other side
+        strong = facefit.symmetrize(field, both, 2, "stronger")              # the side with the point, both sides
+        self.assertTrue(np.allclose(strong[:200, 2], 0.01))
+        self.assertTrue(np.allclose(strong[200:, 2], -0.01))
 
     def test_short_hair(self):
         """2026-11-09 (owner: the race-default hair came back and hid the ears): the closest-cropped vanilla hair."""
