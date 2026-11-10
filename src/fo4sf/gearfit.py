@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from . import skeletonmap
+from . import sfmorph, skeletonmap
 from .skyrimhair import MAX_WEIGHTS, UNIT, HairShape, nearest_surface, _vertex_face_normals
 
 STRETCH = (0.75, 1.33)          # bone length ratio clamp
@@ -2697,5 +2697,5 @@ def morph_deltas(points: np.ndarray, body_pts: np.ndarray, body_morph, k: int = 
             for j in range(len(q)):
                 if np.abs(blend[j]).max() > 1e-5:
                     out[key][c + j] = tuple(float(x) for x in blend[j])
-                    extra[key][c + j] = body_morph.extra[key].get(int(near[j]), (0, 0, 0))
+                    extra[key][c + j] = body_morph.extra[key].get(int(near[j]), sfmorph.NEUTRAL_EXTRA)
     return out, extra

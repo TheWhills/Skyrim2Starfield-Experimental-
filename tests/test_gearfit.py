@@ -617,7 +617,7 @@ class MorphTests(unittest.TestCase):
         self.assertAlmostEqual(d["Overweight"][0][0], 0.05, places=3)
         self.assertNotIn(0, d["Thin"])
         self.assertAlmostEqual(d["Thin"][1][1], 0.02, places=3)
-        self.assertEqual(extra["Thin"][1], (0, 0, 0))
+        self.assertEqual(extra["Thin"][1], sfmorph.NEUTRAL_EXTRA)        # the body's words (no change)
 
 
 class EnvelopeTests(unittest.TestCase):

@@ -50,3 +50,15 @@ class ProbeTests(unittest.TestCase):
         files = E.body_nif_files([shape("A", [[0, 0, 0], [0.1, 0, 0], [0, 0.1, 0]], [[("A", 1.0)]] * 3)], ["m.mat"],
                                  binds, "S2S/T")
         self.assertEqual(morph_probe.mesh_vertices(files["meshes/S2S/T.nif"]), [("A", 3)])
+
+
+class NeutralWordsTests(unittest.TestCase):
+    def test_new_records_change_nothing_but_position(self):
+        """2026-11-09 (owner: race faces dark red): records without given words carry the no-change words, not zeros
+        (zero normal words decode to -511 on every axis)."""
+        m = sfmorph.parse(sfmorph.build(2, ["A"], {"A": {0: (0.01, 0, 0)}}))
+        self.assertEqual(m.extra["A"][0], sfmorph.NEUTRAL_EXTRA)
+        self.assertEqual(sfmorph.pack_normal_delta((0, 0, 0)), sfmorph.NEUTRAL_EXTRA[1])
+        w = sfmorph.pack_normal_delta((1, -1, 0))
+        self.assertEqual((w & 0x3FF, w >> 10 & 0x3FF, w >> 20 & 0x3FF), (1022, 0, 511))
+

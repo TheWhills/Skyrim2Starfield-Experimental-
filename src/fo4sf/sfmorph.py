@@ -19,6 +19,19 @@ class MorphError(ValueError):
     pass
 
 
+# The words of a record that changes nothing but the position (2026-11-09, verified on 238 keys of a modded outfit's
+# morph.dat files: colour 0xC618 on every record; normal / tangent 10:10:10:2 with 511 as zero, 0x5FF7FDFF the most
+# common word). Zeros there decode to normal deltas of -511 on every axis: our race head keys written with them came
+# out dark red in game (owner, 2026-11-09), the face lit through broken normals.
+NEUTRAL_EXTRA = (0xC618, 0x5FF7FDFF, 0x5FF7FDFF)
+
+
+def pack_normal_delta(d) -> int:
+    """A 10:10:10:2 normal / tangent delta word (511 = 0, 511 per unit), w bits 1 as in the game's files."""
+    x, y, z = (int(round(max(-1.0, min(1.0, float(c))) * 511)) + 511 for c in d)
+    return (1 << 30) | (min(z, 1023) << 20) | (min(y, 1023) << 10) | min(x, 1023)
+
+
 @dataclass
 class Morph:
     version: int
@@ -76,8 +89,10 @@ def parse(data: bytes) -> Morph:
 
 
 def build(num_vertices: int, keys: List[str], deltas: Dict[str, Dict[int, Tuple[float, float, float]]],
-          extra: Optional[Dict[str, Dict[int, Tuple[int, int, int]]]] = None, version: int = 3) -> bytes:
-    """A morph.dat: per vertex, a record for each key it moves under (normal / tangent words 0 unless given)."""
+          extra: Optional[Dict[str, Dict[int, Tuple[int, int, int]]]] = None, version: int = 3,
+          default_extra: Tuple[int, int, int] = NEUTRAL_EXTRA) -> bytes:
+    """A morph.dat: per vertex, a record for each key it moves under (colour / normal / tangent words default_extra,
+    no change, unless given)."""
     if len(keys) > 128:
         raise MorphError("at most 128 keys")
     head = b"MDAT" + struct.pack("<III", version, num_vertices, len(keys))
@@ -90,7 +105,7 @@ def build(num_vertices: int, keys: List[str], deltas: Dict[str, Dict[int, Tuple[
             if d is None:
                 continue
             mask |= 1 << k
-            col, nrm, tan = (extra or {}).get(key, {}).get(v, (0, 0, 0))
+            col, nrm, tan = (extra or {}).get(key, {}).get(v, default_extra)
             recs.append(np.asarray(d, "<f2").tobytes() + struct.pack("<HII", col, nrm, tan))
             n += 1
         # an entry without records still carries the running record index (2026-11-06: with 0 there, thin pillars

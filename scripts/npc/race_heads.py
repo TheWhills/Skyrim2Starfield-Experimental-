@@ -189,6 +189,16 @@ def vanilla_head_tcmp(sf_esm, female):
     return text_of(dict(m[2]).get(b"TCMP", b""))
 
 
+def neutral_extra(morph):
+    """(colour, normal, tangent) words for our new keys' records: the vanilla head's most common colour word (the
+    clothing files use 0xC618 throughout) and zero normal / tangent deltas (2026-11-09, owner: the race faces came out
+    dark red; our records carried zeros, which decode to normal deltas of -511)."""
+    from collections import Counter
+    cols = Counter(e[0] for k in morph.keys for e in morph.extra.get(k, {}).values())
+    col = cols.most_common(1)[0][0] if cols else sfmorph.NEUTRAL_EXTRA[0]
+    return (col, sfmorph.NEUTRAL_EXTRA[1], sfmorph.NEUTRAL_EXTRA[2])
+
+
 HAIR_TYPES = (3, 4)          # HDPT PNAM: hair, facial hair (npc_hair.HAIR, FACIAL_HAIR)
 
 
@@ -369,6 +379,8 @@ def main(argv=None):
         srep["regions"] = regions
         srep["weight_share"] = {r: round(float(W[:, i].sum() / nv), 3) for i, r in enumerate(regions)}
         keys, deltas, extra = list(morph.keys), dict(morph.deltas), dict(morph.extra)
+        neutral = neutral_extra(morph)
+        srep["new_key_words"] = [f"{w:08X}" for w in neutral]
         by_race, by_region = {}, {r: [] for r in regions}
         for race in races:
             if race not in disp:
@@ -397,7 +409,8 @@ def main(argv=None):
         path = os.path.join(a.out, *rel_out.split("/"))
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as fh:
-            fh.write(sfmorph.build(morph.num_vertices, keys, deltas, extra, version=morph.version))
+            fh.write(sfmorph.build(morph.num_vertices, keys, deltas, extra, version=morph.version,
+                                   default_extra=neutral))
         srep.update(keys=len(keys), morph_file=rel_out)
         print(f"  {len(keys)} keys -> {rel_out}")
         for race, x in srep.get("races", {}).items():

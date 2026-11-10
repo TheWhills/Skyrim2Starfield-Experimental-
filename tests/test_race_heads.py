@@ -218,6 +218,13 @@ class PluginTests(unittest.TestCase):
                 sys.modules["race_probe"] = saved[0]
             face_fit.hkx_to_af.vanilla_file, H.bsa_archives = saved[1], saved[2]
 
+    def test_new_keys_carry_no_change_words(self):
+        """2026-11-09: our race keys' records take the vanilla head's colour word and zero normal / tangent deltas."""
+        m = sfmorph.Morph(3, 2, ["V"], {"V": {0: (0, 0, 0), 1: (0, 0, 0)}},
+                          {"V": {0: (0x1234, 1, 2), 1: (0x1234, 3, 4)}})
+        self.assertEqual(H.neutral_extra(m), (0x1234, 0x5FF7FDFF, 0x5FF7FDFF))
+        self.assertEqual(H.neutral_extra(sfmorph.Morph(3, 1, [], {}, {})), sfmorph.NEUTRAL_EXTRA)
+
     def test_without_hair(self):
         """2026-11-09 (owner: the males' hair hid the ears): hair and facial hair parts dropped, the rest kept."""
         types_ = {1: 1, 2: 3, 3: 4, 4: 6}

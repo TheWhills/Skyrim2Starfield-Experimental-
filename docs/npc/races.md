@@ -196,6 +196,13 @@ race_heads now copies the template's pre-built face textures under each test NPC
 NPCs (bake_faces). Next look: the shape (side view: ears, brow, cheekbones), now that the colour is the template's.
 The males' long hair hid the ears and the sides of the face (owner): the test NPCs now have no hair or beard
 (--keep-hair keeps the template's).
+Rerun with baked textures and no hair (owner, same evening): still dark red with a light nose and lips, so the
+texture reading was wrong (the hair came off; a short race-default hair came back). New cause (verified in the
+format, in game unverified): each morph.dat record carries a colour word and packed normal / tangent deltas
+(10:10:10:2, 511 = zero; 0x5FF7FDFF = no change, colour 0xC618 on every record of a modded outfit's 238 keys). Our new
+race keys were written with zeros there, i.e. a normal delta of -511 on every axis wherever a race key moves the
+face, which lights it black-red (the nose and lips, mostly unmoved, stayed light). sfmorph.build now writes the
+no-change words by default; race_heads uses the vanilla head's own colour word for its new keys.
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /
