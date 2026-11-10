@@ -139,6 +139,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    In game: placeatme Faendal's test NPC (faces.json): Bosmer head and ears, his own face on top; a Nord looks like
    before. S2SRaceTest.esm must load before S2SFaceTest.esm.
+7e. A (read-only): children (docs/npc/races-roadmap.md "Children"): Starfield's child race and child heads.
+   ```powershell
+   python -I scripts\npc\npc_record_diff.py --type RACE --a "$sf\Data\Starfield.esm" --b "$sf\Data\Starfield.esm" --find child --show ChildRace > child_race.txt
+   python -I scripts\npc\npc_record_diff.py --type HDPT --a "$sf\Data\Starfield.esm" --b "$sf\Data\Starfield.esm" --find child --show child_head > child_parts.txt
+   python -I scripts\npc\npc_record_diff.py --type RACE --a "$sky\Skyrim.esm" --b "$sky\Skyrim.esm" --find child --show ChildRace > sky_child_race.txt
+   ```
+   Send the three .txt files.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

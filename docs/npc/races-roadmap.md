@@ -92,14 +92,41 @@ facial bone regions file), makeup layers, skin tones.
   the race shape is not applied twice (owner, 2026-11-10: Faendal with the Bosmer head).
 
 ### I2. Children
-Skyrim's children are one race, ChildRace, whatever their family's race, with their own head, body and smaller
-skeleton (Riverwood: Dorthe, Frodnar). Starfield has its own child race (Starfield.esm holds a HeadPartsChildRace
-list, 0001550F; the race record itself not yet read). **built (2026-11-10):** face_fit skips ChildRace NPCs with a
-note (they would come out adult-sized on an adult template). **open:** read Starfield's child race (head, body,
-skeleton, chargen, its vanilla child NPCs: race_survey / look_probe), fit Skyrim child faces onto Starfield's child
-head (a child-to-child alignment), a vanilla child NPC as template, children's clothes fitted to Starfield's child
-body (gear_fit targets the adult body today), child voices. Whether a child keeps a hint of its family's race (an
-elf child's ears) is Skyrim's choice too: ChildRace has one head, so no.
+Skyrim: one race, ChildRace, for every child whatever the parents' race (so no elf ears on elf children), its own
+head, child body and smaller skeleton; FaceGen faces per child; children's clothes, hairs and voices (MaleChild /
+FemaleChild).
+
+What the owner's reference mod shows (Playable Children 0.4, Nexus 11014, read 2026-11-10; its records only, its
+assets are not ours to ship):
+- Starfield has a vanilla ChildRace (00034FB1; with HumanRace and HumanCorpseRace in the vanilla condition form
+  HumanRaceORChildRaceORHumanCorpseRace) and child head parts (HeadPartsChildRace, 0001550F).
+- **Starfield's child heads have the adult head's topology** (the mod's child_head_boy / child_head_girl: 15,370
+  vertices, 29,708 triangles, as the adult head; the child head's chargen morph record points at the ADULT chargen
+  morph.dat, Meshes\Morphs\Human\Female\Chargen\Head, its performance morphs at Meshes\Morphs\Child\Head_Girl\
+  Performance). So everything built for adult heads (face fit, baking, face parts) works on child heads.
+- The mod's playable child race HCRace is built the way ours are: a copy of HumanRace with RNAM / SRAC HumanRace placed
+  after the skin tones and no subgraph entries, a child skeleton of its own (Actors\cpc\CharacterAssets\skeleton.nif
+  + _facebones twin, the human .rig and animations), height 0.86, its own head parts and valid-race list, the adult
+  naked body meshes on that skeleton (the child shape comes from the bones), child clothes with chargen morph.dat,
+  the vanilla condition form widened to its race.
+
+Steps:
+1. **research (owner run):** the vanilla ChildRace record (skeleton, chargen or not, heights, head parts) and the vanilla
+   child NPCs; Skyrim's ChildRace head (topology, base head, FaceGen per child).
+2. **S2S_ChildRace**, thin over Starfield's ChildRace (Skyrim content asks ChildRace / IsChild: one race, as Skyrim).
+   Per-parent-race child races (S2S_NordChildRace ...) only if content needs it later.
+3. **Faces:** each child's own head, baked: Skyrim FaceGen child head minus Skyrim's child base head, moved onto
+   Starfield's child head (the adult correspondence after a child-to-child alignment), written as that NPC's own head
+   part (headbake). No sliders needed for NPCs, and it works whether or not the child skeleton has face bones.
+4. **Body:** Starfield's child skeleton and body (vanilla ChildRace's), height from Skyrim's ChildRace.
+5. **Clothes:** Skyrim's children's clothes through gear_fit onto the child body (source: Skyrim's child body, target:
+   the body on the child skeleton); hairs through the hair converter onto the child head.
+6. **Voices:** MaleChild / FemaleChild lines through the voice pipeline (start-of-game filter included), a child voice
+   type as template.
+7. **AI:** their packages through the schedule converter; Starfield's human animations on the child skeleton (as
+   vanilla children and the mod).
+8. **Player children (optional):** with Playable Children installed its HCRace already gives that; not ours to rebuild.
+Built so far: face_fit skips ChildRace NPCs (they would come out adult-sized on an adult template).
 
 ### J. Beast races (Khajiit, Argonian)
 - **open:** own heads (1356 / 1219 vertices) converted as the race's Face part, skinned to Starfield's face bones
