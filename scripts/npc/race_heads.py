@@ -189,6 +189,15 @@ def vanilla_head_tcmp(sf_esm, female):
     return text_of(dict(m[2]).get(b"TCMP", b""))
 
 
+HAIR_TYPES = (3, 4)          # HDPT PNAM: hair, facial hair (npc_hair.HAIR, FACIAL_HAIR)
+
+
+def without_hair(subs, part_types):
+    """NPC subrecords without hair / facial hair head parts (2026-11-09, owner: the males' long hair hid the ears and
+    the sides of the face the race shapes change)."""
+    return [(s, d) for s, d in subs if not (s == b"PNAM" and len(d) == 4 and part_types.get(_u32(d)) in HAIR_TYPES)]
+
+
 def with_head_part(subs, head_fid, part_types):
     """NPC subrecords with Face-type head parts (PNAM) dropped and head_fid added after the last PNAM (or after DNAM /
     DATA when there is none)."""
@@ -210,7 +219,7 @@ def with_blends(subs, blends):
     return subs[:at] + add + subs[at:]
 
 
-def build_plugin(sf_esm, made, race_head=False):
+def build_plugin(sf_esm, made, race_head=False, keep_hair=False):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     Returns (records, info, report)."""
     import face_fit
@@ -265,6 +274,8 @@ def build_plugin(sf_esm, made, race_head=False):
                 subs = sfplugin.edit(subs, {b"DOFT": struct.pack("<I", no_outfit),
                                             b"SOFT": struct.pack("<I", no_outfit)})
             subs = with_head_part(subs, h_fid, part_types)
+            if not keep_hair:
+                subs = without_hair(subs, part_types)
             if keys:
                 subs = with_blends(subs, {k: 1.0 for k in keys})
             recs.append((b"NPC_", tpl[1], subs, fid))
@@ -321,6 +332,8 @@ def main(argv=None):
     ap.add_argument("--race-head", action="store_true",
                     help="also override HumanRace: our head part as its Face part, our keys in its morph groups")
     ap.add_argument("--force", action="store_true", help="write even if the frame check fails")
+    ap.add_argument("--keep-hair", action="store_true", help="keep the template's hair and beard (default: none, so "
+                    "the ears and the sides of the face show)")
     ap.add_argument("--no-baked-face-textures", dest="baked_face_textures", action="store_false",
                     help="leave the NPCs without the template's pre-built face textures (the game builds them)")
     a = ap.parse_args(argv)
@@ -389,7 +402,7 @@ def main(argv=None):
         print(f"  {len(keys)} keys -> {rel_out}")
         for race, x in srep.get("races", {}).items():
             print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
-    recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head)
+    recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair)
     report.update(prep)
     if a.baked_face_textures:
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)

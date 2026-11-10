@@ -194,6 +194,8 @@ verified): with no pre-built face textures the game builds the face texture at r
 blends (BMPN); our new keys name no textures, the vanilla ones do (the control, with no blends, came out plain).
 race_heads now copies the template's pre-built face textures under each test NPC's FormID, as face_fit does for its
 NPCs (bake_faces). Next look: the shape (side view: ears, brow, cheekbones), now that the colour is the template's.
+The males' long hair hid the ears and the sides of the face (owner): the test NPCs now have no hair or beard
+(--keep-hair keeps the template's).
 
 ## Mouths and tusks (2026-11-09; offline checks only)
 - Skyrim (verified, race_survey): teeth / tongue / tusks are a head part of their own (Misc type): MouthHuman.nif /

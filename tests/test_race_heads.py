@@ -218,6 +218,12 @@ class PluginTests(unittest.TestCase):
                 sys.modules["race_probe"] = saved[0]
             face_fit.hkx_to_af.vanilla_file, H.bsa_archives = saved[1], saved[2]
 
+    def test_without_hair(self):
+        """2026-11-09 (owner: the males' hair hid the ears): hair and facial hair parts dropped, the rest kept."""
+        types_ = {1: 1, 2: 3, 3: 4, 4: 6}
+        subs = [(b"PNAM", struct.pack("<I", f)) for f in (1, 2, 3, 4)] + [(b"EDID", b"x\0")]
+        self.assertEqual([struct.unpack("<I", d)[0] for s_, d in H.without_hair(subs, types_) if s_ == b"PNAM"], [1, 4])
+
     def test_baked_faces_from_the_template(self):
         """2026-11-09 (owner: race NPCs dark red, nose / lips light; control plain): each test NPC gets its template's
         pre-built face textures under its own FormID, as face_fit's NPCs do."""

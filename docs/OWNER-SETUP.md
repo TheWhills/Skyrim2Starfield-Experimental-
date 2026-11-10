@@ -85,7 +85,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
 6c. Done 2026-11-09: crafting stations. Alchemy lab, enchanter and cooking pot each open a Starfield menu (Starfield's
    recipes; Skyrim's own recipes are a later step).
 7. B + C: race heads test, second run (2026-11-09 first run: control plain, race faces dark red; now with the
-   template's pre-built face textures). Command under "Race heads test" below; then the race NPCs from the front and
+   template's pre-built face textures, no hair). Command under "Race heads test" below; then the race NPCs from the front and
    from the side (ears, brow, cheekbones) next to the control.
 
 8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
