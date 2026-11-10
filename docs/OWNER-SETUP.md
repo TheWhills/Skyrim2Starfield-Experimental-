@@ -149,6 +149,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Then, with the outfit's model path from child_outfit.txt (its MOD3 line, the female model):
    `python -I scripts\tools\model_bounds.py --sf-data "$sf\Data" --model "<that path>"` (does a vanilla child outfit
    stand ~1.5 m tall like an adult's, or child height?). Send the four .txt files and that output.
+7f. A (read-only): loose items with physics (docs/interior/items.md): which vanilla items' bodies we can borrow.
+   ```powershell
+   python -I scripts\interior\item_physics_probe.py --sf-data "$sf\Data" --out C:\Modding\work\items
+   ```
+   Send C:\Modding\work\items\item_physics_probe.md.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

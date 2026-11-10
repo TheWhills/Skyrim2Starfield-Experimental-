@@ -25,6 +25,10 @@ only"): the model with a fixed box collision, no item record. Status words as in
    donors: a probe over vanilla MISC / ALCH / BOOK world models (their physics blobs: shape type, size, motion type
    word, mass words) - read on the owner's PC like every template. Mass per item: from Skyrim's own bhkRigidBody
    (each clutter NIF carries its mass) or from size x a density.
+   **built (2026-11-10):** scripts/interior/item_physics_probe.py (read-only): every vanilla MISC / ALCH / BOOK / AMMO /
+   KEYM world model's bodies (tagfile size, Havok shape classes), and for the 6,168-byte box layout the
+   KEYFRAMED_FIELDS words, box size and mass words, grouped by the motion word at 240 and labelled against the static
+   template's and the door donor's -> candidate dynamic donors.
 2. **Shape:** box first (bottles, plates and books are fine as boxes); convex hulls later (S6's next step, also for
    statics).
 3. **Records:** an item converter like item_convert (armour) for MISC / ALCH / BOOK / WEAP / AMMO / KEYM: Starfield
