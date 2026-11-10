@@ -148,6 +148,23 @@ class PartTests(unittest.TestCase):
         g = next(sfnif.parse_bsgeometry(b) for i, b in enumerate(n.blocks) if n.type_of(i) == "BSGeometry")
         self.assertEqual("geometries/" + g.meshes[0].path.decode().replace("\\", "/") + ".mesh", mesh_key)
 
+    def test_rigid_eye_turns_with_socket(self):
+        """A ring of 'lid' head vertices around an 'eyeball' turned 10 degrees and moved: the eyeball turns and moves
+        the same way, as one piece (similarity recovered)."""
+        ang = np.radians(np.arange(0, 360, 20))
+        ring = np.c_[0.015 * np.cos(ang), 0.012 * np.sin(ang), np.zeros_like(ang)]
+        ball = np.c_[0.01 * np.cos(ang[:9]), 0.01 * np.sin(ang[:9]), -0.004 + 0 * ang[:9]]
+        th = np.radians(10)
+        R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        t = np.array([0.001, 0.002, 0.003])
+        disp = ring @ R.T + t - ring
+        d, rep = headbake.rigid_displacement(ball, np.eye(4), ring, disp, radius=0.01, min_pts=6)
+        self.assertLess(np.abs(ball + d - (ball @ R.T + t)).max(), 1e-9)
+        self.assertAlmostEqual(rep["turn_deg"], 10.0, places=4)
+        self.assertAlmostEqual(rep["scale"], 1.0, places=6)
+        none, rep2 = headbake.rigid_displacement(ball, np.eye(4), ring, disp, radius=0.001)
+        self.assertIsNone(none)
+
     def test_far_shape_left(self):
         far = self.local + [5.0, 0, 0]
         scale, raw = sfmesh.encode_positions([tuple(p) for p in far], margin=0.02)

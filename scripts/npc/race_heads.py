@@ -292,10 +292,11 @@ def race_model_path(name, female):
 FACE_PART_TYPES = {2: "right eye", 4: "facial hair", 7: "jewelry", 6: "eyebrows", 9: "teeth", 12: "left eye",
                    13: "eyelashes"}
 HUMAN_PART_LIST = "HeadPartsHumanRace"
+RIGID_TYPES = {2, 12}      # eyes: moved as one piece with their socket (headbake.rigid_displacement)
 
 
 def face_parts(recs_all, types=FACE_PART_TYPES):
-    """[(FormID, EditorID, MODL, sexes [female...])] of the head parts HumanRace offers (RNAM = HeadPartsHumanRace)
+    """[(FormID, EditorID, MODL, sexes [female...], type)] of the head parts HumanRace offers (RNAM = HeadPartsHumanRace)
     of the face types, plus their extra parts (HNAM), recursively; sexes from DATA (bit 1 male, bit 2 female; neither
     or both: both)."""
     lst = next((fid for t, _h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == HUMAN_PART_LIST), None)
@@ -318,8 +319,32 @@ def face_parts(recs_all, types=FACE_PART_TYPES):
             continue
         fl = sb.get(b"DATA", b"\0")[0]
         sexes = [f for f, bit in ((False, 2), (True, 4)) if fl & bit] or [False, True]
-        out.append((fid, sfplugin.edid(hd[fid]), modl, sexes))
+        out.append((fid, sfplugin.edid(hd[fid]), modl, sexes, _u32(sb.get(b"PNAM", bytes(4)))))
     return out
+
+
+def twin(path):
+    """The <model>_facebones.nif twin of a model path (Data-relative or MODL): actors with face bones (the player,
+    named NPCs) are drawn from it (scripts/armor/hair_pack.py; HDPT model flag 'Has FaceBones Model'), so the looks
+    menu's sculpt controls, which move face bones, act on it (2026-11-10: the Orc head had none, the shape pads did
+    nothing)."""
+    stem, ext = os.path.splitext(path)
+    return stem + "_facebones" + ext
+
+
+def _write_files(out, files):
+    for rel, data in files.items():
+        path = os.path.join(out, *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(data)
+
+
+def _vanilla_or_none(face_fit, rel, sf_data):
+    try:
+        return face_fit.hkx_to_af.vanilla_file(rel, sf_data)[0]
+    except (SystemExit, KeyError, OSError):
+        return None
 
 
 def race_part_model(name, edid, female):
@@ -347,16 +372,24 @@ def write_race_heads(sf_data, out, made, races, parts=True):
             if race not in m.get("disp", {}):
                 continue
             mp = race_model_path(NAMES[race], female)
-            files = headbake.baked_head_files(
-                nif_bytes, lambda r: face_fit.hkx_to_af.vanilla_file(r, sf_data)[0], paths[0], m["vertices"],
-                m["disp"][race], "meshes/" + mp.replace("\\", "/").lower())
-            for rel, data in files.items():
-                path = os.path.join(out, *rel.split("/"))
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, "wb") as fh:
-                    fh.write(data)
+            read = lambda r: face_fit.hkx_to_af.vanilla_file(r, sf_data)[0]
+            files = headbake.baked_head_files(nif_bytes, read, paths[0], m["vertices"], m["disp"][race],
+                                              "meshes/" + mp.replace("\\", "/").lower())
+            fb = _vanilla_or_none(face_fit, twin("meshes/" + modl.replace("\\", "/")), sf_data)
+            if fb is not None:          # the _facebones twin, what the player is drawn from
+                fpaths, _s = facefit.starfield_head_parts(fb)
+                files.update(headbake.baked_head_files(fb, read, fpaths[0], m["vertices"], m["disp"][race],
+                                                       twin("meshes/" + mp.replace("\\", "/").lower())))
+            # the facial bone regions file (the sculpt dials), named after the race like vanilla's
+            # humanracefacialboneregions<sex>.txt (hypothesis: looked up by race EditorID): a copy under our name
+            reg = _vanilla_or_none(face_fit, face_fit.SF_REGIONS[female], sf_data)
+            if reg is not None:
+                files[face_fit.SF_REGIONS[female].replace(
+                    "humanrace", f"s2s_{NAMES[race].lower()}race")] = reg
+            _write_files(out, files)
             models.setdefault(race, {})[female] = mp
             rep.setdefault(race, {})[SEXES[female]] = {"from": modl, "model": mp, "files": len(files),
+                                                       "facebones_twin": fb is not None,
                                                        "max_move_m": round(float(np.linalg.norm(
                                                            m["disp"][race], axis=1).max()), 4)}
         if not plist:
@@ -367,7 +400,7 @@ def write_race_heads(sf_data, out, made, races, parts=True):
             if race not in m.get("disp", {}):
                 continue
             t0, prep, done = time.time(), {}, 0
-            for fid, edid, modl, sexes in plist:
+            for fid, edid, modl, sexes, ptype in plist:
                 if female not in sexes:
                     continue
                 try:
@@ -379,15 +412,22 @@ def write_race_heads(sf_data, out, made, races, parts=True):
                 try:
                     files, frep = headbake.baked_part_files(
                         nb, lambda r: face_fit.hkx_to_af.vanilla_file(r, sf_data)[0], m["vertices"],
-                        m["disp"][race], head_skin, "meshes/" + mp.replace("\\", "/").lower())
+                        m["disp"][race], head_skin, "meshes/" + mp.replace("\\", "/").lower(), ptype in RIGID_TYPES)
                 except (SystemExit, KeyError, ValueError, OSError) as e:
                     prep[edid] = {"error": str(e)[:200]}
                     continue
-                for rel, data in files.items():
-                    path = os.path.join(out, *rel.split("/"))
-                    os.makedirs(os.path.dirname(path), exist_ok=True)
-                    with open(path, "wb") as fh:
-                        fh.write(data)
+                fb = _vanilla_or_none(face_fit, twin("meshes/" + modl.replace("\\", "/")), sf_data)
+                if fb is not None:
+                    try:
+                        f2, r2 = headbake.baked_part_files(
+                            fb, lambda r: face_fit.hkx_to_af.vanilla_file(r, sf_data)[0], m["vertices"],
+                            m["disp"][race], head_skin, twin("meshes/" + mp.replace("\\", "/").lower()),
+                            ptype in RIGID_TYPES)
+                        files.update(f2)
+                        frep["facebones_twin"] = r2
+                    except (SystemExit, KeyError, ValueError, OSError) as e:
+                        frep["facebones_twin"] = {"error": str(e)[:200]}
+                _write_files(out, files)
                 race_parts.setdefault(race, []).append((fid, female, mp))
                 prep[edid] = frep
                 done += 1
@@ -945,7 +985,8 @@ def main(argv=None):
         models, rparts, report["baked_heads"] = write_race_heads(sf_data, a.out, made, wanted, not a.no_bake_parts)
         for race, per in report["baked_heads"].items():
             for sex, x in per.items():
-                print(f"  {race} {sex}: shape baked into {x['model']} ({x['files'] - 1} meshes)")
+                print(f"  {race} {sex}: shape baked into {x['model']} ({x['files']} files; _facebones twin: "
+                      f"{'yes' if x.get('facebones_twin') else 'NOT FOUND'})")
     strings = load_lstrings(sf_data)
     report["localized_strings"] = {k: len(v) for k, v in strings.items()}
     if not strings:

@@ -372,3 +372,16 @@ why the mod needs no clothes of its own.
   its copies; hair and the other types stay shared (HeadPartsHumanRace with our race added). Per-part frame and
   distance in race_heads.json (baked_heads.<race>.<sex>.parts). Not yet: eye textures / colours per race, tusks.
   Note: races of other mods added to HeadPartsHumanRace lose the vanilla face parts while this plugin is loaded.
+
+- 2026-11-10 Two more from the baked-head look:
+  * Sculpt pads (thin / round ...) did nothing on the Orc head. Our race head had no `_facebones` twin: actors with
+    face bones (the player, named NPCs) are drawn from `<model>_facebones.nif` (hair_pack's finding; HDPT model flag
+    "Has FaceBones Model" in xEdit's SF1 defs), and the sculpt dials move face bones. race_heads now bakes the twin
+    of the head and of each face part (when vanilla has one), and copies the facial bone regions file under the
+    race's name (`s2s_orcracefacialboneregions<sex>.txt` next to `humanrace...`; hypothesis: looked up by race
+    EditorID, unverified). race_heads.json: baked_heads.<race>.<sex>.facebones_twin.
+  * Eyes (owner: Skyrim's elf eyes tilt more than the lids): eyes are now moved as one piece with their socket: a
+    similarity (turn, scale, move) fitted from the head vertices within 1 cm of the eye before -> after the race
+    shape (headbake.rigid_displacement; turn_deg / scale per eye in race_heads.json), instead of per-vertex moves
+    that bend the eyeball. Next: compare with Skyrim's own race eyes (its eye models' race morph, if any) and the
+    eye textures per race.

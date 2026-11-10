@@ -204,11 +204,46 @@ def part_displacement(part_pts, M, head_pts, head_disp):
     return d_head @ np.linalg.inv(M[:3, :3]).T
 
 
+def similarity(src, dst):
+    """(s, R, t) with dst ~ s R src + t (least squares, Umeyama; no reflection)."""
+    src, dst = np.asarray(src, float), np.asarray(dst, float)
+    ms, md = src.mean(0), dst.mean(0)
+    a, b = src - ms, dst - md
+    U, S, Vt = np.linalg.svd(b.T @ a / len(src))
+    D = np.eye(3)
+    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
+        D[2, 2] = -1
+    R = U @ D @ Vt
+    var = (a ** 2).sum() / len(src)
+    sc = float(np.trace(np.diag(S) @ D) / var) if var > 0 else 1.0
+    return sc, R, md - sc * R @ ms
+
+
+def rigid_displacement(part_pts, M, head_pts, head_disp, radius: float = 0.01, min_pts: int = 12):
+    """(per part vertex displacement in its own frame, report): the part moved as one piece, turned and scaled with
+    the head surface around it (head vertices within radius of the part: the eye socket and lids), fitted as a
+    similarity from those vertices before -> after (2026-11-10, owner: Skyrim's elf eyes are tilted, not only the
+    lids; a per-vertex nearest move would bend the eyeball instead of turning it). None if fewer than min_pts."""
+    p = apply4(M, part_pts)
+    head_pts = np.asarray(head_pts, float)
+    d = np.linalg.norm(p[nearest(p, head_pts)] - head_pts, axis=1)
+    near = d < radius
+    if near.sum() < min_pts:
+        return None, {"socket_vertices": int(near.sum())}
+    sc, R, t = similarity(head_pts[near], head_pts[near] + np.asarray(head_disp, float)[near])
+    moved = sc * p @ R.T + t
+    ang = float(np.degrees(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))))
+    return (moved - p) @ np.linalg.inv(M[:3, :3]).T, {"socket_vertices": int(near.sum()), "turn_deg": round(ang, 2),
+                                                        "scale": round(sc, 4)}
+
+
 def baked_part_files(nif_bytes: bytes, read: Callable[[str], bytes], head_pts, head_disp, head_skin,
-                     out_nif: str):
+                     out_nif: str, rigid: bool = False):
     """({out_nif: NIF, "geometries/<d>/<f>.mesh": meshes}, report) of a head part with every skinned or unskinned
     BSGeometry baked: LOD 0 moved per vertex like its nearest head vertex (part_to_head's frame), the other LOD slots
-    by nearest LOD 0 vertex. Shapes whose LOD 0 lies farther than 0.25 m (median) from the head are left as they are."""
+    by nearest LOD 0 vertex. Shapes whose LOD 0 lies farther than 0.25 m (median) from the head are left as they are.
+    rigid (eyes): each shape moved as one piece with its socket (rigid_displacement), per vertex if too few socket
+    vertices."""
     n = nifmod.parse(nif_bytes)
     files: Dict[str, bytes] = {}
     rep = {"shapes": []}
@@ -227,7 +262,11 @@ def baked_part_files(nif_bytes: bytes, read: Callable[[str], bytes], head_pts, h
         if frame["median_to_head_m"] > 0.25:
             srep["left"] = "far from the head"
             continue
-        disp = part_displacement(pts, M, head_pts, head_disp)
+        disp = None
+        if rigid:
+            disp, srep["rigid"] = rigid_displacement(pts, M, head_pts, head_disp)
+        if disp is None:
+            disp = part_displacement(pts, M, head_pts, head_disp)
         srep["max_move_m"] = round(float(np.linalg.norm(disp, axis=1).max(initial=0.0)), 4)
         for m in refs:
             rel = "geometries/" + m.path.decode("latin-1").replace("\\", "/") + ".mesh"

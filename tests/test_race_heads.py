@@ -165,8 +165,9 @@ class PluginTests(unittest.TestCase):
                  0x23),
                 (b"HDPT", b"", [(b"EDID", Z("AlienBrow")), (b"MODL", Z("a.nif")), (b"PNAM", I(6)), (b"RNAM", I(9))],
                  0x24)]
-        self.assertEqual(H.face_parts(recs), [(0x21, "Brow", "b.nif", [True]), (0x22, "BrowExtra", "e.nif",
-                                                                                   [False, True])])
+        self.assertEqual(H.face_parts(recs), [(0x21, "Brow", "b.nif", [True], 6), (0x22, "BrowExtra", "e.nif",
+                                                                                      [False, True], 0)])
+        self.assertEqual(H.twin("S2S\\Races\\Orc\\MaleHead.nif"), "S2S\\Races\\Orc\\MaleHead_facebones.nif")
 
     def test_delocalize(self):
         tables = {"strings": {7: "Nose"}, "dlstrings": {9: "A race."}}
@@ -410,6 +411,15 @@ class PluginTests(unittest.TestCase):
                     rep = json.load(fh)
                 nif_path = os.path.join(out, "meshes", "s2s", "races", "orc", "malehead.nif")
                 self.assertTrue(os.path.isfile(nif_path))
+                # 2026-11-10 (owner: shape pads locked): the _facebones twin the player is drawn from, and the facial
+                # bone regions file under the race's name
+                self.assertTrue(os.path.isfile(os.path.join(out, "meshes", "s2s", "races", "orc",
+                                                            "malehead_facebones.nif")))
+                self.assertTrue(rep["baked_heads"]["OrcRace"]["male"]["facebones_twin"])
+                self.assertTrue(os.path.isfile(os.path.join(out, *face_fit.SF_REGIONS[True].replace(
+                    "humanrace", "s2s_orcrace").split("/"))))
+                self.assertTrue(os.path.isfile(os.path.join(out, "meshes", "s2s", "races", "orc", "parts",
+                                                            "human_male_beard_goatee_m_facebones.nif")))
                 with open(nif_path, "rb") as fh:
                     n = nifmod.parse(fh.read())
                 g = next(sfnif.parse_bsgeometry(b) for i, b in enumerate(n.blocks) if n.type_of(i) == "BSGeometry")
