@@ -530,3 +530,6 @@ why the mod needs no clothes of its own.
   a Teeth part (the looks menu's teeth colour swaps a Teeth part's material). The race mouth is now type 0 by
   default (MOUTH_PART_TYPE). To check next: the mouth moves when talking (its morph record is the vanilla teeth's,
   copied), and the looks menu's TEETH row with no Teeth part.
+- 2026-11-11, **verified in game (owner):** the Orc mouth as a misc part shows ivory tusks / teeth on the player
+  (looks menu) and NPCs, and drops with the jaw when the NPC talks (its morph record, the vanilla teeth's copy, still
+  drives it). The looks menu's TEETH row now changes nothing (no Teeth part on the race; harmless).
