@@ -846,6 +846,9 @@ def race_part_records(recs_all, name, race_fid, parts, new_fid, mouths=None, mou
     return recs, copies, l_fid
 
 
+MOUTH_PART_TYPE = 0     # misc, not Teeth (9): see --mouth-type
+
+
 def mouth_records(by, info, name, female, l_fid, copies, new_fid, mouth_type=None):
     """The race's mouth (race_mouths.convert_mouth info): a copy of the vanilla teeth's morph record (TMPP / TCMP ->
     our folders, its vertex count in MOBC -> ours) and of the vanilla teeth part (MODL ours, MNAM that record, RNAM
@@ -881,8 +884,8 @@ def mouth_records(by, info, name, female, l_fid, copies, new_fid, mouth_type=Non
     if fl:
         ed[b"DATA"] = bytes([(fl[0] & ~0x6) | (4 if female else 2)]) + bytes(fl[1:])
     if mouth_type is not None:
-        # 2026-11-11 test: the player draws our mouth's shape (the tusks) in white / pink - the human teeth colours:
-        # the looks menu's TEETH row (a teeth colour on the player) seems to replace a Teeth part's material
+        # 2026-11-11, verified in game: as a Teeth part the player's mouth drew in the human teeth material (white
+        # teeth, pink gums on our UVs); the looks menu's teeth colour replaces a Teeth part's material
         ed[b"PNAM"] = struct.pack("<I", mouth_type)
     p_fid = new_fid(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}")
     out.append((b"HDPT", h, sfplugin.edit(list(sb), ed), p_fid))
@@ -1316,9 +1319,10 @@ def main(argv=None):
     ap.add_argument("--mouth-brightness", type=float, default=None,
                     help="the converted mouth texture's colour times this (default race_mouths.MOUTH_ALBEDO_GAIN; "
                          "1 = Skyrim's as is: 2026-11-11 the Orc teeth drew near black in Starfield's light)")
-    ap.add_argument("--mouth-type", type=int, default=None,
-                    help="test: the race mouth part's HDPT type (PNAM) instead of Teeth (9), e.g. 0 (misc): the "
-                         "player's teeth colour (looks menu TEETH row) may replace a Teeth part's material")
+    ap.add_argument("--mouth-type", type=int, default=MOUTH_PART_TYPE,
+                    help=f"the race mouth part's HDPT type (PNAM; default {MOUTH_PART_TYPE}: misc). 2026-11-11, "
+                         "verified in game: as a Teeth part (9) the player's mouth got the human teeth material (the "
+                         "looks menu's teeth colour replaces a Teeth part's material); as 0 it keeps ours")
     ap.add_argument("--mouth-on-head", action="store_true",
                     help="test: the race's head part also carries its mouth as an extra part (HNAM), so whatever "
                          "head the game draws brings the mouth (2026-11-11: the player showed no Orc mouth)")

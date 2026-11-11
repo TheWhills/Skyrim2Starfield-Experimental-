@@ -525,3 +525,8 @@ why the mod needs no clothes of its own.
   OUR geometry, in white teeth / pink gums: the human teeth texture on our UVs (the tusks sample a gum area of it).
   So the player's mouth material is replaced; suspect: the looks menu's TEETH row (four teeth colours, NPC TETC)
   swaps a Teeth-type part's material on the player. Test: --mouth-type 0 gives the race mouth another HDPT type.
+- 2026-11-11, **verified in game:** with --mouth-type 0 the player's looks menu shows the Orc mouth in the UV-test
+  colours (red / green tusks): the player had drawn our mouth all along, in the human teeth material, because it was
+  a Teeth part (the looks menu's teeth colour swaps a Teeth part's material). The race mouth is now type 0 by
+  default (MOUTH_PART_TYPE). To check next: the mouth moves when talking (its morph record is the vanilla teeth's,
+  copied), and the looks menu's TEETH row with no Teeth part.
