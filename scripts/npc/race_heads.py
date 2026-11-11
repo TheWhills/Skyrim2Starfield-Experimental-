@@ -1275,24 +1275,34 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     return recs, info, rep
 
 
+HUMAN_TONE_RACE = "NordRace"     # Skyrim's human skin tone presets (male HumanSkinBaseWhite, female ..SkinWhite)
+
+
 def skin_tone_ramps(sky_esm, races):
-    """{race: {female: 9 sRGB colours}}: Skyrim's skin tone presets (skin_tone_probe.skyrim_tones) as a ramp per sex."""
+    """{race: {female: 9 sRGB colours}}: Skyrim's skin tone presets (skin_tone_probe.skyrim_tones) as a ramp per sex;
+    HUMAN_TONE_RACE's ramps under the key "human"."""
     import skin_tone_probe
     from fo4sf import skintone
     out = {}
-    for race, per in skin_tone_probe.skyrim_tones(sky_esm, tuple(races)).items():
+    for race, per in skin_tone_probe.skyrim_tones(sky_esm, tuple(races) + (HUMAN_TONE_RACE,)).items():
         for sex, x in per.items():
             rgbs = [tuple(p["rgb"]) for p in x["presets"] if p.get("rgb")]
             if rgbs:
                 out.setdefault(race, {})[sex == "female"] = skintone.tone_ramp(rgbs)
+                if race == HUMAN_TONE_RACE:
+                    out.setdefault("human", {})[sex == "female"] = skintone.tone_ramp(rgbs)
     return out
 
 
-def write_skin_tones(jobs, ramps, read, out, texconv=""):
-    """The race's skin tone textures (skintone.race_tone_groups jobs) under out: each vanilla tone texture recoloured
-    to its slot's colour of ramps[female] (slots ranked by the vanilla textures' brightness). Faces stay as vanilla's
-    (uncompressed RGBA8 sRGB, one mip); body / hands (vanilla BC1) go through texconv to BC1 sRGB with mips, or stay
-    uncompressed without it. read(path) -> bytes. Returns {texture: [r, g, b]}."""
+def write_skin_tones(jobs, ramps, read, out, texconv="", human=None, test=False):
+    """The race's skin tone textures (skintone.race_tone_groups jobs) under out. Slots are ranked by the vanilla
+    textures' brightness (lightest first) and get that rank's colour of ramps[female]. human ({female: ramp}, the
+    default mode since 2026-11-11, owner: the absolute colours came out dark): each vanilla texture times
+    race / human colour of its rank (skintone.relative); without it, the texture recoloured to the race colour
+    (skintone.recolour). test: slots sk0 / sk1 / sk2 solid green / white / grey (skintone.TEST_COLOURS), to see what
+    the game does with a tone texture's colour. Faces stay as vanilla's (uncompressed RGBA8 sRGB, one mip); body /
+    hands (vanilla BC1) go through texconv to BC1 sRGB with mips, or stay uncompressed without it. read(path) ->
+    bytes. Returns {texture: [r, g, b] (the race colour of the slot, or the test colour)}."""
     import shutil
     from fo4sf import skintone, textures
     tc = find_texconv(texconv)
@@ -1302,9 +1312,18 @@ def write_skin_tones(jobs, ramps, read, out, texconv=""):
         by_group.setdefault((kind, female), []).append((new, src, slot))
     for (kind, female), items in sorted(by_group.items()):
         imgs = {slot: skintone.decode_dds(read(src)) for _n, src, slot in items}
-        colours = skintone.slot_colours(imgs, ramps[female])
+        ranks = skintone.slot_ranks(imgs)
+        ramp = ramps[female]
         for new, src, slot in items:
-            rgba = skintone.recolour(imgs[slot], colours[slot])
+            colour = tuple(ramp[min(ranks[slot], len(ramp) - 1)])
+            if test and slot < len(skintone.TEST_COLOURS):
+                colour = skintone.TEST_COLOURS[slot]
+                rgba = skintone.solid(imgs[slot], colour)
+            elif human:
+                h = human[female]
+                rgba = skintone.relative(imgs[slot], colour, h[min(ranks[slot], len(h) - 1)])
+            else:
+                rgba = skintone.recolour(imgs[slot], colour)
             path = os.path.join(out, *new.split("/"))
             os.makedirs(os.path.dirname(path), exist_ok=True)
             if kind != "face" and tc:
@@ -1316,7 +1335,7 @@ def write_skin_tones(jobs, ramps, read, out, texconv=""):
             else:
                 with open(path, "wb") as fh:
                     fh.write(skintone.raw_dds(rgba))
-            done[new] = list(colours[slot])
+            done[new] = list(colour)
         print(f"  skin tones: {SEXES[female]} {kind}: {len(items)} textures "
               f"({'BC1 via texconv' if kind != 'face' and tc else 'uncompressed RGBA8'})")
     shutil.rmtree(staging, ignore_errors=True)
@@ -1407,6 +1426,12 @@ def main(argv=None):
     ap.add_argument("--skin-tones", default="",
                     help="races (of --new-races) that get skin tones of their own: Starfield's skin tone textures "
                          "recoloured to Skyrim's skin tone presets (e.g. OrcRace; 2026-11-11 test)")
+    ap.add_argument("--skin-tone-mode", choices=("relative", "absolute"), default="relative",
+                    help="relative (default): each vanilla tone texture times race / human Skyrim preset colour of "
+                         "the same rank; absolute: the texture recoloured to the race colour (came out dark)")
+    ap.add_argument("--skin-tone-test", action="store_true",
+                    help="tone slots sk0 / sk1 / sk2 solid green / white / grey (body, hands and face), to see how "
+                         "the game shows a tone texture's colour")
     ap.add_argument("--keep-hair", action="store_true", help="keep the template's hair and beard (default: none, so "
                     "the ears and the sides of the face show)")
     ap.add_argument("--no-baked-face-textures", dest="baked_face_textures", action="store_false",
@@ -1514,9 +1539,13 @@ def main(argv=None):
     if wanted and a.race_height == "skyrim" and os.path.isfile(sky_esm):
         heights = skyrim_heights(sky_esm, wanted)
         report["skyrim_heights"] = {r: [round(x, 3) for x in h] for r, h in heights.items()}
-    ramps = {}
+    ramps, human_ramps = {}, None
     if a.skin_tones:
-        ramps = {r: x for r, x in skin_tone_ramps(sky_esm, race_names(a.skin_tones)).items() if r in wanted}
+        all_ramps = skin_tone_ramps(sky_esm, race_names(a.skin_tones))
+        human_ramps = all_ramps.get("human") if a.skin_tone_mode == "relative" else None
+        if a.skin_tone_mode == "relative" and not human_ramps:
+            raise SystemExit(f"--skin-tone-mode relative: no {HUMAN_TONE_RACE} skin tone presets in {sky_esm}")
+        ramps = {r: x for r, x in all_ramps.items() if r in wanted}
         for r, per in ramps.items():
             print(f"  {r} skin tones: " + "; ".join(f"{SEXES[f]} {per[f][0]} .. {per[f][-1]}" for f in sorted(per)))
         missing = [r for r in race_names(a.skin_tones) if r not in ramps]
@@ -1537,7 +1566,7 @@ def main(argv=None):
         arcs = skin_tone_probe.TextureArchives(sf_data)
         for race, jobs in tone_jobs.items():
             report.setdefault("skin_tone_textures", {})[race] = write_skin_tones(
-                jobs, ramps[race], arcs.read, a.out, a.texconv)
+                jobs, ramps[race], arcs.read, a.out, a.texconv, human_ramps, a.skin_tone_test)
             t = prep["new_races"][race]["skin_tones"]
             print(f"  {race} skin tones: {t['groups']} groups, {t['textures']} textures, race strings renamed "
                   f"{t['race_strings_renamed']}; face complex group: {(t['complex'] or {}).get('pointed_at_copies')} "

@@ -85,6 +85,20 @@ def vanilla_groups():
         (b"AVMD", b"hdr", [(b"EDID", Z("Eyes_Blue"))], 0x99)]
 
 
+class RelativeTests(unittest.TestCase):
+    def test_relative_and_solid(self):
+        px = np.zeros((1, 2, 4), np.uint8)
+        px[0, 0], px[0, 1] = (240, 192, 153, 255), (200, 100, 100, 7)
+        same = S.relative(px, (90, 90, 90), (90, 90, 90))
+        self.assertTrue(np.array_equal(same, px))                     # race == human: unchanged
+        out = S.relative(px, (89, 113, 92), (198, 176, 168))           # Orc vs human, lightest rank
+        self.assertEqual(out[0, 0, :3].tolist(), [109, 124, 83])
+        self.assertGreater(int(out[0, 0, 1]), int(out[0, 0, 0]))      # greener than red
+        self.assertEqual(int(out[0, 1, 3]), 7)                        # alpha kept
+        sol = S.solid(px, (0, 255, 0))
+        self.assertEqual(sol[0, 1].tolist(), [0, 255, 0, 7])
+
+
 class GroupTests(unittest.TestCase):
     def test_kinds(self):
         self.assertEqual(S.tone_group_kind("SimpleGroup_Female_Naked_Body_Skin_Tones"), ("body", True))

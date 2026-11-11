@@ -199,9 +199,32 @@ def with_tone_names(subs, names, sigs=RACE_TONE_SIGS):
     return [(s, _zs(names[_text(d)]) if s in sigs and _text(d) in names else d) for s, d in subs]
 
 
+def slot_ranks(images):
+    """{slot: rank}: the slots in order of their vanilla texture's median luminance (0 = lightest)."""
+    lum = {k: float(np.median(_luma_lin(img[..., :3]))) for k, img in images.items()}
+    return {k: i for i, k in enumerate(sorted(lum, key=lambda k: -lum[k]))}
+
+
 def slot_colours(images, ramp):
     """{slot: colour}: the ramp's colours (lightest first) given to the slots in order of their vanilla texture's
     median luminance (lightest first), so the race's tones keep Starfield's slot order whichever way it runs."""
-    lum = {k: float(np.median(_luma_lin(img[..., :3]))) for k, img in images.items()}
-    order = sorted(lum, key=lambda k: -lum[k])
-    return {k: tuple(ramp[min(i, len(ramp) - 1)]) for i, k in enumerate(order)}
+    return {k: tuple(ramp[min(i, len(ramp) - 1)]) for k, i in slot_ranks(images).items()}
+
+
+def relative(rgba, race, human):
+    """rgba (h, w, 4 uint8) changed the way Skyrim tells this race from a human of the same rank: per channel, in
+    linear light, times race / human (both Skyrim skin tone preset colours; Skyrim lays them over the same kind of
+    base skin). The vanilla texture's own colour variation (lips, cheeks) and brightness stay; alpha kept."""
+    f = srgb_to_linear(np.array(race, np.float32)) / np.maximum(srgb_to_linear(np.array(human, np.float32)), 1e-4)
+    out = linear_to_srgb(np.clip(srgb_to_linear(rgba[..., :3]) * f[None, None, :], 0.0, 1.0))
+    return np.concatenate([np.round(out).clip(0, 255).astype(np.uint8), rgba[..., 3:4]], -1)
+
+
+TEST_COLOURS = ((0, 255, 0), (255, 255, 255), (128, 128, 128))     # slots sk0, sk1, sk2 in --skin-tone-test
+
+
+def solid(rgba, colour):
+    out = np.empty_like(rgba)
+    out[..., :3] = colour
+    out[..., 3] = rgba[..., 3]
+    return out

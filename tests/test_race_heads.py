@@ -680,6 +680,26 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(sk0[0, 0, :3].tolist(), [41, 47, 36])
         self.assertFalse(os.path.exists(os.path.join(d, "_skin_tone_staging")))
 
+    def test_relative_and_test_modes(self):
+        from fo4sf import skintone
+        light = np.full((4, 4, 4), 200, np.uint8)
+        files = {"v/b0.dds": skintone.raw_dds(light), "v/b1.dds": skintone.raw_dds(light[:, :, :] // 2 + 1)}
+        jobs = {"t/body/male_sk0_color.dds": ("v/b0.dds", "body", False, 0),
+                "t/body/male_sk1_color.dds": ("v/b1.dds", "body", False, 1)}
+        ramps, human = {False: [(89, 113, 92), (41, 47, 36)]}, {False: [(89, 113, 92), (82, 61, 48)]}
+
+        def run(**kw):
+            with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()), \
+                    unittest.mock.patch.object(H, "find_texconv", lambda tc="": ""):
+                H.write_skin_tones(jobs, ramps, files.__getitem__, d, **kw)
+                return [skintone.decode_dds(open(os.path.join(d, "t", "body", f"male_sk{k}_color.dds"), "rb").read())
+                        for k in (0, 1)]
+        rel = run(human=human)
+        self.assertEqual(rel[0][0, 0, :3].tolist(), [200, 200, 200])      # race == human colour: vanilla kept
+        self.assertGreater(int(rel[1][0, 0, 1]), int(rel[1][0, 0, 0]))   # Orc vs dark human: greener
+        test = run(human=human, test=True)
+        self.assertEqual([t[0, 0, :3].tolist() for t in test], [[0, 255, 0], [255, 255, 255]])
+
 
 if __name__ == "__main__":
     unittest.main()

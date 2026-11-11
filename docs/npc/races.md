@@ -555,3 +555,12 @@ why the mod needs no clothes of its own.
   the face differs (its tone textures may be blended with something, e.g. by their alpha, or be more than a colour
   map). scripts/npc/skin_tone_preview.py: vanilla vs our tone textures side by side with numbers (median colour,
   brightness spread, alpha range) to find out.
+- 2026-11-11, skin_tone_preview on the owner's game: every tone texture's alpha is 255 (no blend mask); our face
+  textures hold the intended colours (male face sk0 median (89,113,92), as the hands). So the face's dark brown look
+  in game is not in our texture: the game does something more with the face tone texture (e.g. multiplies it with
+  another, human-coloured map) - unverified. Two changes: --skin-tone-mode relative (new default): each vanilla tone
+  texture times race / human Skyrim preset colour of the same rank (human = NordRace's presets; Skyrim lays both over
+  the same kind of base skin), per channel in linear light, so Starfield's brightness and colour variation stay
+  (measured medians: male face sk0 (240,192,153) -> (109,124,83), sk4 (182,144,104) -> (141,147,107); absolute gave
+  (89,113,92) / (80,92,82)). --skin-tone-test: slots sk0 / sk1 / sk2 solid green / white / grey on body, hands and
+  face, to see in game what the face does with a tone texture's colour (white shows the extra factor directly).
