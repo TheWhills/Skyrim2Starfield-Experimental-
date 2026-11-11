@@ -510,3 +510,7 @@ why the mod needs no clothes of its own.
   ChargenPresetMale02.. NPCs, copied into our race), whose PNAM has Human_Male_Teeth and the human brows / eyes; only
   the head comes from the race. build_plugin now replaces the race's presets with copies on the race
   (race_preset_copies: RNAM ours, Face = the race head, the other parts = the race copies). Unverified.
+- 2026-11-11, preset copies in (10) and the chargen lists extended: the player still showed no test colours, NPCs
+  did. Difference: the teeth part is flagged "Has FaceBones Model" (FLLD 1, copied onto our mouth part), and actors
+  with face bones (the player) are drawn from <model>_facebones.nif, which we never wrote for the mouth (the head and
+  face parts got their twins). convert_mouth now writes mouth_<sex>_facebones.nif (the same NIF). Unverified.

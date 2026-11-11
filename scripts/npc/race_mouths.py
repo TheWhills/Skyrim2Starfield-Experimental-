@@ -243,6 +243,10 @@ def convert_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, teeth
                                     g.translation, g.rotation, mat)
     files[mpath] = mdata
     files[out_base + ".nif"] = nif
+    # 2026-11-11: the vanilla teeth part is flagged "Has FaceBones Model" (FLLD 1, kept on our copy), so actors with
+    # face bones - the player - are drawn from <model>_facebones.nif; without one the player showed no Orc mouth
+    # (the --mouth-uv-test colours on NPCs only). Ours has no face-bone skin to differ by: the same NIF.
+    files[out_base + "_facebones.nif"] = nif
     info.update(material=mat, model=out_base[len("meshes/"):].replace("/", "\\") + ".nif")
     return files, info
 

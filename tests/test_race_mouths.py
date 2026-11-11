@@ -87,6 +87,8 @@ class ConvertTests(unittest.TestCase):
         n = nifmod.parse(out["meshes/s2s/races/orc/mouth_m.nif"])
         g = next(sfnif.parse_bsgeometry(b) for i, b in enumerate(n.blocks) if n.type_of(i) == "BSGeometry")
         self.assertEqual(RM.vanilla_material(out["meshes/s2s/races/orc/mouth_m.nif"]), "materials\\s2s\\mouthorc.mat")
+        # 2026-11-11: the player (face bones) is drawn from the _facebones twin
+        self.assertEqual(out["meshes/s2s/races/orc/mouth_m_facebones.nif"], out["meshes/s2s/races/orc/mouth_m.nif"])
         mesh = sfmesh.parse(out["geometries/" + g.meshes[0].path.decode().replace("\\", "/") + ".mesh"])
         pos = np.array([sfmesh.decode_position(p, mesh.scale) for p in mesh.positions])
         self.assertLess(np.abs(pos - sky_head).max(), 1e-4)                          # aligned, teeth frame = head's
