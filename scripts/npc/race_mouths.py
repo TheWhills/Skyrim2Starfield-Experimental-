@@ -265,6 +265,8 @@ def main(argv=None):
     import json
     ap = argparse.ArgumentParser(description=main.__doc__)
     ap.add_argument("--skyrim-data", required=True)
+    ap.add_argument("--dump", help="also copy each mouth's texture files (.dds) into this folder, to look at "
+                                   "(game files: never commit them)")
     a = ap.parse_args(argv)
     sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
     import hkx_to_af
@@ -281,6 +283,19 @@ def main(argv=None):
             print(path)
             for r in rows:
                 print("   " + json.dumps(r))
+                for tex in (r["textures"] if a.dump else []):
+                    if not tex:
+                        continue
+                    try:
+                        data = hkx_to_af.read_any(tex, sky)
+                    except SystemExit as e:
+                        print(f"      {tex}: {e}")
+                        continue
+                    os.makedirs(a.dump, exist_ok=True)
+                    dst = os.path.join(a.dump, os.path.basename(tex.replace("\\", "/")))
+                    with open(dst, "wb") as fh:
+                        fh.write(data)
+                    print(f"      -> {dst} ({len(data)} bytes)")
     return 0
 
 

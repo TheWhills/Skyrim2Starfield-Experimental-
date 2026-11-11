@@ -142,3 +142,26 @@ class ShapeReportTests(unittest.TestCase):
                                                    "textures\\armor\\iron\\cuirass_n.dds"])
         self.assertEqual(rows[0]["triangles"], 2)
         self.assertEqual(rows[0]["uv_min"][1], 0.5)
+
+    def test_dump_textures(self):
+        """--dump copies each mouth texture out of the archives (to look at the tusks' colours)."""
+        import tempfile
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import test_skyrim_armor as A
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "armor"))
+        import hkx_to_af
+        import mouth_probe
+        from fo4sf import bsa
+        files = {"m.nif": A.skinned_nif_bytes(), "textures\\armor\\iron\\cuirass.dds": b"DDS d",
+                 "textures\\armor\\iron\\cuirass_n.dds": b"DDS n"}
+        saved = (bsa.SkyrimArchives, hkx_to_af.read_any, mouth_probe.SKY_MOUTHS)
+        bsa.SkyrimArchives = lambda d: None
+        hkx_to_af.read_any = lambda p, sky: files[p]
+        mouth_probe.SKY_MOUTHS = {False: {"orc": "m.nif"}}
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                RM.main(["--skyrim-data", d, "--dump", os.path.join(d, "out")])
+                with open(os.path.join(d, "out", "cuirass_n.dds"), "rb") as fh:
+                    self.assertEqual(fh.read(), b"DDS n")
+        finally:
+            bsa.SkyrimArchives, hkx_to_af.read_any, mouth_probe.SKY_MOUTHS = saved
