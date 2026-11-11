@@ -440,3 +440,10 @@ why the mod needs no clothes of its own.
   race's. Our head parts are now Face-typed too (the end-to-end test checks a single Face part). Open, to look at
   after the rebuild: on the player the inner lips look pulled into vertical strands around the teeth (the bake's lip
   area or the mouth mesh), the tusks are pink in the looks menu and dark in the world (material).
+- 2026-11-10, owner's race_view comparison (race_probe): the male Orc's open underbite matches Skyrim's (Skyrim's
+  Orc race shape itself parts the lips; the teeth fill it in game). The female's does not: Skyrim's female Orc lips
+  barely part from the front, ours gape. New: headcorr.Correspondence.fit_lip_edges (race_transfer, so race_probe and
+  race_heads both use it; --no-lip-edges to compare): the lips' meeting rows on Starfield's head (per 2 mm column
+  the upper lip's lowest vertex and the lower lip's highest, near Skyrim's mouth edge, not in the pocket) get the move
+  of Skyrim's mouth edge on their side, the change fading over their own lip within 15 mm. Reported per race:
+  "lips open <before> -> <after> mm (Skyrim <edges>)". Unverified on the owner's heads (synthetic test only).

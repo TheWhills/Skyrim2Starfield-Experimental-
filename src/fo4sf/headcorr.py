@@ -199,6 +199,83 @@ class Correspondence:
     def transfer(self, field: np.ndarray, smooth: int = 0) -> np.ndarray:
         return self.smooth(self.sample(field), smooth)
 
+    mouth = None        # set by correspond when the lip term ran: see fit_lip_edges
+
+    def fit_lip_edges(self, disp: np.ndarray, field: np.ndarray, reach: float = 0.006, radius: float = 0.015):
+        """(disp, report): disp (per dst vertex) with the lips' meeting rows moved exactly like the src mouth's edges.
+
+        2026-11-10 (owner's race_view: the female Orc's lips gape on Starfield's head where Skyrim's barely part):
+        Skyrim's open mouth has edges (the hole loop); Starfield's closed lips meet in rows: per column across the
+        mouth the upper lip's lowest vertex and the lower lip's highest, near the edge and not in the pocket behind
+        (sides from the correspondence's lip term; model axes through to_model). Each row vertex within reach of the src mouth edge gets the field of the
+        nearest src edge vertices on its side (the inverse-distance mean of the two nearest; reach counted from the
+        edge plus half the opening's height, as the lips meet about mid-way across it); the change spreads over
+        its own lip side, fading to nothing at radius. Unchanged without the lip term's data (Skyrim side or no
+        hole)."""
+        disp = np.asarray(disp, float)
+        if self.mouth is None:
+            return disp, {"lip_edges": "no mouth data"}
+        m = self.mouth
+        field = np.asarray(field, float)
+        g = welded(disp, self.inv)
+        wv, side = m["dst_v"], m["dst_side"] >= 0.5                 # True: lower lip
+        hole, src_v = m["hole"], m["src_v"]
+        hup = hole[m["src_side"][hole] < 0.5]
+        hdn = hole[m["src_side"][hole] >= 0.5]
+        if len(hup) < 2 or len(hdn) < 2:
+            return disp, {"lip_edges": "mouth edge not split into upper / lower"}
+        ax, fw, lat = m["up_axis"], m["fwd_axis"], m["lat_axis"]
+        hz = src_v[hole] @ ax
+        reach = reach + (hz.max() - hz.min()) / 2           # the lips meet about mid-way across the opening
+        dh = np.linalg.norm(wv[:, None, :] - src_v[hole][None, :, :], axis=2).min(1)
+        near = (dh < reach) & (wv @ fw > (src_v[hole] @ fw).mean() - 0.005)   # not the mouth pocket behind
+        # the meeting rows: per column across the mouth (2 mm wide), the upper lip's lowest vertex and the lower
+        # lip's highest (Starfield's lips join through the pocket, so the rows need not share an edge)
+        col = np.floor((wv @ lat) / 0.002).astype(int)
+        rows = []
+        for lower in (False, True):
+            cand = np.where(near & (side == lower))[0]
+            z = wv[cand] @ ax
+            best = {}
+            for v, c, zz in zip(cand.tolist(), col[cand].tolist(), z.tolist()):
+                if c not in best or (zz > best[c][1] if lower else zz < best[c][1]):
+                    best[c] = (v, zz)
+            rows += [v for v, _z in best.values()]
+        rows = np.array(sorted(rows), int)
+        if not len(rows):
+            return disp, {"lip_edges": "no meeting rows near the mouth edge"}
+        target = np.zeros((len(rows), 3))
+        corr = np.zeros((len(rows), 3))
+        for i, v in enumerate(rows):
+            cand = hdn if side[v] else hup
+            d = np.linalg.norm(src_v[cand] - wv[v], axis=1)
+            j = np.argsort(d)[:2]
+            w = 1.0 / np.maximum(d[j], 1e-6)
+            target[i] = (field[cand[j]] * w[:, None]).sum(0) / w.sum()
+            corr[i] = target[i] - g[v]
+        out = g.copy()
+        for lower in (False, True):
+            r = rows[side[rows] == lower]
+            if not len(r):
+                continue
+            c = corr[side[rows] == lower]
+            mine = np.where(side == lower)[0]
+            d = np.linalg.norm(wv[mine][:, None, :] - wv[r][None, :, :], axis=2)
+            j = d.argmin(1)
+            fall = np.clip(1.0 - d[np.arange(len(mine)), j] / radius, 0.0, 1.0) ** 2
+            out[mine] += c[j] * fall[:, None]
+
+        def opening(x):
+            up, dn = x[rows[~side[rows]]] @ ax, x[rows[side[rows]]] @ ax
+            return float(up.mean() - dn.mean()) if len(up) and len(dn) else 0.0
+        src_open = float((field[hup] @ ax).mean() - (field[hdn] @ ax).mean())
+        rep = {"rows": [int((~side[rows]).sum()), int(side[rows].sum())],
+               "mean_change_m": round(float(np.linalg.norm(corr, axis=1).mean()), 5),
+               "max_change_m": round(float(np.linalg.norm(corr, axis=1).max()), 5),
+               "opening_dz_m": {"skyrim_edges": round(src_open, 5), "before": round(opening(g), 5),
+                                "after": round(opening(out), 5)}}
+        return out[self.inv], rep
+
 
 def correspond(src_v: np.ndarray, src_f: np.ndarray, dst_v: np.ndarray, dst_f: np.ndarray,
                to_model: Optional[np.ndarray] = None, candidates: int = 8, min_dot: float = 0.2,
@@ -238,6 +315,7 @@ def correspond(src_v: np.ndarray, src_f: np.ndarray, dst_v: np.ndarray, dst_f: n
     report = {"src_triangles": int(len(sf)), "src_loose_triangles": int(len(src_f) - len(sf)),
               "dst_seam_vertices": int((cnt[inv] > 1).sum()), "src_edge_m": round(h, 5)}
     # lip side
+    mouth = None
     if to_model is not None and lip_weight > 0:
         src_m = src_v @ to_model[:3, :3].T + to_model[:3, 3]
         dst_m = wv @ to_model[:3, :3].T + to_model[:3, 3]
@@ -254,6 +332,10 @@ def correspond(src_v: np.ndarray, src_f: np.ndarray, dst_v: np.ndarray, dst_f: n
             ld = lip_side(wv, wf, sup, sdn)
             lc = np.einsum("nck,nck->nc", B, ls[sf[T]])
             U = U + lip_weight * ((lc - ld[:, None]) / lip_sigma) ** 2
+            mouth = {"hole": np.asarray(hole, int), "src_side": ls, "src_v": src_v, "dst_v": wv,
+                     **{k: to_model[:3, :3].T[:, i] / np.linalg.norm(to_model[:3, :3].T[:, i])
+                        for i, k in enumerate(("lat_axis", "fwd_axis", "up_axis"))},
+                     "dst_side_of": None}
             report["mouth"] = {"hole_vertices": int(len(hole)),
                                "anchor_gap_m": [round(float(np.linalg.norm(dst_m[sup] - src_m[up])) / scale, 4),
                                                 round(float(np.linalg.norm(dst_m[sdn] - src_m[down])) / scale, 4)]}
@@ -289,4 +371,9 @@ def correspond(src_v: np.ndarray, src_f: np.ndarray, dst_v: np.ndarray, dst_f: n
                   nearest_kept=round(float(np.mean(lab == U.argmin(1))), 3))
     corners = sf[T[r, lab]][inv]
     bary = B[r, lab][inv]
-    return Correspondence(corners, bary, inv, df, report)
+    out = Correspondence(corners, bary, inv, df, report)
+    if mouth is not None:              # each welded dst vertex's lip side: that of its chosen src point
+        mouth.pop("dst_side_of")
+        mouth["dst_side"] = (B[r, lab] * ls[sf[T[r, lab]]]).sum(1)
+        out.mouth = mouth
+    return out

@@ -310,7 +310,7 @@ class PluginTests(unittest.TestCase):
         head = types.SimpleNamespace(vertices=v, triangles=t)
         fake_rp = types.SimpleNamespace(
             SF_MORPH="meshes/morphs/human/{sex}/chargen/{part}/morph.dat",
-            race_transfer=lambda sky, sf, female, smooth, ff: (head, None, None, None, disp,
+            race_transfer=lambda sky, sf, female, smooth, ff, **kw: (head, None, None, None, disp,
                                                                {"transfer": "surface", "alignment": {"rms_m": 0.008}}))
         import face_fit
         saved = (sys.modules.get("race_probe"), face_fit.hkx_to_af.vanilla_file, H.bsa_archives)
@@ -446,7 +446,7 @@ class PluginTests(unittest.TestCase):
             return data, low
         fake_rp = types.SimpleNamespace(
             SF_MORPH="meshes/morphs/human/{sex}/chargen/{part}/morph.dat",
-            race_transfer=lambda sky, sf, female, smooth, ff: (head, None, None, (1.0, np.eye(3), np.zeros(3)),
+            race_transfer=lambda sky, sf, female, smooth, ff, **kw: (head, None, None, (1.0, np.eye(3), np.zeros(3)),
                                                                dict(disp),
                                                                {"transfer": "surface", "alignment": {"rms_m": 0.008}}))
         import face_fit

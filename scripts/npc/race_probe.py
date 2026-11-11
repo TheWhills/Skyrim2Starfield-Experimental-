@@ -153,7 +153,7 @@ def human_race_refs(esm):
 
 
 # ----------------------------------------------------------------------------------- 3. race morphs onto Starfield
-def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="surface"):
+def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="surface", lip_edges=True):
     head, _rep = face_fit.starfield_head(sf_data, female)
     tri_base = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_HEAD_TRI[female], sky))
     races = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_RACE_TRI[female], sky), deltas=True)
@@ -184,7 +184,12 @@ def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="
     rep["transfer"] = method
     for m in races["morphs"]:
         if corr is not None:
-            disp = corr.transfer(m["deltas"] @ al[1].T * al[0], smooth)
+            field = m["deltas"] @ al[1].T * al[0]
+            disp = corr.transfer(field, smooth)
+            if lip_edges:
+                # 2026-11-10: the lips' meeting rows moved like Skyrim's mouth edges (the female Orc gaped)
+                disp, lrep = corr.fit_lip_edges(disp, field)
+                rep.setdefault("lip_edges", {})[m["name"]] = lrep
         else:
             disp = facefit.transfer(base, base + m["deltas"], al, head.vertices)
             if smooth:
@@ -277,6 +282,9 @@ def main(argv=None):
                     help="surface: a point on the Skyrim surface per Starfield vertex (fo4sf.headcorr); nearest: the "
                          "old 4-nearest-vertex average (to compare)")
     ap.add_argument("--skip", action="append", default=[], choices=["morphs", "refs", "transfer"])
+    ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
+                    help="leave the lips as transferred (to compare): without it the lips' meeting rows move like "
+                         "Skyrim's mouth edges")
     a = ap.parse_args(argv)
     import face_fit                                     # heavy imports only when run
     t0 = time.time()
@@ -320,7 +328,8 @@ def main(argv=None):
         views = {}
         for female in (False, True):
             head, base, races, al, disp, rep = race_transfer(sky, sf_data, female, a.smooth, face_fit,
-                                                             legacy=a.legacy_alignment, method=a.transfer)
+                                                             legacy=a.legacy_alignment, method=a.transfer,
+                                                             lip_edges=a.lip_edges)
             if regions.get(female):
                 for name, d in disp.items():
                     rep["races"][name]["regions"] = per_region(d, regions[female], len(head.vertices))
@@ -337,6 +346,9 @@ def main(argv=None):
                 top = sorted(((k, v["max_m"]) for k, v in reg.items() if k != "outside"), key=lambda kv: -kv[1])[:3]
                 print(f"   {name:13} Skyrim max {x['skyrim_max_m']:.3f} m, on Starfield {x['starfield_max_m']:.3f} m; "
                       f"most in {top}; outside regions {reg.get('outside')}")
+                le = rep.get("lip_edges", {}).get(name)
+                if le:
+                    print(f"   {'':13} lips: {le}")
         viewer(os.path.join(a.out, "race_view.html"), views)
     with open(os.path.join(a.out, "race_probe.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1, default=str)

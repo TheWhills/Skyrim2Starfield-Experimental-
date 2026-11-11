@@ -1204,6 +1204,9 @@ def main(argv=None):
     ap.add_argument("--no-bake-parts", action="store_true",
                     help="--race-shape baked: no race copies of the face head parts (eyes, brows, beards, teeth, "
                          "lashes, jewelry); the race then uses HumanRace's (2026-11-10 default: baked copies)")
+    ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
+                    help="the race shapes' lips as transferred: without it the lips' meeting rows move like Skyrim's "
+                         "mouth edges (2026-11-10: the female Orc gaped where Skyrim's lips barely part)")
     ap.add_argument("--symmetry", choices=("stronger", "mean", "none"), default="stronger",
                     help="left / right: per vertex pair the side that moved more (default), their mean, or as "
                          "transferred")
@@ -1227,7 +1230,8 @@ def main(argv=None):
         sex = SEXES[female]
         data, rel = face_fit.hkx_to_af.vanilla_file(race_probe.SF_MORPH.format(sex=sex, part="head"), sf_data)
         morph = sfmorph.parse(data)
-        head, _base, _races, _al, disp, trep = race_probe.race_transfer(sky, sf_data, female, a.smooth, face_fit)
+        head, _base, _races, _al, disp, trep = race_probe.race_transfer(sky, sf_data, female, a.smooth, face_fit,
+                                                                          lip_edges=a.lip_edges)
         align = tuple(_al[:3]) if _al is not None else None
         if a.symmetry != "none":
             # 2026-11-09 (owner: one ear looked better than the other on every NPC, the other side for each sex):
@@ -1241,7 +1245,8 @@ def main(argv=None):
             raise SystemExit(f"{sex}: head morph.dat has {morph.num_vertices} vertices, the head mesh {nv}")
         fc = frame_check(morph, head.vertices, head.triangles)
         srep = {"vanilla_morph": rel, "vanilla_keys": len(morph.keys), "frame_check_overweight_outward": fc,
-                "transfer": trep.get("transfer"), "alignment_rms_m": trep["alignment"]["rms_m"]}
+                "transfer": trep.get("transfer"), "alignment_rms_m": trep["alignment"]["rms_m"],
+                "lip_edges": trep.get("lip_edges")}
         report["sexes"][sex] = srep
         print(f"{sex}: vanilla head morph {len(morph.keys)} keys; frame check (Overweight outward) {fc}")
         if fc is not None and fc < 0.7 and not a.force:
@@ -1290,7 +1295,11 @@ def main(argv=None):
         srep.update(keys=len(keys), morph_file=rel_out)
         print(f"  {len(keys)} keys -> {rel_out}")
         for race, x in srep.get("races", {}).items():
-            print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m")
+            le = (srep.get("lip_edges") or {}).get(race) or {}
+            op = le.get("opening_dz_m") or {}
+            lips = (f"; lips open {op['before'] * 1000:.1f} -> {op['after'] * 1000:.1f} mm (Skyrim "
+                    f"{op['skyrim_edges'] * 1000:.1f})") if op else ""
+            print(f"  {race}: max {x['max_m']:.3f} m, split error {x['split_error_max_m']:.6f} m{lips}")
     wanted = race_names(a.new_races)
     models, rparts, mouths = None, None, None
     if wanted and a.race_shape == "baked":
