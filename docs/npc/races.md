@@ -533,3 +533,8 @@ why the mod needs no clothes of its own.
 - 2026-11-11, **verified in game (owner):** the Orc mouth as a misc part shows ivory tusks / teeth on the player
   (looks menu) and NPCs, and drops with the jaw when the NPC talks (its morph record, the vanilla teeth's copy, still
   drives it). The looks menu's TEETH row now changes nothing (no Teeth part on the race; harmless).
+- 2026-11-11, owner: test the Orc's skin tone before building every race. Plan: Skyrim's skin tones are tint presets
+  (RACE tint mask type 6, colours from CLFM records); Starfield's are AVMD groups of 9 colour textures (body / hands /
+  per-phenotype face). An Orc race of ours would name its own groups (BSTT / HSTT / FSTT strings) holding recoloured
+  copies of the vanilla tone textures, tinted to Skyrim's Orc presets. First: scripts/npc/skin_tone_probe.py
+  (read-only) lists Skyrim's presets per race and Starfield's tone groups with their texture sizes / formats.
