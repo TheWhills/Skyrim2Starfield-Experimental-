@@ -673,3 +673,22 @@ class ChargenOptionListTests(unittest.TestCase):
         self.assertEqual(got, {"HeadPartsChargenOptionsMale": [0x10, 0x11, 0x1000872, 0x1000900, 0x1000813],
                                "HeadPartsChargenOptionsFemale": [0x20, 0x1000874]})
         self.assertEqual({f for _t, _h, _s, f in out}, {0x3D9AF, 0x3D9B0})    # overrides, same FormIDs
+
+
+class PresetCopyTests(unittest.TestCase):
+    def test_presets_become_race_copies(self):
+        """2026-11-11: a new game's Orc player kept the first chargen preset's human teeth; the race's presets are now
+        copies on the race with its head and part copies."""
+        h = bytes(24)
+        npcs = {0x50560: (h, [(b"EDID", Z("ChargenPresetMale02")), (b"RNAM", I(0x347D)),
+                              (b"PNAM", I(0x24A022)), (b"PNAM", I(0x24A03D)), (b"PNAM", I(0x13EB51))]),
+                0x50566: (h, [(b"EDID", Z("ChargenPresetFemale01")), (b"RNAM", I(0x347D)), (b"PNAM", I(0x12201))])}
+        rsubs = [(b"MNAM", b""), (b"RPRM", I(0x50560)), (b"RPRM", I(0x999)), (b"FNAM", b""), (b"RPRF", I(0x50566))]
+        part_types = {0x24A022: 1, 0x12201: 1, 0x24A03D: 9, 0x13EB51: 3}
+        n = iter(range(0x1000900, 0x1000a00))
+        out, recs = H.race_preset_copies(rsubs, npcs, "Orc", 0x1000811, {False: 0x100080F, True: 0x1000810},
+                                         part_types, {False: {0x24A03D: 0x1000872}}, lambda e: next(n))
+        self.assertEqual([_u(d) for s, d in out if s in (b"RPRM", b"RPRF")], [0x1000900, 0x999, 0x1000901])
+        male = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2S_OrcRace_ChargenPresetMale02"]
+        self.assertEqual(_u(dict(male)[b"RNAM"]), 0x1000811)
+        self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"), [0x13EB51, 0x100080F, 0x1000872])

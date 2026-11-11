@@ -505,3 +505,8 @@ why the mod needs no clothes of its own.
   options) looks like teeth colour (NPC TETC). Starfield's chargen part lists HeadPartsChargenOptionsMale / Female
   hold only vanilla parts. build_plugin now overrides them with every race copy of their entries added
   (chargen_option_lists); human_only_parts already makes the vanilla ones invalid for our races. Unverified.
+- 2026-11-11, owner: on a coc'd new game the Orc player already shows the human teeth (and the pink corners) before
+  any menu. The player's face on a new game is the first chargen preset's (RPRM / RPRF: HumanRace's vanilla
+  ChargenPresetMale02.. NPCs, copied into our race), whose PNAM has Human_Male_Teeth and the human brows / eyes; only
+  the head comes from the race. build_plugin now replaces the race's presets with copies on the race
+  (race_preset_copies: RNAM ours, Face = the race head, the other parts = the race copies). Unverified.

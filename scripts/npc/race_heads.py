@@ -716,6 +716,32 @@ def add_presets(subs, presets):
     return out
 
 
+def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, new_fid):
+    """(RACE subrecords, [NPC_ records]): each chargen preset of the race (RPRM / RPRF, copied from HumanRace: vanilla
+    preset NPCs) replaced by a copy on the race - RNAM ours, its Face head part the race's head, its other parts the
+    race copies (2026-11-11: a new game's player is built from the first preset, so the Orc player kept the preset's
+    human teeth, brows and eyes; only the head, which the menu takes from the race, was ours). npcs: {FormID: (header,
+    subs)}; heads {female: HDPT}; copies {female: {vanilla: copy}}."""
+    made, out, recs = {}, [], []
+    for s_, d in rsubs:
+        if s_ in PRESET_SIG.values() and len(d) == 4 and _u32(d) in npcs:
+            v = _u32(d)
+            if v not in made:
+                female = s_ == PRESET_SIG[True]
+                h, sb = npcs[v]
+                edid = f"S2S_{name}Race_{sfplugin.edid(sb) or f'Preset{v:08X}'}"
+                fid = new_fid(edid)
+                subs = sfplugin.edit(list(sb), {b"EDID": sfplugin.zs(edid), b"RNAM": struct.pack("<I", race_fid)})
+                if female in heads:
+                    subs = with_head_part(subs, heads[female], part_types)
+                subs = swap_parts(subs, copies.get(female, {}))
+                recs.append((b"NPC_", h, subs, fid))
+                made[v] = fid
+            d = struct.pack("<I", made[v])
+        out.append((s_, d))
+    return out, recs
+
+
 LSTRING_SIGS = {b"FULL": "strings", b"DESC": "dlstrings", b"FMRN": "strings", b"FDSL": "strings",
                 b"MPPN": "strings"}
 
@@ -1029,6 +1055,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     hdpts = {fid: s for t, h, s, fid in recs_all if t == b"HDPT"}
     human = next((fid for t, _h, s, fid in recs_all if t == b"RACE" and sfplugin.edid(s) == "HumanRace"), None)
     npc_recs = [r for r in recs_all if r[0] == b"NPC_"]
+    npc_by = {fid: (h, s) for t, h, s, fid in npc_recs}
     masters = 1
     ids = ids or FormIds(None, masters)
     recs, rep = [], {"npcs": [], "head_parts": {}}
@@ -1131,6 +1158,10 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                                     (mouths or {}).get(race))
                 recs += prs
                 rsubs = swap_race_heads(rsubs, copies)
+                rsubs, prec = race_preset_copies(rsubs, npc_by, NAMES[race], r_fid, rheads, part_types, copies,
+                                                 ids.take)
+                recs += prec
+                rrep["preset_copies"] = len(prec)
                 part_copies[race] = copies
                 rrep["face_parts"] = {SEXES[f]: len(set(c.values())) for f, c in copies.items()}
             recs.append((b"RACE", by_fid[human][1], rsubs, r_fid))
