@@ -140,7 +140,14 @@ class RaceProbeTests(unittest.TestCase):
                                             files["head"] if p.endswith(".tri") else b"",
                                             vanilla_file=lambda p, sf: (_ for _ in ()).throw(SystemExit("none"))))
         head, b, races, al, out, rep = P.race_transfer(None, "", False, 0, ff)
-        self.assertIn("error", rep["ears"])                     # no head morph to find the ears in: skipped
+        self.assertNotIn("ears", rep)                           # the ear fit is opt-in (2026-11-10)
+        rep_e = P.race_transfer(None, "", False, 0, ff, ears=True)[5]
+        self.assertIn("error", rep_e["ears"])                   # no head morph to find the ears in: skipped
+        dump = P.geometry_dump(head, b, races, al, out, {"Ears": np.array([1, 2])})
+        self.assertEqual(dump["sf_v"].shape, (len(H.vertices), 3))
+        self.assertEqual(dump["sky_delta_HighElfRace"].shape, (len(base), 3))
+        self.assertEqual(list(dump["sf_region_Ears"]), [1, 2])
+        np.testing.assert_allclose(dump["model_xf"], node)
         self.assertEqual(rep["transfer"], "surface")
         self.assertIsNone(rep["correspondence"]["mouth"])      # no mouth on a sphere
         np.testing.assert_allclose(out["HighElfRace"][0], (0.1, 0, 0), atol=1e-6)      # up = local +x

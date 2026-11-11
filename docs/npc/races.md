@@ -461,3 +461,11 @@ why the mod needs no clothes of its own.
   it, Skyrim's vertices warped by it within 35 mm of its ear (fading over 20 mm) and the race field turned with them,
   before the correspondence. Reported per side: gap before / after, move, turn, scale (--no-ear-fit to compare).
   Both unverified on the owner's heads.
+- 2026-11-10, owner's run with both fixes: lips: the female Orc's visible opening now 0.6 mm (was 3.2; Skyrim's
+  lips overlap by 1.0 mm), the male's 13.6 mm (Skyrim 11.0: open, as it should be). Ears: ear_fit reported a 25 mm
+  gap on both sides, 4 cm moves, 21-34 degree turns, scale at its 0.9 limit: it matched the sides of the heads (the
+  Ears region off the side of the head is mostly side of the head; 266-321 of Skyrim's 898 vertices) - no visible
+  change. ear_fit is now opt-in (--ear-fit). The viewer also shows the female's other ear sinking into the head
+  while one becomes a blade (both ears moving the same way sideways?). Next: race_probe --dump-geometry
+  (race_geom_<sex>.npz: both heads, alignment, deltas, regions, transfer; game-derived, never committed) so the ear
+  can be examined offline instead of from screenshots.

@@ -220,8 +220,26 @@ def warp(pts, fits, vectors=False):
     return out
 
 
+def geometry_dump(head, base, races, al, disp, regions=None):
+    """Arrays for race_geom_<sex>.npz (--dump-geometry): both heads, the alignment, Skyrim's race deltas, our
+    transfer, Starfield's regions, to look at offline (2026-11-10: the ear and lip fixes were guessed from
+    screenshots). Game-derived: never committed."""
+    dump = {"sf_v": np.asarray(head.vertices, np.float32), "sf_f": np.asarray(head.triangles, np.int32),
+            "model_xf": np.asarray(getattr(head, "model_xf", None) if getattr(head, "model_xf", None) is not None
+                                   else np.eye(4), np.float64),
+            "sky_v": np.asarray(base, np.float32), "sky_f": np.asarray(races["faces"], np.int32),
+            "al_s": np.float64(al[0]), "al_R": np.asarray(al[1], np.float64), "al_t": np.asarray(al[2], np.float64)}
+    for m in races["morphs"]:
+        dump["sky_delta_" + m["name"]] = np.asarray(m["deltas"], np.float32)
+    for name, d in disp.items():
+        dump["sf_disp_" + name] = np.asarray(d, np.float32)
+    for r, idx in (regions or {}).items():
+        dump["sf_region_" + r] = np.asarray(idx, np.int32)
+    return dump
+
+
 def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="surface", lip_edges=True,
-                  ears=True):
+                  ears=False):
     head, _rep = face_fit.starfield_head(sf_data, female)
     tri_base = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_HEAD_TRI[female], sky))
     races = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_RACE_TRI[female], sky), deltas=True)
@@ -365,9 +383,13 @@ def main(argv=None):
     ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
                     help="leave the lips as transferred (to compare): without it the lips' meeting rows move like "
                          "Skyrim's visible lip edges")
-    ap.add_argument("--no-ear-fit", dest="ear_fit", action="store_false",
-                    help="the heads aligned as a whole only (to compare): without it Skyrim's ears are first moved "
-                         "onto Starfield's (ear_fit)")
+    ap.add_argument("--ear-fit", action="store_true",
+                    help="first move Skyrim's ears onto Starfield's (ear_fit; experimental: on the owner's heads "
+                         "2026-11-10 it matched the sides of the heads, not the ears)")
+    ap.add_argument("--dump-geometry", action="store_true",
+                    help="also write race_geom_<sex>.npz (both heads' vertices and triangles, the alignment, the "
+                         "Skyrim race deltas, Starfield's regions, our transfer) to look at offline; game-derived "
+                         "data: never commit it")
     a = ap.parse_args(argv)
     import face_fit                                     # heavy imports only when run
     t0 = time.time()
@@ -417,6 +439,9 @@ def main(argv=None):
                 for name, d in disp.items():
                     rep["races"][name]["regions"] = per_region(d, regions[female], len(head.vertices))
             report.setdefault("transfer", {})[SEXES[female]] = rep
+            if a.dump_geometry:
+                dump = geometry_dump(head, base, races, al, disp, regions.get(female))
+                np.savez_compressed(os.path.join(a.out, f"race_geom_{SEXES[female]}.npz"), **dump)
             np.savez_compressed(os.path.join(a.out, f"race_morphs_{SEXES[female]}.npz"),
                                 **{k: v.astype(np.float32) for k, v in disp.items()})
             views[SEXES[female]] = (head, base, races, al, disp)

@@ -1207,9 +1207,9 @@ def main(argv=None):
     ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
                     help="the race shapes' lips as transferred: without it the lips' meeting rows move like Skyrim's "
                          "visible lip edges (2026-11-10: the female Orc gaped where Skyrim's lips look closed)")
-    ap.add_argument("--no-ear-fit", dest="ear_fit", action="store_false",
-                    help="the heads aligned as a whole only: without it Skyrim's ears are first moved onto "
-                         "Starfield's (race_probe.ear_fit; 2026-11-10: the female Orc's ear came out a flat blade)")
+    ap.add_argument("--ear-fit", action="store_true",
+                    help="first move Skyrim's ears onto Starfield's (race_probe.ear_fit; experimental, off by default: "
+                         "on the owner's heads 2026-11-10 it matched the sides of the heads, not the ears)")
     ap.add_argument("--symmetry", choices=("stronger", "mean", "none"), default="stronger",
                     help="left / right: per vertex pair the side that moved more (default), their mean, or as "
                          "transferred")
