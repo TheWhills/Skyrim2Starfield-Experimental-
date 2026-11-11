@@ -231,11 +231,21 @@ def lateral_axis(vertices: np.ndarray) -> int:
     return best[1]
 
 
-def symmetrize(field: np.ndarray, vertices: np.ndarray, axis: int = 0, mode: str = "mean") -> np.ndarray:
+def _vertex_normals(v: np.ndarray, f: np.ndarray) -> np.ndarray:
+    n = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
+    out = np.zeros_like(v)
+    for k in range(3):
+        np.add.at(out, f[:, k], n)
+    return out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-12)
+
+
+def symmetrize(field: np.ndarray, vertices: np.ndarray, axis: int = 0, mode: str = "mean",
+               faces: Optional[np.ndarray] = None) -> np.ndarray:
     """A displacement field made mirror-symmetric (2026-11-05: with More Sliders' left / right sliders the fit chased
     the transfer's left-right noise: Ralof came out deformed). mode "mean": the mean of the field and its mirror
     image; "stronger": per vertex the larger of the two (2026-11-09, owner: with the mean the race heads' ears came out
-    half-pointed: one side of the transfer had the point, the other had lost it)."""
+    half-pointed: one side of the transfer had the point, the other had lost it); with faces, a vertex whose mirror
+    partner's surface faces another way (the other lip) keeps its own."""
     m = mirror_index(vertices, axis)
     flip = np.ones(3)
     flip[axis] = -1.0
@@ -243,6 +253,12 @@ def symmetrize(field: np.ndarray, vertices: np.ndarray, axis: int = 0, mode: str
     flipped = f[m] * flip
     if mode == "stronger":
         own = np.linalg.norm(f, axis=1) >= np.linalg.norm(flipped, axis=1)
+        if faces is not None:
+            # 2026-11-11 (the Orc mouth's "strands", found in the owner's geometry dump): Starfield's lips meet with
+            # their surfaces interleaved, so a vertex's mirror partner can lie on the OTHER lip; taking its larger
+            # move tore the lips into spikes. A partner whose (mirrored) surface faces another way is not its twin.
+            n = _vertex_normals(np.asarray(vertices, float), np.asarray(faces, int))
+            own |= (n * (n[m] * flip)).sum(1) < 0.5
         return np.where(own[:, None], f, flipped)
     return 0.5 * (f + flipped)
 

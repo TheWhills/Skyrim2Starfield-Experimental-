@@ -1241,7 +1241,8 @@ def main(argv=None):
             # the transfer lost the point on one side; Skyrim's race heads are symmetric. "stronger" keeps, per
             # vertex pair, the side that moved more (the mean gave half-pointed ears)
             ax = facefit.lateral_axis(head.vertices)
-            disp = {r: facefit.symmetrize(np.asarray(d, float), head.vertices, ax, a.symmetry)
+            disp = {r: facefit.symmetrize(np.asarray(d, float), head.vertices, ax, a.symmetry,
+                                          faces=head.triangles)
                     for r, d in disp.items()}
         nv = len(head.vertices)
         if morph.num_vertices != nv:

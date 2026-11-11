@@ -186,6 +186,9 @@ class RaceProbeTests(unittest.TestCase):
             with open(p, encoding="utf-8") as fh:
                 t = fh.read()
             self.assertIn('"names": ["OrcRace"]', t)
+            # 2026-11-11: the camera looks from +Y, so +X is the screen's left: the Starfield head (tan) goes there
+            self.assertIn("mk(sv,u32(d.sf_f),0.13,0xd8b8a0)", t)
+            self.assertIn("tan: Starfield head", t)
             self.assertNotIn("__DATA__", t)
 
 

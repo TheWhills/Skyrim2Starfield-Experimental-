@@ -469,3 +469,18 @@ why the mod needs no clothes of its own.
   while one becomes a blade (both ears moving the same way sideways?). Next: race_probe --dump-geometry
   (race_geom_<sex>.npz: both heads, alignment, deltas, regions, transfer; game-derived, never committed) so the ear
   can be examined offline instead of from screenshots.
+- 2026-11-11, from the owner's geometry dump (race_geom_<sex>.npz, looked at offline; the first time the heads were
+  examined directly instead of through screenshots):
+  - race_view.html's label was wrong: the camera looks from +Y, so the Starfield head (placed at x -0.13) showed on
+    the RIGHT. The blue, low-poly head both of us had been reading as ours was Skyrim's own: its flat "blade" ear and
+    its see-through mouth slit are Skyrim's 898-vertex mesh. Fixed: Starfield on the left, the label names each head
+    by colour (tan: Starfield, blue: Skyrim). The 2026-11-10 viewer readings above (blade ear, gaping female lips)
+    were of Skyrim's head.
+  - The in-game "strands" across the male Orc's mouth: race_heads' --symmetry stronger. Starfield's lips meet with
+    their surfaces interleaved, so a lip vertex's mirror partner can lie on the other lip (123 of 1,224 mouth
+    vertices on the male); taking the partner's larger move tore the lips into vertical spikes. The raw transfer is
+    clean. facefit.symmetrize(faces=...) now keeps a vertex's own move when its partner's mirrored surface faces
+    another way (normals' dot < 0.5); the ears still get the stronger side (both 45.6 mm male, 34.2 mm female).
+    A few stretched faces remain at the mouth corners (from the transfer itself).
+  - The ears are fine in the game build: the raw transfer gives one ear its point (34 mm) and the other less (23 mm),
+    and the symmetry gives both the 34 mm one; Skyrim's tip moves 38 mm.

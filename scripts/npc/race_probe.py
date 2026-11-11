@@ -320,7 +320,11 @@ def b64(a, dt):
 
 
 def viewer(path, sexes):
-    """race_view.html: per sex the Starfield head (with each race morph) and the Skyrim head (same morph)."""
+    """race_view.html: per sex the Starfield head (with each race morph) and the Skyrim head (same morph).
+
+    2026-11-11: the label said "left: Starfield" but the camera looks from +Y, so the Starfield head (x -0.13) showed
+    on the right: the owner and I read Skyrim's low-poly head as ours for a day. Now the Starfield head is on the
+    screen's left and the label names each head by its colour (tan: Starfield, blue: Skyrim)."""
     payload = {}
     for sex, (head, base, races, al, disp) in sexes.items():
         s, R, t = al[:3]
@@ -337,7 +341,8 @@ def viewer(path, sexes):
 <style>body{margin:0;font:14px sans-serif;background:#222;color:#ddd}#ui{position:absolute;top:8px;left:8px;
 background:#000a;padding:8px;border-radius:6px}select,label{margin-right:8px}</style></head><body>
 <div id="ui"><select id="sex"></select><select id="race"></select><label><input type="range" id="amt" min="0" max="2"
-step="0.05" value="1"> amount</label><span id="info"></span><br>left: Starfield head, right: Skyrim head (aligned)</div>
+step="0.05" value="1"> amount</label><span id="info"></span><br><b style="color:#d8b8a0">tan: Starfield head
+(converted, the game's)</b> &nbsp; <b style="color:#a0b8d8">blue: Skyrim head (its own, low-poly)</b></div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
@@ -355,7 +360,7 @@ g.setIndex(new THREE.BufferAttribute(f,1));g.computeVertexNormals();const m=new 
 m.position.x=off;m.userData.base=v;sc.add(m);return m}
 function build(){meshes.forEach(m=>sc.remove(m));const d=P[sex.value];
 const sv=f32(d.sf_v),kv=f32(d.sky_v);let c=[0,0,0];for(let i=0;i<sv.length;i+=3){c[0]+=sv[i];c[1]+=sv[i+1];c[2]+=sv[i+2]}
-c=c.map(x=>x/(sv.length/3));meshes=[mk(sv,u32(d.sf_f),-0.13,0xd8b8a0),mk(kv,u32(d.sky_f),0.13,0xa0b8d8)];
+c=c.map(x=>x/(sv.length/3));meshes=[mk(sv,u32(d.sf_f),0.13,0xd8b8a0),mk(kv,u32(d.sky_f),-0.13,0xa0b8d8)];
 meshes.forEach(m=>{m.position.y=-c[1];m.position.z=-c[2]});
 race.innerHTML=d.names.map(n=>'<option>'+n+'</option>').join('');cam.position.set(0,0.9,0.05);ctl.target.set(0,0,0);apply()}
 function apply(){const d=P[sex.value],a=+amt.value,n=race.value;[[meshes[0],d.sf_d[n]],[meshes[1],d.sky_d[n]]].forEach(([m,s])=>{
@@ -383,6 +388,9 @@ def main(argv=None):
     ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
                     help="leave the lips as transferred (to compare): without it the lips' meeting rows move like "
                          "Skyrim's visible lip edges")
+    ap.add_argument("--symmetry", choices=("stronger", "mean", "none"), default="stronger",
+                    help="as race_heads: per vertex pair the side that moved more (stronger), the mean, or the raw "
+                         "transfer (none)")
     ap.add_argument("--ear-fit", action="store_true",
                     help="first move Skyrim's ears onto Starfield's (ear_fit; experimental: on the owner's heads "
                          "2026-11-10 it matched the sides of the heads, not the ears)")
@@ -435,6 +443,13 @@ def main(argv=None):
             head, base, races, al, disp, rep = race_transfer(sky, sf_data, female, a.smooth, face_fit,
                                                              legacy=a.legacy_alignment, method=a.transfer,
                                                              lip_edges=a.lip_edges, ears=a.ear_fit)
+            if a.symmetry != "none":
+                # as race_heads does (2026-11-09: the transfer loses the ear's point on one side), so the viewer
+                # shows what the game gets (2026-11-11: the owner's "ear difference" was this one-sided ear)
+                ax = facefit.lateral_axis(head.vertices)
+                disp = {r: facefit.symmetrize(np.asarray(d, float), head.vertices, ax, a.symmetry,
+                                              faces=head.triangles)
+                        for r, d in disp.items()}
             if regions.get(female):
                 for name, d in disp.items():
                     rep["races"][name]["regions"] = per_region(d, regions[female], len(head.vertices))

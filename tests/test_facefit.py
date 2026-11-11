@@ -193,6 +193,24 @@ class RidgeSymmetryTests(unittest.TestCase):
         self.assertTrue(np.allclose(sym[m] * [-1, 1, 1], sym))           # ... the result is a mirror image of itself
         self.assertAlmostEqual(float(np.abs(sym[:, 1]).max()), 0.0005, places=6)
 
+    def test_symmetrize_other_lip(self):
+        """2026-11-11 (the Orc mouth's strands): a vertex whose mirror partner lies on the other lip (interleaved lip
+        surfaces facing the other way) keeps its own move; partners on the same surface still share the stronger."""
+        A, B = np.array([0.01, 0.0, 0.0002]), np.array([-0.01, 0.0, -0.0002])
+        dx, dy = np.array([0.001, 0.0, 0.0]), np.array([0.0, 0.001, 0.0])
+        v = np.array([A, A + dy, A + dx, B, B + dy, B - dx,                 # upper lip (faces down) / lower (up)
+                      (0.03, 0, 0.01), (0.03, 0.001, 0.01), (0.031, 0, 0.01),       # an ear and its twin
+                      (-0.03, 0, 0.01), (-0.03, 0.001, 0.01), (-0.031, 0, 0.01)])
+        f = np.array([[0, 1, 2], [3, 4, 5], [6, 8, 7], [9, 10, 11]])
+        field = np.zeros_like(v)
+        field[:3, 2], field[3:6, 2] = 0.005, -0.009        # upper lip up, lower lip down (further)
+        field[6:9, 0] = 0.03                               # one ear's point; the other lost it
+        plain = F.symmetrize(field, v, 0, "stronger")
+        self.assertAlmostEqual(plain[0, 2], -0.009)                         # without faces: torn
+        fixed = F.symmetrize(field, v, 0, "stronger", faces=f)
+        np.testing.assert_allclose(fixed[:6], field[:6])                    # each lip keeps its own
+        np.testing.assert_allclose(fixed[9:12, 0], -0.03)                   # the ear still gets its twin's point
+
 
 RECIPE = "\n".join([
     "MORESLIDERSFACEBONES\t1", "# comment",
