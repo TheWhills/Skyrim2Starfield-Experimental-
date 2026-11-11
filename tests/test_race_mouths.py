@@ -204,7 +204,7 @@ class BrightnessAndUvTestTests(unittest.TestCase):
             saved = (H.mouth_converter, H.vanilla_teeth, RM.convert_mouth, H.facefit.starfield_head_parts)
             H.mouth_converter = lambda sky, o, *a: (Conv(), staging)
             H.vanilla_teeth = lambda recs, sf, female, ff: (1, b"", {}, 2)
-            RM.convert_mouth = lambda *a: ({}, {"vertices": 3, "jaw_vertices": 1, "material": a[-1]})
+            RM.convert_mouth = lambda *a: ({}, {"vertices": 3, "jaw_vertices": 1, "material": a[9]})
             H.facefit.starfield_head_parts = lambda raw: ([], {})
             import fo4sf.skyrimskin as sk
             import fo4sf.nif as nm
@@ -225,3 +225,33 @@ class BrightnessAndUvTestTests(unittest.TestCase):
             p = os.path.join(out, "textures", "s2s", "actors", "character", "mouth", "mouthorc_x_color.dds")
             self.assertTrue(os.path.isfile(p))
             self.assertEqual(rep["OrcRace male"]["uv_test"], "textures/s2s/actors/character/mouth/mouthorc_x_color.dds")
+
+
+class FacebonesTwinTests(unittest.TestCase):
+    def test_twin_skinned_to_teeth_bones(self):
+        """2026-11-11 (nif_parts on the owner's game: teeth_facebones.nif is skinned to faceBone_C_TopTeeth /
+        BottomTeeth; the player showed no C_Head-skinned Orc mouth): the twin puts the jaw vertices on the bottom
+        teeth bone, the rest on the top, with the vanilla twin's binds."""
+        bind_b = ((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0.0, 0.01, 0.0), 1.0)
+        nb = nifmod.serialize(sfnif.build_skinned_nif(b"Teeth_faceBones", [sfnif.SkinnedShape(
+            b"Teeth_faceBones:0", b"aaaa\\bbbb", 3, 3, "x.mat", [b"faceBone_C_TopTeeth", b"faceBone_C_BottomTeeth"],
+            [IDENT, bind_b])]))
+        pts = np.array([[0, 0, 0], [0.01, 0, 0], [0, 0, -0.01], [0.01, 0, -0.01]], float)
+        jaw = np.array([False, False, True, True])
+        out = RM.facebones_mouth(nb, pts, np.tile([0, -1.0, 0], (4, 1)), [(0, 0), (1, 0), (0, 1), (1, 1)],
+                                 np.array([[0, 1, 2], [1, 3, 2]]), jaw, "mouth_m_faceBones", "m.mat")
+        self.assertIsNotNone(out)
+        mpath, mdata, nif = out
+        n = nifmod.parse(nif)
+        g = next(sfnif.parse_bsgeometry(b) for i, b in enumerate(n.blocks) if n.type_of(i) == "BSGeometry")
+        from fo4sf import headbake
+        sk = headbake.geometry_skin(n, g)
+        self.assertEqual([b.decode() if isinstance(b, bytes) else b for b in sk["bones"]],
+                         ["faceBone_C_TopTeeth", "faceBone_C_BottomTeeth"])
+        m = sfmesh.parse(mdata)
+        bones = [m.weights[i * m.weights_per_vertex][0] for i in range(4)]
+        self.assertEqual(bones, [0, 0, 1, 1])
+        plain = nifmod.serialize(sfnif.build_skinned_nif(b"T", [sfnif.SkinnedShape(
+            b"T", b"aaaa\\bbbb", 3, 3, "x.mat", [b"C_Head"], [IDENT])]))
+        self.assertIsNone(RM.facebones_mouth(plain, pts, np.tile([0, -1.0, 0], (4, 1)), [(0, 0)] * 4,
+                                             np.array([[0, 1, 2]]), jaw, "m", "m.mat"))

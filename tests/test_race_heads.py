@@ -458,7 +458,8 @@ class PluginTests(unittest.TestCase):
         saved_cm = race_mouths.convert_mouth
         calls = []
 
-        def fake_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, t_nif, t_morphs, base, material):
+        def fake_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, t_nif, t_morphs, base, material,
+                       teeth_fb_nif=None):
             calls.append((sky_path, base, sorted(t_morphs)))
             return ({base + ".nif": b"nif"}, {"vertices": 348, "jaw_vertices": 120, "vanilla_vertices": 21,
                                               "model": base[len("meshes/"):].replace("/", "\\") + ".nif",

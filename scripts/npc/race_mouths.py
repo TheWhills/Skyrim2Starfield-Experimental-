@@ -173,27 +173,50 @@ def teeth_template(nif_bytes):
     raise ValueError("teeth NIF without geometry")
 
 
-def build_mouth(pts, normals, uvs, tris, bind, bones, name, translation, rotation, material):
-    """{"mesh path": bytes, nif bytes} of a C_Head-skinned mouth (points in the teeth's mesh frame, metres)."""
+def build_mouth(pts, normals, uvs, tris, bind, bones, name, translation, rotation, material, weights=None,
+                binds=None):
+    """{"mesh path": bytes, nif bytes} of a skinned mouth (points in the teeth's mesh frame, metres): all on bones[0]
+    with bind (the C_Head mouth), or weights [[(bone, w)]] per vertex over bones with binds (one per bone)."""
     from fo4sf import skyrimhair
+    if weights is None:
+        weights, bones, binds = [[(bones[0], 1.0)] for _ in range(len(pts))], [bones[0]], [bind]
     sh = skyrimhair.HairShape(name.encode(), np.asarray(pts, float), np.asarray(normals, float), None,
                               list(uvs), [tuple(int(x) for x in t) for t in tris],
-                              [[(bones[0], 1.0)] for _ in range(len(pts))], -1, -1, -1,
-                              colors=[(255, 255, 255, 255)] * len(pts))
+                              weights, -1, -1, -1, colors=[(255, 255, 255, 255)] * len(pts))
     hair, _r = skyrimhair.uv_tangents(skyrimhair.Hair([sh], [], {}, {}))
     import dataclasses
     sh = dataclasses.replace(hair.shapes[0], colors=[(255, 255, 255, 255)] * len(pts))   # white: no hair strand colours
-    m = skyrimhair._mesh(sh, [bones[0]], False)
+    m = skyrimhair._mesh(sh, list(bones), False)
     data = sfmesh.serialize(m)
     d, f = mesh_file_path(data)
     nif = sfnif.build_skinned_nif(name.encode(), [sfnif.SkinnedShape(
-        name.encode(), f"{d}\\{f}".encode(), len(tris) * 3, len(pts), material, [bones[0].encode()], [bind],
-        tuple(translation), tuple(rotation))])
+        name.encode(), f"{d}\\{f}".encode(), len(tris) * 3, len(pts), material, [b.encode() for b in bones],
+        list(binds), tuple(translation), tuple(rotation))])
     return f"geometries/{d}/{f}.mesh", data, nifmod.serialize(nif)
 
 
+FACEBONE_TEETH = ("facebone_c_topteeth", "facebone_c_bottomteeth")
+
+
+def facebones_mouth(teeth_fb_nif, local, lnrm, uvs, tris, jaw, name, material):
+    """(mesh path, mesh bytes, NIF bytes) of the mouth's _facebones twin, or None: skinned like the vanilla teeth
+    twin (2026-11-11, nif_parts on the owner's game: teeth_facebones.nif is skinned to faceBone_C_TopTeeth /
+    faceBone_C_BottomTeeth, not C_Head; the player, drawn from the twins, showed no C_Head-skinned Orc mouth) - the
+    jaw vertices on the bottom teeth bone, the rest on the top, with the vanilla twin's binds."""
+    g, skin, _lod0 = teeth_template(teeth_fb_nif)
+    names = [b.decode("latin-1") if isinstance(b, bytes) else str(b) for b in skin.get("bones", [])]
+    low = [n.lower() for n in names]
+    if not all(x in low for x in FACEBONE_TEETH) or not skin.get("binds"):
+        return None
+    top, bot = (names[low.index(x)] for x in FACEBONE_TEETH)
+    binds = [skin["binds"][low.index(x)] for x in FACEBONE_TEETH]
+    weights = [[(bot if j else top, 1.0)] for j in jaw]
+    return build_mouth(local, lnrm, uvs, tris, None, [top, bot], name, g.translation, g.rotation, material,
+                       weights=weights, binds=binds)
+
+
 def convert_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, teeth_nif, teeth_morphs, out_base,
-                  material=None):
+                  material=None, teeth_fb_nif=None):
     """Files and info of a Skyrim mouth as a Starfield teeth part.
     read_sky / read_sf: path -> bytes; sky_path: the Skyrim mouth NIF; align: (s, R, t) Skyrim model -> Starfield head
     mesh frame (race_probe.race_transfer); head_pts / head_skin: the head (mesh frame, its skin); teeth_nif: the
@@ -244,9 +267,15 @@ def convert_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, teeth
     files[mpath] = mdata
     files[out_base + ".nif"] = nif
     # 2026-11-11: the vanilla teeth part is flagged "Has FaceBones Model" (FLLD 1, kept on our copy), so actors with
-    # face bones - the player - are drawn from <model>_facebones.nif; without one the player showed no Orc mouth
-    # (the --mouth-uv-test colours on NPCs only). Ours has no face-bone skin to differ by: the same NIF.
-    files[out_base + "_facebones.nif"] = nif
+    # face bones - the player - are drawn from <model>_facebones.nif, skinned to the face rig's teeth bones
+    fb = facebones_mouth(teeth_fb_nif, local, lnrm, uvs, tris, jaw, os.path.basename(out_base) + "_faceBones",
+                         mat) if teeth_fb_nif else None
+    if fb is not None:
+        files[fb[0]] = fb[1]
+        files[out_base + "_facebones.nif"] = fb[2]
+    else:
+        files[out_base + "_facebones.nif"] = nif
+    info["facebones"] = "teeth bones" if fb is not None else "copy (C_Head)"
     info.update(material=mat, model=out_base[len("meshes/"):].replace("/", "\\") + ".nif")
     return files, info
 

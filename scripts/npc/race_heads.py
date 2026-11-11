@@ -481,10 +481,14 @@ def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit, gain
                     if material == conv.neutral:
                         material = None
                 base = f"meshes/s2s/races/{NAMES[race].lower()}/mouth_{'f' if female else 'm'}"
+                t_modl = next((text_of(d) for t_, _h, sb_, f_ in recs if t_ == b"HDPT" and f_ == t_fid
+                               for x, d in sb_ if x == b"MODL"), "")
+                t_fb = _vanilla_or_none(face_fit, twin("meshes/" + t_modl.replace("\\", "/")), sf_data) if t_modl \
+                    else None
                 files, info = race_mouths.convert_mouth(
                     lambda p: face_fit.hkx_to_af.read_any(p, sky),
                     lambda p: face_fit.hkx_to_af.vanilla_file(p, sf_data)[0], sky_path, m["align"], m["vertices"],
-                    head_skin, t_nif, t_morphs, base, material)
+                    head_skin, t_nif, t_morphs, base, material, t_fb)
             except (SystemExit, KeyError, ValueError, OSError) as e:
                 rep[key] = {"error": str(e)[:300]}
                 continue
@@ -494,7 +498,8 @@ def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit, gain
             done.setdefault(race, {})[female] = info
             rep[key] = {k: v for k, v in info.items() if k not in ("replaces",)}
             print(f"  {key}: mouth {info['vertices']} vertices ({info['jaw_vertices']} on the jaw), material "
-                  f"{'converted' if material else 'vanilla teeth (no texconv / ContentResources)'}")
+                  f"{'converted' if material else 'vanilla teeth (no texconv / ContentResources)'}; _facebones: "
+                  f"{info.get('facebones')}")
     if conv is not None:
         for d in ("materials", "textures"):
             if os.path.isdir(os.path.join(staging, d)):

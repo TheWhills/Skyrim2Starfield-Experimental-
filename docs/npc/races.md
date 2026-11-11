@@ -514,3 +514,9 @@ why the mod needs no clothes of its own.
   did. Difference: the teeth part is flagged "Has FaceBones Model" (FLLD 1, copied onto our mouth part), and actors
   with face bones (the player) are drawn from <model>_facebones.nif, which we never wrote for the mouth (the head and
   face parts got their twins). convert_mouth now writes mouth_<sex>_facebones.nif (the same NIF). Unverified.
+- 2026-11-11, --mouth-on-head: the player still showed no Orc mouth. nif_parts on the owner's game: the vanilla
+  malehead_facebones.nif holds only the head (53 faceBone_* bones; no teeth inside), teeth.nif is skinned to C_Head
+  and teeth_facebones.nif to faceBone_C_TopTeeth / faceBone_C_BottomTeeth. Our mouth's twin was a copy of the
+  C_Head NIF: the player's face-bone rig (what the twins are drawn on) would have nothing to bind it to. The twin is
+  now skinned like vanilla's (race_mouths.facebones_mouth: jaw vertices on BottomTeeth, the rest on TopTeeth, the
+  vanilla twin's binds); the build prints "_facebones: teeth bones". Unverified.
