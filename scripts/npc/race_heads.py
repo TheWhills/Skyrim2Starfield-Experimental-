@@ -716,6 +716,12 @@ def add_presets(subs, presets):
     return out
 
 
+def with_extra_part(subs, part_fid):
+    """HDPT subrecords with part_fid added as an extra part (HNAM) after its type (PNAM) / other extra parts."""
+    at = max((i for i, (s_, _d) in enumerate(subs) if s_ in (b"PNAM", b"HNAM")), default=len(subs) - 1)
+    return list(subs[:at + 1]) + [(b"HNAM", struct.pack("<I", part_fid))] + list(subs[at + 1:])
+
+
 def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, new_fid):
     """(RACE subrecords, [NPC_ records]): each chargen preset of the race (RPRM / RPRF, copied from HumanRace: vanilla
     preset NPCs) replaced by a copy on the race - RNAM ours, its Face head part the race's head, its other parts the
@@ -1039,7 +1045,7 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
-                 race_parts=None, heights=None, mouths=None, ids=None):
+                 race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -1158,6 +1164,16 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                                     (mouths or {}).get(race))
                 recs += prs
                 rsubs = swap_race_heads(rsubs, copies)
+                if mouth_on_head and race in race_models:
+                    # 2026-11-11 test: the player shows no Orc mouth though every record names it; the head (ours on
+                    # the player: the ears) brings it along as an extra part, as Skyrim's Orc head does
+                    for f, h_fid in rheads.items():
+                        mouth = next((c for v, c in copies.get(f, {}).items() if part_types.get(v) == 9), None)
+                        k = next((i for i, r in enumerate(recs) if r[0] == b"HDPT" and r[3] == h_fid), None)
+                        if mouth is not None and k is not None:
+                            t_, h_, s_, f_ = recs[k]
+                            recs[k] = (t_, h_, with_extra_part(s_, mouth), f_)
+                            rrep.setdefault("mouth_on_head", {})[SEXES[f]] = f"{mouth:08X}"
                 rsubs, prec = race_preset_copies(rsubs, npc_by, NAMES[race], r_fid, rheads, part_types, copies,
                                                  ids.take)
                 recs += prec
@@ -1291,6 +1307,9 @@ def main(argv=None):
     ap.add_argument("--mouth-brightness", type=float, default=None,
                     help="the converted mouth texture's colour times this (default race_mouths.MOUTH_ALBEDO_GAIN; "
                          "1 = Skyrim's as is: 2026-11-11 the Orc teeth drew near black in Starfield's light)")
+    ap.add_argument("--mouth-on-head", action="store_true",
+                    help="test: the race's head part also carries its mouth as an extra part (HNAM), so whatever "
+                         "head the game draws brings the mouth (2026-11-11: the player showed no Orc mouth)")
     ap.add_argument("--mouth-uv-test", action="store_true",
                     help="the mouth's colour texture replaced by four coloured quarters (red top-left, green "
                          "top-right, blue bottom-left, yellow bottom-right): the tusks sample the top half, so red / "
@@ -1414,7 +1433,7 @@ def main(argv=None):
     if not strings:
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models, strings, rparts, heights, mouths, ids)
+                                    wanted, models, strings, rparts, heights, mouths, ids, a.mouth_on_head)
     ids.save()
     report["formids"] = {"ledger": os.path.join(a.out, LEDGER), "new": ids.new}
     report.update(prep)

@@ -692,3 +692,13 @@ class PresetCopyTests(unittest.TestCase):
         male = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2S_OrcRace_ChargenPresetMale02"]
         self.assertEqual(_u(dict(male)[b"RNAM"]), 0x1000811)
         self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"), [0x13EB51, 0x100080F, 0x1000872])
+
+
+class ExtraPartTests(unittest.TestCase):
+    def test_with_extra_part(self):
+        """--mouth-on-head: the race head carries the mouth as an extra part, after its type and other extras."""
+        subs = [(b"EDID", Z("H")), (b"PNAM", I(1)), (b"HNAM", I(5)), (b"RNAM", I(9))]
+        out = H.with_extra_part(subs, 0x1000872)
+        self.assertEqual([s for s, _d in out], [b"EDID", b"PNAM", b"HNAM", b"HNAM", b"RNAM"])
+        self.assertEqual(_u(out[3][1]), 0x1000872)
+        self.assertEqual([s for s, _d in H.with_extra_part(subs[:2], 7)], [b"EDID", b"PNAM", b"HNAM"])
