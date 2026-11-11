@@ -71,8 +71,32 @@ def outline(subs, keep=6):
     return out
 
 
-def diff(a_subs, b_subs):
-    """[(sig, kind, text)] kind: 'only A', 'only B', 'differs' (subrecords compared in order per signature)."""
+def named(text, names):
+    """text with each 8-hex-digit FormID followed by its EditorID from names (2026-11-11: which teeth part)."""
+    import re
+    if not names:
+        return text
+    return re.sub(r"\b([0-9A-F]{8})\b", lambda m: m.group(1) + (f" ({names[int(m.group(1), 16)]})"
+                                                               if int(m.group(1), 16) in names else ""), text)
+
+
+NAME_TYPES = (b"HDPT", b"FLST", b"RACE", b"MRPH", b"NPC_")
+
+
+def edids(paths, types=NAME_TYPES):
+    """{FormID as stored: EditorID} over the plugins' records of types (head parts, lists, races, morphs, NPCs)."""
+    out = {}
+    for p in paths:
+        for _t, _h, subs, fid in sfplugin.records(p, types):
+            e = sfplugin.edid(subs)
+            if e:
+                out.setdefault(fid, e)
+    return out
+
+
+def diff(a_subs, b_subs, every=False):
+    """[(sig, kind, text)] kind: 'only A', 'only B', 'differs' (subrecords compared in order per signature); every:
+    a differing signature lists all its values on both sides, not the first (2026-11-11: the player's head parts)."""
     def group(subs):
         g = {}
         for s, d in subs:
@@ -86,6 +110,9 @@ def diff(a_subs, b_subs):
             rows.append((sig, "only A", "; ".join(show(sig, d) for d in xa[:3])))
         elif not xa:
             rows.append((sig, "only B", "; ".join(show(sig, d) for d in xb[:3])))
+        elif xa != xb and every:
+            rows.append((sig, "differs", f"A {len(xa)}x [{', '.join(show(sig, d) for d in xa)}] | "
+                                         f"B {len(xb)}x [{', '.join(show(sig, d) for d in xb)}]"))
         elif xa != xb:
             rows.append((sig, "differs", f"A {len(xa)}x {show(sig, xa[0])} | B {len(xb)}x {show(sig, xb[0])}"))
     return rows
@@ -108,7 +135,11 @@ def main(argv=None):
                          "signature collapsed (2026-11-09: S2S_OrcRace against MannequinRace / HumanRace)")
     ap.add_argument("--find", action="append", default=[],
                     help="SUBSTR: list the EditorIDs of --type in --a containing it (2026-11-10)")
+    ap.add_argument("--all", action="store_true", help="differing signatures: every value, not the first")
+    ap.add_argument("--names", action="append", default=[],
+                    help="plugin whose EditorIDs are printed beside FormIDs (repeat; 2026-11-11)")
     a = ap.parse_args(argv)
+    names = edids(a.names) if a.names else {}
     rtype = a.type.encode("ascii")[:4].ljust(4, b"_")
     A, B = npc_by_edid(a.a, rtype), npc_by_edid(a.b, rtype)
     for f in a.find:
@@ -128,7 +159,7 @@ def main(argv=None):
             continue
         print(f"{e} {src[0]:08X}: {len(src[1])} subrecords")
         for line in outline(src[1]):
-            print("  " + line)
+            print("  " + named(line, names))
     for pair in a.pair:
         ka, _, kb = pair.partition("=")
         ka, kb = ka.strip().lower(), kb.strip().lower()
@@ -136,10 +167,10 @@ def main(argv=None):
             print(f"{pair}: in A {ka in A}, in B {kb in B} {[e for e in B if kb[:12] in e][:8]}")
             continue
         (fa, sa), (fb, sb) = A[ka], B[kb]
-        rows = diff(sa, sb)
+        rows = diff(sa, sb, a.all)
         print(f"{ka} {fa:08X} vs {kb} {fb:08X}; {len(sa)} / {len(sb)} subrecords; {len(rows)} signatures differ")
         for sig, kind, text in rows:
-            print(f"  {sig.decode('latin-1')}: {kind}: {text}")
+            print(f"  {sig.decode('latin-1')}: {kind}: {named(text, names)}")
     for who in a.npc:
         k = who.lower()
         hits = [e for e in A if k in e]
@@ -150,7 +181,7 @@ def main(argv=None):
             continue
         fa, sa = A[key]
         fb, sb = B[key]
-        rows = diff(sa, sb)
+        rows = diff(sa, sb, a.all)
         print(f"{key}: A {fa:08X}, B {fb:08X}; {len(sa)} / {len(sb)} subrecords; {len(rows)} signatures differ")
         for sig, kind, text in rows:
             print(f"  {sig.decode('latin-1')}: {kind}: {text}")

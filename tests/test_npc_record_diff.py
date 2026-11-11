@@ -36,3 +36,15 @@ class DiffTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AllAndNamesTests(unittest.TestCase):
+    def test_every_value_and_names(self):
+        """2026-11-11: which teeth part the player gets: every PNAM value, with head part names."""
+        a = [(b"PNAM", struct.pack("<I", 1)), (b"PNAM", struct.pack("<I", 2))]
+        b = [(b"PNAM", struct.pack("<I", 1)), (b"PNAM", struct.pack("<I", 3))]
+        (_s, kind, text), = D.diff(a, b, every=True)
+        self.assertEqual(text, "A 2x [00000001, 00000002] | B 2x [00000001, 00000003]")
+        self.assertEqual(D.named(text, {3: "Human_Male_Teeth"}),
+                         "A 2x [00000001, 00000002] | B 2x [00000001, 00000003 (Human_Male_Teeth)]")
+        self.assertEqual(D.diff(a, b)[0][2], "A 2x 00000001 | B 2x 00000001")
