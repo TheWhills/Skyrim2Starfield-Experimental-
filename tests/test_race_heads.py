@@ -703,3 +703,18 @@ class ExtraPartTests(unittest.TestCase):
         self.assertEqual([s for s, _d in out], [b"EDID", b"PNAM", b"HNAM", b"HNAM", b"RNAM"])
         self.assertEqual(_u(out[3][1]), 0x1000872)
         self.assertEqual([s for s, _d in H.with_extra_part(subs[:2], 7)], [b"EDID", b"PNAM", b"HNAM"])
+
+
+class MouthTypeTests(unittest.TestCase):
+    def test_mouth_type_override(self):
+        """--mouth-type: the race mouth part with another HDPT type (the player's teeth colour may swap a Teeth
+        part's material)."""
+        h = bytes(24)
+        by = {0x24A03D: (h, [(b"EDID", Z("Human_Male_Teeth")), (b"MODL", Z("Teeth.nif")), (b"DATA", b"\x03"),
+                             (b"PNAM", I(9)), (b"RNAM", I(0x24A024))])}
+        info = {"part_fid": 0x24A03D, "mrph_fid": 0x999, "model": "s2s\\mouth_m.nif", "morph_folders": {}}
+        n = iter(range(0x1000900, 0x1000a00))
+        for t, want in ((None, 9), (0, 0)):
+            out = H.mouth_records(by, info, "Orc", False, 0x1000812, {}, lambda e: next(n), t)
+            hd = next(s for sig, _h, s, _f in out if sig == b"HDPT")
+            self.assertEqual(_u(dict(hd)[b"PNAM"]), want)

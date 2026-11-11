@@ -817,7 +817,7 @@ def swap_race_heads(subs, by_sex):
     return out
 
 
-def race_part_records(recs_all, name, race_fid, parts, new_fid, mouths=None):
+def race_part_records(recs_all, name, race_fid, parts, new_fid, mouths=None, mouth_type=None):
     """(records, {female: {vanilla FormID: copy FormID}}, list FormID): the race's valid-race list (FLST
     S2S_HeadParts<name>Race, holding the race) and a copy of each baked face part (EDID S2S_<name>Race_<part>_M/F,
     MODL the baked model, RNAM that list, DATA this sex only, extra parts HNAM -> their copies of the same sex).
@@ -842,11 +842,11 @@ def race_part_records(recs_all, name, race_fid, parts, new_fid, mouths=None):
         sub = swap_parts(sub, copies[female], sig=b"HNAM")
         recs.append((b"HDPT", h, sub, copies[female][vfid]))
     for female, info in (mouths or {}).items():
-        recs += mouth_records(by, info, name, female, l_fid, copies.setdefault(female, {}), new_fid)
+        recs += mouth_records(by, info, name, female, l_fid, copies.setdefault(female, {}), new_fid, mouth_type)
     return recs, copies, l_fid
 
 
-def mouth_records(by, info, name, female, l_fid, copies, new_fid):
+def mouth_records(by, info, name, female, l_fid, copies, new_fid, mouth_type=None):
     """The race's mouth (race_mouths.convert_mouth info): a copy of the vanilla teeth's morph record (TMPP / TCMP ->
     our folders, its vertex count in MOBC -> ours) and of the vanilla teeth part (MODL ours, MNAM that record, RNAM
     the race's list, this sex only); every vanilla teeth part of the sex maps to it (copies)."""
@@ -880,6 +880,10 @@ def mouth_records(by, info, name, female, l_fid, copies, new_fid):
     fl = dict(sb).get(b"DATA")
     if fl:
         ed[b"DATA"] = bytes([(fl[0] & ~0x6) | (4 if female else 2)]) + bytes(fl[1:])
+    if mouth_type is not None:
+        # 2026-11-11 test: the player draws our mouth's shape (the tusks) in white / pink - the human teeth colours:
+        # the looks menu's TEETH row (a teeth colour on the player) seems to replace a Teeth part's material
+        ed[b"PNAM"] = struct.pack("<I", mouth_type)
     p_fid = new_fid(f"S2S_{name}Race_Mouth_{'F' if female else 'M'}")
     out.append((b"HDPT", h, sfplugin.edit(list(sb), ed), p_fid))
     for v in set(info.get("replaces", [])) | {t_fid}:
@@ -1050,7 +1054,7 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
-                 race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False):
+                 race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False, mouth_type=None):
     """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
@@ -1166,7 +1170,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             if race_parts and race_parts.get(race):
                 prs, copies, _l = race_part_records(recs_all, NAMES[race], r_fid, race_parts[race],
                                                     ids.take,
-                                                    (mouths or {}).get(race))
+                                                    (mouths or {}).get(race), mouth_type)
                 recs += prs
                 rsubs = swap_race_heads(rsubs, copies)
                 if mouth_on_head and race in race_models:
@@ -1312,6 +1316,9 @@ def main(argv=None):
     ap.add_argument("--mouth-brightness", type=float, default=None,
                     help="the converted mouth texture's colour times this (default race_mouths.MOUTH_ALBEDO_GAIN; "
                          "1 = Skyrim's as is: 2026-11-11 the Orc teeth drew near black in Starfield's light)")
+    ap.add_argument("--mouth-type", type=int, default=None,
+                    help="test: the race mouth part's HDPT type (PNAM) instead of Teeth (9), e.g. 0 (misc): the "
+                         "player's teeth colour (looks menu TEETH row) may replace a Teeth part's material")
     ap.add_argument("--mouth-on-head", action="store_true",
                     help="test: the race's head part also carries its mouth as an extra part (HNAM), so whatever "
                          "head the game draws brings the mouth (2026-11-11: the player showed no Orc mouth)")
@@ -1438,7 +1445,8 @@ def main(argv=None):
     if not strings:
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
-                                    wanted, models, strings, rparts, heights, mouths, ids, a.mouth_on_head)
+                                    wanted, models, strings, rparts, heights, mouths, ids, a.mouth_on_head,
+                                    a.mouth_type)
     ids.save()
     report["formids"] = {"ledger": os.path.join(a.out, LEDGER), "new": ids.new}
     report.update(prep)

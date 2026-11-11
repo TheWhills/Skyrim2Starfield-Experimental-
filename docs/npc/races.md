@@ -520,3 +520,8 @@ why the mod needs no clothes of its own.
   C_Head NIF: the player's face-bone rig (what the twins are drawn on) would have nothing to bind it to. The twin is
   now skinned like vanilla's (race_mouths.facebones_mouth: jaw vertices on BottomTeeth, the rest on TopTeeth, the
   vanilla twin's binds); the build prints "_facebones: teeth bones". Unverified.
+- 2026-11-11, the facebones twin skinned to the teeth bones: no change on the player. Re-read of the screenshots: the
+  player's "pink tusks" have our mouth's shape (tusks rising at the corners, the gapped upper row) - the player draws
+  OUR geometry, in white teeth / pink gums: the human teeth texture on our UVs (the tusks sample a gum area of it).
+  So the player's mouth material is replaced; suspect: the looks menu's TEETH row (four teeth colours, NPC TETC)
+  swaps a Teeth-type part's material on the player. Test: --mouth-type 0 gives the race mouth another HDPT type.
