@@ -538,3 +538,15 @@ why the mod needs no clothes of its own.
   per-phenotype face). An Orc race of ours would name its own groups (BSTT / HSTT / FSTT strings) holding recoloured
   copies of the vanilla tone textures, tinted to Skyrim's Orc presets. First: scripts/npc/skin_tone_probe.py
   (read-only) lists Skyrim's presets per race and Starfield's tone groups with their texture sizes / formats.
+- 2026-11-11, skin_tone_probe on the owner's game: Orc presets male (89,113,92) .. (41,47,36), female (94,138,124) ..
+  (61,82,73); Starfield's tone groups name 9 textures sk0..sk8 each: body / hands 1024 BC1 sRGB with mips, faces
+  1024 uncompressed RGBA8 sRGB, one mip; HumanRace's strings name the groups by TNAM (BSTT
+  Male_Naked_Body_Skin_Tones, HSTT Male_Hands, FSTT FaceSkinTones = ComplexGroup_FaceSkinTones, which lists the
+  per-phenotype face groups). race_heads --skin-tones OrcRace (src/fo4sf/skintone.py): the race gets copies of the
+  adult tone groups (S2S_Orc_..., children's and the mannequin's left out) and its BSTT / HSTT / FSTT renamed to
+  them; each copy's textures are the vanilla ones recoloured (per pixel: the slot's colour times the pixel's
+  luminance over the texture's median, in linear light; alpha kept), the slot's colour from a 9-step ramp through
+  Skyrim's presets, given to the slots in order of the vanilla textures' brightness. Size: 54 textures (body and
+  hands 9 per sex, BC1 via texconv when found, else uncompressed; faces 9 per sex shared by every phenotype, made
+  from <sex>_default's: the phenotypes' age detail is lost on the Orc). The complex group's layout is unread; the copy
+  points every string / FormID naming a copied group at the copy (the build prints how many). Unverified.

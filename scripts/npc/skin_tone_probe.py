@@ -120,6 +120,15 @@ class TextureArchives:
                 for n in a.names:
                     self.where.setdefault(n.replace("\\", "/").lower(), (a, fn))
 
+    def read(self, path):
+        """The bytes of a texture (path with or without "textures/"); KeyError when no archive has it."""
+        k = path.replace("\\", "/").lower()
+        k = k if k.startswith("textures/") else "textures/" + k
+        hit = self.where.get(k)
+        if hit is None:
+            raise KeyError(path)
+        return hit[0].read(hit[0].find(k))
+
     def header(self, path):
         k = path.replace("\\", "/").lower()
         k = k if k.startswith("textures/") else "textures/" + k

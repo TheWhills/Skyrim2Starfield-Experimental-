@@ -405,12 +405,17 @@ def race_part_model(name, edid, female):
 TEXCONV_CANDIDATES = (r"C:\Modding\tools\texconv.exe", r"C:\Modding\tools\xedit\Edit Scripts\Texconvx64.exe")
 
 
+def find_texconv(texconv=""):
+    import shutil
+    return next((c for c in (texconv, *TEXCONV_CANDIDATES, shutil.which("texconv") or "") if c and os.path.isfile(c)),
+                "")
+
+
 def mouth_converter(sky, out, starfield, texconv="", content_resources=""):
     """(SkyrimConverter, staging folder) for the mouth's material, or (None, why) without texconv / ContentResources."""
     import shutil
     from fo4sf import skyrimconvert
-    tc = next((c for c in (texconv, *TEXCONV_CANDIDATES, shutil.which("texconv") or "") if c and os.path.isfile(c)),
-              "")
+    tc = find_texconv(texconv)
     cr = content_resources or os.path.join(starfield, "Tools", "ContentResources.zip")
     if not tc or not os.path.isfile(cr):
         return None, f"no texconv ({tc or 'not found'}) or ContentResources.zip ({cr})"
@@ -1057,8 +1062,11 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
-                 race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False, mouth_type=None):
-    """made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
+                 race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False, mouth_type=None,
+                 skin_tones=None):
+    """skin_tones: {race: ramps} (skin_tone_ramps): those new races get skin tone groups of their own
+    (skintone.race_tone_groups; their textures' jobs in the report's "_skin_tone_jobs", written by main).
+    made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
     such a race gets a head part per sex (ours with that MODL), no chargen phenotype or morph-group keys (its chargen
     lists stay HumanRace's), and its NPCs no race blends. Returns (records, info, report)."""
@@ -1066,6 +1074,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     import face_fit
     info = sfplugin.header_info(sf_esm)
     recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST", *CONDITION_TYPES])
+    avmd = sfplugin.records(sf_esm, [b"AVMD"]) if skin_tones else []
     if strings:                       # our plugins are not localized: copies carry text, not string ids
         recs_all = [(t, h, delocalize(sb, strings), fid) for t, h, sb, fid in recs_all]
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
@@ -1166,6 +1175,17 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                 fac = tuple(heights[race][i] / (heights[HEIGHT_REFERENCE][i] or 1.0) for i in (0, 1))
                 rsubs = with_heights(rsubs, fac)
                 rrep["height_factor"] = {"male": round(fac[0], 4), "female": round(fac[1], 4)}
+            if skin_tones and race in skin_tones:
+                from fo4sf import skintone
+                trecs, tnames, jobs, trep = skintone.race_tone_groups(
+                    avmd, f"S2S_{NAMES[race]}_", f"textures/s2s/races/{NAMES[race].lower()}", ids.take)
+                recs += trecs
+                before = rsubs
+                rsubs = skintone.with_tone_names(rsubs, tnames)
+                trep["race_strings_renamed"] = sum(a != b for a, b in zip(before, rsubs))
+                trep["textures"] = len(jobs)
+                rrep["skin_tones"] = trep
+                rep.setdefault("_skin_tone_jobs", {})[race] = jobs
             if race in race_models:
                 rrep["shape"] = "baked into its head model"
                 rrep["head_parts"] = {SEXES[f]: {"HDPT": f"{h:08X}", "MODL": race_models[race][f]}
@@ -1255,6 +1275,54 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     return recs, info, rep
 
 
+def skin_tone_ramps(sky_esm, races):
+    """{race: {female: 9 sRGB colours}}: Skyrim's skin tone presets (skin_tone_probe.skyrim_tones) as a ramp per sex."""
+    import skin_tone_probe
+    from fo4sf import skintone
+    out = {}
+    for race, per in skin_tone_probe.skyrim_tones(sky_esm, tuple(races)).items():
+        for sex, x in per.items():
+            rgbs = [tuple(p["rgb"]) for p in x["presets"] if p.get("rgb")]
+            if rgbs:
+                out.setdefault(race, {})[sex == "female"] = skintone.tone_ramp(rgbs)
+    return out
+
+
+def write_skin_tones(jobs, ramps, read, out, texconv=""):
+    """The race's skin tone textures (skintone.race_tone_groups jobs) under out: each vanilla tone texture recoloured
+    to its slot's colour of ramps[female] (slots ranked by the vanilla textures' brightness). Faces stay as vanilla's
+    (uncompressed RGBA8 sRGB, one mip); body / hands (vanilla BC1) go through texconv to BC1 sRGB with mips, or stay
+    uncompressed without it. read(path) -> bytes. Returns {texture: [r, g, b]}."""
+    import shutil
+    from fo4sf import skintone, textures
+    tc = find_texconv(texconv)
+    staging = os.path.join(out, "_skin_tone_staging")
+    by_group, done = {}, {}
+    for new, (src, kind, female, slot) in jobs.items():
+        by_group.setdefault((kind, female), []).append((new, src, slot))
+    for (kind, female), items in sorted(by_group.items()):
+        imgs = {slot: skintone.decode_dds(read(src)) for _n, src, slot in items}
+        colours = skintone.slot_colours(imgs, ramps[female])
+        for new, src, slot in items:
+            rgba = skintone.recolour(imgs[slot], colours[slot])
+            path = os.path.join(out, *new.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if kind != "face" and tc:
+                os.makedirs(staging, exist_ok=True)
+                tmp = os.path.join(staging, os.path.basename(path))
+                with open(tmp, "wb") as fh:
+                    fh.write(skintone.raw_dds(rgba))
+                textures.texconv(tc, tmp, os.path.dirname(path), "BC1_UNORM_SRGB")
+            else:
+                with open(path, "wb") as fh:
+                    fh.write(skintone.raw_dds(rgba))
+            done[new] = list(colours[slot])
+        print(f"  skin tones: {SEXES[female]} {kind}: {len(items)} textures "
+              f"({'BC1 via texconv' if kind != 'face' and tc else 'uncompressed RGBA8'})")
+    shutil.rmtree(staging, ignore_errors=True)
+    return done
+
+
 def bake_faces(npcs, sf_data, out):
     """The template's pre-built face textures under each test NPC's FormID, as face_fit does (2026-11-09, owner: the
     race NPCs, without them, came out dark red with light nose / lips / eyelids; the control, also without, was a
@@ -1336,6 +1404,9 @@ def main(argv=None):
     ap.add_argument("--symmetry", choices=("stronger", "mean", "none"), default="stronger",
                     help="left / right: per vertex pair the side that moved more (default), their mean, or as "
                          "transferred")
+    ap.add_argument("--skin-tones", default="",
+                    help="races (of --new-races) that get skin tones of their own: Starfield's skin tone textures "
+                         "recoloured to Skyrim's skin tone presets (e.g. OrcRace; 2026-11-11 test)")
     ap.add_argument("--keep-hair", action="store_true", help="keep the template's hair and beard (default: none, so "
                     "the ears and the sides of the face show)")
     ap.add_argument("--no-baked-face-textures", dest="baked_face_textures", action="store_false",
@@ -1443,6 +1514,14 @@ def main(argv=None):
     if wanted and a.race_height == "skyrim" and os.path.isfile(sky_esm):
         heights = skyrim_heights(sky_esm, wanted)
         report["skyrim_heights"] = {r: [round(x, 3) for x in h] for r, h in heights.items()}
+    ramps = {}
+    if a.skin_tones:
+        ramps = {r: x for r, x in skin_tone_ramps(sky_esm, race_names(a.skin_tones)).items() if r in wanted}
+        for r, per in ramps.items():
+            print(f"  {r} skin tones: " + "; ".join(f"{SEXES[f]} {per[f][0]} .. {per[f][-1]}" for f in sorted(per)))
+        missing = [r for r in race_names(a.skin_tones) if r not in ramps]
+        if missing:
+            print(f"  skin tones: {', '.join(missing)} skipped (not in --new-races, or no Skyrim skin tone presets)")
     ids = FormIds(os.path.join(a.out, LEDGER))       # stable FormIDs across rebuilds (saved games)
     strings = load_lstrings(sf_data)
     report["localized_strings"] = {k: len(v) for k, v in strings.items()}
@@ -1450,8 +1529,19 @@ def main(argv=None):
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
                                     wanted, models, strings, rparts, heights, mouths, ids, a.mouth_on_head,
-                                    a.mouth_type)
+                                    a.mouth_type, ramps)
     ids.save()
+    tone_jobs = prep.pop("_skin_tone_jobs", {})
+    if tone_jobs:
+        import skin_tone_probe
+        arcs = skin_tone_probe.TextureArchives(sf_data)
+        for race, jobs in tone_jobs.items():
+            report.setdefault("skin_tone_textures", {})[race] = write_skin_tones(
+                jobs, ramps[race], arcs.read, a.out, a.texconv)
+            t = prep["new_races"][race]["skin_tones"]
+            print(f"  {race} skin tones: {t['groups']} groups, {t['textures']} textures, race strings renamed "
+                  f"{t['race_strings_renamed']}; face complex group: {(t['complex'] or {}).get('pointed_at_copies')} "
+                  f"links pointed at the copies")
     report["formids"] = {"ledger": os.path.join(a.out, LEDGER), "new": ids.new}
     report.update(prep)
     if a.baked_face_textures:

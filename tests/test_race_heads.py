@@ -12,6 +12,7 @@ import sys
 import tempfile
 import types
 import unittest
+import unittest.mock
 
 import numpy as np
 
@@ -652,6 +653,32 @@ class PluginTests(unittest.TestCase):
             self.assertEqual(H.MAX_KEYS, 128)
             with self.assertRaises(SystemExit):
                 H.main(["--skyrim-data", "x", "--starfield", "y", "--out", "z", "--races", "MoonRace"])
+
+
+class SkinToneTests(unittest.TestCase):
+    """2026-11-11 (owner: test the Orc's skin tone before building every race)."""
+
+    def test_write_skin_tones(self):
+        from fo4sf import skintone
+        light = np.full((4, 4, 4), 200, np.uint8)
+        dark = np.full((4, 4, 4), 60, np.uint8)
+        files = {"v/b0.dds": skintone.raw_dds(dark), "v/b1.dds": skintone.raw_dds(light),
+                 "v/f0.dds": skintone.raw_dds(light)}
+        jobs = {"textures/s2s/races/orc/body/male_sk0_color.dds": ("v/b0.dds", "body", False, 0),
+                "textures/s2s/races/orc/body/male_sk1_color.dds": ("v/b1.dds", "body", False, 1),
+                "textures/s2s/races/orc/face/female_sk0_color.dds": ("v/f0.dds", "face", True, 0)}
+        ramps = {False: [(89, 113, 92), (41, 47, 36)], True: [(94, 138, 124)]}
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()), \
+                unittest.mock.patch.object(H, "find_texconv", lambda tc="": ""):
+            done = H.write_skin_tones(jobs, ramps, files.__getitem__, d)
+            sk0 = skintone.decode_dds(open(os.path.join(d, "textures", "s2s", "races", "orc", "body",
+                                                        "male_sk0_color.dds"), "rb").read())
+        # the darker vanilla slot gets the darker Orc colour
+        self.assertEqual(done["textures/s2s/races/orc/body/male_sk0_color.dds"], [41, 47, 36])
+        self.assertEqual(done["textures/s2s/races/orc/body/male_sk1_color.dds"], [89, 113, 92])
+        self.assertEqual(done["textures/s2s/races/orc/face/female_sk0_color.dds"], [94, 138, 124])
+        self.assertEqual(sk0[0, 0, :3].tolist(), [41, 47, 36])
+        self.assertFalse(os.path.exists(os.path.join(d, "_skin_tone_staging")))
 
 
 if __name__ == "__main__":
