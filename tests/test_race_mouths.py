@@ -156,12 +156,17 @@ class ShapeReportTests(unittest.TestCase):
                  "textures\\armor\\iron\\cuirass_n.dds": b"DDS n"}
         saved = (bsa.SkyrimArchives, hkx_to_af.read_any, mouth_probe.SKY_MOUTHS)
         bsa.SkyrimArchives = lambda d: None
-        hkx_to_af.read_any = lambda p, sky: files[p]
+        def read(p, sky):
+            if p not in files:
+                raise SystemExit("not found")
+            return files[p]
+        hkx_to_af.read_any = read
         mouth_probe.SKY_MOUTHS = {False: {"orc": "m.nif"}}
         try:
             with tempfile.TemporaryDirectory() as d:
                 RM.main(["--skyrim-data", d, "--dump", os.path.join(d, "out")])
                 with open(os.path.join(d, "out", "cuirass_n.dds"), "rb") as fh:
                     self.assertEqual(fh.read(), b"DDS n")
+                self.assertTrue(os.path.isfile(os.path.join(d, "out", "m.nif")))
         finally:
             bsa.SkyrimArchives, hkx_to_af.read_any, mouth_probe.SKY_MOUTHS = saved
