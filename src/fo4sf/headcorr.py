@@ -202,16 +202,17 @@ class Correspondence:
     mouth = None        # set by correspond when the lip term ran: see fit_lip_edges
 
     def fit_lip_edges(self, disp: np.ndarray, field: np.ndarray, reach: float = 0.006, radius: float = 0.015):
-        """(disp, report): disp (per dst vertex) with the lips' meeting rows moved exactly like the src mouth's edges.
+        """(disp, report): disp (per dst vertex) with the lips' visible edges moving up / down like Skyrim's.
 
-        2026-11-10 (owner's race_view: the female Orc's lips gape on Starfield's head where Skyrim's barely part):
-        Skyrim's open mouth has edges (the hole loop); Starfield's closed lips meet in rows: per column across the
-        mouth the upper lip's lowest vertex and the lower lip's highest, near the edge and not in the pocket behind
-        (sides from the correspondence's lip term; model axes through to_model). Each row vertex within reach of the src mouth edge gets the field of the
-        nearest src edge vertices on its side (the inverse-distance mean of the two nearest; reach counted from the
-        edge plus half the opening's height, as the lips meet about mid-way across it); the change spreads over
-        its own lip side, fading to nothing at radius. Unchanged without the lip term's data (Skyrim side or no
-        hole)."""
+        2026-11-10 (owner's race_view: the female Orc's lips gape on Starfield's head where Skyrim's look closed):
+        seen from the front, a lip's visible edge is its lowest (upper lip) / highest (lower lip) point per column
+        across the mouth, near the mouth and not in the pocket behind. On Skyrim's head (sides from the lip term, the
+        mouth hole's edges for "near"; reach from the edge plus half the opening's height) these edges are measured
+        before and after the field: Skyrim's female Orc mouth edges part by ~5 mm, but its upper lip's front comes
+        down over the lower, so the visible opening hardly changes. Starfield's closed lips meet in rows (the same
+        per-column extremes, 2 mm columns); each row vertex gets the vertical move of Skyrim's visible edge at its
+        column (interpolated; forward / sideways moves stay as transferred); the change spreads over its own lip,
+        fading to nothing at radius. Model axes through to_model. Unchanged without the lip term's data."""
         disp = np.asarray(disp, float)
         if self.mouth is None:
             return disp, {"lip_edges": "no mouth data"}
@@ -244,15 +245,39 @@ class Correspondence:
         rows = np.array(sorted(rows), int)
         if not len(rows):
             return disp, {"lip_edges": "no meeting rows near the mouth edge"}
-        target = np.zeros((len(rows), 3))
+        # Skyrim's visible lip edges: per 6 mm column the upper lip's lowest point and the lower lip's highest, over
+        # its lip vertices near the mouth, before and after the field (an overhanging lip front counts: from the
+        # front, Skyrim's female Orc lips overlap although its mouth edges part)
+        sside = m["src_side"] >= 0.5
+        sd = np.linalg.norm(src_v[:, None, :] - src_v[hole][None, :, :], axis=2).min(1)
+        snear = (sd < reach) & (src_v @ fw > (src_v[hole] @ fw).mean() - 0.005)
+        lat_lo, lat_hi = (src_v[hole] @ lat).min(), (src_v[hole] @ lat).max()
+
+        def edges_of(pos, near_, sides, width):
+            """{lower: (column centres, edge heights)} of pos's visible lip edges."""
+            c_ = np.floor((pos @ lat) / width).astype(int)
+            out_ = {}
+            for lower in (False, True):
+                idx = np.where(near_ & (sides == lower))[0]
+                best = {}
+                for v, c, zz in zip(idx.tolist(), c_[idx].tolist(), (pos[idx] @ ax).tolist()):
+                    if c not in best or (zz > best[c] if lower else zz < best[c]):
+                        best[c] = zz
+                ks = sorted(best)
+                out_[lower] = (np.array([(k + 0.5) * width for k in ks]), np.array([best[k] for k in ks]))
+            return out_
+        sb = edges_of(src_v, snear, sside, 0.006)
+        sa = edges_of(src_v + field, snear, sside, 0.006)
         corr = np.zeros((len(rows), 3))
         for i, v in enumerate(rows):
-            cand = hdn if side[v] else hup
-            d = np.linalg.norm(src_v[cand] - wv[v], axis=1)
-            j = np.argsort(d)[:2]
-            w = 1.0 / np.maximum(d[j], 1e-6)
-            target[i] = (field[cand[j]] * w[:, None]).sum(0) / w.sum()
-            corr[i] = target[i] - g[v]
+            lower = bool(side[v])
+            xb, zb = sb[lower]
+            xa, za = sa[lower]
+            if not len(xb) or not len(xa):
+                continue
+            x = float(np.clip(wv[v] @ lat, lat_lo, lat_hi))
+            dz = float(np.interp(x, xa, za) - np.interp(x, xb, zb))     # Skyrim's visible edge moved this much
+            corr[i] = (dz - float(g[v] @ ax)) * ax                       # up / down only; forward stays
         out = g.copy()
         for lower in (False, True):
             r = rows[side[rows] == lower]
@@ -265,15 +290,21 @@ class Correspondence:
             fall = np.clip(1.0 - d[np.arange(len(mine)), j] / radius, 0.0, 1.0) ** 2
             out[mine] += c[j] * fall[:, None]
 
-        def opening(x):
-            up, dn = x[rows[~side[rows]]] @ ax, x[rows[side[rows]]] @ ax
-            return float(up.mean() - dn.mean()) if len(up) and len(dn) else 0.0
-        src_open = float((field[hup] @ ax).mean() - (field[hdn] @ ax).mean())
+        def visible(e):
+            """Median visible opening (upper edge - lower edge) over the columns both lips have, metres."""
+            (xu, zu), (xl, zl) = e[False], e[True]
+            if not len(xu) or not len(xl):
+                return 0.0
+            xs = xu[(xu >= max(xu.min(), xl.min())) & (xu <= min(xu.max(), xl.max()))]
+            return float(np.median(np.interp(xs, xu, zu) - np.interp(xs, xl, zl))) if len(xs) else 0.0
+        dnear = near
         rep = {"rows": [int((~side[rows]).sum()), int(side[rows].sum())],
                "mean_change_m": round(float(np.linalg.norm(corr, axis=1).mean()), 5),
                "max_change_m": round(float(np.linalg.norm(corr, axis=1).max()), 5),
-               "opening_dz_m": {"skyrim_edges": round(src_open, 5), "before": round(opening(g), 5),
-                                "after": round(opening(out), 5)}}
+               "visible_opening_m": {"skyrim_before": round(visible(sb), 5), "skyrim_after": round(visible(sa), 5),
+                                     "starfield_base": round(visible(edges_of(wv, dnear, side, 0.002)), 5),
+                                     "before": round(visible(edges_of(wv + g, dnear, side, 0.002)), 5),
+                                     "after": round(visible(edges_of(wv + out, dnear, side, 0.002)), 5)}}
         return out[self.inv], rep
 
 

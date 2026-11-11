@@ -447,3 +447,17 @@ why the mod needs no clothes of its own.
   the upper lip's lowest vertex and the lower lip's highest, near Skyrim's mouth edge, not in the pocket) get the move
   of Skyrim's mouth edge on their side, the change fading over their own lip within 15 mm. Reported per race:
   "lips open <before> -> <after> mm (Skyrim <edges>)". Unverified on the owner's heads (synthetic test only).
+- 2026-11-10, owner's rerun: the female Orc still gaped; by the report Starfield's meeting rows opened 3.6 mm where
+  Skyrim's mouth EDGES part 5.0 mm, yet Skyrim's female looks closed from the front: its upper lip's front comes down
+  over the lower. So the target is now the VISIBLE edges: per column the upper lip's lowest point and the lower lip's
+  highest, on Skyrim before / after the race shape (6 mm columns over its lip vertices near the mouth) and on
+  Starfield (2 mm columns); Starfield's rows get the vertical move of Skyrim's visible edges (forward moves stay).
+  Report: visible_opening_m {skyrim_before, skyrim_after, starfield_base, before, after}.
+- 2026-11-10, owner: "the female ear difference": in race_view the female Orc's Starfield ear is a flat blade
+  straight out (one side in the raw transfer; race_heads' symmetry copies it), Skyrim's keeps an ear's shape. The
+  heads are aligned as a whole (~8 mm rms), so the ear is where they are furthest apart and Starfield's ear can take
+  the Skyrim scalp's move. New: race_probe.ear_fit, per side an ICP similarity (scale within 10 %, nearest pairs both
+  ways) of the Skyrim vertices near Starfield's ear (the head morph's Ears region, off the side of the head) onto
+  it, Skyrim's vertices warped by it within 35 mm of its ear (fading over 20 mm) and the race field turned with them,
+  before the correspondence. Reported per side: gap before / after, move, turn, scale (--no-ear-fit to compare).
+  Both unverified on the owner's heads.

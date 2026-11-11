@@ -170,8 +170,8 @@ class LipTests(unittest.TestCase):
         self.assertEqual(corr.report["mouth"]["hole_vertices"], len(headcorr.mouth_hole(sv, sf)))
 
     def test_lip_edges_follow_the_src_mouth_edges(self):
-        """2026-11-10 (owner: the female Orc's lips gaped on Starfield's head where Skyrim's barely part): the lips'
-        meeting rows get the src mouth edges' move, faded over their own lip, nothing far away."""
+        """2026-11-10 (owner: the female Orc's lips gaped on Starfield's head where Skyrim's look closed): the lips'
+        meeting rows get the vertical move of Skyrim's visible lip edges, faded over their own lip, nothing far away."""
         sv, sf = slit_face()
         field = np.zeros((len(sv), 3))
         # the lip surfaces open more away from the edge than at it (edge rows at |z| = 5 mm move 1 mm)
@@ -186,15 +186,30 @@ class LipTests(unittest.TestCase):
         body = np.abs(dv[upper_row, 0]) <= 0.015
         self.assertTrue(np.allclose(out[upper_row][body, 2], 0.001, atol=2e-4), out[upper_row][body, 2])
         self.assertTrue(np.allclose(out[lower_row][body, 2], -0.001, atol=2e-4), out[lower_row][body, 2])
+        self.assertTrue(np.allclose(out[upper_row][:, :2], wrong[upper_row][:, :2]))    # only up / down
         far = np.linalg.norm(dv - dv[upper_row].mean(0), axis=1) > 0.06
         self.assertTrue(np.allclose(out[far], wrong[far]))
-        self.assertAlmostEqual(rep["opening_dz_m"]["skyrim_edges"], 0.002, places=4)
-        self.assertLess(abs(rep["opening_dz_m"]["after"] - 0.002), 5e-4)
-        self.assertGreater(rep["opening_dz_m"]["before"], rep["opening_dz_m"]["after"] + 0.002)
+        op = rep["visible_opening_m"]
+        self.assertLess(abs(op["skyrim_after"] - op["skyrim_before"] - 0.002), 3e-4)
+        self.assertLess(abs(op["after"] - op["starfield_base"] - 0.002), 5e-4)
+        self.assertGreater(op["before"], op["after"] + 0.002)
         none = headcorr.correspond(sv, sf, dv, df)                 # no lip term: unchanged
         same, r2 = none.fit_lip_edges(wrong, field)
         self.assertTrue(np.array_equal(same, wrong))
         self.assertEqual(r2, {"lip_edges": "no mouth data"})
+
+    def test_lip_edges_overhang(self):
+        """Skyrim's mouth edge rises 3 mm but the lip row above comes down over it: the visible edge rises 1 mm."""
+        sv, sf = slit_face()
+        field = np.zeros((len(sv), 3))
+        mouth = np.abs(sv[:, 0]) < 0.03
+        field[mouth & np.isclose(sv[:, 2], 0.005), 2] = 0.003
+        field[mouth & np.isclose(sv[:, 2], 0.010), 2] = -0.004
+        dv, df, lower_row, upper_row = pocket_face()
+        corr = headcorr.correspond(sv, sf, dv, df, to_model=np.eye(4))
+        out, rep = corr.fit_lip_edges(corr.transfer(field, 0), field)
+        body = np.abs(dv[upper_row, 0]) <= 0.015
+        self.assertTrue(np.allclose(out[upper_row][body, 2], 0.001, atol=3e-4), out[upper_row][body, 2])
 
     def test_loose_triangles_ignored(self):
         sv, sf = slit_face()

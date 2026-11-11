@@ -137,12 +137,35 @@ class RaceProbeTests(unittest.TestCase):
             head_alignment=lambda head, d, legacy=False: (base, facefit.align_to_local(base, head.vertices,
                                                                                          head.model_xf), True),
             hkx_to_af=types.SimpleNamespace(read_any=lambda p, sky: files["races"] if "races" in p else
-                                            files["head"] if p.endswith(".tri") else b""))
+                                            files["head"] if p.endswith(".tri") else b"",
+                                            vanilla_file=lambda p, sf: (_ for _ in ()).throw(SystemExit("none"))))
         head, b, races, al, out, rep = P.race_transfer(None, "", False, 0, ff)
+        self.assertIn("error", rep["ears"])                     # no head morph to find the ears in: skipped
         self.assertEqual(rep["transfer"], "surface")
         self.assertIsNone(rep["correspondence"]["mouth"])      # no mouth on a sphere
         np.testing.assert_allclose(out["HighElfRace"][0], (0.1, 0, 0), atol=1e-6)      # up = local +x
         self.assertLess(float(np.abs(out["HighElfRace"][nu + 1:]).max()), 1e-6)       # below the first ring: still
+
+    def test_ear_fit(self):
+        """2026-11-10 (owner: the female Orc's ear a flat blade): Skyrim's ear 15 mm off Starfield's is moved onto it,
+        the face far from the ear stays."""
+        g = np.linspace(-0.02, 0.02, 9)
+        ear = np.array([(0.09 + 8 * (y * y + z * z), y, z) for y in g for z in g])   # a cupped flap off the right
+        face = np.array([(x, 0.09, z) for x in np.linspace(-0.04, 0.04, 9) for z in g] +
+                        [(-0.09, y, z) for y in g for z in g])           # and the left side of the head
+        dst = np.concatenate([ear, face])
+        ears = np.arange(len(ear))
+        src = np.concatenate([ear + (0.012, -0.006, 0.004), face])
+        fits, rep = P.ear_fit(src, dst, ears, np.eye(4))
+        self.assertEqual(rep["left"], "no ear vertices")
+        self.assertLess(rep["right"]["gap_m"][1], 0.002)
+        self.assertGreater(rep["right"]["gap_m"][0], 0.008)
+        moved = P.warp(src, fits)
+        near = np.linalg.norm(moved[:len(ear)][:, None, :] - ear[None, :, :], axis=2).min(1)
+        self.assertLess(float(np.median(near)), 0.0015)                 # on the ear (5 mm grid: it may slide)
+        np.testing.assert_allclose(moved[len(ear):], face)                # 9 cm away: untouched
+        vec = P.warp(np.tile((0.0, 0.0, 0.01), (len(src), 1)), fits, vectors=True)
+        np.testing.assert_allclose(np.linalg.norm(vec[:len(ear)], axis=1), 0.01, atol=1e-3)   # turned, not moved
 
     def test_viewer(self):
         class H:

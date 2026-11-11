@@ -153,7 +153,75 @@ def human_race_refs(esm):
 
 
 # ----------------------------------------------------------------------------------- 3. race morphs onto Starfield
-def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="surface", lip_edges=True):
+def ear_fit(src, dst, ears, to_model, iters=20, reach=0.03, inner=0.035, fade=0.02):
+    """Per side, Skyrim's ear moved onto Starfield's (2026-11-10, owner: the female Orc's ear came out a flat blade
+    where Skyrim's keeps its shape; the heads are aligned as a whole, about 8 mm rms, more at the ears, so Starfield's
+    ear partly took the Skyrim scalp's move). src: Skyrim's vertices in dst's frame; ears: dst vertex indices of the
+    head morph's Ears region; to_model: dst frame -> model (+X lateral). A similarity (scale within 10 %) fitted by
+    ICP (nearest pairs both ways) from the Skyrim
+    vertices within reach of that side's ear onto the ear's vertices, applied fully within inner of the Skyrim ear's
+    centre and fading out over fade. Returns ([(weights (S,), scale, R, t)], report)."""
+    from fo4sf import headbake
+    src, dst = np.asarray(src, float), np.asarray(dst, float)
+    lat = to_model[:3, :3].T[:, 0]
+    lat = lat / np.linalg.norm(lat)
+    xs = dst @ lat
+    centre_x = float(xs.min() + xs.max()) / 2                # the head's middle, left to right
+    fits, rep = [], {}
+    for name, sign in (("left", -1.0), ("right", 1.0)):
+        q = dst[ears][sign * (dst[ears] @ lat - centre_x) > 0.03]          # the ear itself, off the side of the head
+        if len(q) < 20:
+            rep[name] = "no ear vertices"
+            continue
+        c = q.mean(0)
+        cand = np.where(np.linalg.norm(src - c, axis=1) < reach + float(np.linalg.norm(q - c, axis=1).max()))[0]
+        cand = cand[sign * (src[cand] @ lat - centre_x) > 0.02]
+        if len(cand) < 6:
+            rep[name] = "no Skyrim ear vertices near"
+            continue
+        p = src[cand]
+
+        def gap(pts):
+            """Both ways: the median distance from each ear vertex to the nearest Skyrim one, and back."""
+            d = np.linalg.norm(q[:, None, :] - pts[None, :, :], axis=2)
+            return float(np.median(d.min(1)) + np.median(d.min(0))) / 2
+        before = gap(p)
+        sc, R, t = 1.0, np.eye(3), np.zeros(3)
+        for _ in range(iters):
+            cur = sc * p @ R.T + t
+            d = np.linalg.norm(q[:, None, :] - cur[None, :, :], axis=2)
+            # pairs both ways (each ear vertex's nearest Skyrim vertex and each Skyrim vertex's nearest ear vertex),
+            # so neither side collapses onto a few points of the other
+            a_src = np.concatenate([p[d.argmin(1)], p])
+            a_dst = np.concatenate([q, q[d.argmin(0)]])
+            sc, R, t = headbake.similarity(a_src, a_dst)
+            sc = float(np.clip(sc, 0.9, 1.1))
+            t = a_dst.mean(0) - sc * a_src.mean(0) @ R.T
+        after = gap(sc * p @ R.T + t)
+        ang = float(np.degrees(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))))
+        if after >= before:
+            rep[name] = {"skyrim_vertices": int(len(cand)), "gap_m": round(before, 4), "kept": "fit no closer"}
+            continue
+        d = np.linalg.norm(src - p.mean(0), axis=1)
+        w = np.clip(1.0 - (d - inner) / fade, 0.0, 1.0)
+        fits.append((w, sc, R, t))
+        rep[name] = {"skyrim_vertices": int(len(cand)), "gap_m": [round(before, 4), round(after, 4)],
+                     "move_m": round(float(np.linalg.norm(sc * p.mean(0) @ R.T + t - p.mean(0))), 4),
+                     "turn_deg": round(ang, 1), "scale": round(sc, 3), "warped_vertices": int((w > 0).sum())}
+    return fits, rep
+
+
+def warp(pts, fits, vectors=False):
+    """pts (or vectors: the field, turned and scaled only) moved by ear_fit's fits, blended by their weights."""
+    out = np.asarray(pts, float).copy()
+    for w, sc, R, t in fits:
+        moved = sc * out @ R.T + (0.0 if vectors else t)
+        out = out + w[:, None] * (moved - out)
+    return out
+
+
+def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="surface", lip_edges=True,
+                  ears=True):
     head, _rep = face_fit.starfield_head(sf_data, female)
     tri_base = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_HEAD_TRI[female], sky))
     races = skyrimtri.parse(face_fit.hkx_to_af.read_any(SKY_RACE_TRI[female], sky), deltas=True)
@@ -175,16 +243,28 @@ def race_transfer(sky, sf_data, female, smooth, face_fit, legacy=False, method="
     rep["alignment"] = {"scale": al[0], "rms_m": al[3], "model_space": model_space}
     out = {}
     corr = None
+    fits = []
     if method == "surface":
         s, R, t = al[:3]
         node = getattr(head, "model_xf", None)
-        corr = headcorr.correspond(s * base @ R.T + t, races["faces"], head.vertices, head.triangles,
-                                   to_model=np.asarray(node, float) if model_space and node is not None else None)
+        to_model = np.asarray(node, float) if model_space and node is not None else None
+        src_al = s * base @ R.T + t
+        if ears and to_model is not None:
+            try:
+                regs = morph_regions(sfmorph.parse(face_fit.hkx_to_af.vanilla_file(
+                    SF_MORPH.format(sex=SEXES[female], part="head"), sf_data)[0]))[0]
+                ear_idx = np.array(sorted(regs.get("Ears", ())), int)
+            except (SystemExit, KeyError, ValueError, OSError) as e:
+                ear_idx, rep["ears"] = np.zeros(0, int), {"error": str(e)[:200]}
+            if len(ear_idx):
+                fits, rep["ears"] = ear_fit(src_al, np.asarray(head.vertices, float), ear_idx, to_model)
+                src_al = warp(src_al, fits)
+        corr = headcorr.correspond(src_al, races["faces"], head.vertices, head.triangles, to_model=to_model)
         rep["correspondence"] = corr.report
     rep["transfer"] = method
     for m in races["morphs"]:
         if corr is not None:
-            field = m["deltas"] @ al[1].T * al[0]
+            field = warp(m["deltas"] @ al[1].T * al[0], fits, vectors=True)
             disp = corr.transfer(field, smooth)
             if lip_edges:
                 # 2026-11-10: the lips' meeting rows moved like Skyrim's mouth edges (the female Orc gaped)
@@ -284,7 +364,10 @@ def main(argv=None):
     ap.add_argument("--skip", action="append", default=[], choices=["morphs", "refs", "transfer"])
     ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
                     help="leave the lips as transferred (to compare): without it the lips' meeting rows move like "
-                         "Skyrim's mouth edges")
+                         "Skyrim's visible lip edges")
+    ap.add_argument("--no-ear-fit", dest="ear_fit", action="store_false",
+                    help="the heads aligned as a whole only (to compare): without it Skyrim's ears are first moved "
+                         "onto Starfield's (ear_fit)")
     a = ap.parse_args(argv)
     import face_fit                                     # heavy imports only when run
     t0 = time.time()
@@ -329,7 +412,7 @@ def main(argv=None):
         for female in (False, True):
             head, base, races, al, disp, rep = race_transfer(sky, sf_data, female, a.smooth, face_fit,
                                                              legacy=a.legacy_alignment, method=a.transfer,
-                                                             lip_edges=a.lip_edges)
+                                                             lip_edges=a.lip_edges, ears=a.ear_fit)
             if regions.get(female):
                 for name, d in disp.items():
                     rep["races"][name]["regions"] = per_region(d, regions[female], len(head.vertices))
@@ -341,6 +424,7 @@ def main(argv=None):
                   f"vertices, alignment rms {rep['alignment']['rms_m']:.4f} m "
                   f"({'model space' if rep['alignment']['model_space'] else 'legacy'}); transfer {rep['transfer']} "
                   f"{rep.get('correspondence', '')}")
+            print(f"   ears: {rep.get('ears')}")
             for name, x in rep["races"].items():
                 reg = x.get("regions", {})
                 top = sorted(((k, v["max_m"]) for k, v in reg.items() if k != "outside"), key=lambda kv: -kv[1])[:3]
