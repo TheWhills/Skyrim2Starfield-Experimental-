@@ -866,6 +866,33 @@ def human_only_parts(recs_all, vanilla_fids, new_fid):
     return out
 
 
+CHARGEN_PART_LISTS = ("HeadPartsChargenOptionsMale", "HeadPartsChargenOptionsFemale")
+
+
+def chargen_option_lists(recs_all, part_copies):
+    """(records): an override of each of Starfield's chargen head part lists (CHARGEN_PART_LISTS) with every race copy
+    of its entries added after the entries (2026-11-11: the race's records hand the player our Orc mouth, yet the looks
+    menu showed the human teeth even on a new game: the menu takes its parts from these lists, where only the vanilla
+    parts were; with human_only_parts those are not valid for our races, the copies are). part_copies:
+    {race: {female: {vanilla FormID: copy FormID}}}."""
+    by_vanilla = {}
+    for per_sex in part_copies.values():
+        for m in per_sex.values():
+            for v, c in m.items():
+                by_vanilla.setdefault(v, [])
+                if c not in by_vanilla[v]:
+                    by_vanilla[v].append(c)
+    out = []
+    for t, h, sb, fid in recs_all:
+        if t != b"FLST" or sfplugin.edid(sb) not in CHARGEN_PART_LISTS:
+            continue
+        have = [_u32(d) for s_, d in sb if s_ == b"LNAM" and len(d) == 4]
+        add = [c for v in have for c in by_vanilla.get(v, []) if c not in have]
+        if add:
+            out.append((b"FLST", h, list(sb) + [(b"LNAM", struct.pack("<I", c)) for c in dict.fromkeys(add)], fid))
+    return out
+
+
 def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
     """The vanilla Player record (NPC_ 00000007) with its race (RNAM) set to ours and its Face head part ours, as
     the Exo Race mod's player patch does (Nexus 7992: ExoRacePlayer.esm edits the player record; 2026-11-09, owner's
@@ -1152,6 +1179,10 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             ho = human_only_parts(recs_all, baked, ids.take)
             recs += ho
             rep["human_only_parts"] = len(ho) - 1
+            co = chargen_option_lists(recs_all, part_copies)
+            recs += co
+            rep["chargen_option_lists"] = {sfplugin.edid(s_): sum(1 for x, _d in s_ if x == b"LNAM")
+                                           for _t, _h, s_, _f in co}
         rep["_player_parts"] = (heads, part_types, next(((h_, s) for t, h_, s, fid in recs_all
                                                          if t == b"NPC_" and fid == 0x7), None), race_heads,
                                 part_copies)

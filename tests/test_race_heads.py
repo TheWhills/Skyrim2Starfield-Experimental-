@@ -655,3 +655,21 @@ class PluginTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChargenOptionListTests(unittest.TestCase):
+    def test_copies_added_to_chargen_lists(self):
+        """2026-11-11: the looks menu gave the Orc player human teeth even on a new game; its parts come from
+        HeadPartsChargenOptionsMale / Female, which now carry every race copy of their entries."""
+        h = bytes(24)
+        recs = [(b"FLST", h, [(b"EDID", Z("HeadPartsChargenOptionsMale")), (b"LNAM", I(0x10)), (b"LNAM", I(0x11))],
+                 0x3D9AF),
+                (b"FLST", h, [(b"EDID", Z("HeadPartsChargenOptionsFemale")), (b"LNAM", I(0x20))], 0x3D9B0),
+                (b"FLST", h, [(b"EDID", Z("Other")), (b"LNAM", I(0x10))], 0x99)]
+        copies = {"OrcRace": {False: {0x10: 0x1000872, 0x11: 0x1000813}, True: {0x20: 0x1000874}},
+                  "HighElfRace": {False: {0x10: 0x1000900}}}
+        out = H.chargen_option_lists(recs, copies)
+        got = {sfplugin.edid(s): [_u(d) for x, d in s if x == b"LNAM"] for _t, _h, s, _f in out}
+        self.assertEqual(got, {"HeadPartsChargenOptionsMale": [0x10, 0x11, 0x1000872, 0x1000900, 0x1000813],
+                               "HeadPartsChargenOptionsFemale": [0x20, 0x1000874]})
+        self.assertEqual({f for _t, _h, _s, f in out}, {0x3D9AF, 0x3D9B0})    # overrides, same FormIDs

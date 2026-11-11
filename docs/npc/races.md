@@ -498,3 +498,10 @@ why the mod needs no clothes of its own.
   pink, but nothing in our path flips V. --mouth-uv-test replaces the mouth colour with four coloured quarters (red
   top-left, green top-right, blue bottom-left, yellow bottom-right) to settle it in game: red / green tusks = read as
   is, blue / yellow = flipped.
+- 2026-11-11, the player's teeth: the records are right (Player PNAM and S2S_OrcRace's default HEAD both name
+  S2S_OrcRace_Mouth_M; its HNAM extra part is the tongue, our copy on the player), yet in the looks menu, on new
+  games too, the player shows Starfield's teeth (the --mouth-uv-test colours on the NPC, not on the player). Starfield
+  has one teeth part per sex (Human_Male_Teeth, Human_Female_Teeth, Human_Child_Teeth); the menu's TEETH row (4
+  options) looks like teeth colour (NPC TETC). Starfield's chargen part lists HeadPartsChargenOptionsMale / Female
+  hold only vanilla parts. build_plugin now overrides them with every race copy of their entries added
+  (chargen_option_lists); human_only_parts already makes the vanilla ones invalid for our races. Unverified.
