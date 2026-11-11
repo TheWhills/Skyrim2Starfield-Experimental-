@@ -127,3 +127,18 @@ class RecordTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShapeReportTests(unittest.TestCase):
+    def test_textures_per_shape(self):
+        """2026-11-11 (owner: the Orc tusks pink in the looks menu, dark in the world): the mouth's shapes and the
+        textures each one really uses."""
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import test_skyrim_armor as A
+        rows = RM.shape_report(A.skinned_nif_bytes())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Sleeve")
+        self.assertEqual(rows[0]["textures"][:2], ["textures\\armor\\iron\\cuirass.dds",
+                                                   "textures\\armor\\iron\\cuirass_n.dds"])
+        self.assertEqual(rows[0]["triangles"], 2)
+        self.assertEqual(rows[0]["uv_min"][1], 0.5)

@@ -484,3 +484,8 @@ why the mod needs no clothes of its own.
     A few stretched faces remain at the mouth corners (from the transfer itself).
   - The ears are fine in the game build: the raw transfer gives one ear its point (34 mm) and the other less (23 mm),
     and the symmetry gives both the 34 mm one; Skyrim's tip moves 38 mm.
+- 2026-11-11, owner's rebuild: the strands are gone (looks menu, front and side); the tusks still pink in the looks
+  menu, the mouth dark on the NPCs. Suspect: write_mouths converts only the FIRST Skyrim mouth shape's material
+  (skinned_shapes(...)[0]) and the merged mouth uses it for every shape, so the tusks may be sampling the gum /
+  tongue texture. New read-only check: python -I scripts\npc\race_mouths.py --skyrim-data <Skyrim Data> prints each
+  mouth shape's textures and UV range.

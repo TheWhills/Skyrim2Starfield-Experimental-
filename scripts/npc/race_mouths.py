@@ -240,3 +240,49 @@ def convert_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, teeth
     files[out_base + ".nif"] = nif
     info.update(material=mat, model=out_base[len("meshes/"):].replace("/", "\\") + ".nif")
     return files, info
+
+
+def shape_report(data):
+    """[{name, vertices, triangles, textures, uv_min, uv_max}] per skinned shape of a Skyrim mouth NIF (2026-11-11:
+    the merged mouth takes its FIRST shape's material for all shapes; the owner's Orc tusks came out pink in the
+    looks menu and dark in the world: which textures do the shapes really use?)."""
+    from fo4sf import skyrimnif
+    n = nifmod.parse(data)
+    out = []
+    for s in skyrimskin.skinned_shapes(n):
+        uv = np.asarray(s.uvs, float) if s.uvs else np.zeros((0, 2))
+        out.append({"name": (s.name.decode("latin-1") if isinstance(s.name, bytes) else str(s.name)),
+                    "vertices": len(s.positions), "triangles": int(np.asarray(s.triangles, int).reshape(-1, 3).shape[0]),
+                    "textures": skyrimnif.texture_set(n, s.shader_ref) or [],
+                    "uv_min": uv.min(0).round(3).tolist() if len(uv) else None,
+                    "uv_max": uv.max(0).round(3).tolist() if len(uv) else None})
+    return out
+
+
+def main(argv=None):
+    """Read-only: the shapes and textures of Skyrim's mouths (mouth_probe.SKY_MOUTHS)."""
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(description=main.__doc__)
+    ap.add_argument("--skyrim-data", required=True)
+    a = ap.parse_args(argv)
+    sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
+    import hkx_to_af
+    import mouth_probe
+    from fo4sf import bsa
+    sky = bsa.SkyrimArchives(a.skyrim_data)
+    for female, kinds in mouth_probe.SKY_MOUTHS.items():
+        for kind, path in kinds.items():
+            try:
+                rows = shape_report(hkx_to_af.read_any(path, sky))
+            except SystemExit as e:
+                print(f"{path}: {e}")
+                continue
+            print(path)
+            for r in rows:
+                print("   " + json.dumps(r))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
