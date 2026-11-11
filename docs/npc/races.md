@@ -489,3 +489,12 @@ why the mod needs no clothes of its own.
   (skinned_shapes(...)[0]) and the merged mouth uses it for every shape, so the tusks may be sampling the gum /
   tongue texture. New read-only check: python -I scripts\npc\race_mouths.py --skyrim-data <Skyrim Data> prints each
   mouth shape's textures and UV range.
+- 2026-11-11, the Orc mouth's colours, from the owner's dump (MouthOrc.nif / .dds, looked at offline): one shape, one
+  texture; our converted colour texture is Skyrim's exactly (same mean). Skyrim's texture is very dark (mean sRGB
+  (30, 19, 18); the brightest teeth ~(99, 97, 82)), which explains the near-black mouth under Starfield's light; the
+  tusks sample the ivory blocks of the lower-teeth row (UVs kept through build_mouth, checked). The converted
+  colour is now times race_mouths.MOUTH_ALBEDO_GAIN = 2.5 (--mouth-brightness; 1 = as Skyrim's). Unexplained: the
+  tusks drew PINK in the looks menu; rendered with V flipped, the tusks land on the gum / tongue area and come out
+  pink, but nothing in our path flips V. --mouth-uv-test replaces the mouth colour with four coloured quarters (red
+  top-left, green top-right, blue bottom-left, yellow bottom-right) to settle it in game: red / green tusks = read as
+  is, blue / yellow = flipped.

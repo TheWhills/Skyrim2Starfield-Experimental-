@@ -33,6 +33,11 @@ from fo4sf import nif as nifmod  # noqa: E402
 from fo4sf.convert_static import mesh_file_path  # noqa: E402
 
 RACE_MOUTHS = {"OrcRace": "orc"}               # Skyrim race -> mouth_probe.SKY_MOUTHS kind
+# 2026-11-11 (owner's dump of MouthOrc.dds): Skyrim's Orc mouth texture is very dark (mean sRGB (30, 19, 18), its
+# brightest teeth texels ~(99, 97, 82)); under Starfield's lighting the teeth drew near black. Times 2.5 the tusks come
+# out ivory (~(248, 243, 205) at the brightest) and the gums dark red, as Skyrim shows them.
+MOUTH_ALBEDO_GAIN = 2.5
+DXGI_RGBA8_SRGB = 29
 TEETH_TYPE = 9
 JAW_SHARE = 0.25
 
@@ -240,6 +245,27 @@ def convert_mouth(read_sky, read_sf, sky_path, align, head_pts, head_skin, teeth
     files[out_base + ".nif"] = nif
     info.update(material=mat, model=out_base[len("meshes/"):].replace("/", "\\") + ".nif")
     return files, info
+
+
+def color_texture_of(material):
+    """The colour texture SkyrimConverter writes beside a material: materials\\s2s\\x\\y.mat ->
+    textures/s2s/x/y_color.dds ('' when not that layout)."""
+    m = material.replace("\\", "/")
+    if not (m.lower().startswith("materials/") and m.lower().endswith(".mat")):
+        return ""
+    return "textures/" + m[len("materials/"):-len(".mat")] + "_color.dds"
+
+
+def uv_test_pixels(size=256):
+    """RGBA bytes of a UV test texture: red top-left, green top-right, blue bottom-left, yellow bottom-right."""
+    h = size // 2
+    img = np.zeros((size, size, 4), np.uint8)
+    img[:, :, 3] = 255
+    img[:h, :h, 0] = 230
+    img[:h, h:, 1] = 230
+    img[h:, :h, 2] = 230
+    img[h:, h:, :2] = 230
+    return img.tobytes()
 
 
 def shape_report(data):

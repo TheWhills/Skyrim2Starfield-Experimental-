@@ -170,3 +170,56 @@ class ShapeReportTests(unittest.TestCase):
                 self.assertTrue(os.path.isfile(os.path.join(d, "out", "m.nif")))
         finally:
             bsa.SkyrimArchives, hkx_to_af.read_any, mouth_probe.SKY_MOUTHS = saved
+
+
+class BrightnessAndUvTestTests(unittest.TestCase):
+    def test_color_texture_and_uv_pixels(self):
+        self.assertEqual(RM.color_texture_of("materials\\s2s\\actors\\character\\mouth\\mouthorc_c67d0a6c.mat"),
+                         "textures/s2s/actors/character/mouth/mouthorc_c67d0a6c_color.dds")
+        self.assertEqual(RM.color_texture_of("x.mat"), "")
+        px = np.frombuffer(RM.uv_test_pixels(8), np.uint8).reshape(8, 8, 4)
+        self.assertEqual(px[1, 1, :3].tolist(), [230, 0, 0])       # top-left red
+        self.assertEqual(px[1, 6, :3].tolist(), [0, 230, 0])       # top-right green
+        self.assertEqual(px[6, 1, :3].tolist(), [0, 0, 230])       # bottom-left blue
+        self.assertEqual(px[6, 6, :3].tolist(), [230, 230, 0])     # bottom-right yellow
+
+    def test_write_mouths_brightens_and_writes_uv_test(self):
+        """2026-11-11: the Orc teeth drew near black (Skyrim's texture is very dark): the material is converted with
+        the colour times MOUTH_ALBEDO_GAIN; --mouth-uv-test overwrites its colour texture with the quarters."""
+        import tempfile
+        import types
+        calls = []
+
+        class Conv:
+            neutral = "neutral.mat"
+
+            def _shape_material(self, n, s, albedo_tint=None):
+                calls.append(albedo_tint)
+                return "materials\\s2s\\actors\\character\\mouth\\mouthorc_x.mat"
+        with tempfile.TemporaryDirectory() as out:
+            staging = os.path.join(out, "_mouth_staging")
+            os.makedirs(os.path.join(staging, "textures"))
+            saved = (H.mouth_converter, H.vanilla_teeth, RM.convert_mouth, H.facefit.starfield_head_parts)
+            H.mouth_converter = lambda sky, o, *a: (Conv(), staging)
+            H.vanilla_teeth = lambda recs, sf, female, ff: (1, b"", {}, 2)
+            RM.convert_mouth = lambda *a: ({}, {"vertices": 3, "jaw_vertices": 1, "material": a[-1]})
+            H.facefit.starfield_head_parts = lambda raw: ([], {})
+            import fo4sf.skyrimskin as sk
+            import fo4sf.nif as nm
+            saved2 = (sk.skinned_shapes, nm.parse)
+            sk.skinned_shapes = lambda n: [object()]
+            nm.parse = lambda b: None
+            ff = types.SimpleNamespace(
+                hkx_to_af=types.SimpleNamespace(read_any=lambda p, s: b"", vanilla_file=lambda p, s: (b"", p)),
+                SF_HEADS={False: "h", True: "h"})
+            made = {False: {"align": (1, np.eye(3), np.zeros(3)), "vertices": np.zeros((3, 3))}}
+            try:
+                done, rep = H.write_mouths("", out, made, ["OrcRace"], [], object(), ("", "", ""), ff,
+                                           uv_test=True)
+            finally:
+                H.mouth_converter, H.vanilla_teeth, RM.convert_mouth, H.facefit.starfield_head_parts = saved
+                sk.skinned_shapes, nm.parse = saved2
+            self.assertEqual(calls, [(RM.MOUTH_ALBEDO_GAIN,) * 3])
+            p = os.path.join(out, "textures", "s2s", "actors", "character", "mouth", "mouthorc_x_color.dds")
+            self.assertTrue(os.path.isfile(p))
+            self.assertEqual(rep["OrcRace male"]["uv_test"], "textures/s2s/actors/character/mouth/mouthorc_x_color.dds")

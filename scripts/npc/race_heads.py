@@ -444,9 +444,11 @@ def vanilla_teeth(recs, sf_data, female, face_fit):
     return fid, nb, morphs, m_fid
 
 
-def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit):
+def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit, gain=None, uv_test=False):
     """{race: {female: info}} of the races in race_mouths.RACE_MOUTHS: Skyrim's mouth converted as the race's teeth
-    (race_mouths.convert_mouth), files under out; info carries the vanilla teeth part / morph record it replaces."""
+    (race_mouths.convert_mouth), files under out; info carries the vanilla teeth part / morph record it replaces.
+    gain: the mouth texture's colour multiplied by this (race_mouths.MOUTH_ALBEDO_GAIN when None); uv_test: the
+    colour texture replaced by race_mouths.uv_test_pixels (to see which way the tusks sample it in game)."""
     import shutil
     import mouth_probe
     import race_mouths
@@ -473,7 +475,9 @@ def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit):
                     from fo4sf import nif as nifmod, skyrimskin
                     sn = nifmod.parse(face_fit.hkx_to_af.read_any(sky_path, sky))
                     shp = next(iter(skyrimskin.skinned_shapes(sn)), None)
-                    material = conv._shape_material(sn, shp) if shp is not None else None
+                    g = race_mouths.MOUTH_ALBEDO_GAIN if gain is None else gain
+                    material = (conv._shape_material(sn, shp, albedo_tint=(g, g, g) if g != 1.0 else None)
+                                if shp is not None else None)
                     if material == conv.neutral:
                         material = None
                 base = f"meshes/s2s/races/{NAMES[race].lower()}/mouth_{'f' if female else 'm'}"
@@ -496,6 +500,19 @@ def write_mouths(sf_data, out, made, races, recs, sky, conv_args, face_fit):
             if os.path.isdir(os.path.join(staging, d)):
                 shutil.copytree(os.path.join(staging, d), os.path.join(out, d), dirs_exist_ok=True)
         shutil.rmtree(staging, ignore_errors=True)
+        if uv_test:
+            for race, by_sex in done.items():
+                for female, info in by_sex.items():
+                    rel = race_mouths.color_texture_of(info.get("material") or "")
+                    if not rel:
+                        continue
+                    from fo4sf import textures
+                    p = os.path.join(out, *rel.split("/"))
+                    os.makedirs(os.path.dirname(p), exist_ok=True)
+                    textures.write_dds_dx10(p, 256, 256, race_mouths.DXGI_RGBA8_SRGB, race_mouths.uv_test_pixels(256),
+                                            4)
+                    info["uv_test"] = rel
+                    rep[f"{race} {SEXES[female]}"]["uv_test"] = rel
     elif want:
         rep["material"] = staging
     return done, rep
@@ -513,7 +530,8 @@ def _sex_parts(recs, female):
     return out
 
 
-def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=("", "", "")):
+def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=("", "", ""), mouth_gain=None,
+                     mouth_uv_test=False):
     """Per race and sex: the vanilla head part's NIF with the race shape baked into its head meshes
     (headbake.baked_head_files), and (parts) every face head part HumanRace offers baked the same way
     (headbake.baked_part_files), written under out. Returns ({race: {female: MODL}}, {race: [(part FormID, female,
@@ -525,7 +543,8 @@ def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=
     models, race_parts, rep = {}, {}, {}
     precs = sfplugin.records(esm, [b"HDPT", b"FLST", b"MRPH"])
     plist = face_parts(precs) if parts else []
-    mouths, mrep = write_mouths(sf_data, out, made, races, precs, sky, conv_args, face_fit) if parts else ({}, {})
+    mouths, mrep = (write_mouths(sf_data, out, made, races, precs, sky, conv_args, face_fit, mouth_gain, mouth_uv_test)
+                    if parts else ({}, {}))
     for female, m in made.items():
         modl = vanilla_head_model(esm, female)
         nif_bytes, _rel = face_fit.hkx_to_af.vanilla_file("meshes/" + modl.replace("\\", "/"), sf_data)
@@ -1207,6 +1226,13 @@ def main(argv=None):
     ap.add_argument("--no-lip-edges", dest="lip_edges", action="store_false",
                     help="the race shapes' lips as transferred: without it the lips' meeting rows move like Skyrim's "
                          "visible lip edges (2026-11-10: the female Orc gaped where Skyrim's lips look closed)")
+    ap.add_argument("--mouth-brightness", type=float, default=None,
+                    help="the converted mouth texture's colour times this (default race_mouths.MOUTH_ALBEDO_GAIN; "
+                         "1 = Skyrim's as is: 2026-11-11 the Orc teeth drew near black in Starfield's light)")
+    ap.add_argument("--mouth-uv-test", action="store_true",
+                    help="the mouth's colour texture replaced by four coloured quarters (red top-left, green "
+                         "top-right, blue bottom-left, yellow bottom-right): the tusks sample the top half, so red / "
+                         "green tusks in game = Skyrim's UVs read as they are, blue / yellow = flipped")
     ap.add_argument("--ear-fit", action="store_true",
                     help="first move Skyrim's ears onto Starfield's (race_probe.ear_fit; experimental, off by default: "
                          "on the owner's heads 2026-11-10 it matched the sides of the heads, not the ears)")
@@ -1309,7 +1335,8 @@ def main(argv=None):
     models, rparts, mouths = None, None, None
     if wanted and a.race_shape == "baked":
         models, rparts, report["baked_heads"], mouths, report["mouths"] = write_race_heads(
-            sf_data, a.out, made, wanted, not a.no_bake_parts, sky, (a.starfield, a.texconv, a.content_resources))
+            sf_data, a.out, made, wanted, not a.no_bake_parts, sky, (a.starfield, a.texconv, a.content_resources),
+            a.mouth_brightness, a.mouth_uv_test)
         for race, per in report["baked_heads"].items():
             for sex, x in per.items():
                 print(f"  {race} {sex}: shape baked into {x['model']} ({x['files']} files; _facebones twin: "
