@@ -550,3 +550,8 @@ why the mod needs no clothes of its own.
   hands 9 per sex, BC1 via texconv when found, else uncompressed; faces 9 per sex shared by every phenotype, made
   from <sex>_default's: the phenotypes' age detail is lost on the Orc). The complex group's layout is unread; the copy
   points every string / FormID naming a copied group at the copy (the build prints how many). Unverified.
+- 2026-11-11, **in game (owner):** with the textures installed, --skin-tones takes effect: the Orc player's hands are
+  green (tone 3); the face (tone 1) is very dark, brownish rather than green, with orange specks. Not yet known why
+  the face differs (its tone textures may be blended with something, e.g. by their alpha, or be more than a colour
+  map). scripts/npc/skin_tone_preview.py: vanilla vs our tone textures side by side with numbers (median colour,
+  brightness spread, alpha range) to find out.
