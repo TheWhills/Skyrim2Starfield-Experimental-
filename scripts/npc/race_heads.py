@@ -1447,12 +1447,14 @@ def face_targets(tone_textures, out, rank=RACE_TONE_DEFAULT, kind="body"):
     return out_
 
 
-def bake_faces(npcs, sf_data, out, tones=None):
+def bake_faces(npcs, sf_data, out, tones=None, skip_races=()):
     """The template's pre-built face textures under each test NPC's FormID, as face_fit does (2026-11-09, owner: the
     race NPCs, without them, came out dark red with light nose / lips / eyelids; the control, also without, was a
     plain light face: the runtime face texture follows the morph blends, and ours name no textures). The shape stays
     the runtime one (morph keys). tones {race: callable(female) -> bytes -> bytes or None}: the colour texture of
-    that race's NPCs recoloured to its skin tone. Returns the count written per NPC."""
+    that race's NPCs recoloured to its skin tone. skip_races: the new race's NPCs of these races get none (their face
+    built at runtime from the skin tone, like the player's; 2026-11-12, owner: a recoloured baked face still showed a
+    lighter neck / chest patch). Returns the count written per NPC."""
     import face_fit
     from fo4sf import ba2
     names = {}
@@ -1463,6 +1465,10 @@ def bake_faces(npcs, sf_data, out, tones=None):
     done = {}
     for n in npcs:
         tpl, fid = int(n["template_form_id"], 16), int(n["form_id"], 16)
+        if n.get("race_record") and n.get("race") in skip_races:
+            n["baked_face_textures"] = []
+            done[n["edid"]] = 0
+            continue
         tone = (tones or {}).get(n.get("race")) if n.get("race_record") else None   # NPCs of the new race only
         colour = tone(n.get("sex") == "female") if tone else None     # None: copied as it is
         kw = {"colour": colour} if colour is not None else {}
@@ -1544,6 +1550,9 @@ def main(argv=None):
                     help="append (default): the race's tones added after the vanilla ones in the vanilla tone groups "
                          "(how SW Aliens.esm adds its green skins); groups: tone groups of the race's own (faces drew "
                          "nothing in game)")
+    ap.add_argument("--race-npc-baked-faces", action="store_true",
+                    help="the new race's test NPCs keep a (recoloured) copy of their template's baked face; default: "
+                         "none, so their face is built at runtime from the skin tone like the player's")
     ap.add_argument("--skin-tone-test", action="store_true",
                     help="tone slots sk0 / sk1 / sk2 solid green / white / grey (body, hands and face), to see how "
                          "the game shows a tone texture's colour")
@@ -1701,7 +1710,8 @@ def main(argv=None):
                 report.setdefault("baked_face_targets", {})[race] = {SEXES[f]: list(c) for f, c in targets.items()}
                 tones[race] = (lambda tg: lambda female: face_tone(tg[female], a.texconv) if female in tg
                                else None)(targets)
-        report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out, tones)
+        skip = () if a.race_npc_baked_faces else tuple(tones)
+        report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out, tones, skip)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
     parts = report.pop("_player_parts", None)

@@ -702,6 +702,13 @@ class SkinToneTests(unittest.TestCase):
             H.bake_faces(npcs, d, d, {"OrcRace": lambda female: ("tone", female)})
         self.assertEqual(calls, [(0x1000894, ("tone", False)), (0x1000804, None)])
         self.assertTrue(npcs[0]["baked_face_tone"])
+        calls.clear()
+        with tempfile.TemporaryDirectory() as d, \
+                unittest.mock.patch.object(face_fit, "baked_face_index", lambda names: {0x10: {}}), \
+                unittest.mock.patch.object(face_fit, "write_baked_face", fake_write):
+            done = H.bake_faces(npcs, d, d, {"OrcRace": lambda female: ("tone", female)}, ("OrcRace",))
+        self.assertEqual(calls, [(0x1000804, None)])                  # the race NPC gets none (runtime face)
+        self.assertEqual(done["a"], 0)
 
     def test_player_patch_both_heads(self):
         """2026-11-12: Body Type 2 gave the player a human female head; the patch lists both sexes' race heads."""

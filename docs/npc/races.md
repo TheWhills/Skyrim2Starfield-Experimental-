@@ -606,3 +606,8 @@ why the mod needs no clothes of its own.
   lighter than the body around it. The baked face is now matched to the body tone texture's median (same slot)
   instead of the face tone texture's (vanilla's face textures run lighter than the body ones: sk4 face (182,144,104)
   vs body (177,129,90)). The detail difference (a baked face carries its template's pores / makeup) stays.
+- 2026-11-12, **owner:** the player patch with both heads did not help: Body Type 2 is still a human female head
+  (round ears) with our tusks; the NPCs' recoloured baked faces still show a lighter neck / chest patch. Next:
+  scripts/npc/preset_probe.py lists every record referencing HumanRace's presets (where the menu may take its
+  profiles from) and our race's / Player's Face parts as built. The race's test NPCs now get no baked face by
+  default (--race-npc-baked-faces keeps it): their face is built at runtime from the skin tone, like the player's.
