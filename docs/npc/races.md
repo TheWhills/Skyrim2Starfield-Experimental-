@@ -635,3 +635,4 @@ why the mod needs no clothes of its own.
   body tone texture of the copy's own tone (PRESET_TONE_SPREAD). preset_probe also lists the presets' face fields.
 - 2026-11-12, **owner:** the Orc profiles' faces are now green (41–50, both sexes) with the baked preset faces.
   Female profiles still show the tusks through closed lips.
+  In game (Jemison) the player picked from profile 42 keeps the green face, hands and pointed ears.
