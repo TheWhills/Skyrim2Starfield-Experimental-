@@ -629,3 +629,7 @@ why the mod needs no clothes of its own.
 - 2026-11-12, **owner:** the Orc test NPCs' faces now green like their bodies (recoloured baked faces). The Orc
   profiles get their Orc tone (hands green) but keep a human face: a preset's Dermaesthetic texture layer carries its
   human face skin (as Nazeem's did, docs/ai/decisions.md 2026-11-06). The race's preset copies now drop that layer.
+- 2026-11-12, **owner:** without the Dermaesthetic layer the Orc profiles' faces are still human (hands green). Same
+  as the NPC finding: a face the game builds for a non-player stays human. The race's preset copies now get baked
+  faces like the test NPCs: the vanilla preset's baked face (by its FormID) recoloured to the median of the race's
+  body tone texture of the copy's own tone (PRESET_TONE_SPREAD). preset_probe also lists the presets' face fields.

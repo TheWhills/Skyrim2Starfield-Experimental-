@@ -1039,6 +1039,10 @@ def fo4land_zstring(d):
     return d.split(b"\0", 1)[0].decode("latin-1")
 
 
+def preset_tone_rank(i):
+    return PRESET_TONE_SPREAD[i % len(PRESET_TONE_SPREAD)]
+
+
 def preset_tones(recs, first):
     """The race's preset copies (NPC_ records) with a skin tone of the race each (STON = first appended index +
     PRESET_TONE_SPREAD in turn; 2026-11-12, owner: the Orc profiles came with their human preset's skin tone) and
@@ -1048,7 +1052,7 @@ def preset_tones(recs, first):
     for t, h, s, f in recs:
         if t == b"NPC_":
             s = without_layer(s, SKIN_LAYER)
-            s = with_ston(s, first + PRESET_TONE_SPREAD[i % len(PRESET_TONE_SPREAD)])
+            s = with_ston(s, first + preset_tone_rank(i))
             i += 1
         out.append((t, h, s, f))
     return out
@@ -1321,6 +1325,18 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                 tones = rrep.get("skin_tones") or {}
                 if tones.get("method") == "append" and tones.get("first_index"):
                     prec = preset_tones(prec, tones["first_index"][0])
+                    # their faces: baked like the test NPCs' (2026-11-12, owner: profile faces stayed human, an
+                    # NPC's runtime face does not follow the tone), from the vanilla preset's baked face
+                    by_edid = {sfplugin.edid(sb): f for f, (_h, sb) in npc_by.items()}
+                    prefix = f"S2S_{NAMES[race]}Race_"
+                    for i, (t_, _h, sb, f) in enumerate(x for x in prec if x[0] == b"NPC_"):
+                        e = sfplugin.edid(sb)
+                        v = by_edid.get(e[len(prefix):]) if e.startswith(prefix) else None
+                        if v is not None:
+                            rep.setdefault("preset_faces", []).append({
+                                "race": race, "sex": "female" if "female" in e.lower() else "male", "edid": e,
+                                "template_form_id": f"{v:08X}", "form_id": f"{f:08X}",
+                                "race_record": f"S2S_{NAMES[race]}Race", "tone_rank": preset_tone_rank(i)})
                 recs += prec
                 rrep["preset_copies"] = len(prec)
                 race_presets_all += [f for t_, _h, _s, f in prec if t_ == b"NPC_"]
@@ -1537,7 +1553,8 @@ def bake_faces(npcs, sf_data, out, tones=None, skip_races=()):
             done[n["edid"]] = 0
             continue
         tone = (tones or {}).get(n.get("race")) if n.get("race_record") else None   # NPCs of the new race only
-        colour = tone(n.get("sex") == "female") if tone else None     # None: copied as it is
+        colour = (tone(n.get("sex") == "female", n["tone_rank"]) if "tone_rank" in n else
+                  tone(n.get("sex") == "female")) if tone else None     # None: copied as it is
         kw = {"colour": colour} if colour is not None else {}
         written = face_fit.write_baked_face(index, tpl, fid, sf_data, out, PLUGIN, **kw) if tpl in index else []
         n["baked_face_textures"] = [os.path.basename(p) for p in written]
@@ -1773,13 +1790,15 @@ def main(argv=None):
     if a.baked_face_textures:
         tones = {}
         for race, done in (report.get("skin_tone_textures") or {}).items():
-            targets = face_targets(done, a.out)
-            if targets:
-                report.setdefault("baked_face_targets", {})[race] = {SEXES[f]: list(c) for f, c in targets.items()}
-                tones[race] = (lambda tg: lambda female: face_tone(tg[female], a.texconv) if female in tg
-                               else None)(targets)
+            by_rank = {k: face_targets(done, a.out, rank=k) for k in range(9)}
+            if by_rank.get(RACE_TONE_DEFAULT):
+                report.setdefault("baked_face_targets", {})[race] = {
+                    SEXES[f]: list(c) for f, c in by_rank[RACE_TONE_DEFAULT].items()}
+                tones[race] = (lambda tg: lambda female, rank=RACE_TONE_DEFAULT:
+                               face_tone(tg[rank][female], a.texconv) if female in tg.get(rank, {}) else None)(by_rank)
         skip = tuple(tones) if a.race_npc_runtime_faces else ()
-        report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out, tones, skip)
+        report["baked_faces"] = bake_faces(report["npcs"] + report.get("preset_faces", []), sf_data, a.out, tones,
+                                           skip)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
     parts = report.pop("_player_parts", None)
