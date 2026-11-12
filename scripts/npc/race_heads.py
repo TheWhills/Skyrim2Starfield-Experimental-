@@ -732,12 +732,18 @@ def with_extra_part(subs, part_fid):
     return list(subs[:at + 1]) + [(b"HNAM", struct.pack("<I", part_fid))] + list(subs[at + 1:])
 
 
-def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, new_fid):
+BLEND_SIGS = (b"BMPN", b"BMPV")      # an NPC's head morph blends (what builds its head shape, races.md 2026-11-09)
+
+
+def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, new_fid, drop_blends=False):
     """(RACE subrecords, [NPC_ records]): each chargen preset of the race (RPRM / RPRF, copied from HumanRace: vanilla
     preset NPCs) replaced by a copy on the race - RNAM ours, its Face head part the race's head, its other parts the
     race copies (2026-11-11: a new game's player is built from the first preset, so the Orc player kept the preset's
-    human teeth, brows and eyes; only the head, which the menu takes from the race, was ours). npcs: {FormID: (header,
-    subs)}; heads {female: HDPT}; copies {female: {vanilla: copy}}."""
+    human teeth, brows and eyes; only the head, which the menu takes from the race, was ours). drop_blends (the race's
+    shape baked into its head): the copies lose their head morph blends (BMPN / BMPV), whose human phenotypes
+    reshaped our head back to a human face (2026-11-12, owner: every preset has tusks, but only our Orc NPC's preset
+    looks Orc; the female body type gives a human face with tusks), as the race's test NPCs already do. npcs:
+    {FormID: (header, subs)}; heads {female: HDPT}; copies {female: {vanilla: copy}}."""
     made, out, recs = {}, [], []
     for s_, d in rsubs:
         if s_ in PRESET_SIG.values() and len(d) == 4 and _u32(d) in npcs:
@@ -751,6 +757,8 @@ def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, n
                 if female in heads:
                     subs = with_head_part(subs, heads[female], part_types)
                 subs = swap_parts(subs, copies.get(female, {}))
+                if drop_blends:
+                    subs = [x for x in subs if x[0] not in BLEND_SIGS]
                 recs.append((b"NPC_", h, subs, fid))
                 made[v] = fid
             d = struct.pack("<I", made[v])
@@ -1230,7 +1238,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                             recs[k] = (t_, h_, with_extra_part(s_, mouth), f_)
                             rrep.setdefault("mouth_on_head", {})[SEXES[f]] = f"{mouth:08X}"
                 rsubs, prec = race_preset_copies(rsubs, npc_by, NAMES[race], r_fid, rheads, part_types, copies,
-                                                 ids.take)
+                                                 ids.take, drop_blends=race in race_models)
                 recs += prec
                 rrep["preset_copies"] = len(prec)
                 part_copies[race] = copies
@@ -1253,7 +1261,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             subs = sfplugin.edit(list(src[2]), {b"EDID": sfplugin.zs(edid), b"RNAM": struct.pack("<I", race_fids[race]),
                                                 b"FULL": sfplugin.zs(f"{NAMES[race]} {n['sex']} (S2S race)")})
             if race in race_heads:          # the shape is in the head: the race's head part, no race blends
-                subs = with_head_part([x for x in subs if x[0] not in (b"BMPN", b"BMPV")],
+                subs = with_head_part([x for x in subs if x[0] not in BLEND_SIGS],
                                       race_heads[race][n["sex"] == "female"], part_types)
             if race in part_copies:
                 subs = swap_parts(subs, part_copies[race].get(n["sex"] == "female", {}))

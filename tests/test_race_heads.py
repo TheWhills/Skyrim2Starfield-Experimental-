@@ -772,6 +772,21 @@ class PresetCopyTests(unittest.TestCase):
         self.assertEqual(_u(dict(male)[b"RNAM"]), 0x1000811)
         self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"), [0x13EB51, 0x100080F, 0x1000872])
 
+    def test_baked_head_presets_lose_blends(self):
+        """2026-11-12: presets' human morph blends turned our baked Orc head back into a human face."""
+        h = bytes(24)
+        npcs = {0x50566: (h, [(b"EDID", Z("ChargenPresetFemale01")), (b"RNAM", I(0x347D)), (b"PNAM", I(0x12201)),
+                              (b"BMPN", Z("female_eu_md1_Mouth")), (b"BMPV", I(0)), (b"FMSI", I(3))])}
+        rsubs = [(b"FNAM", b""), (b"RPRF", I(0x50566))]
+        n = iter(range(0x1000900, 0x1000a00))
+        for drop, want in ((False, 1), (True, 0)):
+            _out, recs = H.race_preset_copies(rsubs, npcs, "Orc", 0x1000811, {True: 0x1000810}, {0x12201: 1}, {},
+                                              lambda e: next(n), drop_blends=drop)
+            s = recs[0][2]
+            self.assertEqual(sum(1 for x, _d in s if x == b"BMPN"), want)
+            self.assertEqual(sum(1 for x, _d in s if x == b"BMPV"), want)
+            self.assertIn(b"FMSI", [x for x, _d in s])                  # face dials kept
+
 
 class ExtraPartTests(unittest.TestCase):
     def test_with_extra_part(self):

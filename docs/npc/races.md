@@ -585,3 +585,7 @@ why the mod needs no clothes of its own.
   HumanRace blend NPCs) like the tones (skintone.relative at the NPCs' tone, STON first + 4), written uncompressed
   (formats other than RGBA8 / BC1 decoded through texconv). Also seen: the female Orc player's tusks stick out
   through her closed lips (her mouth opens 0.6 mm; male 13.7) - open.
+- 2026-11-12, **owner:** every preset has the tusks, but only one male preset looks Orc (our NPC, which has no
+  morph blends); the female body type is a normal human preset face with tusks. The preset copies kept their human
+  morph blends (BMPN / BMPV), which reshape our baked head back to a human face. race_preset_copies now drops them
+  when the race's shape is baked (face dials kept, so presets still differ by their dials and colours). Unverified.
