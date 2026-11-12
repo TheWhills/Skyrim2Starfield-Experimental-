@@ -774,6 +774,33 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"HCOL", b"h\0")], 9),
                          [(b"EDID", b"x\0"), (b"STON", b"\x09"), (b"HCOL", b"h\0")])
 
+    def test_chained_tones(self):
+        """2026-11-12, every race: each race's tones are appended after the previous race's, in TONE_ORDER (the
+        Orc keeps 9-17 whatever else is built); the overrides hold every race's entries."""
+        from fo4sf import skintone
+        h = bytes(24)
+        sub = [(b"EDID", Z("SimpleGroup_Male_Naked_Body_Skin_Tones")), (b"ITMC", I(9))]
+        for k in range(9):
+            sub += [(b"LNAM", Z(f"m_sk{k}")), (b"VNAM", Z(f"textures/body/m_sk{k}.dds")), (b"NNAM", I(0))]
+        avmd = [(b"AVMD", h, sub + [(b"MODT", b"")], 0x163F4)]
+        out = H.chained_tones(avmd, ["OrcRace", "HighElfRace"])
+        self.assertEqual(list(out), ["OrcRace", "HighElfRace"])
+        self.assertEqual(out["OrcRace"][2]["first_index"], [9])
+        self.assertEqual(out["HighElfRace"][2]["first_index"], [18])
+        body = out["OrcRace"][0][0][2]
+        self.assertIs(out["OrcRace"][0], out["HighElfRace"][0])
+        self.assertEqual(dict(body)[b"ITMC"], I(27))
+        vn = [skintone._text(d) for x, d in body if x == b"VNAM"]
+        self.assertEqual(len(vn), 27)
+        self.assertEqual(vn[9], "textures/s2s/races/orc/body/male_sk0_color.dds")
+        self.assertEqual(vn[18], "textures/s2s/races/altmer/body/male_sk0_color.dds")
+        self.assertEqual([skintone._text(d) for x, d in body if x == b"LNAM"][18], "m_sk18")
+        self.assertEqual(body[-1][0], b"MODT")
+        # the Altmer's sources are vanilla textures, not the Orc's
+        self.assertEqual(out["HighElfRace"][1]["textures/s2s/races/altmer/body/male_sk3_color.dds"][0],
+                         "textures/body/m_sk3.dds")
+        self.assertEqual(H.tone_races("all"), list(H.TONE_ORDER))
+
     def test_write_skin_tones(self):
         from fo4sf import skintone
         light = np.full((4, 4, 4), 200, np.uint8)

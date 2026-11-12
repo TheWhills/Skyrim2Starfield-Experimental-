@@ -654,3 +654,8 @@ why the mod needs no clothes of its own.
   the records tried do not reach. **Parked** (owner: a female Orc just picks a female Orc profile). Known
   limitation: switching body type in the menu gives a human face with tusks; pick an Orc profile of the wanted
   sex instead. Kept: the Orc profiles first and female / male in turn (player patch).
+- 2026-11-12, every race: appended skin tones for several races in one build (race_heads.chained_tones): each
+  race's 9 tones after the previous race's in TONE_ORDER, so the numbers stay put whatever else is built: Orc tones
+  9-17 (menu 10-18), Altmer 18-26 (19-27), Bosmer 27-35 (28-36), Dunmer 36-44 (37-45). `--skin-tones all` = those
+  four; Nord, Imperial, Breton, Redguard and Elder share Skyrim's human tones (Starfield's own fit), Dremora has none
+  in the owner's skin tone dump. --races stays at most four races (its morph keys: 84 vanilla + 9 per race <= 128).

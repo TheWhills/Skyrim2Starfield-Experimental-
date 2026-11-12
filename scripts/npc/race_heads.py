@@ -1014,6 +1014,32 @@ def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
     return subs
 
 
+TONE_ORDER = ("OrcRace", "HighElfRace", "WoodElfRace", "DarkElfRace")  # appended in this order: Orc tones 9-17,
+#                                         Altmer 18-26, Bosmer 27-35, Dunmer 36-44 (then any other race, by name)
+TONE_RACES_ALL = TONE_ORDER               # --skin-tones all: the races whose Skyrim skin is not human (Nord, Imperial,
+#                                         Breton, Redguard and Elder share Skyrim's human tones: Starfield's own fit)
+
+
+def tone_races(text):
+    """race_names, except 'all': TONE_RACES_ALL (the non-human skins)."""
+    return list(TONE_RACES_ALL) if text.strip().lower() == "all" else race_names(text)
+
+
+def chained_tones(avmd, races, root=lambda race: f"textures/s2s/races/{NAMES[race].lower()}"):
+    """{race: (override records, jobs, report)} in `races` order: each race's tones appended after the previous
+    race's (skintone.appended_tones on the groups as the earlier races left them). The overrides of the last race
+    hold every race's entries; they are returned under the first race (the others: the same list)."""
+    from fo4sf import skintone
+    out, cur, final = {}, list(avmd), None
+    for race in dict.fromkeys(races):
+        trecs, jobs, trep = skintone.appended_tones(cur, root(race))
+        over = {r[3]: r for r in trecs}
+        cur = [over.get(r[3], r) for r in cur]
+        out[race] = (trecs, jobs, trep)
+        final = trecs
+    return {r: (final, j, t) for r, (_x, j, t) in out.items()}
+
+
 RACE_TONE_DEFAULT = 4          # an NPC / the player of a race with appended tones: its 5th tone (the middle Orc green)
 
 
@@ -1191,7 +1217,10 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     info = sfplugin.header_info(sf_esm)
     recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST", *CONDITION_TYPES])
     avmd = sfplugin.records(sf_esm, [b"AVMD"]) if skin_tones else []
-    appended = []
+    # appended tones, every race at once in TONE_ORDER (a race's tone numbers stay put whatever else is built)
+    appended = (chained_tones(avmd, [r for r in TONE_ORDER + tuple(sorted(new_races or ()))
+                                     if r in (skin_tones or {}) and r in (new_races or ())])
+                if skin_tones and skin_tone_method == "append" else {})
     if strings:                       # our plugins are not localized: copies carry text, not string ids
         recs_all = [(t, h, delocalize(sb, strings), fid) for t, h, sb, fid in recs_all]
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
@@ -1302,11 +1331,8 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                     rsubs = skintone.with_tone_names(rsubs, tnames)
                     trep["race_strings_renamed"] = sum(a != b for a, b in zip(before, rsubs))
                 else:
-                    if appended:
-                        raise SystemExit("--skin-tone-method append: one race per build for now (the tones are "
-                                         "appended to the vanilla groups)")
-                    trecs, jobs, trep = skintone.appended_tones(avmd, root)
-                    appended.append(race)
+                    trecs, jobs, trep = appended[race]
+                    trecs = trecs if race == next(iter(appended)) else []   # the overrides once (they hold all)
                 recs += trecs
                 trep["method"] = skin_tone_method
                 trep["textures"] = len(jobs)
@@ -1640,7 +1666,8 @@ def main(argv=None):
                          "transferred")
     ap.add_argument("--skin-tones", default="",
                     help="races (of --new-races) that get skin tones of their own: Starfield's skin tone textures "
-                         "recoloured to Skyrim's skin tone presets (e.g. OrcRace; 2026-11-11 test)")
+                         "recoloured to Skyrim's skin tone presets (e.g. OrcRace; 2026-11-11 test); 'all': the "
+                         "non-human skins (Orc, Altmer, Bosmer, Dunmer), appended in that order")
     ap.add_argument("--skin-tone-mode", choices=("relative", "absolute"), default="relative",
                     help="relative (default): each vanilla tone texture times race / human Skyrim preset colour of "
                          "the same rank; absolute: the texture recoloured to the race colour (came out dark)")
@@ -1764,14 +1791,14 @@ def main(argv=None):
         report["skyrim_heights"] = {r: [round(x, 3) for x in h] for r, h in heights.items()}
     ramps, human_ramps = {}, None
     if a.skin_tones:
-        all_ramps = skin_tone_ramps(sky_esm, race_names(a.skin_tones))
+        all_ramps = skin_tone_ramps(sky_esm, tone_races(a.skin_tones))
         human_ramps = all_ramps.get("human") if a.skin_tone_mode == "relative" else None
         if a.skin_tone_mode == "relative" and not human_ramps:
             raise SystemExit(f"--skin-tone-mode relative: no {HUMAN_TONE_RACE} skin tone presets in {sky_esm}")
         ramps = {r: x for r, x in all_ramps.items() if r in wanted}
         for r, per in ramps.items():
             print(f"  {r} skin tones: " + "; ".join(f"{SEXES[f]} {per[f][0]} .. {per[f][-1]}" for f in sorted(per)))
-        missing = [r for r in race_names(a.skin_tones) if r not in ramps]
+        missing = [r for r in tone_races(a.skin_tones) if r not in ramps]
         if missing:
             print(f"  skin tones: {', '.join(missing)} skipped (not in --new-races, or no Skyrim skin tone presets)")
     ids = FormIds(os.path.join(a.out, LEDGER))       # stable FormIDs across rebuilds (saved games)
