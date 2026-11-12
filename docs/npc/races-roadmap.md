@@ -214,3 +214,13 @@ Built 2026-11-12 (synthetic tests; not yet run on the game):
   STON from its Skyrim skin on the child scale (0-2). Outfit, hair and voice stay the template's for now.
 - Open: Skyrim children's clothes onto the child races (gear_fit output is already adult-sized; the addons need the
   child races), child hairs, child voices, GetIsRace ChildRace conditions.
+
+Reuse in face_fit (2026-11-12, owner: "if an NPC changes so we only have to rebuild that one NPC"): each NPC's fit
+(dials, or a child's baked head) is kept in _fit_cache.json in --out under a key of its FaceGen head, its Skyrim race
+(and whether it is fitted against that race's morph), the fit settings (options, --regions / --head-nif / recipe
+files, Starfield.esm and the mesh archives' size and time) and the fitting code (face_fit's fit functions by source,
+src/fo4sf facefit / headcorr / headbake, child_faces.py, FIT_VERSION). A run reuses every unchanged NPC and makes the
+per-sex head setup (alignment, correspondence) only when some NPC of that sex is fitted; the plugin, outfits, race
+swap, colours, textures and voices are written every run (quick, and they depend on the other plugins). --refit fits
+all; --preview always fits. A changed race needs no refit of its NPCs' dials (they are fitted against Skyrim's race
+morph; the converted race is applied by the writer). tests/test_face_fit_script.py FitCacheTests.

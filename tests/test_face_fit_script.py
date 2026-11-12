@@ -6,6 +6,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -120,6 +121,73 @@ class FaceFitScriptTests(unittest.TestCase):
                 self.assertEqual([(sfplugin.edid(o[2]), dict(o[2])[b"INAM"]) for o in otft], [("S2S_NoOutfit", b"")])
                 self.assertEqual(dict(subs)[b"DOFT"], struct.pack("<I", otft[0][3]))
                 self.assertEqual(dict(subs)[b"SOFT"], struct.pack("<I", otft[0][3]))
+        finally:
+            (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head,
+             S.bsa.SkyrimArchives) = saved
+
+
+class FitCacheTests(unittest.TestCase):
+    def test_unchanged_npcs_reused(self):
+        """2026-11-12 (owner: an NPC that changed is the only one rebuilt): a second run reuses every fit (no head
+        setup at all) and still writes the plugin; a changed FaceGen head refits that NPC only; --refit refits all."""
+        sliders = facefit.load_regions(json.dumps(T.REGIONS))
+        sf_head = T.make_head(T.head_points())
+        sky_base = T.head_points(3000, seed=5) * 70.0
+        sky_head = T.make_head(sky_base / 70.0)
+        faces = {k: facefit.deform(sky_head, sliders, v) * 70.0 for k, v in TRUTH.items()}
+        ids = {"0A2C94": "HousecarlWhiterun", "013BAB": "Ysolda"}
+        version = {"Ysolda": "1"}
+        setups = []
+
+        def read_any(path, _sky=None):
+            if "facegeom" in path.lower():
+                e = ids[path[-10:-4].upper()]
+                return f"face:{e}:{version.get(e, '1')}".encode()
+            return b"base"
+
+        def skyrim_head(data, model=False):
+            d = data.decode()
+            return sky_base.copy() if d == "base" else faces[d.split(":")[1]]
+
+        def starfield_head(d, f, h=None, r=None):
+            setups.append(f)
+            return sf_head, {"face_bones": 6}
+        saved = (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head, S.bsa.SkyrimArchives)
+        S.hkx_to_af.read_any = read_any
+        S.hkx_to_af.vanilla_file = lambda p, d: (json.dumps(T.REGIONS).encode(), p)
+        S.skyrim_head = skyrim_head
+        S.starfield_head = starfield_head
+        S.bsa.SkyrimArchives = lambda d: None
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                sky, sf, out = (os.path.join(tmp, x) for x in ("sky", "sf", "out"))
+                os.makedirs(sky)
+                os.makedirs(os.path.join(sf, "Data"))
+                skyrim_esm(os.path.join(sky, "Skyrim.esm"))
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+
+                def run(*extra):
+                    with mock.patch("builtins.print"):
+                        self.assertEqual(S.main(["--skyrim-data", sky, "--starfield", sf, "--out", out,
+                                                 "--npc", "HousecarlWhiterun", "--npc", "Ysolda", "--test-plugin"]
+                                                + list(extra)), 0)
+                    with open(os.path.join(out, "faces.json"), encoding="utf-8") as fh:
+                        return {r["edid"]: r for r in json.load(fh)["npcs"]}
+                first = run()
+                self.assertEqual(len(setups), 1)
+                os.remove(os.path.join(out, S.PLUGIN))
+                second = run()
+                self.assertEqual(len(setups), 1)                                    # no head setup at all
+                self.assertTrue(all(r.get("fit_reused") for r in second.values()))
+                for e in TRUTH:
+                    self.assertEqual(second[e]["dials"], first[e]["dials"])
+                self.assertTrue(os.path.isfile(os.path.join(out, S.PLUGIN)))        # the plugin is written anyway
+                version["Ysolda"] = "2"                                             # her FaceGen head changed
+                third = run()
+                self.assertEqual((third["Ysolda"].get("fit_reused"), third["HousecarlWhiterun"].get("fit_reused")),
+                                 (None, True))
+                fourth = run("--refit")
+                self.assertFalse(any(r.get("fit_reused") for r in fourth.values()))
         finally:
             (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head,
              S.bsa.SkyrimArchives) = saved

@@ -224,6 +224,79 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
             "dials": {}}
 
 
+FIT_CACHE = "_fit_cache.json"     # in --out: each NPC's fit result by an input key (2026-11-12)
+FIT_VERSION = 1                   # bump when the fit changes in a way the hashed code below does not show
+FIT_FUNCS = ("skyrim_head", "skyrim_head_triangles", "skyrim_head_matrix", "race_delta", "head_alignment",
+             "starfield_head_node", "starfield_head", "child_face")
+
+
+def fit_code_hash():
+    """The fitting code: face_fit's fit functions (FIT_FUNCS, their source), src/fo4sf facefit / headcorr / headbake,
+    child_faces.py, FIT_VERSION. The writer code is not in it (it runs every time)."""
+    import hashlib
+    import inspect
+    import child_faces
+    h = hashlib.sha1(str(FIT_VERSION).encode())
+    mod = sys.modules[__name__]
+    for f in FIT_FUNCS:
+        h.update(inspect.getsource(getattr(mod, f)).encode())
+    from fo4sf import headbake
+    for m in (facefit, headcorr, headbake, child_faces):
+        with open(m.__file__, "rb") as fh:
+            h.update(fh.read())
+    return h.hexdigest()
+
+
+def fit_settings(a, sf_data):
+    """What the fit of every NPC depends on besides its own face: the fit options, the regions / head / recipe
+    files given, and the game files the defaults come from (size and time: a game update refits)."""
+    def stamp(path):
+        try:
+            st = os.stat(path)
+            return [os.path.basename(path), st.st_size, int(st.st_mtime)]
+        except OSError:
+            return [path, None]
+    files = [stamp(p) for p in list(a.regions or []) + list(a.head_nif) + ([a.facebones_recipe] if a.facebones_recipe
+                                                                            else [])]
+    games = [stamp(os.path.join(sf_data, "Starfield.esm"))] + [
+        stamp(os.path.join(sf_data, f)) for f in sorted(os.listdir(sf_data)) if f.lower().startswith(
+            "starfield - meshes") and f.lower().endswith(".ba2")] if os.path.isdir(sf_data) else []
+    return {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit, "ridge": a.ridge,
+            "symmetry": not a.no_symmetry, "transfer": a.transfer, "legacy": bool(a.legacy_alignment),
+            "files": files, "games": games}
+
+
+def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted):
+    """One NPC's fit key: the fitting code and settings, its FaceGen head, its Skyrim race and whether it is fitted
+    against that race's morph (a converted race: the NPC's own features only)."""
+    import hashlib
+    h = hashlib.sha1(code.encode())
+    h.update(json.dumps(settings, sort_keys=True).encode())
+    h.update(facegen_bytes)
+    h.update(repr((sky_race, bool(race_converted))).encode())
+    return h.hexdigest()
+
+
+def load_fit_cache(out):
+    try:
+        with open(os.path.join(out, FIT_CACHE), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def cached_fit(cache, edid, key, out):
+    """The cached row of an NPC when its key matches and the files its fit wrote (a child's head) are there."""
+    e = cache.get(edid.lower())
+    if not e or e.get("key") != key:
+        return None
+    row = e.get("row") or {}
+    for rel in (row.get("child") or {}).get("files", []):
+        if not os.path.isfile(os.path.join(out, *rel.split("/"))):
+            return None
+    return json.loads(json.dumps(row))
+
+
 def converted_child_races(races_plugin):
     """{Skyrim child race EditorID: local FormID of ours} from race_heads.json beside the race plugin."""
     try:
@@ -872,6 +945,9 @@ def main(argv=None):
     ap.add_argument("--dial-limit", type=float, default=1.0,
                     help="largest dial value (1 = the looks menu's range; e.g. 1.5 to test whether the game takes "
                          "more: the fit hit 1.0 on 8 of Ralof's dials)")
+    ap.add_argument("--refit", action="store_true",
+                    help="fit every NPC again (default: an NPC whose FaceGen head, race, fit settings and fitting "
+                         "code are unchanged since the last run reuses that fit; the plugin is always rewritten)")
     ap.add_argument("--preview", action="store_true",
                     help="faces_preview\\<NPC>.png per NPC: Starfield's base head, the Skyrim face on it (the fit's "
                          "target), our fitted face; front, side, and a heat map of each one's change from the base")
@@ -947,9 +1023,11 @@ def main(argv=None):
     if a.facebones_recipe:
         with open(a.facebones_recipe, encoding="utf-8", errors="replace") as fh:
             recipe = facefit.load_recipe(fh.read())
-    for female in (False, True):
-        if not any(n["female"] == female for n in chosen):
-            continue
+    def sex_setup(female):
+        """Starfield's head, Skyrim's base head aligned on it and the correspondence, for one sex: made the first
+        time an NPC of that sex is fitted (2026-11-12: a run whose NPCs are all reused makes none)."""
+        if female in setup:
+            return setup[female]
         reg_file = a.regions[int(female)] if len(a.regions) > int(female) else None
         if reg_file:
             with open(reg_file, encoding="utf-8") as fh:
@@ -976,28 +1054,58 @@ def main(argv=None):
             alignment="model space via the head node (2026-11-09)" if model_space else "legacy ICP on the mesh",
             transfer="surface (headcorr)" if corr is not None else "nearest vertices",
             correspondence=corr.report if corr is not None else None)
-    dial_ids = race_dials(os.path.join(sf_data, "Starfield.esm"))
-    for female, (sliders, *_rest) in setup.items():
+        if dial_ids_of[0] is None:
+            dial_ids_of[0] = race_dials(os.path.join(sf_data, "Starfield.esm"))
         ids = {s.id for s in sliders}
-        rd = set(dial_ids[female])
+        rd = set(dial_ids_of[0][female])
         report["sexes"]["female" if female else "male"]["race_dials"] = {
             "count": len(rd), "also_slider_ids": len(rd & ids), "slider_ids_not_dials": len(ids - rd)}
+        return setup[female]
+
+    dial_ids_of = [None]
+    fit_cache = load_fit_cache(out)
+    code_hash = fit_code_hash()
+    settings_now = fit_settings(a, sf_data)
+    reused = []
 
     child_ctx = {}
     for n in chosen:
-        sliders, head, base, al, model_space, corr = setup.get(n["female"], (None,) * 6)
         row = {"edid": n["edid"], "form_id": f"{n['form_id']:08X}", "female": n["female"]}
-        if "child" in races.get(n["race"], "").lower():
+        sky_race = races.get(n["race"], "")
+        key = None
+        if not a.preview and not a.refit:
+            try:
+                fg_bytes = hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky)
+                key = npc_fit_key(code_hash, settings_now, fg_bytes, sky_race, sky_race in conv_races)
+            except (SystemExit, KeyError, OSError):
+                key = None
+            hit = cached_fit(fit_cache, n["edid"], key, out) if key else None
+            if hit is not None:
+                hit["fit_reused"] = True
+                report["npcs"].append(hit)
+                reused.append(n["edid"])
+                for sx, srep in (fit_cache.get("_sexes") or {}).items():
+                    report["sexes"].setdefault(sx, srep)
+                continue
+
+        def remember(r):
+            if key and "error" not in r:
+                fit_cache[n["edid"].lower()] = {"key": key, "row": r}
+            else:
+                fit_cache.pop(n["edid"].lower(), None)
+        if "child" in sky_race.lower():
             # 2026-11-12: Skyrim's children (NordRaceChild ...) get their own face baked into a head of their own on
             # Starfield's child head (child_faces); no dials (Starfield's children have none)
             try:
                 row.update(child_face(n, races.get(n["race"]), sky, sf_data, out, a, child_ctx))
             except (SystemExit, ValueError, KeyError, OSError, nifmod.NifError) as e:
                 row["error"] = f"child ({races.get(n['race'])}): {e}"
+            remember(row)
             report["npcs"].append(row)
             print({k: v for k, v in row.items() if k != "dials"})
             continue
         try:
+            sliders, head, base, al, model_space, corr = sex_setup(n["female"])
             fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
                              model=model_space)
             if fg is None or len(fg) != len(base):
@@ -1034,8 +1142,14 @@ def main(argv=None):
                        skyrim_face_change_m=float(np.sqrt(np.mean(np.sum(disp ** 2, 1)))))
         except (SystemExit, ValueError, nifmod.NifError) as e:
             row["error"] = str(e)
+        remember(row)
         report["npcs"].append(row)
         print({k: v for k, v in row.items() if k not in ("dials", "dial_names")})
+    fit_cache["_sexes"] = dict(fit_cache.get("_sexes") or {}, **report["sexes"])
+    with open(os.path.join(out, FIT_CACHE), "w", encoding="utf-8") as fh:
+        json.dump(fit_cache, fh)
+    if reused:
+        print(f"{len(reused)} NPC fits unchanged, reused (--refit to fit again): {', '.join(reused)}")
 
     if a.test_plugin:
         sf_esm = os.path.join(sf_data, "Starfield.esm")
