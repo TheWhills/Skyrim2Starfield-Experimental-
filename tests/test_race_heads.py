@@ -814,6 +814,11 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(out["HighElfRace"][1]["textures/s2s/races/altmer/body/male_sk3_color.dds"][0],
                          "textures/body/m_sk3.dds")
         self.assertEqual(H.tone_races("all"), list(H.TONE_ORDER))
+        # 2026-11-12: the Nord (the human reference) got tones of its own with --new-races all --skin-tones all
+        ramps = {"NordRace": 1, "human": 1, "OrcRace": 2, "HighElfRace": 3}
+        self.assertEqual(H.wanted_ramps(ramps, ["NordRace", "OrcRace", "HighElfRace"], "all"),
+                         {"OrcRace": 2, "HighElfRace": 3})
+        self.assertEqual(H.wanted_ramps(ramps, ["NordRace", "OrcRace"], "Nord,Orc"), {"NordRace": 1, "OrcRace": 2})
 
     def test_write_skin_tones(self):
         from fo4sf import skintone

@@ -1037,6 +1037,13 @@ def tone_races(text):
     return list(TONE_RACES_ALL) if text.strip().lower() == "all" else race_names(text)
 
 
+def wanted_ramps(all_ramps, wanted, text):
+    """{race: ramps} of the races both built (wanted) and asked for in --skin-tones (text); not the "human" key nor
+    HUMAN_TONE_RACE unless asked for."""
+    asked = set(tone_races(text))
+    return {r: x for r, x in all_ramps.items() if r in wanted and r in asked}
+
+
 def chained_tones(avmd, races, root=lambda race: f"textures/s2s/races/{NAMES[race].lower()}"):
     """{race: (override records, jobs, report)} in `races` order: each race's tones appended after the previous
     race's (skintone.appended_tones on the groups as the earlier races left them). The overrides of the last race
@@ -1807,7 +1814,9 @@ def main(argv=None):
         human_ramps = all_ramps.get("human") if a.skin_tone_mode == "relative" else None
         if a.skin_tone_mode == "relative" and not human_ramps:
             raise SystemExit(f"--skin-tone-mode relative: no {HUMAN_TONE_RACE} skin tone presets in {sky_esm}")
-        ramps = {r: x for r, x in all_ramps.items() if r in wanted}
+        # only the races asked for (the human reference race's ramps come along for --skin-tone-mode relative:
+        # 2026-11-12, --new-races all --skin-tones all also gave the Nord 9 copies of the vanilla tones)
+        ramps = wanted_ramps(all_ramps, wanted, a.skin_tones)
         for r, per in ramps.items():
             print(f"  {r} skin tones: " + "; ".join(f"{SEXES[f]} {per[f][0]} .. {per[f][-1]}" for f in sorted(per)))
         missing = [r for r in tone_races(a.skin_tones) if r not in ramps]

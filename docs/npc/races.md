@@ -663,3 +663,7 @@ why the mod needs no clothes of its own.
   copies after the vanilla profiles), but the player patch's CharGenPresets override, which replaces it, listed
   only the player race's copies and the vanilla ones. Fixed (player_chargen_list): the player race first, then the
   vanilla profiles, then every other race's.
+- 2026-11-12, owner's first every-race build (--races Orc + 3 elves, --new-races all, --skin-tones all): ten races
+  baked (heads, 56 / 40 face parts each, ~22 min), tones Orc 9, Altmer 18, Bosmer 27, Dunmer 36 as planned; but the
+  Nord got tones 45-53 too (its ramps come along as the human reference). Fixed (wanted_ramps). That build's player
+  patch still lists only the Orc's profiles (fixed before, needs a rebuild).
