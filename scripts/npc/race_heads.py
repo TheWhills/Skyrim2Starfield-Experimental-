@@ -757,11 +757,6 @@ def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, n
                 if female in heads:
                     subs = with_head_part(subs, heads[female], part_types)
                 subs = swap_parts(subs, copies.get(female, {}))
-                # the other sex's head too, as on the player patch (2026-11-12, owner: Body Type 2 on an Orc
-                # profile gives a human head; head parts carry a male / female flag)
-                if (not female) in heads and all(_u32(d) != heads[not female] for x, d in subs if x == b"PNAM"):
-                    at = max([i + 1 for i, (x, _d) in enumerate(subs) if x == b"PNAM"] or [len(subs)])
-                    subs = subs[:at] + [(b"PNAM", struct.pack("<I", heads[not female]))] + subs[at:]
                 if drop_blends:
                     subs = [x for x in subs if x[0] not in BLEND_SIGS]
                 recs.append((b"NPC_", h, subs, fid))
@@ -975,14 +970,12 @@ def chargen_preset_list(recs_all, presets, first=False):
     return (b"FLST", h, list(sb[:at]) + add + list(sb[at:]), fid)
 
 
-def chargen_option_lists(recs_all, part_copies, heads=None):
+def chargen_option_lists(recs_all, part_copies):
     """(records): an override of each of Starfield's chargen head part lists (CHARGEN_PART_LISTS) with every race copy
     of its entries added after the entries (2026-11-11: the race's records hand the player our Orc mouth, yet the looks
     menu showed the human teeth even on a new game: the menu takes its parts from these lists, where only the vanilla
     parts were; with human_only_parts those are not valid for our races, the copies are). part_copies:
-    {race: {female: {vanilla FormID: copy FormID}}}. heads {female: [Face HDPT]}: the races' heads first in the
-    list of their sex (2026-11-12, owner: Body Type 2 keeps the hair but gives a human head at a human tone; the
-    menu likely picks the new sex's face from these lists)."""
+    {race: {female: {vanilla FormID: copy FormID}}}."""
     by_vanilla = {}
     for per_sex in part_copies.values():
         for m in per_sex.values():
@@ -996,13 +989,8 @@ def chargen_option_lists(recs_all, part_copies, heads=None):
             continue
         have = [_u32(d) for s_, d in sb if s_ == b"LNAM" and len(d) == 4]
         add = [c for v in have for c in by_vanilla.get(v, []) if c not in have]
-        front = [x for x in (heads or {}).get("Female" in sfplugin.edid(sb), []) if x not in have]
-        if add or front:
-            sb = list(sb)
-            lnam = [i for i, (s_, _d) in enumerate(sb) if s_ == b"LNAM"]
-            at = lnam[0] if lnam else len(sb)
-            sb = sb[:at] + [(b"LNAM", struct.pack("<I", x)) for x in front] + sb[at:]
-            out.append((b"FLST", h, sb + [(b"LNAM", struct.pack("<I", c)) for c in dict.fromkeys(add)], fid))
+        if add:
+            out.append((b"FLST", h, list(sb) + [(b"LNAM", struct.pack("<I", c)) for c in dict.fromkeys(add)], fid))
     return out
 
 
@@ -1024,14 +1012,6 @@ def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
         at = max(i + 1 for i, (s, _d) in enumerate(subs) if s == b"PNAM")
         subs = subs[:at] + [(b"PNAM", struct.pack("<I", heads[other]))] + subs[at:]
     return subs
-
-
-FEMALE_PLAYER = "ChargenFemalePlayer"   # Starfield.esm 002E7C8E, default object ChargenFemalePlayer_DO
-
-
-def female_player(recs_all):
-    """(type, header, subs, FormID) of Starfield's ChargenFemalePlayer NPC, or None."""
-    return next((r for r in recs_all if r[0] == b"NPC_" and sfplugin.edid(r[2]) == FEMALE_PLAYER), None)
 
 
 RACE_TONE_DEFAULT = 4          # an NPC / the player of a race with appended tones: its 5th tone (the middle Orc green)
@@ -1431,11 +1411,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             if cp is not None:
                 recs.append(cp)
                 rep["chargen_presets_added"] = len(race_presets_all)
-            hs = {}
-            for rh in race_heads.values():
-                for f_, x in rh.items():
-                    hs.setdefault(f_, []).append(x)
-            co = chargen_option_lists(recs_all, part_copies, hs)
+            co = chargen_option_lists(recs_all, part_copies)
             recs += co
             rep["chargen_option_lists"] = {sfplugin.edid(s_): sum(1 for x, _d in s_ if x == b"LNAM")
                                            for _t, _h, s_, _f in co}
@@ -1862,24 +1838,12 @@ def main(argv=None):
             pre = r.get("_chargen_presets")
             cp = chargen_preset_list(recs_all_, pre, first=True) if pre else None
             precs = [cp] if cp is not None else []
-            # the female player (2026-11-12, preset_probe: CharGenPresets' first entry ChargenFemalePlayer is the
-            # default object ChargenFemalePlayer_DO, the only record naming it besides the list; no preset names
-            # another, so Body Type 2 most likely starts from it - owner: a human woman with our tusks)
-            fp = female_player(recs_all_)
-            if fp is not None:
-                fsubs = player_patch(fp[2], race_fid, pheads, part_types_, pcopies)
-                if race in race_heads_:
-                    fsubs = without_layer([x for x in fsubs if x[0] not in BLEND_SIGS], SKIN_LAYER)
-                if tones.get("method") == "append" and tones.get("first_index"):
-                    fsubs = with_ston(fsubs, tones["first_index"][0] + RACE_TONE_DEFAULT)
-                precs.append((b"NPC_", fp[1], fsubs, fp[3]))
             name = f"S2S{NAMES[race]}Player.esm"
             with open(os.path.join(a.out, name), "wb") as fh:
                 fh.write(sfplugin.build([(b"NPC_", player[0], psubs, 0x7)] + precs, info,
                                         author="Skyrim2Starfield races", masters=["Starfield.esm", PLUGIN]))
             report["player_patch"] = {"plugin": name, "race": f"S2S_{NAMES[race]}Race",
-                                      "female_player": f"{fp[3]:08X}" if fp is not None else None,
-                                      "chargen_presets_first": len(pre) if cp is not None else 0}
+                                      "chargen_presets_first": len(pre) if precs else 0}
             print(f"  player patch: {name} (load it after {PLUGIN}; the player starts as S2S_{NAMES[race]}Race)")
     for r in (report.get("new_races") or {}).values():
         if r.get("_chargen_presets"):

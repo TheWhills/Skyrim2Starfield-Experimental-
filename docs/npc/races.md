@@ -646,15 +646,11 @@ why the mod needs no clothes of its own.
   human preset (e.g. a dark-skinned human woman at tone 8 with our tusks). So the switch does not take the list's
   first female nor its neighbour. preset_probe now dumps CharGenPresets in full (sex, race, fields naming other
   NPCs) and every record naming its entries, to find what pairs a profile with its other body type.
-- 2026-11-12, preset_probe on the owner's game: CharGenPresets has 39 entries, female / male in turn
-  (ChargenPresetFemale01-19 / Male01-19), the first ChargenFemalePlayer (002E7C8E), which is also the only other
-  thing named anywhere: the default object ChargenFemalePlayer_DO. No preset names another (no pairing field). So
-  Body Type 2 most likely starts from ChargenFemalePlayer, the female counterpart of the Player record. The player
-  patch now makes her ours like the Player (race, our female head, the face part copies, no morph blends or
-  Dermaesthetic layer, the race's default tone). Unverified.
-- 2026-11-12, **owner:** with ChargenFemalePlayer an Orc, Body Type 2 on an Orc profile is still a human woman. New
-  clue: she keeps the profile's hair (35) and hair colour, and her skin tone resets to a human one (2). So the switch
-  converts the current character rather than loading a preset, and takes a female Face part from somewhere other
-  than the race (its head list holds ours). Two changes: each of the race's preset copies now carries both sexes'
-  race heads (like the player patch), and the races' heads go first in HeadPartsChargenOptionsMale / Female (the
-  menu's part lists). Unverified; ChargenFemalePlayer stays patched.
+- 2026-11-12, **owner:** Body Type 2 on an Orc profile still a human woman after two more attempts, both now taken
+  out again: (1) the player patch making ChargenFemalePlayer (CharGenPresets' first entry, the default object
+  ChargenFemalePlayer_DO) an Orc; (2) every preset copy carrying both sexes' heads plus the races' heads first in
+  HeadPartsChargenOptionsMale / Female. Seen: the switch keeps the profile's hair and hair colour and resets the
+  skin tone to a human one (2, 4, 8), so it converts the current character and takes a human head from somewhere
+  the records tried do not reach. **Parked** (owner: a female Orc just picks a female Orc profile). Known
+  limitation: switching body type in the menu gives a human face with tusks; pick an Orc profile of the wanted
+  sex instead. Kept: the Orc profiles first and female / male in turn (player patch).

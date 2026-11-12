@@ -92,7 +92,7 @@ class WeightTests(unittest.TestCase):
         self.assertIsNone(H.frame_check(m, v, t, key="Missing"))
 
 
-def starfield_esm(path, extra=()):
+def starfield_esm(path):
     h = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)   # noqa: E731
     tcmp = lambda p: struct.pack("<H", len(p) + 1) + p.encode() + b"\0"                        # noqa: E731
     recs = [
@@ -137,7 +137,6 @@ def starfield_esm(path, extra=()):
                                (b"VTCK", I(1)), (b"DNAM", bytes(8)), (b"FMSI", I(3)),
                                (b"FMRS", struct.pack("<f", 0.5)), (b"ATTX", b"\0")], 0x801),
         (b"OTFT", h(b"OTFT"), [(b"EDID", Z("SomeOutfit"))], 0x900)]
-    recs += [(t, h(t), sb, f) for t, sb, f in extra]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
@@ -323,10 +322,7 @@ class PluginTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as d:
                 sf = os.path.join(d, "sf")
                 os.makedirs(os.path.join(sf, "Data"))
-                # ChargenFemalePlayer (2026-11-12: Body Type 2 gave a human woman; the player patch makes her ours)
-                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"), extra=[
-                    (b"NPC_", [(b"EDID", Z("ChargenFemalePlayer")), (b"ACBS", I(1) + bytes(12)),
-                               (b"RNAM", I(0x347D)), (b"PNAM", I(0x511))], 0x2E7C8E)])
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
                 out = os.path.join(d, "out")
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out,
@@ -393,13 +389,7 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual(rep["head_part_race_lists"], ["HeadPartsHumanRace 0000024A", "OtherList 0000024B"])
                 # the player patch: the Player record (00000007) of the new race with our head part
                 pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
-                self.assertEqual([r[3] for r in pp], [0x7, 0x2E7C8E])
-                fpd = pp[1][2]
-                self.assertEqual(struct.unpack("<I", dict(fpd)[b"RNAM"])[0], orc[2])
-                fheads = [struct.unpack("<I", d_)[0] for s_, d_ in fpd if s_ == b"PNAM"]
-                self.assertIn(int(rep["head_parts"]["female"]["HDPT"], 16), fheads)
-                self.assertNotIn(0x511, fheads)
-                self.assertEqual(rep["player_patch"]["female_player"], "002E7C8E")
+                self.assertEqual([r[3] for r in pp], [0x7])
                 pd = pp[0][2]
                 self.assertEqual(struct.unpack("<I", dict(pd)[b"RNAM"])[0], orc[2])
                 heads_ = [struct.unpack("<I", d_)[0] for s_, d_ in pd if s_ == b"PNAM"]
@@ -847,11 +837,6 @@ class ChargenOptionListTests(unittest.TestCase):
         self.assertEqual(got, {"HeadPartsChargenOptionsMale": [0x10, 0x11, 0x1000872, 0x1000900, 0x1000813],
                                "HeadPartsChargenOptionsFemale": [0x20, 0x1000874]})
         self.assertEqual({f for _t, _h, _s, f in out}, {0x3D9AF, 0x3D9B0})    # overrides, same FormIDs
-        # 2026-11-12 (Body Type 2 gave a human head): the races' heads first in their sex's list
-        out = H.chargen_option_lists(recs, copies, {False: [0x1000809], True: [0x100080A]})
-        got = {sfplugin.edid(s): [_u(d) for x, d in s if x == b"LNAM"] for _t, _h, s, _f in out}
-        self.assertEqual(got["HeadPartsChargenOptionsMale"][:3], [0x1000809, 0x10, 0x11])
-        self.assertEqual(got["HeadPartsChargenOptionsFemale"], [0x100080A, 0x20, 0x1000874])
 
 
 class PresetCopyTests(unittest.TestCase):
@@ -870,11 +855,7 @@ class PresetCopyTests(unittest.TestCase):
         self.assertEqual([_u(d) for s, d in out if s in (b"RPRM", b"RPRF")], [0x1000900, 0x999, 0x1000901])
         male = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2S_OrcRace_ChargenPresetMale02"]
         self.assertEqual(_u(dict(male)[b"RNAM"]), 0x1000811)
-        # both heads (2026-11-12: Body Type 2 on an Orc profile gave a human head)
-        self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"),
-                         [0x13EB51, 0x100080F, 0x1000810, 0x1000872])
-        fem = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2S_OrcRace_ChargenPresetFemale01"]
-        self.assertEqual(sorted(_u(d) for s, d in fem if s == b"PNAM"), [0x100080F, 0x1000810])
+        self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"), [0x13EB51, 0x100080F, 0x1000872])
 
     def test_baked_head_presets_lose_blends(self):
         """2026-11-12: presets' human morph blends turned our baked Orc head back into a human face."""
