@@ -38,6 +38,8 @@ Starfield must be closed while a script writes into the mods folders.
 | What | Where |
 | --- | --- |
 | Repository (branch `skyrim/armor`) | `$HOME\Skyrim2Starfield-Experimental-` |
+| Headless test instance (hard links + sandbox profile, scripts/harness) | `D:\S2S Test` (same drive as `$sf`) |
+| Harness output (smoke.json, screenshots, crash logs / dumps) | `out\harness` in the repository |
 | Skyrim SE Data | `C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data` (`$sky`) |
 | Starfield install | `D:\SteamLibrary\steamapps\common\Starfield` (`$sf`) |
 | MO2 mods folder | `$env:LOCALAPPDATA\ModOrganizer\Starfield\mods` (`$mods`) |
@@ -203,6 +205,17 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    broken or crash = disable it and tell me.
 
 ## Working commands
+
+Headless test instance (scripts/harness/README.md). Once: `scripts\harness\sandbox\build.bat` (Visual Studio C++)
+and the Windows SDK's Debugging Tools (cdb), then `python -I scripts\harness\crash_capture.py --selftest`.
+Build and smoke-test (Starfield may stay open; add `--mod "$armor"` etc. for converted content):
+
+```powershell
+python -I scripts\harness\test_instance.py build --starfield $sf
+python -I scripts\harness\test_instance.py smoke --crash
+```
+
+Send back `out\harness\smoke.json` and `out\harness\smoke.png`.
 
 Converted outfit for a test NPC (one per NPC; `--add` keeps the other outfits in the plugin):
 
