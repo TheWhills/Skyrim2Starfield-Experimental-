@@ -667,3 +667,8 @@ why the mod needs no clothes of its own.
   baked (heads, 56 / 40 face parts each, ~22 min), tones Orc 9, Altmer 18, Bosmer 27, Dunmer 36 as planned; but the
   Nord got tones 45-53 too (its ramps come along as the human reference). Fixed (wanted_ramps). That build's player
   patch still lists only the Orc's profiles (fixed before, needs a rebuild).
+- 2026-11-12, owner's every-race test (Orc player patch off): Nord profiles look human (expected), Orc profiles
+  right, but most Imperial / Redguard / Bosmer / Dunmer profiles show hair and a floating outline with no head.
+  Cause: the baked heads' and parts' .mesh files go under `<out>\geometries\` (headbake.baked_head_files) and only
+  textures / meshes were copied; the Orc's geometries were installed earlier. Install step for the races build:
+  copy textures, meshes AND geometries.
