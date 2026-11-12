@@ -659,13 +659,32 @@ class SkinToneTests(unittest.TestCase):
     """2026-11-11 (owner: test the Orc's skin tone before building every race)."""
 
     def test_face_tone(self):
-        """2026-11-12: the Orc NPCs' baked faces stayed human; their colour texture now gets the race's tone."""
+        """2026-11-12: the Orc NPCs' baked faces stayed human, then came out lighter than the body; their colour
+        texture now gets the median colour of the race's own face tone texture."""
         from fo4sf import skintone
         face = np.full((4, 4, 4), 255, np.uint8)
         face[..., :3] = (198, 176, 168)
-        conv = H.face_tone([(89, 113, 92)] * 9, [(198, 176, 168)] * 9)
+        face[0, 0, :3] = (150, 120, 110)
+        conv = H.face_tone((89, 113, 92))
         out = skintone.decode_dds(conv(skintone.raw_dds(face)))
-        self.assertEqual(out[0, 0, :3].tolist(), [89, 113, 92])      # human colour -> the race's
+        self.assertEqual(out[1, 1, :3].tolist(), [89, 113, 92])      # median -> the target
+        self.assertLess(int(out[0, 0, 1]), 113)                       # detail kept
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "textures", "s2s", "races", "orc", "face")
+            os.makedirs(p)
+            with open(os.path.join(p, "female_sk4_color.dds"), "wb") as fh:
+                fh.write(skintone.raw_dds(face))
+            got = H.face_targets({"textures/s2s/races/orc/face/female_sk4_color.dds": [1, 2, 3],
+                                  "textures/s2s/races/orc/body/male_sk4_color.dds": [1, 2, 3]}, d)
+        self.assertEqual(got, {True: (198, 176, 168)})
+
+    def test_human_faces(self):
+        h = bytes(24)
+        recs = [(b"FLST", h, [(b"EDID", Z(H.HUMAN_PART_LIST)), (b"LNAM", I(0x347D))], 0x24A024),
+                (b"HDPT", h, [(b"EDID", Z("HumanMaleHead")), (b"PNAM", I(1)), (b"RNAM", I(0x24A024))], 0x10),
+                (b"HDPT", h, [(b"EDID", Z("Brows")), (b"PNAM", I(3)), (b"RNAM", I(0x24A024))], 0x11),
+                (b"HDPT", h, [(b"EDID", Z("OtherHead")), (b"PNAM", I(1)), (b"RNAM", I(0x999))], 0x12)]
+        self.assertEqual(H.human_faces(recs), {0x10})
 
     def test_bake_faces_tones_race_npcs_only(self):
         import face_fit

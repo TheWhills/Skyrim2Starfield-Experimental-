@@ -907,10 +907,24 @@ def mouth_records(by, info, name, female, l_fid, copies, new_fid, mouth_type=Non
     return out
 
 
+def human_faces(recs_all):
+    """FormIDs of the vanilla Face head parts (HDPT type 1) valid for HumanRace's part list."""
+    lists = {fid for t, _h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == HUMAN_PART_LIST}
+    out = set()
+    for t, _h, sb, fid in recs_all:
+        if t == b"HDPT":
+            d = dict(sb)
+            if _u32(d.get(b"PNAM", bytes(4))[:4]) == 1 and _u32(d.get(b"RNAM", bytes(4))[:4]) in lists:
+                out.add(fid)
+    return out
+
+
 def human_only_parts(recs_all, vanilla_fids, new_fid):
     """(records): a list S2S_HeadPartsHumanOnly holding HeadPartsHumanRace's vanilla entries, and an override of each
     vanilla face part that has race copies with its valid races (RNAM) set to it, so a race of ours (in
-    HeadPartsHumanRace for the shared parts: hair, ...) is offered its own copies only."""
+    HeadPartsHumanRace for the shared parts: hair, ...) is offered its own copies only. vanilla_fids may also hold
+    the vanilla Face parts (human_faces; 2026-11-12, owner: the new-game profiles and the female body type showed
+    a human head with our tusks: a preset's own Face part wins over the race's head while it is valid for the race)."""
     src = next(((h, sb) for t, h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == HUMAN_PART_LIST), None)
     if src is None:
         return []
@@ -1289,7 +1303,9 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             rep["race_condition_patches"] = [f"{t_.decode()} {sfplugin.edid(s_)} {f_:08X}" for t_, _h, s_, f_ in conds]
         baked = {v for c in part_copies.values() for per in c.values() for v in per}
         if baked:
-            ho = human_only_parts(recs_all, baked, ids.take)
+            faces = human_faces(recs_all) if race_heads else set()
+            rep["human_only_faces"] = len(faces)
+            ho = human_only_parts(recs_all, baked | faces, ids.take)
             recs += ho
             rep["human_only_parts"] = len(ho) - 1
             co = chargen_option_lists(recs_all, part_copies)
@@ -1400,17 +1416,28 @@ def decode_any_dds(data, texconv=""):
                 return skintone.decode_dds(fh.read())
 
 
-def face_tone(race_ramp, human_ramp, rank=RACE_TONE_DEFAULT, texconv=""):
-    """bytes -> bytes for a baked face colour texture: skintone.relative at the race's tone of `rank` (the tone its
-    NPCs get), written uncompressed RGBA8 sRGB (2026-11-12, owner: the Orc test NPCs' bodies green, their baked
-    faces human)."""
+def face_tone(target, texconv=""):
+    """bytes -> bytes for a baked face colour texture: skintone.match_median to target (the race's face tone texture's
+    median colour at the tone its NPCs get), written uncompressed RGBA8 sRGB (2026-11-12, owner: the Orc test NPCs'
+    bodies green, their baked faces human; then, recoloured by the Skyrim presets alone, lighter than the body)."""
     from fo4sf import skintone
 
     def convert(data):
-        img = decode_any_dds(data, texconv)
-        k = min(rank, len(race_ramp) - 1, len(human_ramp) - 1)
-        return skintone.raw_dds(skintone.relative(img, race_ramp[k], human_ramp[k]))
+        return skintone.raw_dds(skintone.match_median(decode_any_dds(data, texconv), target))
     return convert
+
+
+def face_targets(tone_textures, out, rank=RACE_TONE_DEFAULT):
+    """{female: sRGB median colour} of a race's written face tone textures of slot `rank` (write_skin_tones' result
+    keys, e.g. textures/s2s/races/orc/face/male_sk4_color.dds)."""
+    from fo4sf import skintone
+    out_ = {}
+    for new in tone_textures:
+        parts = new.split("/")
+        if len(parts) >= 2 and parts[-2] == "face" and parts[-1].endswith(f"_sk{rank}_color.dds"):
+            with open(os.path.join(out, *parts), "rb") as fh:
+                out_[parts[-1].startswith("female")] = skintone.median_colour(skintone.decode_dds(fh.read()))
+    return out_
 
 
 def bake_faces(npcs, sf_data, out, tones=None):
@@ -1430,7 +1457,7 @@ def bake_faces(npcs, sf_data, out, tones=None):
     for n in npcs:
         tpl, fid = int(n["template_form_id"], 16), int(n["form_id"], 16)
         tone = (tones or {}).get(n.get("race")) if n.get("race_record") else None   # NPCs of the new race only
-        colour = tone(n.get("sex") == "female") if tone else None
+        colour = tone(n.get("sex") == "female") if tone else None     # None: copied as it is
         kw = {"colour": colour} if colour is not None else {}
         written = face_fit.write_baked_face(index, tpl, fid, sf_data, out, PLUGIN, **kw) if tpl in index else []
         n["baked_face_textures"] = [os.path.basename(p) for p in written]
@@ -1661,10 +1688,12 @@ def main(argv=None):
     report.update(prep)
     if a.baked_face_textures:
         tones = {}
-        if human_ramps:
-            for race, per in ramps.items():
-                tones[race] = (lambda per: lambda female: face_tone(per[female], human_ramps[female],
-                                                                     texconv=a.texconv))(per)
+        for race, done in (report.get("skin_tone_textures") or {}).items():
+            targets = face_targets(done, a.out)
+            if targets:
+                report.setdefault("baked_face_targets", {})[race] = {SEXES[f]: list(c) for f, c in targets.items()}
+                tones[race] = (lambda tg: lambda female: face_tone(tg[female], a.texconv) if female in tg
+                               else None)(targets)
         report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out, tones)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))

@@ -99,6 +99,17 @@ class RelativeTests(unittest.TestCase):
         self.assertEqual(sol[0, 1].tolist(), [0, 255, 0, 7])
 
 
+class MedianTests(unittest.TestCase):
+    def test_match_median(self):
+        img = np.full((3, 3, 4), 255, np.uint8)
+        img[..., :3] = (200, 150, 130)
+        img[0, 0, :3] = (100, 75, 65)
+        self.assertEqual(S.median_colour(img), (200, 150, 130))
+        out = S.match_median(img, (90, 120, 80))
+        self.assertEqual(S.median_colour(out), (90, 120, 80))
+        self.assertLess(int(out[0, 0, 1]), 120)
+
+
 class GroupTests(unittest.TestCase):
     def test_kinds(self):
         self.assertEqual(S.tone_group_kind("SimpleGroup_Female_Naked_Body_Skin_Tones"), ("body", True))

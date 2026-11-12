@@ -589,3 +589,11 @@ why the mod needs no clothes of its own.
   morph blends); the female body type is a normal human preset face with tusks. The preset copies kept their human
   morph blends (BMPN / BMPV), which reshape our baked head back to a human face. race_preset_copies now drops them
   when the race's shape is baked (face dials kept, so presets still differ by their dials and colours). Unverified.
+- 2026-11-12, **owner, after the blend fix:** Orc NPC faces now green but lighter / yellower than the body; the new
+  game's profiles (Personnel record) and the female body type still show a plain human head with our tusks; only
+  the player's own (patched) preset is Orc. So the menu's presets are not the race's RPRM / RPRF copies, and a
+  preset's own Face part wins over the race's head. Changes: the vanilla Face parts valid for HumanRace's part list
+  (human_faces) join human_only_parts (valid for HumanRace's list without our races; expected: the game falls back
+  to the race's head part, unverified - risk: no head at all); the NPCs' baked face colour is now matched to the
+  median colour of the race's face tone texture at their tone (skintone.match_median) instead of Skyrim's preset
+  ratio. The chargen profiles' human eyes / brows are already race-only through the part copies.

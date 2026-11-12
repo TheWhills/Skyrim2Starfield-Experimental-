@@ -271,3 +271,20 @@ def appended_tones(avmd, tex_root, count=9):
         out = [(s, struct.pack("<I", n0 + count) if s == b"ITMC" else d) for s, d in out]
         recs.append((b"AVMD", h, out, fid))
     return recs, jobs, {"groups": len(recs), "first_index": sorted(firsts)}
+
+
+def median_colour(rgba):
+    """sRGB median colour (per channel) of the pixels with some brightness."""
+    lum = _luma_lin(rgba[..., :3])
+    sel = lum > 0.002
+    px = rgba[..., :3][sel] if sel.any() else rgba[..., :3].reshape(-1, 3)
+    return tuple(int(x) for x in np.median(px, axis=0))
+
+
+def match_median(rgba, target):
+    """rgba with each channel scaled (linear light) so its median colour (median_colour) becomes target; detail and
+    alpha kept (2026-11-12: a template's baked face recoloured to match the race's own face tone texture)."""
+    have = srgb_to_linear(np.array(median_colour(rgba), np.float32))
+    f = srgb_to_linear(np.array(target, np.float32)) / np.maximum(have, 1e-4)
+    out = linear_to_srgb(np.clip(srgb_to_linear(rgba[..., :3]) * f[None, None, :], 0.0, 1.0))
+    return np.concatenate([np.round(out).clip(0, 255).astype(np.uint8), rgba[..., 3:4]], -1)
