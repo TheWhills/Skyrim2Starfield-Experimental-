@@ -687,3 +687,9 @@ why the mod needs no clothes of its own.
   (race_heads.face_tone, as the race's own NPCs and presets). faces.json: per NPC race.skin {slot, ston, menu_tone}.
   Point --races-plugin at race_heads' --out (S2SRaceTest.esm with race_heads.json and the tone textures beside it).
   Human races (Nord, Imperial, Breton, Redguard, Elder) keep the human tone from the Skyrim tint.
+- 2026-11-12, owner's decision: every NPC on its own Skyrim race, the human races too (Ralof / Ysolda Nord, Delphine
+  Breton, Camilla / Lucan Imperial), with face_fit --races-plugin. Owner's condition: the race shape is the base, not
+  a cap: whatever an NPC's Skyrim sliders do to its face stays. That is face_fit's race path: the fit target is the
+  NPC's FaceGen head minus Skyrim's base head WITH the race morph, so the NPC's own slider changes go into its
+  Starfield dials on top of the race head. To watch: faces.json rms_after / sliders_at_limit per NPC (a face beyond
+  the dials' reach is approximated), and Delphine / Ralof / Ysolda against their earlier (HumanRace) look.
