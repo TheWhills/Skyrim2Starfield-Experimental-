@@ -224,3 +224,19 @@ per-sex head setup (alignment, correspondence) only when some NPC of that sex is
 swap, colours, textures and voices are written every run (quick, and they depend on the other plugins). --refit fits
 all; --preview always fits. A changed race needs no refit of its NPCs' dials (they are fitted against Skyrim's race
 morph; the converted race is applied by the writer). tests/test_face_fit_script.py FitCacheTests.
+
+Shape blends in face_fit (2026-11-12, owner: "are we actually taking advantage of the Starfield sliders over the
+template ... shape blends"). Until now face_fit fitted only the 49 face dials (bone sliders) and removed the
+template's shape blends (BMPN / BMPV). Owner's faces.json (16 adults, dials only): the dials closed 21-41 % of the
+Skyrim face difference (rms), and the women's largest dials were the same for all (Mouth Left-Right ~ -0.57,
+Forehead narrow): the shared Nord shape, since that run had only the Orc race next to the race plugin given (the
+human NPCs fell back to HumanRace). In game Delphine / Sigrid / Hilde and Alvor / Embry / Orgnar / Ralof read as one
+face each with other hair. Now the fit solves dials and shape blends together (facefit.fit blends=): the blends are
+the Starfield head morph.dat's phenotype keys (<sex>_<ethnicity>_<phenotype>_<region>, what vanilla NPCs carry as
+BMPN), default only the "eu" ones (--blend-ethnicity; owner: generic western faces), each 0..1, one region's blends
+together at most 1 (scaled, sliders refitted); the ridge is scaled by the slider columns alone so adding blends does
+not hold the sliders back more. Written as BMPN / BMPV after the face data. --no-blends: the old fit. Synthetic test:
+blends and dials recovered, rms 4x below dials alone (tests/test_facefit.py BlendFitTests). Unverified: the game
+applying BMPN keys from a vanilla head's morph.dat on a converted race head (our morph.dat holds every vanilla key);
+which ethnicity codes the keys use (the report's shape_blends lists the offered regions; an empty offer means none
+matched); the gain on real faces (faces.json rms_after and blends per NPC).

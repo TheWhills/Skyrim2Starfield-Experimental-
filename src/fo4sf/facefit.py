@@ -143,23 +143,27 @@ def basis(head: Head, sliders: Sequence[Slider], pos_unit: float = 0.01):
 
 
 def bounded_lsq(A: np.ndarray, b: np.ndarray, w: Optional[np.ndarray] = None, ridge: float = 1e-6,
-                iters: int = 400, tol: float = 1e-10, upper: float = 1.0) -> np.ndarray:
-    """argmin_x ||sqrt(w) (A x - b)||^2 + ridge ||x||^2 with 0 <= x <= upper (coordinate descent)."""
+                iters: int = 400, tol: float = 1e-10, upper: float = 1.0, scale: Optional[float] = None) -> np.ndarray:
+    """argmin_x ||sqrt(w) (A x - b)||^2 + ridge ||x||^2 with 0 <= x <= upper (coordinate descent; upper a number or
+    one per column)."""
     if w is not None:
         A = A * w[:, None]
         b = b * w
     G = A.T @ A
     h = A.T @ b
-    scale = max(float(np.mean(np.diag(G))), 1e-30)
+    if scale is None:
+        scale = float(np.mean(np.diag(G)))
+    scale = max(scale, 1e-30)
     G = G + np.eye(len(G)) * ridge * scale
     x = np.zeros(len(G))
     d = np.diag(G).copy()
+    up = np.broadcast_to(np.asarray(upper, float), (len(G),))
     for _ in range(iters):
         biggest = 0.0
         for i in range(len(x)):
             if d[i] <= 0:
                 continue
-            new = min(upper, max(0.0, x[i] + (h[i] - G[i] @ x) / d[i]))
+            new = min(up[i], max(0.0, x[i] + (h[i] - G[i] @ x) / d[i]))
             biggest = max(biggest, abs(new - x[i]))
             x[i] = new
         if biggest < tol:
@@ -167,28 +171,82 @@ def bounded_lsq(A: np.ndarray, b: np.ndarray, w: Optional[np.ndarray] = None, ri
     return x
 
 
+def _with_vertices(head: Head, vertices: np.ndarray) -> Head:
+    """The same head (bones, weights, pivots) with other vertices: blends move the mesh, the bones stay."""
+    h = Head(np.asarray(vertices, float), head.bones, head.weights, head.pivots, head.frames)
+    for k, v in vars(head).items():
+        if k not in ("vertices", "bones", "weights", "pivots", "frames"):
+            setattr(h, k, v)
+    return h
+
+
+BLEND_REGION_MAX = 1.0      # the blends of one region (male_eu_ol1_Nose, male_eu_md2_Nose ...) add up to at most this
+
+
 def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weights: Optional[np.ndarray] = None,
-        pos_unit: float = 0.01, ridge: float = 1e-6, refine: int = 2, limit: float = 1.0
-        ) -> Tuple[Dict[int, float], Dict]:
+        pos_unit: float = 0.01, ridge: float = 1e-6, refine: int = 2, limit: float = 1.0, blends=None,
+        blend_limit: float = 1.0, blend_groups: Optional[Sequence[str]] = None,
+        region_max: float = BLEND_REGION_MAX) -> Tuple[Dict[int, float], Dict]:
     """Slider values {id: value} that move head.vertices toward target (V, 3), and a report (RMS before / after with
     the exact deformation). refine > 0 re-linearises around the solution (rotations / scales) that many times.
-    limit: the largest |value| (1 = the looks menu's range; more is a test of what the game accepts)."""
+    limit: the largest |value| (1 = the looks menu's range; more is a test of what the game accepts).
+    blends (2026-11-12, owner: "are we taking advantage of the Starfield sliders ... shape blends"): (names, D) with D
+    (K, V, 3) the head's morph.dat deltas of K shape blends (BMPN keys), fitted together with the sliders, each
+    0..blend_limit; blend_groups: a group (region) per blend, whose blends together stay within region_max (scaled
+    down, then the rest refitted). The report's "blends" holds {name: weight} (weights > 1e-3)."""
     wv = np.ones(len(head.vertices)) if vertex_weights is None else np.asarray(vertex_weights, float)
     w = np.repeat(np.sqrt(np.maximum(wv, 0.0)), 3)
     A, keys = basis(head, sliders, pos_unit)
+    names, D = ([], np.zeros((0,) + head.vertices.shape)) if blends is None else (list(blends[0]),
+                                                                                 np.asarray(blends[1], float))
+    nb = len(names)
+    B = D.reshape(nb, -1).T if nb else np.zeros((head.vertices.size, 0))
+    groups = list(blend_groups) if blend_groups is not None else [None] * nb
     values: Dict[int, float] = {}
+    bw = np.zeros(nb)
     base = head.vertices
-    for _ in range(1 + max(0, refine)):
-        # residual of the exact model at the current values, solved for the change of the linear part
-        current = deform(head, sliders, values, pos_unit)
+
+    def shaped(weights):
+        return _with_vertices(head, base + np.tensordot(weights, D, axes=1)) if nb else head
+
+    Aw = A * w[:, None]
+    slider_scale = float(np.mean(np.sum(Aw * Aw, axis=0))) if len(keys) else None
+
+    def solve(joint):
+        nonlocal values, bw
+        current = deform(shaped(bw), sliders, values, pos_unit)
         x0 = np.array([max(0.0, values.get(k, 0.0) * s) for k, s in keys])
-        rhs = (target - current).reshape(-1) + A @ x0
-        x = bounded_lsq(A, rhs, w, ridge, upper=limit)
+        if joint:
+            rhs = (target - current).reshape(-1) + A @ x0 + B @ bw
+            # the ridge scaled by the sliders' columns alone, so adding blends does not hold the sliders back more
+            x = bounded_lsq(np.concatenate([A, B], axis=1), rhs, w, ridge,
+                            upper=np.concatenate([np.full(len(keys), limit), np.full(nb, blend_limit)]),
+                            scale=slider_scale)
+            xd, bw = x[:len(keys)], x[len(keys):]
+        else:
+            xd = bounded_lsq(A, (target - current).reshape(-1) + A @ x0, w, ridge, upper=limit)
         new: Dict[int, float] = {}
-        for (k, s), xi in zip(keys, x):
+        for (k, s), xi in zip(keys, xd):
             new[k] = new.get(k, 0.0) + s * xi
         values = {k: v for k, v in new.items() if abs(v) > 1e-6}
-    final = deform(head, sliders, values, pos_unit)
+
+    for _ in range(1 + max(0, refine)):
+        solve(joint=nb > 0)
+    capped_any = False
+    if nb:
+        # a region's blends past region_max are scaled down to it and held; the sliders are refitted round them
+        capped = bw.copy()
+        for g in {g for g in groups if g is not None}:
+            idx = [i for i, gg in enumerate(groups) if gg == g]
+            tot = float(capped[idx].sum())
+            if tot > region_max:
+                capped[idx] *= region_max / tot
+        if not np.allclose(capped, bw):
+            bw, capped_any = capped, True
+            for _ in range(1 + max(0, refine)):
+                solve(joint=False)
+    h = shaped(bw)
+    final = deform(h, sliders, values, pos_unit)
     mask = wv > 0
 
     def rms(a):
@@ -196,10 +254,15 @@ def fit(head: Head, sliders: Sequence[Slider], target: np.ndarray, vertex_weight
     at_limit = sorted(k for k, v in values.items() if abs(v) >= limit - 1e-4)
     err = np.sqrt(np.sum((final - target) ** 2, axis=1))[mask]
     moved = np.sqrt(np.sum((final - base) ** 2, axis=1))[mask]
-    return values, {"rms_before": rms(base), "rms_after": rms(final), "sliders_used": len(values),
-                    "columns": len(keys), "sliders_at_limit": at_limit, "ridge": ridge,
-                    "max_error_m": float(err.max()) if len(err) else 0.0,
-                    "max_change_m": float(moved.max()) if len(moved) else 0.0}
+    rep = {"rms_before": rms(base), "rms_after": rms(final), "sliders_used": len(values),
+           "columns": len(keys) + nb, "sliders_at_limit": at_limit, "ridge": ridge,
+           "max_error_m": float(err.max()) if len(err) else 0.0,
+           "max_change_m": float(moved.max()) if len(moved) else 0.0}
+    if nb:
+        rep["blends"] = {n: round(float(b), 4) for n, b in zip(names, bw) if b > 1e-3}
+        rep["blends_offered"] = nb
+        rep["blend_regions_capped"] = capped_any
+    return values, rep
 
 
 def mirror_index(vertices: np.ndarray, axis: int = 0) -> np.ndarray:

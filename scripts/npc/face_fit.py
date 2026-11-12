@@ -225,7 +225,7 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
 
 
 FIT_CACHE = "_fit_cache.json"     # in --out: each NPC's fit result by an input key (2026-11-12)
-FIT_VERSION = 1                   # bump when the fit changes in a way the hashed code below does not show
+FIT_VERSION = 2                   # bump when the fit changes in a way the hashed code below does not show
 FIT_FUNCS = ("skyrim_head", "skyrim_head_triangles", "skyrim_head_matrix", "race_delta", "head_alignment",
              "starfield_head_node", "starfield_head", "child_face")
 
@@ -263,6 +263,7 @@ def fit_settings(a, sf_data):
             "starfield - meshes") and f.lower().endswith(".ba2")] if os.path.isdir(sf_data) else []
     return {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit, "ridge": a.ridge,
             "symmetry": not a.no_symmetry, "transfer": a.transfer, "legacy": bool(a.legacy_alignment),
+            "blends": None if a.no_blends else a.blend_ethnicity,
             "files": files, "games": games}
 
 
@@ -463,6 +464,45 @@ def face_subrecords(values):
     for k in sorted(values):
         out += [(b"FMSI", struct.pack("<I", int(k))), (b"FMRS", struct.pack("<f", float(values[k])))]
     return out
+
+
+BLEND_KEY = re.compile(r"^(male|female)_([a-z]{2})_([a-z]{2}\d)_(\w+)$", re.I)   # <sex>_<ethnicity>_<phenotype>_<region>
+BLEND_ETHNICITIES = ("eu",)       # owner 2026-11-12: Skyrim has no ethnicities; faces from the generic western blends
+
+
+def head_blends(morph, nverts, female, ethnicities=BLEND_ETHNICITIES):
+    """(names, D (K, V, 3), regions) of the head morph.dat's shape blends (Starfield's looks-menu "shape blends", the
+    keys vanilla NPCs carry as BMPN): its phenotype keys <sex>_<ethnicity>_<phenotype>_<region> of these
+    ethnicities ("all" for every one); our race keys (<sex>_sk_...) and body keys are not blends."""
+    sex = "female" if female else "male"
+    names, regions = [], []
+    for k in morph.keys:
+        g = BLEND_KEY.match(k)
+        if not g or g.group(1).lower() != sex or g.group(2).lower() == "sk":
+            continue
+        if "all" not in ethnicities and g.group(2).lower() not in ethnicities:
+            continue
+        names.append(k)
+        regions.append(g.group(4))
+    D = np.zeros((len(names), nverts, 3))
+    for i, k in enumerate(names):
+        for v, d in morph.deltas[k].items():
+            if v < nverts:
+                D[i, v] = d
+    return names, D, regions
+
+
+def with_blends(subs, blends):
+    """NPC subrecords with BMPN (key) / BMPV (f32 weight) pairs, name sorted, right after the face data (as
+    race_heads.with_blends); existing pairs replaced."""
+    subs = [(s, d) for s, d in subs if s not in (b"BMPN", b"BMPV")]
+    face = [i for i, (s, _d) in enumerate(subs) if s in (b"FMSI", b"FMRS", b"FMRI", b"FMRG")]
+    at = face[-1] + 1 if face else next((i for i, (s, _d) in enumerate(subs) if s in (b"ATTX", b"STON", b"HCOL")),
+                                        len(subs))
+    add = []
+    for name in sorted(blends):
+        add += [(b"BMPN", sfplugin.zs(name)), (b"BMPV", struct.pack("<f", float(blends[name])))]
+    return subs[:at] + add + subs[at:]
 
 
 def with_face(subs, values, keep=()):
@@ -945,6 +985,12 @@ def main(argv=None):
     ap.add_argument("--dial-limit", type=float, default=1.0,
                     help="largest dial value (1 = the looks menu's range; e.g. 1.5 to test whether the game takes "
                          "more: the fit hit 1.0 on 8 of Ralof's dials)")
+    ap.add_argument("--no-blends", action="store_true",
+                    help="fit only the face sliders (dials), not Starfield's shape blends (the head morph.dat's "
+                         "phenotype keys, written as BMPN / BMPV); the fit before 2026-11-12")
+    ap.add_argument("--blend-ethnicity", default=",".join(BLEND_ETHNICITIES),
+                    help="which phenotype keys may be blended (comma list of the keys' ethnicity codes, or 'all'; "
+                         "default eu: the generic western faces, owner 2026-11-12)")
     ap.add_argument("--refit", action="store_true",
                     help="fit every NPC again (default: an NPC whose FaceGen head, race, fit settings and fitting "
                          "code are unchanged since the last run reuses that fit; the plugin is always rewritten)")
@@ -1047,13 +1093,30 @@ def main(argv=None):
             corr = headcorr.correspond(s_ * base @ R_.T + t_, skyrim_head_triangles(base_bytes), head.vertices,
                                        head.triangles, to_model=np.asarray(node, float) if model_space and
                                        node is not None else None)
-        setup[female] = (sliders, head, base, al, model_space, corr)
+        blend_set, brep = None, None
+        if not a.no_blends:
+            try:
+                import race_probe
+                from fo4sf import sfmorph
+                sex_name = "female" if female else "male"
+                mdata, mrel = hkx_to_af.vanilla_file(race_probe.SF_MORPH.format(sex=sex_name, part="head"), sf_data)
+                morph = sfmorph.parse(mdata)
+                if morph.num_vertices != len(head.vertices):
+                    brep = {"error": f"head morph.dat has {morph.num_vertices} vertices, the head {len(head.vertices)}"}
+                else:
+                    eth = tuple(x.strip().lower() for x in a.blend_ethnicity.split(","))
+                    names, D, groups = head_blends(morph, len(head.vertices), female, eth)
+                    blend_set = (names, D, groups) if names else None
+                    brep = {"morph": mrel, "offered": len(names), "regions": sorted(set(groups)), "ethnicities": eth}
+            except (SystemExit, KeyError, OSError, ValueError) as e:
+                brep = {"error": str(e)[:200]}
+        setup[female] = (sliders, head, base, al, model_space, corr, blend_set)
         report["sexes"]["female" if female else "male"] = dict(
             hrep, sliders=len(sliders), skyrim_base_vertices=len(base), alignment_scale=al[0],
             alignment_rms_m=al[3], alignment_rotated=bool(not np.allclose(al[1], np.eye(3))),
             alignment="model space via the head node (2026-11-09)" if model_space else "legacy ICP on the mesh",
             transfer="surface (headcorr)" if corr is not None else "nearest vertices",
-            correspondence=corr.report if corr is not None else None)
+            correspondence=corr.report if corr is not None else None, shape_blends=brep)
         if dial_ids_of[0] is None:
             dial_ids_of[0] = race_dials(os.path.join(sf_data, "Starfield.esm"))
         ids = {s.id for s in sliders}
@@ -1105,7 +1168,7 @@ def main(argv=None):
             print({k: v for k, v in row.items() if k != "dials"})
             continue
         try:
-            sliders, head, base, al, model_space, corr = sex_setup(n["female"])
+            sliders, head, base, al, model_space, corr, blend_set = sex_setup(n["female"])
             fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
                              model=model_space)
             if fg is None or len(fg) != len(base):
@@ -1127,11 +1190,16 @@ def main(argv=None):
             if not a.no_symmetry:
                 disp = facefit.symmetrize(disp, head.vertices)
             values, rep = facefit.fit(head, sliders, head.vertices + disp, facefit.face_weights(head),
-                                      pos_unit=a.pos_unit, limit=a.dial_limit,
-                                      ridge=a.ridge)
+                                      pos_unit=a.pos_unit, limit=a.dial_limit, ridge=a.ridge,
+                                      blends=(blend_set[0], blend_set[1]) if blend_set else None,
+                                      blend_groups=blend_set[2] if blend_set else None)
             names = {s.id: f"{s.region}: {s.name}" for s in sliders}
             if a.preview and getattr(head, "triangles", None) is not None and len(head.triangles):
-                fitted = facefit.deform(head, sliders, values, pos_unit=a.pos_unit)
+                shaped = head
+                if rep.get("blends") and blend_set:
+                    bw = np.array([rep["blends"].get(k, 0.0) for k in blend_set[0]])
+                    shaped = facefit._with_vertices(head, head.vertices + np.tensordot(bw, blend_set[1], axes=1))
+                fitted = facefit.deform(shaped, sliders, values, pos_unit=a.pos_unit)
                 os.makedirs(os.path.join(out, "faces_preview"), exist_ok=True)
                 png = os.path.join(out, "faces_preview", f"{n['edid']}.png")
                 hair_probe.write_png(png, facepreview.sheet([head.vertices, head.vertices + disp, fitted],
@@ -1223,6 +1291,8 @@ def main(argv=None):
                                  {b"EDID": sfplugin.zs(f"S2SFace_{row['edid']}"),
                                   b"FULL": sfplugin.zs(full)}, drop=STRIP + STRIP_GEAR)
             subs = without_templates(subs)
+            if row.get("blends"):
+                subs = with_blends(subs, row["blends"])
             if no_outfit is not None:
                 subs = sfplugin.edit(subs, {b"DOFT": struct.pack("<I", no_outfit), b"SOFT": struct.pack("<I", no_outfit)})
             item_fid = None

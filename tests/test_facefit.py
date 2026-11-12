@@ -260,6 +260,48 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(int(moved.sum()), len(moves))
 
 
+class BlendFitTests(unittest.TestCase):
+    """2026-11-12 (owner: are we using Starfield's shape blends, not just the sliders): blends fitted with the dials."""
+
+    def blends(self, v):
+        """Three shape blends a slider cannot make: a cheek bulge, a forehead slope, a nose hump (V, 3 each)."""
+        cheek = np.exp(-((np.abs(v[:, 0]) - 0.05) ** 2 + v[:, 2] ** 2) / (2 * 0.02 ** 2))[:, None] * np.array(
+            [0, 0.006, 0])
+        fore = np.clip(v[:, 2:3] - 0.05, 0, None) * np.array([0, 0.08, 0]) * (v[:, 1:2] > 0)
+        hump = np.exp(-(v[:, 0] ** 2 + (v[:, 2] - 0.01) ** 2) / (2 * 0.01 ** 2))[:, None] * np.array([0, 0.004, 0])
+        return ["male_eu_md2_Cheeks", "male_eu_ol1_Forehead", "male_eu_ol1_Nose"], np.stack([cheek, fore, hump])
+
+    def test_recovers_blends_and_sliders(self):
+        sliders = F.load_regions(json.dumps(REGIONS))
+        head = make_head(head_points())
+        names, D = self.blends(head.vertices)
+        truth_b = np.array([0.6, 0.0, 0.8])
+        shaped = F._with_vertices(head, head.vertices + np.tensordot(truth_b, D, axes=1))
+        target = F.deform(shaped, sliders, {40: 0.5}, 0.01)
+        only, rep0 = F.fit(head, sliders, target)
+        vals, rep = F.fit(head, sliders, target, blends=(names, D), ridge=1e-6)
+        self.assertLess(rep["rms_after"], 0.25 * rep0["rms_after"])          # far closer than sliders alone
+        got = np.array([rep["blends"].get(n, 0.0) for n in names])
+        self.assertTrue(np.allclose(got, truth_b, atol=0.08), got)
+        self.assertAlmostEqual(vals.get(40, 0.0), 0.5, delta=0.08)
+        self.assertEqual(rep["blends_offered"], 3)
+        # nothing given: the old fit, unchanged
+        v2, r2 = F.fit(head, sliders, target)
+        self.assertEqual((v2, r2), (only, rep0))
+
+    def test_region_cap(self):
+        """Blends of one region (both nose keys here) add up to at most region_max; the sliders refit round them."""
+        sliders = F.load_regions(json.dumps(REGIONS))
+        head = make_head(head_points())
+        _n, D = self.blends(head.vertices)
+        names = ["male_eu_ol1_Nose", "male_eu_md2_Nose"]
+        D2 = np.stack([D[2], D[2] * 0.9])
+        target = head.vertices + 1.6 * D[2]                                   # more than one key alone can give
+        _v, rep = F.fit(head, sliders, target, blends=(names, D2), blend_groups=["Nose", "Nose"], region_max=1.0)
+        self.assertLessEqual(sum(rep["blends"].values()), 1.0 + 1e-6)
+        self.assertTrue(rep["blend_regions_capped"])
+
+
 if __name__ == "__main__":
     unittest.main()
 
