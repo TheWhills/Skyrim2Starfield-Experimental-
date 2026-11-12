@@ -611,3 +611,10 @@ why the mod needs no clothes of its own.
   scripts/npc/preset_probe.py lists every record referencing HumanRace's presets (where the menu may take its
   profiles from) and our race's / Player's Face parts as built. The race's test NPCs now get no baked face by
   default (--race-npc-baked-faces keeps it): their face is built at runtime from the skin tone, like the player's.
+- 2026-11-12, preset_probe on the owner's game: HumanRace's 10 presets (RPRM 00050560-65, RPRF 00050566-69) are
+  named by HumanRace and by one form list, CharGenPresets (0003F551), nothing else; our race's preset copies carry
+  our heads (S2S_OrcRace_male_Head / female_Head) as built. So the profiles / looks-menu presets come from
+  CharGenPresets (human presets applied to an Orc keep the race's tusks but their own human head). race_heads now
+  overrides CharGenPresets with the race's preset copies added after the vanilla ones (humans see them too).
+  Open: whether Body Type 2 picks the list's first female (a human one). The probe's Player face list was empty
+  because it did not read the race plugin's head parts; fixed.

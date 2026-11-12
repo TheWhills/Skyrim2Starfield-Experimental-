@@ -938,6 +938,24 @@ def human_only_parts(recs_all, vanilla_fids, new_fid):
 
 
 CHARGEN_PART_LISTS = ("HeadPartsChargenOptionsMale", "HeadPartsChargenOptionsFemale")
+CHARGEN_PRESET_LIST = "CharGenPresets"      # Starfield.esm 0003F551: the looks menu's profiles (preset_probe)
+
+
+def chargen_preset_list(recs_all, presets):
+    """(record) an override of Starfield's CharGenPresets form list with presets (NPC FormIDs, e.g. the race's preset
+    copies) added after its entries, or None without the list (2026-11-12, preset_probe on the owner's game: the
+    list holds HumanRace's 10 presets and is the only record besides HumanRace naming them; the new-game profiles and
+    the looks menu's presets showed a human head with our tusks: the menu keeps the race and applies a human preset's
+    face)."""
+    src = next(((h, sb, fid) for t, h, sb, fid in recs_all if t == b"FLST" and sfplugin.edid(sb) == CHARGEN_PRESET_LIST),
+               None)
+    if src is None or not presets:
+        return None
+    h, sb, fid = src
+    have = {_u32(d) for s, d in sb if s == b"LNAM" and len(d) == 4}
+    add = [(b"LNAM", struct.pack("<I", x)) for x in presets if x not in have]
+    at = max([i + 1 for i, (s, _d) in enumerate(sb) if s == b"LNAM"] or [len(sb)])
+    return (b"FLST", h, list(sb[:at]) + add + list(sb[at:]), fid)
 
 
 def chargen_option_lists(recs_all, part_copies):
@@ -1187,6 +1205,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                 "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = {PLUGIN}'s load order "
                                            f"index)"})
     race_fids, race_heads, part_copies = {}, {}, {}
+    race_presets_all = []
     if new_races and human is not None:
         mann = next((s for t, _h, s, fid in recs_all if t == b"RACE" and sfplugin.edid(s) == "MannequinRace"), None)
         rep["new_races"] = {}
@@ -1261,6 +1280,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                                  ids.take, drop_blends=race in race_models)
                 recs += prec
                 rrep["preset_copies"] = len(prec)
+                race_presets_all += [f for t_, _h, _s, f in prec if t_ == b"NPC_"]
                 part_copies[race] = copies
                 rrep["face_parts"] = {SEXES[f]: len(set(c.values())) for f, c in copies.items()}
             recs.append((b"RACE", by_fid[human][1], rsubs, r_fid))
@@ -1314,6 +1334,10 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             ho = human_only_parts(recs_all, baked | faces, ids.take)
             recs += ho
             rep["human_only_parts"] = len(ho) - 1
+            cp = chargen_preset_list(recs_all, race_presets_all)
+            if cp is not None:
+                recs.append(cp)
+                rep["chargen_presets_added"] = len(race_presets_all)
             co = chargen_option_lists(recs_all, part_copies)
             recs += co
             rep["chargen_option_lists"] = {sfplugin.edid(s_): sum(1 for x, _d in s_ if x == b"LNAM")

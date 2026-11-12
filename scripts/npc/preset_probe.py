@@ -98,10 +98,11 @@ def main(argv=None):
         by.setdefault((typ, e, fid), set()).add(s)
     for (typ, e, fid), sigs in sorted(by.items()):
         print(f"  {typ} {e} [{fid}] fields {sorted(sigs)}")
+    hdpt = {f: s for t, _h, s, f in sfplugin.records(sf_esm, [b"HDPT"])}
+    for p in a.plugin:                       # every plugin's head parts (the player patch names the race plugin's)
+        hdpt.update({f: s for t, _h, s, f in sfplugin.records(p, [b"HDPT"])})
     for p in a.plugin:
-        recs = sfplugin.records(p, [b"RACE", b"NPC_", b"HDPT"])
-        hdpt = {f: s for t, _h, s, f in recs if t == b"HDPT"}
-        hdpt.update({f: s for t, _h, s, f in sfplugin.records(sf_esm, [b"HDPT"]) if f not in hdpt})
+        recs = sfplugin.records(p, [b"RACE", b"NPC_", b"HDPT", b"FLST"])
         npcs = {f: s for t, _h, s, f in recs if t == b"NPC_"}
         pr = {}
         for t, _h, s, f in recs:
@@ -110,12 +111,17 @@ def main(argv=None):
                 pr[sfplugin.edid(s)] = {sex: [{"npc": f"{x:08X}", "edid": sfplugin.edid(npcs[x]) if x in npcs else None,
                                                "face": face_part(npcs[x], hdpt) if x in npcs else None}
                                               for x in v] for sex, v in rp.items()}
+            if t == b"FLST" and sfplugin.edid(s) == "CharGenPresets":
+                pr["CharGenPresets"] = [f"{u32(d):08X}" for x, d in s if x == b"LNAM"]
             if t == b"NPC_" and f == 0x7:
                 pr["Player"] = {"face": face_part(s, hdpt), "RNAM": f"{u32(dict(s).get(b'RNAM', bytes(4))):08X}"}
         rep[os.path.basename(p)] = pr
         for k, v in pr.items():
             if k == "Player":
                 print(f"  {os.path.basename(p)} Player: race {v['RNAM']}, face parts {v['face']}")
+                continue
+            if k == "CharGenPresets":
+                print(f"  {os.path.basename(p)} CharGenPresets override: {len(v)} entries")
                 continue
             for sex, lst in v.items():
                 faces = sorted({str(x['face']) for x in lst})
