@@ -753,6 +753,22 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual([_u(d) for s, d in out[2] if s == b"LNAM"], [0x50560, 0x50566, 0x100088A, 0x1000890])
         self.assertIsNone(H.chargen_preset_list(recs, []))
 
+    def test_chargen_preset_list_first(self):
+        """2026-11-12: Body Type 2 on an Orc profile gave a human woman; the player patch puts the race's copies
+        before the vanilla entries."""
+        h = bytes(24)
+        recs = [(b"FLST", h, [(b"EDID", Z("CharGenPresets")), (b"LNAM", I(0x50566)), (b"LNAM", I(0x50560)),
+                              (b"XXXX", b"")], 0x3F551)]
+        out = H.chargen_preset_list(recs, [0x1000890, 0x100088A], first=True)
+        self.assertEqual([_u(d) for s, d in out[2] if s == b"LNAM"], [0x1000890, 0x100088A, 0x50566, 0x50560])
+        self.assertEqual(out[2][0][0], b"EDID")
+        self.assertEqual(out[2][-1][0], b"XXXX")
+
+    def test_interleave_sexes(self):
+        """female, male, ... then the rest, like vanilla's CharGenPresets."""
+        self.assertEqual(H.interleave_sexes([1, 2, 3, 4], [10, 11]), [10, 1, 11, 2, 3, 4])
+        self.assertEqual(H.interleave_sexes([], [10]), [10])
+
     def test_with_ston(self):
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"STON", b"\x02"), (b"HCOL", b"h\0")], 13)[1], (b"STON", b"\x0d"))
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"HCOL", b"h\0")], 9),

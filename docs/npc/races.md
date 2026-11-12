@@ -636,3 +636,9 @@ why the mod needs no clothes of its own.
 - 2026-11-12, **owner:** the Orc profiles' faces are now green (41–50, both sexes) with the baked preset faces.
   Female profiles still show the tusks through closed lips.
   In game (Jemison) the player picked from profile 42 keeps the green face, hands and pointed ears.
+- 2026-11-12, **owner:** Body Type 2 on Orc profile 42 still gives a human woman (skin tone 2, our tusks); the
+  female Orc profiles themselves are right. Vanilla's CharGenPresets lists HumanRace's presets female / male in
+  turn (00050566, 00050560, 00050567, ...); ours were added after them, males then females. So the switch likely
+  takes a vanilla entry (the list's first female, or the profile's neighbour in the list). Now the race's copies
+  are interleaved female / male the same way, and the player patch (S2SOrcPlayer.esm) overrides CharGenPresets with
+  them first (Orc profiles 1-10, human ones after). Unverified.
