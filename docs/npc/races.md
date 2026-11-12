@@ -652,3 +652,9 @@ why the mod needs no clothes of its own.
   Body Type 2 most likely starts from ChargenFemalePlayer, the female counterpart of the Player record. The player
   patch now makes her ours like the Player (race, our female head, the face part copies, no morph blends or
   Dermaesthetic layer, the race's default tone). Unverified.
+- 2026-11-12, **owner:** with ChargenFemalePlayer an Orc, Body Type 2 on an Orc profile is still a human woman. New
+  clue: she keeps the profile's hair (35) and hair colour, and her skin tone resets to a human one (2). So the switch
+  converts the current character rather than loading a preset, and takes a female Face part from somewhere other
+  than the race (its head list holds ours). Two changes: each of the race's preset copies now carries both sexes'
+  race heads (like the player patch), and the races' heads go first in HeadPartsChargenOptionsMale / Female (the
+  menu's part lists). Unverified; ChargenFemalePlayer stays patched.

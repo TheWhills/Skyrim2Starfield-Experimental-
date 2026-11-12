@@ -757,6 +757,11 @@ def race_preset_copies(rsubs, npcs, name, race_fid, heads, part_types, copies, n
                 if female in heads:
                     subs = with_head_part(subs, heads[female], part_types)
                 subs = swap_parts(subs, copies.get(female, {}))
+                # the other sex's head too, as on the player patch (2026-11-12, owner: Body Type 2 on an Orc
+                # profile gives a human head; head parts carry a male / female flag)
+                if (not female) in heads and all(_u32(d) != heads[not female] for x, d in subs if x == b"PNAM"):
+                    at = max([i + 1 for i, (x, _d) in enumerate(subs) if x == b"PNAM"] or [len(subs)])
+                    subs = subs[:at] + [(b"PNAM", struct.pack("<I", heads[not female]))] + subs[at:]
                 if drop_blends:
                     subs = [x for x in subs if x[0] not in BLEND_SIGS]
                 recs.append((b"NPC_", h, subs, fid))
@@ -970,12 +975,14 @@ def chargen_preset_list(recs_all, presets, first=False):
     return (b"FLST", h, list(sb[:at]) + add + list(sb[at:]), fid)
 
 
-def chargen_option_lists(recs_all, part_copies):
+def chargen_option_lists(recs_all, part_copies, heads=None):
     """(records): an override of each of Starfield's chargen head part lists (CHARGEN_PART_LISTS) with every race copy
     of its entries added after the entries (2026-11-11: the race's records hand the player our Orc mouth, yet the looks
     menu showed the human teeth even on a new game: the menu takes its parts from these lists, where only the vanilla
     parts were; with human_only_parts those are not valid for our races, the copies are). part_copies:
-    {race: {female: {vanilla FormID: copy FormID}}}."""
+    {race: {female: {vanilla FormID: copy FormID}}}. heads {female: [Face HDPT]}: the races' heads first in the
+    list of their sex (2026-11-12, owner: Body Type 2 keeps the hair but gives a human head at a human tone; the
+    menu likely picks the new sex's face from these lists)."""
     by_vanilla = {}
     for per_sex in part_copies.values():
         for m in per_sex.values():
@@ -989,8 +996,13 @@ def chargen_option_lists(recs_all, part_copies):
             continue
         have = [_u32(d) for s_, d in sb if s_ == b"LNAM" and len(d) == 4]
         add = [c for v in have for c in by_vanilla.get(v, []) if c not in have]
-        if add:
-            out.append((b"FLST", h, list(sb) + [(b"LNAM", struct.pack("<I", c)) for c in dict.fromkeys(add)], fid))
+        front = [x for x in (heads or {}).get("Female" in sfplugin.edid(sb), []) if x not in have]
+        if add or front:
+            sb = list(sb)
+            lnam = [i for i, (s_, _d) in enumerate(sb) if s_ == b"LNAM"]
+            at = lnam[0] if lnam else len(sb)
+            sb = sb[:at] + [(b"LNAM", struct.pack("<I", x)) for x in front] + sb[at:]
+            out.append((b"FLST", h, sb + [(b"LNAM", struct.pack("<I", c)) for c in dict.fromkeys(add)], fid))
     return out
 
 
@@ -1419,7 +1431,11 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             if cp is not None:
                 recs.append(cp)
                 rep["chargen_presets_added"] = len(race_presets_all)
-            co = chargen_option_lists(recs_all, part_copies)
+            hs = {}
+            for rh in race_heads.values():
+                for f_, x in rh.items():
+                    hs.setdefault(f_, []).append(x)
+            co = chargen_option_lists(recs_all, part_copies, hs)
             recs += co
             rep["chargen_option_lists"] = {sfplugin.edid(s_): sum(1 for x, _d in s_ if x == b"LNAM")
                                            for _t, _h, s_, _f in co}

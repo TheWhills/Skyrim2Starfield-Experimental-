@@ -847,6 +847,11 @@ class ChargenOptionListTests(unittest.TestCase):
         self.assertEqual(got, {"HeadPartsChargenOptionsMale": [0x10, 0x11, 0x1000872, 0x1000900, 0x1000813],
                                "HeadPartsChargenOptionsFemale": [0x20, 0x1000874]})
         self.assertEqual({f for _t, _h, _s, f in out}, {0x3D9AF, 0x3D9B0})    # overrides, same FormIDs
+        # 2026-11-12 (Body Type 2 gave a human head): the races' heads first in their sex's list
+        out = H.chargen_option_lists(recs, copies, {False: [0x1000809], True: [0x100080A]})
+        got = {sfplugin.edid(s): [_u(d) for x, d in s if x == b"LNAM"] for _t, _h, s, _f in out}
+        self.assertEqual(got["HeadPartsChargenOptionsMale"][:3], [0x1000809, 0x10, 0x11])
+        self.assertEqual(got["HeadPartsChargenOptionsFemale"], [0x100080A, 0x20, 0x1000874])
 
 
 class PresetCopyTests(unittest.TestCase):
@@ -865,7 +870,11 @@ class PresetCopyTests(unittest.TestCase):
         self.assertEqual([_u(d) for s, d in out if s in (b"RPRM", b"RPRF")], [0x1000900, 0x999, 0x1000901])
         male = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2S_OrcRace_ChargenPresetMale02"]
         self.assertEqual(_u(dict(male)[b"RNAM"]), 0x1000811)
-        self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"), [0x13EB51, 0x100080F, 0x1000872])
+        # both heads (2026-11-12: Body Type 2 on an Orc profile gave a human head)
+        self.assertEqual(sorted(_u(d) for s, d in male if s == b"PNAM"),
+                         [0x13EB51, 0x100080F, 0x1000810, 0x1000872])
+        fem = dict((sfplugin.edid(s), s) for _t, _h, s, _f in recs)["S2S_OrcRace_ChargenPresetFemale01"]
+        self.assertEqual(sorted(_u(d) for s, d in fem if s == b"PNAM"), [0x100080F, 0x1000810])
 
     def test_baked_head_presets_lose_blends(self):
         """2026-11-12: presets' human morph blends turned our baked Orc head back into a human face."""
