@@ -672,3 +672,7 @@ why the mod needs no clothes of its own.
   Cause: the baked heads' and parts' .mesh files go under `<out>\geometries\` (headbake.baked_head_files) and only
   textures / meshes were copied; the Orc's geometries were installed earlier. Install step for the races build:
   copy textures, meshes AND geometries.
+- 2026-11-12, **verified in game (owner), every race, player patch off, geometries installed:** Altmer profiles gold
+  with the elf head and pointed ears (85, 89); Bosmer women brown (93, 95), Bosmer men (98, 99) elf-shaped but close
+  to a pale human tone; Dunmer blue-grey (103 dark, 105, 109 pale grey). Profile blocks as seen: Altmer 80-89,
+  Bosmer 90-99, Dunmer 100-109, Orc 110-119 (each block female / male in turn).
