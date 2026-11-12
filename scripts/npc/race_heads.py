@@ -975,6 +975,12 @@ def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
         subs = with_head_part(subs, heads[female], part_types)
     if part_copies and female in part_copies:
         subs = swap_parts(subs, part_copies[female])
+    # the other sex's head too (2026-11-12, owner: Body Type 2 in the looks menu gave a human female head, round ears,
+    # with only our tusks; head parts carry a male / female flag, so the game can pick the one for the body type)
+    other = not female
+    if other in heads and all(_u32(d) != heads[other] for s, d in subs if s == b"PNAM" and len(d) == 4):
+        at = max(i + 1 for i, (s, _d) in enumerate(subs) if s == b"PNAM")
+        subs = subs[:at] + [(b"PNAM", struct.pack("<I", heads[other]))] + subs[at:]
     return subs
 
 

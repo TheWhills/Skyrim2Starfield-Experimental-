@@ -703,6 +703,15 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(calls, [(0x1000894, ("tone", False)), (0x1000804, None)])
         self.assertTrue(npcs[0]["baked_face_tone"])
 
+    def test_player_patch_both_heads(self):
+        """2026-11-12: Body Type 2 gave the player a human female head; the patch lists both sexes' race heads."""
+        acbs = struct.pack("<I", 0) + bytes(20)
+        subs = [(b"EDID", Z("Player")), (b"ACBS", acbs), (b"RNAM", I(0x347D)), (b"PNAM", I(0x10)), (b"PNAM", I(0x20))]
+        out = H.player_patch(subs, 0x1000811, {False: 0x100080F, True: 0x1000810}, {0x10: 1, 0x20: 3})
+        p = [_u(d) for x, d in out if x == b"PNAM"]
+        self.assertEqual(sorted(p), [0x20, 0x100080F, 0x1000810])
+        self.assertEqual(_u(dict(out)[b"RNAM"]), 0x1000811)
+
     def test_with_ston(self):
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"STON", b"\x02"), (b"HCOL", b"h\0")], 13)[1], (b"STON", b"\x0d"))
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"HCOL", b"h\0")], 9),

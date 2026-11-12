@@ -597,3 +597,8 @@ why the mod needs no clothes of its own.
   to the race's head part, unverified - risk: no head at all); the NPCs' baked face colour is now matched to the
   median colour of the race's face tone texture at their tone (skintone.match_median) instead of Skyrim's preset
   ratio. The chargen profiles' human eyes / brows are already race-only through the part copies.
+- 2026-11-12, **owner:** with the human Face parts made human-only, Body Type 2 on the (Orc) player still gives a
+  human female head (round ears) with our tusks: the menu does not swap an invalid Face for the race's. The only
+  preset that looks Orc is the player's own record (the player patch puts our head on it), so the body-type switch
+  likely picks the Face for the new sex from the player record's parts: the patch now lists both sexes' race heads
+  (head parts carry a male / female flag). Unverified.
