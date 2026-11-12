@@ -43,6 +43,8 @@ PROXY_DLLS = {"dxgi.dll", "d3d11.dll", "d3d12.dll", "dinput8.dll", "version.dll"
 #: engine honours each one is UNVERIFIED until the owner's first smoke run (the screenshot shows size / intro).
 CUSTOM_INI = (("General", "sIntroSequence", ""), ("General", "bAlwaysActive", "1"),
               ("Archive", "bInvalidateOlderFiles", "1"), ("Archive", "sResourceDataDirsFinal", ""))
+#: Mean grey level under which a screenshot counts as all black.
+BLACK = 3.0
 PREFS_INI = (("Display", "bFull Screen", "0"), ("Display", "bBorderless", "1"),
              ("Display", "iSize W", "640"), ("Display", "iSize H", "360"))
 
@@ -62,6 +64,14 @@ class Instance:
         self.pid_file = os.path.join(self.profile, "pid.txt")
         self.sfse_log = os.path.join(self.my_games, "SFSE", "Logs", "sfse.txt")
         self.sandbox_log = os.path.join(self.documents, "S2SSandbox.log")
+        self.desktop_file = os.path.join(self.profile, "desktop.txt")
+
+    def desktop(self) -> str:
+        """The desktop the running game was launched on (hidden by default)."""
+        if os.path.exists(self.desktop_file):
+            with open(self.desktop_file) as f:
+                return f.read().strip() or DESKTOP
+        return DESKTOP
 
     def load(self) -> dict:
         if not os.path.exists(self.state):
@@ -276,7 +286,7 @@ def running_pid(inst: Instance):
     return pid if pid and hidden_launch.under(hidden_launch.process_image(pid), inst.root) else None
 
 
-def launch(inst: Instance) -> int:
+def launch(inst: Instance, visible: bool = False) -> int:
     state = inst.load()
     if running_pid(inst):
         raise SystemExit("already running (pid %d): stop it first" % running_pid(inst))
@@ -287,12 +297,15 @@ def launch(inst: Instance) -> int:
     for stale in (inst.sfse_log, inst.sandbox_log):
         if os.path.exists(stale):
             os.remove(stale)
-    pid = hidden_launch.launch(os.path.join(inst.root, EXE), inst.root, DESKTOP,
+    desktop = hidden_launch.VISIBLE_DESKTOP if visible else DESKTOP
+    pid = hidden_launch.launch(os.path.join(inst.root, EXE), inst.root, desktop,
                                [SANDBOX_DLL, (os.path.join(inst.root, state["sfse_dll"]),
                                               hidden_launch.SFSE_ENTRY_ORDINAL)], env)
     with open(inst.pid_file, "w") as f:
         f.write(str(pid))
-    print("launched pid %d on hidden desktop %s" % (pid, DESKTOP))
+    with open(inst.desktop_file, "w") as f:
+        f.write(desktop)
+    print("launched pid %d on %s" % (pid, "YOUR desktop (visible)" if visible else "hidden desktop " + desktop))
     return pid
 
 
@@ -305,20 +318,21 @@ def stop(inst: Instance) -> int:
     return 0
 
 
-def shot(inst: Instance, out: str) -> str:
+def shot(inst: Instance, out: str) -> tuple:
+    """Screenshots the running game to `out`; (path, mean brightness), path "" when there is no window."""
     pid = running_pid(inst)
     if not pid:
         raise SystemExit("not running")
-    image = hidden_launch.capture(DESKTOP, pid)
+    image = hidden_launch.capture(inst.desktop(), pid)
     if image is None:
         print("no window yet")
-        return ""
+        return "", 0.0
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     image.save(out)
-    dark = sum(image.convert("L").resize((64, 36)).getdata()) / (64 * 36) < 3
-    print("screenshot %s (%dx%d)%s" % (out, image.width, image.height,
-                                       "  WARNING: all black (D3D12 capture may not work)" if dark else ""))
-    return out
+    level = hidden_launch.mean_brightness(image)
+    print("screenshot %s (%dx%d, mean brightness %.1f)%s" % (out, image.width, image.height, level,
+                                                             "  ALL BLACK" if level < BLACK else ""))
+    return out, level
 
 
 def _tail(path: str, lines: int = 15) -> list:
@@ -365,20 +379,22 @@ def smoke(inst: Instance, args) -> int:
             raise SystemExit(crash_capture.MISSING_CDB + " (or run smoke without --crash)")
     before = {p: file_state(p) for p in player_profile_files()}
     started = time.time()
-    pid = launch(inst)
+    pid = launch(inst, args.visible)
+    desktop = inst.desktop()
     try:
         if args.crash:
             crash_capture.attach(pid, os.path.join(OUT, "crash"), "smoke")
         checks = {}
         deadline = time.time() + args.timeout
-        while time.time() < deadline and running_pid(inst) and not hidden_launch.has_window(DESKTOP, pid):
+        while time.time() < deadline and running_pid(inst) and not hidden_launch.has_window(desktop, pid):
             time.sleep(1)
-        checks["window"] = hidden_launch.has_window(DESKTOP, pid)
+        checks["window"] = hidden_launch.has_window(desktop, pid)
         window_s = round(time.time() - started, 1)
         time.sleep(args.settle)
         checks["alive_after_settle"] = bool(running_pid(inst))
-        shot_path = shot(inst, os.path.join(OUT, "smoke.png")) if checks["alive_after_settle"] else ""
-        checks["screenshot"] = bool(shot_path)
+        shot_path, level = (shot(inst, os.path.join(OUT, "smoke.png")) if checks["alive_after_settle"]
+                            else ("", 0.0))
+        checks["screenshot_not_black"] = bool(shot_path) and level >= BLACK
     finally:
         if not args.keep:
             stop(inst)
@@ -391,6 +407,7 @@ def smoke(inst: Instance, args) -> int:
     checks["player_profile_untouched"] = not changed
     result = {"checks": checks, "window_seconds": window_s, "sfse_problems": problems,
               "player_files_changed": changed, "screenshot": shot_path,
+              "screenshot_brightness": round(level, 2), "desktop": desktop,
               "sandbox_log": _tail(inst.sandbox_log, 40), "sfse_log": sfse[-40:]}
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "smoke.json"), "w", encoding="utf-8") as f:
@@ -419,9 +436,13 @@ def parse_args(argv=None):
     sm.add_argument("--settle", type=float, default=30, help="seconds to let it run before the screenshot")
     sm.add_argument("--crash", action="store_true", help="attach crash_capture (cdb) right after launch")
     sm.add_argument("--keep", action="store_true", help="leave it running afterwards")
+    sm.add_argument("--visible", action="store_true",
+                    help="run on YOUR desktop instead of a hidden one (diagnoses black screenshots)")
     s = sub.add_parser("shot", help="screenshot the hidden window")
     s.add_argument("--out", default=os.path.join(OUT, "shot.png"))
-    for name in ("launch", "status", "stop"):
+    la = sub.add_parser("launch")
+    la.add_argument("--visible", action="store_true", help="run on YOUR desktop instead of a hidden one")
+    for name in ("status", "stop"):
         sub.add_parser(name)
     return parser.parse_args(argv)
 
@@ -440,12 +461,12 @@ def main(argv=None) -> int:
             raise SystemExit("pass --instance-dir (found %d S2S Test folders)" % len(guess))
     inst = Instance(root)
     if args.cmd == "launch":
-        launch(inst)
+        launch(inst, args.visible)
         return 0
     if args.cmd == "smoke":
         return smoke(inst, args)
     if args.cmd == "shot":
-        return 0 if shot(inst, args.out) else 1
+        return 0 if shot(inst, args.out)[0] else 1
     return {"status": status, "stop": stop}[args.cmd](inst)
 
 

@@ -40,6 +40,8 @@ PATH_SIZE = 2048
 CODE_AT = 0x10 + PATH_SIZE
 #: SFSE's StartSFSE export.
 SFSE_ENTRY_ORDINAL = 1
+#: The owner's own, visible desktop: `launch` puts the game there instead of a new hidden one (diagnostics).
+VISIBLE_DESKTOP = "Default"
 #: A remote LoadLibrary that has not returned in this long has hung the loader (sfse_loader: one minute).
 INJECT_TIMEOUT_MS = 60000
 
@@ -172,11 +174,14 @@ def inject(process, dll_path: str, entry_ordinal: int = None) -> None:
 def launch(exe: str, cwd: str, desktop: str, dlls: list, env: dict, args: str = "") -> int:
     """Starts `exe` on desktop `desktop`, injects `dlls` in order, resumes it; its pid.
 
+    `desktop` "Default" (VISIBLE_DESKTOP) is the owner's own screen: no hidden desktop is made.
     Each of `dlls` is a path, or (path, entry ordinal) for a DLL started by an export (SFSE).
     The process is terminated if any injection fails, so a half-loaded game never runs. It holds its own
     handle to the desktop, which keeps the desktop alive after this process exits.
     """
-    desk = _check(_U32.CreateDesktopW(desktop, None, None, 0, GENERIC_ALL, None), "CreateDesktopW")
+    visible = desktop.lower() == VISIBLE_DESKTOP.lower()
+    desk = None if visible else _check(_U32.CreateDesktopW(desktop, None, None, 0, GENERIC_ALL, None),
+                                       "CreateDesktopW")
     info = StartupInfo(cb=ctypes.sizeof(StartupInfo), lpDesktop="WinSta0\\" + desktop)
     proc = ProcessInformation()
     text = environment_block(os.environ, env)
@@ -185,9 +190,10 @@ def launch(exe: str, cwd: str, desktop: str, dlls: list, env: dict, args: str = 
     try:
         _check(_K32.CreateProcessW(exe, command, None, None, False, CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
                                    block, cwd, ctypes.byref(info), ctypes.byref(proc)), "CreateProcessW")
-        kept = wintypes.HANDLE()
-        _check(_K32.DuplicateHandle(_K32.GetCurrentProcess(), wintypes.HANDLE(desk), proc.hProcess,
-                                    ctypes.byref(kept), 0, False, DUPLICATE_SAME_ACCESS), "DuplicateHandle")
+        if desk:
+            kept = wintypes.HANDLE()
+            _check(_K32.DuplicateHandle(_K32.GetCurrentProcess(), wintypes.HANDLE(desk), proc.hProcess,
+                                        ctypes.byref(kept), 0, False, DUPLICATE_SAME_ACCESS), "DuplicateHandle")
         try:
             for dll in dlls:
                 path, ordinal = dll if isinstance(dll, tuple) else (dll, None)
@@ -201,7 +207,8 @@ def launch(exe: str, cwd: str, desktop: str, dlls: list, env: dict, args: str = 
         for handle in (proc.hThread, proc.hProcess):
             if handle:
                 _K32.CloseHandle(handle)
-        _U32.CloseDesktop(desk)
+        if desk:
+            _U32.CloseDesktop(desk)
 
 
 def _windows_of(desk, pid: int) -> list:
@@ -230,6 +237,12 @@ def has_window(desktop: str, pid: int) -> bool:
         return bool(_windows_of(desk, pid))
     finally:
         _U32.CloseDesktop(desk)
+
+
+def mean_brightness(image) -> float:
+    """Mean grey level (0-255) of `image` at 64x36: under ~3 is an all-black frame."""
+    small = image.convert("L").resize((64, 36))
+    return sum(small.tobytes()) / (64 * 36)
 
 
 def capture(desktop: str, pid: int):

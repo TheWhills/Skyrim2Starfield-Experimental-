@@ -157,6 +157,13 @@ class Build(unittest.TestCase):
                 T.build(args)
 
 
+class Brightness(unittest.TestCase):
+    def test_black_and_lit_frames(self):
+        from PIL import Image
+        self.assertLess(H.mean_brightness(Image.new("RGB", (640, 360))), T.BLACK)
+        self.assertGreater(H.mean_brightness(Image.new("RGB", (640, 360), (90, 120, 160))), T.BLACK)
+
+
 class Capture(unittest.TestCase):
     def test_find_cdb_order(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -183,7 +190,7 @@ class Capture(unittest.TestCase):
     def test_smoke_stops_game_when_a_step_fails(self):
         stopped = []
         saved = T.launch, T.stop, T.hidden_launch.has_window, T.running_pid
-        T.launch, T.stop = (lambda inst: 1), (lambda inst: stopped.append(inst))
+        T.launch, T.stop = (lambda inst, visible=False: 1), (lambda inst: stopped.append(inst))
         T.running_pid = lambda inst: 1
 
         def broken(*_):
@@ -191,7 +198,8 @@ class Capture(unittest.TestCase):
         T.hidden_launch.has_window = broken
         try:
             with self.assertRaises(OSError):
-                T.smoke(T.Instance("x"), argparse.Namespace(crash=False, timeout=1, settle=0, keep=False))
+                T.smoke(T.Instance("x"), argparse.Namespace(crash=False, timeout=1, settle=0, keep=False,
+                                                           visible=False))
         finally:
             T.launch, T.stop, T.hidden_launch.has_window, T.running_pid = saved
         self.assertEqual(len(stopped), 1)

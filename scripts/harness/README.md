@@ -48,7 +48,7 @@ old one.
 |---|---|
 | `window` | the game made a window on the hidden desktop within `--timeout` |
 | `alive_after_settle` | still running after `--settle` seconds |
-| `screenshot` | PrintWindow returned an image (it warns when it is all black) |
+| `screenshot_not_black` | PrintWindow returned an image with mean brightness >= 3 (`smoke.json` has the value) |
 | `sandbox_redirected` | `S2SSandbox.log`: all 3 shell32 exports repointed |
 | `sfse_log_in_sandbox` | SFSE wrote its log into the sandbox profile, so SFSE ran and was redirected |
 | `player_profile_untouched` | the owner's own StarfieldCustom/Prefs.ini, sfse.txt and Plugins.txt kept size and time |
@@ -58,15 +58,18 @@ old one.
 - **Verified (offline, this repo's tests):** the remote stub equals `sfse_loader/Inject.cpp`'s `kCode` and the
   block layout equals `InjectDLLThreadData` (ianpatt/sfse source); `StartSFSE` is ordinal 1 (`sfse/sfse.def`);
   sfse_loader sets `SteamGameId`/`SteamAppID` to 1716740 (`sfse_loader/main.cpp`), as `launch` does.
-- **Verified on Skyrim SE by tes4skyrim, unverified on Starfield:** hidden-desktop rendering, PrintWindow capture
-  (Skyrim is D3D11; Starfield's D3D12 swap chain may capture black), the sandbox (which of the three folder
-  functions `Starfield.exe` imports is unknown: its log lists every slot repointed), the audio mute, cdb capture.
-- **Unverified:** the sandbox INI keys (`iSize W/H`, `bBorderless`, `sIntroSequence`, `bAlwaysActive`) and
-  whether Starfield runs without focus. The first smoke run's screenshot answers most of these.
+- **Verified in game (owner's first smoke, 2026-11-12, SFSE 0.2.21 / sfse_1_16_244):** the hidden-desktop launch
+  with the sandbox then SFSE injected; window after 4.1 s at 640x360 (`iSize W/H` honoured); still running after
+  30 s on the hidden desktop; sandbox log "export table: 3 of 3"; SFSE logged into the sandbox with no problem
+  lines; the owner's StarfieldCustom/Prefs.ini, sfse.txt and Plugins.txt unchanged.
+- **Open:** the PrintWindow screenshot was all black. Either PrintWindow cannot read Starfield's D3D12 swap chain,
+  or the game does not present on a hidden desktop. `smoke --visible` (same run on the owner's desktop) tells them
+  apart. Fallback either way: capture inside the game from the bridge plugin (swap-chain Present hook).
+- **Unverified:** `sIntroSequence`, `bAlwaysActive`, the audio mute, cdb capture on Starfield.
 
 ## Next (not in this change)
 
-1. The owner's first `smoke --crash` and what it shows.
+1. `smoke --visible`: whether the black screenshot is the capture or the hidden desktop.
 2. **Speed:** whether Starfield honours `iFPSClamp` (tes4skyrim's speed-up on Skyrim: each frame advances a fixed
    1/N s; N=6 ran ~11x). Try `build --ini StarfieldCustom.ini:General:iFPSClamp=6` and compare game time.
 3. **Bridge:** an SFSE plugin (CommonLibSF, as `native/combat`) with a named pipe that runs console commands on the
