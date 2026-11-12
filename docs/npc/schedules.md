@@ -180,3 +180,9 @@ points the package at it; the load doors (verified both ways) and the exterior n
 Without --exterior nothing changes (tests/test_make_schedule.py ExteriorTests). Unverified: the C# was not compiled
 here (no NuGet access); whether the AI paths out through the converted doors in game. Still left out: packages near a
 reference in an exterior cell that was not converted, and NPCs whose Skyrim start spot is outdoors.
+
+Shared packages (2026-11-12, owner's 14-NPC Riverwood build stopped: "duplicate identity key
+PACK:S2S_AlvorSigridDortheEat20x1"): Skyrim gives one package to several NPCs (the family meal: Alvor, Sigrid,
+Dorthe); PluginSpike built it once per NPC under the same EditorID. Now the first NPC's copy is linked from the others
+(as in Skyrim); if it comes out different for a later NPC (its converted inputs, or its cell for "in cell") that NPC
+gets its own, EditorID_<NPC>. C# not compiled here (no NuGet).

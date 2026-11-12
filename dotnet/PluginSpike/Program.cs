@@ -452,6 +452,12 @@ IStarfieldModGetter? FacePlugin(string path)
 var extMarkers = new List<(PlacedObject m, JsonElement pos)>();
 var extMarkerFor = new Dictionary<string, FormKey>();
 
+// Packages Skyrim shares between NPCs (2026-11-12, owner's Riverwood build: AlvorSigridDortheEat20x1 is Alvor's, Sigrid's
+// and Dorthe's; the second copy stopped the build on a duplicate EditorID): built once and linked from each NPC, as in
+// Skyrim. When the same package comes out different for another NPC (its converted inputs, or its cell for "in cell"),
+// that NPC gets its own copy, EditorID + "_" + its Skyrim EditorID.
+var builtPackages = new Dictionary<string, (FormKey key, string sig)>();
+
 void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource)
 {
     var sk = ac.GetProperty("skyrim").GetString()!;
@@ -500,6 +506,18 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
     foreach (var pj in ac.GetProperty("packages").EnumerateArray())
     {
         var edid = pj.GetProperty("edid").GetString()!;
+        var pkSig = cellName + "|" + pj.GetRawText();
+        if (builtPackages.TryGetValue(edid, out var sharedPk))
+        {
+            if (sharedPk.sig == pkSig)
+            {
+                npc.Packages.Add(new FormLink<IPackageGetter>(sharedPk.key));
+                notes.Add($"{edid} {sharedPk.key}: shared, built for an earlier NPC");
+                continue;
+            }
+            notes.Add($"{edid}: differs from the earlier NPC's (inputs or cell): own copy {edid}_{sk}");
+            edid = $"{edid}_{sk}";
+        }
         var tkey = new FormKey(sfEsm, Convert.ToUInt32(pj.GetProperty("sf_template_form").GetString(), 16) & 0xFFFFFF);
         if (!vanillaPackage.TryGetValue(tkey, out var vp)) { notes.Add($"{edid}: no vanilla package uses template {tkey}"); continue; }
         var pk = (Package)vp.Duplicate(Id("PACK:" + edid));
@@ -577,6 +595,7 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
         }
         mod.Packages.Add(pk);
         npc.Packages.Add(new FormLink<IPackageGetter>(pk.FormKey));
+        builtPackages.TryAdd(pj.GetProperty("edid").GetString()!, (pk.FormKey, pkSig));
         // PSDT month as written: Starfield's 0 = any month (make_schedule.sf_schedule); vanilla's for comparison
         notes.Add($"{edid} {pk.FormKey} (copy of vanilla {vp.EditorID} {vp.FormKey}); schedule month {pk.ScheduleMonth} "
             + $"(vanilla {vp.ScheduleMonth}) hour {pk.ScheduleHour} for {pk.ScheduleDurationInMinutes} min");
