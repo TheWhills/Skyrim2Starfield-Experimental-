@@ -184,3 +184,11 @@ Built so far: face_fit skips ChildRace NPCs (they would come out adult-sized on 
 5. H2: Skyrim's continuous sliders as dials (after the regions-file test).
 6. K: build from the load order (before body mods are installed).
 7. G, H3, H4, F; then J (beast races) as its own project.
+
+Children research, owner's runs 2026-11-12 (step 1, continued): a vanilla child outfit (Outfit_Child_CoraCoe.nif)
+is adult-sized (1.52 m tall, the adult outfits' +1.632 m lift; the child skeleton shrinks it), so outfits converted
+for adults fit children too once their addons name the child races. Skyrim's NordRaceChild uses the ADULT skeletons
+(skeleton.nif / skeleton_female.nif), height 0.8, head parts male 0001C22E / female 0001C558 (+ 00051401, 000511CA,
+000511CB); Dorthe is NordRaceChild with her own head part 0001C559. scripts/npc/child_probe.py (read-only) next:
+whether a Skyrim child head is its own mesh, Dorthe's / Frodnar's FaceGen heads, and how Starfield's child NPCs are
+built (dials, blends, baked faces) and how its child heads compare with the adult heads.
