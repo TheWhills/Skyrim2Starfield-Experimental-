@@ -711,3 +711,9 @@ why the mod needs no clothes of its own.
   mouth) and the baking code (headbake.py + BAKE_VERSION) in <out>\_bake_cache.json; same key and every file still
   there -> "N face parts unchanged, reused". The NPC steps (face_fit, the Riverwood build) never rebuild races: they
   read S2SRaceTest.esm, race_heads.json and the tone textures from race_heads' --out.
+- 2026-11-12, owner's first face_fit run with every race (--races-plugin at race_heads' --out): all 16 NPCs fitted
+  against their race's head (Ralof / Ysolda / Orgnar / Embry / Alvor / Sigrid / Hod / Gerdur / Sven Nord, Nazeem /
+  Saadia Redguard, Delphine Breton, Faendal Bosmer, Hilde Elder, Camilla / Lucan Imperial; rms 1.1-2.9 mm, at most
+  one slider at its limit: Delphine 69, Embry 77), then a TypeError writing the plugin: the head part type lambda
+  indexed the PNAM bytes instead of the unpacked value (never run before: no earlier NPC was of a converted race).
+  Fixed (face_fit.hdpt_type, tested through on_race).

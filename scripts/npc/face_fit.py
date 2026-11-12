@@ -192,6 +192,15 @@ def race_skin(subs, conv, female, rgb):
     return subs, info, (rh.face_tone(target) if target else None)
 
 
+def hdpt_type(rec):
+    """The head part type (PNAM) of an HDPT record (type, header, subs, FormID), or None. (2026-11-12, owner's first
+    run with every race: the inline version indexed the bytes, not the unpacked tuple: TypeError.)"""
+    if rec is None:
+        return None
+    d = bytes(dict(rec[2]).get(b"PNAM", bytes(4)))
+    return struct.unpack("<I", d[:4])[0] if len(d) >= 4 else None
+
+
 def on_race(subs, conv, female, index, sf_hdpt, part_type):
     """NPC subrecords on its converted race: RNAM the race, each head part (PNAM) swapped for the race's copy (by the
     vanilla part's EditorID), the Face part for the race head, the teeth for the race mouth. index: the race plugin's
@@ -1026,8 +1035,7 @@ def main(argv=None):
             face_colour = rskin = None
             if race_index is not None and sky_race in conv_races:
                 subs, swapped = on_race(subs, conv_races[sky_race], row["female"], race_index, sf_hdpt_all,
-                                        lambda rec: struct.unpack("<I", bytes(dict(rec[2]).get(b"PNAM", bytes(4)))[0])
-                                        if rec is not None else None)
+                                        hdpt_type)
                 row.setdefault("race", {}).update(npc_race=f"S2S_{conv_races[sky_race]['name']}Race",
                                                   parts_swapped=swapped)
                 rgb = (((row.get("dressed") or {}).get("face_colors") or {}).get("skin") or {}).get("skyrim_rgb")

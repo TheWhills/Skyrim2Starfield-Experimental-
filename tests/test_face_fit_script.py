@@ -291,7 +291,12 @@ class RaceNpcTests(unittest.TestCase):
         self.assertEqual([struct.unpack("<I", d_)[0] for _s, d_ in out],
                          [0x0300080F, 0x03000810, 0x03000811, 0x03000813, 0x540])
         self.assertEqual(n, 3)
-        self.assertIsNone(c["tones"])                      # no skin tones in that race_heads.json
+        self.assertIsNone(c["tones"])
+        # the type function the run uses (2026-11-12: it raised TypeError on the owner's first every-race run)
+        self.assertEqual([S.hdpt_type(sf_hdpt[f]) for f in (0x510, 0x520, 0x530)], [1, 2, 9])
+        self.assertIsNone(S.hdpt_type(None))
+        out2, n2 = S.on_race(subs, c, False, 3, sf_hdpt, S.hdpt_type)
+        self.assertEqual((out2, n2), (out, n))                      # no skin tones in that race_heads.json
 
     def test_race_skin(self):
         """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a
