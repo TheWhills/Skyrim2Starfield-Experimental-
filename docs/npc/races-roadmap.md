@@ -111,10 +111,19 @@ assets are not ours to ship):
   the vanilla condition form widened to its race.
 
 Steps:
-1. **research (owner run):** the vanilla ChildRace record (skeleton, chargen or not, heights, head parts) and the vanilla
-   child NPCs; Skyrim's ChildRace head (topology, base head, FaceGen per child).
-2. **S2S_ChildRace**, thin over Starfield's ChildRace (Skyrim content asks ChildRace / IsChild: one race, as Skyrim).
-   Per-parent-race child races (S2S_NordChildRace ...) only if content needs it later.
+1. **research (owner run 2026-11-12, done in part):**
+   - Starfield ChildRace 002AABCD: skeleton Actors\Child\CharacterAssets\skeleton.nif (both sexes), the female
+     human .rig, Human_Root graph, human animations; height (DAT2) 0.86 / 0.86; skin tone strings
+     Child_Male_Body / Child_Female_Body / Child_Female_Hands / FaceSkinTones_Child; SRAC HumanRace; head parts
+     Human_Child_Head_Boy (00243A73, Actors\Child\Mesh\Child_Head_Boy.nif, morph 00243A9A) / _Girl (00243A74),
+     child eyes / brows / lashes / teeth / 8 child hairs (child_parts.txt).
+   - **Skyrim has no single ChildRace:** NordRaceChild, ImperialRaceChild, BretonRaceChild, RedguardRaceChild
+     (+ BretonRaceChildVampire). So the plan below changes: a child race per Skyrim child race.
+   - Vanilla child outfits are their own ARMA on ChildRace (AA_Clothes_Child_CoraCoe: Clothes\Outfit_Child_CoraCoe\
+     Outfit_Child_CoraCoe.nif); child or adult size still to measure (model_bounds).
+   - Next: Skyrim's NordRaceChild record (head parts, base head) and a child NPC's (Dorthe's) record.
+2. **S2S_<Race>ChildRace** per Skyrim child race (Nord, Imperial, Breton, Redguard), thin over Starfield's ChildRace
+   (as our adult races over HumanRace), so content asking GetIsRace NordRaceChild works.
 3. **Faces:** each child's own head, baked: Skyrim FaceGen child head minus Skyrim's child base head, moved onto
    Starfield's child head (the adult correspondence after a child-to-child alignment), written as that NPC's own head
    part (headbake). No sliders needed for NPCs, and it works whether or not the child skeleton has face bones.
