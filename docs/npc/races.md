@@ -646,3 +646,9 @@ why the mod needs no clothes of its own.
   human preset (e.g. a dark-skinned human woman at tone 8 with our tusks). So the switch does not take the list's
   first female nor its neighbour. preset_probe now dumps CharGenPresets in full (sex, race, fields naming other
   NPCs) and every record naming its entries, to find what pairs a profile with its other body type.
+- 2026-11-12, preset_probe on the owner's game: CharGenPresets has 39 entries, female / male in turn
+  (ChargenPresetFemale01-19 / Male01-19), the first ChargenFemalePlayer (002E7C8E), which is also the only other
+  thing named anywhere: the default object ChargenFemalePlayer_DO. No preset names another (no pairing field). So
+  Body Type 2 most likely starts from ChargenFemalePlayer, the female counterpart of the Player record. The player
+  patch now makes her ours like the Player (race, our female head, the face part copies, no morph blends or
+  Dermaesthetic layer, the race's default tone). Unverified.

@@ -1014,6 +1014,14 @@ def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
     return subs
 
 
+FEMALE_PLAYER = "ChargenFemalePlayer"   # Starfield.esm 002E7C8E, default object ChargenFemalePlayer_DO
+
+
+def female_player(recs_all):
+    """(type, header, subs, FormID) of Starfield's ChargenFemalePlayer NPC, or None."""
+    return next((r for r in recs_all if r[0] == b"NPC_" and sfplugin.edid(r[2]) == FEMALE_PLAYER), None)
+
+
 RACE_TONE_DEFAULT = 4          # an NPC / the player of a race with appended tones: its 5th tone (the middle Orc green)
 
 
@@ -1838,12 +1846,24 @@ def main(argv=None):
             pre = r.get("_chargen_presets")
             cp = chargen_preset_list(recs_all_, pre, first=True) if pre else None
             precs = [cp] if cp is not None else []
+            # the female player (2026-11-12, preset_probe: CharGenPresets' first entry ChargenFemalePlayer is the
+            # default object ChargenFemalePlayer_DO, the only record naming it besides the list; no preset names
+            # another, so Body Type 2 most likely starts from it - owner: a human woman with our tusks)
+            fp = female_player(recs_all_)
+            if fp is not None:
+                fsubs = player_patch(fp[2], race_fid, pheads, part_types_, pcopies)
+                if race in race_heads_:
+                    fsubs = without_layer([x for x in fsubs if x[0] not in BLEND_SIGS], SKIN_LAYER)
+                if tones.get("method") == "append" and tones.get("first_index"):
+                    fsubs = with_ston(fsubs, tones["first_index"][0] + RACE_TONE_DEFAULT)
+                precs.append((b"NPC_", fp[1], fsubs, fp[3]))
             name = f"S2S{NAMES[race]}Player.esm"
             with open(os.path.join(a.out, name), "wb") as fh:
                 fh.write(sfplugin.build([(b"NPC_", player[0], psubs, 0x7)] + precs, info,
                                         author="Skyrim2Starfield races", masters=["Starfield.esm", PLUGIN]))
             report["player_patch"] = {"plugin": name, "race": f"S2S_{NAMES[race]}Race",
-                                      "chargen_presets_first": len(pre) if precs else 0}
+                                      "female_player": f"{fp[3]:08X}" if fp is not None else None,
+                                      "chargen_presets_first": len(pre) if cp is not None else 0}
             print(f"  player patch: {name} (load it after {PLUGIN}; the player starts as S2S_{NAMES[race]}Race)")
     for r in (report.get("new_races") or {}).values():
         if r.get("_chargen_presets"):

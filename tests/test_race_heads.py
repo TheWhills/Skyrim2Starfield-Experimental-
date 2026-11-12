@@ -92,7 +92,7 @@ class WeightTests(unittest.TestCase):
         self.assertIsNone(H.frame_check(m, v, t, key="Missing"))
 
 
-def starfield_esm(path):
+def starfield_esm(path, extra=()):
     h = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)   # noqa: E731
     tcmp = lambda p: struct.pack("<H", len(p) + 1) + p.encode() + b"\0"                        # noqa: E731
     recs = [
@@ -137,6 +137,7 @@ def starfield_esm(path):
                                (b"VTCK", I(1)), (b"DNAM", bytes(8)), (b"FMSI", I(3)),
                                (b"FMRS", struct.pack("<f", 0.5)), (b"ATTX", b"\0")], 0x801),
         (b"OTFT", h(b"OTFT"), [(b"EDID", Z("SomeOutfit"))], 0x900)]
+    recs += [(t, h(t), sb, f) for t, sb, f in extra]
     with open(path, "wb") as fh:
         fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
 
@@ -322,7 +323,10 @@ class PluginTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as d:
                 sf = os.path.join(d, "sf")
                 os.makedirs(os.path.join(sf, "Data"))
-                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+                # ChargenFemalePlayer (2026-11-12: Body Type 2 gave a human woman; the player patch makes her ours)
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"), extra=[
+                    (b"NPC_", [(b"EDID", Z("ChargenFemalePlayer")), (b"ACBS", I(1) + bytes(12)),
+                               (b"RNAM", I(0x347D)), (b"PNAM", I(0x511))], 0x2E7C8E)])
                 out = os.path.join(d, "out")
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out,
@@ -389,7 +393,13 @@ class PluginTests(unittest.TestCase):
                 self.assertEqual(rep["head_part_race_lists"], ["HeadPartsHumanRace 0000024A", "OtherList 0000024B"])
                 # the player patch: the Player record (00000007) of the new race with our head part
                 pp = sfplugin.records(os.path.join(out, "S2SOrcPlayer.esm"), [b"NPC_"])
-                self.assertEqual([r[3] for r in pp], [0x7])
+                self.assertEqual([r[3] for r in pp], [0x7, 0x2E7C8E])
+                fpd = pp[1][2]
+                self.assertEqual(struct.unpack("<I", dict(fpd)[b"RNAM"])[0], orc[2])
+                fheads = [struct.unpack("<I", d_)[0] for s_, d_ in fpd if s_ == b"PNAM"]
+                self.assertIn(int(rep["head_parts"]["female"]["HDPT"], 16), fheads)
+                self.assertNotIn(0x511, fheads)
+                self.assertEqual(rep["player_patch"]["female_player"], "002E7C8E")
                 pd = pp[0][2]
                 self.assertEqual(struct.unpack("<I", dict(pd)[b"RNAM"])[0], orc[2])
                 heads_ = [struct.unpack("<I", d_)[0] for s_, d_ in pd if s_ == b"PNAM"]
