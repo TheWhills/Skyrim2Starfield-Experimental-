@@ -633,3 +633,5 @@ why the mod needs no clothes of its own.
   as the NPC finding: a face the game builds for a non-player stays human. The race's preset copies now get baked
   faces like the test NPCs: the vanilla preset's baked face (by its FormID) recoloured to the median of the race's
   body tone texture of the copy's own tone (PRESET_TONE_SPREAD). preset_probe also lists the presets' face fields.
+- 2026-11-12, **owner:** the Orc profiles' faces are now green (41–50, both sexes) with the baked preset faces.
+  Female profiles still show the tusks through closed lips.
