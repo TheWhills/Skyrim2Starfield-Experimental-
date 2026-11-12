@@ -391,6 +391,47 @@ def _write_files(out, files):
             fh.write(data)
 
 
+BAKE_CACHE = "_bake_cache.json"      # in --out: what each race / sex part bake wrote, by an input key
+
+
+def bake_key(vertices, disp, parts, extra=b""):
+    """A key for one race / sex face-part bake: its inputs (the head's vertices, the race displacement, the parts
+    list) and the baking code (src/fo4sf/headbake.py and this file's BAKE_VERSION), so a rebuild reuses the files
+    only when nothing that shapes them changed (2026-11-12, owner: do not redo steps that are already done)."""
+    import hashlib
+    from fo4sf import headbake
+    h = hashlib.sha1()
+    h.update(np.ascontiguousarray(vertices, dtype=np.float64).tobytes())
+    h.update(np.ascontiguousarray(disp, dtype=np.float64).tobytes())
+    h.update(repr(parts).encode())
+    h.update(extra)
+    with open(headbake.__file__, "rb") as fh:
+        h.update(fh.read())
+    h.update(str(BAKE_VERSION).encode())
+    return h.hexdigest()
+
+
+BAKE_VERSION = 1        # bump when this file's part baking changes (headbake.py changes are caught by the key)
+
+
+def load_bake_cache(out):
+    try:
+        with open(os.path.join(out, BAKE_CACHE), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def cached_bake(cache, name, key, out):
+    """The cache entry for name when its key matches and every file it wrote is still in out, else None."""
+    e = cache.get(name)
+    if not e or e.get("key") != key:
+        return None
+    if not all(os.path.isfile(os.path.join(out, *r.split("/"))) for r in e.get("files", [])):
+        return None
+    return e
+
+
 def _vanilla_or_none(face_fit, rel, sf_data):
     try:
         return face_fit.hkx_to_af.vanilla_file(rel, sf_data)[0]
@@ -589,11 +630,23 @@ def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=
             continue
         head_raw, _ = face_fit.hkx_to_af.vanilla_file(face_fit.SF_HEADS[female], sf_data)
         _p, head_skin = facefit.starfield_head_parts(head_raw)
+        cache = load_bake_cache(out)
         for race in races:
             if race not in m.get("disp", {}):
                 continue
             t0, prep, done = time.time(), {}, 0
             todo = sum(1 for x in plist if female in x[3])
+            name = f"{race}_{SEXES[female]}"
+            key = bake_key(m["vertices"], m["disp"][race], [x for x in plist if female in x[3]],
+                           repr(sorted(mouths.get(race, {}))).encode())
+            hit = cached_bake(cache, name, key, out)
+            if hit is not None:
+                race_parts.setdefault(race, []).extend((int(f), bool(fe), mp) for f, fe, mp in hit["parts"])
+                rep[race][SEXES[female]]["parts"] = hit["report"]
+                rep[race][SEXES[female]]["parts_reused"] = True
+                print(f"  {race} {SEXES[female]}: {len(hit['parts'])} face parts unchanged, reused")
+                continue
+            written, mine = [], []
             print(f"  {race} {SEXES[female]}: baking {todo} face parts ...", flush=True)
             seen = 0
             for fid, edid, modl, sexes, ptype in plist:
@@ -629,10 +682,15 @@ def write_race_heads(sf_data, out, made, races, parts=True, sky=None, conv_args=
                     except (SystemExit, KeyError, ValueError, OSError) as e:
                         frep["facebones_twin"] = {"error": str(e)[:200]}
                 _write_files(out, files)
+                written += list(files)
                 race_parts.setdefault(race, []).append((fid, female, mp))
+                mine.append((fid, female, mp))
                 prep[edid] = frep
                 done += 1
             rep[race][SEXES[female]]["parts"] = prep
+            cache[name] = {"key": key, "files": written, "parts": mine, "report": prep}
+            with open(os.path.join(out, BAKE_CACHE), "w", encoding="utf-8") as fh:
+                json.dump(cache, fh)
             print(f"  {race} {SEXES[female]}: {done} face parts baked ({time.time() - t0:.0f} s)")
     return models, race_parts, rep, mouths, mrep
 

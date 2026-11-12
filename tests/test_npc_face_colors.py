@@ -123,7 +123,10 @@ class FaceSkinTests(unittest.TestCase):
         src = {"race": 0x99, "female": False, "head_parts": [], "tints": [{"index": 1, "color": (53, 39, 34, 0)}]}
         subs = [(b"EDID", z("T")), (b"TNAM", z("Dermaesthetic")), (b"QNAM", z("European_Male_Md1_Sk1"))]
         out, info = face_fit.face_colors(subs, src, real, None)
-        self.assertIn((b"QNAM", z("African_Male_Md1_Sk8")), out)
+        # 2026-11-12 (owner: Skyrim has no ethnicities): the generic western face skin for every race, its Sk the
+        # nearest to the skin tone; the dark skin itself is the STON (and the recoloured baked face)
+        self.assertIn((b"QNAM", z("European_Male_md1_sk3")), out)
+        self.assertIn((b"STON", b"\x08"), out)
         self.assertEqual(info["face_skin"]["set"], True)
 
 

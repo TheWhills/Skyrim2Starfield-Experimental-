@@ -579,6 +579,27 @@ class PluginTests(unittest.TestCase):
                     led = json.load(fh)["ids"]
                 self.assertEqual(int(led["S2S_OrcRace"], 16), by["S2S_OrcRace"][2] & 0xFFFFFF)
                 self.assertIn("S2S_OrcRace", rep["formids"]["new"])
+                # 2026-11-12 (owner: do not redo what is done): a rebuild with nothing changed reuses the face parts
+                with contextlib.redirect_stdout(io.StringIO()) as so:
+                    self.assertEqual(H.main(["--skyrim-data", d, "--starfield", sf, "--out", out, "--races",
+                                             "HighElfRace,OrcRace", "--new-races", "Orc,Bosmer", "--player-race",
+                                             "Orc", "--symmetry", "none"]), 0)
+                self.assertIn("face parts unchanged, reused", so.getvalue())
+                self.assertNotIn("baking", so.getvalue())
+                with open(os.path.join(out, "race_heads.json")) as fh:
+                    rep2 = json.load(fh)
+                self.assertTrue(rep2["baked_heads"]["OrcRace"]["male"]["parts_reused"])
+                self.assertEqual(rep2["new_races"]["OrcRace"]["face_parts"], rep["new_races"]["OrcRace"]["face_parts"])
+                recs4 = sfplugin.records(os.path.join(out, H.PLUGIN), [b"HDPT"])
+                self.assertIn("S2S_OrcRace_Human_Male_Beard_Goatee_M", {sfplugin.edid(s_) for _t, _h, s_, _f in recs4})
+                # a part file gone: that race / sex is baked again
+                os.remove(os.path.join(out, "meshes", "s2s", "races", "orc", "parts", "human_male_beard_goatee_m.nif"))
+                with contextlib.redirect_stdout(io.StringIO()) as so:
+                    H.main(["--skyrim-data", d, "--starfield", sf, "--out", out, "--races", "HighElfRace,OrcRace",
+                            "--new-races", "Orc,Bosmer", "--player-race", "Orc", "--symmetry", "none"])
+                self.assertIn("OrcRace male: baking", so.getvalue())
+                self.assertTrue(os.path.isfile(os.path.join(out, "meshes", "s2s", "races", "orc", "parts",
+                                                            "human_male_beard_goatee_m.nif")))
         finally:
             if saved[0] is None:
                 sys.modules.pop("race_probe", None)

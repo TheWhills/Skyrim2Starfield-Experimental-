@@ -449,6 +449,12 @@ def human_face_colour(tpl_subs, ston, female, read):
     return rh.face_tone(target), {"template_ston": tpl_ston, "ston": ston, "face_target": list(target)}
 
 
+# Every converted NPC's template and face skin texture are of one ethnicity, the generic western one (2026-11-12,
+# owner: "Skyrim doesn't have ethnicities": a template's ethnic face would show through, a Nord with Asian eyes; the
+# features come from Skyrim's sliders, the colour from the skin tone and the recoloured face). Was per race
+# (npc_records.SKYRIM_ETHNICITY: Redguard african).
+FACE_ETHNICITY = "european"
+
 # a template of another face ethnicity only when none of the NPC's is left (was 6, less than the 8 steps of skin tone:
 # 2026-11-12, owner: "we don't want a Delphine mapped on the Asian preset")
 ETHNICITY_MISMATCH = 100
@@ -575,7 +581,7 @@ def target_skin(n, npcs, real):
     src = npcs.get(faces.get(n["form_id"], n["form_id"]), n)
     tints, _d = real.get("races", {}).get(src.get("race"), ({}, {}))
     rgb, _how = npc_records.skyrim_skin_rgb(src, tints)
-    return npc_records.skin_tone(rgb), npc_records.skyrim_ethnicity(real.get("race_edids", {}).get(src.get("race"), ""))
+    return npc_records.skin_tone(rgb), FACE_ETHNICITY
 
 
 def with_race_hair(src, real):
@@ -609,7 +615,7 @@ def face_colors(subs, src, real, hair_color_name):
         values[b"ECOL"] = sfplugin.zs(ecol)
     if hair_color_name:
         values[b"BCOL"] = sfplugin.zs(hair_color_name)
-    ethnicity = npc_records.skyrim_ethnicity(real.get("race_edids", {}).get(src.get("race"), ""))
+    ethnicity = FACE_ETHNICITY
     derma, dhow = npc_records.choose_dermaesthetic(real.get("derma", []), ethnicity, src.get("female", False), ston)
     placed = False
     if derma:

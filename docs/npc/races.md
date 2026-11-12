@@ -701,3 +701,13 @@ why the mod needs no clothes of its own.
   is left), and a template whose tone is 2+ steps from the NPC's gets its baked face recoloured to the NPC's body
   tone (Starfield's body tone texture at its STON; faces.json test_npc.face_recoloured). Races with tones of their
   own were already recoloured to the race tone.
+- 2026-11-12, owner: "Skyrim doesn't have ethnicities ... a Nord with Asian eyes"; "skin tone is separate from
+  ethnicity". face_fit now gives every converted NPC the generic western template and face skin texture
+  (FACE_ETHNICITY european; was per race, Redguard african). The features come from Skyrim's sliders, the skin
+  colour stays separate: STON from the Skyrim skin tint (or the race's own tones), and the baked face recoloured
+  when the template's tone is 2+ steps off.
+- 2026-11-12, owner: "don't redo steps that aren't needed". race_heads' face-part baking (~20 of its ~25 minutes for
+  every race) is now reused: per race / sex a key over its inputs (head vertices, race displacement, parts list,
+  mouth) and the baking code (headbake.py + BAKE_VERSION) in <out>\_bake_cache.json; same key and every file still
+  there -> "N face parts unchanged, reused". The NPC steps (face_fit, the Riverwood build) never rebuild races: they
+  read S2SRaceTest.esm, race_heads.json and the tone textures from race_heads' --out.
