@@ -429,6 +429,31 @@ def template_skin(subs):
     return ston, eth
 
 
+# Starfield's body skin tone textures (owner's skin tone probe 2026-11-11), slot k = STON k
+HUMAN_BODY_TONE = {False: "textures/actors/human/naked_body/nakedbodym_sk{k}_color.dds",
+                   True: "textures/actors/human/naked_body/nakedbodyf_sk{k}_color.dds"}
+TONE_GAP = 2       # template skin tone this many steps or more from the NPC's: its baked face recoloured
+
+
+def human_face_colour(tpl_subs, ston, female, read):
+    """bytes -> bytes recolouring a template's baked face to the body tone the NPC gets (the median colour of
+    Starfield's body tone texture at its STON), or None when the template's own tone is within TONE_GAP - 1 of it.
+    2026-11-12: the template is now chosen by face ethnicity first, so a dark Nord can get a pale European template
+    whose baked face (what a non-player NPC shows) would not match its body."""
+    tpl_ston = template_skin(tpl_subs)[0]
+    if ston is None or tpl_ston is None or abs(tpl_ston - ston) < TONE_GAP:
+        return None, None
+    from fo4sf import skintone
+    import race_heads as rh
+    target = skintone.median_colour(skintone.decode_dds(read(HUMAN_BODY_TONE[female].format(k=ston))))
+    return rh.face_tone(target), {"template_ston": tpl_ston, "ston": ston, "face_target": list(target)}
+
+
+# a template of another face ethnicity only when none of the NPC's is left (was 6, less than the 8 steps of skin tone:
+# 2026-11-12, owner: "we don't want a Delphine mapped on the Asian preset")
+ETHNICITY_MISMATCH = 100
+
+
 def pick_template(npc_recs, race_fid, female, edid=None, skin=None, baked=None):
     """A vanilla human NPC of the sex to copy: `edid` when given; else one with face dials and no template, preferring
     plain ones (no scripts, no affinity data: a generic NPC rather than a quest character) with a voice type (VTCK:
@@ -448,7 +473,7 @@ def pick_template(npc_recs, race_fid, female, edid=None, skin=None, baked=None):
                     and (baked is None or r[3] in baked):
                 ston, eth = template_skin(subs)
                 cost = abs((ston if ston is not None else 4) - (skin[0] if skin[0] is not None else 4)) + \
-                    (0 if eth == skin[1] else 6) + 0.5 * template_wear(subs)
+                    (0 if eth == skin[1] else ETHNICITY_MISMATCH) + 0.5 * template_wear(subs)
                 voiced.append((cost, sfplugin.edid(subs), r))
         if voiced:
             return min(voiced, key=lambda c: (c[0], c[1]))[2]
@@ -952,6 +977,7 @@ def main(argv=None):
         if otft:
             no_outfit = sfplugin.new_form_id(0, masters=len(masters))
             recs.append((b"OTFT", otft[0][1], [(b"EDID", sfplugin.zs("S2S_NoOutfit")), (b"INAM", b"")], no_outfit))
+        tone_arcs = None
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -991,7 +1017,7 @@ def main(argv=None):
                 vt = next((struct.unpack_from("<I", bytes(d), 0)[0] for sg, d in subs if sg == b"VTCK"), None)
                 row["voice_type"] = real["voices"].get(vt, f"{vt:08X}" if vt else None)
             sky_race = races.get(by_edid[row["edid"].lower()]["race"], "")
-            face_colour = None
+            face_colour = rskin = None
             if race_index is not None and sky_race in conv_races:
                 subs, swapped = on_race(subs, conv_races[sky_race], row["female"], race_index, sf_hdpt_all,
                                         lambda rec: struct.unpack("<I", bytes(dict(rec[2]).get(b"PNAM", bytes(4)))[0])
@@ -999,9 +1025,9 @@ def main(argv=None):
                 row.setdefault("race", {}).update(npc_race=f"S2S_{conv_races[sky_race]['name']}Race",
                                                   parts_swapped=swapped)
                 rgb = (((row.get("dressed") or {}).get("face_colors") or {}).get("skin") or {}).get("skyrim_rgb")
-                subs, skin, face_colour = race_skin(subs, conv_races[sky_race], row["female"], rgb)
-                if skin:
-                    row["race"]["skin"] = skin
+                subs, rskin, face_colour = race_skin(subs, conv_races[sky_race], row["female"], rgb)
+                if rskin:
+                    row["race"]["skin"] = rskin
             body_names = (list(a.body_npc) + list(BODY_NPC)[len(a.body_npc):])[:2]
             body_name = body_names[int(row["female"])]
             body_note = "template's own"
@@ -1020,6 +1046,16 @@ def main(argv=None):
                                                    f"from, to compare in game)",
                                "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load "
                                           f"order index)", "body": body_note}
+            if baked and tpl[3] in baked and rskin is None and skin is not None:
+                try:
+                    if tone_arcs is None:
+                        import skin_tone_probe
+                        tone_arcs = skin_tone_probe.TextureArchives(sf_data)
+                    face_colour, fc = human_face_colour(tpl[2], skin[0], row["female"], tone_arcs.read)
+                    if fc:
+                        row["test_npc"]["face_recoloured"] = fc
+                except (KeyError, ValueError, OSError) as e:      # no such texture / format: the template's face
+                    row["test_npc"]["face_recoloured"] = f"not recoloured: {e}"
             if baked and tpl[3] in baked:
                 row["test_npc"]["baked_face_textures"] = [os.path.basename(p) for p in
                                                           write_baked_face(baked, tpl[3], fid, sf_data, out,

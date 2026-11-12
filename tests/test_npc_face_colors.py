@@ -153,6 +153,12 @@ class TemplateSkinTests(unittest.TestCase):
         self.assertEqual(pick(True, (6, "african")), 4)
         self.assertEqual(pick(True, (1, "european")), 5)
         self.assertEqual(face_fit.pick_template(self.RECS, 0x7D34, False, None)[3], 1)   # no skin: first voiced
+        # 2026-11-12 (owner: no Delphine on an Asian preset): the face ethnicity wins over skin tone; a dark European
+        # NPC gets the pale European template, not the dark African one
+        self.assertEqual(pick(False, (8, "european")), 1)
+        self.assertEqual(pick(True, (6, "european")), 5)
+        # no template of that ethnicity: the nearest skin tone of another
+        self.assertEqual(pick(False, (8, "asian")), 2)
 
     def test_prefers_smooth_young_faces(self):
         rough = [(b"TNAM", z("Accents1")), (b"QNAM", z("x")), (b"TNAM", z("Scars")), (b"QNAM", z("y"))]

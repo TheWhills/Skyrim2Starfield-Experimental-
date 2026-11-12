@@ -693,3 +693,11 @@ why the mod needs no clothes of its own.
   NPC's FaceGen head minus Skyrim's base head WITH the race morph, so the NPC's own slider changes go into its
   Starfield dials on top of the race head. To watch: faces.json rms_after / sliders_at_limit per NPC (a face beyond
   the dials' reach is approximated), and Delphine / Ralof / Ysolda against their earlier (HumanRace) look.
+- 2026-11-12, owner: "we don't want a Delphine mapped on the Asian preset". What a face_fit template gives: its baked
+  face textures (what a non-player NPC shows), voice type, body; its shape data (phenotype blends BMPN / BMPV, morph
+  regions) is removed by default, the face shape is our fit. Templates were already chosen by face ethnicity
+  (Dermaesthetic: Nord / Imperial / Breton / Elder european, Redguard african; others european) and skin tone, but
+  ethnicity only weighed 6 against up to 8 steps of tone. Now ETHNICITY_MISMATCH 100 (another ethnicity only if none
+  is left), and a template whose tone is 2+ steps from the NPC's gets its baked face recoloured to the NPC's body
+  tone (Starfield's body tone texture at its STON; faces.json test_npc.face_recoloured). Races with tones of their
+  own were already recoloured to the race tone.

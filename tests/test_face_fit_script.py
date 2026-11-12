@@ -327,3 +327,19 @@ class RaceNpcTests(unittest.TestCase):
             # no Skyrim colour: the middle tone; a race without tones: unchanged
             self.assertEqual(S.race_skin(subs, {"tones": t}, False, None)[1]["slot"], 4)
             self.assertEqual(S.race_skin(subs, {"tones": None}, False, [1, 2, 3]), (subs, None, None))
+
+    def test_human_face_colour(self):
+        """2026-11-12: templates chosen by face ethnicity first; a template whose skin tone is TONE_GAP or more from
+        the NPC's gets its baked face recoloured to the NPC's body tone (Starfield's body tone texture at its STON)."""
+        from fo4sf import skintone
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        body = {S.HUMAN_BODY_TONE[False].format(k=k): skintone.raw_dds(skintone.solid(
+            np.full((4, 4, 4), 255, np.uint8), (220 - 20 * k, 170 - 15 * k, 140 - 12 * k))) for k in range(9)}
+        tpl = [(b"EDID", Z("t")), (b"STON", b"\x01")]
+        self.assertEqual(S.human_face_colour(tpl, 2, False, body.__getitem__), (None, None))       # 1 step: kept
+        colour, info = S.human_face_colour(tpl, 7, False, body.__getitem__)
+        self.assertEqual((info["template_ston"], info["ston"]), (1, 7))
+        face = skintone.raw_dds(skintone.solid(np.full((4, 4, 4), 255, np.uint8), (200, 160, 130)))
+        got = skintone.median_colour(skintone.decode_dds(colour(face)))
+        self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(got, (80, 65, 56))), got)
+        self.assertEqual(S.human_face_colour(tpl, None, False, body.__getitem__), (None, None))
