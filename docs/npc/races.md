@@ -573,3 +573,10 @@ why the mod needs no clothes of its own.
   the same for our race, the Orc's 9 tones appended to the vanilla groups (textures under our folder; the race
   keeps HumanRace's strings; every phenotype's face entries share one set per sex). Collides with the alien mods
   (both override the same records; the later plugin wins): test with them off. Unverified.
+- 2026-11-11, **verified in game (owner), --skin-tone-method append:** the skin tone row has 18 tones; the face
+  follows ours exactly (test tones 10 / 11 / 12: flat green / white / grey face, so the face tone texture is used as
+  it is), and tones 13-17 (relative mode) give an olive-to-deep-green Orc face. The menu counts from 1 (tone 10 = the
+  first appended, index 9). Follow-ups made: slot k now takes the k-th lightest vanilla texture (vanilla's slots are
+  not in brightness order, so 15 came out lighter than 13 / 14), and the race's test NPCs and the player patch get
+  STON = first appended index + 4 (a middle Orc tone). Known: the Star Wars alien mods append to the same groups
+  (whichever plugin loads last wins); every phenotype shares one face set per sex.

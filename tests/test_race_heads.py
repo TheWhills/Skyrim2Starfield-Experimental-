@@ -658,6 +658,11 @@ class PluginTests(unittest.TestCase):
 class SkinToneTests(unittest.TestCase):
     """2026-11-11 (owner: test the Orc's skin tone before building every race)."""
 
+    def test_with_ston(self):
+        self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"STON", b"\x02"), (b"HCOL", b"h\0")], 13)[1], (b"STON", b"\x0d"))
+        self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"HCOL", b"h\0")], 9),
+                         [(b"EDID", b"x\0"), (b"STON", b"\x09"), (b"HCOL", b"h\0")])
+
     def test_write_skin_tones(self):
         from fo4sf import skintone
         light = np.full((4, 4, 4), 200, np.uint8)
@@ -673,11 +678,11 @@ class SkinToneTests(unittest.TestCase):
             done = H.write_skin_tones(jobs, ramps, files.__getitem__, d)
             sk0 = skintone.decode_dds(open(os.path.join(d, "textures", "s2s", "races", "orc", "body",
                                                         "male_sk0_color.dds"), "rb").read())
-        # the darker vanilla slot gets the darker Orc colour
-        self.assertEqual(done["textures/s2s/races/orc/body/male_sk0_color.dds"], [41, 47, 36])
-        self.assertEqual(done["textures/s2s/races/orc/body/male_sk1_color.dds"], [89, 113, 92])
+        # slot 0 = the lightest vanilla texture with the lightest Orc colour (tones run light to dark)
+        self.assertEqual(done["textures/s2s/races/orc/body/male_sk0_color.dds"], [89, 113, 92])
+        self.assertEqual(done["textures/s2s/races/orc/body/male_sk1_color.dds"], [41, 47, 36])
         self.assertEqual(done["textures/s2s/races/orc/face/female_sk0_color.dds"], [94, 138, 124])
-        self.assertEqual(sk0[0, 0, :3].tolist(), [41, 47, 36])
+        self.assertEqual(sk0[0, 0, :3].tolist(), [89, 113, 92])
         self.assertFalse(os.path.exists(os.path.join(d, "_skin_tone_staging")))
 
     def test_relative_and_test_modes(self):
@@ -695,7 +700,7 @@ class SkinToneTests(unittest.TestCase):
                 return [skintone.decode_dds(open(os.path.join(d, "t", "body", f"male_sk{k}_color.dds"), "rb").read())
                         for k in (0, 1)]
         rel = run(human=human)
-        self.assertEqual(rel[0][0, 0, :3].tolist(), [200, 200, 200])      # race == human colour: vanilla kept
+        self.assertEqual(rel[0][0, 0, :3].tolist(), [200, 200, 200])      # race == human colour: lightest kept
         self.assertGreater(int(rel[1][0, 0, 1]), int(rel[1][0, 0, 0]))   # Orc vs dark human: greener
         test = run(human=human, test=True)
         self.assertEqual([t[0, 0, :3].tolist() for t in test], [[0, 255, 0], [255, 255, 255]])

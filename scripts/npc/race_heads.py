@@ -956,6 +956,18 @@ def player_patch(player_subs, race_fid, heads, part_types, part_copies=None):
     return subs
 
 
+RACE_TONE_DEFAULT = 4          # an NPC / the player of a race with appended tones: its 5th tone (the middle Orc green)
+
+
+def with_ston(subs, value):
+    """An NPC's subrecords with its skin tone index (STON, one byte) set: replaced where it has one, else put before
+    its hair colour (HCOL) or at the end."""
+    if any(s == b"STON" for s, _d in subs):
+        return [(s, bytes([value]) if s == b"STON" else d) for s, d in subs]
+    at = next((i for i, (s, _d) in enumerate(subs) if s == b"HCOL"), len(subs))
+    return list(subs[:at]) + [(b"STON", bytes([value]))] + list(subs[at:])
+
+
 def with_races(flst_subs, human_fid, race_fids):
     """A form list (FLST) with race_fids appended after its last HumanRace-or-other 4-byte entry, in the entries'
     own signature, or None if it does not hold HumanRace. 2026-11-10 (owner: showlooksmenu as S2S_OrcRace crashes
@@ -1245,6 +1257,9 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                                       race_heads[race][n["sex"] == "female"], part_types)
             if race in part_copies:
                 subs = swap_parts(subs, part_copies[race].get(n["sex"] == "female", {}))
+            tones = rep["new_races"][race].get("skin_tones") or {}
+            if tones.get("method") == "append" and tones.get("first_index"):
+                subs = with_ston(subs, tones["first_index"][0] + RACE_TONE_DEFAULT)
             recs.append((b"NPC_", src[1], subs, fid))
             rep["npcs"].append(dict(n, edid=edid, form_id=f"{fid:08X}", race_record=f"S2S_{NAMES[race]}Race",
                                     blends=0 if race in race_heads else n["blends"],
@@ -1306,8 +1321,8 @@ def skin_tone_ramps(sky_esm, races):
 
 
 def write_skin_tones(jobs, ramps, read, out, texconv="", human=None, test=False):
-    """The race's skin tone textures (skintone.race_tone_groups jobs) under out. Slots are ranked by the vanilla
-    textures' brightness (lightest first) and get that rank's colour of ramps[female]. human ({female: ramp}, the
+    """The race's skin tone textures (skintone.race_tone_groups / appended_tones jobs) under out. Slot k is made from
+    the k-th lightest of the group's vanilla textures with the k-th colour of ramps[female] (lightest first). human ({female: ramp}, the
     default mode since 2026-11-11, owner: the absolute colours came out dark): each vanilla texture times
     race / human colour of its rank (skintone.relative); without it, the texture recoloured to the race colour
     (skintone.recolour). test: slots sk0 / sk1 / sk2 solid green / white / grey (skintone.TEST_COLOURS), to see what
@@ -1323,18 +1338,22 @@ def write_skin_tones(jobs, ramps, read, out, texconv="", human=None, test=False)
         by_group.setdefault((kind, female), []).append((new, src, slot))
     for (kind, female), items in sorted(by_group.items()):
         imgs = {slot: skintone.decode_dds(read(src)) for _n, src, slot in items}
-        ranks = skintone.slot_ranks(imgs)
+        # slot k gets the k-th lightest vanilla texture and the k-th ramp colour, so the race's tones run light to
+        # dark in the menu (2026-11-11, owner's screenshots: vanilla's own slots are not in brightness order)
+        by_rank = {i: k for k, i in skintone.slot_ranks(imgs).items()}
         ramp = ramps[female]
         for new, src, slot in items:
-            colour = tuple(ramp[min(ranks[slot], len(ramp) - 1)])
+            rank = min(slot, len(by_rank) - 1)
+            base = imgs[by_rank[rank]]
+            colour = tuple(ramp[min(rank, len(ramp) - 1)])
             if test and slot < len(skintone.TEST_COLOURS):
                 colour = skintone.TEST_COLOURS[slot]
-                rgba = skintone.solid(imgs[slot], colour)
+                rgba = skintone.solid(base, colour)
             elif human:
                 h = human[female]
-                rgba = skintone.relative(imgs[slot], colour, h[min(ranks[slot], len(h) - 1)])
+                rgba = skintone.relative(base, colour, h[min(rank, len(h) - 1)])
             else:
-                rgba = skintone.recolour(imgs[slot], colour)
+                rgba = skintone.recolour(base, colour)
             path = os.path.join(out, *new.split("/"))
             os.makedirs(os.path.dirname(path), exist_ok=True)
             if kind != "face" and tc:
@@ -1612,6 +1631,9 @@ def main(argv=None):
             race_fid = (int(r["form_id"], 16) & 0xFFFFFF) | 0x01000000
             pheads = {f: (h & 0xFFFFFF) | 0x01000000 for f, h in heads_.items()}
             psubs = player_patch(player[1], race_fid, pheads, part_types_, pcopies)
+            tones = r.get("skin_tones") or {}
+            if tones.get("method") == "append" and tones.get("first_index"):
+                psubs = with_ston(psubs, tones["first_index"][0] + RACE_TONE_DEFAULT)
             name = f"S2S{NAMES[race]}Player.esm"
             with open(os.path.join(a.out, name), "wb") as fh:
                 fh.write(sfplugin.build([(b"NPC_", player[0], psubs, 0x7)], info,
