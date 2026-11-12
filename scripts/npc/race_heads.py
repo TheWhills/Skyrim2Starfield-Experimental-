@@ -1063,8 +1063,10 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
 
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
                  race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False, mouth_type=None,
-                 skin_tones=None):
-    """skin_tones: {race: ramps} (skin_tone_ramps): those new races get skin tone groups of their own
+                 skin_tones=None, skin_tone_method="append"):
+    """skin_tone_method: "append" (default, 2026-11-11): the race's tones appended to the vanilla tone groups
+    (skintone.appended_tones; the race keeps HumanRace's strings); "groups": tone groups of the race's own
+    (renamed copies; their faces drew nothing in game). skin_tones: {race: ramps} (skin_tone_ramps): those new races get skin tone groups of their own
     (skintone.race_tone_groups; their textures' jobs in the report's "_skin_tone_jobs", written by main).
     made: {female: {"folder", "keys_by_race": {race: [keys]}, "keys_by_region": {region: [keys]}}}.
     race_models: {race: {female: MODL}}: new races whose shape is baked into a head model of their own (2026-11-10):
@@ -1075,6 +1077,7 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
     info = sfplugin.header_info(sf_esm)
     recs_all = sfplugin.records(sf_esm, [b"HDPT", b"MRPH", b"RACE", b"NPC_", b"OTFT", b"FLST", *CONDITION_TYPES])
     avmd = sfplugin.records(sf_esm, [b"AVMD"]) if skin_tones else []
+    appended = []
     if strings:                       # our plugins are not localized: copies carry text, not string ids
         recs_all = [(t, h, delocalize(sb, strings), fid) for t, h, sb, fid in recs_all]
     by_fid = {fid: (t, h, s) for t, h, s, fid in recs_all}
@@ -1177,12 +1180,20 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                 rrep["height_factor"] = {"male": round(fac[0], 4), "female": round(fac[1], 4)}
             if skin_tones and race in skin_tones:
                 from fo4sf import skintone
-                trecs, tnames, jobs, trep = skintone.race_tone_groups(
-                    avmd, f"S2S_{NAMES[race]}_", f"textures/s2s/races/{NAMES[race].lower()}", ids.take)
+                root = f"textures/s2s/races/{NAMES[race].lower()}"
+                if skin_tone_method == "groups":
+                    trecs, tnames, jobs, trep = skintone.race_tone_groups(avmd, f"S2S_{NAMES[race]}_", root, ids.take)
+                    before = rsubs
+                    rsubs = skintone.with_tone_names(rsubs, tnames)
+                    trep["race_strings_renamed"] = sum(a != b for a, b in zip(before, rsubs))
+                else:
+                    if appended:
+                        raise SystemExit("--skin-tone-method append: one race per build for now (the tones are "
+                                         "appended to the vanilla groups)")
+                    trecs, jobs, trep = skintone.appended_tones(avmd, root)
+                    appended.append(race)
                 recs += trecs
-                before = rsubs
-                rsubs = skintone.with_tone_names(rsubs, tnames)
-                trep["race_strings_renamed"] = sum(a != b for a, b in zip(before, rsubs))
+                trep["method"] = skin_tone_method
                 trep["textures"] = len(jobs)
                 rrep["skin_tones"] = trep
                 rep.setdefault("_skin_tone_jobs", {})[race] = jobs
@@ -1429,6 +1440,10 @@ def main(argv=None):
     ap.add_argument("--skin-tone-mode", choices=("relative", "absolute"), default="relative",
                     help="relative (default): each vanilla tone texture times race / human Skyrim preset colour of "
                          "the same rank; absolute: the texture recoloured to the race colour (came out dark)")
+    ap.add_argument("--skin-tone-method", choices=("append", "groups"), default="append",
+                    help="append (default): the race's tones added after the vanilla ones in the vanilla tone groups "
+                         "(how SW Aliens.esm adds its green skins); groups: tone groups of the race's own (faces drew "
+                         "nothing in game)")
     ap.add_argument("--skin-tone-test", action="store_true",
                     help="tone slots sk0 / sk1 / sk2 solid green / white / grey (body, hands and face), to see how "
                          "the game shows a tone texture's colour")
@@ -1558,7 +1573,7 @@ def main(argv=None):
         print("  WARNING: no Starfield string tables found: copied names stay string ids (garbled in game)")
     recs, info, prep = build_plugin(os.path.join(sf_data, "Starfield.esm"), made, a.race_head, a.keep_hair,
                                     wanted, models, strings, rparts, heights, mouths, ids, a.mouth_on_head,
-                                    a.mouth_type, ramps)
+                                    a.mouth_type, ramps, a.skin_tone_method)
     ids.save()
     tone_jobs = prep.pop("_skin_tone_jobs", {})
     if tone_jobs:
@@ -1568,9 +1583,14 @@ def main(argv=None):
             report.setdefault("skin_tone_textures", {})[race] = write_skin_tones(
                 jobs, ramps[race], arcs.read, a.out, a.texconv, human_ramps, a.skin_tone_test)
             t = prep["new_races"][race]["skin_tones"]
-            print(f"  {race} skin tones: {t['groups']} groups, {t['textures']} textures, race strings renamed "
-                  f"{t['race_strings_renamed']}; face complex group: {(t['complex'] or {}).get('pointed_at_copies')} "
-                  f"links pointed at the copies")
+            if t["method"] == "groups":
+                print(f"  {race} skin tones: {t['groups']} groups, {t['textures']} textures, race strings renamed "
+                      f"{t['race_strings_renamed']}; face complex group: "
+                      f"{(t['complex'] or {}).get('pointed_at_copies')} links pointed at the copies")
+            else:
+                print(f"  {race} skin tones: appended to {t['groups']} vanilla tone groups as tones "
+                      f"{t['first_index']} + 0..8 (menu numbers start at 1: pick tone {t['first_index'][0] + 1} or "
+                      f"higher), {t['textures']} textures")
     report["formids"] = {"ledger": os.path.join(a.out, LEDGER), "new": ids.new}
     report.update(prep)
     if a.baked_face_textures:

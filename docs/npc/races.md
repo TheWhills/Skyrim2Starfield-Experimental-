@@ -564,3 +564,12 @@ why the mod needs no clothes of its own.
   (measured medians: male face sk0 (240,192,153) -> (109,124,83), sk4 (182,144,104) -> (141,147,107); absolute gave
   (89,113,92) / (80,92,82)). --skin-tone-test: slots sk0 / sk1 / sk2 solid green / white / grey on body, hands and
   face, to see in game what the face does with a tone texture's colour (white shows the extra factor directly).
+- 2026-11-11, **in game (owner), --skin-tone-test with our own groups:** the face stayed the same dark brown-black on
+  every tone, the test colours (green / white / grey) included: the face drew none of our face textures (the
+  race_heads report shows the face complex group copied right: 22 entries, LNAM phenotype key -> VNAM our simple
+  group's EditorID). look_probe with the Star Wars alien mods (whose green faces work): they add no adult race; they
+  override HumanRace's own tone groups (body, hands, every face phenotype) with 18 entries instead of vanilla's 9,
+  the new ones named like vanilla's (male_eu_md1_sk9_color ...). race_heads --skin-tone-method append (new default):
+  the same for our race, the Orc's 9 tones appended to the vanilla groups (textures under our folder; the race
+  keeps HumanRace's strings; every phenotype's face entries share one set per sex). Collides with the alien mods
+  (both override the same records; the later plugin wins): test with them off. Unverified.

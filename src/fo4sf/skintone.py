@@ -8,6 +8,7 @@ the race's colour (a 9-step ramp through Skyrim's presets, lightest first like s
     ramp = tone_ramp([(89, 113, 92), (80, 92, 82), (83, 96, 77), (63, 72, 57), (41, 47, 36)])
     rgba = recolour(decode_dds(vanilla_bytes), ramp[k])
 """
+import re
 import struct
 from typing import List, Sequence, Tuple
 
@@ -228,3 +229,45 @@ def solid(rgba, colour):
     out[..., :3] = colour
     out[..., 3] = rgba[..., 3]
     return out
+
+
+def appended_tones(avmd, tex_root, count=9):
+    """The alien mod's way (SW Aliens.esm, owner's look_probe 2026-11-11: it overrides HumanRace's own tone groups,
+    18 entries instead of vanilla's 9, the new ones at the vanilla naming sk9..sk17; its green faces work, while our
+    renamed copies of the groups drew no face at all): overrides of the vanilla adult tone groups (body, hands, every
+    face phenotype; not the complex group, not children's) with `count` more entries each, after the vanilla ones.
+    New entry n (index = vanilla count + k): LNAM the group's first LNAM with its sk number replaced (e.g.
+    male_eu_md1_sk9_color), VNAM our texture of race slot k under tex_root (faces: one set per sex, made from
+    <sex>_default's textures), NNAM as the first entry's; ITMC raised. The race keeps HumanRace's tone strings.
+    Returns (override records, jobs {texture: (vanilla texture, kind, female, k)}, report {"groups", "first_index"})."""
+    groups, default_face = [], {}
+    for t, h, subs, fid in avmd:
+        k = tone_group_kind(_text(dict(subs).get(b"EDID", b"")))
+        if k is None or k[0] == "complex":
+            continue
+        groups.append((k, h, list(subs), fid))
+        if k[0] == "face" and (_text(dict(subs).get(b"EDID", b"")) or "").lower().endswith("_default"):
+            default_face[k[1]] = [_text(d) for s, d in subs if s == b"VNAM"]
+    recs, jobs, firsts = [], {}, set()
+    for (kind, female), h, subs, fid in groups:
+        entries = [i for i, (s, _d) in enumerate(subs) if s == b"LNAM"]
+        if not entries:
+            continue
+        lnam0 = _text(subs[entries[0]][1]) or ""
+        nnam0 = next((d for s, d in subs[entries[0]:] if s == b"NNAM"), struct.pack("<I", 0))
+        vanilla = [_text(d) for s, d in subs if s == b"VNAM"]
+        n0 = len(entries)
+        firsts.add(n0)
+        sex = "female" if female else "male"
+        new = []
+        for k in range(count):
+            path = f"{tex_root}/{kind}/{sex}_sk{k}_color.dds"
+            srcs = default_face.get(female, vanilla) if kind == "face" else vanilla
+            jobs.setdefault(path, (srcs[min(k, len(srcs) - 1)], kind, female, k))
+            name = re.sub(r"sk\d+", f"sk{n0 + k}", lnam0, count=1) if re.search(r"sk\d+", lnam0) else f"{lnam0}_{n0 + k}"
+            new += [(b"LNAM", _zs(name)), (b"VNAM", _zs(path)), (b"NNAM", nnam0)]
+        end = max(i for i, (s, _d) in enumerate(subs) if s in (b"LNAM", b"VNAM", b"NNAM")) + 1
+        out = subs[:end] + new + subs[end:]
+        out = [(s, struct.pack("<I", n0 + count) if s == b"ITMC" else d) for s, d in out]
+        recs.append((b"AVMD", h, out, fid))
+    return recs, jobs, {"groups": len(recs), "first_index": sorted(firsts)}

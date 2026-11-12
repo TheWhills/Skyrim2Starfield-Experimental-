@@ -141,6 +141,30 @@ class GroupTests(unittest.TestCase):
             "S2S_Orc_Male_Naked_Body_Skin_Tones", "Male_Hands", None, "S2S_Orc_Female_Hands", "S2S_Orc_FaceSkinTones",
             "Female_Hands"])                                   # Male_Hands not copied here; FULL untouched
 
+    def test_appended_tones(self):
+        """2026-11-11: SW Aliens.esm's green skins are entries appended to the vanilla groups (sk9..), not groups of
+        their own; our renamed groups drew no face."""
+        van = vanilla_groups()
+        recs, jobs, rep = S.appended_tones(van, "textures/s2s/races/orc", count=2)
+        self.assertEqual(rep["groups"], 4)                      # body, hands, 2 faces; not child / complex / eyes
+        by = {r[3]: r for r in recs}
+        self.assertNotIn(0xC70A2, by)
+        body = by[0x163F4][2]
+        self.assertEqual(body[:2], van[0][2][:2])                # same record (FormID), EDID kept
+        self.assertEqual(dict(body)[b"ITMC"], I(5))
+        lnams = [S._text(d) for s, d in body if s == b"LNAM"]
+        self.assertEqual(lnams[3:], ["m_sk3", "m_sk4"])          # first LNAM's sk number moved on
+        vn = [S._text(d) for s, d in body if s == b"VNAM"]
+        self.assertEqual(vn[:3], [f"textures/body/m_sk{k}.dds" for k in range(3)])
+        self.assertEqual(vn[3:], ["textures/s2s/races/orc/body/male_sk0_color.dds",
+                                  "textures/s2s/races/orc/body/male_sk1_color.dds"])
+        face = by[0x1F90D][2]
+        self.assertEqual([S._text(d) for s, d in face if s == b"LNAM"][2:],
+                         ["male_eu_md1_sk2_color", "male_eu_md1_sk3_color"])
+        self.assertEqual(len([1 for s, _d in face if s == b"NNAM"]), 4)
+        self.assertTrue(jobs["textures/s2s/races/orc/face/male_sk1_color.dds"][0].endswith("male_default_sk1_color.dds"))
+        self.assertEqual(rep["first_index"], [1, 2, 3])
+
     def test_slot_colours_follow_vanilla_brightness(self):
         imgs = {k: np.full((2, 2, 4), v, np.uint8) for k, v in ((0, 90), (1, 200), (2, 40))}
         ramp = [(9, 9, 9), (5, 5, 5), (1, 1, 1)]
