@@ -126,6 +126,46 @@ class FaceFitScriptTests(unittest.TestCase):
              S.bsa.SkyrimArchives) = saved
 
 
+class GenericTemplateTests(unittest.TestCase):
+    def test_one_template_per_sex(self):
+        """2026-11-12 (owner: Faendal on another template than the others): every NPC of a sex copies the generic
+        template when the game has it; --template-by-tone the old pick (the plain SettlerM01 here)."""
+        sliders = facefit.load_regions(json.dumps(T.REGIONS))
+        sf_head = T.make_head(T.head_points())
+        sky_base = T.head_points(3000, seed=5) * 70.0
+        sky_head = T.make_head(sky_base / 70.0)
+        faces = {k: facefit.deform(sky_head, sliders, v) * 70.0 for k, v in TRUTH.items()}
+        ids = {"0A2C94": "HousecarlWhiterun", "013BAB": "Ysolda"}
+        saved = (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head, S.bsa.SkyrimArchives,
+                 S.GENERIC_TEMPLATE)
+        S.hkx_to_af.read_any = lambda p, _s=None: (("face:" + ids[p[-10:-4].upper()]).encode()
+                                                   if "facegeom" in p.lower() else b"base")
+        S.hkx_to_af.vanilla_file = lambda p, d: (json.dumps(T.REGIONS).encode(), p)
+        S.skyrim_head = lambda d, model=False: sky_base.copy() if d == b"base" else faces[d.decode().split(":")[1]]
+        S.starfield_head = lambda d, f, h=None, r=None: (sf_head, {"face_bones": 6})
+        S.bsa.SkyrimArchives = lambda d: None
+        S.GENERIC_TEMPLATE = ("QuestGuyM", "NoSuchFemale")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                sky, sf, out = (os.path.join(tmp, x) for x in ("sky", "sf", "out"))
+                os.makedirs(sky)
+                os.makedirs(os.path.join(sf, "Data"))
+                skyrim_esm(os.path.join(sky, "Skyrim.esm"))
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+
+                def run(*extra):
+                    with mock.patch("builtins.print"):
+                        S.main(["--skyrim-data", sky, "--starfield", sf, "--out", out, "--npc", "HousecarlWhiterun",
+                                "--test-plugin", "--refit"] + list(extra))
+                    with open(os.path.join(out, "faces.json"), encoding="utf-8") as fh:
+                        return json.load(fh)["npcs"][0]["test_npc"]["template"]
+                self.assertEqual(run(), "QuestGuyM")
+                self.assertEqual(run("--template-by-tone"), "SettlerM01")
+        finally:
+            (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head, S.bsa.SkyrimArchives,
+             S.GENERIC_TEMPLATE) = saved
+
+
 class FitCacheTests(unittest.TestCase):
     def test_unchanged_npcs_reused(self):
         """2026-11-12 (owner: an NPC that changed is the only one rebuilt): a second run reuses every fit (no head

@@ -530,6 +530,11 @@ STRIP_GEAR = (b"DOFT", b"CNTO", b"COCT")
 # used: ChargenPresetFemale04_Swap (Ralof, Orgnar, Embry) and ChargenPresetFemale04 (Ysolda). --body-npc none keeps
 # each template's own body.
 BODY_NPC = ("ChargenPresetFemale04_Swap", "ChargenPresetFemale04")
+# The template every NPC of a sex copies (2026-11-12, owner: "always the generic western-looking one"; Faendal came out
+# on SG02ChandaBanda, Nazeem on MQ101_MinerLaserDrillMale04, Sigrid / Hilde on CF_KlaudiaSwist: picked by skin tone).
+# Skin tone is separate: STON and the face colour follow the NPC (race_skin on a converted race, human_face_colour
+# otherwise). --template-by-tone: the old pick by tone; --template-npc names others.
+GENERIC_TEMPLATE = BODY_NPC
 BODY_SIGS = (b"MWGT", b"MRSV")
 
 
@@ -974,6 +979,9 @@ def main(argv=None):
                          f"default {BODY_NPC[0]}, {BODY_NPC[1]}; 'none' keeps each template's)")
     ap.add_argument("--template-npc", action="append", default=[],
                     help="Starfield NPC EditorID the test NPCs copy (male, then female); default: a plain one")
+    ap.add_argument("--template-by-tone", action="store_true",
+                    help="pick each NPC's template by skin tone (before 2026-11-12) instead of the generic one per sex "
+                         f"({', '.join(GENERIC_TEMPLATE)})")
     ap.add_argument("--hair", action="store_true",
                     help="with --test-plugin: the test NPCs wear their Skyrim hair and beard (needs --texconv)")
     ap.add_argument("--texconv", help="texconv.exe, for --hair")
@@ -1276,9 +1284,14 @@ def main(argv=None):
                                 child_race, conv_child, race_index, recs, masters, test_subs)
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
+            if want is None and not a.template_by_tone:
+                want = GENERIC_TEMPLATE[int(row["female"])]
             skin = target_skin(by_edid[row["edid"].lower()], npcs, real) if real is not None else None
             tpl = (pick_template(npc_recs, human, row["female"], want, skin=skin, baked=baked) if baked else None) \
                 or pick_template(npc_recs, human, row["female"], want, skin=skin)
+            if tpl is None and want is not None and not a.template_npc:      # the generic one is not in this game
+                tpl = (pick_template(npc_recs, human, row["female"], None, skin=skin, baked=baked) if baked
+                       else None) or pick_template(npc_recs, human, row["female"], None, skin=skin)
             if tpl is None:
                 row["test_npc"] = "no vanilla template NPC of this sex"
                 continue

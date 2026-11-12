@@ -240,3 +240,13 @@ blends and dials recovered, rms 4x below dials alone (tests/test_facefit.py Blen
 applying BMPN keys from a vanilla head's morph.dat on a converted race head (our morph.dat holds every vanilla key);
 which ethnicity codes the keys use (the report's shape_blends lists the offered regions; an empty offer means none
 matched); the gain on real faces (faces.json rms_after and blends per NPC).
+
+One template per sex (2026-11-12, owner: Faendal "reverted to human looking and even looks like he's using a
+different template than others"). faces.json (verified): templates were still picked by skin tone: men on
+ChargenPresetFemale04_Swap, but Faendal SG02ChandaBanda, Nazeem MQ101_MinerLaserDrillMale04, Saadia
+ChargenPresetMale05_Swap, Sven / Lucan ChargenPresetMale03; women CF_KlaudiaSwist or ChargenPresetFemale04. And that
+run's race plugin path held only the Orc race, so every human and elf NPC was on HumanRace (Faendal's "human" look).
+Now every NPC of a sex copies GENERIC_TEMPLATE (ChargenPresetFemale04_Swap / ChargenPresetFemale04, the bodies the
+outfits are fitted on); skin tone stays separate (race_skin on a converted race, human_face_colour's recolour
+otherwise). --template-by-tone for the old pick; if the game lacks the generic one the old pick is used.
+Unverified: the recolour of a light template face to a dark tone (Redguards, Dunmer) in game.
