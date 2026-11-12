@@ -659,3 +659,7 @@ why the mod needs no clothes of its own.
   9-17 (menu 10-18), Altmer 18-26 (19-27), Bosmer 27-35 (28-36), Dunmer 36-44 (37-45). `--skin-tones all` = those
   four; Nord, Imperial, Breton, Redguard and Elder share Skyrim's human tones (Starfield's own fit), Dremora has none
   in the owner's skin tone dump. --races stays at most four races (its morph keys: 84 vanilla + 9 per race <= 128).
+- 2026-11-12, owner asked whether every race's profiles get added: in S2SRaceTest.esm yes (each race's 10 preset
+  copies after the vanilla profiles), but the player patch's CharGenPresets override, which replaces it, listed
+  only the player race's copies and the vanilla ones. Fixed (player_chargen_list): the player race first, then the
+  vanilla profiles, then every other race's.

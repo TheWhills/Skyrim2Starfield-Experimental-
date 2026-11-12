@@ -970,6 +970,18 @@ def chargen_preset_list(recs_all, presets, first=False):
     return (b"FLST", h, list(sb[:at]) + add + list(sb[at:]), fid)
 
 
+def player_chargen_list(recs_all, new_races, race):
+    """(record) the player patch's CharGenPresets: the player race's profiles first, then the vanilla ones, then every
+    other race's (new_races {race: report with "_chargen_presets"}). This override replaces S2SRaceTest.esm's, so
+    it must list the other races too (2026-11-12, building every race: only the Orc's would have been listed)."""
+    pre = (new_races.get(race) or {}).get("_chargen_presets")
+    cp = chargen_preset_list(recs_all, pre, first=True) if pre else None
+    others = [x for k, rr in new_races.items() if k != race for x in rr.get("_chargen_presets") or []]
+    if cp is not None and others:
+        cp = chargen_preset_list([cp], others)
+    return cp
+
+
 def chargen_option_lists(recs_all, part_copies):
     """(records): an override of each of Starfield's chargen head part lists (CHARGEN_PART_LISTS) with every race copy
     of its entries added after the entries (2026-11-11: the race's records hand the player our Orc mouth, yet the looks
@@ -1863,7 +1875,7 @@ def main(argv=None):
             # the race's profiles first (Body Type 2 took a human woman with the copies after the vanilla ones);
             # our forms keep 01xxxxxx (S2SRaceTest.esm is master 1 here too)
             pre = r.get("_chargen_presets")
-            cp = chargen_preset_list(recs_all_, pre, first=True) if pre else None
+            cp = player_chargen_list(recs_all_, report.get("new_races") or {}, race)
             precs = [cp] if cp is not None else []
             name = f"S2S{NAMES[race]}Player.esm"
             with open(os.path.join(a.out, name), "wb") as fh:
