@@ -623,3 +623,6 @@ why the mod needs no clothes of its own.
   tone (now: STON = first appended + 2 / 4 / 6 / 3 / 5 in turn); profiles 1-40 (human) also show the Orc tusks,
   since the player patch keeps the player on the Orc race and the menu keeps the race (expected; a human player
   needs S2SOrcPlayer.esm off).
+- 2026-11-12, **owner:** an Orc test NPC without a baked face: green body, human-coloured face (its STON is an Orc
+  tone): an NPC's runtime face does not follow the skin tone groups as the player's does. Back to the recoloured
+  baked face by default (matched to the body tone; --race-npc-runtime-faces for none).
