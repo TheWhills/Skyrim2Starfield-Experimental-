@@ -676,3 +676,14 @@ why the mod needs no clothes of its own.
   with the elf head and pointed ears (85, 89); Bosmer women brown (93, 95), Bosmer men (98, 99) elf-shaped but close
   to a pale human tone; Dunmer blue-grey (103 dark, 105, 109 pale grey). Profile blocks as seen: Altmer 80-89,
   Bosmer 90-99, Dunmer 100-109, Orc 110-119 (each block female / male in turn).
+- 2026-11-12, owner: the Orc profiles in the normal order: the player patch no longer overrides CharGenPresets
+  (S2SRaceTest.esm's list stands: the vanilla profiles, then each race's block).
+- 2026-11-12, owner: "when we convert NPCs it always matches the race and skin". face_fit --races-plugin already put
+  an NPC of a converted race on that race (head, face parts, mouth); its skin was still a human tone (STON 0-8 from
+  its Skyrim tint) and its baked face a human template's (Faendal: the Bosmer head, human skin). Now, for a race
+  with tones of its own (race_heads.json: skin_tones / skin_tone_textures; face_fit.race_tones): STON = the race's
+  first tone + the slot whose Skyrim colour is nearest the NPC's Skyrim skin colour by luminance (no colour: the
+  middle slot), the human Dermaesthetic layer dropped, the baked face recoloured to that slot's body tone texture
+  (race_heads.face_tone, as the race's own NPCs and presets). faces.json: per NPC race.skin {slot, ston, menu_tone}.
+  Point --races-plugin at race_heads' --out (S2SRaceTest.esm with race_heads.json and the tone textures beside it).
+  Human races (Nord, Imperial, Breton, Redguard, Elder) keep the human tone from the Skyrim tint.

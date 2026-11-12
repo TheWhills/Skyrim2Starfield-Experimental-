@@ -764,20 +764,6 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(out[2][0][0], b"EDID")
         self.assertEqual(out[2][-1][0], b"XXXX")
 
-    def test_player_chargen_list(self):
-        """2026-11-12, every race: the player patch's list (which replaces S2SRaceTest.esm's) keeps the other races'
-        profiles after the vanilla ones; the player race's first."""
-        h = bytes(24)
-        recs = [(b"FLST", h, [(b"EDID", Z("CharGenPresets")), (b"LNAM", I(0x2E7C8E)), (b"LNAM", I(0x5055F))],
-                 0x3F551)]
-        nr = {"HighElfRace": {"_chargen_presets": [0x1000901, 0x1000900]},
-              "OrcRace": {"_chargen_presets": [0x1000890, 0x100088A]},
-              "NordRace": {"_chargen_presets": [0x1000911]}}
-        out = H.player_chargen_list(recs, nr, "OrcRace")
-        self.assertEqual([_u(d) for s, d in out[2] if s == b"LNAM"],
-                         [0x1000890, 0x100088A, 0x2E7C8E, 0x5055F, 0x1000901, 0x1000900, 0x1000911])
-        self.assertIsNone(H.player_chargen_list(recs, {}, "OrcRace"))
-
     def test_interleave_sexes(self):
         """female, male, ... then the rest, like vanilla's CharGenPresets."""
         self.assertEqual(H.interleave_sexes([1, 2, 3, 4], [10, 11]), [10, 1, 11, 2, 3, 4])

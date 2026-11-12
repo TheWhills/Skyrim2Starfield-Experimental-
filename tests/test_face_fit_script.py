@@ -291,3 +291,39 @@ class RaceNpcTests(unittest.TestCase):
         self.assertEqual([struct.unpack("<I", d_)[0] for _s, d_ in out],
                          [0x0300080F, 0x03000810, 0x03000811, 0x03000813, 0x540])
         self.assertEqual(n, 3)
+        self.assertIsNone(c["tones"])                      # no skin tones in that race_heads.json
+
+    def test_race_skin(self):
+        """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a
+        human skin tone). An NPC of a race with tones of its own: STON = the race's first tone + the slot nearest its
+        Skyrim skin, no Dermaesthetic layer, its baked face recoloured to that slot's body tone texture."""
+        from fo4sf import skintone
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        with tempfile.TemporaryDirectory() as d:
+            tex, rep_tex = {}, {}
+            for k in range(9):
+                rel = f"textures/s2s/races/bosmer/body/male_sk{k}_color.dds"
+                path = os.path.join(d, *rel.split("/"))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "wb") as fh:
+                    fh.write(skintone.raw_dds(skintone.solid(np.full((4, 4, 4), 255, np.uint8), (200 - 20 * k, 150 - 15 * k, 100 - 10 * k))))
+                rep_tex[rel] = [200 - 20 * k, 150 - 15 * k, 100 - 10 * k]
+            rep = {"new_races": {"WoodElfRace": {"skin_tones": {"method": "append", "first_index": [27]}}},
+                   "skin_tone_textures": {"WoodElfRace": rep_tex}}
+            t = S.race_tones(rep, "WoodElfRace", d)
+            self.assertEqual(t["first"], 27)
+            self.assertEqual(t["ramp"][False][3], [140, 105, 70])
+            self.assertIsNone(S.race_tones(rep, "NordRace", d))
+            subs = [(b"EDID", Z("x")), (b"TNAM", Z("Dermaesthetic")), (b"QNAM", Z("European_Male_md1_Sk3")),
+                    (b"STON", b"\x02"), (b"HCOL", Z("Brown"))]
+            out, info, colour = S.race_skin(subs, {"tones": t}, False, [142, 104, 71])
+            self.assertEqual(info["slot"], 3)
+            self.assertEqual(dict(out)[b"STON"], bytes([30]))
+            self.assertNotIn(b"TNAM", dict(out))
+            self.assertNotIn(b"QNAM", dict(out))
+            face = skintone.raw_dds(skintone.solid(np.full((4, 4, 4), 255, np.uint8), (180, 140, 120)))
+            got = skintone.median_colour(skintone.decode_dds(colour(face)))
+            self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(got, (140, 105, 70))), got)
+            # no Skyrim colour: the middle tone; a race without tones: unchanged
+            self.assertEqual(S.race_skin(subs, {"tones": t}, False, None)[1]["slot"], 4)
+            self.assertEqual(S.race_skin(subs, {"tones": None}, False, [1, 2, 3]), (subs, None, None))

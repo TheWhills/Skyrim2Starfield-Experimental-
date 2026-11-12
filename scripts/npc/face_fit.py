@@ -134,12 +134,62 @@ def converted_races(races_plugin):
             mm = re.match(re.escape(pre) + r"(.+)_([MF])$", e)
             if mm and not mm.group(1).startswith("Mouth"):
                 parts[mm.group(2) == "F"][mm.group(1)] = fid
-        out[race] = {"name": name, "form_id": int(r["form_id"], 16) & 0xFFFFFF, "parts": parts,
+        tones = race_tones(rep, race, folder)
+        out[race] = {"name": name, "form_id": int(r["form_id"], 16) & 0xFFFFFF, "parts": parts, "tones": tones,
                      "head": {f: hd[f"{pre}{SEX}_Head"] for f, SEX in ((False, "male"), (True, "female"))
                               if f"{pre}{SEX}_Head" in hd},
                      "mouth": {f: hd[f"{pre}Mouth_{c}"] for f, c in ((False, "M"), (True, "F"))
                                if f"{pre}Mouth_{c}" in hd}}
     return out
+
+
+def race_tones(rep, race, folder):
+    """{"first": the race's first appended tone (STON), "ramp": {female: [sRGB per slot k]}, "textures": [written
+    tone textures], "folder"} from race_heads.json (rep), or None for a race without tones of its own (the human
+    races keep Starfield's tones). 2026-11-12, owner: a converted NPC always matches its race and skin."""
+    t = ((rep.get("new_races") or {}).get(race) or {}).get("skin_tones") or {}
+    tex = (rep.get("skin_tone_textures") or {}).get(race) or {}
+    if t.get("method") != "append" or not t.get("first_index") or not tex:
+        return None
+    ramp = {}
+    for path, rgb in tex.items():
+        m = re.search(r"/body/(male|female)_sk(\d+)_color\.dds$", path)
+        if m:
+            ramp.setdefault(m.group(1) == "female", {})[int(m.group(2))] = list(rgb)[:3]
+    return {"first": int(t["first_index"][0]), "ramp": {f: [v[k] for k in sorted(v)] for f, v in ramp.items()},
+            "textures": list(tex), "folder": folder}
+
+
+RACE_TONE_DEFAULT = 4          # race_heads.RACE_TONE_DEFAULT: the middle of the race's 9 tones
+
+
+def race_tone_rank(ramp, rgb):
+    """The race slot (0 = lightest) whose Skyrim colour is nearest the NPC's Skyrim skin colour by luminance, or
+    RACE_TONE_DEFAULT without one."""
+    if not ramp or not rgb or rgb[0] is None:
+        return RACE_TONE_DEFAULT
+    y = lambda c: 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]           # noqa: E731
+    return min(range(len(ramp)), key=lambda k: abs(y(ramp[k]) - y(rgb)))
+
+
+def race_skin(subs, conv, female, rgb):
+    """(subs, info, colour or None): an NPC of a converted race with tones of its own on the race's tone nearest its
+    Skyrim skin (STON = the race's first tone + slot), without the human Dermaesthetic face skin layer; colour:
+    bytes -> bytes recolouring its baked face to that tone's body texture (race_heads.face_tone, as the race's own
+    NPCs and presets). (subs, None, None) for a race without tones."""
+    t = conv.get("tones")
+    if not t or female not in t["ramp"]:
+        return subs, None, None
+    import race_heads as rh
+    k = race_tone_rank(t["ramp"][female], rgb)
+    subs = rh.without_layer(rh.with_ston(subs, t["first"] + k), rh.SKIN_LAYER)
+    try:
+        target = rh.face_targets(t["textures"], t["folder"], rank=k).get(female)
+    except OSError:                   # the tone textures are not beside race_heads.json (point at race_heads' --out)
+        target = None
+    info = {"slot": k, "ston": t["first"] + k, "menu_tone": t["first"] + k + 1, "skyrim_rgb": rgb,
+            "face_target": list(target) if target else None}
+    return subs, info, (rh.face_tone(target) if target else None)
 
 
 def on_race(subs, conv, female, index, sf_hdpt, part_type):
@@ -941,12 +991,17 @@ def main(argv=None):
                 vt = next((struct.unpack_from("<I", bytes(d), 0)[0] for sg, d in subs if sg == b"VTCK"), None)
                 row["voice_type"] = real["voices"].get(vt, f"{vt:08X}" if vt else None)
             sky_race = races.get(by_edid[row["edid"].lower()]["race"], "")
+            face_colour = None
             if race_index is not None and sky_race in conv_races:
                 subs, swapped = on_race(subs, conv_races[sky_race], row["female"], race_index, sf_hdpt_all,
                                         lambda rec: struct.unpack("<I", bytes(dict(rec[2]).get(b"PNAM", bytes(4)))[0])
                                         if rec is not None else None)
                 row.setdefault("race", {}).update(npc_race=f"S2S_{conv_races[sky_race]['name']}Race",
                                                   parts_swapped=swapped)
+                rgb = (((row.get("dressed") or {}).get("face_colors") or {}).get("skin") or {}).get("skyrim_rgb")
+                subs, skin, face_colour = race_skin(subs, conv_races[sky_race], row["female"], rgb)
+                if skin:
+                    row["race"]["skin"] = skin
             body_names = (list(a.body_npc) + list(BODY_NPC)[len(a.body_npc):])[:2]
             body_name = body_names[int(row["female"])]
             body_note = "template's own"
@@ -967,7 +1022,8 @@ def main(argv=None):
                                           f"order index)", "body": body_note}
             if baked and tpl[3] in baked:
                 row["test_npc"]["baked_face_textures"] = [os.path.basename(p) for p in
-                                                          write_baked_face(baked, tpl[3], fid, sf_data, out)]
+                                                          write_baked_face(baked, tpl[3], fid, sf_data, out,
+                                                                           colour=face_colour)]
             if a.control_npcs:
                 # the same NPC with the template's own face data (dials, presets) kept: only hair, colours, outfit
                 # and name are ours (2026-11-06: our Saadia's face stays light where her template's is dark)
