@@ -785,6 +785,32 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(out[2][0][0], b"EDID")
         self.assertEqual(out[2][-1][0], b"XXXX")
 
+    def test_child_race_subs(self):
+        """2026-11-12: S2S_<Race>ChildRace = Starfield's ChildRace, our EditorID, armor race ChildRace before SRAC."""
+        child = [(b"EDID", Z("ChildRace")), (b"FULL", Z("Child")), (b"FSTT", Z("FaceSkinTones_Child")),
+                 (b"SRAC", I(0x347D)), (b"PTOP", I(0)), (b"MNAM", b""), (b"HEAD", I(0x243A73))]
+        out = H.child_race_subs(child, 0x2AABCD, "Nord")
+        self.assertEqual(out[0], (b"EDID", Z("S2S_NordChildRace")))
+        sigs = [x for x, _d in out]
+        self.assertEqual(sigs.index(b"RNAM") + 1, sigs.index(b"SRAC"))
+        self.assertEqual(dict(out)[b"RNAM"], I(0x2AABCD))
+        self.assertEqual(len(out), len(child) + 1)
+
+    def test_merged_race_lists(self):
+        """A list holding HumanRace and ChildRace gets our adult and child races in one override; a child-only list
+        (the child head parts' valid races) gets the child races."""
+        h = bytes(24)
+        recs = [(b"FLST", h, [(b"EDID", Z("HumanRaceORChildRace")), (b"LNAM", I(0x347D)), (b"LNAM", I(0x2AABCD))],
+                 0x10),
+                (b"FLST", h, [(b"EDID", Z("HeadPartsChildRace")), (b"LNAM", I(0x2AABCD))], 0x1550F),
+                (b"FLST", h, [(b"EDID", Z("HeadPartsHumanRace")), (b"LNAM", I(0x347D))], 0x24A)]
+        adult = H.head_part_race_lists(recs, 0x347D, [0x1000800])
+        out = H.merged_race_lists(recs, adult, 0x2AABCD, [0x1000900])
+        got = {f: [_u(d) for x, d in sb if x == b"LNAM"] for _h, sb, f in out}
+        self.assertEqual(got, {0x10: [0x347D, 0x2AABCD, 0x1000800, 0x1000900],
+                               0x24A: [0x347D, 0x1000800], 0x1550F: [0x2AABCD, 0x1000900]})
+        self.assertEqual(len(out), 3)
+
     def test_interleave_sexes(self):
         """female, male, ... then the rest, like vanilla's CharGenPresets."""
         self.assertEqual(H.interleave_sexes([1, 2, 3, 4], [10, 11]), [10, 1, 11, 2, 3, 4])

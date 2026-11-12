@@ -1266,6 +1266,41 @@ def head_part_race_lists(recs_all, human_fid, race_fids):
     return out
 
 
+# Skyrim's child races per adult race (owner's child_probe 2026-11-12: NordRaceChild, ImperialRaceChild,
+# BretonRaceChild, RedguardRaceChild share one child head; no other race has children)
+CHILD_RACES = {"NordRace": "NordRaceChild", "ImperialRace": "ImperialRaceChild", "BretonRace": "BretonRaceChild",
+               "RedguardRace": "RedguardRaceChild"}
+SF_CHILD_RACE = "ChildRace"
+
+
+def child_race_subs(child_subs, child_fid, name):
+    """S2S_<name>ChildRace: Starfield's ChildRace (its child skeleton, height, child skin tones and head parts) with
+    our EditorID and ChildRace as its armor race (RNAM, before SRAC, as ours over HumanRace), so the vanilla child
+    outfits, whose addons name ChildRace, fit it."""
+    subs = [x for x in sfplugin.edit(list(child_subs), {b"EDID": sfplugin.zs(f"S2S_{name}ChildRace")})
+            if x[0] != b"RNAM"]
+    at = next((i for i, (sg, _d) in enumerate(subs) if sg == b"SRAC"), len(subs))
+    return subs[:at] + [(b"RNAM", struct.pack("<I", child_fid))] + subs[at:]
+
+
+def merged_race_lists(recs_all, lists, base_fid, fids):
+    """lists ([(header, subs, FormID)] of form list overrides) with fids also added to every form list holding
+    base_fid, one override per list (a list holding both HumanRace and ChildRace gets both our adult and child
+    races)."""
+    by = {f: (h, sb) for h, sb, f in lists}
+    order = [f for _h, _s, f in lists]
+    for t, h, sb, f in recs_all:
+        if t != b"FLST":
+            continue
+        cur = by.get(f, (h, sb))
+        new = with_races(cur[1], base_fid, fids)
+        if new is not None:
+            if f not in by:
+                order.append(f)
+            by[f] = (cur[0], new)
+    return [(by[f][0], by[f][1], f) for f in order]
+
+
 def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), race_models=None, strings=None,
                  race_parts=None, heights=None, mouths=None, ids=None, mouth_on_head=False, mouth_type=None,
                  skin_tones=None, skin_tone_method="append"):
@@ -1483,8 +1518,23 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
             t_, h_, rsubs, rf = recs[k]
             recs[k] = (t_, h_, add_presets(rsubs, per), rf)
             rep["new_races"][race]["presets"] = {SEXES[f]: [f"{x:08X}" for x in v] for f, v in per.items()}
+        # each converted human race's child race (2026-11-12, owner: "let's work on the children")
+        child = next((fid for t, _h, sb, fid in recs_all if t == b"RACE" and sfplugin.edid(sb) == SF_CHILD_RACE), None)
+        child_fids = {}
+        if child is not None:
+            for race in new_races:
+                if race in CHILD_RACES and race in race_fids:
+                    e = f"S2S_{NAMES[race]}ChildRace"
+                    fid = ids.take(e)
+                    recs.append((b"RACE", by_fid[child][1], child_race_subs(by_fid[child][2], child, NAMES[race]),
+                                 fid))
+                    child_fids[CHILD_RACES[race]] = fid
+                    rep.setdefault("child_races", {})[CHILD_RACES[race]] = {"edid": e, "form_id": f"{fid:08X}",
+                                                                            "adult": race}
         if race_fids:
             lists = head_part_race_lists(recs_all, human, list(race_fids.values()))
+            if child_fids:
+                lists = merged_race_lists(recs_all, lists, child, list(child_fids.values()))
             for h_, s_, f_ in lists:
                 recs.append((b"FLST", h_, s_, f_))
             rep["head_part_race_lists"] = [f"{sfplugin.edid(s_)} {f_:08X}" for _h, s_, f_ in lists]

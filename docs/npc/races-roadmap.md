@@ -192,3 +192,25 @@ for adults fit children too once their addons name the child races. Skyrim's Nor
 000511CB); Dorthe is NordRaceChild with her own head part 0001C559. scripts/npc/child_probe.py (read-only) next:
 whether a Skyrim child head is its own mesh, Dorthe's / Frodnar's FaceGen heads, and how Starfield's child NPCs are
 built (dials, blends, baked faces) and how its child heads compare with the adult heads.
+
+Children, owner's child_probe 2026-11-12 (verified on the owner's game files):
+- Skyrim: every child race (Nord / Imperial / Breton / Redguard) shares one child head, MaleHeadChild
+  (ChildHead.nif, 1,211 vertices, both sexes; the adult heads are 898 / 996), with ChildMouth and ChildEyes; Dorthe's
+  and Frodnar's FaceGen heads have that topology (1,211). Child hairs per race.
+- Starfield: 51 ChildRace NPCs (28 female, 23 male), none with face dials, morph blends or pre-built face textures;
+  29 templated. Its child heads (Child_Head_Boy / _Girl) have the adult head's topology (15,370 vertices).
+- So a child's face cannot go into dials: it is baked into a head of its own.
+
+Built 2026-11-12 (synthetic tests; not yet run on the game):
+- race_heads: S2S_<Race>ChildRace for each converted race with Skyrim children (CHILD_RACES: Nord, Imperial, Breton,
+  Redguard): a copy of ChildRace with our EditorID and ChildRace as armor race (vanilla child outfits); every form
+  list holding ChildRace (HeadPartsChildRace, the human-or-child condition lists) also holds ours, merged with the
+  adult races into one override per list. race_heads.json: child_races.
+- face_fit (scripts/npc/child_faces.py): an NPC of a Skyrim child race is no longer skipped: its FaceGen head minus
+  Skyrim's child head, aligned onto Starfield's child head of its sex and carried over by the surface
+  correspondence (as the races), symmetrized, is baked into S2S\Children\<EditorID>Head.nif (+ _facebones twin,
+  geometries); its test NPC is a vanilla child NPC (no template, voiced, plain first) with that head as its Face
+  part (an HDPT of ours copied from Human_Child_Head_Boy / _Girl), on our child race (--races-plugin) else ChildRace,
+  STON from its Skyrim skin on the child scale (0-2). Outfit, hair and voice stay the template's for now.
+- Open: Skyrim children's clothes onto the child races (gear_fit output is already adult-sized; the addons need the
+  child races), child hairs, child voices, GetIsRace ChildRace conditions.

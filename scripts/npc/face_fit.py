@@ -192,6 +192,89 @@ def race_skin(subs, conv, female, rgb):
     return subs, info, (rh.face_tone(target) if target else None)
 
 
+def child_face(n, sky_race, sky, sf_data, out, a, cache):
+    """{"child": {...}, "dials": {}} for a Skyrim child NPC: its face baked into a head of its own on Starfield's
+    child head (child_faces), the files written under out. cache: {female: child_faces.child_setup}."""
+    import child_faces
+    female = n["female"]
+    if female not in cache:
+        hd = {sfplugin.edid(sb).lower(): sb for _t, _h, sb, _f in
+              sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
+        van = hd.get(child_faces.SF_CHILD_HEAD_PART[female].lower())
+        if van is None:
+            raise ValueError(f"no {child_faces.SF_CHILD_HEAD_PART[female]} in Starfield.esm")
+        modl = bytes(dict(van).get(b"MODL", b"")).split(b"\0")[0].decode("latin-1")
+        cache[female] = child_faces.child_setup(sky, sf_data, female, sys.modules[__name__], modl, a.transfer)
+    ctx = cache[female]
+    fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
+                     model=ctx["model_space"])
+    if fg is None:
+        raise ValueError("FaceGen head has no head shape")
+    disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
+    files = child_faces.child_head_files(ctx, disp, n["edid"], lambda r: hkx_to_af.vanilla_file(r, sf_data)[0])
+    for rel, data in files.items():
+        path = os.path.join(out, *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(data)
+    mag = np.linalg.norm(disp, axis=1)
+    return {"child": {"skyrim_race": sky_race, "head_model": child_faces.child_model_path(n["edid"]),
+                      "files": sorted(files), "max_move_m": round(float(mag.max()), 4),
+                      "rms_move_m": round(float(np.sqrt(np.mean(mag ** 2))), 5), "setup": ctx["report"]},
+            "dials": {}}
+
+
+def converted_child_races(races_plugin):
+    """{Skyrim child race EditorID: local FormID of ours} from race_heads.json beside the race plugin."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(races_plugin)), "race_heads.json"),
+                  encoding="utf-8") as fh:
+            rep = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return {k: int(v["form_id"], 16) & 0xFFFFFF for k, v in (rep.get("child_races") or {}).items()}
+
+
+def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_race, conv_child, race_index, recs,
+                    masters, test_subs):
+    """The child's test NPC: a vanilla child NPC (child_faces.pick_child_template) with our head part (its baked
+    head) as Face, on our child race when race_heads built it (else ChildRace), its STON from its Skyrim skin on
+    the child scale; its outfit, hair and voice the template's (children's clothes / hair not converted yet)."""
+    import child_faces
+    female = row["female"]
+    tpl = child_faces.pick_child_template(npc_recs, child_race, female)
+    if tpl is None:
+        row["test_npc"] = "no vanilla child NPC of this sex"
+        return
+    van = next((r for r in sf_hdpt_recs if sfplugin.edid(r[2]).lower() ==
+                child_faces.SF_CHILD_HEAD_PART[female].lower()), None)
+    if van is None:
+        row["test_npc"] = f"no {child_faces.SF_CHILD_HEAD_PART[female]} in Starfield.esm"
+        return
+    part_types = {r[3]: hdpt_type(r) for r in sf_hdpt_recs}
+    hfid = sfplugin.new_form_id(len(recs), masters=len(masters))
+    recs.append((b"HDPT", van[1], child_faces.child_head_part(van[2], row["edid"], row["child"]["head_model"]), hfid))
+    full = f"{row['edid']} (S2S)"
+    ston = None
+    if real is not None:
+        full = npc_records.npc_name(n, real["strings"])
+        ston = child_faces.child_tone(target_skin(n, npcs, real)[0])
+    sky_race = races.get(n["race"], "")
+    race_fid = None
+    if race_index is not None and sky_race in conv_child:
+        race_fid = (race_index << 24) | conv_child[sky_race]
+    subs = child_faces.child_npc_subs(tpl[2], row["edid"], full, hfid, part_types, race_fid, ston)
+    subs = without_templates(sfplugin.edit(subs, {}, drop=STRIP))
+    fid = sfplugin.new_form_id(len(recs), masters=len(masters))
+    test_subs[row["edid"]] = len(recs)
+    recs.append((b"NPC_", tpl[1], subs, fid))
+    row["name"] = full
+    row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]), "template_form_id": f"{tpl[3]:08X}",
+                       "head_part": f"{hfid:08X}", "race": f"S2S child race {race_fid:08X}" if race_fid else "ChildRace",
+                       "ston": ston,
+                       "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load order index)"}
+
+
 def hdpt_type(rec):
     """The head part type (PNAM) of an HDPT record (type, header, subs, FormID), or None. (2026-11-12, owner's first
     run with every race: the inline version indexed the bytes, not the unpacked tuple: TypeError.)"""
@@ -900,15 +983,19 @@ def main(argv=None):
         report["sexes"]["female" if female else "male"]["race_dials"] = {
             "count": len(rd), "also_slider_ids": len(rd & ids), "slider_ids_not_dials": len(ids - rd)}
 
+    child_ctx = {}
     for n in chosen:
-        sliders, head, base, al, model_space, corr = setup[n["female"]]
+        sliders, head, base, al, model_space, corr = setup.get(n["female"], (None,) * 6)
         row = {"edid": n["edid"], "form_id": f"{n['form_id']:08X}", "female": n["female"]}
         if "child" in races.get(n["race"], "").lower():
-            # 2026-11-10: Skyrim's children (ChildRace: their own head, body and skeleton) would come out as adults
-            # on the adult template; they wait for the child path (races-roadmap.md, children)
-            row["error"] = f"child ({races.get(n['race'])}): not converted yet (Starfield's child race pending)"
+            # 2026-11-12: Skyrim's children (NordRaceChild ...) get their own face baked into a head of their own on
+            # Starfield's child head (child_faces); no dials (Starfield's children have none)
+            try:
+                row.update(child_face(n, races.get(n["race"]), sky, sf_data, out, a, child_ctx))
+            except (SystemExit, ValueError, KeyError, OSError, nifmod.NifError) as e:
+                row["error"] = f"child ({races.get(n['race'])}): {e}"
             report["npcs"].append(row)
-            print({k: v for k, v in row.items()})
+            print({k: v for k, v in row.items() if k != "dials"})
             continue
         try:
             fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
@@ -993,8 +1080,18 @@ def main(argv=None):
             no_outfit = sfplugin.new_form_id(0, masters=len(masters))
             recs.append((b"OTFT", otft[0][1], [(b"EDID", sfplugin.zs("S2S_NoOutfit")), (b"INAM", b"")], no_outfit))
         tone_arcs = None
+        child_race = next((fid for _t, _h, s_, fid in sfplugin.records(sf_esm, [b"RACE"])
+                           if sfplugin.edid(s_) == "ChildRace"), None)
+        conv_child = converted_child_races(a.races_plugin) if a.races_plugin else {}
+        sf_hdpt_recs = None
         for row in report["npcs"]:
             if "dials" not in row:
+                continue
+            if row.get("child"):
+                if sf_hdpt_recs is None:
+                    sf_hdpt_recs = sfplugin.records(sf_esm, [b"HDPT"])
+                write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
+                                child_race, conv_child, race_index, recs, masters, test_subs)
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
             skin = target_skin(by_edid[row["edid"].lower()], npcs, real) if real is not None else None
