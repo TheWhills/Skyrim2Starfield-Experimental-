@@ -336,3 +336,14 @@ if the build is still at -1.5707963). `scripts/terrain/set_planet_latlon.py` sho
 worldspace entry (latitude / longitude) and moves it in place (planet plugin in the staging folder, the installed copy
 when it is the same file, overlays_params.json), no rebuild: sea all round needs the all-ocean biome map (installed
 Nirn: --land-px 0). Unresolved: whether the planet template (Jemison) has an axial tilt that also moves the noon sun.
+
+Day length, tilt and the sun (2026-11-12, owner: "make the planet a 24 hour planet", NPC schedules run on 24 h).
+Owner's dump of Earth / Mars / Luna / Jemison PNDT: ENAM (72 bytes) = six f64 (apoapsis, periapsis, ?, eccentricity,
+inclination rad, semi-major axis km), then f32 axial tilt rad (Earth 23.0 deg, Mars 25.0, Jemison 5.0, Luna 7.0),
+f32 rotation in turns per Earth day (Earth 1.0, Mars 0.96, Jemison 0.48, Luna 0 = tidally locked), f32 (Luna pi,
+others 0), f32 0, u32 1, u32 0. Supported (tilts, inclinations, axes match the real planets); the in-game day length
+read from it unverified. Nirn, a Jemison copy, therefore had a ~50-hour day and 5 deg tilt. set_planet_latlon.py
+--day-hours / --axial-tilt-deg patch them in place (kept in overlays_params.json "planet"); make_planet.py writes
+them (default now 24 h; tilt the template's unless given). Sun path = latitude (CNAM) + tilt + time of year: noon
+sun height ~ 90 deg - |latitude| (+- tilt with the season); at the pole it circles the horizon. Unverified: whether
+NPC package hours follow the planet's local day.

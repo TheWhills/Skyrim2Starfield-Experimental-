@@ -54,7 +54,8 @@ def zs(text: str) -> bytes:
     return text.encode("latin-1") + b"\0"
 
 
-def planet_subrecords(subs, name, edid, radius_km, slot, worlds, biomes, orbit_scale, remap=None):
+def planet_subrecords(subs, name, edid, radius_km, slot, worlds, biomes, orbit_scale, remap=None, day_hours=None,
+                      tilt_deg=None):
     """The cloned subrecords with the changes listed in the module docstring. worlds: [(lat, lon, raw FormID)];
     biomes: {FormID: coverage %} (PPBD entries of other biomes are dropped)."""
     out, seen = [], {}
@@ -74,9 +75,13 @@ def planet_subrecords(subs, name, edid, radius_km, slot, worlds, biomes, orbit_s
             system, _parent, _slot = struct.unpack("<III", d)
             d = struct.pack("<III", system, 0, slot)
         elif s == b"ENAM" and len(d) == 72:
-            v = list(struct.unpack("<9d", d))
-            v = [x * orbit_scale if x > 1e6 else x for x in v]
-            d = struct.pack("<9d", *v)
+            v = [x * orbit_scale if x > 1e6 else x for x in struct.unpack("<6d", d[:48])]
+            tail = bytearray(d[48:])
+            if tilt_deg is not None:                  # ENAM f32 at 48: axial tilt (rad); at 52: turns per Earth day
+                struct.pack_into("<f", tail, 0, math.radians(tilt_deg))
+            if day_hours:
+                struct.pack_into("<f", tail, 4, 24.0 / day_hours)
+            d = struct.pack("<6d", *v) + bytes(tail)
         elif s == b"PPBD":
             fid = struct.unpack_from("<I", d)[0]
             if fid not in biomes:
@@ -251,6 +256,10 @@ def main(argv=None):
                     help="no Nirn planet / surface / orbit locations, no landing or map marker")
     ap.add_argument("--marker-name", default="Skyrim", help="the map marker's name")
     ap.add_argument("--slot", type=int, default=30, help="planet slot in the star system (unused by vanilla)")
+    ap.add_argument("--day-hours", type=float, default=None,
+                    help="hours per day (default: overlays_params.json's, else 24; the template Jemison's is ~50)")
+    ap.add_argument("--axial-tilt-deg", type=float, default=None,
+                    help="axial tilt in degrees (default: overlays_params.json's, else the template's)")
     ap.add_argument("--orbit-scale", type=float, default=1.3, help="orbit distances x this (away from the template)")
     a = ap.parse_args(argv)
     prm = json.load(open(os.path.join(a.staging, "overlays_params.json"), encoding="utf-8"))
@@ -278,7 +287,10 @@ def main(argv=None):
     only = int(a.only_biome, 16) if a.only_biome else None
     new = planet_subrecords(subs, a.name, f"{a.name}PlanetData", a.radius_km, a.slot, worlds,
                             {only: 100.0} if only else {OCEAN: 95.0, LAND: 5.0}, a.orbit_scale,
-                            remap=None if only else {OCEAN: ocean_fid})
+                            remap=None if only else {OCEAN: ocean_fid},
+                            day_hours=a.day_hours if a.day_hours else (prm.get("planet") or {}).get("day_hours", 24.0),
+                            tilt_deg=a.axial_tilt_deg if a.axial_tilt_deg is not None
+                            else (prm.get("planet") or {}).get("axial_tilt_deg"))
     after, n_extra, top_fid, notes = b"", 0, 0, []
     if not a.no_locations:
         loc, surf, orb = own | 0x802, own | 0x803, own | 0x804

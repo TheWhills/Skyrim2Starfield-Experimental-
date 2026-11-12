@@ -146,5 +146,26 @@ class MakePlanet(unittest.TestCase):
                 self.assertEqual(struct.unpack_from("<II", hedr, 4), (10, 0x812))
 
 
+class DayLengthTests(unittest.TestCase):
+    def test_day_hours_and_tilt_written(self):
+        """2026-11-12: ENAM's f64 orbit distances scaled as before; the f32 tilt / rotation set when given."""
+        import math
+        enam = struct.pack("<6d", 2.2e8, 2.1e8, 2.3e8, 0.06, 0.09, 2.2e8) + struct.pack("<4f", 0.087266, 0.48, 0, 0) \
+            + struct.pack("<II", 1, 0)
+        subs = [(b"EDID", b"JemisonPlanetData\0"), (b"ENAM", enam), (b"PPBD", struct.pack("<If", mp.OCEAN, 60.0) + bytes(28))]
+        out = dict(mp.planet_subrecords(subs, "Nirn", "NirnPlanetData", 200, 30, [], {mp.OCEAN: 100.0}, 1.3,
+                                        day_hours=24.0, tilt_deg=23.4))
+        e = out[b"ENAM"]
+        self.assertEqual(len(e), 72)
+        self.assertAlmostEqual(struct.unpack_from("<d", e, 0)[0], 2.2e8 * 1.3)
+        self.assertAlmostEqual(struct.unpack_from("<d", e, 24)[0], 0.06)                    # eccentricity kept
+        tilt, spin = struct.unpack_from("<ff", e, 48)
+        self.assertAlmostEqual(spin, 1.0, places=6)
+        self.assertAlmostEqual(math.degrees(tilt), 23.4, places=4)
+        self.assertEqual(e[56:], enam[56:])
+        keep = dict(mp.planet_subrecords(subs, "Nirn", "NirnPlanetData", 200, 30, [], {mp.OCEAN: 100.0}, 1.0))
+        self.assertEqual(keep[b"ENAM"][48:], enam[48:])                                    # nothing given: template's
+
+
 if __name__ == "__main__":
     unittest.main()
