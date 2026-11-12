@@ -626,3 +626,6 @@ why the mod needs no clothes of its own.
 - 2026-11-12, **owner:** an Orc test NPC without a baked face: green body, human-coloured face (its STON is an Orc
   tone): an NPC's runtime face does not follow the skin tone groups as the player's does. Back to the recoloured
   baked face by default (matched to the body tone; --race-npc-runtime-faces for none).
+- 2026-11-12, **owner:** the Orc test NPCs' faces now green like their bodies (recoloured baked faces). The Orc
+  profiles get their Orc tone (hands green) but keep a human face: a preset's Dermaesthetic texture layer carries its
+  human face skin (as Nazeem's did, docs/ai/decisions.md 2026-11-06). The race's preset copies now drop that layer.

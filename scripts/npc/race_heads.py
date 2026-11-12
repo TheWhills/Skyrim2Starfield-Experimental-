@@ -1017,12 +1017,37 @@ def with_ston(subs, value):
 PRESET_TONE_SPREAD = (2, 4, 6, 3, 5)      # the race's tones its presets start on, in turn (lighter to darker mix)
 
 
+LAYER_PARTS = (b"QNAM", b"VNAM", b"NNAM", b"INTV")     # an NPC texture layer: TNAM name, then these
+SKIN_LAYER = "Dermaesthetic"     # the layer holding a face's human skin texture (docs/ai/decisions.md 2026-11-06)
+
+
+def without_layer(subs, name):
+    """NPC subrecords with texture layer `name` (TNAM and its QNAM / VNAM / NNAM / INTV) dropped."""
+    out, skip = [], False
+    for s, d in subs:
+        if s == b"TNAM":
+            skip = fo4land_zstring(d) == name
+        elif s not in LAYER_PARTS:
+            skip = False
+        if not skip:
+            out.append((s, d))
+    return out
+
+
+def fo4land_zstring(d):
+    d = bytes(d)
+    return d.split(b"\0", 1)[0].decode("latin-1")
+
+
 def preset_tones(recs, first):
     """The race's preset copies (NPC_ records) with a skin tone of the race each (STON = first appended index +
-    PRESET_TONE_SPREAD in turn; 2026-11-12, owner: the Orc profiles came with their human preset's skin tone)."""
+    PRESET_TONE_SPREAD in turn; 2026-11-12, owner: the Orc profiles came with their human preset's skin tone) and
+    without their Dermaesthetic layer (owner, next build: tone set, hands green, face still the preset's human skin
+    texture)."""
     out, i = [], 0
     for t, h, s, f in recs:
         if t == b"NPC_":
+            s = without_layer(s, SKIN_LAYER)
             s = with_ston(s, first + PRESET_TONE_SPREAD[i % len(PRESET_TONE_SPREAD)])
             i += 1
         out.append((t, h, s, f))

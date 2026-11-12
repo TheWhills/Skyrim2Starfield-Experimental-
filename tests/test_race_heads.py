@@ -719,6 +719,15 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(sorted(p), [0x20, 0x100080F, 0x1000810])
         self.assertEqual(_u(dict(out)[b"RNAM"]), 0x1000811)
 
+    def test_without_layer(self):
+        subs = [(b"EDID", Z("p")), (b"TNAM", Z("Dermaesthetic")), (b"QNAM", Z("European_Male_md1_Sk3")),
+                (b"VNAM", Z("x.dds")), (b"NNAM", b"\0" * 4), (b"INTV", b"\0" * 4), (b"TNAM", Z("Freckles")),
+                (b"QNAM", Z("F1")), (b"STON", b"\x02")]
+        out = H.without_layer(subs, "Dermaesthetic")
+        self.assertEqual([x for x, _d in out], [b"EDID", b"TNAM", b"QNAM", b"STON"])
+        self.assertEqual(out[1][1], Z("Freckles"))
+        self.assertEqual(H.without_layer(subs, "Nope"), subs)
+
     def test_preset_tones(self):
         recs = [(b"NPC_", b"", [(b"EDID", Z("a")), (b"STON", b"\x02")], 1), (b"HDPT", b"", [], 2),
                 (b"NPC_", b"", [(b"EDID", Z("b")), (b"HCOL", b"h\0")], 3)]
