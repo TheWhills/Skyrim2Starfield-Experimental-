@@ -642,3 +642,7 @@ why the mod needs no clothes of its own.
   takes a vanilla entry (the list's first female, or the profile's neighbour in the list). Now the race's copies
   are interleaved female / male the same way, and the player patch (S2SOrcPlayer.esm) overrides CharGenPresets with
   them first (Orc profiles 1-10, human ones after). Unverified.
+- 2026-11-12, **owner:** with the copies first, profiles 1-10 are Orcs, but each one's other body type is still a
+  human preset (e.g. a dark-skinned human woman at tone 8 with our tusks). So the switch does not take the list's
+  first female nor its neighbour. preset_probe now dumps CharGenPresets in full (sex, race, fields naming other
+  NPCs) and every record naming its entries, to find what pairs a profile with its other body type.

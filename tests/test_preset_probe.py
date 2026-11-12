@@ -37,9 +37,13 @@ class ProbeTests(unittest.TestCase):
                            (b"RPRF", I(0x501))], 0x347D),
                 (b"FLST", [(b"EDID", Z("ChargenPresetList")), (b"LNAM", I(0x501)), (b"LNAM", I(0x77))], 0x900),
                 (b"FLST", [(b"EDID", Z("Unrelated")), (b"LNAM", I(0x77))], 0x901),
+                (b"FLST", [(b"EDID", Z("CharGenPresets")), (b"LNAM", I(0x501)), (b"LNAM", I(0x500))], 0x3F551),
+                (b"FLST", [(b"EDID", Z("OtherBodyType")), (b"LNAM", I(0x500)), (b"LNAM", I(0x501))], 0x902),
                 (b"HDPT", [(b"EDID", Z("HumanFemaleHead")), (b"MODL", Z("FemaleHead.nif")), (b"PNAM", I(1))], 0x12),
-                (b"NPC_", [(b"EDID", Z("ChargenPresetMale01")), (b"PNAM", I(0x12))], 0x500),
-                (b"NPC_", [(b"EDID", Z("ChargenPresetFemale01")), (b"PNAM", I(0x12)), (b"TNAM", Z("Dermaesthetic")),
+                (b"NPC_", [(b"EDID", Z("ChargenPresetMale01")), (b"ACBS", I(0) + bytes(16)), (b"PNAM", I(0x12)),
+                           (b"XLNK", I(0x501))], 0x500),
+                (b"NPC_", [(b"EDID", Z("ChargenPresetFemale01")), (b"ACBS", I(1) + bytes(16)), (b"PNAM", I(0x12)),
+                           (b"TNAM", Z("Dermaesthetic")),
                            (b"QNAM", Z("European_Female_md1_Sk3")), (b"STON", b"\x03")], 0x501)])
             plug = os.path.join(d, "Race.esm")
             esm(plug, [(b"RACE", [(b"EDID", Z("S2S_OrcRace")), (b"FNAM", b""), (b"RPRF", I(0x501))], 0x1000),
@@ -54,6 +58,13 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn(("Unrelated", "LNAM"), refs)
         self.assertEqual(rep["Race.esm"]["Player"]["face"], [["00000012", "HumanFemaleHead", "FemaleHead.nif"]])
         self.assertIn("ChargenPresetList", so.getvalue())
+        cl = rep["chargen_list"]
+        self.assertEqual([(e["edid"], e["sex"]) for e in cl],
+                         [("ChargenPresetFemale01", "female"), ("ChargenPresetMale01", "male")])
+        self.assertEqual(cl[1]["links"], [["XLNK", "00000501", "ChargenPresetFemale01"]])
+        other = next(r for r in rep["chargen_referrers"] if r["edid"] == "OtherBodyType")
+        self.assertEqual(other["order"], [2, 1])
+        self.assertNotIn("CharGenPresets", [r["edid"] for r in rep["chargen_referrers"]])
         self.assertEqual(rep["humanrace_preset_faces"]["ChargenPresetFemale01"],
                          [["TNAM", "Dermaesthetic"], ["QNAM", "European_Female_md1_Sk3"], ["STON", "3"]])
 

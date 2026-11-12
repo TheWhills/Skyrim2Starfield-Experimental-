@@ -8,6 +8,10 @@ human head with our tusks, though the race's own presets RPRM / RPRF are copies 
    That shows the other lists the menu may read (a form list of chargen presets, a quest, ...).
 3. Per --plugin: each RACE's presets with each preset NPC's Face head part (HDPT type 1) and its model, and the
    Player record's (00000007) head parts.
+4. Starfield's CharGenPresets list in full (2026-11-12, owner: with our race's copies first, profiles 1-10 are Orcs
+   but each one's other body type is still a human preset): each entry's EditorID, sex (ACBS bit 0), race, and
+   every field naming another NPC (a link to the other body type?); every record naming any of its entries
+   (another list in the same order?).
 Writes preset_probe.json and prints a summary.
 """
 import argparse
@@ -94,6 +98,25 @@ def face_fields(subs):
     return out
 
 
+def npc_summary(fid, npcs):
+    """{form_id, edid, sex, race, links: [[sig, FormID, EditorID]]} of an NPC: links are its fields (any 4-byte
+    offset) holding another NPC's FormID."""
+    s = npcs.get(fid)
+    if s is None:
+        return {"form_id": f"{fid:08X}", "edid": None, "sex": None, "race": None, "links": []}
+    acbs = next((bytes(d) for x, d in s if x == b"ACBS"), b"")
+    links = []
+    for x, d in s:
+        d = bytes(d)
+        for i in range(0, len(d) - 3, 4):
+            t = struct.unpack("<I", d[i:i + 4])[0]
+            if t != fid and t in npcs:
+                links.append([x.decode("latin-1"), f"{t:08X}", sfplugin.edid(npcs[t])])
+    return {"form_id": f"{fid:08X}", "edid": sfplugin.edid(s),
+            "sex": ("female" if u32(acbs) & 1 else "male") if len(acbs) >= 4 else None,
+            "race": f"{u32(dict(s).get(b'RNAM', bytes(4))):08X}", "links": links}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield", required=True)
@@ -109,7 +132,8 @@ def main(argv=None):
     pres = race_presets(human[2])
     rep["humanrace_presets"] = {k: [f"{x:08X}" for x in v] for k, v in pres.items()}
     targets = {x for v in pres.values() for x in v}
-    vnpcs = {f: s for t, _h, s, f in sfplugin.records(sf_esm, [b"NPC_"]) if f in targets}
+    all_npcs = {f: s for t, _h, s, f in sfplugin.records(sf_esm, [b"NPC_"])}
+    vnpcs = {f: s for f, s in all_npcs.items() if f in targets}
     rep["humanrace_preset_faces"] = {sfplugin.edid(s): face_fields(s) for f, s in vnpcs.items()}
     print(f"HumanRace presets: {len(pres['male'])} male, {len(pres['female'])} female; scanning Starfield.esm ...")
     refs = references(sf_esm, targets)
@@ -119,6 +143,24 @@ def main(argv=None):
         by.setdefault((typ, e, fid), set()).add(s)
     for (typ, e, fid), sigs in sorted(by.items()):
         print(f"  {typ} {e} [{fid}] fields {sorted(sigs)}")
+    cg = next((s for t, _h, s, f in sfplugin.records(sf_esm, [b"FLST"]) if sfplugin.edid(s) == "CharGenPresets"), None)
+    if cg is not None:
+        entries = [u32(d) for x, d in cg if x == b"LNAM"]
+        rep["chargen_list"] = [npc_summary(f, all_npcs) for f in entries]
+        print(f"CharGenPresets: {len(entries)} entries")
+        for i, e in enumerate(rep["chargen_list"], 1):
+            print(f"  {i:2d} {e['form_id']} {e['edid']} {e['sex']} links {e['links']}")
+        crefs = [r for r in references(sf_esm, set(entries)) if r[1] != "CharGenPresets"]
+        rep["chargen_references"] = crefs
+        cby = {}
+        for typ, e, fid, sg, t in crefs:
+            cby.setdefault((typ, e, fid), []).append(t)
+        rep["chargen_referrers"] = [{"type": typ, "edid": e, "form_id": fid, "entries": len(set(v)),
+                                     "order": [entries.index(int(x, 16)) + 1 for x in v]}
+                                    for (typ, e, fid), v in sorted(cby.items())]
+        for r in rep["chargen_referrers"]:
+            print(f"  named by {r['type']} {r['edid']} [{r['form_id']}]: {r['entries']} entries, list order "
+                  f"{r['order'][:12]}")
     hdpt = {f: s for t, _h, s, f in sfplugin.records(sf_esm, [b"HDPT"])}
     for p in a.plugin:                       # every plugin's head parts (the player patch names the race plugin's)
         hdpt.update({f: s for t, _h, s, f in sfplugin.records(p, [b"HDPT"])})
