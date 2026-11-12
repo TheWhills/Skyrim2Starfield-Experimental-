@@ -167,3 +167,16 @@ the converted cells, no Starfield template, ...), the furniture kinds its packag
 kinds, "static" when there is none), whether face_fit made its face-test NPC (a faces.json `test_npc` that is a
 string is the reason none was made), a status (ready / partial / blocked) and the -Actors list for
 riverwood_doors.ps1. Writes readiness.json / readiness.md. To scale from three NPCs to the whole of Riverwood.
+
+## Outdoors: in and out of the houses (2026-11-12)
+
+Owner: "convert outside stuff, so that they can walk around Riverwood, go inside and outside". Until now a package
+whose location was a reference outside the batch's interiors (Alvor's forge, Gerdur's mill, the market stalls) was
+left out. make_schedule.py --exterior DIR (riverwood_doors.ps1 passes its -Exterior, the staged exterior with
+formids.json) now keeps it when that reference's Skyrim cell holds references that were converted into the exterior:
+the location becomes `near_exterior_reference` (its Skyrim spot, cell "exterior"). PluginSpike puts one XMarker per
+such reference in the exterior world's persistent cell (ExtPos: the overlay frame, as the exterior load doors) and
+points the package at it; the load doors (verified both ways) and the exterior navmesh carry the NPC between.
+Without --exterior nothing changes (tests/test_make_schedule.py ExteriorTests). Unverified: the C# was not compiled
+here (no NuGet access); whether the AI paths out through the converted doors in game. Still left out: packages near a
+reference in an exterior cell that was not converted, and NPCs whose Skyrim start spot is outdoors.

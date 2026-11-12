@@ -174,6 +174,56 @@ def fit_item(a, edid: str, sex: str, fit_args) -> dict:
     return {"rows": rows, "meshes": [m.get("mesh") for m in rep.get("meshes", [])]}
 
 
+FIT_CACHE = "_fit_cache.json"        # in --out: the inputs each item / sex fit was made from
+FIT_VERSION = 1
+
+
+def fit_key(a, edid: str, sex: str, fit_args) -> str:
+    """A key for one item / sex fit: what shapes it (item, sex, race, --helmets, --fit-args) and the fitting code
+    (gear_fit.py, src/fo4sf/gearfit.py, FIT_VERSION), so a run reuses a fit only when nothing that made it changed
+    (2026-11-12, owner: an outfit two NPCs wear is converted once, and done steps are not redone)."""
+    import hashlib
+    import gear_fit
+    from fo4sf import gearfit
+    h = hashlib.sha1(repr((edid.lower(), sex, a.race, bool(a.helmets), list(fit_args), FIT_VERSION)).encode())
+    for mod in (gear_fit, gearfit):
+        with open(mod.__file__, "rb") as fh:
+            h.update(fh.read())
+    return h.hexdigest()
+
+
+def load_fit_cache(out: str) -> dict:
+    try:
+        with open(os.path.join(out, FIT_CACHE), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def fit_or_reuse(a, edid: str, sex: str, fit_args, cache: dict) -> dict:
+    """fit_item, or its earlier result when the same fit is in the cache, its stage report is still there and the
+    staged files were not dropped (--refit: always fit). Updates cache on a new fit."""
+    name = f"Items\\{edid}_{TAG[sex]}"
+    key = fit_key(a, edid, sex, fit_args)
+    path = stage_report(a.out, name)
+    if not a.refit and cache.get(name) == key and os.path.isfile(path) \
+            and os.path.isdir(os.path.join(a.out, "_staging")):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                rep = json.load(fh)
+            rows = (rep.get("records") or {}).get("stage")
+            if rows is not None:
+                return {"rows": rows, "meshes": [m.get("mesh") for m in rep.get("meshes", [])], "reused": True}
+        except (OSError, ValueError):
+            pass
+    f = fit_item(a, edid, sex, fit_args)
+    if f.get("rows") is not None:
+        cache[name] = key
+    else:
+        cache.pop(name, None)
+    return f
+
+
 def kept_records(path: str, dropped) -> list:
     """The records of an existing plugin whose EditorID is not in `dropped`."""
     if not os.path.isfile(path):
@@ -223,6 +273,9 @@ def main(argv=None):
     ap.add_argument("--replace-all", action="store_true", help="drop items converted in earlier runs from the plugin "
                                                                "(their ids stay reserved in the id file)")
     ap.add_argument("--archive2", default="")
+    ap.add_argument("--refit", action="store_true",
+                    help="fit every item again (default: an item / sex fitted before with the same inputs and code "
+                         "is reused)")
     ap.add_argument("--dry-run", action="store_true", help="list each item's meshes per sex; write nothing")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
@@ -268,9 +321,10 @@ def main(argv=None):
     strings = npc_records.skyrim_names(sky)
     fit_args = shlex.split(a.fit_args)
     items, rep = [], {"items": {}, "notes": notes}
+    fit_cache = {} if a.replace_all else load_fit_cache(a.out)
     for e in edids:
         armo = inv["armo"][by_edid[e.lower()]]
-        fits = {sex: fit_item(a, armo["edid"], sex, fit_args) for sex in sexes}
+        fits = {sex: fit_or_reuse(a, armo["edid"], sex, fit_args, fit_cache) for sex in sexes}
         rows = {sex: fits[sex].get("rows") or [] for sex in sexes}
         pairs, slot_notes = pair_parts(rows.get("male", []), rows.get("female", []))
         rep["items"][armo["edid"]] = {"fits": {s: {k: v for k, v in f.items() if k != "rows"} for s, f in fits.items()},
@@ -308,6 +362,11 @@ def main(argv=None):
     with open(plugin_path, "wb") as fh:
         fh.write(sfplugin.build(keep + recs, info, author="Skyrim2Starfield clothes", masters=["Starfield.esm"]))
     ids.save()
+    with open(os.path.join(a.out, FIT_CACHE), "w", encoding="utf-8") as fh:
+        json.dump(fit_cache, fh, indent=1)
+    reused = [f"{e} ({s_})" for e, r in rep["items"].items() for s_, f in r["fits"].items() if f.get("reused")]
+    if reused:
+        print(f"{len(reused)} item fits unchanged, reused (--refit to fit again): {', '.join(reused)}")
     packed = None
     if os.path.isdir(staging):
         import hair_pack

@@ -139,5 +139,71 @@ class ScheduleTests(unittest.TestCase):
                              ("Sandbox", "near_editor_location", True))
 
 
+
+class ExteriorTests(unittest.TestCase):
+    def test_exterior_locations(self):
+        """2026-11-12 (owner: NPCs walk around Riverwood, in and out): with --exterior, a package near a reference in
+        a converted exterior cell is kept as near_exterior_reference (its Skyrim spot); a reference outside it is still
+        left out; without --exterior both are left out, as before."""
+        with tempfile.TemporaryDirectory() as d:
+            tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))])
+            npc = rec(b"NPC_", 0x100, [(b"EDID", Z("Alvor")), (b"ACBS", bytes(24)),
+                                       (b"PKID", struct.pack("<I", 0x200)), (b"PKID", struct.pack("<I", 0x210))])
+            tpl = pack(0x201, "Sandbox", 19, 0, None, [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0))], [0],
+                       [(0, "Location")], [("Procedure", "Sandbox")])
+            forge = pack(0x200, "AlvorWorkForge", 18, 0x201, (8, 0, 600),
+                         [("Location", b"PLDT", struct.pack("<iIi", 0, 0x701, 512))], [0])
+            far = pack(0x210, "AlvorVisitWhiterun", 18, 0x201, (20, 0, 60),
+                       [("Location", b"PLDT", struct.pack("<iIi", 0, 0x801, 512))], [0])
+            house = rec(b"CELL", 0x500, [(b"EDID", Z("AlvorAndSigridsHouse")), (b"DATA", b"\x01\x00")])
+            achr = rec(b"ACHR", 0x600, [(b"NAME", struct.pack("<I", 0x100)), (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))])
+            ext = rec(b"CELL", 0x510, [(b"DATA", b"\x00\x00")])
+            forge_mk = rec(b"REFR", 0x701, [(b"NAME", struct.pack("<I", 0x3B)),
+                                             (b"DATA", struct.pack("<6f", 2000, 3000, 100, 0, 0, 1))])
+            anvil = rec(b"REFR", 0x702, [(b"NAME", struct.pack("<I", 0x3B)), (b"DATA", struct.pack("<6f", 2010, 3000, 100, 0, 0, 0))])
+            ext2 = rec(b"CELL", 0x520, [(b"DATA", b"\x00\x00")])
+            far_mk = rec(b"REFR", 0x801, [(b"NAME", struct.pack("<I", 0x3B)), (b"DATA", struct.pack("<6f", 9e4, 9e4, 0, 0, 0, 0))])
+            wrld = rec(b"WRLD", 0x3C, [(b"EDID", Z("Tamriel"))])
+            body = (grup(b"NPC_", 0, [npc]) + grup(b"PACK", 0, [forge, far, tpl])
+                    + grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [house, grup(0x500, 6, [grup(0x500, 8, [achr])])])])])
+                    + grup(b"WRLD", 0, [wrld, grup(0x3C, 1, [
+                        ext, grup(0x510, 6, [grup(0x510, 9, [forge_mk, anvil])]),
+                        ext2, grup(0x520, 6, [grup(0x520, 9, [far_mk])])])]))
+            sky = os.path.join(d, "Skyrim.esm")
+            with open(sky, "wb") as fh:
+                fh.write(tes4 + body)
+            sf = os.path.join(d, "Starfield.esm")
+            with open(sf, "wb") as fh:
+                fh.write(tes4 + grup(b"PACK", 0, [pack(
+                    0x2CB1, "Sandbox", 19, 0, None, [("Location", b"PLDT", struct.pack("<iIfI", 3, 0, 0, 0))], [2],
+                    [(2, "Location")], [("Procedure", "Sandbox")])]))
+            work = os.path.join(d, "work")
+            os.makedirs(work)
+            cj = os.path.join(work, "cell.json")
+            with open(cj, "w") as fh:
+                json.dump({"cell": "AlvorAndSigridsHouse"}, fh)
+            with open(os.path.join(work, "cells.txt"), "w") as fh:
+                fh.write(cj + "\n")
+            exterior = os.path.join(d, "skyrim_all")
+            os.makedirs(exterior)
+            with open(os.path.join(exterior, "formids.json"), "w") as fh:
+                json.dump({"plugin": "SkyrimAll.esm", "world": "Tamriel", "refs": {"000702:Skyrim.esm": "00001234"}}, fh)
+            args = ["--skyrim", sky, "--starfield", sf, "--npc", "Alvor", "--work", work, "--template-npc", "0001ABCD"]
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(M.main(args + ["--exterior", exterior]), 0)
+            with open(os.path.join(work, "actors.json")) as fh:
+                r = json.load(fh)
+            pk = r["actors"][0]["packages"]
+            self.assertEqual([p["skyrim"] for p in pk], ["AlvorWorkForge"])
+            loc = pk[0]["inputs"]["2"]
+            self.assertEqual((loc["type"], loc["source"], loc["pos"], loc["cell"]),
+                             ("near_exterior_reference", "000701:Skyrim.esm", [2000.0, 3000.0, 100.0], "exterior"))
+            self.assertTrue(any("AlvorVisitWhiterun: left out" in n for n in r["notes"]))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(M.main(args), 0)
+            with open(os.path.join(work, "actors.json")) as fh:
+                self.assertEqual(json.load(fh)["actors"][0]["packages"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

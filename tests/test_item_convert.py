@@ -235,6 +235,56 @@ class MainTests(unittest.TestCase):
         self.assertEqual(rep["items"]["Boots"]["fits"]["female"]["error"], "no worn armor meshes")
 
 
+class ReuseTests(unittest.TestCase):
+    def test_unchanged_fits_reused_shared_outfit_once(self):
+        """2026-11-12 (owner: one conversion per outfit, whoever wears it; done steps not redone): two NPCs with the
+        same Skyrim outfit fit its items once per sex; a later run reuses those fits (same records and ids), --refit
+        or other --fit-args fit again."""
+        rows_by = {("Cuirass", s): [row("Cuirass", s)] for s in IC.SEXES}
+        rows_by.update({("Boots", s): [row("Boots", s, (7,), item="Boots")] for s in IC.SEXES})
+        calls = []
+
+        def fit(a, edid, sex, fit_args):
+            calls.append((edid, sex))
+            name = f"Items\\{edid}_{IC.TAG[sex]}"
+            os.makedirs(os.path.join(a.out, "_staging"), exist_ok=True)
+            with open(IC.stage_report(a.out, name), "w", encoding="utf-8") as fh:
+                json.dump({"records": {"stage": rows_by[(edid, sex)]}, "meshes": []}, fh)
+            return {"rows": rows_by[(edid, sex)]}
+
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(IC, "fit_item", fit):
+                run = lambda argv: self.run_plain(d, argv)                              # noqa: E731
+                by, _o = run(["--npc", "Ralof", "--npc", "Ralof"])
+                self.assertEqual(sorted(calls), sorted((e, s) for e in ("Cuirass", "Boots") for s in IC.SEXES))
+                first = {k: r[3] for k, r in by.items()}
+                calls.clear()
+                by2, _o = run(["--npc", "Ralof"])
+                self.assertEqual(calls, [])                                           # nothing fitted again
+                self.assertEqual({k: r[3] for k, r in by2.items()}, first)
+                run(["--npc", "Ralof", "--refit"])
+                self.assertEqual(len(calls), 4)
+                calls.clear()
+                run(["--armor", "Boots", "--fit-args=--conform"])
+                self.assertEqual(sorted(calls), [("Boots", "female"), ("Boots", "male")])
+
+    def run_plain(self, d, argv):
+        sky, sf = os.path.join(d, "Skyrim"), os.path.join(d, "SF")
+        os.makedirs(sky, exist_ok=True)
+        os.makedirs(os.path.join(sf, "Data"), exist_ok=True)
+        if not os.path.isfile(os.path.join(sky, "Skyrim.esm")):
+            test_os_convert.esm(os.path.join(sky, "Skyrim.esm"))
+            sf_esm(os.path.join(sf, "Data", "Starfield.esm"))
+        out = os.path.join(d, "out")
+        with mock.patch.object(E, "template_model", lambda sf_data: ("mat", 2792)), \
+                mock.patch.object(IC.bsa, "SkyrimArchives", lambda p: object()), \
+                mock.patch("npc_records.skyrim_names", lambda sky: {}), mock.patch("builtins.print"), \
+                mock.patch("hair_pack.pack", lambda *x, **k: None):
+            self.assertEqual(IC.main(["--skyrim-data", sky, "--starfield", sf, "--out", out] + argv), 0)
+        recs = sfplugin.records(os.path.join(out, IC.PLUGIN), [b"ARMA", b"MRPH", b"ARMO", b"OTFT", b"NPC_"])
+        return {sfplugin.edid(r[2]): r for r in recs}, out
+
+
 class FaceFitLookupTests(unittest.TestCase):
     def test_npc_wears_its_converted_skyrim_outfit(self):
         sky_otft = {0x930: "RalofOutfit"}

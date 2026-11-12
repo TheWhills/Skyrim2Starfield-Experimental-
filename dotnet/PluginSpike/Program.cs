@@ -446,6 +446,12 @@ IStarfieldModGetter? FacePlugin(string path)
     return faceMods[path] = fm;
 }
 
+// Outdoor package spots (2026-11-12, owner: "walk around riverwood, go inside and outside"): make_schedule.py --exterior's
+// near_exterior_reference: an XMarker at the Skyrim spot in the exterior world's persistent cell (ExtPos: the overlay
+// frame), made once per Skyrim reference, placed by the exterior block below (needs EXTERIOR_DIR and its doors/navmesh).
+var extMarkers = new List<(PlacedObject m, JsonElement pos)>();
+var extMarkerFor = new Dictionary<string, FormKey>();
+
 void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource)
 {
     var sk = ac.GetProperty("skyrim").GetString()!;
@@ -539,6 +545,21 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                             }
                             target = new LocationTarget { Link = new FormLink<IPlacedGetter>(refKey) };
                             break;
+                        case "near_exterior_reference":
+                        {
+                            var srcX = v.GetProperty("source").GetString()!;
+                            if (!extMarkerFor.TryGetValue(srcX, out var mk))
+                            {
+                                var m = new PlacedObject(Id($"EXTMARK:{srcX}"), release)
+                                    { Base = new FormLinkNullable<IPlaceableObjectGetter>(xMarker), Rotation = Rot(v.GetProperty("rot")) };
+                                m.MajorRecordFlagsRaw |= 0x400;
+                                extMarkers.Add((m, v.GetProperty("pos").Clone()));
+                                extMarkerFor[srcX] = mk = m.FormKey;
+                                sourceMap[srcX] = m.FormKey.ToString();
+                            }
+                            target = new LocationTarget { Link = new FormLink<IPlacedGetter>(mk) };
+                            break;
+                        }
                         case "in_cell": target = new LocationCell { Link = new FormLink<ICellGetter>(cell.FormKey) }; break;
                         case "near_package_start": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearPackageStart }; break;
                         case "near_editor_location": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearEditorLocation }; break;
@@ -976,6 +997,10 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
     extInLost += want.Count;                                         // listed, placed, but not found in the world
     if (extDoorsPath != null)
         Console.WriteLine($"exterior doors into the interiors: {extIn} made load doors (override of {wg.EditorID}), {extInLost} not");
+    foreach (var (em, ep) in extMarkers) { em.Position = ExtPos(ep); tco.Persistent.Add(em); }
+    if (extMarkers.Count > 0)
+        Console.WriteLine($"outdoor package spots: {extMarkers.Count} markers in {wg.EditorID}'s persistent cell");
+    extMarkers.Clear();
 
     // ---- exterior navmeshes (2026-11-08, owner: "convert the exterior mesh"; docs/terrain/exterior-navmesh.md) -------
     // make_skyrim_navmesh.py export: Skyrim's navmeshes around a place, in the overlay frame (Skyrim units), split at the
@@ -1051,6 +1076,8 @@ foreach (var (obj, t) in pendingTeleports)
     };
     teleLinked++;
 }
+if (extMarkers.Count > 0)
+    Console.WriteLine($"WARNING: {extMarkers.Count} outdoor package spots not placed (no EXTERIOR_DIR with EXTERIOR_DOORS / EXTERIOR_NAVMESH): those packages point at nothing");
 if (teleOut + teleOutLost > 0)
     Console.WriteLine($"doors out to the exterior: {teleOut} linked, {teleOutLost} not (" +
                       (extDir == null ? "no EXTERIOR_DIR / EXTERIOR_DOORS" : "its exterior door was not made a load door") + ")");

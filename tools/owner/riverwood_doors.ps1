@@ -74,6 +74,9 @@ if ($Actors.Count -gt 0) {
     # with -Furniture the sandboxes have chairs / the bar / beds to use: keep Skyrim's own Allow Wandering (Orgnar: off,
     # so he stays at the bar) instead of forcing it on
     if ($Furniture) { $sa += @("--keep-furniture-only") }
+    # outdoor package spots (2026-11-12): packages near a reference in the converted exterior are kept (FO4Port.esm
+    # puts a marker there in the exterior's persistent cell), so the NPCs walk out of their houses and around town
+    $sa += @("--exterior", $Exterior)
     if (Test-Path $Faces) { $sa += @("--faces", $Faces) } else { Write-Host "no faces.json at $Faces" -ForegroundColor Yellow }
     python -I scripts\npc\make_schedule.py @sa
     if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }

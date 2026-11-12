@@ -79,7 +79,24 @@ def ref_place(ix, fid):
     return [round(c, 3) for c in v[:3]], [round(c, 5) for c in v[3:]]
 
 
-def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=False, keep_furniture_only=False):
+def exterior_cells(sky, formids_path):
+    """{Skyrim exterior CELL FormID} holding at least one reference the installed exterior converted (its formids.json
+    "refs": Skyrim ref key "XXXXXX:Skyrim.esm" -> our FormID): the converted outdoors, where a package location may
+    point (2026-11-12, owner: "can we convert outside stuff, so they can walk around Riverwood, go inside and out")."""
+    with open(formids_path, encoding="utf-8") as fh:
+        refs = json.load(fh).get("refs") or {}
+    out = set()
+    for k in refs:
+        m = re.match(r"^([0-9A-Fa-f]{6}):Skyrim\.esm$", k)
+        if m:
+            c = sky.cell_of.get(int(m.group(1), 16))
+            if c is not None:
+                out.add(c)
+    return out
+
+
+def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=False, keep_furniture_only=False,
+                    ext_cells=None):
     p = packages.parse_pack(sky.subs(pack_fid))
     if not keep_conditioned and (p["conditions"] or p["owner_quest"]):
         notes.append(f"{p['edid']}: left out (quest / conditions decide when Skyrim runs it: "
@@ -123,6 +140,12 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
                 info = sky.name_of(v["value"])
                 where = (info.get("cell") or {}).get("edid")
                 if where not in cell_names:
+                    if ext_cells and sky.cell_of.get(v["value"]) in ext_cells and pos is not None:
+                        # outdoors, in the converted exterior: PluginSpike places a persistent XMarker there (EXTERIOR_DIR)
+                        loc.update(type="near_exterior_reference", source=skyrimrefs.formkey(v["value"], "Skyrim.esm"),
+                                   pos=pos, rot=rot, base=(info.get("base") or {}).get("edid"), cell="exterior")
+                        inputs[str(target)] = loc
+                        continue
                     drop = f"its location {name} is near a reference in {where or 'the exterior'}, outside the batch"
                     continue
                 loc.update(type="near_reference", source=skyrimrefs.formkey(v["value"], "Skyrim.esm"), pos=pos, rot=rot,
@@ -213,6 +236,9 @@ def main(argv=None):
                     help="keep Skyrim's Allow Wandering off on sandboxes (only once furniture / idle markers are converted)")
     ap.add_argument("--template-npc", default="", help="Starfield NPC FormID to copy instead (hex)")
     ap.add_argument("--face-plugin", default="", help="the face-test plugin (default: S2SFaceTest.esm next to --faces)")
+    ap.add_argument("--exterior", default="", help="the installed exterior's staging folder (formids.json): package "
+                                                   "locations near references in its converted cells are kept (NPCs "
+                                                   "go outdoors); without it they are left out as before")
     a = ap.parse_args(argv)
     notes = []
     cells_txt = os.path.join(a.work, "cells.txt")
@@ -232,6 +258,14 @@ def main(argv=None):
     if xmarker is None:
         notes.append("Starfield.esm has no STAT XMarker: package locations near Skyrim markers will not work")
     sky = packages.Index(a.skyrim)
+    ext_cells = None
+    if a.exterior:
+        fp = os.path.join(a.exterior, "formids.json")
+        if os.path.exists(fp):
+            ext_cells = exterior_cells(sky, fp)
+            notes.append(f"exterior: {len(ext_cells)} converted Skyrim cells (package locations there are kept)")
+        else:
+            notes.append(f"exterior: no {fp}; outdoor package locations left out")
     actors = []
     try:
         for edid in [e.strip() for n in a.npc for e in n.split(",") if e.strip()]:
@@ -265,7 +299,7 @@ def main(argv=None):
                 notes.append(f"{edid}: {why}; give --faces or --template-npc")
                 continue
             pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned,
-                                  a.keep_furniture_only) for p in src["packages"]]
+                                  a.keep_furniture_only, ext_cells) for p in src["packages"]]
             name = npc.get("full_name") or edid
             ac = {"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
                   "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]}

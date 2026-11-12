@@ -92,3 +92,13 @@ the shirt's skin slot; and the armpit band (gear_fit.armpits) was added to every
 showed through the shirt. Now a skin piece on an item that does not cover the body (slot 3) takes the item's own
 slots (os_export.item_records), and only body gear gets the armpit band (gear_fit.armpit_skin).
 Owner, 2026-11-09 after rebuilding only the shoes and Nazeem's boots: all working (verified in game).
+
+Reuse (2026-11-12, owner: "we're not reconverting an outfit if two people wear it ... one outfit that each character
+that uses it gets ... with the male and female versions on the same outfit. That needs to be the process moving
+forward"): item_convert.py is the outfit path for every converted NPC (face_fit.py --items-plugin; gear_fit's
+per-NPC --name <NPC>_outfit only for tests). One run with many --npc converts each Skyrim item once per sex, however
+many of them wear it (already so); now a later run also reuses an item / sex fit made before with the same inputs
+(item, sex, race, --helmets, --fit-args) and the same fitting code (gear_fit.py, src/fo4sf/gearfit.py), its stage
+report and _staging still there (_fit_cache.json in --out; --refit fits again; --replace-all starts over). Records and
+FormIDs come out the same (tests/test_item_convert.py ReuseTests).
+
