@@ -618,3 +618,8 @@ why the mod needs no clothes of its own.
   overrides CharGenPresets with the race's preset copies added after the vanilla ones (humans see them too).
   Open: whether Body Type 2 picks the list's first female (a human one). The probe's Player face list was empty
   because it did not read the race plugin's head parts; fixed.
+- 2026-11-12, **verified in game (owner):** with CharGenPresets extended, the new-game profiles 41-50 are the race's
+  copies, with the Orc head shape (male and female, pointed ears). Seen: they came with their human preset's skin
+  tone (now: STON = first appended + 2 / 4 / 6 / 3 / 5 in turn); profiles 1-40 (human) also show the Orc tusks,
+  since the player patch keeps the player on the Orc race and the menu keeps the race (expected; a human player
+  needs S2SOrcPlayer.esm off).

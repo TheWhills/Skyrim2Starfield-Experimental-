@@ -1014,6 +1014,21 @@ def with_ston(subs, value):
     return list(subs[:at]) + [(b"STON", bytes([value]))] + list(subs[at:])
 
 
+PRESET_TONE_SPREAD = (2, 4, 6, 3, 5)      # the race's tones its presets start on, in turn (lighter to darker mix)
+
+
+def preset_tones(recs, first):
+    """The race's preset copies (NPC_ records) with a skin tone of the race each (STON = first appended index +
+    PRESET_TONE_SPREAD in turn; 2026-11-12, owner: the Orc profiles came with their human preset's skin tone)."""
+    out, i = [], 0
+    for t, h, s, f in recs:
+        if t == b"NPC_":
+            s = with_ston(s, first + PRESET_TONE_SPREAD[i % len(PRESET_TONE_SPREAD)])
+            i += 1
+        out.append((t, h, s, f))
+    return out
+
+
 def with_races(flst_subs, human_fid, race_fids):
     """A form list (FLST) with race_fids appended after its last HumanRace-or-other 4-byte entry, in the entries'
     own signature, or None if it does not hold HumanRace. 2026-11-10 (owner: showlooksmenu as S2S_OrcRace crashes
@@ -1278,6 +1293,9 @@ def build_plugin(sf_esm, made, race_head=False, keep_hair=False, new_races=(), r
                             rrep.setdefault("mouth_on_head", {})[SEXES[f]] = f"{mouth:08X}"
                 rsubs, prec = race_preset_copies(rsubs, npc_by, NAMES[race], r_fid, rheads, part_types, copies,
                                                  ids.take, drop_blends=race in race_models)
+                tones = rrep.get("skin_tones") or {}
+                if tones.get("method") == "append" and tones.get("first_index"):
+                    prec = preset_tones(prec, tones["first_index"][0])
                 recs += prec
                 rrep["preset_copies"] = len(prec)
                 race_presets_all += [f for t_, _h, _s, f in prec if t_ == b"NPC_"]

@@ -719,6 +719,14 @@ class SkinToneTests(unittest.TestCase):
         self.assertEqual(sorted(p), [0x20, 0x100080F, 0x1000810])
         self.assertEqual(_u(dict(out)[b"RNAM"]), 0x1000811)
 
+    def test_preset_tones(self):
+        recs = [(b"NPC_", b"", [(b"EDID", Z("a")), (b"STON", b"\x02")], 1), (b"HDPT", b"", [], 2),
+                (b"NPC_", b"", [(b"EDID", Z("b")), (b"HCOL", b"h\0")], 3)]
+        out = H.preset_tones(recs, 9)
+        self.assertEqual(dict(out[0][2])[b"STON"], bytes([11]))
+        self.assertEqual(out[1], recs[1])
+        self.assertEqual(dict(out[2][2])[b"STON"], bytes([13]))
+
     def test_chargen_preset_list(self):
         """2026-11-12: the menu's profiles come from CharGenPresets; the race's preset copies are added after it."""
         h = bytes(24)
