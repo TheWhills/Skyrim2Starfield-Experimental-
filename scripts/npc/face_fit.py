@@ -320,10 +320,12 @@ def baked_face_index(names_by_archive) -> Dict[int, Dict[str, Tuple[str, str]]]:
     return out
 
 
-def write_baked_face(index, tpl_fid: int, new_fid: int, data_dir: str, out: str, plugin: str = None) -> list:
+def write_baked_face(index, tpl_fid: int, new_fid: int, data_dir: str, out: str, plugin: str = None,
+                     colour=None) -> list:
     """The template's baked face textures copied under the new NPC's FormID (load-order byte dropped, as the game
     names its own) in out/textures/actors/character/facecustomization/<plugin>/. The baked head mesh is not
-    copied: the face shape stays ours (runtime). Returns the written paths."""
+    copied: the face shape stays ours (runtime). colour: bytes -> bytes applied to the colour texture (race_heads:
+    a race's skin tone, 2026-11-11). Returns the written paths."""
     from fo4sf import ba2
     plugin = plugin or PLUGIN
     folder = os.path.join(out, "textures", "actors", "character", "facecustomization", plugin)
@@ -333,8 +335,11 @@ def write_baked_face(index, tpl_fid: int, new_fid: int, data_dir: str, out: str,
             opened[arc] = ba2.Ba2(os.path.join(data_dir, arc))
         os.makedirs(folder, exist_ok=True)
         path = os.path.join(folder, f"{new_fid & 0xFFFFFF:08x}_{kind}.dds")
+        data = opened[arc].read(name)
+        if colour is not None and kind == "color":
+            data = colour(data)
         with open(path, "wb") as fh:
-            fh.write(opened[arc].read(name))
+            fh.write(data)
         written.append(path)
     return written
 

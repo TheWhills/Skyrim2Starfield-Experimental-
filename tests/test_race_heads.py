@@ -658,6 +658,32 @@ class PluginTests(unittest.TestCase):
 class SkinToneTests(unittest.TestCase):
     """2026-11-11 (owner: test the Orc's skin tone before building every race)."""
 
+    def test_face_tone(self):
+        """2026-11-12: the Orc NPCs' baked faces stayed human; their colour texture now gets the race's tone."""
+        from fo4sf import skintone
+        face = np.full((4, 4, 4), 255, np.uint8)
+        face[..., :3] = (198, 176, 168)
+        conv = H.face_tone([(89, 113, 92)] * 9, [(198, 176, 168)] * 9)
+        out = skintone.decode_dds(conv(skintone.raw_dds(face)))
+        self.assertEqual(out[0, 0, :3].tolist(), [89, 113, 92])      # human colour -> the race's
+
+    def test_bake_faces_tones_race_npcs_only(self):
+        import face_fit
+        calls = []
+
+        def fake_write(index, tpl, fid, data, out, plugin, colour=None):
+            calls.append((fid, colour))
+            return ["x_color.dds"]
+        npcs = [{"template_form_id": "10", "form_id": "1000894", "edid": "a", "race": "OrcRace", "sex": "male",
+                 "race_record": "S2S_OrcRace"},
+                {"template_form_id": "10", "form_id": "1000804", "edid": "b", "race": "OrcRace", "sex": "female"}]
+        with tempfile.TemporaryDirectory() as d, \
+                unittest.mock.patch.object(face_fit, "baked_face_index", lambda names: {0x10: {}}), \
+                unittest.mock.patch.object(face_fit, "write_baked_face", fake_write):
+            H.bake_faces(npcs, d, d, {"OrcRace": lambda female: ("tone", female)})
+        self.assertEqual(calls, [(0x1000894, ("tone", False)), (0x1000804, None)])
+        self.assertTrue(npcs[0]["baked_face_tone"])
+
     def test_with_ston(self):
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"STON", b"\x02"), (b"HCOL", b"h\0")], 13)[1], (b"STON", b"\x0d"))
         self.assertEqual(H.with_ston([(b"EDID", b"x\0"), (b"HCOL", b"h\0")], 9),

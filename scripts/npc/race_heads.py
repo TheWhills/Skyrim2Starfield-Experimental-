@@ -1372,11 +1372,45 @@ def write_skin_tones(jobs, ramps, read, out, texconv="", human=None, test=False)
     return done
 
 
-def bake_faces(npcs, sf_data, out):
+def decode_any_dds(data, texconv=""):
+    """RGBA uint8 of a DDS's top mip: skintone.decode_dds (RGBA8 / BC1), else through texconv (to RGBA8 sRGB)."""
+    import tempfile
+    from fo4sf import skintone, textures
+    try:
+        return skintone.decode_dds(data)
+    except ValueError:
+        tc = find_texconv(texconv)
+        if not tc:
+            raise
+        with tempfile.TemporaryDirectory() as d:
+            src, dst = os.path.join(d, "in.dds"), os.path.join(d, "out")
+            os.makedirs(dst)
+            with open(src, "wb") as fh:
+                fh.write(data)
+            textures.texconv(tc, src, dst, "R8G8B8A8_UNORM_SRGB", ("-m", "1"))
+            with open(os.path.join(dst, "in.dds"), "rb") as fh:
+                return skintone.decode_dds(fh.read())
+
+
+def face_tone(race_ramp, human_ramp, rank=RACE_TONE_DEFAULT, texconv=""):
+    """bytes -> bytes for a baked face colour texture: skintone.relative at the race's tone of `rank` (the tone its
+    NPCs get), written uncompressed RGBA8 sRGB (2026-11-12, owner: the Orc test NPCs' bodies green, their baked
+    faces human)."""
+    from fo4sf import skintone
+
+    def convert(data):
+        img = decode_any_dds(data, texconv)
+        k = min(rank, len(race_ramp) - 1, len(human_ramp) - 1)
+        return skintone.raw_dds(skintone.relative(img, race_ramp[k], human_ramp[k]))
+    return convert
+
+
+def bake_faces(npcs, sf_data, out, tones=None):
     """The template's pre-built face textures under each test NPC's FormID, as face_fit does (2026-11-09, owner: the
     race NPCs, without them, came out dark red with light nose / lips / eyelids; the control, also without, was a
     plain light face: the runtime face texture follows the morph blends, and ours name no textures). The shape stays
-    the runtime one (morph keys). Returns the count written per NPC."""
+    the runtime one (morph keys). tones {race: callable(female) -> bytes -> bytes or None}: the colour texture of
+    that race's NPCs recoloured to its skin tone. Returns the count written per NPC."""
     import face_fit
     from fo4sf import ba2
     names = {}
@@ -1387,8 +1421,13 @@ def bake_faces(npcs, sf_data, out):
     done = {}
     for n in npcs:
         tpl, fid = int(n["template_form_id"], 16), int(n["form_id"], 16)
-        written = face_fit.write_baked_face(index, tpl, fid, sf_data, out, PLUGIN) if tpl in index else []
+        tone = (tones or {}).get(n.get("race")) if n.get("race_record") else None   # NPCs of the new race only
+        colour = tone(n.get("sex") == "female") if tone else None
+        kw = {"colour": colour} if colour is not None else {}
+        written = face_fit.write_baked_face(index, tpl, fid, sf_data, out, PLUGIN, **kw) if tpl in index else []
         n["baked_face_textures"] = [os.path.basename(p) for p in written]
+        if colour is not None and written:
+            n["baked_face_tone"] = True
         done[n["edid"]] = len(written)
     return done
 
@@ -1613,7 +1652,12 @@ def main(argv=None):
     report["formids"] = {"ledger": os.path.join(a.out, LEDGER), "new": ids.new}
     report.update(prep)
     if a.baked_face_textures:
-        report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out)
+        tones = {}
+        if human_ramps:
+            for race, per in ramps.items():
+                tones[race] = (lambda per: lambda female: face_tone(per[female], human_ramps[female],
+                                                                     texconv=a.texconv))(per)
+        report["baked_faces"] = bake_faces(report["npcs"], sf_data, a.out, tones)
     with open(os.path.join(a.out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield races", masters=["Starfield.esm"]))
     parts = report.pop("_player_parts", None)

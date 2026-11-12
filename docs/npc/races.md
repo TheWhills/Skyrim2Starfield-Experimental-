@@ -580,3 +580,8 @@ why the mod needs no clothes of its own.
   not in brightness order, so 15 came out lighter than 13 / 14), and the race's test NPCs and the player patch get
   STON = first appended index + 4 (a middle Orc tone). Known: the Star Wars alien mods append to the same groups
   (whichever plugin loads last wins); every phenotype shares one face set per sex.
+- 2026-11-12, **in game (owner):** the Orc test NPCs' bodies and hands are green, their faces human (each copies
+  its template's baked face textures). bake_faces now recolours the colour texture of the new race's NPCs (not the
+  HumanRace blend NPCs) like the tones (skintone.relative at the NPCs' tone, STON first + 4), written uncompressed
+  (formats other than RGBA8 / BC1 decoded through texconv). Also seen: the female Orc player's tusks stick out
+  through her closed lips (her mouth opens 0.6 mm; male 13.7) - open.
