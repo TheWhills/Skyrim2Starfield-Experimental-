@@ -108,3 +108,14 @@ cache started empty, and it was only written at the end of a run). Now each fini
 stopped run keeps it), each fit prints its time, and --reuse-staged takes every finished stage report already on disk
 (older fits, a stopped run's) without the key check; a fit whose staged files are newer than its report (stopped
 part-way) is fitted again. Speed itself not changed yet: the per-fit times decide what to make faster.
+
+Speed (2026-11-12, owner: "what step takes the most time"). Measured on a synthetic fit (gear 5,000 vertices,
+Starfield surface 20,000, Skyrim body 2,560; the real ones also run the neck steps and the slider morphs, not
+measured here): 67 s, of which closest_on_mesh (the closest point on the body for every gear vertex, called ~15 times
+per fit and 4 more per shape in slider_clearance) 29 s: a full distance matrix to every body vertex and a Python loop
+per point; seen_from_outside 13 s: a z-buffer drawn one triangle at a time in Python. Both vectorised (closest_on_mesh
+uses scipy's k-d tree when installed, numpy otherwise): 15 s, and the fit's output is identical to the bit
+(compared on the whole synthetic fit; tests/test_gearfit.py SpeedEquivalenceTests against the old code). Next
+largest: skyrimhair.nearest_surface (5 s, full distance matrix). item_convert's fit key now uses FIT_VERSION numbers
+(gearfit.py, gear_fit.py, item_convert.py) instead of the source, so a change like this does not refit everything; a
+change to what a fit produces must bump one.

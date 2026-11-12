@@ -179,17 +179,16 @@ FIT_VERSION = 1
 
 
 def fit_key(a, edid: str, sex: str, fit_args) -> str:
-    """A key for one item / sex fit: what shapes it (item, sex, race, --helmets, --fit-args) and the fitting code
-    (gear_fit.py, src/fo4sf/gearfit.py, FIT_VERSION), so a run reuses a fit only when nothing that made it changed
-    (2026-11-12, owner: an outfit two NPCs wear is converted once, and done steps are not redone)."""
+    """A key for one item / sex fit: what shapes it (item, sex, race, --helmets, --fit-args) and the fit's version
+    numbers (gearfit.FIT_VERSION, gear_fit.FIT_VERSION, this file's FIT_VERSION), so a run reuses a fit only when
+    nothing that made it changed (2026-11-12, owner: an outfit two NPCs wear is converted once, and done steps are not
+    redone). Versions, not the source: a change that leaves every fit the same (2026-11-12: the speed-up, checked
+    equal to the bit) must not refit hours of outfits; a change to what a fit produces bumps a version."""
     import hashlib
     import gear_fit
     from fo4sf import gearfit
-    h = hashlib.sha1(repr((edid.lower(), sex, a.race, bool(a.helmets), list(fit_args), FIT_VERSION)).encode())
-    for mod in (gear_fit, gearfit):
-        with open(mod.__file__, "rb") as fh:
-            h.update(fh.read())
-    return h.hexdigest()
+    return hashlib.sha1(repr((edid.lower(), sex, a.race, bool(a.helmets), list(fit_args), FIT_VERSION,
+                              gearfit.FIT_VERSION, gear_fit.FIT_VERSION)).encode()).hexdigest()
 
 
 def load_fit_cache(out: str) -> dict:

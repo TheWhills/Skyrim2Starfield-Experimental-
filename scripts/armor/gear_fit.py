@@ -455,6 +455,7 @@ def skin_shapes(textures: dict) -> set:
     return {n for n, t in textures.items() if t and t[0].lower().replace("/", "\\").startswith(SKIN_TEXTURES)}
 
 
+FIT_VERSION = 1                # bump when what a fit produces changes (item_convert reuses fits by it)
 TESSELLATE = 3                 # low-poly gear split n x n before the fit
 TESSELLATE_BELOW = 2000        # vertices: only shapes smaller than this
 

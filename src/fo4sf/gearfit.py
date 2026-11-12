@@ -32,6 +32,7 @@ CARRY = 0.10                    # m: gear takes the body offset of Skyrim body p
 KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body keeps its Skyrim gap on Starfield's
 PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
+FIT_VERSION = 1                 # bump when what a fit produces changes (item_convert reuses fits by it)
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
 SKIN_DEPTH = 0.003              # m: a shape whose vertices lie this close to the Skyrim body is a skin piece
@@ -561,73 +562,113 @@ def body_offsets(sky_body: np.ndarray, sf_pts: np.ndarray, sf_nrm: np.ndarray, r
                  "median_depth_mm": float(np.median(np.abs(depth[ok])) * 1000) if ok.any() else None}
 
 
+def _vertex_triangles(n: int, tris: np.ndarray) -> np.ndarray:
+    """(n, most) triangle ids round each vertex, ascending, -1 padded."""
+    flat = tris.ravel()
+    if not len(flat):
+        return np.full((n, 1), -1, int)
+    order = np.argsort(flat, kind="stable")              # stable: each vertex's triangles in ascending order
+    vids, tids = flat[order], order // 3
+    counts = np.bincount(vids, minlength=n)
+    start = np.concatenate([[0], np.cumsum(counts)[:-1]])
+    vt = np.full((n, max(1, int(counts.max()))), -1, int)
+    vt[vids, np.arange(len(vids)) - start[vids]] = tids
+    return vt
+
+
+def _k_nearest(points: np.ndarray, verts: np.ndarray, k: int, chunk: int = 512) -> np.ndarray:
+    """(len(points), k) indices of the k nearest vertices: scipy's k-d tree when it is installed, else numpy in
+    chunks (2026-11-12: the full distance matrix against the ~20k-vertex body was a large part of each fit)."""
+    try:
+        from scipy.spatial import cKDTree
+    except Exception:                                          # noqa: BLE001 - numpy only
+        cKDTree = None
+    if cKDTree is not None:
+        _d, idx = cKDTree(verts).query(points, k=k)
+        return np.asarray(idx, int).reshape(len(points), k)
+    vv = (verts * verts).sum(1)
+    out = np.empty((len(points), k), int)
+    for c0 in range(0, len(points), chunk):
+        q = points[c0:c0 + chunk]
+        d2 = (q * q).sum(1)[:, None] + vv[None, :] - 2.0 * q @ verts.T
+        out[c0:c0 + chunk] = np.argpartition(d2, k - 1, axis=1)[:, :k]
+    return out
+
+
 def closest_on_mesh(points: np.ndarray, verts: np.ndarray, tris: np.ndarray, vnrm: np.ndarray, k: int = 6,
-                    chunk: int = 256, with_normals: bool = False):
+                    chunk: int = 1024, with_normals: bool = False):
     """(closest surface point, signed depth along the outward face normal, distance) of each point on a triangle
     mesh, searching the triangles around its k nearest vertices (2026-11-06: nearest-VERTEX depth missed boot and
-    sole points just inside the shins and feet, where the body's vertices lie several cm apart)."""
+    sole points just inside the shins and feet, where the body's vertices lie several cm apart). Vectorised over
+    the points (2026-11-12: the per-point loop was most of a fit's time); among equally close triangles the lowest
+    id wins, as before."""
+    points = np.asarray(points, float)
+    verts = np.asarray(verts, float)
     tris = np.asarray(tris, int).reshape(-1, 3)
-    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
-    fn = np.cross(b - a, c - a)
-    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
-    flip = np.einsum("ij,ij->i", fn, vnrm[tris].sum(1)) < 0          # face normals the way the vertex normals point
-    fn[flip] *= -1
-    vt = [[] for _ in range(len(verts))]
-    for t, tri in enumerate(tris):
-        for v in tri:
-            vt[v].append(t)
-    vv = (verts * verts).sum(1)
     best_p = np.zeros_like(points)
     best_d = np.full(len(points), np.inf)
     best_s = np.zeros(len(points))
     best_n = np.zeros_like(points)
-    for c0 in range(0, len(points), chunk):
-        q = points[c0:c0 + chunk]
-        d2 = (q * q).sum(1)[:, None] + vv[None, :] - 2.0 * q @ verts.T
-        kk = min(k, len(verts))
-        near = np.argpartition(d2, kk - 1, axis=1)[:, :kk]
-        for j in range(len(q)):
-            cand = np.unique([t for v in near[j] for t in vt[v]])
-            if not len(cand):
-                continue
-            cp = _closest_on_triangles(q[j], a[cand], b[cand], c[cand])
-            dist = np.linalg.norm(cp - q[j], axis=1)
-            i = int(np.argmin(dist))
-            best_p[c0 + j], best_d[c0 + j] = cp[i], dist[i]
-            best_s[c0 + j] = float((q[j] - cp[i]) @ fn[cand[i]])
-            best_n[c0 + j] = fn[cand[i]]
+    if len(points) and len(verts) and len(tris):
+        a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
+        fn = np.cross(b - a, c - a)
+        fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+        flip = np.einsum("ij,ij->i", fn, vnrm[tris].sum(1)) < 0      # face normals the way the vertex normals point
+        fn[flip] *= -1
+        vt = _vertex_triangles(len(verts), tris)
+        near = _k_nearest(points, verts, min(k, len(verts)))
+        for c0 in range(0, len(points), chunk):
+            q = points[c0:c0 + chunk]
+            cand = np.sort(vt[near[c0:c0 + chunk]].reshape(len(q), -1), axis=1)
+            ok = cand >= 0
+            ci = np.where(ok, cand, 0)
+            cp = _closest_on_triangles(q[:, None, :], a[ci], b[ci], c[ci])
+            dist = np.where(ok, np.linalg.norm(cp - q[:, None, :], axis=-1), np.inf)
+            i = np.argmin(dist, axis=1)                          # first of equals: the lowest triangle id
+            rows = np.arange(len(q))
+            have = np.isfinite(dist[rows, i])
+            t = ci[rows, i]
+            sl = slice(c0, c0 + len(q))
+            best_p[sl] = np.where(have[:, None], cp[rows, i], 0.0)
+            best_d[sl] = np.where(have, dist[rows, i], np.inf)
+            # the same arithmetic as a per-point (q - cp) @ n, so depths exactly on the surface keep their sign
+            s_ = np.array([float(x @ y) for x, y in zip(q - cp[rows, i], fn[t])]) if len(q) else np.zeros(0)
+            best_s[sl] = np.where(have, s_, 0.0)
+            best_n[sl] = np.where(have[:, None], fn[t], 0.0)
     if with_normals:
         return best_p, best_s, best_d, best_n
     return best_p, best_s, best_d
 
 
 def _closest_on_triangles(p, a, b, c) -> np.ndarray:
-    """Closest point to p on each triangle (a, b, c) (Ericson, Real-Time Collision Detection 5.1.5), vectorised."""
+    """Closest point to p on each triangle (a, b, c) (Ericson, Real-Time Collision Detection 5.1.5), vectorised;
+    p broadcasts against a / b / c (a point and (m, 3) triangles, or (n, 1, 3) points and (n, m, 3) triangles)."""
+    dot = lambda u, v: np.einsum("...j,...j->...", u, v)               # noqa: E731
     ab, ac, ap = b - a, c - a, p - a
-    d1, d2 = np.einsum("ij,ij->i", ab, ap), np.einsum("ij,ij->i", ac, ap)
+    d1, d2 = dot(ab, ap), dot(ac, ap)
     bp = p - b
-    d3, d4 = np.einsum("ij,ij->i", ab, bp), np.einsum("ij,ij->i", ac, bp)
+    d3, d4 = dot(ab, bp), dot(ac, bp)
     cp = p - c
-    d5, d6 = np.einsum("ij,ij->i", ab, cp), np.einsum("ij,ij->i", ac, cp)
+    d5, d6 = dot(ab, cp), dot(ac, cp)
     va, vb, vc = d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2
     den = np.where(np.abs(va + vb + vc) > 1e-20, va + vb + vc, 1e-20)
     v, w = vb / den, vc / den
-    out = a + ab * v[:, None] + ac * w[:, None]                       # inside the face
+    out = a + ab * v[..., None] + ac * w[..., None]                    # inside the face
     with np.errstate(divide="ignore", invalid="ignore"):
         # edges
         e_ab = (vc <= 0) & (d1 >= 0) & (d3 <= 0)
         t = np.where(e_ab, d1 / np.where(d1 - d3 != 0, d1 - d3, 1), 0)
-        out = np.where(e_ab[:, None], a + ab * t[:, None], out)
+        out = np.where(e_ab[..., None], a + ab * t[..., None], out)
         e_ac = (vb <= 0) & (d2 >= 0) & (d6 <= 0)
         t = np.where(e_ac, d2 / np.where(d2 - d6 != 0, d2 - d6, 1), 0)
-        out = np.where(e_ac[:, None], a + ac * t[:, None], out)
+        out = np.where(e_ac[..., None], a + ac * t[..., None], out)
         e_bc = (va <= 0) & ((d4 - d3) >= 0) & ((d5 - d6) >= 0)
         t = np.where(e_bc, (d4 - d3) / np.where((d4 - d3) + (d5 - d6) != 0, (d4 - d3) + (d5 - d6), 1), 0)
-        out = np.where(e_bc[:, None], b + (c - b) * t[:, None], out)
+        out = np.where(e_bc[..., None], b + (c - b) * t[..., None], out)
     # vertices
-    out = np.where(((d1 <= 0) & (d2 <= 0))[:, None], a, out)
-    out = np.where(((d3 >= 0) & (d4 <= d3))[:, None], b, out)
-    out = np.where(((d6 >= 0) & (d5 <= d6))[:, None], c, out)
+    out = np.where(((d1 <= 0) & (d2 <= 0))[..., None], a, out)
+    out = np.where(((d3 >= 0) & (d4 <= d3))[..., None], b, out)
+    out = np.where(((d6 >= 0) & (d5 <= d6))[..., None], c, out)
     return out
 
 
@@ -1608,6 +1649,48 @@ VIS_TOL = 0.001       # m: a point this close behind the nearest surface still c
 VIS_VIEWS = [(az, el) for el in (0, 35) for az in range(0, 360, 45)] + [(0, 70), (180, 70)]   # not from below
 
 
+def _raster_max(zb: np.ndarray, X: np.ndarray, Y: np.ndarray, Z: np.ndarray, faces: np.ndarray, n: int,
+                most: int = 1 << 22) -> None:
+    """zb (n x n) raised to each face's depth at the pixel centres it covers: all faces at once, grouped by their
+    pixel box size (2026-11-12: one face at a time in Python was the slowest step of a fit); the same arithmetic
+    per pixel as drawing them one by one."""
+    if not len(faces):
+        return
+    x, y = X[faces], Y[faces]
+    x0 = np.maximum(0, np.floor(x.min(1)).astype(np.int64))
+    x1 = np.minimum(n - 1, np.ceil(x.max(1)).astype(np.int64))
+    y0 = np.maximum(0, np.floor(y.min(1)).astype(np.int64))
+    y1 = np.minimum(n - 1, np.ceil(y.max(1)).astype(np.int64))
+    den = (y[:, 1] - y[:, 2]) * (x[:, 0] - x[:, 2]) + (x[:, 2] - x[:, 1]) * (y[:, 0] - y[:, 2])
+    keep = (x0 <= x1) & (y0 <= y1) & (np.abs(den) >= 1e-12)
+    side = np.maximum(x1 - x0, y1 - y0) + 1
+    size = np.ones(len(faces), np.int64)
+    while (size < side).any():
+        size = np.where(size < side, size * 2, size)
+    for b in np.unique(size[keep]):
+        idx = np.nonzero(keep & (size == b))[0]
+        oy, ox = np.divmod(np.arange(b * b), b)
+        step = max(1, most // int(b * b))
+        for c0 in range(0, len(idx), step):
+            k = idx[c0:c0 + step]
+            px = x0[k, None] + ox[None, :]
+            py = y0[k, None] + oy[None, :]
+            inbox = (px <= x1[k, None]) & (py <= y1[k, None])
+            gx, gy = px + 0.5, py + 0.5
+            xa, xb, xc = (x[k, i][:, None] for i in range(3))
+            ya, yb, yc = (y[k, i][:, None] for i in range(3))
+            d = den[k][:, None]
+            w0 = ((yb - yc) * (gx - xc) + (xc - xb) * (gy - yc)) / d
+            w1 = ((yc - ya) * (gx - xc) + (xa - xc) * (gy - yc)) / d
+            w2 = 1 - w0 - w1
+            m = inbox & (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            if not m.any():
+                continue
+            f = faces[k]
+            z = w0 * Z[f[:, 0]][:, None] + w1 * Z[f[:, 1]][:, None] + w2 * Z[f[:, 2]][:, None]
+            np.maximum.at(zb, (py[m], px[m]), z[m])
+
+
 def seen_from_outside(query: np.ndarray, pts: np.ndarray, tris, views=VIS_VIEWS, pixel: float = VIS_PIXEL,
                       tol: float = VIS_TOL) -> np.ndarray:
     """Which query points can be seen from outside the mesh (points, tris), in any of the orthographic views
@@ -1639,25 +1722,7 @@ def seen_from_outside(query: np.ndarray, pts: np.ndarray, tris, views=VIS_VIEWS,
         Y = (pp[:, 1] + half) / pixel
         Z = pp[:, 2]
         on = ((X[t].max(1) >= 0) & (X[t].min(1) <= n) & (Y[t].max(1) >= 0) & (Y[t].min(1) <= n))
-        for f in t[on]:
-            x, y = X[f], Y[f]
-            x0, x1 = max(0, int(np.floor(x.min()))), min(n - 1, int(np.ceil(x.max())))
-            y0, y1 = max(0, int(np.floor(y.min()))), min(n - 1, int(np.ceil(y.max())))
-            if x0 > x1 or y0 > y1:
-                continue
-            den = (y[1] - y[2]) * (x[0] - x[2]) + (x[2] - x[1]) * (y[0] - y[2])
-            if abs(den) < 1e-12:
-                continue
-            gx, gy = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
-            w0 = ((y[1] - y[2]) * (gx - x[2]) + (x[2] - x[1]) * (gy - y[2])) / den
-            w1 = ((y[2] - y[0]) * (gx - x[2]) + (x[0] - x[2]) * (gy - y[2])) / den
-            w2 = 1 - w0 - w1
-            m = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
-            if not m.any():
-                continue
-            z = w0 * Z[f[0]] + w1 * Z[f[1]] + w2 * Z[f[2]]
-            sub = zb[y0:y1 + 1, x0:x1 + 1]
-            np.maximum(sub, np.where(m, z, -np.inf), out=sub)
+        _raster_max(zb, X, Y, Z, t[on], n)
         ix = np.clip(((qq[:, 0] + half) / pixel).astype(int), 0, n - 1)
         iy = np.clip(((qq[:, 1] + half) / pixel).astype(int), 0, n - 1)
         out |= qq[:, 2] >= zb[iy, ix] - tol

@@ -714,9 +714,6 @@ class BindTests(unittest.TestCase):
         self.assertTrue(np.allclose(rot @ p_mesh + trans, 0, atol=1e-9))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class KeepTuckedTests(unittest.TestCase):
     def test_hidden_tab_drawn_in_to_its_skyrim_gap_visible_left(self):
@@ -984,3 +981,80 @@ class JoinWeightsTests(unittest.TestCase):
         # one ring away it fades back towards its own weights
         self.assertGreater(dict(out[23]).get("L_Biceps", 0), dict(out[17]).get("L_Biceps", 0))
         self.assertGreater(dict(out[0]).get("C_Chest", 0), dict(out[6]).get("C_Chest", 0))
+
+
+def _ref_closest_on_mesh(points, verts, tris, vnrm, k=6):
+    """The per-point version (before 2026-11-12), the reference the vectorised one must match."""
+    tris = np.asarray(tris, int).reshape(-1, 3)
+    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
+    fn = np.cross(b - a, c - a)
+    fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-12)
+    fn[np.einsum("ij,ij->i", fn, vnrm[tris].sum(1)) < 0] *= -1
+    vt = [[] for _ in range(len(verts))]
+    for t, tri in enumerate(tris):
+        for v in tri:
+            vt[v].append(t)
+    vv = (verts * verts).sum(1)
+    bp, bd, bs, bn = np.zeros_like(points), np.full(len(points), np.inf), np.zeros(len(points)), np.zeros_like(points)
+    d2 = (points * points).sum(1)[:, None] + vv[None, :] - 2.0 * points @ verts.T
+    near = np.argpartition(d2, k - 1, axis=1)[:, :k]
+    for j in range(len(points)):
+        cand = np.unique([t for v in near[j] for t in vt[v]])
+        if not len(cand):
+            continue
+        cp = G._closest_on_triangles(points[j], a[cand], b[cand], c[cand])
+        dist = np.linalg.norm(cp - points[j], axis=1)
+        i = int(np.argmin(dist))
+        bp[j], bd[j], bs[j], bn[j] = cp[i], dist[i], float((points[j] - cp[i]) @ fn[cand[i]]), fn[cand[i]]
+    return bp, bs, bd, bn
+
+
+class SpeedEquivalenceTests(unittest.TestCase):
+    """2026-11-12 (owner: outfit conversion took hours): the vectorised closest-point search and visibility
+    rasteriser give the same numbers as the per-point / per-face versions they replace."""
+
+    def test_closest_on_mesh_matches_per_point(self):
+        rng = np.random.default_rng(7)
+        v = rng.normal(size=(400, 3))
+        t = rng.integers(0, 400, size=(700, 3))
+        t[:5] = t[0]                                         # repeated triangles: equal distances, lowest id wins
+        n = rng.normal(size=(400, 3))
+        q = np.concatenate([rng.normal(size=(300, 3)), v[:20]])           # some exactly on vertices
+        new = G.closest_on_mesh(q, v, t, n, with_normals=True)
+        ref = _ref_closest_on_mesh(q, v, t, n)
+        for x, y in zip(new, ref):
+            self.assertTrue(np.array_equal(x, y))
+        p, s, d = G.closest_on_mesh(np.zeros((0, 3)), v, t, n)
+        self.assertEqual((len(p), len(s), len(d)), (0, 0, 0))
+
+    def test_raster_matches_per_face(self):
+        rng = np.random.default_rng(3)
+        n = 60
+        X, Y, Z = rng.uniform(-5, 65, 300), rng.uniform(-5, 65, 300), rng.normal(size=300)
+        faces = rng.integers(0, 300, size=(400, 3))
+        faces[:3] = [[0, 1, 1], [2, 2, 2], [3, 4, 5]]                     # degenerate ones skipped
+        zb = np.full((n, n), -np.inf)
+        G._raster_max(zb, X, Y, Z, faces, n, most=5000)                    # small batches
+        ref = np.full((n, n), -np.inf)
+        for f in faces:
+            x, y = X[f], Y[f]
+            x0, x1 = max(0, int(np.floor(x.min()))), min(n - 1, int(np.ceil(x.max())))
+            y0, y1 = max(0, int(np.floor(y.min()))), min(n - 1, int(np.ceil(y.max())))
+            if x0 > x1 or y0 > y1:
+                continue
+            den = (y[1] - y[2]) * (x[0] - x[2]) + (x[2] - x[1]) * (y[0] - y[2])
+            if abs(den) < 1e-12:
+                continue
+            gx, gy = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
+            w0 = ((y[1] - y[2]) * (gx - x[2]) + (x[2] - x[1]) * (gy - y[2])) / den
+            w1 = ((y[2] - y[0]) * (gx - x[2]) + (x[0] - x[2]) * (gy - y[2])) / den
+            w2 = 1 - w0 - w1
+            m = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+            z = w0 * Z[f[0]] + w1 * Z[f[1]] + w2 * Z[f[2]]
+            sub = ref[y0:y1 + 1, x0:x1 + 1]
+            np.maximum(sub, np.where(m, z, -np.inf), out=sub)
+        self.assertTrue(np.array_equal(zb, ref))
+
+
+if __name__ == "__main__":
+    unittest.main()
