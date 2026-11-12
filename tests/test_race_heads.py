@@ -675,7 +675,7 @@ class SkinToneTests(unittest.TestCase):
             with open(os.path.join(p, "female_sk4_color.dds"), "wb") as fh:
                 fh.write(skintone.raw_dds(face))
             got = H.face_targets({"textures/s2s/races/orc/face/female_sk4_color.dds": [1, 2, 3],
-                                  "textures/s2s/races/orc/body/male_sk4_color.dds": [1, 2, 3]}, d)
+                                  "textures/s2s/races/orc/body/male_sk4_color.dds": [1, 2, 3]}, d, kind="face")
         self.assertEqual(got, {True: (198, 176, 168)})
 
     def test_human_faces(self):

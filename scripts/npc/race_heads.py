@@ -1433,14 +1433,15 @@ def face_tone(target, texconv=""):
     return convert
 
 
-def face_targets(tone_textures, out, rank=RACE_TONE_DEFAULT):
-    """{female: sRGB median colour} of a race's written face tone textures of slot `rank` (write_skin_tones' result
-    keys, e.g. textures/s2s/races/orc/face/male_sk4_color.dds)."""
+def face_targets(tone_textures, out, rank=RACE_TONE_DEFAULT, kind="body"):
+    """{female: sRGB median colour} of a race's written `kind` tone textures of slot `rank` (write_skin_tones' result
+    keys, e.g. textures/s2s/races/orc/body/male_sk4_color.dds). Body by default (2026-11-12, owner: matched to the
+    face tone texture, the baked faces' neck / upper chest still read lighter than the body around them)."""
     from fo4sf import skintone
     out_ = {}
     for new in tone_textures:
         parts = new.split("/")
-        if len(parts) >= 2 and parts[-2] == "face" and parts[-1].endswith(f"_sk{rank}_color.dds"):
+        if len(parts) >= 2 and parts[-2] == kind and parts[-1].endswith(f"_sk{rank}_color.dds"):
             with open(os.path.join(out, *parts), "rb") as fh:
                 out_[parts[-1].startswith("female")] = skintone.median_colour(skintone.decode_dds(fh.read()))
     return out_

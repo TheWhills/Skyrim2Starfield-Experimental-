@@ -602,3 +602,7 @@ why the mod needs no clothes of its own.
   preset that looks Orc is the player's own record (the player patch puts our head on it), so the body-type switch
   likely picks the Face for the new sex from the player record's parts: the patch now lists both sexes' race heads
   (head parts carry a male / female flag). Unverified.
+- 2026-11-12, owner: NPC faces now close to the body, but the baked face's neck / upper-chest patch reads a little
+  lighter than the body around it. The baked face is now matched to the body tone texture's median (same slot)
+  instead of the face tone texture's (vanilla's face textures run lighter than the body ones: sk4 face (182,144,104)
+  vs body (177,129,90)). The detail difference (a baked face carries its template's pores / makeup) stays.
