@@ -39,7 +39,8 @@ class ProbeTests(unittest.TestCase):
                 (b"FLST", [(b"EDID", Z("Unrelated")), (b"LNAM", I(0x77))], 0x901),
                 (b"HDPT", [(b"EDID", Z("HumanFemaleHead")), (b"MODL", Z("FemaleHead.nif")), (b"PNAM", I(1))], 0x12),
                 (b"NPC_", [(b"EDID", Z("ChargenPresetMale01")), (b"PNAM", I(0x12))], 0x500),
-                (b"NPC_", [(b"EDID", Z("ChargenPresetFemale01")), (b"PNAM", I(0x12))], 0x501)])
+                (b"NPC_", [(b"EDID", Z("ChargenPresetFemale01")), (b"PNAM", I(0x12)), (b"TNAM", Z("Dermaesthetic")),
+                           (b"QNAM", Z("European_Female_md1_Sk3")), (b"STON", b"\x03")], 0x501)])
             plug = os.path.join(d, "Race.esm")
             esm(plug, [(b"RACE", [(b"EDID", Z("S2S_OrcRace")), (b"FNAM", b""), (b"RPRF", I(0x501))], 0x1000),
                        (b"NPC_", [(b"EDID", Z("Player")), (b"RNAM", I(0x1000)), (b"PNAM", I(0x12))], 0x7)])
@@ -53,6 +54,8 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn(("Unrelated", "LNAM"), refs)
         self.assertEqual(rep["Race.esm"]["Player"]["face"], [["00000012", "HumanFemaleHead", "FemaleHead.nif"]])
         self.assertIn("ChargenPresetList", so.getvalue())
+        self.assertEqual(rep["humanrace_preset_faces"]["ChargenPresetFemale01"],
+                         [["TNAM", "Dermaesthetic"], ["QNAM", "European_Female_md1_Sk3"], ["STON", "3"]])
 
 
 if __name__ == "__main__":

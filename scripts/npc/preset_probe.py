@@ -75,6 +75,25 @@ def face_part(npc_subs, hdpt):
     return out
 
 
+FACE_SIGS = (b"TNAM", b"QNAM", b"VNAM", b"NNAM", b"INTV", b"STON", b"FMRI", b"FMRG", b"TETC", b"FDDS")
+
+
+def face_fields(subs):
+    """[(sig, value)] of an NPC's face texture / skin fields (texture layers, STON, phenotype), readable."""
+    out = []
+    for s, d in subs:
+        if s in FACE_SIGS:
+            d = bytes(d)
+            if d.endswith(b"\0") and all(32 <= c < 127 for c in d[:-1]):
+                v = d[:-1].decode("latin-1")
+            elif len(d) == 1:
+                v = str(d[0])
+            else:
+                v = d.hex()
+            out.append((s.decode("latin-1"), v))
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--starfield", required=True)
@@ -90,6 +109,8 @@ def main(argv=None):
     pres = race_presets(human[2])
     rep["humanrace_presets"] = {k: [f"{x:08X}" for x in v] for k, v in pres.items()}
     targets = {x for v in pres.values() for x in v}
+    vnpcs = {f: s for t, _h, s, f in sfplugin.records(sf_esm, [b"NPC_"]) if f in targets}
+    rep["humanrace_preset_faces"] = {sfplugin.edid(s): face_fields(s) for f, s in vnpcs.items()}
     print(f"HumanRace presets: {len(pres['male'])} male, {len(pres['female'])} female; scanning Starfield.esm ...")
     refs = references(sf_esm, targets)
     rep["references"] = refs
@@ -109,7 +130,8 @@ def main(argv=None):
             if t == b"RACE":
                 rp = race_presets(s)
                 pr[sfplugin.edid(s)] = {sex: [{"npc": f"{x:08X}", "edid": sfplugin.edid(npcs[x]) if x in npcs else None,
-                                               "face": face_part(npcs[x], hdpt) if x in npcs else None}
+                                               "face": face_part(npcs[x], hdpt) if x in npcs else None,
+                                               "face_fields": face_fields(npcs[x]) if x in npcs else None}
                                               for x in v] for sex, v in rp.items()}
             if t == b"FLST" and sfplugin.edid(s) == "CharGenPresets":
                 pr["CharGenPresets"] = [f"{u32(d):08X}" for x, d in s if x == b"LNAM"]
