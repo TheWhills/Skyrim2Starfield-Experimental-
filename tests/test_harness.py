@@ -158,6 +158,44 @@ class Build(unittest.TestCase):
 
 
 class Capture(unittest.TestCase):
+    def test_find_cdb_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_cdb, sdk_cdb = os.path.join(tmp, "env_cdb.exe"), os.path.join(tmp, "sdk_cdb.exe")
+            for p in (env_cdb, sdk_cdb):
+                open(p, "w").close()
+            none = lambda _name: None  # noqa: E731
+            self.assertEqual(C.find_cdb({"S2S_CDB": env_cdb}, (sdk_cdb,), none), env_cdb)
+            self.assertEqual(C.find_cdb({}, (sdk_cdb,), none), sdk_cdb)
+            self.assertEqual(C.find_cdb({}, (), lambda name: "on_path"), "on_path")
+            self.assertIsNone(C.find_cdb({"S2S_CDB": os.path.join(tmp, "gone.exe")}, (), none))
+
+    def test_smoke_refuses_before_launch_without_cdb(self):
+        launched = []
+        old_cdb, old_launch = C.CDB, T.launch
+        C.CDB, T.launch = None, lambda inst: launched.append(inst) or 1
+        try:
+            with self.assertRaises(SystemExit):
+                T.smoke(T.Instance("x"), argparse.Namespace(crash=True))
+        finally:
+            C.CDB, T.launch = old_cdb, old_launch
+        self.assertEqual(launched, [])
+
+    def test_smoke_stops_game_when_a_step_fails(self):
+        stopped = []
+        saved = T.launch, T.stop, T.hidden_launch.has_window, T.running_pid
+        T.launch, T.stop = (lambda inst: 1), (lambda inst: stopped.append(inst))
+        T.running_pid = lambda inst: 1
+
+        def broken(*_):
+            raise OSError("desktop gone")
+        T.hidden_launch.has_window = broken
+        try:
+            with self.assertRaises(OSError):
+                T.smoke(T.Instance("x"), argparse.Namespace(crash=False, timeout=1, settle=0, keep=False))
+        finally:
+            T.launch, T.stop, T.hidden_launch.has_window, T.running_pid = saved
+        self.assertEqual(len(stopped), 1)
+
     def test_section(self):
         log = "noise\nMARKER_ARMED\nMARKER_CRASH\nexr\nMARKER_REGS\nrax=1\nMARKER_STACK\nkb\n"
         self.assertEqual(C.section(log, "MARKER_CRASH"), "MARKER_CRASH\nexr\n")

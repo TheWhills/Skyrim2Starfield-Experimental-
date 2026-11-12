@@ -357,23 +357,31 @@ def file_state(path: str) -> tuple:
 
 
 def smoke(inst: Instance, args) -> int:
-    """Launch, wait for the window, settle, screenshot, check; exit 0 only when every check passes."""
+    """Launch, wait for the window, settle, screenshot, check; exit 0 only when every check passes.
+    Whatever goes wrong after the launch, the game is stopped again (unless --keep)."""
+    if args.crash:
+        import crash_capture
+        if not crash_capture.CDB:  # checked before launching, so a missing debugger never orphans a game
+            raise SystemExit(crash_capture.MISSING_CDB + " (or run smoke without --crash)")
     before = {p: file_state(p) for p in player_profile_files()}
     started = time.time()
     pid = launch(inst)
-    if args.crash:
-        import crash_capture
-        crash_capture.attach(pid, os.path.join(OUT, "crash"), "smoke")
-    checks = {}
-    deadline = time.time() + args.timeout
-    while time.time() < deadline and running_pid(inst) and not hidden_launch.has_window(DESKTOP, pid):
-        time.sleep(1)
-    checks["window"] = hidden_launch.has_window(DESKTOP, pid)
-    window_s = round(time.time() - started, 1)
-    time.sleep(args.settle)
-    checks["alive_after_settle"] = bool(running_pid(inst))
-    shot_path = shot(inst, os.path.join(OUT, "smoke.png")) if checks["alive_after_settle"] else ""
-    checks["screenshot"] = bool(shot_path)
+    try:
+        if args.crash:
+            crash_capture.attach(pid, os.path.join(OUT, "crash"), "smoke")
+        checks = {}
+        deadline = time.time() + args.timeout
+        while time.time() < deadline and running_pid(inst) and not hidden_launch.has_window(DESKTOP, pid):
+            time.sleep(1)
+        checks["window"] = hidden_launch.has_window(DESKTOP, pid)
+        window_s = round(time.time() - started, 1)
+        time.sleep(args.settle)
+        checks["alive_after_settle"] = bool(running_pid(inst))
+        shot_path = shot(inst, os.path.join(OUT, "smoke.png")) if checks["alive_after_settle"] else ""
+        checks["screenshot"] = bool(shot_path)
+    finally:
+        if not args.keep:
+            stop(inst)
     sandbox = "\n".join(_tail(inst.sandbox_log, 200))
     checks["sandbox_redirected"] = "export table: 3 of 3" in sandbox
     sfse = _tail(inst.sfse_log, 400)
@@ -381,10 +389,9 @@ def smoke(inst: Instance, args) -> int:
     problems = sfse_problems(sfse)
     changed = [p for p, s in before.items() if file_state(p) != s]
     checks["player_profile_untouched"] = not changed
-    if not args.keep:
-        stop(inst)
     result = {"checks": checks, "window_seconds": window_s, "sfse_problems": problems,
-              "player_files_changed": changed, "screenshot": shot_path}
+              "player_files_changed": changed, "screenshot": shot_path,
+              "sandbox_log": _tail(inst.sandbox_log, 40), "sfse_log": sfse[-40:]}
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "smoke.json"), "w", encoding="utf-8") as f:
         json.dump(result, f, indent=1)

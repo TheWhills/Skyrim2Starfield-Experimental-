@@ -21,12 +21,25 @@ Ported from tes4skyrim's tools/live/crash_capture.py (MIT, bryantmh). See: scrip
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
 
-#: Windows SDK debugger, x64 build (matching the game). Override with $env:S2S_CDB.
-CDB = os.environ.get("S2S_CDB", r"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe")
+#: Where the x64 cdb.exe (matching the game) is looked for, after $env:S2S_CDB and before PATH.
+CDB_PLACES = (r"C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe",
+              r"C:\Program Files\Windows Kits\10\Debuggers\x64\cdb.exe")
+
+
+def find_cdb(env=os.environ, places=CDB_PLACES, which=shutil.which):
+    """The cdb.exe to use: $env:S2S_CDB, the Windows SDK's usual folders, then PATH; None when there is none."""
+    for path in ([env["S2S_CDB"]] if env.get("S2S_CDB") else []) + list(places):
+        if os.path.exists(path):
+            return path
+    return which("cdb.exe") or which("cdb")
+
+
+CDB = find_cdb()
 PROCESS = "Starfield.exe"
 OUT = os.path.join("out", "crash")
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -123,10 +136,13 @@ def _prepare(out_dir: str, tag: str):
     return log, dump
 
 
+MISSING_CDB = ("cdb.exe not found (looked at $env:S2S_CDB, %s and PATH): install the Windows SDK with only "
+               "'Debugging Tools for Windows' ticked, or set $env:S2S_CDB" % ", ".join(CDB_PLACES))
+
+
 def _need_cdb() -> None:
-    if not os.path.exists(CDB):
-        raise SystemExit("cdb.exe not found at %s: install the Windows SDK's 'Debugging Tools for Windows' "
-                         "or set $env:S2S_CDB" % CDB)
+    if not CDB:
+        raise SystemExit(MISSING_CDB)
 
 
 def attach(pid, out_dir: str = OUT, tag: str = "crash", first: str = "") -> str:
