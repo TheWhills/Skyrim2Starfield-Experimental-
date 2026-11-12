@@ -102,3 +102,9 @@ many of them wear it (already so); now a later run also reuses an item / sex fit
 report and _staging still there (_fit_cache.json in --out; --refit fits again; --replace-all starts over). Records and
 FormIDs come out the same (tests/test_item_convert.py ReuseTests).
 
+
+Owner 2026-11-12: the first all-NPC item_convert run took hours, refitting items already converted on 11-09 (the
+cache started empty, and it was only written at the end of a run). Now each finished fit is saved as it ends (a
+stopped run keeps it), each fit prints its time, and --reuse-staged takes every finished stage report already on disk
+(older fits, a stopped run's) without the key check; a fit whose staged files are newer than its report (stopped
+part-way) is fitted again. Speed itself not changed yet: the per-fit times decide what to make faster.

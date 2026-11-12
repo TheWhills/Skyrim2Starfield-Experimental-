@@ -200,27 +200,57 @@ def load_fit_cache(out: str) -> dict:
         return {}
 
 
-def fit_or_reuse(a, edid: str, sex: str, fit_args, cache: dict) -> dict:
+def staged_complete(out: str, rows, report_mtime: float) -> bool:
+    """No staged file of these parts is newer than their stage report (a fit stopped part-way rewrites files before
+    its report: those are not taken as finished)."""
+    for r in rows:
+        rel = "/".join((r.get("nif") or "").replace("\\", "/").split("/")[:-1])
+        if not rel:
+            continue
+        for root in (out, os.path.join(out, "_staging")):
+            for sub in ("", "meshes", "geometries"):
+                d = os.path.join(root, sub, *rel.split("/"))
+                if os.path.isdir(d):
+                    for fn in os.listdir(d):
+                        if os.path.getmtime(os.path.join(d, fn)) > report_mtime + 2:
+                            return False
+    return True
+
+
+def fit_or_reuse(a, edid: str, sex: str, fit_args, cache: dict, save=None) -> dict:
     """fit_item, or its earlier result when the same fit is in the cache, its stage report is still there and the
-    staged files were not dropped (--refit: always fit). Updates cache on a new fit."""
+    staged files were not dropped (--refit: always fit). --reuse-staged: any finished stage report on disk is taken
+    as is (fits made before the cache existed, or by a run that was stopped). Updates cache on a new fit and calls
+    save() after each item / sex, so a stopped run keeps what it finished."""
+    import time
     name = f"Items\\{edid}_{TAG[sex]}"
     key = fit_key(a, edid, sex, fit_args)
     path = stage_report(a.out, name)
-    if not a.refit and cache.get(name) == key and os.path.isfile(path) \
-            and os.path.isdir(os.path.join(a.out, "_staging")):
+    known = cache.get(name) == key or getattr(a, "reuse_staged", False)
+    if not a.refit and known and os.path.isfile(path) and os.path.isdir(os.path.join(a.out, "_staging")):
         try:
             with open(path, encoding="utf-8") as fh:
                 rep = json.load(fh)
             rows = (rep.get("records") or {}).get("stage")
-            if rows is not None:
+            if rows is not None and (cache.get(name) == key or staged_complete(a.out, rows, os.path.getmtime(path))):
+                if cache.get(name) != key:
+                    cache[name] = key
+                    if save:
+                        save()
+                print(f"--- {edid} ({sex}): fitted before, reused")
                 return {"rows": rows, "meshes": [m.get("mesh") for m in rep.get("meshes", [])], "reused": True}
         except (OSError, ValueError):
             pass
+    t0 = time.time()
     f = fit_item(a, edid, sex, fit_args)
+    f["seconds"] = round(time.time() - t0, 1)
+    print(f"--- {edid} ({sex}): fitted in {f['seconds']:.0f} s")
     if f.get("rows") is not None:
         cache[name] = key
     else:
         cache.pop(name, None)
+    if save:
+        save()
     return f
 
 
@@ -276,6 +306,9 @@ def main(argv=None):
     ap.add_argument("--refit", action="store_true",
                     help="fit every item again (default: an item / sex fitted before with the same inputs and code "
                          "is reused)")
+    ap.add_argument("--reuse-staged", action="store_true",
+                    help="take every item / sex whose stage report is already on disk (and finished) as fitted, "
+                         "without checking how it was made: fits from before the cache, or from a stopped run")
     ap.add_argument("--dry-run", action="store_true", help="list each item's meshes per sex; write nothing")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
@@ -322,9 +355,13 @@ def main(argv=None):
     fit_args = shlex.split(a.fit_args)
     items, rep = [], {"items": {}, "notes": notes}
     fit_cache = {} if a.replace_all else load_fit_cache(a.out)
+
+    def save_cache():
+        with open(os.path.join(a.out, FIT_CACHE), "w", encoding="utf-8") as fh:
+            json.dump(fit_cache, fh, indent=1)
     for e in edids:
         armo = inv["armo"][by_edid[e.lower()]]
-        fits = {sex: fit_or_reuse(a, armo["edid"], sex, fit_args, fit_cache) for sex in sexes}
+        fits = {sex: fit_or_reuse(a, armo["edid"], sex, fit_args, fit_cache, save_cache) for sex in sexes}
         rows = {sex: fits[sex].get("rows") or [] for sex in sexes}
         pairs, slot_notes = pair_parts(rows.get("male", []), rows.get("female", []))
         rep["items"][armo["edid"]] = {"fits": {s: {k: v for k, v in f.items() if k != "rows"} for s, f in fits.items()},
@@ -362,8 +399,7 @@ def main(argv=None):
     with open(plugin_path, "wb") as fh:
         fh.write(sfplugin.build(keep + recs, info, author="Skyrim2Starfield clothes", masters=["Starfield.esm"]))
     ids.save()
-    with open(os.path.join(a.out, FIT_CACHE), "w", encoding="utf-8") as fh:
-        json.dump(fit_cache, fh, indent=1)
+    save_cache()
     reused = [f"{e} ({s_})" for e, r in rep["items"].items() for s_, f in r["fits"].items() if f.get("reused")]
     if reused:
         print(f"{len(reused)} item fits unchanged, reused (--refit to fit again): {', '.join(reused)}")

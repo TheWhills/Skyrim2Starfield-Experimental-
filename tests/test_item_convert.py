@@ -268,6 +268,45 @@ class ReuseTests(unittest.TestCase):
                 run(["--armor", "Boots", "--fit-args=--conform"])
                 self.assertEqual(sorted(calls), [("Boots", "female"), ("Boots", "male")])
 
+    def test_reuse_staged_and_stopped_runs(self):
+        """2026-11-12 (owner: hours of refitting outfits converted before): each finished fit is saved as it ends,
+        so a stopped run keeps it; --reuse-staged takes finished stage reports on disk without the cache, but not a
+        fit whose files are newer than its report (stopped part-way)."""
+        rows_by = {("Cuirass", s): [row("Cuirass", s)] for s in IC.SEXES}
+        rows_by.update({("Boots", s): [row("Boots", s, (7,), item="Boots")] for s in IC.SEXES})
+        calls = []
+
+        def fit(a, edid, sex, fit_args):
+            if edid == "Boots" and stop[0]:
+                raise KeyboardInterrupt
+            calls.append((edid, sex))
+            os.makedirs(os.path.join(a.out, "_staging"), exist_ok=True)
+            with open(IC.stage_report(a.out, f"Items\\{edid}_{IC.TAG[sex]}"), "w", encoding="utf-8") as fh:
+                json.dump({"records": {"stage": rows_by[(edid, sex)]}, "meshes": []}, fh)
+            return {"rows": rows_by[(edid, sex)]}
+        stop = [True]
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(IC, "fit_item", fit):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_plain(d, ["--npc", "Ralof"])                     # stopped at the boots
+            with open(os.path.join(d, "out", IC.FIT_CACHE), encoding="utf-8") as fh:
+                self.assertEqual(sorted(json.load(fh)), ["Items\\Cuirass_F", "Items\\Cuirass_M"])
+            stop[0] = False
+            calls.clear()
+            self.run_plain(d, ["--npc", "Ralof"])
+            self.assertEqual(sorted(calls), [("Boots", "female"), ("Boots", "male")])
+            # no cache (fits from before it existed): --reuse-staged takes the reports; one stopped part-way is fitted
+            os.remove(os.path.join(d, "out", IC.FIT_CACHE))
+            part = os.path.join(d, "out", "meshes", "S2S", "Items", "Boots_M")
+            os.makedirs(part, exist_ok=True)
+            newer = os.path.join(part, "Boots.nif")
+            with open(newer, "wb") as fh:
+                fh.write(b"half")
+            t = os.path.getmtime(IC.stage_report(os.path.join(d, "out"), "Items\\Boots_M")) + 60
+            os.utime(newer, (t, t))
+            calls.clear()
+            self.run_plain(d, ["--npc", "Ralof", "--reuse-staged"])
+            self.assertEqual(calls, [("Boots", "male")])
+
     def run_plain(self, d, argv):
         sky, sf = os.path.join(d, "Skyrim"), os.path.join(d, "SF")
         os.makedirs(sky, exist_ok=True)
