@@ -433,6 +433,7 @@ var xMarker = new FormKey(sfEsm, actorsRoot is JsonElement axr && axr.TryGetProp
 // them so). ACTOR_LOOK=generic: the earlier generic copy of the vanilla template instead (A/B).
 var faceMods = new Dictionary<string, IStarfieldModGetter>(StringComparer.OrdinalIgnoreCase);
 var extraMasters = new List<ModKey>();                 // face plugins and their masters, for the write's load order
+var animMasters = new List<ModKey>();                  // furniture animation keywords' plugin (S2SStances.esm): loads last
 IStarfieldModGetter? FacePlugin(string path)
 {
     if (faceMods.TryGetValue(path, out var have)) return have;
@@ -733,7 +734,11 @@ FormKey? FurnitureBase(string key)
     if (b.TryGetProperty("anim_keyword", out var akw) && akw.ValueKind == JsonValueKind.String)
     {
         f.Keywords ??= new ExtendedList<IFormLinkGetter<IKeywordGetter>>();
-        f.Keywords.Add(FormKey.Factory(akw.GetString()!).ToLink<IKeywordGetter>());
+        var akk = FormKey.Factory(akw.GetString()!);
+        f.Keywords.Add(akk.ToLink<IKeywordGetter>());
+        // a master of FO4Port.esm now: the write sorts masters against the load order given (owner 2026-11-13:
+        // MissingModException S2SStances.esm without this)
+        if (!animMasters.Contains(akk.ModKey)) animMasters.Add(akk.ModKey);
         modelNote += $", Skyrim animations ({b.GetProperty("anim_set").GetString()} {akw.GetString()})";
     }
     mod.Furniture.Add(f);
@@ -1330,11 +1335,11 @@ mod.ModHeader.Stats.NextFormID = next;
 var path = Path.Combine(outDir, modKey.FileName);
 var sfData = Environment.GetEnvironmentVariable("STARFIELD_DATA") ?? throw new InvalidOperationException("set STARFIELD_DATA to the Starfield Data folder");
 var loadOrder = new[] { (ModKey?)sfEsm, extKey, planetKey }.Where(k => k != null).Select(k => k!.Value)
-    .Concat(extraMasters).Distinct().ToArray();
+    .Concat(extraMasters).Concat(animMasters).Distinct().ToArray();
 var knownMasters = loadOrder.Select(k => new KeyedMasterStyle(k, MasterStyle.Full)).ToArray();
 void WriteMod()
 {
-    if (extKey == null && extraMasters.Count == 0)
+    if (extKey == null && extraMasters.Count == 0 && animMasters.Count == 0)
         mod.BeginWrite.ToPath(path).WithLoadOrderFromHeaderMasters().WithDataFolder(sfData)
             .WithKnownMasters(knownMasters).Write();
     else
