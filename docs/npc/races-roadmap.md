@@ -250,3 +250,12 @@ Now every NPC of a sex copies GENERIC_TEMPLATE (ChargenPresetFemale04_Swap / Cha
 outfits are fitted on); skin tone stays separate (race_skin on a converted race, human_face_colour's recolour
 otherwise). --template-by-tone for the old pick; if the game lacks the generic one the old pick is used.
 Unverified: the recolour of a light template face to a dark tone (Redguards, Dunmer) in game.
+
+Elders and hair colour (2026-11-13, owner in game: Hilde (Elder) looks young; Hilde and Faendal black-haired; looks
+menu "Facial Forms 2" options 14 / 15 at higher intensity age a face). Hair: faces.json had both on Skyrim
+HairColor14Grey -> SaltAndPepper (the grey-family name nearest Skyrim's dark tint); now a Starfield colour named by one
+of the Skyrim EditorID's own words wins (Grey -> Grey), unless it says dark / light (BrownDark still darker). Age:
+NPC faces are drawn from the template's pre-built face textures, so the Facial Forms layer has to be found first:
+face_layer_probe.py lists each texture layer's textures (which layer and texture "Facial Forms 2 #14 / 15" is), the
+looks menu's option lists (AVMD) and old NPCs' layers. Then: Elder NPCs on an old template or the layer composited
+into the face textures face_fit writes. Open.

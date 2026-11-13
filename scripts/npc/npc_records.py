@@ -162,6 +162,14 @@ def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
     # Skyrim's colour EditorIDs say what the colour is (HairColor03BrightBlond, HairColor06Auburn); its CLFM RGB is a
     # tint multiplied into the texture and reads much darker (BrightBlond is 81, 77, 57), so the words decide the
     # family (owner 2026-11-05: Ralof came out red, then by RGB alone brown, Ysolda's Auburn black-brown)
+    # a Starfield colour named by one of the Skyrim EditorID's own words wins (2026-11-13: HairColor14Grey went to
+    # SaltAndPepper, the grey-family name nearest its dark tint, and Hilde / Faendal showed black hair; Starfield has
+    # Grey, White, Auburn, Copper ... by those very names)
+    toks = {t.lower() for t in re.split(r"[^A-Za-z]+", re.sub(r"([a-z])([A-Z])", r"\1 \2",
+                                                              skyrim_color.get("edid", ""))) if t}
+    exact = [n for n in natural if n.lower() in toks]
+    if exact and not toks & {"dark", "light", "bright", "pale", "deep"}:     # 'BrownDark' still goes darker
+        return exact[0], "same colour name"
     want = color_words(skyrim_color.get("edid", ""))
     hues = want - {"dark", "light"}
     if hues:

@@ -73,6 +73,10 @@ class RecordTests(unittest.TestCase):
         self.assertEqual(NR.match_hair_color(rgb("HairColor03BrightBlond", (81, 77, 57)), sf)[0], "Blonde")
         self.assertEqual(NR.match_hair_color(rgb("HairColor06Auburn", (48, 35, 33)), sf)[0], "Auburn")
         self.assertEqual(NR.match_hair_color(rgb("HairColor02BrownDark", (40, 30, 20)), sf)[0], "BlackBrown")
+        # 2026-11-13: Skyrim's own colour word names a Starfield colour: Grey stays Grey (was SaltAndPepper by its dark
+        # tint, Hilde / Faendal black-haired in game)
+        self.assertEqual(NR.match_hair_color(rgb("HairColor14Grey", (70, 75, 85)), sf + ["SaltAndPepper", "Grey"]),
+                         ("Grey", "same colour name"))
         self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf)[0], "Brown")
         self.assertEqual(NR.match_hair_color(rgb("X", (20, 18, 17)), sf)[0], "Black")
         self.assertEqual(NR.match_hair_color(rgb("X", (120, 40, 25)), sf)[0], "Auburn")
