@@ -54,6 +54,49 @@ WEAPON_TYPES = ("Dagger", "WarAxe", "Mace", "Greatsword", "Battleaxe", "Warhamme
 TYPE_ROOT = "actors\\human\\animations\\melee\\s2s_types"
 TYPE_INDEX = 8
 RACE_EDID = "HumanRace"
+# Skyrim's own furniture animations (docs/npc/furniture.md "Animations", 2026-11-13): per set a keyword our furniture
+# carries (make_furniture.ANIM_SETS) and, for every HumanRace furniture entry (esm, and the generated table's third-person
+# Furniture rows) whose target keywords hold one of the set's vanilla keywords, a copy with the set keyword added and the
+# set's folder of converted Skyrim clips first (furniture_anim_pack.py writes them under the vanilla tags; a tag the
+# folder lacks falls back to the vanilla folders after it). Keywords from FURN_INDEX on (after stances and types).
+# Lives here, not in its own plugin: one HumanRace override only can win.
+FURN_INDEX = 16
+FURNITURE_SETS = (("Sit", ("AnimFurnChair", "AnimFurnBench"), "actors\\human\\animations\\furniture\\s2s_sit"),)
+FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
+
+
+def furniture_keyword_edid(anim_set: str) -> str:
+    return f"S2S_AnimFurnSkyrim{anim_set}"          # = make_furniture.anim_keyword_edid
+
+
+def furniture_entries(entries, rows, keyword_ids, set_kw, vanilla, folder):
+    """New entries for one furniture set: copies of the race's third-person furniture entries and of the table's
+    third-person Furniture rows whose target keywords include a `vanilla` keyword (EditorIDs), the set keyword added to
+    the target keywords and `folder` first. (entries, rows used, unresolved keyword names)."""
+    want = {keyword_ids[v.lower()] for v in vanilla if v.lower() in keyword_ids}
+    out, used, unresolved = [], 0, set()
+    for e in entries:
+        flags = (e.get("flags") or "").replace(" ", "")
+        if not (flags.startswith("0200") and flags[4:8] == "0000") or not want & set(e["target_keywords"]):
+            continue
+        out.append(dict(e, race=None, target_keywords=list(e["target_keywords"]) + [set_kw],
+                        paths=[folder] + list(e["paths"])))
+        used += 1
+    for r in rows or []:
+        if r["role"].lower() != "furniture" or r["perspective"].lower() != "3rd":
+            continue
+        if not {t.lower() for t in r["target"]} & {v.lower() for v in vanilla}:
+            continue
+        names = r["actor"] + r["target"]
+        missing = [n for n in names if n.lower() not in keyword_ids]
+        if missing:
+            unresolved.update(missing)
+            continue
+        out.append({"actor_keywords": [keyword_ids[n.lower()] for n in r["actor"]],
+                    "target_keywords": [keyword_ids[n.lower()] for n in r["target"]] + [set_kw],
+                    "graph": r["graph"], "paths": [folder] + r["paths"], "flags": FURNITURE_THIRD_PERSON})
+        used += 1
+    return out, used, unresolved
 
 
 def keyword_edid(stance: str) -> str:
@@ -190,7 +233,7 @@ def race_with_stances(subs, keywords: dict, first_person: bool = False, table_ro
 
 
 def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text=None, common: bool = True,
-          weapon_types=WEAPON_TYPES):
+          weapon_types=WEAPON_TYPES, furniture_sets=FURNITURE_SETS):
     """(plugin bytes, report) from Starfield.esm (+ the generated HumanRace table text, read from the archives)."""
     info = sfplugin.header_info(esm_path)
     recs = sfplugin.records(esm_path, [b"KYWD", b"RACE"])
@@ -215,6 +258,23 @@ def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text
         out.append((b"KYWD", kywd[1], subs, fid))
     race_subs, rep = race_with_stances(race[2], keywords, first_person, table_rows=rows, keyword_ids=keyword_ids,
                                        common=common, types=types)
+    rep["furniture"] = {}
+    if furniture_sets:
+        all_rows = parse_table(table_text) if table_text else []
+        vanilla_entries = subgraph.parse(race[2])
+        furn = []
+        for j, (st, vanilla, folder) in enumerate(furniture_sets):
+            fid = sfplugin.new_form_id(FURN_INDEX + j)
+            subs = sfplugin.edit(kywd[2], {b"EDID": sfplugin.zs(furniture_keyword_edid(st))}, drop=(b"FULL", b"DESC"))
+            out.append((b"KYWD", kywd[1], subs, fid))
+            ents, used, unres = furniture_entries(vanilla_entries, all_rows, keyword_ids, fid, vanilla, folder)
+            for e in ents:
+                furn += subgraph.build(e)
+            rep["furniture"][st] = {"keyword": furniture_keyword_edid(st), "form": f"{fid:08X}", "folder": folder,
+                                    "vanilla_keywords": list(vanilla), "entries": used,
+                                    "unresolved_keywords": sorted(unres)}
+        at = next(i for i, (s_, _d) in enumerate(race_subs) if s_ in subgraph.FIELDS)
+        race_subs = list(race_subs[:at]) + furn + list(race_subs[at:])        # one keyword more: first
     out.append((b"RACE", race[1], race_subs, race[3]))
     rep["keywords"] = {keyword_edid(s): f"{fid:08X}" for s, fid in keywords.items()}
     rep["type_keywords"] = {type_keyword_edid(t): f"{fid:08X}" for t, fid in types.items()}
@@ -251,6 +311,8 @@ def main(argv=None):
     ap.add_argument("--no-dual", action="store_true", help="no Dual stance (S2S_StanceDual, s2s_stances\\dual)")
     ap.add_argument("--no-types", action="store_true",
                     help="no weapon-type keywords / entries (S2S_Anim<Type>, s2s_types\\<type>)")
+    ap.add_argument("--no-furniture", action="store_true",
+                    help="no Skyrim furniture-animation keywords / entries (FURNITURE_SETS)")
     ap.add_argument("--no-common", action="store_true",
                     help="no shared s2s_stances\\common folder (and no neutral entries)")
     a = ap.parse_args(argv)
@@ -270,7 +332,8 @@ def main(argv=None):
             if table is None:
                 print(f"{GENERATED_TABLE} not found in the archives: falling back to the esm's melee entries")
     data, rep = build(esm, stances=STANCES if a.no_dual else STANCES_DUAL, first_person=a.first_person,
-                      table_text=table, common=not a.no_common, weapon_types=() if a.no_types else WEAPON_TYPES)
+                      table_text=table, common=not a.no_common, weapon_types=() if a.no_types else WEAPON_TYPES,
+                      furniture_sets=() if a.no_furniture else FURNITURE_SETS)
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(data)
@@ -286,6 +349,10 @@ def main(argv=None):
               f"{TYPE_ROOT})")
     if rep.get("unresolved_keywords"):
         print(f"  rows skipped, keywords not in Starfield.esm: {', '.join(rep['unresolved_keywords'])}")
+    for st, f in rep.get("furniture", {}).items():
+        print(f"  furniture {st}: {f['keyword']} ({f['form']}), {f['entries']} entries with {f['folder']} first"
+              + (f"; rows skipped (keywords not in Starfield.esm): {f['unresolved_keywords']}"
+                 if f["unresolved_keywords"] else ""))
     for f in rep["melee_first_folders"]:
         print(f"  melee entry folder: {f}")
     return 0

@@ -47,7 +47,7 @@ class StancePluginTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             esm = os.path.join(d, "Starfield.esm")
             starfield_esm(esm, big=True)
-            data, rep = SP.build(esm)
+            data, rep = SP.build(esm, furniture_sets=())
             out = os.path.join(d, SP.PLUGIN)
             with open(out, "wb") as fh:
                 fh.write(data)
@@ -343,6 +343,54 @@ class StancePackPlanTests(unittest.TestCase):
                                                   "Greatsword"), 1)
             self.assertTrue(os.path.isfile(os.path.join(d, "out", "meshes", *SP.type_folder("Greatsword").split("\\"),
                                                         "MeleeAttack_A.af")))
+
+
+class FurnitureAnimEntriesTests(unittest.TestCase):
+    """2026-11-13: Skyrim's own furniture animations: a keyword per set and copies of the furniture entries with it."""
+
+    def test_furniture_set_keyword_and_entries(self):
+        CHAIR, BENCH, FEMALE, OTHER = 0x000A0021, 0x000A0022, 0x000A0023, 0x000A0024
+        hdr = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)  # noqa: E731
+        furn = lambda target, paths, flags: subgraph.build({                                     # noqa: E731
+            "actor_keywords": [], "target_keywords": target, "graph": "AnimTextData\\Tables\\Graphs\\F.agx",
+            "paths": paths, "flags": flags})
+        race = [(b"EDID", b"HumanRace\0")]
+        race += entry([PLAYER], [MELEE1H], "Player_Melee.agx", ["actors\\human\\animations\\melee\\onehanded"])
+        race += furn([CHAIR], ["actors\\human\\animations\\furniture\\chair"], "02 00 00 00")
+        race += furn([CHAIR], ["actors\\human\\_1stperson\\animations\\furniture\\chair"], "02 00 01 00")   # 1st
+        race += furn([BENCH], ["actors\\human\\animations\\furniture\\bench"], "02 00 00 00")
+        race += furn([OTHER], ["actors\\human\\animations\\furniture\\bed"], "02 00 00 00")
+        recs = [(b"KYWD", hdr(b"KYWD"), [(b"EDID", z_(n))], f)
+                for n, f in (("AnimFurnChair", CHAIR), ("AnimFurnBench", BENCH), ("Female", FEMALE),
+                             ("AnimFurnBed", OTHER))]
+        recs.append((b"RACE", hdr(b"RACE"), race, 0x00003CDB))
+        table = ("Role\tPerspective\tActor Keyword\tTarget Keyword\tBehavior\tPaths\n"
+                 "Furniture\t3rd\tFemale\tAnimFurnChair\tF.agx\tactors\\human\\animations\\furniture\\chair\\female\n"
+                 "Furniture\t3rd\tAnimArchetypePirate\tAnimFurnBench\tF.agx\tx\n"            # unknown keyword: skipped
+                 "Furniture\t1st\t\tAnimFurnChair\tF.agx\ty\n"                                  # first person
+                 "Furniture\t3rd\t\tAnimFurnBed\tF.agx\tz\n")                                   # other furniture
+        with tempfile.TemporaryDirectory() as d:
+            esm = os.path.join(d, "Starfield.esm")
+            with open(esm, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}, masters=()))
+            data, rep = SP.build(esm, stances=SP.STANCES, table_text=None, weapon_types=())
+            out = os.path.join(d, SP.PLUGIN)
+            with open(out, "wb") as fh:
+                fh.write(data)
+            kw = {sfplugin.edid(s): fid for _t, _h, s, fid in sfplugin.records(out, [b"KYWD"])}
+            sit = kw["S2S_AnimFurnSkyrimSit"]
+            self.assertEqual(sit, sfplugin.new_form_id(SP.FURN_INDEX))         # fixed, after stances and types
+            ents = subgraph.parse(sfplugin.records(out, [b"RACE"])[0][2])
+            mine = [e for e in ents if sit in e["target_keywords"]]
+            self.assertEqual([(e["target_keywords"], e["paths"][0]) for e in mine],
+                             [([CHAIR, sit], SP.FURNITURE_SETS[0][2]), ([BENCH, sit], SP.FURNITURE_SETS[0][2])])
+            self.assertEqual(mine[0]["paths"][1:], ["actors\\human\\animations\\furniture\\chair"])
+            self.assertEqual(ents.index(mine[0]), 0)                             # first: one keyword more
+            self.assertEqual(rep["furniture"]["Sit"]["entries"], 2)
+            # with the generated table: its third-person chair / bench rows too (unknown keywords skipped)
+            _d, rep2 = SP.build(esm, stances=SP.STANCES, table_text=table, weapon_types=())
+            self.assertEqual(rep2["furniture"]["Sit"]["entries"], 3)
+            self.assertEqual(rep2["furniture"]["Sit"]["unresolved_keywords"], ["AnimArchetypePirate"])
 
 
 if __name__ == "__main__":

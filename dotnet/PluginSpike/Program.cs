@@ -728,6 +728,14 @@ FormKey? FurnitureBase(string key)
     if (b.TryGetProperty("shift_m", out var sh) && f.MarkerParameters != null)
         foreach (var smp in f.MarkerParameters)
             smp.Offset = new P3Float(smp.Offset.X + sh[0].GetSingle(), smp.Offset.Y + sh[1].GetSingle(), smp.Offset.Z + sh[2].GetSingle());
+    // anim_keyword (make_furniture.py --anim-plugin, 2026-11-13): a keyword from S2SStances.esm whose HumanRace entries put
+    // a folder of converted Skyrim clips first for this furniture (docs/npc/furniture.md "Animations")
+    if (b.TryGetProperty("anim_keyword", out var akw) && akw.ValueKind == JsonValueKind.String)
+    {
+        f.Keywords ??= new ExtendedList<IFormLinkGetter<IKeywordGetter>>();
+        f.Keywords.Add(FormKey.Factory(akw.GetString()!).ToLink<IKeywordGetter>());
+        modelNote += $", Skyrim animations ({b.GetProperty("anim_set").GetString()} {akw.GetString()})";
+    }
     mod.Furniture.Add(f);
     if (furnBases.Count < 40)
         furnNotes.Add($"{f.EditorID} {f.FormKey}: copy of {tpl.EditorID} ({b.GetProperty("kind").GetString()}), {modelNote}, " +

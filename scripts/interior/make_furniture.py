@@ -160,6 +160,44 @@ def markers(rec, kind, marker_z):
     return out
 
 
+# Skyrim's own animations on our furniture (docs/npc/furniture.md "Animations", 2026-11-13): kind -> animation set.
+# A set is a keyword in S2SStances.esm (stance_plugin.FURNITURE_SETS) whose HumanRace entries put a folder of
+# converted Skyrim clips first; the furniture carries the keyword (PluginSpike, "anim_keyword").
+ANIM_SETS = {"chair": "Sit", "bench": "Sit"}
+
+
+def anim_keyword_edid(anim_set: str) -> str:
+    return f"S2S_AnimFurnSkyrim{anim_set}"
+
+
+def add_anim_keywords(out, plugin_path, read_keywords=None):
+    """Give each base whose kind has an animation set its keyword's FormKey from the animations plugin (S2SStances.esm):
+    "anim_keyword" ("XXXXXX:S2SStances.esm"), "anim_set". Returns {set: count}; sets whose keyword the plugin lacks are
+    reported under "missing"."""
+    if read_keywords is None:
+        from fo4sf import sfplugin
+
+        def read_keywords(path):
+            return {sfplugin.edid(r[2]): r[3] for r in sfplugin.records(path, [b"KYWD"]) if sfplugin.edid(r[2])}
+    kws = {k.lower(): v for k, v in read_keywords(plugin_path).items()}
+    name = re.split(r"[\\/]", plugin_path)[-1]           # a Windows path read anywhere
+    done, missing = {}, set()
+    for b in out["bases"].values():
+        st = ANIM_SETS.get(b.get("kind"))
+        if not st:
+            continue
+        fid = kws.get(anim_keyword_edid(st).lower())
+        if fid is None:
+            missing.add(st)
+            continue
+        b["anim_keyword"] = f"{fid & 0xFFFFFF:06X}:{name}"
+        b["anim_set"] = st
+        done[st] = done.get(st, 0) + 1
+    if missing:
+        done["missing"] = sorted(missing)
+    return done
+
+
 def add_bounds(out, convert_dir, bounds_of=None):
     """Object bounds (metres, [[min], [max]]) for each base with a converted model (the batch's convert/manifest.json):
     "bounds" in its furniture.json entry, which PluginSpike writes as the furniture's OBND. 2026-11-13 (owner, in game):
@@ -304,6 +342,8 @@ def main(argv=None):
                          "bartender=0,0.2,0 (furniture_standoff.py measures how far)")
     ap.add_argument("--no-crafting", action="store_true",
                     help="leave crafting stations (cooking pots, alchemy, enchanting, smithing) as statics")
+    ap.add_argument("--anim-plugin", help="S2SStances.esm (stance_plugin.py): chairs / benches get its Skyrim-animation "
+                                          "keyword (docs/npc/furniture.md \"Animations\")")
     ap.add_argument("--no-exterior", action="store_true",
                     help="ignore <work>\\exterior_furniture.json (the outdoor furniture from batch --exterior-furniture)")
     a = ap.parse_args(argv)
@@ -326,6 +366,13 @@ def main(argv=None):
         out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs)
     finally:
         ix.close()
+    if a.anim_plugin:
+        if os.path.exists(a.anim_plugin):
+            got = add_anim_keywords(out, a.anim_plugin)
+            print(f"Skyrim animation sets from {os.path.basename(a.anim_plugin)}: "
+                  + (", ".join(f"{k} {v}" for k, v in got.items()) or "none"))
+        else:
+            print(f"--anim-plugin {a.anim_plugin}: not found (furniture keeps Starfield's animations)")
     nb = add_bounds(out, os.path.join(a.work, "convert"))
     if nb:
         print(f"object bounds from the converted models: {nb} bases")

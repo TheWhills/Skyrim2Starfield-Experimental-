@@ -281,10 +281,24 @@ def main(argv=None):
                     help="write the annotations the combat plugin reads (MCO / BFCO windows, PIE.@ commands, TKDR_, "
                          "TDM_, Collision_) into the .afx events; with HOST, all as events named HOST carrying the "
                          "Skyrim annotation as payload (the plugin's sPluginEventHost)")
+    ap.add_argument("--into", metavar="DATA_FOLDER",
+                    help="with --replace: write into this folder (relative to Data, e.g. meshes\\actors\\human\\"
+                         "animations\\furniture\\s2s_sit) instead of the vanilla clip's own, keeping the vanilla file "
+                         "name and tag: a set of our own that a keyword-picked animation entry puts first")
+    ap.add_argument("--com-shift", metavar="X,Y",
+                    help="shift every clip's COM by these metres (one seat offset for a whole furniture set, e.g. the "
+                         "--align-com result of its Idle), instead of --align-com per clip")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
     a = ap.parse_args(argv)
+    fixed_shift = None
+    if a.com_shift:
+        try:
+            fixed_shift = np.array([float(x) for x in a.com_shift.split(",")], dtype=np.float64)
+            assert fixed_shift.shape == (2,)
+        except (ValueError, AssertionError):
+            sys.exit(f"--com-shift wants X,Y in metres, got {a.com_shift}")
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
@@ -384,6 +398,10 @@ def main(argv=None):
                     file_name = new_name
                 target_dir = os.path.join(out, *os.path.dirname(rel).split("/"))
                 row["replaces"] = f"{os.path.dirname(rel)}/{file_name}.af"
+                if a.into:
+                    target_dir = os.path.join(out, *[x for x in a.into.replace("/", "\\").split("\\") if x])
+                    row["into"] = a.into
+                    row["template"] = row.pop("replaces")
                 like_last = vanilla_last_frame(a.calumi, rig_path, vafx, a.starfield_data, out)
                 if like_last is not None:
                     row["vanilla_frames"] = like_last + 1
@@ -450,7 +468,11 @@ def main(argv=None):
                 out_t, out_q = retarget.hold_rest_rotation(out_rig, out_t, out_q, skeletonmap.HOLD_REST_ROTATION)
                 if a.weapon_in_hand:
                     out_t, out_q = retarget.copy_world(out_rig, out_t, out_q, skeletonmap.WEAPON_FOLLOWERS)
-                if vafx and a.align_com:
+                if fixed_shift is not None:
+                    out_t = out_t.copy()
+                    out_t[:, game_rig.index["COM"], :2] += fixed_shift
+                    row["com_shift_m"] = [round(float(x), 3) for x in fixed_shift]
+                elif vafx and a.align_com:
                     shift = com_shift(a.calumi, rig_path, game_rig, vafx, a.starfield_data, out_t, out_q, out)
                     out_t = out_t.copy()
                     out_t[:, game_rig.index["COM"], :2] += shift

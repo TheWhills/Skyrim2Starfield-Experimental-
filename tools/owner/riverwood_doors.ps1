@@ -25,7 +25,10 @@ param(
     [string[]]$FurnShift = @(),   # move a furniture kind's markers, e.g. -FurnShift "bartender=0,0.2,0"
     [switch]$NoCrafting,       # with -Furniture: leave crafting stations (cooking pots, alchemy, smithing) as statics
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
-    [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json"
+    [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
+    # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
+    # furniture_anim_pack.py); "" or a missing file = Starfield's animations
+    [string]$AnimPlugin = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Stances\S2SStances.esm"
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -92,6 +95,7 @@ if ($Furniture) {
     # several kinds: separate with ";" ("bartender=0,0.2,0;lean_counter=0,0.1,0")
     foreach ($sh in ($FurnShift -join ";").Split(";")) { if ($sh.Trim()) { $fa += @("--shift", $sh.Trim()) } }
     if ($NoCrafting) { $fa += @("--no-crafting") }
+    if ($AnimPlugin -and (Test-Path $AnimPlugin)) { $fa += @("--anim-plugin", $AnimPlugin) }
     python -I scripts\interior\make_furniture.py @fa
     if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }
 }

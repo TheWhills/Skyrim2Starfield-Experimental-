@@ -183,3 +183,17 @@ Steps:
 2. Mapping table kind -> (Starfield tags, Skyrim clips): from the survey.
 3. First kind end to end (sitting: bench and chair; the chair idle already converts): clips, keyword, entry, CK run.
 4. Then lean, sweep, tanning rack, anvil, forge, chopping, cooking, ...; props (broom, hammer) after.
+Survey result (owner's run, 2026-11-13, verified from furniture_anims.json): Starfield's furniture folders play one
+tag set: EnterFromStand / Idle / Idle_Flavor01-06 / ExitToStand / QuickExitToStand (+ LookDirections), seats with
+Front / Left / Right / Rear Enter / Exit variants, Camera and Talk_*; graph FurnitureHeadTracking_Wrapping.agx over
+Furniture.agx. The generated table has no generic third-person chair / bench row (only AnimArchetypePirate ones):
+those entries are HumanRace's own in Starfield.esm. Our races take HumanRace as subgraph template (SRAC), so a
+HumanRace entry reaches our NPCs. Skyrim (mt_behavior.hkx): chair_frontentervar1 / chair_frontexit, chair_left / right
+enter / exit, chair_idlebasevar1 (+ basevar2, shoulders, arms crossed / look down with transitions); benches use the
+chair set; no entry from behind.
+Built (first set, Sit; untested in game): stance_plugin.FURNITURE_SETS adds keyword S2S_AnimFurnSkyrimSit (fixed
+FormID, index 16) and copies of every third-person chair / bench entry with it and furniture\s2s_sit first;
+furniture_anim_pack.py converts the Skyrim set (one seat offset for the set: the Idle's --align-com, then --com-shift
+for all; no root motion) into that folder under the chair descriptors; make_furniture --anim-plugin gives chair / bench
+bases the keyword and PluginSpike adds it (FO4Port.esm then masters S2SStances.esm: it must load after it). Arms-crossed
+/ look-down flavours wait for stitching their transitions; female clips use the male conversion for now.
