@@ -114,10 +114,28 @@ def race_delta(sky, female, race_edid, base_bytes, model_space, cache):
     return d
 
 
+def race_heads_stale(races_plugin) -> str:
+    """A warning when race_heads.json beside the race plugin is older than the plugin, else "" (2026-11-13: the MO2
+    folder held the 11-12 plugin with the 11-11 race_heads.json, face_fit found 1 race of 10 and every NPC lost its
+    converted race, Faendal human again)."""
+    folder = os.path.dirname(os.path.abspath(races_plugin))
+    js = os.path.join(folder, "race_heads.json")
+    try:
+        if os.path.getmtime(js) + 60 < os.path.getmtime(races_plugin):
+            return (f"{js} is older than {os.path.basename(races_plugin)}: copy race_heads.json from the race build's "
+                    "--out folder next to the plugin, or NPCs may lose their converted race")
+    except OSError:
+        pass
+    return ""
+
+
 def converted_races(races_plugin):
     """{Skyrim race EditorID: {"name", "form_id" (local), "parts": {female: {vanilla HDPT EditorID: local FormID}},
     "head": {female: local FormID}, "mouth": {female: local FormID}}} from the race plugin and its race_heads.json."""
     folder = os.path.dirname(os.path.abspath(races_plugin))
+    stale = race_heads_stale(races_plugin)
+    if stale:
+        print(f"WARNING: {stale}")
     with open(os.path.join(folder, "race_heads.json"), encoding="utf-8") as fh:
         rep = json.load(fh)
     hd = {sfplugin.edid(sb): fid & 0xFFFFFF for _t, _h, sb, fid in sfplugin.records(races_plugin, [b"HDPT"])}

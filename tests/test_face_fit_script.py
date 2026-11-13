@@ -331,6 +331,21 @@ class SurfaceTransferTests(unittest.TestCase):
                 self.assertAlmostEqual(got.get(k, 0.0), v, delta=0.15, msg=(edid, got))
 
 
+class RaceHeadsStaleTests(unittest.TestCase):
+    def test_warns_when_json_older_than_plugin(self):
+        with tempfile.TemporaryDirectory() as d:
+            esm, js = os.path.join(d, "S2SRaceTest.esm"), os.path.join(d, "race_heads.json")
+            for f in (esm, js):
+                open(f, "w").close()
+            os.utime(js, (1000, 1000))
+            os.utime(esm, (100000, 100000))
+            self.assertIn("older than", S.race_heads_stale(esm))
+            os.utime(js, (100000, 100000))
+            self.assertEqual(S.race_heads_stale(esm), "")
+            os.remove(js)
+            self.assertEqual(S.race_heads_stale(esm), "")
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -113,7 +113,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    All ten races at once (each its own race, baked head + parts, Skyrim height); --player-race picks which one you
    play (Orc, Altmer, Bosmer, Dunmer, Nord, ...):
    ```powershell
-   python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races all --player-race Orc
+   python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races all --player-race Orc   (keep race_heads.json next to S2SRaceTest.esm: face_fit reads the race list from it)
    ```
    The Orc race now also gets Skyrim's orc mouth (teeth + tusks) as its teeth; the run uses texconv and
    <Starfield>\Tools\ContentResources.zip for its texture (--texconv / --content-resources if elsewhere). Check in

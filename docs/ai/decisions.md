@@ -2277,3 +2277,8 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   measured means; near-black names (< 6) only for a black / dark Skyrim colour (Ysolda's Auburn -> Amber / Copper,
   not Starfield's black Auburn); nearest colour by hue first, then lightness. Grey measures mid grey, so Hilde's
   Grey hair showing black is not the colour choice: open (in-game test asked).
+- 2026-11-13 Regression found (owner's checks): a face_fit run gave every NPC no converted race (Faendal human again,
+  all fits redone). The MO2 "S2S Race Test" folder held the 11-12 S2SRaceTest.esm (same hash as the build in
+  C:\Modding\work\races\heads) beside the 11-11 race_heads.json (1 race with an edid of 10). face_fit now warns when
+  race_heads.json is older than the plugin; owner copies the current one over and reruns. Hair colours in game
+  (verified, owner's shots): Hilde and Faendal grey, Alvor dirty blonde, Embry blonde.
