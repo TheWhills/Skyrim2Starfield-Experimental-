@@ -2269,3 +2269,11 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   the AVMD pairs and decodes every gradient (mean, lightness, a 16-point profile, a PNG each); the palette comes from
   --group (default Long_Straight, the material the converted hairs use). Unverified: how dark Grey is, and whether
   the converted strands only reach the dark end of the gradient.
+- 2026-11-13 owner's hair_color_probe run (verified from its report and PNGs): each hair colour name is a whole
+  colour texture of the hairstyle's strand atlas, not a ramp. Long_Straight means (as stored, lightness): White 92,
+  Platinum 94, Grey 52, Blonde 67, DirtyBlonde 46, Brown 28, Amber 27, Copper 23, SaltAndBrown 18, BlackBrown 8,
+  Black 4.6, SaltAndPepper 2.8, Jet 2.7, Auburn 1.9. So the old SaltAndPepper pick really was black, and the
+  name-guessed NAME_RGB had SaltAndPepper (mid grey) and Auburn (red-brown) badly wrong: NAME_RGB is now the
+  measured means; near-black names (< 6) only for a black / dark Skyrim colour (Ysolda's Auburn -> Amber / Copper,
+  not Starfield's black Auburn); nearest colour by hue first, then lightness. Grey measures mid grey, so Hilde's
+  Grey hair showing black is not the colour choice: open (in-game test asked).

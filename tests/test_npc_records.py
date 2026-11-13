@@ -68,20 +68,27 @@ class RecordTests(unittest.TestCase):
         sf = ["Black", "Brown", "BlackBrown", "DirtyBlonde", "SaltAndBrown", "Jet", "Copper", "Platinum", "Amber",
               "SaltAndPepper", "Auburn", "Grey", "White", "Violet", "Blue", "Blonde", "Ruby", "Teal"]   # the owner's run
         rgb = lambda e, c: {"edid": e, "rgba": c + (0,)}
-        self.assertEqual(NR.match_hair_color(rgb("HairColor01", (200, 168, 105)), sf)[0], "Blonde")
+        self.assertIn(NR.match_hair_color(rgb("HairColor01", (200, 168, 105)), sf)[0], ("Blonde", "Platinum"))
         # the owner's run: Skyrim's RGB is a dark tint, its EditorID says the colour (Ralof came out red, then brown)
         self.assertEqual(NR.match_hair_color(rgb("HairColor03BrightBlond", (81, 77, 57)), sf)[0], "Blonde")
-        self.assertEqual(NR.match_hair_color(rgb("HairColor06Auburn", (48, 35, 33)), sf)[0], "Auburn")
+        # 2026-11-13 measured: Starfield's Auburn (and SaltAndPepper) are near black; a red-brown Skyrim colour goes to
+        # the red family's usable colours instead
+        self.assertIn(NR.match_hair_color(rgb("HairColor06Auburn", (48, 35, 33)), sf)[0], ("Amber", "Copper"))
+        self.assertEqual(NR.match_hair_color(rgb("HairColorBlack", (10, 10, 10)), sf)[0], "Black")
+        self.assertIn(NR.match_hair_color(rgb("HairColor09DarkAuburn", (30, 15, 10)), sf)[0],
+                      ("Auburn", "Amber", "Copper"))                       # 'dark' may go near black
         self.assertEqual(NR.match_hair_color(rgb("HairColor02BrownDark", (40, 30, 20)), sf)[0], "BlackBrown")
         # 2026-11-13: Skyrim's own colour word names a Starfield colour: Grey stays Grey (was SaltAndPepper by its dark
         # tint, Hilde / Faendal black-haired in game)
         self.assertEqual(NR.match_hair_color(rgb("HairColor14Grey", (70, 75, 85)), sf + ["SaltAndPepper", "Grey"]),
                          ("Grey", "same colour name"))
-        self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf)[0], "Brown")
-        self.assertEqual(NR.match_hair_color(rgb("X", (20, 18, 17)), sf)[0], "Black")
-        self.assertEqual(NR.match_hair_color(rgb("X", (120, 40, 25)), sf)[0], "Auburn")
+        self.assertEqual(NR.match_hair_color(rgb("X", (40, 25, 14)), sf)[0], "Brown")
+        self.assertIn(NR.match_hair_color(rgb("X", (20, 18, 17)), sf)[0], ("Black", "Jet"))
+        self.assertIn(NR.match_hair_color(rgb("X", (120, 40, 25)), sf)[0], ("Copper", "Amber"))
+        self.assertNotIn(NR.match_hair_color(rgb("X", (70, 75, 85)), sf)[0],
+                         ("SaltAndPepper", "Auburn", "Black", "Jet"))      # a mid grey-blue tint is not black
         self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 140)), sf)[0] in NR.NAME_RGB, True)  # never Violet
-        self.assertEqual(NR.match_hair_color(rgb("X", (90, 60, 40)), sf, {"Ruby": [90, 60, 40]})[0], "Brown")
+        self.assertEqual(NR.match_hair_color(rgb("X", (40, 25, 14)), sf, {"Ruby": [40, 25, 14]})[0], "Brown")
         names = ["Blonde01", "BrownDark02", "BrownLight03", "Red01", "Black01", "Grey01"]
         blonde = {"edid": "HairColor07Blonde", "rgba": (200, 170, 110, 0)}
         self.assertEqual(NR.match_hair_color(blonde, names)[0], "Blonde01")

@@ -125,30 +125,51 @@ def lightness(rgb) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-# Starfield's hair colour names (the owner's probe 2026-11-05: 22 names on Starfield.esm's NPCs; no colour record or
-# texture ties a name to a colour) with a colour judged from the NAME (approximate, not measured), the natural ones
-# only: a Skyrim NPC's natural colour should not land on Violet / Teal / Fuchsia.
-NAME_RGB = {"Jet": (14, 13, 14), "Black": (26, 22, 20), "BlackBrown": (46, 33, 25), "Brown": (86, 58, 38),
-            "Auburn": (112, 46, 30), "Copper": (156, 82, 42), "Amber": (168, 112, 52), "DirtyBlonde": (160, 130, 86),
-            "Blonde": (202, 168, 108), "Platinum": (216, 206, 182), "SaltAndBrown": (120, 104, 92),
-            "SaltAndPepper": (128, 126, 123), "Grey": (152, 152, 150), "White": (226, 224, 218)}
+# Starfield's hair colours, MEASURED (owner's hair_color_probe run 2026-11-13): each name is a whole colour texture
+# per hairstyle group (AVMD SimpleGroup_Hair_*), these are the mean RGB of the Long_Straight group's (the material
+# the converted Skyrim hairs use), as stored (dark: the hair shader brightens them). The natural ones only: a Skyrim
+# NPC's natural colour should not land on Violet / Teal / Fuchsia. Until 11-13 these were guessed from the names,
+# and two guesses were badly wrong: SaltAndPepper (guessed mid grey) and Auburn (guessed red-brown) are near black.
+NAME_RGB = {"Jet": (2.8, 2.7, 2.8), "Black": (4.7, 4.6, 4.7), "BlackBrown": (11.7, 7.4, 4.9),
+            "Brown": (41.2, 25.1, 13.7), "Auburn": (6.0, 0.8, 0.1), "Copper": (55.4, 14.9, 3.1),
+            "Amber": (45.3, 23.0, 8.2), "DirtyBlonde": (69.8, 42.1, 17.8), "Blonde": (91.6, 63.5, 35.3),
+            "Platinum": (117.3, 90.4, 60.9), "SaltAndBrown": (22.6, 16.6, 12.1),
+            "SaltAndPepper": (2.8, 2.8, 2.8), "Grey": (57.2, 51.5, 45.3), "White": (96.4, 91.1, 84.4)}
+# measured lightness below this reads black in game: only for a Skyrim colour that is black / dark, or dark itself
+NEAR_BLACK = 6.0
+DARK_INPUT = 30.0      # a Skyrim tint (no colour words) this dark may go to a near-black colour
 
 
 def _nearest(rgb, table: Dict[str, Iterable[float]], names) -> Optional[str]:
+    """The name whose colour is nearest: hue (chromaticity) first, then lightness. Skyrim's tint and Starfield's
+    stored colours are on different brightness scales, so hue decides more than plain RGB distance does."""
     cand = [n for n in names if n in table]
     if not cand:
         return None
-    w = (0.3, 0.59, 0.11)
+
+    def chroma(c):
+        c = [float(x) for x in list(c)[:3]]
+        t = sum(c) or 1.0
+        return c[0] / t, c[1] / t, lightness(c)
+    want = chroma(rgb)
 
     def dist(n):
-        return sum(wi * (float(a) - float(b)) ** 2 for wi, a, b in zip(w, list(table[n])[:3], rgb))
+        r, g, l = chroma(table[n])
+        return 1000.0 * ((r - want[0]) ** 2 + (g - want[1]) ** 2) + ((l - want[2]) / 30.0) ** 2
     return min(cand, key=dist)
+
+
+def _usable(n: str, table, black_ok: bool) -> bool:
+    """False for a near-black colour (measured) unless the Skyrim colour is black / dark."""
+    c = table.get(n, NAME_RGB.get(n))
+    return black_ok or c is None or lightness(c) >= NEAR_BLACK
 
 
 def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
                      palette: Optional[Dict[str, List[float]]] = None) -> Tuple[Optional[str], str]:
     """(Starfield hair colour name, how) for a Skyrim CLFM {"edid", "rgba"}: the nearest colour by RGB in the measured
-    palette when it covers at least 3 of the names; else in NAME_RGB (colours judged from the names); else the most
+    palette when it covers at least 3 of the names; else in NAME_RGB (measured 2026-11-13); near-black colours only for
+    a black / dark Skyrim colour; else the most
     shared colour words; else None."""
     names = sorted({n for n in names if n})
     if not names or not skyrim_color:
@@ -156,9 +177,14 @@ def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
     rgb = (skyrim_color.get("rgba") or [None])[:3]
     has_rgb = bool(rgb) and rgb[0] is not None
     table = palette if (palette and sum(1 for n in names if n in palette) >= 3) else NAME_RGB
-    how = "palette" if table is palette else "name colours (approximate)"
+    how = "palette" if table is palette else "measured colours"
     natural = [n for n in names if n in NAME_RGB] or \
         [n for n in names if not re.search(r"violet|blue|teal|fuchsia|purple|yellow|aqua|ruby|pink|green", n, re.I)]
+    # 2026-11-13 measured: Auburn and SaltAndPepper are as black as Black; Ysolda's auburn should not go black
+    want = color_words(skyrim_color.get("edid", ""))
+    black_ok = bool(want & {"black", "dark"}) or (not (want - {"dark", "light"}) and has_rgb
+                                                  and lightness(rgb) < DARK_INPUT)
+    natural = [n for n in natural if _usable(n, table, black_ok)] or natural
     # Skyrim's colour EditorIDs say what the colour is (HairColor03BrightBlond, HairColor06Auburn); its CLFM RGB is a
     # tint multiplied into the texture and reads much darker (BrightBlond is 81, 77, 57), so the words decide the
     # family (owner 2026-11-05: Ralof came out red, then by RGB alone brown, Ysolda's Auburn black-brown)
@@ -170,7 +196,6 @@ def match_hair_color(skyrim_color: Optional[Dict], names: Iterable[str],
     exact = [n for n in natural if n.lower() in toks]
     if exact and not toks & {"dark", "light", "bright", "pale", "deep"}:     # 'BrownDark' still goes darker
         return exact[0], "same colour name"
-    want = color_words(skyrim_color.get("edid", ""))
     hues = want - {"dark", "light"}
     if hues:
         fam = []
