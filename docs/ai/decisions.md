@@ -2282,3 +2282,9 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   C:\Modding\work\races\heads) beside the 11-11 race_heads.json (1 race with an edid of 10). face_fit now warns when
   race_heads.json is older than the plugin; owner copies the current one over and reruns. Hair colours in game
   (verified, owner's shots): Hilde and Faendal grey, Alvor dirty blonde, Embry blonde.
+- 2026-11-13 Outdoor furniture (owner: Riverwood's benches unusable, forge missing; verified from the owner's
+  skipped.json: the forge / smelter / tanning rack models were dropped by the 'marker' substring rule). Editor markers
+  are now only markers-folder / marker*-named files; the Riverwood build turns the outdoor furniture around Riverwood
+  into Starfield furniture in FO4Port.esm (persistent cell of the world) and disables the exterior statics under them,
+  so no exterior rebuild is needed (that would also move every exterior FormID: TerrainOverlays numbers them in order).
+  Details in docs/npc/furniture.md "Outdoors". PluginSpike part written without a compiler.

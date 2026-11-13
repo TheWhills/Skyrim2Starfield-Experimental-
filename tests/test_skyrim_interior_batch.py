@@ -188,6 +188,41 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(len(alone["edge_links"]), 0)
         self.assertEqual(len(together["edge_links"]), 1)
 
+    def test_batch_exterior_furniture(self):
+        """2026-11-13: --exterior-furniture adds Riverwood's outdoor furniture: its models converted with the batch
+        (the forge's BlacksmithForgeMarker.nif too), idle markers listed but not converted, disabled ones left out."""
+        from unittest import mock
+        import make_skyrim_interior as mi
+        refs = [{"formkey": "00A001:Skyrim.esm", "type": "Furniture", "model": "Furniture\\BlacksmithForgeMarker.nif",
+                 "base_formkey": "00B001:Skyrim.esm", "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0},
+                {"formkey": "00A002:Skyrim.esm", "type": "Furniture", "model": "Furniture\\FarmBench01.nif",
+                 "base_formkey": "00B002:Skyrim.esm", "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0},
+                {"formkey": "00A003:Skyrim.esm", "type": "IdleMarker", "model": "Markers\\IdleMarker.nif",
+                 "base_formkey": "00B003:Skyrim.esm", "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0},
+                {"formkey": "00A004:Skyrim.esm", "type": "Furniture", "model": "Furniture\\QuestChair.nif",
+                 "base_formkey": "00B004:Skyrim.esm", "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0x800},
+                {"formkey": "00A005:Skyrim.esm", "type": "Static", "model": "Architecture\\Wall.nif",
+                 "base_formkey": "00B005:Skyrim.esm", "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0}]
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "terrain"))
+        import make_skyrim_objects
+        with mock.patch.object(make_skyrim_objects, "around_cells", return_value=(4, 8, -12, -8)), \
+                mock.patch.object(mi.skyrimrefs, "export_world", return_value={"refs": refs}) as ew:
+            got = mi.exterior_furniture(self.esm, "Riverwood", 2)
+        self.assertEqual(ew.call_args[0][1:], ("Tamriel", (4, 8, -12, -8)))
+        self.assertEqual([r["formkey"] for r in got["refs"]], ["00A001:Skyrim.esm", "00A002:Skyrim.esm",
+                                                               "00A003:Skyrim.esm"])
+        work = os.path.join(self.tmp.name, "work_ext")
+        with mock.patch.object(mi, "exterior_furniture", return_value=got), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            mi.main(["batch", "--skyrim", self.esm, "--cells", "RiverwoodHouse", "--work", work,
+                     "--exterior-furniture", "Riverwood"])
+        self.assertIn("outdoor furniture around Riverwood: 3 references", out.getvalue())
+        conv = [m["model"] for m in json.load(open(os.path.join(work, "convert_input.json")))["refs"]]
+        self.assertIn("Furniture\\BlacksmithForgeMarker.nif", conv)
+        self.assertIn("Furniture\\FarmBench01.nif", conv)
+        self.assertNotIn("Markers\\IdleMarker.nif", conv)
+        self.assertEqual(len(json.load(open(os.path.join(work, "exterior_furniture.json")))["refs"]), 3)
+
     def test_script_batch_and_check(self):
         import make_skyrim_interior as mi
         work = os.path.join(self.tmp.name, "work")

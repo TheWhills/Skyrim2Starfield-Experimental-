@@ -40,6 +40,13 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(ex.classify(ref("7", t="Flora", model="landscape\\plants\\tato.nif"))[0], "convert")
         self.assertEqual(ex.classify(ref("8", t="Activator", model="Water\\Water1024.nif"))[1], "water")
         self.assertEqual(ex.classify(ref("9", model="SetDressing\\WaterCooler\\WaterCooler01.nif"))[0], "convert")
+        # 2026-11-13: Skyrim's smithing furniture has 'Marker' in its file name but is real geometry (Riverwood's
+        # forge was skipped); editor markers are in a markers folder or start with 'marker' / 'xmarker'
+        for m in ("Furniture\\BlacksmithForgeMarker.nif", "Furniture\\SmelterMarker.nif",
+                  "Furniture\\TanningRackMarker.nif"):
+            self.assertEqual(ex.classify(ref("10", t="Furniture", model=m))[0], "convert", m)
+        for m in ("Marker_X.nif", "XMarkerHeading.nif", "Markers\\MovableMarker.nif"):
+            self.assertEqual(ex.classify(ref("11", model=m))[1], "editor_marker", m)
 
     def test_select_keeps_every_reference_in_one_list(self):
         export = {"schema_version": 2, "cell": "c", "refs": [ref("1"), ref("2", t="TextureSet", model=""),

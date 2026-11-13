@@ -35,7 +35,11 @@ TYPE_REASONS = {
     "AcousticSpace": "acoustic space: ambient sound not translated",
 }
 # the same model filter convert_batch applies to cell exports (editor markers; fog / light / particle effect meshes)
-MARKER_RE = re.compile(r"marker", re.I)
+# Editor markers: models in a markers folder, or whose file name starts with 'marker' / 'xmarker' (Marker_X.nif,
+# markers\xmarker.nif). Not any path containing 'marker' (2026-11-13, owner's skipped.json: that dropped Skyrim's
+# real smithing furniture, Furniture\BlacksmithForgeMarker.nif 19x, SmelterMarker.nif 18x, TanningRackMarker.nif 64x:
+# Riverwood's forge was missing).
+MARKER_RE = re.compile(r"(^|[\\/])markers?[\\/]|(^|[\\/])x?marker[^\\/]*$", re.I)
 EFFECTS_RE = re.compile(r"^\\?effects[\\/]", re.I)
 # placed water planes (activators using meshes\water\*.nif): FO4 renders them with its water type; converted as a
 # static they would be an opaque grey sheet at water level, so they stay out until water is translated

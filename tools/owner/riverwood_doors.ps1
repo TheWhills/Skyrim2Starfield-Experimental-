@@ -24,6 +24,7 @@ param(
     [ValidateSet("floor", "skyrim")][string]$MarkerZ = "floor",   # furniture marker height (docs/npc/furniture.md)
     [string[]]$FurnShift = @(),   # move a furniture kind's markers, e.g. -FurnShift "bartender=0,0.2,0"
     [switch]$NoCrafting,       # with -Furniture: leave crafting stations (cooking pots, alchemy, smithing) as statics
+    [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json"
 )
 $ErrorActionPreference = "Stop"
@@ -44,6 +45,9 @@ Step "1. interior batch with doors to the exterior"
 $args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--work", $Work, "--exterior")
 if ($Find) { $args1 += @("--find", $Find) } else { $args1 += @("--cells", $Cells) }
 if ($nav) { $args1 += @("--navmesh-defaults", $nav.FullName) }
+# outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
+# furniture in the exterior (their models converted with the interiors)
+if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }
 python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }
 

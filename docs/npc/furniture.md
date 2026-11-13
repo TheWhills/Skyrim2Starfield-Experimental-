@@ -130,3 +130,18 @@ Owner, 2026-11-09 after the rebuild (verified in game): E on the alchemy lab ope
 (Starfield's medical recipes). FLLD not needed. Next: Skyrim's own recipes (COBJ by bench type) as the menu's content.
 The enchanter (WorkbenchIndustrial copy) and a cooking pot in Sven's house (galley workbench copy) open their menus too
 (owner, verified). All three crafting kinds in Riverwood work.
+
+## Outdoors (2026-11-13)
+Owner (in game): Riverwood's outdoor benches cannot be sat on and Alvor's forge is missing. Verified from the owner's
+skipped.json / objects.json of the installed exterior: every outdoor furniture is a plain static (161 CommonChair01,
+124 FarmBench01, 44 BlacksmithWorkbench01, 26 BlacksmithAnvil ... placed), and the smithing furniture whose model
+name holds "Marker" was dropped as an editor marker (CraftingBlackSmithForge, Furniture\BlacksmithForgeMarker.nif
+19x; CraftingSmelterMarker1 18x; CraftingTanningRackMarker 64x). Changes:
+- exterior.MARKER_RE: only a markers folder or a file name starting with marker / xmarker is an editor marker (the
+  forge, smelter and tanning rack come back on the next exterior rebuild).
+- The Riverwood build with -Furniture (riverwood_doors.ps1; -NoOutdoorFurniture to skip): make_skyrim_interior.py
+  batch --exterior-furniture <-NavAround> --exterior-radius <-NavRadius> lists Skyrim's outdoor FURN / IDLM references
+  there (not initially disabled) in exterior_furniture.json and converts their models with the interiors;
+  make_furniture.py makes them the same furniture as indoors (cell "exterior", persistent); PluginSpike places them in
+  the exterior world's persistent cell (ExtPos) and disables the exterior's static copy of each (an Initially Disabled
+  override, as for the load doors). No exterior rebuild. Unverified in game: placement, sitting, the forge's E.

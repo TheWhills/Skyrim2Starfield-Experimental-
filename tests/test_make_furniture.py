@@ -112,6 +112,30 @@ class MakeFurnitureTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 M.parse_shift(["nosuchkind=0,0,0"])
 
+            # 2026-11-13: outdoor furniture (batch --exterior-furniture's exterior_furniture.json) joins as cell "exterior",
+            # persistent; bases without a Starfield furniture and unknown bases are left out
+            with open(os.path.join(work, "exterior_furniture.json"), "w") as fh:
+                json.dump({"refs": [{"formkey": "000700:Skyrim.esm", "type": "Furniture", "base_formkey": "000020:Skyrim.esm",
+                                     "pos": [4096.0, -8192.0, 50.0], "rot": [0, 0, 0.5], "scale": 1.0},
+                                    {"formkey": "000701:Skyrim.esm", "type": "Furniture", "base_formkey": "000022:Skyrim.esm",
+                                     "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0},
+                                    {"formkey": "000702:Skyrim.esm", "type": "Static", "base_formkey": "000999:Skyrim.esm",
+                                     "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": None}]}, fh)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work])
+            with open(os.path.join(work, "furniture.json")) as fh:
+                r3 = json.load(fh)
+            out = [x for x in r3["refs"] if x["cell"] == M.EXTERIOR]
+            self.assertEqual([(x["formkey"], x["base"], x["persistent"], x["pos"]) for x in out],
+                             [("000700:Skyrim.esm", "000020:Skyrim.esm", True, [4096.0, -8192.0, 50.0])])
+            self.assertIn("outdoors: 1 furniture references", buf.getvalue())
+            self.assertEqual(len([x for x in r3["refs"] if x["cell"] != M.EXTERIOR]), 3)   # the interior ones unchanged
+            with contextlib.redirect_stdout(io.StringIO()):
+                M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work, "--no-exterior"])
+            with open(os.path.join(work, "furniture.json")) as fh:
+                self.assertFalse(any(x["cell"] == M.EXTERIOR for x in json.load(fh)["refs"]))
+
     def test_kinds(self):
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "CommonBed01", "keywords": [], "mnam": {"flags": ["Has Sleep Marker"]}}), "bed")
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "FarmTableBench01", "keywords": ["IsTable"],

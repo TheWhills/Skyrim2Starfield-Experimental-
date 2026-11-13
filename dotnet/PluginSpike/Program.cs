@@ -1021,6 +1021,62 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
         Console.WriteLine($"outdoor package spots: {extMarkers.Count} markers in {wg.EditorID}'s persistent cell");
     extMarkers.Clear();
 
+    // ---- outdoor furniture (2026-11-13, owner: Riverwood's benches cannot be sat on, the forge is missing) ----------
+    // furniture.json refs with cell "exterior" (make_skyrim_interior.py batch --exterior-furniture -> make_furniture.py):
+    // the same furniture bases as indoors (model converted in this batch), each reference persistent in the world's
+    // persistent cell at its Skyrim spot (ExtPos); the exterior's static copy of the same Skyrim reference (formids.json),
+    // if it has one, gets an Initially Disabled override in its cell, as the doors above.
+    if (furnRoot is JsonElement fre)
+    {
+        int extFurn = 0, extFurnNoBase = 0, extFurnOff = 0;
+        var furnOff = new HashSet<FormKey>();
+        foreach (var fr in fre.GetProperty("refs").EnumerateArray())
+        {
+            if (fr.GetProperty("cell").GetString() != "exterior") continue;
+            var fbo = FurnitureBase(fr.GetProperty("base").GetString()!);
+            if (fbo is not FormKey fbok) { extFurnNoBase++; continue; }
+            var fsrc = fr.GetProperty("formkey").GetString()!;
+            var fpo = new PlacedObject(Id("EXTFURN:" + fsrc), release)
+            {
+                Base = new FormLinkNullable<IPlaceableObjectGetter>(fbok),
+                Position = ExtPos(fr.GetProperty("pos")), Rotation = Rot(fr.GetProperty("rot")),
+            };
+            var fsc = fr.GetProperty("scale").GetSingle();
+            if (Math.Abs(fsc - 1f) > 1e-4) fpo.Scale = fsc;
+            fpo.MajorRecordFlagsRaw |= 0x400;                                  // persistent
+            tco.Persistent.Add(fpo);
+            placedAll[fsrc] = fpo;
+            sourceMap[fsrc] = fpo.FormKey.ToString();
+            if (extIds.GetProperty("refs").TryGetProperty(fsrc, out var fid))
+                furnOff.Add(new FormKey(extKey!.Value, Convert.ToUInt32(fid.GetString(), 16)));
+            extFurn++;
+        }
+        foreach (var blk in wg.SubCells)
+            foreach (var sb in blk.Items)
+                foreach (var c in sb.Items)
+                    foreach (var tr in c.Temporary)
+                    {
+                        if (!furnOff.Contains(tr.FormKey) || tr is not IPlacedObjectGetter tsg) continue;
+                        var toff = (PlacedObject)tsg.DeepCopy();
+                        toff.MajorRecordFlagsRaw |= 0x800;                     // Initially Disabled
+                        CellOverride(blk, sb, c).Temporary.Add(toff);
+                        furnOff.Remove(tr.FormKey);
+                        extFurnOff++;
+                    }
+        foreach (var pr in wg.TopCell!.Persistent)
+        {
+            if (!furnOff.Contains(pr.FormKey) || pr is not IPlacedObjectGetter psg) continue;
+            var poff = (PlacedObject)psg.DeepCopy();
+            poff.MajorRecordFlagsRaw |= 0x800;
+            tco.Persistent.Add(poff);
+            furnOff.Remove(pr.FormKey);
+            extFurnOff++;
+        }
+        if (extFurn + extFurnNoBase > 0)
+            Console.WriteLine($"outdoor furniture: {extFurn} references in {wg.EditorID}'s persistent cell, {extFurnOff} exterior " +
+                              $"statics disabled under them, {furnOff.Count} statics not found, {extFurnNoBase} with no furniture base");
+    }
+
     // ---- exterior navmeshes (2026-11-08, owner: "convert the exterior mesh"; docs/terrain/exterior-navmesh.md) -------
     // make_skyrim_navmesh.py export: Skyrim's navmeshes around a place, in the overlay frame (Skyrim units), split at the
     // 100 m Starfield cells, each piece with its Starfield cell. Each goes into an override of that exterior cell, parent
@@ -1095,6 +1151,9 @@ foreach (var (obj, t) in pendingTeleports)
     };
     teleLinked++;
 }
+if (extDir == null && furnRoot is JsonElement freW
+    && freW.GetProperty("refs").EnumerateArray().Any(x => x.GetProperty("cell").GetString() == "exterior"))
+    Console.WriteLine("WARNING: outdoor furniture not placed (no EXTERIOR_DIR with EXTERIOR_DOORS / EXTERIOR_NAVMESH)");
 if (extMarkers.Count > 0)
     Console.WriteLine($"WARNING: {extMarkers.Count} outdoor package spots not placed (no EXTERIOR_DIR with EXTERIOR_DOORS / EXTERIOR_NAVMESH): those packages point at nothing");
 if (teleOut + teleOutLost > 0)

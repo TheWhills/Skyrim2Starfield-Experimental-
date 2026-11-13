@@ -182,19 +182,18 @@ def parse_shift(items):
     return out
 
 
-def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True):
+EXTERIOR = "exterior"     # the "cell" of an outdoor reference (exterior_furniture.json; PluginSpike puts it outside)
+
+
+def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True, ext_refs=()):
     cell_ids = {}
     for c in cells:
         f = ix.find_edid(b"CELL", c)
         if f is not None:
             cell_ids[f] = c
     refs, base_recs = [], {}
-    for r, c in sorted(ix.cell_of.items()):
-        if c not in cell_ids or ix.kind(r) != "REFR":
-            continue
-        b = survey.ref_base(ix, r)
-        if b is None or ix.kind(b) not in ("FURN", "IDLM"):
-            continue
+
+    def need_base(b):
         if b not in base_recs:
             rec = survey.base_record(ix, b, starfield=False)
             if archives is not None and rec.get("model") and rec["type"] == "FURN":
@@ -204,6 +203,13 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
                 except (ValueError, struct.error):
                     rec["nif_markers"] = []
             base_recs[b] = rec
+    for r, c in sorted(ix.cell_of.items()):
+        if c not in cell_ids or ix.kind(r) != "REFR":
+            continue
+        b = survey.ref_base(ix, r)
+        if b is None or ix.kind(b) not in ("FURN", "IDLM"):
+            continue
+        need_base(b)
         ref = next(((d, s) for s, d in ix.subs(r) if s == b"DATA" and len(d) >= 24), None)
         if ref is None:
             continue
@@ -213,6 +219,20 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
         refs.append({"formkey": key, "cell": cell_ids[c], "base": skyrimrefs.formkey(b, "Skyrim.esm"),
                      "pos": [round(x, 3) for x in v[:3]], "rot": [round(x, 5) for x in v[3:]], "scale": round(scale, 4),
                      "persistent": key in targets})
+    # outdoor ones (2026-11-13, make_skyrim_interior.py batch --exterior-furniture): placed by PluginSpike in the
+    # exterior world, in its persistent cell (always loaded; no Starfield cell lookup needed)
+    for e in ext_refs:
+        bk = e.get("base_formkey") or ""
+        try:
+            b = int(bk.split(":")[0], 16)
+        except ValueError:
+            continue
+        if b not in ix.records or ix.kind(b) not in ("FURN", "IDLM"):
+            continue
+        need_base(b)
+        refs.append({"formkey": e["formkey"], "cell": EXTERIOR, "base": skyrimrefs.formkey(b, "Skyrim.esm"),
+                     "pos": [round(x, 3) for x in e["pos"]], "rot": [round(x, 5) for x in e["rot"]],
+                     "scale": round(e.get("scale") or 1.0, 4), "persistent": True})
     bases, skipped = {}, []
     for b, rec in base_recs.items():
         kind = kind_of(rec, crafting)
@@ -246,6 +266,8 @@ def main(argv=None):
                          "bartender=0,0.2,0 (furniture_standoff.py measures how far)")
     ap.add_argument("--no-crafting", action="store_true",
                     help="leave crafting stations (cooking pots, alchemy, enchanting, smithing) as statics")
+    ap.add_argument("--no-exterior", action="store_true",
+                    help="ignore <work>\\exterior_furniture.json (the outdoor furniture from batch --exterior-furniture)")
     a = ap.parse_args(argv)
     try:
         shift = parse_shift(a.shift)
@@ -258,7 +280,12 @@ def main(argv=None):
     archives = bsa.SkyrimArchives(a.skyrim_data)
     ix = packages.Index(a.skyrim)
     try:
-        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting)
+        ext_path = os.path.join(a.work, "exterior_furniture.json")
+        ext_refs = []
+        if os.path.exists(ext_path) and not a.no_exterior:
+            with open(ext_path, encoding="utf-8") as fh:
+                ext_refs = json.load(fh)["refs"]
+        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs)
     finally:
         ix.close()
     path = os.path.join(a.work, "furniture.json")
@@ -268,6 +295,9 @@ def main(argv=None):
     for b in out["bases"].values():
         n = sum(1 for r in out["refs"] if out["bases"].get(r["base"]) is b)
         by_kind.setdefault(b["kind"], []).append(f"{b['edid']} x{n}")
+    n_out = sum(1 for r in out["refs"] if r["cell"] == EXTERIOR)
+    if n_out:
+        print(f"outdoors: {n_out} furniture references")
     print(f"{len(out['refs'])} furniture references from {len(out['bases'])} Skyrim bases in {len(cells)} cells "
           f"({sum(r['persistent'] for r in out['refs'])} persistent: named by an NPC package)")
     for k, v in sorted(by_kind.items()):

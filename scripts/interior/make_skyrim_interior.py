@@ -34,6 +34,23 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 from fo4sf import exterior, fo4land, skyriminterior, skyrimrefs  # noqa: E402
 
 
+FURNITURE_TYPES = ("Furniture", "IdleMarker")
+
+
+def exterior_furniture(esm, around, radius, world="Tamriel"):
+    """(2026-11-13, owner: Riverwood's outdoor seats unusable, its forge missing) Skyrim's furniture and idle markers
+    placed outdoors around `around` (an exterior cell EditorID or "X,Y", `radius` cells each side): {"around", "cells",
+    "refs": [export entries: formkey, type, base_formkey, base_editor_id, model, pos, rot, scale]}. Initially disabled
+    ones (quest states) are left out. Their models join the batch's conversion; make_furniture.py turns them into
+    Starfield furniture and PluginSpike puts them in the exterior (the exterior's static copies disabled)."""
+    sys.path.insert(0, os.path.join(REPO, "scripts", "terrain"))
+    from make_skyrim_objects import around_cells
+    rect = around_cells(esm, around, radius)
+    exp = skyrimrefs.export_world(esm, world, rect)
+    refs = [r for r in exp["refs"] if r.get("type") in FURNITURE_TYPES and not r.get("disabled")]
+    return {"around": around, "cells": list(rect), "world": world, "refs": refs}
+
+
 def save(path, obj):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=1)
@@ -167,6 +184,15 @@ def cmd_batch(a):
                      "navmeshes": len(e["navmeshes"]), "unreadable_navmeshes": len(e["unreadable_navmeshes"]),
                      "linked_doors": sum(1 for r in cell["refs"] if "teleport" in r),
                      "arrival": (e["arrival"] or {}).get("source")})
+    if a.exterior_furniture:
+        ext_furn = exterior_furniture(a.skyrim, a.exterior_furniture, a.exterior_radius)
+        for r in ext_furn["refs"]:
+            if r["type"] == "Furniture" and r.get("model") and exterior.classify(r)[0] == "convert":
+                by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
+                                                                      "formkey": r["formkey"]})
+        save(os.path.join(work, "exterior_furniture.json"), ext_furn)
+        print(f"outdoor furniture around {a.exterior_furniture}: {len(ext_furn['refs'])} references "
+              f"(cells x {ext_furn['cells'][0]}..{ext_furn['cells'][1]}, y {ext_furn['cells'][2]}..{ext_furn['cells'][3]})")
     models = [by_model[k] for k in sorted(by_model)]
     save(os.path.join(work, "convert_input.json"), {"schema_version": 2, "cell": "batch", "refs": models})
     with open(os.path.join(work, "cells.txt"), "w", encoding="utf-8") as f:
@@ -259,6 +285,10 @@ def parser():
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")
     ap.add_argument("--depth", type=int, default=1, help="batch with --connected-from: doors to follow (default 1)")
     ap.add_argument("--limit", type=int, default=0, help="batch: at most this many cells (0: all)")
+    ap.add_argument("--exterior-furniture", default="",
+                    help="batch: also the outdoor furniture / idle markers around this exterior cell (e.g. Riverwood): "
+                         "their models converted, exterior_furniture.json for make_furniture.py")
+    ap.add_argument("--exterior-radius", type=int, default=2, help="batch --exterior-furniture: cells each side")
     ap.add_argument("--exterior", action="store_true",
                     help="batch: link doors to the worldspace too (writes exterior_doors.json for make_skyrim_objects.py "
                          "stage --interiors and PluginSpike's EXTERIOR_DOORS)")
