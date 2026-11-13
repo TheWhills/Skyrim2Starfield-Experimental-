@@ -160,5 +160,46 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(pal, {"Blonde01": [220, 190, 130], "Brown02": [90, 60, 30]})
 
 
+class GradientTests(unittest.TestCase):
+    """2026-11-13: the looks menu's hair colours are gradient textures named per hairstyle group in AVMD records."""
+
+    def test_gradient_textures_palette_and_decode(self):
+        def avmd(edid, pairs):
+            subs = [(b"EDID", zs(edid)), (b"MNAM", struct.pack("<I", 1))]
+            for n, v in pairs:
+                subs += [(b"LNAM", zs(n)), (b"VNAM", zs(v)), (b"NNAM", bytes(4))]
+            return (b"AVMD", HDR, subs, 0)
+        recs = [avmd("SimpleGroup_Hair_Long_Straight", [("Grey", "textures/h/ls_grey_color.dds"),
+                                                         ("White", "textures/h/ls_white_color.dds")]),
+                avmd("ComplexGroup_HairColor", [("Hair_Long_Straight", "SimpleGroup_Hair_Long_Straight")]),
+                avmd("SimpleGroup_Accents2_color", [("Bags", "textures/x.dds")])]
+        groups = HP.gradient_textures(recs)
+        self.assertEqual(groups, {"Long_Straight": [("Grey", "textures/h/ls_grey_color.dds"),
+                                                    ("White", "textures/h/ls_white_color.dds")]})
+        import numpy as np
+        ramp = np.zeros((4, 32, 4), np.uint8)
+        ramp[:, :, :3] = np.linspace(0, 248, 32)[None, :, None].astype(np.uint8)
+        prof = HP.gradient_profile(ramp, samples=4)
+        self.assertEqual([p[0] for p in prof], [0, 80, 168, 248])
+        import hair_probe
+        old = hair_probe.decode_rgba, hair_probe.write_png
+        hair_probe.decode_rgba = lambda raw, texconv: ramp // (2 if raw == b"grey" else 1)
+        hair_probe.write_png = lambda path, px: None
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                files = {"textures/h/ls_grey_color.dds": b"grey", "textures/h/ls_white_color.dds": b"white"}
+                grads = HP.decode_gradients(dict(groups, Short=[("Grey", "textures/h/missing.dds")]),
+                                            files.get, "texconv.exe", d)
+        finally:
+            hair_probe.decode_rgba, hair_probe.write_png = old
+        self.assertEqual(grads["Short"]["Grey"]["error"], "not found in the archives")
+        ls = grads["Long_Straight"]
+        self.assertLess(ls["Grey"]["lightness"], ls["White"]["lightness"])
+        self.assertEqual(len(ls["White"]["profile"]), 16)
+        pal = HP.gradient_palette(grads, "long_straight")
+        self.assertEqual(sorted(pal), ["Grey", "White"])
+        self.assertEqual(HP.gradient_palette(grads, "Afro"), {})
+
+
 if __name__ == "__main__":
     unittest.main()

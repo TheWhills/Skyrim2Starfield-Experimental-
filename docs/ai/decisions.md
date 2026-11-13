@@ -2260,3 +2260,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
 - 2026-11-10 The Orc's mouth is Skyrim's own mouth mesh converted as the race's teeth part, not Starfield's teeth with tusks added: Skyrim's orc teeth are part of the race's look (crooked, tusks) and come as one mesh made for the orc head. One shape (one MRPH per part drives one shape by vertex number), C_Head-only skin like vanilla teeth, performance / chargen keys copied per side from the vanilla teeth (jaw by Skyrim's Aah, lower by vanilla jawOpen). Alternative kept open: vanilla teeth + a tusk-only shape (needs a second morph record route).
 - 2026-11-10 The walled cities are separate worldspaces like Skyrim's (owner's choice over open cities): each city its own overlay built with the installed Tamriel's options (make_skyrim_overlay --like) and no planet plugin of its own; one registration plugin (register_worlds.py) appends every city world to the main build's planet record (Nirn) away from Tamriel, instead of one Mars plugin per build (each overrode the same planet record: only one build at a time). Alternatives: all worlds in one TerrainOverlays plugin (objects.json holds one world), open cities merged into Tamriel (duplicates / seams / navmesh to fix).
 - 2026-11-10 Our records' FormIDs come from a ledger per build folder (race_heads.FormIds, race_formids.json: EditorID -> object id, never reused), not from build order: adding a race or part used to shift every later FormID, which breaks saved games that reference them. Alternative: hashing EditorIDs to ids (collisions, no room to grow in order).
+- 2026-11-13 owner: Hilde and Faendal (HCOL Grey; before that SaltAndPepper) show black hair while their brows
+  turned grey. Verified from the owner's face_layer_probe --match hair report: Starfield's hair colours are gradient
+  textures, one set per hairstyle group (AVMD SimpleGroup_Hair_Afro / Choppy / Evenbuzz / Long_Straight /
+  Long_Unkempt / Medium / Misc / Short, 23 names each, LNAM name -> VNAM
+  textures/actors/human/faces/hair/<group>_hair_shared_<name>_color.dds; ComplexGroup_HairColor lists the groups).
+  The 2026-11-05 probe never decoded these (its 60-texture limit went on other hits). hair_color_probe.py now reads
+  the AVMD pairs and decodes every gradient (mean, lightness, a 16-point profile, a PNG each); the palette comes from
+  --group (default Long_Straight, the material the converted hairs use). Unverified: how dark Grey is, and whether
+  the converted strands only reach the dark end of the gradient.

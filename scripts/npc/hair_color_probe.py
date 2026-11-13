@@ -8,6 +8,12 @@ collects the evidence on the owner's PC:
     colour / gradients, or one of the HCOL names;
   * each such texture decoded (texconv): size, mean colour, the colour along its middle row, a PNG to look at.
 
+  * (2026-11-13) the looks menu's own hair colour gradients: Starfield.esm's AVMD SimpleGroup_Hair_<group> records
+    pair each colour name (LNAM) with a gradient texture (VNAM, e.g. textures/actors/human/faces/hair/
+    long_straight_hair_shared_grey_color.dds), one set per hairstyle group; every one is decoded, and the palette
+    comes from --group's (default Long_Straight: the material the converted Skyrim hairs use,
+    skyrim_hairs.STRAND_MATERIAL).
+
 Writes into --out: hair_color_probe.json (all of it) and hair_colors.json ({"palette": {name: [r, g, b]}} for every
 HCOL name it could tie to a colour: a CLFM of that name, or a texture whose file name holds the name; empty when
 none), which face_fit.py --hair-colors reads.
@@ -59,6 +65,45 @@ def color_records(esm: str, names) -> list:
         if "hair" in e.lower() or "hair" in full.lower() or e.lower() in want or full.lower() in want:
             out.append({"form_id": f"{fid:08X}", "edid": e, "full": full, "rgba": rgba})
     return out
+
+
+GRADIENT_PREFIX = "SimpleGroup_Hair_"
+DEFAULT_GROUP = "Long_Straight"
+
+
+def gradient_textures(records) -> dict:
+    """{group: [(colour name, texture path)]} from AVMD records (sfplugin.records tuples): each SimpleGroup_Hair_*
+    record's LNAM (name) / VNAM (texture) pairs, in order."""
+    out = {}
+    for _t, _h, subs, _f in records:
+        e = sfplugin.edid(subs)
+        if not e.startswith(GRADIENT_PREFIX):
+            continue
+        pairs, name = [], None
+        for sig, d in subs:
+            if sig == b"LNAM":
+                name = fo4land.zstring(d)
+            elif sig == b"VNAM" and name is not None:
+                v = fo4land.zstring(d)
+                if v.lower().endswith(".dds"):
+                    pairs.append((name, v))
+                name = None
+        if pairs:
+            out[e[len(GRADIENT_PREFIX):]] = pairs
+    return out
+
+
+def gradient_profile(px, samples: int = 16) -> list:
+    """The texture's colour along its longer axis (the other axis averaged), `samples` points, 0-255 RGB."""
+    a = np.asarray(px)[:, :, :3].astype(np.float64)
+    line = a.mean(0) if a.shape[1] >= a.shape[0] else a.mean(1)
+    idx = np.linspace(0, len(line) - 1, min(samples, len(line))).round().astype(int)
+    return [[int(round(v)) for v in line[i]] for i in idx]
+
+
+def lightness(rgb) -> float:
+    r, g, b = (float(x) for x in rgb[:3])
+    return round(0.2126 * r + 0.7152 * g + 0.0722 * b, 1)
 
 
 def _tokens(text: str) -> set:
@@ -143,7 +188,39 @@ def palette_from(names, clfm, textures) -> dict:
     return pal
 
 
-def probe(starfield: str, texconv: str, out: str, decode_limit: int = 60, read=None) -> dict:
+def decode_gradients(groups: dict, read, texconv: str, out: str) -> dict:
+    """{group: {name: {"path", "mean_rgb", "lightness", "profile", "png"} or {"path", "error"}}}."""
+    import hair_probe
+    res = {}
+    for g, pairs in groups.items():
+        for name, rel in pairs:
+            row = {"path": rel}
+            raw = read(rel)
+            if raw is None:
+                row["error"] = "not found in the archives"
+            else:
+                try:
+                    px = hair_probe.decode_rgba(raw, texconv)
+                    row["mean_rgb"] = [round(float(x), 1) for x in np.asarray(px)[:, :, :3].reshape(-1, 3).mean(0)]
+                    row["lightness"] = lightness(row["mean_rgb"])
+                    row["profile"] = gradient_profile(px)
+                    png = f"gradient_{g}_{name}.png"
+                    hair_probe.write_png(os.path.join(out, png), hair_probe.shrink(px, 256)[:, :, :3])
+                    row["png"] = png
+                except Exception as e:                    # noqa: BLE001 (report only)
+                    row["error"] = f"{type(e).__name__}: {e}"
+            res.setdefault(g, {})[name] = row
+    return res
+
+
+def gradient_palette(gradients: dict, group: str = DEFAULT_GROUP) -> dict:
+    """{name: mean RGB} from `group`'s decoded gradients (case-insensitive group name); empty when absent."""
+    g = next((k for k in gradients if k.lower() == group.lower()), None)
+    return {n: r["mean_rgb"] for n, r in (gradients.get(g) or {}).items() if "mean_rgb" in r}
+
+
+def probe(starfield: str, texconv: str, out: str, decode_limit: int = 60, read=None,
+          group: str = DEFAULT_GROUP) -> dict:
     import hair_probe
     import hair_pack
     read = read or (lambda rel: hair_pack.read_game_file(starfield, rel))
@@ -180,8 +257,10 @@ def probe(starfield: str, texconv: str, out: str, decode_limit: int = 60, read=N
             except Exception as e:                        # noqa: BLE001 (report only)
                 row["error"] = f"{type(e).__name__}: {e}"
         textures.append(row)
-    pal = palette_from(every, clfm, textures)
-    report = {"npc_color_names": names, "clfm": clfm, "archive_hits": [{"archive": a, "path": p} for a, p in hits],
+    gradients = decode_gradients(gradient_textures(sfplugin.records(esm, [b"AVMD"])), read, texconv, out)
+    pal = gradient_palette(gradients, group) or palette_from(every, clfm, textures)
+    report = {"npc_color_names": names, "clfm": clfm, "gradient_group": group,
+              "gradients": gradients, "archive_hits": [{"archive": a, "path": p} for a, p in hits],
               "material_hits": mats, "textures": textures, "palette": pal}
     with open(os.path.join(out, "hair_color_probe.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)
@@ -195,15 +274,22 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--texconv", required=True)
     ap.add_argument("--out", required=True, help="a folder outside the repository")
+    ap.add_argument("--group", default=DEFAULT_GROUP,
+                    help="the hairstyle group whose gradients make the palette (SimpleGroup_Hair_<group>)")
     a = ap.parse_args(argv)
     if os.path.abspath(a.out).lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
-    rep = probe(a.starfield, a.texconv, a.out)
+    rep = probe(a.starfield, a.texconv, a.out, group=a.group)
     print(f"hair colour names: {len(rep['npc_color_names']['hair'])} (hair), "
           f"{len(rep['npc_color_names']['facial_hair'])} (facial hair)")
     print(f"colour records: {len(rep['clfm'])}; archive files: {len(rep['archive_hits'])}; "
           f"material files: {len(rep['material_hits'])}; textures decoded: "
           f"{sum(1 for t in rep['textures'] if 'mean_rgb' in t)}")
+    grad = rep["gradients"]
+    print(f"hair colour gradients: {sum(len(v) for v in grad.values())} in {len(grad)} groups, decoded "
+          f"{sum(1 for v in grad.values() for r in v.values() if 'mean_rgb' in r)}")
+    for n, r in sorted((rep["gradients"].get(a.group) or {}).items(), key=lambda kv: -kv[1].get("lightness", -1)):
+        print(f"  {n:13s} {r.get('lightness', '-'):>6} {r.get('mean_rgb', r.get('error'))}")
     print(f"palette: {len(rep['palette'])} names with a colour")
     print("report:", os.path.join(a.out, "hair_color_probe.json"))
     return 0
