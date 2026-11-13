@@ -175,5 +175,24 @@ class MakeFurnitureTests(unittest.TestCase):
                          "hammer")
 
 
+class BoundsTests(unittest.TestCase):
+    def test_add_bounds_from_manifest(self):
+        """2026-11-13: furniture gets its converted model's bounds (no bounds: the prompt only at the centre)."""
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "manifest.json"), "w") as fh:
+                json.dump({"items": [{"source": "meshes\\Furniture\\Farm\\FarmBench01.nif",
+                                      "model": "skyrim\\furniture\\farm\\farmbench01.nif"}]}, fh)
+            out = {"bases": {"a": {"model": "Furniture\\Farm\\FarmBench01.nif"}, "b": {"model": None},
+                             "c": {"model": "Furniture\\NotConverted.nif"}}}
+            seen = []
+            n = M.add_bounds(out, d, bounds_of=lambda m: seen.append(m) or [[-1, -0.2, 0], [1, 0.2, 0.45]])
+            self.assertEqual(n, 1)
+            self.assertEqual(seen, ["skyrim\\furniture\\farm\\farmbench01.nif"])
+            self.assertEqual(out["bases"]["a"]["bounds"], [[-1, -0.2, 0], [1, 0.2, 0.45]])
+            self.assertNotIn("bounds", out["bases"]["b"])
+            self.assertNotIn("bounds", out["bases"]["c"])
+            self.assertEqual(M.add_bounds(out, os.path.join(d, "nothing")), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

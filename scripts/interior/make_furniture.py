@@ -151,6 +151,35 @@ def markers(rec, kind, marker_z):
     return out
 
 
+def add_bounds(out, convert_dir, bounds_of=None):
+    """Object bounds (metres, [[min], [max]]) for each base with a converted model (the batch's convert/manifest.json):
+    "bounds" in its furniture.json entry, which PluginSpike writes as the furniture's OBND. 2026-11-13 (owner, in game):
+    with no bounds the Sit / Sleep prompt came up only when looking at the furniture's very centre. Returns how many."""
+    man = os.path.join(convert_dir, "manifest.json")
+    if not os.path.exists(man):
+        return 0
+    with open(man, encoding="utf-8") as fh:
+        items = {i["source"].replace("/", "\\").lower(): i["model"] for i in json.load(fh).get("items", [])}
+    if bounds_of is None:
+        from fo4sf import skyrimlod
+
+        def bounds_of(model):
+            try:
+                return skyrimlod.model_bounds(convert_dir, model)
+            except (OSError, ValueError, struct.error):
+                return None
+    n = 0
+    for b in out["bases"].values():
+        if not b.get("model"):
+            continue
+        model = items.get(("meshes\\" + b["model"].lstrip("\\")).lower())
+        bb = bounds_of(model) if model else None
+        if bb:
+            b["bounds"] = bb
+            n += 1
+    return n
+
+
 def actor_targets(work):
     path = os.path.join(work, "actors.json")
     if not os.path.exists(path):
@@ -288,6 +317,9 @@ def main(argv=None):
         out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs)
     finally:
         ix.close()
+    nb = add_bounds(out, os.path.join(a.work, "convert"))
+    if nb:
+        print(f"object bounds from the converted models: {nb} bases")
     path = os.path.join(a.work, "furniture.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=1)

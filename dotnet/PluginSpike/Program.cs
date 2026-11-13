@@ -678,7 +678,15 @@ FormKey? FurnitureBase(string key)
             // the game does not draw markers: owner 2026-11-08, the benches were missing. Bounds as our statics (none) instead
             // of the invisible marker's.
             f.MajorRecordFlagsRaw &= ~0x800000;
-            f.ObjectBounds = new ObjectBounds();
+            // our model's bounds (make_furniture.py from the converted NIF): with none (2026-11-13, owner) the Sit /
+            // Sleep prompt only came up when looking at the furniture's very centre
+            f.ObjectBounds = b.TryGetProperty("bounds", out var fbb) && fbb.ValueKind == JsonValueKind.Array
+                ? new ObjectBounds
+                {
+                    First = new P3Float(fbb[0][0].GetSingle(), fbb[0][1].GetSingle(), fbb[0][2].GetSingle()),
+                    Second = new P3Float(fbb[1][0].GetSingle(), fbb[1][1].GetSingle(), fbb[1][2].GetSingle()),
+                }
+                : new ObjectBounds();
         }
         else modelNote = $"template's model ({src} not converted)";
     }

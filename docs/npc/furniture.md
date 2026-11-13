@@ -145,3 +145,8 @@ name holds "Marker" was dropped as an editor marker (CraftingBlackSmithForge, Fu
   make_furniture.py makes them the same furniture as indoors (cell "exterior", persistent); PluginSpike places them in
   the exterior world's persistent cell (ExtPos) and disables the exterior's static copy of each (an Initially Disabled
   override, as for the load doors). No exterior rebuild. Unverified in game: placement, sitting, the forge's E.
+Owner, first outdoor look (2026-11-13): benches and chairs outside are ours (console: FURN refs in FO4Port.esm), NPCs
+use the markers; the Sit / Sleep prompt only shows when looking at the furniture's very centre; a bench offers Sit
+but sitting does nothing; one chair (against a wall, a post and the tanning rack beside it) offers nothing. Changed:
+furniture with our model gets that model's object bounds (make_furniture.add_bounds from the batch's converted NIF;
+before: empty bounds, a point). Open: the bench / chair entry (Skyrim's entry sides vs the wall, or the marker facing).
