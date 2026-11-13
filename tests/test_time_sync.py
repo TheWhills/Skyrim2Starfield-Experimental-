@@ -72,7 +72,7 @@ class TimeSyncTests(unittest.TestCase):
             src = fh.read()
         self.assertTrue(src.startswith(f"ScriptName {T.SCRIPT} extends Quest"))
         for call in ("Game.SetLocalTime(", "Game.GetLocalTime()", "Utility.GetCurrentGameTime()",
-                     "StartTimerGameTime(", "GetCurrentPlanet()", '"SkyrimTerrainTamriel_Mars.esm"'):
+                     "StartTimer(", "GetCurrentPlanet()", '"SkyrimTerrainTamriel_Mars.esm"'):
             self.assertIn(call, src)
 
 

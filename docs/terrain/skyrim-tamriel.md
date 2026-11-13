@@ -353,7 +353,7 @@ together (+30 min each: the 24 h day works) but local ran 6 h 20 min ahead, late
 a day: the planet turns once per 24 h and also moves along its orbit); GetCurrentTime (the game hour the package /
 time-of-day conditions use) = UT (7.21 at 07:12 UT). So NPC schedules run on UT while the sun follows local time.
 Fix: S2STimeSync.esm, one start-game-enabled quest (a DialogueGeneric copy, as the voice quest) running
-S2S_LocalTimeSync.psc: on game load and every game hour, only on Nirn, Game.SetLocalTime(game hour) when they differ
+S2S_LocalTimeSync.psc: on game load and every 10 real seconds (a game-hour timer left a coc unsynced), only on Nirn, Game.SetLocalTime(game hour) when they differ
 by more than 3 minutes. Built by tools\owner\time_sync.ps1 (Creation Kit Papyrus compiler + time_sync.py; the quest's
 script block copied from a vanilla one-script quest, only the name ours). Unverified: the compile (Planet type,
 GetCurrentPlanet, SetLocalTime's parameters), the quest starting in an existing save, SetLocalTime's cost. The console

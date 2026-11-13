@@ -1,13 +1,13 @@
 ScriptName S2S_LocalTimeSync extends Quest
 {Skyrim2Starfield, 2026-11-13. Keeps the planet Nirn's local time (where its sun stands) equal to the game hour, the
 clock NPC schedules run on. Owner's test: GetCurrentTime gave the UT hour while local time ran ~6 h ahead and slipped a
-few minutes a day (the planet turns once per 24 h but also moves along its orbit). Every EveryHours game hours, on game
-load, and only while the player is on Nirn: if the two differ by more than Tolerance hours, SetLocalTime turns the
-planet to the game hour.}
+few minutes a day (the planet turns once per 24 h but also moves along its orbit). Every EverySeconds real seconds
+(2026-11-13: a game-hour timer left a coc / landing unsynced for up to an hour) and on game load, only while the
+player is on Nirn: if the two differ by more than Tolerance hours, SetLocalTime turns the planet to the game hour.}
 
 Int Property PlanetID = 0x800 Auto Const                         ; Nirn's planet record (PNDT) in PlanetPlugin
 String Property PlanetPlugin = "SkyrimTerrainTamriel_Mars.esm" Auto Const
-Float Property EveryHours = 1.0 Auto Const
+Float Property EverySeconds = 10.0 Auto Const                    ; real seconds between checks (cheap when in step)
 Float Property Tolerance = 0.05 Auto Const                       ; 3 minutes
 
 Event OnQuestInit()
@@ -19,7 +19,7 @@ Event Actor.OnPlayerLoadGame(Actor akSender)
     Sync()
 EndEvent
 
-Event OnTimerGameTime(Int aiTimerID)
+Event OnTimer(Int aiTimerID)
     Sync()
 EndEvent
 
@@ -35,6 +35,6 @@ Function Sync()
             Game.SetLocalTime(hour)
         EndIf
     EndIf
-    CancelTimerGameTime()
-    StartTimerGameTime(EveryHours)
+    CancelTimer()
+    StartTimer(EverySeconds)
 EndFunction
