@@ -166,3 +166,20 @@ in (CraftingBlackSmithForge -> WorkbenchIndustrial with blacksmithforgemarker.ni
 PickaxeMining* x5, WoodChoppingBlock x4, BucketCarry* x2, WoodPile x2, ResourceObjectSawmill, LeverPushAnimatingMetal
 became FoundCanvasChair copies (with the canvas chair model where theirs did not convert). make_furniture
 WORK_FURNITURE_RE now leaves those out (a real model stays the exterior's static) until Skyrim's animations are ported.
+
+## Animations: Skyrim's own on our furniture (plan, 2026-11-13)
+Owner: NPCs use the outdoor and indoor markers now, but with Starfield's animations and props (a datapad while
+"standing", a rag at the tanning rack); convert Skyrim's so they look right, in the right spot.
+Route (nothing new invented; both halves verified before): (1) a Skyrim clip decoded, retargeted and written as .af
+plays correctly on the Starfield human rig (hkx_to_af; chair_idlearmscrossedvar1 seated correctly in game,
+2026-10-19); (2) Starfield picks clip folders by keywords and an esm HumanRace entry with one keyword more than a
+generated-table row wins (stances, verified in game 2026-10-23), followed by the Creation Kit's GenerateAnimInfo run.
+So per furniture kind: our furniture copies get an S2S keyword; an entry cloned from the template's Furniture row(s)
+with that keyword puts a folder of converted Skyrim clips first, written under the tags the template's graph already
+plays (enter / idle loop / exit ...); tags our folder lacks fall back to Starfield's.
+Steps:
+1. Survey (scripts/armor/furniture_anim_survey.py, read-only): per template, its keywords, the matching Furniture rows,
+   folders, clip tags and graph; per Skyrim base we convert, its IDLE events and the Skyrim behaviour clips.
+2. Mapping table kind -> (Starfield tags, Skyrim clips): from the survey.
+3. First kind end to end (sitting: bench and chair; the chair idle already converts): clips, keyword, entry, CK run.
+4. Then lean, sweep, tanning rack, anvil, forge, chopping, cooking, ...; props (broom, hammer) after.
