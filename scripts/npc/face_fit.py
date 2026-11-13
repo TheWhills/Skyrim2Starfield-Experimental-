@@ -670,6 +670,57 @@ FACE_ETHNICITY = "european"
 ETHNICITY_MISMATCH = 100
 
 
+ELDER_RACES = ("elderrace", "elderracevampire")
+AGE_ACCENTS = re.compile(r"wrinkles|crowsfeet|roughface|undereyecrease|nasolabial", re.I)
+# layers an old template should not carry: they would put one NPC's scars / make-up / dirt on every elder
+NOT_GENERIC = ("Scars", "TattooMask", "MakeupFullPaintMask1", "MakeupFullPaintMask2", "Eyeshadow1", "Eyeshadow2",
+               "Eyeliner1", "Eyeliner2", "Lipstick1", "Lipstick2", "EnvironmentMask", "Cheeks1", "Cheeks2")
+
+
+def face_layers(subs):
+    """[(layer name, texture name, intensity u32)] of an NPC's face texture layers (TNAM, QNAM, INTV)."""
+    out, cur = [], None
+    for s, d in subs:
+        if s == b"TNAM":
+            cur = [fo4land_zstring(d), "", 0]
+            out.append(cur)
+        elif cur is not None and s == b"QNAM":
+            cur[1] = fo4land_zstring(d)
+        elif cur is not None and s == b"INTV" and len(d) >= 4:
+            cur[2] = struct.unpack_from("<I", bytes(d), 0)[0]
+    return [tuple(x) for x in out]
+
+
+def pick_elder_template(npc_recs, race_fid, female, baked=None):
+    """The generic OLD template of a sex (2026-11-13, owner: Elder-race NPCs should look old; Starfield's age is in the
+    face skin: an ol phenotype Dermaesthetic plus wrinkle accents, the looks menu's Facial Forms, baked into the
+    template's face textures). A plain voiced vanilla NPC (as pick_template) with a european_<sex>_ol Dermaesthetic and
+    the most wrinkle accents (Accents / ColorlessAccents with wrinkles, crow's feet, rough face ...), and none of the
+    one-person layers (NOT_GENERIC: scars, make-up, dirt, tattoos). None if there is none."""
+    sex = "female" if female else "male"
+    best = []
+    for r in npc_recs:
+        subs = r[2]
+        sigs = {s for s, _d in subs}
+        acbs = next((bytes(d) for s, d in subs if s == b"ACBS"), b"")
+        if bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1) != female:
+            continue
+        rnam = next((struct.unpack_from("<I", bytes(d), 0)[0] for s, d in subs if s == b"RNAM"), None)
+        if rnam != race_fid or b"FMSI" not in sigs or b"TPLT" in sigs or b"VTCK" not in sigs:
+            continue
+        if sigs & {b"VMAD", b"QSTA", b"BNAM"} or (baked is not None and r[3] not in baked):
+            continue
+        layers = face_layers(subs)
+        derma = next((t for n, t, _i in layers if n == "Dermaesthetic"), "")
+        if not re.match(rf"european_{sex}_ol\d", derma, re.I):
+            continue
+        if any(n in NOT_GENERIC for n, _t, _i in layers):
+            continue
+        age = sum(i for n, t, i in layers if "Accents" in n and AGE_ACCENTS.search(t))
+        best.append((-age, len(layers), sfplugin.edid(subs), r))
+    return min(best, key=lambda b: b[:3])[3] if best else None
+
+
 def pick_template(npc_recs, race_fid, female, edid=None, skin=None, baked=None):
     """A vanilla human NPC of the sex to copy: `edid` when given; else one with face dials and no template, preferring
     plain ones (no scripts, no affinity data: a generic NPC rather than a quest character) with a voice type (VTCK:
@@ -979,6 +1030,9 @@ def main(argv=None):
                          f"default {BODY_NPC[0]}, {BODY_NPC[1]}; 'none' keeps each template's)")
     ap.add_argument("--template-npc", action="append", default=[],
                     help="Starfield NPC EditorID the test NPCs copy (male, then female); default: a plain one")
+    ap.add_argument("--no-elder-template", action="store_true",
+                    help="Elder-race NPCs on the generic template too (default: the generic old one, "
+                         "pick_elder_template: its baked face carries Starfield's age wrinkles)")
     ap.add_argument("--template-by-tone", action="store_true",
                     help="pick each NPC's template by skin tone (before 2026-11-12) instead of the generic one per sex "
                          f"({', '.join(GENERIC_TEMPLATE)})")
@@ -1284,8 +1338,16 @@ def main(argv=None):
                                 child_race, conv_child, race_index, recs, masters, test_subs)
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
+            elder = None
+            if want is None and not a.no_elder_template and \
+                    races.get(by_edid[row["edid"].lower()].get("race"), "").lower() in ELDER_RACES:
+                elder = (pick_elder_template(npc_recs, human, row["female"], baked=baked) if baked else None) or \
+                    pick_elder_template(npc_recs, human, row["female"])
+                row["elder_template"] = sfplugin.edid(elder[2]) if elder else "none found: the generic one"
             if want is None and not a.template_by_tone:
                 want = GENERIC_TEMPLATE[int(row["female"])]
+            if elder is not None:
+                want = sfplugin.edid(elder[2])
             skin = target_skin(by_edid[row["edid"].lower()], npcs, real) if real is not None else None
             tpl = (pick_template(npc_recs, human, row["female"], want, skin=skin, baked=baked) if baked else None) \
                 or pick_template(npc_recs, human, row["female"], want, skin=skin)

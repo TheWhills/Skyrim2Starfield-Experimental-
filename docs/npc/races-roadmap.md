@@ -259,3 +259,13 @@ NPC faces are drawn from the template's pre-built face textures, so the Facial F
 face_layer_probe.py lists each texture layer's textures (which layer and texture "Facial Forms 2 #14 / 15" is), the
 looks menu's option lists (AVMD) and old NPCs' layers. Then: Elder NPCs on an old template or the layer composited
 into the face textures face_fit writes. Open.
+
+Elder template (2026-11-13, owner's face_layer_probe): the looks menu's Facial Forms 1 / 2 are the Accents1 / Accents2
+texture layers (SimpleGroup_Accents2_color lists their options in order: ... Accents_UnderEyeBags_Dark (14),
+Accents_RoughFace_Dark (15), Accents_Fullface_Wrinkles ...; each with _color / _normal / _rough / _ao), intensity INTV.
+Old vanilla NPCs: an *_ol1_* Dermaesthetic face skin plus Accents wrinkles (Crew_Elite_Lin: Fullface_Wrinkles +
+CrowsFeet); the generic templates carry only European_*_md2_Sk1. NPC faces come from pre-built textures, so Elder-race
+NPCs now copy the generic OLD template of their sex (pick_elder_template: plain, voiced, european ol Dermaesthetic,
+the most wrinkle accents, no scars / make-up / dirt / tattoos; faces.json row "elder_template"); skin tone recoloured
+as for the others. --no-elder-template: the generic one. Unverified in game; if no such NPC has a pre-built face the
+generic one is used and the wrinkles would have to be painted into the face textures instead.

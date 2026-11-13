@@ -126,6 +126,37 @@ class FaceFitScriptTests(unittest.TestCase):
              S.bsa.SkyrimArchives) = saved
 
 
+class ElderTemplateTests(unittest.TestCase):
+    def test_pick_elder_template(self):
+        """2026-11-13 (owner: Elder NPCs should look old): a plain european old-skin NPC with the most wrinkle accents
+        and no one-person layers (scars, make-up, dirt)."""
+        I = lambda v: struct.pack("<I", v)                                          # noqa: E731
+        Z = lambda t: t.encode() + b"\0"                                            # noqa: E731
+
+        def npc(fid, edid, derma, layers=(), female=True, extra=()):
+            subs = [(b"EDID", Z(edid)), (b"ACBS", I(1 if female else 0) + bytes(12)), (b"RNAM", I(0x347D)),
+                    (b"FMSI", b""), (b"VTCK", I(1)), (b"TNAM", Z("Dermaesthetic")), (b"QNAM", Z(derma)),
+                    (b"INTV", I(64))]
+            for n, t, i in layers:
+                subs += [(b"TNAM", Z(n)), (b"QNAM", Z(t)), (b"INTV", I(i))]
+            return (b"NPC_", b"", subs + list(extra), fid)
+        recs = [npc(1, "Young", "European_Female_md2_Sk1"),
+                npc(2, "OldScarred", "European_Female_ol1_Sk2", [("Accents1", "Accents_Fullface_Wrinkles", 60),
+                                                                 ("Scars", "Scar_X", 30)]),
+                npc(3, "OldLight", "European_Female_ol1_Sk2", [("Accents1", "Accents_CrowsFeet", 20)]),
+                npc(4, "OldStrong", "European_Female_ol1_Sk3", [("Accents1", "Accents_Fullface_Wrinkles", 40),
+                                                                ("Accents2", "Accents_RoughFace_Dark", 30)]),
+                npc(5, "OldAfrican", "African_Female_ol1_Sk8", [("Accents1", "Accents_Fullface_Wrinkles", 99)]),
+                npc(6, "OldMale", "European_Male_ol1_Sk1", [("Accents1", "Accents_Fullface_Wrinkles", 99)], False),
+                npc(7, "OldScripted", "European_Female_ol1_Sk1", [("Accents1", "Accents_Fullface_Wrinkles", 99)],
+                    extra=[(b"VMAD", b"x")])]
+        self.assertEqual(S.pick_elder_template(recs, 0x347D, True)[3], 4)
+        self.assertEqual(S.pick_elder_template(recs, 0x347D, False)[3], 6)
+        self.assertEqual(S.pick_elder_template(recs, 0x347D, True, baked={3})[3], 3)
+        self.assertIsNone(S.pick_elder_template(recs[:1], 0x347D, True))
+        self.assertEqual(S.face_layers(recs[3][2])[1], ("Accents1", "Accents_Fullface_Wrinkles", 40))
+
+
 class GenericTemplateTests(unittest.TestCase):
     def test_one_template_per_sex(self):
         """2026-11-12 (owner: Faendal on another template than the others): every NPC of a sex copies the generic
