@@ -52,8 +52,11 @@ $imports = Split-Path $base.FullName
 Write-Host "imports: $imports"
 
 Step "Compile S2S_LocalTimeSync"
+# the compiler takes the script by NAME, found through -i (a full path gave "filename does not match script name")
 $src = "$Repo\scripts\terrain\papyrus"
-& $Compiler "$src\S2S_LocalTimeSync.psc" "-f=$($flags.FullName)" "-i=$src;$imports" "-o=$Mod\Scripts" -optimize -release -final
+Push-Location $src
+& $Compiler "S2S_LocalTimeSync" "-f=$($flags.FullName)" "-i=$src;$imports" "-o=$Mod\Scripts" -optimize -release -final
+Pop-Location
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path "$Mod\Scripts\S2S_LocalTimeSync.pex")) { Fail "Papyrus compile (paste its output)" }
 
 Step "S2STimeSync.esm"
