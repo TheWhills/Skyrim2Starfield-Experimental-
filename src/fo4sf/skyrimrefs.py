@@ -89,14 +89,14 @@ def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str 
         bases = read_bases(p)
         _wfid, start, end, _fields = p.find_world(world)
 
-        def walk(s, e, cell):
+        def walk(s, e, cell, top=True):
             for item in fo4land.iter_items(p.buf, s, e):
                 if item[0] == "GRUP":
                     _g, off, gend, label, gtype = item
                     if gtype in (4, 5):
-                        walk(off + 24, gend, None)
+                        walk(off + 24, gend, None, top=False)
                     elif gtype == 6 and cell is not None and struct.unpack("<I", label)[0] == cell["fid"]:
-                        walk(off + 24, gend, cell)
+                        walk(off + 24, gend, cell, top=top)
                     elif gtype in (8, 9) and cell is not None:
                         children(off + 24, gend, cell, gtype == 8)
                     continue
@@ -107,6 +107,11 @@ def export_world(esm: str, world: str = "Tamriel", cells=None, plugin_name: str 
                 for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)):
                     if sig == b"XCLC" and len(d) >= 8:
                         xy = struct.unpack_from("<ii", d)
+                # the world's persistent cell (its CELL outside the exterior blocks): Skyrim.esm gives it XCLC 0,0,
+                # so its references must take their cell from their position (2026-11-13: Riverwood's forge, a
+                # persistent reference at cell 4,-12, was filed under 0,0 and left out of a --cells / --around export)
+                if top:
+                    xy = None
                 cell = {"fid": fid, "xy": xy}
                 if xy is not None:
                     stats["cells"] += 1

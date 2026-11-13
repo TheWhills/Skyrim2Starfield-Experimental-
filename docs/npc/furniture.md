@@ -154,3 +154,9 @@ Owner, same day: `disable` in the console on the old exterior bench under ours, 
 Initially Disabled override had not taken in game, and the static's collision blocked the sit. PluginSpike now hides a
 replaced exterior static (furniture and load doors) as xEdit's "Undelete and Disable References" does: Initially
 Disabled, 1000 m lower, enable parent PlayerRef (000014) with "opposite of parent". Written without a compiler.
+Riverwood's forge (owner's export of every forge / anvil / smelter in Tamriel, 2026-11-13): CraftingBlackSmithForge at
+(20459, -45225) units, i.e. cell 4,-12, but listed under cell 0,0, as every persistent reference: Skyrim.esm gives the
+world's persistent cell XCLC 0,0, and skyrimrefs took that as the references' cell, so a --cells / --around export
+(exterior_furniture.json, skyrim_first_run --radius) left all persistent references out. Fixed: the persistent cell's
+references take their cell from their position. Its fire (LightForgeFire01) is a light: exterior lights are not
+translated yet, so the forge comes back unlit.

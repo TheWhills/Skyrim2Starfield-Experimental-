@@ -345,7 +345,8 @@ def build_esm(world_items_cells, hills, extent, base_records=BASES, persistent_r
             r = r[:8] + struct.pack("<I", flags) + r[12:]
         return r
 
-    pcell = rec(b"CELL", 0x200, [(b"DATA", b"\x02\0")])
+    # as Skyrim.esm: the persistent cell has XCLC 0,0 (2026-11-13: that filed every persistent reference under 0,0)
+    pcell = rec(b"CELL", 0x200, [(b"DATA", b"\x02\0"), (b"XCLC", struct.pack("<iiI", 0, 0, 0))])
     items = [pcell, grup(0x200, 6, [grup(0x200, 8, [ref(*r) for r in persistent_refs])])]
     sub, fid = [], 0x1000
     x0, x1, y0, y1 = extent
