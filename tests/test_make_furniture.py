@@ -146,6 +146,17 @@ class MakeFurnitureTests(unittest.TestCase):
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "LeanTableMarker", "keywords": ["isLeanTable"]}), "lean_table")
         self.assertEqual(M.kind_of({"type": "IDLM", "edid": "X", "animations": ["IdleOffsetArmsCrossedStart"]}), "arms_crossed")
         self.assertEqual(M.kind_of({"type": "IDLM", "edid": "X", "animations": ["IdleSomething"]}), "stand")
+        # 2026-11-13: Skyrim work / creature furniture with Sit markers is no chair (the owner's build made 16 dragon
+        # perches, mining spots, chopping blocks ... Starfield canvas chairs)
+        sit = [{"type": "Sit"}]
+        for e in ("DragonPerchRockL02", "DragonPerchTower", "PickaxeMiningFloorMarker", "PickaxeMiningTableMarker",
+                  "WoodChoppingBlock", "BucketCarryPourMarker", "BucketCarryFillMarker", "LeverPushAnimatingMetal",
+                  "ResourceObjectSawmill", "WoodPile"):
+            self.assertIsNone(M.kind_of({"type": "FURN", "edid": e, "keywords": [], "entry_points": sit}), e)
+        for e in ("CommonChair01F", "WoodenChair01", "NobleChair01", "InvisibleChairMarker", "InvisibleChairMarkerChild"):
+            self.assertEqual(M.kind_of({"type": "FURN", "edid": e, "keywords": [], "entry_points": sit}), "chair", e)
+        self.assertEqual(M.kind_of({"type": "FURN", "edid": "CraftingBlacksmithSharpeningWheel", "keywords": []}),
+                         "weapon_bench")                       # a crafting station, not caught by the work rule
 
     def test_crafting_kinds(self):
         pot = {"type": "FURN", "edid": "CraftingCookingPotSm", "bench_type": 1,

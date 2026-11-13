@@ -160,3 +160,9 @@ world's persistent cell XCLC 0,0, and skyrimrefs took that as the references' ce
 (exterior_furniture.json, skyrim_first_run --radius) left all persistent references out. Fixed: the persistent cell's
 references take their cell from their position. Its fire (LightForgeFire01) is a light: exterior lights are not
 translated yet, so the forge comes back unlit.
+Owner's Riverwood build after the persistent-reference fix (2026-11-13, log verified): 92 outdoor references, the forge
+in (CraftingBlackSmithForge -> WorkbenchIndustrial with blacksmithforgemarker.nif), 20 exterior statics hidden. But the
+"Sit marker -> chair" fallback also took Skyrim's work / creature furniture: DragonPerchRockL02 x12, DragonPerchTower x4,
+PickaxeMining* x5, WoodChoppingBlock x4, BucketCarry* x2, WoodPile x2, ResourceObjectSawmill, LeverPushAnimatingMetal
+became FoundCanvasChair copies (with the canvas chair model where theirs did not convert). make_furniture
+WORK_FURNITURE_RE now leaves those out (a real model stays the exterior's static) until Skyrim's animations are ported.

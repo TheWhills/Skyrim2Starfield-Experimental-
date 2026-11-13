@@ -103,6 +103,13 @@ def crafting_kind(rec):
     return None
 
 
+# Skyrim work / creature furniture whose markers are "Sit" but which is no seat (2026-11-13, owner's Riverwood build:
+# once the persistent outdoor references came in, 16 dragon perches, mining spots, chopping blocks, buckets, a lever,
+# the sawmill and wood piles all became Starfield canvas chairs). Left alone: a real model stays the exterior's static.
+WORK_FURNITURE_RE = re.compile(r"dragon|perch|pickaxe|mining|woodchop|chopping|bucket|lever|sawmill|woodpile|"
+                               r"resourceobject|oremine|orevein|fishing|butter|churn", re.I)
+
+
 def kind_of(rec, crafting=True):
     """Which Starfield template a Skyrim FURN / IDLM becomes; None = left as it is (a static, or nothing)."""
     edid = rec.get("edid") or ""
@@ -131,6 +138,8 @@ def kind_of(rec, crafting=True):
         return "lean_counter"
     if "istable" in kw or "bench" in edid.lower():
         return "bench"
+    if WORK_FURNITURE_RE.search(edid) or any(WORK_FURNITURE_RE.search(k) for k in kw):
+        return None                                            # work / creature furniture: no Starfield match yet
     if "Sit" in anims:
         return "chair"
     return None
