@@ -13,6 +13,7 @@ $sky="C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data"
 $sf="D:\SteamLibrary\steamapps\common\Starfield"
 $mods="$env:LOCALAPPDATA\ModOrganizer\Starfield\mods"
 $armor="$mods\S2S Armor Test"
+$calumi="C:\Users\elija\Modding\sf_animation_io\sf_animation_io-master\CALUMI.Animation.dll"   # hkx_to_af / furniture_anim_pack (owner, 2026-11-13)
 $face="$mods\S2S Face Test"
 $hairs="$mods\S2S Skyrim Hairs\S2SSkyrimHairs.esm"
 $ms="$mods\More-Sliders Complete"
