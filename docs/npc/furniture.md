@@ -150,3 +150,7 @@ use the markers; the Sit / Sleep prompt only shows when looking at the furniture
 but sitting does nothing; one chair (against a wall, a post and the tanning rack beside it) offers nothing. Changed:
 furniture with our model gets that model's object bounds (make_furniture.add_bounds from the batch's converted NIF;
 before: empty bounds, a point). Open: the bench / chair entry (Skyrim's entry sides vs the wall, or the marker facing).
+Owner, same day: `disable` in the console on the old exterior bench under ours, then Sit works (verified): the
+Initially Disabled override had not taken in game, and the static's collision blocked the sit. PluginSpike now hides a
+replaced exterior static (furniture and load doors) as xEdit's "Undelete and Disable References" does: Initially
+Disabled, 1000 m lower, enable parent PlayerRef (000014) with "opposite of parent". Written without a compiler.

@@ -869,6 +869,17 @@ foreach (var cellPath in cellPaths)
 // was staged with --interiors (already a persistent load door there), that reference is overridden with the XTEL instead.
 // Written without a compiler (no NuGet in the cloud workspace); Mutagen names as used elsewhere in this file and in
 // dotnet/TerrainOverlays.
+// An exterior static that our load door / furniture replaces: Initially Disabled alone did not take (owner 2026-11-13,
+// in game: the old bench still stood under ours, its collision stopping the sit; console `disable` on it fixed
+// sitting). So as xEdit's "Undelete and Disable References" does: disabled, sunk 1000 m, and enable parent = the
+// player with "opposite of parent" (the player is always enabled, so it stays disabled in any save).
+void HideExteriorStatic(PlacedObject o)
+{
+    o.MajorRecordFlagsRaw |= 0x800;                                            // Initially Disabled
+    o.Position = new P3Float(o.Position.X, o.Position.Y, o.Position.Z - 1000f);
+    o.EnableParent = new EnableParent { Flags = (EnableParent.Flag)1 };       // Set Enable State to Opposite of Parent
+    o.EnableParent.Reference.SetTo(new FormKey(sfEsm, 0x000014));              // PlayerRef
+}
 var extDir = Environment.GetEnvironmentVariable("EXTERIOR_DIR");
 var extDoorsPath = Environment.GetEnvironmentVariable("EXTERIOR_DOORS");
 var extNavPath = Environment.GetEnvironmentVariable("EXTERIOR_NAVMESH");   // make_skyrim_navmesh.py export's exterior_navmesh.json
@@ -1016,7 +1027,7 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
                     // the exterior's static copy of it: Initially Disabled, in an override of its cell
                     var co = CellOverride(blk, sb, c);
                     var off = (PlacedObject)sg.DeepCopy();
-                    off.MajorRecordFlagsRaw |= 0x800;                         // Initially Disabled
+                    HideExteriorStatic(off);
                     co.Temporary.Add(off);
                     want.Remove(r.FormKey);
                     extIn++;
@@ -1066,7 +1077,7 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
                     {
                         if (!furnOff.Contains(tr.FormKey) || tr is not IPlacedObjectGetter tsg) continue;
                         var toff = (PlacedObject)tsg.DeepCopy();
-                        toff.MajorRecordFlagsRaw |= 0x800;                     // Initially Disabled
+                        HideExteriorStatic(toff);
                         CellOverride(blk, sb, c).Temporary.Add(toff);
                         furnOff.Remove(tr.FormKey);
                         extFurnOff++;
@@ -1075,7 +1086,7 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
         {
             if (!furnOff.Contains(pr.FormKey) || pr is not IPlacedObjectGetter psg) continue;
             var poff = (PlacedObject)psg.DeepCopy();
-            poff.MajorRecordFlagsRaw |= 0x800;
+            HideExteriorStatic(poff);
             tco.Persistent.Add(poff);
             furnOff.Remove(pr.FormKey);
             extFurnOff++;
