@@ -47,6 +47,32 @@ class RefOverrideTests(unittest.TestCase):
             self.assertTrue(hits[0][3]["disabled"])
             self.assertEqual(hits[0][3]["enable_parent"], "000014:Starfield.esm flags 1")
             self.assertEqual(hits[0][3]["base"], "00ABCD:Starfield.esm")
+            self.assertEqual(hits[0][3]["in"], "top CELL")
+
+    def test_group_chain(self):
+        """world > block > sub-block > cell (its CELL record before the group) > temporary is spelled out; a cell
+        group with no CELL record before it is flagged."""
+        cell = rec(b"CELL", 0x00000100, [])
+        ref = rec(b"REFR", 0x0000502E, [(b"DATA", struct.pack("<6f", 0, 0, 1.0, 0, 0, 0))])
+        children = grup(struct.pack("<I", 0x00000100), 6, [grup(struct.pack("<I", 0x00000100), 9, [ref])])
+        sub = grup(struct.pack("<hh", -1, 2), 5, [cell, children])
+        world = grup(b"WRLD", 0, [rec(b"WRLD", 0x00000F3C, []),
+                                  grup(struct.pack("<I", 0x00000F3C), 1, [grup(struct.pack("<hh", 0, 0), 4, [sub])])])
+        bad = grup(b"WRLD", 0, [rec(b"WRLD", 0x00000F3C, []),
+                                grup(struct.pack("<I", 0x00000F3C), 1, [grup(struct.pack("<hh", 0, 0), 4, [
+                                    grup(struct.pack("<hh", -1, 2), 5, [children])])])])
+        with tempfile.TemporaryDirectory() as d:
+            for name, body in (("good.esm", world), ("bad.esm", bad)):
+                path = os.path.join(d, name)
+                with open(path, "wb") as fh:
+                    fh.write(rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.0, 0, 0)), (b"MAST", b"T.esm\0"),
+                                              (b"DATA", b"\0" * 8)]) + body)
+                _ml, hits = R.find(path, 0x00502E)
+                self.assertEqual(len(hits), 1)
+                want = ("top WRLD > world 000F3C:T.esm (its WRLD record just before: yes) > block 0,0 > sub-block 2,-1 > "
+                        f"cell 000100:T.esm (its CELL record just before: {'yes' if name == 'good.esm' else 'NO'}) > "
+                        "temporary")
+                self.assertEqual(hits[0][3]["in"], want)
 
 
 if __name__ == "__main__":

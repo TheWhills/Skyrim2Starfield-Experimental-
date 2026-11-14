@@ -8,7 +8,9 @@ belongs to the same plugin as the original and its plugin loads after every othe
         --plugin <SkyrimTerrainTamriel_Mars.esm> --plugin <FO4Port.esm>
 
 2026-11-14 (owner): the exterior static under each outdoor bench still shows in game (console: GetDisabled 0, z 184.88,
-not 1000 m lower), although FO4Port.esm's build reports disabling them.
+not 1000 m lower), although FO4Port.esm's build reports disabling them. The tool showed FO4Port.esm's copy is right
+(same owner, disabled, sunk, loading last), so it also prints the groups each copy sits in (world, block, sub-block, cell,
+temporary / persistent): the game files a reference by them.
 """
 import argparse
 import os
@@ -50,12 +52,44 @@ def describe(fields, flags, master_list, own_name):
     return out
 
 
-def walk(p, start, end):
+GROUP_NAMES = {1: "world", 2: "int block", 3: "int sub-block", 4: "block", 5: "sub-block", 6: "cell", 8: "persistent",
+               9: "temporary", 10: "visible distant"}
+
+
+def walk(p, start, end, chain=()):
+    """Records with the chain of groups they sit in: [(group type, label bytes, CELL / WRLD FormIDs seen just before
+    the group in its parent)]."""
+    last = {}
     for item in fo4land.iter_items(p.buf, start, end):
         if item[0] == "GRUP":
-            yield from walk(p, item[1] + 24, item[2])
+            _g, off, gend, label, gtype = item
+            yield from walk(p, off + 24, gend, chain + ((gtype, bytes(label), dict(last)),))
+            last = {}
         else:
-            yield item
+            yield item + (chain,)
+            if item[0] in (b"CELL", b"WRLD"):
+                last[item[0].decode()] = item[3]
+
+
+def chain_text(chain, master_list, own_name):
+    """'world 00000F3C:X > block 0,-1 > sub-block ... > cell 0000ABCD:X (CELL record before it: yes) > temporary'."""
+    out = []
+    for gtype, label, last in chain:
+        name = GROUP_NAMES.get(gtype, f"type {gtype}")
+        if gtype in (1, 6, 8, 9, 10):
+            fid = struct.unpack("<I", label)[0]
+            want = "WRLD" if gtype == 1 else "CELL"
+            ref = f"{fid & 0xFFFFFF:06X}:{owner(fid, master_list, own_name)}"
+            before = "" if gtype in (8, 9, 10) else f" (its {want} record just before: {'yes' if last.get(want) == fid else 'NO'})"
+            out.append(f"{name} {ref}{before}" if gtype in (1, 6) else name)
+        elif gtype == 0:
+            out.append("top " + label.decode("latin-1"))
+        elif gtype in (4, 5):
+            y, x = struct.unpack("<hh", label)
+            out.append(f"{name} {x},{y}")
+        else:
+            out.append(name)
+    return " > ".join(out)
 
 
 def find(path, local_id):
@@ -64,11 +98,13 @@ def find(path, local_id):
     hits = []
     with fo4land.Plugin(path) as p:
         ml = masters(p)
-        for typ, off, flags, fid in walk(p, p.body, len(p.buf)):
+        for typ, off, flags, fid, chain in walk(p, p.body, len(p.buf)):
             if (fid & 0xFFFFFF) != local_id or typ not in REF_TYPES:
                 continue
             fields = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
-            hits.append((owner(fid, ml, name), typ.decode(), fid, describe(fields, flags, ml, name)))
+            d = describe(fields, flags, ml, name)
+            d["in"] = chain_text(chain, ml, name)
+            hits.append((owner(fid, ml, name), typ.decode(), fid, d))
     return ml, hits
 
 
@@ -82,7 +118,9 @@ def main(argv=None):
         ml, hits = find(path, local_id)
         print(f"== {os.path.basename(path)}  masters: {', '.join(ml) or '-'}")
         for own, typ, fid, d in hits:
+            where = d.pop("in")
             print(f"  {typ} {fid:08X} = {local_id:06X}:{own}  " + "  ".join(f"{k} {v}" for k, v in d.items()))
+            print(f"    in: {where}")
         if not hits:
             print(f"  no reference ending {local_id:06X}")
     return 0
