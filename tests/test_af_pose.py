@@ -31,5 +31,17 @@ class PoseTests(unittest.TestCase):
         self.assertEqual(P.joints(["Root", "C_Pelvis", "L_Hand", "R_Finger11"]), ["C_Pelvis", "L_Hand"])
 
 
+    def test_hands_on_thighs(self):
+        """Hip at x -0.1, knee 0.4 m forward: a left wrist 0.2 m along, 0.05 up and 0.02 outward reads back as such."""
+        pose = {"L_Thigh": np.array([-0.1, 0, 0.5]), "L_Calf": np.array([-0.1, 0.4, 0.5]),
+                "L_Wrist": np.array([-0.12, 0.2, 0.55]), "R_Thigh": np.array([0.1, 0, 0.5]),
+                "R_Calf": np.array([0.1, 0.4, 0.5]), "R_Hand": np.array([0.1, 0.5, 0.45])}
+        got = P.hands_on_thighs(pose)
+        self.assertEqual(got["L"], (0.5, 0.05, 0.02))
+        self.assertEqual(got["R"], (1.0, -0.05, 0.0))                    # past the knee: clamped to it
+        self.assertIn("hand over L thigh: 0.50 of the way to the knee, +0.050 m above", P.report("x", pose, set()))
+        self.assertEqual(P.hands_on_thighs({"C_Pelvis": np.zeros(3)}), {})
+
+
 if __name__ == "__main__":
     unittest.main()

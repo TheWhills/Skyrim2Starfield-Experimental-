@@ -11,6 +11,10 @@ hips; Skyrim's own has them forward. Compare our Idle with Starfield's chair Idl
 
 A --af that is not a file on disk is read from Starfield's archives. Prints, per clip, the arm / leg / spine joints
 (metres, the actor's frame: x right, y forward, z up, as Starfield's rig) and the hands relative to the pelvis.
+
+2026-11-14 (owner): with hand IK gone the seated hands rest forward but sink into the thighs. Each clip now also
+prints where each hand sits over its thigh (hands_on_thighs); compare our Idle's height above the hip-knee line with
+Starfield's chair Idle to see how far the hands must come up.
 """
 import argparse
 import os
@@ -77,6 +81,30 @@ def joints(names):
     return [n for n in names if JOINT_RE.search(n)]
 
 
+def _side_bone(pose, side, pattern):
+    rx = re.compile(rf"^{side}_({pattern})$", re.I)
+    return next((n for n in pose if rx.match(n)), None)
+
+
+def hands_on_thighs(pose):
+    """Where each hand sits over its thigh: {side: (t, up, out)}. t is how far along the thigh (0 at the hip joint,
+    1 at the knee), up the hand's height above the hip-knee line there, out how far it is to the outside of it
+    (metres). The thigh's surface sits some way above that line, so compare `up` with a clip whose hands rest on the
+    thighs in game (Starfield's chair Idle): a smaller `up` means the hands sink into the legs."""
+    out = {}
+    for side, sign in (("L", -1.0), ("R", 1.0)):
+        hip, knee = _side_bone(pose, side, "thigh"), _side_bone(pose, side, "calf|knee")
+        hand = _side_bone(pose, side, "wrist") or _side_bone(pose, side, "hand")
+        if not (hip and knee and hand):
+            continue
+        a, b, h = pose[hip], pose[knee], pose[hand]
+        ab = b - a
+        t = float(np.clip(np.dot(h - a, ab) / (np.dot(ab, ab) or 1.0), 0.0, 1.0))
+        d = h - (a + t * ab)
+        out[side] = (round(t, 3) + 0.0, round(float(d[2]), 3) + 0.0, round(float(d[0]) * sign, 3) + 0.0)
+    return out
+
+
 def report(label, pose, keyed):
     pel = next((pose[n] for n in pose if re.search(r"pelvis", n, re.I)), None)
     lines = [f"== {label}"]
@@ -84,6 +112,9 @@ def report(label, pose, keyed):
         p = np.round(pose[n], 3) + 0.0                     # no "-0.000"
         rel = "" if pel is None else "  rel pelvis " + " ".join(f"{v:+.3f}" for v in (np.round(p - pel, 3) + 0.0))
         lines.append(f"  {n:24s} {p[0]:+.3f} {p[1]:+.3f} {p[2]:+.3f}{rel}{'' if n in keyed else '  (not keyed)'}")
+    for side, (t, up, out) in hands_on_thighs(pose).items():
+        lines.append(f"  hand over {side} thigh: {t:.2f} of the way to the knee, {up:+.3f} m above the hip-knee line,"
+                     f" {out:+.3f} m outside it")
     return "\n".join(lines)
 
 
