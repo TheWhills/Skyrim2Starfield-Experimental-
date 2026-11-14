@@ -253,3 +253,10 @@ places each exterior load door at the staged exterior's static door (EXTERIOR_DI
 copy, so the rebuild read sunk statics and put the 7 load doors 1000 m down (and sank the statics again). Now step 5
 patches only the installed copy, and PluginSpike stops if a staged door static is already disabled. Recovery: restore
 both copies from their .before_ref_overrides backups (made on the first patch, i.e. the originals), rebuild.
+
+Body shape (2026-11-14, owner: "the difference in body is going to cause issues with every animation, can we account
+for that when we convert"). Plan: measure once how thick each body part is around its bone in both bodies
+(fo4sf.bodyprofile: a radius grid per segment, by position along it and direction around it, from the skinned body in
+its bind pose; scripts/armor/body_profiles.py), then in the retarget keep each hand's gap to the nearest body surface
+(Skyrim's gap, on Starfield's surface) by two-bone arm IK, blended out as the hand leaves the body. Generalises
+lift_hands (thighs only, tuned 0.13 m) to chest, belly, hips, the other arm.
