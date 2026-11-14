@@ -260,3 +260,14 @@ for that when we convert"). Plan: measure once how thick each body part is aroun
 its bind pose; scripts/armor/body_profiles.py), then in the retarget keep each hand's gap to the nearest body surface
 (Skyrim's gap, on Starfield's surface) by two-bone arm IK, blended out as the hand leaves the body. Generalises
 lift_hands (thighs only, tuned 0.13 m) to chest, belly, hips, the other arm.
+Owner's first measurement (2026-11-14, body_profiles.json): Starfield's male body is NOT thicker. Mean radii Skyrim /
+Starfield: chest 0.155 / 0.129, belly 0.142 / 0.127, thigh 0.090 / 0.083, upper arm 0.085 / 0.060, forearm 0.047 /
+0.035 (Skyrim's skeleton ~8 % taller). The difference is proportion: Starfield's upper arm 0.27 m vs Skyrim's 0.33
+(0.30 at Starfield's height), forearm 0.24 vs 0.23 (0.21), shoulder joint lower. Skyrim's arm rotations therefore land
+the hand elsewhere relative to the body. Fixes to the measurement after that run: surfaces sampled by area (Skyrim's
+body has 2453 vertices), hips measured hip joint to hip joint (Starfield's C_Hips -> C_Spine is 6 mm), points beyond
+1.8x a segment's median distance dropped (armpit torso points on the upper arm), heights printed.
+retarget.keep_contacts (hkx_to_af --body-profiles; furniture_anim_pack --body-profiles, which then drops
+HAND_CLEARANCE): per frame and hand, each body segment near Skyrim's wrist (gap < 0.14 m, full below 0.06) pulls
+Starfield's wrist to the same position along / direction around / gap from Starfield's segment surface; arm IK, hand
+rotation kept. Unverified on real clips.

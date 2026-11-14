@@ -279,6 +279,92 @@ def lift_hands(rig: "Rig", lt, lq, clearance: float, outside: float = 0.0, sides
     return lt, lq, info
 
 
+CONTACT_NEAR = 0.06      # a hand this close to a body surface (metres, Skyrim's gap) keeps that gap on Starfield's body
+CONTACT_FAR = 0.14       # ... fading out by this gap: a hand away from the body moves as the arm's rotations put it
+
+
+def keep_contacts(sk: "Rig", sf: "Rig", out_t, out_q, wt_sk, wq_sk, profiles: Dict, unit: float = SKYRIM_M_PER_UNIT,
+                  scale: float = 1.0, sides=("L", "R")):
+    """Locals in which each hand near the body keeps its place relative to the body's surface: where Skyrim's wrist
+    is relative to a body segment (position along it, direction around it, gap from its surface, fo4sf.bodyprofile),
+    Starfield's is put relative to the same segment of Starfield's body (its own radius there, Skyrim's gap scaled to
+    Starfield's height), by two-bone IK on the arm, the hand keeping its world rotation. Each segment near the hand
+    pulls by how near it is (CONTACT_NEAR .. CONTACT_FAR), so contacts blend in and out without jumps.
+
+    Why (2026-11-14, owner: "the difference in body is going to cause issues with every animation"): Starfield's arm
+    is proportioned differently (upper arm ~10 % shorter, forearm ~14 % longer, shoulders lower: body_profiles), so
+    Skyrim's arm rotations put the hands into the thighs when seated and into the chest with arms crossed.
+    profiles: body_profiles.json ({"skyrim": {segment: profile}, "starfield": {...}}). Returns (lt, lq, report)."""
+    from . import bodyprofile as BP
+    lt, lq = np.asarray(out_t, float), np.asarray(out_q, float).copy()
+    psk, psf = profiles.get("skyrim", {}), profiles.get("starfield", {})
+    segs = []
+    for name, ska, skb, sfa, sfb in BP.SEGMENTS:
+        if name in psk and name in psf and all(n in sk.index for n in (ska, skb)) and all(
+                n in sf.index for n in (sfa, sfb)):
+            drv = BP.DRIVER.get(name, (ska, sfa))
+            segs.append((name, sk.index[ska], sk.index[skb], sf.index[sfa], sf.index[sfb],
+                         sk.index.get(drv[0], sk.index[ska]), sf.index.get(drv[1], sf.index[sfa])))
+    _rt_sk, rq_sk = sk.rest_world()
+    _rt_sf, rq_sf = sf.rest_world()
+    report = {}
+    for side in sides:
+        hand_sk = sk.index.get(f"NPC {side} Hand [{side}Hnd]")
+        chain = [f"{side}_Biceps", f"{side}_Forearm", f"{side}_Wrist"]
+        if hand_sk is None or any(n not in sf.index for n in chain):
+            continue
+        own = (f"{side}_upperarm", f"{side}_forearm")
+        wt_sf, wq_sf = sf.fk(lt, lq)
+        hs = wt_sk[:, hand_sk] * unit                                        # (F, 3) Skyrim wrist, metres
+        hf = wt_sf[:, sf.index[chain[2]]]
+        pull = np.zeros_like(hf)
+        weight = np.zeros(len(hf))
+        used = {}
+        for name, a_s, b_s, a_f, b_f, d_s, d_f in segs:
+            if name in own:
+                continue
+            frs = np.asarray(psk[name]["frame"], float)
+            frf = np.asarray(psf[name]["frame"], float)
+            ds = qmul(wq_sk[:, d_s], qinv(rq_sk[d_s])[None])                 # the segment's turn from rest
+            df = qmul(wq_sf[:, d_f], qinv(rq_sf[d_f])[None])
+            A, B = wt_sk[:, a_s] * unit, wt_sk[:, b_s] * unit
+            ax = qrot(ds, np.broadcast_to(frs[0], A.shape))
+            r0 = qrot(ds, np.broadcast_to(frs[1], A.shape))
+            r1 = qrot(ds, np.broadcast_to(frs[2], A.shape))
+            p = hs - A
+            length = np.maximum(np.linalg.norm(B - A, axis=1), 1e-9)
+            along = np.sum(p * ax, axis=1)
+            t = along / length
+            perp = p - along[:, None] * ax
+            ang = np.arctan2(np.sum(perp * r1, axis=1), np.sum(perp * r0, axis=1))
+            tc = np.clip(t, 0.0, 1.0)
+            gap = np.linalg.norm(perp, axis=1) - BP.radius_at(psk[name], tc, ang)
+            outside = np.maximum(np.maximum(-t, t - 1.0), 0.0) * length    # past the segment's ends
+            w = _smooth((CONTACT_FAR - gap) / (CONTACT_FAR - CONTACT_NEAR)) * _smooth(1.0 - outside / 0.05)
+            if not np.any(w > 1e-4):
+                continue
+            Af, Bf = wt_sf[:, a_f], wt_sf[:, b_f]
+            f1 = qrot(df, np.broadcast_to(frf[1], Af.shape))
+            f2 = qrot(df, np.broadcast_to(frf[2], Af.shape))
+            d = np.cos(ang)[:, None] * f1 + np.sin(ang)[:, None] * f2
+            target = Af + tc[:, None] * (Bf - Af) + d * (BP.radius_at(psf[name], tc, ang) + gap * scale)[:, None]
+            pull += w[:, None] * (target - hf)
+            weight += w
+            used[name] = int(np.sum(w > 0.5))
+        move = weight > 1e-4
+        if not np.any(move):
+            report[side] = {"frames": 0, "max_move_m": 0.0, "segments": {}}
+            continue
+        delta = pull / np.maximum(weight, 1.0)[:, None]                      # several contacts: their mean pull
+        _nt, nq, left = two_bone_ik(sf, lt, lq, chain[0], chain[1], chain[2], hf + delta)
+        lq[move] = nq[move]
+        report[side] = {"frames": int(np.sum(move)),
+                        "max_move_m": round(float(np.max(np.linalg.norm(delta[move], axis=1))), 3),
+                        "unreached_m": round(float(np.max(left[move])), 3),
+                        "segments": {k: v for k, v in sorted(used.items()) if v}}
+    return lt, lq, report
+
+
 def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
     """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
     the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones
@@ -408,7 +494,7 @@ def skyrim_locals(clip: dict, sk: Rig):
 
 
 def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False,
-             left_weapon: bool = False, two_hand_grip: bool = False) -> Dict:
+             left_weapon: bool = False, two_hand_grip: bool = False, body_profiles: Optional[Dict] = None) -> Dict:
     """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf.
 
     The weapon always sits in the fist at the vanilla grip (skeletonmap.GRIP). weapon_in_hand: also turn the gripping
@@ -420,7 +506,8 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
     (the left weapon hangs rigidly off Skyrim's Shield node). Off, WeaponLeft keeps the WORLD rule.
     two_hand_grip (greatswords, battleaxes, warhammers): the left wrist is put back where Skyrim has it relative to
     the weapon on every frame (two-bone IK on the left arm), so the support hand stays on the handle; Starfield's arm
-    proportions otherwise let it slide 3-6 cm (measured 2026-10-20 on Nordic Combat Animations' greatsword set)."""
+    proportions otherwise let it slide 3-6 cm (measured 2026-10-20 on Nordic Combat Animations' greatsword set).
+    body_profiles (body_profiles.json): hands near the body keep their place relative to its surface (keep_contacts)."""
     lt, lq = skyrim_locals(clip, sk)
     wt_sk, wq_sk = sk.fk(lt, lq)
     rt_sk, rq_sk = sk.rest_world()
@@ -578,8 +665,14 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
     grip_report = None
     if two_hand_grip:
         out_t, out_q, wt, grip_report = _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes)
+    contact_report = None
+    if body_profiles:
+        sides = ("R",) if two_hand_grip else ("L", "R")                 # a two-hand grip keeps the left on the weapon
+        out_t, out_q, contact_report = keep_contacts(sk, sf, out_t, out_q, wt_sk, wq_sk, body_profiles, unit, scale,
+                                                     sides)
+        wt = sf.fk(out_t, out_q)[0]
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
-            "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report}
+            "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report, "contacts": contact_report}
 
 
 def _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes):

@@ -153,12 +153,14 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
-def hkx_args(a, work, folder, replace, com=None, hands=None):
+def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None):
     out = ["--calumi", a.calumi, "--skyrim-data", a.skyrim_data, "--starfield-data", os.path.join(a.starfield, "Data"),
            "--out", work, "--into", folder, "--no-root-motion"]
     out += ["--com-shift", f"{com[0]},{com[1]}"] if com is not None else ["--align-com"]
     if hands:
         out += ["--hand-clearance", ",".join(str(x) for x in hands)]
+    if profiles:
+        out += ["--body-profiles", profiles]
     for r in replace:
         out += ["--replace", r]
     return out
@@ -176,6 +178,9 @@ def main(argv=None):
                     help="with one --set: use this offset instead of COM_SHIFT / the Idle's --align-com result "
                          "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
     ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
+    ap.add_argument("--body-profiles", metavar="JSON",
+                    help="body_profiles.py's output: hands keep their place relative to the body (all sets); replaces "
+                         "HAND_CLEARANCE unless --hand-clearance is given")
     a = ap.parse_args(argv)
     for p in (a.out, a.work):
         if os.path.abspath(p).lower().startswith(os.path.abspath(REPO).lower()):
@@ -189,7 +194,8 @@ def main(argv=None):
         work = os.path.join(a.work, st)
         idle, rest = replace_args(st)
         com = parse_pair(a.com_shift) if a.com_shift else (list(COM_SHIFT[st]) if st in COM_SHIFT else None)
-        hands = parse_pair(a.hand_clearance) if a.hand_clearance else HAND_CLEARANCE.get(st)
+        hands = parse_pair(a.hand_clearance) if a.hand_clearance else (
+            None if a.body_profiles else HAND_CLEARANCE.get(st))
         if com is None:
             print(f"== {st}: Idle with --align-com (the set's seat offset)")
             rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "idle"), folder, idle))
@@ -202,7 +208,7 @@ def main(argv=None):
             com = row["com_shift_m"]
             print(f"{st}: offset {com[0]},{com[1]} (add to COM_SHIFT to keep it)")
         print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
-        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands))
+        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))
@@ -222,10 +228,16 @@ def main(argv=None):
                 shutil.copy2(os.path.join(src, f), os.path.join(dst, f))
         print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors")
         lifted = {r["name"]: r["hands_lifted"] for r in rows if r.get("hands_lifted")}
+        contacts = {r["name"]: r["contacts"] for r in rows if r.get("contacts")}
+        if a.body_profiles:
+            moved = [v["max_move_m"] for d in contacts.values() for v in d.values() if v.get("frames")]
+            near = sorted({k for d in contacts.values() for v in d.values() for k in v.get("segments", {})})
+            print(f"{st}: hands kept on the body in {sum(1 for d in contacts.values() if any(v.get('frames') for v in d.values()))}"
+                  f" clips, moved up to {max(moved, default=0.0)} m, against {', '.join(near) or 'nothing'}")
         if hands:
             top = max((v["max_lift_m"] for d in lifted.values() for v in d.values()), default=0.0)
             print(f"{st}: hands kept {hands[0]} m above the thighs, {len(lifted)} clips, lifted up to {top} m")
-        report[st] = {"folder": folder, "com_shift_m": com, "hand_clearance": hands, "hands_lifted": lifted, "clips": len(rows), "hand_ik_stripped": stripped,
+        report[st] = {"folder": folder, "com_shift_m": com, "hand_clearance": hands, "hands_lifted": lifted, "contacts": contacts, "clips": len(rows), "hand_ik_stripped": stripped,
                       "failed": [r.get("clip") for r in rows if "error" in r], "files": files}
         print(f"{st}: {len(files)} files -> {dst}" + (f"; failed: {report[st]['failed']}" if report[st]["failed"] else ""))
     with open(os.path.join(a.work, "furniture_anim_pack.json"), "w", encoding="utf-8") as fh:

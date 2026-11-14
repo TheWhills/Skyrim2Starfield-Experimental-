@@ -311,6 +311,42 @@ class RetargetTests(unittest.TestCase):
         _t, _q, capped = R.lift_hands(rig, lt[:1], lq[:1], 0.30)
         self.assertEqual(capped["L"]["max_lift_m"], 0.1)                      # never more than max_lift
 
+    def test_keep_contacts_hand_on_thigh(self):
+        """Seated: Skyrim's wrist 0.02 m above its thigh's surface (radius 0.08); Starfield's arm, proportioned
+        differently, puts it 0.03 inside. keep_contacts puts it 0.02 above Starfield's surface (scale 1), the hand's
+        rotation kept; a hand far from the body (frame 1) is left alone."""
+        from fo4sf import bodyprofile as BP
+        sk = R.Rig(["Root", "NPC L Thigh [LThg]", "NPC L Calf [LClf]", "NPC L UpperArm [LUar]",
+                    "NPC L Forearm [LLar]", "NPC L Hand [LHnd]"], [-1, 0, 1, 0, 3, 4],
+                   [(0, 0, 0), (-0.1, 0, 0.5), (0, 0.45, 0), (-0.2, -0.05, 1.0), (0, 0.05, -0.25), (0.1, 0.2, -0.15)],
+                   [I] * 6)
+        sf = R.Rig(["Root", "L_Thigh", "L_Calf", "L_Biceps", "L_Forearm", "L_Wrist"], [-1, 0, 1, 0, 3, 4],
+                   [(0, 0, 0), (-0.1, 0, 0.5), (0, 0.45, 0), (-0.2, -0.05, 1.0), (0, 0.05, -0.29), (0.1, 0.2, -0.16)],
+                   [I] * 6)
+        unit = 1.0
+        sk_lt = np.repeat(sk.t[None], 2, 0).copy()
+        sk_lt[1, 3] = (-0.2, -0.05, 1.4)                                       # frame 1: hand 0.4 m higher
+        wt_sk, wq_sk = sk.fk(sk_lt, np.repeat(sk.q[None], 2, 0))
+        flat = [[0.08] * BP.A_BINS] * BP.T_BINS
+        a, b = np.array([-0.1, 0, 0.5]), np.array([-0.1, 0.45, 0.5])
+        prof = {"radius": flat, "frame": BP.segment_frame(a, b).tolist(), "a": a.tolist(), "b": b.tolist()}
+        profiles = {"skyrim": {"L_thigh": prof}, "starfield": {"L_thigh": prof}}
+        lt = np.repeat(sf.t[None], 2, 0).copy()
+        lt[1, 3] = (-0.2, -0.05, 1.4)
+        lq = np.repeat(sf.q[None], 2, 0)
+        wt0, wq0 = sf.fk(lt, lq)
+        np.testing.assert_allclose(wt0[0, 5], [-0.1, 0.2, 0.55], atol=1e-9)
+        lt2, lq2, rep = R.keep_contacts(sk, sf, lt, lq, wt_sk, wq_sk, profiles, unit=unit, sides=("L",))
+        wt2, wq2 = sf.fk(lt2, lq2)
+        np.testing.assert_allclose(wt2[0, 5], [-0.1, 0.2, 0.60], atol=1e-6)     # 0.08 + 0.02 above the axis
+        self.assertAlmostEqual(abs(float(np.dot(wq2[0, 5], wq0[0, 5]))), 1.0, places=9)
+        np.testing.assert_allclose(wt2[1], wt0[1], atol=1e-12)
+        self.assertEqual(rep["L"]["frames"], 1)
+        self.assertEqual(rep["L"]["segments"], {"L_thigh": 1})
+        self.assertAlmostEqual(rep["L"]["max_move_m"], 0.05, places=3)
+        _t, _q, half = R.keep_contacts(sk, sf, lt, lq, wt_sk, wq_sk, profiles, unit=unit, scale=0.5, sides=("L",))
+        self.assertAlmostEqual(half["L"]["max_move_m"], 0.04, places=3)        # the gap scales: 0.08 + 0.01
+
     def test_two_hand_grip_puts_the_support_hand_back_on_the_weapon(self):
         sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "Weapon", "NPC L UpperArm [LUar]",
                     "NPC L Forearm [LLar]", "NPC L Hand [LHnd]"]

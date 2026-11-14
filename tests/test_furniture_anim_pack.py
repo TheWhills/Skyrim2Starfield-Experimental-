@@ -78,6 +78,8 @@ class PackTests(unittest.TestCase):
         args = P.hkx_args(A, "w", "meshes\\x", ["a::b"], com=[0.1, -0.05], hands=(0.13, 0.03))
         self.assertEqual(args[args.index("--hand-clearance") + 1], "0.13,0.03")
         self.assertEqual(P.HAND_CLEARANCE["Sit"], (0.13, 0.03))
+        args = P.hkx_args(A, "w", "meshes\\x", ["a::b"], com=[0, 0], profiles="C:\\w\\body_profiles.json")
+        self.assertEqual(args[args.index("--body-profiles") + 1], "C:\\w\\body_profiles.json")
 
     def test_parse_pair(self):
         """PowerShell splits an unquoted 0.027,-0.091 into two arguments: every form gives the same pair."""

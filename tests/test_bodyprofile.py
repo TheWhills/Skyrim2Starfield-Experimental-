@@ -46,6 +46,19 @@ class BodyProfileTests(unittest.TestCase):
         self.assertEqual(n, "thigh")
         self.assertAlmostEqual(d, 0.04, delta=0.004)
 
+    def test_sample_surface_and_outliers(self):
+        """Surface samples land on the triangles; a far point near a segment does not raise its radius."""
+        quad = np.array([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], float)
+        s = BP.sample_surface(quad, [[0, 1, 2], [0, 2, 3]], 500)
+        self.assertEqual(s.shape, (500, 3))
+        self.assertTrue(np.all((s[:, :2] >= -1e-9) & (s[:, :2] <= 1 + 1e-9)) and np.allclose(s[:, 2], 0))
+        joints = {"A": [0, 0, 0.0], "B": [0, 0, 1.0]}
+        pts = np.concatenate([tube(joints["A"], joints["B"], 0.05, 0.05), [[0.3, 0, 0.5]] * 30])
+        prof = BP.measure(joints, pts, [("arm", "A", "B")])
+        self.assertLess(float(np.max(prof["arm"]["radius"])), 0.06)
+        self.assertAlmostEqual(BP.height({"C_Neck": [0, 0, 1.5], "L_Foot": [0, 0, 0.1], "R_Foot": [0, 0, 0.1]},
+                                         "starfield"), 1.4)
+
     def test_summary_and_segments(self):
         sky = {"hips": {"radius": [[0.1] * BP.A_BINS] * BP.T_BINS}}
         sf = {"hips": {"radius": [[0.12] * BP.A_BINS] * BP.T_BINS}}
@@ -55,6 +68,7 @@ class BodyProfileTests(unittest.TestCase):
         sfs = dict((n, (a, b)) for n, a, b in BP.segments_for("starfield"))
         self.assertEqual(sk["L_thigh"], ("NPC L Thigh [LThg]", "NPC L Calf [LClf]"))
         self.assertEqual(sfs["R_forearm"], ("R_Forearm", "R_Wrist"))
+        self.assertEqual(sfs["hips"], ("L_Thigh", "R_Thigh"))
         from fo4sf import skeletonmap as M                                    # every pair maps joint to joint
         for _n, ska, skb, sfa, sfb in BP.SEGMENTS:
             self.assertEqual(M.MAP.get(ska), sfa)

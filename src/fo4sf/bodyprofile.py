@@ -20,8 +20,10 @@ A_BINS = 16
 
 # (segment, Skyrim joint at its start, Skyrim joint at its end, Starfield start, Starfield end); joints as in
 # skeletonmap.MAP. The hands are not segments (they are what touches); the head is left out for now.
+# hips: across the pelvis, hip joint to hip joint (2026-11-14, owner's first measurement: Starfield's C_Hips -> C_Spine
+# is 6 mm long, no segment to measure around).
 SEGMENTS: List[Tuple[str, str, str, str, str]] = [
-    ("hips", "NPC Pelvis [Pelv]", "NPC Spine [Spn0]", "C_Hips", "C_Spine"),
+    ("hips", "NPC L Thigh [LThg]", "NPC R Thigh [RThg]", "L_Thigh", "R_Thigh"),
     ("belly", "NPC Spine [Spn0]", "NPC Spine2 [Spn2]", "C_Spine", "C_Chest"),
     ("chest", "NPC Spine2 [Spn2]", "NPC Neck [Neck]", "C_Chest", "C_Neck"),
 ]
@@ -33,6 +35,10 @@ for _s in ("L", "R"):
          f"{_s}_Forearm"),
         (f"{_s}_forearm", f"NPC {_s} Forearm [{_s}Lar]", f"NPC {_s} Hand [{_s}Hnd]", f"{_s}_Forearm", f"{_s}_Wrist"),
     ]
+
+
+# the bone whose turn a segment follows when it is not the start joint's (hip to hip turns with the pelvis)
+DRIVER = {"hips": ("NPC Pelvis [Pelv]", "C_Hips")}
 
 
 def segment_frame(a, b) -> np.ndarray:
@@ -66,6 +72,28 @@ def _bin(t, ang):
     return ti, ai
 
 
+def sample_surface(points, triangles, n: int = 60000, seed: int = 0) -> np.ndarray:
+    """n points spread over a mesh's surface by area (2026-11-14: Skyrim's male body has 2453 vertices, too few for
+    the radius bins; its surface samples evenly)."""
+    p = np.asarray(points, float).reshape(-1, 3)
+    t = np.asarray(triangles, int).reshape(-1, 3)
+    if len(t) == 0:
+        return p
+    a, b, c = p[t[:, 0]], p[t[:, 1]], p[t[:, 2]]
+    area = 0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1)
+    if area.sum() <= 0:
+        return p
+    rng = np.random.default_rng(seed)
+    k = rng.choice(len(t), size=n, p=area / area.sum())
+    u, v = rng.random(n), rng.random(n)
+    flip = u + v > 1
+    u[flip], v[flip] = 1 - u[flip], 1 - v[flip]
+    return a[k] + (b[k] - a[k]) * u[:, None] + (c[k] - a[k]) * v[:, None]
+
+
+OUTLIER = 1.8          # a point farther than this times its segment's median distance is another body part's
+
+
 def measure(joints: Dict[str, np.ndarray], points, segments: Sequence[Tuple[str, str, str]]) -> Dict[str, Dict]:
     """{segment: {"a", "b", "frame", "radius" (T_BINS x A_BINS), "samples"}} from body points (N, 3, skeleton space,
     metres) and joint positions. segments: (name, start joint, end joint). Each point goes to the segment nearest to it
@@ -89,6 +117,8 @@ def measure(joints: Dict[str, np.ndarray], points, segments: Sequence[Tuple[str,
         mine = pts[owner == k]
         t, ang, r = local_coords(a, b, frame, mine)
         keep = (t >= 0.0) & (t <= 1.0)
+        if np.any(keep):                                   # torso points by the armpit counted on the upper arm
+            keep &= r <= OUTLIER * float(np.median(r[keep]))
         t, ang, r = t[keep], ang[keep], r[keep]
         grid = np.full((T_BINS, A_BINS), np.nan)
         ti, ai = _bin(t, ang)
@@ -102,7 +132,12 @@ def measure(joints: Dict[str, np.ndarray], points, segments: Sequence[Tuple[str,
                 break
             nb = np.stack([np.roll(grid, 1, axis=1), np.roll(grid, -1, axis=1)])
             fill = np.isnan(grid) & ~np.all(np.isnan(nb), axis=0)
-            grid[fill] = np.nanmean(nb, axis=0)[fill]
+            with np.errstate(all="ignore"):
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    mean = np.nanmean(nb, axis=0)
+            grid[fill] = mean[fill]
         if np.isnan(grid).all():
             continue
         grid[np.isnan(grid)] = float(np.nanmean(grid))
@@ -158,3 +193,12 @@ def nearest(profiles: Dict[str, Dict], point) -> Optional[Tuple[str, float]]:
         if best is None or d < best[1]:
             best = (n, d)
     return best
+
+
+def height(joints: Dict[str, np.ndarray], side: str) -> float:
+    """Neck joint height over the mean foot joint height, metres (the skeletons' size, for comparing radii)."""
+    names = {"skyrim": ("NPC Neck [Neck]", "NPC L Foot [Lft ]", "NPC R Foot [Rft ]"),
+             "starfield": ("C_Neck", "L_Foot", "R_Foot")}[side]
+    if not all(n in joints for n in names):
+        return 0.0
+    return float(joints[names[0]][2] - (joints[names[1]][2] + joints[names[2]][2]) / 2)
