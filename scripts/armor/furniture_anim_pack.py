@@ -64,6 +64,12 @@ SETS = {
 # Skyrim's clips place the hands themselves.
 DROP_VARIABLES = ("bEnableHandIK",)
 
+# Hands resting on the thighs: at least this far above the hip-knee line and to the outside of it (metres), by arm IK
+# (hkx_to_af --hand-clearance). 2026-11-14 (owner, in game: the seated hands sink into the thighs). af_pose
+# hands_on_thighs: our Idle 0.047 / 0.063 above, 0.004 / 0.034 inside; Starfield's chair Idle 0.129 / 0.136 above,
+# 0.026 / 0.030 outside.
+HAND_CLEARANCE = {"Sit": (0.13, 0.03)}
+
 
 def strip_variables(afx_text: str, names=DROP_VARIABLES) -> str:
     """An .afx descriptor without the <variable> entries named `names` (any case)."""
@@ -77,6 +83,12 @@ def strip_variables(afx_text: str, names=DROP_VARIABLES) -> str:
     return re.sub(r"[ \t]*<variables>\s*</variables>[ \t]*\r?\n?", "", out)
 
 
+def parse_pair(value):
+    """'0.027,-0.091' or ['0.027', '-0.091'] or ['0.027,-0.091'] (PowerShell splits an unquoted pair) -> floats."""
+    text = ",".join(value) if isinstance(value, (list, tuple)) else str(value)
+    return [float(x) for x in text.replace(" ", ",").split(",") if x]
+
+
 def replace_args(anim_set: str):
     """hkx_to_af --replace values for a set: (Idle first, the rest)."""
     folder, tpl, rows = SETS[anim_set]
@@ -88,10 +100,12 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
-def hkx_args(a, work, folder, replace, com=None):
+def hkx_args(a, work, folder, replace, com=None, hands=None):
     out = ["--calumi", a.calumi, "--skyrim-data", a.skyrim_data, "--starfield-data", os.path.join(a.starfield, "Data"),
            "--out", work, "--into", folder, "--no-root-motion"]
     out += ["--com-shift", f"{com[0]},{com[1]}"] if com is not None else ["--align-com"]
+    if hands:
+        out += ["--hand-clearance", ",".join(str(x) for x in hands)]
     for r in replace:
         out += ["--replace", r]
     return out
@@ -105,7 +119,10 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="the mod folder (MO2): gets meshes\\actors\\human\\animations\\...")
     ap.add_argument("--work", required=True, help="a scratch folder outside the repository")
     ap.add_argument("--set", action="append", choices=sorted(SETS), help="only these sets (default: all)")
-    ap.add_argument("--com-shift", metavar="X,Y", help="use this seat offset instead of the Idle's --align-com result")
+    ap.add_argument("--com-shift", metavar="X,Y", nargs="+",
+                    help="use this seat offset instead of the Idle's --align-com result (PowerShell splits an unquoted "
+                         "X,Y in two: both forms are taken)")
+    ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
     a = ap.parse_args(argv)
     for p in (a.out, a.work):
         if os.path.abspath(p).lower().startswith(os.path.abspath(REPO).lower()):
@@ -116,7 +133,8 @@ def main(argv=None):
         folder = SETS[st][0]
         work = os.path.join(a.work, st)
         idle, rest = replace_args(st)
-        com = [float(x) for x in a.com_shift.split(",")] if a.com_shift else None
+        com = parse_pair(a.com_shift) if a.com_shift else None
+        hands = parse_pair(a.hand_clearance) if a.hand_clearance else HAND_CLEARANCE.get(st)
         if com is None:
             print(f"== {st}: Idle with --align-com (the set's seat offset)")
             rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "idle"), folder, idle))
@@ -126,7 +144,7 @@ def main(argv=None):
                 sys.exit(f"{st}: the Idle did not convert ({row.get('error') or row})")
             com = row["com_shift_m"]
         print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
-        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com))
+        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))
@@ -145,7 +163,11 @@ def main(argv=None):
             else:
                 shutil.copy2(os.path.join(src, f), os.path.join(dst, f))
         print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors")
-        report[st] = {"folder": folder, "com_shift_m": com, "clips": len(rows), "hand_ik_stripped": stripped,
+        lifted = {r["name"]: r["hands_lifted"] for r in rows if r.get("hands_lifted")}
+        if hands:
+            top = max((v["max_lift_m"] for d in lifted.values() for v in d.values()), default=0.0)
+            print(f"{st}: hands kept {hands[0]} m above the thighs, {len(lifted)} clips, lifted up to {top} m")
+        report[st] = {"folder": folder, "com_shift_m": com, "hand_clearance": hands, "hands_lifted": lifted, "clips": len(rows), "hand_ik_stripped": stripped,
                       "failed": [r.get("clip") for r in rows if "error" in r], "files": files}
         print(f"{st}: {len(files)} files -> {dst}" + (f"; failed: {report[st]['failed']}" if report[st]["failed"] else ""))
     with open(os.path.join(a.work, "furniture_anim_pack.json"), "w", encoding="utf-8") as fh:

@@ -43,6 +43,15 @@ class PackTests(unittest.TestCase):
         self.assertEqual(args[args.index("--com-shift") + 1], "0.1,-0.05")
         self.assertNotIn("--align-com", args)
         self.assertIn("--no-root-motion", args)
+        self.assertNotIn("--hand-clearance", args)
+        args = P.hkx_args(A, "w", "meshes\\x", ["a::b"], com=[0.1, -0.05], hands=(0.13, 0.03))
+        self.assertEqual(args[args.index("--hand-clearance") + 1], "0.13,0.03")
+        self.assertEqual(P.HAND_CLEARANCE["Sit"], (0.13, 0.03))
+
+    def test_parse_pair(self):
+        """PowerShell splits an unquoted 0.027,-0.091 into two arguments: every form gives the same pair."""
+        for v in ("0.027,-0.091", ["0.027,-0.091"], ["0.027", "-0.091"]):
+            self.assertEqual(P.parse_pair(v), [0.027, -0.091])
 
 
 class AnimKeywordTests(unittest.TestCase):

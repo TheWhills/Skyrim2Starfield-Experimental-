@@ -279,6 +279,27 @@ class RetargetTests(unittest.TestCase):
         self.assertTrue(np.allclose(bone(wt2, "L_Forearm", "L_Wrist"), 0.25))
         self.assertTrue(np.allclose(lt2, lt) and np.allclose(lq2[:, 0], lq[:, 0]))   # nothing else moved
 
+    def test_lift_hands_over_the_thighs(self):
+        """Seated: the left hand rests 0.05 m above its thigh line and is lifted to 0.13 (and 0.03 outward), the hand
+        keeping its rotation; a hand raised well above the thigh, and the right side with no arm bones, are left."""
+        names = ["Root", "L_Thigh", "L_Calf", "L_Biceps", "L_Forearm", "L_Wrist", "R_Thigh", "R_Calf"]
+        parents = [-1, 0, 1, 0, 3, 4, 0, 6]
+        rig = R.Rig(names, parents, [(0, 0, 0), (-0.1, 0, 0.55), (0, 0.42, 0), (-0.2, -0.05, 1.05), (0, 0.05, -0.29),
+                                     (0, 0.2, -0.16), (0.1, 0, 0.55), (0, 0.42, 0)], [I] * 8)
+        lt = np.repeat(rig.t[None], 2, 0).copy()
+        lq = np.repeat(rig.q[None], 2, 0).copy()
+        lt[1, 3] = (-0.2, -0.05, 1.45)                                        # frame 1: the arm 0.4 m higher
+        wt, wq = rig.fk(lt, lq)
+        np.testing.assert_allclose(wt[0, 5], [-0.2, 0.2, 0.6], atol=1e-9)    # 0.05 above the thigh line, 0.1 outside it
+        lt2, lq2, info = R.lift_hands(rig, lt, lq, 0.13, 0.12)
+        wt2, wq2 = rig.fk(lt2, lq2)
+        np.testing.assert_allclose(wt2[0, 5], [-0.22, 0.2, 0.68], atol=1e-6)  # up 0.08, out to 0.12
+        self.assertAlmostEqual(abs(float(np.dot(wq2[0, 5], wq[0, 5]))), 1.0, places=9)
+        np.testing.assert_allclose(wt2[1], wt[1], atol=1e-12)                 # raised hand: untouched
+        self.assertEqual(info, {"L": {"frames": 1, "max_lift_m": 0.08}})
+        _t, _q, none = R.lift_hands(rig, lt, lq, 0.04)
+        self.assertEqual(none, {"L": {"frames": 0, "max_lift_m": 0.0}})       # already above: nothing to do
+
     def test_two_hand_grip_puts_the_support_hand_back_on_the_weapon(self):
         sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "Weapon", "NPC L UpperArm [LUar]",
                     "NPC L Forearm [LLar]", "NPC L Hand [LHnd]"]

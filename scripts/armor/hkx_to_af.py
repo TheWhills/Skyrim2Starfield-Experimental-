@@ -288,10 +288,21 @@ def main(argv=None):
     ap.add_argument("--com-shift", metavar="X,Y",
                     help="shift every clip's COM by these metres (one seat offset for a whole furniture set, e.g. the "
                          "--align-com result of its Idle), instead of --align-com per clip")
+    ap.add_argument("--hand-clearance", metavar="UP[,OUT]",
+                    help="seated clips: lift a hand resting on its thigh to at least UP metres above the hip-knee line "
+                         "(and OUT to the outside of it) by arm IK; Starfield's thighs are thicker than Skyrim's "
+                         "(Starfield's chair Idle: about 0.13,0.03)")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
     a = ap.parse_args(argv)
+    hand_clear = None
+    if a.hand_clearance:
+        try:
+            hand_clear = [float(x) for x in a.hand_clearance.split(",")]
+            assert 1 <= len(hand_clear) <= 2
+        except (ValueError, AssertionError):
+            sys.exit(f"--hand-clearance wants UP[,OUT] in metres, got {a.hand_clearance}")
     fixed_shift = None
     if a.com_shift:
         try:
@@ -468,6 +479,9 @@ def main(argv=None):
                 out_t, out_q = retarget.hold_rest_rotation(out_rig, out_t, out_q, skeletonmap.HOLD_REST_ROTATION)
                 if a.weapon_in_hand:
                     out_t, out_q = retarget.copy_world(out_rig, out_t, out_q, skeletonmap.WEAPON_FOLLOWERS)
+                if hand_clear:
+                    out_t, out_q, lifted = retarget.lift_hands(out_rig, out_t, out_q, *hand_clear)
+                    row["hands_lifted"] = lifted
                 if fixed_shift is not None:
                     out_t = out_t.copy()
                     out_t[:, game_rig.index["COM"], :2] += fixed_shift

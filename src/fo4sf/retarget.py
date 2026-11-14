@@ -228,6 +228,50 @@ def two_bone_ik(rig: "Rig", lt, lq, upper: str, lower: str, end: str, target):
     return lt, lq, np.linalg.norm(wt3[:, ie] - T, axis=-1)
 
 
+def _smooth(x):
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3 - 2 * x)
+
+
+def lift_hands(rig: "Rig", lt, lq, clearance: float, outside: float = 0.0, sides=(("L", -1.0), ("R", 1.0))):
+    """Locals in which a hand resting on its thigh sits at least `clearance` metres above the hip-knee line (and at
+    least `outside` metres to the outside of it), reached by two-bone IK on the arm (Biceps / Forearm / Wrist), the hand
+    keeping its world rotation. Hands away from the thighs (past the hip or knee, off to the side, or well above) are
+    left alone, with a smooth blend in between so enters and exits do not jump.
+
+    Why (2026-11-14, owner): Skyrim's seated hands, on Starfield's body, sink into the thighs: with the arm rotations
+    copied, the wrist sat 0.05-0.06 m above the hip-knee line where Starfield's own chair Idle has it at 0.13 (af_pose
+    hands_on_thighs); Starfield's thighs are thicker than Skyrim's. Returns (lt, lq, {side: {frames, max_lift_m}})."""
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float)
+    info = {}
+    for side, sign in sides:
+        names = [f"{side}_{b}" for b in ("Thigh", "Calf", "Biceps", "Forearm", "Wrist")]
+        if any(n not in rig.index for n in names):
+            continue
+        hip, knee, upper, lower, end = (rig.index[n] for n in names)
+        wt, _wq = rig.fk(lt, lq)
+        a, b, h = wt[:, hip], wt[:, knee], wt[:, end]
+        ab = b - a
+        t = np.sum((h - a) * ab, axis=-1) / np.maximum(np.sum(ab * ab, axis=-1), 1e-9)
+        d = h - (a + np.clip(t, 0.0, 1.0)[:, None] * ab)
+        up, out = d[:, 2], d[:, 0] * sign
+        w = (_smooth((t + 0.15) / 0.15) * _smooth((1.15 - t) / 0.15)       # along the thigh
+             * _smooth((0.16 - np.abs(out)) / 0.06)                          # over it, not off to the side
+             * _smooth((clearance + 0.10 - up) / 0.05))                      # resting on it, not raised
+        dz = np.maximum(clearance - up, 0.0) * w
+        dx = np.maximum(outside - out, 0.0) * w * sign
+        move = (dz > 1e-4) | (np.abs(dx) > 1e-4)
+        if not np.any(move):
+            info[side] = {"frames": 0, "max_lift_m": 0.0}
+            continue
+        target = h + np.stack([dx, np.zeros_like(dz), dz], axis=-1)
+        nt, nq, _left = two_bone_ik(rig, lt, lq, names[2], names[3], names[4], target)
+        lq = lq.copy()
+        lq[move] = nq[move]
+        info[side] = {"frames": int(np.sum(move)), "max_lift_m": round(float(np.max(dz)), 3)}
+    return lt, lq, info
+
+
 def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
     """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
     the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones

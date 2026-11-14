@@ -206,5 +206,10 @@ Arms (2026-11-14, verified from the owner's af_pose and .afx dumps): our convert
 the spine at 0.57 m (forward on the thighs, as Skyrim), the vanilla chair Idle at 0.67 m beside the body (armrests).
 Starfield's chair AND bench Idle descriptors carry bEnableHandIK over the whole clip, and we copied it: in game the
 graph pulls the hands to IK targets of Starfield's furniture models (ours have none) -> arms back and twisted. Now
-furniture_anim_pack leaves bEnableHandIK out of our descriptors (DROP_VARIABLES). Needs the pack rerun and the CK
-cache run; unverified in game.
+furniture_anim_pack leaves bEnableHandIK out of our descriptors (DROP_VARIABLES). Verified in game (owner,
+2026-11-14): the hands rest forward on the thighs.
+Hands in the thighs (owner, 2026-11-14, screenshot: better, but the hands clip into the legs). af_pose hands_on_thighs:
+our Idle's wrists 0.047 / 0.063 m above the hip-knee line, slightly inside it; Starfield's chair Idle 0.129 / 0.136 m
+above, 0.03 m outside (Starfield's thighs are thicker than Skyrim's). The pack now lifts hands resting on the thighs to
+0.13 m above and 0.03 m outside (HAND_CLEARANCE, hkx_to_af --hand-clearance, retarget.lift_hands: two-bone arm IK, the
+hand keeping its rotation, blended out when the hand leaves the thigh). Unverified in game.
