@@ -299,6 +299,17 @@ class RetargetTests(unittest.TestCase):
         self.assertEqual(info, {"L": {"frames": 1, "max_lift_m": 0.08}})
         _t, _q, none = R.lift_hands(rig, lt, lq, 0.04)
         self.assertEqual(none, {"L": {"frames": 0, "max_lift_m": 0.0}})       # already above: nothing to do
+        stand = rig.t.copy()[None]
+        stand[0, 2] = (0, 0.02, -0.42)                                        # thigh pointing down: standing
+        stand[0, 3] = (-0.2, -0.05, 0.95)                                     # hand level with the thigh, beside it
+        _t, _q, standing = R.lift_hands(rig, stand, rig.q[None].copy(), 0.13)
+        self.assertEqual(standing["L"]["frames"], 0)
+        low = rig.t.copy()[None]
+        low[0, 3] = (-0.2, -0.05, 0.90)                                       # seated, hand 0.1 below the thigh line
+        _t, _q, below = R.lift_hands(rig, low, rig.q[None].copy(), 0.13)
+        self.assertEqual(below["L"]["frames"], 0)
+        _t, _q, capped = R.lift_hands(rig, lt[:1], lq[:1], 0.30)
+        self.assertEqual(capped["L"]["max_lift_m"], 0.1)                      # never more than max_lift
 
     def test_two_hand_grip_puts_the_support_hand_back_on_the_weapon(self):
         sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "Weapon", "NPC L UpperArm [LUar]",

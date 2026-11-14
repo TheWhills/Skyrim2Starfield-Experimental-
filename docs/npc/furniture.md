@@ -212,4 +212,7 @@ Hands in the thighs (owner, 2026-11-14, screenshot: better, but the hands clip i
 our Idle's wrists 0.047 / 0.063 m above the hip-knee line, slightly inside it; Starfield's chair Idle 0.129 / 0.136 m
 above, 0.03 m outside (Starfield's thighs are thicker than Skyrim's). The pack now lifts hands resting on the thighs to
 0.13 m above and 0.03 m outside (HAND_CLEARANCE, hkx_to_af --hand-clearance, retarget.lift_hands: two-bone arm IK, the
-hand keeping its rotation, blended out when the hand leaves the thigh). Unverified in game.
+hand keeping its rotation, blended out when the hand leaves the thigh). Idle verified by af_pose: 0.130 / 0.133 above.
+The first version lifted hands in the enters / exits by up to 0.196 m (owner's pack report): standing, the thigh points
+down and a hanging hand counted as "over" it. Now only while seated (thigh near level), only hands on top of the thigh
+line, and at most 0.10 m (Idle clips need 0.07-0.09). Unverified in game.
