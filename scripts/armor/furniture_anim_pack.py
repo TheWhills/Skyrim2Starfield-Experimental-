@@ -57,6 +57,26 @@ SETS = {
 }
 
 
+# Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back
+# and twisted inward, hands by the hips; af_pose showed the clip itself has them forward on the thighs, as in Skyrim).
+# Starfield's chair and bench descriptors keep bEnableHandIK on over the whole Idle (and its enters / exits): the graph
+# then pulls the hands to IK targets of Starfield's furniture models, which our converted Skyrim models do not have.
+# Skyrim's clips place the hands themselves.
+DROP_VARIABLES = ("bEnableHandIK",)
+
+
+def strip_variables(afx_text: str, names=DROP_VARIABLES) -> str:
+    """An .afx descriptor without the <variable> entries named `names` (any case)."""
+    import re
+    want = {n.lower() for n in names}
+
+    def keep(m):
+        nm = re.search(r"<name>\s*([^<]*?)\s*</name>", m.group(0))
+        return "" if nm and nm.group(1).lower() in want else m.group(0)
+    out = re.sub(r"[ \t]*<variable>.*?</variable>[ \t]*\r?\n?", keep, afx_text, flags=re.S)
+    return re.sub(r"[ \t]*<variables>\s*</variables>[ \t]*\r?\n?", "", out)
+
+
 def replace_args(anim_set: str):
     """hkx_to_af --replace values for a set: (Idle first, the rest)."""
     folder, tpl, rows = SETS[anim_set]
@@ -113,9 +133,19 @@ def main(argv=None):
         dst = os.path.join(a.out, *folder.split("\\"))
         os.makedirs(dst, exist_ok=True)
         files = sorted(f for f in os.listdir(src) if f.lower().endswith((".af", ".afx"))) if os.path.isdir(src) else []
+        stripped = 0
         for f in files:
-            shutil.copy2(os.path.join(src, f), os.path.join(dst, f))
-        report[st] = {"folder": folder, "com_shift_m": com, "clips": len(rows),
+            if f.lower().endswith(".afx"):
+                with open(os.path.join(src, f), encoding="utf-8", errors="replace") as fh:
+                    text = fh.read()
+                new = strip_variables(text)
+                stripped += new != text
+                with open(os.path.join(dst, f), "w", encoding="utf-8", newline="") as fh:
+                    fh.write(new)
+            else:
+                shutil.copy2(os.path.join(src, f), os.path.join(dst, f))
+        print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors")
+        report[st] = {"folder": folder, "com_shift_m": com, "clips": len(rows), "hand_ik_stripped": stripped,
                       "failed": [r.get("clip") for r in rows if "error" in r], "files": files}
         print(f"{st}: {len(files)} files -> {dst}" + (f"; failed: {report[st]['failed']}" if report[st]["failed"] else ""))
     with open(os.path.join(a.work, "furniture_anim_pack.json"), "w", encoding="utf-8") as fh:

@@ -202,3 +202,9 @@ playing, seat height right, but the arms are pulled back and twisted inward, han
 idle has them forward). Open: the clip itself (conversion) or the game after it (furniture graph layers / IK).
 scripts/armor/af_pose.py prints a clip's joint world positions read back the game's way, for our Idle beside the
 vanilla chair Idle. Also: one outdoor bench still has a terrain-plugin static (0400502E) under it.
+Arms (2026-11-14, verified from the owner's af_pose and .afx dumps): our converted Idle has the wrists 0.15 m in front of
+the spine at 0.57 m (forward on the thighs, as Skyrim), the vanilla chair Idle at 0.67 m beside the body (armrests).
+Starfield's chair AND bench Idle descriptors carry bEnableHandIK over the whole clip, and we copied it: in game the
+graph pulls the hands to IK targets of Starfield's furniture models (ours have none) -> arms back and twisted. Now
+furniture_anim_pack leaves bEnableHandIK out of our descriptors (DROP_VARIABLES). Needs the pack rerun and the CK
+cache run; unverified in game.

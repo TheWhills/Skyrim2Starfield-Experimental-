@@ -61,5 +61,25 @@ class AnimKeywordTests(unittest.TestCase):
         self.assertNotIn("anim_keyword", out2["bases"]["a"])
 
 
+class DescriptorTests(unittest.TestCase):
+    def test_strip_hand_ik(self):
+        """2026-11-14: Starfield's seat descriptors turn hand IK on; ours leave it out (the arms twisted in game)."""
+        afx = ("<root>\n\t<is_state>1</is_state>\n\t<tag>Idle</tag>\n\t<filename>Idle.af</filename>\n"
+               "\t<flags>\n\t\t<flag>Disable Foot IK</flag>\n\t</flags>\n\t<variables>\n"
+               "\t\t<variable><name>bUseStandToExit</name><start>0</start><end>274</end></variable>\n"
+               "\t\t<variable><name>bEnableHandIK</name><start>0</start><end>274</end></variable>\n"
+               "\t</variables>\n</root>\n")
+        out = P.strip_variables(afx)
+        self.assertNotIn("bEnableHandIK", out)
+        self.assertIn("<variable><name>bUseStandToExit</name><start>0</start><end>274</end></variable>", out)
+        self.assertIn("Disable Foot IK", out)
+        from fo4sf import agx
+        d = agx.read_descriptor(out.encode())
+        self.assertEqual((d["tag"], d["is_state"]), ("Idle", "1"))
+        only = afx.replace("\t\t<variable><name>bUseStandToExit</name><start>0</start><end>274</end></variable>\n", "")
+        self.assertNotIn("<variables>", P.strip_variables(only))            # an emptied block goes too
+        self.assertEqual(P.strip_variables(out), out)                        # nothing to strip: unchanged
+
+
 if __name__ == "__main__":
     unittest.main()
