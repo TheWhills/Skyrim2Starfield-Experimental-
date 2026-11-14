@@ -103,7 +103,11 @@ SETS = {
 # Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.
 # Sets not listed are aligned to their template's Idle on each run; (0, 0) keeps Skyrim's own placement (WallLean:
 # Skyrim leans back on the wall, the template's actor faces a counter, so its COM is no guide).
-COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0)}
+# 2026-11-14 owner's pack run (--align-com of each Idle): RailLean .. Tanning. Tanning's 0.65 m back is large (Starfield's
+# wipe-wall actor stands farther out than Skyrim's tanner): check in game, (0, 0) = Skyrim's own spot.
+COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (-0.155, -0.181), "Counter": (-0.146, -0.276),
+             "LeanTable": (0.026, -0.26), "Sweep": (-0.002, -0.045), "Alchemy": (0.014, -0.037),
+             "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (-0.029, -0.648)}
 
 
 # Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back
