@@ -197,3 +197,8 @@ furniture_anim_pack.py converts the Skyrim set (one seat offset for the set: the
 for all; no root motion) into that folder under the chair descriptors; make_furniture --anim-plugin gives chair / bench
 bases the keyword and PluginSpike adds it (FO4Port.esm then masters S2SStances.esm: it must load after it). Arms-crossed
 / look-down flavours wait for stitching their transitions; female clips use the male conversion for now.
+First in-game look at the Sit set (owner, 2026-11-14, screenshots): the player sits on our bench with the Skyrim clips
+playing, seat height right, but the arms are pulled back and twisted inward, hands by the hips (Skyrim's base chair
+idle has them forward). Open: the clip itself (conversion) or the game after it (furniture graph layers / IK).
+scripts/armor/af_pose.py prints a clip's joint world positions read back the game's way, for our Idle beside the
+vanilla chair Idle. Also: one outdoor bench still has a terrain-plugin static (0400502E) under it.
