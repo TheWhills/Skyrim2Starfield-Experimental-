@@ -216,3 +216,15 @@ hand keeping its rotation, blended out when the hand leaves the thigh). Idle ver
 The first version lifted hands in the enters / exits by up to 0.196 m (owner's pack report): standing, the thigh points
 down and a hanging hand counted as "over" it. Now only while seated (thigh near level), only hands on top of the thigh
 line, and at most 0.10 m (Idle clips need 0.07-0.09). Unverified in game.
+
+Exterior statics under the outdoor furniture (2026-11-14). In game every outdoor bench / chair still had the exterior's
+static under it (console on 0400502E: GetDisabled 0, original height; the game's z is the plugins' z - 200 m).
+scripts/tools/ref_overrides.py on the installed plugins (verified): FO4Port.esm's copy belongs to
+SkyrimTerrainTamriel.esm, is Initially Disabled, sunk to -615.12, enable parent PlayerRef with "opposite", sits in the
+same world / block 0,-1 / sub-block 0,-1 / cell 001341 / temporary group as the original (cell record before it), and
+FO4Port.esm loads after both terrain plugins; _Mars has no copy; staged and installed exterior identical (hash). On a
+fresh `coc SKY_TamrielRiverwoodSpawn` from the main menu (no save) the static (040181E2) still stood under a chair. So the
+game does not apply FO4Port.esm's overrides of those temporary references (cause unresolved). Fix:
+scripts/terrain/apply_ref_overrides.py writes FO4Port.esm's hidden statics into the exterior plugin itself, in place
+(Initially Disabled flag, FO4Port's sunk position; same record sizes, no FormID moves; one-time backup), into the
+installed and the staged copy; riverwood_doors.ps1 step 5 runs it after every install. Unverified in game.

@@ -2288,3 +2288,12 @@ helpers keep only theirs. Layer 31 verified in game (owner, 2026-10-23); the lay
   into Starfield furniture in FO4Port.esm (persistent cell of the world) and disables the exterior statics under them,
   so no exterior rebuild is needed (that would also move every exterior FormID: TerrainOverlays numbers them in order).
   Details in docs/npc/furniture.md "Outdoors". PluginSpike part written without a compiler.
+
+## 2026-11-14: replaced exterior statics are hidden in the exterior plugin itself (Claude)
+Decision: scripts/terrain/apply_ref_overrides.py patches the exterior plugin in place (Initially Disabled, sunk 1000 m)
+for every exterior reference FO4Port.esm hides; riverwood_doors.ps1 runs it after each install, on the installed and
+the staged copy.
+Why: the game ignores FO4Port.esm's correct overrides of those temporary references (verified with ref_overrides.py;
+fresh coc with no save still shows them). An in-place patch keeps record sizes, so no FormID or group shifts.
+Alternatives: rebuild the exterior without those statics (shifts every FormID, long build); keep debugging the
+override (cause unknown; left open).

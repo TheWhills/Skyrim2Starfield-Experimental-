@@ -124,5 +124,11 @@ Step "4. install (replaces the Oct 23 FO4Port test)"
 if (Test-Path "$SF\Data\FO4Port.deploy.json") { python -I scripts\deploy_starfield.py uninstall --starfield $SF }
 python -I scripts\deploy_starfield.py install --staging $staging --starfield $SF
 if ($LASTEXITCODE -ne 0) { Fail "install" }
+# 2026-11-14: the game ignores FO4Port.esm's overrides of the exterior's statics (in game, fresh coc: still there), so
+# the hidden ones are written into the exterior plugin itself, in place (docs/npc/furniture.md)
+Step "5. hide the replaced exterior statics in the exterior plugin"
+$extPlugin = (Get-Content "$Exterior\formids.json" -Raw | ConvertFrom-Json).plugin
+python -I scripts\terrain\apply_ref_overrides.py --from "$SF\Data\FO4Port.esm" --into "$SF\Data\$extPlugin" --into "$Exterior\$extPlugin"
+if ($LASTEXITCODE -ne 0) { Fail "apply_ref_overrides" }
 Write-Host "`nIn game: coc SKY_TamrielRiverwoodSpawn, walk to the Sleeping Giant Inn's door and use it; inside, use the front door back out." -ForegroundColor Green
 try { notify "riverwood_doors: built and installed" } catch {}
