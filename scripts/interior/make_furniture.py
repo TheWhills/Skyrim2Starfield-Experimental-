@@ -32,6 +32,7 @@ import os
 import re
 import struct
 import sys
+from typing import Optional
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -163,7 +164,30 @@ def markers(rec, kind, marker_z):
 # Skyrim's own animations on our furniture (docs/npc/furniture.md "Animations", 2026-11-13): kind -> animation set.
 # A set is a keyword in S2SStances.esm (stance_plugin.FURNITURE_SETS) whose HumanRace entries put a folder of
 # converted Skyrim clips first; the furniture carries the keyword (PluginSpike, "anim_keyword").
-ANIM_SETS = {"chair": "Sit", "bench": "Sit"}
+# Which Skyrim furniture plays which of our animation sets (furniture_anim_pack.SETS): (kinds, EditorID regex or None,
+# set), first match. The lean markers share one Starfield template (lean_counter) but Skyrim gives each its own clips.
+ANIM_SET_RULES = (
+    (("chair", "bench"), None, "Sit"),
+    (("lean_counter",), r"wall", "WallLean"),
+    (("lean_counter",), r"rail", "RailLean"),
+    (("lean_counter", "bartender"), r"counter", "Counter"),
+    (("lean_table",), None, "LeanTable"),
+    (("sweep",), None, "Sweep"),
+    (("alchemy",), None, "Alchemy"),
+    (("workbench",), r"enchant", "Enchant"),
+    (("cook",), None, "Cook"),
+    (("scrape",), r"tanning", "Tanning"),
+)
+ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
+
+
+def anim_set_for(base) -> Optional[str]:
+    """The animation set for a furniture base {kind, edid}, or None (Starfield's own animations)."""
+    kind, edid = base.get("kind"), base.get("edid") or ""
+    for kinds, rx, st in ANIM_SET_RULES:
+        if kind in kinds and (rx is None or re.search(rx, edid, re.I)):
+            return st
+    return None
 
 
 def anim_keyword_edid(anim_set: str) -> str:
@@ -183,7 +207,7 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
     name = re.split(r"[\\/]", plugin_path)[-1]           # a Windows path read anywhere
     done, missing = {}, set()
     for b in out["bases"].values():
-        st = ANIM_SETS.get(b.get("kind"))
+        st = anim_set_for(b)
         if not st:
             continue
         fid = kws.get(anim_keyword_edid(st).lower())

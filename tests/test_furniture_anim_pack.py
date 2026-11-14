@@ -31,7 +31,38 @@ class PackTests(unittest.TestCase):
         for st, (folder, _tpl, _rows) in P.SETS.items():
             self.assertEqual("meshes\\" + plugin_sets[st], folder)               # the entry's SAPT = where the pack writes
             self.assertEqual(SP.furniture_keyword_edid(st), MF.anim_keyword_edid(st))
-        self.assertTrue(set(MF.ANIM_SETS.values()) <= set(P.SETS))
+        self.assertEqual(set(MF.ANIM_SETS), set(P.SETS))                         # every set is used and built
+        self.assertEqual([st for st, _v, _f in SP.FURNITURE_SETS][0], "Sit")     # Sit keeps its keyword FormID
+        for st, (folder, tpl, rows) in P.SETS.items():
+            self.assertTrue(any(r[0] == "idle.afx" for r in rows), st)             # every set has an Idle
+            self.assertTrue(tpl.startswith(P.SF_ANIM + "furniture\\"), st)
+
+    def test_standing_set(self):
+        """Every flavor slot of the template is filled (the idle when there are no flavors), exits twice, instant."""
+        folder, tpl, rows = P.standing_set("s2s_x", "desklean", "i.hkx", ("f1.hkx", "f2.hkx"), "e.hkx", "x.hkx", 3,
+                                           instant=True)
+        self.assertEqual(folder, P.SF_ANIM + "furniture\\s2s_x")
+        self.assertEqual(rows, [("idle.afx", "i.hkx", None), ("idle_flavor01.afx", "f1.hkx", None),
+                                ("idle_flavor02.afx", "f2.hkx", None), ("idle_flavor03.afx", "f1.hkx", None),
+                                ("enterfromstand.afx", "e.hkx", None), ("exittostand.afx", "x.hkx", None),
+                                ("quickexittostand.afx", "x.hkx", None), ("enterinstant.afx", "i.hkx", None)])
+        _f, _t, rows = P.standing_set("s2s_y", "bartender", "i.hkx", n_flavors=2)
+        self.assertEqual(rows, [("idle.afx", "i.hkx", None), ("idle_flavor01.afx", "i.hkx", None),
+                                ("idle_flavor02.afx", "i.hkx", None)])
+
+    def test_anim_set_for(self):
+        """The lean markers share a template but get their own sets; forges keep Starfield's animations."""
+        import make_furniture as MF
+        cases = {("chair", "WoodenChair01"): "Sit", ("bench", "FarmBench01F"): "Sit",
+                 ("lean_counter", "WallLeanMarker"): "WallLean", ("lean_counter", "RailLeanMarker"): "RailLean",
+                 ("lean_counter", "CounterLeanMarker"): "Counter", ("bartender", "CounterBarLeanMarker"): "Counter",
+                 ("lean_table", "LeanTableMarker"): "LeanTable", ("sweep", "SweepIdleMarker"): "Sweep",
+                 ("alchemy", "CraftingAlchemyWorkbench"): "Alchemy",
+                 ("workbench", "CraftingEnchantingWorkbenchTabletop"): "Enchant",
+                 ("workbench", "CraftingBlackSmithForge"): None, ("cook", "CraftingCookingPotSm"): "Cook",
+                 ("scrape", "CraftingTanningRackMarker"): "Tanning", ("bed", "CommonBed01"): None}
+        for (kind, edid), want in cases.items():
+            self.assertEqual(MF.anim_set_for({"kind": kind, "edid": edid}), want, edid)
 
     def test_hkx_args(self):
         class A:

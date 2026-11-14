@@ -230,3 +230,20 @@ scripts/terrain/apply_ref_overrides.py writes FO4Port.esm's hidden statics into 
 (Initially Disabled flag, FO4Port's sunk position; same record sizes, no FormID moves; one-time backup), into the
 installed and the staged copy; riverwood_doors.ps1 step 5 runs it after every install. Owner's run: 19 statics patched
 in each copy. Verified in game (owner, 2026-11-14): the statics are gone and the furniture can be sat on.
+
+More sets (2026-11-14, after Sit was verified). The owner's survey of the template folders (furniture_anims.json):
+leaningbartopfront, bartender, desklean, standing_sweep, standing_wipewall and the pharma / industrial / galley
+workbenches all play Idle, Idle_Flavor01..NN (6 / 5 / 4 / 5 / 5 / 5 / 6 / 0), EnterFromStand, ExitToStand,
+QuickExitToStand (sweep and wipe-wall also EnterInstant). furniture_anim_pack.standing_set fills them from one Skyrim idle
+loop (mt_behavior's clips): RailLean (railleanidle / enter / exit), WallLean (wall_idleback*), Counter
+(animobjectcounteridleloopright / enter / exit; the arms-on-counter and wiping loops are other poses, left for clip
+stitching), LeanTable (idleleantable, _point as flavor, _enter / _exit), Sweep (animobjectsweepingidlebase, var1,
+start; no Skyrim exit: Starfield's stays), Alchemy (craftingalchemybench stir / pound / tap, enter / exit), Enchant
+(craftingenchantingbench idle / idlecircle / enter / exit, on the industrial workbench template), Cook
+(craftingcookingpotstir / enter / exit), Tanning (craftingtanning idleb / idlea / enterb / exitb, wipe-wall template).
+Every flavor slot is filled (a vanilla flavor would play Starfield's own pose mid-idle). make_furniture.ANIM_SET_RULES:
+kind + EditorID -> set (the three lean markers share the lean_counter template but not their clips; the forge keeps
+Starfield's). stance_plugin.FURNITURE_SETS: one keyword per set in this order (Sit's FormID unchanged), the set's
+folder first in copies of the template keyword's entries. Offsets: COM_SHIFT keeps Sit's measured one; WallLean
+(0, 0) (leaning back, while the template's actor faces a counter); the rest are aligned to their template's Idle.
+Props (broom, ladle, scraper): unverified: Starfield's descriptor events are kept. Unverified in game.

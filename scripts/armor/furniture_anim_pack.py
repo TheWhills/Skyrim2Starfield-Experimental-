@@ -4,12 +4,14 @@ under the file names and tags of the vanilla Starfield furniture clips (their de
 put first, for furniture carrying the set's keyword, by S2SStances.esm (stance_plugin.FURNITURE_SETS) - tags it lacks
 fall back to Starfield's.
 
-Sets (mapping from the owner's furniture_anim_survey, 2026-11-13: Starfield's chair / bench graph plays these tags; the
-Skyrim clips are the ones Skyrim's mt_behavior plays for chairs and benches):
-  Sit (chairs, benches): actors\\human\\animations\\furniture\\s2s_sit
+Sets (mapping from the owner's furniture_anim_survey, 2026-11-13 / 14: the tags the templates' folders have; the
+Skyrim clips are the ones Skyrim's mt_behavior plays for that furniture), each in actors\\human\\animations\\furniture\\:
+  Sit (chairs, benches) s2s_sit; RailLean, WallLean, Counter, LeanTable, Sweep, Alchemy, Enchant, Cook, Tanning
+  (s2s_<name>); make_furniture.ANIM_SET_RULES says which Skyrim furniture gets which.
 
-One seat offset for the whole set: the Idle is converted first with --align-com (its mean COM moved onto the vanilla
-chair Idle's), and that shift is then applied to every clip (--com-shift), so entering, sitting and leaving line up.
+One offset per set: the Idle is converted first with --align-com (its mean COM moved onto the vanilla template Idle's),
+and that shift is then applied to every clip of the set, so entering, idling and leaving line up; measured offsets are
+kept in COM_SHIFT.
 No root motion: Starfield's own furniture clips carry the body's way into the seat themselves (supported hypothesis).
 
     python -I scripts\\armor\\furniture_anim_pack.py --calumi "<CALUMI.Animation.dll>" --skyrim-data "$sky"
@@ -34,6 +36,23 @@ SF_ANIM = "meshes\\actors\\human\\animations\\"
 
 # set -> (folder under meshes\, vanilla template folder under meshes\, [(vanilla .afx file, Skyrim clip, new tag/None)])
 # new tag: a tag the template folder lacks (written under its own name, the given template's descriptor reused).
+def standing_set(folder, template, idle, flavors=(), enter=None, exit_=None, n_flavors=0, instant=False):
+    """Rows for a set built on one idle loop: Idle, every Idle_FlavorNN slot the template folder has (n_flavors) filled
+    from `flavors` in turn (the idle itself when there are none: a vanilla flavor would play Starfield's own pose in
+    the middle of ours), EnterFromStand, ExitToStand and QuickExitToStand, EnterInstant (spawning in place) when the
+    template has it. Flavors must start and end on the idle's pose (Skyrim's transitions into another loop do not)."""
+    rows = [("idle.afx", idle, None)]
+    pool = list(flavors) or [idle]
+    rows += [(f"idle_flavor{i:02d}.afx", pool[(i - 1) % len(pool)], None) for i in range(1, n_flavors + 1)]
+    if enter:
+        rows.append(("enterfromstand.afx", enter, None))
+    if exit_:
+        rows += [("exittostand.afx", exit_, None), ("quickexittostand.afx", exit_, None)]
+    if instant:
+        rows.append(("enterinstant.afx", idle, None))
+    return (SF_ANIM + "furniture\\" + folder, SF_ANIM + "furniture\\" + template, rows)
+
+
 SETS = {
     "Sit": (SF_ANIM + "furniture\\s2s_sit", SF_ANIM + "furniture\\chair", [
         ("idle.afx", "male\\chair_idlebasevar1.hkx", None),
@@ -54,7 +73,37 @@ SETS = {
         ("rightquickexittostand.afx", "male\\chair_rightexit.hkx", None),
         # Skyrim has no entry from behind: Rear* stay Starfield's; EnterInstant, LookDirections, Talk_*, Camera too
     ]),
+    # 2026-11-14 (owner's survey of the templates' folders: every one has Idle, Idle_FlavorNN, EnterFromStand,
+    # ExitToStand, QuickExitToStand; sweep and wipe-wall also EnterInstant). Skyrim clips: mt_behavior's furniture clips.
+    "RailLean": standing_set("s2s_raillean", "leaningbartopfront", "railleanidle.hkx", (), "railleanenter.hkx",
+                             "railleanexit.hkx", 6),
+    "WallLean": standing_set("s2s_walllean", "leaningbartopfront", "wall_idlebackloop.hkx", (),
+                             "wall_idlebackenter.hkx", "wall_idlebackexit.hkx", 6),
+    # the counter's arms-on-counter / wiping loops are other poses (reached by transition clips): idle only for now
+    "Counter": standing_set("s2s_counter", "bartender", "animobjectcounteridleloopright.hkx", (),
+                            "animobjectcounterenter.hkx", "animobjectcounterexit.hkx", 5),
+    "LeanTable": standing_set("s2s_leantable", "desklean", "idleleantable.hkx", ("idleleantable_point.hkx",),
+                              "idleleantable_enter.hkx", "idleleantable_exit.hkx", 4),
+    # Skyrim's sweeping has no exit clip: ExitToStand stays Starfield's. The broom: Starfield's descriptor events.
+    "Sweep": standing_set("s2s_sweep", "standing_sweep", "animobjectsweepingidlebase.hkx",
+                          ("animobjectsweepingidlevar1.hkx",), "animobjectsweepingidlestart.hkx", None, 5, instant=True),
+    "Alchemy": standing_set("s2s_alchemy", "workbench\\pharmaworkbench", "craftingalchemybenchstirboth.hkx",
+                            ("craftingalchemybenchpoundboth.hkx", "craftingalchemybenchtap.hkx"),
+                            "craftingalchemybenchenter.hkx", "craftingalchemybenchexit.hkx", 5),
+    "Enchant": standing_set("s2s_enchant", "workbench\\industrialworkbench", "craftingenchantingbenchidle.hkx",
+                            ("craftingenchantingbenchidlecircle.hkx",), "craftingenchantingbenchenter.hkx",
+                            "craftingenchantingbenchexit.hkx", 6),
+    "Cook": standing_set("s2s_cook", "workbench\\galleyworkbench", "craftingcookingpotstir.hkx", (),
+                         "craftingcookingpotenter.hkx", "craftingcookingpotexit.hkx", 0),
+    "Tanning": standing_set("s2s_tanning", "standing_wipewall", "craftingtanningidleb.hkx",
+                            ("craftingtanningidlea.hkx",), "craftingtanningenterb.hkx", "craftingtanningexitb.hkx", 5,
+                            instant=True),
 }
+
+# Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.
+# Sets not listed are aligned to their template's Idle on each run; (0, 0) keeps Skyrim's own placement (WallLean:
+# Skyrim leans back on the wall, the template's actor faces a counter, so its COM is no guide).
+COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0)}
 
 
 # Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back
@@ -120,20 +169,22 @@ def main(argv=None):
     ap.add_argument("--work", required=True, help="a scratch folder outside the repository")
     ap.add_argument("--set", action="append", choices=sorted(SETS), help="only these sets (default: all)")
     ap.add_argument("--com-shift", metavar="X,Y", nargs="+",
-                    help="use this seat offset instead of the Idle's --align-com result (PowerShell splits an unquoted "
-                         "X,Y in two: both forms are taken)")
+                    help="with one --set: use this offset instead of COM_SHIFT / the Idle's --align-com result "
+                         "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
     ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
     a = ap.parse_args(argv)
     for p in (a.out, a.work):
         if os.path.abspath(p).lower().startswith(os.path.abspath(REPO).lower()):
             sys.exit(f"{p}: must be outside the repository")
+    if a.com_shift and len(a.set or SETS) != 1:
+        sys.exit("--com-shift is one set's offset: give it with exactly one --set")
     import hkx_to_af
     report = {}
-    for st in a.set or sorted(SETS):
+    for st in a.set or list(SETS):
         folder = SETS[st][0]
         work = os.path.join(a.work, st)
         idle, rest = replace_args(st)
-        com = parse_pair(a.com_shift) if a.com_shift else None
+        com = parse_pair(a.com_shift) if a.com_shift else (list(COM_SHIFT[st]) if st in COM_SHIFT else None)
         hands = parse_pair(a.hand_clearance) if a.hand_clearance else HAND_CLEARANCE.get(st)
         if com is None:
             print(f"== {st}: Idle with --align-com (the set's seat offset)")
@@ -141,8 +192,11 @@ def main(argv=None):
             with open(os.path.join(work, "idle", "report.json"), encoding="utf-8") as fh:
                 row = json.load(fh)[0]
             if rc != 0 or "com_shift_m" not in row:
-                sys.exit(f"{st}: the Idle did not convert ({row.get('error') or row})")
+                print(f"{st}: the Idle did not convert ({row.get('error') or row}); set skipped")
+                report[st] = {"folder": folder, "failed": [row.get("clip")], "error": row.get("error"), "files": []}
+                continue
             com = row["com_shift_m"]
+            print(f"{st}: offset {com[0]},{com[1]} (add to COM_SHIFT to keep it)")
         print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
         rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:

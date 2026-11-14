@@ -61,7 +61,22 @@ RACE_EDID = "HumanRace"
 # folder lacks falls back to the vanilla folders after it). Keywords from FURN_INDEX on (after stances and types).
 # Lives here, not in its own plugin: one HumanRace override only can win.
 FURN_INDEX = 16
-FURNITURE_SETS = (("Sit", ("AnimFurnChair", "AnimFurnBench"), "actors\\human\\animations\\furniture\\s2s_sit"),)
+_FURN = "actors\\human\\animations\\furniture\\"
+# (set, the vanilla furniture keywords whose entries are copied with the set's keyword, the set's folder). The keyword
+# FormIDs follow this order (FURN_INDEX + position): add new sets at the end. Counter: Skyrim's counter-lean markers are
+# on the bartop-lean template, the bar-counter ones on the bartender template (make_furniture.TEMPLATES).
+FURNITURE_SETS = (
+    ("Sit", ("AnimFurnChair", "AnimFurnBench"), _FURN + "s2s_sit"),
+    ("RailLean", ("AnimFurnLeaningBartopFront",), _FURN + "s2s_raillean"),
+    ("WallLean", ("AnimFurnLeaningBartopFront",), _FURN + "s2s_walllean"),
+    ("Counter", ("AnimFurnBartender", "AnimFurnLeaningBartopFront"), _FURN + "s2s_counter"),
+    ("LeanTable", ("AnimFurnDeskLean",), _FURN + "s2s_leantable"),
+    ("Sweep", ("AnimFurnStanding_Sweep",), _FURN + "s2s_sweep"),
+    ("Alchemy", ("AnimFurnPharmaWorkbench",), _FURN + "s2s_alchemy"),
+    ("Enchant", ("AnimFurnIndustrialWorkbench",), _FURN + "s2s_enchant"),
+    ("Cook", ("AnimFurnGalleyWorkbench",), _FURN + "s2s_cook"),
+    ("Tanning", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_tanning"),
+)
 FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
 
 
