@@ -886,10 +886,13 @@ foreach (var cellPath in cellPaths)
 // in game: the old bench still stood under ours, its collision stopping the sit; console `disable` on it fixed
 // sitting). So as xEdit's "Undelete and Disable References" does: disabled, sunk 1000 m, and enable parent = the
 // player with "opposite of parent" (the player is always enabled, so it stays disabled in any save).
+// 2026-11-14: the exterior plugin itself now carries the hidden statics (scripts/terrain/apply_ref_overrides.py, run after
+// each install), so a static read from it may already be disabled and sunk: sink it only once.
 void HideExteriorStatic(PlacedObject o)
 {
+    var already = (o.MajorRecordFlagsRaw & 0x800) != 0;
     o.MajorRecordFlagsRaw |= 0x800;                                            // Initially Disabled
-    o.Position = new P3Float(o.Position.X, o.Position.Y, o.Position.Z - 1000f);
+    if (!already) o.Position = new P3Float(o.Position.X, o.Position.Y, o.Position.Z - 1000f);
     o.EnableParent = new EnableParent { Flags = (EnableParent.Flag)1 };       // Set Enable State to Opposite of Parent
     o.EnableParent.Reference.SetTo(new FormKey(sfEsm, 0x000014));              // PlayerRef
 }
