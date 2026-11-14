@@ -8,8 +8,11 @@ cell, temporary group, cell record before it), FO4Port's disabled and sunk, load
 main menu (no save) the static still stood under the chair (GetDisabled 0, original height). The game does not apply
 FO4Port.esm's overrides of those temporary references, so the exterior plugin carries the change itself.
 
-    python -I scripts\\terrain\\apply_ref_overrides.py --from "$sf\\Data\\FO4Port.esm"
-        --into "$sf\\Data\\SkyrimTerrainTamriel.esm" --into C:\\Modding\\staging\\skyrim_all\\SkyrimTerrainTamriel.esm
+    python -I scripts\\terrain\\apply_ref_overrides.py --from "$sf\\Data\\FO4Port.esm" --into "$sf\\Data\\SkyrimTerrainTamriel.esm"
+
+Only the installed copy, never the staged exterior (EXTERIOR_DIR): the FO4Port.esm build reads the staged statics for
+where its load doors go, and patched (sunk) ones put the doors 1000 m underground (owner, 2026-11-14: no door could be
+entered after a rebuild; the staged copy had been patched too).
 
 Starfield must be closed. Each --into gets a one-time backup (<name>.before_ref_overrides) the first time it is patched.
 Run again after every FO4Port.esm build and after every exterior rebuild (riverwood_doors.ps1 does).
@@ -102,7 +105,8 @@ def patch(target_path, hidden):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--from", dest="port", required=True, help="FO4Port.esm")
-    ap.add_argument("--into", action="append", required=True, help="the exterior plugin (each copy); repeatable")
+    ap.add_argument("--into", action="append", required=True,
+                    help="the installed exterior plugin (not the staged one the build reads); repeatable")
     a = ap.parse_args(argv)
     for target in a.into:
         hidden = hidden_in(a.port, os.path.basename(target))

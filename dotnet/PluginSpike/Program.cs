@@ -1029,6 +1029,11 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
                             newDoorBases[model] = dkey = drec.FormKey;
                         }
                     }
+                    // a staged static already hidden in place (apply_ref_overrides run on the staged copy before
+                    // 2026-11-14) would put the door underground: refuse rather than build doors nobody can use
+                    if ((sg.MajorRecordFlagsRaw & 0x800) != 0)
+                        throw new InvalidOperationException($"{w2.src}: the staged exterior's door static {sg.FormKey} is " +
+                            "already disabled (sunk): restore the staged exterior plugin from its .before_ref_overrides copy");
                     var nd = new PlacedObject(Id("EXTREF:" + w2.src), release)
                     {
                         Base = new FormLinkNullable<IPlaceableObjectGetter>(dkey),

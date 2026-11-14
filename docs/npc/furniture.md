@@ -247,3 +247,9 @@ Starfield's). stance_plugin.FURNITURE_SETS: one keyword per set in this order (S
 folder first in copies of the template keyword's entries. Offsets: COM_SHIFT keeps Sit's measured one; WallLean
 (0, 0) (leaning back, while the template's actor faces a counter); the rest are aligned to their template's Idle.
 Props (broom, ladle, scraper): unverified: Starfield's descriptor events are kept. Unverified in game.
+
+Doors underground (owner, 2026-11-14, after the build with step 5: doors look wrong, none can be entered). The build
+places each exterior load door at the staged exterior's static door (EXTERIOR_DIR); step 5 had also patched that staged
+copy, so the rebuild read sunk statics and put the 7 load doors 1000 m down (and sank the statics again). Now step 5
+patches only the installed copy, and PluginSpike stops if a staged door static is already disabled. Recovery: restore
+both copies from their .before_ref_overrides backups (made on the first patch, i.e. the originals), rebuild.
