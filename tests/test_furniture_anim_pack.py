@@ -136,6 +136,18 @@ class PackTests(unittest.TestCase):
         self.assertEqual(clip, ("RearEnterFromStand.af", b"REAR"))       # read by its lower-case archive name
         self.assertIn("idle.afx", P.vanilla_leftovers(sorted(files), files.get, [chair, common], set()))
 
+    def test_unanswered_tags(self):
+        """Tags of the template folders ours do not answer: idle-like ones flagged, enters / exits / look / camera not;
+        ours and repeats skipped."""
+        d = "meshes\\actors\\human\\animations\\furniture\\chair\\"
+        files = {d + n + ".afx": f"<root><tag>{t}</tag></root>".encode() for n, t in (
+            ("idle", "Idle"), ("idle_flavor05", "Idle_Flavor05"), ("breathe", "IdleBreathe"),
+            ("rearenterfromstand", "RearEnterFromStand"), ("lookdirections", "LookDirections"), ("camera", "Camera"))}
+        files[d + "female\\breathe.afx"] = b"<root><tag>IdleBreathe</tag></root>"
+        got = P.unanswered_tags(sorted(files), files.get, [d, d + "female"], {"Idle"})
+        self.assertEqual(sorted(got), [("Camera", False), ("IdleBreathe", True), ("Idle_Flavor05", True),
+                                       ("LookDirections", False), ("RearEnterFromStand", False)])
+
     def test_leftover_folders(self):
         f = P.leftover_folders("Sit")
         self.assertEqual([x.split("furniture\\")[-1] for x in f],
@@ -206,14 +218,20 @@ class AnimKeywordTests(unittest.TestCase):
         self.assertEqual(MF.markers(lean, "lean_counter", "floor"), [])                  # SPECIAL: template's
         self.assertEqual(MF.skyrim_markers({"edid": "SweepIdleMarker"}, "sweep", "floor"), MF.AT_THE_REFERENCE)
         out = {"bases": {
-            "r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky},
+            "r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky,
+                  "shift_m": list(MF.DEFAULT_SHIFT["lean_counter"])},
+            "w": {"kind": "lean_counter", "edid": "WallLeanMarker", "markers": [], "skyrim_markers": sky,
+                  "shift_m": [0.0, -0.05, 0.0]},
             "s": {"kind": "sweep", "edid": "SweepIdleMarker", "markers": [],
                   "skyrim_markers": [dict(m) for m in MF.AT_THE_REFERENCE]},
             "a": {"kind": "alchemy", "edid": "CraftingAlchemyWorkbench", "markers": [], "skyrim_markers": sky}}}
-        kws = {"S2S_AnimFurnSkyrimRailLean": 0x01000811, "S2S_AnimFurnSkyrimSweep": 0x01000815,
+        kws = {"S2S_AnimFurnSkyrimRailLean": 0x01000811, "S2S_AnimFurnSkyrimWallLean": 0x01000812,
+               "S2S_AnimFurnSkyrimSweep": 0x01000815,
                "S2S_AnimFurnSkyrimAlchemy": 0x01000816}
         MF.add_anim_keywords(out, "S2SStances.esm", read_keywords=lambda p: kws)
         self.assertEqual(out["bases"]["r"]["markers"], sky)
+        self.assertNotIn("shift_m", out["bases"]["r"])                   # the bar-lean default dropped
+        self.assertEqual(out["bases"]["w"]["shift_m"], [0.0, -0.05, 0.0])   # one given on the command line stays
         self.assertEqual(out["bases"]["s"]["markers"], MF.AT_THE_REFERENCE)
         self.assertEqual(out["bases"]["a"]["markers"], [])
         none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}

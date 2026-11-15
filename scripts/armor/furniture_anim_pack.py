@@ -249,6 +249,29 @@ def vanilla_leftovers(names, read, folders, have_tags, keep_props=False) -> dict
     return out
 
 
+# 2026-11-15 (owner, in game, seated male player): with every flavor replaced by the Idle the body still slumps now and
+# then, the arms straight and the hands down at the seat's edge: Starfield's own chair pose (made for armrests) on a
+# chair without them. So a state of the template folders that ours do not answer still plays Starfield's clip. Every
+# such tag that is not an enter / exit / look / camera / flinch state (those keep Starfield's motion, cleaned above)
+# gets the set's Idle, as the talk slots do.
+NOT_IDLE = ("enter", "exit", "look", "camera", "flinch")
+
+
+def unanswered_tags(names, read, folders, have_tags) -> list:
+    """[(tag, idle-like)] of the descriptors directly in `folders` (first wins per tag) whose tag is not in have_tags."""
+    out, seen = [], {t.lower() for t in have_tags}
+    for folder in folders:
+        f = folder.replace("/", "\\").lower().rstrip("\\") + "\\"
+        for n in sorted(x for x in names if x.startswith(f) and x.endswith(".afx") and "\\" not in x[len(f):]):
+            raw = read(n)
+            tag = _tag(raw.decode("utf-8", "replace")) if raw else None
+            if not tag or tag.lower() in seen:
+                continue
+            seen.add(tag.lower())
+            out.append((tag, not any(w in tag.lower() for w in NOT_IDLE)))
+    return out
+
+
 def parse_pair(value):
     """'0.027,-0.091' or ['0.027', '-0.091'] or ['0.027,-0.091'] (PowerShell splits an unquoted pair) -> floats."""
     text = ",".join(value) if isinstance(value, (list, tuple)) else str(value)
@@ -373,9 +396,21 @@ def main(argv=None):
                 shutil.copy2(os.path.join(dst, idle_af), os.path.join(dst, name[:-1]))
                 talk += 1
         left = {}
+        filled = []
         if sf_arcs is not None:
             have = {t for t in (_tag(open(os.path.join(dst, x), encoding="utf-8", errors="replace").read())
                                 for x in os.listdir(dst) if x.lower().endswith(".afx")) if t}
+            if idle_af and idle_afx:
+                gaps = unanswered_tags(sf_arcs.names, sf_arcs.read, leftover_folders(st), have)
+                filled = [t for t, idle_like in gaps if idle_like]
+                for name, text in talk_copies(base, filled).items():
+                    with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:
+                        fh.write(text)
+                    shutil.copy2(os.path.join(dst, idle_af), os.path.join(dst, name[:-1]))
+                have |= set(filled)
+                rest = [t for t, idle_like in gaps if not idle_like]
+                print(f"{st}: Starfield's own states answered with our Idle: {', '.join(filled) or 'none'}; "
+                      f"left to Starfield: {', '.join(rest) or 'none'}")
             left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, leftover_folders(st), have,
                                      st in KEEP_PROPS)
             for name, (text, clip) in left.items():
@@ -402,7 +437,7 @@ def main(argv=None):
             print(f"{st}: hands kept {hands[0]} m above the thighs, {len(lifted)} clips, lifted up to {top} m")
         report[st] = {"folder": folder, "com_shift_m": com, "hand_clearance": hands, "hands_lifted": lifted, "contacts": contacts, "clips": len(rows), "hand_ik_stripped": stripped,
                       "failed": [r.get("clip") for r in rows if "error" in r], "files": files,
-                      "starfield_states_cleaned": sorted(left)}
+                      "starfield_states_cleaned": sorted(left), "starfield_states_idle": filled}
         print(f"{st}: {len(files)} files -> {dst}" + (f"; failed: {report[st]['failed']}" if report[st]["failed"] else ""))
     with open(os.path.join(a.work, "furniture_anim_pack.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)

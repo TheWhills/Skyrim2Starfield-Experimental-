@@ -354,3 +354,12 @@ needs the actors' getpos against the marker positions. Every Sit flavor checked 
 +0.050 m); test: flavors replaced by the Idle in place. The table's chair / bench rows are the pirate ones (generic
 ones are HumanRace esm entries); benches read furniture\bench, women chair\female / bench\female first: the hand-IK
 clean-up now scans those too (leftover_folders).
+Owner's tests (2026-11-15): (1) flavors replaced by the Idle: the seated slump (arms straight, hands at the seat edge:
+Starfield's chair pose made for armrests) still comes, so not our flavors. The pack now answers every template-folder
+tag ours lack (chair, bench, their female folders, furniture\common) with the set's Idle unless it is an enter / exit
+/ look / camera / flinch state (unanswered_tags; printed per set), those keep Starfield's clip cleaned of hand IK.
+(2) Hod's getangle z 315.48 = his marker's heading 315.5 (console positions are in another frame than the plugin's, not
+compared). The lean stand-off found: make_furniture.DEFAULT_SHIFT moves bartender / lean_counter markers +0.30 m along
+the furniture's +y (measured 2026-11-08 for Starfield's bar-lean animation at the counter face), ahead of Hod (facing
+0) and behind Hilde (facing 180): exactly the owner's "a foot". add_anim_keywords drops that default where our Skyrim
+clips use Skyrim's markers (a --shift given on the command line stays). Needs the Riverwood build.

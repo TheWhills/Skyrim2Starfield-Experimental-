@@ -233,6 +233,12 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
         b["anim_set"] = st
         if b.get("skyrim_markers") and not b.get("markers") and b.get("kind") not in CRAFT_KINDS:
             b["markers"] = b["skyrim_markers"]           # our Skyrim clips stand at Skyrim's spot
+            # ... without DEFAULT_SHIFT, measured for Starfield's bar-lean animation at the counter face (2026-11-15,
+            # owner: Hod ~0.3 m in front of his post, Hilde ~0.3 m back from the rail: the +0.30 m along the
+            # furniture's +y, ahead of Hod (facing 0) and behind Hilde (facing 180)). A shift given on the command
+            # line (different from the default) stays.
+            if b.get("shift_m") is not None and list(b["shift_m"]) == list(DEFAULT_SHIFT.get(b.get("kind"), [])):
+                del b["shift_m"]
         done[st] = done.get(st, 0) + 1
     if missing:
         done["missing"] = sorted(missing)
