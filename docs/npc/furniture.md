@@ -367,3 +367,8 @@ Owner's run (2026-11-15): Sit's only unanswered idle-like tag was Stand_Start (n
 state behind the seated slump, supported); left to Starfield (cleaned of hand IK where it had it): Camera, EnterInstant,
 LookDirections(_Head), RearEnterFromStand, RearQuickExitToStand, Flinch. Other sets: none idle-like unanswered. The
 build put the lean / counter / table bases on Skyrim's markers without the 0.30 m default shift.
+Owner in game (2026-11-15) after Stand_Start and the 0.30 m shift: the leans are right ("leaning on the wall
+correctly", Hod and another NPC against their posts, verified). The seated arms-back moment still comes (player and
+Hilde). scripts/armor/furniture_graph_probe.py: every tag the chair / bench graphs (and the graphs they link) play,
+resolved through each HumanRace esm entry's and table row's folder chain against our folder, hand-IK descriptors
+marked, to find what still plays Starfield's own clip.
