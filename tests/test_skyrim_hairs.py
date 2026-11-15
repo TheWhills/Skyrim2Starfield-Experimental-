@@ -682,6 +682,11 @@ class MainTests(unittest.TestCase):
                                    "HairMaleNord01", "--diagnose", "--merge-plugin",
                                    os.path.join(ks_dir, "S2SHair.esm")])
             self.assertEqual(rc_diag, 0)
+            # S2SHair.esm and ours both override the women's list: the merged looks-menu plugin is written next to them
+            merged = os.path.join(d, "S2S Looks Menu", "S2SLooksMenu.esm")
+            self.assertTrue(os.path.isfile(merged))
+            fem = next(s_ for _t, _h, s_, f in sfplugin.records(merged, [b"FLST"]) if f == 0x0003D9B0)
+            self.assertIn(0x01000800, [struct.unpack("<I", d_)[0] for x, d_ in fem if x == b"LNAM"])
 
             seen = []
 

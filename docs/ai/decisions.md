@@ -2297,3 +2297,16 @@ Why: the game ignores FO4Port.esm's correct overrides of those temporary referen
 fresh coc with no save still shows them). An in-place patch keeps record sizes, so no FormID or group shifts.
 Alternatives: rebuild the exterior without those statics (shifts every FormID, long build); keep debugging the
 override (cause unknown; left open).
+
+## 2026-11-15 One merged plugin for the looks-menu lists (S2SLooksMenu.esm)
+Owner: the converted Skyrim hairs are not in the looks menu. Cause (verified from the owner's loadorder.txt and the
+code): S2SRaceTest.esm (line 14) loads after S2SSkyrimHairs.esm (line 12) and, since 2026-11-11, overrides
+HeadPartsChargenOptionsFemale / Male from the vanilla entries plus its race copies; the last loaded override wins, so
+the hairs' entries (KS and Skyrim) were dropped. Decision: `scripts/npc/looks_menu_lists.py` reads every S2S*.esm in
+the mods folder and, for each Starfield.esm form list that two or more of them override, writes the union (vanilla
+entries, then each plugin's added entries in load order) to S2SLooksMenu.esm, loaded last; race_heads and skyrim_hairs
+run it after writing their plugin. Why: each plugin keeps building alone; giving S2SRaceTest.esm masters would move
+its own FormIDs (01xxxxxx, written into the player patch and saves). Alternatives: race_heads merging the hair
+plugins as masters (FormID shift); skyrim_hairs merging S2SRaceTest.esm (a slow hair rebuild after every race build).
+Not read: other mods' overrides of the same lists. In game unverified.
+

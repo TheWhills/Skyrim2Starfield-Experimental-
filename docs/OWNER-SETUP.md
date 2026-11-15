@@ -46,6 +46,7 @@ Starfield must be closed while a script writes into the mods folders.
 | Test NPCs: S2SFaceTest.esm, `faces.json` (NPC ids), face textures | `$mods\S2S Face Test` (`$face`) |
 | Race heads test: S2SRaceTest.esm, head morph.dat, `race_heads.json` (NPC ids) | `$mods\S2S Race Test` |
 | Converted hair / beards: S2SSkyrimHairs.esm | `$mods\S2S Skyrim Hairs` (`$hairs`) |
+| Merged looks-menu lists: S2SLooksMenu.esm (written by race_heads / skyrim_hairs; enable it, load it last) | `$mods\S2S Looks Menu` |
 | Voice test (a second S2SFaceTest.esm under Sound\Voice) | `$mods\S2S Voice Swap Test` |
 | More Sliders (face-bone mod) | `$mods\More-Sliders Complete` (`$ms`, `$cs`) |
 | Beard matches (beard_match.json) | `C:\Modding\work\beards` |

@@ -51,6 +51,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "scripts", "armor"))
 
 from fo4sf import facefit, headcorr, sfmorph, sfplugin  # noqa: E402
+import looks_menu_lists  # noqa: E402
 
 PLUGIN = "S2SRaceTest.esm"
 SEXES = {False: "male", True: "female"}
@@ -1989,6 +1990,13 @@ def main(argv=None):
     for r in (report.get("new_races") or {}).values():
         if r.get("_chargen_presets"):
             r["chargen_presets"] = [f"{x:08X}" for x in r.pop("_chargen_presets")]
+    # 2026-11-15: our override of the looks-menu part lists replaced S2SSkyrimHairs.esm's (the hairs vanished from
+    # the menu); S2SLooksMenu.esm, loaded last, holds every S2S plugin's entries (looks_menu_lists.py)
+    try:
+        report["looks_menu_lists"] = looks_menu_lists.update(os.path.dirname(os.path.abspath(a.out)),
+                                                             os.path.join(sf_data, "Starfield.esm"))
+    except Exception as e:                                       # noqa: BLE001 (the race plugin is written anyway)
+        print(f"  looks menu lists not merged: {type(e).__name__}: {e}")
     with open(os.path.join(a.out, "race_heads.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)
     print("  hair on the test NPCs:", report.get("hair") or "none cropped found (the race's default; --keep-hair: "

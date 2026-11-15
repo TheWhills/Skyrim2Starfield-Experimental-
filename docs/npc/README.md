@@ -22,6 +22,9 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
    the official DLC masters' hair head parts, beast races left out, `--facial-hair` adds beards) with hair_pack's
    pipeline (head fit per sex, shaping, hair shader, `_facebones` twin), one head part per hairstyle copied from a
    vanilla one of that sex's looks-menu list, appended to HeadPartsChargenOptionsFemale / Male: S2SSkyrimHairs.esm.
+   S2SRaceTest.esm overrides the same two lists (its race copies of face parts); the last loaded override wins, so
+   `scripts/npc/looks_menu_lists.py` (run at the end of race_heads and skyrim_hairs) writes S2SLooksMenu.esm in
+   `S2S Looks Menu` with every S2S plugin's entries of each list two of them override. Load it last.
 3c. Real NPC records (owner 2026-11-05: Ralof and Ysolda "with their faces and generic greetings", the converted
    looks-menu hairs, matched hair colour): `face_fit.py --test-plugin --hairs-plugin <S2SSkyrimHairs.esm>`
    (scripts/npc/npc_records.py): the NPC's Skyrim name (Skyrim's string tables), fitted face, its Skyrim hair / beard

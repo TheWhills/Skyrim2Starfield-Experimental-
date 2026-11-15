@@ -44,6 +44,7 @@ from fo4sf import bsa, fo4land, hairstrands, sfplugin, skyrimconvert  # noqa: E4
 from fo4sf import skyrimhair, skyrimnif, skyrimnpc, smpcloth  # noqa: E402
 from fo4sf import nif as nifmod  # noqa: E402
 import hair_pack  # noqa: E402
+import looks_menu_lists  # noqa: E402
 
 PLUGIN = "S2SSkyrimHairs.esm"
 MAIN_BA2 = "S2SSkyrimHairs - Main.ba2"
@@ -717,6 +718,10 @@ def main(argv=None):
         fh.write(sfplugin.build(recs, sfplugin.header_info(esm), masters=tuple(masters)))
     report["packing"] = hair_pack.pack(staging, out, a.starfield, a.archive2, MAIN_BA2, TEX_BA2)
     report["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
+    try:                                         # 2026-11-15: S2SRaceTest.esm overrides the same lists
+        report["looks_menu_lists"] = looks_menu_lists.update(os.path.dirname(out), esm)
+    except Exception as e:                                       # noqa: BLE001 (the hair plugin is written anyway)
+        print(f"  looks menu lists not merged: {type(e).__name__}: {e}")
     with open(os.path.join(out, "skyrim_hairs.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1, default=str)
     bad = [r for r in report["parts"] if not r.get("ok")]
