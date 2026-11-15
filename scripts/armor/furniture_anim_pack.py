@@ -146,6 +146,27 @@ def strip_variables(afx_text: str, names=DROP_VARIABLES) -> str:
 KEEP_PROPS = ("Sweep",)
 
 
+# Talking while on our furniture (2026-11-15, owner, in game: seated Hilde, talking, crossed her arms fine but "puts them
+# down and they briefly go inside her body"): those are Starfield's own seated talk clips (furniture\common: the owner's
+# survey lists these tags), blended with our sitting pose, the forearms passing through the body. Each set gets them
+# as copies of its own Idle (Skyrim's seated NPCs do not gesture either), so the game finds ours first. Copies, not
+# conversions: the same clip 38 times over would only cost time.
+TALK_SLOTS = tuple([f"Idle_Dialogue{i:02d}" for i in range(1, 8)] + [f"Talk_L{i:02d}" for i in range(1, 11)]
+                   + [f"Talk_M{i:02d}" for i in range(1, 17)] + [f"Talk_S{i:02d}" for i in range(1, 6)])
+
+
+def talk_copies(idle_afx: str, slots=TALK_SLOTS):
+    """{file name: descriptor text} for each slot: the set's Idle descriptor with its tag and file name changed, the
+    clip being a copy of Idle.af under <slot>.af."""
+    import re
+    out = {}
+    for slot in slots:
+        t = re.sub(r"<tag>\s*[^<]*</tag>", f"<tag>{slot}</tag>", idle_afx, count=1)
+        t = re.sub(r"<filename>\s*[^<]*</filename>", f"<filename>{slot}.af</filename>", t, count=1)
+        out[slot.lower() + ".afx"] = t
+    return out
+
+
 def strip_events(afx_text: str, prefixes=("AnimObj",)) -> str:
     """An .afx descriptor without the <event> entries whose name starts with one of `prefixes` (any case)."""
     import re
@@ -257,8 +278,20 @@ def main(argv=None):
                     fh.write(new)
             else:
                 shutil.copy2(os.path.join(src, f), os.path.join(dst, f))
+        idle_af = next((f for f in files if f.lower() == "idle.af"), None)
+        idle_afx = next((f for f in files if f.lower() == "idle.afx"), None)
+        talk = 0
+        if idle_af and idle_afx:
+            with open(os.path.join(dst, idle_afx), encoding="utf-8", errors="replace") as fh:
+                base = fh.read()
+            for name, text in talk_copies(base).items():
+                with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:
+                    fh.write(text)
+                shutil.copy2(os.path.join(dst, idle_af), os.path.join(dst, name[:-1]))
+                talk += 1
         print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors"
-              + (f", Starfield's prop events of {props}" if props else ""))
+              + (f", Starfield's prop events of {props}" if props else "")
+              + (f"; Idle copied into {talk} talk slots" if talk else ""))
         lifted = {r["name"]: r["hands_lifted"] for r in rows if r.get("hands_lifted")}
         contacts = {r["name"]: r["contacts"] for r in rows if r.get("contacts")}
         if a.body_profiles:

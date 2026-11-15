@@ -307,3 +307,11 @@ stores skyrim_markers for those bases (the Skyrim NIF's furniture markers, or th
 marker), and add_anim_keywords uses them when the base gets one of our animation keywords; crafting stations keep the
 template's (Starfield's menu needs its marker). COM_SHIFT for RailLean / Counter / LeanTable / Sweep back to (0, 0):
 Skyrim's clips at Skyrim's spots. Needs the pack for those sets and the Riverwood build. Unverified in game.
+Owner's build after the switch (2026-11-15): every lean / counter / table / sweep base "1 markers from Skyrim"; model
+cache "reused": 0 once more (the first build after the signature change; the next should reuse all 265).
+Talking on our furniture (2026-11-15, owner: seated Hilde crossed her arms while talking, fine, then "puts them down
+and they briefly go inside her body"): Starfield's own seated talk clips (furniture\common Idle_Dialogue01-07,
+Talk_L01-L10, Talk_M01-M16, Talk_S01-S05) blended with our pose. The pack now writes, for every set, copies of its
+own Idle under those 38 tags (TALK_SLOTS, talk_copies: descriptor with the tag and file name changed; the clip copied,
+not converted again), found before Starfield's (our folder first). New files: needs the Creation Kit cache run.
+Unverified in game.

@@ -97,6 +97,20 @@ class PackTests(unittest.TestCase):
         self.assertNotIn("<events>", P.strip_events(only))
         self.assertEqual(P.KEEP_PROPS, ("Sweep",))
 
+    def test_talk_copies(self):
+        """38 talk / dialogue slots, each the Idle descriptor with its own tag and file name, the rest unchanged."""
+        idle = ("<root>\n<is_state>1</is_state>\n<tag>Idle</tag>\n<filename>Idle.af</filename>\n"
+                "<variables><variable><name>bUseStandToExit</name><start>0</start><end>274</end></variable></variables>"
+                "\n</root>")
+        got = P.talk_copies(idle)
+        self.assertEqual(len(got), 38)
+        self.assertEqual(sorted(got)[:2], ["idle_dialogue01.afx", "idle_dialogue02.afx"])
+        t = got["talk_m16.afx"]
+        self.assertIn("<tag>Talk_M16</tag>", t)
+        self.assertIn("<filename>Talk_M16.af</filename>", t)
+        self.assertIn("bUseStandToExit", t)
+        self.assertNotIn("<tag>Idle</tag>", t)
+
     def test_parse_pair(self):
         """PowerShell splits an unquoted 0.027,-0.091 into two arguments: every form gives the same pair."""
         for v in ("0.027,-0.091", ["0.027,-0.091"], ["0.027", "-0.091"]):
