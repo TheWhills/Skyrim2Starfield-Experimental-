@@ -78,8 +78,24 @@ class PackTests(unittest.TestCase):
         args = P.hkx_args(A, "w", "meshes\\x", ["a::b"], com=[0.1, -0.05], hands=(0.13, 0.03))
         self.assertEqual(args[args.index("--hand-clearance") + 1], "0.13,0.03")
         self.assertEqual(P.HAND_CLEARANCE["Sit"], (0.13, 0.03))
-        args = P.hkx_args(A, "w", "meshes\\x", ["a::b"], com=[0, 0], profiles="C:\\w\\body_profiles.json")
+        args = P.hkx_args(A, "w", "meshes\\x", ["a::b"], com=[0, 0], profiles="C:\\w\\body_profiles.json",
+                          shoulders="C:\\w\\shoulders.json")
+        self.assertEqual(args[args.index("--shoulder-calibration") + 1], "C:\\w\\shoulders.json")
         self.assertEqual(args[args.index("--body-profiles") + 1], "C:\\w\\body_profiles.json")
+
+    def test_strip_events(self):
+        """The dish rag's AnimObj events go; SetPos events and the audio stay; an emptied <events> goes."""
+        afx = ("<root>\n<events>\n<event><frame>0</frame><name>AnimObjLoad</name><payload>AnimObjectDishRag</payload>"
+               "</event>\n<event><frame>16</frame><name>SetPosBegin</name><payload></payload></event>\n"
+               "<event><frame>26</frame><name>AnimObjDraw</name><payload>AnimObjectDishRag</payload></event>\n"
+               "</events>\n<audios><audio><frame>26</frame><foley>X</foley></audio></audios>\n</root>")
+        out = P.strip_events(afx)
+        self.assertNotIn("AnimObj", out)
+        self.assertIn("SetPosBegin", out)
+        self.assertIn("<foley>X</foley>", out)
+        only = "<root>\n<events>\n<event><frame>0</frame><name>AnimObjLoad</name></event>\n</events>\n</root>"
+        self.assertNotIn("<events>", P.strip_events(only))
+        self.assertEqual(P.KEEP_PROPS, ("Sweep",))
 
     def test_parse_pair(self):
         """PowerShell splits an unquoted 0.027,-0.091 into two arguments: every form gives the same pair."""

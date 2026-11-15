@@ -136,6 +136,24 @@ def strip_variables(afx_text: str, names=DROP_VARIABLES) -> str:
     return re.sub(r"[ \t]*<variables>\s*</variables>[ \t]*\r?\n?", "", out)
 
 
+# Props: the template descriptors' AnimObj* events load and draw Starfield's prop (2026-11-15, owner, in game: the tanner
+# held a white cloth; standing_wipewall\enterfromstand.afx: AnimObjLoad / AnimObjDraw AnimObjectDishRag). Left out
+# of every set but these, whose Skyrim clip holds the same kind of thing (the broom).
+KEEP_PROPS = ("Sweep",)
+
+
+def strip_events(afx_text: str, prefixes=("AnimObj",)) -> str:
+    """An .afx descriptor without the <event> entries whose name starts with one of `prefixes` (any case)."""
+    import re
+    low = tuple(x.lower() for x in prefixes)
+
+    def keep(m):
+        nm = re.search(r"<name>\s*([^<]*?)\s*</name>", m.group(0))
+        return "" if nm and nm.group(1).lower().startswith(low) else m.group(0)
+    out = re.sub(r"[ \t]*<event>.*?</event>[ \t]*\r?\n?", keep, afx_text, flags=re.S)
+    return re.sub(r"[ \t]*<events>\s*</events>[ \t]*\r?\n?", "", out)
+
+
 def parse_pair(value):
     """'0.027,-0.091' or ['0.027', '-0.091'] or ['0.027,-0.091'] (PowerShell splits an unquoted pair) -> floats."""
     text = ",".join(value) if isinstance(value, (list, tuple)) else str(value)
@@ -153,7 +171,7 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
-def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None):
+def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None, shoulders=None):
     out = ["--calumi", a.calumi, "--skyrim-data", a.skyrim_data, "--starfield-data", os.path.join(a.starfield, "Data"),
            "--out", work, "--into", folder, "--no-root-motion"]
     out += ["--com-shift", f"{com[0]},{com[1]}"] if com is not None else ["--align-com"]
@@ -161,6 +179,8 @@ def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None):
         out += ["--hand-clearance", ",".join(str(x) for x in hands)]
     if profiles:
         out += ["--body-profiles", profiles]
+    if shoulders:
+        out += ["--shoulder-calibration", shoulders]
     for r in replace:
         out += ["--replace", r]
     return out
@@ -178,6 +198,8 @@ def main(argv=None):
                     help="with one --set: use this offset instead of COM_SHIFT / the Idle's --align-com result "
                          "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
     ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
+    ap.add_argument("--shoulder-calibration", metavar="JSON",
+                    help="af_pose.py --calibrate-shoulders' output (all sets): shoulders where Starfield's clips have them")
     ap.add_argument("--body-profiles", metavar="JSON",
                     help="body_profiles.py's output: hands keep their place relative to the body (all sets); replaces "
                          "HAND_CLEARANCE unless --hand-clearance is given")
@@ -208,25 +230,31 @@ def main(argv=None):
             com = row["com_shift_m"]
             print(f"{st}: offset {com[0]},{com[1]} (add to COM_SHIFT to keep it)")
         print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
-        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles))
+        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles,
+                                     a.shoulder_calibration))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))
         dst = os.path.join(a.out, *folder.split("\\"))
         os.makedirs(dst, exist_ok=True)
         files = sorted(f for f in os.listdir(src) if f.lower().endswith((".af", ".afx"))) if os.path.isdir(src) else []
-        stripped = 0
+        stripped = props = 0
         for f in files:
             if f.lower().endswith(".afx"):
                 with open(os.path.join(src, f), encoding="utf-8", errors="replace") as fh:
                     text = fh.read()
                 new = strip_variables(text)
                 stripped += new != text
+                if st not in KEEP_PROPS:
+                    plain = strip_events(new)
+                    props += plain != new
+                    new = plain
                 with open(os.path.join(dst, f), "w", encoding="utf-8", newline="") as fh:
                     fh.write(new)
             else:
                 shutil.copy2(os.path.join(src, f), os.path.join(dst, f))
-        print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors")
+        print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors"
+              + (f", Starfield's prop events of {props}" if props else ""))
         lifted = {r["name"]: r["hands_lifted"] for r in rows if r.get("hands_lifted")}
         contacts = {r["name"]: r["contacts"] for r in rows if r.get("contacts")}
         if a.body_profiles:

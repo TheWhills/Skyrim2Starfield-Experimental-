@@ -365,6 +365,80 @@ def keep_contacts(sk: "Rig", sf: "Rig", out_t, out_q, wt_sk, wq_sk, profiles: Di
     return lt, lq, report
 
 
+SHOULDER_BONES = {"chest": "C_Chest", "neck": "C_Neck", "L": "L_Clavicle", "R": "R_Clavicle",
+                  "L_arm": "L_Biceps", "R_arm": "R_Biceps"}
+
+
+def body_frames(chest, neck, l_clav, r_clav) -> np.ndarray:
+    """(F, 3, 3) per-frame body frames (columns: x to the actor's right, y forward, z up the spine) from joint
+    positions (F, 3): the frame clavicle directions are compared in, the same for both games' clips."""
+    z = np.asarray(neck, float) - np.asarray(chest, float)
+    z /= np.maximum(np.linalg.norm(z, axis=-1, keepdims=True), 1e-12)
+    x = np.asarray(r_clav, float) - np.asarray(l_clav, float)
+    x -= np.sum(x * z, axis=-1, keepdims=True) * z
+    x /= np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-12)
+    y = np.cross(z, x)
+    return np.stack([x, y, z], axis=-1)
+
+
+def clavicle_dirs(positions: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    """{side: (F, 3) unit clavicle direction (clavicle joint -> upper arm joint) in the body frame} from per-frame
+    joint positions keyed by SHOULDER_BONES' Starfield names."""
+    b = SHOULDER_BONES
+    fr = body_frames(positions[b["chest"]], positions[b["neck"]], positions[b["L"]], positions[b["R"]])
+    out = {}
+    for side in ("L", "R"):
+        d = np.asarray(positions[b[side + "_arm"]], float) - np.asarray(positions[b[side]], float)
+        d = np.einsum("fji,fj->fi", fr, d)                                 # world -> body: frame transposed
+        out[side] = d / np.maximum(np.linalg.norm(d, axis=-1, keepdims=True), 1e-12)
+    return out
+
+
+def shoulder_calibration(ours: Dict[str, np.ndarray], reference: Dict[str, np.ndarray]) -> Dict[str, list]:
+    """{side: quaternion (x, y, z, w) in the body frame} turning our clips' mean clavicle direction onto a Starfield
+    reference clip's, both from clavicle_dirs over a clip doing the same thing (a neutral or seated idle)."""
+    out = {}
+    for side in ("L", "R"):
+        a = np.mean(ours[side], axis=0)
+        b = np.mean(reference[side], axis=0)
+        out[side] = [round(float(v), 6) for v in _from_to(a[None], b[None])[0]]
+    return out
+
+
+def apply_shoulder_offsets(rig: "Rig", lt, lq, offsets: Dict[str, list]):
+    """Locals with each clavicle turned by offsets[side] (body-frame quaternion, shoulder_calibration), its children
+    keeping their world rotations, so the shoulder joint moves and the arm still points where it did.
+
+    Why (2026-11-15, owner: "all animations seem to cause the shoulders to go down"; af_pose shoulders): ours sat
+    0.137-0.151 m below the neck with the clavicle 10-14 deg below level, Starfield's chair Idle 0.074-0.079 m and 7-9
+    deg above, its bar lean 0.014-0.027 m. rest_alignment points Starfield's clavicle where Skyrim's points, but the two
+    skeletons put the clavicle joint differently (37 deg apart at rest), so the same direction is not the same
+    shoulder. Returns (lt, lq, report)."""
+    b = SHOULDER_BONES
+    names = [b[k] for k in ("chest", "neck", "L", "R")]
+    if not offsets or any(n not in rig.index for n in names):
+        return lt, lq, None
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float).copy()
+    wt, wq = rig.fk(lt, lq)
+    fr = body_frames(*(wt[:, rig.index[n]] for n in names))
+    qb = np.array([mat_to_quat(m) for m in fr])
+    report = {}
+    for side, off in offsets.items():
+        c = rig.index.get(b.get(side, ""))
+        if c is None:
+            continue
+        o = np.asarray(off, float) / np.linalg.norm(off)
+        o_world = qmul(qmul(qb, np.broadcast_to(o, qb.shape)), qinv(qb))
+        new_w = qmul(o_world, wq[:, c])
+        par = rig.parents[c]
+        lq[:, c] = qmul(qinv(wq[:, par]), new_w) if par >= 0 else new_w
+        for k, p in enumerate(rig.parents):
+            if p == c:
+                lq[:, k] = qmul(qinv(new_w), wq[:, k])
+        report[side] = round(float(np.degrees(2 * np.arccos(min(1.0, abs(o[3]))))), 1)
+    return lt, lq, report
+
+
 def rehome(src: "Rig", lt, lq, names: List[str], parents: List[int], rest_t, rest_q):
     """Re-express a clip given as local (t, q) on `src` in another hierarchy (`names`, `parents`, rest locals), e.g.
     the game's skeleton.rig, whose bone order and parenting differ from the skeleton NIF's (Root at the top, twist bones
@@ -494,7 +568,8 @@ def skyrim_locals(clip: dict, sk: Rig):
 
 
 def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False,
-             left_weapon: bool = False, two_hand_grip: bool = False, body_profiles: Optional[Dict] = None) -> Dict:
+             left_weapon: bool = False, two_hand_grip: bool = False, body_profiles: Optional[Dict] = None,
+             shoulder_offsets: Optional[Dict] = None) -> Dict:
     """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf.
 
     The weapon always sits in the fist at the vanilla grip (skeletonmap.GRIP). weapon_in_hand: also turn the gripping
@@ -507,7 +582,9 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
     two_hand_grip (greatswords, battleaxes, warhammers): the left wrist is put back where Skyrim has it relative to
     the weapon on every frame (two-bone IK on the left arm), so the support hand stays on the handle; Starfield's arm
     proportions otherwise let it slide 3-6 cm (measured 2026-10-20 on Nordic Combat Animations' greatsword set).
-    body_profiles (body_profiles.json): hands near the body keep their place relative to its surface (keep_contacts)."""
+    body_profiles (body_profiles.json): hands near the body keep their place relative to its surface (keep_contacts).
+    shoulder_offsets ({side: body-frame quaternion}, shoulder_calibration): clavicles turned so the shoulders sit as
+    Starfield's own clips have them (apply_shoulder_offsets); before the contacts, which then see the moved arms."""
     lt, lq = skyrim_locals(clip, sk)
     wt_sk, wq_sk = sk.fk(lt, lq)
     rt_sk, rq_sk = sk.rest_world()
@@ -662,6 +739,10 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
             out_t[:, i, :] = qrot(qinv(pw_q), target_t - pw_t)
         wq[:, i, :] = qmul(pw_q, out_q[:, i, :])
         wt[:, i, :] = pw_t + qrot(pw_q, out_t[:, i, :])
+    shoulder_report = None
+    if shoulder_offsets:
+        out_t, out_q, shoulder_report = apply_shoulder_offsets(sf, out_t, out_q, shoulder_offsets)
+        wt = sf.fk(out_t, out_q)[0]
     grip_report = None
     if two_hand_grip:
         out_t, out_q, wt, grip_report = _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes)
@@ -672,7 +753,8 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
                                                      sides)
         wt = sf.fk(out_t, out_q)[0]
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
-            "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report, "contacts": contact_report}
+            "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report, "contacts": contact_report,
+            "shoulders": shoulder_report}
 
 
 def _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes):

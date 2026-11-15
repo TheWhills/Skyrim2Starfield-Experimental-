@@ -277,3 +277,18 @@ match within 10 % except the upper arm (Starfield 0.83x) and the pelvis (0.86x).
 up to 0.156 m), WallLean 3 (forearms, belly, chest, hips; 0.139 m), Sweep 3 (0.12 m), RailLean 2 (0.092 m), the rest
 under 0.04 m. Sit Idle by af_pose: hands 0.135 / 0.148 m above the hip-knee line, Starfield's chair Idle 0.129 / 0.136,
 with no tuned value (lift_hands' 0.13 was set from that same chair). Unverified in game.
+
+Shoulders and props (2026-11-15). Owner, in game: the tanner works 0.65 m from the rack holding a white cloth; seated
+NPCs briefly hold the hands oddly; the wall lean's hands clip; "all animations seem to cause the shoulders to go
+down". af_pose shoulders (owner's run): our sitting Idle 0.137 / 0.140 m below the neck, clavicle 10-11 deg below
+level; Starfield's chair Idle 0.074 / 0.079 m, 7-9 deg above; our wall lean 0.151 m, 14 deg below; Starfield's bar
+lean 0.014-0.027 m, 20-26 deg above. One systematic error: rest_alignment points Starfield's clavicle where Skyrim's
+points, but the skeletons put the clavicle joint differently (37 deg apart at rest). Fix: a calibration from a pair of
+clips doing the same thing (ours as converted without it, Starfield's), af_pose --calibrate-shoulders -> a body-frame
+turn per clavicle (retarget.shoulder_calibration), applied in the retarget before the two-hand grip and the contacts
+(apply_shoulder_offsets: the clavicle turns, its children keep their world rotations, so the shoulder joint moves and
+the arm points as before); hkx_to_af / furniture_anim_pack --shoulder-calibration. First pair: Skyrim's seated idle
+against Starfield's chair Idle; a neutral standing pair to check it against later. Calibrate from clips converted
+WITHOUT the calibration (else it measures its own result). Tanning: COM_SHIFT (0, 0); the template's AnimObj* events
+(AnimObjLoad / AnimObjDraw AnimObjectDishRag in standing_wipewall\enterfromstand.afx) are left out of every set but
+Sweep (KEEP_PROPS). Unverified in game.

@@ -145,7 +145,13 @@ def main(argv=None):
     ap.add_argument("--af", action="append", required=True, help=".af on disk, or an archive path")
     ap.add_argument("--frame", type=float, default=0.5, help="frame, or a fraction of the clip (< 1): default middle")
     ap.add_argument("--work", default=os.path.join(os.environ.get("TEMP", "/tmp"), "af_pose"))
+    ap.add_argument("--calibrate-shoulders", metavar="JSON",
+                    help="with two --af (ours, then a Starfield clip doing the same thing): write the clavicle turn "
+                         "that puts our shoulders where Starfield's are (retarget.shoulder_calibration), averaged over "
+                         "the clips' frames; hkx_to_af / furniture_anim_pack --shoulder-calibration apply it")
     a = ap.parse_args(argv)
+    if a.calibrate_shoulders and len(a.af) != 2:
+        sys.exit("--calibrate-shoulders takes exactly two --af: ours, then the Starfield reference")
     import hkx_to_af
     from fo4sf import af_writer
     os.makedirs(a.work, exist_ok=True)
@@ -158,6 +164,7 @@ def main(argv=None):
         with open(rig_path, "wb") as fh:
             fh.write(data)
     rig = af_writer.load_rig(a.calumi, rig_path)
+    dirs = []
     for src in a.af:
         path = src
         if not os.path.isfile(src):
@@ -166,10 +173,30 @@ def main(argv=None):
             with open(path, "wb") as fh:
                 fh.write(data)
         rb = af_writer.read_back(a.calumi, path, rig_path)
+        if a.calibrate_shoulders:
+            from fo4sf import retarget
+            n = rb["frames"]
+            frames = sorted({round(k * (n - 1) / 39) for k in range(40)}) if n > 1 else [0]
+            poses = [world_pose(rig, rb, fr) for fr in frames]
+            names = list(retarget.SHOULDER_BONES.values())
+            missing = [m for m in names if m not in poses[0]]
+            if missing:
+                sys.exit(f"{src}: no {missing} in the pose")
+            dirs.append(retarget.clavicle_dirs({m: np.array([p[m] for p in poses]) for m in names}))
         f = a.frame * max(rb["frames"] - 1, 0) if a.frame < 1 else a.frame
         pose = world_pose(rig, rb, f)
         print(report(f"{src} (frame {f:.0f} of {rb['frames']}, {len(rb['bones'])} bones keyed)", pose,
                      set(rb["bones"])))
+    if a.calibrate_shoulders:
+        import json
+        from fo4sf import retarget
+        cal = retarget.shoulder_calibration(dirs[0], dirs[1])
+        for side, q in cal.items():
+            ang = float(np.degrees(2 * np.arccos(min(1.0, abs(q[3])))))
+            print(f"shoulder calibration {side}: turn {ang:.1f} deg {q}")
+        with open(a.calibrate_shoulders, "w", encoding="utf-8") as fh:
+            json.dump({**cal, "ours": a.af[0], "reference": a.af[1]}, fh, indent=1)
+        print("->", a.calibrate_shoulders)
     return 0
 
 

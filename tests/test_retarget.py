@@ -347,6 +347,41 @@ class RetargetTests(unittest.TestCase):
         _t, _q, half = R.keep_contacts(sk, sf, lt, lq, wt_sk, wq_sk, profiles, unit=unit, scale=0.5, sides=("L",))
         self.assertAlmostEqual(half["L"]["max_move_m"], 0.04, places=3)        # the gap scales: 0.08 + 0.01
 
+    def test_shoulder_calibration_round_trip(self):
+        """Our clavicles slope 15 deg down, the reference's 8 deg up: the calibration's offset, applied, makes our
+        clavicle directions the reference's (in a turned body too), and the upper arm keeps its world rotation, so
+        only the shoulder joint moves."""
+        def rig_for(slope_deg, turn_deg=0.0):
+            names = ["Root", "C_Chest", "C_Neck", "L_Clavicle", "L_Biceps", "L_Forearm", "R_Clavicle", "R_Biceps"]
+            parents = [-1, 0, 1, 1, 3, 4, 1, 6]
+            a = np.radians(slope_deg)
+            arm_l = (-0.15 * np.cos(a), 0.0, -0.15 * np.sin(a))
+            arm_r = (0.15 * np.cos(a), 0.0, -0.15 * np.sin(a))
+            h = np.radians(turn_deg) / 2
+            root_q = (0.0, 0.0, np.sin(h), np.cos(h))
+            return R.Rig(names, parents, [(0, 0, 0), (0, 0, 1.2), (0, 0, 0.25), (-0.02, 0, 0.2), arm_l, (0, 0, -0.27),
+                                          (0.02, 0, 0.2), arm_r], [root_q] + [I] * 7)
+        def dirs(rig):
+            wt, _wq = rig.fk(rig.t[None], rig.q[None])
+            return R.clavicle_dirs({n: wt[:, rig.index[n]] for n in R.SHOULDER_BONES.values()})
+        ours, ref = rig_for(15), rig_for(-8)
+        cal = R.shoulder_calibration(dirs(ours), dirs(ref))
+        self.assertEqual(sorted(cal), ["L", "R"])
+        turned = rig_for(15, turn_deg=70)                                       # the actor faces another way
+        lt, lq = turned.t[None].copy(), turned.q[None].copy()
+        wt0, wq0 = turned.fk(lt, lq)
+        lt2, lq2, rep = R.apply_shoulder_offsets(turned, lt, lq, cal)
+        wt2, wq2 = turned.fk(lt2, lq2)
+        got = R.clavicle_dirs({n: wt2[:, turned.index[n]] for n in R.SHOULDER_BONES.values()})
+        want = dirs(ref)
+        for side in ("L", "R"):
+            np.testing.assert_allclose(got[side], want[side], atol=1e-6)
+        self.assertEqual(rep, {"L": 23.0, "R": 23.0})
+        b = turned.index["L_Biceps"]
+        self.assertAlmostEqual(abs(float(np.dot(wq2[0, b], wq0[0, b]))), 1.0, places=9)   # the arm's direction kept
+        self.assertGreater(wt2[0, b, 2], wt0[0, b, 2] + 0.05)                         # the shoulder joint went up
+        self.assertEqual(R.apply_shoulder_offsets(turned, lt, lq, {})[2], None)
+
     def test_two_hand_grip_puts_the_support_hand_back_on_the_weapon(self):
         sk_names = ["NPC Root [Root]", "NPC R Hand [RHnd]", "Weapon", "NPC L UpperArm [LUar]",
                     "NPC L Forearm [LLar]", "NPC L Hand [LHnd]"]

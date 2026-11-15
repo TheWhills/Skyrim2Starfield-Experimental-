@@ -291,6 +291,9 @@ def main(argv=None):
     ap.add_argument("--body-profiles", metavar="JSON",
                     help="body_profiles.py's body_profiles.json: hands near the body keep their place relative to its "
                          "surface on Starfield's differently proportioned body (retarget.keep_contacts)")
+    ap.add_argument("--shoulder-calibration", metavar="JSON",
+                    help="af_pose.py --calibrate-shoulders' output: clavicles turned so the shoulders sit as in "
+                         "Starfield's clips (retarget.apply_shoulder_offsets)")
     ap.add_argument("--hand-clearance", metavar="UP[,OUT]",
                     help="seated clips: lift a hand resting on its thigh to at least UP metres above the hip-knee line "
                          "(and OUT to the outside of it) by arm IK; Starfield's thighs are thicker than Skyrim's "
@@ -299,6 +302,10 @@ def main(argv=None):
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
     a = ap.parse_args(argv)
+    shoulders = None
+    if a.shoulder_calibration:
+        with open(a.shoulder_calibration, encoding="utf-8") as fh:
+            shoulders = {k: v for k, v in json.load(fh).items() if k in ("L", "R")}
     profiles = None
     if a.body_profiles:
         with open(a.body_profiles, encoding="utf-8") as fh:
@@ -456,11 +463,14 @@ def main(argv=None):
             motion = None if a.no_root_motion else rootmotion.from_annotations(clip["annotations"], clip["frames"], FPS)
             events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
             res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand, left_weapon=a.left_weapon,
-                                    two_hand_grip=a.two_hand_grip, body_profiles=profiles)
+                                    two_hand_grip=a.two_hand_grip, body_profiles=profiles,
+                                    shoulder_offsets=shoulders)
             if res.get("two_hand_grip"):
                 row["two_hand_grip"] = res["two_hand_grip"]
             if res.get("contacts"):
                 row["contacts"] = res["contacts"]
+            if res.get("shoulders"):
+                row["shoulders_turned_deg"] = res["shoulders"]
             if not a.no_foot_plant:
                 res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)
