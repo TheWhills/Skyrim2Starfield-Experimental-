@@ -203,11 +203,14 @@ EXTRA_TEMPLATES = {"Sit": (SF_ANIM + "furniture\\bench",)}
 
 
 def leftover_folders(anim_set: str) -> list:
-    """The Starfield folders vanilla_leftovers scans for a set: its template and EXTRA_TEMPLATES, each with its female
-    subfolder after it, then furniture\\common."""
+    """The Starfield folders vanilla_leftovers scans for a set: its template and EXTRA_TEMPLATES, each with its
+    animflavor and female subfolders, then furniture\\common."""
     out = []
     for f in (SETS[anim_set][1],) + EXTRA_TEMPLATES.get(anim_set, ()):
-        out += [f, f + "\\female"]
+        # animflavor first (2026-11-15, owner's furniture_graph_probe: HumanRace's chair / bench entries read
+        # chair\animflavor (32 tags) and chair\female\animflavor before chair; the graph renames tags with a
+        # "Relaxed" prefix and PoseA / B / C suffixes, played from there: Starfield's armrest pose on our seat)
+        out += [f + "\\animflavor", f + "\\female\\animflavor", f, f + "\\female"]
     return out + [COMMON_FOLDER]
 
 
@@ -255,6 +258,29 @@ def vanilla_leftovers(names, read, folders, have_tags, keep_props=False) -> dict
 # such tag that is not an enter / exit / look / camera / flinch state (those keep Starfield's motion, cleaned above)
 # gets the set's Idle, as the talk slots do.
 NOT_IDLE = ("enter", "exit", "look", "camera", "flinch")
+
+
+# The furniture graph renames tags (owner's furniture_graph_probe, 2026-11-15: FurnitureHeadTracking_Wrapping's
+# switches add the prefix "Relaxed" and the suffixes PoseA / PoseB / PoseC): a renamed tag whose base ours answers
+# plays our clip for the base (an enter stays an enter).
+TAG_PREFIXES = ("Relaxed",)
+TAG_SUFFIXES = ("PoseA", "PoseB", "PoseC")
+
+
+def base_tag(tag: str, have_lower) -> str:
+    """The tag ours answer that `tag` renames (a TAG_PREFIXES prefix and / or a TAG_SUFFIXES suffix, with or without
+    an underscore), or None."""
+    cands = {tag}
+    for p in TAG_PREFIXES:
+        for c in list(cands):
+            if c.lower().startswith(p.lower()):
+                cands.add(c[len(p):].lstrip("_"))
+    for x in TAG_SUFFIXES:
+        for c in list(cands):
+            if c.lower().endswith(x.lower()):
+                cands.add(c[:-len(x)].rstrip("_"))
+    hits = [c for c in cands if c != tag and c.lower() in have_lower]
+    return min(hits, key=len) if hits else None
 
 
 def unanswered_tags(names, read, folders, have_tags) -> list:
@@ -402,6 +428,28 @@ def main(argv=None):
                                 for x in os.listdir(dst) if x.lower().endswith(".afx")) if t}
             if idle_af and idle_afx:
                 gaps = unanswered_tags(sf_arcs.names, sf_arcs.read, leftover_folders(st), have)
+                ours = {}
+                for x in os.listdir(dst):
+                    if x.lower().endswith(".afx"):
+                        with open(os.path.join(dst, x), encoding="utf-8", errors="replace") as fh:
+                            text = fh.read()
+                        if _tag(text):
+                            ours.setdefault(_tag(text).lower(), text)
+                renamed = []
+                for t, _idle_like in gaps:
+                    b = base_tag(t, ours)
+                    clip = _clip_name(ours[b.lower()]) if b else None
+                    if not clip or not os.path.isfile(os.path.join(dst, clip)):
+                        continue
+                    for name, text in talk_copies(ours[b.lower()], [t]).items():
+                        with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:
+                            fh.write(text)
+                        shutil.copy2(os.path.join(dst, clip), os.path.join(dst, name[:-1]))
+                    renamed.append(f"{t}={b}")
+                have |= {r.split("=")[0] for r in renamed}
+                gaps = [(t, i) for t, i in gaps if t not in have]
+                if renamed:
+                    print(f"{st}: renamed states answered with our clip of the base: {', '.join(renamed)}")
                 filled = [t for t, idle_like in gaps if idle_like]
                 for name, text in talk_copies(base, filled).items():
                     with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:

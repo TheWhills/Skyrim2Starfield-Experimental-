@@ -372,3 +372,14 @@ correctly", Hod and another NPC against their posts, verified). The seated arms-
 Hilde). scripts/armor/furniture_graph_probe.py: every tag the chair / bench graphs (and the graphs they link) play,
 resolved through each HumanRace esm entry's and table row's folder chain against our folder, hand-IK descriptors
 marked, to find what still plays Starfield's own clip.
+Owner's furniture_graph_probe (2026-11-15): HumanRace's own chair / bench entries read chair\animflavor (32 tags),
+chair\female\animflavor (27), bench\animflavor (18), bench\female\animflavor (23) BEFORE chair / bench; the wrapping
+graph renames tags (prefix "Relaxed", suffixes PoseA / PoseB / PoseC) and plays GripOffset_LeftArm / _RightArm (no
+folder answers those: nothing plays). So the seated arms-back moment: renamed states from animflavor (Starfield's
+armrest pose), supported. The pack now scans the animflavor folders and answers a renamed tag whose base ours answer
+with our clip of the base (base_tag: RelaxedEnterFromStand -> our EnterFromStand), other idle-like ones with the Idle.
+Beds (owner, in game: NPCs sleep sideways): Skyrim's bed markers and the cot template's read alike (rotation 0, entry
+left / right; Skyrim's double bed sleepers side by side along x, so the beds run along y), so Starfield's sleep
+animation lies along the marker's x: make_furniture.DEFAULT_TURN bed -90 (the head pointed at the wall with the pillow
+to the left: a quarter turn counter-clockwise from above; Bethesda's z is clockwise). --turn bed=90 / riverwood_doors
+-FurnTurn "bed=90" if the head ends at the foot. Unverified in game.

@@ -292,6 +292,26 @@ def actor_targets(work):
 DEFAULT_SHIFT = {"bartender": [0.0, 0.30, 0.0], "lean_counter": [0.0, 0.30, 0.0]}
 
 
+# Beds (2026-11-15, owner, in game: NPCs sleep sideways across Skyrim's beds). Skyrim's bed markers and the template
+# cot's (FoundCanvasCot01) read the same: rotation 0, entered from the left / right (owner's furniture survey), and
+# Skyrim's double bed puts its two sleepers side by side along x, so its beds run along the marker's y; Starfield's
+# sleep animation lies across that on our markers, i.e. along the marker's x. A quarter turn: in the owner's screenshot
+# the head pointed at the wall with the pillow to the left, a quarter turn counter-clockwise seen from above, -90 in
+# Bethesda's clockwise z (supported; if the head ends at the foot, --turn bed=90).
+DEFAULT_TURN = {"bed": -90.0}
+
+
+def parse_turn(items):
+    """["bed=90", ...] -> {kind: degrees} on top of DEFAULT_TURN (a kind given replaces its default; "bed=0" off)."""
+    out = dict(DEFAULT_TURN)
+    for it in items or []:
+        k, _, v = it.partition("=")
+        if k not in TEMPLATES:
+            raise ValueError(f"--turn {it!r}: want <kind>=degrees with kind one of {sorted(TEMPLATES)}")
+        out[k] = float(v)
+    return out
+
+
 def parse_shift(items):
     """["bartender=0,0.2,0", ...] -> {kind: [dx, dy, dz]} (metres, in the furniture's own frame: +y = its facing),
     on top of DEFAULT_SHIFT (a kind given here replaces its default; "bartender=0,0,0" turns it off)."""
@@ -308,7 +328,7 @@ def parse_shift(items):
 EXTERIOR = "exterior"     # the "cell" of an outdoor reference (exterior_furniture.json; PluginSpike puts it outside)
 
 
-def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True, ext_refs=()):
+def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True, ext_refs=(), turn=None):
     cell_ids = {}
     for c in cells:
         f = ix.find_edid(b"CELL", c)
@@ -375,6 +395,10 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
             bases[key]["skyrim_markers"] = skyrim_markers(rec, kind, marker_z)
         if (shift or {}).get(kind):
             bases[key]["shift_m"] = shift[kind]
+        if (turn or {}).get(kind):
+            for m in bases[key]["markers"]:
+                m["rot_deg"] = round((m["rot_deg"] + turn[kind] + 180.0) % 360.0 - 180.0, 1) + 0.0
+            bases[key]["turn_deg"] = turn[kind]
     refs = [r for r in refs if r["base"] in bases]
     return {"bases": bases, "refs": refs, "skipped": skipped, "marker_z": marker_z}
 
@@ -389,6 +413,9 @@ def main(argv=None):
     ap.add_argument("--shift", action="append", default=[], metavar="KIND=DX,DY,DZ",
                     help="move every marker of a kind, metres in the furniture's frame (+y forward), e.g. "
                          "bartender=0,0.2,0 (furniture_standoff.py measures how far)")
+    ap.add_argument("--turn", action="append", default=[], metavar="KIND=DEG",
+                    help="turn every marker of a kind (degrees, Bethesda's clockwise z) on top of DEFAULT_TURN "
+                         "(bed -90: Starfield's sleep animation lies across Skyrim's beds); bed=0 turns it off")
     ap.add_argument("--no-crafting", action="store_true",
                     help="leave crafting stations (cooking pots, alchemy, enchanting, smithing) as statics")
     ap.add_argument("--anim-plugin", help="S2SStances.esm (stance_plugin.py): chairs / benches get its Skyrim-animation "
@@ -398,6 +425,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     try:
         shift = parse_shift(a.shift)
+        turn = parse_turn(a.turn)
     except ValueError as e:
         ap.error(str(e))
     cells = survey.batch_cells(a.work, [])
@@ -412,7 +440,7 @@ def main(argv=None):
         if os.path.exists(ext_path) and not a.no_exterior:
             with open(ext_path, encoding="utf-8") as fh:
                 ext_refs = json.load(fh)["refs"]
-        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs)
+        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs, turn)
     finally:
         ix.close()
     if a.anim_plugin:

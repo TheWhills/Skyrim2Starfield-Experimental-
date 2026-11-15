@@ -148,11 +148,21 @@ class PackTests(unittest.TestCase):
         self.assertEqual(sorted(got), [("Camera", False), ("IdleBreathe", True), ("Idle_Flavor05", True),
                                        ("LookDirections", False), ("RearEnterFromStand", False)])
 
+    def test_base_tag(self):
+        have = {"idle", "enterfromstand", "idle_flavor01"}
+        self.assertEqual(P.base_tag("RelaxedIdle", have), "Idle")
+        self.assertEqual(P.base_tag("Relaxed_EnterFromStand", have), "EnterFromStand")
+        self.assertEqual(P.base_tag("Idle_PoseB", have), "Idle")
+        self.assertEqual(P.base_tag("RelaxedIdle_Flavor01PoseC", have), "Idle_Flavor01")
+        self.assertIsNone(P.base_tag("Idle", have))                       # not renamed
+        self.assertIsNone(P.base_tag("RelaxedCamera", have))
+
     def test_leftover_folders(self):
         f = P.leftover_folders("Sit")
         self.assertEqual([x.split("furniture\\")[-1] for x in f],
-                         ["chair", "chair\\female", "bench", "bench\\female", "common"])
-        self.assertEqual(len(P.leftover_folders("RailLean")), 3)
+                         ["chair\\animflavor", "chair\\female\\animflavor", "chair", "chair\\female",
+                          "bench\\animflavor", "bench\\female\\animflavor", "bench", "bench\\female", "common"])
+        self.assertEqual(len(P.leftover_folders("RailLean")), 5)
 
     def test_copy_only_reuses_the_conversion(self):
         """--copy-only: no hkx_to_af call; the earlier conversion's files are copied again, cleaned, with talk slots."""

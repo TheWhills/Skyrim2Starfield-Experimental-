@@ -27,6 +27,7 @@ param(
     [switch]$Furniture,        # chairs / benches / beds / lean counters / idle markers as Starfield furniture NPCs use
     [ValidateSet("floor", "skyrim")][string]$MarkerZ = "floor",   # furniture marker height (docs/npc/furniture.md)
     [string[]]$FurnShift = @(),   # move a furniture kind's markers, e.g. -FurnShift "bartender=0,0.2,0"
+    [string[]]$FurnTurn = @(),    # turn a furniture kind's markers (degrees), e.g. -FurnTurn "bed=90" (default bed -90)
     [switch]$NoCrafting,       # with -Furniture: leave crafting stations (cooking pots, alchemy, smithing) as statics
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
@@ -99,6 +100,7 @@ if ($Furniture) {
     $fa = @("--skyrim", "$SKY\Skyrim.esm", "--skyrim-data", $SKY, "--work", $Work, "--marker-z", $MarkerZ)
     # several kinds: separate with ";" ("bartender=0,0.2,0;lean_counter=0,0.1,0")
     foreach ($sh in ($FurnShift -join ";").Split(";")) { if ($sh.Trim()) { $fa += @("--shift", $sh.Trim()) } }
+    foreach ($tu in ($FurnTurn -join ";").Split(";")) { if ($tu.Trim()) { $fa += @("--turn", $tu.Trim()) } }
     if ($NoCrafting) { $fa += @("--no-crafting") }
     if ($AnimPlugin -and (Test-Path $AnimPlugin)) { $fa += @("--anim-plugin", $AnimPlugin) }
     python -I scripts\interior\make_furniture.py @fa

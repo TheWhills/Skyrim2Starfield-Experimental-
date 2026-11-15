@@ -102,12 +102,19 @@ class MakeFurnitureTests(unittest.TestCase):
 
             with contextlib.redirect_stdout(io.StringIO()):
                 M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work, "--marker-z", "skyrim",
-                        "--shift", "bartender=0,0.25,0"])
+                        "--shift", "bartender=0,0.25,0", "--turn", "chair=90"])
             with open(os.path.join(work, "furniture.json")) as fh:
                 r2 = json.load(fh)
             self.assertEqual(r2["bases"]["000020:Skyrim.esm"]["markers"][0]["offset_m"][2], 0.0)
             self.assertEqual(r2["bases"]["000021:Skyrim.esm"]["shift_m"], [0.0, 0.25, 0.0])
             self.assertNotIn("shift_m", r2["bases"]["000020:Skyrim.esm"])
+            self.assertEqual(r2["bases"]["000020:Skyrim.esm"]["markers"][0]["rot_deg"], -90.0)   # 180 + 90
+            self.assertEqual(r2["bases"]["000020:Skyrim.esm"]["turn_deg"], 90.0)
+            self.assertNotIn("turn_deg", b["000020:Skyrim.esm"])                               # no default for chairs
+            self.assertEqual(M.parse_turn([]), {"bed": -90.0})                                # beds: a quarter turn
+            self.assertEqual(M.parse_turn(["bed=0"])["bed"], 0.0)
+            with self.assertRaises(ValueError):
+                M.parse_turn(["nosuchkind=90"])
             self.assertEqual(M.parse_shift(["bartender=0,0,0"])["bartender"], [0.0, 0.0, 0.0])
             with self.assertRaises(ValueError):
                 M.parse_shift(["nosuchkind=0,0,0"])
