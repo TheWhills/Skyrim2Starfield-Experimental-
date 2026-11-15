@@ -190,6 +190,53 @@ def strip_events(afx_text: str, prefixes=("AnimObj",)) -> str:
     return re.sub(r"[ \t]*<events>\s*</events>[ \t]*\r?\n?", "", out)
 
 
+# Starfield's own states we do not convert (chair: Rear* enters / exits, EnterInstant, LookDirections ...; the
+# templates' and furniture\common's descriptors) still play with bEnableHandIK and their prop events. 2026-11-15
+# (owner, male player): the hands go into the body for a moment as he sits; af_pose --gaps on every one of our sit
+# enters and the Idle: never inside (closest +0.035 m; Starfield's chair EnterFromStand -0.001 m), so the game adds it.
+# Each such descriptor is copied into our folder (found first) with those left out, its clip with it: Starfield's
+# motion, without the pull to IK targets our models do not have. Descriptors with nothing to leave out are not copied.
+COMMON_FOLDER = SF_ANIM + "furniture\\common"
+
+
+def _tag(afx_text: str):
+    import re
+    m = re.search(r"<tag>\s*([^<]*?)\s*</tag>", afx_text)
+    return m.group(1) if m else None
+
+
+def _clip_name(afx_text: str):
+    import re
+    m = re.search(r"<filename>\s*([^<]*?)\s*</filename>", afx_text)
+    return m.group(1) if m else None
+
+
+def vanilla_leftovers(names, read, folders, have_tags, keep_props=False) -> dict:
+    """{file name: (descriptor text, clip bytes or None)} for the descriptors directly in `folders` (archive folders,
+    first wins per tag) whose tag is not in `have_tags` (lower case) and that change when bEnableHandIK / prop events
+    are left out. names: normalised archive names; read(name) -> bytes."""
+    out, seen = {}, {t.lower() for t in have_tags}
+    for folder in folders:
+        f = folder.replace("/", "\\").lower().rstrip("\\") + "\\"
+        for n in sorted(x for x in names if x.startswith(f) and x.endswith(".afx") and "\\" not in x[len(f):]):
+            raw = read(n)
+            if raw is None:
+                continue
+            text = raw.decode("utf-8", "replace")
+            tag = _tag(text)
+            if not tag or tag.lower() in seen:
+                continue
+            seen.add(tag.lower())
+            new = strip_variables(text)
+            if not keep_props:
+                new = strip_events(new)
+            if new == text:
+                continue
+            clip = _clip_name(text)
+            out[n[len(f):]] = (new, (clip, read(f + clip.lower())) if clip else None)
+    return out
+
+
 def parse_pair(value):
     """'0.027,-0.091' or ['0.027', '-0.091'] or ['0.027,-0.091'] (PowerShell splits an unquoted pair) -> floats."""
     text = ",".join(value) if isinstance(value, (list, tuple)) else str(value)
@@ -250,6 +297,10 @@ def main(argv=None):
         sys.exit("--com-shift is one set's offset: give it with exactly one --set")
     import hkx_to_af
     report = {}
+    sf_arcs = None                       # Starfield's archives, for its own states we do not convert (vanilla_leftovers)
+    if os.path.isdir(os.path.join(a.starfield, "Data")):
+        import furniture_anim_survey
+        sf_arcs = furniture_anim_survey.SfArchives(os.path.join(a.starfield, "Data"))
     for st in a.set or list(SETS):
         folder = SETS[st][0]
         work = os.path.join(a.work, st)
@@ -309,6 +360,21 @@ def main(argv=None):
                     fh.write(text)
                 shutil.copy2(os.path.join(dst, idle_af), os.path.join(dst, name[:-1]))
                 talk += 1
+        left = {}
+        if sf_arcs is not None:
+            have = {t for t in (_tag(open(os.path.join(dst, x), encoding="utf-8", errors="replace").read())
+                                for x in os.listdir(dst) if x.lower().endswith(".afx")) if t}
+            left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, [SETS[st][1], COMMON_FOLDER], have,
+                                     st in KEEP_PROPS)
+            for name, (text, clip) in left.items():
+                with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:
+                    fh.write(text)
+                if clip and clip[1] is not None:
+                    with open(os.path.join(dst, clip[0]), "wb") as fh:
+                        fh.write(clip[1])
+            if left:
+                print(f"{st}: Starfield's own {', '.join(sorted(_tag(t) for t, _c in left.values()))} "
+                      f"copied with {', '.join(DROP_VARIABLES)} / prop events left out")
         print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors"
               + (f", Starfield's prop events of {props}" if props else "")
               + (f"; Idle copied into {talk} talk / upper-body slots" if talk else ""))
@@ -323,7 +389,8 @@ def main(argv=None):
             top = max((v["max_lift_m"] for d in lifted.values() for v in d.values()), default=0.0)
             print(f"{st}: hands kept {hands[0]} m above the thighs, {len(lifted)} clips, lifted up to {top} m")
         report[st] = {"folder": folder, "com_shift_m": com, "hand_clearance": hands, "hands_lifted": lifted, "contacts": contacts, "clips": len(rows), "hand_ik_stripped": stripped,
-                      "failed": [r.get("clip") for r in rows if "error" in r], "files": files}
+                      "failed": [r.get("clip") for r in rows if "error" in r], "files": files,
+                      "starfield_states_cleaned": sorted(left)}
         print(f"{st}: {len(files)} files -> {dst}" + (f"; failed: {report[st]['failed']}" if report[st]["failed"] else ""))
     with open(os.path.join(a.work, "furniture_anim_pack.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1)

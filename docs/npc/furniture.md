@@ -334,3 +334,9 @@ Male player, hands into the body for a moment as he sits (owner, 2026-11-15): no
 have none). af_pose --gaps body_profiles.json checks each clip over all its frames: each hand's (wrist and palm)
 smallest distance to the body's surface (Starfield's body profiles, posed by their joints; mean radius around the
 axis) and the frames where it is inside; our sit enters against Starfield's chair EnterFromStand.
+Owner's af_pose --gaps (2026-11-15): our sit enters (front / left / right) and Idle never put a hand inside the body
+(closest +0.035 m); Starfield's chair EnterFromStand -0.001 m. Owner: the moment at the start of sitting looks like
+the first conversion (arms back and twisted: the hand-IK pull). So a Starfield descriptor with bEnableHandIK still plays
+there: the states we do not convert (Rear*, EnterInstant, LookDirections ...). The pack's copy step now copies every
+such descriptor of the set's template folder and furniture\common into our folder with hand IK / prop events left out
+(vanilla_leftovers; Starfield's clip with it; ones with nothing to leave out are not copied). Unverified in game.

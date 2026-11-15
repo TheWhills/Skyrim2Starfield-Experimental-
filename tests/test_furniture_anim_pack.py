@@ -113,6 +113,29 @@ class PackTests(unittest.TestCase):
         self.assertIn("bUseStandToExit", t)
         self.assertNotIn("<tag>Idle</tag>", t)
 
+    def test_vanilla_leftovers(self):
+        """Starfield's own states we do not convert: copied with hand IK / prop events left out; ours, ones with
+        nothing to leave out, and a tag an earlier folder already gave are not."""
+        ik = ("<root><tag>{t}</tag><filename>{t}.af</filename><variables><variable><name>bEnableHandIK</name>"
+              "<start>0</start><end>9</end></variable></variables></root>")
+        chair, common = "meshes\\actors\\human\\animations\\furniture\\chair\\", \
+            "meshes\\actors\\human\\animations\\furniture\\common\\"
+        files = {chair + "rearenterfromstand.afx": ik.format(t="RearEnterFromStand").encode(),
+                 chair + "rearenterfromstand.af": b"REAR",
+                 chair + "idle.afx": ik.format(t="Idle").encode(),                 # ours already
+                 chair + "camera.afx": b"<root><tag>Camera</tag><filename>Camera.af</filename></root>",
+                 chair + "female\\enterinstant.afx": ik.format(t="EnterInstant").encode(),   # a subfolder: not read
+                 common + "lookdirections.afx": ik.format(t="LookDirections").encode(),
+                 common + "lookdirections.af": b"LOOK",
+                 common + "rearenterfromstand.afx": ik.format(t="RearEnterFromStand").encode()}
+        got = P.vanilla_leftovers(sorted(files), files.get, [chair[:-1], common], {"Idle"})
+        self.assertEqual(sorted(got), ["lookdirections.afx", "rearenterfromstand.afx"])
+        text, clip = got["rearenterfromstand.afx"]
+        self.assertNotIn("bEnableHandIK", text)
+        self.assertIn("<tag>RearEnterFromStand</tag>", text)
+        self.assertEqual(clip, ("RearEnterFromStand.af", b"REAR"))       # read by its lower-case archive name
+        self.assertIn("idle.afx", P.vanilla_leftovers(sorted(files), files.get, [chair, common], set()))
+
     def test_copy_only_reuses_the_conversion(self):
         """--copy-only: no hkx_to_af call; the earlier conversion's files are copied again, cleaned, with talk slots."""
         import contextlib
