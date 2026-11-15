@@ -197,6 +197,18 @@ def strip_events(afx_text: str, prefixes=("AnimObj",)) -> str:
 # Each such descriptor is copied into our folder (found first) with those left out, its clip with it: Starfield's
 # motion, without the pull to IK targets our models do not have. Descriptors with nothing to leave out are not copied.
 COMMON_FOLDER = SF_ANIM + "furniture\\common"
+# Other template folders a set's keyword rows read after ours (the owner's subgraph_rows.py, 2026-11-15: benches read
+# furniture\bench, women chair\female / bench\female first): scanned too, each with its female subfolder.
+EXTRA_TEMPLATES = {"Sit": (SF_ANIM + "furniture\\bench",)}
+
+
+def leftover_folders(anim_set: str) -> list:
+    """The Starfield folders vanilla_leftovers scans for a set: its template and EXTRA_TEMPLATES, each with its female
+    subfolder after it, then furniture\\common."""
+    out = []
+    for f in (SETS[anim_set][1],) + EXTRA_TEMPLATES.get(anim_set, ()):
+        out += [f, f + "\\female"]
+    return out + [COMMON_FOLDER]
 
 
 def _tag(afx_text: str):
@@ -364,7 +376,7 @@ def main(argv=None):
         if sf_arcs is not None:
             have = {t for t in (_tag(open(os.path.join(dst, x), encoding="utf-8", errors="replace").read())
                                 for x in os.listdir(dst) if x.lower().endswith(".afx")) if t}
-            left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, [SETS[st][1], COMMON_FOLDER], have,
+            left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, leftover_folders(st), have,
                                      st in KEEP_PROPS)
             for name, (text, clip) in left.items():
                 with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:

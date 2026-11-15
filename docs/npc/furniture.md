@@ -346,3 +346,11 @@ body: an idle flavor (af_pose --gaps had checked the enters and the Idle only). 
 Skyrim's enter clips carry root motion (to the wall / rail) that --no-root-motion drops; Hod too far forward and Hilde
 too far back, each along the way they face, fits. scripts/armor/furniture_motion.py prints each set clip's root motion
 end from Skyrim's animationdatasinglefile (DefaultMale, generators mapped through the behaviours).
+Owner's results (2026-11-15): furniture_motion.py: Skyrim's chair front enter ends y +0.907 m turned 180 deg, rail
+enter y +0.693, wall enter y +0.264 turned 180: Skyrim's marker is where the enter ENDS, so ours (no root motion, at
+the marker from the start) stand where Skyrim's end; root motion does not explain the lean stand-off (corrected the
+supposition above). Next suspect: the template's marker model (kept for the lean spots) and its own marker 0.3 m back;
+needs the actors' getpos against the marker positions. Every Sit flavor checked by --gaps: never inside (closest
++0.050 m); test: flavors replaced by the Idle in place. The table's chair / bench rows are the pirate ones (generic
+ones are HumanRace esm entries); benches read furniture\bench, women chair\female / bench\female first: the hand-IK
+clean-up now scans those too (leftover_folders).

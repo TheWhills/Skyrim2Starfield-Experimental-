@@ -136,6 +136,12 @@ class PackTests(unittest.TestCase):
         self.assertEqual(clip, ("RearEnterFromStand.af", b"REAR"))       # read by its lower-case archive name
         self.assertIn("idle.afx", P.vanilla_leftovers(sorted(files), files.get, [chair, common], set()))
 
+    def test_leftover_folders(self):
+        f = P.leftover_folders("Sit")
+        self.assertEqual([x.split("furniture\\")[-1] for x in f],
+                         ["chair", "chair\\female", "bench", "bench\\female", "common"])
+        self.assertEqual(len(P.leftover_folders("RailLean")), 3)
+
     def test_copy_only_reuses_the_conversion(self):
         """--copy-only: no hkx_to_af call; the earlier conversion's files are copied again, cleaned, with talk slots."""
         import contextlib
