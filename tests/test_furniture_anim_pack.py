@@ -98,12 +98,14 @@ class PackTests(unittest.TestCase):
         self.assertEqual(P.KEEP_PROPS, ("Sweep",))
 
     def test_talk_copies(self):
-        """38 talk / dialogue slots, each the Idle descriptor with its own tag and file name, the rest unchanged."""
+        """38 talk / dialogue slots and 7 upper-body idle slots, each the Idle descriptor with its own tag and file name, the rest unchanged."""
         idle = ("<root>\n<is_state>1</is_state>\n<tag>Idle</tag>\n<filename>Idle.af</filename>\n"
                 "<variables><variable><name>bUseStandToExit</name><start>0</start><end>274</end></variable></variables>"
                 "\n</root>")
         got = P.talk_copies(idle)
-        self.assertEqual(len(got), 38)
+        self.assertEqual(len(got), 45)
+        self.assertIn("<tag>IdlePartialBody_Flavor04</tag>", got["idlepartialbody_flavor04.afx"])
+        self.assertIn("idlepartialbody_stop.afx", got)
         self.assertEqual(sorted(got)[:2], ["idle_dialogue01.afx", "idle_dialogue02.afx"])
         t = got["talk_m16.afx"]
         self.assertIn("<tag>Talk_M16</tag>", t)

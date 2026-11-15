@@ -322,3 +322,11 @@ tags (supported). Suspect: a subgraph row of another role than Furniture (stance
 that also matches chairs. scripts/armor/subgraph_rows.py lists every table row naming given keywords, any role.
 Also seen: idle Hilde's shoulders low and hands sunk into her lap (a woman on the male conversion; the shoulder
 calibration and body profiles are male), Hod still ~0.3 m off the post, Hilde slightly off the rail (facing now right).
+Owner's checks (2026-11-15): subgraph_rows.py: "1607 rows; 5 match: Furniture 5" for AnimFurnChair / AnimFurnBench (no
+other role, verified). The owner's survey (furniture_anims.json) shows the furniture graph linking NPC_IdlePartialBody
+(variables iSyncPartialBodyBlend, iSyncInDialogueScene) and common\female holding IdlePartialBody, _Flavor01-04,
+_Start, _Stop (common\pirate 01-02, plain common none): a woman's standing upper-body idles over our seated pose (hand to
+chin, arms crossed; arms hanging into the lap = "shoulders down, hands inside her body"); men have none. So
+TALK_SLOTS now also holds those 7 tags (PARTIAL_BODY_SLOTS), Idle copies like the talk ones. Supported, unverified in
+game. Lean markers (owner's furniture.json): every lean / counter / table / sweep / tanning base's Skyrim marker is the
+reference itself (offset 0; wall lean facing 0, rail lean 180), so Hod's remaining ~0.3 m is not the marker data.

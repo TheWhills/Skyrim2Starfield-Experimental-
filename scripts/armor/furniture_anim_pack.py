@@ -151,8 +151,19 @@ KEEP_PROPS = ("Sweep",)
 # survey lists these tags), blended with our sitting pose, the forearms passing through the body. Each set gets them
 # as copies of its own Idle (Skyrim's seated NPCs do not gesture either), so the game finds ours first. Copies, not
 # conversions: the same clip 38 times over would only cost time.
+# 2026-11-15, owner, in game after those: seated Hilde still put a hand to her chin / crossed her arms, and at rest her
+# shoulders dropped with the hands sunk into her lap. Verified on the owner's PC: the 38 copies are on disk and in the
+# Creation Kit cache, and no subgraph row but the Furniture ones matches chairs (subgraph_rows.py). The furniture graph
+# links NPC_IdlePartialBody (an upper-body idle layer; its variables iSyncPartialBodyBlend / iSyncInDialogueScene), and
+# common\female (in the female rows' folder chain) holds IdlePartialBody, its flavors 01-04, Start and Stop
+# (common\pirate 01-02; plain common none, so men are unaffected): a woman's standing upper body over our seat. Same
+# answer: each set's Idle under those tags too, in our folder before common\female.
+PARTIAL_BODY_SLOTS = ("IdlePartialBody", "IdlePartialBody_Flavor01", "IdlePartialBody_Flavor02",
+                      "IdlePartialBody_Flavor03", "IdlePartialBody_Flavor04", "IdlePartialBody_Start",
+                      "IdlePartialBody_Stop")
 TALK_SLOTS = tuple([f"Idle_Dialogue{i:02d}" for i in range(1, 8)] + [f"Talk_L{i:02d}" for i in range(1, 11)]
-                   + [f"Talk_M{i:02d}" for i in range(1, 17)] + [f"Talk_S{i:02d}" for i in range(1, 6)])
+                   + [f"Talk_M{i:02d}" for i in range(1, 17)] + [f"Talk_S{i:02d}" for i in range(1, 6)]) \
+    + PARTIAL_BODY_SLOTS
 
 
 def talk_copies(idle_afx: str, slots=TALK_SLOTS):
@@ -300,7 +311,7 @@ def main(argv=None):
                 talk += 1
         print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors"
               + (f", Starfield's prop events of {props}" if props else "")
-              + (f"; Idle copied into {talk} talk slots" if talk else ""))
+              + (f"; Idle copied into {talk} talk / upper-body slots" if talk else ""))
         lifted = {r["name"]: r["hands_lifted"] for r in rows if r.get("hands_lifted")}
         contacts = {r["name"]: r["contacts"] for r in rows if r.get("contacts")}
         if a.body_profiles:
