@@ -185,10 +185,36 @@ def mesh_template(a):
     return None
 
 
+CONVERT_ROOTS = ("skyrimconvert", "convert_static", "bsa", "checkpoints")
+
+
+def converter_modules(root_dir, roots=CONVERT_ROOTS):
+    """The fo4sf modules the model conversion imports, directly or through each other (2026-11-15, owner: "we don't
+    want to rebuild unnecessary steps"): the checkpoint signature hashed every src/fo4sf/*.py, so a change to the
+    animation retarget or the body profiles threw away all 265 Riverwood model checkpoints (the owner's build:
+    "reused": 0, 72 s converting unchanged models)."""
+    from pathlib import Path
+    root_dir = Path(root_dir)
+    pat = re.compile(r"^\s*(?:from\s+(?:fo4sf|)\.?\s*import\s+([\w ,()]+)|from\s+(?:fo4sf)?\.(\w+)\s+import"
+                     r"|from\s+fo4sf\.(\w+)\s+import|import\s+fo4sf\.(\w+))", re.M)
+    seen, todo = set(), list(roots)
+    while todo:
+        m = todo.pop()
+        if m in seen or not (root_dir / f"{m}.py").exists():
+            continue
+        seen.add(m)
+        text = (root_dir / f"{m}.py").read_text(encoding="utf-8", errors="replace")
+        for g in pat.findall(text):
+            names = [g[0]] if g[0] else []
+            names = [x.strip(" ()") for n in names for x in n.split(",")] + [x for x in g[1:] if x]
+            todo += [x.split(" as ")[0].strip() for x in names if x.strip()]
+    return sorted(root_dir / f"{m}.py" for m in seen)
+
+
 def checkpoint_signature(a):
     from fo4sf import checkpoints
     from pathlib import Path
-    code = sorted(Path(REPO, "src", "fo4sf").glob("*.py")) + [Path(__file__)]
+    code = converter_modules(Path(REPO, "src", "fo4sf")) + [Path(__file__)]
     archives = sorted(p for p in Path(a.skyrim_data).iterdir() if p.suffix.lower() == ".bsa")
     return {"version": 1, "kind": "skyrim", "archives": [checkpoints.archive_identity(p) for p in archives],
             "content": {str(p.resolve()): checkpoints.digest(p) for p in

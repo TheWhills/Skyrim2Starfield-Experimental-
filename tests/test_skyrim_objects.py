@@ -494,8 +494,6 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("next: dotnet run", log.getvalue())
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ReadBasesTests(unittest.TestCase):
@@ -563,3 +561,27 @@ class LoadDoorStageTests(unittest.TestCase):
         self.assertEqual(objects["bases"][door["base"]]["edid"], "SKY_WRInnDoor_LoadDoor")
         self.assertEqual(objects["refs"][1]["base"], 0)                   # the same model elsewhere stays a static
         self.assertNotIn("persistent", objects["refs"][1])
+
+
+class ConverterModulesTests(unittest.TestCase):
+    def test_signature_follows_the_converters_imports_only(self):
+        """2026-11-15: only the modules the model conversion imports (directly, through each other, inside functions,
+        any import form) are hashed; an unrelated module (the animation retarget) is not."""
+        import tempfile
+        from pathlib import Path
+        import make_skyrim_objects as MSO
+        with tempfile.TemporaryDirectory() as d:
+            pkg = Path(d)
+            files = {"skyrimconvert": "from . import nif\nfrom .textures import x\n",
+                     "nif": "import struct\n", "textures": "def f():\n    from fo4sf import cmsencode, sfmesh as m\n",
+                     "cmsencode": "", "sfmesh": "from fo4sf.ba2 import A\n", "ba2": "", "convert_static": "",
+                     "bsa": "", "checkpoints": "", "retarget": "from . import nif\n", "bodyprofile": ""}
+            for n, text in files.items():
+                (pkg / f"{n}.py").write_text(text)
+            got = [p.stem for p in MSO.converter_modules(pkg)]
+            self.assertEqual(got, ["ba2", "bsa", "checkpoints", "cmsencode", "convert_static", "nif", "sfmesh",
+                                   "skyrimconvert", "textures"])
+
+
+if __name__ == "__main__":
+    unittest.main()

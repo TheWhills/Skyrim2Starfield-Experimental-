@@ -63,3 +63,13 @@ count. Measured: dense 4.48 s -> 3.73 s, thin 4.40 s -> 3.50 s with scipy; 14.6 
 1654 -> 1674 / 1674 -> 1665: a few lines the old order smoothed then rejected are now dropped first, so the rng draws
 shift; same method). Bigger levers, not code: scipy installed (cKDTree; 4.5 s vs 14.6 s here, the gap grows with
 the hair's size) and --strand-copies (build only the copies being judged: each grows its own cards).
+
+## 2026-11-15 Skyrim model checkpoints: hash only the converter's own modules (Claude)
+Owner: "we don't want to rebuild unnecessary steps". The Riverwood build's step 2 (make_skyrim_objects convert
+--resume) printed "reused": 0 and reconverted all 265 models (71.8 s, owner's log 2026-11-14) although no model or
+converter code had changed: the checkpoint signature hashed every src/fo4sf/*.py, so the day's retarget /
+bodyprofile commits invalidated every model. Now it hashes only the modules the conversion imports (converter_modules:
+the import closure of skyrimconvert, convert_static, bsa, checkpoints; checked against sys.modules after importing
+them: nothing loaded is missing, 6 lazily imported extras are hashed too). Before: 265 converted, 71.8 s on a build
+with no converter change. After: one more full conversion (the signature's file list changed), then expected 265
+reused on the next builds; to be confirmed from the owner's next two build logs.
