@@ -31,7 +31,12 @@ FACE_PLUGIN = "S2SFaceTest.esm"           # face_fit.py --test-plugin's output, 
 # Skyrim package templates -> Starfield's (owner's package_survey.py 2026-11-08: Starfield has Sandbox (577 uses),
 # Travel, Sit, Sleep, ...; Skyrim's SandboxWorking = travel, unlock doors, sandbox: Starfield's Sandbox procedure list)
 SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep", "travel": "Travel", "sit": "Sit",
-             "eat": "Sandbox"}
+             "eat": "Sandbox", "sandboxworkingmultilocation": "Sandbox", "carryanddropitem": "Sandbox"}
+# 2026-11-15 (owner: Faendal stays inside all day; his actors.json: FaendalWork7x12, SandboxWorkingMultiLocation, and
+# three CarryFirewood runs, CarryAndDropItem, left out for want of a Starfield template): Starfield has no
+# multi-location sandbox or carry procedure, so these become a Sandbox at their FIRST location input (the work spot /
+# the woodpile); later location inputs are skipped (noted).
+FIRST_LOCATION_ONLY = {"sandboxworkingmultilocation", "carryanddropitem"}
 # inputs set on the Starfield side whatever Skyrim had (by normalized Starfield input name): Starfield has no Eat
 # template; its NPCs eat while sandboxing (Allow Eating / Allow Sitting)
 FORCE = {"eat": {"alloweating": True, "allowsitting": True}}
@@ -116,10 +121,16 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
     for i in sf_values:
         by_name.setdefault(norm(sf_names.get(i)), i)
     inputs, skipped, drop = {}, [], None
+    first_loc = tname.lower() in FIRST_LOCATION_ONLY
     for k, (inp, idx) in enumerate(zip(p["inputs"], value_indexes(p))):
         name = sky_names.get(idx)
         target = by_name.get(norm(name))
         v = inp["value"]
+        if first_loc and inp["type"].lower() == "location":
+            if "location" not in by_name or str(by_name["location"]) in inputs:
+                skipped.append(f"{name or idx} (Location: only the first is kept)")
+                continue
+            target = by_name["location"]
         if target is None:
             skipped.append(f"{name or idx} ({inp['type']})")
             continue

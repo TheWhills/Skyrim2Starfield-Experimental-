@@ -60,7 +60,7 @@ class ScheduleTests(unittest.TestCase):
             tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))])
             npc = rec(b"NPC_", 0x100, [(b"EDID", Z("Orgnar")), (b"FULL", Z("Orgnar")), (b"ACBS", bytes(24)),
                                        (b"PKID", struct.pack("<I", 0x202)), (b"PKID", struct.pack("<I", 0x200)),
-                                       (b"PKID", struct.pack("<I", 0x203))])
+                                       (b"PKID", struct.pack("<I", 0x203)), (b"PKID", struct.pack("<I", 0x206))])
             quest = rec(b"PACK", 0x202, [(b"EDID", Z("MQSomething")), (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
                                          (b"CTDA", bytes(32)), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
             eat_t = pack(0x204, "Eat", 19, 0, None, [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0))], [0],
@@ -76,11 +76,20 @@ class ScheduleTests(unittest.TestCase):
                       [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 256)), ("Bool", *B(0)), ("Bool", *B(1)),
                        ("Float", b"CNAM", struct.pack("<f", 50))],
                       [0, 14, 1, 7])
+            # Faendal's kind of work (2026-11-15): SandboxWorkingMultiLocation, no Starfield template -> Sandbox at its
+            # first location; the second (a cell outside the batch) skipped, not a reason to drop the package
+            multi_t = pack(0x205, "SandboxWorkingMultiLocation", 19, 0, None,
+                           [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0)),
+                            ("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0))],
+                           [0, 3], [(0, "Location 1"), (3, "Location 2")], [("Procedure", "Sandbox")])
+            multi = pack(0x206, "OrgnarWork7x12", 18, 0x205, (7, 0, 720),
+                         [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 300)),
+                          ("Location", b"PLDT", struct.pack("<iIi", 1, 0x7777, 0))], [0, 3])
             cell = rec(b"CELL", 0x500, [(b"EDID", Z("RiverwoodSleepingGiantInn"))])
             achr = rec(b"ACHR", 0x600, [(b"NAME", struct.pack("<I", 0x100)), (b"DATA", struct.pack("<6f", -1312.8, 18.3, 0, 0, 0, 1.5))])
             marker = rec(b"REFR", 0x601, [(b"NAME", struct.pack("<I", 0x3B)), (b"DATA", struct.pack("<6f", -1250, 40, 0, 0, 0, 0))])
             xm = rec(b"STAT", 0x3B, [(b"EDID", Z("XMarker"))])
-            body = (grup(b"STAT", 0, [xm]) + grup(b"NPC_", 0, [npc]) + grup(b"PACK", 0, [pk, tpl, quest, eat_t, eat])
+            body = (grup(b"STAT", 0, [xm]) + grup(b"NPC_", 0, [npc]) + grup(b"PACK", 0, [pk, tpl, quest, eat_t, eat, multi_t, multi])
                     + grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [cell, grup(0x500, 6, [grup(0x500, 8, [achr, marker])])])])]))
             sky = os.path.join(d, "Skyrim.esm")
             with open(sky, "wb") as fh:
@@ -132,7 +141,12 @@ class ScheduleTests(unittest.TestCase):
             self.assertNotIn("face_npc", ac)
             self.assertTrue(any("Orgnar: no face-test NPC" in n for n in r["notes"]))
             # the quest-conditioned package is left out; Eat becomes Sandbox near the editor location, eating allowed
-            self.assertEqual([q["skyrim"] for q in ac["packages"]], ["OrgnarWorkInn0x24", "OrgnarEat7x1"])
+            self.assertEqual([q["skyrim"] for q in ac["packages"]], ["OrgnarWorkInn0x24", "OrgnarEat7x1",
+                                                                     "OrgnarWork7x12"])
+            w = ac["packages"][2]
+            self.assertEqual((w["sf_template"], w["inputs"]["2"]["type"], w["inputs"]["2"]["source"]),
+                             ("Sandbox", "near_reference", "000601:Skyrim.esm"))
+            self.assertTrue(any("OrgnarWork7x12" in n and "only the first is kept" in n for n in r["notes"]))
             self.assertTrue(any("MQSomething: left out" in n for n in r["notes"]))
             e = ac["packages"][1]
             self.assertEqual((e["sf_template"], e["inputs"]["2"]["type"], e["inputs"]["5"]["value"]),

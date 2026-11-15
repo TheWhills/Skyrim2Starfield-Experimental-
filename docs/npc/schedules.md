@@ -194,3 +194,13 @@ interior cells but one in a converted exterior cell (--exterior) gets cell "exte
 PluginSpike places it in the world's persistent cell at ExtPos after the outdoor furniture, its package targets
 resolved against every reference the build placed (indoors and out; one not placed: near its editor location).
 OWNER-SETUP's Riverwood command now names all the adults face_fit fits (children are not converted yet).
+
+## Work packages without a Starfield template (2026-11-15)
+Owner: Sven and Faendal stay inside all day; Sven went to bed as Hilde left in the morning. Their actors.json
+(owner's run): Faendal kept Eat 22-23, Sleep 23-4, Hunt 4-8 (outdoors); FaendalWork7x12 (SandboxWorkingMultiLocation)
+and three FaendalCarryFirewood runs (CarryAndDropItem) were left out for want of a Starfield template, FaendalEatStump /
+MS13 visit for their conditions: nothing from 8 to 22. Sven: PlayInn 10x16 (Sandbox near a reference in the inn),
+Sleep 2x7, Breakfast 9x1 (his Skyrim day: asleep 2-9, so going to bed as Hilde starts her day at 8 is Skyrim's
+schedule); SvenRiverwoodIntroPatrol left out (2 conditions). Now SandboxWorkingMultiLocation and CarryAndDropItem
+become Starfield's Sandbox at their first location input (later ones skipped, noted). Open: Sven's inn package (house
+-> exterior -> inn, interior to interior) did not move him; in game check with getcurrentaipackage at noon.
