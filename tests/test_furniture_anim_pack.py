@@ -111,6 +111,36 @@ class PackTests(unittest.TestCase):
         self.assertIn("bUseStandToExit", t)
         self.assertNotIn("<tag>Idle</tag>", t)
 
+    def test_copy_only_reuses_the_conversion(self):
+        """--copy-only: no hkx_to_af call; the earlier conversion's files are copied again, cleaned, with talk slots."""
+        import contextlib
+        import io
+        import json
+        import tempfile
+        from unittest import mock
+        import hkx_to_af
+        with tempfile.TemporaryDirectory() as d:
+            folder = P.SETS["Sweep"][0]
+            src = os.path.join(d, "work", "Sweep", "all", *folder.split("\\"))
+            os.makedirs(src)
+            with open(os.path.join(d, "work", "Sweep", "all", "report.json"), "w") as fh:
+                json.dump([{"name": "animobjectsweepingidlebase"}], fh)
+            with open(os.path.join(src, "Idle.af"), "wb") as fh:
+                fh.write(b"AF")
+            with open(os.path.join(src, "Idle.afx"), "w") as fh:
+                fh.write("<root><tag>Idle</tag><filename>Idle.af</filename></root>")
+            out = os.path.join(d, "out")
+            args = ["--calumi", "c", "--skyrim-data", "s", "--starfield", "f", "--out", out, "--work",
+                    os.path.join(d, "work"), "--set", "Sweep", "--copy-only"]
+            with mock.patch.object(hkx_to_af, "main", side_effect=AssertionError("converted")), \
+                    contextlib.redirect_stdout(io.StringIO()) as so:
+                P.main(args)
+            dst = os.path.join(out, *folder.split("\\"))
+            self.assertTrue(os.path.exists(os.path.join(dst, "talk_s05.af")))
+            with open(os.path.join(dst, "talk_s05.afx")) as fh:
+                self.assertIn("<tag>Talk_S05</tag>", fh.read())
+            self.assertIn("copied again (--copy-only)", so.getvalue())
+
     def test_parse_pair(self):
         """PowerShell splits an unquoted 0.027,-0.091 into two arguments: every form gives the same pair."""
         for v in ("0.027,-0.091", ["0.027,-0.091"], ["0.027", "-0.091"]):

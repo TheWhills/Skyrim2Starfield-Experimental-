@@ -223,6 +223,9 @@ def main(argv=None):
                     help="with one --set: use this offset instead of COM_SHIFT / the Idle's --align-com result "
                          "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
     ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
+    ap.add_argument("--copy-only", action="store_true",
+                    help="no conversion: copy the earlier one in --work again (descriptor clean-up, talk slots); for "
+                         "changes to the copy step only")
     ap.add_argument("--shoulder-calibration", metavar="JSON",
                     help="af_pose.py --calibrate-shoulders' output (all sets): shoulders where Starfield's clips have them")
     ap.add_argument("--body-profiles", metavar="JSON",
@@ -243,7 +246,12 @@ def main(argv=None):
         com = parse_pair(a.com_shift) if a.com_shift else (list(COM_SHIFT[st]) if st in COM_SHIFT else None)
         hands = parse_pair(a.hand_clearance) if a.hand_clearance else (
             None if a.body_profiles else HAND_CLEARANCE.get(st))
-        if com is None:
+        done_rep = os.path.join(work, "all", "report.json")
+        if a.copy_only and not os.path.exists(done_rep):
+            print(f"{st}: --copy-only but no earlier conversion in {os.path.join(work, 'all')}; converting")
+        if a.copy_only and os.path.exists(done_rep):
+            print(f"== {st}: the earlier conversion, copied again (--copy-only)")
+        elif com is None:
             print(f"== {st}: Idle with --align-com (the set's seat offset)")
             rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "idle"), folder, idle))
             with open(os.path.join(work, "idle", "report.json"), encoding="utf-8") as fh:
@@ -254,9 +262,10 @@ def main(argv=None):
                 continue
             com = row["com_shift_m"]
             print(f"{st}: offset {com[0]},{com[1]} (add to COM_SHIFT to keep it)")
-        print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
-        rc = hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles,
-                                     a.shoulder_calibration))
+        if not (a.copy_only and os.path.exists(done_rep)):
+            print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
+            hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles,
+                                    a.shoulder_calibration))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))

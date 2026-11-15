@@ -375,6 +375,7 @@ docs/npc/furniture.md). Starfield closed. Only the steps whose input changed nee
    python -I scripts\armor\body_profiles.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\body_profiles
    python -I scripts\armor\furniture_anim_pack.py --calumi $calumi --skyrim-data $sky --starfield $sf --out "$mods\S2S Furniture Anims" --work C:\Modding\work\furniture_anim_pack --body-profiles C:\Modding\work\body_profiles\body_profiles.json
    ```
+   Changes to the copy step only (descriptor clean-up, talk slots): add `--copy-only` (reuses the conversion in --work).
 3. Creation Kit animation cache: only when sets, folders or descriptors (.afx) changed, not for clip-only changes.
    `Remove-Item -Recurse -Force C:\Modding\work\s2s\animinfo`, run **CreationKit (1)** from MO2, wait for it to close, then:
    ```powershell
