@@ -383,3 +383,12 @@ left / right; Skyrim's double bed sleepers side by side along x, so the beds run
 animation lies along the marker's x: make_furniture.DEFAULT_TURN bed -90 (the head pointed at the wall with the pillow
 to the left: a quarter turn counter-clockwise from above; Bethesda's z is clockwise). --turn bed=90 / riverwood_doors
 -FurnTurn "bed=90" if the head ends at the foot. Unverified in game.
+Owner's anim_cache_clips (2026-11-15, after the CK cache run): the 8 cache files naming s2s_sit resolve 862 clips
+elsewhere: 263 chair\animflavor, 181 chair\female\animflavor, 158 bench\animflavor, 136 bench\female\animflavor
+(<mood>_<clip>.af: thinking, confident, crosslegs, executive, relaxed, tablet, analyzeangry, bored, depressed, fancy,
+slouched, analyze, armscrossedcasual, recline, sandwich; each over idle / flavors / sit_start / stand_start / talk /
+lookdirections), common (93: casting, ladders, locomotion, relaxed_idlepartialbody_<prop> incl. handsbehind,
+armcrossed), common\female 7, common\pirate 5, and chair / bench EnterInstant, LookDirections(_Head),
+RearEnterFromStand, furniture\common Camera / Flinch. Verified: so the brief upper-body takeover on our seat is a mood
+variant (no descriptor of its own; found by file name along the chain). The pack now copies our clip of the base under
+every such variant name into our folder (mood_variants); LookDirections variants stay Starfield's (no base of ours).

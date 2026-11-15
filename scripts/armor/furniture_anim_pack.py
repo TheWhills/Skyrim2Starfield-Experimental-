@@ -298,6 +298,37 @@ def unanswered_tags(names, read, folders, have_tags) -> list:
     return out
 
 
+# Mood variants (2026-11-15, owner's anim_cache_clips on the Creation Kit cache: our Sit set still resolved 862 Starfield
+# clips, 738 of them in chair / bench (female) \\animflavor: analyze_idle, confident_idle_flavor02, crosslegs_talk_l01
+# ... and the upper-body layer's relaxed_idlepartialbody_handsbehind ... in common): a seated character's animation
+# flavor (thinking, confident, crosslegs, executive, relaxed, tablet, bored, slouched, analyze ...) plays
+# <flavor>_<clip>.af, found by file name along the folder chain (no descriptor of its own), so Starfield's played
+# over our pose. Each such variant whose base is a clip of ours gets a copy of ours under its name, in our folder.
+VARIANT_FOLDERS = (SF_ANIM + "common", SF_ANIM + "common\\female", SF_ANIM + "common\\pirate")
+
+
+def mood_variants(names, folders, our_clips) -> dict:
+    """{variant file name: our clip file name} for the .af files directly in `folders` named <prefix>_<base> where
+    <base> is one of ours (our_clips: {stem lower case: file name}; the longest base wins), and any with
+    'idlepartialbody' in the name (the upper-body layer) -> our Idle. Our own names are skipped."""
+    out = {}
+    stems = sorted(our_clips, key=len, reverse=True)
+    for folder in folders:
+        f = folder.replace("/", "\\").lower().rstrip("\\") + "\\"
+        for n in names:
+            if not (n.startswith(f) and n.endswith(".af") and "\\" not in n[len(f):]):
+                continue
+            stem = n[len(f):-3]
+            if stem in our_clips or stem + ".af" in out:
+                continue
+            base = next((o for o in stems if stem.endswith("_" + o)), None)
+            if base is None and "idlepartialbody" in stem and "idle" in our_clips:
+                base = "idle"
+            if base is not None:
+                out[stem + ".af"] = our_clips[base]
+    return out
+
+
 def parse_pair(value):
     """'0.027,-0.091' or ['0.027', '-0.091'] or ['0.027,-0.091'] (PowerShell splits an unquoted pair) -> floats."""
     text = ",".join(value) if isinstance(value, (list, tuple)) else str(value)
@@ -459,6 +490,13 @@ def main(argv=None):
                 rest = [t for t, idle_like in gaps if not idle_like]
                 print(f"{st}: Starfield's own states answered with our Idle: {', '.join(filled) or 'none'}; "
                       f"left to Starfield: {', '.join(rest) or 'none'}")
+            our_clips = {x[:-3].lower(): x for x in os.listdir(dst) if x.lower().endswith(".af")}
+            variants = mood_variants(sf_arcs.names, leftover_folders(st) + list(VARIANT_FOLDERS), our_clips)
+            for name, clip in variants.items():
+                shutil.copy2(os.path.join(dst, clip), os.path.join(dst, name))
+            if variants:
+                print(f"{st}: {len(variants)} mood / upper-body variants answered with our clips "
+                      f"({len({n.split('_')[0] for n in variants})} prefixes)")
             left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, leftover_folders(st), have,
                                      st in KEEP_PROPS)
             for name, (text, clip) in left.items():

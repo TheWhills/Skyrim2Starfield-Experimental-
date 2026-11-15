@@ -157,6 +157,18 @@ class PackTests(unittest.TestCase):
         self.assertIsNone(P.base_tag("Idle", have))                       # not renamed
         self.assertIsNone(P.base_tag("RelaxedCamera", have))
 
+    def test_mood_variants(self):
+        af = "meshes\\actors\\human\\animations\\furniture\\chair\\animflavor\\"
+        cm = "meshes\\actors\\human\\animations\\common\\"
+        names = [af + "analyze_idle.af", af + "confident_idle_flavor02.af", af + "crosslegs_talk_l01.af",
+                 af + "bored_lookdirections.af", af + "idle.af", af + "sub\\analyze_idle.af",
+                 cm + "relaxed_idlepartialbody_flavor01_handsbehind.af", cm + "castself.af"]
+        ours = {"idle": "Idle.af", "idle_flavor02": "Idle_Flavor02.af", "talk_l01": "Talk_L01.af"}
+        got = P.mood_variants(names, [af, cm], ours)
+        self.assertEqual(got, {"analyze_idle.af": "Idle.af", "confident_idle_flavor02.af": "Idle_Flavor02.af",
+                               "crosslegs_talk_l01.af": "Talk_L01.af",
+                               "relaxed_idlepartialbody_flavor01_handsbehind.af": "Idle.af"})
+
     def test_leftover_folders(self):
         f = P.leftover_folders("Sit")
         self.assertEqual([x.split("furniture\\")[-1] for x in f],
