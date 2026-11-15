@@ -204,6 +204,32 @@ class ExteriorTests(unittest.TestCase):
             with open(os.path.join(work, "actors.json")) as fh:
                 self.assertEqual(json.load(fh)["actors"][0]["packages"], [])
 
+            # 2026-11-15: an NPC Skyrim places outdoors (in a converted exterior cell) stands there; without
+            # --exterior it is left out with a note
+            elsewhere = rec(b"ACHR", 0x600, [(b"NAME", struct.pack("<I", 0x999)),       # Alvor not indoors
+                                             (b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))])
+            outdoor = rec(b"ACHR", 0x650, [(b"NAME", struct.pack("<I", 0x100)),
+                                           (b"DATA", struct.pack("<6f", 2100, 3050, 90, 0, 0, 0.5))])
+            body = (grup(b"NPC_", 0, [npc]) + grup(b"PACK", 0, [forge, far, tpl])
+                    + grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [house, grup(0x500, 6, [grup(0x500, 8, [elsewhere])])])])])
+                    + grup(b"WRLD", 0, [wrld, grup(0x3C, 1, [
+                        ext, grup(0x510, 6, [grup(0x510, 9, [forge_mk, anvil, outdoor])]),
+                        ext2, grup(0x520, 6, [grup(0x520, 9, [far_mk])])])]))
+            with open(sky, "wb") as fh:
+                fh.write(tes4 + body)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(M.main(args + ["--exterior", exterior]), 0)
+            with open(os.path.join(work, "actors.json")) as fh:
+                r = json.load(fh)
+            ac = r["actors"][0]
+            self.assertEqual((ac["cell"], ac["pos"], ac["source"]), ("exterior", [2100.0, 3050.0, 90.0],
+                                                                     "000650:Skyrim.esm"))
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(M.main(args), 1)                                 # no actor placed
+            with open(os.path.join(work, "actors.json")) as fh:
+                r = json.load(fh)
+            self.assertEqual(r["actors"], [])
+            self.assertTrue(any("outdoors needs --exterior" in n for n in r["notes"]))
 
 if __name__ == "__main__":
     unittest.main()

@@ -459,7 +459,11 @@ var extMarkerFor = new Dictionary<string, FormKey>();
 // that NPC gets its own copy, EditorID + "_" + its Skyrim EditorID.
 var builtPackages = new Dictionary<string, (FormKey key, string sig)>();
 
-void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource)
+// exterior (2026-11-15, owner: only Embry, Delphine and Orgnar in game, "not the rest of Riverwood"): an NPC Skyrim
+// places outdoors goes into the world's persistent cell at ExtPos (posOf); its package targets resolve against every
+// reference this build placed (indoors or out); one with no placed reference keeps the package near its editor location.
+void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, FormKey> placedBySource,
+                Func<JsonElement, P3Float>? posOf = null, bool exterior = false)
 {
     var sk = ac.GetProperty("skyrim").GetString()!;
     INpcGetter? faceNpc = null;
@@ -552,6 +556,12 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                     {
                         case "near_reference":
                             var srcRef = v.GetProperty("source").GetString()!;
+                            if (exterior && !placedBySource.ContainsKey(srcRef))
+                            {
+                                notes.Add($"{edid}: {srcRef} not placed by this build (outdoor NPC): near its editor location");
+                                target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearEditorLocation };
+                                break;
+                            }
                             if (!placedBySource.TryGetValue(srcRef, out var refKey))
                             {
                                 // not placed by us (an editor marker): a Starfield XMarker at its spot, persistent as package targets are
@@ -579,6 +589,8 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                             target = new LocationTarget { Link = new FormLink<IPlacedGetter>(mk) };
                             break;
                         }
+                        case "in_cell" when exterior:
+                            target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearEditorLocation }; break;
                         case "in_cell": target = new LocationCell { Link = new FormLink<ICellGetter>(cell.FormKey) }; break;
                         case "near_package_start": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearPackageStart }; break;
                         case "near_editor_location": target = new LocationFallback { Type = LocationTargetRadius.LocationType.NearEditorLocation }; break;
@@ -616,7 +628,7 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
             }
         }
     var achr = new PlacedNpc(Id($"ACHR:{cellName}:{sk}"), release)
-        { Base = new FormLinkNullable<INpcGetter>(npc.FormKey), Position = Pos(ac.GetProperty("pos")), Rotation = Rot(ac.GetProperty("rot")) };
+        { Base = new FormLinkNullable<INpcGetter>(npc.FormKey), Position = (posOf ?? new Func<JsonElement, P3Float>(Pos))(ac.GetProperty("pos")), Rotation = Rot(ac.GetProperty("rot")) };
     achr.MajorRecordFlagsRaw |= 0x400;
     cell.Persistent.Add(achr);
     sourceMap[ac.GetProperty("source").GetString()!] = achr.FormKey.ToString();
@@ -1115,6 +1127,24 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
         if (extFurn + extFurnNoBase > 0)
             Console.WriteLine($"outdoor furniture: {extFurn} references in {wg.EditorID}'s persistent cell, {extFurnOff} exterior " +
                               $"statics disabled under them, {furnOff.Count} statics not found, {extFurnNoBase} with no furniture base");
+    }
+
+    // ---- NPCs that start outdoors (2026-11-15; make_schedule.py: cell "exterior") ----------------------------------
+    if (actorsRoot is JsonElement extActors)
+    {
+        var everywhere = new Dictionary<string, FormKey>();
+        foreach (var kv in sourceMap) everywhere[kv.Key] = FormKey.Factory(kv.Value);
+        int outdoorActors = 0;
+        foreach (var ac in extActors.GetProperty("actors").EnumerateArray())
+            if (ac.GetProperty("cell").GetString() == "exterior")
+            {
+                PlaceActor(tco, "exterior", ac, everywhere, ExtPos, exterior: true);
+                outdoorActors++;
+            }
+        foreach (var (em, ep) in extMarkers) { em.Position = ExtPos(ep); tco.Persistent.Add(em); }
+        if (outdoorActors > 0)
+            Console.WriteLine($"outdoor NPCs: {outdoorActors} in {wg.EditorID}'s persistent cell ({extMarkers.Count} more package spots)");
+        extMarkers.Clear();
     }
 
     // ---- exterior navmeshes (2026-11-08, owner: "convert the exterior mesh"; docs/terrain/exterior-navmesh.md) -------

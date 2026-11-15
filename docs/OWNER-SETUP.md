@@ -75,7 +75,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Send faces.json (and gear_fit.json if Embry's run complains).
 5. B: the Riverwood build with the scheduled NPCs (always after a face_fit run: its ids move):
    ```powershell
-   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry,Alvor,Sigrid,Hod,Gerdur,Faendal,Sven,Hilde,LucanValerius,CamillaValerius -Furniture
    ```
 6. C: in game: Embry's shirt shows, Delphine's dress does not clip at the shoulders, the faces (compare with Skyrim),
    Orgnar still at the bar. New in this build: cooking pots, the alchemy lab and the enchanter are Starfield
@@ -361,7 +361,7 @@ python -I scripts\interior\furniture_survey.py --skyrim "$sky\Skyrim.esm" --skyr
 Furniture NPCs can use (chairs, benches, beds, lean counters, sweeping spots) in the same build (Starfield closed):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry -Furniture
+powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar,Delphine,Embry,Alvor,Sigrid,Hod,Gerdur,Faendal,Sven,Hilde,LucanValerius,CamillaValerius -Furniture
 ```
 Scheduled NPCs with their own face, hair, outfit and voice: fit them first (outfit, voice lines, face-test NPC; the
 face_fit run must list every NPC wanted, old and new, since it rewrites S2SFaceTest.esm), then the build above. The

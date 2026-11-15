@@ -186,3 +186,10 @@ PACK:S2S_AlvorSigridDortheEat20x1"): Skyrim gives one package to several NPCs (t
 Dorthe); PluginSpike built it once per NPC under the same EditorID. Now the first NPC's copy is linked from the others
 (as in Skyrim); if it comes out different for a later NPC (its converted inputs, or its cell for "in cell") that NPC
 gets its own, EditorID_<NPC>. C# not compiled here (no NuGet).
+
+NPCs that start outdoors (2026-11-15, owner: only Embry, Delphine and Orgnar were in game, "not the rest of
+Riverwood"; the build had been given only those three). make_schedule.py: an NPC with no reference in the batch's
+interior cells but one in a converted exterior cell (--exterior) gets cell "exterior" and its Skyrim spot;
+PluginSpike places it in the world's persistent cell at ExtPos after the outdoor furniture, its package targets
+resolved against every reference the build placed (indoors and out; one not placed: near its editor location).
+OWNER-SETUP's Riverwood command now names all the adults face_fit fits (children are not converted yet).

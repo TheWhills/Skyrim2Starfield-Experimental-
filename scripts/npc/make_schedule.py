@@ -290,8 +290,20 @@ def main(argv=None):
                     pos, rot = ref_place(sky, r)
                     spot = {"cell": c, "pos": pos, "rot": rot, "source": skyrimrefs.formkey(r, "Skyrim.esm")}
                     break
+            if spot is None and ext_cells:
+                # 2026-11-15 (owner: only Embry, Delphine and Orgnar are in game, "not the rest of Riverwood"): an NPC
+                # Skyrim places outdoors, in a converted exterior cell, stands at its Skyrim spot in the exterior
+                # world (PluginSpike: the world's persistent cell, ExtPos), as the outdoor furniture
+                for r in placed:
+                    if sky.cell_of.get(r) in ext_cells:
+                        pos, rot = ref_place(sky, r)
+                        if pos is not None:
+                            spot = {"cell": "exterior", "pos": pos, "rot": rot,
+                                    "source": skyrimrefs.formkey(r, "Skyrim.esm")}
+                            break
             if spot is None:
-                notes.append(f"{edid}: not placed in any cell of the batch ({sorted(cell_names)}); left out")
+                notes.append(f"{edid}: not placed in any cell of the batch ({sorted(cell_names)})"
+                             + ("" if ext_cells else " (outdoors needs --exterior)") + "; left out")
                 continue
             tpl, why = (a.template_npc, "--template-npc") if a.template_npc else \
                 pick_template(faces, edid, npc["female"])
