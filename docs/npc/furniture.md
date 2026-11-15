@@ -330,3 +330,7 @@ chin, arms crossed; arms hanging into the lap = "shoulders down, hands inside he
 TALK_SLOTS now also holds those 7 tags (PARTIAL_BODY_SLOTS), Idle copies like the talk ones. Supported, unverified in
 game. Lean markers (owner's furniture.json): every lean / counter / table / sweep / tanning base's Skyrim marker is the
 reference itself (offset 0; wall lean facing 0, rail lean 180), so Hod's remaining ~0.3 m is not the marker data.
+Male player, hands into the body for a moment as he sits (owner, 2026-11-15): not the women's upper-body idles (men
+have none). af_pose --gaps body_profiles.json checks each clip over all its frames: each hand's (wrist and palm)
+smallest distance to the body's surface (Starfield's body profiles, posed by their joints; mean radius around the
+axis) and the frames where it is inside; our sit enters against Starfield's chair EnterFromStand.

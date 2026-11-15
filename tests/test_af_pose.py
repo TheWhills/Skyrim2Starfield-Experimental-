@@ -31,6 +31,28 @@ class PoseTests(unittest.TestCase):
         self.assertEqual(P.joints(["Root", "C_Pelvis", "L_Hand", "R_Finger11"]), ["C_Pelvis", "L_Hand"])
 
 
+    def test_hand_gaps(self):
+        """A belly 0.12 m thick around the spine: a wrist 0.2 m in front is outside, one 0.05 m in front inside; the
+        own forearm is never counted; the gap report finds the inside frames."""
+        ring = [[0.12] * 16 for _ in range(5)]
+        profiles = {"belly": {"radius": ring}, "L_forearm": {"radius": [[0.5] * 16 for _ in range(5)]}}
+        pose = {"C_Spine": np.array([0, 0, 1.0]), "C_Chest": np.array([0, 0, 1.3]),
+                "L_Forearm": np.array([-0.3, 0.2, 1.15]), "L_Wrist": np.array([-0.1, 0.2, 1.15])}
+        g = P.hand_gaps(pose, profiles)["L"]
+        self.assertEqual(g[1], "belly")
+        self.assertAlmostEqual(g[0], math.hypot(-0.02, 0.2) - 0.12, places=3)    # the palm, 8 cm past the wrist
+        pose["L_Wrist"] = np.array([0.0, 0.05, 1.15])
+        pose["L_Forearm"] = np.array([0.0, 0.3, 1.15])
+        self.assertLess(P.hand_gaps(pose, profiles)["L"][0], 0)
+        rig = {"names": ["C_Spine", "C_Chest", "L_Forearm", "L_Wrist"], "parents": [-1, -1, -1, -1],
+               "t": [pose["C_Spine"], pose["C_Chest"], np.array([-0.3, 0.2, 1.15]), np.array([-0.1, 0.2, 1.15])],
+               "q": [np.array([0, 0, 0, 1.0])] * 4}
+        rb = {"frames": 11, "rotations": {}, "translations": {
+            "L_Wrist": [(0, (-0.1, 0.2, 1.15)), (4, (0.0, 0.05, 1.15)), (7, (-0.1, 0.2, 1.15))],
+            "L_Forearm": [(0, (-0.3, 0.2, 1.15)), (4, (0.0, 0.3, 1.15)), (7, (-0.3, 0.2, 1.15))]}}
+        lines = P.gap_report("clip", rig, rb, profiles, samples=11)
+        self.assertIn("inside the body: frames 4-6 (3 sampled)", lines[1])
+
     def test_hands_on_thighs(self):
         """Hip at x -0.1, knee 0.4 m forward: a left wrist 0.2 m along, 0.05 up and 0.02 outward reads back as such."""
         pose = {"L_Thigh": np.array([-0.1, 0, 0.5]), "L_Calf": np.array([-0.1, 0.4, 0.5]),

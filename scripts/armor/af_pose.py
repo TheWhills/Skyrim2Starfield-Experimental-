@@ -15,6 +15,9 @@ A --af that is not a file on disk is read from Starfield's archives. Prints, per
 2026-11-14 (owner): with hand IK gone the seated hands rest forward but sink into the thighs. Each clip now also
 prints where each hand sits over its thigh (hands_on_thighs); compare our Idle's height above the hip-knee line with
 Starfield's chair Idle to see how far the hands must come up.
+
+2026-11-15 (owner): the male player's hands go into the body for a moment as he sits down. --gaps body_profiles.json
+checks every clip over all its frames: each hand's smallest distance to the body's surface and when it is inside.
 """
 import argparse
 import os
@@ -122,6 +125,66 @@ def shoulders(pose):
     return out
 
 
+PALM = 0.08     # metres past the wrist joint, along the forearm, where the palm's middle is (roughly)
+
+
+def hand_gaps(pose, profiles):
+    """{side: (gap, segment, point)}: how far each hand is outside the nearest body part's surface (metres, negative =
+    inside), checked at the wrist joint and the palm (PALM past it). Body parts: bodyprofile's segments for Starfield
+    (hips, belly, chest, thighs, calves, the OTHER arm), posed by their two joints in this frame; the surface radius is
+    the mean around the axis at that point, so the twist of the part does not matter (a check, not the retarget's
+    exact surface). 2026-11-15, owner: the hands go into the body for a moment as the (male) player sits down."""
+    from fo4sf import bodyprofile as BP
+    out = {}
+    for side in ("L", "R"):
+        wrist, fore = pose.get(f"{side}_Wrist"), pose.get(f"{side}_Forearm")
+        if wrist is None or fore is None:
+            continue
+        d = wrist - fore
+        palm = wrist + d / (np.linalg.norm(d) or 1.0) * PALM
+        best = None
+        for name, _sa, _sb, a_n, b_n in BP.SEGMENTS:
+            if name.startswith(f"{side}_") and ("arm" in name):
+                continue                                             # its own arm
+            pr = profiles.get(name)
+            if pr is None or a_n not in pose or b_n not in pose:
+                continue
+            a, b = pose[a_n], pose[b_n]
+            ab = b - a
+            length2 = float(ab @ ab) or 1e-12
+            ring = np.asarray(pr["radius"], float).mean(axis=1)               # per t bin, mean around the axis
+            for label, pt in (("wrist", wrist), ("palm", palm)):
+                t = float((pt - a) @ ab / length2)
+                tc = min(max(t, 0.0), 1.0)
+                axis_d = float(np.linalg.norm(pt - (a + tc * ab)))
+                r = float(np.interp(tc * BP.T_BINS - 0.5, np.arange(BP.T_BINS), ring))
+                gap = axis_d - r if 0.0 <= t <= 1.0 else axis_d - r * 0.5   # past an end: half the radius (rounded cap)
+                if best is None or gap < best[0]:
+                    best = (round(gap, 3) + 0.0, name, label)
+        if best is not None:
+            out[side] = best
+    return out
+
+
+def gap_report(label, rig, rb, profiles, samples=120):
+    """Lines: per hand, its smallest gap over the clip (frame, body part) and the frames where it is inside."""
+    n = rb["frames"]
+    frames = sorted({round(k * (n - 1) / (samples - 1)) for k in range(samples)}) if n > 1 else [0]
+    rows = {"L": [], "R": []}
+    for f in frames:
+        for side, g in hand_gaps(world_pose(rig, rb, f), profiles).items():
+            rows[side].append((f, *g))
+    lines = [f"== {label}: hands against the body over {len(frames)} of {n} frames (negative = inside)"]
+    for side, rs in rows.items():
+        if not rs:
+            continue
+        f, gap, seg, pt = min(rs, key=lambda r: r[1])
+        inside = [r[0] for r in rs if r[1] < 0]
+        span = f"frames {inside[0]}-{inside[-1]} ({len(inside)} sampled)" if inside else "never"
+        lines.append(f"  {side} hand: closest {gap:+.3f} m ({pt} at {seg}, frame {f}); inside the body: {span}")
+    return lines
+
+
 def report(label, pose, keyed):
     pel = next((pose[n] for n in pose if re.search(r"pelvis", n, re.I)), None)
     lines = [f"== {label}"]
@@ -149,7 +212,15 @@ def main(argv=None):
                     help="with two --af (ours, then a Starfield clip doing the same thing): write the clavicle turn "
                          "that puts our shoulders where Starfield's are (retarget.shoulder_calibration), averaged over "
                          "the clips' frames; hkx_to_af / furniture_anim_pack --shoulder-calibration apply it")
+    ap.add_argument("--gaps", metavar="BODY_PROFILES_JSON",
+                    help="body_profiles.json (scripts/armor/body_profiles.py): per clip, how close each hand comes to "
+                         "the body over the whole clip and the frames where it is inside (hand_gaps)")
     a = ap.parse_args(argv)
+    profiles = None
+    if a.gaps:
+        import json
+        with open(a.gaps, encoding="utf-8") as fh:
+            profiles = json.load(fh).get("starfield") or {}
     if a.calibrate_shoulders and len(a.af) != 2:
         sys.exit("--calibrate-shoulders takes exactly two --af: ours, then the Starfield reference")
     import hkx_to_af
@@ -183,6 +254,9 @@ def main(argv=None):
             if missing:
                 sys.exit(f"{src}: no {missing} in the pose")
             dirs.append(retarget.clavicle_dirs({m: np.array([p[m] for p in poses]) for m in names}))
+        if profiles is not None:
+            print("\n".join(gap_report(src, rig, rb, profiles)))
+            continue
         f = a.frame * max(rb["frames"] - 1, 0) if a.frame < 1 else a.frame
         pose = world_pose(rig, rb, f)
         print(report(f"{src} (frame {f:.0f} of {rb['frames']}, {len(rb['bones'])} bones keyed)", pose,
