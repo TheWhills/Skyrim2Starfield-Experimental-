@@ -146,9 +146,10 @@ def kind_of(rec, crafting=True):
     return None
 
 
-def markers(rec, kind, marker_z):
-    """Per Skyrim marker: offset (m), rotation (degrees), entry sides; [] = use the template's SNAM unchanged."""
-    if kind in SPECIAL:
+def markers(rec, kind, marker_z, special_ok=False):
+    """Per Skyrim marker: offset (m), rotation (degrees), entry sides; [] = use the template's SNAM unchanged.
+    special_ok: also for SPECIAL kinds (Skyrim's markers, for furniture playing our Skyrim clips: skyrim_markers)."""
+    if kind in SPECIAL and not special_ok:
         return []
     nm = [m for m in rec.get("nif_markers") or [] if isinstance(m, dict) and "offset" in m]
     disabled = {m["index"]: set(m.get("disabled") or []) for m in rec.get("markers") or []}
@@ -190,6 +191,20 @@ def anim_set_for(base) -> Optional[str]:
     return None
 
 
+# The spot an actor takes when the Skyrim base has no marker NIF (an idle marker, IDLM): the reference itself, facing
+# its heading, as Skyrim plays idle markers.
+AT_THE_REFERENCE = [{"offset_m": [0.0, 0.0, 0.0], "rot_deg": 0.0, "entry": ["Front"]}]
+
+
+def skyrim_markers(rec, kind, marker_z):
+    """Skyrim's own spots for a base, whatever its kind: its NIF's furniture markers, or the reference itself
+    (AT_THE_REFERENCE) for one without. Used in place of a SPECIAL template's markers when the base plays our Skyrim
+    clips (add_anim_keywords): 2026-11-15 (owner, in game): Hilde leaned facing along the walkway instead of at the
+    rail, Hod stood ~0.3 m off the post he leans on; both had the bartop-lean template's marker (another stand-off and
+    facing), while chairs and benches, on Skyrim's markers, sit right."""
+    return markers(rec, kind, marker_z, special_ok=True) or [dict(m) for m in AT_THE_REFERENCE]
+
+
 def anim_keyword_edid(anim_set: str) -> str:
     return f"S2S_AnimFurnSkyrim{anim_set}"
 
@@ -216,6 +231,8 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
             continue
         b["anim_keyword"] = f"{fid & 0xFFFFFF:06X}:{name}"
         b["anim_set"] = st
+        if b.get("skyrim_markers") and not b.get("markers") and b.get("kind") not in CRAFT_KINDS:
+            b["markers"] = b["skyrim_markers"]           # our Skyrim clips stand at Skyrim's spot
         done[st] = done.get(st, 0) + 1
     if missing:
         done["missing"] = sorted(missing)
@@ -348,6 +365,8 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
         real_model = rec["type"] == "FURN" and not rec["is_marker"]
         bases[key] = {"edid": rec["edid"], "type": rec["type"], "kind": kind, "template": form, "template_edid": tedid,
                       "model": rec.get("model") if real_model else None, "markers": markers(rec, kind, marker_z)}
+        if kind in SPECIAL and kind not in CRAFT_KINDS:
+            bases[key]["skyrim_markers"] = skyrim_markers(rec, kind, marker_z)
         if (shift or {}).get(kind):
             bases[key]["shift_m"] = shift[kind]
     refs = [r for r in refs if r["base"] in bases]

@@ -298,3 +298,12 @@ below the neck, clavicle 5-6 deg above level (before 0.137 / 0.140 m, 10-11 deg 
 0.074, 7-9 above); the wall lean 0.089 / 0.082 m (before 0.151). Hands on the thighs unchanged (0.135 / 0.147 m), and
 keep_contacts moves less (Sit up to 0.087 m, was 0.156; WallLean 0.075, was 0.139). Prop events left out: Sit 7
 descriptors (Starfield's chair flavors carry props), Counter 3, Alchemy 2, Enchant 3, Cook 2, Tanning 4.
+
+Lean spots on Skyrim's markers (2026-11-15, owner, in game with the calibrated shoulders: "leaning looks better" but
+Hilde leaned facing along the walkway instead of at the rail, Hod stood ~0.3 m off the post). Their bases (SPECIAL
+kinds: lean_counter, bartender, lean_table, sweep, scrape) kept the Starfield template's marker, right for Starfield's
+own animations, not for Skyrim's clips (chairs and benches, on Skyrim's NIF markers, sit right). make_furniture now
+stores skyrim_markers for those bases (the Skyrim NIF's furniture markers, or the reference itself for an idle
+marker), and add_anim_keywords uses them when the base gets one of our animation keywords; crafting stations keep the
+template's (Starfield's menu needs its marker). COM_SHIFT for RailLean / Counter / LeanTable / Sweep back to (0, 0):
+Skyrim's clips at Skyrim's spots. Needs the pack for those sets and the Riverwood build. Unverified in game.

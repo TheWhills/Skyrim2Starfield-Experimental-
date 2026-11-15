@@ -105,8 +105,12 @@ SETS = {
 # Skyrim leans back on the wall, the template's actor faces a counter, so its COM is no guide).
 # 2026-11-14 owner's pack run (--align-com of each Idle): RailLean .. Tanning. Tanning (0, 0): 2026-11-15 in game the
 # tanner worked 0.65 m away from the rack with the wipe-wall template's offset (-0.029, -0.648); Skyrim's own spot.
-COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (-0.155, -0.181), "Counter": (-0.146, -0.276),
-             "LeanTable": (0.026, -0.26), "Sweep": (-0.002, -0.045), "Alchemy": (0.014, -0.037),
+# 2026-11-15: the lean, counter, table and sweep spots now take Skyrim's own markers (make_furniture.skyrim_markers;
+# in game they stood at the bartop-lean template's spot, off the rail / post), so their clips keep Skyrim's own
+# placement too: (0, 0). The offsets measured against the templates were RailLean (-0.155, -0.181), Counter
+# (-0.146, -0.276), LeanTable (0.026, -0.26), Sweep (-0.002, -0.045).
+COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (0.0, 0.0), "Counter": (0.0, 0.0),
+             "LeanTable": (0.0, 0.0), "Sweep": (0.0, 0.0), "Alchemy": (0.014, -0.037),
              "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (0.0, 0.0)}
 
 

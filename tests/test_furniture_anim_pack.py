@@ -118,6 +118,33 @@ class AnimKeywordTests(unittest.TestCase):
                          {"missing": ["Sit"]})
         self.assertNotIn("anim_keyword", out2["bases"]["a"])
 
+    def test_skyrim_markers_for_our_clips(self):
+        """2026-11-15: a lean marker (SPECIAL) playing our clips takes Skyrim's NIF marker; a sweep idle marker (no NIF)
+        the reference itself; a crafting station keeps the template's (the menu needs it); without the animations
+        plugin the template's marker stays."""
+        import make_furniture as MF
+        U = MF.U
+        lean = {"edid": "RailLeanMarker", "nif_markers": [{"offset": [0, -0.3 * U, 0],
+                                                          "heading_deg": 180.0, "entry": ["Front"]}]}
+        sky = MF.skyrim_markers(lean, "lean_counter", "floor")
+        self.assertEqual(sky, [{"offset_m": [0.0, -0.3, 0.0], "rot_deg": 180.0, "entry": ["Front"]}])
+        self.assertEqual(MF.markers(lean, "lean_counter", "floor"), [])                  # SPECIAL: template's
+        self.assertEqual(MF.skyrim_markers({"edid": "SweepIdleMarker"}, "sweep", "floor"), MF.AT_THE_REFERENCE)
+        out = {"bases": {
+            "r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky},
+            "s": {"kind": "sweep", "edid": "SweepIdleMarker", "markers": [],
+                  "skyrim_markers": [dict(m) for m in MF.AT_THE_REFERENCE]},
+            "a": {"kind": "alchemy", "edid": "CraftingAlchemyWorkbench", "markers": [], "skyrim_markers": sky}}}
+        kws = {"S2S_AnimFurnSkyrimRailLean": 0x01000811, "S2S_AnimFurnSkyrimSweep": 0x01000815,
+               "S2S_AnimFurnSkyrimAlchemy": 0x01000816}
+        MF.add_anim_keywords(out, "S2SStances.esm", read_keywords=lambda p: kws)
+        self.assertEqual(out["bases"]["r"]["markers"], sky)
+        self.assertEqual(out["bases"]["s"]["markers"], MF.AT_THE_REFERENCE)
+        self.assertEqual(out["bases"]["a"]["markers"], [])
+        none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}
+        MF.add_anim_keywords(none, "S2SStances.esm", read_keywords=lambda p: {})
+        self.assertEqual(none["bases"]["r"]["markers"], [])
+
 
 class DescriptorTests(unittest.TestCase):
     def test_strip_hand_ik(self):
