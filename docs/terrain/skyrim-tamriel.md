@@ -358,3 +358,11 @@ by more than 3 minutes. Built by tools\owner\time_sync.ps1 (Creation Kit Papyrus
 script block copied from a vanilla one-script quest, only the name ours). Unverified: the compile (Planet type,
 GetCurrentPlanet, SetLocalTime's parameters), the quest starting in an existing save, SetLocalTime's cost. The console
 passtime N passed odd amounts (1 -> 30 min, later 1 -> 5.5 h): use the Wait menu for timing tests.
+
+Landing elsewhere (2026-11-15, owner: "could we change our landing spot on the planet to the Throat of the World").
+scripts/terrain/set_landing.py: a Skyrim location's world location marker (LCTN MNAM) or --at X Y gives the place;
+skyrimsite.flat_site picks the flattest dry 80 m square within --radius (default 600 m: the summit is steep, the
+printed ground range says how rough the square is; Riverwood's pad: 4.8 m); the planet plugin's SKY_NirnLandingMarker
+and SKY_NirnMapMarker move there in place (staged copy, and with --starfield the installed one when identical), and
+overlays_params.json "landing" is updated (old ones kept in "landing_history"). No terrain rebuild, FormIDs unchanged.
+Without --apply it only prints. Unverified on the owner's data.
