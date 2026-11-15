@@ -315,3 +315,10 @@ Talk_L01-L10, Talk_M01-M16, Talk_S01-S05) blended with our pose. The pack now wr
 own Idle under those 38 tags (TALK_SLOTS, talk_copies: descriptor with the tag and file name changed; the clip copied,
 not converted again), found before Starfield's (our folder first). New files: needs the Creation Kit cache run.
 Unverified in game.
+Owner, in game after the talk slots (2026-11-15): seated Hilde still played Starfield's talk gesture (hand to chin, arm
+across). On the owner's PC (verified): s2s_sit holds the 38 slot descriptors and clips (Idle copies, 4:54 / 4:10 PM),
+and 8 AnimationFileData cache files name s2s_sit\talk_l01. So the gesture does not come through those furniture-graph
+tags (supported). Suspect: a subgraph row of another role than Furniture (stance_plugin copies only Furniture rows)
+that also matches chairs. scripts/armor/subgraph_rows.py lists every table row naming given keywords, any role.
+Also seen: idle Hilde's shoulders low and hands sunk into her lap (a woman on the male conversion; the shoulder
+calibration and body profiles are male), Hod still ~0.3 m off the post, Hilde slightly off the rail (facing now right).
