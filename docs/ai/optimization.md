@@ -73,3 +73,7 @@ the import closure of skyrimconvert, convert_static, bsa, checkpoints; checked a
 them: nothing loaded is missing, 6 lazily imported extras are hashed too). Before: 265 converted, 71.8 s on a build
 with no converter change. After: one more full conversion (the signature's file list changed), then expected 265
 reused on the next builds; to be confirmed from the owner's next two build logs.
+Measured (owner's Riverwood build log, 2026-11-15, after commits to retarget / furniture / af_pose only): step 2
+"reused": 229 of 235 assets, "seconds": 18.0 (before: 0 reused, 71.8 s). The remaining 6 and the 30 failures
+(15 "no triangle geometry", 15 effect-shader-only shapes: models with nothing to convert, retried each build) are not
+checkpointed; 265 vs 235 is the models / assets count of the batch.

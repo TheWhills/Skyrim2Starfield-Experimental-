@@ -363,3 +363,7 @@ compared). The lean stand-off found: make_furniture.DEFAULT_SHIFT moves bartende
 the furniture's +y (measured 2026-11-08 for Starfield's bar-lean animation at the counter face), ahead of Hod (facing
 0) and behind Hilde (facing 180): exactly the owner's "a foot". add_anim_keywords drops that default where our Skyrim
 clips use Skyrim's markers (a --shift given on the command line stays). Needs the Riverwood build.
+Owner's run (2026-11-15): Sit's only unanswered idle-like tag was Stand_Start (now our Idle; that is the Starfield
+state behind the seated slump, supported); left to Starfield (cleaned of hand IK where it had it): Camera, EnterInstant,
+LookDirections(_Head), RearEnterFromStand, RearQuickExitToStand, Flinch. Other sets: none idle-like unanswered. The
+build put the lean / counter / table bases on Skyrim's markers without the 0.30 m default shift.
