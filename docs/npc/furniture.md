@@ -340,3 +340,9 @@ the first conversion (arms back and twisted: the hand-IK pull). So a Starfield d
 there: the states we do not convert (Rear*, EnterInstant, LookDirections ...). The pack's copy step now copies every
 such descriptor of the set's template folder and furniture\common into our folder with hand IK / prop events left out
 (vanilla_leftovers; Starfield's clip with it; ones with nothing to leave out are not copied). Unverified in game.
+Owner in game after the cleaned states (2026-11-15): Hod still ~a foot in front of the post, Hilde ~a foot back from
+the rail; the seated player (already seated: the Wait prompt) every so often leans and drags the hands down into the
+body: an idle flavor (af_pose --gaps had checked the enters and the Idle only). Suspect for the leans (supported):
+Skyrim's enter clips carry root motion (to the wall / rail) that --no-root-motion drops; Hod too far forward and Hilde
+too far back, each along the way they face, fits. scripts/armor/furniture_motion.py prints each set clip's root motion
+end from Skyrim's animationdatasinglefile (DefaultMale, generators mapped through the behaviours).
