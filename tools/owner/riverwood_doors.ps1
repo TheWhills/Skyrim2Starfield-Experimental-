@@ -19,7 +19,11 @@ param(
     [string]$NavAround = "Riverwood",
     [int]$NavRadius = 2,
     [switch]$Resurvey,         # redo the vanilla navmesh survey (it is kept between runs)
-    [string[]]$Actors = @(),   # Skyrim NPCs to place in their converted cell with their AI packages, e.g. -Actors Orgnar
+    # Skyrim NPCs to place with their AI packages. Default (2026-11-15, owner: "why you keep losing progress"): every
+    # Riverwood adult face_fit fits, so a command without -Actors no longer drops them; -NoActors for none.
+    [string[]]$Actors = @("Orgnar", "Delphine", "Embry", "Faendal", "Alvor", "Sigrid", "Hod", "Gerdur", "Sven", "Hilde",
+                          "CamillaValerius", "LucanValerius"),
+    [switch]$NoActors,
     [switch]$Furniture,        # chairs / benches / beds / lean counters / idle markers as Starfield furniture NPCs use
     [ValidateSet("floor", "skyrim")][string]$MarkerZ = "floor",   # furniture marker height (docs/npc/furniture.md)
     [string[]]$FurnShift = @(),   # move a furniture kind's markers, e.g. -FurnShift "bartender=0,0.2,0"
@@ -73,6 +77,7 @@ if ($Navmesh) {
     if ($LASTEXITCODE -ne 0) { Fail "navmesh export" }
 }
 
+if ($NoActors) { $Actors = @() }
 if ($Actors.Count -gt 0) {
     Step "2c. NPCs with their schedules: $($Actors -join ', ')"
     $sa = @("--skyrim", "$SKY\Skyrim.esm", "--starfield", "$SF\Data\Starfield.esm", "--work", $Work)
