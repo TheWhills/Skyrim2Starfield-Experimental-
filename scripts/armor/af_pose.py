@@ -105,6 +105,23 @@ def hands_on_thighs(pose):
     return out
 
 
+def shoulders(pose):
+    """Each shoulder joint (the upper arm's root, Biceps) relative to the neck joint: {side: (down, out, slope)},
+    down = metres below the neck, out = metres to the side, slope = the clavicle's angle below level, degrees
+    (2026-11-15, owner: "all animations seem to cause the shoulders to go down": compare with a Starfield clip)."""
+    neck = next((pose[n] for n in pose if re.fullmatch(r"C_Neck", n, re.I)), None)
+    out = {}
+    for side in ("L", "R"):
+        clav, arm = _side_bone(pose, side, "clavicle"), _side_bone(pose, side, "biceps|upperarm")
+        if neck is None or not (clav and arm):
+            continue
+        d = pose[arm] - neck
+        c = pose[arm] - pose[clav]
+        slope = float(np.degrees(np.arctan2(-c[2], np.hypot(c[0], c[1]))))
+        out[side] = (round(float(-d[2]), 3) + 0.0, round(float(abs(d[0])), 3) + 0.0, round(slope, 1) + 0.0)
+    return out
+
+
 def report(label, pose, keyed):
     pel = next((pose[n] for n in pose if re.search(r"pelvis", n, re.I)), None)
     lines = [f"== {label}"]
@@ -115,6 +132,8 @@ def report(label, pose, keyed):
     for side, (t, up, out) in hands_on_thighs(pose).items():
         lines.append(f"  hand over {side} thigh: {t:.2f} of the way to the knee, {up:+.3f} m above the hip-knee line,"
                      f" {out:+.3f} m outside it")
+    for side, (down, out, slope) in shoulders(pose).items():
+        lines.append(f"  {side} shoulder: {down:+.3f} m below the neck, {out:.3f} m out, clavicle {slope:+.1f} deg below level")
     return "\n".join(lines)
 
 

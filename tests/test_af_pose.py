@@ -43,5 +43,14 @@ class PoseTests(unittest.TestCase):
         self.assertEqual(P.hands_on_thighs({"C_Pelvis": np.zeros(3)}), {})
 
 
+    def test_shoulders(self):
+        """Neck at 1.5 m; left clavicle at x -0.02, 1.48 m, shoulder joint 0.15 m out and 0.05 m lower: 0.07 below the
+        neck, 0.17 out, clavicle sloping atan(0.05 / 0.15) = 18.4 deg."""
+        pose = {"C_Neck": np.array([0, 0, 1.5]), "L_Clavicle": np.array([-0.02, 0, 1.48]),
+                "L_Biceps": np.array([-0.17, 0, 1.43])}
+        self.assertEqual(P.shoulders(pose), {"L": (0.07, 0.17, 18.4)})
+        self.assertIn("L shoulder: +0.070 m below the neck, 0.170 m out, clavicle +18.4 deg", P.report("x", pose, set()))
+
+
 if __name__ == "__main__":
     unittest.main()
