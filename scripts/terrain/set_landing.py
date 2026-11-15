@@ -99,7 +99,9 @@ def main(argv=None):
     where = ap.add_mutually_exclusive_group(required=True)
     where.add_argument("--location", help="a Skyrim location's EditorID, e.g. ThroatoftheWorldLocation")
     where.add_argument("--at", type=float, nargs=2, metavar=("X", "Y"), help="Skyrim world units")
-    ap.add_argument("--radius", type=float, default=600.0, help="metres around the place to search (default 600)")
+    ap.add_argument("--radius", type=float, nargs="+", default=[150.0, 300.0, 600.0],
+                    help="metres around the place to search; several print one candidate each (default 150 300 600); "
+                         "--apply takes one")
     ap.add_argument("--name", default="Nirn", help="the planet's name in make_planet.py's marker EditorIDs")
     ap.add_argument("--starfield", default="", help="also patch the installed planet plugin in <Starfield>\\Data")
     ap.add_argument("--apply", action="store_true", help="write the change (otherwise only print it)")
@@ -113,22 +115,33 @@ def main(argv=None):
     if a.location:
         sky = packages.Index(a.skyrim)
         try:
-            x, y, _z = place_of_location(sky, a.location)
+            x, y, z_units = place_of_location(sky, a.location)
         finally:
             sky.close()
         label = a.location
     else:
         x, y = a.at
+        z_units = None
         label = f"({x:g}, {y:g})"
     near = (x / UNITS_PER_M - origin[0], y / UNITS_PER_M - origin[1])
+    if a.apply and len(a.radius) != 1:
+        sys.exit("--apply takes one --radius (the candidate to use)")
     land = skyrimland.SkyrimLand(a.skyrim, o.get("world_edid") or skyrimland.WORLD)
-    site = skyrimsite.flat_site(land.grids, land.water, land.default_water, origin, o.get("height_offset_m", 0.0),
-                                near, radius_m=a.radius)
+    offset = o.get("height_offset_m", 0.0)
+    place_z = None if z_units is None else z_units / UNITS_PER_M + offset
+    print(f"{label}: Skyrim ({x:g}, {y:g}) = overlay ({near[0]:.1f}, {near[1]:.1f}) m"
+          + ("" if place_z is None else f", height {place_z:.1f} m"))
+    site = None
+    for r in a.radius:
+        site = skyrimsite.flat_site(land.grids, land.water, land.default_water, origin, offset, near, radius_m=r)
+        if not site:
+            print(f"  within {r:g} m: no dry 80 m square")
+            continue
+        drop = "" if place_z is None else f", {place_z - site['z']:.0f} m below the place"
+        print(f"  within {r:g} m: pad at ({site['x']:g}, {site['y']:g}, {site['z']:g}), {site['distance_m']:g} m away"
+              f"{drop}, ground range {site['range_m']:g} m over 80 m (Riverwood's pad: 4.8 m)")
     if not site:
-        sys.exit(f"no dry 80 m square within {a.radius:g} m of {label}: try a larger --radius")
-    print(f"{label}: Skyrim ({x:g}, {y:g}) = overlay ({near[0]:.1f}, {near[1]:.1f}) m")
-    print(f"landing: ({site['x']:g}, {site['y']:g}, {site['z']:g}), {site['distance_m']:g} m from it, ground range "
-          f"{site['range_m']:g} m over the 80 m square (the arrival's pad near Riverwood: 4.8 m)")
+        sys.exit(f"no dry 80 m square near {label}: try a larger --radius")
     plugin = os.path.join(a.staging, prm["mars"]["plugin"])
     offs = marker_offsets(plugin, a.name)
     if set(offs) != {"landing", "map"}:

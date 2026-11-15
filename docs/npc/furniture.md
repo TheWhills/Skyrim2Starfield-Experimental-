@@ -292,3 +292,9 @@ against Starfield's chair Idle; a neutral standing pair to check it against late
 WITHOUT the calibration (else it measures its own result). Tanning: COM_SHIFT (0, 0); the template's AnimObj* events
 (AnimObjLoad / AnimObjDraw AnimObjectDishRag in standing_wipewall\enterfromstand.afx) are left out of every set but
 Sweep (KEEP_PROPS). Unverified in game.
+Owner's run with the calibration (2026-11-15): af_pose --calibrate-shoulders on our Sit Idle (converted without it)
+against Starfield's chair Idle: turn 26.9 / 26.5 deg. After the pack with it: our Sit Idle's shoulders 0.085 / 0.082 m
+below the neck, clavicle 5-6 deg above level (before 0.137 / 0.140 m, 10-11 deg below; Starfield's chair Idle 0.079 /
+0.074, 7-9 above); the wall lean 0.089 / 0.082 m (before 0.151). Hands on the thighs unchanged (0.135 / 0.147 m), and
+keep_contacts moves less (Sit up to 0.087 m, was 0.156; WallLean 0.075, was 0.139). Prop events left out: Sit 7
+descriptors (Starfield's chair flavors carry props), Counter 3, Alchemy 2, Enchant 3, Cook 2, Tanning 4.
