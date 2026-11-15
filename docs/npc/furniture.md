@@ -271,3 +271,8 @@ retarget.keep_contacts (hkx_to_af --body-profiles; furniture_anim_pack --body-pr
 HAND_CLEARANCE): per frame and hand, each body segment near Skyrim's wrist (gap < 0.14 m, full below 0.06) pulls
 Starfield's wrist to the same position along / direction around / gap from Starfield's segment surface; arm IK, hand
 rotation kept. Unverified on real clips.
+Owner's run with the fixed measurement and --body-profiles (2026-11-14): at equal height (Skyrim x0.896) the bodies
+match within 10 % except the upper arm (Starfield 0.83x) and the pelvis (0.86x). keep_contacts: Sit 9 clips (thighs,
+up to 0.156 m), WallLean 3 (forearms, belly, chest, hips; 0.139 m), Sweep 3 (0.12 m), RailLean 2 (0.092 m), the rest
+under 0.04 m. Sit Idle by af_pose: hands 0.135 / 0.148 m above the hip-knee line, Starfield's chair Idle 0.129 / 0.136,
+with no tuned value (lift_hands' 0.13 was set from that same chair). Unverified in game.
