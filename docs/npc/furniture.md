@@ -228,8 +228,9 @@ fresh `coc SKY_TamrielRiverwoodSpawn` from the main menu (no save) the static (0
 game does not apply FO4Port.esm's overrides of those temporary references (cause unresolved). Fix:
 scripts/terrain/apply_ref_overrides.py writes FO4Port.esm's hidden statics into the exterior plugin itself, in place
 (Initially Disabled flag, FO4Port's sunk position; same record sizes, no FormID moves; one-time backup), into the
-installed and the staged copy; riverwood_doors.ps1 step 5 runs it after every install. Owner's run: 19 statics patched
-in each copy. Verified in game (owner, 2026-11-14): the statics are gone and the furniture can be sat on.
+installed copy (correction 2026-11-14: at first also the staged copy, which put the load doors underground on the
+next build; see "Doors underground" below); riverwood_doors.ps1 step 5 runs it after every install. Owner's run: 19
+statics patched. Verified in game (owner, 2026-11-14): the statics are gone and the furniture can be sat on.
 
 More sets (2026-11-14, after Sit was verified). The owner's survey of the template folders (furniture_anims.json):
 leaningbartopfront, bartender, desklean, standing_sweep, standing_wipewall and the pharma / industrial / galley

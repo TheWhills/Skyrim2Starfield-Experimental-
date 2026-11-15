@@ -343,11 +343,10 @@ NPC schedules, step 1 (read-only survey of an NPC's AI packages and Starfield's 
 python -I scripts\npc\package_survey.py --skyrim "$sky\Skyrim.esm" --npc Orgnar --starfield "$sf\Data\Starfield.esm" --out C:\Modding\work\packages
 ```
 
-NPCs placed in their converted interior with their Skyrim AI packages (step 2 of docs/npc/schedules.md; Starfield closed):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Actors Orgnar
-```
+NPCs with their Skyrim AI packages (docs/npc/schedules.md): every riverwood_doors.ps1 run places all twelve Riverwood
+adults by default (Orgnar, Delphine, Embry, Faendal, Alvor, Sigrid, Hod, Gerdur, Sven, Hilde, Camilla and Lucan
+Valerius; since 2026-11-15, after a command naming only three dropped the rest), indoors or, if Skyrim starts them
+outdoors, in the world at their Skyrim spot. `-Actors A,B` for others, `-NoActors` for none.
 
 In game, NPC selected in the console: `getiscurrentpackage <id>` (1 = running; ids are printed by the build, FO4Port's
 load slot is 05, e.g. `getiscurrentpackage 05000E64`). `getcurrentaiprocedure` is not a reliable check (vanilla NPCs show -1).
@@ -363,6 +362,28 @@ Furniture NPCs can use (chairs, benches, beds, lean counters, sweeping spots) in
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
 ```
+
+Skyrim's own furniture animations (sitting, leaning, counters, sweeping, alchemy, enchanting, cooking, tanning;
+docs/npc/furniture.md). Starfield closed. Only the steps whose input changed need rerunning:
+
+1. Stance plugin (new or changed animation sets: their keywords):
+   ```powershell
+   python -I scripts\armor\stance_plugin.py --starfield $sf --out "$mods\S2S Stances"
+   ```
+2. Body profiles (once; again only if the bodies change), then the clips, with the hands kept on the body:
+   ```powershell
+   python -I scripts\armor\body_profiles.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\body_profiles
+   python -I scripts\armor\furniture_anim_pack.py --calumi $calumi --skyrim-data $sky --starfield $sf --out "$mods\S2S Furniture Anims" --work C:\Modding\work\furniture_anim_pack --body-profiles C:\Modding\work\body_profiles\body_profiles.json
+   ```
+3. Creation Kit animation cache: only when sets, folders or descriptors (.afx) changed, not for clip-only changes.
+   `Remove-Item -Recurse -Force C:\Modding\work\s2s\animinfo`, run **CreationKit (1)** from MO2, wait for it to close, then:
+   ```powershell
+   $src="C:\Modding\work\s2s\animinfo\Meshes\AnimTextData"; $dst="$mods\S2S AnimInfo\Meshes\AnimTextData"
+   robocopy "$src\AnimationFileData" "$dst\AnimationFileData" /MIR
+   robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubgraphInfoAndOffsetData.txt
+   ```
+4. The Riverwood build above (furniture keywords), when sets were added. Its step 5 hides the exterior statics under
+   the outdoor furniture and doors in the installed exterior plugin only (never the staged copy the build reads).
 Scheduled NPCs with their own face, hair, outfit and voice: fit them first (outfit, voice lines, face-test NPC; the
 face_fit run must list every NPC wanted, old and new, since it rewrites S2SFaceTest.esm), then the build above. The
 build overrides each NPC's face-test record (FO4Port.esm masters S2SFaceTest.esm: in MO2's plugin list FO4Port.esm must

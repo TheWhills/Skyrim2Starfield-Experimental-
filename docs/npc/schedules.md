@@ -39,7 +39,8 @@ assumed as in Skyrim / FO4: unverified) placed persistent at its spot; radius wr
 Mutagen keeps u32; PluginSpike prints the vanilla value both ways). NPC: copy of face_fit's vanilla template for that NPC
 (faces.json), name, packages = ours, AI-package template flag cleared, scripts dropped; placed as a persistent ACHR.
 Not yet: his face / hair / outfit (the test NPC lives in S2SFaceTest.esm, an MO2 plugin), furniture (the bar-lean
-marker is a static here), dialogue / vendor. `riverwood_doors.ps1 -Actors Orgnar` runs it.
+marker is a static here), dialogue / vendor. `riverwood_doors.ps1 -Actors Orgnar` ran it (now all twelve adults by
+default, 2026-11-15).
 
 ## Delphine and Embry (survey 2026-11-08) and the rules that came from them
 Delphine: 14 packages, the first ones from the main quest (Sky Haven Temple practice / sandbox / sleep, return to
