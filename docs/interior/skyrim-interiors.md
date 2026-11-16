@@ -469,3 +469,11 @@ out, as FireCandleFlame's 75000 did on our candle cards (2026-11-15). The clone 
 adaptive, about our orange v2 hearth: 5000 x 1.5 x 0.3) wherever it sets one (skyrimfire.set_emittance; the build's
 "layered_fire" stats show the vanilla values and how many were set). If it stays white or turns grey, its textures are
 greyscale and need a tint: the cloned .mat shows which fields it has.
+Owner at 2000 (2026-11-16 10:14): still white (fire across the logs, finer and dimmer). The clone (**verified**, the
+owner's sf_layeredfirev2.mat): 3layereffectemissive, layer 1 emissive FireColumnTile_color (4 x 2 flipbook, scrolling
+in V every 1.1 s, UV x1 / x1.25), layer 2 SimpleSmokeBrightTile opacity (x5, subtractive, scrolling every 0.75 s),
+layer 3 GradientFlameCurveInv opacity (the flame's shape); vanilla emittance 12000 adaptive, exposure 11.17; colour only
+from LayeredEmissivityComponent.FirstLayerTint (1, 0.949, 0.922): LayeredFireV2 is a near-white fire by design. The
+clone now takes FirstLayerTint LAYERED_TINT (1, 0.45, 0.12), Skyrim's fire orange (in LAYERED_EMITTANCE, so
+set_emittance writes it). Candles with Starfield's flame mesh: "a small thin flicker at the wick" -> SF_CANDLE_WIDTH /
+_HEIGHT x7.0 / x2.5. Both in skyrimfire.py only, so -AssetsOnly redoes just the flame models.

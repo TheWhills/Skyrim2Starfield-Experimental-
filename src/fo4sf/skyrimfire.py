@@ -493,11 +493,22 @@ def sf_shape_mesh_path(nif_bytes: bytes, shape_name: bytes = b"Flame:0") -> Opti
 # as FireCandleFlame's own 75000 blew our candle cards out to white on 2026-11-15 (supported hypothesis: the same
 # cause). The layered clone takes LAYERED_EMITTANCE wherever the material sets an emittance (set_emittance): about what
 # our own hearth flames had when the owner called them orange (5000 x Skyrim's multiple 1.5 x EMITTANCE_SCALE 0.3)
-LAYERED_EMITTANCE = {"LuminousEmittance": "2000", "AdaptiveEmittance": "true", "ExposureOffset": "8"}
+# Owner at 2000 (2026-11-16 10:14): still white. The clone (verified, the owner's sf_layeredfirev2.mat): emissive
+# texture FireColumnTile_color, coloured only by LayeredEmissivityComponent.FirstLayerTint = (1, 0.949, 0.922), near
+# white - the material's colour is that tint, not its texture. LAYERED_TINT: Skyrim's fire orange (GradFireExplosion's
+# upper rows, the colour our orange v2 hearth baked in); the bright cores clip red first and read yellow
+LAYERED_TINT = (1.0, 0.45, 0.12)
+LAYERED_EMITTANCE = {"LuminousEmittance": "2000", "AdaptiveEmittance": "true", "ExposureOffset": "8",
+                     "FirstLayerTint": {"Data": {"Value": {"Data": {"w": "1", "x": f"{LAYERED_TINT[0]:g}",
+                                                                    "y": f"{LAYERED_TINT[1]:g}",
+                                                                    "z": f"{LAYERED_TINT[2]:g}"},
+                                                           "Type": "XMFLOAT4"}},
+                                        "Type": "BSMaterial::Color", "Version": 1}}
 
 
 def set_emittance(mat: dict, em: dict) -> int:
-    """Every component of the material that sets LuminousEmittance gets `em` instead; returns how many did."""
+    """Every component of the material that sets LuminousEmittance (LayeredEmissivityComponent) gets the fields of `em`
+    (emittance, and with LAYERED_EMITTANCE its emissive tint) instead; returns how many did."""
     n = 0
     for o in mat.get("Objects", []):
         for c in o.get("Components", []):
@@ -595,8 +606,10 @@ PARTICLE_REPLACES = r"fxfireatlas"
 # small, not bright, quite thin")
 CANDLE_STYLES = ("skyrim", "starfield")
 # owner 2026-11-16 08:52 at x1.8 / x1.1: "the candles are quite thin still"
-SF_CANDLE_WIDTH = 3.0                # x Skyrim's card half width
-SF_CANDLE_HEIGHT = 1.25              # x Skyrim's card half height
+# owner 2026-11-16 10:14, Starfield's own flame mesh at x3.0 / x1.25: a small thin flicker at the wick (Skyrim's flame on
+# the same horn candle stands about as tall as the horn's cup is wide): x2 taller, wider still
+SF_CANDLE_WIDTH = 7.0                # x Skyrim's card half width
+SF_CANDLE_HEIGHT = 2.5               # x Skyrim's card half height
 # Starfield's candle flame is not a card (sf_firepit_probe, verified): "Flame:0" in setdressing\candles\*_lit.nif is a
 # 228-vertex, 336-triangle mesh with vertex colours, radially symmetric (x, y +-7.0, z +-8.46 before the shape's 0.002 -
 # 0.003 scale: 2.8 - 4.2 cm wide), FireCandleFlame.mat on it. With candle_style "starfield" and --starfield-data the

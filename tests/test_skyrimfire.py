@@ -649,6 +649,11 @@ class LayeredStyleTest(unittest.TestCase):
             self.assertIn("Data\\\\Textures\\\\Fx_emissive.DDS", written)   # its own textures kept
             self.assertIn('"LuminousEmittance" : "%s"' % skyrimfire.LAYERED_EMITTANCE["LuminousEmittance"], written)
             self.assertEqual(c.stats["layered_fire"]["emittance_set"], 1)
+            em = next(cc["Data"] for o in json.loads(written)["Objects"] for cc in o["Components"]
+                      if cc["Type"] == "BSMaterial::LayeredEmissivityComponent")
+            tint = em["FirstLayerTint"]["Data"]["Value"]["Data"]
+            self.assertEqual((float(tint["x"]), float(tint["y"]), float(tint["z"])), skyrimfire.LAYERED_TINT)
+            self.assertGreater(skyrimfire.LAYERED_TINT[0], 2 * skyrimfire.LAYERED_TINT[1])   # orange, not white
             self.assertEqual(c.stats["layered_fire"]["emittance"], [{"AdaptiveEmittance": "true", "ExposureOffset": "8",
                                                                     "LuminousEmittance": "5000"}])   # the vanilla value
             c2 = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)

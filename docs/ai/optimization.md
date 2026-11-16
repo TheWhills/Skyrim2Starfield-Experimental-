@@ -93,4 +93,9 @@ changed): **117 s** (convert 68.1 s of it, 265 models, reused 0). Full build wit
 checkpoints reused (2026-11-16, -FlameStyle particles, 229 of 235 models reused, convert 22.8 s): **72 s**. After =
 the next -AssetsOnly flame run ("assets-only build: N s") - pending. This commit itself changes skyrimconvert.py and
 make_skyrim_objects.py, so the next build reconverts every model once more.
+First -AssetsOnly run (owner, 2026-11-16 10:14): **81 s** with every model reconverted again (convert 64.6 s, reused 0,
+224 assets): the commit before it had changed skyrimconvert.py (layered fire), which is in the global signature. Still
+below the 117 s full build with everything reconverting (no export / navmesh / NPCs / plugin). Rule for flame rounds:
+keep the change in skyrimfire.py (per-model flame_key) when it can live there; the tint / candle-size round after it
+touches only skyrimfire.py, so the next -AssetsOnly run redoes the flame models alone - its time is the "after".
 
