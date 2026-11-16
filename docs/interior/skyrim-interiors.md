@@ -399,3 +399,5 @@ metres}); PluginSpike places that vanilla MSTT with every reference of the model
 the reference, initially disabled with it); the scrolling FXFireAtlas meshes are left out, the log glow stays, candles
 keep the Skyrim cards. Unverified: FireMed01's size against a Skyrim hearth (scaled with the reference only), the
 PluginSpike change compiling (no .NET in the cloud workspace).
+Owner's build (2026-11-15 22:57): PluginSpike compiled; 8 FireMed01 references placed (Sleeping Giant 3, every
+house 1), with 3 flame materials (candles, log glow). In-game look pending.

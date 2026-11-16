@@ -88,7 +88,8 @@ skyrimconvert's imports; -FlameStyle too). Changes:
   style) and is redone alone when it changes; the convert summary reports `flame_models_redone`.
 * `riverwood_doors.ps1 -AssetsOnly`: convert (resume) + install only; the plugin from the last full build is reused.
   Both modes now print their total seconds.
-Measured: before = the owner's next full build ("full build: N s"), after = the following -AssetsOnly flame run
-("assets-only build: N s") - to be filled in from those two runs. This commit itself changes skyrimconvert.py and
+Measured: before = the owner's full build 2026-11-15 22:57 with every model reconverting (the converter itself had
+changed): **117 s** (convert 68.1 s of it, 265 models, reused 0). After = the next -AssetsOnly flame run
+("assets-only build: N s") - pending. This commit itself changes skyrimconvert.py and
 make_skyrim_objects.py, so the next build reconverts every model once more.
 
