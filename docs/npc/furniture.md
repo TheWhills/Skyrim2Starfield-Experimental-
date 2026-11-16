@@ -573,4 +573,12 @@ into it, Skyrim's own draw time), so it does not fly from the drop to the fire.
 Sounds: afx_events --name SoundPlay (verified): all 23 are grenade / mine throws, payload a name (WPNGrenadeThrow).
 sound_records.py (read-only) finds which Starfield.esm record type holds that name and lists hammer / metal / steam /
 water / fire EditorIDs of that type, the candidates for Skyrim's forge sounds.
+Skyrim's own forge sounds (owner, 2026-11-16: "why can't we just grab the skyrim sounds ... We are already converted all
+the voices"): the voices play without new sound records because a dialogue line's audio is found by file name
+(Sound\Voice\<plugin>\<voice type>\<id>.wem, voice-pipeline.md) through events Starfield already has. A SoundPlay
+payload instead names a sound record that points at a Wwise event in a soundbank; Skyrim's files need an event and a
+bank of our own (Starfield.wproj, the Creation Kit's Wwise project, Wwise 2021.1.14 as for the voices) and a record in
+our plugin naming it. Loose .wem files in Data\Sound\SoundBanks replace an existing sound by ID (Nexus guides), which
+would change that sound everywhere. sound_records.py sections 4-5: a vanilla sound record's subrecords (its link to
+Wwise) and Skyrim's forge sounds followed SOUN -> SNDR -> files.
 

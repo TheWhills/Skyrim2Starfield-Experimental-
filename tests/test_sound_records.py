@@ -15,5 +15,11 @@ class SoundRecordsTest(unittest.TestCase):
                          ["FX_SteamHiss", "OBJ_Hammer_Impact"])
 
 
+    def test_helpers(self):
+        self.assertEqual(S.hexhead(b"\x01\x02", 1), "01 ...")
+        self.assertEqual(S.zstr(b"Sound\\FX\\a.wav\0junk"), "Sound\\FX\\a.wav")
+        self.assertIn("NPCHumanBlacksmithForgeQuench", S.SKYRIM_FORGE)
+
+
 if __name__ == "__main__":
     unittest.main()
