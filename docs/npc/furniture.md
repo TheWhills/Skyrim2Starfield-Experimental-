@@ -540,4 +540,11 @@ Plan: one set per station in furniture_anim_pack, as the earlier standing sets: 
 clips walk (to the trough and back): furniture_motion.py --clips prints each clip's root-motion end and farthest point;
 the earlier sets were converted without root motion; (2) where the props are loaded (none of the clips' own triggers
 loads the hammer: the states' enter events, not read yet).
+**Verified in game** (owner, 2026-11-16 13:34): "it's working!" (the forge on the wall-wipe NPC work template, Alvor
+at it with Skyrim's clips). Missing: the sounds. Skyrim's come from the forge machine's clip triggers
+(smithing_probe: SoundPlay.NPCHumanBlacksmithHammer / ...Distant on each blow, NPCHumanBlacksmithForgeQuench at 3.3 s
+of the Temper, ...QuenchDrop in the Discard, OBJBlacksmithForge and NPCHumanBlacksmithForgeTake in the Pull); our
+descriptors carry none. Starfield's own sound events in descriptors (name, payload kind) are read first:
+scripts/armor/afx_events.py (read-only) lists the events of given furniture folders (the standing repair hammer
+hammers too) and, over every .afx, the event names and the sound payloads matching hammer / metal / steam / water ...
 
