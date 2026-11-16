@@ -201,7 +201,7 @@ class InteriorTests(unittest.TestCase):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
         self.assertEqual(json.load(open(path)), {"SleepingGiantInn": {
             "LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim",
-            "LIGHT_POWER": "2.5", "OMNI_LIGHT": "3197A6", "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95",
+            "LIGHT_POWER": "2", "OMNI_LIGHT": "3197A6", "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95",
             "LIGHT_FLICKER": "subtle", "LIGHT_FLICKER_INTENSITY": "0.15", "LIGHT_FLICKER_PERIOD": "0.5",
             "LIGHT_FALLOFF": "skyrim"}})
         cfg = {"*": {"IMAGE_SPACE": "000123"}, "SleepingGiantInn": {"LIGHTING_TEMPLATE": "0ABCDE", "OMNI_LIGHT": "1",
@@ -212,7 +212,7 @@ class InteriorTests(unittest.TestCase):
         got = json.load(open(path))
         self.assertEqual(got["*"], {"IMAGE_SPACE": "000123"})
         self.assertEqual(got["SleepingGiantInn"], {"LIGHTING_TEMPLATE": "0ABCDE", "LIGHT_MERGE_M": "1", "OMNI_LIGHT": "1",
-                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "2.5",
+                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "2",
                                                    "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95",
                                                    "LIGHT_FLICKER": "subtle", "LIGHT_FLICKER_INTENSITY": "0.15",
                                                    "LIGHT_FLICKER_PERIOD": "0.5", "LIGHT_FALLOFF": "skyrim"})

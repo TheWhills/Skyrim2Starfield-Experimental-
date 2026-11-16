@@ -98,14 +98,15 @@ def cmd_list(a):
 # LIGHT_FALLOFF skyrim (Skyrim's exponent), LIGHT_FLICKER template (Starfield's fire flicker), LIGHT_POWER 2 (8000 lm,
 # what the lights had before, now warm and with the softer falloff)
 INTERIOR_LIGHTING = {"LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37",
-                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "2.5", "OMNI_LIGHT": "3197A6",
+                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "2", "OMNI_LIGHT": "3197A6",
                      "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95", "LIGHT_FLICKER": "subtle",
                      "LIGHT_FLICKER_INTENSITY": "0.15", "LIGHT_FLICKER_PERIOD": "0.5", "LIGHT_FALLOFF": "skyrim"}
 # 10:53 on that: "the flickering is still too much ... going from dark to light ... as opposed to a subtle flicker. It's
 # also slightly still too dark": LIGHT_FLICKER subtle (the base's flicker sequence removed, a plain 15 % flicker every
-# 0.5 s), LIGHT_POWER 2.5 (10000 lm)
+# 0.5 s), LIGHT_POWER 2.5 (10000 lm). 11:05 (Faendal's house, subtle flicker accepted): "let's tone it back down, the
+# light seems very bright right at the source" -> LIGHT_POWER 2 (8000 lm)
 # earlier defaults: a stored value equal to one of these was written by an older export, not by hand, and is updated
-PREVIOUS_LIGHTING = {"LIGHT_POWER": {"4", "1.5", "2"}, "LIGHT_FLICKER": {"template"}}
+PREVIOUS_LIGHTING = {"LIGHT_POWER": {"4", "1.5", "2.5"}, "LIGHT_FLICKER": {"template"}}
 
 
 def write_lighting(work, cell, a):

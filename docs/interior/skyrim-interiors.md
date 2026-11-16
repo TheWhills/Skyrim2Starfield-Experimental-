@@ -513,3 +513,7 @@ the base's EffectSequenceComponent is removed and the plain flicker (FlickerEffe
 at LIGHT_FLICKER_INTENSITY 0.15 every LIGHT_FLICKER_PERIOD 0.5 s, no movement; LIGHT_POWER 2.5 (10000 lm). Unresolved:
 the scale of FlickerIntensityAmplitude (vanilla values 0.8 - 1.33); the light lines print it with the flicker effect and
 the component count.
+Owner, that build (11:05, Faendal's house): flicker no longer commented on; "let's tone it back down, the light seems
+very bright right at the source" (the fireplace's back wall and the wall behind the bedside candle) -> LIGHT_POWER 2
+(8000 lm). The hot spots are inverse-square falloff next to a wall (Skyrim's lights fall off over their radius instead);
+if they stay, next is a softer source (Starfield's area / source-radius fields) rather than less power.
