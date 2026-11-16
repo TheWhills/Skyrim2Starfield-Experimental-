@@ -471,6 +471,11 @@ def main(argv=None):
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))
         dst = os.path.join(a.out, *folder.split("\\"))
+        # the set's folder is ours alone and every file in it is made here: start empty, so no copy from an earlier
+        # run survives (2026-11-15: the Sweep reconversion with the broom bone kept 119 mood variants copied from the
+        # old clips, which mood_variants then skipped as already present)
+        if os.path.isdir(dst) and os.path.isdir(src):
+            shutil.rmtree(dst)
         os.makedirs(dst, exist_ok=True)
         files = sorted(f for f in os.listdir(src) if f.lower().endswith((".af", ".afx"))) if os.path.isdir(src) else []
         stripped = props = graphs_swapped = 0

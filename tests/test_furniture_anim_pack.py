@@ -229,6 +229,13 @@ class PackTests(unittest.TestCase):
                 P.main(args)
             dst = os.path.join(out, *folder.split("\\"))
             self.assertTrue(os.path.exists(os.path.join(dst, "talk_s05.af")))
+            with open(os.path.join(dst, "stale_variant.af"), "wb") as fh:          # from an earlier run
+                fh.write(b"OLD")
+            with mock.patch.object(hkx_to_af, "main", side_effect=AssertionError("converted")), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                P.main(args)
+            self.assertFalse(os.path.exists(os.path.join(dst, "stale_variant.af")))  # the folder starts empty
+            self.assertTrue(os.path.exists(os.path.join(dst, "talk_s05.af")))
             with open(os.path.join(dst, "talk_s05.afx")) as fh:
                 self.assertIn("<tag>Talk_S05</tag>", fh.read())
             self.assertIn("copied again (--copy-only)", so.getvalue())
