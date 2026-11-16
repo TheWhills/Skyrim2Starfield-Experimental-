@@ -98,4 +98,7 @@ First -AssetsOnly run (owner, 2026-11-16 10:14): **81 s** with every model recon
 below the 117 s full build with everything reconverting (no export / navmesh / NPCs / plugin). Rule for flame rounds:
 keep the change in skyrimfire.py (per-model flame_key) when it can live there; the tint / candle-size round after it
 touches only skyrimfire.py, so the next -AssetsOnly run redoes the flame models alone - its time is the "after".
+After (owner, 2026-11-16 10:19, -AssetsOnly, skyrimfire.py-only change): reused 196, flame_models_redone 25, convert
+**21.5 s** (before: 64.6 s with everything reconverted; 68.1 s inside the 117 s full build). Convert is now 3x faster for
+a flame round. The total "assets-only build: N s" line was cut off in the paste; the rest of the run is install only.
 
