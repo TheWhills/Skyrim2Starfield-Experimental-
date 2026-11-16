@@ -67,13 +67,18 @@ class PackTests(unittest.TestCase):
             self.assertEqual(MF.anim_set_for({"kind": kind, "edid": edid}), want, edid)
 
     def test_forge_set(self):
-        """2026-11-16 (smithing_probe): Enter = Pull, Idle = Hammer, flavors = Temper, Exit; Skyrim's own spot."""
+        """2026-11-16 (smithing_probe): Enter = Pull, Idle = Hammer, flavors = Temper / Discard + Pull (the fire is
+        reached from the hammering too, not only on entering), Exit; Skyrim's own spot."""
         folder, tpl, rows = P.SETS["Forge"]
         self.assertEqual((folder, tpl), (P.SF_ANIM + "furniture\\s2s_forge", P.SF_ANIM + "furniture\\standing_wipewall"))
         d = dict((r[0], r[1]) for r in rows)
         self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["exittostand.afx"]),
                          ("blacksmithforgepull.hkx", "blacksmithforgehammer.hkx", "blacksmithforgeexit.hkx"))
-        self.assertEqual({d[f"idle_flavor{i:02d}.afx"] for i in range(1, 6)}, {"blacksmithforgetemper.hkx"})
+        both = "blacksmithforgediscard.hkx+blacksmithforgepull.hkx"
+        self.assertEqual([d[f"idle_flavor{i:02d}.afx"] for i in range(1, 6)],
+                         ["blacksmithforgetemper.hkx", both] * 2 + ["blacksmithforgetemper.hkx"])
+        rep = [x for x in P.replace_args("Forge")[1] if "discard" in x][0]
+        self.assertTrue(rep.startswith(P.SKY_ANIM + both + "::"), rep)
         self.assertEqual(d["enterinstant.afx"], "blacksmithforgehammer.hkx")      # spawned at work: props loaded
         self.assertEqual(P.COM_SHIFT["Forge"], (0.0, 0.0))
         folder, tpl, rows = P.SETS["Grindstone"]

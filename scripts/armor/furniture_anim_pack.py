@@ -107,9 +107,13 @@ SETS = {
     # workbench template (the forge's Starfield furniture) has 6 flavor slots (the Enchant set's).
     # The furniture is NPC work furniture on the wall-wipe template (make_furniture.TEMPLATES "forge", 2026-11-16:
     # Alvor never used it as Starfield's industrial workbench): its folder's slots, 5 flavors and EnterInstant.
+    # 2026-11-16 (owner, in game: "going back and forth between hammering and then putting the sword in the trough ...
+    # in skyrim they usually also pull the ropes on the forge"): an NPC placed at the forge enters instantly (the
+    # Hammer), so the Pull, the only clip at the fire, never played. Discard + Pull (hkx_to_af CLIP A+B, retarget.concat)
+    # is Skyrim's other trough branch played through to the hammering pose: flavors alternate Temper / Discard + Pull.
     "Forge": standing_set("s2s_forge", "standing_wipewall", "blacksmithforgehammer.hkx",
-                          ("blacksmithforgetemper.hkx",), "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 5,
-                          instant=True),
+                          ("blacksmithforgetemper.hkx", "blacksmithforgediscard.hkx+blacksmithforgepull.hkx"),
+                          "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 5, instant=True),
     # 2026-11-16 (smithing_probe): the sharpening wheel's machine Enter -> Spin (loop) -> Exit; the owner's listing
     # of Starfield's workbench folders has workbench\weaponworkbench (the grindstone's Starfield furniture,
     # WorkbenchWeapon). Its flavor count is not known: unanswered_tags gives every idle-like slot ours lack our Idle.

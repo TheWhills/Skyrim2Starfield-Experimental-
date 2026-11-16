@@ -59,6 +59,15 @@ SF_RIG_RX = re.compile(r"actors/human/.*characterassets/skeleton\.rig$", re.I)
 FPS = 30.0                                     # Starfield clip rate
 
 
+def clip_parts(clip: str) -> list:
+    """A clip argument's files: "dir\\a.hkx+b.hkx" -> ["dir\\a.hkx", "dir\\b.hkx"] (later parts without a folder
+    take the first one's)."""
+    parts = clip.split("+")
+    cut = max(parts[0].rfind("\\"), parts[0].rfind("/"))
+    d = parts[0][:cut + 1]
+    return [parts[0]] + [p if ("\\" in p or "/" in p) else d + p for p in parts[1:]]
+
+
 def read_any(path, skyrim=None):
     if os.path.isfile(path):
         with open(path, "rb") as fh:
@@ -446,9 +455,13 @@ def main(argv=None):
                 like_last = vanilla_last_frame(a.calumi, rig_path, vafx, a.starfield_data, out)
                 if like_last is not None:
                     row["vanilla_frames"] = like_last + 1
-            data = read_any(c, sky)
             try:
-                clip = skyrimhkx.decode_clip(data, sk.names)
+                # CLIP may be A.hkx+B.hkx: the clips one after another (retarget.concat; the forge's Discard + Pull)
+                parts = [skyrimhkx.decode_clip(read_any(p, sky), sk.names) for p in clip_parts(c)]
+                clip = parts[0] if len(parts) == 1 else retarget.concat(parts, FPS)
+                if len(parts) > 1:
+                    row["concatenated_frames"] = clip["concatenated"]
+                    row["join_turn_deg"] = clip["join_turn_deg"]              # ~0: the clips chain without a jump
             except skyrimhkx.HkxError as e:
                 if "no hkaSplineCompressedAnimation" in str(e):  # skeletons, behaviours: not clips
                     row["skipped"] = "not an animation"

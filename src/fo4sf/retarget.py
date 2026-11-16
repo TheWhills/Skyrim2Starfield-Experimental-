@@ -552,6 +552,41 @@ def resample(clip: dict, fps: float = 30.0) -> dict:
     return dict(clip, tracks=tracks, frames=n, fps=float(fps), resampled_from=src_fps)
 
 
+def concat(clips, fps: float = 30.0) -> dict:
+    """Clips played one after another as one clip (2026-11-16, the forge: Skyrim's Discard ends on the pose its Pull
+    starts from, and the Pull ends on the Hammer's, so Discard + Pull is one flavor from the hammering pose back to it).
+    Each is resampled to `fps` first; the tracks kept are the bones every clip animates (by name, the first clip's
+    order); annotation times move by the length of the clips before them. The joins are cuts: each clip keeps all its
+    frames (a clip's last and the next one's first are the same pose in a chain like Skyrim's)."""
+    clips = [resample(c, fps) for c in clips]
+    if len(clips) == 1:
+        return clips[0]
+    common = [b for b in clips[0]["bones"] if all(b in c["bones"] for c in clips[1:])]
+    tracks = {b: [] for b in common}
+    ann, start = [], 0.0
+    for c in clips:
+        at = {b: k for k, b in enumerate(c["bones"])}
+        for b in common:
+            tracks[b] += list(c["tracks"][at[b]])
+        ann += [dict(x, time=float(x.get("time", 0.0)) + start) for x in c.get("annotations") or []]
+        start += int(c["frames"]) / fps
+    joins, at = [], 0
+    for c in clips[:-1]:                     # the largest local turn of any bone across each cut, degrees
+        at += int(c["frames"])
+        worst = 0.0
+        for b in common:
+            qa, qb = np.array(tracks[b][at - 1][1], float), np.array(tracks[b][at][1], float)
+            dot = min(1.0, abs(float(np.dot(qa, qb))) / (np.linalg.norm(qa) * np.linalg.norm(qb) or 1.0))
+            worst = max(worst, float(np.degrees(2 * np.arccos(dot))))
+        joins.append(round(worst, 1))
+    first = clips[0]
+    idx = [first["bone_indices"][first["bones"].index(b)] for b in common] if first.get("bone_indices") else None
+    n = sum(int(c["frames"]) for c in clips)
+    return dict(first, fps=float(fps), frames=n, duration=(n - 1) / fps, bones=common, bone_indices=idx,
+                tracks=[tracks[b] for b in common], annotations=ann,
+                concatenated=[int(c["frames"]) for c in clips], join_turn_deg=joins)
+
+
 def skyrim_locals(clip: dict, sk: Rig):
     """(F, B, 3) / (F, B, 4) Skyrim local transforms: rest everywhere, clip tracks where the clip has them."""
     F = clip["frames"]

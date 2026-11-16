@@ -528,6 +528,29 @@ class RetargetTests(unittest.TestCase):
         self.assertTrue(np.allclose(R.ease_out(lt, lq, 0)[0], lt))
 
 
+class ConcatTest(unittest.TestCase):
+    def clip(self, n, x0, bones=("A", "B"), fps=30.0, ann=()):
+        tracks = [[((x0 + k, 0, 0), (0, 0, 0, 1), (1,)) for k in range(n)] for _ in bones]
+        return {"fps": fps, "frames": n, "duration": (n - 1) / fps, "bones": list(bones), "bone_indices": [0, 1, 2][:len(bones)],
+                "tracks": tracks, "annotations": [{"time": t, "text": x} for t, x in ann]}
+
+    def test_concat(self):
+        """2026-11-16 (the forge's Discard + Pull): frames appended, common bones only, annotations shifted, the
+        largest bone turn across the cut reported."""
+        a = self.clip(3, 0, ann=[(0.0, "a")])
+        b = self.clip(4, 10, bones=("B", "A", "C"), ann=[(0.1, "b")])
+        c = R.concat([a, b])
+        self.assertEqual((c["frames"], c["bones"], c["concatenated"]), (7, ["A", "B"], [3, 4]))
+        self.assertAlmostEqual(c["duration"], 6 / 30)
+        self.assertEqual([f[0][0] for f in c["tracks"][0]], [0, 1, 2, 10, 11, 12, 13])
+        self.assertEqual([round(x["time"], 4) for x in c["annotations"]], [0.0, 0.2])
+        self.assertEqual(c["join_turn_deg"], [0.0])
+        turned = self.clip(2, 0)
+        turned["tracks"][1] = [((0, 0, 0), (0, 0, math.sin(math.radians(45)), math.cos(math.radians(45))), (1,))] * 2
+        self.assertAlmostEqual(R.concat([a, turned])["join_turn_deg"][0], 90.0, places=1)
+        self.assertIs(R.concat([a])["tracks"], a["tracks"])                 # one clip: itself
+
+
 if __name__ == "__main__":
     unittest.main()
 

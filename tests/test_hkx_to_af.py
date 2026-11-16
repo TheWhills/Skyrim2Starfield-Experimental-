@@ -91,5 +91,12 @@ class FitTests(unittest.TestCase):
         self.assertIs(H.fit_clip(clip, 0), clip)
 
 
+class ClipPartsTest(unittest.TestCase):
+    def test_clip_parts(self):
+        self.assertEqual(H.clip_parts("m\\a\\x.hkx+y.hkx"), ["m\\a\\x.hkx", "m\\a\\y.hkx"])
+        self.assertEqual(H.clip_parts("x.hkx+d/y.hkx"), ["x.hkx", "d/y.hkx"])
+        self.assertEqual(H.clip_parts("m/x.hkx"), ["m/x.hkx"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -548,3 +548,12 @@ descriptors carry none. Starfield's own sound events in descriptors (name, paylo
 scripts/armor/afx_events.py (read-only) lists the events of given furniture folders (the standing repair hammer
 hammers too) and, over every .afx, the event names and the sound payloads matching hammer / metal / steam / water ...
 
+**The fire and the bellows** (owner, 2026-11-16: "going back and forth between hammering and then putting the sword in
+the trough ... in skyrim they usually also pull the ropes on the forge"). Supported hypothesis: Alvor is placed at the
+forge, so he enters with EnterInstant (the Hammer) and the Pull, the only clip at the fire, never played; the flavors
+were all Temper. Skyrim's other trough branch, Discard (drop the iron) then Pull (a new one from the fire, the bellows,
+back to the hammering pose), is now one flavor: hkx_to_af takes CLIP A.hkx+B.hkx (retarget.concat: resampled, frames
+appended, common bones, annotations shifted; the report's join_turn_deg is the largest bone turn across the cut, ~0
+when the clips chain). Flavors: Temper, Discard + Pull, Temper, Discard + Pull, Temper. Unknown: whether Skyrim hides
+the iron during the Discard (its iron bone jumps from the drop to the fire at the cut).
+
