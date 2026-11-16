@@ -117,6 +117,13 @@ def main(argv=None):
         desc = skyrimhkx.describe(sky._read(bsa.norm(hkx_to_af.SKY_SKELETON)))
         bones = next(s_["bones"] for s_ in desc["skeletons"] if len(s_["bones"]) > 20)
         bone_names = [b["name"] if isinstance(b, dict) else b for b in bones]
+        sk0 = next(s_ for s_ in desc["skeletons"] if len(s_["bones"]) > 20)
+        for i, b in enumerate(bone_names):
+            if "animobject" in b.lower():
+                par = sk0["parents"][i]
+                print(f"== Skyrim skeleton: {b} under {bone_names[par] if par >= 0 else '-'}, rest "
+                      f"t {tuple(round(v, 2) for v in sk0['reference_pose'][i]['t'])} "
+                      f"q {tuple(round(v, 4) for v in sk0['reference_pose'][i]['q'])}")
         for c in a.skyrim_clip:
             path = bsa.norm("meshes\\actors\\character\\animations\\" + c)
             data = sky._read(path)
@@ -130,7 +137,9 @@ def main(argv=None):
                     continue
                 ts = [k[0] for k in tr]
                 span = max(max(abs(x - y) for x, y in zip(t, ts[0])) for t in ts) if ts else 0.0
-                moving.append(f"{b} (first {tuple(round(v, 1) for v in ts[0])}, moves {span:.1f} units)")
+                q0 = tr[0][1] if tr and len(tr[0]) > 1 else None
+                moving.append(f"{b} (first {tuple(round(v, 2) for v in ts[0])} q {tuple(round(v, 4) for v in q0) if q0 is not None else '-'}, "
+                              f"moves {span:.1f} units)")
             print(f"== Skyrim {c}: {clip['frames']} frames; prop bones: {moving or 'none'}")
             print(f"   annotations: {[(round(e.get('time', 0), 2), e.get('text')) for e in clip['annotations']][:20]}")
     folder = ANIM + a.folder.lower().replace("/", "\\").strip("\\") + "\\"
@@ -156,6 +165,19 @@ def main(argv=None):
             with open(p, "wb") as fh:
                 fh.write(raw)
             rb = af_writer.read_back(a.calumi, p, rig_path)
+            if clip == "idle.af":
+                rig = af_writer.load_rig(a.calumi, rig_path)
+                for i, b in enumerate(rig["names"]):
+                    if "animobject" in b.lower() or b in ("R_Wrist", "Weapon"):
+                        par = rig["parents"][i]
+                        print(f"== Starfield rig: {b} under {rig['names'][par] if par >= 0 else '-'}, rest "
+                              f"t {tuple(round(float(v), 3) for v in rig['t'][i])} q {tuple(round(float(v), 4) for v in rig['q'][i])}")
+                for b in ("AnimObjectA", "R_AnimObject1"):
+                    k = rb["translations"].get(b) or []
+                    r = rb["rotations"].get(b) or []
+                    if k:
+                        print(f"== Starfield sweep idle {b}: first t {tuple(round(float(v), 3) for v in k[0][1])} "
+                              f"q {tuple(round(float(v), 4) for v in r[0][1]) if r else '-'}; {len(k)} keys")
             keyed = [b for b in rb["bones"] if "animobject" in b.lower() or b.lower() in ("weapon", "root")]
             print(f"== Starfield {a.folder}\\{clip}: {len(rb['bones'])} bones keyed; prop bones keyed: {keyed}")
     return 0
