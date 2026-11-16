@@ -185,6 +185,36 @@ def mesh_template(a):
     return None
 
 
+def sf_candle_mesh(a):
+    """Starfield's own candle flame mesh (skyrimfire.SF_CANDLE_MESH_NIF's "Flame:0", read from the Starfield archives at
+    build time, never stored) for --candle-style starfield, as an sfmesh.SfMesh; None without --starfield-data or when
+    it is not found (crossed cards then)."""
+    if getattr(a, "candle_style", "skyrim") != "starfield" or not getattr(a, "starfield_data", None):
+        return None
+    from fo4sf import ba2, sfmesh, skyrimfire
+    arcs = [ba2.Ba2(os.path.join(a.starfield_data, fn)) for fn in sorted(os.listdir(a.starfield_data))
+            if fn.lower().startswith("starfield - meshes") and fn.lower().endswith(".ba2")]
+
+    def read(name):
+        for arc in arcs:
+            i = arc.find(name)
+            if i is not None:
+                return arc.read(i)
+        return None
+    try:
+        nif = read(skyrimfire.SF_CANDLE_MESH_NIF)
+        path = skyrimfire.sf_shape_mesh_path(nif) if nif else None
+        data = read(path) if path else None
+        if data:
+            print(f"candles: Starfield's flame mesh {path}")
+            return sfmesh.parse(data)
+    except Exception as e:                                          # noqa: BLE001
+        print(f"candles: Starfield's flame mesh not read ({type(e).__name__}: {e}); crossed cards")
+        return None
+    print("candles: Starfield's flame mesh not found; crossed cards")
+    return None
+
+
 CONVERT_ROOTS = ("skyrimconvert", "convert_static", "bsa", "checkpoints")
 # modules only flame models depend on (2026-11-15, owner: "are we running more steps than needed for the test again"):
 # kept out of the global signature; their digest + the flame style are checked per model (flame_key) instead, so a
@@ -192,8 +222,9 @@ CONVERT_ROOTS = ("skyrimconvert", "convert_static", "bsa", "checkpoints")
 FLAME_MODULES = ("skyrimfire",)
 
 
-def flame_key(a) -> str:
-    """Digest of the flame code and the flame style: a flame model's checkpoint is reused only while it matches."""
+def flame_key(a, extra: str = "") -> str:
+    """Digest of the flame code and the flame style (+ extra: what the build found, e.g. Starfield's candle mesh): a
+    flame model's checkpoint is reused only while it matches."""
     from pathlib import Path
     h = hashlib.sha256()
     for m in FLAME_MODULES:
@@ -201,6 +232,7 @@ def flame_key(a) -> str:
     h.update(getattr(a, "flame_style", "particles").encode())
     h.update(str(parse_particle_fire(getattr(a, "particle_fire", ""))).encode())
     h.update(getattr(a, "candle_style", "skyrim").encode())
+    h.update(extra.encode())
     return h.hexdigest()[:16]
 
 
@@ -287,7 +319,8 @@ def cmd_convert(a):
     ids = load(ids_path) if os.path.exists(ids_path) else {}
     taken = {v.lower() for v in ids.values()}
     conv, items, failures, reused = None, [], [], 0
-    fkey, flame_redone = flame_key(a), 0
+    candle_mesh = sf_candle_mesh(a)
+    fkey, flame_redone = flame_key(a, "sf-candle-mesh" if candle_mesh is not None else ""), 0
     print(f"{len(names):,} models; converting up to {a.limit:,}")
     for k, name in enumerate(names[:a.limit]):
         r = cache.load(name) if cache else None
@@ -303,6 +336,7 @@ def cmd_convert(a):
                 conv.flame_style = getattr(a, "flame_style", "particles")
                 conv.particle_fire = parse_particle_fire(getattr(a, "particle_fire", ""))
                 conv.candle_style = getattr(a, "candle_style", "skyrim")
+                conv.sf_candle_mesh = candle_mesh
             r = conv.convert_nif(name)
             if flame_relevant(r):
                 r["flame_key"] = fkey
@@ -350,6 +384,8 @@ def cmd_convert(a):
                 "failure_reasons": reasons, "seconds": round(time.time() - t0, 1)}
     save(os.path.join(staging, "manifest.json"), manifest, indent=1)
     print(json.dumps({"converted": len(items), **stats, "collision": coll, "seconds": manifest["seconds"]}))
+    if conv and "layeredfire" in conv.material_errors:
+        print(f"layered fire: not cloned ({conv.material_errors['layeredfire']}); the vanilla path is used as it is")
     if ramps:
         print(f"stair ramps: {sum(len(v) for v in ramps.values())} flights in {len(ramps)} models "
               f"({', '.join(sorted(ramps)[:8])}{' ...' if len(ramps) > 8 else ''})")
@@ -1052,12 +1088,14 @@ def main(argv=None):
                          "the worldspace doors into those interiors become persistent load doors")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
-    ap.add_argument("--flame-style", default="particles", choices=("skyrim", "starfield", "particles"),
-                    help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, or "
-                         "(particles) hearths as Starfield's own particle fire (docs/interior/skyrim-interiors.md)")
+    ap.add_argument("--flame-style", default="particles", choices=("skyrim", "starfield", "particles", "layered"),
+                    help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, "
+                         "(particles) hearths as Starfield's own particle fire, or (layered) Skyrim's hearth flame "
+                         "meshes and cards burning with Starfield's LayeredFireV2 (docs/interior/skyrim-interiors.md)")
     ap.add_argument("--candle-style", default="skyrim", choices=("skyrim", "starfield"),
                     help="convert: candle flames with Skyrim's textures (two cross-fading layers) or Starfield's own "
-                         "candle flame flipbook on cards widened to Skyrim's teardrop (skyrimfire.SF_CANDLE_WIDTH)")
+                         "candle flame (its mesh, read with --starfield-data, and material) fitted to Skyrim's "
+                         "teardrop (skyrimfire.SF_CANDLE_WIDTH)")
     ap.add_argument("--particle-fire", default="",
                     help="convert, --flame-style particles: the Starfield fire to place, BASE[:SCALE], or several "
                          "comma-separated to compare side by side (default 00C78D = FireMed01 at scale 1; "

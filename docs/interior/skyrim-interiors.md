@@ -404,7 +404,8 @@ house 1), with 3 flame materials (candles, log glow).
 Owner in game, v4 (2026-11-15): real moving flames, sparks and smoke in the hearth (**verified: vanilla particle-fire
 MSTTs placed by our plugin burn**), but "a bit intense, looks like three flares as opposed to hearth flames": FireMed01
 is a standalone medium fire with a tall smoke plume, one per FireplaceWood01Burning (the Sleeping Giant pit has 3).
-Candles unchanged by design (Starfield's own candles are cards). Next: `-ParticleFire BASE[:SCALE]` (any Starfield.esm
+Candles unchanged by design (Starfield's own candles were taken for cards; sf_firepit_probe 2026-11-16: they are a
+228-vertex mesh). Next: `-ParticleFire BASE[:SCALE]` (any Starfield.esm
 fire, scaled with the hearth) and `sf_fire_probe.py --only-psfx` (every record using a .psfx, fire-like ones with
 their particle files and size) to choose a hearth-like fire (firemed02, firegenericflame, firepit_armisticearchives_01).
 sf_fire_probe --only-psfx (owner, 2026-11-15): 853 records use a .psfx. Placeable fires (MSTT): FireMed01 00C78D
@@ -445,3 +446,20 @@ fire pits work"; candles (Starfield's flame x1.8 / x1.1) "quite thin still" -> x
 standalone fire; Starfield's own pits presumably burn with flame geometry on its layered fire materials (LayeredFireV2 /
 V3, Fire_Layered_ArmisticeArchive_01). scripts/interior/sf_firepit_probe.py (read-only) lists every Starfield NIF naming
 a fire material (with its shapes, materials, sizes) and the records using those NIFs.
+sf_firepit_probe (owner, 2026-11-16), **verified**: Starfield has no fire-pit flame geometry. 36 of 54,651 NIFs name a
+fire material: 33 candles / a paper lantern (FireCandleFlame + FireCandleGlow), 7 of ours, Firepit_Portable01 (only
+the pit: metal, gravel, rocks, wood; its STAT 00146A50 carries no particles, so its fire is a separately placed particle
+fire, as ours are) and two debug models: LayeredFireV2.mat on a 1 m box (effects\debugfiles\testmaterialbox.nif) and
+xTests\LayeredFire.mat on a teapot. So Starfield "fire pits" are what we already did; the fireball look is the
+standalone particle fire itself. Starfield's candle flame "Flame:0" is not a card but a 228-vertex / 336-triangle
+mesh with vertex colours, radially symmetric (x, y +-7.0, z +-8.46 x the shape's 0.002 - 0.003 = 2.8 - 4.2 cm wide).
+Two changes, one build:
+* `--flame-style layered` (riverwood_doors -FlameStyle layered; a full build, the particle fires go): Skyrim's own hearth
+  layout - the scrolling FXFireAtlas flame meshes, UVs stretched to 0..1 per card (skyrimfire.normalize_card_uvs), and
+  the FlamesSmall01 particle cards - burns with LayeredFireV2.mat, Starfield's fire material for any geometry, cloned as
+  it is (skyrimconvert.layered_fire_material; the build prints its shader model, layers and textures under
+  "layered_fire"; if it cannot be read, the vanilla path is used directly). Log glow unchanged. Unresolved: how it
+  looks on cards.
+* `--candle-style starfield` now uses that mesh: read from the Starfield archives at build time (never stored), fitted
+  to SF_CANDLE_WIDTH / _HEIGHT (x3.0 / x1.25) x Skyrim's flame (skyrimfire.sf_flame_shape: box to box, normals through
+  the stretch, vertex colours kept); crossed cards when --starfield-data is missing or the mesh is not found.

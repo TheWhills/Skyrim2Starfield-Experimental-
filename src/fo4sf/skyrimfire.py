@@ -413,6 +413,98 @@ def crossed_cards(center, half_w: float, half_h: float, planes: int = 3, name: b
                            [(255, 255, 255, 255)] * len(pos), tris, False)
 
 
+def normalize_card_uvs(shape: nifmod.Fo4Shape) -> nifmod.Fo4Shape:
+    """The shape with each connected piece's UVs stretched to 0..1 (its own UV box, orientation kept): a Skyrim flame
+    card that shows one cell of an atlas, or a strip of a scrolling texture, shows a whole material made for one flame
+    (LAYERED_FIRE_MAT)."""
+    import dataclasses
+    n = len(shape.positions)
+    if not shape.uvs or not n:
+        return shape
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for a, b, c in shape.triangles:
+        for x, y in ((a, b), (b, c)):
+            rx, ry = find(x), find(y)
+            if rx != ry:
+                parent[rx] = ry
+    groups = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    uvs = list(shape.uvs)
+    for idx in groups.values():
+        us, vs = [shape.uvs[i][0] for i in idx], [shape.uvs[i][1] for i in idx]
+        u0, du = min(us), (max(us) - min(us)) or 1.0
+        v0, dv = min(vs), (max(vs) - min(vs)) or 1.0
+        for i in idx:
+            uvs[i] = ((shape.uvs[i][0] - u0) / du, (shape.uvs[i][1] - v0) / dv)
+    return dataclasses.replace(shape, uvs=uvs)
+
+
+def sf_flame_shape(sm, center, half_w: float, half_h: float, name: bytes = b"Flame") -> nifmod.Fo4Shape:
+    """A Starfield flame mesh (sfmesh.SfMesh, e.g. its candle's "Flame:0") as a shape fitted to the box half_w across,
+    half_h up, centred on `center` (Skyrim units): positions box to box, normals / tangents through the stretch,
+    vertex colours (BGRA -> RGBA), UVs and triangles kept."""
+    from . import sfmesh
+    pts = [sfmesh.decode_position(p, sm.scale) for p in sm.positions]
+    lo = [min(p[a] for p in pts) for a in range(3)]
+    hi = [max(p[a] for p in pts) for a in range(3)]
+    mid = [(lo[a] + hi[a]) / 2 for a in range(3)]
+    ext = [((hi[a] - lo[a]) / 2) or 1.0 for a in range(3)]
+    k = (half_w / ext[0], half_w / ext[1], half_h / ext[2])
+    pos = [tuple(center[a] + (p[a] - mid[a]) * k[a] for a in range(3)) for p in pts]
+
+    def unit(v):
+        ln = math.sqrt(sum(c * c for c in v)) or 1.0
+        return tuple(c / ln for c in v)
+    nor = [unit(tuple(d / k[a] for a, d in enumerate(sfmesh.decode_packed(u)[:3]))) for u in sm.normals]
+    tan = [unit(tuple(d * k[a] for a, d in enumerate(sfmesh.decode_packed(u)[:3]))) for u in sm.tangents]
+    uvs = [(sfmesh.half_to_float(u), sfmesh.half_to_float(v)) for u, v in sm.uv1]
+    cols = [((c >> 16) & 255, (c >> 8) & 255, c & 255, (c >> 24) & 255) for c in sm.colors]
+    if len(tan) != len(pos) or len(nor) != len(pos):
+        tan = []
+    return nifmod.Fo4Shape(name, (0.0, 0.0, 0.0), (1, 0, 0, 0, 1, 0, 0, 0, 1), 1.0, -1, -1, -1, pos, uvs, nor, tan,
+                           cols, [tuple(t) for t in sm.triangles], False)
+
+
+def sf_shape_mesh_path(nif_bytes: bytes, shape_name: bytes = b"Flame:0") -> Optional[str]:
+    """"geometries/<dir>/<file>.mesh" of the LOD 0 mesh of the BSGeometry named shape_name in a Starfield NIF."""
+    from . import sfnif
+    n = nifmod.parse(nif_bytes)
+    for i, b in enumerate(n.blocks):
+        if n.type_of(i) != "BSGeometry" or len(b) < 4:
+            continue
+        k = struct.unpack_from("<i", b, 0)[0]
+        nm = n.strings[k] if 0 <= k < len(n.strings) else b""
+        if (nm if isinstance(nm, bytes) else str(nm).encode()) != shape_name:
+            continue
+        m = sfnif.parse_bsgeometry(b).meshes[0]
+        if m is not None:
+            return "geometries/" + m.path.decode("latin-1").replace("\\", "/") + ".mesh"
+    return None
+
+
+def material_summary(mat: dict) -> dict:
+    """What a cloned vanilla material is: its shader model, layers and texture files (for the build report)."""
+    out = {"shader_model": None, "layers": [], "textures": []}
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::ShaderModelComponent":
+                out["shader_model"] = (c.get("Data") or {}).get("FileName")
+    summ = mat.get("Summary", {}) or {}
+    for layer, d in summ.items():
+        if isinstance(d, dict) and "Textures" in d:
+            out["layers"].append(layer)
+            out["textures"] += sorted({t.get("File") for t in d["Textures"].values() if isinstance(t, dict)
+                                       and t.get("File")})
+    return out
+
+
 # ---------------------------------------------------------------------------------------------------------- textures
 def palette_bake(rgba, palette, palette_color: bool, palette_alpha: bool, row: float = PALETTE_ROW,
                  tint=(1.0, 1.0, 1.0), alpha_row: Optional[float] = None):
@@ -450,7 +542,17 @@ RING = 0.85                          # flame card ring radius / emitter radius (
 # particles\fires\firemed01.psfx; sf_fire_probe.py) placed with every reference of the model at the emitter
 # (PluginSpike sf_effects); the hearth's scrolling flame meshes (PARTICLE_REPLACES) are left out, the log glow stays;
 # candles keep the Skyrim cards (Starfield's own candles are cards too)
-FLAME_STYLES = ("skyrim", "starfield", "particles")
+# "layered" (2026-11-16, owner on spread FireMed02: "a few fireballs thrown in there, compared to Skyrim's that looks like
+# a hearth burning. Do we need to figure out how Starfield fire pits work"). sf_firepit_probe on the owner's game
+# (verified): Starfield has no fire-pit flame geometry - 36 of 54,651 NIFs name a fire material, all candles / a paper
+# lantern except Firepit_Portable01 (the pit only: metal, gravel, rocks, wood; its STAT carries no particles, so its fire
+# is a separately placed particle fire, as ours were) and two debug models: LayeredFireV2.mat on a 1 m box
+# (effects\debugfiles\testmaterialbox.nif) and xTests\LayeredFire.mat on a teapot - a fire material made for any
+# geometry. So "layered" keeps Skyrim's whole hearth layout (its scrolling flame meshes, UVs stretched to 0..1 per card
+# by normalize_card_uvs, and the flame-particle cards) and burns it with LAYERED_FIRE_MAT cloned as it is (unresolved:
+# how it looks on cards)
+FLAME_STYLES = ("skyrim", "starfield", "particles", "layered")
+LAYERED_FIRE_MAT = "Materials/Effects/Fires/LayeredFireV2.mat"
 # owner's comparisons (2026-11-15 / 16): FireMed01 00C78D "three flares"; FXP_MemorialFire 004630 far too big even at
 # x0.35 / x0.5; the Armistice Archives fire pit 20D560 does not show when placed; FireMed02 1CEDAB at x0.8 "looks better"
 PARTICLE_FIRE_BASE = "1CEDAB"
@@ -472,6 +574,13 @@ CANDLE_STYLES = ("skyrim", "starfield")
 # owner 2026-11-16 08:52 at x1.8 / x1.1: "the candles are quite thin still"
 SF_CANDLE_WIDTH = 3.0                # x Skyrim's card half width
 SF_CANDLE_HEIGHT = 1.25              # x Skyrim's card half height
+# Starfield's candle flame is not a card (sf_firepit_probe, verified): "Flame:0" in setdressing\candles\*_lit.nif is a
+# 228-vertex, 336-triangle mesh with vertex colours, radially symmetric (x, y +-7.0, z +-8.46 before the shape's 0.002 -
+# 0.003 scale: 2.8 - 4.2 cm wide), FireCandleFlame.mat on it. With candle_style "starfield" and --starfield-data the
+# converter reads that mesh from the game at build time (not stored) and fits it to SF_CANDLE_WIDTH / _HEIGHT x Skyrim's
+# flame (sf_flame_shape); without it, crossed cards as before
+SF_CANDLE_MESH_NIF = "meshes/setdressing/candles/candlegen_c01_lit.nif"
+SF_CANDLE_MESH_SHAPE = b"Flame:0"
 STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat", (14, 14, 30.0)),
                     "candle": ("Materials/Effects/Fires/FireCandleFlame.mat", (12, 12, 90.0))}
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},

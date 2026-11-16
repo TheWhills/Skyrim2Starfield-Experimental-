@@ -314,6 +314,8 @@ class SkyrimConverter(pipeline.Converter):
         self._effect_template = None
         self._addon_flames = {}
         self.flame_style = "skyrim"                   # skyrimfire.FLAME_STYLES
+        self.sf_candle_mesh = None                    # sfmesh.SfMesh of Starfield's candle flame (candle_style starfield)
+        self._layered = set()                         # material paths that take normalize_card_uvs
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None,
@@ -458,6 +460,9 @@ class SkyrimConverter(pipeline.Converter):
         if getattr(self, "flame_style", "skyrim") == "particles" and \
                 re.search(skyrimfire.PARTICLE_REPLACES, info["source"], re.I):
             return None                               # Starfield's particle fire burns here instead
+        if getattr(self, "flame_style", "skyrim") == "layered" and \
+                re.search(skyrimfire.PARTICLE_REPLACES, info["source"], re.I):
+            return self.layered_fire_material()       # Skyrim's flame mesh, Starfield's geometry fire material
         bake = skyrimfire.bake_params(info)
         return self.flame_material(info["source"], **bake,
                                    scroll=skyrimfire.uv_scroll(info["controllers"]), kind="hearth",
@@ -559,10 +564,23 @@ class SkyrimConverter(pipeline.Converter):
                 mat = self.starfield_flame_material("candle", keep_emittance=True)   # Starfield's candle, as it is
                 if mat is None:
                     continue
+                sf_mesh = getattr(self, "sf_candle_mesh", None)
                 for c in skyrimfire.flame_card_centres(f):
                     centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
-                    shapes.append(skyrimfire.crossed_cards(centre, f["half_w"] * skyrimfire.SF_CANDLE_WIDTH,
-                                                           f["half_h"] * skyrimfire.SF_CANDLE_HEIGHT,
+                    w = f["half_w"] * skyrimfire.SF_CANDLE_WIDTH
+                    h = f["half_h"] * skyrimfire.SF_CANDLE_HEIGHT
+                    nm = f"{tag}_{len(shapes)}".encode()
+                    shapes.append(skyrimfire.sf_flame_shape(sf_mesh, centre, w, h, nm) if sf_mesh is not None
+                                  else skyrimfire.crossed_cards(centre, w, h, name=nm))
+                    mats.append(mat)
+                continue
+            if kind == "hearth" and getattr(self, "flame_style", "skyrim") == "layered":
+                mat = self.layered_fire_material()
+                if mat is None:
+                    continue
+                for c in skyrimfire.flame_card_centres(f):
+                    centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
+                    shapes.append(skyrimfire.crossed_cards(centre, f["half_w"], f["half_h"],
                                                            name=f"{tag}_{len(shapes)}".encode()))
                     mats.append(mat)
                 continue
@@ -598,6 +616,34 @@ class SkyrimConverter(pipeline.Converter):
                                                            mirror=mirror))
                     mats.append(mat)
         return shapes, mats
+
+    def layered_fire_material(self) -> Optional[str]:
+        """flame_style "layered": a clone of skyrimfire.LAYERED_FIRE_MAT exactly as it is (its textures, controllers,
+        emittance), written once; what it is goes to stats["layered_fire"]. If it cannot be read, the vanilla path itself
+        (the game resolves it from its own material database) and the reason in material_errors."""
+        key = "layeredfire"
+        if key in self._materials:
+            return self._materials[key]
+        from . import convert_material as cm
+        path = skyrimfire.LAYERED_FIRE_MAT
+        try:
+            template = cm.read_template_path(self.content_resources, path)
+            stem = "sf_" + os.path.splitext(os.path.basename(path))[0].lower()
+            mat = cm.build_from_template(template, "S2S_Flame_" + stem, {})
+            mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
+            p = os.path.join(self.staging, *mat_rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(skyrimfire.dumps(mat))
+            self.stats["layered_fire"] = dict(skyrimfire.material_summary(template), template=path)
+            self._materials[key] = mat_rel.replace("/", "\\")
+        except Exception as e:                                      # noqa: BLE001
+            self.material_errors[key] = f"{type(e).__name__}: {e}"
+            self._materials[key] = path.replace("/", "\\")
+        if not hasattr(self, "_layered"):
+            self._layered = set()
+        self._layered.add(self._materials[key])
+        return self._materials[key]
 
     def starfield_flame_material(self, kind: str, keep_emittance: bool = False) -> Optional[str]:
         """flame_style "starfield" / candle_style "starfield": a clone of Starfield's own fire material for `kind`
@@ -728,6 +774,7 @@ class SkyrimConverter(pipeline.Converter):
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
             flame_shapes = sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
+            shapes = [skyrimfire.normalize_card_uvs(s) if m in getattr(self, "_layered", ()) else s for s, m in zip(shapes, mats)]
             doubled = too_big = 0
             for i, s in enumerate(shapes):
                 if mats[i] is not None and skyrimnif.double_sided(src, s.shader_ref):

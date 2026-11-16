@@ -389,7 +389,7 @@ class FlameStyleTest(unittest.TestCase):
     def test_flame_style_reaches_the_converter(self):
         src = open(os.path.join(HERE, "..", "scripts", "terrain", "make_skyrim_objects.py")).read()
         self.assertIn('conv.flame_style = getattr(a, "flame_style", "particles")', src)
-        self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield", "particles"))
+        self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield", "particles", "layered"))
 
 
 class ParticleFireChoiceTest(unittest.TestCase):
@@ -508,6 +508,150 @@ class StarfieldCandleTest(unittest.TestCase):
         paths = [m["Data"]["Address"]["Data"]["Path"]["Data"][0]
                  for m in ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"]]
         self.assertEqual(paths, ["FlipbookAuto"])
+
+
+def flame_mesh(n_ring=6):
+    """A small radially symmetric Starfield-style flame mesh: x, y +-7, z +-8.46, vertex colours, UVs."""
+    from fo4sf import sfmesh
+    pts, uvs, cols, tris = [(0.0, 0.0, 8.46), (0.0, 0.0, -8.46)], [(0.5, 0.0), (0.5, 1.0)], [0xFF102030] * 2, []
+    for k in range(n_ring):
+        a = 2 * math.pi * k / n_ring
+        pts.append((7.0 * math.cos(a), 7.0 * math.sin(a), 0.0))
+        uvs.append((k / n_ring, 0.5))
+        cols.append(0x80FFFFFF)
+    for k in range(n_ring):
+        a, b = 2 + k, 2 + (k + 1) % n_ring
+        tris += [(0, a, b), (1, b, a)]
+    m = sfmesh.SfMesh(version=2)
+    m.scale, m.positions = sfmesh.encode_positions(pts)
+    m.uv1 = [(sfmesh.float_to_half(u), sfmesh.float_to_half(v)) for u, v in uvs]
+    m.colors = cols
+    m.normals = [sfmesh.encode_packed(*((p[0] / 7.0, p[1] / 7.0, 0.0) if abs(p[2]) < 1 else (0, 0, 1 if p[2] > 0 else -1)),
+                                      w=1 / 3) for p in pts]
+    m.tangents = [sfmesh.encode_packed(0.0, 0.0, 1.0) for _p in pts]
+    m.triangles = tris
+    return m
+
+
+class SfCandleMeshTest(unittest.TestCase):
+    """2026-11-16, sf_firepit_probe: Starfield's candle flame is a 228-vertex mesh, not a card; its mesh carries
+    Starfield's FireCandleFlame in Skyrim's teardrop."""
+
+    def test_mesh_is_fitted_to_the_flame_box_with_colours_and_uvs(self):
+        sh = skyrimfire.sf_flame_shape(flame_mesh(), (10.0, -4.0, 50.0), 3.0, 2.5, b"F")
+        P = np.array(sh.positions)
+        self.assertAlmostEqual(P[:, 0].max() - P[:, 0].min(), 6.0, places=2)
+        self.assertAlmostEqual(P[:, 2].max() - P[:, 2].min(), 5.0, places=2)
+        self.assertAlmostEqual((P[:, 2].max() + P[:, 2].min()) / 2, 50.0, places=2)
+        self.assertAlmostEqual((P[:, 0].max() + P[:, 0].min()) / 2, 10.0, places=2)
+        self.assertEqual(sh.colors[0], (0x10, 0x20, 0x30, 0xFF))           # BGRA u32 -> RGBA
+        self.assertEqual(sh.colors[2], (255, 255, 255, 0x80))
+        self.assertAlmostEqual(sh.uvs[1][1], 1.0, places=3)
+        self.assertEqual(len(sh.triangles), 12)
+        self.assertTrue(all(abs(math.hypot(*n) - 1) < 1e-6 for n in sh.normals))
+
+    def test_candles_use_the_mesh_when_the_build_found_it(self):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.candle_style = "starfield"
+        c.sf_candle_mesh = flame_mesh()
+        c.starfield_flame_material = lambda kind, keep_emittance=False: "sf.mat"
+        shapes, mats = c.particle_flame_cards([FlameStyleTest.FLAME], (0, 0, 0), "candle")
+        self.assertEqual(mats, ["sf.mat"])
+        self.assertEqual(len(shapes[0].positions), 8)                     # the mesh, not 3 crossed cards (24)
+        P = np.array(shapes[0].positions)
+        self.assertAlmostEqual(P[:, 0].max(), 1.0 * skyrimfire.SF_CANDLE_WIDTH, places=2)
+        self.assertAlmostEqual(P[:, 2].max() - P[:, 2].min(), 2 * 2.0 * skyrimfire.SF_CANDLE_HEIGHT, places=2)
+
+    def test_mesh_path_is_read_from_the_named_shape(self):
+        from fo4sf import nif as nifmod, sfnif
+        sp, box = sfnif.bounds_from_points([(0, 0, 0), (1, 1, 1)])
+        shapes = [sfnif.StaticShape(b"Exotic_Candle:0", b"aaaa\\bbbb", 3, 3, "wax.mat", sp, box),
+                  sfnif.StaticShape(b"Flame:0", b"bc78\\1e5b", 3, 3, "flame.mat", sp, box)]
+        data = nifmod.serialize(sfnif.build_static_nif(b"CandleGen_C01_Lit", shapes))
+        self.assertEqual(skyrimfire.sf_shape_mesh_path(data), "geometries/bc78/1e5b.mesh")
+        self.assertIsNone(skyrimfire.sf_shape_mesh_path(data, b"Glow:0"))
+
+    def test_build_reads_the_mesh_only_for_starfield_candles(self):
+        sys.path.insert(0, os.path.join(HERE, "..", "scripts", "terrain"))
+        import make_skyrim_objects as mso
+
+        class A:
+            candle_style, starfield_data = "skyrim", "nowhere"
+        self.assertIsNone(mso.sf_candle_mesh(A()))
+        A.candle_style, A.starfield_data = "starfield", None
+        self.assertIsNone(mso.sf_candle_mesh(A()))
+        A.starfield_data = "x"
+        self.assertNotEqual(mso.flame_key(A(), "sf-candle-mesh"), mso.flame_key(A()))
+
+
+class LayeredStyleTest(unittest.TestCase):
+    """2026-11-16: Starfield has no fire-pit flame geometry (sf_firepit_probe); "layered" burns Skyrim's own hearth
+    layout with Starfield's geometry fire material LayeredFireV2."""
+
+    def test_card_uvs_stretch_to_0_1_per_piece(self):
+        from fo4sf import nif as nifmod
+        pos = [(0, 0, 0), (1, 0, 0), (1, 0, 1), (5, 0, 0), (6, 0, 0), (6, 0, 1)]
+        uvs = [(0.25, 0.5), (0.5, 0.5), (0.5, 0.0), (0.0, 0.2), (0.1, 0.2), (0.1, 0.1)]
+        sh = nifmod.Fo4Shape(b"S", (0, 0, 0), (1, 0, 0, 0, 1, 0, 0, 0, 1), 1.0, -1, -1, -1, pos, uvs, [], [], [],
+                             [(0, 1, 2), (3, 4, 5)], False)
+        out = skyrimfire.normalize_card_uvs(sh)
+        self.assertEqual([tuple(round(c, 6) for c in uv) for uv in out.uvs],
+                         [(0, 1), (1, 1), (1, 0), (0, 1), (1, 1), (1, 0)])
+        self.assertEqual(sh.uvs[0], (0.25, 0.5))                           # the original left alone
+
+    def conv(self):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.flame_style = "layered"
+        c.fire_pattern = skyrimfire.FIRE_EFFECT
+        c.layered_fire_material = lambda: "layered.mat"
+        c.flame_material = lambda *a, **k: "glow.mat"
+        return c
+
+    def test_hearth_flame_meshes_and_particle_cards_take_the_layered_fire(self):
+        mesh = FakeNif([("BSEffectShaderProperty", effect_block(0xC0000078))])
+        glow = FakeNif([("BSEffectShaderProperty", effect_block(0x8C000038,
+                                                                source=b"textures\\clutter\\woodfires\\WoodFires01_g.dds"))])
+        c = self.conv()
+        self.assertEqual(c.skyrim_flame_material(mesh, 0), "layered.mat")
+        self.assertEqual(c.skyrim_flame_material(glow, 0), "glow.mat")      # the log glow keeps Skyrim's texture
+        orig = skyrimfire.particle_systems
+        skyrimfire.particle_systems = lambda n: [ParticleStyleTest.SYSTEM]
+        try:
+            shapes, mats = c.model_flames(object())
+            fx = c.model_fire_effects(object())
+        finally:
+            skyrimfire.particle_systems = orig
+        self.assertEqual(set(mats), {"layered.mat"})
+        self.assertEqual(len(shapes), 5)                                  # emitter + ring of four
+        self.assertEqual(fx, [])                                          # no particle fire placed
+        candles, cmats = c.particle_flame_cards([FlameStyleTest.FLAME], (0, 0, 0), "candle")
+        self.assertEqual(cmats, ["glow.mat"] * 2)                          # candles follow the candle style
+
+    def test_layered_material_is_cloned_once_as_it_is_or_falls_back_to_the_vanilla_path(self):
+        import tempfile, zipfile, json
+        from fo4sf import skyrimconvert
+        t = fire_template()
+        with tempfile.TemporaryDirectory() as d:
+            z = os.path.join(d, "cr.zip")
+            with zipfile.ZipFile(z, "w") as zf:
+                zf.writestr(skyrimfire.LAYERED_FIRE_MAT, json.dumps(t))
+            c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+            c.content_resources, c.staging, c.prefix = z, d, "skyrim"
+            c._materials, c.material_errors, c.stats = {}, {}, {}
+            p = c.layered_fire_material()
+            self.assertEqual(p, "materials\\skyrim\\effects\\sf_layeredfirev2.mat")
+            self.assertIs(c.layered_fire_material(), p)
+            self.assertIn(p, c._layered)
+            self.assertEqual(c.stats["layered_fire"]["template"], skyrimfire.LAYERED_FIRE_MAT)
+            written = open(os.path.join(d, *p.split("\\"))).read()
+            self.assertIn("Data\\\\Textures\\\\Fx_emissive.DDS", written)   # its own textures kept
+            c2 = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+            c2.content_resources, c2.staging, c2.prefix = os.path.join(d, "missing.zip"), d, "skyrim"
+            c2._materials, c2.material_errors, c2.stats = {}, {}, {}
+            self.assertEqual(c2.layered_fire_material(), skyrimfire.LAYERED_FIRE_MAT.replace("/", "\\"))
+            self.assertIn("layeredfire", c2.material_errors)
 
 
 class FireSpreadTest(unittest.TestCase):

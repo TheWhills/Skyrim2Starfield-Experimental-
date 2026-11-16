@@ -36,11 +36,12 @@ param(
     [string]$AnimPlugin = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Stances\S2SStances.esm",
     # candle / hearth flames: cards with Skyrim's textures or Starfield's fire flipbooks; "particles": hearths as
     # Starfield's own particle fire (a plugin change: a full build, not -AssetsOnly)
-    # default since 2026-11-16 (owner's comparisons): hearths burn Starfield's FireMed02, candles keep Skyrim's cards
-    [ValidateSet("skyrim", "starfield", "particles")][string]$FlameStyle = "particles",
+    # default since 2026-11-16 (owner's comparisons): hearths burn Starfield's FireMed02, candles keep Skyrim's cards;
+    # "layered": Skyrim's hearth flame meshes and cards burning with Starfield's LayeredFireV2 material, no particle fire
+    [ValidateSet("skyrim", "starfield", "particles", "layered")][string]$FlameStyle = "particles",
     # with -FlameStyle particles: the Starfield fire placed in hearths, "BASE[:SCALE]" (default FireMed02 1CEDAB, 0.8)
     [string]$ParticleFire = "",
-    # candle flames: Skyrim's textures, or Starfield's own candle flame widened to Skyrim's teardrop (models only:
+    # candle flames: Skyrim's textures, or Starfield's own candle flame (its mesh + material) fitted to Skyrim's teardrop (models only:
     # -AssetsOnly is enough to switch)
     [ValidateSet("skyrim", "starfield")][string]$CandleStyle = "skyrim",
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
