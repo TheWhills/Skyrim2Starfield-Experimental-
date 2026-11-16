@@ -454,5 +454,16 @@ class ClipEventsTest(unittest.TestCase):
                                                  "w", "x", [], blend=0.8))
 
 
+class FreshDirTest(unittest.TestCase):
+    def test_fresh_dir(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            old = os.path.join(d, "all", "x", "Idle_Flavor06.af")
+            os.makedirs(os.path.dirname(old))
+            open(old, "w").close()
+            P.fresh_dir(os.path.join(d, "all"))
+            self.assertEqual(os.listdir(os.path.join(d, "all")), [])
+
+
 if __name__ == "__main__":
     unittest.main()

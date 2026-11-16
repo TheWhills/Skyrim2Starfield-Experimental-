@@ -582,6 +582,13 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
+def fresh_dir(path):
+    """`path` empty (made if missing)."""
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    os.makedirs(path, exist_ok=True)
+
+
 def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None, shoulders=None, props=(), blend=0.0):
     out = ["--calumi", a.calumi, "--skyrim-data", a.skyrim_data, "--starfield-data", os.path.join(a.starfield, "Data"),
            "--out", work, "--into", folder, "--no-root-motion"]
@@ -657,6 +664,9 @@ def main(argv=None):
             com = row["com_shift_m"]
             print(f"{st}: offset {com[0]},{com[1]} (add to COM_SHIFT to keep it)")
         if not (a.copy_only and os.path.exists(done_rep)):
+            # a fresh conversion folder: the copy step takes every file in it (2026-11-16: the Forge's Idle_Flavor06 of
+            # the industrial-workbench template, 11:59, was still copied after the move to the wall-wipe one's 5)
+            fresh_dir(os.path.join(work, "all"))
             print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
             hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles,
                                     a.shoulder_calibration, SET_PROPS.get(st, ()), JOIN_BLEND.get(st, 0.0)))
