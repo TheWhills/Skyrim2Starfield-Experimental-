@@ -86,8 +86,9 @@ FURNITURE_SETS = (
     ("Enchant", ("AnimFurnIndustrialWorkbench",), _FURN + "s2s_enchant"),
     ("Cook", ("AnimFurnGalleyWorkbench",), _FURN + "s2s_cook"),
     ("Tanning", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_tanning"),
-    ("Forge", ("AnimFurnIndustrialWorkbench",), _FURN + "s2s_forge"),      # 2026-11-16, Skyrim's blacksmith forge
-    ("Grindstone", ("AnimFurnWeaponWorkbench",), _FURN + "s2s_grindstone"),   # 2026-11-16, the sharpening wheel
+    # 2026-11-16: the forge and the sharpening wheel on the wall-wipe NPC work template (make_furniture.TEMPLATES)
+    ("Forge", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_forge"),
+    ("Grindstone", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_grindstone"),
 )
 FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
 

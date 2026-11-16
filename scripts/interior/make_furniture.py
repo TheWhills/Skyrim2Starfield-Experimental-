@@ -69,9 +69,18 @@ TEMPLATES = {
     "weapon_bench": ("002B6A63", "WorkbenchWeapon"),               # AnimFurnWeaponWorkbench (grindstone)
     "armor_bench": ("002B6A62", "WorkbenchArmor"),                 # AnimFurnArmorWorkbench (armor table)
     "scrape": ("0003C420", "NPCStanding_WipeWall"),                # AnimFurnStanding_WipeWall (tanning rack)
+    # 2026-11-16 (owner, in game: Alvor stands by our forge and never uses it; the player's E on it does nothing, as
+    # on Starfield's own chem bench placed in the inn on 2026-11-09). SfInspect (verified): WorkbenchIndustrial has no
+    # FurnitureClassWork keyword (NPCs' work sandboxing uses furniture of that class: the tanner, Embry's sweeping and
+    # Orgnar's bar, on such templates, work in game), while NPCRepair_ToolStanding_Hammer is IgnoredBySandbox. So the
+    # forge and the grindstone, which play our Skyrim clips, become NPC work furniture on the wall-wipe template
+    # (FurnitureClassWork, not ignored by sandbox; the tanning rack's): Starfield's crafting menu is lost (it did not
+    # open anyway); Skyrim's animations, props and spot are kept
+    "forge": ("0003C420", "NPCStanding_WipeWall"),                 # Skyrim's blacksmith forge (Forge set)
+    "grindstone": ("0003C420", "NPCStanding_WipeWall"),            # Skyrim's sharpening wheel (Grindstone set)
 }
 SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
-           "scrape",
+           "scrape", "forge", "grindstone",
            # crafting stations (2026-11-09, owner: E on our alchemy lab put the player inside it facing away, no menu;
            # Starfield's own chem bench, same record but its own marker, worked): Skyrim's crafting NIFs all hold one
            # marker at the origin, heading 0, entry Behind (owner's furniture survey: cooking pot, alchemy lab and
@@ -83,11 +92,12 @@ CRAFT_KINDS = {"cook", "alchemy", "workbench", "weapon_bench", "armor_bench"}   
 CRAFTING = [(("craftingcookpot", "issmallcookingpot", "cookingspit", "cookingpot"), "cook"),
             (("isalchemy", "wicraftingalchemy", "craftingalchemy"), "alchemy"),
             (("isenchanting", "wicraftingenchanting", "craftingenchanting"), "workbench"),
-            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "weapon_bench"),
+            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "grindstone"),
             (("craftingsmithingarmortable", "armortable"), "armor_bench"),
             (("craftingtanningrack", "tanningrack"), "scrape"),
             (("craftingsmithinganvil", "anvil"), "hammer"),
-            (("craftingsmithingforge", "craftingsmelter", "forge", "smelter"), "workbench")]
+            (("craftingsmelter", "issmelter", "smelter"), "workbench"),
+            (("craftingsmithingforge", "isblacksmithforge", "forge"), "forge")]
 # Skyrim idle-marker animations (IDLE EditorIDs, lower case) -> kind
 IDLE_KINDS = [("sweep", "sweep"), ("armscrossed", "arms_crossed"), ("examine", "browse"), ("study", "browse"),
               ("warmhands", "arms_front")]
@@ -178,8 +188,8 @@ ANIM_SET_RULES = (
     (("workbench",), r"enchant", "Enchant"),
     (("cook",), None, "Cook"),
     (("scrape",), r"tanning", "Tanning"),
-    (("workbench",), r"forge", "Forge"),
-    (("weapon_bench",), r"sharpening|grindstone", "Grindstone"),
+    (("forge",), None, "Forge"),
+    (("grindstone",), None, "Grindstone"),
 )
 # Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
 # is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips

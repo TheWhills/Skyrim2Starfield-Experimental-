@@ -163,7 +163,7 @@ class MakeFurnitureTests(unittest.TestCase):
         for e in ("CommonChair01F", "WoodenChair01", "NobleChair01", "InvisibleChairMarker", "InvisibleChairMarkerChild"):
             self.assertEqual(M.kind_of({"type": "FURN", "edid": e, "keywords": [], "entry_points": sit}), "chair", e)
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "CraftingBlacksmithSharpeningWheel", "keywords": []}),
-                         "weapon_bench")                       # a crafting station, not caught by the work rule
+                         "grindstone")                         # a crafting station, not caught by the work rule
 
     def test_crafting_kinds(self):
         pot = {"type": "FURN", "edid": "CraftingCookingPotSm", "bench_type": 1,
@@ -172,16 +172,22 @@ class MakeFurnitureTests(unittest.TestCase):
         self.assertIsNone(M.kind_of(pot, crafting=False))                       # --no-crafting: a static
         cases = {"CraftingAlchemyWorkbench": (["isAlchemy", "WICraftingAlchemy"], 5, "alchemy"),
                  "CraftingEnchantingWorkbenchTabletop": (["isEnchanting"], 3, "workbench"),
-                 "CraftingSmithingForge": (["CraftingSmithingForge"], 1, "workbench"),
-                 "CraftingSmithingSharpeningWheel": (["CraftingSmithingSharpeningWheel"], 2, "weapon_bench"),
+                 "CraftingSmithingForge": (["CraftingSmithingForge"], 1, "forge"),
+                 "CraftingBlackSmithForge": (["isBlacksmithForge", "CraftingSmithingForge"], 1, "forge"),
+                 "CraftingSmelterMarker1": (["isSmelter", "CraftingSmelter"], 1, "workbench"),
+                 "CraftingBlacksmithAnvil": (["isBlacksmithAnvil", "CraftingSmithingForge"], 1, "hammer"),
+                 "CraftingSmithingSharpeningWheel": (["CraftingSmithingSharpeningWheel"], 2, "grindstone"),
                  "CraftingSmithingArmorTable": (["CraftingSmithingArmorTable"], 7, "armor_bench"),
                  "CraftingTanningRack": (["CraftingTanningRack"], 1, "scrape"),
                  "CraftingSmithingAnvil": ([], 1, "hammer"),
                  "CraftingSomethingNew": ([], 1, None)}                         # a bench we do not know: static
         for edid, (kw, bt, want) in cases.items():
             self.assertEqual(M.kind_of({"type": "FURN", "edid": edid, "keywords": kw, "bench_type": bt}), want, edid)
-        for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench", "scrape"):
+        for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench", "scrape", "forge", "grindstone"):
             self.assertIn(k, M.TEMPLATES)
+        # 2026-11-16: the forge / wheel are NPC work furniture (the wall-wipe template: FurnitureClassWork)
+        self.assertEqual(M.TEMPLATES["forge"][1], "NPCStanding_WipeWall")
+        self.assertIn("forge", M.SPECIAL)
         self.assertIn("scrape", M.SPECIAL)                                      # the wall-wipe marker's own offset
         # 2026-11-09: Skyrim's crafting markers sit at the origin (its animations stand off): the template's markers
         sky = {"type": "FURN", "edid": "CraftingAlchemyWorkbenchTabletop", "keywords": ["isAlchemy"], "bench_type": 5,

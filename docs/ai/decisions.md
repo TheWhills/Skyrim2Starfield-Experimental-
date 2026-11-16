@@ -2324,3 +2324,10 @@ empty nodes; the effect system behind them is unknown).
   temperature shifted 95 mired warmer (PluginSpike LIGHT_TEMPERATURE warm). Evidence: SfInspect of Starfield's fire
   lights and Faendal's Skyrim lights (docs/interior/skyrim-interiors.md). Alternative kept: per-light templates (candle
   vs fire vs fill) if one base does not fit every room.
+- 2026-11-16 Skyrim's forge and sharpening wheel become Starfield NPC work furniture (copies of NPCStanding_WipeWall,
+  FurnitureClassWork) playing our Skyrim Forge / Grindstone sets, not Starfield crafting workbenches. Why: Alvor never
+  used the forge as WorkbenchIndustrial (no FurnitureClassWork) and the player's E on Starfield workbenches does
+  nothing in our cells (2026-11-09, 2026-11-16); the furniture NPCs do work at in Riverwood carries FurnitureClassWork.
+  Cost: no Starfield crafting menu at the forge. Alternatives: a second, player-only workbench reference at the forge
+  once workbench activation works; NPCRepair_ToolStanding_Hammer (IgnoredBySandbox, so packages must name it).
+

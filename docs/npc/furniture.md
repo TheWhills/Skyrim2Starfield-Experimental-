@@ -93,8 +93,8 @@ Sleeping Giant; owner's furniture survey). make_furniture now turns crafting sta
 |---|---|---|
 | cooking pot / spit | Invisible_GalleyWorkbench01 000EFC6F (marker-only; our pot as its model) | AnimFurnGalleyWorkbench, WorkbenchCookingKeyword |
 | alchemy lab | WorkbenchChem 002B6A61 | AnimFurnPharmaWorkbench |
-| enchanter, forge, smelter | WorkbenchIndustrial 001F50AD (no script; WorkbenchResearch has one) | AnimFurnIndustrialWorkbench |
-| grindstone | WorkbenchWeapon 002B6A63 | AnimFurnWeaponWorkbench |
+| enchanter, forge, smelter | WorkbenchIndustrial 001F50AD (no script; WorkbenchResearch has one; 2026-11-16: the forge is NPCStanding_WipeWall, Forge set) | AnimFurnIndustrialWorkbench |
+| grindstone | WorkbenchWeapon 002B6A63 (2026-11-16: NPCStanding_WipeWall, NPC work furniture, Grindstone set) | AnimFurnWeaponWorkbench |
 | armor table | WorkbenchArmor 002B6A62 | AnimFurnArmorWorkbench |
 | anvil | NPCRepair_ToolStanding_Hammer 0000A4B0 (as the hammer table) | AnimFurnRepair_Tool_HammerStanding |
 | tanning rack | NPCStanding_WipeWall 0003C420 (marker-only) | AnimFurnStanding_WipeWall |
@@ -511,6 +511,17 @@ left one, 2.8 m away in the fire at the Pull's start); the build gave the forge 
 from Skyrim". In game unverified. Grindstone set (2026-11-16; the owner's folder listing has
 workbench\weaponworkbench): Enter / Spin (Idle) / Exit of the sharpening wheel, on Skyrim's wheel marker
 (SKYRIM_SPOT_SETS), every other idle-like slot answered with the Spin; no props (none found for the wheel).
+Owner in game (2026-11-16 12:21-12:23): Alvor stands beside the forge and never uses it; for the player the
+"Industrial Workbench" prompt shows only from one narrow angle and E does nothing (as Starfield's own chem bench on
+2026-11-09). SfInspect (owner's, **verified**): WorkbenchIndustrial: Flags 0, keywords without FurnitureClassWork,
+marker (0, -0.8, 0), activation angle 180; NPCRepair_ToolStanding_Hammer: Flags IgnoredBySandbox, IsMarker,
+PackInUseOnly, marker model RepairToolHammer_Marker.nif. The furniture Riverwood's NPCs do work at in game (tanning
+rack: NPCStanding_WipeWall; sweeping: NPCSweeping; Orgnar's bar: NPCBartender_Standing) all carry FurnitureClassWork
+(owner's furniture_anims.md). So the forge and the grindstone are now NPC work furniture on the wall-wipe template
+(make_furniture kinds "forge" / "grindstone"; the smelter stays the industrial workbench), their sets on its folder
+(standing_wipewall: 5 flavors, EnterInstant = the Idle with the props loaded), the keywords' entries copied from
+AnimFurnStanding_WipeWall's. Starfield's crafting menu at the forge is given up (it did not open). Supported
+hypothesis: Alvor's SandboxWorking package picks FurnitureClassWork furniture.
 
 Skyrim's smithing, **verified** from smithing_probe (owner, 2026-11-16; Skyrim.esm and mt_behavior.hkx):
 | station (FURN) | model | enter idle | clips (state machine order) | props (ANIO) |

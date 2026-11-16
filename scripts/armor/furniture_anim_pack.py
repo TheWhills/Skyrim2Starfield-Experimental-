@@ -105,13 +105,17 @@ SETS = {
     # ends back on the hammering pose; Discard ends before a new Pull, so it would jump), Exit. No root motion in any of
     # them (furniture_motion --clips, verified): the walk to the trough is in the body's own track. The industrial
     # workbench template (the forge's Starfield furniture) has 6 flavor slots (the Enchant set's).
-    "Forge": standing_set("s2s_forge", "workbench\\industrialworkbench", "blacksmithforgehammer.hkx",
-                          ("blacksmithforgetemper.hkx",), "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 6),
+    # The furniture is NPC work furniture on the wall-wipe template (make_furniture.TEMPLATES "forge", 2026-11-16:
+    # Alvor never used it as Starfield's industrial workbench): its folder's slots, 5 flavors and EnterInstant.
+    "Forge": standing_set("s2s_forge", "standing_wipewall", "blacksmithforgehammer.hkx",
+                          ("blacksmithforgetemper.hkx",), "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 5,
+                          instant=True),
     # 2026-11-16 (smithing_probe): the sharpening wheel's machine Enter -> Spin (loop) -> Exit; the owner's listing
     # of Starfield's workbench folders has workbench\weaponworkbench (the grindstone's Starfield furniture,
     # WorkbenchWeapon). Its flavor count is not known: unanswered_tags gives every idle-like slot ours lack our Idle.
-    "Grindstone": standing_set("s2s_grindstone", "workbench\\weaponworkbench", "blacksmithsharpeningwheelspin.hkx",
-                               (), "blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelexit.hkx", 0),
+    "Grindstone": standing_set("s2s_grindstone", "standing_wipewall", "blacksmithsharpeningwheelspin.hkx",
+                               (), "blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelexit.hkx", 5,
+                               instant=True),
 }
 
 # Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.

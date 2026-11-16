@@ -59,8 +59,9 @@ class PackTests(unittest.TestCase):
                  ("lean_table", "LeanTableMarker"): "LeanTable", ("sweep", "SweepIdleMarker"): "Sweep",
                  ("alchemy", "CraftingAlchemyWorkbench"): "Alchemy",
                  ("workbench", "CraftingEnchantingWorkbenchTabletop"): "Enchant",
-                 ("workbench", "CraftingBlackSmithForge"): "Forge",
-                 ("weapon_bench", "CraftingBlacksmithSharpeningWheel"): "Grindstone", ("cook", "CraftingCookingPotSm"): "Cook",
+                 ("forge", "CraftingBlackSmithForge"): "Forge",
+                 ("grindstone", "CraftingBlacksmithSharpeningWheel"): "Grindstone",
+                 ("workbench", "CraftingSmelterMarker1"): None, ("cook", "CraftingCookingPotSm"): "Cook",
                  ("scrape", "CraftingTanningRackMarker"): "Tanning", ("bed", "CommonBed01"): None}
         for (kind, edid), want in cases.items():
             self.assertEqual(MF.anim_set_for({"kind": kind, "edid": edid}), want, edid)
@@ -68,15 +69,15 @@ class PackTests(unittest.TestCase):
     def test_forge_set(self):
         """2026-11-16 (smithing_probe): Enter = Pull, Idle = Hammer, flavors = Temper, Exit; Skyrim's own spot."""
         folder, tpl, rows = P.SETS["Forge"]
-        self.assertEqual((folder, tpl), (P.SF_ANIM + "furniture\\s2s_forge",
-                                         P.SF_ANIM + "furniture\\workbench\\industrialworkbench"))
+        self.assertEqual((folder, tpl), (P.SF_ANIM + "furniture\\s2s_forge", P.SF_ANIM + "furniture\\standing_wipewall"))
         d = dict((r[0], r[1]) for r in rows)
         self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["exittostand.afx"]),
                          ("blacksmithforgepull.hkx", "blacksmithforgehammer.hkx", "blacksmithforgeexit.hkx"))
-        self.assertEqual({d[f"idle_flavor{i:02d}.afx"] for i in range(1, 7)}, {"blacksmithforgetemper.hkx"})
+        self.assertEqual({d[f"idle_flavor{i:02d}.afx"] for i in range(1, 6)}, {"blacksmithforgetemper.hkx"})
+        self.assertEqual(d["enterinstant.afx"], "blacksmithforgehammer.hkx")      # spawned at work: props loaded
         self.assertEqual(P.COM_SHIFT["Forge"], (0.0, 0.0))
         folder, tpl, rows = P.SETS["Grindstone"]
-        self.assertTrue(tpl.endswith("workbench\\weaponworkbench"))
+        self.assertTrue(tpl.endswith("standing_wipewall"))
         d = dict((r[0], r[1]) for r in rows)
         self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["exittostand.afx"]),
                          ("blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelspin.hkx",
@@ -398,7 +399,7 @@ class AnimKeywordTests(unittest.TestCase):
         self.assertEqual(out["bases"]["a"]["markers"], [])
         # 2026-11-16: the forge's Skyrim sequence is laid out around Skyrim's forge marker: a crafting station, but
         # it takes Skyrim's spot when it plays the Forge set
-        forge = {"bases": {"f": {"kind": "workbench", "edid": "CraftingBlackSmithForge", "markers": [],
+        forge = {"bases": {"f": {"kind": "forge", "edid": "CraftingBlackSmithForge", "markers": [],
                                  "skyrim_markers": sky}}}
         MF.add_anim_keywords(forge, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimForge": 0x0100081B})
         self.assertEqual((forge["bases"]["f"]["anim_set"], forge["bases"]["f"]["markers"]), ("Forge", sky))
