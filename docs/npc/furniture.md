@@ -597,4 +597,12 @@ his package S2S_AlvorWork8x12 (formids.json 3763 = 0xEB3) is in FO4Port.esm. The
 checks (record flags, keywords, markers, entry sides, pathing, ownership). furniture_record_probe.py (read-only)
 prints our forge / tanning records beside the vanilla wall-wipe template, and the sweep / rail lean (chosen on
 schedules) beside theirs, with the differences.
+package_coverage.py (read-only): per NPC and package, the location (reference / cell, Skyrim's radius) and the
+furniture references inside it, to check whether a schedule's area holds the forge, the tanning rack or the rail
+(owner: "do we know if their schedules are aligned to even work with that"). What changed for that furniture, by
+commit: 11-14 sets added; 11-15 16:33 lean / counter / table / sweep / tanning on Skyrim's own markers, 17:51 the
+bar-lean 0.30 m shift dropped; 11-16 11:25-11:39 untextured shapes of *Marker.nif models dropped (the tanning rack and
+forge models are TanningRackMarker.nif / BlacksmithForgeMarker.nif; the last build dropped one shape, milllogpile's),
+11:48 Forge set, 12:10 Grindstone set, 13:18 forge (and grindstone) moved onto the tanning rack's wall-wipe template,
+15:02 Grindstone removed. The schedule conversion (make_schedule.py) has not changed since 11-15 15:32.
 
