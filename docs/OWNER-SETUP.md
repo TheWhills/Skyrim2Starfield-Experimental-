@@ -78,7 +78,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
-   Flames: hearths burn Starfield's own FireMed02 by default (`-FlameStyle particles`, a full build;
+   Flames: hearths burn Skyrim's flame layout with Starfield's LayeredFireV2 by default (`-FlameStyle layered`); `-FlameStyle particles` places Starfield's FireMed02 instead (a full build;
    `-ParticleFire 1CEDAB:0.8` picks the fire and its size); `-FlameStyle layered`: Skyrim's hearth flames burning with
    Starfield's LayeredFireV2 material, no particle fire; `-CandleStyle starfield`: Starfield's candle flame mesh and
    material fitted to Skyrim's teardrop (models only); `starfield`

@@ -1088,7 +1088,7 @@ def main(argv=None):
                          "the worldspace doors into those interiors become persistent load doors")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
-    ap.add_argument("--flame-style", default="particles", choices=("skyrim", "starfield", "particles", "layered"),
+    ap.add_argument("--flame-style", default="layered", choices=("skyrim", "starfield", "particles", "layered"),
                     help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, "
                          "(particles) hearths as Starfield's own particle fire, or (layered) Skyrim's hearth flame "
                          "meshes and cards burning with Starfield's LayeredFireV2 (docs/interior/skyrim-interiors.md)")

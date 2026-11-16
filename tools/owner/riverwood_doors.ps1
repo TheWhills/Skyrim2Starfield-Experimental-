@@ -38,7 +38,8 @@ param(
     # Starfield's own particle fire (a plugin change: a full build, not -AssetsOnly)
     # default since 2026-11-16 (owner's comparisons): hearths burn Starfield's FireMed02, candles keep Skyrim's cards;
     # "layered": Skyrim's hearth flame meshes and cards burning with Starfield's LayeredFireV2 material, no particle fire
-    [ValidateSet("skyrim", "starfield", "particles", "layered")][string]$FlameStyle = "particles",
+    # default "layered" since 2026-11-16 11:06 (owner accepted the orange LayeredFireV2 hearth and Skyrim's candles)
+    [ValidateSet("skyrim", "starfield", "particles", "layered")][string]$FlameStyle = "layered",
     # with -FlameStyle particles: the Starfield fire placed in hearths, "BASE[:SCALE]" (default FireMed02 1CEDAB, 0.8)
     [string]$ParticleFire = "",
     # candle flames: Skyrim's textures, or Starfield's own candle flame (its mesh + material) fitted to Skyrim's teardrop (models only:
@@ -65,7 +66,7 @@ if (-not (Test-Path $Texconv)) {
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
-if ($AssetsOnly -and ($ParticleFire -or $FlameStyle -ne "particles")) {
+if ($AssetsOnly -and ($ParticleFire -or $FlameStyle -eq "particles")) {
     Write-Host "note: the hearth fires are plugin records; a different -FlameStyle / -ParticleFire takes a full build" -ForegroundColor Yellow
 }
 if ($AssetsOnly) {

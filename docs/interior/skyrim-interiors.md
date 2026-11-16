@@ -517,3 +517,8 @@ Owner, that build (11:05, Faendal's house): flicker no longer commented on; "let
 very bright right at the source" (the fireplace's back wall and the wall behind the bedside candle) -> LIGHT_POWER 2
 (8000 lm). The hot spots are inverse-square falloff next to a wall (Skyrim's lights fall off over their radius instead);
 if they stay, next is a softer source (Starfield's area / source-radius fields) rather than less power.
+Owner (2026-11-16 11:06): "that's better, let's table this for now" - interior lighting parked at these defaults
+(LGT_Fire_Cauldron base, 8000 lm, 95 mired warmer, subtle flicker, Skyrim falloff). Flames settled for now: hearths
+`layered` (now riverwood_doors' default -FlameStyle and make_skyrim_objects' --flame-style default), candles `skyrim`
+(the default). Open when lighting returns: hot spots next to walls (softer source), the inn's 65.7 m / 64000 lm fill
+light, the cell ambient (45,48,48, neutral).
