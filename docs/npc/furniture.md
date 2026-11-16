@@ -445,3 +445,5 @@ R_AnimObject1 1.16 m from the wrist): now, for sets with props, every non-additi
 folders is copied into ours (vanilla_leftovers force) and rewritten with the prop bone held at our Idle's hand pose
 (pin_bone: CALUMI read-back, dense keys, root-motion header kept), until the exit's AnimObjUnequipAll; the mood
 variants are made after that, so their exits use the pinned copies.
+Owner in game (2026-11-15): Delphine also sleeps across her bed (Sleeping Giant), head off the side; her getangle z 180.
+Needed next: the bed's getangle z (click the bed), to tell whether the sleeper follows bed + marker rotation at all.

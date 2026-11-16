@@ -264,3 +264,14 @@ Unknowns the survey answers: which effect assets the interiors use and how often
 which light sits next to each; whether Starfield models carry particle blocks; which material components Starfield's
 database has (a flipbook / emissive component and its fields = animated glowing materials can be written like our
 other .mat files). scripts/interior/fire_survey.py (read-only) writes fire_survey.json / .md.
+Survey answers (owner's run 2026-11-09, Riverwood batch): candles (table / wall / floor / chandeliers, 90 placements)
+have no flame in their model, only AddOnNode slots for ADDN MPSCandleFlame01 (textures candleflame01 / candleglow01);
+hearths are FireplaceWood01Burning (8: flame cards on FXFireAtlas02 / 04 + WoodFires01_g, animated; particles; one
+haze plane); the bare hearth architecture carries nothing. Starfield: 0 of 60 fire-named models carry particle blocks,
+its fire ADDN records all point at fxemptynode.nif (the effect lives elsewhere), and its materials have a
+FlipbookComponent (IsAFlipbook, Columns, Rows, FPS, Loops) and emissive / effect settings. So: flames = converted cards
+with a flipbook emissive material; candle add-ons placed by us at each AddOnNode.
+2026-11-15: scripts/interior/flame_probe.py (read-only) prints what that conversion needs: the candle ADDN's model and
+DATA, every effect-shader shape of the hearth / candle / add-on models (texture, flags, UV offset / scale, its
+controllers: variable, frequency, start / stop, keys), AddOnNode positions, and Starfield's flipbook .mat files (a
+fire one printed whole, the template our flame materials copy).
