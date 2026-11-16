@@ -392,3 +392,6 @@ armcrossed), common\female 7, common\pirate 5, and chair / bench EnterInstant, L
 RearEnterFromStand, furniture\common Camera / Flinch. Verified: so the brief upper-body takeover on our seat is a mood
 variant (no descriptor of its own; found by file name along the chain). The pack now copies our clip of the base under
 every such variant name into our folder (mood_variants); LookDirections variants stay Starfield's (no base of ours).
+Verified (owner's anim_cache_clips on the regenerated CK cache, 2026-11-15): after mood_variants (Sit 352 variants,
+the other sets 95-119 each, mostly the upper-body prop variants) the clips the s2s_sit cache files resolve elsewhere
+fell from 862 to 121: the game does find mood variants by file name in our folder. In game unverified.
