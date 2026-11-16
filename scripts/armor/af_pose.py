@@ -185,6 +185,31 @@ def gap_report(label, rig, rb, profiles, samples=120):
     return lines
 
 
+# the joints a stick figure needs (Starfield rig names); the dump keeps only these
+DUMP_JOINTS = ("C_Hips", "C_Spine", "C_Chest", "C_Neck", "C_Head", "L_Clavicle", "R_Clavicle", "L_Biceps", "R_Biceps",
+               "L_Forearm", "R_Forearm", "L_Wrist", "R_Wrist", "L_Thigh", "R_Thigh", "L_Calf", "R_Calf", "L_Foot",
+               "R_Foot", "L_Toe", "R_Toe")
+DUMP_BONES = (("C_Hips", "C_Spine"), ("C_Spine", "C_Chest"), ("C_Chest", "C_Neck"), ("C_Neck", "C_Head"),
+              ("C_Neck", "L_Clavicle"), ("C_Neck", "R_Clavicle"), ("L_Clavicle", "L_Biceps"),
+              ("R_Clavicle", "R_Biceps"), ("L_Biceps", "L_Forearm"), ("R_Biceps", "R_Forearm"),
+              ("L_Forearm", "L_Wrist"), ("R_Forearm", "R_Wrist"), ("C_Hips", "L_Thigh"), ("C_Hips", "R_Thigh"),
+              ("L_Thigh", "L_Calf"), ("R_Thigh", "R_Calf"), ("L_Calf", "L_Foot"), ("R_Calf", "R_Foot"),
+              ("L_Foot", "L_Toe"), ("R_Foot", "R_Toe"))
+
+
+def dump_clip(label, rig, rb, joints=DUMP_JOINTS):
+    """{name, fps, joints, bones, frames: [[x, y, z] per joint]} of every frame (metres, 3 decimals); joints the rig
+    lacks are left out."""
+    n = max(int(rb.get("frames") or 1), 1)
+    names = [j for j in joints if j in rig["names"]]
+    frames = []
+    for f in range(n):
+        pose = world_pose(rig, rb, f)
+        frames.append([[round(float(v), 3) + 0.0 for v in pose[j]] for j in names])
+    return {"name": label, "fps": rb.get("fps") or 30, "joints": names,
+            "bones": [b for b in DUMP_BONES if b[0] in names and b[1] in names], "frames": frames}
+
+
 def report(label, pose, keyed):
     pel = next((pose[n] for n in pose if re.search(r"pelvis", n, re.I)), None)
     lines = [f"== {label}"]
@@ -212,6 +237,9 @@ def main(argv=None):
                     help="with two --af (ours, then a Starfield clip doing the same thing): write the clavicle turn "
                          "that puts our shoulders where Starfield's are (retarget.shoulder_calibration), averaged over "
                          "the clips' frames; hkx_to_af / furniture_anim_pack --shoulder-calibration apply it")
+    ap.add_argument("--dump", metavar="JSON",
+                    help="write every frame's joint world positions of each --af (the skeleton's main joints) to JSON, "
+                         "for a viewer (2026-11-15: watch a whole converted clip, not one frame)")
     ap.add_argument("--gaps", metavar="BODY_PROFILES_JSON",
                     help="body_profiles.json (scripts/armor/body_profiles.py): per clip, how close each hand comes to "
                          "the body over the whole clip and the frames where it is inside (hand_gaps)")
@@ -235,7 +263,7 @@ def main(argv=None):
         with open(rig_path, "wb") as fh:
             fh.write(data)
     rig = af_writer.load_rig(a.calumi, rig_path)
-    dirs = []
+    dirs, dumps = [], []
     for src in a.af:
         path = src
         if not os.path.isfile(src):
@@ -254,6 +282,9 @@ def main(argv=None):
             if missing:
                 sys.exit(f"{src}: no {missing} in the pose")
             dirs.append(retarget.clavicle_dirs({m: np.array([p[m] for p in poses]) for m in names}))
+        if a.dump:
+            dumps.append(dump_clip(src, rig, rb))
+            continue
         if profiles is not None:
             print("\n".join(gap_report(src, rig, rb, profiles)))
             continue
@@ -261,6 +292,11 @@ def main(argv=None):
         pose = world_pose(rig, rb, f)
         print(report(f"{src} (frame {f:.0f} of {rb['frames']}, {len(rb['bones'])} bones keyed)", pose,
                      set(rb["bones"])))
+    if a.dump:
+        import json
+        with open(a.dump, "w", encoding="utf-8") as fh:
+            json.dump({"clips": dumps}, fh)
+        print(f"{len(dumps)} clips, {sum(len(c['frames']) for c in dumps)} frames -> {a.dump}")
     if a.calibrate_shoulders:
         import json
         from fo4sf import retarget

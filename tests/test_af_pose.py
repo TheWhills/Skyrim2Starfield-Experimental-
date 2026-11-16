@@ -31,6 +31,18 @@ class PoseTests(unittest.TestCase):
         self.assertEqual(P.joints(["Root", "C_Pelvis", "L_Hand", "R_Finger11"]), ["C_Pelvis", "L_Hand"])
 
 
+    def test_dump_clip(self):
+        rig = {"names": ["C_Hips", "C_Spine", "L_Wrist"], "parents": [-1, 0, 1],
+               "t": [np.array([0, 0, 1.0]), np.array([0, 0, 0.2]), np.array([0.3, 0, 0])],
+               "q": [np.array([0, 0, 0, 1.0])] * 3}
+        rb = {"frames": 3, "rotations": {}, "translations": {"C_Hips": [(0, (0, 0, 1.0)), (2, (0, 0, 0.5))]}}
+        d = P.dump_clip("x", rig, rb)
+        self.assertEqual(d["joints"], ["C_Hips", "C_Spine", "L_Wrist"])
+        self.assertEqual(d["bones"], [("C_Hips", "C_Spine")])
+        self.assertEqual(len(d["frames"]), 3)
+        self.assertEqual(d["frames"][0][2], [0.3, 0.0, 1.2])
+        self.assertEqual(d["frames"][2][2], [0.3, 0.0, 0.7])
+
     def test_hand_gaps(self):
         """A belly 0.12 m thick around the spine: a wrist 0.2 m in front is outside, one 0.05 m in front inside; the
         own forearm is never counted; the gap report finds the inside frames."""
