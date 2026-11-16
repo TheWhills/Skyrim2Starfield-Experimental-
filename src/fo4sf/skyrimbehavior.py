@@ -26,6 +26,8 @@ from hkRootLevelContainer's first pointer). Fields not listed here are not read.
     weight f32 @64
   hkbBehaviorReferenceGenerator: behaviorName char* @72 (e.g. Behaviors\\QuadrupedBehavior.hkx)
   hkbVariableBindingSet: bindings (40-byte records: memberPath char* @0, variableIndex i32 @28, bindingType i8 @33)
+  hkbClipTriggerArray: triggers @16 (32-byte records: localTime f32 @0, event id i32 @8, payload ptr @16, flags u8
+    @24..26);  hkbStringEventPayload: data char* @16 (2026-11-16, supported, not yet checked on game data)
 Every other object is kept generically: its class, name (when it is an hkbNode) and the objects it points to, in
 field order, so the whole tree can be walked.
 """
@@ -36,6 +38,7 @@ from . import hkpackfile
 
 NODE_NAME, NODE_BINDINGS = 56, 16
 TRANSITION_SIZE = 72
+TRIGGER_SIZE = 32
 BINDING_SIZE = 40
 SM_MODES = {0: "default", 1: "sync", 2: "random", 3: "chooser"}
 
@@ -184,6 +187,21 @@ def read(data: bytes) -> Dict:
             n.update(behavior=r.string(o, 72))
         elif c == "hkbBlenderGeneratorChild":
             n.update(generator=r.p(o, 48), weight=r.u("<f", o, 64)[0])
+        elif c == "hkbClipTriggerArray":
+            # triggers (hkArray @16) of 32-byte hkbClipTrigger: localTime f32 @0, event (hkbEventProperty: id i32 @8,
+            # payload ptr @16), relativeToEndOfClip u8 @24, acyclic @25, isAnnotation @26 (2026-11-16, smithing_probe;
+            # supported: hk_2010 class layout, checked on data by the event ids landing in the event list)
+            d, cnt = r.array(o, 16)
+            n["triggers"] = []
+            for k in range(cnt if d is not None else 0):
+                b = d + TRIGGER_SIZE * k
+                t, = r.pf.unpack("<f", b)
+                ev, = r.pf.unpack("<i", b + 8)
+                rel, acyc, ann = r.pf.unpack("<3B", b + 24)
+                n["triggers"].append({"time": round(t, 4), "event": ev, "payload": r.ptr.get(b + 16),
+                                      "relative_to_end": bool(rel), "acyclic": bool(acyc), "annotation": bool(ann)})
+        elif c == "hkbStringEventPayload":
+            n["data"] = r.string(o, 16)                 # hkStringPtr data after hkReferencedObject
         nodes[o] = n
     # checks: every transition targets a state of its machine (or a nested / wildcard case), event ids in range
     for o, n in nodes.items():

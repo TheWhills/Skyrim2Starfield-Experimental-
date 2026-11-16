@@ -14,7 +14,7 @@ from fo4sf import skyrimbehavior as SB  # noqa: E402
 from test_skyrim_hkx import Hkx2010  # noqa: E402
 
 
-def graph(bias=0):
+def graph(bias=0, triggers=False):
     h = Hkx2010()
     B = bias
     root = h.obj("hkRootLevelContainer", 16 + B)
@@ -27,6 +27,9 @@ def graph(bias=0):
     ta = h.obj("hkbStateMachineTransitionInfoArray", 32 + B)
     c0 = h.obj("hkbClipGenerator", 120 + B)
     c1 = h.obj("hkbClipGenerator", 120 + B)
+    if triggers:                                       # objects first: data allocated later is outside their ranges
+        ta2 = h.obj("hkbClipTriggerArray", 32 + B)
+        pay = h.obj("hkbStringEventPayload", 24 + B)
     nv = h.alloc(24)
     h.array(root + B, nv, 1)
     h.ptr(nv + 16, g)
@@ -59,6 +62,15 @@ def graph(bias=0):
         h.string(c + B + 56, name)
         h.string(c + B + 72, anim)
         h.put(c + B + 88, "<4f", 0, 0, 0, 1.25)
+    if triggers:                                       # IdleClip: moveStop at 0.5 s with a string payload
+        h.string(pay + B + 16, "AnimObjectHammer")
+        rec2 = h.alloc(32)
+        h.put(rec2, "<f", 0.5)
+        h.put(rec2 + 8, "<i", 1)
+        h.ptr(rec2 + 16, pay)
+        h.put(rec2 + 24, "<3B", 0, 1, 0)
+        h.array(ta2 + B + 16, rec2, 1)
+        h.ptr(c0 + B + 80, ta2)
     return h.bytes()
 
 
@@ -78,6 +90,28 @@ class SkyrimBehaviorTests(unittest.TestCase):
             self.assertEqual((walk["animation"], walk["speed"]), ("Animations\\Walk.hkx", 1.25))
             self.assertEqual(b["checks"], [])
             self.assertEqual(SB.summary(b)["transitions"], 1)
+
+    def test_clip_triggers_and_string_payloads(self):
+        """2026-11-16 (smithing_probe): a clip's triggers (time, event, payload) and string payloads (prop names)."""
+        for bias in (0, 8):
+            b = SB.read(graph(bias, triggers=True))
+            clip = next(n for n in b["nodes"].values() if n.get("name") == "IdleClip")
+            tr = b["nodes"][clip["triggers"]]["triggers"]
+            self.assertEqual([(t["time"], b["events"][t["event"]], t["acyclic"]) for t in tr], [(0.5, "moveStop", True)])
+            self.assertEqual(b["nodes"][tr[0]["payload"]]["data"], "AnimObjectHammer")
+
+    def test_smithing_probe_reads_the_machine_and_triggers(self):
+        import re
+        import smithing_probe as P
+        b = SB.read(graph(triggers=True))
+        rx = re.compile("walk|idle", re.I)
+        m, = P.machines_with(b, rx)
+        self.assertEqual((m["name"], m["start"]), ("Locomotion", "Idle"))
+        self.assertEqual([(s["name"], s["clips"], s["transitions"]) for s in m["states"]],
+                         [("Idle", ["Idle.hkx"], [("moveStart", "Walk")]), ("Walk", ["Walk.hkx"], [])])
+        self.assertEqual(P.clip_triggers(b, rx), [("IdleClip", "Idle.hkx", [(0.5, "moveStop", "AnimObjectHammer")])])
+        self.assertEqual(P.payload_strings(b), ["AnimObjectHammer"])
+        self.assertEqual(P.machines_with(b, re.compile("anvil")), [])
 
     def test_checks_catch_a_bad_target(self):
         data = bytearray(graph())

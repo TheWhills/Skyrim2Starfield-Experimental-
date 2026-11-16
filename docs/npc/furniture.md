@@ -447,3 +447,19 @@ folders is copied into ours (vanilla_leftovers force) and rewritten with the pro
 variants are made after that, so their exits use the pinned copies.
 Owner in game (2026-11-15): Delphine also sleeps across her bed (Sleeping Giant), head off the side; her getangle z 180.
 Needed next: the bed's getangle z (click the bed), to tell whether the sleeper follows bed + marker rotation at all.
+
+## Smithing (2026-11-16)
+Owner: "let's work through the smithing animations. These are going to be more complicated because in Skyrim the
+character takes a sword, puts them in water trough, and also puts them in the forge, etc. There's hammering, it's a
+whole thing. Right now, as in other places, there is a white outline of certain things around the smithing object."
+So far the forge / smelter play Starfield's industrial workbench, the anvil Starfield's standing hammer table, the
+grindstone Starfield's weapon bench (table above): Starfield's own animations and props. Skyrim's smithing is not
+one idle loop like the sit / lean / sweep sets but a sequence of clips with props (hammer, tongs, the blade) loaded
+and swapped between them. First the facts: scripts/armor/smithing_probe.py (read-only) prints the smithing stations'
+records (models, keywords, markers and their animations; the matching IDLE and ANIO records: the props), every
+behaviour state machine that plays smithing clips (states, the clips under each, transitions with their events: the
+order the sequence runs in), the clips' triggers (AnimObjLoad / AnimObjDraw with the prop's name), and each clip
+file's duration and annotations. skyrimbehavior now reads hkbClipTriggerArray (time, event, payload, flags) and
+hkbStringEventPayload (data) (layout supported, checked by the probe's event names on game data). The white outline:
+screenshot needed.
+
