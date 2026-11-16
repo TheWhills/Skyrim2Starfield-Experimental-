@@ -637,4 +637,9 @@ stance_plugin Forge on AnimFurnWelder, the pack on furniture\welder with 4 flavo
 the tanning rack has NPCStanding_WipeWall to itself again. Unresolved: whether Alvor then walks into the forge (the
 rail / wall / counter leans share AnimFurnLeaningBartopFront and all work, so sharing alone may not be the whole story;
 the forge's own walk-in, a 13.9 s Pull without root motion, is the other suspect).
+Owner, 18:23-18:26: on the welder build Alvor stands at a PatrolIdleMarker (our "stand" furniture, hands behind his
+back) most of his work day and never picks the forge; Hilde "still chooses the chair over everything when she can".
+Two unverified levers: package Energy (make_schedule x 0.01 on the scale of ShopkeeperSchedules.esm, a mod; Starfield.esm's
+own values never read: energy_survey.py) and Skyrim's idle-marker timers (IDLT, not carried into our furniture:
+idle_marker_timers.py). Both read-only.
 
