@@ -437,3 +437,11 @@ PROP_SWAP (its AnimObj payloads AnimObjectBroom -> S2S_AnimObjectBroomSkyrim); s
 AnimObjectBroom, model S2S\AnimObjects\BroomSkyrim.nif, FormID PROP_INDEX 48); anim_object_convert.py (Skyrim's broom
 converted, root renamed, Prn R_AnimObject1, collision dropped). Assumption (supported): Skyrim's animation-object broom
 had the clutter broom's geometry origin at AnimObjectR. Unverified in game.
+Owner in game with the broom (2026-11-15): it appears and mostly follows the sweeping, but (1) the hands hold the
+handle for seconds before it appears, and (2) at the end it detaches entirely. (1) the AnimObjLoad / AnimObjDraw frames
+were Starfield's enter's; now frame 0 in our prop sets' descriptors (props_at_start). (2) Skyrim has no sweep exit, so
+our set plays Starfield's exits, which key R_AnimObject1 for Starfield's setup (broom on AnimObjectA; its sweep idle holds
+R_AnimObject1 1.16 m from the wrist): now, for sets with props, every non-additive Starfield clip of the template
+folders is copied into ours (vanilla_leftovers force) and rewritten with the prop bone held at our Idle's hand pose
+(pin_bone: CALUMI read-back, dense keys, root-motion header kept), until the exit's AnimObjUnequipAll; the mood
+variants are made after that, so their exits use the pinned copies.

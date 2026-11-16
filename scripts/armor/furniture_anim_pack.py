@@ -152,6 +152,109 @@ SET_PROPS = {"Sweep": ("AnimObjectR=R_AnimObject1",)}
 PROP_SWAP = {"Sweep": {"AnimObjectBroom": "S2S_AnimObjectBroomSkyrim"}}
 
 
+PROP_LOAD_EVENTS = ("AnimObjLoad", "AnimObjDraw")
+
+
+def props_at_start(afx_text: str, names=PROP_LOAD_EVENTS) -> str:
+    """The descriptor with its `names` events moved to frame 0 (2026-11-15, owner: Embry's hands were on the broom
+    handle for seconds before the broom appeared: the events kept the frames of Starfield's own enter, whose hands
+    reach the broom later than Skyrim's)."""
+    import re
+    from fo4sf import af_writer
+    data = afx_text.encode("utf-8")
+    for n in names:
+        if re.search(rf"<name>\s*{n}\s*</name>", afx_text):
+            data = af_writer.set_event_frame(data, n, 0)
+    return data.decode("utf-8")
+
+
+def dense_keys(keys, frames: int, quat: bool):
+    """(frames, 3 or 4) values from [(frame, value)] keys: linear between keys (normalised for quaternions, the
+    shorter way), held before the first and after the last."""
+    import numpy as np
+    fr = [k for k, _v in keys]
+    vals = [np.asarray(v, float) for _k, v in keys]
+    out = np.empty((frames, len(vals[0])))
+    for f in range(frames):
+        j = int(np.searchsorted(fr, f))
+        if j < len(fr) and fr[j] == f:
+            out[f] = vals[j]
+        elif j == 0:
+            out[f] = vals[0]
+        elif j >= len(fr):
+            out[f] = vals[-1]
+        else:
+            a, b = vals[j - 1], vals[j]
+            u = (f - fr[j - 1]) / (fr[j] - fr[j - 1])
+            if quat and float(np.dot(a, b)) < 0:
+                b = -b
+            v = a * (1 - u) + b * u
+            out[f] = v / (np.linalg.norm(v) or 1.0) if quat else v
+    return out
+
+
+def pin_bone(calumi, rig_path, af_path, bone, t, q, work):
+    """Rewrite a clip with `bone` held at local (t, q) on every frame, every other keyed bone as it was (header root
+    motion kept). 2026-11-15, owner: at the end of sweeping the broom flew off: our Sweep set uses Starfield's own exit
+    clips (Skyrim has none), which key R_AnimObject1 for Starfield's setup (its broom hangs on AnimObjectA; the
+    vanilla sweep idle holds R_AnimObject1 1.16 m from the wrist), and our broom hangs on R_AnimObject1."""
+    import numpy as np
+    from fo4sf import af_writer, rootmotion
+    rig = af_writer.load_rig(calumi, rig_path)
+    rb = af_writer.read_back(calumi, af_path, rig_path)
+    F = max(int(rb["frames"]), 1)
+    names = rig["names"]
+    ct = np.repeat(np.asarray(rig["t"], float)[None], F, axis=0)
+    cq = np.repeat(np.asarray(rig["q"], float)[None], F, axis=0)
+    keyed = set(rb["bones"]) | {bone}
+    for i, n in enumerate(names):
+        if rb["translations"].get(n):
+            ct[:, i] = dense_keys(rb["translations"][n], F, False)
+        if rb["rotations"].get(n):
+            cq[:, i] = dense_keys(rb["rotations"][n], F, True)
+    bi = names.index(bone)
+    ct[:, bi], cq[:, bi] = np.asarray(t, float), np.asarray(q, float)
+    with open(af_path, "rb") as fh:
+        head_q, head_t = rootmotion.read_header(fh.read())
+    os.makedirs(work, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(af_path))[0]
+    w = af_writer.write(calumi, work, stem, names, rig["parents"], rig["t"], rig["q"], ct, cq, rig_path=rig_path,
+                        omit=tuple(n for n in names if n not in keyed))
+    rootmotion.patch_header(w["af"], head_t, head_q)
+    shutil.copy2(w["af"], af_path)
+    return {"frames": F, "bones": len(keyed)}
+
+
+def pin_props(a, st, dst, idle_af, bones, left) -> list:
+    """Hold each prop bone in Starfield's clips copied into our folder (`left`, non-additive ones) at our Idle's pose
+    of it (pin_bone). Returns the clips rewritten."""
+    import hkx_to_af
+    from fo4sf import af_writer
+    work = os.path.join(a.work, st, "pin")
+    os.makedirs(work, exist_ok=True)
+    rig_path = os.path.join(work, "skeleton.rig")
+    if not os.path.isfile(rig_path):
+        _n, data = hkx_to_af.starfield_find(os.path.join(a.starfield, "Data"), hkx_to_af.SF_RIG_RX,
+                                            ("starfield - animations",))
+        if data is None:
+            print(f"{st}: Starfield's skeleton.rig not found: the prop bones in its clips are left as they are")
+            return []
+        with open(rig_path, "wb") as fh:
+            fh.write(data)
+    ours = af_writer.read_back(a.calumi, os.path.join(dst, idle_af), rig_path)
+    done = []
+    for name, (text, clip) in left.items():
+        if not clip or clip[1] is None or "<flag>additive</flag>" in text.lower().replace(" ", ""):
+            continue
+        for b in bones:
+            if not (ours["translations"].get(b) and ours["rotations"].get(b)):
+                continue
+            pin_bone(a.calumi, rig_path, os.path.join(dst, clip[0]), b, ours["translations"][b][0][1],
+                     ours["rotations"][b][0][1], os.path.join(work, "out"))
+            done.append(_tag(text))
+    return sorted(set(done))
+
+
 def swap_anim_objects(afx_text: str, swaps: dict) -> str:
     """The descriptor with each AnimObj* event payload named in `swaps` (any case) replaced by its value."""
     import re
@@ -247,7 +350,7 @@ def _clip_name(afx_text: str):
     return m.group(1) if m else None
 
 
-def vanilla_leftovers(names, read, folders, have_tags, keep_props=False, graph_swaps=None) -> dict:
+def vanilla_leftovers(names, read, folders, have_tags, keep_props=False, graph_swaps=None, force=False) -> dict:
     """{file name: (descriptor text, clip bytes or None)} for the descriptors directly in `folders` (archive folders,
     first wins per tag) whose tag is not in `have_tags` (lower case) and that change when bEnableHandIK / prop events
     are left out. names: normalised archive names; read(name) -> bytes."""
@@ -268,7 +371,7 @@ def vanilla_leftovers(names, read, folders, have_tags, keep_props=False, graph_s
                 new = strip_events(new)
             if graph_swaps:
                 new = swap_graph(new, graph_swaps)
-            if new == text:
+            if new == text and not (force and "<flag>additive</flag>" not in text.lower().replace(" ", "")):
                 continue
             clip = _clip_name(text)
             out[n[len(f):]] = (new, (clip, read(f + clip.lower())) if clip else None)
@@ -490,7 +593,7 @@ def main(argv=None):
                     props += plain != new
                     new = plain
                 if PROP_SWAP.get(st):
-                    new = swap_anim_objects(new, PROP_SWAP[st])
+                    new = props_at_start(swap_anim_objects(new, PROP_SWAP[st]))
                 if GRAPH_SWAP.get(st):
                     swapped = swap_graph(new, GRAPH_SWAP[st])
                     graphs_swapped += swapped != new
@@ -548,15 +651,9 @@ def main(argv=None):
                 rest = [t for t, idle_like in gaps if not idle_like]
                 print(f"{st}: Starfield's own states answered with our Idle: {', '.join(filled) or 'none'}; "
                       f"left to Starfield: {', '.join(rest) or 'none'}")
-            our_clips = {x[:-3].lower(): x for x in os.listdir(dst) if x.lower().endswith(".af")}
-            variants = mood_variants(sf_arcs.names, leftover_folders(st) + list(VARIANT_FOLDERS), our_clips)
-            for name, clip in variants.items():
-                shutil.copy2(os.path.join(dst, clip), os.path.join(dst, name))
-            if variants:
-                print(f"{st}: {len(variants)} mood / upper-body variants answered with our clips "
-                      f"({len({n.split('_')[0] for n in variants})} prefixes)")
+            prop_bones = [p.split("=", 1)[1] for p in SET_PROPS.get(st, ())]
             left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, leftover_folders(st), have,
-                                     st in KEEP_PROPS, GRAPH_SWAP.get(st))
+                                     st in KEEP_PROPS, GRAPH_SWAP.get(st), force=bool(prop_bones))
             for name, (text, clip) in left.items():
                 with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:
                     fh.write(text)
@@ -566,6 +663,16 @@ def main(argv=None):
             if left:
                 print(f"{st}: Starfield's own {', '.join(sorted(_tag(t) for t, _c in left.values()))} "
                       f"copied with {', '.join(DROP_VARIABLES)} / prop events left out, our graph")
+            pinned = pin_props(a, st, dst, idle_af, prop_bones, left) if prop_bones and idle_af else []
+            if pinned:
+                print(f"{st}: {', '.join(prop_bones)} held in the hand in Starfield's {', '.join(pinned)}")
+            our_clips = {x[:-3].lower(): x for x in os.listdir(dst) if x.lower().endswith(".af")}
+            variants = mood_variants(sf_arcs.names, leftover_folders(st) + list(VARIANT_FOLDERS), our_clips)
+            for name, clip in variants.items():
+                shutil.copy2(os.path.join(dst, clip), os.path.join(dst, name))
+            if variants:
+                print(f"{st}: {len(variants)} mood / upper-body variants answered with our clips "
+                      f"({len({n.split('_')[0] for n in variants})} prefixes)")
         if graphs_swapped:
             print(f"{st}: {graphs_swapped} descriptors load {', '.join(GRAPH_SWAP[st].values())} instead of "
                   f"{', '.join(GRAPH_SWAP[st])}")

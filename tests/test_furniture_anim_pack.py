@@ -196,6 +196,72 @@ class PackTests(unittest.TestCase):
         self.assertIn("--prop", P.hkx_args(type("A", (), {"calumi": "c", "skyrim_data": "s", "starfield": "f"})(),
                                            "w", "x", [], com=(0, 0), props=P.SET_PROPS["Sweep"]))
 
+    def test_props_at_start(self):
+        t = ("<root>\n<events>\n<event><frame>37</frame><name>AnimObjLoad</name><payload>B</payload></event>\n"
+             "<event><frame>40</frame><name>AnimObjDraw</name><payload>B</payload></event>\n"
+             "<event><frame>50</frame><name>FootLeft</name><payload></payload></event>\n</events>\n</root>")
+        got = P.props_at_start(t)
+        self.assertIn("<frame>0</frame><name>AnimObjLoad</name>", got)
+        self.assertIn("<frame>0</frame><name>AnimObjDraw</name>", got)
+        self.assertIn("<frame>50</frame><name>FootLeft</name>", got)
+        self.assertEqual(P.props_at_start("<root><tag>Idle</tag></root>"), "<root><tag>Idle</tag></root>")
+
+    def test_dense_keys(self):
+        import numpy as np
+        t = P.dense_keys([(0, (0, 0, 0)), (4, (4, 0, 0))], 6, False)
+        np.testing.assert_allclose(t[:, 0], [0, 1, 2, 3, 4, 4])
+        q = P.dense_keys([(0, (0, 0, 0, 1)), (2, (0, 0, 0, -1))], 3, True)        # same rotation, other sign
+        np.testing.assert_allclose(np.abs(q[1]), [0, 0, 0, 1], atol=1e-9)
+
+    def test_vanilla_leftovers_force(self):
+        d = "meshes\\actors\\human\\animations\\furniture\\standing_sweep\\"
+        files = {d + "exittostand.afx": b"<root><tag>ExitToStand</tag><filename>ExitToStand.af</filename></root>",
+                 d + "exittostand.af": b"EXIT",
+                 d + "lookdirections.afx": b"<root><tag>LookDirections</tag><filename>L.af</filename><flags>"
+                                           b"<flag>Additive</flag></flags></root>"}
+        self.assertEqual(P.vanilla_leftovers(sorted(files), files.get, [d], set()), {})
+        got = P.vanilla_leftovers(sorted(files), files.get, [d], set(), force=True)
+        self.assertEqual(sorted(got), ["exittostand.afx"])                     # additive ones stay Starfield's
+        self.assertEqual(got["exittostand.afx"][1], ("ExitToStand.af", b"EXIT"))
+
+    def test_pin_bone(self):
+        import tempfile
+        import numpy as np
+        from unittest import mock
+        from fo4sf import af_writer, rootmotion
+        rig = {"names": ["Root", "R_Wrist", "R_AnimObject1", "C_Head"], "parents": [-1, 0, 1, 0],
+               "t": [[0, 0, 0]] * 4, "q": [[0, 0, 0, 1]] * 4}
+        rb = {"frames": 3, "bones": ["R_Wrist", "R_AnimObject1"],
+              "translations": {"R_Wrist": [(0, (0, 0, 1)), (2, (0, 0, 3))], "R_AnimObject1": [(0, (0, -1.16, 0))]},
+              "rotations": {"R_Wrist": [(0, (0, 0, 0, 1))], "R_AnimObject1": [(0, (0, 0, 0, 1))]}}
+        seen = {}
+
+        def fake_write(lib, out, name, names, parents, rt, rq, ct, cq, rig_path=None, omit=()):
+            seen.update(ct=ct, cq=cq, omit=omit)
+            p = os.path.join(out, name + ".af")
+            with open(p, "wb") as fh:
+                fh.write(b"NEW")
+            return {"af": p}
+        with tempfile.TemporaryDirectory() as d:
+            af = os.path.join(d, "ExitToStand.af")
+            with open(af, "wb") as fh:
+                fh.write(b"OLD")
+            with mock.patch.object(af_writer, "load_rig", lambda *a: rig), \
+                    mock.patch.object(af_writer, "read_back", lambda *a: rb), \
+                    mock.patch.object(af_writer, "write", fake_write), \
+                    mock.patch.object(rootmotion, "read_header", lambda data: ((0, 0, 0, 1), (0.5, 0, 0))), \
+                    mock.patch.object(rootmotion, "patch_header", lambda p, t, q: seen.update(head=(tuple(t), tuple(q)))):
+                rep = P.pin_bone("calumi", "rig", af, "R_AnimObject1", (0.01, 0.02, -0.03), (0, 0, 0.6, 0.8),
+                                 os.path.join(d, "work"))
+            with open(af, "rb") as fh:
+                self.assertEqual(fh.read(), b"NEW")
+        self.assertEqual(rep, {"frames": 3, "bones": 2})
+        np.testing.assert_allclose(seen["ct"][:, 2], [[0.01, 0.02, -0.03]] * 3)     # held in the hand
+        np.testing.assert_allclose(seen["cq"][:, 2], [[0, 0, 0.6, 0.8]] * 3)
+        np.testing.assert_allclose(seen["ct"][:, 1, 2], [1, 2, 3])                   # the rest as it was
+        self.assertEqual(seen["omit"], ("Root", "C_Head"))                          # unkeyed bones stay unkeyed
+        self.assertEqual(seen["head"], ((0.5, 0, 0), (0, 0, 0, 1)))                  # root motion kept
+
     def test_leftover_folders(self):
         f = P.leftover_folders("Sit")
         self.assertEqual([x.split("furniture\\")[-1] for x in f],
