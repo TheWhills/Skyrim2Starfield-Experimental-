@@ -542,6 +542,18 @@ class FireSpreadTest(unittest.TestCase):
         self.assertAlmostEqual(fx[0]["offset_m"][0], round(-70 / 3 / 70, 4), places=4)
 
 
+class SfFirepitProbeTest(unittest.TestCase):
+    def test_fire_materials_and_paths(self):
+        sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))
+        import sf_firepit_probe as P
+        b = (b"\x00Materials\\Effects\\Fires\\LayeredFireV3.mat\x00Materials\\SetDressing\\Stone01.mat\x00"
+             b"Materials\\Effects\\Fires\\FiresGeneric_Sm_01_14x14.mat")
+        self.assertEqual(P.fire_materials(b), ["Materials\\Effects\\Fires\\FiresGeneric_Sm_01_14x14.mat",
+                                               "Materials\\Effects\\Fires\\LayeredFireV3.mat"])
+        self.assertEqual(P.norm("Meshes/SetDressing/FirePit01.nif"), "setdressing\\firepit01.nif")
+        self.assertEqual(P.norm("SetDressing\\FirePit01.nif"), "setdressing\\firepit01.nif")
+
+
 class ParticleScanTest(unittest.TestCase):
     def test_finds_particle_block_types_in_the_header_only(self):
         sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))

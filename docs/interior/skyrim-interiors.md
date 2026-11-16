@@ -439,3 +439,9 @@ fireplace: one small flame in the middle). One fire per Skyrim emitter is a poin
 through its flame meshes. Now (skyrimfire.fire_spots): the fires go along the longer side of the model's fire shapes
 (flame meshes + log glow, model space), FIRE_SPACING 24.5 units (0.35 m) apart, at most FIRE_MAX 4 per model, at the
 emitter's height, each x SPREAD_SCALE 0.75 when there are several; a model without fire shapes keeps one per emitter.
+Owner in game (2026-11-16 08:52): the pit now burns along its length but "looks a little silly, very clearly a few
+fireballs thrown in there, compared to Skyrim's that looks like a hearth burning. Do we need to figure out how Starfield
+fire pits work"; candles (Starfield's flame x1.8 / x1.1) "quite thin still" -> x3.0 / x1.25. A placed MSTT fire is a
+standalone fire; Starfield's own pits presumably burn with flame geometry on its layered fire materials (LayeredFireV2 /
+V3, Fire_Layered_ArmisticeArchive_01). scripts/interior/sf_firepit_probe.py (read-only) lists every Starfield NIF naming
+a fire material (with its shapes, materials, sizes) and the records using those NIFs.

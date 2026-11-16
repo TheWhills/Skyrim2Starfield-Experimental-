@@ -469,8 +469,9 @@ PARTICLE_REPLACES = r"fxfireatlas"
 # Skyrim's fuller teardrop (the "starfield" flame style on 2026-11-15 used Skyrim's card size and our emittance: "very
 # small, not bright, quite thin")
 CANDLE_STYLES = ("skyrim", "starfield")
-SF_CANDLE_WIDTH = 1.8                # x Skyrim's card half width
-SF_CANDLE_HEIGHT = 1.1               # x Skyrim's card half height
+# owner 2026-11-16 08:52 at x1.8 / x1.1: "the candles are quite thin still"
+SF_CANDLE_WIDTH = 3.0                # x Skyrim's card half width
+SF_CANDLE_HEIGHT = 1.25              # x Skyrim's card half height
 STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat", (14, 14, 30.0)),
                     "candle": ("Materials/Effects/Fires/FireCandleFlame.mat", (12, 12, 90.0))}
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
