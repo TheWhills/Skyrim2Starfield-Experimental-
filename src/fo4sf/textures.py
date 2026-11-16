@@ -81,6 +81,57 @@ def decode_bc5(data: bytes, width: int, height: int):
             _blocks_to_plane(_bc4_block_values(blocks[:, 8:]), width, height))
 
 
+def _bc1_colour_values(blocks, four_colour_always: bool):
+    """blocks: (N, 8) uint8 BC1 colour blocks -> (N, 16, 4) uint8 RGBA (alpha 0 for BC1's transparent index)."""
+    c0 = blocks[:, 0].astype(np.uint32) | (blocks[:, 1].astype(np.uint32) << 8)
+    c1 = blocks[:, 2].astype(np.uint32) | (blocks[:, 3].astype(np.uint32) << 8)
+
+    def rgb(c):
+        r = ((c >> 11) & 31) * 255.0 / 31.0
+        g = ((c >> 5) & 63) * 255.0 / 63.0
+        b = (c & 31) * 255.0 / 31.0
+        return np.stack([r, g, b], axis=1)
+    a, b = rgb(c0), rgb(c1)
+    four = np.ones(len(blocks), bool) if four_colour_always else (c0 > c1)
+    pal = np.zeros((len(blocks), 4, 4), np.float32)
+    pal[:, 0, :3], pal[:, 1, :3] = a, b
+    pal[:, :, 3] = 255.0
+    pal[:, 2, :3] = np.where(four[:, None], (2 * a + b) / 3.0, (a + b) / 2.0)
+    pal[:, 3, :3] = np.where(four[:, None], (a + 2 * b) / 3.0, 0.0)
+    pal[:, 3, 3] = np.where(four, 255.0, 0.0)
+    idx = blocks[:, 4].astype(np.uint32) | (blocks[:, 5].astype(np.uint32) << 8) | \
+        (blocks[:, 6].astype(np.uint32) << 16) | (blocks[:, 7].astype(np.uint32) << 24)
+    out = np.zeros((len(blocks), 16, 4), np.uint8)
+    rows = np.arange(len(blocks))
+    for px in range(16):
+        k = ((idx >> np.uint32(2 * px)) & np.uint32(3)).astype(np.int64)
+        out[:, px] = np.round(pal[rows, k]).astype(np.uint8)
+    return out
+
+
+def _blocks_to_rgba(values, width, height):
+    bw, bh = max(1, width // 4), max(1, height // 4)
+    v = values.reshape(bh, bw, 4, 4, 4)
+    return v.transpose(0, 2, 1, 3, 4).reshape(bh * 4, bw * 4, 4)
+
+
+def decode_dxt(data: bytes):
+    """Top mip of a DXT1 / DXT5 (BC1 / BC3) DDS, legacy or DX10 header -> (h, w, 4) uint8 RGBA. Skyrim's effect
+    textures are DXT5; for looking at them (flame_textures.py) without texconv."""
+    h = read_dds_header(data)
+    w, ht, off = h["width"], h["height"], h["data_offset"]
+    n = max(1, w // 4) * max(1, ht // 4)
+    if h["fourcc"] == b"DXT1" or h["dxgi"] in (71, 72):
+        blocks = np.frombuffer(data[off:off + n * 8], np.uint8).reshape(n, 8)
+        return _blocks_to_rgba(_bc1_colour_values(blocks, False), w, ht)
+    if h["fourcc"] in (b"DXT5", b"DXT4") or h["dxgi"] in (77, 78):
+        blocks = np.frombuffer(data[off:off + n * 16], np.uint8).reshape(n, 16)
+        out = _bc1_colour_values(np.ascontiguousarray(blocks[:, 8:]), True)
+        out[:, :, 3] = _bc4_block_values(np.ascontiguousarray(blocks[:, :8]))
+        return _blocks_to_rgba(out, w, ht)
+    raise DdsError(f"decode_dxt: unsupported format {h['fourcc']!r} / dxgi {h['dxgi']}")
+
+
 def load_fo4_bc5(path):
     d = open(path, "rb").read()
     h = read_dds_header(d)

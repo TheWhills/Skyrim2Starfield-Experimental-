@@ -326,3 +326,11 @@ Mask "X;Y".
 * To check in game (supported hypotheses): flames scroll upward (else the scroll sign flips), the hearth colour is
   orange like Skyrim's (else the palette row), candle flames sit on the wicks, brightness (EMITTANCE).
 * Rebuild cost: skyrimconvert changed, so the model checkpoints are invalid once and every model converts again.
+Owner in game, v1 (2026-11-15, Sleeping Giant, beside Skyrim screenshots): flames present; candle cards white, very
+bright with a slight flicker, static, reading as thin crossed lines (Skyrim: a small warm yellow-orange flame); hearth
+flames move but are faint, small and blue (Skyrim: big orange flames, mostly the FlamesSmall01 particles, which v1
+leaves out). Changes: candle emittance from FireCandleFlame's fixed 75000 to the hearth's adaptive 5000; card colour
+= particle colour x the effect shader's emissive colour (Skyrim's rule; v1 used the particle colour only).
+scripts/interior/flame_textures.py (read-only) renders the atlas, palette, candle and glow textures and the palette
+bakes for rows 0 / 0.5 / 1 with the grey from green or from alpha into one sheet, and prints the shaders' emissive
+colours and where the hearth's particle systems sit: the data to fix the palette lookup and add the particle flames.

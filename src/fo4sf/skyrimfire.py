@@ -192,8 +192,16 @@ def particle_systems(n) -> list:
             k = struct.unpack_from("<i", b, 0)[0] if len(b) >= 4 else -1
             if 0 <= k < len(n.strings):
                 name = n.strings[k].decode("latin-1") if isinstance(n.strings[k], bytes) else str(n.strings[k])
+            shader = None
+            if sh:
+                try:
+                    shader = effect_shader(n, sh[0])
+                except Exception:                                   # noqa: BLE001
+                    shader = None
             systems[i] = {"block": i, "type": n.type_of(i), "name": name,
                           "shader_block": sh[0] if sh else None,
+                          "emissive_color": list(shader["emissive_color"][:3]) if shader and "emissive_color" in shader
+                          else None,
                           "textures": [x.decode("latin-1") for x in re.findall(rb"[\w\\/ .-]+\.dds", n.blocks[sh[0]])]
                           if sh else [], "modifiers": []}
     for i in range(len(n.blocks)):
@@ -222,6 +230,9 @@ def particle_flame(system: dict) -> Optional[dict]:
     smax = max(scales) if scales else 1.0
     col = next((m["fields"] for m in system["modifiers"] if m.get("type") == "BSPSysSimpleColorModifier"), None)
     color = (col["c2r"], col["c2g"], col["c2b"]) if col else (1.0, 1.0, 1.0)
+    shader = system.get("emissive_color")          # Skyrim draws particle colour x the shader's emissive colour
+    if shader:
+        color = tuple(c * s for c, s in zip(color, shader))
     rise = em["speed"] * em["life_span"]
     half_w = em["radius"] * smax
     return {"texture": tex, "half_w": half_w, "half_h": half_w + rise * 0.25, "lift": rise * 0.5,
@@ -303,7 +314,9 @@ def palette_bake(rgba, palette, palette_color: bool, palette_alpha: bool, row: f
 # ---------------------------------------------------------------------------------------------------------- materials
 EFFECT_TEMPLATE_MAT = "Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat"   # 1LayerEffectEmissive, soft additive
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
-             "candle": {"LuminousEmittance": "75000", "AdaptiveEmittance": "false"}}   # FiresGeneric / FireCandleFlame
+             # 2026-11-15 (owner, in game): FireCandleFlame's fixed 75000 blew the candle cards out to white; candles
+             # now take the hearth's adaptive setting until tuned
+             "candle": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"}}
 
 
 def _curve(points, loop_seconds: float) -> dict:

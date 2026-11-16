@@ -72,6 +72,10 @@ class ParticleFlameTest(unittest.TestCase):
         self.assertGreater(f["half_h"], f["half_w"])
         self.assertEqual(f["color"], (1.0, 1.0, 1.0))
 
+    def test_card_colour_includes_the_shaders_emissive_colour(self):
+        f = skyrimfire.particle_flame(dict(self.CANDLE, emissive_color=[1.0, 0.6, 0.2]))
+        self.assertEqual(f["color"], (1.0, 0.6, 0.2))
+
     def test_halo_and_smoke_are_left_out(self):
         glow = {"name": "CandleGlow01", "textures": ["textures\\effects\\CandleGlow01.dds"], "modifiers": [
             {"type": "NiPSysBoxEmitter", "fields": {"speed": 6, "radius": 80, "life_span": 0.4}}]}
@@ -167,14 +171,15 @@ class EffectMaterialTest(unittest.TestCase):
     def test_candle_flicker_drives_emissive_intensity_at_candle_emittance(self):
         mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_c", self.FILES, kind="candle", flicker=1.0)
         em = next(c for c in self.comps(mat) if c["Type"] == "BSMaterial::LayeredEmissivityComponent")
-        self.assertEqual(em["Data"], {"LuminousEmittance": "75000", "AdaptiveEmittance": "false"})
+        self.assertEqual(em["Data"], skyrimfire.EMITTANCE["candle"])
         ctrl = next(c for c in self.comps(mat) if c["Type"] == "BSBind::ControllerComponent")
         m, = ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"]
         self.assertEqual(m["Data"]["Address"]["Data"]["Path"]["Data"], ["EmissiveIntensity"])
         vals = [float(k["Data"]["Value"]) for k in
                 m["Data"]["Controller"]["Data"]["Data"]["Curve"]["Data"]["Controls"]["Data"]]
-        self.assertEqual(max(vals), 75000.0)
-        self.assertGreater(min(vals), 75000 * 0.6)
+        top = float(skyrimfire.EMITTANCE["candle"]["LuminousEmittance"])
+        self.assertEqual(max(vals), top)
+        self.assertGreater(min(vals), top * 0.6)
 
     def test_template_ids_are_renamed(self):
         mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_x", self.FILES)
@@ -200,6 +205,38 @@ class AddonFlamesTest(unittest.TestCase):
         P = np.array(shapes[0].positions)
         self.assertAlmostEqual(P[:, 0].mean(), 21.3, places=4)
         self.assertAlmostEqual(P[:, 2].mean(), 128.25, places=4)
+
+
+class DecodeDxtTest(unittest.TestCase):
+    def dds(self, fourcc, blocks):
+        return (b"DDS " + struct.pack("<7I", 124, 0, 4, 4, 0, 0, 1) + bytes(44) + struct.pack("<II4s", 32, 4, fourcc)
+                + bytes(40) + blocks)
+
+    def test_dxt5_colour_and_alpha(self):
+        from fo4sf import textures
+        alpha = bytes([255, 0]) + bytes([0x49, 0x92, 0x24, 0x49, 0x92, 0x24])     # every index 1 -> a1 = 0
+        colour = struct.pack("<HHI", 0xF800, 0x001F, 0x55555555)                  # every index 1 -> c1 = blue
+        img = textures.decode_dxt(self.dds(b"DXT5", alpha + colour))
+        self.assertEqual(img.shape, (4, 4, 4))
+        self.assertEqual(img[2, 1].tolist(), [0, 0, 255, 0])
+
+    def test_dxt1_three_colour_mode_has_transparent_black(self):
+        from fo4sf import textures
+        img = textures.decode_dxt(self.dds(b"DXT1", struct.pack("<HHI", 0x001F, 0xF800, 0xFFFFFFFF)))
+        self.assertEqual(img[0, 0].tolist(), [0, 0, 0, 0])
+
+
+class FlameTexturesScriptTest(unittest.TestCase):
+    def test_contact_sheet_helpers(self):
+        sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))
+        import flame_textures
+        img = np.zeros((4, 2, 3), np.uint8)
+        self.assertEqual(flame_textures.fit(img, 8).shape, (8, 4, 3))
+        rgba = np.full((1, 1, 4), 255, np.uint8)
+        rgba[0, 0, 3] = 0
+        self.assertEqual(flame_textures.over_black(rgba).tolist(), [[[0, 0, 0]]])
+        sheet = flame_textures.row([np.zeros((3, 2, 3), np.uint8), np.zeros((3, 5, 3), np.uint8)])
+        self.assertEqual(sheet.shape, (3, 11, 3))
 
 
 if __name__ == "__main__":
