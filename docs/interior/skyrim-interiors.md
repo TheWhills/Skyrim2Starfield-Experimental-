@@ -413,3 +413,6 @@ MemorialFire_01 20D560 (firepit_armisticearchives_01: a fire pit), FireGeneric_O
 marker). Comparison build: `-ParticleFire 004630,20D560,1CEDAB`: PluginSpike gives the k-th fire placed in the plugin
 choice k mod n (the Sleeping Giant pit's three fires = the three candidates side by side; its log prints each fire's
 base and position).
+Comparison build (owner, 2026-11-16, 72 s): Sleeping Giant pit fires (x, metres; Orgnar's bar is at x -18.8):
+20D560 fire pit at -8.47 (nearest the bar), 004630 generic flame at -7.33 (middle), 1CEDAB FireMed02 at -6.20
+(farthest from the bar); houses: Alvor 004630, Faendal 20D560, Gerdur 1CEDAB, Trader 004630, Sven 20D560.
