@@ -419,5 +419,6 @@ Comparison build (owner, 2026-11-16, 72 s): Sleeping Giant pit fires (x, metres;
 Owner in game (2026-11-16): only two of the three pit fires show; the middle one (004630, firegenericflame) is "far
 too big" (a tall solid flame body at x0.84), the end one looks better (by elimination 1CEDAB FireMed02; owner unsure
 it differs from FireMed01). The missing one is most likely 20D560 (Armistice Archives fire pit: its MSTT has no
-bounds, EditorMarker_FX model; unconfirmed - Faendal's / Sven's house have it alone). Next comparison:
+bounds, EditorMarker_FX model). **Confirmed** (owner, 06:49): Faendal's house, which has only 20D560, shows no fire;
+20D560 dropped from the candidates (it probably needs a script or activation to start). Next comparison:
 004630 at 0.35 (a solid hearth-sized flame) and 1CEDAB at 0.8.
