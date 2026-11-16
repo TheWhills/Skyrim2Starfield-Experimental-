@@ -194,6 +194,13 @@ ANIM_SET_RULES = (
 # Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
 # is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips
 # carry no root motion, and its spot is the marker's (2026-11-16)
+# 2026-11-16 (owner, in game): forced in (cf "Actor.SnapIntoInteraction") Alvor plays the whole forge sequence, but on his
+# work schedule he never uses the forge: "he seems to hit a weird walk before he goes back to his neutral position"
+# (an approach that fails), while Hilde, her chair disabled, leans on her rail. Skyrim's crafting markers allow one
+# side only (Behind), and the forge's own model (pit, trough, anvil) stands around that spot: these sets' spots may be
+# entered from every side, so the AI can take whichever approach it can path (supported hypothesis, owner's test).
+ANY_SIDE_SETS = {"Forge", "Tanning"}
+ALL_SIDES = ["Front", "Rear", "Left", "Right"]
 SKYRIM_SPOT_SETS = {"Forge"}         # (the Grindstone set, removed 2026-11-16, stood at Skyrim's wheel marker too)
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
 
@@ -257,6 +264,8 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
             # line (different from the default) stays.
             if b.get("shift_m") is not None and list(b["shift_m"]) == list(DEFAULT_SHIFT.get(b.get("kind"), [])):
                 del b["shift_m"]
+        if st in ANY_SIDE_SETS and b.get("markers"):
+            b["markers"] = [dict(m, entry=list(ALL_SIDES)) for m in b["markers"]]
         done[st] = done.get(st, 0) + 1
     if missing:
         done["missing"] = sorted(missing)

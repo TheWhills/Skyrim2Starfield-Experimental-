@@ -402,7 +402,14 @@ class AnimKeywordTests(unittest.TestCase):
         forge = {"bases": {"f": {"kind": "forge", "edid": "CraftingBlackSmithForge", "markers": [],
                                  "skyrim_markers": sky}}}
         MF.add_anim_keywords(forge, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimForge": 0x0100081B})
-        self.assertEqual((forge["bases"]["f"]["anim_set"], forge["bases"]["f"]["markers"]), ("Forge", sky))
+        # ... entered from every side (2026-11-16, owner: Alvor tried to reach it and gave up; Skyrim allows Behind only)
+        self.assertEqual((forge["bases"]["f"]["anim_set"], forge["bases"]["f"]["markers"]),
+                         ("Forge", [dict(sky[0], entry=["Front", "Rear", "Left", "Right"])]))
+        self.assertEqual(sky[0]["entry"], ["Front"])                                     # the shared list untouched
+        tan = {"bases": {"t": {"kind": "scrape", "edid": "CraftingTanningRackMarker", "markers": [],
+                               "skyrim_markers": [{"offset_m": [0, 0, 0], "rot_deg": 0.0, "entry": ["Rear"]}]}}}
+        MF.add_anim_keywords(tan, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimTanning": 0x01000819})
+        self.assertEqual(tan["bases"]["t"]["markers"][0]["entry"], MF.ALL_SIDES)
         none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}
         MF.add_anim_keywords(none, "S2SStances.esm", read_keywords=lambda p: {})
         self.assertEqual(none["bases"]["r"]["markers"], [])

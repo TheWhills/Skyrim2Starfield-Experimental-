@@ -605,4 +605,11 @@ bar-lean 0.30 m shift dropped; 11-16 11:25-11:39 untextured shapes of *Marker.ni
 forge models are TanningRackMarker.nif / BlacksmithForgeMarker.nif; the last build dropped one shape, milllogpile's),
 11:48 Forge set, 12:10 Grindstone set, 13:18 forge (and grindstone) moved onto the tanning rack's wall-wipe template,
 15:02 Grindstone removed. The schedule conversion (make_schedule.py) last changed 11-15 18:30 (multi-location work and carry packages).
+Owner, 17:32: with her chair disabled Hilde leans on her rail (the sandbox preferred the chair: rail lean works);
+Alvor "seems to hit a weird walk before he goes back to his neutral position", an approach that fails. Skyrim's
+crafting markers allow entry from Behind only, and the forge's own model stands around that spot; make_furniture
+ANY_SIDE_SETS (Forge, Tanning) now lets those spots be entered from every side (supported hypothesis; the owner's
+next build tests it: furniture records only, no animation or cache step).Owner, 17:34-17:35 (screenshot): Alvor standing between the trough and the rail behind the forge spot, "keeps
+shifting his legs like he wants to move but is stuck": the approach point Behind the marker (toward the rail / post)
+is where he stops, consistent with an unreachable or blocked entry side.
 
