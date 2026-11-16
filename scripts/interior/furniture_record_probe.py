@@ -23,7 +23,10 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 PAIRS = (("S2S_Furn_CraftingBlackSmithForge", "NPCStanding_WipeWall"),
          ("S2S_Furn_CraftingTanningRackMarker", "NPCStanding_WipeWall"),
          ("S2S_Furn_SweepIdleMarker", "NPCSweeping"),
-         ("S2S_Furn_RailLeanMarker", "NPCLeaningBartopFront"))
+         ("S2S_Furn_RailLeanMarker", "NPCLeaningBartopFront"),
+         # a real model NPCs do use (owner: "so there's nothing different between the chair being usable and the
+         # tanning rack?"): Hilde's chair outside her house
+         ("S2S_Furn_CommonChair01F", "FoundCanvasChair01_Free"))
 
 
 def header_flags(header: bytes) -> int:
