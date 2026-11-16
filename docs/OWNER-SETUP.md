@@ -78,6 +78,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
+   Flames: add `-FlameStyle starfield` for Starfield's fire animation on Skyrim-placed flames (default `skyrim`:
+   Skyrim's textures); switching reconverts every model once.
 6. C: in game: Embry's shirt shows, Delphine's dress does not clip at the shoulders, the faces (compare with Skyrim),
    Orgnar still at the bar. New in this build: cooking pots, the alchemy lab and the enchanter are Starfield
    crafting furniture: does anyone cook at a pot, and what does E on a pot / the alchemy lab open? (If it breaks

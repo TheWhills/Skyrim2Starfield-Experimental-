@@ -365,3 +365,15 @@ baked into the colour clipped hearth cores to white. Flames v3:
   texture keeps the palette's hue.
 A slow upward drift was proposed too; a UV scroll on a flipbook would slide neighbouring frames into view, so the
 cross-fade does that job instead.
+particle_scan.py (owner, 2026-11-15): 79,344 Starfield NIFs (base game, DLC, Creations, our own) read, 0 with a
+Gamebryo particle block (NiParticleSystem / NiPSys* / BSPSys*). **Verified**: Starfield's models carry no Gamebryo
+particles, so Skyrim's particle systems cannot be copied into converted models as they are (an injected test model
+could still be tried, but the engine very likely no longer has that path); cards stay the route, and Starfield's own
+particle system (behind its empty-node fire ADDN records) is unresearched.
+Owner on v3 (2026-11-15): hearth flames "a bit intense, three straight clots of flame; maybe better to use Starfield's
+flame". Changes: hearth EMITTANCE_SCALE 0.5 -> 0.3, card ring 55 % -> 85 % of the emitter radius (RING), and a switch
+`--flame-style skyrim|starfield` (riverwood_doors.ps1 -FlameStyle): "starfield" keeps the cards' places, sizes and
+timing from Skyrim but plays Starfield's own fire flipbooks (FiresGeneric_Sm_01_14x14 196 frames at 30 fps for
+hearths, FireCandleFlame 144 frames at 90 fps for candles; clones with their vanilla textures, our emittance, one
+layer). The hearth's scrolling flame meshes keep Skyrim's texture in both styles. The style is in the checkpoint
+signature, so switching reconverts the models.

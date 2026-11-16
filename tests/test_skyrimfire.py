@@ -275,7 +275,7 @@ class HearthV2Test(unittest.TestCase):
         centres = skyrimfire.flame_card_centres(f)
         self.assertEqual(len(centres), 5)
         self.assertAlmostEqual(centres[0][2], 7.99 + 45 * 0.4 * 0.5, places=4)
-        self.assertAlmostEqual(math.hypot(centres[1][0], centres[1][1]), 11.0, places=4)
+        self.assertAlmostEqual(math.hypot(centres[1][0], centres[1][1]), 20.0 * skyrimfire.RING, places=4)
 
     def test_emittance_takes_skyrims_multiple_and_the_kind_scale(self):
         mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_h", EffectMaterialTest.FILES, kind="hearth",
@@ -346,6 +346,50 @@ class FlameTexturesScriptTest(unittest.TestCase):
         self.assertEqual(flame_textures.over_black(rgba).tolist(), [[[0, 0, 0]]])
         sheet = flame_textures.row([np.zeros((3, 2, 3), np.uint8), np.zeros((3, 5, 3), np.uint8)])
         self.assertEqual(sheet.shape, (3, 11, 3))
+
+
+class FlameStyleTest(unittest.TestCase):
+    FLAME = {"texture": "textures\\effects\\CandleFlame01.dds", "half_w": 1.0, "half_h": 2.0, "lift": 1.25,
+             "color": (1, 1, 1), "life": 0.33, "name": "CandleFlame01", "grid": (2, 2), "origin": (0.0, 0.0, 0.0),
+             "spread": 0.0, "greyscale": "", "palette_color": False, "palette_alpha": False, "color_row": 1.0,
+             "alpha_row": 1.0}
+
+    def conv(self, style):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.flame_style = style
+        c.flame_material = lambda *a, **k: "skyrim.mat"
+        c.starfield_flame_material = lambda kind: f"sf_{kind}.mat"
+        return c
+
+    def test_starfield_style_puts_starfields_flipbook_on_the_same_single_layer_cards(self):
+        shapes, mats = self.conv("starfield").particle_flame_cards([self.FLAME], (5, 0, 100), "candle")
+        self.assertEqual(mats, ["sf_candle.mat"])
+        P = np.array(shapes[0].positions)
+        self.assertAlmostEqual(P[:, 0].mean(), 5.0, places=4)
+        self.assertAlmostEqual(P[:, 2].mean(), 101.25, places=4)
+
+    def test_skyrim_style_keeps_two_layers(self):
+        shapes, mats = self.conv("skyrim").particle_flame_cards([self.FLAME], (0, 0, 0), "candle")
+        self.assertEqual(mats, ["skyrim.mat"] * 2)
+
+    def test_starfield_candle_material_rebuilds_its_own_flipbook_timer(self):
+        t = fire_template()
+        t["Objects"][0]["Components"].insert(1, {"Data": {"x": 1}, "Index": 0, "Type": "BSBind::DirectoryComponent"})
+        mat = skyrimfire.effect_material(t, "S2S_Flame_sf", {}, kind="candle", flipbook=(12, 12, 90.0), flicker=1.0)
+        comps = [c for o in mat["Objects"] for c in o["Components"]]
+        self.assertEqual(sum(c["Type"] == "BSBind::DirectoryComponent" for c in comps), 1)
+        ctrl = next(c for c in comps if c["Type"] == "BSBind::ControllerComponent")
+        paths = [m["Data"]["Address"]["Data"]["Path"]["Data"][0]
+                 for m in ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"]]
+        self.assertEqual(paths, ["EmissiveIntensity", "FlipbookAuto"])
+        files = [c["Data"]["FileName"] for c in comps if c["Type"] == "BSMaterial::MRTextureFile"]
+        self.assertIn("Data\\Textures\\Fx_emissive.DDS", files)          # Starfield's own textures kept
+
+    def test_flame_style_is_part_of_the_checkpoint_signature(self):
+        src = open(os.path.join(HERE, "..", "scripts", "terrain", "make_skyrim_objects.py")).read()
+        self.assertIn('"flame_style": getattr(a, "flame_style", "skyrim")', src)
+        self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield"))
 
 
 class ParticleScanTest(unittest.TestCase):

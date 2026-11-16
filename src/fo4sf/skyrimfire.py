@@ -325,12 +325,12 @@ def particle_flame(system: dict) -> Optional[dict]:
 
 
 def flame_card_centres(flame: dict) -> List[tuple]:
-    """Where the cards of one particle flame go (model space): one at the emitter, plus four on a ring at 55 % of
-    the emitter's radius when the emitter is wider than a card (FireplaceWood01Burning: a 20-unit cylinder)."""
+    """Where the cards of one particle flame go (model space): one at the emitter, plus four on a ring at RING x the
+    emitter's radius when the emitter is wider than a card (FireplaceWood01Burning: a 20-unit cylinder)."""
     ox, oy, oz = flame["origin"]
     z = oz + flame["lift"]
     out = [(ox, oy, z)]
-    r = flame.get("spread", 0.0) * 0.55
+    r = flame.get("spread", 0.0) * RING
     if flame.get("spread", 0.0) > flame["half_w"] * 0.5:
         out += [(ox + r * math.cos(a), oy + r * math.sin(a), z) for a in (0.4, 0.4 + math.pi / 2, 0.4 + math.pi,
                                                                           0.4 + 3 * math.pi / 2)]
@@ -417,7 +417,15 @@ def palette_bake(rgba, palette, palette_color: bool, palette_alpha: bool, row: f
 EFFECT_TEMPLATE_MAT = "Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat"   # 1LayerEffectEmissive, soft additive
 # brightness = base x Skyrim's emissive multiple x EMITTANCE_SCALE (the multiple was baked into the colour before and
 # clipped hearth flames to white; owner 2026-11-15: hearth cores white-hot beside Skyrim's orange)
-EMITTANCE_SCALE = {"hearth": 0.5, "candle": 1.0}
+# 2026-11-15 v3 in game: hearth particle cards read as "intense straight clots": dimmer, and the ring wider
+EMITTANCE_SCALE = {"hearth": 0.3, "candle": 1.0}
+RING = 0.85                          # flame card ring radius / emitter radius (v2 / v3: 0.55)
+# flame styles (owner 2026-11-15, after v3: "maybe it is better to use Starfield's flame"): "skyrim" = Skyrim's
+# textures on the cards (flames v3); "starfield" = the same cards (Skyrim's places, sizes, timing) playing Starfield's
+# own fire flipbooks, cloned from its materials with their textures (vanilla files; nothing copied)
+FLAME_STYLES = ("skyrim", "starfield")
+STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat", (14, 14, 30.0)),
+                    "candle": ("Materials/Effects/Fires/FireCandleFlame.mat", (12, 12, 90.0))}
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
              # 2026-11-15 (owner, in game): FireCandleFlame's fixed 75000 blew the candle cards out to white; candles
              # now take the hearth's adaptive setting until tuned

@@ -313,6 +313,7 @@ class SkyrimConverter(pipeline.Converter):
         self.addon_models = dict(skyrimfire.ADDON_MODELS)
         self._effect_template = None
         self._addon_flames = {}
+        self.flame_style = "skyrim"                   # skyrimfire.FLAME_STYLES
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None,
@@ -551,6 +552,16 @@ class SkyrimConverter(pipeline.Converter):
         shapes, mats = [], []
         L2 = skyrimfire.LAYER2
         for f in flames:
+            if getattr(self, "flame_style", "skyrim") == "starfield":   # Starfield's flipbook, one layer (it has frames enough)
+                mat = self.starfield_flame_material(kind)
+                if mat is None:
+                    continue
+                for c in skyrimfire.flame_card_centres(f):
+                    centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
+                    shapes.append(skyrimfire.crossed_cards(centre, f["half_w"], f["half_h"],
+                                                           name=f"{tag}_{len(shapes)}".encode()))
+                    mats.append(mat)
+                continue
             cols, rows = f["grid"]
             frames = cols * rows
             fps = skyrimfire.FLIPBOOK_FPS[kind]
@@ -573,6 +584,30 @@ class SkyrimConverter(pipeline.Converter):
                                                            mirror=mirror))
                     mats.append(mat)
         return shapes, mats
+
+    def starfield_flame_material(self, kind: str) -> Optional[str]:
+        """flame_style "starfield": a clone of Starfield's own fire material for `kind` (skyrimfire.STARFIELD_FLAMES:
+        its textures and flipbook, played on a timer at our emittance), written once."""
+        from . import convert_material as cm
+        key = "sffire:" + kind
+        if key in self._materials:
+            return self._materials[key]
+        try:
+            path, flipbook = skyrimfire.STARFIELD_FLAMES[kind]
+            template = cm.read_template_path(self.content_resources, path)
+            stem = "sf_" + os.path.splitext(os.path.basename(path))[0].lower()
+            mat = skyrimfire.effect_material(template, "S2S_Flame_" + stem, {}, kind=kind, flipbook=flipbook,
+                                             flicker=1.0)
+            mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
+            p = os.path.join(self.staging, *mat_rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(skyrimfire.dumps(mat))
+            self._materials[key] = mat_rel.replace("/", "\\")
+        except Exception as e:                                      # noqa: BLE001
+            self._materials[key] = None
+            self.material_errors[key] = f"{type(e).__name__}: {e}"
+        return self._materials[key]
 
     def addon_flames(self, src) -> tuple:
         """(shapes, materials) of flame cards at the model's AddOnNodes whose add-on is a flame particle system

@@ -223,7 +223,8 @@ def checkpoint_signature(a):
             "collision": "boxes" if (getattr(a, "box_collision", False) or not getattr(a, "starfield_data", None))
             else "native",
             "stair_layer": stair_layer(a),
-            "max_texture": a.max_texture or None}
+            "max_texture": a.max_texture or None,
+            "flame_style": getattr(a, "flame_style", "skyrim")}
 
 
 def stair_layer(a):
@@ -259,6 +260,7 @@ def cmd_convert(a):
                 conv = skyrimconvert.SkyrimConverter(src, staging, a.texconv, a.content_resources, template,
                                                      prefix=ASSET_PREFIX, max_texture=a.max_texture,
                                                      sf_mesh_template=sf_mesh, stair_layer=stair_layer(a))
+                conv.flame_style = getattr(a, "flame_style", "skyrim")
             r = conv.convert_nif(name)
             if cache:
                 try:
@@ -1004,6 +1006,9 @@ def main(argv=None):
                          "the worldspace doors into those interiors become persistent load doors")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
+    ap.add_argument("--flame-style", default="skyrim", choices=("skyrim", "starfield"),
+                    help="convert: particle flames (candles, hearth) with Skyrim's textures or Starfield's fire "
+                         "flipbooks, on the same cards (docs/interior/skyrim-interiors.md, flames)")
     a = ap.parse_args(argv)
     need = {"export": ("skyrim", "work"), "select": ("work", "terrain"),
             "convert": ("work", "skyrim_data", "content_resources", "texconv"),
