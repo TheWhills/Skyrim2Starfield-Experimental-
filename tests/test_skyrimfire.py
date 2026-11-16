@@ -348,5 +348,16 @@ class FlameTexturesScriptTest(unittest.TestCase):
         self.assertEqual(sheet.shape, (3, 11, 3))
 
 
+class ParticleScanTest(unittest.TestCase):
+    def test_finds_particle_block_types_in_the_header_only(self):
+        sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))
+        import particle_scan
+        head = b"Gamebryo File Format\x00" + b"\x0dNiPSysEmitter\x10NiParticleSystem\x06NiNode"
+        self.assertEqual(particle_scan.particle_types(head), {"NiPSysEmitter", "NiParticleSystem"})
+        self.assertEqual(particle_scan.particle_types(b"\x06NiNode\x0aBSGeometry"), set())
+        late = b"\x06NiNode" + bytes(70000) + b"NiPSysData"
+        self.assertEqual(particle_scan.particle_types(late), set())
+
+
 if __name__ == "__main__":
     unittest.main()
