@@ -198,7 +198,7 @@ def flame_key(a) -> str:
     h = hashlib.sha256()
     for m in FLAME_MODULES:
         h.update((Path(REPO, "src", "fo4sf") / f"{m}.py").read_bytes())
-    h.update(getattr(a, "flame_style", "skyrim").encode())
+    h.update(getattr(a, "flame_style", "particles").encode())
     h.update(str(parse_particle_fire(getattr(a, "particle_fire", ""))).encode())
     return h.hexdigest()[:16]
 
@@ -299,7 +299,7 @@ def cmd_convert(a):
                 conv = skyrimconvert.SkyrimConverter(src, staging, a.texconv, a.content_resources, template,
                                                      prefix=ASSET_PREFIX, max_texture=a.max_texture,
                                                      sf_mesh_template=sf_mesh, stair_layer=stair_layer(a))
-                conv.flame_style = getattr(a, "flame_style", "skyrim")
+                conv.flame_style = getattr(a, "flame_style", "particles")
                 conv.particle_fire = parse_particle_fire(getattr(a, "particle_fire", ""))
             r = conv.convert_nif(name)
             if flame_relevant(r):
@@ -1050,7 +1050,7 @@ def main(argv=None):
                          "the worldspace doors into those interiors become persistent load doors")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
-    ap.add_argument("--flame-style", default="skyrim", choices=("skyrim", "starfield", "particles"),
+    ap.add_argument("--flame-style", default="particles", choices=("skyrim", "starfield", "particles"),
                     help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, or "
                          "(particles) hearths as Starfield's own particle fire (docs/interior/skyrim-interiors.md)")
     ap.add_argument("--particle-fire", default="",

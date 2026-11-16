@@ -606,11 +606,11 @@ class ConverterModulesTests(unittest.TestCase):
 
     def test_particle_fire_spec(self):
         import make_skyrim_objects as MSO
-        self.assertEqual(MSO.parse_particle_fire(""), [("00C78D", 1.0)])
+        self.assertEqual(MSO.parse_particle_fire(""), [("1CEDAB", 0.8)])
         self.assertEqual(MSO.parse_particle_fire("c78d:0.6"), [("00C78D", 0.6)])
-        self.assertEqual(MSO.parse_particle_fire("0004630"), [("004630", 1.0)])
+        self.assertEqual(MSO.parse_particle_fire("0004630"), [("004630", 0.8)])
         self.assertEqual(MSO.parse_particle_fire("004630, 20D560:0.8,1CEDAB"),
-                         [("004630", 1.0), ("20D560", 0.8), ("1CEDAB", 1.0)])
+                         [("004630", 0.8), ("20D560", 0.8), ("1CEDAB", 0.8)])
         with self.assertRaises(ValueError):
             MSO.parse_particle_fire("FireMed01")
 

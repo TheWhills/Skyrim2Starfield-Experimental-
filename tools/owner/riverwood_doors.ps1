@@ -36,8 +36,9 @@ param(
     [string]$AnimPlugin = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Stances\S2SStances.esm",
     # candle / hearth flames: cards with Skyrim's textures or Starfield's fire flipbooks; "particles": hearths as
     # Starfield's own particle fire (a plugin change: a full build, not -AssetsOnly)
-    [ValidateSet("skyrim", "starfield", "particles")][string]$FlameStyle = "skyrim",
-    # with -FlameStyle particles: the Starfield fire placed in hearths, "BASE[:SCALE]" (default FireMed01 00C78D, 1)
+    # default since 2026-11-16 (owner's comparisons): hearths burn Starfield's FireMed02, candles keep Skyrim's cards
+    [ValidateSet("skyrim", "starfield", "particles")][string]$FlameStyle = "particles",
+    # with -FlameStyle particles: the Starfield fire placed in hearths, "BASE[:SCALE]" (default FireMed02 1CEDAB, 0.8)
     [string]$ParticleFire = "",
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
@@ -60,8 +61,8 @@ if (-not (Test-Path $Texconv)) {
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
-if ($AssetsOnly -and $FlameStyle -eq "particles") {
-    Fail "-FlameStyle particles places Starfield fire objects in the plugin: run it as a full build (without -AssetsOnly)"
+if ($AssetsOnly -and ($ParticleFire -or $FlameStyle -ne "particles")) {
+    Write-Host "note: the hearth fires are plugin records; a different -FlameStyle / -ParticleFire takes a full build" -ForegroundColor Yellow
 }
 if ($AssetsOnly) {
     $staging = Join-Path $Work "convert"

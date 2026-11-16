@@ -388,7 +388,7 @@ class FlameStyleTest(unittest.TestCase):
 
     def test_flame_style_reaches_the_converter(self):
         src = open(os.path.join(HERE, "..", "scripts", "terrain", "make_skyrim_objects.py")).read()
-        self.assertIn('conv.flame_style = getattr(a, "flame_style", "skyrim")', src)
+        self.assertIn('conv.flame_style = getattr(a, "flame_style", "particles")', src)
         self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield", "particles"))
 
 
@@ -458,7 +458,7 @@ class ParticleStyleTest(unittest.TestCase):
             other = self.conv("skyrim").model_fire_effects(object())
         finally:
             skyrimfire.particle_systems = orig
-        self.assertEqual(fx, [{"base": "00C78D", "scale": 1.0, "offset_m": [0.0, 0.0, round(7.99 / 70, 4)]}])
+        self.assertEqual(fx, [{"base": "1CEDAB", "scale": 0.8, "offset_m": [0.0, 0.0, round(7.99 / 70, 4)]}])
         self.assertEqual(cards, ([], []))
         self.assertEqual(other, [])
 
