@@ -21,7 +21,7 @@ import os
 import re
 from typing import Dict, List, Optional
 
-from . import convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimnif
+from . import convert_static, nif as nifmod, pipeline, sfcollision, sfmesh, sfnif, skyrimfire, skyrimnif
 
 UNIT = 1.0 / 70.0
 # landscape pieces (rocks, cliffs, mountains, boulders): solid from below, what matters is the walkable top and the
@@ -306,6 +306,13 @@ class SkyrimConverter(pipeline.Converter):
         self.shape_hook = shape_hook
         self.sf_mesh_template = sf_mesh_template      # native Skyrim collision (convert_static_sse); None = boxes
         self.stair_layer = stair_layer                # layer of the stair ramps added to native collision; None = none
+        # flames (skyrimfire): effect shapes whose texture matches fire_pattern become emissive effect materials;
+        # AddOnNode<n> with n in addon_models gets that add-on's flame particles as cards; fire=False = old behaviour
+        self.fire = True
+        self.fire_pattern = skyrimfire.FIRE_EFFECT
+        self.addon_models = dict(skyrimfire.ADDON_MODELS)
+        self._effect_template = None
+        self._addon_flames = {}
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None,
@@ -414,8 +421,8 @@ class SkyrimConverter(pipeline.Converter):
         if s.shader_ref < 0:
             return self.neutral
         kind = src.type_of(s.shader_ref)
-        if kind == "BSEffectShaderProperty":          # glow, fog, waterfall spray, magic: not translated
-            return None
+        if kind == "BSEffectShaderProperty":          # fire / candle flames: effect material; glow, fog, magic: skipped
+            return self.skyrim_flame_material(src, s.shader_ref) if self.fire else None
         if skyrimnif.refraction(src, s.shader_ref):  # heat haze / refraction: not translated, like effect shaders
             return None
         paths = skyrimnif.texture_set(src, s.shader_ref)
@@ -438,6 +445,124 @@ class SkyrimConverter(pipeline.Converter):
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral
 
+    # -- flames (skyrimfire) ---------------------------------------------------------------------
+    def skyrim_flame_material(self, src, shader_ref) -> Optional[str]:
+        """Effect material for a Skyrim flame shape (BSEffectShaderProperty with a fire texture), None otherwise."""
+        try:
+            info = skyrimfire.effect_shader(src, shader_ref)
+        except Exception:                                           # noqa: BLE001
+            return None
+        if not skyrimfire.is_fire_effect(info, self.fire_pattern):
+            return None
+        tint = tuple(info.get("emissive_color", (1.0, 1.0, 1.0))[:3])
+        return self.flame_material(info["source"], info["greyscale"], info["palette_color"], info["palette_alpha"],
+                                   tint=tint, scroll=skyrimfire.uv_scroll(info["controllers"]), kind="hearth",
+                                   vertex_color=info["vertex_alpha"])
+
+    def flame_material(self, source: str, greyscale: str = "", palette_color: bool = False,
+                       palette_alpha: bool = False, tint=(1.0, 1.0, 1.0), scroll=None, kind: str = "hearth",
+                       flicker: Optional[float] = None, vertex_color: bool = False) -> Optional[str]:
+        """Convert (once) a Skyrim effect texture into a Starfield emissive effect material: palette baked in,
+        colour + emissive BC1 sRGB, opacity BC4; skyrimfire.effect_material with the scroll / flicker controllers."""
+        ident = "|".join(str(x) for x in (source.lower(), greyscale.lower(), palette_color, palette_alpha,
+                                          [round(v, 3) for v in tint], scroll, kind, flicker, vertex_color))
+        stem = os.path.splitext(os.path.basename(source.replace("\\", "/")))[0].lower() + "_" + \
+            hashlib.sha1(ident.encode()).hexdigest()[:8]
+        key = "fire:" + stem
+        if key in self._materials:
+            return self._materials[key]
+        try:
+            self._materials[key] = self._write_flame_material(stem, source, greyscale, palette_color, palette_alpha,
+                                                              tint, scroll, kind, flicker, vertex_color)
+            self.stats["flame_materials"] = self.stats.get("flame_materials", 0) + 1
+        except Exception as e:                                      # noqa: BLE001  (recorded; the shape is skipped)
+            self._materials[key] = None
+            self.material_errors[key] = f"{type(e).__name__}: {e}"
+        return self._materials[key]
+
+    def _rgba(self, data: bytes, tmp: str, tag: str):
+        import numpy as np
+        from . import textures
+        p = os.path.join(tmp, f"{tag}.dds")
+        with open(p, "wb") as f:
+            f.write(data)
+        textures.texconv(self.texconv, p, tmp, "R8G8B8A8_UNORM", ("-m", "1"))
+        raw = open(p, "rb").read()
+        h = textures.read_dds_header(raw)
+        px = np.frombuffer(raw[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
+        return px.reshape(h["height"], h["width"], 4)
+
+    def _write_flame_material(self, stem, source, greyscale, palette_color, palette_alpha, tint, scroll, kind,
+                              flicker, vertex_color) -> str:
+        import tempfile
+        import numpy as np
+        from . import convert_material as cm, textures
+        src = self.src.texture(source)
+        if src is None:
+            raise FileNotFoundError(f"{source} not in the Skyrim archives")
+        pal = self.src.texture(greyscale) if greyscale and (palette_color or palette_alpha) else None
+        tex_rel = f"textures/{self.prefix}/effects/{stem}"
+        files = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            rgba = self._rgba(src, tmp, "src")
+            if pal is not None:
+                rgba = skyrimfire.palette_bake(rgba, self._rgba(pal, tmp, "pal"), palette_color, palette_alpha,
+                                               tint=tint)
+            else:
+                rgba = skyrimfire.palette_bake(rgba, rgba[:1], False, False, tint=tint)
+            h, w = rgba.shape[:2]
+            colour = np.ascontiguousarray(np.concatenate([rgba[:, :, :3], np.full((h, w, 1), 255, np.uint8)], 2))
+            textures.write_dds_dx10(os.path.join(tmp, "c_in.dds"), w, h, textures.DXGI_R8G8B8A8_UNORM,
+                                    colour.tobytes(), 4)
+            textures.texconv(self.texconv, os.path.join(tmp, "c_in.dds"), tmp, "BC1_UNORM_SRGB")
+            textures.write_r8(os.path.join(tmp, "o_in.dds"), np.ascontiguousarray(rgba[:, :, 3]))
+            textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
+            for kind_, fn in (("color", "c_in.dds"), ("opacity", "o_in.dds")):
+                dst = os.path.join(self.staging, *f"{tex_rel}_{kind_}.dds".split("/"))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                self._publish_texture(os.path.join(tmp, fn), dst, kind_)
+                files[kind_] = cm.game_path(f"{tex_rel}_{kind_}.dds")
+        if self._effect_template is None:
+            self._effect_template = cm.read_template_path(self.content_resources, skyrimfire.EFFECT_TEMPLATE_MAT)
+        mat = skyrimfire.effect_material(self._effect_template, "S2S_Flame_" + re.sub(r"[^a-z0-9]+", "_", stem),
+                                         {"Albedo": files["color"], "Emissive": files["color"],
+                                          "Opacity": files["opacity"]},
+                                         kind=kind, scroll=scroll, flicker=flicker, vertex_color=vertex_color)
+        mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
+        p = os.path.join(self.staging, *mat_rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
+            f.write(skyrimfire.dumps(mat))
+        return mat_rel.replace("/", "\\")
+
+    def addon_flames(self, src) -> tuple:
+        """(shapes, materials) of flame cards at the model's AddOnNodes whose add-on is a flame particle system
+        (Skyrim's candles: AddOnNode49 -> MPSCandleFlame01)."""
+        shapes, mats = [], []
+        for idx, pos in skyrimfire.addon_nodes(src):
+            model = self.addon_models.get(idx)
+            if not model:
+                continue
+            if idx not in self._addon_flames:
+                flames = []
+                raw = self.src.mesh(model)
+                if raw is not None:
+                    try:
+                        flames = [f for f in (skyrimfire.particle_flame(ps)
+                                              for ps in skyrimfire.particle_systems(nifmod.parse(raw))) if f]
+                    except Exception as e:                          # noqa: BLE001
+                        self.material_errors["addon:" + model] = f"{type(e).__name__}: {e}"
+                self._addon_flames[idx] = flames
+            for k, f in enumerate(self._addon_flames[idx]):
+                mat = self.flame_material(f["texture"], tint=f["color"], kind="candle",
+                                          flicker=max(0.6, 3 * f["life"]))
+                if mat is None:
+                    continue
+                shapes.append(skyrimfire.crossed_cards((pos[0], pos[1], pos[2] + f["lift"]), f["half_w"], f["half_h"],
+                                                       name=f"AddOnFlame{idx}_{len(shapes)}".encode()))
+                mats.append(mat)
+        return shapes, mats
+
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
         the bone's frame) instead of a static model; out_suffix is appended to the output name."""
@@ -454,8 +579,7 @@ class SkyrimConverter(pipeline.Converter):
             if not shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
-            if all(m is None for m in mats):
-                raise ValueError("only effect-shader / refraction shapes, skipped")
+            flame_shapes = sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
             doubled = too_big = 0
             for i, s in enumerate(shapes):
                 if mats[i] is not None and skyrimnif.double_sided(src, s.shader_ref):
@@ -464,6 +588,12 @@ class SkyrimConverter(pipeline.Converter):
                         too_big += 1                  # left one-sided: visible from the front only
                     else:
                         shapes[i], doubled = d, doubled + 1
+            cards = []
+            if self.fire and not skin_bone:
+                cards, card_mats = self.addon_flames(src)
+                shapes, mats = list(shapes) + cards, list(mats) + card_mats
+            if all(m is None for m in mats):
+                raise ValueError("only effect-shader / refraction shapes, skipped")
             rel = re.sub(r"^meshes[\\/]", "", nif_name.replace("\\", "/"), flags=re.I)
             out_name = f"{self.prefix}/{os.path.splitext(rel)[0].lower()}{out_suffix}"
             report = {}
@@ -483,7 +613,8 @@ class SkyrimConverter(pipeline.Converter):
                        collision="skyrim" if self.collision_template is not None else None,
                        collision_report=report, skipped_effect_shapes=sum(1 for m in mats if m is None),
                        fallback_materials=sum(1 for m in mats if m == self.neutral),
-                       double_sided_shapes=doubled, double_sided_too_big=too_big, **hook_report)
+                       double_sided_shapes=doubled, double_sided_too_big=too_big,
+                       flame_shapes=flame_shapes, flame_cards=len(cards), **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"

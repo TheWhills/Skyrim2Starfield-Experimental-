@@ -303,3 +303,26 @@ sizes and colours, Skyrim's textures); hearth flame meshes keep their geometry w
 (texture baked through the palette, V scroll as a UVOffset controller); the hearth's particle flames become a few
 cards with FXFireAtlas02. Pass 3 lays out a Starfield lit candle (how its flame card is built and faces the camera),
 FireCandleGlow.mat and the shortest UVOffset-controller material, the templates for both.
+Pass 3 results (owner, 2026-11-15): Starfield's lit candle (candlegen_c01_lit.nif) and paper lantern are plain
+static NIFs: the flame is a BSGeometry "Flame:0" (228 vertices, vertex colours) + BSLightingShaderProperty naming
+FireCandleFlame.mat, beside a "Glow:0" disc on FireCandleGlow.mat (EmissiveIntensity FloatCurveController flicker,
+29812 .. 45000, plus UVOffset). No billboard nodes. A UV scroll (AnimatedGlowFX_LightBeam01): Float2DCurveController on
+"UVOffset", XCurve without controls, YCurve (0, 0) -> (1, 1), InputDistance / MaxInput = the loop length, Loop true,
+Mask "X;Y".
+
+### Flames v1 (2026-11-15): src/fo4sf/skyrimfire.py, used by skyrimconvert
+* Hearth / campfire flame meshes (BSEffectShaderProperty whose texture matches `fire|flame|candle|woodfires`) keep
+  their geometry and get an emissive effect material cloned from FiresGeneric_Sm_01_14x14.mat (soft additive,
+  emissive only) with its flipbook removed: the Skyrim texture with the palette baked in (colour = palette at the
+  texture's grey, alpha = palette alpha at the texture's alpha, row PALETTE_ROW = bottom), times the effect's emissive
+  colour; colour BC1 sRGB, opacity BC4; VertexColorBlend when Skyrim fades by vertex alpha. Skyrim's V Offset
+  controller becomes a UVOffset Float2DCurveController (FireplaceWood01Burning: 0 -> 1 over 5.667 s and 4.267 s).
+  Other effect shapes (glows, magic, dust) stay skipped as before.
+* Candles: every AddOnNode<n> with n in ADDON_MODELS (49 = MPSCandleFlame01) gets that add-on's flame particles as
+  three crossed double-sided cards at the node (CandleFlame01.dds; half width = radius x the scale curve's peak, lifted
+  by half the rise speed x life), material at FireCandleFlame's emittance (75000) with an EmissiveIntensity flicker
+  (about 1 s loop, down to 70 %). Halos (particle radius over 10 units: CandleGlow01's 80) and smoke are left out.
+* Not yet: the hearth's particle flames (FlamesSmall01) and smoke, the log glow's colour pulse, the heat haze.
+* To check in game (supported hypotheses): flames scroll upward (else the scroll sign flips), the hearth colour is
+  orange like Skyrim's (else the palette row), candle flames sit on the wicks, brightness (EMITTANCE).
+* Rebuild cost: skyrimconvert changed, so the model checkpoints are invalid once and every model converts again.

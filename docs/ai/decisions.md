@@ -2310,3 +2310,12 @@ its own FormIDs (01xxxxxx, written into the player patch and saves). Alternative
 plugins as masters (FormID shift); skyrim_hairs merging S2SRaceTest.esm (a slow hair rebuild after every race build).
 Not read: other mods' overrides of the same lists. In game unverified.
 
+## 2026-11-15: Skyrim flames as static effect geometry with controller-animated materials
+Decision: hearth flame meshes keep their geometry with an emissive effect material (palette baked into the texture,
+Skyrim's UV Offset controller written as a BSBind UVOffset curve); candle add-on particles become crossed cards in the
+candle model. Why: Starfield's own candles and lanterns draw flames as static geometry with effect materials, its
+models carry no particle blocks, and 500+ vanilla materials animate UVOffset with BSBind controllers (flame_probe,
+owner's runs). Alternatives: borrow Starfield's fire materials (owner chose Skyrim's own look, 2026-11-09); bake the
+scroll into a flipbook (choppier, more texture memory); Starfield particle effects via ADDN (its fire ADDN records are
+empty nodes; the effect system behind them is unknown).
+
