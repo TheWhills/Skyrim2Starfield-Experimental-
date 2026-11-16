@@ -29,6 +29,7 @@ param(
     [string[]]$FurnShift = @(),   # move a furniture kind's markers, e.g. -FurnShift "bartender=0,0.2,0"
     [string[]]$FurnTurn = @(),    # turn a furniture kind's markers (degrees), e.g. -FurnTurn "bed=90" (default bed -90)
     [switch]$NoCrafting,       # with -Furniture: leave crafting stations (cooking pots, alchemy, smithing) as statics
+    [string[]]$SkipKind = @(), # with -Furniture: leave these furniture kinds as statics, e.g. -SkipKind forge (A/B)
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
     # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
@@ -142,6 +143,7 @@ if ($Furniture) {
     foreach ($sh in ($FurnShift -join ";").Split(";")) { if ($sh.Trim()) { $fa += @("--shift", $sh.Trim()) } }
     foreach ($tu in ($FurnTurn -join ";").Split(";")) { if ($tu.Trim()) { $fa += @("--turn", $tu.Trim()) } }
     if ($NoCrafting) { $fa += @("--no-crafting") }
+    foreach ($sk in $SkipKind) { if ($sk.Trim()) { $fa += @("--skip-kind", $sk.Trim()) } }
     if ($AnimPlugin -and (Test-Path $AnimPlugin)) { $fa += @("--anim-plugin", $AnimPlugin) }
     python -I scripts\interior\make_furniture.py @fa
     if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }

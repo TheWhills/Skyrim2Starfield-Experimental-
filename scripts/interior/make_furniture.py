@@ -355,7 +355,8 @@ def parse_shift(items):
 EXTERIOR = "exterior"     # the "cell" of an outdoor reference (exterior_furniture.json; PluginSpike puts it outside)
 
 
-def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True, ext_refs=(), turn=None):
+def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, crafting=True, ext_refs=(), turn=None,
+          skip_kinds=()):
     cell_ids = {}
     for c in cells:
         f = ix.find_edid(b"CELL", c)
@@ -410,6 +411,9 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
         if kind is None:
             skipped.append(f"{rec['edid']}: no Starfield furniture for it (left as a static)")
             continue
+        if kind in skip_kinds:                 # --skip-kind (A/B, 2026-11-16: the tanning rack without the forge)
+            skipped.append(f"{rec['edid']}: {kind} skipped (--skip-kind; left as a static)")
+            continue
         form, tedid = TEMPLATES[kind]
         nm = rec.get("nif_markers")
         if (kind not in SPECIAL or kind in CRAFT_KINDS) and not nm:
@@ -443,6 +447,9 @@ def main(argv=None):
     ap.add_argument("--turn", action="append", default=[], metavar="KIND=DEG",
                     help="turn every marker of a kind (degrees, Bethesda's clockwise z) on top of DEFAULT_TURN "
                          "(bed -90: Starfield's sleep animation lies across Skyrim's beds); bed=0 turns it off")
+    ap.add_argument("--skip-kind", action="append", default=[], metavar="KIND",
+                    help="leave this kind as statics (repeatable; A/B: 2026-11-16, owner: the tanning rack was used "
+                         "before the forge joined its template, so a build without the forge)")
     ap.add_argument("--no-crafting", action="store_true",
                     help="leave crafting stations (cooking pots, alchemy, enchanting, smithing) as statics")
     ap.add_argument("--anim-plugin", help="S2SStances.esm (stance_plugin.py): chairs / benches get its Skyrim-animation "
@@ -467,7 +474,8 @@ def main(argv=None):
         if os.path.exists(ext_path) and not a.no_exterior:
             with open(ext_path, encoding="utf-8") as fh:
                 ext_refs = json.load(fh)["refs"]
-        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs, turn)
+        out = build(ix, cells, archives, a.marker_z, actor_targets(a.work), shift, not a.no_crafting, ext_refs, turn,
+                    set(a.skip_kind))
     finally:
         ix.close()
     if a.anim_plugin:

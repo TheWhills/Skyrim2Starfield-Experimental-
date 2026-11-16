@@ -612,4 +612,10 @@ ANY_SIDE_SETS (Forge, Tanning) now lets those spots be entered from every side (
 next build tests it: furniture records only, no animation or cache step).Owner, 17:34-17:35 (screenshot): Alvor standing between the trough and the rail behind the forge spot, "keeps
 shifting his legs like he wants to move but is stuck": the approach point Behind the marker (toward the rail / post)
 is where he stops, consistent with an unreachable or blocked entry side.
+Owner, 17:49: "the tanning rack WAS being used before this" (the 13:18 move of the forge onto the tanning rack's
+wall-wipe template). Supported hypothesis to test: a second furniture on that template stops NPCs walking into the
+tanning rack. riverwood_doors -SkipKind forge (make_furniture --skip-kind) builds with the forge left a static: if Hilde
+then tans by herself, sharing the template is the cause. Note on 13:34 ("it's working!"): an NPC who is in his work
+package when the cell loads is placed into the furniture directly (EnterInstant), which may be what was seen; walking
+in (EnterFromStand) is what fails now.
 

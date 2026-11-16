@@ -113,6 +113,15 @@ class MakeFurnitureTests(unittest.TestCase):
             self.assertNotIn("turn_deg", b["000020:Skyrim.esm"])                               # no default for chairs
             self.assertEqual(M.parse_turn([]), {"bed": -90.0})                                # beds: a quarter turn
             self.assertEqual(M.parse_turn(["bed=0"])["bed"], 0.0)
+            # --skip-kind (2026-11-16 A/B: the tanning rack without the forge): that kind stays a static
+            with contextlib.redirect_stdout(io.StringIO()):
+                M.main(["--skyrim", sky, "--skyrim-data", data, "--work", work, "--skip-kind", "chair"])
+            with open(os.path.join(work, "furniture.json")) as fh:
+                r3 = json.load(fh)
+            self.assertNotIn("000020:Skyrim.esm", r3["bases"])
+            self.assertIn("000021:Skyrim.esm", r3["bases"])
+            self.assertTrue(any("chair skipped" in x for x in r3["skipped"]))
+            self.assertFalse(any(x["base"] == "000020:Skyrim.esm" for x in r3["refs"]))
             with self.assertRaises(ValueError):
                 M.parse_turn(["nosuchkind=90"])
             self.assertEqual(M.parse_shift(["bartender=0,0,0"])["bartender"], [0.0, 0.0, 0.0])
