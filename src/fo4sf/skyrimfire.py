@@ -42,7 +42,13 @@ PALETTE_ROW = 1.0
 # Sub-texture grids (frames) of particle atlases, when the NIF's NiPSysData offsets cannot be read: from the owner's
 # contact sheet (CandleFlame01 2 x 2 flames, FXFireAtlas02 4 x 2)
 SUBTEXTURE_GRIDS = {"candleflame01": (2, 2), "fxfireatlas02": (4, 2)}
-FLIPBOOK_FPS = {"candle": 8.0, "hearth": 10.0}
+# 2026-11-15 (owner, flames v2 in game: "a slight low quality, the fires move slower than Starfield's"): Skyrim's atlases
+# have 4 / 8 frames that its particles picked at random while rising and fading; cycled at 8 / 10 fps on fixed cards
+# they read as slow steps. Faster frames, and two layers per flame spot (LAYER2: turned, smaller, higher, mirrored, its
+# own frame rate, cross-fading with the first through OverallOpacity) so the overlap hides the few frames.
+FLIPBOOK_FPS = {"candle": 12.0, "hearth": 20.0}
+LAYER2 = {"fps": 0.73, "size": 0.8, "lift": 0.25, "turn_deg": 30.0}
+CROSSFADE = (0.55, 1.0)              # OverallOpacity range of the two layers' cross-fade, a loop of 3 x a particle life
 
 
 def time_controller(b: bytes) -> dict:
@@ -146,14 +152,16 @@ def uv_scroll(ctrls) -> Optional[Tuple[str, float, float]]:
 
 
 def bake_params(info: dict) -> dict:
-    """How to bake one Skyrim effect shader (see PALETTE_ROW): palette flags, colour / alpha rows and the colour tint
-    (the emissive multiple; times the emissive colour when the colour is not palette-mapped)."""
+    """How to bake one Skyrim effect shader (see PALETTE_ROW): palette flags, colour / alpha rows, the colour tint
+    (the emissive colour when the colour is not palette-mapped, else none) and the emissive multiple, which goes into
+    the material's emittance rather than the texture (baked, it clipped bright flames to white)."""
     col = list(info.get("emissive_color") or [1.0, 1.0, 1.0, 1.0])
     mult = float(info.get("emissive_multiple") or 1.0)
     pc, pa = bool(info.get("palette_color")), bool(info.get("palette_alpha"))
-    tint = (mult,) * 3 if pc else tuple(c * mult for c in col[:3])
+    tint = (1.0, 1.0, 1.0) if pc else tuple(min(1.0, max(0.0, c)) for c in col[:3])
     return {"greyscale": info.get("greyscale") or "", "palette_color": pc, "palette_alpha": pa,
-            "color_row": min(1.0, max(0.0, col[0])), "alpha_row": min(1.0, max(0.0, col[3])), "tint": tint}
+            "color_row": min(1.0, max(0.0, col[0])), "alpha_row": min(1.0, max(0.0, col[3])), "tint": tint,
+            "multiple": mult}
 
 
 def is_fire_effect(info: dict, pattern: str = FIRE_EFFECT) -> bool:
@@ -301,8 +309,8 @@ def particle_flame(system: dict) -> Optional[dict]:
     if not shader and system.get("emissive_color"):
         shader = {"emissive_color": list(system["emissive_color"]) + [1.0], "emissive_multiple": 1.0}
     bake = bake_params(shader)
-    # Skyrim draws particle colour x the shader colour (bake tint: emissive colour x multiple unless palette-mapped)
-    color = tuple(min(4.0, max(0.0, c * t)) for c, t in zip(color, bake["tint"]))
+    # Skyrim draws particle colour x the shader colour (bake tint: the emissive colour unless palette-mapped)
+    color = tuple(min(1.0, max(0.0, c * t)) for c, t in zip(color, bake["tint"]))
     rise = em["speed"] * em["life_span"]
     half_w = em["radius"] * smax
     volume = (emitter or {}).get("volume") or []
@@ -312,7 +320,8 @@ def particle_flame(system: dict) -> Optional[dict]:
             "color": color, "life": em["life_span"], "name": system["name"], "grid": subtexture_grid(system),
             "origin": tuple(system.get("origin") or (0.0, 0.0, 0.0)), "spread": spread,
             "greyscale": bake["greyscale"], "palette_color": bake["palette_color"],
-            "palette_alpha": bake["palette_alpha"], "color_row": bake["color_row"], "alpha_row": bake["alpha_row"]}
+            "palette_alpha": bake["palette_alpha"], "color_row": bake["color_row"], "alpha_row": bake["alpha_row"],
+            "multiple": bake["multiple"]}
 
 
 def flame_card_centres(flame: dict) -> List[tuple]:
@@ -355,13 +364,15 @@ def addon_nodes(n) -> List[Tuple[int, tuple]]:
 
 
 # ---------------------------------------------------------------------------------------------------------- geometry
-def crossed_cards(center, half_w: float, half_h: float, planes: int = 3, name: bytes = b"Flame") -> nifmod.Fo4Shape:
-    """`planes` vertical quads through `center` (Skyrim units), evenly turned about z, double-sided: a flame seen from
-    any side (Starfield's own candle flames are static geometry too). UV v = 0 at the top (the flame's tip)."""
+def crossed_cards(center, half_w: float, half_h: float, planes: int = 3, name: bytes = b"Flame",
+                  turn_deg: float = 0.0, mirror: bool = False) -> nifmod.Fo4Shape:
+    """`planes` vertical quads through `center` (Skyrim units), evenly turned about z (plus turn_deg), double-sided: a
+    flame seen from any side (Starfield's own candle flames are static geometry too). UV v = 0 at the top (the flame's
+    tip); mirror flips u (a second layer that does not repeat the first)."""
     cx, cy, cz = center
     pos, uvs, nor, tan, tris = [], [], [], [], []
     for k in range(planes):
-        a = math.pi * k / planes
+        a = math.pi * k / planes + math.radians(turn_deg)
         dx, dy = math.cos(a), math.sin(a)
         nx, ny = -dy, dx
         for side in (1, -1):                       # front, then the back face (mirrored so the texture reads right)
@@ -369,7 +380,7 @@ def crossed_cards(center, half_w: float, half_h: float, planes: int = 3, name: b
             for s, top in ((-1, False), (1, False), (1, True), (-1, True)):
                 pos.append((cx + s * half_w * dx, cy + s * half_w * dy, cz + (half_h if top else -half_h)))
                 u = (s + 1) * 0.5 if side == 1 else (1 - s) * 0.5
-                uvs.append((u, 0.0 if top else 1.0))
+                uvs.append((1.0 - u if mirror else u, 0.0 if top else 1.0))
                 nor.append((nx * side, ny * side, 0.0))
                 tan.append((dx * side, dy * side, 0.0))
             if side == 1:                          # winding agrees with the normal by the right-hand rule
@@ -404,6 +415,9 @@ def palette_bake(rgba, palette, palette_color: bool, palette_alpha: bool, row: f
 
 # ---------------------------------------------------------------------------------------------------------- materials
 EFFECT_TEMPLATE_MAT = "Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat"   # 1LayerEffectEmissive, soft additive
+# brightness = base x Skyrim's emissive multiple x EMITTANCE_SCALE (the multiple was baked into the colour before and
+# clipped hearth flames to white; owner 2026-11-15: hearth cores white-hot beside Skyrim's orange)
+EMITTANCE_SCALE = {"hearth": 0.5, "candle": 1.0}
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
              # 2026-11-15 (owner, in game): FireCandleFlame's fixed 75000 blew the candle cards out to white; candles
              # now take the hearth's adaptive setting until tuned
@@ -455,14 +469,25 @@ def _directory(bindings) -> dict:
         "Type": "BSBind::Directory"}, "Type": "<ref>"}}, "Index": 0, "Type": "BSBind::DirectoryComponent", "Version": 2}
 
 
+def crossfade_controller(period: float, phase: int, lo_hi=CROSSFADE) -> dict:
+    """FloatCurveController on OverallOpacity: up and down between lo and hi over `period`; phase 1 is the mirror image
+    of phase 0, so two layers trade places (a stand-in for Skyrim's particles being born and fading)."""
+    lo, hi = lo_hi
+    a, b = (hi, lo) if phase == 0 else (lo, hi)
+    return {"Data": {"Curve": _curve([(0.0, a), (period * 0.5, b), (period, a)], period), "Loop": "true"},
+            "Type": "BSBind::FloatCurveController"}
+
+
 def effect_material(template: dict, name: str, files: dict, kind: str = "hearth",
                     scroll: Optional[Tuple[str, float, float]] = None, flicker: Optional[float] = None,
-                    vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None) -> dict:
+                    vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None,
+                    multiple: float = 1.0, crossfade: Optional[Tuple[float, int]] = None) -> dict:
     """An emissive effect material cloned from the vanilla fire template (convert_material.build_from_template):
     files {"Albedo", "Emissive", "Opacity": game paths}; EMITTANCE[kind]; controllers for a UV scroll (axis, delta,
     seconds) and / or a flicker (loop seconds). flipbook (columns, rows, fps): the atlas plays as a looping flipbook
     driven by a TimerController on FlipbookAuto, as vanilla FireCandleFlame.mat; without it the template's flipbook
-    is removed (a single-frame texture)."""
+    is removed (a single-frame texture). Emittance = EMITTANCE[kind] x multiple x EMITTANCE_SCALE[kind];
+    crossfade (period, phase): an OverallOpacity curve (crossfade_controller)."""
     from . import convert_material as cm
     mat = cm.build_from_template(template, name, files)
     for o in mat["Objects"]:
@@ -477,7 +502,8 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
             comps.append(c)
         o["Components"] = comps
     root = mat["Objects"][0]["Components"]
-    em = EMITTANCE[kind]
+    em = dict(EMITTANCE[kind])
+    em["LuminousEmittance"] = f"{float(em['LuminousEmittance']) * multiple * EMITTANCE_SCALE[kind]:g}"
     for c in root:
         if c.get("Type") == "BSMaterial::LayeredEmissivityComponent":
             c["Data"] = {k: v for k, v in c["Data"].items() if k not in ("LuminousEmittance", "AdaptiveEmittance",
@@ -496,6 +522,9 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
     if flipbook:
         maps.append(_mapping("FlipbookAuto", {"Data": None, "Type": "BSBind::TimerController"}))
         binds.append("FlipbookAuto")
+    if crossfade:
+        maps.append(_mapping("OverallOpacity", crossfade_controller(*crossfade)))
+        binds.append("OverallOpacity")
     if maps:
         root.insert(1, _directory(binds))
         root.insert(2, {"Data": {"upControllers": {"Data": {"Data": {

@@ -206,13 +206,20 @@ class AddonFlamesTest(unittest.TestCase):
             shapes, mats = conv.addon_flames(object())
         finally:
             skyrimfire.addon_nodes = orig
-        self.assertEqual(len(shapes), 2)
-        self.assertEqual(mats, ["materials\\skyrim\\effects\\candleflame01_x.mat"] * 2)
+        self.assertEqual(len(shapes), 4)                     # two candle nodes x two layers; node 7 is no flame
+        self.assertEqual(mats, ["materials\\skyrim\\effects\\candleflame01_x.mat"] * 4)
         P = np.array(shapes[0].positions)
         self.assertAlmostEqual(P[:, 0].mean(), 21.3, places=4)
         self.assertAlmostEqual(P[:, 2].mean(), 128.25, places=4)
-        self.assertEqual(calls[0]["flipbook"], (2, 2, skyrimfire.FLIPBOOK_FPS["candle"]))
+        fps = skyrimfire.FLIPBOOK_FPS["candle"]
+        self.assertEqual(calls[0]["flipbook"], (2, 2, fps))
         self.assertEqual(calls[0]["kind"], "candle")
+        L2 = skyrimfire.LAYER2
+        self.assertEqual(calls[1]["flipbook"], (2, 2, round(fps * L2["fps"], 2)))     # second layer, own frame rate
+        self.assertEqual([c["crossfade"][1] for c in calls[:2]], [0, 1])              # opposite phases
+        P2 = np.array(shapes[1].positions)                                            # layer 2: smaller, higher
+        self.assertAlmostEqual(P2[:, 2].max() - P2[:, 2].min(), 2 * 2.0 * L2["size"], places=4)
+        self.assertAlmostEqual(P2[:, 2].mean(), 128.25 + L2["lift"] * 2.0, places=4)
 
 
 class HearthV2Test(unittest.TestCase):
@@ -225,13 +232,15 @@ class HearthV2Test(unittest.TestCase):
         b = skyrimfire.bake_params(self.HEARTH_MESH)
         self.assertAlmostEqual(b["color_row"], 0.224)
         self.assertEqual(b["alpha_row"], 1.0)
-        self.assertEqual(b["tint"], (1.75, 1.75, 1.75))
+        self.assertEqual(b["tint"], (1.0, 1.0, 1.0))       # the multiple goes into the emittance, not the texture
+        self.assertEqual(b["multiple"], 1.75)
 
-    def test_unmapped_colour_is_tinted_by_emissive_colour_times_multiple(self):
+    def test_unmapped_colour_is_tinted_by_emissive_colour(self):
         b = skyrimfire.bake_params({"emissive_color": [0.949, 0.729, 0.62, 1.0], "emissive_multiple": 1.5,
                                     "palette_color": False, "palette_alpha": True, "greyscale": "g.dds"})
         self.assertFalse(b["palette_color"])
-        self.assertAlmostEqual(b["tint"][0], 0.949 * 1.5)
+        self.assertAlmostEqual(b["tint"][0], 0.949)
+        self.assertEqual(b["multiple"], 1.5)
 
     def test_separate_colour_and_alpha_rows(self):
         pal = np.zeros((3, 2, 4), np.uint8)
@@ -267,6 +276,33 @@ class HearthV2Test(unittest.TestCase):
         self.assertEqual(len(centres), 5)
         self.assertAlmostEqual(centres[0][2], 7.99 + 45 * 0.4 * 0.5, places=4)
         self.assertAlmostEqual(math.hypot(centres[1][0], centres[1][1]), 11.0, places=4)
+
+    def test_emittance_takes_skyrims_multiple_and_the_kind_scale(self):
+        mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_h", EffectMaterialTest.FILES, kind="hearth",
+                                         multiple=1.75)
+        em = next(c for o in mat["Objects"] for c in o["Components"]
+                  if c["Type"] == "BSMaterial::LayeredEmissivityComponent")
+        want = float(skyrimfire.EMITTANCE["hearth"]["LuminousEmittance"]) * 1.75 * skyrimfire.EMITTANCE_SCALE["hearth"]
+        self.assertAlmostEqual(float(em["Data"]["LuminousEmittance"]), want, places=2)
+
+    def test_crossfade_layers_mirror_each_other(self):
+        a = skyrimfire.crossfade_controller(1.0, 0)["Data"]["Curve"]["Data"]["Controls"]["Data"]
+        b = skyrimfire.crossfade_controller(1.0, 1)["Data"]["Curve"]["Data"]["Controls"]["Data"]
+        va = [float(k["Data"]["Value"]) for k in a]
+        vb = [float(k["Data"]["Value"]) for k in b]
+        lo, hi = skyrimfire.CROSSFADE
+        self.assertEqual(va, [hi, lo, hi])
+        self.assertEqual(vb, [lo, hi, lo])
+        mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_x", EffectMaterialTest.FILES,
+                                         flipbook=(2, 2, 12.0), crossfade=(1.0, 1))
+        self.assertIn("OverallOpacity", str(mat))
+
+    def test_mirrored_cards_flip_u_only(self):
+        a = skyrimfire.crossed_cards((0, 0, 0), 1, 2)
+        b = skyrimfire.crossed_cards((0, 0, 0), 1, 2, mirror=True, turn_deg=30)
+        self.assertEqual([1 - u for u, _ in a.uvs], [u for u, _ in b.uvs])
+        self.assertEqual([v for _, v in a.uvs], [v for _, v in b.uvs])
+        self.assertAlmostEqual(b.positions[1][1], math.sin(math.radians(30)), places=6)
 
     def test_flipbook_material_plays_frames_on_a_timer(self):
         mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_f", EffectMaterialTest.FILES, kind="hearth",

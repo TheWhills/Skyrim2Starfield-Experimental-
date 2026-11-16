@@ -454,21 +454,24 @@ class SkyrimConverter(pipeline.Converter):
             return None
         if not skyrimfire.is_fire_effect(info, self.fire_pattern):
             return None
-        return self.flame_material(info["source"], **skyrimfire.bake_params(info),
+        bake = skyrimfire.bake_params(info)
+        return self.flame_material(info["source"], **bake,
                                    scroll=skyrimfire.uv_scroll(info["controllers"]), kind="hearth",
                                    vertex_color=info["vertex_alpha"])
 
     def flame_material(self, source: str, greyscale: str = "", palette_color: bool = False,
                        palette_alpha: bool = False, color_row: float = 1.0, alpha_row: float = 1.0,
                        tint=(1.0, 1.0, 1.0), scroll=None, kind: str = "hearth", flicker: Optional[float] = None,
-                       vertex_color: bool = False, flipbook=None) -> Optional[str]:
+                       vertex_color: bool = False, flipbook=None, multiple: float = 1.0,
+                       crossfade=None) -> Optional[str]:
         """Convert (once) a Skyrim effect texture into a Starfield emissive effect material: palette baked in
         (skyrimfire.palette_bake), colour + emissive BC1 sRGB, opacity BC4; skyrimfire.effect_material with the
         scroll / flicker / flipbook controllers."""
         tint = tuple(float(t) for t in tint)
         ident = "|".join(str(x) for x in (source.lower(), greyscale.lower(), palette_color, palette_alpha,
                                           round(color_row, 3), round(alpha_row, 3), [round(v, 3) for v in tint],
-                                          scroll, kind, flicker, vertex_color, flipbook))
+                                          scroll, kind, flicker, vertex_color, flipbook, round(multiple, 3),
+                                          crossfade))
         stem = os.path.splitext(os.path.basename(source.replace("\\", "/")))[0].lower() + "_" + \
             hashlib.sha1(ident.encode()).hexdigest()[:8]
         key = "fire:" + stem
@@ -477,7 +480,7 @@ class SkyrimConverter(pipeline.Converter):
         try:
             self._materials[key] = self._write_flame_material(stem, source, greyscale, palette_color, palette_alpha,
                                                               color_row, alpha_row, tint, scroll, kind, flicker,
-                                                              vertex_color, flipbook)
+                                                              vertex_color, flipbook, multiple, crossfade)
             self.stats["flame_materials"] = self.stats.get("flame_materials", 0) + 1
         except Exception as e:                                      # noqa: BLE001  (recorded; the shape is skipped)
             self._materials[key] = None
@@ -497,7 +500,7 @@ class SkyrimConverter(pipeline.Converter):
         return px.reshape(h["height"], h["width"], 4)
 
     def _write_flame_material(self, stem, source, greyscale, palette_color, palette_alpha, color_row, alpha_row,
-                              tint, scroll, kind, flicker, vertex_color, flipbook) -> str:
+                              tint, scroll, kind, flicker, vertex_color, flipbook, multiple=1.0, crossfade=None) -> str:
         import tempfile
         import numpy as np
         from . import convert_material as cm, textures
@@ -518,7 +521,8 @@ class SkyrimConverter(pipeline.Converter):
             colour = np.ascontiguousarray(np.concatenate([rgba[:, :, :3], np.full((h, w, 1), 255, np.uint8)], 2))
             textures.write_dds_dx10(os.path.join(tmp, "c_in.dds"), w, h, textures.DXGI_R8G8B8A8_UNORM,
                                     colour.tobytes(), 4)
-            textures.texconv(self.texconv, os.path.join(tmp, "c_in.dds"), tmp, "BC1_UNORM_SRGB")
+            # BC7: soft flame gradients went blocky in BC1 (owner, flames v2)
+            textures.texconv(self.texconv, os.path.join(tmp, "c_in.dds"), tmp, "BC7_UNORM_SRGB")
             textures.write_r8(os.path.join(tmp, "o_in.dds"), np.ascontiguousarray(rgba[:, :, 3]))
             textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
             for kind_, fn in (("color", "c_in.dds"), ("opacity", "o_in.dds")):
@@ -532,7 +536,7 @@ class SkyrimConverter(pipeline.Converter):
                                          {"Albedo": files["color"], "Emissive": files["color"],
                                           "Opacity": files["opacity"]},
                                          kind=kind, scroll=scroll, flicker=flicker, vertex_color=vertex_color,
-                                         flipbook=flipbook)
+                                         flipbook=flipbook, multiple=multiple, crossfade=crossfade)
         mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
         p = os.path.join(self.staging, *mat_rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -542,21 +546,32 @@ class SkyrimConverter(pipeline.Converter):
 
     def particle_flame_cards(self, flames, offset=(0.0, 0.0, 0.0), kind="candle", tag="Flame") -> tuple:
         """(shapes, materials): crossed cards for particle flames (skyrimfire.particle_flame results), moved by
-        `offset` (an AddOnNode's position); the atlas plays as a flipbook when it has several frames."""
+        `offset` (an AddOnNode's position). An atlas with several frames plays as a flipbook on two layers per spot
+        (skyrimfire.LAYER2: turned, smaller, higher, mirrored, its own frame rate) that cross-fade."""
         shapes, mats = [], []
+        L2 = skyrimfire.LAYER2
         for f in flames:
             cols, rows = f["grid"]
-            fb = (cols, rows, skyrimfire.FLIPBOOK_FPS[kind]) if cols * rows > 1 else None
-            mat = self.flame_material(f["texture"], f["greyscale"], f["palette_color"], f["palette_alpha"],
-                                      f["color_row"], f["alpha_row"], tint=f["color"], kind=kind,
-                                      flicker=max(0.6, 3 * f["life"]), flipbook=fb)
-            if mat is None:
-                continue
-            for c in skyrimfire.flame_card_centres(f):
-                centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
-                shapes.append(skyrimfire.crossed_cards(centre, f["half_w"], f["half_h"],
-                                                       name=f"{tag}_{len(shapes)}".encode()))
-                mats.append(mat)
+            frames = cols * rows
+            fps = skyrimfire.FLIPBOOK_FPS[kind]
+            period = max(0.6, 3 * f["life"])
+            layers = [(None, 1.0, 0.0, 0.0, False, 0)]
+            if frames > 1:
+                layers = [((cols, rows, fps), 1.0, 0.0, 0.0, False, 0),
+                          ((cols, rows, round(fps * L2["fps"], 2)), L2["size"], L2["lift"], L2["turn_deg"], True, 1)]
+            for fb, size, lift, turn, mirror, phase in layers:
+                mat = self.flame_material(f["texture"], f["greyscale"], f["palette_color"], f["palette_alpha"],
+                                          f["color_row"], f["alpha_row"], tint=f["color"], kind=kind,
+                                          flicker=period, flipbook=fb, multiple=f.get("multiple", 1.0),
+                                          crossfade=(period, phase) if frames > 1 else None)
+                if mat is None:
+                    continue
+                for c in skyrimfire.flame_card_centres(f):
+                    centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2] + lift * f["half_h"])
+                    shapes.append(skyrimfire.crossed_cards(centre, f["half_w"] * size, f["half_h"] * size,
+                                                           name=f"{tag}_{len(shapes)}".encode(), turn_deg=turn,
+                                                           mirror=mirror))
+                    mats.append(mat)
         return shapes, mats
 
     def addon_flames(self, src) -> tuple:

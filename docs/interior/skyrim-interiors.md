@@ -351,3 +351,17 @@ Flames v2:
 * The model's own flame particles become cards too (model_flames): FlamesSmall01 = five crossed cards (one at the
   emitter, four on a ring at 55 % of its radius), 32 units wide, lifted by half their rise. Halos are particle systems
   over 40 units or named / textured "glow"; smoke stays out.
+Owner in game, v2 (2026-11-15): "actually does look much better"; hearth orange with flames across the pit, candles
+small and warm. Left: "a slight low quality, the fires move slower than Starfield's". Causes: Skyrim's atlases have
+4 / 8 frames (Starfield's fire materials 144 - 196 at up to 90 fps) that Skyrim's particles picked at random while
+rising and fading; fixed cards cycling them at 8 / 10 fps step; BC1 made the gradients blocky; the emissive multiple
+baked into the colour clipped hearth cores to white. Flames v3:
+* frames 12 fps (candle) / 20 fps (hearth); two layers per flame spot (LAYER2: turned 30 degrees, 80 % size, lifted a
+  quarter of the flame, u mirrored, its own frame rate x 0.73) cross-fading through an OverallOpacity curve
+  (CROSSFADE 0.55 - 1, opposite phases, a loop of 3 x the particle life) - a stand-in for particles being born and
+  fading; OverallOpacity on effect materials is a supported hypothesis (145 vanilla materials animate it);
+* colour BC7 sRGB instead of BC1;
+* Skyrim's emissive multiple goes into the emittance (base x multiple x EMITTANCE_SCALE, hearth 0.5, candle 1), the
+  texture keeps the palette's hue.
+A slow upward drift was proposed too; a UV scroll on a flipbook would slide neighbouring frames into view, so the
+cross-fade does that job instead.
