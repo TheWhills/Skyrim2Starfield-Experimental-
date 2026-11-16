@@ -78,6 +78,9 @@ def main(argv=None):
     ap.add_argument("--match", default="broom")
     ap.add_argument("--folder", default="standing_sweep", help="a Starfield furniture template folder")
     ap.add_argument("--calumi", help="CALUMI.Animation.dll: also list the animation-object bones the folder's Idle keys")
+    ap.add_argument("--skyrim-clip", action="append", default=[],
+                    help="a Skyrim clip under meshes\\actors\\character\\animations\\ (repeatable): which prop bones it moves, "
+                         "and its annotations")
     a = ap.parse_args(argv)
     import furniture_anim_survey as S
     sky = bsa.SkyrimArchives(a.skyrim_data, loose=False)
@@ -100,6 +103,36 @@ def main(argv=None):
                     print(f"    model {model}: {nif_root_info(data)}")
                 except Exception as e:                              # noqa: BLE001
                     print(f"    model {model}: not read ({type(e).__name__}: {e})")
+    names = sorted({bsa.norm(x) for ar in sky.archives for x in ar.names})
+    hits = [x for x in names if a.match.lower() in x.lower() and x.endswith(".nif")]
+    print(f"== Skyrim meshes named '{a.match}': {len(hits)}")
+    for x in hits[:12]:
+        try:
+            print(f"  {x}: {nif_root_info(sky._read(x))}")
+        except Exception as e:                                      # noqa: BLE001
+            print(f"  {x}: not read ({type(e).__name__}: {e})")
+    if a.skyrim_clip:
+        from fo4sf import skyrimhkx
+        import hkx_to_af
+        desc = skyrimhkx.describe(sky._read(bsa.norm(hkx_to_af.SKY_SKELETON)))
+        bones = next(s_["bones"] for s_ in desc["skeletons"] if len(s_["bones"]) > 20)
+        bone_names = [b["name"] if isinstance(b, dict) else b for b in bones]
+        for c in a.skyrim_clip:
+            path = bsa.norm("meshes\\actors\\character\\animations\\" + c)
+            data = sky._read(path)
+            if data is None:
+                print(f"== Skyrim {c}: not in the archives")
+                continue
+            clip = skyrimhkx.decode_clip(data, bone_names)
+            moving = []
+            for b, tr in zip(clip["bones"], clip["tracks"]):
+                if "animobject" not in b.lower():
+                    continue
+                ts = [k[0] for k in tr]
+                span = max(max(abs(x - y) for x, y in zip(t, ts[0])) for t in ts) if ts else 0.0
+                moving.append(f"{b} (first {tuple(round(v, 1) for v in ts[0])}, moves {span:.1f} units)")
+            print(f"== Skyrim {c}: {clip['frames']} frames; prop bones: {moving or 'none'}")
+            print(f"   annotations: {[(round(e.get('time', 0), 2), e.get('text')) for e in clip['annotations']][:20]}")
     folder = ANIM + a.folder.lower().replace("/", "\\").strip("\\") + "\\"
     print(f"== Starfield {folder} AnimObj events")
     for n in sorted(x for x in arcs.names if x.startswith(folder) and x.endswith(".afx")):
