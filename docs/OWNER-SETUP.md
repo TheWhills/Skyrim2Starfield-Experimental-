@@ -383,7 +383,11 @@ docs/npc/furniture.md). Starfield closed. Only the steps whose input changed nee
    $src="C:\Modding\work\s2s\animinfo\Meshes\AnimTextData"; $dst="$mods\S2S AnimInfo\Meshes\AnimTextData"
    robocopy "$src\AnimationFileData" "$dst\AnimationFileData" /MIR
    robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubgraphInfoAndOffsetData.txt
+   robocopy "$src\DynamicIdleData" "$dst\DynamicIdleData" /MIR
    ```
+   Keep no other mod or loose file under `meshes\actors\human\animations\furniture\` (2026-11-15: the old
+   SkyrimChairs_replace / SkyrimChairIdle_replace tests and loose chair Idle files in the game's Data played the first,
+   broken sitting conversion whenever the game fell back to a Starfield chair clip).
 4. The Riverwood build above (furniture keywords), when sets were added. Its step 5 hides the exterior statics under
    the outdoor furniture and doors in the installed exterior plugin only (never the staged copy the build reads).
 Scheduled NPCs with their own face, hair, outfit and voice: fit them first (outfit, voice lines, face-test NPC; the

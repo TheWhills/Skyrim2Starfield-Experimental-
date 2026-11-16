@@ -406,3 +406,11 @@ FurnitureFireWeapon 8, FurnitureSyncIdle 13. FurnitureRandomSitChair exposes one
 IdleSitting (furniture_graph_probe --graph): its clips are chosen at run time. The Sit set's descriptors, ours and the
 Starfield ones copied into our folder (EnterInstant: NPCs already seated when the cell loads), now load
 FurnitureGenericSit instead (GRAPH_SWAP, swap_graph). Unverified in game.
+Cause found (owner's search of every non-S2S mod, MO2 Overwrite and the game's Data, 2026-11-15): leftovers of the
+first sitting tests replaced Starfield's own chair clips with the early (hand-IK, arms-back) conversion: MO2 mods
+SkyrimChairs_replace (30 files: chair\Idle and chair\animflavor\<mood>_Idle) and SkyrimChairIdle_replace (chair and
+chair\female Idle), and loose files in <Starfield>\Data\Meshes\actors\human\animations\furniture\chair (Idle.af / .afx,
+female too; moved to C:\Modding\work\old_chair_test_backup). Every fall-back to a Starfield chair clip (the random-sit
+graph's flavors, mood variants) played that old conversion: "the exact same way it always has". Also seen: about 25
+old SkyrimMelee_* test mods each with meleeattacks.agx / player_melee.agx (the lowest enabled one wins). The Creation
+Kit's DynamicIdleData (per set, the random idle lists) is now copied with the cache too. In game unverified.
