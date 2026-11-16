@@ -77,3 +77,18 @@ Measured (owner's Riverwood build log, 2026-11-15, after commits to retarget / f
 "reused": 229 of 235 assets, "seconds": 18.0 (before: 0 reused, 71.8 s). The remaining 6 and the 30 failures
 (15 "no triangle geometry", 15 effect-shader-only shapes: models with nothing to convert, retried each build) are not
 checkpointed; 265 vs 235 is the models / assets count of the batch.
+
+## 2026-11-15: flame iterations rebuilt everything
+Owner: "are we doing the thing where we're running more steps than needed for the test again". Yes: each flame test ran
+the full riverwood_doors.ps1 (interior export, all model conversion, navmesh, NPCs, furniture, plugin build, install),
+and every flame change reconverted all ~265 models (skyrimfire.py was in the global checkpoint signature through
+skyrimconvert's imports; -FlameStyle too). Changes:
+* `make_skyrim_objects.py`: skyrimfire and the flame style left the global signature (FLAME_MODULES); a model the
+  flame code touches (flame shapes / cards, skipped effect shapes, AddOnNodes) carries `flame_key` (skyrimfire digest +
+  style) and is redone alone when it changes; the convert summary reports `flame_models_redone`.
+* `riverwood_doors.ps1 -AssetsOnly`: convert (resume) + install only; the plugin from the last full build is reused.
+  Both modes now print their total seconds.
+Measured: before = the owner's next full build ("full build: N s"), after = the following -AssetsOnly flame run
+("assets-only build: N s") - to be filled in from those two runs. This commit itself changes skyrimconvert.py and
+make_skyrim_objects.py, so the next build reconverts every model once more.
+

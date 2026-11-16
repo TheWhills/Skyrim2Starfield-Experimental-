@@ -186,9 +186,29 @@ def mesh_template(a):
 
 
 CONVERT_ROOTS = ("skyrimconvert", "convert_static", "bsa", "checkpoints")
+# modules only flame models depend on (2026-11-15, owner: "are we running more steps than needed for the test again"):
+# kept out of the global signature; their digest + the flame style are checked per model (flame_key) instead, so a
+# flame change reconverts the candles and hearths, not all ~265 models
+FLAME_MODULES = ("skyrimfire",)
 
 
-def converter_modules(root_dir, roots=CONVERT_ROOTS):
+def flame_key(a) -> str:
+    """Digest of the flame code and the flame style: a flame model's checkpoint is reused only while it matches."""
+    from pathlib import Path
+    h = hashlib.sha256()
+    for m in FLAME_MODULES:
+        h.update((Path(REPO, "src", "fo4sf") / f"{m}.py").read_bytes())
+    h.update(getattr(a, "flame_style", "skyrim").encode())
+    return h.hexdigest()[:16]
+
+
+def flame_relevant(r: dict) -> bool:
+    """A model the flame code touches (or could): flame shapes or cards, effect shapes it skipped, AddOnNodes."""
+    return bool(r.get("flame_shapes") or r.get("flame_cards") or r.get("skipped_effect_shapes")
+                or r.get("addon_nodes"))
+
+
+def converter_modules(root_dir, roots=CONVERT_ROOTS, exclude=FLAME_MODULES):
     """The fo4sf modules the model conversion imports, directly or through each other (2026-11-15, owner: "we don't
     want to rebuild unnecessary steps"): the checkpoint signature hashed every src/fo4sf/*.py, so a change to the
     animation retarget or the body profiles threw away all 265 Riverwood model checkpoints (the owner's build:
@@ -200,7 +220,7 @@ def converter_modules(root_dir, roots=CONVERT_ROOTS):
     seen, todo = set(), list(roots)
     while todo:
         m = todo.pop()
-        if m in seen or not (root_dir / f"{m}.py").exists():
+        if m in seen or m in exclude or not (root_dir / f"{m}.py").exists():
             continue
         seen.add(m)
         text = (root_dir / f"{m}.py").read_text(encoding="utf-8", errors="replace")
@@ -223,8 +243,7 @@ def checkpoint_signature(a):
             "collision": "boxes" if (getattr(a, "box_collision", False) or not getattr(a, "starfield_data", None))
             else "native",
             "stair_layer": stair_layer(a),
-            "max_texture": a.max_texture or None,
-            "flame_style": getattr(a, "flame_style", "skyrim")}
+            "max_texture": a.max_texture or None}
 
 
 def stair_layer(a):
@@ -250,9 +269,12 @@ def cmd_convert(a):
     ids = load(ids_path) if os.path.exists(ids_path) else {}
     taken = {v.lower() for v in ids.values()}
     conv, items, failures, reused = None, [], [], 0
+    fkey, flame_redone = flame_key(a), 0
     print(f"{len(names):,} models; converting up to {a.limit:,}")
     for k, name in enumerate(names[:a.limit]):
         r = cache.load(name) if cache else None
+        if r is not None and flame_relevant(r) and r.get("flame_key") != fkey:
+            r, flame_redone = None, flame_redone + 1        # flame code or style changed: this model only
         if r is not None:
             reused += 1
         else:
@@ -262,6 +284,8 @@ def cmd_convert(a):
                                                      sf_mesh_template=sf_mesh, stair_layer=stair_layer(a))
                 conv.flame_style = getattr(a, "flame_style", "skyrim")
             r = conv.convert_nif(name)
+            if flame_relevant(r):
+                r["flame_key"] = fkey
             if cache:
                 try:
                     cache.save(name, r)
@@ -281,7 +305,7 @@ def cmd_convert(a):
                   f"{time.time() - t0:.0f} s")
             save(ids_path, ids)
     stats = dict(conv.stats) if conv else {"materials_ok": 0, "materials_fallback": 0}
-    stats.update(assets=len(items), failed=len(failures), reused=reused)
+    stats.update(assets=len(items), failed=len(failures), reused=reused, flame_models_redone=flame_redone)
     reasons = {}
     for f in failures:
         r = re.sub(r"\d+", "#", f["reason"])[:80]

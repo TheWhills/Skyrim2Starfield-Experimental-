@@ -695,7 +695,8 @@ class SkyrimConverter(pipeline.Converter):
                        collision_report=report, skipped_effect_shapes=sum(1 for m in mats if m is None),
                        fallback_materials=sum(1 for m in mats if m == self.neutral),
                        double_sided_shapes=doubled, double_sided_too_big=too_big,
-                       flame_shapes=flame_shapes, flame_cards=len(cards), **hook_report)
+                       flame_shapes=flame_shapes, flame_cards=len(cards),
+                       addon_nodes=len(skyrimfire.addon_nodes(src)), **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"

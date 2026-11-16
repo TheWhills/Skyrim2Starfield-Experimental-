@@ -386,9 +386,9 @@ class FlameStyleTest(unittest.TestCase):
         files = [c["Data"]["FileName"] for c in comps if c["Type"] == "BSMaterial::MRTextureFile"]
         self.assertIn("Data\\Textures\\Fx_emissive.DDS", files)          # Starfield's own textures kept
 
-    def test_flame_style_is_part_of_the_checkpoint_signature(self):
+    def test_flame_style_reaches_the_converter(self):
         src = open(os.path.join(HERE, "..", "scripts", "terrain", "make_skyrim_objects.py")).read()
-        self.assertIn('"flame_style": getattr(a, "flame_style", "skyrim")', src)
+        self.assertIn('conv.flame_style = getattr(a, "flame_style", "skyrim")', src)
         self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield"))
 
 

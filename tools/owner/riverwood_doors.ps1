@@ -35,7 +35,12 @@ param(
     # furniture_anim_pack.py); "" or a missing file = Starfield's animations
     [string]$AnimPlugin = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Stances\S2SStances.esm",
     # candle / hearth flames: Skyrim's textures or Starfield's fire flipbooks on the same cards
-    [ValidateSet("skyrim", "starfield")][string]$FlameStyle = "skyrim"
+    [ValidateSet("skyrim", "starfield")][string]$FlameStyle = "skyrim",
+    # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
+    # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
+    # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
+    # reused). Not for changes to records (doors, NPCs, furniture, lights).
+    [switch]$AssetsOnly
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -49,7 +54,26 @@ if (-not (Test-Path $Texconv)) {
     $t = Get-ChildItem C:\Modding\tools -Recurse -Filter texconv*.exe -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($t) { $Texconv = $t.FullName } else { Fail "texconv.exe not found (give -Texconv <path>)" }
 }
+$clock = [Diagnostics.Stopwatch]::StartNew()
 $nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+if ($AssetsOnly) {
+    $staging = Join-Path $Work "convert"
+    if (-not (Test-Path (Join-Path $staging "FO4Port.esm")) -or -not (Test-Path (Join-Path $Work "convert_input.json"))) {
+        Fail "-AssetsOnly needs one full build first (no FO4Port.esm / convert_input.json in $Work)"
+    }
+    Step "2. convert the models (resumable; only changed ones are redone)"
+    python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle
+    if ($LASTEXITCODE -ne 0) { Fail "convert" }
+    if ($NoInstall) { Write-Host "converted in $staging (not installed: -NoInstall)"; exit 0 }
+    Step "4. install (archives repacked, plugin unchanged)"
+    if (Test-Path "$SF\Data\FO4Port.deploy.json") { python -I scripts\deploy_starfield.py uninstall --starfield $SF }
+    python -I scripts\deploy_starfield.py install --staging $staging --starfield $SF
+    if ($LASTEXITCODE -ne 0) { Fail "install" }
+    Write-Host ("`nassets-only build: {0:N0} s" -f $clock.Elapsed.TotalSeconds) -ForegroundColor Green
+    try { notify "riverwood_doors: assets rebuilt and installed" } catch {}
+    exit 0
+}
 
 Step "1. interior batch with doors to the exterior"
 $args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--work", $Work, "--exterior")
@@ -140,5 +164,6 @@ $extPlugin = (Get-Content "$Exterior\formids.json" -Raw | ConvertFrom-Json).plug
 # only the installed copy: the build reads the staged one for the statics' places (load doors go where the static stood)
 python -I scripts\terrain\apply_ref_overrides.py --from "$SF\Data\FO4Port.esm" --into "$SF\Data\$extPlugin"
 if ($LASTEXITCODE -ne 0) { Fail "apply_ref_overrides" }
+Write-Host ("`nfull build: {0:N0} s" -f $clock.Elapsed.TotalSeconds) -ForegroundColor Green
 Write-Host "`nIn game: coc SKY_TamrielRiverwoodSpawn, walk to the Sleeping Giant Inn's door and use it; inside, use the front door back out." -ForegroundColor Green
 try { notify "riverwood_doors: built and installed" } catch {}

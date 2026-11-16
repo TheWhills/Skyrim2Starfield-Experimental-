@@ -582,6 +582,26 @@ class ConverterModulesTests(unittest.TestCase):
             self.assertEqual(got, ["ba2", "bsa", "checkpoints", "cmsencode", "convert_static", "nif", "sfmesh",
                                    "skyrimconvert", "textures"])
 
+    def test_flame_code_is_checked_per_flame_model_not_globally(self):
+        """2026-11-15 (owner: "are we running more steps than needed for the test again"): skyrimfire and the flame
+        style left the global signature; flame models carry a flame_key instead."""
+        import tempfile
+        from pathlib import Path
+        from types import SimpleNamespace
+        import make_skyrim_objects as MSO
+        with tempfile.TemporaryDirectory() as d:
+            pkg = Path(d)
+            (pkg / "skyrimconvert.py").write_text("from . import skyrimfire, nif\n")
+            (pkg / "skyrimfire.py").write_text("from . import nif\n")
+            (pkg / "nif.py").write_text("")
+            self.assertEqual([p.stem for p in MSO.converter_modules(pkg)], ["nif", "skyrimconvert"])
+        self.assertNotEqual(MSO.flame_key(SimpleNamespace(flame_style="skyrim")),
+                            MSO.flame_key(SimpleNamespace(flame_style="starfield")))
+        self.assertTrue(MSO.flame_relevant({"flame_cards": 2}))
+        self.assertTrue(MSO.flame_relevant({"addon_nodes": 1}))
+        self.assertTrue(MSO.flame_relevant({"skipped_effect_shapes": 1}))
+        self.assertFalse(MSO.flame_relevant({"flame_shapes": 0, "flame_cards": 0, "addon_nodes": 0}))
+
 
 if __name__ == "__main__":
     unittest.main()

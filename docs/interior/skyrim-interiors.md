@@ -376,4 +376,7 @@ flame". Changes: hearth EMITTANCE_SCALE 0.5 -> 0.3, card ring 55 % -> 85 % of th
 timing from Skyrim but plays Starfield's own fire flipbooks (FiresGeneric_Sm_01_14x14 196 frames at 30 fps for
 hearths, FireCandleFlame 144 frames at 90 fps for candles; clones with their vanilla textures, our emittance, one
 layer). The hearth's scrolling flame meshes keep Skyrim's texture in both styles. The style is in the checkpoint
-signature, so switching reconverts the models.
+signature, so switching reconverts the models (since 2026-11-15 later: only the flame models, per-model flame_key).
+Owner, -FlameStyle starfield in game (2026-11-15): hearth flames "so subtle" (small licks over the logs), candle
+flames very small, dim and thin. Starfield's fire atlases draw a small flame inside each frame, so on Skyrim-sized cards
+they read smaller and fainter than Skyrim's own; Skyrim style stays the default.
