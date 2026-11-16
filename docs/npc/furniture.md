@@ -418,3 +418,9 @@ Verified in game (owner, 2026-11-15): with SkyrimChairs_replace / SkyrimChairIdl
 moved out, the seated slump is gone ("appears fixed"). The talk / upper-body / mood-variant copies, the animflavor
 answers and the FurnitureGenericSit swap stay: each keeps a Starfield clip from playing over ours, and sitting works
 with them.
+Owner in game (2026-11-15): Faendal now goes outside (work package verified); he still sleeps across the bed after the
+-90 turn (to check: furniture.json's bed markers and the actor's vs the bed's getangle z). Embry sweeps with our Sweep
+set but no broom in hand, arms placed for one. Owner's choice: convert Skyrim's broom now (not Starfield's sweep).
+Needs: the broom NIF as a Starfield animation object, an ANIO record, our Sweep descriptors' AnimObjLoad / Draw naming
+it, and the prop bone (Skyrim AnimObjectR -> R_AnimObject1, now in NOT_ANIMATED) keyed in the sweep clips.
+scripts/armor/anim_object_probe.py gathers both games' facts first.
