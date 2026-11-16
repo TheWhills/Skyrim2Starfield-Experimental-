@@ -51,9 +51,26 @@ FormKey Id(string key)
 // ---- statics ----------------------------------------------------------------------------------------------------------
 var items = new List<(string editorId, string model, string source, JsonElement? door)>();
 using var manifestDoc = JsonDocument.Parse(File.ReadAllText(args[1]));
+// sf_effects (2026-11-15, flames: make_skyrim_objects --flame-style particles): vanilla Starfield objects placed with every
+// reference of a model, e.g. the particle fire FireMed01 (MSTT 00C78D, ParticleSystem_Component -> particles\fires\
+// firemed01.psfx) where a Skyrim hearth's flame particles were; offset in metres, model space (rotated / scaled per ref)
+var effectsBySource = new Dictionary<string, List<(FormKey key, P3Float offset)>>(StringComparer.OrdinalIgnoreCase);
 foreach (var it in manifestDoc.RootElement.GetProperty("items").EnumerateArray())
+{
     items.Add((it.GetProperty("editor_id").GetString()!, it.GetProperty("model").GetString()!, it.GetProperty("source").GetString()!,
                it.TryGetProperty("door", out var dj) ? dj : null));
+    if (it.TryGetProperty("sf_effects", out var fxj) && fxj.ValueKind == JsonValueKind.Array)
+    {
+        var list = new List<(FormKey, P3Float)>();
+        foreach (var fx in fxj.EnumerateArray())
+        {
+            var o = fx.GetProperty("offset_m");
+            list.Add((new FormKey(sfEsm, Convert.ToUInt32(fx.GetProperty("base").GetString(), 16) & 0xFFFFFF),
+                      new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle())));
+        }
+        if (list.Count > 0) effectsBySource[it.GetProperty("source").GetString()!.Replace('/', '\\')] = list;
+    }
+}
 
 // source FO4 model -> (base record, origin offset in metres). Hinged doors become DOOR records animated by a vanilla door's
 // graph / skeleton / animations; their NIF origin sits at a different point, so references are shifted by origin_offset.
@@ -784,7 +801,7 @@ foreach (var cellPath in cellPaths)
         SkyrimAmbient(cell, src4, skyLighting, new FormKey(sfEsm, Convert.ToUInt32(ltHex, 16)));
     var lit = new List<P3Float>();
     var placedBySource = new Dictionary<string, FormKey>();               // Skyrim / FO4 ref -> its new reference
-    int lights = 0, placed = 0, skipped = 0, disabled = 0, innerDoors = 0;
+    int lights = 0, placed = 0, skipped = 0, disabled = 0, innerDoors = 0, effectRefs = 0;
     foreach (var r in root.GetProperty("refs").EnumerateArray())
     {
         var src = r.GetProperty("formkey").GetString()!;
@@ -831,6 +848,24 @@ foreach (var cellPath in cellPaths)
             if (Math.Abs(scale - 1f) > 1e-4) obj.Scale = scale;
             if (tele) pendingTeleports.Add((obj, tj.Clone()));
             placed++;
+            if (!tele && effectsBySource.TryGetValue(srcModel, out var fxs))
+            {
+                int fxIndex = 0;
+                foreach (var (fxKey, fxOff) in fxs)
+                {
+                    var fo2 = RotateOffset(fxOff, rot, scale);
+                    var fxo = new PlacedObject(Id($"REFR:{cellName}:{src}:fx{fxIndex++}"), release)
+                    {
+                        Base = new FormLinkNullable<IPlaceableObjectGetter>(fxKey),
+                        Position = new P3Float(pos.X + fo2.X, pos.Y + fo2.Y, pos.Z + fo2.Z),
+                        Rotation = rot,
+                    };
+                    if (Math.Abs(scale - 1f) > 1e-4) fxo.Scale = scale;
+                    if (r.TryGetProperty("disabled", out var fxd) && fxd.GetInt32() != 0) fxo.MajorRecordFlagsRaw |= 0x800;
+                    cell.Temporary.Add(fxo);
+                    effectRefs++;
+                }
+            }
         }
         if (r.TryGetProperty("disabled", out var dis) && dis.GetInt32() != 0)
         {
@@ -879,6 +914,7 @@ foreach (var cellPath in cellPaths)
     block.SubBlocks.Add(sub);
     mod.Cells.Records.Add(block);
     Console.WriteLine($"cell {cellName} {cell.FormKey}: placed {placed} references + {lights} lights ({disabled} initially disabled), skipped {skipped}"
+        + (effectRefs > 0 ? $", {effectRefs} Starfield effects (particle fires)" : "")
         + (innerDoors > 0 ? $", {innerDoors} room doors left out (open doorways)" : "") + navNote);
 }
 

@@ -34,8 +34,9 @@ param(
     # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
     # furniture_anim_pack.py); "" or a missing file = Starfield's animations
     [string]$AnimPlugin = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Stances\S2SStances.esm",
-    # candle / hearth flames: Skyrim's textures or Starfield's fire flipbooks on the same cards
-    [ValidateSet("skyrim", "starfield")][string]$FlameStyle = "skyrim",
+    # candle / hearth flames: cards with Skyrim's textures or Starfield's fire flipbooks; "particles": hearths as
+    # Starfield's own particle fire (a plugin change: a full build, not -AssetsOnly)
+    [ValidateSet("skyrim", "starfield", "particles")][string]$FlameStyle = "skyrim",
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -57,6 +58,9 @@ if (-not (Test-Path $Texconv)) {
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
+if ($AssetsOnly -and $FlameStyle -eq "particles") {
+    Fail "-FlameStyle particles places Starfield fire objects in the plugin: run it as a full build (without -AssetsOnly)"
+}
 if ($AssetsOnly) {
     $staging = Join-Path $Work "convert"
     if (-not (Test-Path (Join-Path $staging "FO4Port.esm")) -or -not (Test-Path (Join-Path $Work "convert_input.json"))) {

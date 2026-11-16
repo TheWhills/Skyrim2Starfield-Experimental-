@@ -389,7 +389,7 @@ class FlameStyleTest(unittest.TestCase):
     def test_flame_style_reaches_the_converter(self):
         src = open(os.path.join(HERE, "..", "scripts", "terrain", "make_skyrim_objects.py")).read()
         self.assertIn('conv.flame_style = getattr(a, "flame_style", "skyrim")', src)
-        self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield"))
+        self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield", "particles"))
 
 
 class SfFireProbeTest(unittest.TestCase):
@@ -404,6 +404,53 @@ class SfFireProbeTest(unittest.TestCase):
         lines = P.describe_record(b"ADDN", 0x123, [(b"EDID", b"MPSFire\x00"), (b"DATA", b"\x31\x00\x00\x00")])
         self.assertEqual(lines[0], "ADDN 00000123 MPSFire")
         self.assertIn("DATA [4] 31000000", lines[2])
+
+
+class ParticleStyleTest(unittest.TestCase):
+    """2026-11-15: hearths as Starfield's own particle fire (FireMed01) placed by the plugin builder."""
+    SYSTEM = {"name": "FlamesSmall01", "textures": ["textures\\effects\\FXFireAtlas02.dds"],
+              "origin": (0.0, 0.0, 7.99), "subtextures": [],
+              "shader": {"emissive_color": [0.949, 0.729, 0.62, 1.0], "emissive_multiple": 1.5,
+                         "palette_color": False, "palette_alpha": True, "greyscale": "g.dds"},
+              "modifiers": [{"type": "NiPSysCylinderEmitter", "volume": [20.0, 0.07],
+                             "fields": {"speed": 45.0, "radius": 16.0, "life_span": 0.4}}]}
+
+    def conv(self, style):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.flame_style = style
+        c.fire_pattern = skyrimfire.FIRE_EFFECT
+        return c
+
+    def test_particles_style_places_firemed01_at_the_emitter_in_metres_and_no_cards(self):
+        orig = skyrimfire.particle_systems
+        skyrimfire.particle_systems = lambda n: [self.SYSTEM]
+        try:
+            c = self.conv("particles")
+            fx = c.model_fire_effects(object())
+            cards = c.model_flames(object())
+            other = self.conv("skyrim").model_fire_effects(object())
+        finally:
+            skyrimfire.particle_systems = orig
+        self.assertEqual(fx, [{"base": "00C78D", "offset_m": [0.0, 0.0, round(7.99 / 70, 4)]}])
+        self.assertEqual(cards, ([], []))
+        self.assertEqual(other, [])
+
+    def test_particles_style_drops_the_scrolling_flame_meshes_but_keeps_the_log_glow(self):
+        mesh = FakeNif([("BSEffectShaderProperty", effect_block(0xC0000078))])
+        glow = FakeNif([("BSEffectShaderProperty", effect_block(0x8C000038,
+                                                                source=b"textures\\clutter\\woodfires\\WoodFires01_g.dds"))])
+        c = self.conv("particles")
+        c.flame_material = lambda *a, **k: "glow.mat"
+        self.assertIsNone(c.skyrim_flame_material(mesh, 0))
+        self.assertEqual(c.skyrim_flame_material(glow, 0), "glow.mat")
+
+    def test_manifest_and_plugin_carry_sf_effects(self):
+        src = open(os.path.join(HERE, "..", "scripts", "terrain", "make_skyrim_objects.py")).read()
+        self.assertIn('items[-1]["sf_effects"] = r["sf_effects"]', src)
+        cs = open(os.path.join(HERE, "..", "dotnet", "PluginSpike", "Program.cs")).read()
+        self.assertIn('it.TryGetProperty("sf_effects"', cs)
+        self.assertIn("effectsBySource.TryGetValue(srcModel", cs)
 
 
 class ParticleScanTest(unittest.TestCase):

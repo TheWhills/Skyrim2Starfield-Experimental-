@@ -385,3 +385,17 @@ ceiling of the static-geometry route: Skyrim's look comes from many overlapping 
 own particle fire (its fire ADDN records point at an empty NIF, so the effect is defined elsewhere).
 scripts/interior/sf_fire_probe.py (read-only) lists Starfield's fire-named records with every field, the archive
 file types with the fire-named files of any non-plain type, and the fire effect NIFs' contents.
+sf_fire_probe results (owner, 2026-11-15). **Verified**: Starfield's particles are `.psfx` files (831, in
+`Starfield - Particles.ba2`: particles\fires\firemed01.psfx, firemed02, firegenericflame, firegeneric_oit,
+firepit_armisticearchives_01, hazardfire01 ...), attached to records by a `ParticleSystem_Component` (BFCB) whose PTCL
+reflection data holds a ParticleSystemPath (MSTT, HAZD, EXPL, ARTO); ADDN records carry the same as PSDF (so its fire
+ADDNs point at fxemptynode.nif). A ready placeable fire: MSTT 0000C78D **FireMed01** (model
+Effects\EffectMarkers\ParticleMarkerOrange.nif = the editor marker); also FXP_MemorialFire 00004630. Starfield's
+candle lights (LGT_Fire_Candle*) carry a BGSEffectSequenceComponent (a flicker sequence); its candles' flames are
+static cards (FireCandleFlame.mat), as ours.
+Flames v4, `--flame-style particles` (riverwood_doors -FlameStyle particles, a full build: the plugin changes): a
+hearth model's flame particle systems become `sf_effects` in the manifest ({base 00C78D, offset_m: the emitter in
+metres}); PluginSpike places that vanilla MSTT with every reference of the model (offset rotated and scaled with
+the reference, initially disabled with it); the scrolling FXFireAtlas meshes are left out, the log glow stays, candles
+keep the Skyrim cards. Unverified: FireMed01's size against a Skyrim hearth (scaled with the reference only), the
+PluginSpike change compiling (no .NET in the cloud workspace).

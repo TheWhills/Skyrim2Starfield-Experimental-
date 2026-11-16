@@ -205,7 +205,7 @@ def flame_key(a) -> str:
 def flame_relevant(r: dict) -> bool:
     """A model the flame code touches (or could): flame shapes or cards, effect shapes it skipped, AddOnNodes."""
     return bool(r.get("flame_shapes") or r.get("flame_cards") or r.get("skipped_effect_shapes")
-                or r.get("addon_nodes"))
+                or r.get("addon_nodes") or r.get("sf_effects"))
 
 
 def converter_modules(root_dir, roots=CONVERT_ROOTS, exclude=FLAME_MODULES):
@@ -300,6 +300,8 @@ def cmd_convert(a):
         items.append({"editor_id": ids[key], "model": r["out_name"].replace("/", "\\") + ".nif", "source": name,
                       "shapes": r["shapes"], "fallback_materials": r["fallback_materials"],
                       "collision_report": r.get("collision_report") or {}})
+        if r.get("sf_effects"):                    # vanilla Starfield objects placed with each reference (PluginSpike)
+            items[-1]["sf_effects"] = r["sf_effects"]
         if (k + 1) % 200 == 0:
             print(f"  {k + 1:,} / {min(len(names), a.limit):,} models, {len(failures):,} failed, "
                   f"{time.time() - t0:.0f} s")
@@ -1030,9 +1032,9 @@ def main(argv=None):
                          "the worldspace doors into those interiors become persistent load doors")
     ap.add_argument("--limit", type=int, default=10 ** 9)
     ap.add_argument("--resume", action="store_true", help="convert: reuse verified per-model checkpoints")
-    ap.add_argument("--flame-style", default="skyrim", choices=("skyrim", "starfield"),
-                    help="convert: particle flames (candles, hearth) with Skyrim's textures or Starfield's fire "
-                         "flipbooks, on the same cards (docs/interior/skyrim-interiors.md, flames)")
+    ap.add_argument("--flame-style", default="skyrim", choices=("skyrim", "starfield", "particles"),
+                    help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, or "
+                         "(particles) hearths as Starfield's own particle fire (docs/interior/skyrim-interiors.md)")
     a = ap.parse_args(argv)
     need = {"export": ("skyrim", "work"), "select": ("work", "terrain"),
             "convert": ("work", "skyrim_data", "content_resources", "texconv"),

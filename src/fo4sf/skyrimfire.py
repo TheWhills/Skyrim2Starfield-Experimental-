@@ -423,7 +423,14 @@ RING = 0.85                          # flame card ring radius / emitter radius (
 # flame styles (owner 2026-11-15, after v3: "maybe it is better to use Starfield's flame"): "skyrim" = Skyrim's
 # textures on the cards (flames v3); "starfield" = the same cards (Skyrim's places, sizes, timing) playing Starfield's
 # own fire flipbooks, cloned from its materials with their textures (vanilla files; nothing copied)
-FLAME_STYLES = ("skyrim", "starfield")
+# "particles" (2026-11-15, owner on v3: "still low quality, like moving pngs compared to flames"): a hearth's flame
+# particles become Starfield's own particle fire, the vanilla MSTT FireMed01 (00C78D: ParticleSystem_Component ->
+# particles\fires\firemed01.psfx; sf_fire_probe.py) placed with every reference of the model at the emitter
+# (PluginSpike sf_effects); the hearth's scrolling flame meshes (PARTICLE_REPLACES) are left out, the log glow stays;
+# candles keep the Skyrim cards (Starfield's own candles are cards too)
+FLAME_STYLES = ("skyrim", "starfield", "particles")
+PARTICLE_FIRE_BASE = "00C78D"
+PARTICLE_REPLACES = r"fxfireatlas"
 STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat", (14, 14, 30.0)),
                     "candle": ("Materials/Effects/Fires/FireCandleFlame.mat", (12, 12, 90.0))}
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},

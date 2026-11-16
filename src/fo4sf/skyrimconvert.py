@@ -455,6 +455,9 @@ class SkyrimConverter(pipeline.Converter):
             return None
         if not skyrimfire.is_fire_effect(info, self.fire_pattern):
             return None
+        if getattr(self, "flame_style", "skyrim") == "particles" and \
+                re.search(skyrimfire.PARTICLE_REPLACES, info["source"], re.I):
+            return None                               # Starfield's particle fire burns here instead
         bake = skyrimfire.bake_params(info)
         return self.flame_material(info["source"], **bake,
                                    scroll=skyrimfire.uv_scroll(info["controllers"]), kind="hearth",
@@ -635,12 +638,27 @@ class SkyrimConverter(pipeline.Converter):
 
     def model_flames(self, src) -> tuple:
         """(shapes, materials): the model's own flame particle systems as cards (FireplaceWood01Burning's
-        FlamesSmall01: most of what a Skyrim hearth shows). Smoke and halos stay out (skyrimfire.particle_flame)."""
+        FlamesSmall01: most of what a Skyrim hearth shows). Smoke and halos stay out (skyrimfire.particle_flame).
+        flame_style "particles": no cards; see model_fire_effects."""
+        if getattr(self, "flame_style", "skyrim") == "particles":
+            return [], []
         try:
             flames = [f for f in (skyrimfire.particle_flame(ps) for ps in skyrimfire.particle_systems(src)) if f]
         except Exception:                                           # noqa: BLE001
             return [], []
         return self.particle_flame_cards(flames, kind="hearth", tag="ParticleFlame")
+
+    def model_fire_effects(self, src) -> list:
+        """flame_style "particles": [{"base", "offset_m"}] Starfield particle fires (skyrimfire.PARTICLE_FIRE_BASE) at
+        each flame particle emitter of the model, in metres, model space (PluginSpike places them with each reference)."""
+        if getattr(self, "flame_style", "skyrim") != "particles":
+            return []
+        try:
+            flames = [f for f in (skyrimfire.particle_flame(ps) for ps in skyrimfire.particle_systems(src)) if f]
+        except Exception:                                           # noqa: BLE001
+            return []
+        return [{"base": skyrimfire.PARTICLE_FIRE_BASE, "offset_m": [round(c * UNIT, 4) for c in f["origin"]]}
+                for f in flames]
 
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
@@ -696,6 +714,7 @@ class SkyrimConverter(pipeline.Converter):
                        fallback_materials=sum(1 for m in mats if m == self.neutral),
                        double_sided_shapes=doubled, double_sided_too_big=too_big,
                        flame_shapes=flame_shapes, flame_cards=len(cards),
+                       sf_effects=self.model_fire_effects(src) if self.fire and not skin_bone else [],
                        addon_nodes=len(skyrimfire.addon_nodes(src)), **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
