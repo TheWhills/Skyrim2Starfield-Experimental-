@@ -623,4 +623,10 @@ template (the forge and the tanning rack on NPCStanding_WipeWall / AnimFurnStand
 either (forced in, both play). Mechanism unresolved (one guess: the walk-in data is kept per template / animation
 keyword, so one set's entry is used for the other). Each set gets its own template: work_templates.py (read-only)
 lists Starfield's FurnitureClassWork furniture by animation keyword, the ones our sets use marked, for the forge's.
+work_templates (owner, 18:03, verified): 65 FURN with FurnitureClassWork, 54 animation keywords; ours use WipeWall,
+Sweep, Bartender. Standing candidates with a keyword of their own and enter / exit through geometry: NPCWelder
+(0025B9D1, AnimFurnWelder), NPCRepairImpactWrench_Standing (0007BDAA, AnimFurnRepair_ToolStanding), NPCWipeTable
+(003B2A66), NPCStandingRummage (00122F06). The header flags of NPCRepair_ToolStanding_Hammer (IgnoredBySandbox per
+SfInspect) equal NPCStanding_WipeWall's (0x10812010), so that flag lives elsewhere in the record. Before moving the
+forge, furniture_anim_survey --template FORMID=EDID reads the candidates' folders (slot names, flavor counts).
 

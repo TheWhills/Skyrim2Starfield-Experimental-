@@ -72,5 +72,11 @@ class SurveyTests(unittest.TestCase):
         self.assertIn("- SweepIdle: Animations\\sweep.hkx", md)
 
 
+class TemplateArgTest(unittest.TestCase):
+    def test_parse_templates(self):
+        import furniture_anim_survey as FS
+        self.assertEqual(FS.parse_templates(["0025B9D1=NPCWelder"]), [("template:NPCWelder", ("0025B9D1", "NPCWelder"))])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -119,7 +119,7 @@ class SfArchives:
         return None
 
 
-def starfield_side(sf_dir, kinds=None):
+def starfield_side(sf_dir, kinds=None, extra=()):
     import make_furniture as MF
     import stance_plugin
     from fo4sf import agx, packages
@@ -130,9 +130,10 @@ def starfield_side(sf_dir, kinds=None):
     ix = packages.Index(os.path.join(data, "Starfield.esm"), types={b"FURN", b"IDLM", b"KYWD"})
     out, graphs_done = {}, {}
     try:
-        for kind, (form, edid) in sorted(MF.TEMPLATES.items()):
-            if kinds and kind not in kinds:
-                continue
+        # --template FORMID=NAME: any Starfield furniture, not only make_furniture's (2026-11-16: a work template of its
+        # own for the forge; work_templates.py lists the candidates)
+        todo = [(k, v) for k, v in sorted(MF.TEMPLATES.items()) if not kinds or k in kinds] + list(extra)
+        for kind, (form, edid) in todo:
             fid = int(form, 16)
             kws = [ix.edid(k) or f"{k:08X}" for s, d in ix.subs(fid) if s == b"KWDA"
                    for k in struct.unpack(f"<{len(d) // 4}I", d)]
@@ -267,12 +268,19 @@ def markdown(rep) -> str:
     return "\n".join(L) + "\n"
 
 
+def parse_templates(args) -> list:
+    """--template FORMID=EDID values -> [("template:EDID", (FORMID, EDID))]."""
+    return [("template:" + t.split("=")[-1], (t.split("=")[0], t.split("=")[-1])) for t in args]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--starfield", help="Starfield's game folder (Data\\ under it)")
     ap.add_argument("--skyrim-data", help="Skyrim SE's Data folder")
     ap.add_argument("--work", help="a Riverwood build folder: its furniture.json lists the Skyrim bases we convert")
     ap.add_argument("--kind", action="append", help="only these furniture kinds (make_furniture.TEMPLATES keys)")
+    ap.add_argument("--template", action="append", default=[], metavar="FORMID=EDID",
+                    help="also this Starfield furniture (repeatable), e.g. 0025B9D1=NPCWelder")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     if not (a.starfield or a.skyrim_data):
@@ -280,7 +288,8 @@ def main(argv=None):
     os.makedirs(a.out, exist_ok=True)
     rep = {}
     if a.starfield:
-        rep["starfield"] = starfield_side(a.starfield, a.kind)
+        extra = parse_templates(a.template)
+        rep["starfield"] = starfield_side(a.starfield, a.kind or ([] if not extra else ["(none)"]), extra)
         print(f"Starfield: {len(rep['starfield']['templates'])} templates, "
               f"{rep['starfield']['furniture_rows']} Furniture rows in the generated table")
     if a.skyrim_data:
