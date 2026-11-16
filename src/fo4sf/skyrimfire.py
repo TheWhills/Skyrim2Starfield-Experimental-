@@ -434,6 +434,14 @@ FLAME_STYLES = ("skyrim", "starfield", "particles")
 PARTICLE_FIRE_BASE = "1CEDAB"
 PARTICLE_FIRE_SCALE = 0.8            # x the hearth reference's scale
 PARTICLE_REPLACES = r"fxfireatlas"
+# candle_style "starfield" (owner 2026-11-16: "use Starfield's for candles as well but make them follow Skyrim's thicker
+# teardrop shape"): Starfield's FireCandleFlame flipbook kept whole (its textures, flipbook, emittance: what its own
+# candles show) on one card per Skyrim flame, the card widened so the flame - a narrow strip in each frame - takes
+# Skyrim's fuller teardrop (the "starfield" flame style on 2026-11-15 used Skyrim's card size and our emittance: "very
+# small, not bright, quite thin")
+CANDLE_STYLES = ("skyrim", "starfield")
+SF_CANDLE_WIDTH = 1.8                # x Skyrim's card half width
+SF_CANDLE_HEIGHT = 1.1               # x Skyrim's card half height
 STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat", (14, 14, 30.0)),
                     "candle": ("Materials/Effects/Fires/FireCandleFlame.mat", (12, 12, 90.0))}
 EMITTANCE = {"hearth": {"LuminousEmittance": "5000", "AdaptiveEmittance": "true", "ExposureOffset": "8"},
@@ -499,13 +507,15 @@ def crossfade_controller(period: float, phase: int, lo_hi=CROSSFADE) -> dict:
 def effect_material(template: dict, name: str, files: dict, kind: str = "hearth",
                     scroll: Optional[Tuple[str, float, float]] = None, flicker: Optional[float] = None,
                     vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None,
-                    multiple: float = 1.0, crossfade: Optional[Tuple[float, int]] = None) -> dict:
+                    multiple: float = 1.0, crossfade: Optional[Tuple[float, int]] = None,
+                    keep_emittance: bool = False) -> dict:
     """An emissive effect material cloned from the vanilla fire template (convert_material.build_from_template):
     files {"Albedo", "Emissive", "Opacity": game paths}; EMITTANCE[kind]; controllers for a UV scroll (axis, delta,
     seconds) and / or a flicker (loop seconds). flipbook (columns, rows, fps): the atlas plays as a looping flipbook
     driven by a TimerController on FlipbookAuto, as vanilla FireCandleFlame.mat; without it the template's flipbook
     is removed (a single-frame texture). Emittance = EMITTANCE[kind] x multiple x EMITTANCE_SCALE[kind];
-    crossfade (period, phase): an OverallOpacity curve (crossfade_controller)."""
+    crossfade (period, phase): an OverallOpacity curve (crossfade_controller); keep_emittance: the template's own
+    emissivity stays (a vanilla material used as it is)."""
     from . import convert_material as cm
     mat = cm.build_from_template(template, name, files)
     for o in mat["Objects"]:
@@ -523,7 +533,7 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
     em = dict(EMITTANCE[kind])
     em["LuminousEmittance"] = f"{float(em['LuminousEmittance']) * multiple * EMITTANCE_SCALE[kind]:g}"
     for c in root:
-        if c.get("Type") == "BSMaterial::LayeredEmissivityComponent":
+        if c.get("Type") == "BSMaterial::LayeredEmissivityComponent" and not keep_emittance:
             c["Data"] = {k: v for k, v in c["Data"].items() if k not in ("LuminousEmittance", "AdaptiveEmittance",
                                                                           "ExposureOffset")}
             c["Data"].update(em)

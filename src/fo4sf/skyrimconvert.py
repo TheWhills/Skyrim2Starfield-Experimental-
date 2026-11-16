@@ -555,6 +555,17 @@ class SkyrimConverter(pipeline.Converter):
         shapes, mats = [], []
         L2 = skyrimfire.LAYER2
         for f in flames:
+            if kind == "candle" and getattr(self, "candle_style", "skyrim") == "starfield":
+                mat = self.starfield_flame_material("candle", keep_emittance=True)   # Starfield's candle, as it is
+                if mat is None:
+                    continue
+                for c in skyrimfire.flame_card_centres(f):
+                    centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
+                    shapes.append(skyrimfire.crossed_cards(centre, f["half_w"] * skyrimfire.SF_CANDLE_WIDTH,
+                                                           f["half_h"] * skyrimfire.SF_CANDLE_HEIGHT,
+                                                           name=f"{tag}_{len(shapes)}".encode()))
+                    mats.append(mat)
+                continue
             if getattr(self, "flame_style", "skyrim") == "starfield":   # Starfield's flipbook, one layer (it has frames enough)
                 mat = self.starfield_flame_material(kind)
                 if mat is None:
@@ -588,19 +599,20 @@ class SkyrimConverter(pipeline.Converter):
                     mats.append(mat)
         return shapes, mats
 
-    def starfield_flame_material(self, kind: str) -> Optional[str]:
-        """flame_style "starfield": a clone of Starfield's own fire material for `kind` (skyrimfire.STARFIELD_FLAMES:
-        its textures and flipbook, played on a timer at our emittance), written once."""
+    def starfield_flame_material(self, kind: str, keep_emittance: bool = False) -> Optional[str]:
+        """flame_style "starfield" / candle_style "starfield": a clone of Starfield's own fire material for `kind`
+        (skyrimfire.STARFIELD_FLAMES: its textures and flipbook, played on a timer; our emittance and a flicker, or
+        with keep_emittance its own emittance and no flicker), written once."""
         from . import convert_material as cm
-        key = "sffire:" + kind
+        key = "sffire:" + kind + (":own" if keep_emittance else "")
         if key in self._materials:
             return self._materials[key]
         try:
             path, flipbook = skyrimfire.STARFIELD_FLAMES[kind]
             template = cm.read_template_path(self.content_resources, path)
-            stem = "sf_" + os.path.splitext(os.path.basename(path))[0].lower()
+            stem = "sf_" + os.path.splitext(os.path.basename(path))[0].lower() + ("_own" if keep_emittance else "")
             mat = skyrimfire.effect_material(template, "S2S_Flame_" + stem, {}, kind=kind, flipbook=flipbook,
-                                             flicker=1.0)
+                                             flicker=None if keep_emittance else 1.0, keep_emittance=keep_emittance)
             mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
             p = os.path.join(self.staging, *mat_rel.split("/"))
             os.makedirs(os.path.dirname(p), exist_ok=True)

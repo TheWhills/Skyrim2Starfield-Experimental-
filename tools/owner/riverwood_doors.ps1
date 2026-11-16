@@ -40,6 +40,9 @@ param(
     [ValidateSet("skyrim", "starfield", "particles")][string]$FlameStyle = "particles",
     # with -FlameStyle particles: the Starfield fire placed in hearths, "BASE[:SCALE]" (default FireMed02 1CEDAB, 0.8)
     [string]$ParticleFire = "",
+    # candle flames: Skyrim's textures, or Starfield's own candle flame widened to Skyrim's teardrop (models only:
+    # -AssetsOnly is enough to switch)
+    [ValidateSet("skyrim", "starfield")][string]$CandleStyle = "skyrim",
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -70,7 +73,7 @@ if ($AssetsOnly) {
         Fail "-AssetsOnly needs one full build first (no FO4Port.esm / convert_input.json in $Work)"
     }
     Step "2. convert the models (resumable; only changed ones are redone)"
-    python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle
+    python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle --candle-style $CandleStyle
     if ($LASTEXITCODE -ne 0) { Fail "convert" }
     if ($NoInstall) { Write-Host "converted in $staging (not installed: -NoInstall)"; exit 0 }
     Step "4. install (archives repacked, plugin unchanged)"
@@ -93,7 +96,7 @@ python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }
 
 Step "2. convert the inn's models (resumable)"
-$conv = @("convert", "--work", $Work, "--skyrim-data", $SKY, "--content-resources", "$SF\Tools\ContentResources.zip", "--texconv", $Texconv, "--starfield-data", "$SF\Data", "--resume", "--flame-style", $FlameStyle)
+$conv = @("convert", "--work", $Work, "--skyrim-data", $SKY, "--content-resources", "$SF\Tools\ContentResources.zip", "--texconv", $Texconv, "--starfield-data", "$SF\Data", "--resume", "--flame-style", $FlameStyle, "--candle-style", $CandleStyle)
 if ($ParticleFire) { $conv += @("--particle-fire", $ParticleFire) }   # an empty argument would be dropped by PowerShell 5
 python -I scripts\terrain\make_skyrim_objects.py @conv
 if ($LASTEXITCODE -ne 0) { Fail "convert" }

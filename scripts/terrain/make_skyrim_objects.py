@@ -200,6 +200,7 @@ def flame_key(a) -> str:
         h.update((Path(REPO, "src", "fo4sf") / f"{m}.py").read_bytes())
     h.update(getattr(a, "flame_style", "particles").encode())
     h.update(str(parse_particle_fire(getattr(a, "particle_fire", ""))).encode())
+    h.update(getattr(a, "candle_style", "skyrim").encode())
     return h.hexdigest()[:16]
 
 
@@ -301,6 +302,7 @@ def cmd_convert(a):
                                                      sf_mesh_template=sf_mesh, stair_layer=stair_layer(a))
                 conv.flame_style = getattr(a, "flame_style", "particles")
                 conv.particle_fire = parse_particle_fire(getattr(a, "particle_fire", ""))
+                conv.candle_style = getattr(a, "candle_style", "skyrim")
             r = conv.convert_nif(name)
             if flame_relevant(r):
                 r["flame_key"] = fkey
@@ -1053,6 +1055,9 @@ def main(argv=None):
     ap.add_argument("--flame-style", default="particles", choices=("skyrim", "starfield", "particles"),
                     help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, or "
                          "(particles) hearths as Starfield's own particle fire (docs/interior/skyrim-interiors.md)")
+    ap.add_argument("--candle-style", default="skyrim", choices=("skyrim", "starfield"),
+                    help="convert: candle flames with Skyrim's textures (two cross-fading layers) or Starfield's own "
+                         "candle flame flipbook on cards widened to Skyrim's teardrop (skyrimfire.SF_CANDLE_WIDTH)")
     ap.add_argument("--particle-fire", default="",
                     help="convert, --flame-style particles: the Starfield fire to place, BASE[:SCALE], or several "
                          "comma-separated to compare side by side (default 00C78D = FireMed01 at scale 1; "

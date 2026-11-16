@@ -479,6 +479,37 @@ class ParticleStyleTest(unittest.TestCase):
         self.assertIn("effectsBySource.TryGetValue(srcModel", cs)
 
 
+class StarfieldCandleTest(unittest.TestCase):
+    """2026-11-16, owner: Starfield's candle flame, in Skyrim's thicker teardrop."""
+
+    def test_candles_get_starfields_own_material_on_one_widened_card(self):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.candle_style = "starfield"
+        calls = []
+        c.starfield_flame_material = lambda kind, keep_emittance=False: calls.append((kind, keep_emittance)) or "sf.mat"
+        c.flame_material = lambda *a, **k: "skyrim.mat"
+        shapes, mats = c.particle_flame_cards([FlameStyleTest.FLAME], (0, 0, 0), "candle")
+        self.assertEqual(mats, ["sf.mat"])
+        self.assertEqual(calls, [("candle", True)])
+        P = np.array(shapes[0].positions)
+        self.assertAlmostEqual(P[:, 2].max() - P[:, 2].min(), 2 * 2.0 * skyrimfire.SF_CANDLE_HEIGHT, places=4)
+        self.assertAlmostEqual(float(np.hypot(P[:, 0], P[:, 1]).max()), 1.0 * skyrimfire.SF_CANDLE_WIDTH, places=4)
+        hearth, _ = c.particle_flame_cards([FlameStyleTest.FLAME], (0, 0, 0), "hearth")
+        self.assertEqual(len(hearth), 2)                     # hearths unaffected by the candle style
+
+    def test_keep_emittance_leaves_the_vanilla_emissivity(self):
+        mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_c", {}, kind="candle",
+                                         flipbook=(12, 12, 90.0), keep_emittance=True)
+        em = next(c for o in mat["Objects"] for c in o["Components"]
+                  if c["Type"] == "BSMaterial::LayeredEmissivityComponent")
+        self.assertEqual(em["Data"], {"AdaptiveEmittance": "true", "ExposureOffset": "8", "LuminousEmittance": "5000"})
+        ctrl = next(c for o in mat["Objects"] for c in o["Components"] if c["Type"] == "BSBind::ControllerComponent")
+        paths = [m["Data"]["Address"]["Data"]["Path"]["Data"][0]
+                 for m in ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"]]
+        self.assertEqual(paths, ["FlipbookAuto"])
+
+
 class ParticleScanTest(unittest.TestCase):
     def test_finds_particle_block_types_in_the_header_only(self):
         sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))

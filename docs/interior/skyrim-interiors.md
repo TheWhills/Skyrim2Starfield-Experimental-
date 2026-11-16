@@ -427,3 +427,9 @@ normal one looks better" = FireMed02 1CEDAB at x0.8 (placement order is the cell
 it sat at the bar end, x -8.47). 004630 looked about as big at x0.35 as at x0.5: the particles barely follow the
 reference scale. **Default now** (2026-11-16): --flame-style particles with FireMed02 at x0.8 (skyrimfire
 PARTICLE_FIRE_BASE / _SCALE; riverwood_doors -FlameStyle defaults to particles); candles keep the Skyrim cards.
+Owner (2026-11-16 07:03): "use Starfield's for candles as well but make them follow Skyrim's thicker teardrop shape".
+`--candle-style starfield` (riverwood_doors -CandleStyle starfield; models only, so -AssetsOnly switches it):
+FireCandleFlame.mat cloned as it is - its FiresGeneric_Sm_03 12 x 12 flipbook at 90 fps on its timer, its emittance
+(75000) and edge falloff, no flicker of ours - on one crossed card per Skyrim candle flame, widened x1.8 and x1.1 taller
+(SF_CANDLE_WIDTH / _HEIGHT) so the narrow flame in each frame fills out to Skyrim's teardrop. The 2026-11-15 "starfield"
+flame style had Skyrim's card size and our emittance (5000 adaptive): "very small, not bright, quite thin".
