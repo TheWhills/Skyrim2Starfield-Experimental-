@@ -470,6 +470,14 @@ static) hold editor-only helper geometry Skyrim does not draw (supported hypothe
 shape of a *Marker.nif model and, in any model, shapes named or under a node named EditorMarker*
 (skyrimnif.editor_marker_blocks); a model left with nothing becomes an empty model, so the furniture keeps its markers
 and draws nothing. The build's stats count editor_marker_shapes. skyrimconvert.py changed: one full reconversion.
+Correction (owner, 2026-11-16 11:36, after that build: 119 shapes dropped, and the forge is gone entirely, pit and
+anvil too): BlacksmithForgeMarker.nif holds the real forge as well as the helpers, so "every shape of a *Marker.nif"
+was wrong. Now (skyrimnif.editor_only): EditorMarker-named shapes anywhere, and in a *Marker.nif only untextured shapes
+(a lighting shader with no diffuse, or no shader; effect shaders stay with the flame code). The stats line lists each
+model's dropped shapes (editor_marker_models: name and reason) as evidence. Root motion of the smithing clips (owner's
+furniture_motion --clips, **verified**): none for the forge, anvil and smelter loops (the forge's walk to the trough is
+in the body's own track, so --no-root-motion keeps it); the grindstone enter / exit move 2 cm; CraftingSmelterPour
+moves 0.985 m to the side and turns 106 deg (it is also the smelter's exit).
 
 Skyrim's smithing, **verified** from smithing_probe (owner, 2026-11-16; Skyrim.esm and mt_behavior.hkx):
 | station (FURN) | model | enter idle | clips (state machine order) | props (ANIO) |

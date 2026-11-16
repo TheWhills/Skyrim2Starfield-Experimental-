@@ -51,8 +51,9 @@ def _name(n, blk):
 # ------------------------------------------------------------------------------------------------- editor markers
 # 2026-11-16 (owner, Riverwood's forge / anvil in game: big untextured grey shapes, "a white outline of certain things
 # around the smithing object"): Skyrim's furniture marker models (BlacksmithForgeMarker.nif, SmelterMarker.nif,
-# HammerTableMarker.nif ...: the station itself is a separate static) carry editor-only helper geometry that Skyrim
-# does not draw in game (supported hypothesis); nodes / shapes named EditorMarker are Skyrim's general editor-only
+# HammerTableMarker.nif ...) carry editor-only helper geometry, untextured, that Skyrim does not draw in game (supported
+# hypothesis); they may hold real geometry too (the forge pit and anvil are in BlacksmithForgeMarker.nif: dropping the
+# whole model removed them, owner 2026-11-16 11:36). Nodes / shapes named EditorMarker are Skyrim's general editor-only
 # geometry (BSXFlags bit 5).
 MARKER_MODEL_RE = re.compile(r"marker[^\\/]*\.nif$", re.I)
 
@@ -80,6 +81,24 @@ def editor_marker_blocks(n: nifmod.NifFile) -> set:
                 break
             j = parent.get(j)
     return out
+
+
+def editor_only(n, shape, marker_model: bool, hidden: set) -> Optional[str]:
+    """Why a shape is editor-only geometry (None: drawn): "EditorMarker" (in editor_marker_blocks) or, in a *Marker.nif
+    model, "untextured" (a lighting shader with no diffuse, or no shader). Effect shaders are left to the flame code."""
+    if shape.block in hidden:
+        return "EditorMarker"
+    if not marker_model:
+        return None
+    if shape.shader_ref < 0 or shape.shader_ref >= len(n.blocks):
+        return "untextured"
+    if n.type_of(shape.shader_ref) == "BSEffectShaderProperty":
+        return None
+    try:
+        paths = texture_set(n, shape.shader_ref)
+    except Exception:                                               # noqa: BLE001
+        return None
+    return None if paths and paths[0] else "untextured"
 
 
 # ------------------------------------------------------------------------------------------------- render geometry

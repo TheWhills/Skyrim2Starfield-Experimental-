@@ -776,14 +776,18 @@ class SkyrimConverter(pipeline.Converter):
             hook_report = {}
             if self.shape_hook is not None:
                 shapes = self.shape_hook(src, shapes, hook_report)
-            # editor-only geometry (skyrimnif.editor_marker_blocks; a *Marker.nif furniture model draws nothing in
-            # Skyrim): left out; a model with nothing else becomes an empty model (the furniture keeps its markers)
+            # editor-only geometry left out (skyrimnif.editor_only): EditorMarker-named shapes anywhere, and untextured
+            # shapes in a *Marker.nif model (2026-11-16: the whole model dropped took the forge pit and anvil with it:
+            # BlacksmithForgeMarker.nif holds the real forge too); a model with nothing else becomes an empty model
             marker_model = bool(skyrimnif.MARKER_MODEL_RE.search(nif_name.replace("/", "\\")))
             hidden = skyrimnif.editor_marker_blocks(src)
-            editor_shapes = sum(1 for s in shapes if marker_model or s.block in hidden)
-            shapes = [s for s in shapes if not (marker_model or s.block in hidden)]
+            why = [skyrimnif.editor_only(src, s, marker_model, hidden) for s in shapes]
+            dropped = [f"{(s.name or b'').decode('latin-1')} ({w})" for s, w in zip(shapes, why) if w]
+            editor_shapes = len(dropped)
+            shapes = [s for s, w in zip(shapes, why) if not w]
             if editor_shapes:
                 self.stats["editor_marker_shapes"] = self.stats.get("editor_marker_shapes", 0) + editor_shapes
+                self.stats.setdefault("editor_marker_models", {})[os.path.basename(nif_name).lower()] = dropped
             if not shapes and not editor_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]

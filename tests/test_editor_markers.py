@@ -46,6 +46,26 @@ class EditorMarkerTest(unittest.TestCase):
                   "furniture\\BlacksmithSharpeningWheelAnimating.nif"):
             self.assertFalse(rx.search(m), m)
 
+    def test_marker_models_keep_their_textured_geometry(self):
+        """11:36, owner: with the whole *Marker.nif dropped the forge pit and anvil went too: only untextured shapes
+        (and EditorMarker ones) are editor-only."""
+        from types import SimpleNamespace as S
+        n = FakeNif([("BSTriShape", b"Forge"), ("BSLightingShaderProperty", b""), ("BSTriShape", b"Blade"),
+                     ("BSLightingShaderProperty", b""), ("BSEffectShaderProperty", b"")], {})
+        tex = {1: ["textures\\forge.dds", "n.dds"], 3: ["", ""]}
+        orig = skyrimnif.texture_set
+        skyrimnif.texture_set = lambda nn, ref: tex.get(ref)
+        try:
+            forge, blade = S(block=0, shader_ref=1), S(block=2, shader_ref=3)
+            self.assertIsNone(skyrimnif.editor_only(n, forge, True, set()))
+            self.assertEqual(skyrimnif.editor_only(n, blade, True, set()), "untextured")
+            self.assertEqual(skyrimnif.editor_only(n, S(block=5, shader_ref=-1), True, set()), "untextured")
+            self.assertIsNone(skyrimnif.editor_only(n, S(block=6, shader_ref=4), True, set()))      # flames
+            self.assertIsNone(skyrimnif.editor_only(n, blade, False, set()))                     # not a marker model
+            self.assertEqual(skyrimnif.editor_only(n, forge, False, {0}), "EditorMarker")
+        finally:
+            skyrimnif.texture_set = orig
+
     def test_an_editor_marker_model_converts_to_an_empty_model(self):
         report = {}
         files = skyrimconvert.convert_static_sse(None, [], "skyrim/furniture/blacksmithforgemarker", [], None, report,
