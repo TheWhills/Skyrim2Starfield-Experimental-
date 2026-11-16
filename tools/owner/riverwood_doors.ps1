@@ -37,6 +37,8 @@ param(
     # candle / hearth flames: cards with Skyrim's textures or Starfield's fire flipbooks; "particles": hearths as
     # Starfield's own particle fire (a plugin change: a full build, not -AssetsOnly)
     [ValidateSet("skyrim", "starfield", "particles")][string]$FlameStyle = "skyrim",
+    # with -FlameStyle particles: the Starfield fire placed in hearths, "BASE[:SCALE]" (default FireMed01 00C78D, 1)
+    [string]$ParticleFire = "",
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -90,7 +92,9 @@ python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }
 
 Step "2. convert the inn's models (resumable)"
-python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle
+$conv = @("convert", "--work", $Work, "--skyrim-data", $SKY, "--content-resources", "$SF\Tools\ContentResources.zip", "--texconv", $Texconv, "--starfield-data", "$SF\Data", "--resume", "--flame-style", $FlameStyle)
+if ($ParticleFire) { $conv += @("--particle-fire", $ParticleFire) }   # an empty argument would be dropped by PowerShell 5
+python -I scripts\terrain\make_skyrim_objects.py @conv
 if ($LASTEXITCODE -ne 0) { Fail "convert" }
 python -I scripts\interior\make_skyrim_interior.py check --work $Work
 

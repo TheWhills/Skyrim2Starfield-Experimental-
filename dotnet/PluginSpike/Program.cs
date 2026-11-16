@@ -54,19 +54,20 @@ using var manifestDoc = JsonDocument.Parse(File.ReadAllText(args[1]));
 // sf_effects (2026-11-15, flames: make_skyrim_objects --flame-style particles): vanilla Starfield objects placed with every
 // reference of a model, e.g. the particle fire FireMed01 (MSTT 00C78D, ParticleSystem_Component -> particles\fires\
 // firemed01.psfx) where a Skyrim hearth's flame particles were; offset in metres, model space (rotated / scaled per ref)
-var effectsBySource = new Dictionary<string, List<(FormKey key, P3Float offset)>>(StringComparer.OrdinalIgnoreCase);
+var effectsBySource = new Dictionary<string, List<(FormKey key, P3Float offset, float scale)>>(StringComparer.OrdinalIgnoreCase);
 foreach (var it in manifestDoc.RootElement.GetProperty("items").EnumerateArray())
 {
     items.Add((it.GetProperty("editor_id").GetString()!, it.GetProperty("model").GetString()!, it.GetProperty("source").GetString()!,
                it.TryGetProperty("door", out var dj) ? dj : null));
     if (it.TryGetProperty("sf_effects", out var fxj) && fxj.ValueKind == JsonValueKind.Array)
     {
-        var list = new List<(FormKey, P3Float)>();
+        var list = new List<(FormKey, P3Float, float)>();
         foreach (var fx in fxj.EnumerateArray())
         {
             var o = fx.GetProperty("offset_m");
+            var fxScale = fx.TryGetProperty("scale", out var fsj) ? fsj.GetSingle() : 1f;
             list.Add((new FormKey(sfEsm, Convert.ToUInt32(fx.GetProperty("base").GetString(), 16) & 0xFFFFFF),
-                      new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle())));
+                      new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle()), fxScale));
         }
         if (list.Count > 0) effectsBySource[it.GetProperty("source").GetString()!.Replace('/', '\\')] = list;
     }
@@ -851,7 +852,7 @@ foreach (var cellPath in cellPaths)
             if (!tele && effectsBySource.TryGetValue(srcModel, out var fxs))
             {
                 int fxIndex = 0;
-                foreach (var (fxKey, fxOff) in fxs)
+                foreach (var (fxKey, fxOff, fxScale) in fxs)
                 {
                     var fo2 = RotateOffset(fxOff, rot, scale);
                     var fxo = new PlacedObject(Id($"REFR:{cellName}:{src}:fx{fxIndex++}"), release)
@@ -860,7 +861,7 @@ foreach (var cellPath in cellPaths)
                         Position = new P3Float(pos.X + fo2.X, pos.Y + fo2.Y, pos.Z + fo2.Z),
                         Rotation = rot,
                     };
-                    if (Math.Abs(scale - 1f) > 1e-4) fxo.Scale = scale;
+                    if (Math.Abs(scale * fxScale - 1f) > 1e-4) fxo.Scale = scale * fxScale;
                     if (r.TryGetProperty("disabled", out var fxd) && fxd.GetInt32() != 0) fxo.MajorRecordFlagsRaw |= 0x800;
                     cell.Temporary.Add(fxo);
                     effectRefs++;

@@ -78,7 +78,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
-   Flames: `-FlameStyle particles` puts Starfield's own particle fire in the hearths (a full build); `starfield`
+   Flames: `-FlameStyle particles` puts Starfield's own particle fire in the hearths (a full build;
+   `-ParticleFire 00C78D:0.6` picks the fire and its size); `starfield`
    plays Starfield's fire animation on Skyrim-placed cards; default `skyrim`: Skyrim's textures on cards; switching redoes only the flame models. For a change to models / textures / materials only
    (flames, not doors / NPCs / furniture / lights), add `-AssetsOnly`: convert + install, the plugin is reused (needs
    one full build first).

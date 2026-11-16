@@ -430,6 +430,7 @@ RING = 0.85                          # flame card ring radius / emitter radius (
 # candles keep the Skyrim cards (Starfield's own candles are cards too)
 FLAME_STYLES = ("skyrim", "starfield", "particles")
 PARTICLE_FIRE_BASE = "00C78D"
+PARTICLE_FIRE_SCALE = 1.0            # x the hearth reference's scale (owner, v4: "a bit intense, three flares")
 PARTICLE_REPLACES = r"fxfireatlas"
 STARFIELD_FLAMES = {"hearth": ("Materials/Effects/Fires/FiresGeneric_Sm_01_14x14.mat", (14, 14, 30.0)),
                     "candle": ("Materials/Effects/Fires/FireCandleFlame.mat", (12, 12, 90.0))}

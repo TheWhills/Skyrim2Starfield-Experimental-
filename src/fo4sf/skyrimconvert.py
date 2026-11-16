@@ -657,7 +657,8 @@ class SkyrimConverter(pipeline.Converter):
             flames = [f for f in (skyrimfire.particle_flame(ps) for ps in skyrimfire.particle_systems(src)) if f]
         except Exception:                                           # noqa: BLE001
             return []
-        return [{"base": skyrimfire.PARTICLE_FIRE_BASE, "offset_m": [round(c * UNIT, 4) for c in f["origin"]]}
+        base, scale = getattr(self, "particle_fire", (skyrimfire.PARTICLE_FIRE_BASE, skyrimfire.PARTICLE_FIRE_SCALE))
+        return [{"base": base, "scale": scale, "offset_m": [round(c * UNIT, 4) for c in f["origin"]]}
                 for f in flames]
 
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:

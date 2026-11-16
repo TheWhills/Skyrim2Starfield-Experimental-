@@ -601,6 +601,16 @@ class ConverterModulesTests(unittest.TestCase):
         self.assertTrue(MSO.flame_relevant({"addon_nodes": 1}))
         self.assertTrue(MSO.flame_relevant({"skipped_effect_shapes": 1}))
         self.assertFalse(MSO.flame_relevant({"flame_shapes": 0, "flame_cards": 0, "addon_nodes": 0}))
+        self.assertNotEqual(MSO.flame_key(SimpleNamespace(flame_style="particles", particle_fire="")),
+                            MSO.flame_key(SimpleNamespace(flame_style="particles", particle_fire="00C78D:0.6")))
+
+    def test_particle_fire_spec(self):
+        import make_skyrim_objects as MSO
+        self.assertEqual(MSO.parse_particle_fire(""), ("00C78D", 1.0))
+        self.assertEqual(MSO.parse_particle_fire("c78d:0.6"), ("00C78D", 0.6))
+        self.assertEqual(MSO.parse_particle_fire("0004630"), ("004630", 1.0))
+        with self.assertRaises(ValueError):
+            MSO.parse_particle_fire("FireMed01")
 
 
 if __name__ == "__main__":

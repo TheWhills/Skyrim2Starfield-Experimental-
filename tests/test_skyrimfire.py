@@ -392,6 +392,22 @@ class FlameStyleTest(unittest.TestCase):
         self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield", "particles"))
 
 
+class ParticleFireChoiceTest(unittest.TestCase):
+    def test_chosen_fire_and_scale_reach_the_effects(self):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.flame_style, c.particle_fire = "particles", ("004630", 0.6)
+        orig = skyrimfire.particle_systems
+        skyrimfire.particle_systems = lambda n: [ParticleStyleTest.SYSTEM]
+        try:
+            fx = c.model_fire_effects(object())
+        finally:
+            skyrimfire.particle_systems = orig
+        self.assertEqual((fx[0]["base"], fx[0]["scale"]), ("004630", 0.6))
+        cs = open(os.path.join(HERE, "..", "dotnet", "PluginSpike", "Program.cs")).read()
+        self.assertIn("fxo.Scale = scale * fxScale", cs)
+
+
 class SfFireProbeTest(unittest.TestCase):
     def test_fire_names_and_record_lines(self):
         sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))
@@ -432,7 +448,7 @@ class ParticleStyleTest(unittest.TestCase):
             other = self.conv("skyrim").model_fire_effects(object())
         finally:
             skyrimfire.particle_systems = orig
-        self.assertEqual(fx, [{"base": "00C78D", "offset_m": [0.0, 0.0, round(7.99 / 70, 4)]}])
+        self.assertEqual(fx, [{"base": "00C78D", "scale": 1.0, "offset_m": [0.0, 0.0, round(7.99 / 70, 4)]}])
         self.assertEqual(cards, ([], []))
         self.assertEqual(other, [])
 

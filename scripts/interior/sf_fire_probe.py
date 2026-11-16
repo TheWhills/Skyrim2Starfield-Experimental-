@@ -55,9 +55,14 @@ def main(argv=None):
     ap.add_argument("--types", default=TYPES)
     ap.add_argument("--per-type", type=int, default=12, help="records printed in full per type")
     ap.add_argument("--files", type=int, default=40, help="fire-named files listed per extension")
+    ap.add_argument("--psfx-types", default="MSTT,ACTI,ARTO,HAZD,EXPL,STAT,ADDN,LIGH,PROJ,MGEF,EFSH,IMPF,IPCT",
+                    help="record types searched for .psfx users (section 1b)")
+    ap.add_argument("--only-psfx", action="store_true", help="section 1b only")
     a = ap.parse_args(argv)
     data = os.path.join(a.starfield, "Data")
 
+    if a.only_psfx:
+        a.per_type = 0
     print("== 1. fire records in Starfield.esm")
     types = [t.strip().encode() for t in a.types.split(",") if t.strip()]
     try:
@@ -76,6 +81,28 @@ def main(argv=None):
             print("\n".join("  " + x for x in describe_record(typ, fid, subs)))
     print(f"  fire-named records per type: { {k.decode(): v for k, v in counts.items()} }")
 
+    print("== 1b. records using a particle system (.psfx), fire-like by name or path")
+    users = sfplugin.records(os.path.join(data, "Starfield.esm"), [t.strip().encode() for t in a.psfx_types.split(",")])
+    n_users = 0
+    for typ, _h, subs, fid in users:
+        paths = sorted({m.decode("latin-1") for _s, d in subs if _s in (b"PTCL", b"PSDF")
+                        for m in re.findall(rb"[\w\\/.-]+\.psfx", d)})
+        if not paths:
+            continue
+        n_users += 1
+        e = sfplugin.edid(subs)
+        if FIRE.search(e) or any(FIRE.search(p) or re.search("smoke|spark|ember", p, re.I) for p in paths):
+            ob = next((d for _s, d in subs if _s == b"OBND" and len(d) == 24), None)
+            size = ""
+            if ob:
+                import struct as _st
+                lo, hi = _st.unpack_from("<3f", ob, 0), _st.unpack_from("<3f", ob, 12)
+                size = " size " + "x".join(f"{h - l:.2f}" for l, h in zip(lo, hi)) + " m"
+            model = next((d for _s, d in subs if _s == b"MODL"), b"").rstrip(b"\0").decode("latin-1")
+            print(f"  {typ.decode()} {fid:08X} {e}: {paths}{size} model {model}")
+    print(f"  records with a particle system: {n_users}")
+    if a.only_psfx:
+        return 0
     print("== 2. archive file types")
     ext, fire_files, effect_nifs = Counter(), defaultdict(list), []
     archives = sorted(f for f in os.listdir(data) if f.lower().endswith(".ba2"))

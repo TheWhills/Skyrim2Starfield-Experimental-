@@ -400,4 +400,10 @@ the reference, initially disabled with it); the scrolling FXFireAtlas meshes are
 keep the Skyrim cards. Unverified: FireMed01's size against a Skyrim hearth (scaled with the reference only), the
 PluginSpike change compiling (no .NET in the cloud workspace).
 Owner's build (2026-11-15 22:57): PluginSpike compiled; 8 FireMed01 references placed (Sleeping Giant 3, every
-house 1), with 3 flame materials (candles, log glow). In-game look pending.
+house 1), with 3 flame materials (candles, log glow).
+Owner in game, v4 (2026-11-15): real moving flames, sparks and smoke in the hearth (**verified: vanilla particle-fire
+MSTTs placed by our plugin burn**), but "a bit intense, looks like three flares as opposed to hearth flames": FireMed01
+is a standalone medium fire with a tall smoke plume, one per FireplaceWood01Burning (the Sleeping Giant pit has 3).
+Candles unchanged by design (Starfield's own candles are cards). Next: `-ParticleFire BASE[:SCALE]` (any Starfield.esm
+fire, scaled with the hearth) and `sf_fire_probe.py --only-psfx` (every record using a .psfx, fire-like ones with
+their particle files and size) to choose a hearth-like fire (firemed02, firegenericflame, firepit_armisticearchives_01).
