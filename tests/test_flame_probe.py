@@ -50,6 +50,24 @@ class FlameProbeTest(unittest.TestCase):
         n = FakeNif([("NiFloatData", d)])
         self.assertEqual(flame_probe.float_keys(n, 0)["keys"], [(0.0, 1.0), (1.0, 3.0)])
 
+    def test_particle_system_gets_shader_texture_and_emitter_fields(self):
+        shader = struct.pack("<iI", -1, 0) + b"\x00" * 7 + b"textures\\effects\\candleflame01.dds\x00"
+        system = struct.pack("<i", 0) + b"\x01" + struct.pack("<i", 1)      # name 0, a bool, then shader ref 1
+        head = struct.pack("<iIi", -1, 0, 2) + b"\x01"                     # name, order, target system 2, active
+        emitter = head + struct.pack("<14f", *range(14)) + struct.pack("<i", -1) + struct.pack("<2f", 2.5, 4.0)
+        color = head + struct.pack("<18f", *[0.1 * k for k in range(18)])
+        n = FakeNif([("NiNode", b"\x00" * 8), ("BSEffectShaderProperty", shader), ("NiParticleSystem", system),
+                     ("NiPSysCylinderEmitter", emitter), ("BSPSysSimpleColorModifier", color)])
+        n.strings = [b"Flame"]
+        ps, = flame_probe.particle_systems(n)
+        self.assertEqual(ps["name"], "Flame")
+        self.assertEqual(ps["textures"], ["textures\\effects\\candleflame01.dds"])
+        em, col = ps["modifiers"]
+        self.assertEqual(em["fields"]["radius"], 10.0)
+        self.assertEqual(em["fields"]["life_span"], 12.0)
+        self.assertEqual(em["volume"], [2.5, 4.0])
+        self.assertAlmostEqual(col["fields"]["c3a"], 1.7, places=4)
+
 
 if __name__ == "__main__":
     unittest.main()

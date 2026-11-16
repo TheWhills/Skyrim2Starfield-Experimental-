@@ -275,3 +275,12 @@ with a flipbook emissive material; candle add-ons placed by us at each AddOnNode
 DATA, every effect-shader shape of the hearth / candle / add-on models (texture, flags, UV offset / scale, its
 controllers: variable, frequency, start / stop, keys), AddOnNode positions, and Starfield's flipbook .mat files (a
 fire one printed whole, the template our flame materials copy).
+Probe results (owner, 2026-11-15): the candle add-on is ADDN 000B9FC5 MPSCandleFlame01 (DATA 49 = AddOnNode49;
+table candle 1 slot, floor candle 4 at 127 units up) whose model has two effect shaders (CandleFlame01, CandleGlow01)
+with no shape of their own: they are particle systems. The hearth's visible flames are two meshes "Flames:0 / :1"
+(48 / 42 vertices) on FXFireAtlas04 coloured through the GradFireExplosion palette (greyscale-to-palette flags), animated
+by a V Offset scroll 0 -> 1 over 5.667 s / 4.267 s, not a flipbook; a "Glow" mesh on the logs (WoodFires01_g) pulses
+its emissive colour; FXFireAtlas02 and smoke are particle systems. Starfield: 527 .mat files with an active flipbook
+(FireFlamethrower 8x8 at 32 fps; FireCandleFlame.mat exists). Second probe pass (same script): particle emitters /
+colour / sub-texture fields, texture sizes, Starfield's material controllers (how a UV scroll is animated) and which
+Starfield fire / candle meshes use which materials.
