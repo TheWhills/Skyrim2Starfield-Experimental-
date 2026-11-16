@@ -604,5 +604,5 @@ commit: 11-14 sets added; 11-15 16:33 lean / counter / table / sweep / tanning o
 bar-lean 0.30 m shift dropped; 11-16 11:25-11:39 untextured shapes of *Marker.nif models dropped (the tanning rack and
 forge models are TanningRackMarker.nif / BlacksmithForgeMarker.nif; the last build dropped one shape, milllogpile's),
 11:48 Forge set, 12:10 Grindstone set, 13:18 forge (and grindstone) moved onto the tanning rack's wall-wipe template,
-15:02 Grindstone removed. The schedule conversion (make_schedule.py) has not changed since 11-15 15:32.
+15:02 Grindstone removed. The schedule conversion (make_schedule.py) last changed 11-15 18:30 (multi-location work and carry packages).
 
