@@ -77,10 +77,9 @@ TEMPLATES = {
     # (FurnitureClassWork, not ignored by sandbox; the tanning rack's): Starfield's crafting menu is lost (it did not
     # open anyway); Skyrim's animations, props and spot are kept
     "forge": ("0003C420", "NPCStanding_WipeWall"),                 # Skyrim's blacksmith forge (Forge set)
-    "grindstone": ("0003C420", "NPCStanding_WipeWall"),            # Skyrim's sharpening wheel (Grindstone set)
 }
 SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
-           "scrape", "forge", "grindstone",
+           "scrape", "forge",
            # crafting stations (2026-11-09, owner: E on our alchemy lab put the player inside it facing away, no menu;
            # Starfield's own chem bench, same record but its own marker, worked): Skyrim's crafting NIFs all hold one
            # marker at the origin, heading 0, entry Behind (owner's furniture survey: cooking pot, alchemy lab and
@@ -92,7 +91,9 @@ CRAFT_KINDS = {"cook", "alchemy", "workbench", "weapon_bench", "armor_bench"}   
 CRAFTING = [(("craftingcookpot", "issmallcookingpot", "cookingspit", "cookingpot"), "cook"),
             (("isalchemy", "wicraftingalchemy", "craftingalchemy"), "alchemy"),
             (("isenchanting", "wicraftingenchanting", "craftingenchanting"), "workbench"),
-            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "grindstone"),
+            # 2026-11-16 (owner: "Can we remove the grindstone stuff for now"; the tanning rack has not been used since
+            # the Grindstone set went in): the wheel is Starfield's weapon workbench again, Starfield's animations
+            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "weapon_bench"),
             (("craftingsmithingarmortable", "armortable"), "armor_bench"),
             (("craftingtanningrack", "tanningrack"), "scrape"),
             (("craftingsmithinganvil", "anvil"), "hammer"),
@@ -189,12 +190,11 @@ ANIM_SET_RULES = (
     (("cook",), None, "Cook"),
     (("scrape",), r"tanning", "Tanning"),
     (("forge",), None, "Forge"),
-    (("grindstone",), None, "Grindstone"),
 )
 # Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
 # is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips
 # carry no root motion, and its spot is the marker's (2026-11-16)
-SKYRIM_SPOT_SETS = {"Forge", "Grindstone"}           # the wheel's clips stand at Skyrim's wheel marker too
+SKYRIM_SPOT_SETS = {"Forge"}         # (the Grindstone set, removed 2026-11-16, stood at Skyrim's wheel marker too)
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
 
 

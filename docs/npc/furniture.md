@@ -582,3 +582,11 @@ our plugin naming it. Loose .wem files in Data\Sound\SoundBanks replace an exist
 would change that sound everywhere. sound_records.py sections 4-5: a vanilla sound record's subrecords (its link to
 Wwise) and Skyrim's forge sounds followed SOUN -> SNDR -> files.
 
+**Grindstone set removed** (owner, 2026-11-16 14:58: "Can we remove the grindstone stuff for now"; the tanning rack
+has not been used in game since the build that added it, 13:29, which also moved the forge onto the tanning rack's
+wall-wipe template). The sharpening wheel is Starfield's weapon workbench again (make_furniture CRAFTING ->
+weapon_bench, Starfield's animations, no Skyrim set), its keyword entry left out of stance_plugin (the last set, so no
+other keyword's FormID moves), its set out of furniture_anim_pack. Its clips, for later: Enter / Spin / Exit of
+blacksmithsharpeningwheel*.hkx on Skyrim's wheel marker. Unresolved: whether the tanning rack stopped because of the
+grindstone, the forge sharing its template, or NPC save state; the owner's next test after this rebuild tells.
+

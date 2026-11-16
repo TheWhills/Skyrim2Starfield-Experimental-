@@ -60,7 +60,7 @@ class PackTests(unittest.TestCase):
                  ("alchemy", "CraftingAlchemyWorkbench"): "Alchemy",
                  ("workbench", "CraftingEnchantingWorkbenchTabletop"): "Enchant",
                  ("forge", "CraftingBlackSmithForge"): "Forge",
-                 ("grindstone", "CraftingBlacksmithSharpeningWheel"): "Grindstone",
+                 ("weapon_bench", "CraftingBlacksmithSharpeningWheel"): None,       # Grindstone set removed
                  ("workbench", "CraftingSmelterMarker1"): None, ("cook", "CraftingCookingPotSm"): "Cook",
                  ("scrape", "CraftingTanningRackMarker"): "Tanning", ("bed", "CommonBed01"): None}
         for (kind, edid), want in cases.items():
@@ -81,12 +81,7 @@ class PackTests(unittest.TestCase):
         self.assertTrue(rep.startswith(P.SKY_ANIM + both + "::"), rep)
         self.assertEqual(d["enterinstant.afx"], "blacksmithforgehammer.hkx")      # spawned at work: props loaded
         self.assertEqual(P.COM_SHIFT["Forge"], (0.0, 0.0))
-        folder, tpl, rows = P.SETS["Grindstone"]
-        self.assertTrue(tpl.endswith("standing_wipewall"))
-        d = dict((r[0], r[1]) for r in rows)
-        self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["exittostand.afx"]),
-                         ("blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelspin.hkx",
-                          "blacksmithsharpeningwheelexit.hkx"))
+        self.assertNotIn("Grindstone", P.SETS)                                   # removed 2026-11-16 (owner)
 
     def test_forge_props(self):
         """2026-11-16: the Forge set loads Skyrim's hammer and iron itself on entering, unequips them on exiting, and

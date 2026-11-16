@@ -88,7 +88,7 @@ FURNITURE_SETS = (
     ("Tanning", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_tanning"),
     # 2026-11-16: the forge and the sharpening wheel on the wall-wipe NPC work template (make_furniture.TEMPLATES)
     ("Forge", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_forge"),
-    ("Grindstone", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_grindstone"),
+    # ("Grindstone", ...) removed 2026-11-16 (owner): it was last, so no other keyword's FormID moves
 )
 FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
 
