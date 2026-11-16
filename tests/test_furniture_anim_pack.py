@@ -135,6 +135,13 @@ class PackTests(unittest.TestCase):
         self.assertIn("<tag>RearEnterFromStand</tag>", text)
         self.assertEqual(clip, ("RearEnterFromStand.af", b"REAR"))       # read by its lower-case archive name
         self.assertIn("idle.afx", P.vanilla_leftovers(sorted(files), files.get, [chair, common], set()))
+        inst = chair + "enterinstant.afx"                     # no hand IK, but the random-sit graph: copied, swapped
+        files[inst] = (b"<root><tag>EnterInstant</tag><filename>EnterInstant.af</filename><events><event><name>"
+                       b"LoadFurnitureGraph</name><payload>G\\FurnitureRandomSitChair.agx</payload></event></events>"
+                       b"</root>")
+        got = P.vanilla_leftovers(sorted(files), files.get, [chair], {"Idle"}, graph_swaps=P.GRAPH_SWAP["Sit"])
+        self.assertIn("FurnitureGenericSit.agx", got["enterinstant.afx"][0])
+        self.assertNotIn("enterinstant.afx", P.vanilla_leftovers(sorted(files), files.get, [chair], {"Idle"}))
 
     def test_unanswered_tags(self):
         """Tags of the template folders ours do not answer: idle-like ones flagged, enters / exits / look / camera not;
@@ -168,6 +175,16 @@ class PackTests(unittest.TestCase):
         self.assertEqual(got, {"analyze_idle.af": "Idle.af", "confident_idle_flavor02.af": "Idle_Flavor02.af",
                                "crosslegs_talk_l01.af": "Talk_L01.af",
                                "relaxed_idlepartialbody_flavor01_handsbehind.af": "Idle.af"})
+
+    def test_swap_graph(self):
+        t = ("<root><events><event><name>LoadFurnitureGraph</name><payload>AnimTextData\\Tables\\Graphs\\"
+             "FurnitureRandomSitChair.agx</payload></event><event><name>CullBone</name><payload>C_BackPack</payload>"
+             "</event></events></root>")
+        got = P.swap_graph(t, P.GRAPH_SWAP["Sit"])
+        self.assertIn("<payload>AnimTextData\\Tables\\Graphs\\FurnitureGenericSit.agx</payload>", got)
+        self.assertIn("<payload>C_BackPack</payload>", got)
+        self.assertEqual(P.swap_graph(got, P.GRAPH_SWAP["Sit"]), got)                   # already swapped
+        self.assertEqual(P.swap_graph(t, {}), t)
 
     def test_leftover_folders(self):
         f = P.leftover_folders("Sit")

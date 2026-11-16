@@ -400,3 +400,9 @@ Owner's S2SCombat log (2026-11-15, player sitting on our chair): the sit-down se
 template), then idleChairSitting, IdleFlavor (+2 s), FlavorEnd (+13 s), IdleFlavor (+14 s). So a second graph, Starfield's
 random-sit chair graph, runs on our chairs with its own flavors; every earlier check covered FurnitureHeadTracking_Wrapping
 only. furniture_graph_probe --graph FurnitureRandomSitChair resolves its tags.
+Owner's listing of LoadFurnitureGraph payloads in Starfield's furniture descriptors (2026-11-15): FurnitureRandomSitChair
+41 (bar stools, benches, chairs), FurnitureGenericSit 45 (executive chairs, character creation, console seats),
+FurnitureFireWeapon 8, FurnitureSyncIdle 13. FurnitureRandomSitChair exposes one unnamed animation node and reacts to
+IdleSitting (furniture_graph_probe --graph): its clips are chosen at run time. The Sit set's descriptors, ours and the
+Starfield ones copied into our folder (EnterInstant: NPCs already seated when the cell loads), now load
+FurnitureGenericSit instead (GRAPH_SWAP, swap_graph). Unverified in game.

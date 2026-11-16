@@ -226,7 +226,7 @@ def _clip_name(afx_text: str):
     return m.group(1) if m else None
 
 
-def vanilla_leftovers(names, read, folders, have_tags, keep_props=False) -> dict:
+def vanilla_leftovers(names, read, folders, have_tags, keep_props=False, graph_swaps=None) -> dict:
     """{file name: (descriptor text, clip bytes or None)} for the descriptors directly in `folders` (archive folders,
     first wins per tag) whose tag is not in `have_tags` (lower case) and that change when bEnableHandIK / prop events
     are left out. names: normalised archive names; read(name) -> bytes."""
@@ -245,6 +245,8 @@ def vanilla_leftovers(names, read, folders, have_tags, keep_props=False) -> dict
             new = strip_variables(text)
             if not keep_props:
                 new = strip_events(new)
+            if graph_swaps:
+                new = swap_graph(new, graph_swaps)
             if new == text:
                 continue
             clip = _clip_name(text)
@@ -327,6 +329,28 @@ def mood_variants(names, folders, our_clips) -> dict:
             if base is not None:
                 out[stem + ".af"] = our_clips[base]
     return out
+
+
+# The graph our sit-down loads (2026-11-15, owner's S2SCombat log: our chair enter sends LoadFurnitureGraph
+# FurnitureRandomSitChair.agx, copied with Starfield's chair descriptor, which then runs IdleFlavor / FlavorEnd of its own:
+# the brief arms-back slump that survived every tag we answered). Starfield's descriptors load 4 furniture graphs
+# (owner's listing): FurnitureRandomSitChair (41: bar stools, benches, chairs), FurnitureGenericSit (45: executive
+# chairs, character creation, console seats), FurnitureFireWeapon, FurnitureSyncIdle. Ours load the plain sitting one.
+GRAPH_SWAP = {"Sit": {"furniturerandomsitchair.agx": "FurnitureGenericSit.agx"}}
+
+
+def swap_graph(afx_text: str, swaps: dict) -> str:
+    """The descriptor with each LoadFurnitureGraph payload whose file name is a key of `swaps` (lower case) replaced
+    by the value, keeping the folder."""
+    import re
+
+    def one(m):
+        path = m.group(2)
+        head, _, name = path.replace("/", "\\").rpartition("\\")
+        new = swaps.get(name.lower())
+        return m.group(1) + ((head + "\\" if head else "") + new if new else path) + m.group(3)
+    return re.sub(r"(<name>\s*LoadFurnitureGraph\s*</name>.*?<payload>\s*)([^<]*?)(\s*</payload>)", one, afx_text,
+                  flags=re.S)
 
 
 def parse_pair(value):
@@ -426,7 +450,7 @@ def main(argv=None):
         dst = os.path.join(a.out, *folder.split("\\"))
         os.makedirs(dst, exist_ok=True)
         files = sorted(f for f in os.listdir(src) if f.lower().endswith((".af", ".afx"))) if os.path.isdir(src) else []
-        stripped = props = 0
+        stripped = props = graphs_swapped = 0
         for f in files:
             if f.lower().endswith(".afx"):
                 with open(os.path.join(src, f), encoding="utf-8", errors="replace") as fh:
@@ -437,6 +461,10 @@ def main(argv=None):
                     plain = strip_events(new)
                     props += plain != new
                     new = plain
+                if GRAPH_SWAP.get(st):
+                    swapped = swap_graph(new, GRAPH_SWAP[st])
+                    graphs_swapped += swapped != new
+                    new = swapped
                 with open(os.path.join(dst, f), "w", encoding="utf-8", newline="") as fh:
                     fh.write(new)
             else:
@@ -498,7 +526,7 @@ def main(argv=None):
                 print(f"{st}: {len(variants)} mood / upper-body variants answered with our clips "
                       f"({len({n.split('_')[0] for n in variants})} prefixes)")
             left = vanilla_leftovers(sf_arcs.names, sf_arcs.read, leftover_folders(st), have,
-                                     st in KEEP_PROPS)
+                                     st in KEEP_PROPS, GRAPH_SWAP.get(st))
             for name, (text, clip) in left.items():
                 with open(os.path.join(dst, name), "w", encoding="utf-8", newline="") as fh:
                     fh.write(text)
@@ -507,7 +535,10 @@ def main(argv=None):
                         fh.write(clip[1])
             if left:
                 print(f"{st}: Starfield's own {', '.join(sorted(_tag(t) for t, _c in left.values()))} "
-                      f"copied with {', '.join(DROP_VARIABLES)} / prop events left out")
+                      f"copied with {', '.join(DROP_VARIABLES)} / prop events left out, our graph")
+        if graphs_swapped:
+            print(f"{st}: {graphs_swapped} descriptors load {', '.join(GRAPH_SWAP[st].values())} instead of "
+                  f"{', '.join(GRAPH_SWAP[st])}")
         print(f"{st}: {', '.join(DROP_VARIABLES)} left out of {stripped} descriptors"
               + (f", Starfield's prop events of {props}" if props else "")
               + (f"; Idle copied into {talk} talk / upper-body slots" if talk else ""))
