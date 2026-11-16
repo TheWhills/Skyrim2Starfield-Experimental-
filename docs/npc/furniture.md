@@ -414,3 +414,7 @@ female too; moved to C:\Modding\work\old_chair_test_backup). Every fall-back to 
 graph's flavors, mood variants) played that old conversion: "the exact same way it always has". Also seen: about 25
 old SkyrimMelee_* test mods each with meleeattacks.agx / player_melee.agx (the lowest enabled one wins). The Creation
 Kit's DynamicIdleData (per set, the random idle lists) is now copied with the cache too. In game unverified.
+Verified in game (owner, 2026-11-15): with SkyrimChairs_replace / SkyrimChairIdle_replace off and the loose chair files
+moved out, the seated slump is gone ("appears fixed"). The talk / upper-body / mood-variant copies, the animflavor
+answers and the FurnitureGenericSit swap stay: each keeps a Starfield clip from playing over ours, and sitting works
+with them.
