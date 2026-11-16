@@ -111,9 +111,11 @@ SETS = {
     # in skyrim they usually also pull the ropes on the forge"): an NPC placed at the forge enters instantly (the
     # Hammer), so the Pull, the only clip at the fire, never played. Discard + Pull (hkx_to_af CLIP A+B, retarget.concat)
     # is Skyrim's other trough branch played through to the hammering pose: flavors alternate Temper / Discard + Pull.
-    "Forge": standing_set("s2s_forge", "standing_wipewall", "blacksmithforgehammer.hkx",
+    # 2026-11-16 (owner's A/B): on the welder's folder (furniture\welder: Enter / EnterInstant / Exit / QuickExit,
+    # Idle and 4 flavors; owner's furniture_anim_survey --template), not the tanning rack's wall-wipe one.
+    "Forge": standing_set("s2s_forge", "welder", "blacksmithforgehammer.hkx",
                           ("blacksmithforgetemper.hkx", "blacksmithforgediscard.hkx+blacksmithforgepull.hkx"),
-                          "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 5, instant=True),
+                          "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 4, instant=True),
     # The Grindstone set (Skyrim's sharpening wheel: Enter / Spin / Exit on the wall-wipe template) was removed
     # 2026-11-16 (owner: "Can we remove the grindstone stuff for now"); docs/npc/furniture.md keeps its clips.
 }

@@ -629,4 +629,12 @@ Sweep, Bartender. Standing candidates with a keyword of their own and enter / ex
 (003B2A66), NPCStandingRummage (00122F06). The header flags of NPCRepair_ToolStanding_Hammer (IgnoredBySandbox per
 SfInspect) equal NPCStanding_WipeWall's (0x10812010), so that flag lives elsewhere in the record. Before moving the
 forge, furniture_anim_survey --template FORMID=EDID reads the candidates' folders (slot names, flavor counts).
+**The forge on its own template** (2026-11-16 18:06): furniture_anim_survey --template (owner's): the welder
+(NPCWelder 0025B9D1, AnimFurnWelder, FurnitureClassWork, enter / exit through geometry) plays furniture\welder:
+EnterFromStand, EnterInstant, ExitToStand, QuickExitToStand, Idle, Idle_Flavor01-04, LookDirections(_Head), on
+FurnitureHeadTracking_Wrapping like the wall-wipe. The Forge set moves there (make_furniture "forge" -> NPCWelder,
+stance_plugin Forge on AnimFurnWelder, the pack on furniture\welder with 4 flavors: Temper, Discard + Pull twice), and
+the tanning rack has NPCStanding_WipeWall to itself again. Unresolved: whether Alvor then walks into the forge (the
+rail / wall / counter leans share AnimFurnLeaningBartopFront and all work, so sharing alone may not be the whole story;
+the forge's own walk-in, a 13.9 s Pull without root motion, is the other suspect).
 

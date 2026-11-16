@@ -76,7 +76,10 @@ TEMPLATES = {
     # forge and the grindstone, which play our Skyrim clips, become NPC work furniture on the wall-wipe template
     # (FurnitureClassWork, not ignored by sandbox; the tanning rack's): Starfield's crafting menu is lost (it did not
     # open anyway); Skyrim's animations, props and spot are kept
-    "forge": ("0003C420", "NPCStanding_WipeWall"),                 # Skyrim's blacksmith forge (Forge set)
+    # 2026-11-16 (owner's A/B, verified: Hilde tans by herself once the forge is not on her rack's template): two of
+    # our sets on one Starfield template stop NPCs walking into either, so the forge has one of its own: the welder,
+    # standing NPC work furniture (FurnitureClassWork, AnimFurnWelder; work_templates.py, furniture_anim_survey)
+    "forge": ("0025B9D1", "NPCWelder"),                            # Skyrim's blacksmith forge (Forge set)
 }
 SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
            "scrape", "forge",

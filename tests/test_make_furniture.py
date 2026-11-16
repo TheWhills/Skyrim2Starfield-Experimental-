@@ -195,7 +195,8 @@ class MakeFurnitureTests(unittest.TestCase):
         for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench", "scrape", "forge"):
             self.assertIn(k, M.TEMPLATES)
         # 2026-11-16: the forge / wheel are NPC work furniture (the wall-wipe template: FurnitureClassWork)
-        self.assertEqual(M.TEMPLATES["forge"][1], "NPCStanding_WipeWall")
+        self.assertEqual(M.TEMPLATES["forge"][1], "NPCWelder")              # its own (not the tanning rack's)
+        self.assertNotEqual(M.TEMPLATES["forge"][0], M.TEMPLATES["scrape"][0])
         self.assertIn("forge", M.SPECIAL)
         self.assertIn("scrape", M.SPECIAL)                                      # the wall-wipe marker's own offset
         # 2026-11-09: Skyrim's crafting markers sit at the origin (its animations stand off): the template's markers
