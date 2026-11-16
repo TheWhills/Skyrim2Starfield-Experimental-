@@ -618,4 +618,9 @@ tanning rack. riverwood_doors -SkipKind forge (make_furniture --skip-kind) build
 then tans by herself, sharing the template is the cause. Note on 13:34 ("it's working!"): an NPC who is in his work
 package when the cell loads is placed into the furniture directly (EnterInstant), which may be what was seen; walking
 in (EnterFromStand) is what fails now.
+**Verified** (owner, 17:55, the -SkipKind forge build): "she used the tanning rack". Two of our sets on one Starfield
+template (the forge and the tanning rack on NPCStanding_WipeWall / AnimFurnStanding_WipeWall) stop NPCs walking into
+either (forced in, both play). Mechanism unresolved (one guess: the walk-in data is kept per template / animation
+keyword, so one set's entry is used for the other). Each set gets its own template: work_templates.py (read-only)
+lists Starfield's FurnitureClassWork furniture by animation keyword, the ones our sets use marked, for the forge's.
 
