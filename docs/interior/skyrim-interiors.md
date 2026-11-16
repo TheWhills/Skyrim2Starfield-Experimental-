@@ -506,3 +506,10 @@ skyrim (Skyrim's falloff exponent), LIGHT_FLICKER template (Starfield's own fire
 movement is converted to metres), LIGHT_POWER 2 (8000 lm, as before the change). The build log's light lines now show
 falloff and flicker. Also seen: one inn light is 65.7 m at 64000 lm (colour 247,244,242: a Skyrim fill light with a
 huge radius, clamped at 16x).
+Owner, that build (10:53): "the flickering is still too much, it's controlling too much of the lighting itself, going
+from dark to light ... as opposed to being a subtle flicker. It's also slightly still too dark". The base's flicker
+(effect sequence, amplitude 1.33: made for a candle's own small light) swings the whole room. Now LIGHT_FLICKER subtle:
+the base's EffectSequenceComponent is removed and the plain flicker (FlickerEffect Flicker, as LGT_MemorialFire) runs
+at LIGHT_FLICKER_INTENSITY 0.15 every LIGHT_FLICKER_PERIOD 0.5 s, no movement; LIGHT_POWER 2.5 (10000 lm). Unresolved:
+the scale of FlickerIntensityAmplitude (vanilla values 0.8 - 1.33); the light lines print it with the flicker effect and
+the component count.

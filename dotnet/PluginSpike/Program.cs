@@ -146,7 +146,8 @@ static P3Float RotateOffset(P3Float v, P3Float r, float scale)
 // Optional per-cell lighting overrides: <output dir>/lighting.json = { "<cell>": { "LIGHTING_TEMPLATE": "06BCF8", ... },
 // "*": { ...defaults for every cell... } }. Keys: LIGHTING_TEMPLATE, IMAGE_SPACE, OMNI_LIGHT, LIGHT_MERGE_M; for cells
 // exported from Skyrim also SKYRIM_LIGHTS (0 = the plain omni), LIGHT_POWER, LIGHT_RADIUS_SCALE, LIGHT_TEMPERATURE
-// (skyrim | warm | keep), LIGHT_MIRED_SHIFT (for warm), LIGHT_FLICKER (skyrim | template), LIGHT_FALLOFF (keep | skyrim),
+// (skyrim | warm | keep), LIGHT_MIRED_SHIFT (for warm), LIGHT_FLICKER (skyrim | template | subtle,
+// with LIGHT_FLICKER_INTENSITY / _PERIOD), LIGHT_FALLOFF (keep | skyrim),
 // CELL_AMBIENT (template | skyrim), AMBIENT_SCALE (see "Skyrim lights"
 // below).
 // Lookup order: cell entry, "*" entry, environment variable, built-in default.
@@ -189,7 +190,9 @@ void SetProp(object o, string name, object value)
     var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
     try
     {
-        p.SetValue(o, t.IsInstanceOfType(value) ? value : Convert.ChangeType(value, t, CultureInfo.InvariantCulture));
+        p.SetValue(o, t.IsInstanceOfType(value) ? value
+                      : t.IsEnum && value is string es ? Enum.Parse(t, es)
+                      : Convert.ChangeType(value, t, CultureInfo.InvariantCulture));
     }
     catch (Exception e) { lightNotes.Add($"{o.GetType().Name}.{name} ({t.Name}): {e.GetType().Name}, not set"); }
 }
@@ -225,12 +228,18 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     // base's own flicker (Starfield's fire: period 1 s, its effect sequence) instead of Skyrim's (0.33 s, and a movement
     // in Skyrim units that was written as metres: 2 - 16 m of jitter); LIGHT_FALLOFF skyrim: Skyrim's falloff exponent
     // (1 on every Riverwood light) instead of the base's 2 (light dies off faster: the dark room)
+    // LIGHT_FLICKER subtle (owner 10:53 on "template": "going from dark to light because of the flicker as opposed to a
+    // subtle flicker": the base's flicker sequence swings the whole light, amplitude 1.33): the base's effect sequence is
+    // removed and the plain flicker (FlickerEffect Flicker, as LGT_MemorialFire) runs at LIGHT_FLICKER_INTENSITY, period
+    // LIGHT_FLICKER_PERIOD, no movement
     var flickerMode = Setting(cell, "LIGHT_FLICKER", "skyrim");
+    float flickerIntensity = float.Parse(Setting(cell, "LIGHT_FLICKER_INTENSITY", "0.15"), CultureInfo.InvariantCulture);
+    float flickerPeriod = float.Parse(Setting(cell, "LIGHT_FLICKER_PERIOD", "0.5"), CultureInfo.InvariantCulture);
     var falloffMode = Setting(cell, "LIGHT_FALLOFF", "keep");
     float radius = Math.Max(F("radius", 300f) / UnitsPerMetre, 1f) * rscale, fade = Math.Max(F("fade", 1f), 0.05f);
     bool flicker = L.TryGetProperty("flicker", out var fl) && fl.ValueKind == JsonValueKind.True;
     var key = string.Create(CultureInfo.InvariantCulture,
-        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{falloffMode}:{F("falloff_exponent", 1f):0.###}");
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}");
     if (lightBases.TryGetValue(key, out var have)) return have;
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
@@ -250,7 +259,17 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
         SetProp(nl, "PbrLuminousPowerLm", (uint)Math.Round(lm));
     }
     else lightNotes.Add($"template {template} has no PbrLuminousPowerLm: power not scaled");
-    if (flicker && flickerMode != "template")
+    if (flickerMode == "subtle")
+    {
+        if (GetProp(nl, "Components") is System.Collections.IList comps)
+            for (int ci = comps.Count - 1; ci >= 0; ci--)
+                if (comps[ci]?.GetType().Name.Contains("EffectSequence") == true) comps.RemoveAt(ci);
+        SetProp(nl, "FlickerEffect", flicker ? "Flicker" : "None");
+        SetProp(nl, "FlickerPeriod", flickerPeriod);
+        SetProp(nl, "FlickerIntensityAmplitude", flicker ? flickerIntensity : 0f);
+        SetProp(nl, "FlickerMovementAmplitude", 0f);
+    }
+    else if (flicker && flickerMode != "template")
     {
         SetProp(nl, "FlickerPeriod", F("flicker_period", 0.2f));
         SetProp(nl, "FlickerIntensityAmplitude", F("flicker_intensity", 0.2f));
@@ -263,7 +282,8 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"  light {nl.EditorID}: radius {tplRadius:0.##} -> {GetProp(nl, "Radius")} m, lumens {tplLm:0} -> {GetProp(nl, "PbrLuminousPowerLm")}, " +
             $"colour {cr},{cg},{cb}, {GetProp(nl, "PbrLightTemperatureK")} K, falloff {GetProp(nl, "FalloffExponent")}, flicker {(flicker ? flickerMode : "none")} " +
-            $"{GetProp(nl, "FlickerPeriod")} s x{GetProp(nl, "FlickerIntensityAmplitude")} move {GetProp(nl, "FlickerMovementAmplitude")}"));
+            $"{GetProp(nl, "FlickerPeriod")} s x{GetProp(nl, "FlickerIntensityAmplitude")} move {GetProp(nl, "FlickerMovementAmplitude")} " +
+            $"({GetProp(nl, "FlickerEffect")}, {(GetProp(nl, "Components") as System.Collections.ICollection)?.Count ?? 0} components)"));
     return nl.FormKey;
 }
 void SkyrimAmbient(Cell cell, string src4, JsonElement sl, FormKey templateKey)
