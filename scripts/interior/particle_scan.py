@@ -41,7 +41,7 @@ def main(argv=None):
     data = os.path.join(a.starfield, "Data")
     arcs = [os.path.join(data, f) for f in sorted(os.listdir(data)) if f.lower().endswith(".ba2")]
     seen, total, failed = set(), 0, 0
-    types, where = Counter(), defaultdict(list)
+    types, where, with_any = Counter(), defaultdict(list), 0
     for path in arcs:
         try:
             arc = ba2.Ba2(path)
@@ -63,12 +63,12 @@ def main(argv=None):
             except Exception:                                       # noqa: BLE001
                 failed += 1
                 continue
+            with_any += bool(found)
             for t in found:
                 types[t] += 1
                 if len(where[t]) < a.show:
                     where[t].append(n)
-    print(f"== {total} NIFs read ({failed} unreadable); with particle blocks: "
-          f"{len({p for v in where.values() for p in v}) if types else 0}+")
+    print(f"== {total} NIFs read ({failed} unreadable); with particle blocks: {with_any}")
     if not types:
         print("   none: no vanilla Starfield model carries a Gamebryo particle system")
     for t, c in types.most_common():
