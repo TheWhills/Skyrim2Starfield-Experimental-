@@ -407,3 +407,9 @@ is a standalone medium fire with a tall smoke plume, one per FireplaceWood01Burn
 Candles unchanged by design (Starfield's own candles are cards). Next: `-ParticleFire BASE[:SCALE]` (any Starfield.esm
 fire, scaled with the hearth) and `sf_fire_probe.py --only-psfx` (every record using a .psfx, fire-like ones with
 their particle files and size) to choose a hearth-like fire (firemed02, firegenericflame, firepit_armisticearchives_01).
+sf_fire_probe --only-psfx (owner, 2026-11-15): 853 records use a .psfx. Placeable fires (MSTT): FireMed01 00C78D
+(firemed01), FireMed02 1CEDAB (firemed02), FXP_MemorialFire 004630 (firegenericflame), FXArmisticeArchives_
+MemorialFire_01 20D560 (firepit_armisticearchives_01: a fire pit), FireGeneric_OIT 3E3C86 (firegeneric_oit, 2 m radius
+marker). Comparison build: `-ParticleFire 004630,20D560,1CEDAB`: PluginSpike gives the k-th fire placed in the plugin
+choice k mod n (the Sleeping Giant pit's three fires = the three candidates side by side; its log prints each fire's
+base and position).

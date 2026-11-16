@@ -396,7 +396,7 @@ class ParticleFireChoiceTest(unittest.TestCase):
     def test_chosen_fire_and_scale_reach_the_effects(self):
         from fo4sf import skyrimconvert
         c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
-        c.flame_style, c.particle_fire = "particles", ("004630", 0.6)
+        c.flame_style, c.particle_fire = "particles", [("004630", 0.6)]
         orig = skyrimfire.particle_systems
         skyrimfire.particle_systems = lambda n: [ParticleStyleTest.SYSTEM]
         try:
@@ -404,6 +404,16 @@ class ParticleFireChoiceTest(unittest.TestCase):
         finally:
             skyrimfire.particle_systems = orig
         self.assertEqual((fx[0]["base"], fx[0]["scale"]), ("004630", 0.6))
+        self.assertNotIn("choices", fx[0])
+        c.particle_fire = [("004630", 1.0), ("20D560", 0.8)]
+        skyrimfire.particle_systems = lambda n: [ParticleStyleTest.SYSTEM]
+        try:
+            fx = c.model_fire_effects(object())
+        finally:
+            skyrimfire.particle_systems = orig
+        self.assertEqual(fx[0]["choices"], [{"base": "004630", "scale": 1.0}, {"base": "20D560", "scale": 0.8}])
+        prog = open(os.path.join(HERE, "..", "dotnet", "PluginSpike", "Program.cs")).read()
+        self.assertIn("fxRotation++ % fxKeys.Length", prog)
         cs = open(os.path.join(HERE, "..", "dotnet", "PluginSpike", "Program.cs")).read()
         self.assertIn("fxo.Scale = scale * fxScale", cs)
 

@@ -203,16 +203,20 @@ def flame_key(a) -> str:
     return h.hexdigest()[:16]
 
 
-def parse_particle_fire(spec: str):
-    """--particle-fire "BASE[:SCALE]" (a Starfield.esm form id in hex, a scale) -> (base, scale); "" = the defaults."""
+def parse_particle_fire(spec: str) -> list:
+    """--particle-fire "BASE[:SCALE][,BASE[:SCALE]...]" (Starfield.esm form ids in hex, scales) -> [(base, scale)];
+    "" = the default fire. Several = A/B: the plugin gives the k-th fire placed choice k mod n."""
     from fo4sf import skyrimfire
     if not spec:
-        return skyrimfire.PARTICLE_FIRE_BASE, skyrimfire.PARTICLE_FIRE_SCALE
-    base, _, scale = spec.partition(":")
-    base = base.strip().upper()
-    if not re.fullmatch(r"[0-9A-F]{1,8}", base):
-        raise ValueError(f"--particle-fire: {spec!r}: want a hex form id, e.g. 00C78D or 00C78D:0.6")
-    return base.zfill(6)[-6:], float(scale) if scale else skyrimfire.PARTICLE_FIRE_SCALE
+        return [(skyrimfire.PARTICLE_FIRE_BASE, skyrimfire.PARTICLE_FIRE_SCALE)]
+    out = []
+    for part in spec.split(","):
+        base, _, scale = part.strip().partition(":")
+        base = base.strip().upper()
+        if not re.fullmatch(r"[0-9A-F]{1,8}", base):
+            raise ValueError(f"--particle-fire: {part!r}: want a hex form id, e.g. 00C78D or 00C78D:0.6")
+        out.append((base.zfill(6)[-6:], float(scale) if scale else skyrimfire.PARTICLE_FIRE_SCALE))
+    return out
 
 
 def flame_relevant(r: dict) -> bool:
@@ -1050,8 +1054,9 @@ def main(argv=None):
                     help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, or "
                          "(particles) hearths as Starfield's own particle fire (docs/interior/skyrim-interiors.md)")
     ap.add_argument("--particle-fire", default="",
-                    help="convert, --flame-style particles: the Starfield fire to place, BASE[:SCALE] (default "
-                         "00C78D = FireMed01 at scale 1; sf_fire_probe.py --only-psfx lists the others)")
+                    help="convert, --flame-style particles: the Starfield fire to place, BASE[:SCALE], or several "
+                         "comma-separated to compare side by side (default 00C78D = FireMed01 at scale 1; "
+                         "sf_fire_probe.py --only-psfx lists the others)")
     a = ap.parse_args(argv)
     need = {"export": ("skyrim", "work"), "select": ("work", "terrain"),
             "convert": ("work", "skyrim_data", "content_resources", "texconv"),

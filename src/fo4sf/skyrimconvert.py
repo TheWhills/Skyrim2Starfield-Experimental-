@@ -657,9 +657,17 @@ class SkyrimConverter(pipeline.Converter):
             flames = [f for f in (skyrimfire.particle_flame(ps) for ps in skyrimfire.particle_systems(src)) if f]
         except Exception:                                           # noqa: BLE001
             return []
-        base, scale = getattr(self, "particle_fire", (skyrimfire.PARTICLE_FIRE_BASE, skyrimfire.PARTICLE_FIRE_SCALE))
-        return [{"base": base, "scale": scale, "offset_m": [round(c * UNIT, 4) for c in f["origin"]]}
-                for f in flames]
+        choices = getattr(self, "particle_fire", None) or [(skyrimfire.PARTICLE_FIRE_BASE,
+                                                             skyrimfire.PARTICLE_FIRE_SCALE)]
+        if isinstance(choices, tuple):                 # one (base, scale)
+            choices = [choices]
+        out = []
+        for f in flames:
+            e = {"base": choices[0][0], "scale": choices[0][1], "offset_m": [round(c * UNIT, 4) for c in f["origin"]]}
+            if len(choices) > 1:                       # A/B: the plugin rotates through these
+                e["choices"] = [{"base": b, "scale": sc} for b, sc in choices]
+            out.append(e)
+        return out
 
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
