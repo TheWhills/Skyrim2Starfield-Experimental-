@@ -395,3 +395,8 @@ every such variant name into our folder (mood_variants); LookDirections variants
 Verified (owner's anim_cache_clips on the regenerated CK cache, 2026-11-15): after mood_variants (Sit 352 variants,
 the other sets 95-119 each, mostly the upper-body prop variants) the clips the s2s_sit cache files resolve elsewhere
 fell from 862 to 121: the game does find mood variants by file name in our folder. In game unverified.
+Owner's S2SCombat log (2026-11-15, player sitting on our chair): the sit-down sends LoadFurnitureGraph
+'AnimTextData\Tables\Graphs\FurnitureRandomSitChair.agx' (an event our enter descriptors carry from Starfield's chair
+template), then idleChairSitting, IdleFlavor (+2 s), FlavorEnd (+13 s), IdleFlavor (+14 s). So a second graph, Starfield's
+random-sit chair graph, runs on our chairs with its own flavors; every earlier check covered FurnitureHeadTracking_Wrapping
+only. furniture_graph_probe --graph FurnitureRandomSitChair resolves its tags.

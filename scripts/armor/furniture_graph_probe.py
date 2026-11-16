@@ -45,6 +45,9 @@ def folder_tags(names, read, folder: str) -> dict:
     return out
 
 
+events_of = {}      # graph name -> the events its links react to (graph_tags fills it)
+
+
 def graph_tags(names, read, graph: str, seen=None) -> dict:
     """{graph name: (tags, alterations)} for a graph and every graph it links (recursively)."""
     seen = {} if seen is None else seen
@@ -61,6 +64,7 @@ def graph_tags(names, read, graph: str, seen=None) -> dict:
         seen[key] = (f"not read: {type(e).__name__}", None)
         return seen
     seen[key] = (sorted(set(s["tags"])), s["tag_alterations"])
+    events_of[key] = s["events"]
     for ref in s["graph_refs"]:
         graph_tags(names, read, ref, seen)
     return seen
@@ -87,6 +91,10 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--keyword", action="append", required=True)
     ap.add_argument("--ours", help="our set's folder on disk (its descriptors' tags count as answered)")
+    ap.add_argument("--graph", action="append", default=[],
+                    help="another graph to resolve (repeatable), e.g. FurnitureRandomSitChair: 2026-11-15 the owner's "
+                         "S2SCombat log showed our chair enter sending LoadFurnitureGraph with that graph, then "
+                         "IdleFlavor / FlavorEnd from it")
     a = ap.parse_args(argv)
     import furniture_anim_survey as S
     import stance_plugin
@@ -120,6 +128,8 @@ def main(argv=None):
               + ", ".join(f"{p} ({len(tags_by_folder[c])})" for p, c in zip(paths, chain)))
         if graph:
             graph_tags(arcs.names, arcs.read, graph, graphs)
+    for g in a.graph:
+        graph_tags(arcs.names, arcs.read, g, graphs)
     ours = set()
     if a.ours and os.path.isdir(a.ours):
         for fn in os.listdir(a.ours):
@@ -134,6 +144,8 @@ def main(argv=None):
             print(f"== graph {g}: {tags or 'not found'}")
             continue
         print(f"== graph {g}: {len(tags)} tags" + (f"; tag alterations {alters}" if alters else ""))
+        if events_of.get(g):
+            print(f"   events: {', '.join(events_of[g])}")
         for t in tags:
             r = resolve(t, chains, tags_by_folder, ours)
             print(f"  {t:32s} " + (r if isinstance(r, str) else ("; ".join(r) if r else "no folder answers it")))
