@@ -364,6 +364,8 @@ class FurnitureAnimEntriesTests(unittest.TestCase):
                 for n, f in (("AnimFurnChair", CHAIR), ("AnimFurnBench", BENCH), ("Female", FEMALE),
                              ("AnimFurnBed", OTHER))]
         recs.append((b"RACE", hdr(b"RACE"), race, 0x00003CDB))
+        recs.append((b"ANIO", hdr(b"ANIO"), [(b"EDID", z_("AnimObjectBroom")), (b"MODL", z_("AnimObjects\\broom.nif")),
+                                             (b"FLLD", b"\x01\0\0\0")], 0x00190D68))
         table = ("Role\tPerspective\tActor Keyword\tTarget Keyword\tBehavior\tPaths\n"
                  "Furniture\t3rd\tFemale\tAnimFurnChair\tF.agx\tactors\\human\\animations\\furniture\\chair\\female\n"
                  "Furniture\t3rd\tAnimArchetypePirate\tAnimFurnBench\tF.agx\tx\n"            # unknown keyword: skipped
@@ -387,6 +389,12 @@ class FurnitureAnimEntriesTests(unittest.TestCase):
             self.assertEqual(mine[0]["paths"][1:], ["actors\\human\\animations\\furniture\\chair"])
             self.assertEqual(ents.index(mine[0]), 0)                             # first: one keyword more
             self.assertEqual(rep["furniture"]["Sit"]["entries"], 2)
+            # Skyrim's broom (2026-11-15): a copy of the vanilla ANIO with our model, at its fixed FormID
+            anio = {sfplugin.edid(s_): (fid, dict(s_)) for _t, _h, s_, fid in sfplugin.records(out, [b"ANIO"])}
+            fid, subs = anio["S2S_AnimObjectBroomSkyrim"]
+            self.assertEqual(fid, sfplugin.new_form_id(SP.PROP_INDEX))
+            self.assertEqual(bytes(subs[b"MODL"]).rstrip(b"\0").decode(), SP.PROP_OBJECTS[0][2])
+            self.assertEqual(bytes(subs[b"FLLD"]), b"\x01\0\0\0")
             # with the generated table: its third-person chair / bench rows too (unknown keywords skipped)
             _d, rep2 = SP.build(esm, stances=SP.STANCES, table_text=table, weapon_types=())
             self.assertEqual(rep2["furniture"]["Sit"]["entries"], 3)

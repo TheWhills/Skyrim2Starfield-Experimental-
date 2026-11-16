@@ -61,6 +61,12 @@ RACE_EDID = "HumanRace"
 # folder lacks falls back to the vanilla folders after it). Keywords from FURN_INDEX on (after stances and types).
 # Lives here, not in its own plugin: one HumanRace override only can win.
 FURN_INDEX = 16
+# Animation objects of Skyrim's props (2026-11-15, owner: convert Skyrim's broom for the Sweep set): (our EditorID, the
+# vanilla ANIO copied, our model under meshes\). Fixed FormIDs from PROP_INDEX. The model comes from
+# scripts/armor/anim_object_convert.py (Skyrim's clutter broom, attached to R_AnimObject1: our sweep clips key that
+# bone where Skyrim holds AnimObjectR).
+PROP_INDEX = 48
+PROP_OBJECTS = (("S2S_AnimObjectBroomSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\BroomSkyrim.nif"),)
 _FURN = "actors\\human\\animations\\furniture\\"
 # (set, the vanilla furniture keywords whose entries are copied with the set's keyword, the set's folder). The keyword
 # FormIDs follow this order (FURN_INDEX + position): add new sets at the end. Counter: Skyrim's counter-lean markers are
@@ -248,10 +254,10 @@ def race_with_stances(subs, keywords: dict, first_person: bool = False, table_ro
 
 
 def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text=None, common: bool = True,
-          weapon_types=WEAPON_TYPES, furniture_sets=FURNITURE_SETS):
+          weapon_types=WEAPON_TYPES, furniture_sets=FURNITURE_SETS, prop_objects=PROP_OBJECTS):
     """(plugin bytes, report) from Starfield.esm (+ the generated HumanRace table text, read from the archives)."""
     info = sfplugin.header_info(esm_path)
-    recs = sfplugin.records(esm_path, [b"KYWD", b"RACE"])
+    recs = sfplugin.records(esm_path, [b"KYWD", b"RACE", b"ANIO"])
     kywd = next((r for r in recs if r[0] == b"KYWD"), None)
     keyword_ids = {sfplugin.edid(r[2]).lower(): r[3] for r in recs if r[0] == b"KYWD" and sfplugin.edid(r[2])}
     rows = player_weapon_rows(parse_table(table_text)) if table_text else None
@@ -291,6 +297,16 @@ def build(esm_path: str, stances=STANCES, first_person: bool = False, table_text
         at = next(i for i, (s_, _d) in enumerate(race_subs) if s_ in subgraph.FIELDS)
         race_subs = list(race_subs[:at]) + furn + list(race_subs[at:])        # one keyword more: first
     out.append((b"RACE", race[1], race_subs, race[3]))
+    rep["props"] = {}
+    for j, (edid, vanilla, model) in enumerate(prop_objects):
+        src = next((r for r in recs if r[0] == b"ANIO" and sfplugin.edid(r[2]).lower() == vanilla.lower()), None)
+        if src is None:
+            rep["props"][edid] = f"no vanilla ANIO {vanilla}"
+            continue
+        fid = sfplugin.new_form_id(PROP_INDEX + j)
+        out.append((b"ANIO", src[1], sfplugin.edit(src[2], {b"EDID": sfplugin.zs(edid), b"MODL": sfplugin.zs(model)}),
+                    fid))
+        rep["props"][edid] = {"form": f"{fid:08X}", "copy_of": vanilla, "model": model}
     rep["keywords"] = {keyword_edid(s): f"{fid:08X}" for s, fid in keywords.items()}
     rep["type_keywords"] = {type_keyword_edid(t): f"{fid:08X}" for t, fid in types.items()}
     rep["type_folders"] = {t: type_folder(t) for t in types}

@@ -424,3 +424,16 @@ set but no broom in hand, arms placed for one. Owner's choice: convert Skyrim's 
 Needs: the broom NIF as a Starfield animation object, an ANIO record, our Sweep descriptors' AnimObjLoad / Draw naming
 it, and the prop bone (Skyrim AnimObjectR -> R_AnimObject1, now in NOT_ANIMATED) keyed in the sweep clips.
 scripts/armor/anim_object_probe.py gathers both games' facts first.
+Skyrim's broom (2026-11-15, owner's anim_object_probe): Skyrim has no broom ANIO; its only broom mesh is
+meshes\clutter\common\broom.nif (no Prn, collision). Skyrim's sweep clip (animobjectsweepingidlebase, 275 frames) holds
+AnimObjectR (under NPC R Hand; rest t (0, -2.43, 7.16)) fixed at t (-24.62, -23.43, 14.21) units, q (-0.3023, -0.7091,
+-0.551, -0.3199): the prop rides rigidly in the right hand ~0.53 m from the wrist (the handle held, the head below).
+Starfield: AnimObjectBroom (00190D68) model AnimObjects\animobjectbroom.nif, Prn AnimObjectA (under Root); its sweep idle
+keys AnimObjectA / C / D, R_AnimObject1 (under R_Wrist, identity rest) and Weapon; the template's enter / enterinstant
+send AnimObjLoad / AnimObjDraw AnimObjectBroom, the exits AnimObjUnequipAll. Built: retarget.place_props (a Starfield prop
+bone takes Skyrim's prop world rotation and its world offset from the hand, from the Starfield hand) via hkx_to_af
+--prop AnimObjectR=R_AnimObject1 (the bone then written, not NOT_ANIMATED); furniture_anim_pack SET_PROPS (Sweep) and
+PROP_SWAP (its AnimObj payloads AnimObjectBroom -> S2S_AnimObjectBroomSkyrim); stance_plugin.PROP_OBJECTS (ANIO copy of
+AnimObjectBroom, model S2S\AnimObjects\BroomSkyrim.nif, FormID PROP_INDEX 48); anim_object_convert.py (Skyrim's broom
+converted, root renamed, Prn R_AnimObject1, collision dropped). Assumption (supported): Skyrim's animation-object broom
+had the clutter broom's geometry origin at AnimObjectR. Unverified in game.

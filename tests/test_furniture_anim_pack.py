@@ -186,6 +186,16 @@ class PackTests(unittest.TestCase):
         self.assertEqual(P.swap_graph(got, P.GRAPH_SWAP["Sit"]), got)                   # already swapped
         self.assertEqual(P.swap_graph(t, {}), t)
 
+    def test_swap_anim_objects(self):
+        t = ("<root><events><event><name>AnimObjLoad</name><payload>AnimObjectBroom</payload></event>"
+             "<event><name>AnimObjDraw</name><payload>animobjectbroom</payload></event>"
+             "<event><name>SoundPlay</name><payload>AnimObjectBroom</payload></event></events></root>")
+        got = P.swap_anim_objects(t, P.PROP_SWAP["Sweep"])
+        self.assertEqual(got.count("S2S_AnimObjectBroomSkyrim"), 2)
+        self.assertIn("<name>SoundPlay</name><payload>AnimObjectBroom</payload>", got)    # not an AnimObj event
+        self.assertIn("--prop", P.hkx_args(type("A", (), {"calumi": "c", "skyrim_data": "s", "starfield": "f"})(),
+                                           "w", "x", [], com=(0, 0), props=P.SET_PROPS["Sweep"]))
+
     def test_leftover_folders(self):
         f = P.leftover_folders("Sit")
         self.assertEqual([x.split("furniture\\")[-1] for x in f],

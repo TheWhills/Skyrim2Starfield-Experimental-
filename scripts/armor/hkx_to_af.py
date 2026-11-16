@@ -204,6 +204,17 @@ def load_motion_data(paths, project, behaviors_dir=None):
     return animdata.clip_motion(proj, generators, report), report
 
 
+def parse_props(specs) -> dict:
+    """--prop SKYRIM=STARFIELD (repeatable) -> {Skyrim bone: Starfield bone}."""
+    out = {}
+    for spec in specs or []:
+        a, _, b = spec.partition("=")
+        if not a.strip() or not b.strip():
+            raise SystemExit(f"--prop wants SKYRIM=STARFIELD, got {spec}")
+        out[a.strip()] = b.strip()
+    return out
+
+
 def parse_fit(specs):
     """--fit NAME=SECONDS -> {name lower: seconds}; NAME is the written clip (the vanilla target, e.g. MeleeBlock_Into)
     or the source clip's file name."""
@@ -291,6 +302,10 @@ def main(argv=None):
     ap.add_argument("--body-profiles", metavar="JSON",
                     help="body_profiles.py's body_profiles.json: hands near the body keep their place relative to its "
                          "surface on Starfield's differently proportioned body (retarget.keep_contacts)")
+    ap.add_argument("--prop", action="append", default=[], metavar="SKYRIM=STARFIELD",
+                    help="a hand-held prop bone (e.g. AnimObjectR=R_AnimObject1): the Starfield bone takes Skyrim's prop "
+                         "pose relative to the hand (retarget.place_props) and is written into the clip (not left out "
+                         "as NOT_ANIMATED), so an animation object attached to it sits in the hand as in Skyrim")
     ap.add_argument("--shoulder-calibration", metavar="JSON",
                     help="af_pose.py --calibrate-shoulders' output: clavicles turned so the shoulders sit as in "
                          "Starfield's clips (retarget.apply_shoulder_offsets)")
@@ -406,7 +421,8 @@ def main(argv=None):
     if a.clip_dir:
         for d, _ds, fns in os.walk(a.clip_dir):
             clips += [(os.path.join(d, f), None, None) for f in sorted(fns) if f.lower().endswith(".hkx")]
-    omit = tuple(skeletonmap.NOT_ANIMATED)
+    props = parse_props(a.prop)
+    omit = tuple(b for b in skeletonmap.NOT_ANIMATED if b not in props.values())
     if a.weapon_in_hand:                       # melee clips: these follow the weapon, as in vanilla combat clips
         omit = tuple(b for b in omit if b not in skeletonmap.WEAPON_FOLLOWERS)
     report = []
@@ -464,7 +480,9 @@ def main(argv=None):
             events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
             res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand, left_weapon=a.left_weapon,
                                     two_hand_grip=a.two_hand_grip, body_profiles=profiles,
-                                    shoulder_offsets=shoulders)
+                                    shoulder_offsets=shoulders, props=props or None)
+            if res.get("props"):
+                row["props"] = res["props"]
             if res.get("two_hand_grip"):
                 row["two_hand_grip"] = res["two_hand_grip"]
             if res.get("contacts"):

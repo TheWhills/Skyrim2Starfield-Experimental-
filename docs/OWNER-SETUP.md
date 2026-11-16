@@ -367,14 +367,18 @@ powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "
 Skyrim's own furniture animations (sitting, leaning, counters, sweeping, alchemy, enchanting, cooking, tanning;
 docs/npc/furniture.md). Starfield closed. Only the steps whose input changed need rerunning:
 
-1. Stance plugin (new or changed animation sets: their keywords):
+1. Stance plugin (new or changed animation sets: their keywords; Skyrim's prop objects, e.g. the broom's ANIO):
    ```powershell
    python -I scripts\armor\stance_plugin.py --starfield $sf --out "$mods\S2S Stances"
+   ```
+   Skyrim's props as Starfield animation objects (once; the sweeping broom), into the furniture animations' mod:
+   ```powershell
+   python -I scripts\armor\anim_object_convert.py --skyrim-data $sky --starfield $sf --texconv C:\Modding\tools\texconv.exe --out "$mods\S2S Furniture Anims"
    ```
 2. Body profiles (once; again only if the bodies change), then the clips, with the hands kept on the body:
    ```powershell
    python -I scripts\armor\body_profiles.py --skyrim-data $sky --starfield $sf --out C:\Modding\work\body_profiles
-   python -I scripts\armor\furniture_anim_pack.py --calumi $calumi --skyrim-data $sky --starfield $sf --out "$mods\S2S Furniture Anims" --work C:\Modding\work\furniture_anim_pack --body-profiles C:\Modding\work\body_profiles\body_profiles.json
+   python -I scripts\armor\furniture_anim_pack.py --calumi $calumi --skyrim-data $sky --starfield $sf --out "$mods\S2S Furniture Anims" --work C:\Modding\work\furniture_anim_pack --body-profiles C:\Modding\work\body_profiles\body_profiles.json --shoulder-calibration C:\Modding\work\shoulders.json
    ```
    Changes to the copy step only (descriptor clean-up, talk slots): add `--copy-only` (reuses the conversion in --work).
 3. Creation Kit animation cache: only when sets, folders or descriptors (.afx) changed, not for clip-only changes.

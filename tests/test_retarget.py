@@ -530,3 +530,30 @@ class RetargetTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PropTests(unittest.TestCase):
+    def test_place_props_keeps_skyrim_offset_and_rotation_from_the_starfield_hand(self):
+        """2026-11-15 (broom): Starfield's prop bone gets Skyrim's prop world rotation and its world offset from the
+        hand, measured from the Starfield hand, whatever the Starfield hand's own rotation."""
+        import math
+        I = [0.0, 0.0, 0.0, 1.0]
+        h = math.sqrt(0.5)
+        sk = R.Rig(["Root", "Hand", "AnimObjectR"], [-1, 0, 1], [[0, 0, 0], [0, 0, 100], [0, -20, -30]],
+                   [I, [0, 0, h, h], [h, 0, 0, h]])
+        sf = R.Rig(["Root", "R_Wrist", "R_AnimObject1"], [-1, 0, 1], [[0, 0, 0], [0.1, 0, 1.4], [0, 0, 0]],
+                   [I, [0, h, 0, h], I])
+        lt_sk, lq_sk = np.array([sk.t]), np.array([sk.q])
+        wt_sk, wq_sk = sk.fk(lt_sk, lq_sk)
+        out_t, out_q = np.array([sf.t], dtype=float), np.array([sf.q], dtype=float)
+        unit = 0.01
+        t, q, rep = R.place_props(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, {"AnimObjectR": "R_AnimObject1"})
+        wt, wq = sf.fk(t, q)
+        want = wt[0, 1] + (wt_sk[0, 2] - wt_sk[0, 1]) * unit
+        np.testing.assert_allclose(wt[0, 2], want, atol=1e-9)
+        d = min(np.abs(wq[0, 2] - wq_sk[0, 2]).max(), np.abs(wq[0, 2] + wq_sk[0, 2]).max())
+        self.assertLess(d, 1e-9)
+        self.assertEqual(rep["R_AnimObject1"]["from"], "AnimObjectR")
+        np.testing.assert_allclose(rep["R_AnimObject1"]["offset_m"], (wt_sk[0, 2] - wt_sk[0, 1]) * unit, atol=1e-3)
+        _t, _q, rep2 = R.place_props(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, {"AnimObjectL": "L_AnimObject1"})
+        self.assertTrue(rep2["L_AnimObject1"]["missing"])

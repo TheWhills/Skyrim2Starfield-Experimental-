@@ -144,6 +144,27 @@ def strip_variables(afx_text: str, names=DROP_VARIABLES) -> str:
 # held a white cloth; standing_wipewall\enterfromstand.afx: AnimObjLoad / AnimObjDraw AnimObjectDishRag). Left out
 # of every set but these, whose Skyrim clip holds the same kind of thing (the broom).
 KEEP_PROPS = ("Sweep",)
+# Skyrim's props on our sets (2026-11-15, owner: Embry sweeps with no broom; owner: convert Skyrim's broom). The set's
+# clips key the prop bone where Skyrim holds it (hkx_to_af --prop), and its descriptors load our animation object
+# (S2SStances.esm's ANIO, a copy of Starfield's AnimObjectBroom with the converted Skyrim broom, attached to the same
+# bone: scripts/armor/anim_object_convert.py) instead of Starfield's.
+SET_PROPS = {"Sweep": ("AnimObjectR=R_AnimObject1",)}
+PROP_SWAP = {"Sweep": {"AnimObjectBroom": "S2S_AnimObjectBroomSkyrim"}}
+
+
+def swap_anim_objects(afx_text: str, swaps: dict) -> str:
+    """The descriptor with each AnimObj* event payload named in `swaps` (any case) replaced by its value."""
+    import re
+    low = {k.lower(): v for k, v in swaps.items()}
+
+    def one(m):
+        body = m.group(0)
+        nm = re.search(r"<name>\s*([^<]*?)\s*</name>", body)
+        if not nm or not nm.group(1).lower().startswith("animobj"):
+            return body
+        return re.sub(r"(<payload>\s*)([^<]*?)(\s*</payload>)",
+                      lambda p: p.group(1) + low.get(p.group(2).lower(), p.group(2)) + p.group(3), body)
+    return re.sub(r"<event>.*?</event>", one, afx_text, flags=re.S)
 
 
 # Talking while on our furniture (2026-11-15, owner, in game: seated Hilde, talking, crossed her arms fine but "puts them
@@ -370,10 +391,12 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
-def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None, shoulders=None):
+def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None, shoulders=None, props=()):
     out = ["--calumi", a.calumi, "--skyrim-data", a.skyrim_data, "--starfield-data", os.path.join(a.starfield, "Data"),
            "--out", work, "--into", folder, "--no-root-motion"]
     out += ["--com-shift", f"{com[0]},{com[1]}"] if com is not None else ["--align-com"]
+    for p in props or ():
+        out += ["--prop", p]
     if hands:
         out += ["--hand-clearance", ",".join(str(x) for x in hands)]
     if profiles:
@@ -443,7 +466,7 @@ def main(argv=None):
         if not (a.copy_only and os.path.exists(done_rep)):
             print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
             hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles,
-                                    a.shoulder_calibration))
+                                    a.shoulder_calibration, SET_PROPS.get(st, ())))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))
@@ -461,6 +484,8 @@ def main(argv=None):
                     plain = strip_events(new)
                     props += plain != new
                     new = plain
+                if PROP_SWAP.get(st):
+                    new = swap_anim_objects(new, PROP_SWAP[st])
                 if GRAPH_SWAP.get(st):
                     swapped = swap_graph(new, GRAPH_SWAP[st])
                     graphs_swapped += swapped != new

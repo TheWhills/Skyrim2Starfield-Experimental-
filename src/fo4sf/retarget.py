@@ -569,7 +569,7 @@ def skyrim_locals(clip: dict, sk: Rig):
 
 def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False,
              left_weapon: bool = False, two_hand_grip: bool = False, body_profiles: Optional[Dict] = None,
-             shoulder_offsets: Optional[Dict] = None) -> Dict:
+             shoulder_offsets: Optional[Dict] = None, props: Optional[Dict[str, str]] = None) -> Dict:
     """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf.
 
     The weapon always sits in the fist at the vanilla grip (skeletonmap.GRIP). weapon_in_hand: also turn the gripping
@@ -752,9 +752,40 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
         out_t, out_q, contact_report = keep_contacts(sk, sf, out_t, out_q, wt_sk, wq_sk, body_profiles, unit, scale,
                                                      sides)
         wt = sf.fk(out_t, out_q)[0]
+    prop_report = None
+    if props:
+        out_t, out_q, prop_report = place_props(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, props)
+        wt = sf.fk(out_t, out_q)[0]
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
             "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report, "contacts": contact_report,
-            "shoulders": shoulder_report}
+            "shoulders": shoulder_report, "props": prop_report}
+
+
+def place_props(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, props):
+    """Hand-held props (2026-11-15, owner: Embry sweeps with no broom; Skyrim's sweep clips hold AnimObjectR, under
+    NPC R Hand, at a fixed offset the whole clip): each Starfield prop bone (props {Skyrim bone: Starfield bone}) gets
+    Skyrim's prop bone's WORLD rotation and its offset from its parent (the hand) in world space, from the Starfield
+    parent's position: the prop keeps Skyrim's orientation (a converted Skyrim prop model keeps Skyrim's axes) and
+    stays in the Starfield hand. Returns (t, q, {Starfield bone: {"from", "offset_m"}})."""
+    out_t, out_q = out_t.copy(), out_q.copy()
+    report = {}
+    for sk_name, sf_name in props.items():
+        if sk_name not in sk.index or sf_name not in sf.index:
+            report[sf_name] = {"from": sk_name, "missing": True}
+            continue
+        si, fi = sk.index[sk_name], sf.index[sf_name]
+        sp, fp = sk.parents[si], sf.parents[fi]
+        if sp < 0 or fp < 0:
+            report[sf_name] = {"from": sk_name, "missing": "no parent"}
+            continue
+        wt, wq = sf.fk(out_t, out_q)
+        offset = (wt_sk[:, si] - wt_sk[:, sp]) * unit                       # world, metres
+        want_t = wt[:, fp] + offset
+        want_q = wq_sk[:, si]
+        out_q[:, fi] = qmul(qinv(wq[:, fp]), want_q)
+        out_t[:, fi] = qrot(qinv(wq[:, fp]), want_t - wt[:, fp])
+        report[sf_name] = {"from": sk_name, "offset_m": [round(float(x), 3) for x in np.mean(offset, axis=0)]}
+    return out_t, out_q, report
 
 
 def _support_hand(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, low, weapon_axes):

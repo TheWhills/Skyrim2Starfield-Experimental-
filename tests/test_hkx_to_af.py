@@ -65,6 +65,16 @@ class VanillaFileTests(unittest.TestCase):
 
 
 @unittest.skipIf(H is None, "numpy not installed")
+class PropTests(unittest.TestCase):
+    def test_parse_props(self):
+        self.assertEqual(H.parse_props(["AnimObjectR=R_AnimObject1", " AnimObjectL = L_AnimObject1 "]),
+                         {"AnimObjectR": "R_AnimObject1", "AnimObjectL": "L_AnimObject1"})
+        self.assertEqual(H.parse_props([]), {})
+        with self.assertRaises(SystemExit):
+            H.parse_props(["AnimObjectR"])
+
+
+@unittest.skipIf(H is None, "numpy not installed")
 class FitTests(unittest.TestCase):
     def test_parse(self):
         self.assertEqual(H.parse_fit(["MeleeBlock_Into=0.15", "1hm_idle=0.2"]), {"meleeblock_into": 0.15, "1hm_idle": 0.2})
