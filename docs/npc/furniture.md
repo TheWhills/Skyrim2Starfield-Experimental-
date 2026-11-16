@@ -590,3 +590,11 @@ other keyword's FormID moves), its set out of furniture_anim_pack. Its clips, fo
 blacksmithsharpeningwheel*.hkx on Skyrim's wheel marker. Unresolved: whether the tanning rack stopped because of the
 grindstone, the forge sharing its template, or NPC save state; the owner's next test after this rebuild tells.
 
+**Forced vs chosen** (owner, 2026-11-16 17:15-17:28, verified): with `cf "Actor.SnapIntoInteraction" <forge>` Alvor
+plays the whole forge sequence (hammer, temper, Discard + Pull with the iron swap), so the clips, descriptors and cache
+work. Without it he never walks to the forge on his work schedule (two in-game hours, after a coc, so not save state);
+his package S2S_AlvorWork8x12 (formids.json 3763 = 0xEB3) is in FO4Port.esm. The forced path skips what the sandbox
+checks (record flags, keywords, markers, entry sides, pathing, ownership). furniture_record_probe.py (read-only)
+prints our forge / tanning records beside the vanilla wall-wipe template, and the sweep / rail lean (chosen on
+schedules) beside theirs, with the differences.
+
