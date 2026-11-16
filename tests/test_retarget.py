@@ -548,6 +548,11 @@ class ConcatTest(unittest.TestCase):
         turned = self.clip(2, 0)
         turned["tracks"][1] = [((0, 0, 0), (0, 0, math.sin(math.radians(45)), math.cos(math.radians(45))), (1,))] * 2
         self.assertAlmostEqual(R.concat([a, turned])["join_turn_deg"][0], 90.0, places=1)
+        self.assertEqual(R.concat([a, turned])["join_worst"][0][0], "B 90.0")
+        prop = self.clip(2, 0, bones=("A", "AnimObjectL"))
+        prop["tracks"][1] = turned["tracks"][1]                             # a prop bone's jump is not the body's
+        self.assertEqual(R.concat([self.clip(2, 0, bones=("A", "AnimObjectL")), prop])["join_turn_deg"], [0.0])
+        self.assertEqual(R.join_turns(a, turned)[0][:2], ("B", 90.0))
         self.assertIs(R.concat([a])["tracks"], a["tracks"])                 # one clip: itself
 
 

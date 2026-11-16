@@ -556,4 +556,10 @@ back to the hammering pose), is now one flavor: hkx_to_af takes CLIP A.hkx+B.hkx
 appended, common bones, annotations shifted; the report's join_turn_deg is the largest bone turn across the cut, ~0
 when the clips chain). Flavors: Temper, Discard + Pull, Temper, Discard + Pull, Temper. Unknown: whether Skyrim hides
 the iron during the Discard (its iron bone jumps from the drop to the fire at the cut).
+Owner's pack run (2026-11-16 13:44): Discard + Pull converted (201 + 417 frames) but join_turn_deg 103.6, which may be
+a prop bone (the iron's AnimObjectL jumps from the drop to the fire) or a real body jump. join_turn_deg now counts body
+bones only and join_worst names the three largest; clip_join.py (read-only) prints, for every ordered pair of the forge's
+clips, how far B starts from where A ends, so which clip really follows the Discard is read rather than assumed.
+Starfield's descriptors (afx_events, 20315 .afx): SoundPlay occurs 23 times, none in the repair-hammer, wall-wipe or
+workbench folders and none with a hammer / metal / water payload; afx_events --name SoundPlay lists all 23.
 

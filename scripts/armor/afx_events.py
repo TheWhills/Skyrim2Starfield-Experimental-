@@ -10,6 +10,7 @@ a Wwise event?) has to be read from its own descriptors before ours can carry an
      payloads matching --match (hammer, metal, steam, water ...) with a file that uses each.
 
     python -I scripts\\armor\\afx_events.py --starfield "<Starfield>" --folder repair_tool_hammerstanding
+    python -I scripts\\armor\\afx_events.py --starfield "<Starfield>" --name SoundPlay   (every SoundPlay, any payload)
 """
 import argparse
 import os
@@ -53,6 +54,8 @@ def main(argv=None):
     ap.add_argument("--folder", action="append", default=[], help="a folder under animations\\furniture\\ (repeatable)")
     ap.add_argument("--match", default=MATCH)
     ap.add_argument("--max-payloads", type=int, default=60)
+    ap.add_argument("--name", action="append", default=[],
+                    help="also list every event with this name (repeatable): payload, frame, file")
     a = ap.parse_args(argv)
     import furniture_anim_survey as S
     arcs = S.SfArchives(os.path.join(a.starfield, "Data"))
@@ -76,6 +79,11 @@ def main(argv=None):
         print(f"-- {n}: {len(ps)} payloads matching")
         for p, fn in sorted(ps.items())[:a.max_payloads]:
             print(f"  {p}   ({fn})")
+    for want in a.name:
+        rows = sorted({(p, fn, f) for fn, text in files.items() for f, n, p in events(text) if n.lower() == want.lower()})
+        print(f"== 3. {want}: {len(rows)} events")
+        for p, fn, f in rows:
+            print(f"  {p or '-'}   frame {f}   {fn}")
     return 0
 
 

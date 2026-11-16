@@ -552,6 +552,23 @@ def resample(clip: dict, fps: float = 30.0) -> dict:
     return dict(clip, tracks=tracks, frames=n, fps=float(fps), resampled_from=src_fps)
 
 
+def join_turns(a: dict, b: dict) -> list:
+    """How far `b` starts from where `a` ends, per bone both animate: [(bone, local turn degrees, local translation
+    change in the clip's units)], largest turn first. ~0 everywhere: b can follow a without a jump."""
+    at = {x: k for k, x in enumerate(b["bones"])}
+    out = []
+    for k, name in enumerate(a["bones"]):
+        if name not in at:
+            continue
+        ta, qa = a["tracks"][k][-1][0], a["tracks"][k][-1][1]
+        tb, qb = b["tracks"][at[name]][0][0], b["tracks"][at[name]][0][1]
+        qa, qb = np.array(qa, float), np.array(qb, float)
+        dot = min(1.0, abs(float(np.dot(qa, qb))) / ((np.linalg.norm(qa) * np.linalg.norm(qb)) or 1.0))
+        out.append((name, round(float(np.degrees(2 * np.arccos(dot))), 1),
+                    round(float(np.linalg.norm(np.array(ta, float) - np.array(tb, float))), 3)))
+    return sorted(out, key=lambda x: -x[1])
+
+
 def concat(clips, fps: float = 30.0) -> dict:
     """Clips played one after another as one clip (2026-11-16, the forge: Skyrim's Discard ends on the pose its Pull
     starts from, and the Pull ends on the Hammer's, so Discard + Pull is one flavor from the hammering pose back to it).
@@ -570,21 +587,18 @@ def concat(clips, fps: float = 30.0) -> dict:
             tracks[b] += list(c["tracks"][at[b]])
         ann += [dict(x, time=float(x.get("time", 0.0)) + start) for x in c.get("annotations") or []]
         start += int(c["frames"]) / fps
-    joins, at = [], 0
-    for c in clips[:-1]:                     # the largest local turn of any bone across each cut, degrees
-        at += int(c["frames"])
-        worst = 0.0
-        for b in common:
-            qa, qb = np.array(tracks[b][at - 1][1], float), np.array(tracks[b][at][1], float)
-            dot = min(1.0, abs(float(np.dot(qa, qb))) / (np.linalg.norm(qa) * np.linalg.norm(qb) or 1.0))
-            worst = max(worst, float(np.degrees(2 * np.arccos(dot))))
-        joins.append(round(worst, 1))
+    joins, worst_bones = [], []
+    for c, d in zip(clips, clips[1:]):       # the largest local turn of a body bone across each cut, degrees
+        body = [x for x in join_turns(c, d) if not x[0].lower().startswith("animobject")]
+        joins.append(body[0][1] if body else 0.0)
+        worst_bones.append([f"{b} {deg}" for b, deg, _dt in body[:3]])
     first = clips[0]
     idx = [first["bone_indices"][first["bones"].index(b)] for b in common] if first.get("bone_indices") else None
     n = sum(int(c["frames"]) for c in clips)
     return dict(first, fps=float(fps), frames=n, duration=(n - 1) / fps, bones=common, bone_indices=idx,
                 tracks=[tracks[b] for b in common], annotations=ann,
-                concatenated=[int(c["frames"]) for c in clips], join_turn_deg=joins)
+                concatenated=[int(c["frames"]) for c in clips], join_turn_deg=joins,
+                join_worst=worst_bones)
 
 
 def skyrim_locals(clip: dict, sk: Rig):

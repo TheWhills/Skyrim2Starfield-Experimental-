@@ -462,6 +462,7 @@ def main(argv=None):
                 if len(parts) > 1:
                     row["concatenated_frames"] = clip["concatenated"]
                     row["join_turn_deg"] = clip["join_turn_deg"]              # ~0: the clips chain without a jump
+                    row["join_worst"] = clip["join_worst"]                    # body bones (AnimObject* left out)
             except skyrimhkx.HkxError as e:
                 if "no hkaSplineCompressedAnimation" in str(e):  # skeletons, behaviours: not clips
                     row["skipped"] = "not an animation"
