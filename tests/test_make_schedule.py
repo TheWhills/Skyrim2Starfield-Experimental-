@@ -128,8 +128,8 @@ class ScheduleTests(unittest.TestCase):
             # Skyrim's month -1 ("any") is Starfield's 0 (form version >= 122 stores month + 1); the Skyrim one kept
             self.assertEqual((p["schedule"]["month"], p["skyrim_schedule"]["month"]), (0, -1))
             self.assertEqual(ac["packages"][1]["schedule"]["month"], 0)
-            # Skyrim Energy 50 (0-100) -> Starfield 0.5 (0-1)
-            self.assertAlmostEqual(p["inputs"]["18"]["value"], 0.5)
+            # Skyrim Energy 50 (0-100) -> Starfield 50: the same scale (2026-11-16, energy_survey on Starfield.esm)
+            self.assertAlmostEqual(p["inputs"]["18"]["value"], 50.0)
             ins = p["inputs"]
             self.assertEqual(ins["2"]["type"], "near_reference")
             self.assertEqual(ins["2"]["source"], "000601:Skyrim.esm")

@@ -2330,4 +2330,12 @@ empty nodes; the effect system behind them is unknown).
   nothing in our cells (2026-11-09, 2026-11-16); the furniture NPCs do work at in Riverwood carries FurnitureClassWork.
   Cost: no Starfield crafting menu at the forge. Alternatives: a second, player-only workbench reference at the forge
   once workbench activation works; NPCRepair_ToolStanding_Hammer (IgnoredBySandbox, so packages must name it).
+- 2026-11-16 Verified (data): Starfield's package Energy is on Skyrim's 0-100 scale (Starfield.esm: 519 of 577 Sandbox
+  packages 50; energy_survey.py, owner's run). make_schedule keeps Skyrim's value (ENERGY_SCALE 1.0, at most 100) in
+  place of x 0.01, which came from a mod (ShopkeeperSchedules.esm, 0.1-0.8) and left our NPCs nearly without energy
+  (owner: Hilde always in her chair, Alvor at one standing spot). In-game effect: the owner's next build.
+- 2026-11-16 Verified (owner's A/B): two of our animation sets on one Starfield furniture template stopped NPCs walking
+  into either (the forge on the tanning rack's NPCStanding_WipeWall: Hilde tanned once the forge was left a static). The
+  forge moved to NPCWelder (AnimFurnWelder) of its own. Skyrim's idle markers are brief stops (IDLT 0-10 s, Gerdur's
+  table 40000 s; idle_marker_timers.py); our standing furniture from them has no limit (open).
 

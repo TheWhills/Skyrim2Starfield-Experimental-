@@ -44,9 +44,12 @@ FORCE = {"eat": {"alloweating": True, "allowsitting": True}}
 # whose Skyrim inputs allow only furniture / idle markers has nothing to do inside its radius, and the NPC leaves it
 # (owner 2026-11-08: Orgnar stood behind the bar for a moment, then walked off): let it wander inside the radius
 NO_FURNITURE = {"allowwandering": True}
-# Skyrim's sandbox Energy is 0-100 (vanilla 50); Starfield's is 0-1 (ShopkeeperSchedules.esm, working Starfield
-# sandboxes: 0.1-0.8 in 186 of 191; supported, not verified)
-ENERGY_SCALE = 0.01
+# Skyrim's sandbox Energy is 0-100 (vanilla 50), and so is Starfield's: 2026-11-16 (owner's energy_survey.py on
+# Starfield.esm, verified): 519 of its 577 Sandbox packages use 50, the rest 0-60 (a few 200 / 500); every Sleep and
+# SandboxAndKeepEyeOn package 50. The earlier x 0.01 (from ShopkeeperSchedules.esm, a mod's 0.1-0.8) gave our NPCs 0.5,
+# next to no energy: Hilde kept her chair, Alvor his standing spot (owner, in game). Kept as is, within 0-100.
+ENERGY_SCALE = 1.0
+ENERGY_MAX = 100.0
 
 
 def sf_schedule(s):
@@ -140,7 +143,7 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
         elif t == "float":
             f = float(v)
             if norm(name) == "energy":
-                f = round(min(max(f * ENERGY_SCALE, 0.0), 1.0), 4)
+                f = round(min(max(f * ENERGY_SCALE, 0.0), ENERGY_MAX), 4)
             inputs[str(target)] = {"kind": "float", "value": f, "skyrim": name}
         elif t in ("int", "integer"):
             inputs[str(target)] = {"kind": "int", "value": int(v), "skyrim": name}

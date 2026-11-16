@@ -96,7 +96,10 @@ the mod; the in-game result is the next test). That fits what the owner saw: eve
 vanilla package appended after ours (a near-editor-location sandbox), i.e. walked around the room.
 Fixed: make_schedule.sf_schedule writes month + 1 (Skyrim's kept as skyrim_schedule); PluginSpike prints the month it
 wrote next to the vanilla package's. Also Energy: the mod's sandboxes use 0.1-0.8 (186 of 191), Skyrim's scale is 0-100
-(vanilla 50), so Skyrim's value x 0.01 (supported).
+(vanilla 50), so Skyrim's value x 0.01 (supported). **Corrected 2026-11-16** (owner's energy_survey.py on Starfield.esm,
+verified): Starfield's own Sandbox packages use 50 in 519 of 577 (the rest 0-60, a few 200 / 500), Sleep and
+SandboxAndKeepEyeOn 50: the same 0-100 scale as Skyrim's. Our 0.5 was next to no energy (Hilde never left her chair,
+Alvor his standing spot); Skyrim's value is now kept as is.
 In game: Orgnar selected, `getiscurrentpackage 05000E64` should now be 1; before the rebuild `getiscurrentpackage
 0000268B` (the appended vanilla one) should be 1, which would confirm the fall-through.
 Verified in game (owner, 2026-11-08 rebuild, build printed "schedule month 0"): Orgnar behind the bar,
