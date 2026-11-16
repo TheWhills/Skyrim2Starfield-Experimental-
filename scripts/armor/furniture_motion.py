@@ -32,6 +32,18 @@ def end_of(block):
     return tuple(round(float(v) * SKYRIM_M_PER_UNIT, 3) + 0.0 for v in t) + (round(float(yaw), 1) + 0.0,)
 
 
+def path_of(block):
+    """(farthest point from the start (x, y, z metres), its distance, its time s) along a motion block: where a clip
+    that walks somewhere and back (Skyrim's forge: to the trough and back) goes, which its end alone does not show."""
+    best = ((0.0, 0.0, 0.0), 0.0, 0.0)
+    for k in block.get("translations") or []:
+        p = tuple(round(float(v) * SKYRIM_M_PER_UNIT, 3) + 0.0 for v in k[1:4])
+        d = round(sum(c * c for c in p) ** 0.5, 3)
+        if d > best[1]:
+            best = (p, d, round(float(k[0]), 3))
+    return best
+
+
 def set_motion(motion, sets):
     """{set: [(slot file, Skyrim clip, end or None)]} for furniture_anim_pack.SETS-style sets; motion: {clip file stem
     lower case: motion block}."""
@@ -50,6 +62,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data", required=True)
     ap.add_argument("--project", default="DefaultMale")
+    ap.add_argument("--clips", default="", help="comma-separated clip names (e.g. BlacksmithForgePull,"
+                    "BlacksmithForgeTemper): their root motion end and farthest point instead of the sets'")
     a = ap.parse_args(argv)
     import furniture_anim_pack
     from fo4sf import skyrimbehavior
@@ -72,6 +86,17 @@ def main(argv=None):
     motion = animdata.clip_motion(proj, animdata.clip_generators(behaviors), rep)
     print(f"{a.project}: {len(motion)} clips with motion ({len(behaviors)} behaviours, {rep.get('by_behavior', 0)} "
           f"generators mapped)")
+    if a.clips:
+        for c in [x.strip() for x in a.clips.split(",") if x.strip()]:
+            stem = os.path.splitext(os.path.basename(c.replace("\\", "/")))[0].lower()
+            blk = motion.get(stem)
+            if not blk:
+                print(f"  {c:36s} no root motion")
+                continue
+            e, (fp, fd, ft) = end_of(blk), path_of(blk)
+            print(f"  {c:36s} ends x {e[0]:+.3f} y {e[1]:+.3f} z {e[2]:+.3f} m, turn {e[3]:+.1f} deg; farthest "
+                  f"{fd:.3f} m at {ft:g} s (x {fp[0]:+.3f} y {fp[1]:+.3f})")
+        return 0
     for name, lines in set_motion(motion, furniture_anim_pack.SETS).items():
         print(f"== {name}")
         seen = set()

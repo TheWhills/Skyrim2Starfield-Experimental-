@@ -23,6 +23,7 @@ Field layouts follow niftools' nif.xml for Skyrim / Skyrim SE. They are checked 
 per-model sanity report (collision bounds against render bounds) is the check on real data.
 """
 import math
+import re
 import struct
 from typing import List, Optional, Tuple
 
@@ -45,6 +46,40 @@ def _av_size(blk: bytes) -> int:
 def _name(n, blk):
     idx, = struct.unpack_from("<i", blk, 0)
     return n.strings[idx] if 0 <= idx < len(n.strings) else b""
+
+
+# ------------------------------------------------------------------------------------------------- editor markers
+# 2026-11-16 (owner, Riverwood's forge / anvil in game: big untextured grey shapes, "a white outline of certain things
+# around the smithing object"): Skyrim's furniture marker models (BlacksmithForgeMarker.nif, SmelterMarker.nif,
+# HammerTableMarker.nif ...: the station itself is a separate static) carry editor-only helper geometry that Skyrim
+# does not draw in game (supported hypothesis); nodes / shapes named EditorMarker are Skyrim's general editor-only
+# geometry (BSXFlags bit 5).
+MARKER_MODEL_RE = re.compile(r"marker[^\\/]*\.nif$", re.I)
+
+
+def editor_marker_blocks(n: nifmod.NifFile) -> set:
+    """Block indices of geometry Skyrim does not draw in game: blocks named EditorMarker* and everything under an
+    NiNode named EditorMarker*."""
+    parent = {}
+    for i in range(len(n.blocks)):
+        if n.type_of(i).endswith("Node"):
+            try:
+                for c in nifmod.node_children(n, i):
+                    parent.setdefault(c, i)
+            except struct.error:
+                pass
+    out = set()
+    for i in range(len(n.blocks)):
+        j, seen = i, set()
+        while j is not None and j not in seen:
+            seen.add(j)
+            blk = n.blocks[j]
+            nm = _name(n, blk) if len(blk) >= 4 else b""
+            if isinstance(nm, bytes) and nm.lower().startswith(b"editormarker"):
+                out.add(i)
+                break
+            j = parent.get(j)
+    return out
 
 
 # ------------------------------------------------------------------------------------------------- render geometry

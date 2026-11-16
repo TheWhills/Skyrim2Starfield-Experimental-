@@ -214,7 +214,7 @@ def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
                        collision_template: Optional[bytes], report: dict, landscape: bool = False,
                        sf_mesh_template: Optional[bytes] = None,
-                       stair_layer: Optional[int] = STAIR_HELPER_LAYER) -> Dict[str, bytes]:
+                       stair_layer: Optional[int] = STAIR_HELPER_LAYER, allow_empty: bool = False) -> Dict[str, bytes]:
     """sf_mesh_template (a vanilla Starfield multi-shape physics blob, meshcollision.UNIVERSAL_TEMPLATE_NIF): Skyrim's
     own collision becomes native Starfield mesh bodies (native_collision, with stair ramps on stair_layer); boxes are
     the fallback, with the reason in report["native_error"]."""
@@ -231,11 +231,15 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
         sphere, box = sfnif.bounds_from_points(pts)
         static_shapes.append(sfnif.StaticShape(s.name or f"Shape{i}".encode(), f"{d}\\{f}".encode(),
                                                len(m.triangles) * 3, len(m.positions), material_paths[i], sphere, box))
-    if not static_shapes:
+    if not static_shapes and not allow_empty:
         raise nifmod.NifError("no shape left after skipping effect shaders")
-    lo = [min(p[a] for p in all_pts) for a in range(3)]
-    hi = [max(p[a] for p in all_pts) for a in range(3)]
-    report["render_bounds_m"] = [[round(v, 3) for v in lo], [round(v, 3) for v in hi]]
+    if all_pts:
+        lo = [min(p[a] for p in all_pts) for a in range(3)]
+        hi = [max(p[a] for p in all_pts) for a in range(3)]
+        report["render_bounds_m"] = [[round(v, 3) for v in lo], [round(v, 3) for v in hi]]
+    else:                                             # allow_empty: an editor-marker model, nothing drawn
+        lo, hi = [-1e9] * 3, [1e9] * 3
+        report["render_bounds_m"] = None
     blobs = None
     if sf_mesh_template is not None:
         try:
@@ -772,7 +776,15 @@ class SkyrimConverter(pipeline.Converter):
             hook_report = {}
             if self.shape_hook is not None:
                 shapes = self.shape_hook(src, shapes, hook_report)
-            if not shapes:
+            # editor-only geometry (skyrimnif.editor_marker_blocks; a *Marker.nif furniture model draws nothing in
+            # Skyrim): left out; a model with nothing else becomes an empty model (the furniture keeps its markers)
+            marker_model = bool(skyrimnif.MARKER_MODEL_RE.search(nif_name.replace("/", "\\")))
+            hidden = skyrimnif.editor_marker_blocks(src)
+            editor_shapes = sum(1 for s in shapes if marker_model or s.block in hidden)
+            shapes = [s for s in shapes if not (marker_model or s.block in hidden)]
+            if editor_shapes:
+                self.stats["editor_marker_shapes"] = self.stats.get("editor_marker_shapes", 0) + editor_shapes
+            if not shapes and not editor_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
             flame_shapes = sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
@@ -791,8 +803,10 @@ class SkyrimConverter(pipeline.Converter):
                 own, own_mats = self.model_flames(src)
                 cards, card_mats = cards + own, card_mats + own_mats
                 shapes, mats = list(shapes) + cards, list(mats) + card_mats
-            if all(m is None for m in mats):
+            if mats and all(m is None for m in mats):
                 raise ValueError("only effect-shader / refraction shapes, skipped")
+            if not shapes and skin_bone:
+                raise ValueError("only editor-marker geometry")
             rel = re.sub(r"^meshes[\\/]", "", nif_name.replace("\\", "/"), flags=re.I)
             out_name = f"{self.prefix}/{os.path.splitext(rel)[0].lower()}{out_suffix}"
             report = {}
@@ -802,7 +816,7 @@ class SkyrimConverter(pipeline.Converter):
                 files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
                                            landscape=bool(LANDSCAPE_RE.search(nif_name)),
                                            sf_mesh_template=self.sf_mesh_template,
-                                           stair_layer=self.stair_layer)
+                                           stair_layer=self.stair_layer, allow_empty=editor_shapes > 0)
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -815,7 +829,8 @@ class SkyrimConverter(pipeline.Converter):
                        double_sided_shapes=doubled, double_sided_too_big=too_big,
                        flame_shapes=flame_shapes, flame_cards=len(cards),
                        sf_effects=self.model_fire_effects(src) if self.fire and not skin_bone else [],
-                       addon_nodes=len(skyrimfire.addon_nodes(src)), **hook_report)
+                       addon_nodes=len(skyrimfire.addon_nodes(src)), editor_marker_shapes=editor_shapes,
+                       **hook_report)
             self.stats["assets"] += 1
         except Exception as e:                       # noqa: BLE001  (recorded per asset, batch continues)
             res["reason"] = f"{type(e).__name__}: {e}"

@@ -17,6 +17,12 @@ class FurnitureMotionTest(unittest.TestCase):
         self.assertEqual(M.end_of(blk), (0.0, -0.3, 0.0, 90.0))       # 21 units back = 0.3 m, a quarter turn
         self.assertEqual(M.end_of({}), (0.0, 0.0, 0.0, 0.0))
 
+    def test_path_of_a_clip_that_walks_away_and_back(self):
+        """2026-11-16: Skyrim's forge clips walk to the trough and back; the farthest point shows it."""
+        blk = {"translations": [(0.0, 0, 0, 0), (2.0, 70.0, 0, 0), (4.0, 0, 0, 0)]}
+        self.assertEqual(M.path_of(blk), ((1.0, 0.0, 0.0), 1.0, 2.0))
+        self.assertEqual(M.path_of({}), ((0.0, 0.0, 0.0), 0.0, 0.0))
+
     def test_set_motion(self):
         sets = {"WallLean": ("f", "t", [("idle.afx", "wall_idlebackloop.hkx", None),
                                         ("enterfromstand.afx", "Wall_IdleBackEnter.hkx", None)])}

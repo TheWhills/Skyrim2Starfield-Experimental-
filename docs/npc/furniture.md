@@ -460,6 +460,32 @@ records (models, keywords, markers and their animations; the matching IDLE and A
 behaviour state machine that plays smithing clips (states, the clips under each, transitions with their events: the
 order the sequence runs in), the clips' triggers (AnimObjLoad / AnimObjDraw with the prop's name), and each clip
 file's duration and annotations. skyrimbehavior now reads hkbClipTriggerArray (time, event, payload, flags) and
-hkbStringEventPayload (data) (layout supported, checked by the probe's event names on game data). The white outline:
-screenshot needed.
+hkbStringEventPayload (data) (layout **verified** by the owner's run: event names and the payload
+AnimObjectBlacksmithForgeIron come out as Skyrim's).
+
+The "white outline" (owner's screenshots, 2026-11-16): big untextured grey shapes - a blade and a cone in the forge pit
+(FURN 10000F54, our forge: model BlacksmithForgeMarker.nif) and a grey tangle of tool shapes by the anvil. Skyrim's
+furniture marker models (*Marker.nif: the forge, smelter, hammer table / wall, ...; the station itself is a separate
+static) hold editor-only helper geometry Skyrim does not draw (supported hypothesis). Now skyrimconvert leaves out every
+shape of a *Marker.nif model and, in any model, shapes named or under a node named EditorMarker*
+(skyrimnif.editor_marker_blocks); a model left with nothing becomes an empty model, so the furniture keeps its markers
+and draws nothing. The build's stats count editor_marker_shapes. skyrimconvert.py changed: one full reconversion.
+
+Skyrim's smithing, **verified** from smithing_probe (owner, 2026-11-16; Skyrim.esm and mt_behavior.hkx):
+| station (FURN) | model | enter idle | clips (state machine order) | props (ANIO) |
+|---|---|---|---|---|
+| CraftingBlackSmithForge 0CAE0B (NPC work) | BlacksmithForgeMarker.nif | IdleBlackSmithForgeEnter | BlacksmithForgePull 13.9 s (takes the iron from the fire; AnimObjDraw AnimObjectBlacksmithForgeIron at 2 s) -> BlacksmithForgeHammer 1.7 s (loop, CountDownTick) -> RandomTrough: BlacksmithForgeTemper 9.4 s (quench at 3.3 s, back to Hammer) or BlacksmithForgeDiscard 6.7 s (quench-drop, then BlacksmithForgeRestart -> Pull); exit BlacksmithForgeExit 2.0 s | AnimObjectBlacksmithForgeIron, AnimObjectBlacksmithForgeHammer |
+| CraftingBlacksmithAnvil 01A2AD (player smithing) | BlacksmithAnvil.nif | IdleBlackSmithingEnterStart | BlackSmithAnvilEnter 1.0 s -> BlackSmithAnvilHammer 1.7 s <-> BlackSmithAnvilIdle 9.1 s; exit BlackSmithAnvilExit 1.0 s | BlackSmithHammerAnimObject, BlackSmithHotIronAnimObject |
+| CraftingBlacksmithSharpeningWheel 06E9C2 | BlacksmithSharpeningWheelAnimating.nif | IdleSharpeningWheelStart | BlacksmithSharpeningWheelEnter 2.0 s -> Spin 9.1 s (loop); exit 2.0 s | - |
+| CraftingSmelterMarker1 09C6CE | SmelterMarker.nif | IdleSmelterEnter | CraftingSmelterEnter 2.0 s -> CraftingSmelterShovel 6.0 s (loop) -> CraftingSmelterPour 12.3 s (also its exit) | - |
+| HammerTableMarker / HammerWallMarker | *Marker.nif | IdleHammerTable / WallEnter | AOHammer(Wall)Enter -> Loop x2 -> Idle (9.1 s) -> Loop ...; exit | AnimObjectHammerTable / Wall |
+| CraftingBlacksmithArmorWorkbench 0D932F | BlacksmithWorkbench01.nif | - | none found under the smithing names | - |
+So the trough, the fire and the hammering the owner describes are the forge's NPC sequence (the forge marker covers
+fire, anvil and trough), one long loop of clips; the anvil is the player's (and Alvor's) hammer-and-rest loop.
+Plan: one set per station in furniture_anim_pack, as the earlier standing sets: Anvil (Enter, Idle = Hammer, flavors
+= the 9 s rest, Exit), Forge (Enter = Pull, Idle = Hammer, flavors = Temper / Discard, Exit), Grindstone (Enter, Idle
+= Spin, Exit), Smelter (Enter, Idle = Shovel, flavor = Pour, Exit = Pour). Two unknowns first: (1) whether the forge
+clips walk (to the trough and back): furniture_motion.py --clips prints each clip's root-motion end and farthest point;
+the earlier sets were converted without root motion; (2) where the props are loaded (none of the clips' own triggers
+loads the hammer: the states' enter events, not read yet).
 
