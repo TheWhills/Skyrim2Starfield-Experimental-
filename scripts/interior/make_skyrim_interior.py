@@ -85,8 +85,19 @@ def cmd_list(a):
 # 122393) left the inn dark and green-grey. What looked like Skyrim: the ship interior template 006658, the Skyrim cell's
 # own ambient (CELL_AMBIENT skyrim), translated lights at 4x the template lumens, and no colour grading (LGT_NoLut
 # 1C6C37; _RENAME_Test_NaturalColorInterior_IS 0606C1 looked about the same, LGT_LUT_Int_Gen_v04_curve 03D206 was dark).
+# Owner 2026-11-16 (Faendal's house): "the light is kind of white and strong at the lighting locations as opposed to a
+# warm fire lit room". Measured (SfInspect, the owner's data): Faendal's five Skyrim lights are 512-unit (7.3 m)
+# flickering lights, four fill lights 198,162,100 (3623 K by its colour) and one fire light 173,103,52 (2321 K); ours were
+# copies of the neutral ship omni 03D38C (2000 lm) at 4x = 8000 lm each. Starfield's own interior fire lights
+# (LGT_Fire_Candle_Interior 3197A4: 3000 lm, 2.5 m; LGT_Fire_Cauldron 3197A6: 4000 lm, 8 m) are 1900 K, falloff exponent
+# 2, with a flicker effect sequence. Now: the base is LGT_Fire_Cauldron (Starfield's fire light at Skyrim's 7 - 8 m
+# radius), x1.5 = 6000 lm, and the colour's temperature 95 mired warmer (PluginSpike LIGHT_TEMPERATURE warm: Skyrim's
+# fire light lands on 1900 K, its fill lights on ~2700 K)
 INTERIOR_LIGHTING = {"LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37",
-                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "4"}
+                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "1.5", "OMNI_LIGHT": "3197A6",
+                     "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95"}
+# earlier defaults: a stored value equal to one of these was written by an older export, not by hand, and is updated
+PREVIOUS_LIGHTING = {"LIGHT_POWER": {"4"}}
 
 
 def write_lighting(work, cell, a):
@@ -95,7 +106,8 @@ def write_lighting(work, cell, a):
     path = os.path.join(work, "convert", "lighting.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     cfg = load(path) if os.path.exists(path) else {}
-    entry = {**INTERIOR_LIGHTING, **cfg.get(cell, {})}       # a hand-edited value for this cell is kept
+    kept = {k: v for k, v in cfg.get(cell, {}).items() if v not in PREVIOUS_LIGHTING.get(k, ())}
+    entry = {**INTERIOR_LIGHTING, **kept}                     # a hand-edited value for this cell is kept
     if a.lighting_template:
         entry["LIGHTING_TEMPLATE"] = a.lighting_template
     if a.light_merge_m is not None:

@@ -201,20 +201,39 @@ class InteriorTests(unittest.TestCase):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
         self.assertEqual(json.load(open(path)), {"SleepingGiantInn": {
             "LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim",
-            "LIGHT_POWER": "4"}})
-        cfg = {"*": {"IMAGE_SPACE": "000123"}, "SleepingGiantInn": {"LIGHTING_TEMPLATE": "0ABCDE", "OMNI_LIGHT": "1"}}
+            "LIGHT_POWER": "1.5", "OMNI_LIGHT": "3197A6", "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95"}})
+        cfg = {"*": {"IMAGE_SPACE": "000123"}, "SleepingGiantInn": {"LIGHTING_TEMPLATE": "0ABCDE", "OMNI_LIGHT": "1",
+                                                                     "LIGHT_POWER": "4"}}   # 4: the old default
         json.dump(cfg, open(path, "w"))
         with contextlib.redirect_stdout(io.StringIO()):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
         got = json.load(open(path))
         self.assertEqual(got["*"], {"IMAGE_SPACE": "000123"})
         self.assertEqual(got["SleepingGiantInn"], {"LIGHTING_TEMPLATE": "0ABCDE", "LIGHT_MERGE_M": "1", "OMNI_LIGHT": "1",
-                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "4"})
+                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "1.5",
+                                                   "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95"})
         with contextlib.redirect_stdout(io.StringIO()):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work,
                      "--lighting-template", "111111", "--light-merge-m", "0.5"])
         got = json.load(open(path))["SleepingGiantInn"]
         self.assertEqual((got["LIGHTING_TEMPLATE"], got["LIGHT_MERGE_M"]), ("111111", "0.5"))
+
+    def test_warm_light_temperature_lands_skyrims_fire_light_on_starfields_fire(self):
+        """PluginSpike LIGHT_TEMPERATURE warm (C#, no compiler in the cloud workspace): the same McCamy + mired shift."""
+        def mccamy(r8, g8, b8):
+            lin = lambda c: c / 255 / 12.92 if c / 255 <= 0.04045 else ((c / 255 + 0.055) / 1.055) ** 2.4
+            r, g, b = lin(r8), lin(g8), lin(b8)
+            X, Y, Z = (0.4124 * r + 0.3576 * g + 0.1805 * b, 0.2126 * r + 0.7152 * g + 0.0722 * b,
+                       0.0193 * r + 0.1192 * g + 0.9505 * b)
+            x, y = X / (X + Y + Z), Y / (X + Y + Z)
+            n = (x - 0.3320) / (0.1858 - y)
+            return int(min(10000, max(1000, 449 * n ** 3 + 3525 * n * n + 6823.3 * n + 5520.33)))
+        warm = lambda k, m=95.0: min(10000, max(1000, round(1e6 / (1e6 / k + m))))
+        self.assertAlmostEqual(warm(mccamy(173, 103, 52)), 1900, delta=25)       # Skyrim fire light -> Starfield fire
+        self.assertTrue(2600 <= warm(mccamy(198, 162, 100)) <= 2800)              # fill light -> incandescent
+        cs = open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs")).read()
+        self.assertIn("1e6 / (1e6 / Math.Max(kelvin, 1u) + mired)", cs)
+        self.assertIn('temperature == "warm"', cs)
 
     def test_refuses_work_inside_the_repository(self):
         import make_skyrim_interior as mi

@@ -146,7 +146,8 @@ static P3Float RotateOffset(P3Float v, P3Float r, float scale)
 // Optional per-cell lighting overrides: <output dir>/lighting.json = { "<cell>": { "LIGHTING_TEMPLATE": "06BCF8", ... },
 // "*": { ...defaults for every cell... } }. Keys: LIGHTING_TEMPLATE, IMAGE_SPACE, OMNI_LIGHT, LIGHT_MERGE_M; for cells
 // exported from Skyrim also SKYRIM_LIGHTS (0 = the plain omni), LIGHT_POWER, LIGHT_RADIUS_SCALE, LIGHT_TEMPERATURE
-// (skyrim | keep), CELL_AMBIENT (template | skyrim), AMBIENT_SCALE (see "Skyrim lights" below).
+// (skyrim | warm | keep), LIGHT_MIRED_SHIFT (for warm), CELL_AMBIENT (template | skyrim), AMBIENT_SCALE (see "Skyrim lights"
+// below).
 // Lookup order: cell entry, "*" entry, environment variable, built-in default.
 var lightCfgPath = Path.Combine(outDir, "lighting.json");
 var lightCfg = File.Exists(lightCfgPath)
@@ -203,6 +204,9 @@ static uint ColourTemperature(int r8, int g8, int b8)
     double x = X / sum, y = Y / sum, n = (x - 0.3320) / (0.1858 - y);
     return (uint)Math.Clamp(449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33, 1000, 10000);
 }
+// a temperature shifted by `mired` (1e6 / K) towards warm, clamped to 1000..10000 K
+static uint WarmerTemperature(uint kelvin, float mired) =>
+    (uint)Math.Clamp(Math.Round(1e6 / (1e6 / Math.Max(kelvin, 1u) + mired)), 1000, 10000);
 FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
 {
     float F(string k, float d) => L.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetSingle() : d;
@@ -211,10 +215,15 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     float power = float.Parse(Setting(cell, "LIGHT_POWER", "1"), CultureInfo.InvariantCulture);
     float rscale = float.Parse(Setting(cell, "LIGHT_RADIUS_SCALE", "1"), CultureInfo.InvariantCulture);
     var temperature = Setting(cell, "LIGHT_TEMPERATURE", "skyrim");
+    // "warm": the colour's temperature shifted LIGHT_MIRED_SHIFT mired warmer (a fixed CTO-gel-like shift). Skyrim's colours
+    // read as warm in its sRGB lighting but as near-white at their own temperature in Starfield's (owner 2026-11-16,
+    // Faendal's house: fill lights 198,162,100 = 3623 K "white and strong"); 95 mired puts Skyrim's fire light 173,103,52
+    // (2321 K) on Starfield's own fire lights' 1900 K (LGT_Fire_Candle / _Cauldron) and the fill lights at ~2700 K
+    float miredShift = float.Parse(Setting(cell, "LIGHT_MIRED_SHIFT", "95"), CultureInfo.InvariantCulture);
     float radius = Math.Max(F("radius", 300f) / UnitsPerMetre, 1f) * rscale, fade = Math.Max(F("fade", 1f), 0.05f);
     bool flicker = L.TryGetProperty("flicker", out var fl) && fl.ValueKind == JsonValueKind.True;
     var key = string.Create(CultureInfo.InvariantCulture,
-        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{(flicker ? 1 : 0)}");
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}");
     if (lightBases.TryGetValue(key, out var have)) return have;
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
@@ -224,7 +233,8 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     SetProp(nl, "Radius", radius);
     var oldColour = GetProp(nl, "Color") is System.Drawing.Color oc ? oc : System.Drawing.Color.White;
     SetProp(nl, "Color", System.Drawing.Color.FromArgb(oldColour.A, cr, cg, cb));
-    if (temperature != "keep") SetProp(nl, "PbrLightTemperatureK", ColourTemperature(cr, cg, cb));
+    if (temperature == "warm") SetProp(nl, "PbrLightTemperatureK", WarmerTemperature(ColourTemperature(cr, cg, cb), miredShift));
+    else if (temperature != "keep") SetProp(nl, "PbrLightTemperatureK", ColourTemperature(cr, cg, cb));
     if (tplLm > 0)
     {
         // bigger than the template: more lumens to reach as far; smaller: the template's (scaling down made the inn darker)

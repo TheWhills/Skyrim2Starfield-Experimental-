@@ -2318,4 +2318,9 @@ models carry no particle blocks, and 500+ vanilla materials animate UVOffset wit
 owner's runs). Alternatives: borrow Starfield's fire materials (owner chose Skyrim's own look, 2026-11-09); bake the
 scroll into a flipbook (choppier, more texture memory); Starfield particle effects via ADDN (its fire ADDN records are
 empty nodes; the effect system behind them is unknown).
-
+- 2026-11-16 Interior lights (owner: Faendal's house "white and strong at the lighting locations as opposed to a warm
+  fire lit room"): Skyrim lights are built on Starfield's own interior fire light (LGT_Fire_Cauldron 3197A6: 1900 K,
+  falloff exponent 2, flicker sequence) instead of the neutral ship omni, at 1.5x its lumens, with each Skyrim colour's
+  temperature shifted 95 mired warmer (PluginSpike LIGHT_TEMPERATURE warm). Evidence: SfInspect of Starfield's fire
+  lights and Faendal's Skyrim lights (docs/interior/skyrim-interiors.md). Alternative kept: per-light templates (candle
+  vs fire vs fill) if one base does not fit every room.

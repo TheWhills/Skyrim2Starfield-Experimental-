@@ -485,3 +485,16 @@ teardrop; next comparison: -CandleStyle skyrim (models only). Interior lighting 
 the lighting locations as opposed to a warm fire lit room". Before changing PluginSpike's Skyrim lights (copies of the
 neutral ship omni 03D38C, temperature from the Skyrim colour, lumens x LIGHT_POWER 4): Starfield's own fire / candle
 lights (SfInspect form type:Light Fire) and Faendal's Skyrim lights (cells/*Faendal*.json) for numbers.
+Numbers (owner, 2026-11-16 10:33), **verified**: Faendal's house has five Skyrim lights, all 512 units (7.3 m),
+flickering: four fill lights (FarmInteriorShadowLight01 / FarmInteriorLight01) colour 198,162,100 (McCamy 3623 K) and
+one fire light (FarmInteriorFireLight01) 173,103,52 (2321 K); cell ambient 45,48,48 from its lighting template. Ours: a
+copy of the neutral ship omni 03D38C at LIGHT_POWER 4 = 8000 lm each at 3623 / 2321 K. Starfield's own interior fire
+lights: LGT_Fire_Candle_Interior 3197A4 (3000 lm, 2.5 m), LGT_Fire_Candle 3197A3 (1000 lm, 4 m), LGT_Fire_Cauldron
+3197A6 (4000 lm, 8 m), LGT_Fire_Ambient 3197A1 (100 lm, 4 m): all 1900 K, colour 254,98,22, falloff exponent 2, the
+candle / cauldron ones with a flicker effect sequence. So ours were twice Starfield's brightest interior fire, and Skyrim's
+fill colour, warm in Skyrim's sRGB lights, sits at a near-neutral 3600 K in Starfield's (supported hypothesis for "white
+and strong"). Now (export defaults, lighting.json): OMNI_LIGHT 3197A6 LGT_Fire_Cauldron as the base, LIGHT_POWER 1.5
+(6000 lm at Skyrim's 7.3 m), LIGHT_TEMPERATURE warm with LIGHT_MIRED_SHIFT 95: every Skyrim light's temperature
+shifted 95 mired warmer, which puts Skyrim's fire light on Starfield's 1900 K and the fill lights near 2700 K. A
+lighting.json value equal to an older default (LIGHT_POWER 4) is updated on export; hand edits stay. A plugin change: a
+full build. Candles, -CandleStyle skyrim (10:33): small teardrop flames (no comment yet).
