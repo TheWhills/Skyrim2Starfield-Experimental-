@@ -392,6 +392,20 @@ class FlameStyleTest(unittest.TestCase):
         self.assertEqual(skyrimfire.FLAME_STYLES, ("skyrim", "starfield"))
 
 
+class SfFireProbeTest(unittest.TestCase):
+    def test_fire_names_and_record_lines(self):
+        sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))
+        import sf_fire_probe as P
+        self.assertTrue(P.is_fire_name("FXCampfireLarge01"))
+        self.assertTrue(P.is_fire_name("candlegen_c01_lit.nif"))
+        self.assertFalse(P.is_fire_name("FireExtinguisher01"))
+        self.assertFalse(P.is_fire_name("LaredoFirearms_Poster01"))
+        self.assertEqual(P.printable(b"\x00\x01Effects\\fxemptynode.nif\x00ab"), "Effects\\fxemptynode.nif")
+        lines = P.describe_record(b"ADDN", 0x123, [(b"EDID", b"MPSFire\x00"), (b"DATA", b"\x31\x00\x00\x00")])
+        self.assertEqual(lines[0], "ADDN 00000123 MPSFire")
+        self.assertIn("DATA [4] 31000000", lines[2])
+
+
 class ParticleScanTest(unittest.TestCase):
     def test_finds_particle_block_types_in_the_header_only(self):
         sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))

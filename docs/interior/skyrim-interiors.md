@@ -380,3 +380,8 @@ signature, so switching reconverts the models (since 2026-11-15 later: only the 
 Owner, -FlameStyle starfield in game (2026-11-15): hearth flames "so subtle" (small licks over the logs), candle
 flames very small, dim and thin. Starfield's fire atlases draw a small flame inside each frame, so on Skyrim-sized cards
 they read smaller and fainter than Skyrim's own; Skyrim style stays the default.
+Owner on v3 Skyrim style (2026-11-15): "still looked low quality, like moving pngs compared to flames". Cards are the
+ceiling of the static-geometry route: Skyrim's look comes from many overlapping moving particles. Next: Starfield's
+own particle fire (its fire ADDN records point at an empty NIF, so the effect is defined elsewhere).
+scripts/interior/sf_fire_probe.py (read-only) lists Starfield's fire-named records with every field, the archive
+file types with the fire-named files of any non-plain type, and the fire effect NIFs' contents.
