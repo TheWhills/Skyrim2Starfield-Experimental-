@@ -555,6 +555,19 @@ class ConcatTest(unittest.TestCase):
         self.assertEqual(R.join_turns(a, turned)[0][:2], ("B", 90.0))
         self.assertIs(R.concat([a])["tracks"], a["tracks"])                 # one clip: itself
 
+    def test_concat_blend(self):
+        """A 0.1 s blend at 30 fps: B starts 3 frames early, the overlap moves from A's keys to B's, props cut."""
+        a = self.clip(6, 0, bones=("A", "AnimObjectL"))
+        b = self.clip(6, 100, bones=("A", "AnimObjectL"), ann=[(0.0, "b")])
+        c = R.concat([a, b], blend=0.1)
+        self.assertEqual((c["frames"], c["part_starts"], c["blend_frames"]), (9, [0, 3], 3))
+        xs = [f[0][0] for f in c["tracks"][0]]
+        self.assertEqual(xs[:3], [0, 1, 2])
+        self.assertTrue(3 < xs[3] < xs[4] < xs[5] < 103, xs)                 # crossfading toward B
+        self.assertEqual(xs[6:], [103, 104, 105])
+        self.assertEqual([f[0][0] for f in c["tracks"][1]][3:6], [100, 101, 102])   # the prop: B's keys
+        self.assertAlmostEqual(c["annotations"][0]["time"], 0.1)
+
 
 if __name__ == "__main__":
     unittest.main()

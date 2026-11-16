@@ -569,36 +569,59 @@ def join_turns(a: dict, b: dict) -> list:
     return sorted(out, key=lambda x: -x[1])
 
 
-def concat(clips, fps: float = 30.0) -> dict:
-    """Clips played one after another as one clip (2026-11-16, the forge: Skyrim's Discard ends on the pose its Pull
-    starts from, and the Pull ends on the Hammer's, so Discard + Pull is one flavor from the hammering pose back to it).
-    Each is resampled to `fps` first; the tracks kept are the bones every clip animates (by name, the first clip's
-    order); annotation times move by the length of the clips before them. The joins are cuts: each clip keeps all its
-    frames (a clip's last and the next one's first are the same pose in a chain like Skyrim's)."""
+def concat(clips, fps: float = 30.0, blend: float = 0.0, cut_prefix: str = "animobject") -> dict:
+    """Clips played one after another as one clip (2026-11-16, the forge's Discard + Pull: one flavor from the
+    hammering pose back to it). Each is resampled to `fps` first; the tracks kept are the bones every clip animates (by
+    name, the first clip's order). With `blend` seconds, each next clip starts that long before the previous one ends
+    and the overlap crossfades (smoothstep; translations / scales linear, rotations slerp), as a Havok blending
+    transition does; bones named `cut_prefix`* (props) take the next clip's keys through the overlap instead of
+    sweeping between two places. Without it the joins are cuts. "part_starts": each clip's first frame in the result;
+    annotation times move with it. "join_turn_deg": the largest body-bone turn across each join before blending."""
     clips = [resample(c, fps) for c in clips]
     if len(clips) == 1:
         return clips[0]
     common = [b for b in clips[0]["bones"] if all(b in c["bones"] for c in clips[1:])]
     tracks = {b: [] for b in common}
-    ann, start = [], 0.0
-    for c in clips:
+    ann, starts = [], []
+    for i, c in enumerate(clips):
         at = {b: k for k, b in enumerate(c["bones"])}
+        F = int(c["frames"])
+        k = 0 if i == 0 else min(int(round(blend * fps)), F - 1, len(tracks[common[0]]) - 1 if common else 0)
+        k = max(k, 0)
+        start = (len(tracks[common[0]]) if common else 0) - k
+        starts.append(start)
+        if k:
+            w = np.arange(1, k + 1, dtype=float) / (k + 1)
+            w = (w * w * (3 - 2 * w))[:, None]
         for b in common:
-            tracks[b] += list(c["tracks"][at[b]])
-        ann += [dict(x, time=float(x.get("time", 0.0)) + start) for x in c.get("annotations") or []]
-        start += int(c["frames"]) / fps
+            new = list(c["tracks"][at[b]])
+            if k:
+                old = tracks[b][-k:]
+                if b.lower().startswith(cut_prefix):
+                    mixed = new[:k]
+                else:
+                    ta, tb = np.array([f[0] for f in old], float), np.array([f[0] for f in new[:k]], float)
+                    qa, qb = np.array([f[1] for f in old], float), np.array([f[1] for f in new[:k]], float)
+                    sa = np.array([f[2] for f in old], float).reshape(k, -1)
+                    sb = np.array([f[2] for f in new[:k]], float).reshape(k, -1)
+                    tm, qm, sm = ta * (1 - w) + tb * w, qslerp(qa, qb, w), sa * (1 - w) + sb * w
+                    mixed = [(tuple(tm[j]), tuple(qm[j]), tuple(sm[j])) for j in range(k)]
+                tracks[b] = tracks[b][:-k] + mixed + new[k:]
+            else:
+                tracks[b] += new
+        ann += [dict(x, time=float(x.get("time", 0.0)) + start / fps) for x in c.get("annotations") or []]
     joins, worst_bones = [], []
-    for c, d in zip(clips, clips[1:]):       # the largest local turn of a body bone across each cut, degrees
-        body = [x for x in join_turns(c, d) if not x[0].lower().startswith("animobject")]
+    for c, d in zip(clips, clips[1:]):       # the largest local turn of a body bone across each join, degrees
+        body = [x for x in join_turns(c, d) if not x[0].lower().startswith(cut_prefix)]
         joins.append(body[0][1] if body else 0.0)
         worst_bones.append([f"{b} {deg}" for b, deg, _dt in body[:3]])
     first = clips[0]
     idx = [first["bone_indices"][first["bones"].index(b)] for b in common] if first.get("bone_indices") else None
-    n = sum(int(c["frames"]) for c in clips)
+    n = len(tracks[common[0]]) if common else 0
     return dict(first, fps=float(fps), frames=n, duration=(n - 1) / fps, bones=common, bone_indices=idx,
                 tracks=[tracks[b] for b in common], annotations=ann,
-                concatenated=[int(c["frames"]) for c in clips], join_turn_deg=joins,
-                join_worst=worst_bones)
+                concatenated=[int(c["frames"]) for c in clips], part_starts=starts, blend_frames=int(round(blend * fps)),
+                join_turn_deg=joins, join_worst=worst_bones)
 
 
 def skyrim_locals(clip: dict, sk: Rig):

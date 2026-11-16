@@ -562,4 +562,15 @@ bones only and join_worst names the three largest; clip_join.py (read-only) prin
 clips, how far B starts from where A ends, so which clip really follows the Discard is read rather than assumed.
 Starfield's descriptors (afx_events, 20315 .afx): SoundPlay occurs 23 times, none in the repair-hammer, wall-wipe or
 workbench folders and none with a hammer / metal / water payload; afx_events --name SoundPlay lists all 23.
+clip_join (owner, 2026-11-16 13:49, **verified**): Pull > Hammer 0.0 deg, Hammer > Temper 0.0, Temper > Hammer 2.7,
+Hammer > Hammer 1.3, Hammer > Discard 4.0, Temper > Discard 0.1: the hammering pose is shared. The Discard ends on no
+clip's first pose (Discard > Pull 62.7 deg in the left arm and head, the closest; > Hammer 99.9); the Pull starts from
+standing (Exit > Pull differs in the fingers and Camera3rd only). So Skyrim's Discard -> Restart -> Pull is a blending
+transition, not a chain. The flavor now crossfades its join (JOIN_BLEND 0.8 s, an assumption: Skyrim's transition
+length not read; hkx_to_af --join-blend, retarget.concat blend: prop bones take the Pull's keys through the overlap)
+and swaps the iron (CLIP_EVENTS: AnimObjUnequip of the iron where the Pull part starts, AnimObjLoad + AnimObjDraw 2 s
+into it, Skyrim's own draw time), so it does not fly from the drop to the fire.
+Sounds: afx_events --name SoundPlay (verified): all 23 are grenade / mine throws, payload a name (WPNGrenadeThrow).
+sound_records.py (read-only) finds which Starfield.esm record type holds that name and lists hammer / metal / steam /
+water / fire EditorIDs of that type, the candidates for Skyrim's forge sounds.
 

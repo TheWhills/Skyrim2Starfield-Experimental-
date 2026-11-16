@@ -266,6 +266,8 @@ def main(argv=None):
     ap.add_argument("--no-verify", action="store_true")
     ap.add_argument("--no-foot-plant", action="store_true", help="skip the foot-planting IK pass")
     ap.add_argument("--osf", metavar="PACK", help="write an OSF Animation content pack named PACK (see above)")
+    ap.add_argument("--join-blend", type=float, default=0.0, metavar="SECONDS",
+                    help="CLIP A.hkx+B.hkx: crossfade each join over this long (retarget.concat; 0 = cut)")
     ap.add_argument("--replace", action="append", default=[], metavar="CLIP::VANILLA_AFX",
                     help="replace a vanilla clip in place (see above); repeatable")
     ap.add_argument("--weapon-in-hand", action="store_true",
@@ -458,9 +460,11 @@ def main(argv=None):
             try:
                 # CLIP may be A.hkx+B.hkx: the clips one after another (retarget.concat; the forge's Discard + Pull)
                 parts = [skyrimhkx.decode_clip(read_any(p, sky), sk.names) for p in clip_parts(c)]
-                clip = parts[0] if len(parts) == 1 else retarget.concat(parts, FPS)
+                clip = parts[0] if len(parts) == 1 else retarget.concat(parts, FPS, a.join_blend)
                 if len(parts) > 1:
                     row["concatenated_frames"] = clip["concatenated"]
+                    row["part_starts"] = clip["part_starts"]                  # each part's first frame (30 fps)
+                    row["blend_frames"] = clip["blend_frames"]
                     row["join_turn_deg"] = clip["join_turn_deg"]              # ~0: the clips chain without a jump
                     row["join_worst"] = clip["join_worst"]                    # body bones (AnimObject* left out)
             except skyrimhkx.HkxError as e:

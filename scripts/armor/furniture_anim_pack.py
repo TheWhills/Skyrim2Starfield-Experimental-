@@ -182,8 +182,45 @@ PROP_SWAP = {"Sweep": {"AnimObjectBroom": "S2S_AnimObjectBroomSkyrim"}}
 # frame 0. The forge's Starfield template (industrial workbench) loads AnimObjectIndustrialWorkbench01 in one flavor
 # only (left out with its other prop events). S2S ANIO records: stance_plugin.PROP_OBJECTS.
 SET_PROP_OBJECTS = {"Forge": ("S2S_AnimObjectForgeHammerSkyrim", "S2S_AnimObjectForgeIronSkyrim")}
+# 2026-11-16 (owner's clip_join run, verified): the forge's clips chain Pull > Hammer 0.0 deg, Hammer > Temper 0.0,
+# Temper > Hammer 2.7, Hammer > Discard 4.0, but the Discard ends on no clip's first pose (Discard > Pull 62.7 deg in
+# the left arm and head, the closest; Pull starts from standing: Exit > Pull differs in the fingers only). Skyrim
+# goes Discard -> BlacksmithForgeRestart -> Pull through a blending transition, so the joined flavor crossfades too.
+# The length is an assumption (Skyrim's transition duration not read): 0.8 s.
+JOIN_BLEND = {"Forge": 0.8}
+# Events at times inside a joined clip's parts: {set: {clip: [(part, seconds into it, event, payload)]}}. The forge's
+# Discard drops the iron and Skyrim's Pull draws a new one at 2 s (smithing_probe: AnimObjDraw at 2.0 s); without
+# this the iron would fly from the drop to the fire. AnimObjUnequip with a payload removes one prop (vanilla: the
+# industrial workbench's Idle_Flavor02, afx_events). Frames: the report's part_starts + seconds * 30.
+_IRON = "S2S_AnimObjectForgeIronSkyrim"
+CLIP_EVENTS = {"Forge": {"blacksmithforgediscard.hkx+blacksmithforgepull.hkx": [
+    (1, 0.0, "AnimObjUnequip", _IRON), (1, 2.0, "AnimObjLoad", _IRON), (1, 2.0, "AnimObjDraw", _IRON)]}}
 ENTER_TAGS = ("enterfromstand", "enterinstant")
 EXIT_TAGS = ("exittostand", "quickexittostand")
+
+
+def clip_event_rows(rows, set_events) -> dict:
+    """{descriptor stem (lower): [(frame, event, payload)]} for the report rows whose clip has CLIP_EVENTS: frame =
+    the part's first frame in the joined clip + seconds * 30."""
+    out = {}
+    for r in rows:
+        clip = (r.get("clip") or "").replace("/", "\\").split("\\")[-1].lower()
+        evs = set_events.get(clip)
+        target = r.get("template") or r.get("replaces")
+        if not evs or not target or "error" in r:
+            continue
+        starts = r.get("part_starts") or [0]
+        stem = os.path.splitext(target.replace("\\", "/").split("/")[-1])[0].lower()
+        out[stem] = [(int(starts[p] + round(sec * 30)), name, pay) for p, sec, name, pay in evs if p < len(starts)]
+    return out
+
+
+def add_clip_events(afx_text: str, events) -> str:
+    from fo4sf import af_writer
+    data = afx_text.encode("utf-8")
+    for f, name, pay in events:
+        data = af_writer.add_event(data, f, name, pay)
+    return data.decode("utf-8")
 
 
 def add_set_props(afx_text: str, objects) -> str:
@@ -545,9 +582,11 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
-def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None, shoulders=None, props=()):
+def hkx_args(a, work, folder, replace, com=None, hands=None, profiles=None, shoulders=None, props=(), blend=0.0):
     out = ["--calumi", a.calumi, "--skyrim-data", a.skyrim_data, "--starfield-data", os.path.join(a.starfield, "Data"),
            "--out", work, "--into", folder, "--no-root-motion"]
+    if blend:
+        out += ["--join-blend", str(blend)]
     out += ["--com-shift", f"{com[0]},{com[1]}"] if com is not None else ["--align-com"]
     for p in props or ():
         out += ["--prop", p]
@@ -620,7 +659,7 @@ def main(argv=None):
         if not (a.copy_only and os.path.exists(done_rep)):
             print(f"== {st}: every clip with --com-shift {com[0]},{com[1]}")
             hkx_to_af.main(hkx_args(a, os.path.join(work, "all"), folder, idle + rest, com, hands, a.body_profiles,
-                                    a.shoulder_calibration, SET_PROPS.get(st, ())))
+                                    a.shoulder_calibration, SET_PROPS.get(st, ()), JOIN_BLEND.get(st, 0.0)))
         with open(os.path.join(work, "all", "report.json"), encoding="utf-8") as fh:
             rows = json.load(fh)
         src = os.path.join(work, "all", *folder.split("\\"))
@@ -632,7 +671,8 @@ def main(argv=None):
             shutil.rmtree(dst)
         os.makedirs(dst, exist_ok=True)
         files = sorted(f for f in os.listdir(src) if f.lower().endswith((".af", ".afx"))) if os.path.isdir(src) else []
-        stripped = props = graphs_swapped = 0
+        stripped = props = graphs_swapped = clip_events_added = 0
+        clip_events = clip_event_rows(rows, CLIP_EVENTS.get(st, {}))
         for f in files:
             if f.lower().endswith(".afx"):
                 with open(os.path.join(src, f), encoding="utf-8", errors="replace") as fh:
@@ -647,6 +687,10 @@ def main(argv=None):
                     new = props_at_start(swap_anim_objects(new, PROP_SWAP[st]))
                 if SET_PROP_OBJECTS.get(st):
                     new = add_set_props(new, SET_PROP_OBJECTS[st])
+                timed = clip_events.get(os.path.splitext(f)[0].lower())
+                if timed:
+                    new = add_clip_events(new, timed)
+                    clip_events_added += len(timed)
                 if GRAPH_SWAP.get(st):
                     swapped = swap_graph(new, GRAPH_SWAP[st])
                     graphs_swapped += swapped != new
@@ -726,6 +770,8 @@ def main(argv=None):
             if variants:
                 print(f"{st}: {len(variants)} mood / upper-body variants answered with our clips "
                       f"({len({n.split('_')[0] for n in variants})} prefixes)")
+        if clip_events_added:
+            print(f"{st}: {clip_events_added} timed events in joined clips (CLIP_EVENTS)")
         if graphs_swapped:
             print(f"{st}: {graphs_swapped} descriptors load {', '.join(GRAPH_SWAP[st].values())} instead of "
                   f"{', '.join(GRAPH_SWAP[st])}")

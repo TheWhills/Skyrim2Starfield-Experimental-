@@ -433,5 +433,26 @@ class DescriptorTests(unittest.TestCase):
         self.assertEqual(P.strip_variables(out), out)                        # nothing to strip: unchanged
 
 
+class ClipEventsTest(unittest.TestCase):
+    def test_forge_iron_events(self):
+        """2026-11-16 (clip_join): the Discard + Pull flavor blends its join and swaps the iron: unequipped where the
+        Pull part starts, a new one drawn 2 s into it (Skyrim's AnimObjDraw time)."""
+        self.assertGreater(P.JOIN_BLEND["Forge"], 0)
+        rows = [{"clip": P.SKY_ANIM + "blacksmithforgediscard.hkx+blacksmithforgepull.hkx", "part_starts": [0, 177],
+                 "template": "meshes/actors/human/animations/furniture/standing_wipewall/Idle_Flavor02.af"},
+                {"clip": P.SKY_ANIM + "blacksmithforgetemper.hkx",
+                 "template": "meshes/actors/human/animations/furniture/standing_wipewall/Idle_Flavor01.af"}]
+        ev = P.clip_event_rows(rows, P.CLIP_EVENTS["Forge"])
+        iron = "S2S_AnimObjectForgeIronSkyrim"
+        self.assertEqual(ev, {"idle_flavor02": [(177, "AnimObjUnequip", iron), (237, "AnimObjLoad", iron),
+                                                (237, "AnimObjDraw", iron)]})
+        afx = "<animation><tag>Idle_Flavor02</tag><events>\r\n</events></animation>"
+        out = P.add_clip_events(afx, ev["idle_flavor02"])
+        self.assertLess(out.index("AnimObjUnequip"), out.index("AnimObjLoad"))
+        self.assertLess(out.index("AnimObjLoad"), out.index("AnimObjDraw"))
+        self.assertIn("--join-blend", P.hkx_args(type("A", (), {"calumi": "c", "skyrim_data": "s", "starfield": "f"}),
+                                                 "w", "x", [], blend=0.8))
+
+
 if __name__ == "__main__":
     unittest.main()
