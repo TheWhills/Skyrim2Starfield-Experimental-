@@ -334,3 +334,20 @@ leaves out). Changes: candle emittance from FireCandleFlame's fixed 75000 to the
 scripts/interior/flame_textures.py (read-only) renders the atlas, palette, candle and glow textures and the palette
 bakes for rows 0 / 0.5 / 1 with the grey from green or from alpha into one sheet, and prints the shaders' emissive
 colours and where the hearth's particle systems sit: the data to fix the palette lookup and add the particle flames.
+flame_textures results (owner, 2026-11-15): GradFireExplosion (256 x 64) runs dark red -> orange -> white from its
+top to its middle row and is blue only in its last rows (bottom row alpha 0 -> 237); the hearth shaders' emissive
+colours are greys (Flames 0.224 / 0.275, log glow 0.196) with multiples 1.25 - 1.75, alpha 1 - so the emissive red is
+the palette row (v1 used the bottom, blue row and then darkened by the grey: the faint blue flames). FXFireAtlas04 is
+grey (R = G = B); CandleFlame01 is a 2 x 2 atlas of four warm flame frames (v1 showed all four on one card: the "II"),
+FXFireAtlas02 a 4 x 2 atlas of orange flames whose alpha is palette-mapped; CandleGlow01 a grey halo (colour 0.39,
+0.29, 0.18). FlamesSmall01 sits at z 7.99 in FireplaceWood01Burning (emitter = a 20-unit cylinder), smoke at 37.5.
+Flames v2:
+* Colour = palette(u = grey, v = emissive red) x emissive multiple; alpha = palette alpha(u = texture alpha,
+  v = emissive alpha); unmapped colour = texture x emissive colour x multiple (skyrimfire.bake_params). Supported
+  hypothesis from the data above (the greys only make sense as rows).
+* Particle atlases play as Starfield flipbooks (columns x rows from the NiPSysData sub-texture offsets, else
+  SUBTEXTURE_GRIDS; FLIPBOOK_FPS candle 8, hearth 10) driven by a TimerController on FlipbookAuto, as vanilla
+  FireCandleFlame.mat: one frame per card, and the candles move.
+* The model's own flame particles become cards too (model_flames): FlamesSmall01 = five crossed cards (one at the
+  emitter, four on a ring at 55 % of its radius), 32 units wide, lifted by half their rise. Halos are particle systems
+  over 40 units or named / textured "glow"; smoke stays out.

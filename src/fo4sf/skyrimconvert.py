@@ -454,18 +454,21 @@ class SkyrimConverter(pipeline.Converter):
             return None
         if not skyrimfire.is_fire_effect(info, self.fire_pattern):
             return None
-        tint = tuple(info.get("emissive_color", (1.0, 1.0, 1.0))[:3])
-        return self.flame_material(info["source"], info["greyscale"], info["palette_color"], info["palette_alpha"],
-                                   tint=tint, scroll=skyrimfire.uv_scroll(info["controllers"]), kind="hearth",
+        return self.flame_material(info["source"], **skyrimfire.bake_params(info),
+                                   scroll=skyrimfire.uv_scroll(info["controllers"]), kind="hearth",
                                    vertex_color=info["vertex_alpha"])
 
     def flame_material(self, source: str, greyscale: str = "", palette_color: bool = False,
-                       palette_alpha: bool = False, tint=(1.0, 1.0, 1.0), scroll=None, kind: str = "hearth",
-                       flicker: Optional[float] = None, vertex_color: bool = False) -> Optional[str]:
-        """Convert (once) a Skyrim effect texture into a Starfield emissive effect material: palette baked in,
-        colour + emissive BC1 sRGB, opacity BC4; skyrimfire.effect_material with the scroll / flicker controllers."""
+                       palette_alpha: bool = False, color_row: float = 1.0, alpha_row: float = 1.0,
+                       tint=(1.0, 1.0, 1.0), scroll=None, kind: str = "hearth", flicker: Optional[float] = None,
+                       vertex_color: bool = False, flipbook=None) -> Optional[str]:
+        """Convert (once) a Skyrim effect texture into a Starfield emissive effect material: palette baked in
+        (skyrimfire.palette_bake), colour + emissive BC1 sRGB, opacity BC4; skyrimfire.effect_material with the
+        scroll / flicker / flipbook controllers."""
+        tint = tuple(float(t) for t in tint)
         ident = "|".join(str(x) for x in (source.lower(), greyscale.lower(), palette_color, palette_alpha,
-                                          [round(v, 3) for v in tint], scroll, kind, flicker, vertex_color))
+                                          round(color_row, 3), round(alpha_row, 3), [round(v, 3) for v in tint],
+                                          scroll, kind, flicker, vertex_color, flipbook))
         stem = os.path.splitext(os.path.basename(source.replace("\\", "/")))[0].lower() + "_" + \
             hashlib.sha1(ident.encode()).hexdigest()[:8]
         key = "fire:" + stem
@@ -473,7 +476,8 @@ class SkyrimConverter(pipeline.Converter):
             return self._materials[key]
         try:
             self._materials[key] = self._write_flame_material(stem, source, greyscale, palette_color, palette_alpha,
-                                                              tint, scroll, kind, flicker, vertex_color)
+                                                              color_row, alpha_row, tint, scroll, kind, flicker,
+                                                              vertex_color, flipbook)
             self.stats["flame_materials"] = self.stats.get("flame_materials", 0) + 1
         except Exception as e:                                      # noqa: BLE001  (recorded; the shape is skipped)
             self._materials[key] = None
@@ -492,8 +496,8 @@ class SkyrimConverter(pipeline.Converter):
         px = np.frombuffer(raw[h["data_offset"]:h["data_offset"] + h["width"] * h["height"] * 4], np.uint8)
         return px.reshape(h["height"], h["width"], 4)
 
-    def _write_flame_material(self, stem, source, greyscale, palette_color, palette_alpha, tint, scroll, kind,
-                              flicker, vertex_color) -> str:
+    def _write_flame_material(self, stem, source, greyscale, palette_color, palette_alpha, color_row, alpha_row,
+                              tint, scroll, kind, flicker, vertex_color, flipbook) -> str:
         import tempfile
         import numpy as np
         from . import convert_material as cm, textures
@@ -507,7 +511,7 @@ class SkyrimConverter(pipeline.Converter):
             rgba = self._rgba(src, tmp, "src")
             if pal is not None:
                 rgba = skyrimfire.palette_bake(rgba, self._rgba(pal, tmp, "pal"), palette_color, palette_alpha,
-                                               tint=tint)
+                                               row=color_row, alpha_row=alpha_row, tint=tint)
             else:
                 rgba = skyrimfire.palette_bake(rgba, rgba[:1], False, False, tint=tint)
             h, w = rgba.shape[:2]
@@ -527,13 +531,33 @@ class SkyrimConverter(pipeline.Converter):
         mat = skyrimfire.effect_material(self._effect_template, "S2S_Flame_" + re.sub(r"[^a-z0-9]+", "_", stem),
                                          {"Albedo": files["color"], "Emissive": files["color"],
                                           "Opacity": files["opacity"]},
-                                         kind=kind, scroll=scroll, flicker=flicker, vertex_color=vertex_color)
+                                         kind=kind, scroll=scroll, flicker=flicker, vertex_color=vertex_color,
+                                         flipbook=flipbook)
         mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
         p = os.path.join(self.staging, *mat_rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8", newline="\n") as f:
             f.write(skyrimfire.dumps(mat))
         return mat_rel.replace("/", "\\")
+
+    def particle_flame_cards(self, flames, offset=(0.0, 0.0, 0.0), kind="candle", tag="Flame") -> tuple:
+        """(shapes, materials): crossed cards for particle flames (skyrimfire.particle_flame results), moved by
+        `offset` (an AddOnNode's position); the atlas plays as a flipbook when it has several frames."""
+        shapes, mats = [], []
+        for f in flames:
+            cols, rows = f["grid"]
+            fb = (cols, rows, skyrimfire.FLIPBOOK_FPS[kind]) if cols * rows > 1 else None
+            mat = self.flame_material(f["texture"], f["greyscale"], f["palette_color"], f["palette_alpha"],
+                                      f["color_row"], f["alpha_row"], tint=f["color"], kind=kind,
+                                      flicker=max(0.6, 3 * f["life"]), flipbook=fb)
+            if mat is None:
+                continue
+            for c in skyrimfire.flame_card_centres(f):
+                centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
+                shapes.append(skyrimfire.crossed_cards(centre, f["half_w"], f["half_h"],
+                                                       name=f"{tag}_{len(shapes)}".encode()))
+                mats.append(mat)
+        return shapes, mats
 
     def addon_flames(self, src) -> tuple:
         """(shapes, materials) of flame cards at the model's AddOnNodes whose add-on is a flame particle system
@@ -553,15 +577,20 @@ class SkyrimConverter(pipeline.Converter):
                     except Exception as e:                          # noqa: BLE001
                         self.material_errors["addon:" + model] = f"{type(e).__name__}: {e}"
                 self._addon_flames[idx] = flames
-            for k, f in enumerate(self._addon_flames[idx]):
-                mat = self.flame_material(f["texture"], tint=f["color"], kind="candle",
-                                          flicker=max(0.6, 3 * f["life"]))
-                if mat is None:
-                    continue
-                shapes.append(skyrimfire.crossed_cards((pos[0], pos[1], pos[2] + f["lift"]), f["half_w"], f["half_h"],
-                                                       name=f"AddOnFlame{idx}_{len(shapes)}".encode()))
-                mats.append(mat)
+            sh, ma = self.particle_flame_cards(self._addon_flames[idx], pos, "candle",
+                                               f"AddOnFlame{idx}_{len(shapes)}")
+            shapes += sh
+            mats += ma
         return shapes, mats
+
+    def model_flames(self, src) -> tuple:
+        """(shapes, materials): the model's own flame particle systems as cards (FireplaceWood01Burning's
+        FlamesSmall01: most of what a Skyrim hearth shows). Smoke and halos stay out (skyrimfire.particle_flame)."""
+        try:
+            flames = [f for f in (skyrimfire.particle_flame(ps) for ps in skyrimfire.particle_systems(src)) if f]
+        except Exception:                                           # noqa: BLE001
+            return [], []
+        return self.particle_flame_cards(flames, kind="hearth", tag="ParticleFlame")
 
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
@@ -591,6 +620,8 @@ class SkyrimConverter(pipeline.Converter):
             cards = []
             if self.fire and not skin_bone:
                 cards, card_mats = self.addon_flames(src)
+                own, own_mats = self.model_flames(src)
+                cards, card_mats = cards + own, card_mats + own_mats
                 shapes, mats = list(shapes) + cards, list(mats) + card_mats
             if all(m is None for m in mats):
                 raise ValueError("only effect-shader / refraction shapes, skipped")

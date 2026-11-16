@@ -33,8 +33,16 @@ SLSF2_DOUBLE_SIDED = 1 << 4
 
 FIRE_EFFECT = r"fire|flame|candle|woodfires"     # effect textures converted as flames (others stay skipped)
 ADDON_MODELS = {49: "meshes\\mps\\mpscandleflame01.nif"}   # Skyrim ADDN DATA index -> model (000B9FC5 MPSCandleFlame01)
-GLOW_RADIUS = 10.0                   # units: particle systems bigger than this are halos (CandleGlow01: 80), not cards
-PALETTE_ROW = 1.0                    # v of the palette row used (0 top .. 1 bottom); unresolved, see module doc
+GLOW_RADIUS = 40.0                   # units: particle systems bigger than this are halos (CandleGlow01: 80), not cards
+# Palette rows (owner's flame_textures run, 2026-11-15): GradFireExplosion is dark red -> orange -> white down to its
+# middle and blue in its last rows; the fire shaders' "emissive colours" are greys (0.224, 0.275, 0.196) = the colour
+# row, alpha 1 = the alpha row (the bottom row's alpha ramps 0 -> 237). Skyrim's lookup as read from that: colour =
+# palette(u = grey, v = emissive red) x emissive multiple, alpha = palette alpha(u = texture alpha, v = emissive alpha).
+PALETTE_ROW = 1.0
+# Sub-texture grids (frames) of particle atlases, when the NIF's NiPSysData offsets cannot be read: from the owner's
+# contact sheet (CandleFlame01 2 x 2 flames, FXFireAtlas02 4 x 2)
+SUBTEXTURE_GRIDS = {"candleflame01": (2, 2), "fxfireatlas02": (4, 2)}
+FLIPBOOK_FPS = {"candle": 8.0, "hearth": 10.0}
 
 
 def time_controller(b: bytes) -> dict:
@@ -137,6 +145,17 @@ def uv_scroll(ctrls) -> Optional[Tuple[str, float, float]]:
     return None
 
 
+def bake_params(info: dict) -> dict:
+    """How to bake one Skyrim effect shader (see PALETTE_ROW): palette flags, colour / alpha rows and the colour tint
+    (the emissive multiple; times the emissive colour when the colour is not palette-mapped)."""
+    col = list(info.get("emissive_color") or [1.0, 1.0, 1.0, 1.0])
+    mult = float(info.get("emissive_multiple") or 1.0)
+    pc, pa = bool(info.get("palette_color")), bool(info.get("palette_alpha"))
+    tint = (mult,) * 3 if pc else tuple(c * mult for c in col[:3])
+    return {"greyscale": info.get("greyscale") or "", "palette_color": pc, "palette_alpha": pa,
+            "color_row": min(1.0, max(0.0, col[0])), "alpha_row": min(1.0, max(0.0, col[3])), "tint": tint}
+
+
 def is_fire_effect(info: dict, pattern: str = FIRE_EFFECT) -> bool:
     return bool(re.search(pattern, info.get("source") or "", re.I))
 
@@ -198,8 +217,10 @@ def particle_systems(n) -> list:
                     shader = effect_shader(n, sh[0])
                 except Exception:                                   # noqa: BLE001
                     shader = None
+            data = [r for r in refs if 0 <= r < len(n.blocks) and n.type_of(r) == "NiPSysData"]
             systems[i] = {"block": i, "type": n.type_of(i), "name": name,
-                          "shader_block": sh[0] if sh else None,
+                          "shader_block": sh[0] if sh else None, "shader": shader,
+                          "subtextures": subtexture_offsets(n.blocks[data[0]]) if data else [],
                           "emissive_color": list(shader["emissive_color"][:3]) if shader and "emissive_color" in shader
                           else None,
                           "textures": [x.decode("latin-1") for x in re.findall(rb"[\w\\/ .-]+\.dds", n.blocks[sh[0]])]
@@ -215,28 +236,96 @@ def particle_systems(n) -> list:
             c = controllers(n, i)[0]
             if c.get("target") in systems:
                 systems[c["target"]]["modifiers"].append({"block": i, "controller": c})
+    try:
+        world = nifmod.world_transforms(n)
+    except Exception:                                               # noqa: BLE001
+        world = None
+    for ps in systems.values():                    # where particles start: the emitter object (else the system)
+        em = next((m for m in ps["modifiers"] if m.get("type") in EMITTERS), None)
+        obj = -1
+        if em is not None and len(n.blocks[em["block"]]) >= 73:
+            obj = struct.unpack_from("<i", n.blocks[em["block"]], 13 + 56)[0]
+        ps["emitter_object"] = obj
+        pos = None
+        for b in (obj, ps["block"]):
+            if pos is None and world is not None and 0 <= b < len(n.blocks):
+                try:
+                    pos = tuple(float(x) for x in world(b)[0])
+                except Exception:                                   # noqa: BLE001
+                    pos = None
+        ps["origin"] = pos or (0.0, 0.0, 0.0)
     return list(systems.values())
+
+
+def subtexture_offsets(b: bytes) -> list:
+    """The sub-texture rectangles of an NiPSysData block (the frames a particle picks from an atlas), found by their
+    shape: a count byte 2..64 then that many Vector4 (u, v, u2 / width, v2 / height) inside 0..1 that tile a grid.
+    [] when none is found (callers fall back to SUBTEXTURE_GRIDS)."""
+    for p in range(0, len(b) - 1):
+        k = b[p]
+        if not 2 <= k <= 64 or p + 1 + 16 * k > len(b):
+            continue
+        rects = [struct.unpack_from("<4f", b, p + 1 + 16 * j) for j in range(k)]
+        if not all(all(0.0 <= x <= 1.0001 for x in r) and r[2] > 0 and r[3] > 0 for r in rects):
+            continue
+        us, vs = {round(r[0], 3) for r in rects}, {round(r[1], 3) for r in rects}
+        if len(us) * len(vs) == k and (len(us) > 1 or len(vs) > 1):
+            return [tuple(round(x, 4) for x in r) for r in rects]
+    return []
+
+
+def subtexture_grid(system: dict) -> Tuple[int, int]:
+    """(columns, rows) of a particle system's atlas: from its NiPSysData offsets, else SUBTEXTURE_GRIDS, else 1 x 1."""
+    rects = system.get("subtextures") or []
+    if rects:
+        return len({round(r[0], 3) for r in rects}), len({round(r[1], 3) for r in rects})
+    tex = (system.get("textures") or [""])[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return SUBTEXTURE_GRIDS.get(tex.rsplit(".", 1)[0], (1, 1))
 
 
 def particle_flame(system: dict) -> Optional[dict]:
     """What a flame particle system looks like as one card: {texture, half_w, half_h, lift, color} in Skyrim units
     (lift = the card centre above the emitter: half the rise over a particle's life). None for halos (radius over
     GLOW_RADIUS), systems without an emitter, and non-fire textures."""
-    em = next((m["fields"] for m in system["modifiers"] if m.get("type") in EMITTERS and "fields" in m), None)
+    emitter = next((m for m in system["modifiers"] if m.get("type") in EMITTERS and "fields" in m), None)
+    em = emitter["fields"] if emitter else None
     tex = system["textures"][0] if system["textures"] else ""
-    if em is None or not re.search(FIRE_EFFECT, tex, re.I) or em["radius"] > GLOW_RADIUS:
+    if em is None or not re.search(FIRE_EFFECT, tex, re.I) or em["radius"] > GLOW_RADIUS \
+            or re.search("glow", tex + " " + system.get("name", ""), re.I):
         return None
     scales = next((m.get("scales") for m in system["modifiers"] if m.get("type") == "BSPSysScaleModifier"), None)
     smax = max(scales) if scales else 1.0
     col = next((m["fields"] for m in system["modifiers"] if m.get("type") == "BSPSysSimpleColorModifier"), None)
     color = (col["c2r"], col["c2g"], col["c2b"]) if col else (1.0, 1.0, 1.0)
-    shader = system.get("emissive_color")          # Skyrim draws particle colour x the shader's emissive colour
-    if shader:
-        color = tuple(c * s for c, s in zip(color, shader))
+    shader = system.get("shader") or {}
+    if not shader and system.get("emissive_color"):
+        shader = {"emissive_color": list(system["emissive_color"]) + [1.0], "emissive_multiple": 1.0}
+    bake = bake_params(shader)
+    # Skyrim draws particle colour x the shader colour (bake tint: emissive colour x multiple unless palette-mapped)
+    color = tuple(min(4.0, max(0.0, c * t)) for c, t in zip(color, bake["tint"]))
     rise = em["speed"] * em["life_span"]
     half_w = em["radius"] * smax
+    volume = (emitter or {}).get("volume") or []
+    spread = float(volume[0]) if emitter.get("type") in ("NiPSysCylinderEmitter", "NiPSysSphereEmitter") and volume \
+        else 0.0
     return {"texture": tex, "half_w": half_w, "half_h": half_w + rise * 0.25, "lift": rise * 0.5,
-            "color": tuple(min(1.0, max(0.0, c)) for c in color), "life": em["life_span"], "name": system["name"]}
+            "color": color, "life": em["life_span"], "name": system["name"], "grid": subtexture_grid(system),
+            "origin": tuple(system.get("origin") or (0.0, 0.0, 0.0)), "spread": spread,
+            "greyscale": bake["greyscale"], "palette_color": bake["palette_color"],
+            "palette_alpha": bake["palette_alpha"], "color_row": bake["color_row"], "alpha_row": bake["alpha_row"]}
+
+
+def flame_card_centres(flame: dict) -> List[tuple]:
+    """Where the cards of one particle flame go (model space): one at the emitter, plus four on a ring at 55 % of
+    the emitter's radius when the emitter is wider than a card (FireplaceWood01Burning: a 20-unit cylinder)."""
+    ox, oy, oz = flame["origin"]
+    z = oz + flame["lift"]
+    out = [(ox, oy, z)]
+    r = flame.get("spread", 0.0) * 0.55
+    if flame.get("spread", 0.0) > flame["half_w"] * 0.5:
+        out += [(ox + r * math.cos(a), oy + r * math.sin(a), z) for a in (0.4, 0.4 + math.pi / 2, 0.4 + math.pi,
+                                                                          0.4 + 3 * math.pi / 2)]
+    return out
 
 
 def addon_nodes(n) -> List[Tuple[int, tuple]]:
@@ -293,20 +382,22 @@ def crossed_cards(center, half_w: float, half_h: float, planes: int = 3, name: b
 
 # ---------------------------------------------------------------------------------------------------------- textures
 def palette_bake(rgba, palette, palette_color: bool, palette_alpha: bool, row: float = PALETTE_ROW,
-                 tint=(1.0, 1.0, 1.0)):
+                 tint=(1.0, 1.0, 1.0), alpha_row: Optional[float] = None):
     """Skyrim's greyscale-to-palette lookup baked into the texture: colour = palette(u = texture green, v = row),
-    alpha = palette alpha(u = texture alpha, v = row) (or the texture's own alpha); then times the effect's
-    emissive colour. rgba, palette: (h, w, 4) uint8 arrays. Returns (h, w, 4) uint8."""
+    alpha = palette alpha(u = texture alpha, v = alpha_row, default row) (or the texture's own alpha); then the
+    colour times `tint`. rgba, palette: (h, w, 4) uint8 arrays. Returns (h, w, 4) uint8."""
     import numpy as np
     out = rgba.astype(np.float32).copy()
     ph, pw = palette.shape[:2]
-    pr = palette[min(ph - 1, max(0, int(round(row * (ph - 1)))))].astype(np.float32)      # (pw, 4)
+
+    def pick(v):
+        return palette[min(ph - 1, max(0, int(round(v * (ph - 1)))))].astype(np.float32)      # (pw, 4)
     if palette_color:
         u = np.clip(np.round(rgba[:, :, 1].astype(np.float32) / 255.0 * (pw - 1)), 0, pw - 1).astype(np.int64)
-        out[:, :, :3] = pr[u][:, :, :3]
+        out[:, :, :3] = pick(row)[u][:, :, :3]
     if palette_alpha:
         u = np.clip(np.round(rgba[:, :, 3].astype(np.float32) / 255.0 * (pw - 1)), 0, pw - 1).astype(np.int64)
-        out[:, :, 3] = pr[u][:, :, 3]
+        out[:, :, 3] = pick(row if alpha_row is None else alpha_row)[u][:, :, 3]
     out[:, :, :3] *= np.array(tint[:3], np.float32)[None, None, :]
     return np.clip(np.round(out), 0, 255).astype(np.uint8)
 
@@ -366,14 +457,25 @@ def _directory(bindings) -> dict:
 
 def effect_material(template: dict, name: str, files: dict, kind: str = "hearth",
                     scroll: Optional[Tuple[str, float, float]] = None, flicker: Optional[float] = None,
-                    vertex_color: bool = False) -> dict:
+                    vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None) -> dict:
     """An emissive effect material cloned from the vanilla fire template (convert_material.build_from_template):
-    files {"Albedo", "Emissive", "Opacity": game paths}; the template's flipbook removed (Skyrim's textures are single
-    frames); EMITTANCE[kind]; controllers for a UV scroll (axis, delta, seconds) and / or a flicker (loop seconds)."""
+    files {"Albedo", "Emissive", "Opacity": game paths}; EMITTANCE[kind]; controllers for a UV scroll (axis, delta,
+    seconds) and / or a flicker (loop seconds). flipbook (columns, rows, fps): the atlas plays as a looping flipbook
+    driven by a TimerController on FlipbookAuto, as vanilla FireCandleFlame.mat; without it the template's flipbook
+    is removed (a single-frame texture)."""
     from . import convert_material as cm
     mat = cm.build_from_template(template, name, files)
     for o in mat["Objects"]:
-        o["Components"] = [c for c in o.get("Components", []) if c.get("Type") != "BSMaterial::FlipbookComponent"]
+        comps = []
+        for c in o.get("Components", []):
+            if c.get("Type") == "BSMaterial::FlipbookComponent":
+                if not flipbook:
+                    continue
+                cols, rows, fps = flipbook
+                c["Data"] = {"Columns": str(int(cols)), "FPS": f"{fps:g}", "IsAFlipbook": "true", "Loops": "true",
+                             "Rows": str(int(rows))}
+            comps.append(c)
+        o["Components"] = comps
     root = mat["Objects"][0]["Components"]
     em = EMITTANCE[kind]
     for c in root:
@@ -391,6 +493,9 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
     if flicker:
         maps.append(_mapping("EmissiveIntensity", flicker_controller(float(em["LuminousEmittance"]), flicker)))
         binds.append("EmissiveIntensity")
+    if flipbook:
+        maps.append(_mapping("FlipbookAuto", {"Data": None, "Type": "BSBind::TimerController"}))
+        binds.append("FlipbookAuto")
     if maps:
         root.insert(1, _directory(binds))
         root.insert(2, {"Data": {"upControllers": {"Data": {"Data": {

@@ -1,3 +1,4 @@
+import math
 import os
 import struct
 import sys
@@ -75,6 +76,7 @@ class ParticleFlameTest(unittest.TestCase):
     def test_card_colour_includes_the_shaders_emissive_colour(self):
         f = skyrimfire.particle_flame(dict(self.CANDLE, emissive_color=[1.0, 0.6, 0.2]))
         self.assertEqual(f["color"], (1.0, 0.6, 0.2))
+        self.assertEqual(f["grid"], (2, 2))                  # CandleFlame01: four flames in a 2 x 2 atlas
 
     def test_halo_and_smoke_are_left_out(self):
         glow = {"name": "CandleGlow01", "textures": ["textures\\effects\\CandleGlow01.dds"], "modifiers": [
@@ -192,8 +194,12 @@ class AddonFlamesTest(unittest.TestCase):
         conv = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
         conv.addon_models = {49: "meshes\\mps\\mpscandleflame01.nif"}
         conv._addon_flames = {49: [{"texture": "textures\\effects\\CandleFlame01.dds", "half_w": 1.0, "half_h": 2.0,
-                                    "lift": 1.25, "color": (1, 1, 1), "life": 0.33, "name": "CandleFlame01"}]}
-        conv.flame_material = lambda *a, **k: "materials\\skyrim\\effects\\candleflame01_x.mat"
+                                    "lift": 1.25, "color": (1, 1, 1), "life": 0.33, "name": "CandleFlame01",
+                                    "grid": (2, 2), "origin": (0.0, 0.0, 0.0), "spread": 0.0, "greyscale": "",
+                                    "palette_color": False, "palette_alpha": False, "color_row": 1.0,
+                                    "alpha_row": 1.0}]}
+        calls = []
+        conv.flame_material = lambda *a, **k: calls.append(k) or "materials\\skyrim\\effects\\candleflame01_x.mat"
         orig = skyrimfire.addon_nodes
         skyrimfire.addon_nodes = lambda n: [(49, (21.3, 0.0, 127.0)), (49, (0.0, 21.3, 127.0)), (7, (0, 0, 0))]
         try:
@@ -205,6 +211,73 @@ class AddonFlamesTest(unittest.TestCase):
         P = np.array(shapes[0].positions)
         self.assertAlmostEqual(P[:, 0].mean(), 21.3, places=4)
         self.assertAlmostEqual(P[:, 2].mean(), 128.25, places=4)
+        self.assertEqual(calls[0]["flipbook"], (2, 2, skyrimfire.FLIPBOOK_FPS["candle"]))
+        self.assertEqual(calls[0]["kind"], "candle")
+
+
+class HearthV2Test(unittest.TestCase):
+    """Owner's flame_textures run (2026-11-15): GradFireExplosion orange above, blue in its last rows; the hearth
+    shaders' emissive colours are greys that pick the row."""
+    HEARTH_MESH = {"emissive_color": [0.224, 0.224, 0.224, 1.0], "emissive_multiple": 1.75, "palette_color": True,
+                   "palette_alpha": True, "greyscale": "textures\\effects\\gradients\\GradFireExplosion.dds"}
+
+    def test_palette_mapped_flames_take_their_row_from_the_emissive_colour(self):
+        b = skyrimfire.bake_params(self.HEARTH_MESH)
+        self.assertAlmostEqual(b["color_row"], 0.224)
+        self.assertEqual(b["alpha_row"], 1.0)
+        self.assertEqual(b["tint"], (1.75, 1.75, 1.75))
+
+    def test_unmapped_colour_is_tinted_by_emissive_colour_times_multiple(self):
+        b = skyrimfire.bake_params({"emissive_color": [0.949, 0.729, 0.62, 1.0], "emissive_multiple": 1.5,
+                                    "palette_color": False, "palette_alpha": True, "greyscale": "g.dds"})
+        self.assertFalse(b["palette_color"])
+        self.assertAlmostEqual(b["tint"][0], 0.949 * 1.5)
+
+    def test_separate_colour_and_alpha_rows(self):
+        pal = np.zeros((3, 2, 4), np.uint8)
+        pal[0] = [[10, 0, 0, 0], [200, 100, 0, 0]]        # top: orange colours, no alpha
+        pal[2] = [[0, 0, 200, 0], [0, 0, 255, 230]]       # bottom: blue, alpha ramp
+        tex = np.array([[[255, 255, 255, 255]]], np.uint8)
+        out = skyrimfire.palette_bake(tex, pal, True, True, row=0.0, alpha_row=1.0)
+        self.assertEqual(out[0, 0].tolist(), [200, 100, 0, 230])
+
+    def test_subtexture_offsets_found_by_shape(self):
+        rects = [(0, 0, 0.5, 0.5), (0.5, 0, 0.5, 0.5), (0, 0.5, 0.5, 0.5), (0.5, 0.5, 0.5, 0.5)]
+        blk = bytes(17) + bytes([4]) + b"".join(struct.pack("<4f", *r) for r in rects) + struct.pack("<f", 1.0)
+        found = skyrimfire.subtexture_offsets(blk)
+        self.assertEqual(len(found), 4)
+        self.assertEqual(skyrimfire.subtexture_grid({"subtextures": found}), (2, 2))
+        self.assertEqual(skyrimfire.subtexture_grid({"textures": ["textures\\effects\\FXFireAtlas02.dds"]}), (4, 2))
+        self.assertEqual(skyrimfire.subtexture_grid({"textures": ["x.dds"]}), (1, 1))
+
+    def test_hearth_particles_become_five_cards_across_the_emitter(self):
+        system = {"name": "FlamesSmall01", "textures": ["textures\\effects\\FXFireAtlas02.dds"],
+                  "origin": (0.0, 0.0, 7.99), "subtextures": [],
+                  "shader": {"emissive_color": [0.949, 0.729, 0.62, 1.0], "emissive_multiple": 1.5,
+                             "palette_color": False, "palette_alpha": True,
+                             "greyscale": "textures\\effects\\gradients\\GradFireExplosion.dds"},
+                  "modifiers": [{"type": "NiPSysCylinderEmitter", "volume": [20.0, 0.07],
+                                 "fields": {"speed": 45.0, "radius": 16.0, "life_span": 0.4}},
+                                {"type": "BSPSysScaleModifier", "scales": [1.0, 1.0148, 0.5]}]}
+        f = skyrimfire.particle_flame(system)
+        self.assertIsNotNone(f)                              # radius 16: a flame, not a halo
+        self.assertEqual(f["grid"], (4, 2))
+        self.assertTrue(f["palette_alpha"] and not f["palette_color"])
+        centres = skyrimfire.flame_card_centres(f)
+        self.assertEqual(len(centres), 5)
+        self.assertAlmostEqual(centres[0][2], 7.99 + 45 * 0.4 * 0.5, places=4)
+        self.assertAlmostEqual(math.hypot(centres[1][0], centres[1][1]), 11.0, places=4)
+
+    def test_flipbook_material_plays_frames_on_a_timer(self):
+        mat = skyrimfire.effect_material(fire_template(), "S2S_Flame_f", EffectMaterialTest.FILES, kind="hearth",
+                                         flipbook=(4, 2, 10.0))
+        comps = [c for o in mat["Objects"] for c in o["Components"]]
+        fb = next(c for c in comps if c["Type"] == "BSMaterial::FlipbookComponent")
+        self.assertEqual(fb["Data"], {"Columns": "4", "FPS": "10", "IsAFlipbook": "true", "Loops": "true", "Rows": "2"})
+        ctrl = next(c for c in comps if c["Type"] == "BSBind::ControllerComponent")
+        m, = ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"]
+        self.assertEqual(m["Data"]["Address"]["Data"]["Path"]["Data"], ["FlipbookAuto"])
+        self.assertEqual(m["Data"]["Controller"]["Data"]["Type"], "BSBind::TimerController")
 
 
 class DecodeDxtTest(unittest.TestCase):
