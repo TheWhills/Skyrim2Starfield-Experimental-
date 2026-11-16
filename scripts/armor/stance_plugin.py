@@ -66,7 +66,11 @@ FURN_INDEX = 16
 # scripts/armor/anim_object_convert.py (Skyrim's clutter broom, attached to R_AnimObject1: our sweep clips key that
 # bone where Skyrim holds AnimObjectR).
 PROP_INDEX = 48
-PROP_OBJECTS = (("S2S_AnimObjectBroomSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\BroomSkyrim.nif"),)
+# 2026-11-16: Skyrim's forge hammer and hot iron (the Forge set; anim_object_convert.PROP_SOURCES), ANIO copies of the
+# broom's vanilla record (the attach bone is the model's Prn, not the record's)
+PROP_OBJECTS = (("S2S_AnimObjectBroomSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\BroomSkyrim.nif"),
+                ("S2S_AnimObjectForgeHammerSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\ForgeHammerSkyrim.nif"),
+                ("S2S_AnimObjectForgeIronSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\ForgeIronSkyrim.nif"))
 _FURN = "actors\\human\\animations\\furniture\\"
 # (set, the vanilla furniture keywords whose entries are copied with the set's keyword, the set's folder). The keyword
 # FormIDs follow this order (FURN_INDEX + position): add new sets at the end. Counter: Skyrim's counter-lean markers are

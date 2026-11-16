@@ -158,8 +158,36 @@ KEEP_PROPS = ("Sweep",)
 # clips key the prop bone where Skyrim holds it (hkx_to_af --prop), and its descriptors load our animation object
 # (S2SStances.esm's ANIO, a copy of Starfield's AnimObjectBroom with the converted Skyrim broom, attached to the same
 # bone: scripts/armor/anim_object_convert.py) instead of Starfield's.
-SET_PROPS = {"Sweep": ("AnimObjectR=R_AnimObject1",)}
+# 2026-11-16 (owner's anim_object_probe on the forge clips, verified): Skyrim's forge holds the hammer on AnimObjectR
+# (fixed in the right hand) and the hot iron on AnimObjectL (in the fire at the Pull's start, carried to the left hand,
+# then fixed ~0.47 m from it through the hammering and the trough).
+SET_PROPS = {"Sweep": ("AnimObjectR=R_AnimObject1",),
+             "Forge": ("AnimObjectR=R_AnimObject1", "AnimObjectL=L_AnimObject1")}
 PROP_SWAP = {"Sweep": {"AnimObjectBroom": "S2S_AnimObjectBroomSkyrim"}}
+# Props a set loads itself (its template loads its own, or none, where Skyrim's are wanted): every enter descriptor
+# (EnterFromStand, EnterInstant) gets AnimObjLoad + AnimObjDraw of each at frame 0, every exit AnimObjUnequipAll at
+# frame 0. The forge's Starfield template (industrial workbench) loads AnimObjectIndustrialWorkbench01 in one flavor
+# only (left out with its other prop events). S2S ANIO records: stance_plugin.PROP_OBJECTS.
+SET_PROP_OBJECTS = {"Forge": ("S2S_AnimObjectForgeHammerSkyrim", "S2S_AnimObjectForgeIronSkyrim")}
+ENTER_TAGS = ("enterfromstand", "enterinstant")
+EXIT_TAGS = ("exittostand", "quickexittostand")
+
+
+def add_set_props(afx_text: str, objects) -> str:
+    """The descriptor with the set's own props loaded and drawn at the start of an enter, all unequipped at the start
+    of an exit (SET_PROP_OBJECTS); other descriptors unchanged."""
+    from fo4sf import af_writer
+    tag = (_tag(afx_text) or "").lower()
+    data = afx_text.encode("utf-8")
+    if tag in ENTER_TAGS:
+        for o in objects:                                # add_event keeps insertion order among equal frames
+            data = af_writer.add_event(data, 0, "AnimObjLoad", o)
+            data = af_writer.add_event(data, 0, "AnimObjDraw", o)
+    elif tag in EXIT_TAGS:
+        data = af_writer.add_event(data, 0, "AnimObjUnequipAll", "")
+    else:
+        return afx_text
+    return data.decode("utf-8")
 
 
 PROP_LOAD_EVENTS = ("AnimObjLoad", "AnimObjDraw")
@@ -604,6 +632,8 @@ def main(argv=None):
                     new = plain
                 if PROP_SWAP.get(st):
                     new = props_at_start(swap_anim_objects(new, PROP_SWAP[st]))
+                if SET_PROP_OBJECTS.get(st):
+                    new = add_set_props(new, SET_PROP_OBJECTS[st])
                 if GRAPH_SWAP.get(st):
                     swapped = swap_graph(new, GRAPH_SWAP[st])
                     graphs_swapped += swapped != new

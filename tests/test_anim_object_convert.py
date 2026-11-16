@@ -39,5 +39,21 @@ class AnimObjectConvertTest(unittest.TestCase):
         self.assertEqual(len(prns), 1)
 
 
+    def test_skyrim_prn_picks_the_bone(self):
+        """2026-11-16 (forge props): a Skyrim animation object's root Prn names its prop bone; mapped to Starfield's."""
+        shape = sfnif.StaticShape(b"Hammer", b"a" * 20 + b"\\" + b"b" * 20, 6, 4, "m.mat", (0, 0, 0, 1),
+                                  (0, 0, 0, 1, 1, 1))
+        src = nif.serialize(sfnif.build_static_nif(b"Object01", [shape]))
+        self.assertIsNone(C.skyrim_prn(src))
+        tagged = C.make_anim_object(src, "AnimObjectBlacksmithForgeHammer", "AnimObjectR")
+        self.assertEqual(C.skyrim_prn(tagged), "AnimObjectR")
+        self.assertEqual(C.bone_for("AnimObjectR", "x"), "R_AnimObject1")
+        self.assertEqual(C.bone_for("animobjectl", "x"), "L_AnimObject1")
+        self.assertEqual(C.bone_for(None, "L_AnimObject1"), "L_AnimObject1")
+        import stance_plugin
+        for e, _v, _m in stance_plugin.PROP_OBJECTS:
+            self.assertIn(e, C.PROP_SOURCES)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -492,6 +492,18 @@ stance_plugin keyword S2S_AnimFurnSkyrimForge (FURN_INDEX + 10); make_furniture 
 alone among crafting stations (SKYRIM_SPOT_SETS), Skyrim's own forge marker: the sequence (fire, anvil, trough) is laid
 out around it. No props yet (the hands mime the hammer and the iron): next, Skyrim's hammer and hot iron as Starfield
 animation objects (as the broom). Grindstone next too (its Starfield template folder first).
+Forge pack (owner, 2026-11-16 11:53): 10 clips, 0 failed, with the shoulder calibration (26.9 / 26.5 deg) and body
+profiles (hands moved at most 0.011 m); 20 files in s2s_forge. Forge props (owner's anim_object_probe, **verified**):
+the clips key AnimObjectR, fixed in the right hand (the hammer: -0.16, -1.83, 5.96 units from it), and AnimObjectL: in
+the Pull it starts in the fire (-120.9, -43.0, 218.1 units from the left hand) and travels 364 units into the hand; in
+the Hammer / Temper it stays fixed 33 units (0.47 m) from the left hand (the iron held out). AnimObjectA / B never move.
+Starfield's industrial template loads AnimObjectIndustrialWorkbench01 in Idle_Flavor02 only (left out with the other
+prop events). Built: SET_PROPS Forge (AnimObjectR=R_AnimObject1, AnimObjectL=L_AnimObject1: place_props as for the
+broom); SET_PROP_OBJECTS: our enter descriptors load and draw S2S_AnimObjectForgeHammerSkyrim and
+S2S_AnimObjectForgeIronSkyrim at frame 0 (the iron then sits in the fire until the Pull lifts it), the exits unequip
+all; stance_plugin.PROP_OBJECTS: their ANIO records (PROP_INDEX + 1 / + 2); anim_object_convert converts every
+PROP_SOURCES model (Skyrim's AnimObjectBlacksmithForgeHammer / Iron.nif, the broom), the attach bone from the Skyrim
+model's own Prn (AnimObjectR / L -> R_ / L_AnimObject1; printed) else the default. Unverified in game.
 
 Skyrim's smithing, **verified** from smithing_probe (owner, 2026-11-16; Skyrim.esm and mt_behavior.hkx):
 | station (FURN) | model | enter idle | clips (state machine order) | props (ANIO) |

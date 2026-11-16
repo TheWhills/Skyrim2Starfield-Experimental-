@@ -75,6 +75,28 @@ class PackTests(unittest.TestCase):
         self.assertEqual({d[f"idle_flavor{i:02d}.afx"] for i in range(1, 7)}, {"blacksmithforgetemper.hkx"})
         self.assertEqual(P.COM_SHIFT["Forge"], (0.0, 0.0))
 
+    def test_forge_props(self):
+        """2026-11-16: the Forge set loads Skyrim's hammer and iron itself on entering, unequips them on exiting, and
+        its clips key both prop bones."""
+        enter = ("<?xml version=\"1.0\"?>\r\n<animation>\r\n\t<tag>EnterFromStand</tag>\r\n\t<events>\r\n"
+                 "\t\t<event><frame>5</frame><name>Foo</name><payload></payload></event>\r\n\t</events>\r\n</animation>\r\n")
+        out = P.add_set_props(enter, P.SET_PROP_OBJECTS["Forge"])
+        import re
+        evs = re.findall(r"<frame>(\d+)</frame><name>(\w+)</name><payload>([^<]*)</payload>", out)
+        self.assertEqual(evs[:4], [("0", "AnimObjLoad", "S2S_AnimObjectForgeHammerSkyrim"),
+                                   ("0", "AnimObjDraw", "S2S_AnimObjectForgeHammerSkyrim"),
+                                   ("0", "AnimObjLoad", "S2S_AnimObjectForgeIronSkyrim"),
+                                   ("0", "AnimObjDraw", "S2S_AnimObjectForgeIronSkyrim")])
+        self.assertEqual(evs[4], ("5", "Foo", ""))
+        ex = P.add_set_props(enter.replace("EnterFromStand", "ExitToStand"), P.SET_PROP_OBJECTS["Forge"])
+        self.assertIn("<name>AnimObjUnequipAll</name>", ex)
+        idle = enter.replace("EnterFromStand", "Idle")
+        self.assertEqual(P.add_set_props(idle, P.SET_PROP_OBJECTS["Forge"]), idle)
+        self.assertEqual(P.SET_PROPS["Forge"], ("AnimObjectR=R_AnimObject1", "AnimObjectL=L_AnimObject1"))
+        import stance_plugin
+        anio = {e for e, _v, _m in stance_plugin.PROP_OBJECTS}
+        self.assertTrue(set(P.SET_PROP_OBJECTS["Forge"]) <= anio)
+
     def test_hkx_args(self):
         class A:
             calumi, skyrim_data, starfield = "c.dll", "sky", "sf"
