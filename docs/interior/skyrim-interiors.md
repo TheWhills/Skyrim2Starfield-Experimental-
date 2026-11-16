@@ -463,3 +463,9 @@ Two changes, one build:
 * `--candle-style starfield` now uses that mesh: read from the Starfield archives at build time (never stored), fitted
   to SF_CANDLE_WIDTH / _HEIGHT (x3.0 / x1.25) x Skyrim's flame (skyrimfire.sf_flame_shape: box to box, normals through
   the stretch, vertex colours kept); crossed cards when --starfield-data is missing or the mesh is not found.
+Owner, -FlameStyle layered in game (2026-11-16 09:52, Sleeping Giant beside Skyrim's): the fire now runs across the
+logs in licks like Skyrim's hearth, but "awfully white". Supported hypothesis: LayeredFireV2's own emittance blows it
+out, as FireCandleFlame's 75000 did on our candle cards (2026-11-15). The clone now takes LAYERED_EMITTANCE (2000,
+adaptive, about our orange v2 hearth: 5000 x 1.5 x 0.3) wherever it sets one (skyrimfire.set_emittance; the build's
+"layered_fire" stats show the vanilla values and how many were set). If it stays white or turns grey, its textures are
+greyscale and need a tint: the cloned .mat shows which fields it has.

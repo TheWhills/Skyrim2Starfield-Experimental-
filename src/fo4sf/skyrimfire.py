@@ -489,13 +489,36 @@ def sf_shape_mesh_path(nif_bytes: bytes, shape_name: bytes = b"Flame:0") -> Opti
     return None
 
 
+# 2026-11-16, owner on -FlameStyle layered in game: the fire runs across the hearth like Skyrim's but "awfully white" -
+# as FireCandleFlame's own 75000 blew our candle cards out to white on 2026-11-15 (supported hypothesis: the same
+# cause). The layered clone takes LAYERED_EMITTANCE wherever the material sets an emittance (set_emittance): about what
+# our own hearth flames had when the owner called them orange (5000 x Skyrim's multiple 1.5 x EMITTANCE_SCALE 0.3)
+LAYERED_EMITTANCE = {"LuminousEmittance": "2000", "AdaptiveEmittance": "true", "ExposureOffset": "8"}
+
+
+def set_emittance(mat: dict, em: dict) -> int:
+    """Every component of the material that sets LuminousEmittance gets `em` instead; returns how many did."""
+    n = 0
+    for o in mat.get("Objects", []):
+        for c in o.get("Components", []):
+            d = c.get("Data")
+            if isinstance(d, dict) and "LuminousEmittance" in d:
+                d.update(em)
+                n += 1
+    return n
+
+
 def material_summary(mat: dict) -> dict:
     """What a cloned vanilla material is: its shader model, layers and texture files (for the build report)."""
-    out = {"shader_model": None, "layers": [], "textures": []}
+    out = {"shader_model": None, "layers": [], "textures": [], "emittance": []}
     for o in mat.get("Objects", []):
         for c in o.get("Components", []):
             if c.get("Type") == "BSMaterial::ShaderModelComponent":
                 out["shader_model"] = (c.get("Data") or {}).get("FileName")
+            d = c.get("Data")
+            if isinstance(d, dict) and "LuminousEmittance" in d:
+                out["emittance"].append({k: d[k] for k in ("LuminousEmittance", "AdaptiveEmittance", "ExposureOffset")
+                                         if k in d})
     summ = mat.get("Summary", {}) or {}
     for layer, d in summ.items():
         if isinstance(d, dict) and "Textures" in d:

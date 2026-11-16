@@ -647,6 +647,10 @@ class LayeredStyleTest(unittest.TestCase):
             self.assertEqual(c.stats["layered_fire"]["template"], skyrimfire.LAYERED_FIRE_MAT)
             written = open(os.path.join(d, *p.split("\\"))).read()
             self.assertIn("Data\\\\Textures\\\\Fx_emissive.DDS", written)   # its own textures kept
+            self.assertIn('"LuminousEmittance" : "%s"' % skyrimfire.LAYERED_EMITTANCE["LuminousEmittance"], written)
+            self.assertEqual(c.stats["layered_fire"]["emittance_set"], 1)
+            self.assertEqual(c.stats["layered_fire"]["emittance"], [{"AdaptiveEmittance": "true", "ExposureOffset": "8",
+                                                                    "LuminousEmittance": "5000"}])   # the vanilla value
             c2 = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
             c2.content_resources, c2.staging, c2.prefix = os.path.join(d, "missing.zip"), d, "skyrim"
             c2._materials, c2.material_errors, c2.stats = {}, {}, {}

@@ -618,8 +618,8 @@ class SkyrimConverter(pipeline.Converter):
         return shapes, mats
 
     def layered_fire_material(self) -> Optional[str]:
-        """flame_style "layered": a clone of skyrimfire.LAYERED_FIRE_MAT exactly as it is (its textures, controllers,
-        emittance), written once; what it is goes to stats["layered_fire"]. If it cannot be read, the vanilla path itself
+        """flame_style "layered": a clone of skyrimfire.LAYERED_FIRE_MAT as it is (its textures, controllers) but with
+        skyrimfire.LAYERED_EMITTANCE, written once; what it is goes to stats["layered_fire"]. If it cannot be read, the vanilla path itself
         (the game resolves it from its own material database) and the reason in material_errors."""
         key = "layeredfire"
         if key in self._materials:
@@ -630,12 +630,14 @@ class SkyrimConverter(pipeline.Converter):
             template = cm.read_template_path(self.content_resources, path)
             stem = "sf_" + os.path.splitext(os.path.basename(path))[0].lower()
             mat = cm.build_from_template(template, "S2S_Flame_" + stem, {})
+            changed = skyrimfire.set_emittance(mat, skyrimfire.LAYERED_EMITTANCE)
             mat_rel = f"materials/{self.prefix}/effects/{stem}.mat"
             p = os.path.join(self.staging, *mat_rel.split("/"))
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(skyrimfire.dumps(mat))
-            self.stats["layered_fire"] = dict(skyrimfire.material_summary(template), template=path)
+            self.stats["layered_fire"] = dict(skyrimfire.material_summary(template), template=path,
+                                              emittance_set=changed)
             self._materials[key] = mat_rel.replace("/", "\\")
         except Exception as e:                                      # noqa: BLE001
             self.material_errors[key] = f"{type(e).__name__}: {e}"
