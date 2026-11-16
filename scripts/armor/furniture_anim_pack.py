@@ -580,6 +580,12 @@ def replace_args(anim_set: str):
     return idle, [x for x in args if x not in idle]
 
 
+def without_enter(entry):
+    """A set (folder, template, rows) without its EnterFromStand row: Starfield's template plays its own walk-in."""
+    folder, tpl, rows = entry
+    return folder, tpl, [r for r in rows if r[0] != "enterfromstand.afx"]
+
+
 def fresh_dir(path):
     """`path` empty (made if missing)."""
     if os.path.isdir(path):
@@ -614,6 +620,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="the mod folder (MO2): gets meshes\\actors\\human\\animations\\...")
     ap.add_argument("--work", required=True, help="a scratch folder outside the repository")
     ap.add_argument("--set", action="append", choices=sorted(SETS), help="only these sets (default: all)")
+    ap.add_argument("--vanilla-enter", action="append", default=[], choices=sorted(SETS),
+                    help="A/B: leave this set's EnterFromStand to Starfield's template (2026-11-16: does the forge's "
+                         "13.9 s Pull as the walk-in stop NPCs entering?)")
     ap.add_argument("--com-shift", metavar="X,Y", nargs="+",
                     help="with one --set: use this offset instead of COM_SHIFT / the Idle's --align-com result "
                          "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
@@ -627,6 +636,8 @@ def main(argv=None):
                     help="body_profiles.py's output: hands keep their place relative to the body (all sets); replaces "
                          "HAND_CLEARANCE unless --hand-clearance is given")
     a = ap.parse_args(argv)
+    for st in a.vanilla_enter:
+        SETS[st] = without_enter(SETS[st])
     for p in (a.out, a.work):
         if os.path.abspath(p).lower().startswith(os.path.abspath(REPO).lower()):
             sys.exit(f"{p}: must be outside the repository")

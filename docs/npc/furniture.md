@@ -642,4 +642,9 @@ back) most of his work day and never picks the forge; Hilde "still chooses the c
 Two unverified levers: package Energy (make_schedule x 0.01 on the scale of ShopkeeperSchedules.esm, a mod; Starfield.esm's
 own values never read: energy_survey.py) and Skyrim's idle-marker timers (IDLT, not carried into our furniture:
 idle_marker_timers.py). Both read-only.
+Owner, 18:44-18:46 (energy 50 build): Alvor now moves between spots (crossed arms at the bench, the forge spot, past
+the tanning rack) and Hilde leans: the energy fix works. At the forge he stands on its spot in a neutral pose and never
+starts; the console `activate <Alvor>` on the forge does nothing. Suspect: our walk-in, Skyrim's 13.9 s Pull as
+EnterFromStand. A/B: furniture_anim_pack --vanilla-enter Forge leaves the welder's own walk-in (our props then load
+only with EnterInstant; the hammer may be missing after a walk-in in that test).
 

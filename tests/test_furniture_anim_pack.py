@@ -462,6 +462,17 @@ class ClipEventsTest(unittest.TestCase):
                                                  "w", "x", [], blend=0.8))
 
 
+class VanillaEnterTest(unittest.TestCase):
+    def test_without_enter(self):
+        """--vanilla-enter (2026-11-16 A/B): the forge's walk-in left to the welder's own; the rest kept."""
+        f, t, rows = P.without_enter(P.SETS["Forge"])
+        names = [r[0] for r in rows]
+        self.assertNotIn("enterfromstand.afx", names)
+        self.assertIn("enterinstant.afx", names)
+        self.assertEqual(len(rows), len(P.SETS["Forge"][2]) - 1)
+        self.assertEqual(("enterfromstand", False), ("enterfromstand", not any(w in "enterfromstand" for w in P.NOT_IDLE)))
+
+
 class FreshDirTest(unittest.TestCase):
     def test_fresh_dir(self):
         import tempfile
