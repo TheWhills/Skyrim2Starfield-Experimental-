@@ -59,7 +59,8 @@ class PackTests(unittest.TestCase):
                  ("lean_table", "LeanTableMarker"): "LeanTable", ("sweep", "SweepIdleMarker"): "Sweep",
                  ("alchemy", "CraftingAlchemyWorkbench"): "Alchemy",
                  ("workbench", "CraftingEnchantingWorkbenchTabletop"): "Enchant",
-                 ("workbench", "CraftingBlackSmithForge"): "Forge", ("cook", "CraftingCookingPotSm"): "Cook",
+                 ("workbench", "CraftingBlackSmithForge"): "Forge",
+                 ("weapon_bench", "CraftingBlacksmithSharpeningWheel"): "Grindstone", ("cook", "CraftingCookingPotSm"): "Cook",
                  ("scrape", "CraftingTanningRackMarker"): "Tanning", ("bed", "CommonBed01"): None}
         for (kind, edid), want in cases.items():
             self.assertEqual(MF.anim_set_for({"kind": kind, "edid": edid}), want, edid)
@@ -74,6 +75,12 @@ class PackTests(unittest.TestCase):
                          ("blacksmithforgepull.hkx", "blacksmithforgehammer.hkx", "blacksmithforgeexit.hkx"))
         self.assertEqual({d[f"idle_flavor{i:02d}.afx"] for i in range(1, 7)}, {"blacksmithforgetemper.hkx"})
         self.assertEqual(P.COM_SHIFT["Forge"], (0.0, 0.0))
+        folder, tpl, rows = P.SETS["Grindstone"]
+        self.assertTrue(tpl.endswith("workbench\\weaponworkbench"))
+        d = dict((r[0], r[1]) for r in rows)
+        self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["exittostand.afx"]),
+                         ("blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelspin.hkx",
+                          "blacksmithsharpeningwheelexit.hkx"))
 
     def test_forge_props(self):
         """2026-11-16: the Forge set loads Skyrim's hammer and iron itself on entering, unequips them on exiting, and

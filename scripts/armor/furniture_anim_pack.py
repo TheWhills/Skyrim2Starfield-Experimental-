@@ -107,6 +107,11 @@ SETS = {
     # workbench template (the forge's Starfield furniture) has 6 flavor slots (the Enchant set's).
     "Forge": standing_set("s2s_forge", "workbench\\industrialworkbench", "blacksmithforgehammer.hkx",
                           ("blacksmithforgetemper.hkx",), "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 6),
+    # 2026-11-16 (smithing_probe): the sharpening wheel's machine Enter -> Spin (loop) -> Exit; the owner's listing
+    # of Starfield's workbench folders has workbench\weaponworkbench (the grindstone's Starfield furniture,
+    # WorkbenchWeapon). Its flavor count is not known: unanswered_tags gives every idle-like slot ours lack our Idle.
+    "Grindstone": standing_set("s2s_grindstone", "workbench\\weaponworkbench", "blacksmithsharpeningwheelspin.hkx",
+                               (), "blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelexit.hkx", 0),
 }
 
 # Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.
@@ -121,7 +126,7 @@ SETS = {
 COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (0.0, 0.0), "Counter": (0.0, 0.0),
              "LeanTable": (0.0, 0.0), "Sweep": (0.0, 0.0), "Alchemy": (0.014, -0.037),
              "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (0.0, 0.0),
-             "Forge": (0.0, 0.0)}           # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
+             "Forge": (0.0, 0.0), "Grindstone": (0.0, 0.0)}           # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
 
 
 # Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back

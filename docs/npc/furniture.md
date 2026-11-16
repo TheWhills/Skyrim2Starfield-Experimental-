@@ -504,6 +504,13 @@ S2S_AnimObjectForgeIronSkyrim at frame 0 (the iron then sits in the fire until t
 all; stance_plugin.PROP_OBJECTS: their ANIO records (PROP_INDEX + 1 / + 2); anim_object_convert converts every
 PROP_SOURCES model (Skyrim's AnimObjectBlacksmithForgeHammer / Iron.nif, the broom), the attach bone from the Skyrim
 model's own Prn (AnimObjectR / L -> R_ / L_AnimObject1; printed) else the default. Unverified in game.
+Owner's run (2026-11-16 12:10, **verified** from its log): Skyrim's hammer model's Prn is AnimObjectR, the iron's
+AnimObjectL (-> R_AnimObject1 / L_AnimObject1); both converted (the iron 2 shapes, one effect shape without a
+material); the pack placed both props in every clip (hammer 2-8 cm from the right wrist; the iron 0.2-0.4 m from the
+left one, 2.8 m away in the fire at the Pull's start); the build gave the forge "Skyrim animations (Forge), 1 markers
+from Skyrim". In game unverified. Grindstone set (2026-11-16; the owner's folder listing has
+workbench\weaponworkbench): Enter / Spin (Idle) / Exit of the sharpening wheel, on Skyrim's wheel marker
+(SKYRIM_SPOT_SETS), every other idle-like slot answered with the Spin; no props (none found for the wheel).
 
 Skyrim's smithing, **verified** from smithing_probe (owner, 2026-11-16; Skyrim.esm and mt_behavior.hkx):
 | station (FURN) | model | enter idle | clips (state machine order) | props (ANIO) |

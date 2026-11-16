@@ -179,11 +179,12 @@ ANIM_SET_RULES = (
     (("cook",), None, "Cook"),
     (("scrape",), r"tanning", "Tanning"),
     (("workbench",), r"forge", "Forge"),
+    (("weapon_bench",), r"sharpening|grindstone", "Grindstone"),
 )
 # Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
 # is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips
 # carry no root motion, and its spot is the marker's (2026-11-16)
-SKYRIM_SPOT_SETS = {"Forge"}
+SKYRIM_SPOT_SETS = {"Forge", "Grindstone"}           # the wheel's clips stand at Skyrim's wheel marker too
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
 
 
