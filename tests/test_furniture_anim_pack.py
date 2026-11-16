@@ -51,7 +51,7 @@ class PackTests(unittest.TestCase):
                                 ("idle_flavor02.afx", "i.hkx", None)])
 
     def test_anim_set_for(self):
-        """The lean markers share a template but get their own sets; forges keep Starfield's animations."""
+        """The lean markers share a template but get their own sets; the forge plays Skyrim's (2026-11-16)."""
         import make_furniture as MF
         cases = {("chair", "WoodenChair01"): "Sit", ("bench", "FarmBench01F"): "Sit",
                  ("lean_counter", "WallLeanMarker"): "WallLean", ("lean_counter", "RailLeanMarker"): "RailLean",
@@ -59,10 +59,21 @@ class PackTests(unittest.TestCase):
                  ("lean_table", "LeanTableMarker"): "LeanTable", ("sweep", "SweepIdleMarker"): "Sweep",
                  ("alchemy", "CraftingAlchemyWorkbench"): "Alchemy",
                  ("workbench", "CraftingEnchantingWorkbenchTabletop"): "Enchant",
-                 ("workbench", "CraftingBlackSmithForge"): None, ("cook", "CraftingCookingPotSm"): "Cook",
+                 ("workbench", "CraftingBlackSmithForge"): "Forge", ("cook", "CraftingCookingPotSm"): "Cook",
                  ("scrape", "CraftingTanningRackMarker"): "Tanning", ("bed", "CommonBed01"): None}
         for (kind, edid), want in cases.items():
             self.assertEqual(MF.anim_set_for({"kind": kind, "edid": edid}), want, edid)
+
+    def test_forge_set(self):
+        """2026-11-16 (smithing_probe): Enter = Pull, Idle = Hammer, flavors = Temper, Exit; Skyrim's own spot."""
+        folder, tpl, rows = P.SETS["Forge"]
+        self.assertEqual((folder, tpl), (P.SF_ANIM + "furniture\\s2s_forge",
+                                         P.SF_ANIM + "furniture\\workbench\\industrialworkbench"))
+        d = dict((r[0], r[1]) for r in rows)
+        self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["exittostand.afx"]),
+                         ("blacksmithforgepull.hkx", "blacksmithforgehammer.hkx", "blacksmithforgeexit.hkx"))
+        self.assertEqual({d[f"idle_flavor{i:02d}.afx"] for i in range(1, 7)}, {"blacksmithforgetemper.hkx"})
+        self.assertEqual(P.COM_SHIFT["Forge"], (0.0, 0.0))
 
     def test_hkx_args(self):
         class A:
@@ -356,6 +367,12 @@ class AnimKeywordTests(unittest.TestCase):
         self.assertEqual(out["bases"]["w"]["shift_m"], [0.0, -0.05, 0.0])   # one given on the command line stays
         self.assertEqual(out["bases"]["s"]["markers"], MF.AT_THE_REFERENCE)
         self.assertEqual(out["bases"]["a"]["markers"], [])
+        # 2026-11-16: the forge's Skyrim sequence is laid out around Skyrim's forge marker: a crafting station, but
+        # it takes Skyrim's spot when it plays the Forge set
+        forge = {"bases": {"f": {"kind": "workbench", "edid": "CraftingBlackSmithForge", "markers": [],
+                                 "skyrim_markers": sky}}}
+        MF.add_anim_keywords(forge, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimForge": 0x0100081B})
+        self.assertEqual((forge["bases"]["f"]["anim_set"], forge["bases"]["f"]["markers"]), ("Forge", sky))
         none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}
         MF.add_anim_keywords(none, "S2SStances.esm", read_keywords=lambda p: {})
         self.assertEqual(none["bases"]["r"]["markers"], [])

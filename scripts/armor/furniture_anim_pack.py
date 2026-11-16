@@ -98,6 +98,15 @@ SETS = {
     "Tanning": standing_set("s2s_tanning", "standing_wipewall", "craftingtanningidleb.hkx",
                             ("craftingtanningidlea.hkx",), "craftingtanningenterb.hkx", "craftingtanningexitb.hkx", 5,
                             instant=True),
+    # 2026-11-16 (owner: "the character takes a sword, puts them in water trough, and also puts them in the forge ...
+    # there's hammering"; smithing_probe, verified: mt_behavior's forge machine Pull -> Hammer (loop) -> RandomTrough
+    # (Temper: quench and back to Hammer | Discard: drop it and Pull a new iron) -> Hammer ...; exit). Starfield's
+    # furniture graph plays one idle with flavors: Enter = Pull (out of the fire), Idle = Hammer, flavors = Temper (it
+    # ends back on the hammering pose; Discard ends before a new Pull, so it would jump), Exit. No root motion in any of
+    # them (furniture_motion --clips, verified): the walk to the trough is in the body's own track. The industrial
+    # workbench template (the forge's Starfield furniture) has 6 flavor slots (the Enchant set's).
+    "Forge": standing_set("s2s_forge", "workbench\\industrialworkbench", "blacksmithforgehammer.hkx",
+                          ("blacksmithforgetemper.hkx",), "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 6),
 }
 
 # Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.
@@ -111,7 +120,8 @@ SETS = {
 # (-0.146, -0.276), LeanTable (0.026, -0.26), Sweep (-0.002, -0.045).
 COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (0.0, 0.0), "Counter": (0.0, 0.0),
              "LeanTable": (0.0, 0.0), "Sweep": (0.0, 0.0), "Alchemy": (0.014, -0.037),
-             "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (0.0, 0.0)}
+             "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (0.0, 0.0),
+             "Forge": (0.0, 0.0)}           # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
 
 
 # Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back

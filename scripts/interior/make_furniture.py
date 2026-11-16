@@ -178,7 +178,12 @@ ANIM_SET_RULES = (
     (("workbench",), r"enchant", "Enchant"),
     (("cook",), None, "Cook"),
     (("scrape",), r"tanning", "Tanning"),
+    (("workbench",), r"forge", "Forge"),
 )
+# Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
+# is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips
+# carry no root motion, and its spot is the marker's (2026-11-16)
+SKYRIM_SPOT_SETS = {"Forge"}
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
 
 
@@ -231,7 +236,9 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
             continue
         b["anim_keyword"] = f"{fid & 0xFFFFFF:06X}:{name}"
         b["anim_set"] = st
-        if b.get("skyrim_markers") and not b.get("markers") and b.get("kind") not in CRAFT_KINDS:
+        if st in SKYRIM_SPOT_SETS and b.get("skyrim_markers"):
+            b["markers"] = b["skyrim_markers"]
+        elif b.get("skyrim_markers") and not b.get("markers") and b.get("kind") not in CRAFT_KINDS:
             b["markers"] = b["skyrim_markers"]           # our Skyrim clips stand at Skyrim's spot
             # ... without DEFAULT_SHIFT, measured for Starfield's bar-lean animation at the counter face (2026-11-15,
             # owner: Hod ~0.3 m in front of his post, Hilde ~0.3 m back from the rail: the +0.30 m along the
@@ -391,7 +398,7 @@ def build(ix, cells, archives, marker_z="floor", targets=(), shift=None, craftin
         real_model = rec["type"] == "FURN" and not rec["is_marker"]
         bases[key] = {"edid": rec["edid"], "type": rec["type"], "kind": kind, "template": form, "template_edid": tedid,
                       "model": rec.get("model") if real_model else None, "markers": markers(rec, kind, marker_z)}
-        if kind in SPECIAL and kind not in CRAFT_KINDS:
+        if (kind in SPECIAL and kind not in CRAFT_KINDS) or anim_set_for(bases[key]) in SKYRIM_SPOT_SETS:
             bases[key]["skyrim_markers"] = skyrim_markers(rec, kind, marker_z)
         if (shift or {}).get(kind):
             bases[key]["shift_m"] = shift[kind]

@@ -478,6 +478,20 @@ model's dropped shapes (editor_marker_models: name and reason) as evidence. Root
 furniture_motion --clips, **verified**): none for the forge, anvil and smelter loops (the forge's walk to the trough is
 in the body's own track, so --no-root-motion keeps it); the grindstone enter / exit move 2 cm; CraftingSmelterPour
 moves 0.985 m to the side and turns 106 deg (it is also the smelter's exit).
+Owner's build with the corrected rule (2026-11-16 11:46): the forge pit and anvil are back, the grey shapes gone
+(screenshot). **Verified** what they were (editor_marker_models): BlacksmithForgeMarker.nif holds an untextured
+editor preview of a whole actor skeleton (NPC Root, COM, MagicNodes, weapon / shield / quiver / cloak / robe / tail
+bone boxes, camera nodes), the props (BlacksmithNoviceHammer, BlacksmithForgeIron, AnimObjectR / L / A / B) and a
+trigger plane: 71 shapes; plus EditorMarker shapes in the dummy weapons, Whiterun plaque triggers, bucket / log pile /
+chopping block / lean / invisible chair markers.
+Forge set (first smithing set, built 2026-11-16; untested in game): furniture_anim_pack SETS["Forge"] (folder
+furniture\s2s_forge, the industrial workbench template): EnterFromStand = BlacksmithForgePull (iron out of the fire),
+Idle = BlacksmithForgeHammer, Idle_Flavor01-06 = BlacksmithForgeTemper (to the trough and back to the hammering pose;
+Discard is left out: it ends before a new Pull, so it would jump), Exit = BlacksmithForgeExit; COM_SHIFT (0, 0).
+stance_plugin keyword S2S_AnimFurnSkyrimForge (FURN_INDEX + 10); make_furniture gives the forge the set and, for it
+alone among crafting stations (SKYRIM_SPOT_SETS), Skyrim's own forge marker: the sequence (fire, anvil, trough) is laid
+out around it. No props yet (the hands mime the hammer and the iron): next, Skyrim's hammer and hot iron as Starfield
+animation objects (as the broom). Grindstone next too (its Starfield template folder first).
 
 Skyrim's smithing, **verified** from smithing_probe (owner, 2026-11-16; Skyrim.esm and mt_behavior.hkx):
 | station (FURN) | model | enter idle | clips (state machine order) | props (ANIO) |

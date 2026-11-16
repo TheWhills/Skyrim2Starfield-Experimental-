@@ -82,6 +82,7 @@ FURNITURE_SETS = (
     ("Enchant", ("AnimFurnIndustrialWorkbench",), _FURN + "s2s_enchant"),
     ("Cook", ("AnimFurnGalleyWorkbench",), _FURN + "s2s_cook"),
     ("Tanning", ("AnimFurnStanding_WipeWall",), _FURN + "s2s_tanning"),
+    ("Forge", ("AnimFurnIndustrialWorkbench",), _FURN + "s2s_forge"),      # 2026-11-16, Skyrim's blacksmith forge
 )
 FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
 
