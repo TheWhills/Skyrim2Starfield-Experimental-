@@ -510,6 +510,38 @@ class StarfieldCandleTest(unittest.TestCase):
         self.assertEqual(paths, ["FlipbookAuto"])
 
 
+class FireSpreadTest(unittest.TestCase):
+    """2026-11-16, owner: "one fireball in a hearth ... not an actual fire across the hearth"."""
+
+    def test_fires_run_along_the_long_side_of_the_fire_shapes(self):
+        pts = [(-50.0, -10.0, 5.0), (50.0, 10.0, 30.0)]          # 100 units along x, 20 across
+        spots = skyrimfire.fire_spots(pts, origin_z=8.0, spacing=24.5, max_n=4)
+        self.assertEqual(len(spots), 4)
+        self.assertEqual([round(p[0], 2) for p in spots], [-37.5, -12.5, 12.5, 37.5])
+        self.assertTrue(all(p[1] == 0.0 and p[2] == 8.0 for p in spots))
+        along_y = skyrimfire.fire_spots([(0, 0, 0), (10, 60, 0)], spacing=24.5)
+        self.assertEqual(len(along_y), 2)
+        self.assertEqual({p[0] for p in along_y}, {5.0})
+        self.assertEqual(skyrimfire.fire_spots([(0, 0, 3), (5, 5, 9)]), [(2.5, 2.5, 3)])
+        self.assertEqual(skyrimfire.fire_spots([]), [])
+
+    def test_hearth_model_gets_several_smaller_fires_in_metres(self):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.flame_style, c.particle_fire = "particles", [("1CEDAB", 0.8)]
+        c._fire_shape_points = lambda src: [(-35.0, 0.0, 4.0), (35.0, 5.0, 40.0)]
+        orig = skyrimfire.particle_systems
+        skyrimfire.particle_systems = lambda n: [ParticleStyleTest.SYSTEM]
+        try:
+            fx = c.model_fire_effects(object())
+        finally:
+            skyrimfire.particle_systems = orig
+        self.assertEqual(len(fx), 3)                         # 70 units / 24.5 -> 3
+        self.assertEqual({e["scale"] for e in fx}, {round(0.8 * skyrimfire.SPREAD_SCALE, 3)})
+        self.assertEqual({e["offset_m"][2] for e in fx}, {round(7.99 / 70, 4)})
+        self.assertAlmostEqual(fx[0]["offset_m"][0], round(-70 / 3 / 70, 4), places=4)
+
+
 class ParticleScanTest(unittest.TestCase):
     def test_finds_particle_block_types_in_the_header_only(self):
         sys.path.insert(0, os.path.join(HERE, "..", "scripts", "interior"))

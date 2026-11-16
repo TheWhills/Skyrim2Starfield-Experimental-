@@ -324,6 +324,28 @@ def particle_flame(system: dict) -> Optional[dict]:
             "multiple": bake["multiple"]}
 
 
+def fire_spots(points, origin_z: Optional[float] = None, spacing: float = None, max_n: int = None) -> List[tuple]:
+    """Where to put fires along a model's fire (Skyrim units, model space): `points` are the fire shapes' vertices;
+    the fires go along the longer side of their XY box, `spacing` apart (at least one, at most max_n), centred on
+    the box, at origin_z (the flame emitter's height) or the box's bottom."""
+    spacing = spacing or FIRE_SPACING
+    max_n = max_n or FIRE_MAX
+    if not points:
+        return []
+    xs, ys, zs = [p[0] for p in points], [p[1] for p in points], [p[2] for p in points]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    along_x = (x1 - x0) >= (y1 - y0)
+    length = (x1 - x0) if along_x else (y1 - y0)
+    n = max(1, min(max_n, int(round(length / spacing))))
+    z = min(zs) if origin_z is None else origin_z
+    out = []
+    for i in range(n):
+        d = (i - (n - 1) / 2) * (length / n)
+        out.append((cx + d, cy, z) if along_x else (cx, cy + d, z))
+    return out
+
+
 def flame_card_centres(flame: dict) -> List[tuple]:
     """Where the cards of one particle flame go (model space): one at the emitter, plus four on a ring at RING x the
     emitter's radius when the emitter is wider than a card (FireplaceWood01Burning: a 20-unit cylinder)."""
@@ -433,6 +455,13 @@ FLAME_STYLES = ("skyrim", "starfield", "particles")
 # x0.35 / x0.5; the Armistice Archives fire pit 20D560 does not show when placed; FireMed02 1CEDAB at x0.8 "looks better"
 PARTICLE_FIRE_BASE = "1CEDAB"
 PARTICLE_FIRE_SCALE = 0.8            # x the hearth reference's scale
+# 2026-11-16 (owner, FireMed02 default in game): "one fireball in a hearth, or 3 in a big one, not an actual fire across
+# the hearth": one fire per Skyrim emitter is a point; Skyrim's fire runs along the logs through its flame meshes.
+# Fires now sit along the long side of the model's fire shapes (flame meshes + log glow), FIRE_SPACING apart, at most
+# FIRE_MAX, each x SPREAD_SCALE when there are several
+FIRE_SPACING = 24.5                  # Skyrim units (0.35 m)
+FIRE_MAX = 4
+SPREAD_SCALE = 0.75
 PARTICLE_REPLACES = r"fxfireatlas"
 # candle_style "starfield" (owner 2026-11-16: "use Starfield's for candles as well but make them follow Skyrim's thicker
 # teardrop shape"): Starfield's FireCandleFlame flipbook kept whole (its textures, flipbook, emittance: what its own

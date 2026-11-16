@@ -661,25 +661,55 @@ class SkyrimConverter(pipeline.Converter):
         return self.particle_flame_cards(flames, kind="hearth", tag="ParticleFlame")
 
     def model_fire_effects(self, src) -> list:
-        """flame_style "particles": [{"base", "offset_m"}] Starfield particle fires (skyrimfire.PARTICLE_FIRE_BASE) at
-        each flame particle emitter of the model, in metres, model space (PluginSpike places them with each reference)."""
+        """flame_style "particles": [{"base", "scale", "offset_m"}] Starfield particle fires (skyrimfire.
+        PARTICLE_FIRE_BASE) for a model with flame particles: spread along its fire shapes (skyrimfire.fire_spots: the
+        flame meshes and log glow), at the emitter's height; in metres, model space (PluginSpike places them with each
+        reference). A model without fire shapes gets one fire at each emitter."""
         if getattr(self, "flame_style", "skyrim") != "particles":
             return []
         try:
             flames = [f for f in (skyrimfire.particle_flame(ps) for ps in skyrimfire.particle_systems(src)) if f]
         except Exception:                                           # noqa: BLE001
             return []
+        if not flames:
+            return []
         choices = getattr(self, "particle_fire", None) or [(skyrimfire.PARTICLE_FIRE_BASE,
                                                              skyrimfire.PARTICLE_FIRE_SCALE)]
         if isinstance(choices, tuple):                 # one (base, scale)
             choices = [choices]
+        spots = skyrimfire.fire_spots(self._fire_shape_points(src), origin_z=min(f["origin"][2] for f in flames))
+        if not spots:
+            spots = [tuple(f["origin"]) for f in flames]
+        k = skyrimfire.SPREAD_SCALE if len(spots) > 1 else 1.0
         out = []
-        for f in flames:
-            e = {"base": choices[0][0], "scale": choices[0][1], "offset_m": [round(c * UNIT, 4) for c in f["origin"]]}
+        for p in spots:
+            e = {"base": choices[0][0], "scale": round(choices[0][1] * k, 3),
+                 "offset_m": [round(c * UNIT, 4) for c in p]}
             if len(choices) > 1:                       # A/B: the plugin rotates through these
-                e["choices"] = [{"base": b, "scale": sc} for b, sc in choices]
+                e["choices"] = [{"base": b, "scale": round(sc * k, 3)} for b, sc in choices]
             out.append(e)
         return out
+
+    def _fire_shape_points(self, src) -> list:
+        """Model-space vertices (Skyrim units) of the model's fire effect shapes (skyrimfire.is_fire_effect)."""
+        pts = []
+        try:
+            shapes = skyrimnif.trishapes(src)
+        except Exception:                                           # noqa: BLE001
+            return pts
+        for sh in shapes:
+            if not (0 <= sh.shader_ref < len(src.blocks)) or src.type_of(sh.shader_ref) != "BSEffectShaderProperty":
+                continue
+            try:
+                if not skyrimfire.is_fire_effect(skyrimfire.effect_shader(src, sh.shader_ref), self.fire_pattern):
+                    continue
+            except Exception:                                       # noqa: BLE001
+                continue
+            r, t, sc = sh.rotation, sh.translation, sh.scale
+            for x, y, z in sh.positions:
+                pts.append((sc * (r[0] * x + r[1] * y + r[2] * z) + t[0], sc * (r[3] * x + r[4] * y + r[5] * z) + t[1],
+                            sc * (r[6] * x + r[7] * y + r[8] * z) + t[2]))
+        return pts
 
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in

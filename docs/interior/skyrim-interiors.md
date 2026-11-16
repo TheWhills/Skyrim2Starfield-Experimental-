@@ -433,3 +433,9 @@ FireCandleFlame.mat cloned as it is - its FiresGeneric_Sm_03 12 x 12 flipbook at
 (75000) and edge falloff, no flicker of ours - on one crossed card per Skyrim candle flame, widened x1.8 and x1.1 taller
 (SF_CANDLE_WIDTH / _HEIGHT) so the narrow flame in each frame fills out to Skyrim's teardrop. The 2026-11-15 "starfield"
 flame style had Skyrim's card size and our emittance (5000 adaptive): "very small, not bright, quite thin".
+Owner, FireMed02 default in game (2026-11-16 08:20): "the hearth flames are basically one fireball in a hearth, or 3 in
+a big one, but don't look like an actual fire across the hearth" (Sleeping Giant pit: three tidy flames; a house
+fireplace: one small flame in the middle). One fire per Skyrim emitter is a point; Skyrim's fire runs along the logs
+through its flame meshes. Now (skyrimfire.fire_spots): the fires go along the longer side of the model's fire shapes
+(flame meshes + log glow, model space), FIRE_SPACING 24.5 units (0.35 m) apart, at most FIRE_MAX 4 per model, at the
+emitter's height, each x SPREAD_SCALE 0.75 when there are several; a model without fire shapes keeps one per emitter.
