@@ -284,3 +284,22 @@ its emissive colour; FXFireAtlas02 and smoke are particle systems. Starfield: 52
 (FireFlamethrower 8x8 at 32 fps; FireCandleFlame.mat exists). Second probe pass (same script): particle emitters /
 colour / sub-texture fields, texture sizes, Starfield's material controllers (how a UV scroll is animated) and which
 Starfield fire / candle meshes use which materials.
+Pass 2 results (owner, 2026-11-15):
+* Skyrim candle flame (MPSCandleFlame01): particle system "CandleFlame01" (CandleFlame01.dds 128x128, one frame):
+  6 / s, life 0.33 s, radius 1.25 units, rising 7.5 units/s, scale 0.7 -> 1.0 -> 0.2 over life, fade in 20 % / out
+  80 %, colour white to warm (0.97, 0.92, 0.88); "CandleGlow01" (CandleGlow01.dds 256x128): 5 / s, life 0.4 s, radius
+  80 units, white at alpha 0.37 (a large soft halo).
+* Hearth particles: "FlamesSmall01" (FXFireAtlas02 512x256 through GradFireExplosion): 15 / s, life 0.4 s, radius 16,
+  rising 45 units/s from a 20-unit cylinder, scale 1 -> 0.5; "smoke" (SmokeParticles01 512x512): 15 / s, life 2 s.
+  Mesh flames: FXFireAtlas04 is a 128x1024 vertical strip (scrolled V 0 -> 1); palette GradFireExplosion 256x64.
+* Starfield animates material values with BSBind controllers: 508 .mat files, binding "UVOffset" in 517 mappings
+  (Float2DCurveController 662) = a UV scroll is native, so Skyrim's V Offset scroll converts as a controller, not a
+  baked flipbook. FireCandleFlame.mat: 1LayerEffectEmissive, flipbook 12x12 at 90 fps driven by a TimerController on
+  "FlipbookAuto" (random offset), EmissiveOnlyEffect, VertexColorBlend, LuminousEmittance 75000, edge falloff.
+* Starfield's lit candles (setdressing/candles/candlegen_*_lit.nif, paperlantern01_on.nif) carry the flame inside the
+  model: FireCandleFlame.mat + FireCandleGlow.mat shapes. No particle blocks; its fire ADDN records are empty nodes.
+Direction: candle add-ons become flame + glow cards placed in the converted candle model at each AddOnNode (Skyrim's
+sizes and colours, Skyrim's textures); hearth flame meshes keep their geometry with an emissive effect material
+(texture baked through the palette, V scroll as a UVOffset controller); the hearth's particle flames become a few
+cards with FXFireAtlas02. Pass 3 lays out a Starfield lit candle (how its flame card is built and faces the camera),
+FireCandleGlow.mat and the shortest UVOffset-controller material, the templates for both.

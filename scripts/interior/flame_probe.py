@@ -202,6 +202,52 @@ def effect_shapes(data: bytes) -> dict:
     return out
 
 
+def sf_nif_layout(n, read_mesh=None) -> list:
+    """Rows describing a Starfield NIF: block, type, name; nodes' children; BSGeometry transform, shader / material,
+    LOD 0 mesh (vertex count, decoded position bounds and UV range when read_mesh(path) returns its bytes)."""
+    from fo4sf import sfmesh, sfnif
+    rows = []
+    for i, b in enumerate(n.blocks):
+        t = n.type_of(i)
+        row = {"block": i, "type": t}
+        if len(b) >= 4:
+            k = struct.unpack_from("<i", b, 0)[0]
+            if 0 <= k < len(n.strings):
+                nm = n.strings[k]
+                row["name"] = nm.decode("latin-1") if isinstance(nm, bytes) else str(nm)
+        if t == "BSGeometry":
+            try:
+                g = sfnif.parse_bsgeometry(b)
+                row.update(translation=[round(x, 3) for x in g.translation], scale=round(g.scale, 3),
+                           flags=g.flags, controller=g.controller, extra=g.extra_refs, shader=g.shader,
+                           alpha=g.alpha, box=[round(x, 3) for x in g.box])
+                m = g.meshes[0]
+                if m is not None:
+                    path = "geometries/" + m.path.decode("latin-1").replace("\\", "/") + ".mesh"
+                    row.update(mesh=path, verts=m.num_verts, mesh_flags=m.flags)
+                    data = read_mesh(path) if read_mesh else None
+                    if data:
+                        sm = sfmesh.parse(data)
+                        pts = [sfmesh.decode_position(p, sm.scale) for p in sm.positions]
+                        if pts:
+                            row["pos_min"] = [round(min(p[j] for p in pts), 4) for j in range(3)]
+                            row["pos_max"] = [round(max(p[j] for p in pts), 4) for j in range(3)]
+                        row["triangles"] = len(sm.triangles)
+                        row["colors"] = len(sm.colors)
+                        if sm.uv1:
+                            us = [sfmesh.half_to_float(u) for u, _v in sm.uv1]
+                            vs = [sfmesh.half_to_float(v) for _u, v in sm.uv1]
+                            row["uv"] = [round(min(us), 3), round(max(us), 3), round(min(vs), 3), round(max(vs), 3)]
+            except Exception as e:                                  # noqa: BLE001
+                row["error"] = f"{type(e).__name__}: {e}"
+        elif t.endswith("Node") and len(b) >= 8:
+            row["size"] = len(b)
+        elif t.endswith("ShaderProperty"):
+            pass
+        rows.append(row)
+    return rows
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data", required=True)
@@ -215,7 +261,19 @@ def main(argv=None):
                     help="material file names to print whole")
     ap.add_argument("--chars", type=int, default=5000)
     ap.add_argument("--mesh-match", default=r"candle|fire|flame|torch|brazier|hearth|lantern")
+    ap.add_argument("--skip-skyrim", action="store_true")
+    ap.add_argument("--skip-mesh-scan", action="store_true")
+    ap.add_argument("--sf-nif", action="append", default=[],
+                    help="Starfield NIFs to lay out block by block (with their LOD 0 mesh bounds)")
+    ap.add_argument("--binding", default="", help="print the shortest .mat whose controllers drive this binding")
     a = ap.parse_args(argv)
+    if not a.skip_skyrim:
+        skyrim_side(a)
+    starfield_side(a)
+    return 0
+
+
+def skyrim_side(a):
     sky = bsa.SkyrimArchives(a.skyrim_data)
     models = a.model or ["meshes\\clutter\\woodfires\\fireplacewood01burning.nif",
                          "meshes\\clutter\\candles\\candlehorntable01.nif",
@@ -259,12 +317,15 @@ def main(argv=None):
             print(f"  {t}: {h['width']}x{h['height']} mips {h['mips']} {h['fourcc']!r} dxgi {h['dxgi']}")
         except Exception as e:                                      # noqa: BLE001
             print(f"  {t}: {type(e).__name__}: {e}")
+
+
+def starfield_side(a):
     cr = os.path.join(a.starfield, "Tools", "ContentResources.zip")
     with zipfile.ZipFile(cr) as z:
         names = [x for x in z.namelist() if x.lower().endswith(".mat")]
         flip, shown, animated = [], 0, []
         from collections import Counter
-        kinds, binds = Counter(), Counter()
+        kinds, binds, bound = Counter(), Counter(), []
         rx = re.compile(a.mat_match, re.I)
         for x in names:
             txt = z.read(x).decode("utf-8", "replace")
@@ -280,20 +341,46 @@ def main(argv=None):
                         kinds.update(re.findall(r'"Type"\s*:\s*"(BSBind::[A-Za-z0-9_:]+)"', txt))
                         binds.update(re.findall(r'"Binding"\s*:\s*"([^"]+)"', txt))
                         break
+            if a.binding and '"MappingsA"' in txt and re.search(r'"Path"[^\]]*\[\s*"%s"' % re.escape(a.binding), txt):
+                bound.append((len(txt), x))
             if x.lower().endswith(tuple(w.lower() for w in a.mat)):
                 print(f"== Starfield material {x}:\n{txt[:a.chars]}")
         print(f"== Starfield .mat with an active flipbook: {len(flip)} of {len(names)}; fire-like: "
               f"{[x for x in flip if rx.search(x)][:30]}")
         print(f"== Starfield .mat with controllers: {len(animated)}; BSBind types {dict(kinds.most_common(30))}")
         print(f"   bindings {dict(binds.most_common(40))}")
+        if bound:
+            bound.sort()
+            print(f"== {len(bound)} materials drive {a.binding}; shortest {bound[0][1]}:")
+            print(z.read(bound[0][1]).decode("utf-8", "replace")[:a.chars])
         uv = [x for x in animated if re.search(r"Offset|Scroll|UV|Flow", z.read(x).decode('utf-8', 'replace'))][:3]
         for x in uv[:1]:
             txt = z.read(x).decode("utf-8", "replace")
             k = txt.find('"upControllers"')
             print(f"== controllers of {x} (of {uv}):\n{txt[k:k + a.chars]}")
-    print("== Starfield meshes named like fire / candle, and the materials they name")
     arcs = [os.path.join(a.starfield, "Data", f) for f in sorted(os.listdir(os.path.join(a.starfield, "Data")))
             if f.lower().endswith(".ba2") and "mesh" in f.lower()]
+    if a.sf_nif:
+        opened = [ba2.Ba2(p) for p in arcs]
+
+        def read_any(name):
+            for arc in opened:
+                i = arc.find(name)
+                if i is not None:
+                    return arc.read(i)
+            return None
+        for name in a.sf_nif:
+            data = read_any(name)
+            print(f"== Starfield NIF {name}: {'not found' if data is None else ''}")
+            if data is None:
+                continue
+            n = nifmod.parse(data)
+            print("  strings: " + json.dumps([x.decode('latin-1') if isinstance(x, bytes) else str(x) for x in n.strings]))
+            for row in sf_nif_layout(n, read_any):
+                print("  " + json.dumps(row))
+    if a.skip_mesh_scan:
+        return
+    print("== Starfield meshes named like fire / candle, and the materials they name")
     mrx = re.compile(a.mesh_match, re.I)
     for path in arcs:
         arc = ba2.Ba2(path)
@@ -307,7 +394,6 @@ def main(argv=None):
                     continue
                 mats = sorted({x.decode("latin-1") for x in re.findall(rb"[\w\\/ .-]+\.mat", b)})
                 print(f"  {nm}: {mats[:8]}")
-    return 0
 
 
 if __name__ == "__main__":

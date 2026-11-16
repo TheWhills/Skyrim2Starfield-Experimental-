@@ -68,6 +68,24 @@ class FlameProbeTest(unittest.TestCase):
         self.assertEqual(em["volume"], [2.5, 4.0])
         self.assertAlmostEqual(col["fields"]["c3a"], 1.7, places=4)
 
+    def test_sf_nif_layout_reads_geometry_material_and_mesh_bounds(self):
+        from fo4sf import nif as nifmod, sfmesh, sfnif
+        scale, raw = sfmesh.encode_positions([(0, 0, 0), (0.02, 0, 0.05), (0, 0.02, 0.05)])
+        m = sfmesh.SfMesh(triangles=[(0, 1, 2)], scale=scale, positions=raw,
+                          uv1=[(sfmesh.float_to_half(u), sfmesh.float_to_half(v)) for u, v in ((0, 0), (1, 0), (0, 1))])
+        shape = sfnif.StaticShape(b"Flame", b"0123456789abcdef0123\\0123456789abcdef0123", 6, 3,
+                                  "Materials\\Effects\\Fires\\FireCandleFlame.mat", (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))
+        n = nifmod.parse(nifmod.serialize(sfnif.build_static_nif(b"Candle", [shape])))
+        meshes = {"geometries/0123456789abcdef0123/0123456789abcdef0123.mesh": sfmesh.serialize(m)}
+        rows = flame_probe.sf_nif_layout(n, meshes.get)
+        geo = next(r for r in rows if r["type"] == "BSGeometry")
+        self.assertEqual(geo["name"], "Flame")
+        self.assertEqual(geo["verts"], 3)
+        self.assertEqual(geo["pos_max"], [0.02, 0.02, 0.05])
+        self.assertEqual(geo["uv"], [0.0, 1.0, 0.0, 1.0])
+        shader = rows[geo["shader"]]
+        self.assertEqual(shader["name"], "Materials\\Effects\\Fires\\FireCandleFlame.mat")
+
 
 if __name__ == "__main__":
     unittest.main()
