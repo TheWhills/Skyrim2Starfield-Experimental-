@@ -477,3 +477,11 @@ from LayeredEmissivityComponent.FirstLayerTint (1, 0.949, 0.922): LayeredFireV2 
 clone now takes FirstLayerTint LAYERED_TINT (1, 0.45, 0.12), Skyrim's fire orange (in LAYERED_EMITTANCE, so
 set_emittance writes it). Candles with Starfield's flame mesh: "a small thin flicker at the wick" -> SF_CANDLE_WIDTH /
 _HEIGHT x7.0 / x2.5. Both in skyrimfire.py only, so -AssetsOnly redoes just the flame models.
+Owner in game (2026-11-16 10:23): hearth "looking better" (LayeredFireV2 tinted orange along Skyrim's flame layout; a
+house fireplace shows a low strip of flame). Candles on Starfield's mesh x7.0 / x2.5: "a line of fire as opposed to a
+teardrop shaped little flame": the flame Starfield draws in its candle flipbook is a thin streak, and stretching the
+mesh does not change what the texture draws (supported hypothesis). Skyrim's own candle texture (CandleFlame01) is the
+teardrop; next comparison: -CandleStyle skyrim (models only). Interior lighting (Faendal's house): "white and strong at
+the lighting locations as opposed to a warm fire lit room". Before changing PluginSpike's Skyrim lights (copies of the
+neutral ship omni 03D38C, temperature from the Skyrim colour, lumens x LIGHT_POWER 4): Starfield's own fire / candle
+lights (SfInspect form type:Light Fire) and Faendal's Skyrim lights (cells/*Faendal*.json) for numbers.
