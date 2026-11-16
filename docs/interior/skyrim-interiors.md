@@ -498,3 +498,11 @@ and strong"). Now (export defaults, lighting.json): OMNI_LIGHT 3197A6 LGT_Fire_C
 shifted 95 mired warmer, which puts Skyrim's fire light on Starfield's 1900 K and the fill lights near 2700 K. A
 lighting.json value equal to an older default (LIGHT_POWER 4) is updated on export; hand edits stay. A plugin change: a
 full build. Candles, -CandleStyle skyrim (10:33): small teardrop flames (no comment yet).
+Owner, that build (2026-11-16 10:45, full build 41 s; lights 6000 lm at 2695 K (fill) / 1902 K (fire), so the
+temperature shift works): the inn "very flickery and incredibly dark". Two of my mistakes: LGT_Fire_Cauldron's falloff
+exponent is 2 where every Riverwood Skyrim light has 1 (the light dies off much faster), and Skyrim's flicker was
+written over the base's (period 0.33 s, and its movement 2 - 16 in Skyrim units taken as metres). Now LIGHT_FALLOFF
+skyrim (Skyrim's falloff exponent), LIGHT_FLICKER template (Starfield's own fire flicker kept; in skyrim mode the
+movement is converted to metres), LIGHT_POWER 2 (8000 lm, as before the change). The build log's light lines now show
+falloff and flicker. Also seen: one inn light is 65.7 m at 64000 lm (colour 247,244,242: a Skyrim fill light with a
+huge radius, clamped at 16x).

@@ -93,11 +93,16 @@ def cmd_list(a):
 # 2, with a flicker effect sequence. Now: the base is LGT_Fire_Cauldron (Starfield's fire light at Skyrim's 7 - 8 m
 # radius), x1.5 = 6000 lm, and the colour's temperature 95 mired warmer (PluginSpike LIGHT_TEMPERATURE warm: Skyrim's
 # fire light lands on 1900 K, its fill lights on ~2700 K)
+# Owner on that build (10:45, the inn): "very flickery and incredibly dark". The base's falloff exponent 2 (Skyrim's
+# lights: 1) and Skyrim's flicker written over the base's (0.33 s, movement in Skyrim units taken as metres). Now
+# LIGHT_FALLOFF skyrim (Skyrim's exponent), LIGHT_FLICKER template (Starfield's fire flicker), LIGHT_POWER 2 (8000 lm,
+# what the lights had before, now warm and with the softer falloff)
 INTERIOR_LIGHTING = {"LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37",
-                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "1.5", "OMNI_LIGHT": "3197A6",
-                     "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95"}
+                     "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "2", "OMNI_LIGHT": "3197A6",
+                     "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95", "LIGHT_FLICKER": "template",
+                     "LIGHT_FALLOFF": "skyrim"}
 # earlier defaults: a stored value equal to one of these was written by an older export, not by hand, and is updated
-PREVIOUS_LIGHTING = {"LIGHT_POWER": {"4"}}
+PREVIOUS_LIGHTING = {"LIGHT_POWER": {"4", "1.5"}}
 
 
 def write_lighting(work, cell, a):

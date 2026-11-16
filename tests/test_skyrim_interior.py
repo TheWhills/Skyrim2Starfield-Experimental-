@@ -201,7 +201,8 @@ class InteriorTests(unittest.TestCase):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work])
         self.assertEqual(json.load(open(path)), {"SleepingGiantInn": {
             "LIGHTING_TEMPLATE": "006658", "LIGHT_MERGE_M": "1", "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim",
-            "LIGHT_POWER": "1.5", "OMNI_LIGHT": "3197A6", "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95"}})
+            "LIGHT_POWER": "2", "OMNI_LIGHT": "3197A6", "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95",
+            "LIGHT_FLICKER": "template", "LIGHT_FALLOFF": "skyrim"}})
         cfg = {"*": {"IMAGE_SPACE": "000123"}, "SleepingGiantInn": {"LIGHTING_TEMPLATE": "0ABCDE", "OMNI_LIGHT": "1",
                                                                      "LIGHT_POWER": "4"}}   # 4: the old default
         json.dump(cfg, open(path, "w"))
@@ -210,8 +211,9 @@ class InteriorTests(unittest.TestCase):
         got = json.load(open(path))
         self.assertEqual(got["*"], {"IMAGE_SPACE": "000123"})
         self.assertEqual(got["SleepingGiantInn"], {"LIGHTING_TEMPLATE": "0ABCDE", "LIGHT_MERGE_M": "1", "OMNI_LIGHT": "1",
-                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "1.5",
-                                                   "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95"})
+                                                   "IMAGE_SPACE": "1C6C37", "CELL_AMBIENT": "skyrim", "LIGHT_POWER": "2",
+                                                   "LIGHT_TEMPERATURE": "warm", "LIGHT_MIRED_SHIFT": "95",
+                                                   "LIGHT_FLICKER": "template", "LIGHT_FALLOFF": "skyrim"})
         with contextlib.redirect_stdout(io.StringIO()):
             mi.main(["export", "--skyrim", self.esm, "--cell", "SleepingGiantInn", "--work", work,
                      "--lighting-template", "111111", "--light-merge-m", "0.5"])
@@ -234,6 +236,10 @@ class InteriorTests(unittest.TestCase):
         cs = open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs")).read()
         self.assertIn("1e6 / (1e6 / Math.Max(kelvin, 1u) + mired)", cs)
         self.assertIn('temperature == "warm"', cs)
+        # 10:45 "very flickery and incredibly dark": the base's own flicker, Skyrim's falloff, movement in metres
+        self.assertIn('flicker && flickerMode != "template"', cs)
+        self.assertIn('F("flicker_movement", 0f) / UnitsPerMetre', cs)
+        self.assertIn('if (falloffMode == "skyrim") SetProp(nl, "FalloffExponent", F("falloff_exponent", 1f));', cs)
 
     def test_refuses_work_inside_the_repository(self):
         import make_skyrim_interior as mi
