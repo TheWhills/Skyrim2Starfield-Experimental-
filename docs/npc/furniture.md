@@ -653,4 +653,11 @@ forge or his tanning rack; Hilde sits. So neither the solid model nor our walk-i
 Starfield's NPCBartender_Standing carries and Skyrim's crafting stations carry for the sandbox's "Allow Special
 Furniture" (on in Alvor's and Hilde's packages). make_furniture SPECIAL_SETS (Forge, Tanning) -> extra_keywords
 ["FurnitureSpecial"], PluginSpike adds them by EditorID (supported hypothesis; next build tests it).
+Owner, 20:37 (FurnitureSpecial build): neither Alvor nor Hilde uses the forge or a tanning rack; why Hilde tanned
+now and then before is unknown. Tried and ruled out for choosing: package energy (fixed, verified otherwise: they now
+rotate), template sharing (forge on its own), any-side entry, our walk-in, the solid model, FurnitureSpecial. Next,
+evidence rather than guesses: work_spot_usage.py (read-only) finds how Starfield.esm itself gets NPCs onto its work
+spots (actors' linked references and their keywords, packages naming the references, ownership). Fallback that does
+not depend on the sandbox: a package of Alvor's that names the forge itself (Starfield's own template for "use this
+furniture"), as Skyrim's working sandbox does in effect.
 
