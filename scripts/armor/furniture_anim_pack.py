@@ -121,6 +121,11 @@ SETS = {
     "Grindstone": standing_set("s2s_grindstone", "repair_toolstanding", "blacksmithsharpeningwheelspin.hkx",
                                (), "blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelexit.hkx", 9,
                                instant=True),
+    # 2026-11-16 21:25 (owner's workbench_probe, verified): the armor workbench hammers as Skyrim's HammerTable state
+    # machine: AOHammerEnter 1.0 s -> AOHammerLoop 1.3 s (hammering, x2) -> AOHammerIdle 9.1 s (rest) -> Loop ...;
+    # exit AOHammerExit 1.0 s. On the table-wiping spot's folder (wipetable: 3 flavors, all the rest).
+    "Workbench": standing_set("s2s_workbench", "wipetable", "aohammerloop.hkx", ("aohammeridle.hkx",),
+                              "aohammerenter.hkx", "aohammerexit.hkx", 3, instant=True),
 }
 
 # Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.
@@ -135,7 +140,7 @@ SETS = {
 COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (0.0, 0.0), "Counter": (0.0, 0.0),
              "LeanTable": (0.0, 0.0), "Sweep": (0.0, 0.0), "Alchemy": (0.014, -0.037),
              "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (0.0, 0.0),
-             "Forge": (0.0, 0.0), "Grindstone": (0.0, 0.0)}           # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
+             "Forge": (0.0, 0.0), "Grindstone": (0.0, 0.0), "Workbench": (0.0, 0.0)}  # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
 
 
 # Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back
@@ -176,13 +181,15 @@ KEEP_PROPS = ("Sweep",)
 # (fixed in the right hand) and the hot iron on AnimObjectL (in the fire at the Pull's start, carried to the left hand,
 # then fixed ~0.47 m from it through the hammering and the trough).
 SET_PROPS = {"Sweep": ("AnimObjectR=R_AnimObject1",),
-             "Forge": ("AnimObjectR=R_AnimObject1", "AnimObjectL=L_AnimObject1")}
+             "Forge": ("AnimObjectR=R_AnimObject1", "AnimObjectL=L_AnimObject1"),
+             "Workbench": ("AnimObjectR=R_AnimObject1",)}       # the HammerTable hammer (its Prn: anim_object_convert)
 PROP_SWAP = {"Sweep": {"AnimObjectBroom": "S2S_AnimObjectBroomSkyrim"}}
 # Props a set loads itself (its template loads its own, or none, where Skyrim's are wanted): every enter descriptor
 # (EnterFromStand, EnterInstant) gets AnimObjLoad + AnimObjDraw of each at frame 0, every exit AnimObjUnequipAll at
 # frame 0. The forge's Starfield template (industrial workbench) loads AnimObjectIndustrialWorkbench01 in one flavor
 # only (left out with its other prop events). S2S ANIO records: stance_plugin.PROP_OBJECTS.
-SET_PROP_OBJECTS = {"Forge": ("S2S_AnimObjectForgeHammerSkyrim", "S2S_AnimObjectForgeIronSkyrim")}
+SET_PROP_OBJECTS = {"Forge": ("S2S_AnimObjectForgeHammerSkyrim", "S2S_AnimObjectForgeIronSkyrim"),
+                    "Workbench": ("S2S_AnimObjectHammerTableSkyrim",)}
 # 2026-11-16 (owner's clip_join run, verified): the forge's clips chain Pull > Hammer 0.0 deg, Hammer > Temper 0.0,
 # Temper > Hammer 2.7, Hammer > Discard 4.0, but the Discard ends on no clip's first pose (Discard > Pull 62.7 deg in
 # the left arm and head, the closest; Pull starts from standing: Exit > Pull differs in the fingers only). Skyrim

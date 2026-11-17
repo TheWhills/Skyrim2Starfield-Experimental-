@@ -36,7 +36,10 @@ PROP_SOURCES = {"S2S_AnimObjectBroomSkyrim": ("meshes\\clutter\\common\\broom.ni
                 "S2S_AnimObjectForgeHammerSkyrim": ("meshes\\animobjects\\animobjectblacksmithforgehammer.nif",
                                                     "R_AnimObject1"),
                 "S2S_AnimObjectForgeIronSkyrim": ("meshes\\animobjects\\animobjectblacksmithforgeiron.nif",
-                                                  "L_AnimObject1")}
+                                                  "L_AnimObject1"),
+                # 2026-11-16 (workbench_probe: ANIO AnimObjectHammerTable, AnimObjects\BlacksmithNoviceHammerRoot.nif)
+                "S2S_AnimObjectHammerTableSkyrim": ("meshes\\animobjects\\blacksmithnovicehammerroot.nif",
+                                                    "R_AnimObject1")}
 SKY_PRN_TO_SF = {"animobjectr": "R_AnimObject1", "animobjectl": "L_AnimObject1", "animobjecta": "AnimObjectA",
                  "animobjectb": "AnimObjectB"}
 

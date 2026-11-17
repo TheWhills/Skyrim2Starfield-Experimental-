@@ -456,6 +456,31 @@ class DescriptorTests(unittest.TestCase):
         self.assertEqual(P.strip_variables(out), out)                        # nothing to strip: unchanged
 
 
+class WorkbenchSetTest(unittest.TestCase):
+    def test_workbench(self):
+        """2026-11-16 (workbench_probe): the armor workbench hammers as Skyrim's HammerTable: Enter, Loop as the idle,
+        the 9 s rest as the flavors, Exit; its own template (wipe table) and keyword; the table hammer as its prop."""
+        folder, tpl, rows = P.SETS["Workbench"]
+        self.assertTrue(tpl.endswith("wipetable"))
+        d = dict((r[0], r[1]) for r in rows)
+        self.assertEqual((d["enterfromstand.afx"], d["idle.afx"], d["idle_flavor03.afx"], d["exittostand.afx"],
+                          d["enterinstant.afx"]),
+                         ("aohammerenter.hkx", "aohammerloop.hkx", "aohammeridle.hkx", "aohammerexit.hkx",
+                          "aohammerloop.hkx"))
+        self.assertEqual(P.SET_PROP_OBJECTS["Workbench"], ("S2S_AnimObjectHammerTableSkyrim",))
+        import stance_plugin as SP
+        import anim_object_convert as AC
+        self.assertIn("S2S_AnimObjectHammerTableSkyrim", [p[0] for p in SP.PROP_OBJECTS])
+        self.assertEqual(SP.PROP_OBJECTS[-1][0], "S2S_AnimObjectHammerTableSkyrim")       # appended: FormIDs keep
+        self.assertIn("S2S_AnimObjectHammerTableSkyrim", AC.PROP_SOURCES)
+        w = [v for n, v, _f in SP.FURNITURE_SETS if n == "Workbench"][0]
+        self.assertEqual(w, ("AnimFurnWipeTable",))
+        self.assertFalse(any(set(w) & set(v) for n, v, _f in SP.FURNITURE_SETS if n != "Workbench"))
+        import make_furniture as MF
+        self.assertEqual(MF.anim_set_for({"kind": "smith_table", "edid": "CraftingBlacksmithArmorWorkbench"}),
+                         "Workbench")
+
+
 class ClipEventsTest(unittest.TestCase):
     def test_forge_iron_events(self):
         """2026-11-16 (clip_join): the Discard + Pull flavor blends its join and swaps the iron: unequipped where the

@@ -84,9 +84,14 @@ TEMPLATES = {
     # the standing repair spot (FurnitureClassWork, AnimFurnRepair_ToolStanding, enter / exit through geometry;
     # furniture\repair_toolstanding: Enter / EnterInstant / Exit / QuickExit, Idle, 9 flavors), FurnitureSpecial added
     "grindstone": ("0007BDAA", "NPCRepairImpactWrench_Standing"),  # Skyrim's sharpening wheel (Grindstone set)
+    # 2026-11-16 21:25 (owner's workbench_probe, verified): Skyrim's armor workbench (CraftingBlacksmithArmorWorkbench,
+    # FurnitureSpecial) has no clip of its own; Skyrim's hammering-at-a-table is HammerTable (AOHammer Enter / Loop /
+    # Idle / Exit, prop AnimObjectHammerTable). On the table-wiping NPC spot of its own (FurnitureClassWork,
+    # AnimFurnWipeTable; furniture\wipetable: Enter / EnterInstant / Exit / QuickExit, Idle, 3 flavors)
+    "smith_table": ("003B2A66", "NPCWipeTable"),                   # Skyrim's armor workbench (Workbench set)
 }
 SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
-           "scrape", "forge", "grindstone",
+           "scrape", "forge", "grindstone", "smith_table",
            # crafting stations (2026-11-09, owner: E on our alchemy lab put the player inside it facing away, no menu;
            # Starfield's own chem bench, same record but its own marker, worked): Skyrim's crafting NIFs all hold one
            # marker at the origin, heading 0, entry Behind (owner's furniture survey: cooking pot, alchemy lab and
@@ -100,7 +105,7 @@ CRAFTING = [(("craftingcookpot", "issmallcookingpot", "cookingspit", "cookingpot
             (("isenchanting", "wicraftingenchanting", "craftingenchanting"), "workbench"),
             # (removed 15:02, back 21:19 on a template of its own: owner, "Let's add the grindstone now")
             (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "grindstone"),
-            (("craftingsmithingarmortable", "armortable"), "armor_bench"),
+            (("craftingsmithingarmortable", "armortable"), "smith_table"),   # 2026-11-16: NPC work (Workbench set)
             (("craftingtanningrack", "tanningrack"), "scrape"),
             (("craftingsmithinganvil", "anvil"), "hammer"),
             (("craftingsmelter", "issmelter", "smelter"), "workbench"),
@@ -197,6 +202,7 @@ ANIM_SET_RULES = (
     (("scrape",), r"tanning", "Tanning"),
     (("forge",), None, "Forge"),
     (("grindstone",), None, "Grindstone"),
+    (("smith_table",), None, "Workbench"),
 )
 # Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
 # is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips
@@ -206,12 +212,12 @@ ANIM_SET_RULES = (
 # (an approach that fails), while Hilde, her chair disabled, leans on her rail. Skyrim's crafting markers allow one
 # side only (Behind), and the forge's own model (pit, trough, anvil) stands around that spot: these sets' spots may be
 # entered from every side, so the AI can take whichever approach it can path (supported hypothesis, owner's test).
-ANY_SIDE_SETS = {"Forge", "Tanning", "Grindstone"}
+ANY_SIDE_SETS = {"Forge", "Tanning", "Grindstone", "Workbench"}
 # 2026-11-16 (owner, in game, energy fixed, invisible-marker A/B too): Alvor never chooses the forge or his tanning
 # rack, Hilde her rack only when nothing else is left; forced in, both play. Starfield's bartender furniture (Orgnar
 # uses ours) carries FurnitureSpecial and so do Skyrim's crafting stations, for the sandbox's "Allow Special Furniture"
 # (on in Alvor's and Hilde's packages); the wall-wipe and welder templates do not (supported hypothesis, owner's test)
-SPECIAL_SETS = {"Forge", "Tanning", "Grindstone"}
+SPECIAL_SETS = {"Forge", "Tanning", "Grindstone", "Workbench"}
 # 2026-11-16 21:24 (owner): these are seen in use only right after a passtime (NPCs placed straight into furniture),
 # never walked into; Alvor stood on the forge's spot and gave up before. Unlike the sweep / lean / bar markers, ours
 # carry a solid model around their spot. Starfield's chairs with a model at the spot carry
@@ -219,7 +225,7 @@ SPECIAL_SETS = {"Forge", "Tanning", "Grindstone"}
 # the furniture's own collision is left out of the interaction (supported hypothesis, owner's test)
 SPECIAL_KEYWORDS = ["FurnitureSpecial", "IgnoreCollisionAtRefForInteractionsKeyword"]
 ALL_SIDES = ["Front", "Rear", "Left", "Right"]
-SKYRIM_SPOT_SETS = {"Forge", "Grindstone"}           # the wheel's clips stand at Skyrim's wheel marker too
+SKYRIM_SPOT_SETS = {"Forge", "Grindstone", "Workbench"}           # the wheel's clips stand at Skyrim's wheel marker too
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
 
 

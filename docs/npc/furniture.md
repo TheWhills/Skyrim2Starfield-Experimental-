@@ -679,4 +679,12 @@ walked into, and the forge stays "very very rare". Two problems, then: choosing 
 are the only work spots with a solid model around the spot; Starfield's chairs with a model at the spot carry
 IgnoreCollisionAtRefForInteractionsKeyword, now added to Forge / Tanning / Grindstone (SPECIAL_KEYWORDS). To see a
 walk-in: after a passtime, watch in real time until he leaves the furniture and comes back.
+workbench_probe (owner, 21:25, verified): Skyrim's CraftingBlacksmithArmorWorkbench 0D932F carries FurnitureSpecial (as
+do the alchemy / enchanting benches and HammerTableMarker: Skyrim's crafting stations are special furniture, as our
+fix assumed) and no clip of its own; IdleHammerTableEnter plays HammerTable_State: AOHammerEnter 1.0 s -> AOHammerLoop
+1.3 s (x2; SoundPlay.NPCHumanBlacksmithRepairHammer / ...Distant at 0.17 and 0.77 s) -> AOHammerIdle 9.1 s -> Loop;
+AOHammerExit 1.0 s; prop ANIO AnimObjectHammerTable (AnimObjects\BlacksmithNoviceHammerRoot.nif). **Workbench set**:
+kind smith_table on NPCWipeTable (003B2A66, AnimFurnWipeTable, its own), idle = Loop, 3 flavors = the rest, Enter /
+Exit, EnterInstant = Loop; prop S2S_AnimObjectHammerTableSkyrim (stance_plugin PROP_OBJECTS, last;
+anim_object_convert); FurnitureSpecial + IgnoreCollision..., every side, Skyrim's marker.
 

@@ -186,7 +186,7 @@ class MakeFurnitureTests(unittest.TestCase):
                  "CraftingSmelterMarker1": (["isSmelter", "CraftingSmelter"], 1, "workbench"),
                  "CraftingBlacksmithAnvil": (["isBlacksmithAnvil", "CraftingSmithingForge"], 1, "hammer"),
                  "CraftingSmithingSharpeningWheel": (["CraftingSmithingSharpeningWheel"], 2, "grindstone"),
-                 "CraftingSmithingArmorTable": (["CraftingSmithingArmorTable"], 7, "armor_bench"),
+                 "CraftingSmithingArmorTable": (["CraftingSmithingArmorTable"], 7, "smith_table"),   # NPC work since 2026-11-16 (Workbench set)
                  "CraftingTanningRack": (["CraftingTanningRack"], 1, "scrape"),
                  "CraftingSmithingAnvil": ([], 1, "hammer"),
                  "CraftingSomethingNew": ([], 1, None)}                         # a bench we do not know: static

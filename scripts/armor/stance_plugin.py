@@ -70,7 +70,9 @@ PROP_INDEX = 48
 # broom's vanilla record (the attach bone is the model's Prn, not the record's)
 PROP_OBJECTS = (("S2S_AnimObjectBroomSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\BroomSkyrim.nif"),
                 ("S2S_AnimObjectForgeHammerSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\ForgeHammerSkyrim.nif"),
-                ("S2S_AnimObjectForgeIronSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\ForgeIronSkyrim.nif"))
+                ("S2S_AnimObjectForgeIronSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\ForgeIronSkyrim.nif"),
+                # 2026-11-16: Skyrim's AnimObjectHammerTable (the armor workbench's hammering; added last: FormIDs keep)
+                ("S2S_AnimObjectHammerTableSkyrim", "AnimObjectBroom", "S2S\\AnimObjects\\HammerTableSkyrim.nif"))
 _FURN = "actors\\human\\animations\\furniture\\"
 # (set, the vanilla furniture keywords whose entries are copied with the set's keyword, the set's folder). The keyword
 # FormIDs follow this order (FURN_INDEX + position): add new sets at the end. Counter: Skyrim's counter-lean markers are
@@ -91,6 +93,7 @@ FURNITURE_SETS = (
     ("Forge", ("AnimFurnWelder",), _FURN + "s2s_forge"),
     # 2026-11-16 21:19 (owner): back, on the standing repair spot's keyword, a template of its own (last: no FormID moves)
     ("Grindstone", ("AnimFurnRepair_ToolStanding",), _FURN + "s2s_grindstone"),
+    ("Workbench", ("AnimFurnWipeTable",), _FURN + "s2s_workbench"),            # 2026-11-16: the armor workbench
 )
 FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
 
