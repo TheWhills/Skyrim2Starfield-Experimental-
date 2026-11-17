@@ -660,4 +660,8 @@ evidence rather than guesses: work_spot_usage.py (read-only) finds how Starfield
 spots (actors' linked references and their keywords, packages naming the references, ownership). Fallback that does
 not depend on the sandbox: a package of Alvor's that names the forge itself (Starfield's own template for "use this
 furniture"), as Skyrim's working sandbox does in effect.
+**Owner, 21:16 (FurnitureSpecial build, the welder's own walk-in): "he randomly just used it"** - Alvor walked into the
+forge by himself and hammered (screenshot: hammer in hand, at the anvil), the first time on a schedule. One sighting:
+FurnitureSpecial (the sandbox's "Allow Special Furniture") is the supported cause; repeated use over a work day, and
+Hilde's tanning with her chair present, would confirm it. Then: our walk-in (the Pull) back without --vanilla-enter.
 
