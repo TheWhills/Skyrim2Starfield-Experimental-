@@ -134,6 +134,29 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertEqual(chain, [("WNAM", "SkinCritter", [("CritterAA", [("MOD2", "Actors\\Critter\\Critter.nif")])])])
         self.assertIn("ARMA CritterAA [MOD2 Actors\\Critter\\Critter.nif]", C.skin_lines("race skin", chain)[0])
 
+    def test_model_detail_on_disk(self):
+        import tempfile
+        from fo4sf import creature, gearfit, nif
+        import numpy as np
+        sh = gearfit.SkyShape(b"chicken", np.array([[0, 0, 0.1], [0.1, 0, 0.1], [0, 0.1, 0.3]], float),
+                              np.array([[0, 0, 1]] * 3, float), [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)],
+                              ["Pelvis"], [[(0, 1.0)]] * 3, {"Pelvis": np.eye(4)})
+        files = creature.skinned_files(sh, "materials\\t.mat", "actors/critter/mesh/t/t", "Pelvis", ["COM"])
+        with tempfile.TemporaryDirectory() as d:
+            for rel, data in files.items():
+                p = os.path.join(d, "Mod", *rel.split("/"))
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                open(p, "wb").write(data)
+            lines = C.models_side(None, [os.path.join(d, "Mod", "meshes", "actors", "critter", "mesh", "t", "t.nif")])
+            os.remove(next(os.path.join(dp, f) for dp, _d, fs in os.walk(os.path.join(d, "Mod", "geometries"))
+                           for f in fs))
+            gone = C.models_side(None, [os.path.join(d, "Mod", "meshes", "actors", "critter", "mesh", "t", "t.nif")])
+        text = "\n".join(lines)
+        self.assertIn("BSGeometry 'chicken'", text)
+        self.assertIn("weights/vertex 4, bone indices used [0]", text)
+        self.assertIn("skin bones (1): COM", text)
+        self.assertIn("MESH NOT FOUND", "\n".join(gone))
+
 
 if __name__ == "__main__":
     unittest.main()

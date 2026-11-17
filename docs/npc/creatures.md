@@ -110,3 +110,12 @@ matching the rig), a crash at load (the shell or rig rejected).
    placed in Riverwood.
 Success in game: the chicken stands, idles and walks with its own skeleton (no stretching), i.e. Starfield takes a
 new creature skeleton on an existing graph.
+
+## First in-game run (owner, 2026-11-17 14:02)
+* Build: 36 files, all 15 clips, nothing missing. In game, `placeatme 2C180F`: the creature is heard but nothing is
+  seen. Supported: the actor exists (its sounds play), its body is not drawn.
+* Candidates: (1) loose .mesh files not loaded (loose animations load on this install, 2026-11-15, but our gear and
+  hair always shipped in BA2s: loose geometries never tested); (2) the skin's bones not found (our bone names COM,
+  Spine ... vs what the engine builds from the .rig); (3) a difference from the vanilla creature model's layout.
+  Next: `creature_probe.py --model` prints the vanilla trilobite model and ours side by side.
+

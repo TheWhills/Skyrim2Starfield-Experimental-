@@ -325,6 +325,55 @@ def skin_lines(label: str, chain) -> list:
             for sig, ae, addons in chain]
 
 
+def model_detail(data: bytes, read_mesh) -> list:
+    """A Starfield model in full, for comparing ours with a vanilla one: nif_summary, then per BSGeometry its flags,
+    transform, bounds, skin / shader refs, the material, each LOD's mesh path (found or not, through read_mesh(path)
+    -> bytes or None) with the .mesh's vertex / triangle counts, weights per vertex, scale and the bone indices it
+    uses; then the skin (SkinAttach names, BSSkin::Instance root / data / bone count, bind translations)."""
+    from fo4sf import nif as nifmod, sfmesh, sfnif
+    n = nifmod.parse(data)
+    out = nif_summary(data)
+    for i in range(len(n.blocks)):
+        if n.type_of(i) != "BSGeometry":
+            continue
+        g = sfnif.parse_bsgeometry(n.blocks[i])
+        nm = n.strings[g.name_idx].decode("latin-1", "replace") if 0 <= g.name_idx < len(n.strings) else ""
+        mat = ""
+        if 0 <= g.shader < len(n.blocks):
+            si = struct.unpack_from("<i", n.blocks[g.shader], 0)[0]
+            mat = n.strings[si].decode("latin-1", "replace") if 0 <= si < len(n.strings) else ""
+        out.append(f"BSGeometry {nm!r}: flags 0x{g.flags:X}, t {tuple(round(v, 3) for v in g.translation)}, "
+                   f"scale {g.scale}, sphere {tuple(round(v, 3) for v in g.sphere)}, box "
+                   f"{tuple(round(v, 3) if abs(v) < 1e30 else 'FLT_MAX' for v in g.box)}, skin -> "
+                   f"{n.type_of(g.skin) if 0 <= g.skin < len(n.blocks) else '-'}, extra "
+                   f"[{', '.join(n.type_of(e) for e in g.extra_refs if 0 <= e < len(n.blocks))}], material {mat!r}")
+        for lod, ref in enumerate(g.meshes):
+            if ref is None:
+                continue
+            path = ref.path.decode("latin-1", "replace")
+            md = read_mesh(path)
+            line = f"  LOD{lod} {path}: indices {ref.indices_size}, verts {ref.num_verts}, flags 0x{ref.flags:X}, "
+            if md is None:
+                out.append(line + "MESH NOT FOUND")
+                continue
+            try:
+                m = sfmesh.parse(md)
+                bones = sorted({b for b, w in m.weights if w}) if m.weights else []
+                out.append(line + f"file v{m.version}: {len(m.positions)} verts, {len(m.triangles)} tris, scale "
+                                  f"{m.scale:.4f}, weights/vertex {m.weights_per_vertex}, bone indices used {bones}, "
+                                  f"uv {len(m.uv1)}, normals {len(m.normals)}, tangents {len(m.tangents)}, "
+                                  f"meshlets {len(m.meshlets)}, lods {len(m.lods)}, tail {len(m.tail)} bytes")
+            except Exception as e:                       # noqa: BLE001
+                out.append(line + f"mesh unreadable: {type(e).__name__}: {e}")
+    sk = sfnif.parse_skin(n)
+    if sk:
+        out.append(f"skin bones ({len(sk.get('bones', []))}): "
+                   + ", ".join(b.decode("latin-1", "replace") for b in sk.get("bones", [])))
+        out.append(f"skin instance (skeleton root, data, bones): {sk.get('instance')}")
+        out.append("bind translations: " + ", ".join(f"{tuple(round(v, 3) for v in b[2])}" for b in sk.get("binds", [])))
+    return out
+
+
 def skyrim_side(sky_data: str, race_edid: str) -> list:
     from fo4sf import bsa, sfplugin, skyrimhkx
     esm = os.path.join(sky_data, "Skyrim.esm")
@@ -446,13 +495,65 @@ def starfield_side(sf_data: str, sf_races) -> list:
     return lines
 
 
+def models_side(sf_data, models) -> list:
+    """model_detail for each model: a file on disk (meshes from <its meshes root>\\..\\geometries, else the archives)
+    or an archive path."""
+    import sf_anim_survey as SAS
+    index = {}
+    if sf_data:
+        for _label, ar in SAS.archives(sf_data):
+            for i, n in enumerate(ar.names):
+                index.setdefault(SAS.norm(n), (ar, i))
+
+    def from_archive(k):
+        k = SAS.norm(k)
+        for cand in (k, "meshes/" + k, "geometries/" + k + ".mesh", "geometries/" + k):
+            if cand in index:
+                ar, i = index[cand]
+                return ar.read(i)
+        return None
+    lines = []
+    for m in models:
+        if os.path.isfile(m):
+            low = os.path.abspath(m).replace("\\", "/")
+            cut = low.lower().rfind("/meshes/")
+            root = low[:cut] if cut >= 0 else os.path.dirname(low)
+
+            def read_mesh(path, root=root):
+                f = os.path.join(root, "geometries", *path.replace("\\", "/").split("/")) + ".mesh"
+                if os.path.isfile(f):
+                    with open(f, "rb") as fh:
+                        return fh.read()
+                return from_archive(path)
+            with open(m, "rb") as fh:
+                data = fh.read()
+            lines.append(f"== model on disk {m}")
+        else:
+            data, read_mesh = from_archive(m), from_archive
+            lines.append(f"== model in the archives {m}")
+            if data is None:
+                lines.append("  not found")
+                continue
+        try:
+            lines += ["  " + ln for ln in model_detail(data, read_mesh)]
+        except Exception as e:                           # noqa: BLE001
+            lines.append(f"  unreadable: {type(e).__name__}: {e}")
+    return lines
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data")
     ap.add_argument("--starfield-data")
     ap.add_argument("--race", default="ChickenRace", help="the Skyrim race (EditorID)")
     ap.add_argument("--sf-race", action="append", default=[], help="a Starfield race to open (EditorID; repeatable)")
+    ap.add_argument("--model", action="append", default=[],
+                    help="a Starfield model to print in full: an archive path (meshes\\...) or a .nif on disk whose "
+                         "meshes are in the geometries folder beside its meshes folder (repeatable)")
     a = ap.parse_args(argv)
+    if a.model:
+        print("\n".join(models_side(a.starfield_data, a.model)))
+        return 0
     if a.skyrim_data:
         print("\n".join(skyrim_side(a.skyrim_data, a.race)))
     if a.starfield_data:
