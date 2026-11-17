@@ -879,3 +879,8 @@ spot the work marker sits at the reference origin, inside the forge model's boun
 pit, anvil, trough): supported reading, the model's own collision around the spot makes the sandbox reject it as
 unreachable (a Sit package or a passtime does not test that). Earlier "model ruled out" tests used the invisible model
 together with the other blockers (IgnoreCollision / 0xF sides) still on, so they did not separate this.
+Owner's rebuild (2026-11-17 08:27 log, verified): "S2S_Furn_CraftingBlacksmithSharpeningWheel ... Ignored By Sandbox
+cleared" (Mutagen's Furniture.Flags is the FNAM property, bit 1 found set and cleared); the four stations carry
++FurnitureSpecial only, our models, 1 Skyrim marker each; build and install OK. In game pending: does Alvor now pick
+the grindstone by himself. The forge stays at its Skyrim spot until the owner says how far / which way moving it
+made it work.
