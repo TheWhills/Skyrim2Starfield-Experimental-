@@ -833,6 +833,24 @@ FormKey? FurnitureBase(string key)
         var old = pi.GetValue(f) is object ov ? Convert.ToInt64(ov) : 0L;
         pi.SetValue(f, Enum.ToObject(et, (old & ~0xFFFFFL) | ((1L << Math.Min(nMk, 20)) - 1)));
     }
+    // sandbox_usable (make_furniture.py, 2026-11-16): clear FNAM bit 1 "Ignored By Sandbox" a template may carry
+    // (NPCRepairImpactWrench_Standing, the grindstone's: NPCs never picked it). Through reflection: the property holding
+    // FNAM is looked up by name, and reported if Mutagen has none
+    if (b.TryGetProperty("sandbox_usable", out var sbu) && sbu.ValueKind == JsonValueKind.True)
+    {
+        var fp = typeof(Furniture).GetProperty("Flags");
+        if (fp == null) furnNotes.Add($"{f.EditorID}: no Flags property (FNAM); Ignored By Sandbox left as the template's");
+        else
+        {
+            var ft = Nullable.GetUnderlyingType(fp.PropertyType) ?? fp.PropertyType;
+            var fv = fp.GetValue(f) is object fo ? Convert.ToInt64(fo) : 0L;
+            if ((fv & 2) != 0)
+            {
+                fp.SetValue(f, Enum.ToObject(ft, fv & ~2L));
+                modelNote += ", Ignored By Sandbox cleared";
+            }
+        }
+    }
     // shift_m (make_furniture.py --shift): every marker moved in the furniture's frame (furniture_standoff.py measures it)
     if (b.TryGetProperty("shift_m", out var sh) && f.MarkerParameters != null)
         foreach (var smp in f.MarkerParameters)

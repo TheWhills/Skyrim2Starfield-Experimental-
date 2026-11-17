@@ -864,3 +864,12 @@ the sandbox's type rotation (CK wiki: the type just done drops to zero, the othe
 and the nearest station scores best again after each stay (whether Starfield excludes the object just used is
 unknown). Skyrim alternates furniture with idle markers (its stand spots are IDLM). Next: Skyrim's IDLM back as
 Starfield idle markers (IDLM, the idle-marker type) instead of furniture or nothing.
+Owner, 23:21-23:25: Alvor keeps choosing his tanning rack (1.39 m from his work centre); with the tanning rack and
+armor workbench disabled and his AI reset (cf "Actor.EvaluatePackage" true) he still never goes to the forge or the
+grindstone. **Grindstone, verified cause**: its template NPCRepairImpactWrench_Standing carries FNAM 2 (furniture_record_probe
+22:47), which furniture_survey decodes as "Ignored By Sandbox" (xEdit's FURN FNAM flags): our copy inherited it.
+make_furniture marks every station sandbox_usable; PluginSpike clears FNAM bit 1 through Mutagen's Furniture.Flags
+(reflection; a missing property is reported). **Forge, unresolved**: the welder's FNAM is 0, and with a Sit package
+naming it Alvor walks in (22:54), so the furniture can be entered; the sandbox does not pick it. Starfield.esm itself
+names its welders through packages or linked references more than it leaves them to sandboxes (work_spot_usage).
+Options: a Sit package for a slice of his work day (Starfield's own way, verified to walk in), or another template.

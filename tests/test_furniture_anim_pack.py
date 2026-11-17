@@ -547,6 +547,12 @@ class PlainStationsTest(unittest.TestCase):
                              keep_keywords=["FurnitureSpecial"])
         self.assertEqual(kept["bases"]["f"]["extra_keywords"], ["FurnitureSpecial"])
         self.assertEqual(kept["bases"]["f"]["markers"][0]["entry"], [])
+        # Ignored By Sandbox cleared on every station (the grindstone's template carries it)
+        self.assertTrue(normal["bases"]["f"]["sandbox_usable"])
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('b.TryGetProperty("sandbox_usable"', cs)
+        self.assertIn("fv & ~2L", cs)
 
 
 if __name__ == "__main__":

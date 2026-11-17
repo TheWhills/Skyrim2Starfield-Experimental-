@@ -302,6 +302,11 @@ def add_anim_keywords(out, plugin_path, read_keywords=None, plain=False, keep_ke
             b["extra_keywords"] = list(SPECIAL_KEYWORDS) if not plain else list(keep_keywords)
         if st in ANY_SIDE_SETS and b.get("markers"):
             b["markers"] = [dict(m, entry=[] if (plain or TEMPLATE_SIDES) else list(ALL_SIDES)) for m in b["markers"]]
+        if st in SPECIAL_SETS:
+            # 2026-11-16 23:25 (owner): with the tanning rack and armor workbench disabled Alvor still never picks the
+            # grindstone or forge. The grindstone's template NPCRepairImpactWrench_Standing has FNAM 2 = "Ignored By
+            # Sandbox" (furniture_record_probe; furniture_survey decodes bit 1 so): PluginSpike clears it on our copy
+            b["sandbox_usable"] = True
         done[st] = done.get(st, 0) + 1
     if missing:
         done["missing"] = sorted(missing)
