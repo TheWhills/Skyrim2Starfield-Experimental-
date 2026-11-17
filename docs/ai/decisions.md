@@ -2349,3 +2349,15 @@ empty nodes; the effect system behind them is unknown).
   during a passtime, with navmesh, model, flags, walk-in clips and entry sides ruled out. Alternatives: linked
   references with a "use linked ref" package (no such Skyrim data), scripts (none in this pipeline). Supported
   hypothesis; first an A/B on the forge.
+
+## Faithful schedules: nothing dropped silently (2026-11-17)
+Owner: "what are we dropping aspects of these? Our goal is a faithful conversion." Where make_schedule cannot
+translate something it has been falling back: conditioned / quest-owned packages left out (20 in Riverwood, e.g.
+HodSawmillSawLog8x11 / LoadLog8x11), SandboxWorkingMultiLocation and CarryAndDropItem flattened to a Sandbox at their
+first location (Faendal's firewood runs lose the carrying; later locations skipped), one package with no Starfield
+template (HodSleepingGiant19x3). Decision: these are gaps to close, not choices; each fallback is listed by
+schedule_readiness (now with every dropped package's conditions decoded and read at game start: decided / ambient /
+story) and is to be replaced by a real translation: package conditions converted to Starfield conditions (ambient
+ones kept as conditions, start-decided ones resolved), Skyrim's multi-step procedure trees (carry and drop, multi
+location) rebuilt from Starfield procedures, the carry arm offset found or converted. Until then a fallback stays
+in the build log and readiness.md, never silent.

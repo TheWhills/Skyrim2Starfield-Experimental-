@@ -80,7 +80,38 @@ def furniture_kind(sky, fid):
     return make_furniture.kind_of(rec) or "static"
 
 
-def assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells=None):
+def package_conditions(sky, pack_fid, npc_row, world):
+    """[{text, verdict, kind}] for a Skyrim package's own conditions (CTDA before its data inputs): the function and
+    its parameters by name, and skyrimdialog.evaluate's reading at the start of a new game (kind 'start': decided,
+    'ambient': varies in play - time, weather, chance -, 'story' / 'player' / 'unknown'). 2026-11-17 (owner: "what are
+    we dropping aspects of these? Our goal is a faithful conversion"): a conditioned package was left out with only
+    a count; this says what each condition is, so each can be converted rather than dropped."""
+    from fo4sf import skyrimdialog as SD
+    ops = {0: "==", 1: "!=", 2: ">", 3: ">=", 4: "<", 5: "<="}
+    out = []
+    for sig, d in sky.subs(pack_fid):
+        if sig in (b"PKCU", b"ANAM", b"PLDT", b"PTDA"):
+            break
+        if sig != b"CTDA":
+            continue
+        c = SD.parse_condition(d)
+        if not c:
+            continue
+        name = SD.NAME_OF.get(c["function"], f"function {c['function']}")
+        args = [sky.edid(x) or f"{x:06X}" for x in (c["param1"], c["param2"]) if x and sky.kind(x)]
+        if c["param1"] and not sky.kind(c["param1"]):
+            args.insert(0, str(c["param1"]))
+        val = (f"global {sky.edid(int(c['value'])) or int(c['value'])}" if c["use_global"] else f"{c['value']:g}")
+        run = {0: "", 1: " (on target)", 2: f" (on {sky.edid(c['reference']) or hex(c['reference'])})"}.get(
+            c["run_on"], f" (run on {c['run_on']})")
+        got, kind = SD.evaluate(c, npc_row, world) if world is not None else (None, "unknown")
+        out.append({"text": f"{name}({', '.join(args)}){run} {ops.get(c['op'], '?')} {val}"
+                            + (" OR" if c["or"] else ""),
+                    "at_start": got, "kind": kind})
+    return out
+
+
+def assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells=None, world=None):
     npc = skyrimnpc.parse_npc(sky.subs(fid), fid)
     src = npc
     if npc["template"] and npc["template_flags"] & skyrimnpc.TEMPLATE_AI_PACKAGES and sky.kind(npc["template"]) == "NPC_":
@@ -93,6 +124,14 @@ def assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells=None):
         got = MS.convert_package(sky, sf_tpls, p, cell_names, notes, False, True, ext_cells)
         pr = {"edid": sky.edid(p), "converted": got is not None,
               "reasons": sorted({reason_of(n) for n in notes})}
+        if got is None:
+            raw = packages.parse_pack(sky.subs(p))
+            pr["skyrim_template"] = sky.edid(raw["template"]) if raw.get("template") else None
+            pr["schedule"] = raw.get("schedule")
+            if raw.get("owner_quest"):
+                pr["owner_quest"] = sky.edid(raw["owner_quest"])
+            if raw.get("conditions"):
+                pr["conditions"] = package_conditions(sky, p, npc, world)
         if got is not None:
             pr.update(template=f"{got['skyrim_template']} -> {got['sf_template']}",
                       hour=(got["schedule"] or {}).get("hour"), duration_min=(got["schedule"] or {}).get("duration_min"))
@@ -151,7 +190,12 @@ def report_md(rows, counts, actors):
                 lines.append(f"  - {p['edid']}: {p.get('template')}, {'any time' if h is None or h < 0 else f'{h}:00'}"
                              f" for {p.get('duration_min')} min{near}")
             else:
-                lines.append(f"  - {p['edid']}: left out ({'; '.join(p['reasons'])})")
+                lines.append(f"  - {p['edid']}: left out ({'; '.join(p['reasons'])})"
+                             + (f", template {p['skyrim_template']}" if p.get("skyrim_template") else "")
+                             + (f", quest {p['owner_quest']}" if p.get("owner_quest") else ""))
+                for c in p.get("conditions") or []:
+                    at = {True: "true", False: "false", None: "?"}[c["at_start"]]
+                    lines.append(f"    - `{c['text']}`: {c['kind']}, at game start {at}")
     return "\n".join(lines) + "\n"
 
 
@@ -182,7 +226,13 @@ def main(argv=None):
     elif fp:
         print(f"no {fp}: outdoor package locations counted as outside")
     try:
-        rows = [assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells)
+        try:
+            from fo4sf import skyrimdialog as SD
+            world = SD.world_from(a.skyrim)
+        except Exception as e:                                       # noqa: BLE001
+            print(f"no game-start world ({type(e).__name__}: {e}): conditions listed without a verdict")
+            world = None
+        rows = [assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells, world)
                 for fid in sorted(placed_npcs(sky, cell_names))]
     finally:
         sky.close()

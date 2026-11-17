@@ -31,7 +31,7 @@ class ReadinessTests(unittest.TestCase):
             work_bar = pack(0x200, "OrgnarWork", 18, 0x201, (-1, -1, 0),
                             [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 256)), ("Bool", *B(1))], [0, 1])
             quest = rec(b"PACK", 0x202, [(b"EDID", Z("MQSomething")), (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
-                                         (b"CTDA", bytes(32)), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
+                                         (b"CTDA", struct.pack("<B3xfH2xIIIII", 0, 1.0, 72, 0x100, 0, 0, 0, 0)), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
             outside = pack(0x203, "HodMill", 18, 0x201, (8, 0, 600),
                            [("Location", b"PLDT", struct.pack("<iIi", 0, 0x701, 256)), ("Bool", *B(0))], [0, 1])
             npcs = [rec(b"NPC_", 0x100, [(b"EDID", Z("Orgnar")), (b"FULL", Z("Orgnar")), (b"ACBS", bytes(24)),
@@ -88,6 +88,9 @@ class ReadinessTests(unittest.TestCase):
             self.assertEqual(by["Orgnar"]["furniture"], {"bartender": 1})
             self.assertEqual([p["reasons"] for p in by["Orgnar"]["packages"] if not p["converted"]],
                              [["conditions / quest-owned"]])
+            # 2026-11-17: the dropped package's conditions, decoded and read at game start (GetIsID Orgnar == 1)
+            q, = [p for p in by["Orgnar"]["packages"] if not p["converted"]]
+            self.assertEqual(q["conditions"], [{"text": "GetIsID(Orgnar) == 1", "at_start": True, "kind": "start"}])
             self.assertEqual(by["Hod"]["packages"][0]["reasons"], ["location outside the converted cells"])
             self.assertEqual((by["Orgnar"]["face_test_npc"], by["Sven"]["face_test_npc"]), (True, False))
             self.assertEqual(r["actors_ready_or_partial"], ["Sven", "Orgnar"])
@@ -98,6 +101,7 @@ class ReadinessTests(unittest.TestCase):
             self.assertIn("-Actors Sven,Orgnar", md)
             self.assertIn("| Hod (Hod) | blocked | 0/1 |", md)
             self.assertIn("  - HodMill: left out (location outside the converted cells)", md)
+            self.assertIn("    - `GetIsID(Orgnar) == 1`: start, at game start true", md)
             # 2026-11-17: --exterior as the build passes it keeps the outdoor location (Hod at the mill)
             ext = os.path.join(d, "ext")
             os.makedirs(ext)
