@@ -224,3 +224,12 @@ TES5 indices). Grouped by what a faithful conversion does with each (game-start 
 - Need a mechanism: HodSawmillSawLog8x11 / LoadLog8x11 (GetVMScriptVariable on ResourceObjectSawRiverwood == 2 / 0:
   the sawmill's script state), HodSleepingGiant19x3 (SandboxMultiLocation), SvenRiverwoodIntroPatrol's template
   (CWPatrolAndGuardContestedHold), Faendal's CarryAndDropItem, Faendal's / Gerdur's SandboxWorkingMultiLocation.
+Owner's readiness after the settled moment (2026-11-17, verified from readiness.md): 7 NPCs ready (Camilla, Dorthe,
+Embry, Gerdur, Lucan, Orgnar, Sigrid); left out: 12 not in settled Riverwood, 2 needing Starfield conditions
+(FrodnarPlayNearPlayer, MQDelphineReturnToRiverwood), 2 needing the sawmill script (Hod), 1 without a template
+(HodSleepingGiant19x3). Two fixes from reading it: (1) readiness showed GetVMScriptVariable's variable as a number;
+the name is the CIS2 string after the CTDA (now shown). (2) DorthePlay is a sandbox near Frodnar, an NPC: PluginSpike
+had no placed NPCs among package targets, so it became an XMarker where Frodnar first stood (indoors) or Dorthe's
+editor location (outdoors). Now every actor's ACHR FormKey is reserved up front (actorTargets, IdFor with
+PlaceActor's key) and a location near an NPC targets that ACHR, so it follows the NPC as in Skyrim (build log:
+"near the NPC ... follows them"). Written without a compiler; unverified in game.

@@ -460,6 +460,17 @@ P3Float Rot(JsonElement o) => new(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSi
 // flag cleared, its scripts dropped) and is placed in the cell as a persistent ACHR.
 var actorsPath = Environment.GetEnvironmentVariable("ACTORS");
 JsonElement? actorsRoot = actorsPath == null ? null : JsonDocument.Parse(File.ReadAllText(actorsPath)).RootElement.Clone();
+// 2026-11-17 (schedule_readiness: DorthePlay is a sandbox near Frodnar, an NPC): a package location near an NPC follows
+// that NPC, as in Skyrim, instead of a marker where it first stood: every actor's ACHR FormKey is reserved here (IdFor;
+// PlaceActor's Id gives the same one), so a package can name an actor placed later
+var actorTargets = new Dictionary<string, FormKey>();
+if (actorsRoot is JsonElement actorsForTargets)
+    foreach (var actorRow in actorsForTargets.GetProperty("actors").EnumerateArray())
+    {
+        var atCell = actorRow.GetProperty("cell").GetString()!;
+        var atCellName = atCell == "exterior" ? "exterior" : "FO4Port_" + atCell;
+        actorTargets[actorRow.GetProperty("source").GetString()!] = IdFor($"ACHR:{atCellName}:{actorRow.GetProperty("skyrim").GetString()}");
+    }
 var sfActors = actorsPath == null ? null : StarfieldMod.CreateFromBinaryOverlay(
     Path.Combine(sfData0 ?? throw new InvalidOperationException("ACTORS needs STARFIELD_DATA"), "Starfield.esm"), release);
 // package template -> a vanilla package using it to copy: one without an owner quest, scripts or conditions, and with no
@@ -633,6 +644,12 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                     {
                         case "near_reference":
                             var srcRef = v.GetProperty("source").GetString()!;
+                            if (actorTargets.TryGetValue(srcRef, out var actorRefKey))
+                            {
+                                target = new LocationTarget { Link = new FormLink<IPlacedGetter>(actorRefKey) };
+                                notes.Add($"{edid}: near the NPC {srcRef} ({actorRefKey}): follows them, as in Skyrim");
+                                break;
+                            }
                             if (exterior && !placedBySource.ContainsKey(srcRef))
                             {
                                 notes.Add($"{edid}: {srcRef} not placed by this build (outdoor NPC): near its editor location");
@@ -654,6 +671,12 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                         case "near_exterior_reference":
                         {
                             var srcX = v.GetProperty("source").GetString()!;
+                            if (actorTargets.TryGetValue(srcX, out var actorExtKey))
+                            {
+                                target = new LocationTarget { Link = new FormLink<IPlacedGetter>(actorExtKey) };
+                                notes.Add($"{edid}: near the NPC {srcX} ({actorExtKey}): follows them, as in Skyrim");
+                                break;
+                            }
                             if (!extMarkerFor.TryGetValue(srcX, out var mk))
                             {
                                 var m = new PlacedObject(Id($"EXTMARK:{srcX}"), release)

@@ -290,3 +290,15 @@ class SitAtTests(unittest.TestCase):
         self.assertIn('case "ref" when d is PackageDataTarget', cs)
         self.assertIn('IdFor("EXTFURN:" + srcF)', cs)
         self.assertIn("skj.ValueKind == JsonValueKind.Null) continue;", cs)
+
+    def test_plugin_spike_package_location_near_an_npc_follows_it(self):
+        """2026-11-17 (DorthePlay near Frodnar): the reserved key is PlaceActor's ACHR key, and both location kinds
+        look it up before making a marker."""
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('var achr = new PlacedNpc(Id($"ACHR:{cellName}:{sk}")', cs)
+        self.assertIn('IdFor($"ACHR:{atCellName}:{actorRow.GetProperty("skyrim").GetString()}")', cs)
+        self.assertIn('atCell == "exterior" ? "exterior" : "FO4Port_" + atCell', cs)
+        self.assertIn('var cellName = "FO4Port_" + src4;', cs)
+        self.assertLess(cs.index("actorTargets.TryGetValue(srcRef"), cs.index("if (exterior && !placedBySource.ContainsKey(srcRef))"))
+        self.assertLess(cs.index("actorTargets.TryGetValue(srcX"), cs.index("if (!extMarkerFor.TryGetValue(srcX"))

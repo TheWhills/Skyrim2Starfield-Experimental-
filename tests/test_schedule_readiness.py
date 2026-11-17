@@ -36,12 +36,16 @@ class ReadinessTests(unittest.TestCase):
                                         (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
                                         (b"CTDA", struct.pack("<B3xfH2xIIIII", 0, 1.0, 72, 0x102, 0, 0, 0, 0)),
                                         (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
+            # 2026-11-17: Hod's sawmill: GetVMScriptVariable's variable name is the CIS2 string after the CTDA
+            saw = rec(b"PACK", 0x205, [(b"EDID", Z("HodSawLog")), (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
+                                       (b"CTDA", struct.pack("<B3xfH2xIIIII", 0, 2.0, 630, 0x601, 479521864, 0, 0, 0)),
+                                       (b"CIS2", Z("::state_var")), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
             outside = pack(0x203, "HodMill", 18, 0x201, (8, 0, 600),
                            [("Location", b"PLDT", struct.pack("<iIi", 0, 0x701, 256)), ("Bool", *B(0))], [0, 1])
             npcs = [rec(b"NPC_", 0x100, [(b"EDID", Z("Orgnar")), (b"FULL", Z("Orgnar")), (b"ACBS", bytes(24)),
                                          (b"PKID", P(0x200)), (b"PKID", P(0x202))]),
                     rec(b"NPC_", 0x101, [(b"EDID", Z("Hod")), (b"FULL", Z("Hod")), (b"ACBS", bytes(24)),
-                                         (b"PKID", P(0x203))]),
+                                         (b"PKID", P(0x203)), (b"PKID", P(0x205))]),
                     rec(b"NPC_", 0x102, [(b"EDID", Z("Sven")), (b"FULL", Z("Sven")), (b"ACBS", bytes(24)),
                                          (b"PKID", P(0x200)), (b"PKID", P(0x204))]),
                     rec(b"NPC_", 0x103, [(b"EDID", Z("Elsewhere")), (b"ACBS", bytes(24)), (b"PKID", P(0x200))])]
@@ -57,7 +61,7 @@ class ReadinessTests(unittest.TestCase):
             cells = grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [inn, grup(0x500, 6, [grup(0x500, 8, in_inn)]),
                                                               mill, grup(0x510, 6, [grup(0x510, 8, in_mill)])])])])
             body = (grup(b"KYWD", 0, [kw]) + grup(b"FURN", 0, [bar]) + grup(b"NPC_", 0, npcs)
-                    + grup(b"PACK", 0, [work_bar, tpl, quest, outside, held]) + cells)
+                    + grup(b"PACK", 0, [work_bar, tpl, quest, outside, held, saw]) + cells)
             sky = os.path.join(d, "Skyrim.esm")
             with open(sky, "wb") as fh:
                 fh.write(tes4 + body)
@@ -102,11 +106,13 @@ class ReadinessTests(unittest.TestCase):
             self.assertEqual((by["Orgnar"]["face_test_npc"], by["Sven"]["face_test_npc"]), (True, False))
             self.assertEqual(r["actors_ready_or_partial"], ["Sven", "Orgnar"])
             self.assertEqual(r["left_out_by_reason"], {"not in settled Riverwood (quest-only or intro)": 1,
-                                                       "location outside the converted cells": 1})
+                                                       "location outside the converted cells": 1,
+                                                       "a script's state (needs the script)": 1})
             with open(os.path.join(out, "readiness.md")) as fh:
                 md = fh.read()
             self.assertIn("-Actors Sven,Orgnar", md)
-            self.assertIn("| Hod (Hod) | blocked | 0/1 |", md)
+            self.assertIn("| Hod (Hod) | blocked | 0/2 |", md)
+            self.assertIn("    - `GetVMScriptVariable(000601, '::state_var') == 2`: script", md)
             self.assertIn("  - HodMill: left out (location outside the converted cells)", md)
             self.assertIn("    - `GetIsID(Hod) == 1`: start, in settled Riverwood false", md)
             self.assertIn("SvenOwnSandbox: SandboxWorking -> Sandbox", md)
@@ -121,7 +127,7 @@ class ReadinessTests(unittest.TestCase):
                 R.main(["--skyrim", sky, "--starfield", sf, "--work", work, "--out", out2, "--exterior", ext])
             with open(os.path.join(out2, "readiness.json")) as fh:
                 hod = {x["edid"]: x for x in json.load(fh)["npcs"]}["Hod"]
-            self.assertEqual((hod["status"], hod["furniture"]), ("ready", {"bartender": 1}))
+            self.assertEqual((hod["status"], hod["furniture"]), ("partial", {"bartender": 1}))   # the sawmill one stays out
             self.assertEqual(hod["packages"][0]["near"], "CounterBarLeanMarker")
             with open(os.path.join(out2, "readiness.md")) as fh:
                 self.assertIn("near CounterBarLeanMarker (bartender)", fh.read())

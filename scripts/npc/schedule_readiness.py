@@ -96,11 +96,15 @@ def package_conditions(sky, pack_fid, npc_row, world):
     from fo4sf import skyrimdialog as SD
     ops = {0: "==", 1: "!=", 2: ">", 3: ">=", 4: "<", 5: "<="}
     out = []
-    for sig, d in sky.subs(pack_fid):
+    subs = []
+    for sig, d in sky.subs(pack_fid):                 # CTDA with the CIS1 / CIS2 strings that follow it
         if sig in (b"PKCU", b"ANAM", b"PLDT", b"PTDA"):
             break
-        if sig != b"CTDA":
-            continue
+        if sig == b"CTDA":
+            subs.append([d, None, None])
+        elif sig in (b"CIS1", b"CIS2") and subs:
+            subs[-1][1 if sig == b"CIS1" else 2] = d.rstrip(b"\0").decode("utf-8", "replace")
+    for d, cis1, cis2 in subs:
         c = SD.parse_condition(d)
         if not c:
             continue
@@ -110,6 +114,10 @@ def package_conditions(sky, pack_fid, npc_row, world):
                 for x in ((c["param1"],) if int2 else (c["param1"], c["param2"])) if x]
         if int2:
             args.append(str(c["param2"]))
+        if cis2 is not None:              # a string parameter (GetVMScriptVariable's variable name): not param2
+            args = [a for a in args if a != str(c["param2"])] + [repr(cis2)]
+        if cis1 is not None:
+            args = [repr(cis1)] + [a for a in args if a != str(c["param1"])]
         val = (f"global {sky.edid(int(c['value'])) or int(c['value'])}" if c["use_global"] else f"{c['value']:g}")
         run = {0: "", 1: " (on target)", 2: f" (on {sky.edid(c['reference']) or hex(c['reference'])})"}.get(
             c["run_on"], f" (run on {c['run_on']})")
