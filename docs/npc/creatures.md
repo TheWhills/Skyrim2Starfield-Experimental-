@@ -183,4 +183,9 @@ new creature skeleton on an existing graph.
   so at rest every vertex weighted to COM (belly, lower breast) was swung 56 deg up into the body. Fix 6: every bind
   from the rig's rest pose in COM's space (creature.rest_worlds); the mesh's own binds agree with the rig on all other
   bones within 0.1 deg. tests/test_creature.py checks that each bone's rest world cancels its bind.
+* **Verified in game (owner, 2026-11-17 17:51, screenshot): the whole chicken shows** (full breast and belly) and it
+  moves right: upright, walking and running with Skyrim's root motion. The first Skyrim creature works in
+  Starfield on its own skeleton, in the critter's place. Open: right turns (mirror; meanwhile the critter's clips,
+  rest pose), its own race (animation index via CK or SAM) so critters stay critters, Skyrim's ragdoll death, the
+  flavour idles' IDLE records, the sitting set, then Riverwood's other animals.
 

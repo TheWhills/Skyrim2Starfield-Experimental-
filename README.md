@@ -22,7 +22,7 @@ Working in game (each item verified by the owner on Starfield; details and dates
 | Schedules | NPC packages converted to Starfield's, in the "settled Riverwood" moment (e.g. Orgnar behind his bar) | [schedules](docs/npc/schedules.md) |
 | Furniture | Sitting, leaning, beds for the player, the alchemy lab, and NPCs working the forge, armor workbench and tanning rack, all with Skyrim's own animations and props | [furniture](docs/npc/furniture.md) |
 | Combat | Skyrim weapon animations on Starfield's skeleton, with root motion (swings carry the player, power attacks dash) | [animation](docs/armor/animation-port.md) |
-| Creatures | **New:** the first Skyrim creature on its own skeleton. Riverwood's chicken is drawn, textured and animated on Starfield's critter graph; movement is still being tuned | [creatures](docs/npc/creatures.md) |
+| Creatures | **New:** the first Skyrim creature on its own skeleton. Riverwood's chicken walks, runs and turns with Skyrim's own animations on Starfield's critter graph; its own race and Riverwood's other animals are next | [creatures](docs/npc/creatures.md) |
 
 Built and tested offline but not yet confirmed in game: the walled cities as their own spaces, Elders' aged faces,
 the remaining work animations (wood chopping, the sawmill, farming), and children.
