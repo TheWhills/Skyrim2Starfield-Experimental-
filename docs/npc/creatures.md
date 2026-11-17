@@ -137,4 +137,14 @@ new creature skeleton on an existing graph.
 * Fix 2: the body is written in COM's space (creature.to_com_space: vertices, normals, tangents, bind worlds),
   COM_Twin at the origin with ParentBoneName = COM, BSXFlags 0x1004A. `--vanilla-material` gives the chicken the
   trilobite's material to rule the converted (loose) material out.
+* **Verified in game (owner, 2026-11-17 14:27, screenshots): the chickens are drawn**, textured with their own
+  converted material, at a chicken's size, on Starfield's critter graph. Starfield takes a creature skeleton of our
+  own: a rig from Skyrim's skeleton plus a body carrying its own bone nodes in COM's space (fix 2 was the one).
+  The owner: "their movement is awfully strange".
+* Known gaps that would show as strange movement: (1) no root motion: our clips play in place, while Starfield keeps
+  root motion in the .af header and a Root track (humans, 2026-10-19) and the critter rig has no Root bone
+  (unresolved where a creature's lives); (2) right turns are the critter's clips (no chicken bones: rest pose);
+  (3) jog = run clip; (4) the critter's speeds vs the chicken's stride; (5) Skyrim plays right turns as mirrored
+  left ones (supported by its "[mirror" generators). Next: `creature_probe.py --motion` prints the chicken's motion
+  data and the vanilla critter clips' headers / COM tracks.
 

@@ -24,6 +24,8 @@ import struct
 import sys
 from collections import Counter
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
@@ -559,6 +561,104 @@ def models_side(sf_data, models) -> list:
     return lines
 
 
+def skyrim_motion(sky_data: str, folder: str = "meshes\\actors\\ambient\\chicken\\",
+                  project: str = "ChickenProject") -> list:
+    """Where each of a Skyrim creature's clips moves its root (animationdatasinglefile, the project's motion blocks
+    mapped to clip files through its behaviours' clip generators), and the generators that play a clip mirrored."""
+    from fo4sf import animdata, bsa, skyrimbehavior
+    from fo4sf.retarget import SKYRIM_M_PER_UNIT
+    arcs = bsa.SkyrimArchives(sky_data, loose=False)
+    text = arcs._read("meshes\\animationdatasinglefile.txt")
+    if text is None:
+        return ["  animationdatasinglefile.txt not in the archives"]
+    projects = animdata.parse(text.decode("latin-1"))
+    proj = next((p for k, p in projects.items() if k.lower() == project.lower()), None)
+    if proj is None:
+        return [f"  project {project} not found"]
+    behaviors = []
+    for n in sorted({bsa.norm(x) for ar in arcs.archives for x in ar.names}):
+        if n.startswith(folder) and "\\behaviors\\" in n and n.endswith(".hkx"):
+            try:
+                behaviors.append(skyrimbehavior.read(arcs._read(n)))
+            except Exception:                            # noqa: BLE001
+                pass
+    gens = animdata.clip_generators(behaviors)
+    rep = {}
+    motion = animdata.clip_motion(proj, gens, rep)
+    lines = [f"== Skyrim {project} root motion: {len(motion)} clips with motion; {len(proj.get('clips', []))} clip "
+             f"generators, {rep.get('mirrored_skipped', 0)} mirrored, mapped by behaviour {rep.get('by_behavior', 0)}"]
+    mirrored = sorted({c["name"] for c in proj.get("clips", []) if "[mirror" in c["name"].lower()})
+    if mirrored:
+        lines.append("  mirrored generators: " + ", ".join(mirrored))
+    for stem, blk in sorted(motion.items()):
+        tr, rot = blk.get("translations") or [], blk.get("rotations") or []
+        t = tr[-1][1:4] if tr else (0.0, 0.0, 0.0)
+        yaw = 0.0
+        if rot:
+            import math
+            yaw = math.degrees(2 * math.atan2(rot[-1][3], rot[-1][4]))
+        lines.append(f"  {stem}: {blk.get('duration', 0):.3f} s, ends x {t[0] * SKYRIM_M_PER_UNIT:+.3f} "
+                     f"y {t[1] * SKYRIM_M_PER_UNIT:+.3f} z {t[2] * SKYRIM_M_PER_UNIT:+.3f} m, turn {yaw:+.1f} deg, "
+                     f"{len(tr)} / {len(rot)} keys")
+    return lines
+
+
+def clip_headers(names, read, folder: str) -> list:
+    """Each .af under folder: the root motion its header carries (rootmotion.read_header: end translation, yaw)."""
+    from fo4sf import rootmotion
+    base = folder.replace("\\", "/").lower().strip("/")
+    base = base if base.startswith("meshes/") else "meshes/" + base
+    out = []
+    for n in sorted(x for x in names if x.startswith(base + "/") and x.endswith(".af")):
+        d = read(n)
+        if d is None or len(d) < 36:
+            continue
+        q, t = rootmotion.read_header(d)
+        out.append(f"  {n[len(base) + 1:]}: header t ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f}) m, "
+                   f"yaw {rootmotion.yaw_degrees(q):+.1f} deg, {len(d)} bytes")
+    return out
+
+
+def clip_tracks(calumi: str, read, rig_key: str, clips, work: str) -> list:
+    """Through CALUMI: each clip's tracks and its first bone's (COM's) translation at the first and last key, i.e.
+    whether a creature's clip moves COM across the ground (root motion in COM) or keeps it in place."""
+    from fo4sf import af_writer
+    os.makedirs(work, exist_ok=True)
+    rig = os.path.join(work, "skeleton.rig")
+    with open(rig, "wb") as fh:
+        fh.write(read(rig_key))
+    out = []
+    for key in clips:
+        d = read(key)
+        if d is None:
+            out.append(f"  {key}: not found")
+            continue
+        af = os.path.join(work, posixpath.basename(key))
+        with open(af, "wb") as fh:
+            fh.write(d)
+        try:
+            rb = af_writer.read_back(calumi, af, rig)
+        except Exception as e:                           # noqa: BLE001
+            out.append(f"  {key}: unreadable: {type(e).__name__}: {e}")
+            continue
+        com = rb["translations"].get("COM") or []
+        line = f"  {posixpath.basename(key)}: {rb['frames']} frames, tracks {len(rb['bones'])}"
+        if "Root" in rb["bones"]:
+            line += " (has Root)"
+        if com:
+            a, b = np.array(com[0][1]), np.array(com[-1][1])
+            line += (f"; COM first ({a[0]:+.3f}, {a[1]:+.3f}, {a[2]:+.3f}) last ({b[0]:+.3f}, {b[1]:+.3f}, "
+                     f"{b[2]:+.3f}) m, {len(com)} keys")
+            rq = rb["rotations"].get("COM") or []
+            if rq:
+                from fo4sf import rootmotion
+                line += f", yaw first {rootmotion.yaw_degrees(rq[0][1]):+.1f} last {rootmotion.yaw_degrees(rq[-1][1]):+.1f}"
+        else:
+            line += "; no COM track"
+        out.append(line)
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data")
@@ -568,9 +668,35 @@ def main(argv=None):
     ap.add_argument("--model", action="append", default=[],
                     help="a Starfield model to print in full: an archive path (meshes\\...) or a .nif on disk whose "
                          "meshes are in the geometries folder beside its meshes folder (repeatable)")
+    ap.add_argument("--motion", action="store_true",
+                    help="root motion: Skyrim's chicken clips (motion data) and the vanilla critter clips' headers")
+    ap.add_argument("--calumi", default="", help="with --motion: CALUMI.Animation.dll, to read the critter clips' tracks")
     a = ap.parse_args(argv)
     if a.model:
         print("\n".join(models_side(a.starfield_data, a.model)))
+        return 0
+    if a.motion:
+        if a.skyrim_data:
+            print("\n".join(skyrim_motion(a.skyrim_data)))
+        if a.starfield_data:
+            import sf_anim_survey as SAS
+            index = {}
+            for _label, ar in SAS.archives(a.starfield_data):
+                for i, n in enumerate(ar.names):
+                    index.setdefault(SAS.norm(n), (ar, i))
+
+            def read(k):
+                hit = index.get(SAS.norm(k))
+                return hit[0].read(hit[1]) if hit else None
+            print("== Starfield critter clip headers (root motion)")
+            print("\n".join(clip_headers(list(index), read, "actors/critter/animations")))
+            if a.calumi:
+                import tempfile
+                clips = [f"meshes/actors/critter/animations/{c}.af" for c in
+                         ("idle", "walkforward", "jogforward", "runforward", "turninplace_left90", "rundeparture_left180")]
+                print("== Starfield critter clip tracks (CALUMI)")
+                print("\n".join(clip_tracks(a.calumi, read, "meshes/actors/critter/characterassets/skeleton.rig",
+                                             clips, tempfile.mkdtemp(prefix="critter_clips_"))))
         return 0
     if a.skyrim_data:
         print("\n".join(skyrim_side(a.skyrim_data, a.race)))

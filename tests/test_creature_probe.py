@@ -161,6 +161,20 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertIn("node 'COM_Twin' <ExportScene>", text)
         self.assertIn("MESH NOT FOUND", "\n".join(gone))
 
+    def test_clip_headers(self):
+        from fo4sf import rootmotion
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            af = os.path.join(d, "w.af")
+            open(af, "wb").write(bytes(64))
+            rootmotion.patch_header(af, (0, 0.5, 0), (0, 0, 0, 1))
+            data = open(af, "rb").read()
+        files = {"meshes/actors/critter/animations/walkforward.af": data,
+                 "meshes/actors/critter/animations/furniture/idle.af": bytes(64)}
+        lines = C.clip_headers(list(files), files.get, "Actors\\Critter\\Animations")
+        self.assertEqual(len(lines), 2)
+        self.assertIn("walkforward.af: header t (+0.000, +0.500, +0.000) m, yaw +0.0 deg", lines[1])
+
 
 if __name__ == "__main__":
     unittest.main()
