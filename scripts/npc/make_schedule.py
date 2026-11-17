@@ -48,6 +48,12 @@ NO_FURNITURE = {"allowwandering": True}
 # Starfield.esm, verified): 519 of its 577 Sandbox packages use 50, the rest 0-60 (a few 200 / 500); every Sleep and
 # SandboxAndKeepEyeOn package 50. The earlier x 0.01 (from ShopkeeperSchedules.esm, a mod's 0.1-0.8) gave our NPCs 0.5,
 # next to no energy: Hilde kept her chair, Alvor his standing spot (owner, in game). Kept as is, within 0-100.
+# 2026-11-17 (owner: "let's do as the player sees it most of the game, with a note that the goal eventually is to
+# convert them all after other aspects of the conversion are fleshed out"): a package with conditions is converted
+# when its conditions hold in Riverwood as a player finds it after arriving - the arrival quests finished, every other
+# quest not started - and left out (noted) when they fail there, depend on play (time, weather, distance: Starfield
+# conditions not written yet) or on a script's state. Quest-driven packages come back when quests are converted.
+SETTLED_QUESTS = ("MQ102", "MQ102A", "DialogueRiverwoodIntroScene", "DialogueRiverwood_Revised")
 ENERGY_SCALE = 1.0
 ENERGY_MAX = 100.0
 
@@ -103,13 +109,58 @@ def exterior_cells(sky, formids_path):
     return out
 
 
+def moment_world(sky, skyrim_path, moment="settled"):
+    """skyrimdialog.World of a new game (quests, globals, form lists from Skyrim.esm); 'settled': SETTLED_QUESTS
+    finished. sky: a packages.Index of the same file (for the quests' FormIDs)."""
+    from fo4sf import skyrimdialog as SD
+    w = SD.world_from(skyrim_path)
+    if moment == "settled":
+        w.settled = {f for f in (sky.find_edid(b"QUST", q) for q in SETTLED_QUESTS) if f is not None}
+    return w
+
+
+def package_ctda(sky, pack_fid) -> list:
+    """The package's own conditions (CTDA before its data inputs), parsed (skyrimdialog.parse_condition)."""
+    from fo4sf import skyrimdialog as SD
+    out = []
+    for sig, d in sky.subs(pack_fid):
+        if sig in (b"PKCU", b"ANAM", b"PLDT", b"PTDA"):
+            break
+        if sig == b"CTDA":
+            c = SD.parse_condition(d)
+            if c:
+                out.append(c)
+    return out
+
+
+def condition_verdict(sky, pack_fid, world, speaker):
+    """('keep' | 'ambient' | 'drop', reasons) of a package's conditions in the world (skyrimdialog.verdict)."""
+    from fo4sf import skyrimdialog as SD
+    return SD.verdict({"conditions": package_ctda(sky, pack_fid)}, speaker or {}, world)
+
+
 def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=False, keep_furniture_only=False,
-                    ext_cells=None):
+                    ext_cells=None, world=None, speaker=None):
     p = packages.parse_pack(sky.subs(pack_fid))
-    if not keep_conditioned and (p["conditions"] or p["owner_quest"]):
-        notes.append(f"{p['edid']}: left out (quest / conditions decide when Skyrim runs it: "
-                     f"{p['conditions']} conditions" + (", owned by a quest" if p["owner_quest"] else "") + ")")
+    if not keep_conditioned and p["owner_quest"]:
+        notes.append(f"{p['edid']}: left out (quest / conditions decide when Skyrim runs it: owned by a quest)")
         return None
+    if not keep_conditioned and p["conditions"]:
+        if world is None:
+            notes.append(f"{p['edid']}: left out (quest / conditions decide when Skyrim runs it: "
+                         f"{p['conditions']} conditions)")
+            return None
+        v, why = condition_verdict(sky, pack_fid, world, speaker)
+        if v == "keep":
+            notes.append(f"{p['edid']}: its {p['conditions']} conditions hold in settled Riverwood; converted without "
+                         f"them")
+        else:
+            kinds = " ".join(why)
+            what = ("needs its script" if " script" in kinds else
+                    "needs Starfield conditions (time / weather / distance), not written yet" if v == "ambient" else
+                    "does not run in settled Riverwood (quest-only or intro)")
+            notes.append(f"{p['edid']}: left out, {what} ({'; '.join(why)})")
+            return None
     tpl = packages.parse_pack(sky.subs(p["template"])) if p["template"] else None
     tname = (tpl or {}).get("edid") or ""
     sf_name = SKY_TO_SF.get(tname.lower(), tname)
@@ -293,6 +344,9 @@ def main(argv=None):
     ap.add_argument("--npc", action="append", required=True)
     ap.add_argument("--work", required=True, help="the interior batch work folder (cells.txt; actors.json is written there)")
     ap.add_argument("--faces", default="", help="face_fit.py's faces.json (vanilla template NPC per test NPC)")
+    ap.add_argument("--moment", choices=("settled", "start", "none"), default="settled",
+                    help="which moment of Skyrim conditioned packages are read at: settled (default: the Riverwood "
+                         "arrival done, other quests not started), start (a new game), none (leave them all out)")
     ap.add_argument("--keep-conditioned", action="store_true",
                     help="keep packages with conditions / an owner quest (their conditions are not converted)")
     ap.add_argument("--keep-furniture-only", action="store_true",
@@ -326,6 +380,13 @@ def main(argv=None):
     if xmarker is None:
         notes.append("Starfield.esm has no STAT XMarker: package locations near Skyrim markers will not work")
     sky = packages.Index(a.skyrim)
+    world = None
+    if a.moment != "none":
+        try:
+            world = moment_world(sky, a.skyrim, a.moment)
+            notes.append(f"moment {a.moment}: quests taken as finished: {sorted(sky.edid(q) for q in world.settled)}")
+        except Exception as e:                                       # noqa: BLE001
+            notes.append(f"moment {a.moment}: no world ({type(e).__name__}: {e}); conditioned packages left out")
     ext_cells = None
     if a.exterior:
         fp = os.path.join(a.exterior, "formids.json")
@@ -379,7 +440,7 @@ def main(argv=None):
                 notes.append(f"{edid}: {why}; give --faces or --template-npc")
                 continue
             pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned,
-                                  a.keep_furniture_only, ext_cells) for p in src["packages"]]
+                                  a.keep_furniture_only, ext_cells, world, npc) for p in src["packages"]]
             for n, (ref, hour, minutes) in enumerate(sit_at.get(edid.lower(), [])):
                 rfid = int(ref.split(":")[0], 16)
                 rpos, rrot = ref_place(sky, rfid)

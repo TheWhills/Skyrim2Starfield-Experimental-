@@ -216,9 +216,11 @@ TES5 indices). Grouped by what a faithful conversion does with each (game-start 
   FrodnarPlayNearPlayer7x12 (GetDistance player to FrodnarPlayMarker < 1000 units: a real Starfield condition).
 - Quest-only (false at game start, only during a quest): MQ102AlvorWork8x12 (MQ102A 10-40), Delphine's Sky Haven
   and MQ106 / MQ204 packages, FaendalMS13VisitCamilla7x2 (MS13 completed).
-- Depends on which moment of Skyrim the conversion keeps (owner's decision pending): true at game start until the
-  intro advances - HildeIntroSit, SvenRiverwoodIntroPatrol, DelphineStartInRoom; false at start, true for the rest of
-  the game once MQ102 reaches 50 - FaendalEatStump12x1, GerdurVisitAlvor14xHalf.
+- Depends on which moment of Skyrim the conversion keeps: true at game start until the intro advances -
+  HildeIntroSit, SvenRiverwoodIntroPatrol, DelphineStartInRoom; false at start, true for the rest of the game once
+  MQ102 reaches 50 - FaendalEatStump12x1, GerdurVisitAlvor14xHalf. Owner's decision (same day): the moment a player
+  sees most of the game (make_schedule --moment settled, docs/ai/decisions.md): the intro ones out, Faendal's stump
+  meal and Gerdur's visit in; converting every package stays the end goal.
 - Need a mechanism: HodSawmillSawLog8x11 / LoadLog8x11 (GetVMScriptVariable on ResourceObjectSawRiverwood == 2 / 0:
   the sawmill's script state), HodSleepingGiant19x3 (SandboxMultiLocation), SvenRiverwoodIntroPatrol's template
   (CWPatrolAndGuardContestedHold), Faendal's CarryAndDropItem, Faendal's / Gerdur's SandboxWorkingMultiLocation.

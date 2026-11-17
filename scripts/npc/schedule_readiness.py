@@ -33,6 +33,12 @@ def reason_of(note):
     n = note.lower()
     if "quest / conditions" in n:
         return "conditions / quest-owned"
+    if "needs its script" in n:
+        return "a script's state (needs the script)"
+    if "needs starfield conditions" in n:
+        return "conditions to write for Starfield (time / weather / distance)"
+    if "does not run in settled riverwood" in n:
+        return "not in settled Riverwood (quest-only or intro)"
     if "outside the batch" in n:
         return "location outside the converted cells"
     if "has no starfield template" in n:
@@ -81,8 +87,9 @@ def furniture_kind(sky, fid):
 
 
 def package_conditions(sky, pack_fid, npc_row, world):
-    """[{text, verdict, kind}] for a Skyrim package's own conditions (CTDA before its data inputs): the function and
-    its parameters by name, and skyrimdialog.evaluate's reading at the start of a new game (kind 'start': decided,
+    """[{text, at_start, kind}] for a Skyrim package's own conditions (CTDA before its data inputs): the function and
+    its parameters by name, and skyrimdialog.evaluate's reading in the world given (make_schedule.moment_world:
+    settled Riverwood) (kind 'start': decided,
     'ambient': varies in play - time, weather, chance -, 'story' / 'player' / 'unknown'). 2026-11-17 (owner: "what are
     we dropping aspects of these? Our goal is a faithful conversion"): a conditioned package was left out with only
     a count; this says what each condition is, so each can be converted rather than dropped."""
@@ -98,9 +105,11 @@ def package_conditions(sky, pack_fid, npc_row, world):
         if not c:
             continue
         name = SD.NAME_OF.get(c["function"], f"function {c['function']}")
-        args = [sky.edid(x) or f"{x:06X}" for x in (c["param1"], c["param2"]) if x and sky.kind(x)]
-        if c["param1"] and not sky.kind(c["param1"]):
-            args.insert(0, str(c["param1"]))
+        int2 = c["function"] in (SD.F["GetStageDone"],)          # param2 is a stage number, not a form
+        args = [sky.edid(x) or f"{x:06X}" if sky.kind(x) else str(x)
+                for x in ((c["param1"],) if int2 else (c["param1"], c["param2"])) if x]
+        if int2:
+            args.append(str(c["param2"]))
         val = (f"global {sky.edid(int(c['value'])) or int(c['value'])}" if c["use_global"] else f"{c['value']:g}")
         run = {0: "", 1: " (on target)", 2: f" (on {sky.edid(c['reference']) or hex(c['reference'])})"}.get(
             c["run_on"], f" (run on {c['run_on']})")
@@ -121,9 +130,11 @@ def assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells=None, world=Non
            "face_test_npc": edid.lower() in faces_edids, "packages": [], "furniture": Counter()}
     for p in src["packages"]:
         notes = []
-        got = MS.convert_package(sky, sf_tpls, p, cell_names, notes, False, True, ext_cells)
+        got = MS.convert_package(sky, sf_tpls, p, cell_names, notes, False, True, ext_cells, world, npc)
         pr = {"edid": sky.edid(p), "converted": got is not None,
               "reasons": sorted({reason_of(n) for n in notes})}
+        if got is not None and any("hold in settled Riverwood" in n for n in notes):
+            pr["kept_conditions"] = package_conditions(sky, p, npc, world)
         if got is None:
             raw = packages.parse_pack(sky.subs(p))
             pr["skyrim_template"] = sky.edid(raw["template"]) if raw.get("template") else None
@@ -188,14 +199,15 @@ def report_md(rows, counts, actors):
                 near = f", near {p['near']}" + (f" ({p['near_kind']})" if p.get("near_kind") else "") if p.get(
                     "near") else ""
                 lines.append(f"  - {p['edid']}: {p.get('template')}, {'any time' if h is None or h < 0 else f'{h}:00'}"
-                             f" for {p.get('duration_min')} min{near}")
+                             f" for {p.get('duration_min')} min{near}"
+                             + (" (its conditions hold in settled Riverwood)" if p.get("kept_conditions") else ""))
             else:
                 lines.append(f"  - {p['edid']}: left out ({'; '.join(p['reasons'])})"
                              + (f", template {p['skyrim_template']}" if p.get("skyrim_template") else "")
                              + (f", quest {p['owner_quest']}" if p.get("owner_quest") else ""))
                 for c in p.get("conditions") or []:
                     at = {True: "true", False: "false", None: "?"}[c["at_start"]]
-                    lines.append(f"    - `{c['text']}`: {c['kind']}, at game start {at}")
+                    lines.append(f"    - `{c['text']}`: {c['kind']}, in settled Riverwood {at}")
     return "\n".join(lines) + "\n"
 
 
@@ -227,8 +239,7 @@ def main(argv=None):
         print(f"no {fp}: outdoor package locations counted as outside")
     try:
         try:
-            from fo4sf import skyrimdialog as SD
-            world = SD.world_from(a.skyrim)
+            world = MS.moment_world(sky, a.skyrim, "settled")
         except Exception as e:                                       # noqa: BLE001
             print(f"no game-start world ({type(e).__name__}: {e}): conditions listed without a verdict")
             world = None

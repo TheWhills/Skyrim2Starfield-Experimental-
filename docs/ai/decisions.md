@@ -2361,3 +2361,18 @@ story) and is to be replaced by a real translation: package conditions converted
 ones kept as conditions, start-decided ones resolved), Skyrim's multi-step procedure trees (carry and drop, multi
 location) rebuilt from Starfield procedures, the carry arm offset found or converted. Until then a fallback stays
 in the build log and readiness.md, never silent.
+
+## Schedules follow "settled Riverwood" for now; all packages are the end goal (2026-11-17)
+Owner: "yes, let's do as the player sees it most of the game, with a note that the goal eventually is to convert them
+all after other aspects of the conversion are fleshed out." make_schedule --moment settled (the default): a package
+with conditions is read in a new game where the Riverwood arrival is done (SETTLED_QUESTS: MQ102, MQ102A,
+DialogueRiverwoodIntroScene, DialogueRiverwood_Revised - every stage done, completed, not running) and every other
+quest has not started (skyrimdialog.World.settled). Conditions that hold there: the package converts (FaendalEatStump,
+GerdurVisitAlvor, DorthePlay, LucanRiverwoodEatInn). Conditions that fail there: left out and noted (the intro
+packages HildeIntroSit, SvenRiverwoodIntroPatrol, DelphineStartInRoom; quest-only MQ102AlvorWork, Delphine's Sky
+Haven / MQ106 / MQ204 ones, FaendalMS13Visit). Conditions that depend on play (time, weather, distance: Frodnar near the
+player, Delphine's return) or on a script's state (Hod's sawmill) are left out until their Starfield conditions /
+the script are converted. --moment start (a new game) and none (old behaviour) remain. **End goal:** every package
+converted with its conditions, once quests, scenes, scripts and Starfield conditions are converted; the settled moment
+is a stage, not the target. Which quests count as the arrival is supported (from the conditions' quests and names),
+not verified against Skyrim's quest stages.

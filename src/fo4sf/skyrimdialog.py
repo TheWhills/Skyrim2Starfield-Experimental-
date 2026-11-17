@@ -246,6 +246,8 @@ START_ZERO = {F[n] for n in ("GetStage", "GetStageDone", "GetQuestCompleted", "G
                              "GetVMQuestVariable",
                              # no Skyrim scene runs in the conversion (quests are not converted), so none is playing
                              "IsScenePlaying")}
+SETTLED_FUNCTIONS = {F[n] for n in ("GetStage", "GetStageDone", "GetQuestCompleted", "GetQuestRunning")}
+SETTLED_STAGE = 1000.0                   # past every stage (Skyrim stages are 0-65535; quests end well below)
 # a variable of a reference's Papyrus script (Hod's sawmill: ResourceObjectSawRiverwood's state): only that script,
 # converted, can answer
 SCRIPT_STATE = {F["GetVMScriptVariable"]}
@@ -261,12 +263,15 @@ class World:
     FLTV), each NPC's factions / race / sex / voice (skyrimnpc.parse_npc rows by FormID), form lists (FLST LNAM),
     quest dialogue conditions (QUST CTDA before NEXT)."""
 
-    def __init__(self, quests=None, globals_=None, npcs=None, lists=None, quest_conditions=None):
+    def __init__(self, quests=None, globals_=None, npcs=None, lists=None, quest_conditions=None, settled=None):
         self.quests = quests or {}                  # {fid: flags}
         self.globals = globals_ or {}               # {fid: value}
         self.npcs = npcs or {}                      # {fid: parse_npc row}
         self.lists = lists or {}                    # {fid: [fids]}
         self.quest_conditions = quest_conditions or {}
+        # 2026-11-17 (owner: "let's do as the player sees it most of the game"): quests taken as finished (every stage
+        # done, completed, not running) - the moment the conversion keeps; every other quest is not started
+        self.settled = set(settled or ())
 
     def running(self, quest_fid) -> bool:
         return bool(self.quests.get(quest_fid, 0) & QUEST_START_ENABLED)
@@ -328,6 +333,10 @@ def evaluate(c: Dict, speaker: Dict, world: World) -> Tuple[Optional[bool], str]
         return None, "ambient"
     if f in (F["GetPCIsRace"], F["GetPCIsSex"], F["GetPCIsClass"]):
         return None, "player"
+    if p1 in world.settled and f in SETTLED_FUNCTIONS:
+        v = {F["GetStage"]: SETTLED_STAGE, F["GetStageDone"]: 1.0, F["GetQuestCompleted"]: 1.0,
+             F["GetQuestRunning"]: 0.0}[f]
+        return op(v, want), "settled"
     if f in START_ZERO:
         return op(0.0, want), "start"
     if f in STORY_ALIAS:

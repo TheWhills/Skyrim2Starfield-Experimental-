@@ -142,6 +142,19 @@ class StartStateTests(unittest.TestCase):
         self.assertEqual(self.v([cond("IsScenePlaying", 0x601, 1.0)]), "drop")
         self.assertEqual(SD.evaluate(cond("GetVMScriptVariable", 0x601, 2.0), self.ralof, self.world), (None, "script"))
 
+    def test_settled_moment(self):
+        """2026-11-17 (owner: "as the player sees it most of the game"): a quest taken as finished - every stage done,
+        completed, not running - while the others stay unstarted."""
+        w = SD.World(self.world.quests, self.world.globals, self.world.npcs, self.world.lists,
+                     self.world.quest_conditions, settled={0x601})
+        v = lambda conds: SD.verdict({"conditions": conds}, self.ralof, w)[0]     # noqa: E731
+        self.assertEqual(v([cond("GetStage", 0x601, 50.0, op=3)]), "keep")          # FaendalEatStump: MQ102 >= 50
+        self.assertEqual(v([cond("GetStageDone", 0x601, 0.0)]), "drop")             # HildeIntroSit: intro stage not done
+        self.assertEqual(v([cond("GetStage", 0x601, 10.0, op=3), cond("GetStage", 0x601, 40.0, op=5)]), "drop")
+        self.assertEqual(v([cond("GetQuestCompleted", 0x601)]), "keep")
+        self.assertEqual(v([cond("GetQuestRunning", 0x601)]), "drop")
+        self.assertEqual(v([cond("GetStage", 0x602, 10.0, op=3)]), "drop")          # another quest: not started
+
     def test_or_groups_and_ambient(self):
         # (GetStage MQ >= 10 OR GetIsID Ralof) AND GetCurrentTime < 12
         conds = [cond("GetStage", 0x601, 10.0, op=3, or_=True), cond("GetIsID", 0x2BF9F),

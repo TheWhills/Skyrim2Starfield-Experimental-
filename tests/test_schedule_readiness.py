@@ -31,7 +31,11 @@ class ReadinessTests(unittest.TestCase):
             work_bar = pack(0x200, "OrgnarWork", 18, 0x201, (-1, -1, 0),
                             [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 256)), ("Bool", *B(1))], [0, 1])
             quest = rec(b"PACK", 0x202, [(b"EDID", Z("MQSomething")), (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
-                                         (b"CTDA", struct.pack("<B3xfH2xIIIII", 0, 1.0, 72, 0x100, 0, 0, 0, 0)), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
+                                         (b"CTDA", struct.pack("<B3xfH2xIIIII", 0, 1.0, 72, 0x101, 0, 0, 0, 0)), (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
+            held = rec(b"PACK", 0x204, [(b"EDID", Z("SvenOwnSandbox")),
+                                        (b"PKDT", struct.pack("<IBBBBHH", 0, 18, 0, 0, 0, 0, 0)),
+                                        (b"CTDA", struct.pack("<B3xfH2xIIIII", 0, 1.0, 72, 0x102, 0, 0, 0, 0)),
+                                        (b"PKCU", struct.pack("<III", 0, 0x201, 0))])
             outside = pack(0x203, "HodMill", 18, 0x201, (8, 0, 600),
                            [("Location", b"PLDT", struct.pack("<iIi", 0, 0x701, 256)), ("Bool", *B(0))], [0, 1])
             npcs = [rec(b"NPC_", 0x100, [(b"EDID", Z("Orgnar")), (b"FULL", Z("Orgnar")), (b"ACBS", bytes(24)),
@@ -39,7 +43,7 @@ class ReadinessTests(unittest.TestCase):
                     rec(b"NPC_", 0x101, [(b"EDID", Z("Hod")), (b"FULL", Z("Hod")), (b"ACBS", bytes(24)),
                                          (b"PKID", P(0x203))]),
                     rec(b"NPC_", 0x102, [(b"EDID", Z("Sven")), (b"FULL", Z("Sven")), (b"ACBS", bytes(24)),
-                                         (b"PKID", P(0x200))]),
+                                         (b"PKID", P(0x200)), (b"PKID", P(0x204))]),
                     rec(b"NPC_", 0x103, [(b"EDID", Z("Elsewhere")), (b"ACBS", bytes(24)), (b"PKID", P(0x200))])]
             bar = rec(b"FURN", 0x400, [(b"EDID", Z("CounterBarLeanMarker")), (b"KSIZ", P(1)), (b"KWDA", P(0x401))])
             kw = rec(b"KYWD", 0x401, [(b"EDID", Z("isBarCounter"))])
@@ -53,7 +57,7 @@ class ReadinessTests(unittest.TestCase):
             cells = grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [inn, grup(0x500, 6, [grup(0x500, 8, in_inn)]),
                                                               mill, grup(0x510, 6, [grup(0x510, 8, in_mill)])])])])
             body = (grup(b"KYWD", 0, [kw]) + grup(b"FURN", 0, [bar]) + grup(b"NPC_", 0, npcs)
-                    + grup(b"PACK", 0, [work_bar, tpl, quest, outside]) + cells)
+                    + grup(b"PACK", 0, [work_bar, tpl, quest, outside, held]) + cells)
             sky = os.path.join(d, "Skyrim.esm")
             with open(sky, "wb") as fh:
                 fh.write(tes4 + body)
@@ -87,21 +91,26 @@ class ReadinessTests(unittest.TestCase):
                              ("partial", "blocked", "ready"))
             self.assertEqual(by["Orgnar"]["furniture"], {"bartender": 1})
             self.assertEqual([p["reasons"] for p in by["Orgnar"]["packages"] if not p["converted"]],
-                             [["conditions / quest-owned"]])
-            # 2026-11-17: the dropped package's conditions, decoded and read at game start (GetIsID Orgnar == 1)
+                             [["not in settled Riverwood (quest-only or intro)"]])
+            # 2026-11-17: conditions decoded and read in settled Riverwood: Orgnar's (GetIsID Hod) fails and is left
+            # out; Sven's own (GetIsID Sven) holds, so the package converts
             q, = [p for p in by["Orgnar"]["packages"] if not p["converted"]]
-            self.assertEqual(q["conditions"], [{"text": "GetIsID(Orgnar) == 1", "at_start": True, "kind": "start"}])
+            self.assertEqual(q["conditions"], [{"text": "GetIsID(Hod) == 1", "at_start": False, "kind": "start"}])
+            kept, = [p for p in by["Sven"]["packages"] if p.get("kept_conditions")]
+            self.assertEqual((kept["edid"], kept["converted"]), ("SvenOwnSandbox", True))
             self.assertEqual(by["Hod"]["packages"][0]["reasons"], ["location outside the converted cells"])
             self.assertEqual((by["Orgnar"]["face_test_npc"], by["Sven"]["face_test_npc"]), (True, False))
             self.assertEqual(r["actors_ready_or_partial"], ["Sven", "Orgnar"])
-            self.assertEqual(r["left_out_by_reason"], {"conditions / quest-owned": 1,
+            self.assertEqual(r["left_out_by_reason"], {"not in settled Riverwood (quest-only or intro)": 1,
                                                        "location outside the converted cells": 1})
             with open(os.path.join(out, "readiness.md")) as fh:
                 md = fh.read()
             self.assertIn("-Actors Sven,Orgnar", md)
             self.assertIn("| Hod (Hod) | blocked | 0/1 |", md)
             self.assertIn("  - HodMill: left out (location outside the converted cells)", md)
-            self.assertIn("    - `GetIsID(Orgnar) == 1`: start, at game start true", md)
+            self.assertIn("    - `GetIsID(Hod) == 1`: start, in settled Riverwood false", md)
+            self.assertIn("SvenOwnSandbox: SandboxWorking -> Sandbox", md)
+            self.assertIn("(its conditions hold in settled Riverwood)", md)
             # 2026-11-17: --exterior as the build passes it keeps the outdoor location (Hod at the mill)
             ext = os.path.join(d, "ext")
             os.makedirs(ext)
