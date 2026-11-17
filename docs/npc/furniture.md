@@ -811,3 +811,12 @@ Neon-location hypothesis is refuted. In game: "if I pass time he always works bu
 places him in it), but in real time he does not set off. sit_package_survey.py (read-only) prints the Sit template's
 input names and every vanilla Sit package's values (UC07_Gel_Sit_Weld, the welder worker, and the copied
 FC_Neon_AyumiKomikoDefaultPackage shown in full), to find which input keeps ours from walking.
+sit_package_survey (owner, 22:40, **verified**): Starfield's Sit template (00003896) inputs: 0 'Sit Target'
+(SingleRef), 1 'ActualSeconds' (0 in all 946 with a value), 2 'StopMovement' (False in all), 4 'Eat?', 6 'Food Object',
+8 'Create Fake Food?'. 979 packages use it, 840 with a specific reference. The copied FC_Neon_AyumiKomikoDefaultPackage
+and the welder worker's UC07_Gel_Sit_Weld are identical but for the target. So our Sit package is set as Starfield's
+own are, and the package is not what keeps Alvor still. With a package that always picks the forge, he does not even
+set off: the procedure finds no way to get into it (supported reading: no reachable entry point), while placing him
+(passtime) or snapping him in needs none. Left on the furniture side: the model (marker nodes, collision; the leans
+and sweep that work use the template's marker model) or the record's markers. Next: the Sit package with
+FURNITURE_MODEL=vanilla (template's model, our markers): walks in -> our converted model; still still -> the markers.
