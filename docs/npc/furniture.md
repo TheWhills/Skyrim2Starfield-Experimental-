@@ -848,3 +848,12 @@ IgnoreCollisionAtRefForInteractionsKeyword, the template's entry sides 0xFFFFFFF
 (supported, strongly). Split next: our model back (FURNITURE_MODEL unset); then --station-keyword (-StationKeyword,
 with -PlainStations: keywords the stations still get) FurnitureSpecial alone, which the sandbox needs to pick them
 without a Sit package.
+**Verified (owner, 23:01)**: build with our models, -PlainStations -StationKeyword FurnitureSpecial, no Sit package:
+"he's entering animations now, and Hilde is using the tanning rack without a passtime". The walk-in blocker was
+IgnoreCollisionAtRefForInteractionsKeyword or our every-side entry (0xF) (not split); FurnitureSpecial stays (the
+sandbox's "Allow Special Furniture"). Now the default: SPECIAL_KEYWORDS = [FurnitureSpecial], the stations' markers
+carry no sides so PluginSpike copies the template's (TEMPLATE_SIDES). -PlainStations / -StationKeyword stay for A/Bs.
+Owner, 23:02: "he isn't using the hammer in the workstation": that build still has the --vanilla-enter walk-ins for
+Forge / Grindstone / Workbench (Starfield's EnterFromStand with its prop events left out), so a walk-in loads no
+hammer (only EnterInstant, after a passtime, has our AnimObjLoad). Our own walk-ins were never the blocker (the record
+was): repack without --vanilla-enter.

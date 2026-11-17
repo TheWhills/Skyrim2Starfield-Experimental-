@@ -418,17 +418,17 @@ class AnimKeywordTests(unittest.TestCase):
         forge = {"bases": {"f": {"kind": "forge", "edid": "CraftingBlackSmithForge", "markers": [],
                                  "skyrim_markers": sky}}}
         MF.add_anim_keywords(forge, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimForge": 0x0100081B})
-        # ... entered from every side (2026-11-16, owner: Alvor tried to reach it and gave up; Skyrim allows Behind only)
+        # ... entered from the template's sides (2026-11-16 23:01, owner: walk-ins work with them, not with our 0xF)
         self.assertEqual((forge["bases"]["f"]["anim_set"], forge["bases"]["f"]["markers"]),
-                         ("Forge", [dict(sky[0], entry=["Front", "Rear", "Left", "Right"])]))
+                         ("Forge", [dict(sky[0], entry=[])]))
         self.assertEqual(sky[0]["entry"], ["Front"])                                     # the shared list untouched
         tan = {"bases": {"t": {"kind": "scrape", "edid": "CraftingTanningRackMarker", "markers": [],
                                "skyrim_markers": [{"offset_m": [0, 0, 0], "rot_deg": 0.0, "entry": ["Rear"]}]}}}
         MF.add_anim_keywords(tan, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimTanning": 0x01000819})
-        self.assertEqual(tan["bases"]["t"]["markers"][0]["entry"], MF.ALL_SIDES)
+        self.assertEqual(tan["bases"]["t"]["markers"][0]["entry"], [])
         # FurnitureSpecial on both (2026-11-16: the sandbox's "Allow Special Furniture", like Starfield's bartender)
-        # ... and their own collision left out of the walk-in (2026-11-16 21:24: seen in use only after a passtime)
-        both = ["FurnitureSpecial", "IgnoreCollisionAtRefForInteractionsKeyword"]
+        # ... and no IgnoreCollisionAtRefForInteractionsKeyword (2026-11-16 23:01: walk-ins work without it)
+        both = ["FurnitureSpecial"]
         self.assertEqual(tan["bases"]["t"]["extra_keywords"], both)
         self.assertEqual(forge["bases"]["f"]["extra_keywords"], both)
         none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}

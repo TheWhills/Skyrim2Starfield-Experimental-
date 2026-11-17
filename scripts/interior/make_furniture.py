@@ -223,7 +223,13 @@ SPECIAL_SETS = {"Forge", "Tanning", "Grindstone", "Workbench"}
 # carry a solid model around their spot. Starfield's chairs with a model at the spot carry
 # IgnoreCollisionAtRefForInteractionsKeyword (work_templates: NPCChair_Analyze, NPCWritingAtDesk_ExecutiveChair):
 # the furniture's own collision is left out of the interaction (supported hypothesis, owner's test)
-SPECIAL_KEYWORDS = ["FurnitureSpecial", "IgnoreCollisionAtRefForInteractionsKeyword"]
+# 2026-11-16 23:01 (owner, verified): with that keyword and the every-side entry (ANY_SIDE_SETS, written as 0xF)
+# taken out again and FurnitureSpecial kept, Alvor walks into his stations and Hilde into her tanning rack with no
+# passtime; with them (21:24-22:51, also with a Sit package naming the forge, also with Starfield's own model) he never
+# did. One of the two blocked the walk-in (which one not split). Now: FurnitureSpecial only; the entry sides are the
+# template's (PluginSpike copies them when a marker lists none: 0xFFFFFFFF for the welder, wall-wipe, repair spot).
+SPECIAL_KEYWORDS = ["FurnitureSpecial"]
+TEMPLATE_SIDES = True
 ALL_SIDES = ["Front", "Rear", "Left", "Right"]
 SKYRIM_SPOT_SETS = {"Forge", "Grindstone", "Workbench"}           # the wheel's clips stand at Skyrim's wheel marker too
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
@@ -295,7 +301,7 @@ def add_anim_keywords(out, plugin_path, read_keywords=None, plain=False, keep_ke
         if st in SPECIAL_SETS and (not plain or keep_keywords):
             b["extra_keywords"] = list(SPECIAL_KEYWORDS) if not plain else list(keep_keywords)
         if st in ANY_SIDE_SETS and b.get("markers"):
-            b["markers"] = [dict(m, entry=[] if plain else list(ALL_SIDES)) for m in b["markers"]]
+            b["markers"] = [dict(m, entry=[] if (plain or TEMPLATE_SIDES) else list(ALL_SIDES)) for m in b["markers"]]
         done[st] = done.get(st, 0) + 1
     if missing:
         done["missing"] = sorted(missing)
