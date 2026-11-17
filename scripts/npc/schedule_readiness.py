@@ -80,7 +80,7 @@ def furniture_kind(sky, fid):
     return make_furniture.kind_of(rec) or "static"
 
 
-def assess(sky, sf_tpls, fid, cell_names, faces_edids):
+def assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells=None):
     npc = skyrimnpc.parse_npc(sky.subs(fid), fid)
     src = npc
     if npc["template"] and npc["template_flags"] & skyrimnpc.TEMPLATE_AI_PACKAGES and sky.kind(npc["template"]) == "NPC_":
@@ -90,20 +90,21 @@ def assess(sky, sf_tpls, fid, cell_names, faces_edids):
            "face_test_npc": edid.lower() in faces_edids, "packages": [], "furniture": Counter()}
     for p in src["packages"]:
         notes = []
-        got = MS.convert_package(sky, sf_tpls, p, cell_names, notes, False, True)
+        got = MS.convert_package(sky, sf_tpls, p, cell_names, notes, False, True, ext_cells)
         pr = {"edid": sky.edid(p), "converted": got is not None,
               "reasons": sorted({reason_of(n) for n in notes})}
         if got is not None:
             pr.update(template=f"{got['skyrim_template']} -> {got['sf_template']}",
                       hour=(got["schedule"] or {}).get("hour"), duration_min=(got["schedule"] or {}).get("duration_min"))
             for v in got["inputs"].values():
-                if isinstance(v, dict) and v.get("type") == "near_reference":
+                if isinstance(v, dict) and v.get("type") in ("near_reference", "near_exterior_reference"):
                     ref = packages_ref_form(v.get("source"))
                     base = ref_base(sky, ref) if ref is not None else None
                     k = furniture_kind(sky, base) if base is not None else None
                     if k:
                         row["furniture"][k] += 1
                     pr["near"] = v.get("base")
+                    pr["near_kind"] = k
         row["packages"].append(pr)
     n_ok = sum(p["converted"] for p in row["packages"])
     row["status"] = ("no packages" if not row["packages"] else "ready" if n_ok == len(row["packages"])
@@ -137,6 +138,20 @@ def report_md(rows, counts, actors):
         lines.append(f"| {r['name']} ({r['edid']}) | {r['status']} | {conv}/{len(r['packages'])} | {'; '.join(why)} | "
                      f"{fur} | {'yes' if r['face_test_npc'] else 'no'} |")
     lines += ["", "Packages left out, by reason:", ""] + [f"- {k}: {v}" for k, v in counts.most_common()]
+    lines += ["", "## Packages per NPC", "",
+              "Converted: Skyrim template -> Starfield's, start hour, minutes, the object the area is centred on "
+              "(its furniture kind; static = no Starfield counterpart yet). Left out: why.", ""]
+    for r in rows:
+        lines.append(f"- **{r['name']}**")
+        for p in r["packages"]:
+            if p["converted"]:
+                h = p.get("hour")
+                near = f", near {p['near']}" + (f" ({p['near_kind']})" if p.get("near_kind") else "") if p.get(
+                    "near") else ""
+                lines.append(f"  - {p['edid']}: {p.get('template')}, {'any time' if h is None or h < 0 else f'{h}:00'}"
+                             f" for {p.get('duration_min')} min{near}")
+            else:
+                lines.append(f"  - {p['edid']}: left out ({'; '.join(p['reasons'])})")
     return "\n".join(lines) + "\n"
 
 
@@ -147,6 +162,8 @@ def main(argv=None):
     ap.add_argument("--work", required=True, help="the interior batch work folder (cells.txt)")
     ap.add_argument("--faces", default="", help="face_fit.py's faces.json (who has a face-test NPC)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--exterior", default="", help="the installed exterior's staging folder (formids.json), as the "
+                                                   "build passes it: package locations outdoors are then kept")
     a = ap.parse_args(argv)
     cell_names = batch_cells(a.work)
     if not cell_names:
@@ -158,8 +175,14 @@ def main(argv=None):
                            if isinstance(r.get("test_npc"), dict)}          # a string = why none was made
     sf_tpls, _x = MS.load_sf_templates(a.starfield)
     sky = packages.Index(a.skyrim)
+    ext_cells = None
+    fp = os.path.join(a.exterior, "formids.json") if a.exterior else ""
+    if fp and os.path.exists(fp):
+        ext_cells = MS.exterior_cells(sky, fp)
+    elif fp:
+        print(f"no {fp}: outdoor package locations counted as outside")
     try:
-        rows = [assess(sky, sf_tpls, fid, cell_names, faces_edids)
+        rows = [assess(sky, sf_tpls, fid, cell_names, faces_edids, ext_cells)
                 for fid in sorted(placed_npcs(sky, cell_names))]
     finally:
         sky.close()

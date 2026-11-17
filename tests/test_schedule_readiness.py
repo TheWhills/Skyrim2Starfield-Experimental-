@@ -97,6 +97,21 @@ class ReadinessTests(unittest.TestCase):
                 md = fh.read()
             self.assertIn("-Actors Sven,Orgnar", md)
             self.assertIn("| Hod (Hod) | blocked | 0/1 |", md)
+            self.assertIn("  - HodMill: left out (location outside the converted cells)", md)
+            # 2026-11-17: --exterior as the build passes it keeps the outdoor location (Hod at the mill)
+            ext = os.path.join(d, "ext")
+            os.makedirs(ext)
+            with open(os.path.join(ext, "formids.json"), "w") as fh:
+                json.dump({"refs": {"000701:Skyrim.esm": "01000800"}}, fh)
+            out2 = os.path.join(d, "out2")
+            with contextlib.redirect_stdout(io.StringIO()):
+                R.main(["--skyrim", sky, "--starfield", sf, "--work", work, "--out", out2, "--exterior", ext])
+            with open(os.path.join(out2, "readiness.json")) as fh:
+                hod = {x["edid"]: x for x in json.load(fh)["npcs"]}["Hod"]
+            self.assertEqual((hod["status"], hod["furniture"]), ("ready", {"bartender": 1}))
+            self.assertEqual(hod["packages"][0]["near"], "CounterBarLeanMarker")
+            with open(os.path.join(out2, "readiness.md")) as fh:
+                self.assertIn("near CounterBarLeanMarker (bartender)", fh.read())
 
 
 if __name__ == "__main__":

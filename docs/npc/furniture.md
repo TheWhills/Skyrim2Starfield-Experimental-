@@ -906,3 +906,29 @@ the forge's lesson applies (moved, the forge was used): test by moving the grind
   grindstone). **Unresolved:** the keywords' names and which objects carry them (the survey now prints both).
 - **Unresolved:** engine-only settings (not in Starfield.esm) for repeats; asked the owner for `help sandbox 2` in
   game.
+
+## Skyrim's other work activities (2026-11-17, owner's smithing_probe --match run, work_probe.txt)
+Owner: "are there other riverwood schedule animations we've yet to convert. such as log cutting, carrying logs, stuff
+with the lumber mill, farming". **Verified** from the probe (Skyrim.esm + behaviours):
+- Wood chopping: FURN WoodChoppingBlock (+Snow, COPY), keyword FurnitureWoodChoppingBlock, one marker; IDLE
+  IdleWoodChopStart -> 0_Master FurnitureState -> Furniture_BehaviorGraph WoodChop_State: AnimObjectChopStart / Loop /
+  Stop. IDLM ChoppingIdleMarker plays the same IdleWoodChopStart. Props by name in the graph: AnimObjectAxe,
+  AnimObjectChopWoodLeft / Right.
+- Woodpile: FURN WoodPile (WoodPickUp.nif, keyword WoodPickUp): WoodPickUp_State AOWoodPickUp; WoodPutDown_State
+  AOWoodPutDown. Carrying between them is an arm offset over walking (MT_Behavior CarryLeft/RightArmBehavior:
+  OffsetCarryLog, OffsetWoodPosture; ANIO AnimObjectCarryFirewood01-03): a layer, not furniture.
+- Lumber mill: FURN ResourceObjectSawmill (MillLogPile.nif, keyword FurnitureResourceObjectSawmill): MillLoad_State
+  AnimObjectMillLoadStart (loading a log). Levers: LeverPushAnimating* FURN, MT_LeverFloorPull.
+- Buckets: FURN BucketCarryFill / PourMarker: OffsetCarryBucketFill / Pour, then the OffsetCarryBucket arm offset;
+  ANIO AnimObjectBucket.
+- Mining: FURN PickaxeMining Wall / Floor / Table: enter / loop / exit like our sit sets; triggers are sounds and
+  AddToInventory at 4 s; ANIO AnimObjectPickAxeWall. No AnimObjLoad in these clips' triggers: the pickaxe is loaded
+  elsewhere in the graph (unresolved where: state enter events are the likely place), so prop automation cannot rely
+  on clip triggers alone.
+- Farming: not furniture. IDLM IdleFarmingMarker plays IdleHoe and IdlePickup_Ground (MT_BehaviorGraph
+  InteractionObjectState, one-shot idles); prop AnimObjectHoe. Whether Riverwood places any: unresolved.
+- The run's --match missed the chop / woodpile / mill clips' own triggers and files (their names hold "Chop",
+  "WoodPickUp", "MillLoad"); a rerun with those names is asked for.
+schedule_readiness now takes --exterior (as the build passes make_schedule) and lists every package per NPC (time,
+template, the object its area is centred on and that object's kind): the owner's first readiness.md counted outdoor
+packages as "outside the converted cells" because the tool did not pass the exterior (make_schedule keeps them).
