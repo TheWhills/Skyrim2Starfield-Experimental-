@@ -51,8 +51,22 @@ Skyrim's TurnLoopingL has no Critter tag (Critter's idle turning graph plays the
 * sfnif.build_skinned_nif takes bone NAMES and per-bone binds, nothing human-specific (used by worn gear, hair and
   rigid weapons), and sfmesh writes per-vertex bone weights: the chicken's mesh can be written against its own
   33 bones. skyrimskin.skinned_shapes reads Skyrim's bones, binds and weights.
-* Missing: a Starfield skeleton.nif writer (a NiNode tree of the bones at rest). The probe now prints a vanilla
+* Missing: a Starfield skeleton.nif for the chicken (a copy of the critter's shell, see Models), and a rig + clips
+  written without retargeting (af_writer already writes any named bone list through CALUMI). The probe now prints a vanilla
   creature skeleton.nif's nodes and extra data (to copy what it carries) and checks the chicken's own models.
+
+## Models (owner's run, 2026-11-17)
+* Verified, Skyrim chicken.nif: one skinned BSTriShape 'chicken', 509 vertices, 650 triangles, 32 bones (all but
+  the root), 0 unweighted vertices, at most 4 influences, weights from NiSkinData; one texture set + an alpha
+  property (cut-out feathers, supported). Our skin reader takes it cleanly.
+* Verified, Skyrim skeleton.nif: 35 NiNodes (Character01 > NPC Root [Root] > the 32 bones, MagicEffectsNode),
+  BSBoneLOD, SkeletonID, and a ragdoll of 7 capsule rigid bodies with 6 ragdoll constraints.
+* Verified, Starfield CritterRace skeleton.nif is a thin shell: 4 NiNodes (Critter_mrRigRoot, Root, COM,
+  CharacterController), BSXFlags, two NiStringExtraData 'sgoKeep', two bhkNPCollisionObject -> bhkPhysicsSystem.
+  Its 30 bones are only in the .rig (whose first bone is COM). Supported: Starfield builds a creature's bones from
+  its .rig at load, so the chicken's skeleton.nif can be a copy of this shell, and its 33 bones go in the .rig.
+  Unresolved: how the 4 nodes nest, and what the two physics systems are (ragdoll / controller capsule): the probe
+  now prints the node tree and the bone names inside each physics blob.
 
 ## What the test needs (in order)
 1. The chicken mesh as a Starfield skinned mesh bound to its own bones, plus a Starfield skeleton.nif of those

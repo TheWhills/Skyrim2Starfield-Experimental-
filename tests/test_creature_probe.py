@@ -117,6 +117,14 @@ class CreatureProbeTests(unittest.TestCase):
         ss = C.nif_summary(nif.serialize(sf))
         self.assertIn("nodes (1): Chicken", ss[1])
         self.assertIn("SkinAttach 'SkinBMP'", ss[2])
+        st = sfnif.build_static_nif(b"Skel", [sfnif.StaticShape(b"S", b"a\\b", 3, 3, "materials\\x.mat",
+                                                                (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))],
+                                    child_collision_blobs=[b"hkRootLevelContainer\0Ragdoll_COM\0"])
+        tree = [ln for ln in C.nif_summary(nif.serialize(st)) if ln.startswith("node ")]
+        coll = next(ln for ln in tree if "Collision0" in ln)
+        self.assertIn("<Skel>", coll)
+        self.assertIn("bhkNPCollisionObject -> bhkPhysicsSystem", coll)
+        self.assertIn("Ragdoll_COM", coll)
 
 
 if __name__ == "__main__":

@@ -242,10 +242,47 @@ def nif_summary(data: bytes) -> list:
     extras = [f"{n.type_of(i)} {name(i)!r}" for i in range(len(n.blocks))
               if "ExtraData" in n.type_of(i) or n.type_of(i) in ("SkinAttach", "BSXFlags")]
     paths = [x.decode("latin-1", "replace") for x in n.strings if PATH_RX.search(x.decode("latin-1", "replace"))]
+    tree = node_tree(n, name) if len(nodes) <= 12 else []
     return [f"BS {n.bs_version}, {len(n.blocks)} blocks: " + ", ".join(f"{t} {c}" for t, c in sorted(types.items())),
             f"nodes ({len(nodes)}): {', '.join(nodes)}",
             f"extra data: {', '.join(extras) or '-'}",
-            f"path strings: {', '.join(paths) or '-'}"]
+            f"path strings: {', '.join(paths) or '-'}", *tree]
+
+
+def node_tree(n, name) -> list:
+    """For a small skeleton.nif: each node with its parent, local translation, extra data names and the collision
+    it carries (bhkNPCollisionObject -> bhkPhysicsSystem: size and the readable strings inside the Havok blob, i.e.
+    which bones a ragdoll or controller names). NiAVObject layout as nif.node_children (FO4 / Starfield)."""
+    from fo4sf import nif as nifmod
+    import sf_anim_survey as SAS
+    parent = {}
+    for i in range(len(n.blocks)):
+        if n.type_of(i) in NODE_TYPES:
+            for c in nifmod.node_children(n, i):
+                parent[c] = i
+    out = []
+    for i in range(len(n.blocks)):
+        if n.type_of(i) not in NODE_TYPES:
+            continue
+        b = n.blocks[i]
+        ne = struct.unpack_from("<I", b, 4)[0]
+        extras = struct.unpack_from(f"<{ne}i", b, 8)
+        t = struct.unpack_from("<3f", b, 8 + 4 * ne + 8)
+        coll = struct.unpack_from("<i", b, 8 + 4 * ne + 8 + 52)[0]
+        line = (f"node {name(i)!r} <{name(parent[i]) if i in parent else '-'}> t ({t[0]:.3f}, {t[1]:.3f}, {t[2]:.3f})"
+                + (f" extra [{', '.join(f'{n.type_of(e)} {name(e)!r}' for e in extras if 0 <= e < len(n.blocks))}]"
+                   if ne else ""))
+        if 0 <= coll < len(n.blocks):
+            line += f" collision {n.type_of(coll)}"
+            cb = n.blocks[coll]
+            if n.type_of(coll) == "bhkNPCollisionObject" and len(cb) >= 10:
+                sysref = struct.unpack_from("<i", cb, 6)[0]
+                if 0 <= sysref < len(n.blocks):
+                    blob = n.blocks[sysref][4:]
+                    strs = [x for x in SAS.strings_of(blob, 3) if not x.startswith("hk") or len(x) > 3]
+                    line += f" -> {n.type_of(sysref)} {len(blob)} bytes, strings: {', '.join(strs[:80])}"
+        out.append(line)
+    return out
 
 
 def skin_summary(data: bytes) -> list:
