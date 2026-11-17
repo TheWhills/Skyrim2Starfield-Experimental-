@@ -32,4 +32,17 @@ these". Read here, for the format only (files unpacked outside the repo, nothing
 * Clothes: RS Children Overhaul and SkyChild both bring children's clothes (outfits on the child body); Realistic
   RS Children uses RS's.
 
-Choice: the owner's (which look); see the reply of 2026-11-17.
+## Decision (owner, 2026-11-17): Realistic RS Children
+Converted children take Realistic RS Children's faces over RS Children Overhaul's heads, races and clothes.
+Plan, in order:
+1. Skyrim load order on our Skyrim side: `--skyrim-mod <folder>` (repeatable, in load order): each folder's plugins
+   override Skyrim.esm's records (later wins, FormIDs through each plugin's master list), its BSAs and loose files
+   win over Skyrim's archives (as --skyrim-overrides does for loose files). Here: RS Children Overhaul (core +
+   "Non Playable - USSEP" RSChildren.esp, the variant Realistic RS Children is made against: it lists USSEP as a
+   master), then Realistic RS Children 4.5, then its 4.7 update. USSEP and KS Hairdos need not be read: no record we
+   convert needs them (supported; the hair comes from the FaceGen NIF, step 3).
+2. S2S_<Race>ChildRace per Skyrim child race over Starfield's ChildRace (races-roadmap I2 step 2), and face_fit for
+   child NPCs: base head = the RS child head (Skyrim's adult female layout), FaceGen = Realistic RS Children's.
+3. Hair from the FaceGen NIF's hair shapes (not the KS Hairdos head-part meshes).
+4. Children's clothes from RS Children Overhaul's outfits; then voices and packages (races-roadmap I2 steps 5-7).
+First target: Dorthe and Frodnar in Riverwood.

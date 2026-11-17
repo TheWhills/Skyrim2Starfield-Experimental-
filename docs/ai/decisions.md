@@ -2391,3 +2391,11 @@ describes this project (Skyrim -> Starfield) instead of the upstream Fallout 4 o
 Why: owner, 2026-11-17: the repo "still looks like it's the fallout converter, and everything is on the armor
 [branch] instead of main". Kept: `skyrim/armor` and the other branches (not deleted); `claude/headless-test-instance`
 has 3 commits of its own, unmerged.
+
+## 2026-11-17: children convert from Realistic RS Children (owner)
+Decision: Skyrim's children are converted with Realistic RS Children's faces (Nexus 39359, 4.5 + 4.7) over RS
+Children Overhaul's heads, races and clothes (Nexus 2650), not from vanilla Skyrim's.
+Why: owner: vanilla children are "quite ugly"; of the three mods compared (docs/npc/children-mods.md) this one gives
+each child its own face, and its head is Skyrim's adult female head layout, the case our face fitter already handles.
+Alternatives: SkyChild (standalone, custom high-detail heads, own races), RS Children Overhaul alone.
+Consequence: our Skyrim reader gains a load order (--skyrim-mod folders: plugins, BSAs, loose files over Skyrim's).
