@@ -147,4 +147,10 @@ new creature skeleton on an existing graph.
   (3) jog = run clip; (4) the critter's speeds vs the chicken's stride; (5) Skyrim plays right turns as mirrored
   left ones (supported by its "[mirror" generators). Next: `creature_probe.py --motion` prints the chicken's motion
   data and the vanilla critter clips' headers / COM tracks.
+* Owner, 14:29 (screenshots): the chickens move, but "not quite upright, they almost pedal their legs forward": the
+  body sits tilted back with the legs out in front. Supported cause: the shell's COM node kept the critter's rotation
+  (critter bones run along x; creature.shell_skeleton set only COM's position), while the rig and the body assume the
+  chicken's COM rest rotation; the engine placing COM by the shell node turns the whole chicken by the difference.
+  Fix 3: the shell's COM gets the chicken's COM rest rotation (com_rest_q in creature_build.json); the probe's node
+  tree prints node rotations, to compare with the critter's COM.
 

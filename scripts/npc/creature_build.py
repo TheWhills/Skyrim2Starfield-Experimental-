@@ -142,7 +142,9 @@ def main(argv=None):
     rep["rig"] = {"bones": cr.names, "com_rest_m": [round(float(v), 4) for v in cr.t[0]]}
 
     # 2. the shell
-    put(CRITTER["skeleton"], creature.shell_skeleton(sf_read(CRITTER["skeleton"]), "Critter_mrRigRoot", cr.t[0]))
+    put(CRITTER["skeleton"], creature.shell_skeleton(sf_read(CRITTER["skeleton"]), "Critter_mrRigRoot", cr.t[0],
+                                                     cr.q[0]))
+    rep["rig"]["com_rest_q"] = [round(float(v), 4) for v in cr.q[0]]
 
     # 3. the body
     model = sky._read(CHICKEN["model"])

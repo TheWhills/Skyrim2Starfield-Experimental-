@@ -261,9 +261,12 @@ def _node_name(n, i) -> bytes:
     return n.strings[idx] if 0 <= idx < len(n.strings) else b""
 
 
-def shell_skeleton(data: bytes, root_name: str, com_t) -> bytes:
+def shell_skeleton(data: bytes, root_name: str, com_t, com_q=None) -> bytes:
     """A copy of a vanilla creature skeleton.nif shell (the critter's) for another creature: the root node renamed
-    (Critter_mrRigRoot -> <root_name>) and the COM node moved to com_t (metres, its local translation under Root).
+    (Critter_mrRigRoot -> <root_name>) and the COM node moved to com_t (metres, its local translation under Root) and,
+    with com_q (x, y, z, w), turned to the creature's own COM rest rotation. Without com_q the critter's COM rotation
+    stayed (owner, 2026-11-17 14:29: chickens drawn but tilted back, legs pedalling forward: supported, the engine
+    places COM by the shell's node, so the rig's rest rotation must be there too).
     The physics (a sphere on COM, the controller capsule) is kept as it is: critter-sized (unresolved: resizing)."""
     n = nifmod.parse(data)
     nodes = [i for i in range(len(n.blocks)) if n.type_of(i) in NODE_TYPES]
@@ -284,5 +287,8 @@ def shell_skeleton(data: bytes, root_name: str, com_t) -> bytes:
     b = n.blocks[coms[0]]
     ne = struct.unpack_from("<I", b, 4)[0]
     p = 8 + 4 * ne + 8
-    n.blocks[coms[0]] = b[:p] + struct.pack("<3f", *map(float, com_t)) + b[p + 12:]
+    b = b[:p] + struct.pack("<3f", *map(float, com_t)) + b[p + 12:]
+    if com_q is not None:
+        b = b[:p + 12] + struct.pack("<9f", *quat_to_rot9(com_q)) + b[p + 48:]
+    n.blocks[coms[0]] = b
     return nifmod.serialize(n)

@@ -271,7 +271,11 @@ def node_tree(n, name) -> list:
         extras = struct.unpack_from(f"<{ne}i", b, 8)
         t = struct.unpack_from("<3f", b, 8 + 4 * ne + 8)
         coll = struct.unpack_from("<i", b, 8 + 4 * ne + 8 + 52)[0]
+        from fo4sf.retarget import mat_to_quat
+        rq = mat_to_quat(struct.unpack_from("<9f", b, 8 + 4 * ne + 8 + 12))
+        rot = "" if abs(abs(rq[3]) - 1) < 1e-4 else f" q ({rq[0]:+.3f}, {rq[1]:+.3f}, {rq[2]:+.3f}, {rq[3]:+.3f})"
         line = (f"node {name(i)!r} <{name(parent[i]) if i in parent else '-'}> t ({t[0]:.3f}, {t[1]:.3f}, {t[2]:.3f})"
+                + rot
                 + (f" extra [{', '.join(f'{n.type_of(e)} {name(e)!r}' for e in extras if 0 <= e < len(n.blocks))}]"
                    if ne else ""))
         if 0 <= coll < len(n.blocks):

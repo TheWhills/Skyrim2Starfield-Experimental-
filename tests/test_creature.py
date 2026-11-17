@@ -142,7 +142,10 @@ class FileTests(unittest.TestCase):
         f.add_block("NiNode", node(b"COM", [], (0, -0.113, 0.149)))
         f.add_block("NiNode", node(b"CharacterController", []))
         f.footer = struct.pack("<II", 1, 0)
-        out = nif.parse(C.shell_skeleton(nif.serialize(f), "S2SChicken_mrRigRoot", (0, 0.01, 0.2)))
+        out = nif.parse(C.shell_skeleton(nif.serialize(f), "S2SChicken_mrRigRoot", (0, 0.01, 0.2), (0, 0, S, S)))
+        np.testing.assert_allclose(struct.unpack_from("<9f", out.blocks[2], 28), C.quat_to_rot9((0, 0, S, S)),
+                                   atol=1e-6)
+        np.testing.assert_allclose(struct.unpack_from("<f", out.blocks[2], 64), (1.0,), atol=1e-9)   # scale kept
         self.assertEqual(C._node_name(out, 0), b"S2SChicken_mrRigRoot")
         self.assertEqual(C._node_name(out, 3), b"CharacterController")
         np.testing.assert_allclose(struct.unpack_from("<3f", out.blocks[2], 16), (0, 0.01, 0.2), atol=1e-6)
