@@ -130,3 +130,8 @@ Plus five SKSE plugins for what Skyrim lacks: jail / journal (TESRuntime), the c
 2. Read our AnimTextData files the way they read animationdata (grammar, hashes), to generate them without the CK.
 3. A small SFSE live-readback plugin: current package, sandbox target, furniture, graph variables of a ref.
 4. Check Starfield's physics range on the planet before scaling up.
+5. Mass in-game testing the tes4skyrim way: the game run headless / at low resolution, fast, to find issues in bulk
+   (owner, 2026-11-17: the purpose of branch `claude/headless-test-instance`, an early start: a harness that launches
+   Starfield, checks for the cdb and a non-black screenshot, and always stops the game; 3 commits, not merged into
+   main). Fits after Riverwood: e.g. every converted creature / NPC / cell placed and screenshotted to catch the
+   invisible-body and tilted-pose kinds of failure the chicken had.
