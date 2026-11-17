@@ -37,6 +37,13 @@ SKY_TO_SF = {"sandboxworking": "Sandbox", "sandbox": "Sandbox", "sleep": "Sleep"
 # multi-location sandbox or carry procedure, so these become a Sandbox at their FIRST location input (the work spot /
 # the woodpile); later location inputs are skipped (noted).
 FIRST_LOCATION_ONLY = {"sandboxworkingmultilocation", "carryanddropitem"}
+# Skyrim input -> Starfield input of another name, per Skyrim template (normalized names). 2026-11-17 (owner's build
+# log: every Eat package listed "Eat Location (Location)" as kept vanilla, so FaendalEatStump / LucanRiverwoodEatInn
+# ran at the copied vanilla package's location, not the stump / the inn; FaendalCarryFirewood had no input at all:
+# its Carry Start is a reference, not a Location). Until carry-and-drop is rebuilt, its sandbox is at the carry start
+# (the woodpile), CARRY_RADIUS_M around it (an assumption: Skyrim's carry has no radius).
+INPUT_ALIAS = {"eat": {"eatlocation": "location"}, "carryanddropitem": {"carrystart": "location"}}
+CARRY_RADIUS_M = 2.0
 # inputs set on the Starfield side whatever Skyrim had (by normalized Starfield input name): Starfield has no Eat
 # template; its NPCs eat while sandboxing (Allow Eating / Allow Sitting)
 FORCE = {"eat": {"alloweating": True, "allowsitting": True}}
@@ -176,10 +183,16 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
         by_name.setdefault(norm(sf_names.get(i)), i)
     inputs, skipped, drop = {}, [], None
     first_loc = tname.lower() in FIRST_LOCATION_ONLY
+    alias = INPUT_ALIAS.get(tname.lower(), {})
     for k, (inp, idx) in enumerate(zip(p["inputs"], value_indexes(p))):
         name = sky_names.get(idx)
-        target = by_name.get(norm(name))
+        target = by_name.get(alias.get(norm(name), norm(name)))
         v = inp["value"]
+        if (alias.get(norm(name)) == "location" and (inp["type"] or "").lower() == "singleref"
+                and isinstance(v, dict) and v.get("type") == 0 and v.get("value")):
+            # a specific reference standing in for a location (carry start): near that reference
+            inp = dict(inp, type="Location")
+            v = {"type": 0, "value": v["value"], "radius": CARRY_RADIUS_M * U, "type_name": "Near reference"}
         if first_loc and inp["type"].lower() == "location":
             if "location" not in by_name or str(by_name["location"]) in inputs:
                 skipped.append(f"{name or idx} (Location: only the first is kept)")

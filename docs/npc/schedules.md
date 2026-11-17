@@ -233,3 +233,13 @@ had no placed NPCs among package targets, so it became an XMarker where Frodnar 
 editor location (outdoors). Now every actor's ACHR FormKey is reserved up front (actorTargets, IdFor with
 PlaceActor's key) and a location near an NPC targets that ACHR, so it follows the NPC as in Skyrim (build log:
 "near the NPC ... follows them"). Written without a compiler; unverified in game.
+Owner's build after the settled moment (2026-11-17 12:00 log, verified): compiled; FaendalEatStump12x1,
+GerdurVisitAlvor14xHalf, LucanRiverwoodEatInn20x4 converted ("its 1 conditions hold in settled Riverwood"). Dorthe and
+Frodnar are not in the build (children are not converted yet), so the near-an-NPC path was not exercised. The log
+showed two input losses: every Eat package listed "Eat Location (Location)" as kept vanilla (Skyrim's Eat names its
+location so; Starfield's Sandbox calls it Location), so the stump / inn meals ran at the copied vanilla package's
+location; and FaendalCarryFirewood had no inputs at all (Carry Start / End are references, not Locations; the earlier
+note that it becomes a Sandbox at its first location was wrong). make_schedule.INPUT_ALIAS now maps Eat Location ->
+Location and Carry Start -> Location (near that reference, CARRY_RADIUS_M 2 m: an assumption) until carry-and-drop is
+rebuilt. Still kept vanilla and to convert: Patrol Start (Camilla, Embry, Hilde patrols: Skyrim's linked-ref patrol
+chain), Sleep's bed search criteria, Eat's food / chair criteria, the multi-location times.

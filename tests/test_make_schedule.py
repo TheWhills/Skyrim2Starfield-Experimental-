@@ -245,8 +245,52 @@ class ExteriorTests(unittest.TestCase):
             self.assertEqual(r["actors"], [])
             self.assertTrue(any("outdoors needs --exterior" in n for n in r["notes"]))
 
-if __name__ == "__main__":
-    unittest.main()
+
+
+class AliasTests(unittest.TestCase):
+    def test_eat_location_and_carry_start_become_the_sandbox_location(self):
+        """2026-11-17 (owner's build log): Skyrim's Eat names its location "Eat Location" and CarryAndDropItem has a
+        Carry Start reference; both are the Starfield Sandbox's Location (the stump / the woodpile), not left vanilla."""
+        from fo4sf import packages
+        with tempfile.TemporaryDirectory() as d:
+            tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.7, 0, 0x800))])
+            eat_t = pack(0x301, "Eat", 19, 0, None, [("Location", b"PLDT", struct.pack("<iIi", 3, 0, 0))], [0],
+                         [(0, "Eat Location")], [("Procedure", "Eat")])
+            carry_t = pack(0x311, "CarryAndDropItem", 19, 0, None,
+                           [("SingleRef", b"PTDA", struct.pack("<iIi", 0, 0, 0)),
+                            ("SingleRef", b"PTDA", struct.pack("<iIi", 0, 0, 0))], [0, 1],
+                           [(0, "Carry Start"), (1, "Carry End")], [("Procedure", "Travel")])
+            eat = pack(0x300, "FaendalEatStump12x1", 18, 0x301, (12, 0, 60),
+                       [("Location", b"PLDT", struct.pack("<iIi", 0, 0x601, 256))], [0])
+            carry = pack(0x310, "FaendalCarryFirewood7x2", 18, 0x311, (7, 0, 120),
+                         [("SingleRef", b"PTDA", struct.pack("<iIi", 0, 0x602, 0)),
+                          ("SingleRef", b"PTDA", struct.pack("<iIi", 0, 0x603, 0))], [0, 1])
+            house = rec(b"CELL", 0x500, [(b"EDID", Z("FaendalsHouse")), (b"DATA", b"\x01\x00")])
+            refs = [rec(b"REFR", f, [(b"NAME", struct.pack("<I", 0x3B)), (b"DATA", struct.pack("<6f", x, 0, 0, 0, 0, 0))])
+                    for f, x in ((0x601, 100), (0x602, 200), (0x603, 300))]
+            body = (grup(b"PACK", 0, [eat_t, carry_t, eat, carry])
+                    + grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, [house, grup(0x500, 6, [grup(0x500, 8, refs)])])])]))
+            sky_p = os.path.join(d, "Skyrim.esm")
+            with open(sky_p, "wb") as fh:
+                fh.write(tes4 + body)
+            sf = os.path.join(d, "Starfield.esm")
+            with open(sf, "wb") as fh:
+                fh.write(tes4 + grup(b"PACK", 0, [pack(
+                    0x2CB1, "Sandbox", 19, 0, None, [("Location", b"PLDT", struct.pack("<iIfI", 3, 0, 0, 0))], [2],
+                    [(2, "Location")], [("Procedure", "Sandbox")])]))
+            sf_tpls, _x = M.load_sf_templates(sf)
+            sky = packages.Index(sky_p)
+            try:
+                notes = []
+                e = M.convert_package(sky, sf_tpls, 0x300, {"FaendalsHouse"}, notes)
+                c = M.convert_package(sky, sf_tpls, 0x310, {"FaendalsHouse"}, notes)
+            finally:
+                sky.close()
+            self.assertEqual((e["inputs"]["2"]["type"], e["inputs"]["2"]["source"]), ("near_reference", "000601:Skyrim.esm"))
+            self.assertEqual((c["inputs"]["2"]["type"], c["inputs"]["2"]["source"], c["inputs"]["2"]["radius_m"]),
+                             ("near_reference", "000602:Skyrim.esm", M.CARRY_RADIUS_M))
+            self.assertTrue(any("Carry End (SingleRef)" in n for n in notes))
+            self.assertFalse(any("Eat Location" in n for n in notes))
 
 
 class SitAtTests(unittest.TestCase):
@@ -302,3 +346,7 @@ class SitAtTests(unittest.TestCase):
         self.assertIn('var cellName = "FO4Port_" + src4;', cs)
         self.assertLess(cs.index("actorTargets.TryGetValue(srcRef"), cs.index("if (exterior && !placedBySource.ContainsKey(srcRef))"))
         self.assertLess(cs.index("actorTargets.TryGetValue(srcX"), cs.index("if (!extMarkerFor.TryGetValue(srcX"))
+
+
+if __name__ == "__main__":
+    unittest.main()
