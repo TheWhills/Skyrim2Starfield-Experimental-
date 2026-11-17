@@ -770,3 +770,9 @@ Is Marker (22:00 build), our walk-in clips (this build), template sharing, entry
 stations (a passtime places him in them). Next, evidence from Starfield itself: work_spot_usage.py (written 20:37,
 never run; NPCWipeTable and NPCLeaningBartopFront added) on how Starfield.esm's own NPCs reach its welder / wall-wipe /
 repair / wipe-table spots (packages naming the reference, actors' linked references and keywords, ownership).
+furniture_navmesh --ref 02C308 (owner, 22:17, **verified** position): Alvor's work package centre is
+RiverwoodBlacksmithWorkMarker at (20587, -45138, -81), on the navmesh, 1.39 m from his tanning rack, 2.20 m from the
+forge, 3.2-3.3 m from the grindstone and armor workbench. The spot where he keeps standing (by the rail between the
+tanning rack and the forge) fits it (supported, from the screenshots only): he idles at his work centre and walks
+between it and the stations without entering, so the sandbox in real time either never commits to a station or gives
+up at it; in a passtime (low process) it places him straight in. work_spot_usage.py next.
