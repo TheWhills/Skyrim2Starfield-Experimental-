@@ -20,7 +20,9 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 # (ours, vanilla template): the forge and tanning rack (not chosen on schedules) and two that are (sweep, rail lean)
-PAIRS = (("S2S_Furn_CraftingBlackSmithForge", "NPCStanding_WipeWall"),
+PAIRS = (("S2S_Furn_CraftingBlackSmithForge", "NPCWelder"),
+         ("S2S_Furn_CraftingBlacksmithSharpeningWheel", "NPCRepairImpactWrench_Standing"),
+         ("S2S_Furn_CraftingBlacksmithArmorWorkbench", "NPCWipeTable"),
          ("S2S_Furn_CraftingTanningRackMarker", "NPCStanding_WipeWall"),
          ("S2S_Furn_SweepIdleMarker", "NPCSweeping"),
          ("S2S_Furn_RailLeanMarker", "NPCLeaningBartopFront"),
@@ -62,6 +64,20 @@ def differences(ours, vanilla) -> list:
     return out
 
 
+def snam(d: bytes) -> list:
+    """Starfield FURN SNAM marker parameters, 28 bytes each: offset x/y/z (m), rotation z, keyword, entry, exit."""
+    out = []
+    for i in range(0, len(d) - 27, 28):
+        x, y, z, rz, kw, en, ex = struct.unpack_from("<4fIII", d, i)
+        out.append(f"offset ({x:.3f}, {y:.3f}, {z:.3f}) m, rot {rz:.3f} rad, keyword {kw:08X}, entry 0x{en:X}, "
+                   f"exit 0x{ex:X}")
+    return out
+
+
+def short2(d: bytes):
+    return struct.unpack_from("<h", d)[0] if len(d) >= 2 else None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--plugin", required=True, help="FO4Port.esm (the staged or installed one)")
@@ -90,6 +106,11 @@ def main(argv=None):
         print(f"    keywords: {kws(subs)}")
         for s, d in subs:
             print(f"    {s.decode('latin-1')} {len(d)}: {d[:48].hex(' ')}{' ...' if len(d) > 48 else ''}")
+            if s == b"SNAM":
+                for line in snam(d):
+                    print(f"      marker: {line}")
+            elif s in (b"JNAM", b"GNAM", b"FNAM"):
+                print(f"      = {short2(d)}")
     for o, v in PAIRS:
         print(f"== {o} vs {v}")
         if o not in ours or v not in vanilla:

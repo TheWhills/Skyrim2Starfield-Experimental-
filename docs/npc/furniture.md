@@ -820,3 +820,10 @@ set off: the procedure finds no way to get into it (supported reading: no reacha
 (passtime) or snapping him in needs none. Left on the furniture side: the model (marker nodes, collision; the leans
 and sweep that work use the template's marker model) or the record's markers. Next: the Sit package with
 FURNITURE_MODEL=vanilla (template's model, our markers): walks in -> our converted model; still still -> the markers.
+Owner, 22:45 (FURNITURE_MODEL=vanilla + Sit package build; screenshots): the forge invisible, Alvor standing in the
+forge shed by the rail, neutral, not working. `help evaluatepackage 4` found nothing (my error: filter 4 searches forms,
+functions are filter 1); `cf "Actor.EvaluatePackage"` on him gave no error (the Papyrus call exists). Pending the
+owner's word on whether he walked there by himself after `moveto player`. If he did and stopped: with Starfield's
+model too, the spot / markers are what fails. furniture_record_probe now pairs each station with its own template
+(forge / NPCWelder, grindstone / NPCRepairImpactWrench_Standing, workbench / NPCWipeTable, tanning / NPCStanding_WipeWall)
+and decodes SNAM (offset, rotation, keyword, entry / exit) and JNAM / GNAM / FNAM.

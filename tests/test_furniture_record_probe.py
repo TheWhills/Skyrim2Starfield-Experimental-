@@ -25,5 +25,17 @@ class FurnitureRecordProbeTest(unittest.TestCase):
         self.assertEqual(F.flag_bits(0x5), ["0x00000001", "0x00000004"])
 
 
+class SnamTest(unittest.TestCase):
+    def test_snam_and_pairs(self):
+        import struct
+        import furniture_record_probe as P
+        d = struct.pack("<4fIII", 0.0, -0.728, 0.0, 3.1416, 0, 0xF, 0xFFFFFFFF)
+        (line,) = P.snam(d)
+        self.assertIn("(0.000, -0.728, 0.000)", line)
+        self.assertIn("entry 0xF", line)
+        self.assertEqual(P.short2(struct.pack("<h", 180)), 180)
+        self.assertIn(("S2S_Furn_CraftingBlackSmithForge", "NPCWelder"), P.PAIRS)
+
+
 if __name__ == "__main__":
     unittest.main()
