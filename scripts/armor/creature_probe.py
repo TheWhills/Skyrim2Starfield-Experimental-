@@ -663,6 +663,33 @@ def clip_tracks(calumi: str, read, rig_key: str, clips, work: str) -> list:
     return out
 
 
+def rig_dump(data: bytes) -> list:
+    """A Starfield .rig laid open, to compare a vanilla rig with ours field by field: the bone names from the table at
+    the end (rig_names), the record area taken as N x 96 bytes before it (docs/spikes/WP-doors-research.md: 96-byte
+    records: rotation, translation, parent index, name offset), whatever precedes it as the header; each record as 24
+    32-bit words (hex), with the words that read as plausible floats also shown as floats."""
+    data = bytes(data)
+    names = rig_names(data)
+    n = len(names)
+    table = sum(len(x) + 1 for x in names)
+    start = len(data) - table - 96 * n
+    out = [f"{len(data)} bytes, {n} bone names, name table {table} bytes, record area from {start}"
+           + ("" if start >= 0 else " (does not fit: layout differs)")]
+    if start < 0:
+        return out
+    out.append("header: " + data[:start].hex(" ", 4))
+    for i in range(n):
+        rec = data[start + 96 * i: start + 96 * (i + 1)]
+        words = struct.unpack("<24I", rec)
+        fl = struct.unpack("<24f", rec)
+        shown = " ".join(f"{w:08x}" for w in words)
+        floats = " ".join(f"{f:+.3f}" if w and 1e-6 < abs(f) < 1e4 else "." for w, f in zip(words, fl))
+        out.append(f"  [{i:2d}] {names[i] if i < n else '?'}")
+        out.append(f"       {shown}")
+        out.append(f"       {floats}")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data")
@@ -675,7 +702,26 @@ def main(argv=None):
     ap.add_argument("--motion", action="store_true",
                     help="root motion: Skyrim's chicken clips (motion data) and the vanilla critter clips' headers")
     ap.add_argument("--calumi", default="", help="with --motion: CALUMI.Animation.dll, to read the critter clips' tracks")
+    ap.add_argument("--rig", action="append", default=[],
+                    help="a .rig to lay open: an archive path (meshes\\...\\skeleton.rig) or a file on disk (repeatable)")
     a = ap.parse_args(argv)
+    if a.rig:
+        import sf_anim_survey as SAS
+        index = {}
+        if a.starfield_data:
+            for _label, ar in SAS.archives(a.starfield_data):
+                for i, nm in enumerate(ar.names):
+                    index.setdefault(SAS.norm(nm), (ar, i))
+        for r in a.rig:
+            if os.path.isfile(r):
+                with open(r, "rb") as fh:
+                    d = fh.read()
+            else:
+                hit = index.get(SAS.norm(r))
+                d = hit[0].read(hit[1]) if hit else None
+            print(f"== rig {r}")
+            print("\n".join(["  not found"] if d is None else rig_dump(d)))
+        return 0
     if a.model:
         print("\n".join(models_side(a.starfield_data, a.model)))
         return 0

@@ -175,6 +175,16 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertIn("walkforward.af: header t (+0.000, +0.500, +0.000) m, yaw +0.0 deg", lines[1])
 
+    def test_rig_dump(self):
+        names = [b"COM", b"Spine"]
+        recs = b"".join(struct.pack("<4f3fi", 0, 0, 0, 1, 0, 0, 0.1 * i, i - 1) + bytes(96 - 32) for i in range(2))
+        data = b"HDR!" + recs + b"\0".join(names) + b"\0"
+        lines = C.rig_dump(data)
+        self.assertIn("2 bone names, name table 10 bytes, record area from 4", lines[0])
+        self.assertEqual(lines[1], "header: 48445221")
+        self.assertIn("[ 1] Spine", lines[5])
+        self.assertIn("+0.100", lines[7])
+
 
 if __name__ == "__main__":
     unittest.main()

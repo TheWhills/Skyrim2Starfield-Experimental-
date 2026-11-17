@@ -188,4 +188,10 @@ new creature skeleton on an existing graph.
   Starfield on its own skeleton, in the critter's place. Open: right turns (mirror; meanwhile the critter's clips,
   rest pose), its own race (animation index via CK or SAM) so critters stay critters, Skyrim's ragdoll death, the
   flavour idles' IDLE records, the sitting set, then Riverwood's other animals.
+* Owner, 17:52: a little way off the chicken's legs stop and it slides; close up the legs animate again. Supported
+  cause: distance animation LOD (Skyrim's chicken skeleton has BSBoneLOD; the critter shell has none, so Starfield's
+  bone LOD likely lives in the .rig): our rig, written through CALUMI (rotation, translation, name, parent only),
+  leaves any per-bone LOD / flag field at its default, so at distance only the root moves. Next: creature_probe.py
+  --rig lays a vanilla rig and ours open field by field (96-byte records) to find it. Less likely: the body has one
+  mesh LOD where the trilobite has four.
 
