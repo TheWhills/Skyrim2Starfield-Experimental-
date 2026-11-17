@@ -144,6 +144,8 @@ Steps:
    vanilla children and the mod).
 8. **Player children (optional):** with Playable Children installed its HCRace already gives that; not ours to rebuild.
 Built so far: face_fit skips ChildRace NPCs (they would come out adult-sized on an adult template).
+Source looks (owner, 2026-11-17: vanilla Skyrim children are "quite ugly"; convert from a child mod instead):
+docs/npc/children-mods.md compares SkyChild, RS Children Overhaul and Realistic RS Children for our converter.
 
 ### J. Beast races (Khajiit, Argonian)
 - **open:** own heads (1356 / 1219 vertices) converted as the race's Face part, skinned to Starfield's face bones
