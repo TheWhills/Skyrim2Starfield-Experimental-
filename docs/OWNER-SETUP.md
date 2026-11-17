@@ -179,7 +179,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    python -I scripts\armor\creature_probe.py --starfield-data "$sf\Data" --sf-race CritterRace > critter_skin.txt
    ```
-   Send critter_skin.txt.
+   Send critter_skin.txt. (Done 2026-11-17.)
+7h. B + C: the chicken in the critter's place (docs/npc/creatures.md, "The first test"). Starfield closed:
+   ```powershell
+   python -I scripts\npc\creature_build.py --skyrim-data "$sky" --starfield-data "$sf\Data" --calumi $calumi --out "$mods\S2S Chicken Test"
+   ```
+   Enable "S2S Chicken Test" in MO2 (loose files, no plugin). In game: `player.placeatme 2C180F`. Send
+   "$mods\S2S Chicken Test\creature_build.json" and say what stands there (chicken? textured? idles / walks?).
+   Disable the mod after: it replaces the critters' rig.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

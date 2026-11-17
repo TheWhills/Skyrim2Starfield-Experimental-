@@ -82,8 +82,19 @@ the chicken's files replace the critter's own, at the critter's paths (skeleton.
 under the critter's file names and descriptors, its body model), as loose files in a test mod. The index still
 lists every file (same names), so any critter (placeatme) shows the chicken, or the failure is the skeleton itself.
 Second test, after: the chicken as its own race (index via CK or SAM).
-Core: src/fo4sf/creature.py (rig fold, clips, skinned mesh, shell; tests/test_creature.py). Still to find: the
-critter's body model path (the probe now follows race / NPC skin -> ARMO -> ARMA).
+Core: src/fo4sf/creature.py (rig fold, clips, skinned mesh, shell; tests/test_creature.py); build:
+scripts/npc/creature_build.py (loose files, no plugin; tests/test_creature_build.py incl. a fake-games run).
+* Verified (fourth run): CritterRace's skin is Skin_Critter_Trilobite -> AA_Critter_Trilobite, MOD2
+  Actors\Critter\Mesh\Critter_Trilobite\Critter_Trilobite.nif; trident, thorn and spaceroach critters have their own
+  skins on the same race and rig; Traits_Critter_Trilobite 002C180F is the NPC to place.
+* The test replaces the trilobite's model, so trilobites show the chicken; the other three lose their bones while the
+  mod is on. Right turns keep the critter's clips (the chicken has left turns only; no mirror yet): during them the
+  chicken stands in its rest pose. Unresolved: whether root motion is needed (clips play in place); the critter-sized
+  sphere / capsule; the units differ by 0.01 % (mesh 1/70, rig 0.0142875: negligible).
+In game, success: a chicken, its feathers textured, idling, walking and running without stretching or exploding.
+Failure modes and what they mean: invisible (the mesh or its bones not found), a tangle of stretched triangles (rig
+and bind disagree: creature_build.json bind_vs_rig), frozen in rest pose while moving (clips not found or not
+matching the rig), a crash at load (the shell or rig rejected).
 
 ## What the test needs (in order)
 1. The chicken mesh as a Starfield skinned mesh bound to its own bones, plus a Starfield skeleton.nif of those
