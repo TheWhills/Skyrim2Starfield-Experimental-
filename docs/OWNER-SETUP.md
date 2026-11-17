@@ -38,7 +38,7 @@ Starfield must be closed while a script writes into the mods folders.
 
 | What | Where |
 | --- | --- |
-| Repository (branch `skyrim/armor`) | `$HOME\Skyrim2Starfield-Experimental-` |
+| Repository (branch `main`) | `$HOME\Skyrim2Starfield-Experimental-` |
 | Skyrim SE Data | `C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data` (`$sky`) |
 | Starfield install | `D:\SteamLibrary\steamapps\common\Starfield` (`$sf`) |
 | MO2 mods folder | `$env:LOCALAPPDATA\ModOrganizer\Starfield\mods` (`$mods`) |
@@ -100,7 +100,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    lists two Orc face presets, and an optional player patch (S2SOrcPlayer.esm) makes the player an Orc, as the Exo
    Race mod does (setrace on the player did not take). Starfield closed:
    ```powershell
-   git pull origin skyrim/armor
+   git pull origin main
    python -I scripts\npc\race_heads.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Race Test" --new-races Orc --player-race Orc
    ```
    S2SOrcPlayer.esm lands in the S2S Race Test mod folder: tick it in MO2's plugin list after S2SRaceTest.esm (off

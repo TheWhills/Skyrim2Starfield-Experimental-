@@ -1,133 +1,99 @@
-> **Skyrim2Starfield-Experimental** — an experimental fork of
-> [fo4sf/fo4-to-starfield](https://github.com/fo4sf/fo4-to-starfield) (MIT), taken from its
-> `claude/terrain-core64-objects` branch at `86e214a`, adding **Skyrim's Tamriel as native Starfield terrain**:
-> [docs/terrain/skyrim-tamriel.md](docs/terrain/skyrim-tamriel.md). Status: offline-tested on synthetic data only;
-> not yet run on a real `Skyrim.esm` or in game. Everything below is the upstream project's README.
+# Skyrim2Starfield (Experimental)
 
-# fo4-to-starfield
+**Converters that bring The Elder Scrolls V: Skyrim Special Edition into Starfield's engine (Creation Engine 2):
+Skyrim's world as native Starfield terrain, its towns, interiors, people, animations and creatures, converted from
+your own game copies.** No game assets are included or distributed; every tool reads your installs and writes to
+your machine.
 
-**Research and toolchain for porting Fallout 4 to Starfield's engine (Creation Engine 2).**
-Format notes, measurements, a risk-first plan, and (as they land) converters for meshes, materials,
-collision, plugin records, terrain and more. Converts from **your own** game copies; no game assets are
-included or distributed.
+The goal is a faithful, walkable Skyrim inside Starfield: the world as the player sees it for most of the game, then
+everything else. Riverwood is the proving ground. Each piece is built as a converter rather than placed by hand, so
+whatever works in Riverwood works for every town that uses the same Skyrim records
+([the Riverwood checklist](docs/RIVERWOOD-COMPLETE.md)).
 
-> **Status: a Fallout 4 prop renders in Starfield.** A Fallout 4 chair, converted by this toolchain and loaded as a
-> plugin, was spawned in the running game (Starfield 1.16.244): correct shape, size and orientation, lit and
-> shadowed by the scene ([screenshot](docs/media/fo4-chair-in-starfield.png), write-ups: [S1](docs/spikes/S1-mesh-writer.md),
-> [S2/S4/S9](docs/spikes/S2-S4-S9-plugin-units-loading.md)), now with its **original Fallout 4 texture**
-> converted to Starfield's material format ([S3](docs/spikes/S3-materials.md)). It now has **box collision** (solid and fixed in place, [S6](docs/spikes/S6-collision.md)); plugin records beyond a static, terrain, actors and animation are still to do.
-> See [Work packages](docs/WORK-PACKAGES.md).
+## Status
 
-**Newest: Fallout 4's Vault 111 interior loads in Starfield as a walk-in cell** (layout, models, textures; lighting still rough):
-[write-up](docs/spikes/WP10-vault111-first-light.md).
+Working in game (each item verified by the owner on Starfield; details and dates in the linked notes):
 
-**Also converted: Vault 81, the Red Rocket cave, Vault 114, the Prydwen, Hotel Rexford, Boston Public Library and Parsons State** ([write-up](docs/spikes/WP10-more-interiors.md)).
-
-![Hotel Rexford lobby, converted from Fallout 4, inside Starfield](docs/media/hotel-rexford.jpg)
-
-![The Vault 111 cryo pods, converted from Fallout 4, inside Starfield](docs/media/vault111-cryo-row.jpg)
-
-![The cave under Red Rocket, converted from Fallout 4, inside Starfield](docs/media/redrocket-cave.jpg)
-
-![Vault 111 corridor, converted from Fallout 4, inside Starfield](docs/media/vault111-corridor.jpg)
-
-![Vault 111 in colour, converted from Fallout 4, inside Starfield](docs/media/vault111-color-catwalk.jpg)
-
-![Vault 111 stairs, converted from Fallout 4, inside Starfield](docs/media/vault111-color-stairs.jpg)
-
-![A Vault 111 room, converted from Fallout 4, inside Starfield](docs/media/vault111-room-in-starfield.png)
-
-![Fallout 4 patio chair, with its original texture, rendered inside Starfield](docs/media/fo4-chair-textured-in-starfield.png)
-
-If you landed here searching for *"Fallout 4 in Starfield"*, *"convert Fallout 4 NIF to Starfield"*,
-*"Starfield .mesh format"*, *"what replaced LAND in Starfield"* or *"port Fallout 4 mods to Starfield"*:
-the answers we have so far are in [docs/FORMAT-GAP.md](docs/FORMAT-GAP.md) and [docs/RISKS.md](docs/RISKS.md).
-
-## Why this is hard (measured, not guessed)
-
-| | Fallout 4 (Creation Engine 1) | Starfield (Creation Engine 2) |
+| Area | What works | Notes |
 |---|---|---|
-| Plugin form version | 131 | 581 |
-| Record types | 137 (116 shared) | 180 |
-| Sampled field overlap on shared types | | mostly 25–60% (`STAT` 0.23, `WEAP` 0.30, `NPC_` 0.51) |
-| Terrain | 37,020 `LAND` records | **none**; `.btd` files + procedural planets |
-| NIF mesh | BS 130, geometry inline | BS 173 (base game) / 175 (DLC), geometry in external `.mesh` files (~684k of them) |
-| Materials | 7,077 `.bgsm` + 295 `.bgem` | `.mat` JSON, compiled into one `.cdb` |
-| Collision | Havok 2014 packfile | Havok tagfile, `hknp` shapes |
-| Animation | 15.7k `.hkx` | `.af`/`.afx`/`.agx`/`.rig` |
-| Voice | 123k `.fuz` | Wwise `.wem` + FaceFX `.ffxanim` |
+| World | Skyrim's Tamriel terrain as a Starfield overlay on a planet, ground textures, Riverwood's river at Skyrim's level, exterior objects, grass (as static patches for now) | [terrain](docs/terrain/skyrim-tamriel.md), [objects](docs/terrain/skyrim-objects.md) |
+| Interiors | Riverwood's interiors with native collision, load doors both ways, lighting, hearth and candle fires | [interiors](docs/interior/skyrim-interiors.md) |
+| People | Skyrim NPCs with fitted faces, their own hair, Skyrim races (skin, ears, hair) and their clothing as items | [NPCs](docs/npc/README.md), [races](docs/npc/races.md) |
+| Schedules | NPC packages converted to Starfield's, in the "settled Riverwood" moment (e.g. Orgnar behind his bar) | [schedules](docs/npc/schedules.md) |
+| Furniture | Chairs, benches, beds, leaning and the alchemy lab, played with Skyrim's own animations (forge and other work stations in progress) | [furniture](docs/npc/furniture.md) |
+| Combat | Skyrim weapon animations on Starfield's skeleton, with root motion (swings carry the player, power attacks dash) | [animation](docs/armor/animation-port.md) |
+| Creatures | **New:** the first Skyrim creature on its own skeleton. Riverwood's chicken is drawn, textured and animated on Starfield's critter graph; movement is still being tuned | [creatures](docs/npc/creatures.md) |
 
-Details and sources: [docs/FORMAT-GAP.md](docs/FORMAT-GAP.md).
+Built and tested offline but not yet confirmed in game: the walled cities as their own spaces, the Skyrim voice
+pipeline, the remaining work animations (wood chopping, the sawmill, farming), and children.
+Open: quests, dialogue and scripts; magic ([notes](docs/magic/README.md)); beast races in cities; the whole world
+in one build. The [Riverwood checklist](docs/RIVERWOOD-COMPLETE.md) tracks each item as done, partial or open.
 
-## Approach in one paragraph
+## How it works
 
-A deterministic, resumable **conversion pipeline**, not a hand rebuild: Fallout 4 data → open intermediate
-formats (glTF, PNG/DDS, JSON) → Starfield formats, run by anyone on their own installs, verified by
-machine oracles at every step (parser round-trip → NifSkope/xEdit → Creation Kit → in-game screenshot),
-with fidelity tiers so the build always completes. It starts with spikes that kill or confirm the
-riskiest assumptions, then the order is **item → static → interior (Vault 111) → actor → exterior**.
-Full reasoning: [docs/PLAN.md](docs/PLAN.md).
-
-## Repo map
+Each converter is deterministic and resumable. It reads Skyrim's records and assets (plugins, BSAs, NIF, HKX,
+behaviour graphs), translates them to Starfield's formats (`.mesh` / NIF, `.mat`, `.af` / `.afx` / `.rig`, plugin
+records, terrain overlays), and writes a mod you enable in Mod Organizer 2. Claims about file formats carry evidence
+labels (**verified**, **supported hypothesis**, **unresolved**), and every tool has synthetic-fixture tests.
 
 | Path | What |
 |---|---|
-| [docs/PLAN.md](docs/PLAN.md) | Strategy, architecture, phases, verification ladder |
-| [docs/RISKS.md](docs/RISKS.md) | Risk register and the nine spikes (S1–S9) with go/no-go and fallbacks |
-| [docs/WORK-PACKAGES.md](docs/WORK-PACKAGES.md) | The task list; mirrored as GitHub issues |
-| [docs/FORMAT-GAP.md](docs/FORMAT-GAP.md) | Measured differences between the two games |
-| [docs/SETUP.md](docs/SETUP.md) | Tools and pinned versions |
-| [docs/spikes/S1-mesh-writer.md](docs/spikes/S1-mesh-writer.md) | First result: the `.mesh` / NIF format, solved offline |
-| [src/fo4sf/](src/fo4sf/) | `sfmesh` (.mesh read/write), `nif` (container), `sfnif` (Starfield blocks), `convert_static` |
-| [docs/JOURNAL.md](docs/JOURNAL.md) | Evidence journal: every experiment, newest last |
-| [docs/measurements/](docs/measurements/) | Raw JSON from the recon scripts (counts only, no game content) |
-| [scripts/](scripts/) | `recon.py`, `recon_physics.py`, `guard.py`, `render_preview.py`, [`oracles/`](scripts/oracles/) (the checks behind S1) |
+| [docs/RIVERWOOD-COMPLETE.md](docs/RIVERWOOD-COMPLETE.md) | What "Riverwood complete" means, item by item |
+| [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md) | Folders, tools and the exact commands to build and test on a PC |
+| [docs/terrain/](docs/terrain/) | Tamriel, objects, grass, LOD, cities, navmesh |
+| [docs/interior/](docs/interior/) | Interiors, items |
+| [docs/npc/](docs/npc/) | NPCs, races, schedules, furniture, creatures, voices |
+| [docs/armor/](docs/armor/) | Armor, skeletons and animation (clips, graphs, root motion, combat) |
+| [docs/research/](docs/research/) | Studies of other converters (e.g. [tes4skyrim](docs/research/tes4skyrim.md)) |
+| [docs/ai/decisions.md](docs/ai/decisions.md) | Architectural decisions, with reasons and alternatives |
+| [src/fo4sf/](src/fo4sf/) | The conversion library (Python; package name kept from upstream) |
+| [scripts/](scripts/) | Command-line converters, probes and builders, by area |
+| [dotnet/](dotnet/) | Plugin writers (Mutagen-based .NET tools) |
+| [tools/owner/](tools/owner/) | One-command PowerShell builds for the owner's PC |
 
-## Quick start (contributors)
+## Quick start
 
 ```
-git clone https://github.com/dasscooby/fo4-to-starfield
-cd fo4-to-starfield
-python -m unittest discover tests        # synthetic fixtures only
+git clone https://github.com/TheWhills/Skyrim2Starfield-Experimental-
+cd Skyrim2Starfield-Experimental-
+python -m unittest discover -s tests      # synthetic fixtures only, no game files needed
 python scripts/guard.py                   # must pass before every commit
 ```
-Then read [docs/SETUP.md](docs/SETUP.md) and pick a work package marked `ready`.
 
-To reproduce the measurements on your own installs:
-```
-python -I scripts/recon.py --fo4-esm <Fallout4.esm> --fo4-data <FO4 Data dir> --sf-data <Starfield Data dir> --out out/
-```
+Building anything for the game needs your own Skyrim Special Edition and Starfield installs (plus the Creation Kit
+for some steps). [docs/OWNER-SETUP.md](docs/OWNER-SETUP.md) lists the tools and the commands.
 
 ## Rules of the repo
 
-- **No game data, ever.** No `.esm`, `.ba2`, `.nif`, `.dds`, `.mesh`, `.hkx`, `.wem`, executables, or
-  anything derived from them beyond statistics. `scripts/guard.py` enforces it (a GitHub Actions template is in [`ci/`](ci/), not enabled yet).
+- **No game data, ever.** No `.esm`, `.bsa`, `.ba2`, `.nif`, `.dds`, `.mesh`, `.hkx`, `.af`, `.wem`, executables, or
+  anything derived from them beyond statistics. `scripts/guard.py` enforces it.
 - Converters read your copies of the games; output stays on your machine.
 - Offline / single-player only.
-- AI-assisted: this project was started with AI coding assistance. Contributions of any kind are welcome;
-  please say if yours was AI-assisted.
+- AI-assisted: much of this project is written with AI coding assistance (commit subjects name the agent, e.g.
+  `Claude:`). Contributions of any kind are welcome; please say if yours was AI-assisted.
 
-## Acknowledgments
+## Origins
 
-This project is led by **dasscooby**, with contributions from these AI coding collaborators:
-
-- **Claude** � core conversion pipeline, materials, native collision integration, plugin generation, and in-game testing.
-- **Codex (OpenAI)** � deployment and recovery, persistent identities and cache checks, source-state preservation, door animation/model tooling, and output verification.
-- **Grok (xAI)** � the interior acceptance harness, evidence requirements, and synthetic gate tests. First contribution: [pinned in-game evidence gate](https://github.com/dasscooby/fo4-to-starfield/commit/76b44dd015b5187d6fc8dee75dbf312b1f585a7b).
-
-Agent-assisted commits use the maintainer's configured Git author; `Codex:` and `Grok:` commit subjects identify their work. These acknowledgments describe contributions, not proof that the unfinished conversion is game-ready.
+This repository started as a fork of [fo4sf/fo4-to-starfield](https://github.com/fo4sf/fo4-to-starfield) (MIT), the
+Fallout 4 → Starfield toolchain by **dasscooby** and its AI collaborators (Claude, Codex, Grok), taken from its
+`claude/terrain-core64-objects` branch. Its Fallout 4 work is still here and still the foundation: the `.mesh` / NIF
+writer, materials, native collision, plugin generation, terrain overlays, and converted Fallout 4 interiors (Vault 111,
+Hotel Rexford and more): see [docs/JOURNAL.md](docs/JOURNAL.md), [docs/PLAN.md](docs/PLAN.md),
+[docs/FORMAT-GAP.md](docs/FORMAT-GAP.md) and [docs/spikes/](docs/spikes/). This fork, led by **TheWhills**, points
+that toolchain at Skyrim.
 
 ## Related projects
 
 - [fo76utils/nifskope](https://github.com/fo76utils/nifskope): NifSkope fork with Starfield `.mesh` / `.mat` support
-- [Mutagen](https://github.com/Mutagen-Modding/Mutagen): .NET library with Fallout 4 and Starfield record support
-- [PyNifly](https://github.com/BadDogSkyrim/PyNifly): Blender NIF import/export (Fallout 4)
-- [xEdit](https://github.com/TES5Edit/TES5Edit): plugin editor (`xSFEdit`, `xFOEdit`)
-- [CoACD (fo76utils fork)](https://github.com/fo76utils/CoACD): convex decomposition for collision
+- [Mutagen](https://github.com/Mutagen-Modding/Mutagen): .NET library with Skyrim, Fallout 4 and Starfield records
+- [xEdit](https://github.com/TES5Edit/TES5Edit): plugin editor (`SSEEdit`, `xSFEdit`)
+- [PyNifly](https://github.com/BadDogSkyrim/PyNifly): Blender NIF import/export
+- [tes4skyrim](https://github.com/bryantmh/tes4skyrim): Oblivion / Morrowind → Skyrim converter (studied in
+  [docs/research/tes4skyrim.md](docs/research/tes4skyrim.md))
 - [SFSE](https://sfse.silverlock.org/): Starfield Script Extender
 
 ## Legal
 
-Fallout, Starfield and Creation Engine are trademarks of Bethesda Softworks / ZeniMax Media. This project is
-unofficial and unaffiliated. It contains no Bethesda content. You need legitimate copies of both games.
-Licence: [MIT](LICENSE) (code and documentation).
+The Elder Scrolls, Skyrim, Fallout, Starfield and Creation Engine are trademarks of Bethesda Softworks / ZeniMax
+Media. This project is unofficial and unaffiliated. It contains no Bethesda content. You need legitimate copies of
+the games. Licence: [MIT](LICENSE) (code and documentation).

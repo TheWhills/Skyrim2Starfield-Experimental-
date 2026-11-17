@@ -2383,3 +2383,11 @@ critter's names, body model, as loose files at the vanilla paths), not as a new 
 Why: a new race with its own animation folders needs the per-race animation index (CK GenerateAnimInfo or SAM), which
 broke race_heads' first copy; replacing keeps the index valid and isolates the question "does Starfield take a new
 creature skeleton". Alternatives: a new race + CK index step (second test), a SAM fragment (needs SAM installed).
+
+## 2026-11-17: `main` is the working branch (Claude, owner's request)
+Decision: `main` fast-forwarded to `skyrim/armor` (990 commits; main had none of its own, and skyrim/cities,
+skyrim/ground-textures and skyrim/objects were already merged into it); new work goes to `main`. The README now
+describes this project (Skyrim -> Starfield) instead of the upstream Fallout 4 one, which moved to "Origins".
+Why: owner, 2026-11-17: the repo "still looks like it's the fallout converter, and everything is on the armor
+[branch] instead of main". Kept: `skyrim/armor` and the other branches (not deleted); `claude/headless-test-instance`
+has 3 commits of its own, unmerged.
