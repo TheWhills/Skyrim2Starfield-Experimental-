@@ -163,6 +163,16 @@ class FileTests(unittest.TestCase):
         bsx = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSXFlags")
         self.assertEqual(struct.unpack_from("<I", bsx, 4)[0], 0x1004A)
 
+    def test_with_back_faces(self):
+        from fo4sf import gearfit
+        sh = gearfit.SkyShape(b"c", np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], float), np.array([[0, 0, 1]] * 3, float),
+                              [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)], ["Pelvis"], [[(0, 1.0)]] * 3, {"Pelvis": np.eye(4)})
+        d, tan = C.with_back_faces(sh, [(1, 0, 0)] * 3)
+        self.assertEqual(len(d.points), 6)
+        self.assertEqual(d.triangles, [(0, 1, 2), (3, 5, 4)])               # the copy wound the other way
+        np.testing.assert_allclose(d.normals[3], (0, 0, -1))
+        self.assertEqual((len(d.uvs), len(d.weights), len(tan)), (6, 6, 6))
+
     def test_shell_skeleton(self):
         f = nif.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                         export_script=b"\x00", sf_data=b"\x7a\x00")

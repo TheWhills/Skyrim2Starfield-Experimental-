@@ -255,6 +255,24 @@ def to_com_space(shape, cr: CreatureRig, tangents=None):
     return dataclasses.replace(shape, points=pts, normals=nrm, joints=joints), tan
 
 
+def with_back_faces(shape, tangents=None):
+    """(shape, tangents) with a mirrored copy of every triangle (reversed winding, normals negated, the same UVs,
+    weights and tangents): a Skyrim surface drawn double-sided (SLSF2_Double_Sided) as one-sided Starfield geometry,
+    as skyrimconvert.with_back_faces does for statics. Owner, 2026-11-17 17:35: the converted chickens walk right but
+    look "almost missing a piece or underbelly" (supported: their inward-facing faces culled)."""
+    import dataclasses
+    nv = len(shape.points)
+    if 2 * nv > 0xFFFF:
+        raise ValueError(f"{nv} vertices: doubled they exceed u16 indices")
+    pts = np.concatenate([np.asarray(shape.points, float)] * 2)
+    nrm = np.asarray(shape.normals, float)
+    nrm = np.concatenate([nrm, -nrm]) if len(nrm) else nrm
+    tris = [tuple(t) for t in shape.triangles] + [(a + nv, c + nv, b + nv) for a, b, c in shape.triangles]
+    out = dataclasses.replace(shape, points=pts, normals=nrm, uvs=list(shape.uvs) * 2, triangles=tris,
+                              weights=list(shape.weights) * 2)
+    return out, (list(tangents) * 2 if tangents is not None else None)
+
+
 def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr: CreatureRig,
                   tangents=None, bsx_flags: int = BODY_BSX) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif", "geometries/<a>/<b>.mesh"}: a gearfit.SkyShape (metres, the actor's model space,

@@ -105,11 +105,15 @@ def main(argv=None):
     ap.add_argument("--texconv", default="", help="texconv.exe: the chicken's own texture (else the trilobite's material)")
     ap.add_argument("--content-resources", default="", help="ContentResources.zip (default: Starfield\\Tools)")
     ap.add_argument("--work", default="", help="scratch folder (default: <out>\\_work, removed after)")
+    ap.add_argument("--double-sided", choices=("auto", "on", "off"), default="auto",
+                    help="add back faces: auto = when Skyrim's shader sets SLSF2_Double_Sided")
+    ap.add_argument("--opaque", action="store_true",
+                    help="the chicken's material without the alpha cutout (to rule the cutout out)")
     ap.add_argument("--vanilla-material", action="store_true",
                     help="give the chicken the trilobite's own material (rules the converted material out)")
     a = ap.parse_args(argv)
 
-    from fo4sf import af_writer, bsa, creature, gearfit, nif as nifmod, retarget, skyrimhkx, skyrimskin
+    from fo4sf import af_writer, bsa, creature, gearfit, nif as nifmod, retarget, skyrimhkx, skyrimnif, skyrimskin
     import sf_anim_survey as SAS
     out = os.path.abspath(a.out)
     work = os.path.abspath(a.work or os.path.join(out, "_work"))
@@ -163,7 +167,11 @@ def main(argv=None):
     if texconv and os.path.isfile(cr_zip) and not a.vanilla_material:
         from fo4sf import skyrimconvert
         conv = skyrimconvert.SkyrimConverter(sky, os.path.join(work, "staging"), texconv, cr_zip, prefix="s2s")
-        material = conv._shape_material(src, s)
+        if a.opaque:
+            tex = skyrimnif.texture_set(src, s.shader_ref) or []
+            material = conv.skyrim_material(tex[0] if tex else "", tex[1] if len(tex) > 1 else "", False, False, 128)
+        else:
+            material = conv._shape_material(src, s)
         if material == conv.neutral:
             material = None
         staging = os.path.join(work, "staging")
@@ -175,6 +183,10 @@ def main(argv=None):
     if material is None:
         material = material_of(sf_read(CRITTER["model"]))
         rep["notes"].append(f"material: the trilobite's own ({material}); pass --texconv for the chicken's texture")
+    test, blend, ref = skyrimnif.alpha_test(src, s.alpha_ref)
+    two_sided = skyrimnif.double_sided(src, s.shader_ref)
+    rep["skyrim_shader"] = {"double_sided": two_sided, "alpha_test": test, "alpha_blend": blend, "alpha_ref": ref,
+                            "material": material, "opaque_forced": bool(a.opaque)}
     tangents = None
     if s.tangents and len(s.tangents) == len(shape.points):
         from fo4sf.skyrimhair import skin_to_model
@@ -182,6 +194,9 @@ def main(argv=None):
         tangents = [rot(t) for t in s.tangents]
     else:
         rep["notes"].append("no tangents in the Skyrim mesh: none written")
+    if a.double_sided == "on" or (a.double_sided == "auto" and two_sided):
+        shape, tangents = creature.with_back_faces(shape, tangents)
+        rep["skyrim_shader"]["back_faces_added"] = True
     files = creature.skinned_files(shape, material, CRITTER["model"][len("meshes/"):-len(".nif")], CHICKEN["com"],
                                    cr, tangents)
     for rel, data in files.items():

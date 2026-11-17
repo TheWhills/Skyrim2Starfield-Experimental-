@@ -170,4 +170,11 @@ new creature skeleton on an existing graph.
   (creature_build: root_motion_m_deg in creature_build.json). Hypothesis for the tilt: the engine does not compose
   COM's clip keys with a rotated COM rest the way af_writer assumes (rest-relative keys, verified on human bones
   whose root carries no such rotation); with COM at identity both readings agree.
+* Owner, 17:35 (screenshots beside Skyrim's chicken): fix 4 works, they "move right"; but the body looks "almost
+  missing a piece or underbelly": a hard edge down the breast, hollow between the legs. Not a rig problem (the pose
+  and stride match Skyrim's). Candidates: (1) faces Skyrim draws double-sided (SLSF2_Double_Sided) culled in
+  Starfield: the creature mesh path never added back faces, unlike statics (skyrimconvert.with_back_faces);
+  (2) the alpha cutout removing more than Skyrim's test does. Fix 5: back faces added when Skyrim's shader is
+  double-sided (--double-sided auto|on|off), the shader / alpha flags recorded in creature_build.json
+  ("skyrim_shader"), and --opaque to rule the cutout out.
 

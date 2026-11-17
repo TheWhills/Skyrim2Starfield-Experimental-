@@ -129,7 +129,7 @@ class MainTests(unittest.TestCase):
                 mock.patch.object(SAS, "archives", lambda _d: [("Starfield - Animations.ba2", Ba2())]), \
                 mock.patch.object(skyrimhkx, "describe", lambda _b: desc), \
                 mock.patch.object(skyrimhkx, "decode_clip", lambda _b, _n=None: clip), \
-                mock.patch.object(skyrimskin, "skinned_shapes", lambda _n: [type("S", (), {"tangents": []})()]), \
+                mock.patch.object(skyrimskin, "skinned_shapes", lambda _n: [type("S", (), {"tangents": [], "alpha_ref": -1, "shader_ref": -1})()]), \
                 mock.patch.object(gearfit, "from_skyrim", lambda _s: shape), \
                 mock.patch.object(af_writer, "write", fake_write), \
                 mock.patch.object(B, "gearfit_find_texconv", lambda _g: ""):
@@ -147,6 +147,8 @@ class MainTests(unittest.TestCase):
         self.assertEqual(rep["rig"]["com_rest_m"], [0.0, 0.0, round(10 * U, 4)])
         self.assertTrue(any("trilobite" in n for n in rep["notes"]))
         self.assertIn("Starfield meshes/actors/critter/animations/walkforward.afx", rep["clips_missing"])
+        self.assertEqual(rep["skyrim_shader"]["double_sided"], False)
+        self.assertNotIn("back_faces_added", rep["skyrim_shader"])
 
 
 if __name__ == "__main__":
