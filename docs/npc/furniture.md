@@ -674,4 +674,9 @@ entry side, Skyrim's wheel marker; clips Enter 2.0 s / Spin 9.1 s (idle and all 
 The armor workbench next: smithing_probe found no clip under its own name (0D932F BlacksmithWorkbench01.nif); the
 HammerTable markers' clips (AOHammer... enter / loop / idle / exit, prop AnimObjectHammerTable) are the candidate;
 smithing_probe --match on them gives the file names before a Workbench set (template: NPCWipeTable, 003B2A66).
+Owner, 21:24: the forge and tanning racks are seen in use only right after a passtime (placed straight in), never
+walked into, and the forge stays "very very rare". Two problems, then: choosing (FurnitureSpecial) and walking in. Ours
+are the only work spots with a solid model around the spot; Starfield's chairs with a model at the spot carry
+IgnoreCollisionAtRefForInteractionsKeyword, now added to Forge / Tanning / Grindstone (SPECIAL_KEYWORDS). To see a
+walk-in: after a passtime, watch in real time until he leaves the furniture and comes back.
 

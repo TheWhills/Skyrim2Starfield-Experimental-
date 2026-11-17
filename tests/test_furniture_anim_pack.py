@@ -427,8 +427,10 @@ class AnimKeywordTests(unittest.TestCase):
         MF.add_anim_keywords(tan, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimTanning": 0x01000819})
         self.assertEqual(tan["bases"]["t"]["markers"][0]["entry"], MF.ALL_SIDES)
         # FurnitureSpecial on both (2026-11-16: the sandbox's "Allow Special Furniture", like Starfield's bartender)
-        self.assertEqual(tan["bases"]["t"]["extra_keywords"], ["FurnitureSpecial"])
-        self.assertEqual(forge["bases"]["f"]["extra_keywords"], ["FurnitureSpecial"])
+        # ... and their own collision left out of the walk-in (2026-11-16 21:24: seen in use only after a passtime)
+        both = ["FurnitureSpecial", "IgnoreCollisionAtRefForInteractionsKeyword"]
+        self.assertEqual(tan["bases"]["t"]["extra_keywords"], both)
+        self.assertEqual(forge["bases"]["f"]["extra_keywords"], both)
         none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}
         MF.add_anim_keywords(none, "S2SStances.esm", read_keywords=lambda p: {})
         self.assertEqual(none["bases"]["r"]["markers"], [])

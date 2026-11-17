@@ -212,6 +212,12 @@ ANY_SIDE_SETS = {"Forge", "Tanning", "Grindstone"}
 # uses ours) carries FurnitureSpecial and so do Skyrim's crafting stations, for the sandbox's "Allow Special Furniture"
 # (on in Alvor's and Hilde's packages); the wall-wipe and welder templates do not (supported hypothesis, owner's test)
 SPECIAL_SETS = {"Forge", "Tanning", "Grindstone"}
+# 2026-11-16 21:24 (owner): these are seen in use only right after a passtime (NPCs placed straight into furniture),
+# never walked into; Alvor stood on the forge's spot and gave up before. Unlike the sweep / lean / bar markers, ours
+# carry a solid model around their spot. Starfield's chairs with a model at the spot carry
+# IgnoreCollisionAtRefForInteractionsKeyword (work_templates: NPCChair_Analyze, NPCWritingAtDesk_ExecutiveChair):
+# the furniture's own collision is left out of the interaction (supported hypothesis, owner's test)
+SPECIAL_KEYWORDS = ["FurnitureSpecial", "IgnoreCollisionAtRefForInteractionsKeyword"]
 ALL_SIDES = ["Front", "Rear", "Left", "Right"]
 SKYRIM_SPOT_SETS = {"Forge", "Grindstone"}           # the wheel's clips stand at Skyrim's wheel marker too
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
@@ -277,7 +283,7 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
             if b.get("shift_m") is not None and list(b["shift_m"]) == list(DEFAULT_SHIFT.get(b.get("kind"), [])):
                 del b["shift_m"]
         if st in SPECIAL_SETS:
-            b["extra_keywords"] = ["FurnitureSpecial"]
+            b["extra_keywords"] = list(SPECIAL_KEYWORDS)
         if st in ANY_SIDE_SETS and b.get("markers"):
             b["markers"] = [dict(m, entry=list(ALL_SIDES)) for m in b["markers"]]
         done[st] = done.get(st, 0) + 1
