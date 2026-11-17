@@ -663,5 +663,8 @@ furniture"), as Skyrim's working sandbox does in effect.
 **Owner, 21:16 (FurnitureSpecial build, the welder's own walk-in): "he randomly just used it"** - Alvor walked into the
 forge by himself and hammered (screenshot: hammer in hand, at the anvil), the first time on a schedule. One sighting:
 FurnitureSpecial (the sandbox's "Allow Special Furniture") is the supported cause; repeated use over a work day, and
-Hilde's tanning with her chair present, would confirm it. Then: our walk-in (the Pull) back without --vanilla-enter.
+Hilde's tanning with her chair present, would confirm it. Then: our walk-in (the Pull) back without --vanilla-enter.Owner, 21:17 (same build): Alvor kneeling at his tanning rack, scraping (Skyrim's tanning clip), also the first time
+by himself. Two different pieces chosen right after FurnitureSpecial went on them (never before in any build today):
+FurnitureSpecial is the cause (supported, strongly). Open: whether other sets NPCs should pick by themselves (cooking
+pot, alchemy, enchanting on Starfield workbench templates) need it too.
 

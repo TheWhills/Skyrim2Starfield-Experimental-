@@ -2338,4 +2338,8 @@ empty nodes; the effect system behind them is unknown).
   into either (the forge on the tanning rack's NPCStanding_WipeWall: Hilde tanned once the forge was left a static). The
   forge moved to NPCWelder (AnimFurnWelder) of its own. Skyrim's idle markers are brief stops (IDLT 0-10 s, Gerdur's
   table 40000 s; idle_marker_timers.py); our standing furniture from them has no limit (open).
+- 2026-11-16 Supported (owner, in game): Starfield's sandbox ("Allow Special Furniture") picks work furniture only when
+  it carries FurnitureSpecial (as Starfield's NPCBartender_Standing and Skyrim's crafting stations do); the wall-wipe
+  and welder templates lack it. make_furniture SPECIAL_SETS (Forge, Tanning) add it (PluginSpike extra_keywords):
+  Alvor then used the forge and his tanning rack by himself for the first time.
 
