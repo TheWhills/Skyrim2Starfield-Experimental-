@@ -26,26 +26,51 @@ from .retarget import Rig, SKYRIM_M_PER_UNIT, qmul, qrot
 COM = "COM"
 
 
+ROOT = "Root"
+IDENTITY_Q = np.array([0.0, 0.0, 0.0, 1.0])
+
+
 @dataclass
 class CreatureRig:
     names: List[str]
     parents: List[int]
     t: np.ndarray            # (B, 3) metres, local rest
     q: np.ndarray            # (B, 4) x y z w
-    sources: List[int]       # index of each bone in the Skyrim skeleton
+    sources: List[int]       # index of each bone in the Skyrim skeleton (-1: Root, which Skyrim has no bone for)
     root: int                # the folded Skyrim root (index in the Skyrim skeleton), -1 if none
     com: int                 # the Skyrim bone that became COM
+    level: np.ndarray = None # COM's Skyrim rest rotation, moved into COM's children (COM rests unrotated)
+
+    @property
+    def com_index(self) -> int:
+        return self.names.index(COM)
 
     def fold(self, lt, lq, unit: float = SKYRIM_M_PER_UNIT):
-        """Skyrim locals (..., Bs, 3) / (..., Bs, 4) in Havok units -> this rig's locals in metres."""
+        """Skyrim locals (..., Bs, 3) / (..., Bs, 4) in Havok units -> this rig's locals in metres: Root (if any) at
+        rest (root motion is added by the caller), the Skyrim root folded into COM, and COM levelled (self.level
+        taken out of COM and put into its children: every bone's world transform is unchanged)."""
         lt, lq = np.asarray(lt, float), np.asarray(lq, float)
-        t = lt[..., self.sources, :] * unit
-        q = lq[..., self.sources, :].copy()
+        lead = lt.shape[:-2]
+        B = len(self.names)
+        t = np.zeros(lead + (B, 3))
+        q = np.zeros(lead + (B, 4))
+        q[..., 3] = 1.0
+        mine = [i for i, src in enumerate(self.sources) if src >= 0]
+        srcs = [self.sources[i] for i in mine]
+        t[..., mine, :] = lt[..., srcs, :] * unit
+        q[..., mine, :] = lq[..., srcs, :]
+        k = self.com_index
         if self.root >= 0:
-            k = self.sources.index(self.com)
             rq, rt = lq[..., self.root, :], lt[..., self.root, :] * unit
             q[..., k, :] = qmul(rq, lq[..., self.com, :])
             t[..., k, :] = rt + qrot(rq, lt[..., self.com, :] * unit)
+        if self.level is not None:
+            lv = np.broadcast_to(self.level, q[..., k, :].shape)
+            q[..., k, :] = qmul(q[..., k, :], lv * np.array([-1.0, -1.0, -1.0, 1.0]))
+            for c, p in enumerate(self.parents):
+                if p == k:
+                    t[..., c, :] = qrot(lv, t[..., c, :])
+                    q[..., c, :] = qmul(lv, q[..., c, :])
         return t, q
 
     def rig(self) -> Rig:
@@ -53,10 +78,14 @@ class CreatureRig:
 
 
 def creature_rig(sk: Rig, com: str = "Pelvis", root: Optional[str] = None,
-                 unit: float = SKYRIM_M_PER_UNIT) -> CreatureRig:
+                 unit: float = SKYRIM_M_PER_UNIT, add_root: bool = True, level_com: bool = True) -> CreatureRig:
     """The Starfield rig of a Skyrim creature skeleton (Havok units): `root` (default the skeleton's root when it is
-    the COM bone's parent) folded into `com`, which is renamed COM and becomes the rig's root; other bones keep
-    names and hierarchy. Bones outside COM's subtree (none on the chicken) are dropped."""
+    the COM bone's parent) folded into `com`, which is renamed COM; with add_root a Root bone at the origin above it
+    (the shell's Root > COM; the critter's moving clips key Root, owner's motion probe 2026-11-17); with level_com
+    COM rests unrotated, as the critter's does (its clips hold COM level), its Skyrim rest rotation moved into its
+    children (owner, 2026-11-17 14:29 / 14:38: with the chicken's Pelvis pitch (-56 deg about x) on COM the birds
+    stood tilted back, legs pedalling in front). Other bones keep names and hierarchy; bones outside COM's subtree
+    (none on the chicken) are dropped."""
     if com not in sk.index:
         raise ValueError(f"no bone {com!r}")
     ci = sk.index[com]
@@ -69,11 +98,17 @@ def creature_rig(sk: Rig, com: str = "Pelvis", root: Optional[str] = None,
     for i in range(len(sk.names)):                       # parents precede children (Rig): one pass finds the subtree
         if i == ci or (sk.parents[i] >= 0 and sk.parents[i] in keep):
             keep.append(i)
-    pos = {s: k for k, s in enumerate(keep)}
-    names = [COM if i == ci else sk.names[i] for i in keep]
-    parents = [-1 if i == ci else pos[sk.parents[i]] for i in keep]
-    cr = CreatureRig(names, parents, np.zeros((len(keep), 3)), np.zeros((len(keep), 4)), keep, ri, ci)
+    lead = 1 if add_root else 0
+    pos = {s: k + lead for k, s in enumerate(keep)}
+    names = ([ROOT] if add_root else []) + [COM if i == ci else sk.names[i] for i in keep]
+    parents = ([-1] if add_root else []) + [(0 if add_root else -1) if i == ci else pos[sk.parents[i]] for i in keep]
+    sources = ([-1] if add_root else []) + keep
+    cr = CreatureRig(names, parents, np.zeros((len(names), 3)), np.zeros((len(names), 4)), sources, ri, ci)
     cr.t, cr.q = cr.fold(sk.t, sk.q, unit)
+    if level_com:
+        lv = cr.q[cr.com_index].copy()
+        cr.level = lv / (np.linalg.norm(lv) or 1.0)
+        cr.t, cr.q = cr.fold(sk.t, sk.q, unit)
     return cr
 
 
@@ -148,15 +183,18 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
     bsx = f.add_block("BSXFlags", struct.pack("<iI", f.string_index(b"BSX"), bsx_flags))
     node_of, kids = {}, {root: []}
     for i, name in enumerate(cr.names):
+        if name == ROOT:                                 # the body hangs off COM: no Root node in it (vanilla)
+            continue
         b = f.add_block("NiNode", b"")
-        if cr.parents[i] < 0:
+        if name == COM:
             e = f.add_block("NiStringExtraData", struct.pack("<ii", f.string_index(b"ParentBoneName"),
                                                              f.string_index(name.encode("latin-1"))))
         else:
             e = f.add_block("NiStringExtraData", struct.pack("<ii", s_keep, s_keep))
         node_of[i] = (b, e)
         kids[b] = []
-        kids[root if cr.parents[i] < 0 else node_of[cr.parents[i]][0]].append(b)
+        p = cr.parents[i]
+        kids[root if name == COM or p < 0 or cr.names[p] == ROOT else node_of[p][0]].append(b)
     base = len(f.blocks)
     nb = len(bones)
     g = sfnif.BSGeometry(name_idx=f.string_index(shape.name), extra_refs=[base + 2, base + 3], sphere=(0.0, 0.0, 0.0, 0.0),
@@ -181,8 +219,10 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
                 + struct.pack(f"<{len(children)}i", *children))
     f.blocks[root] = node(f.string_index(root_name), [bsx], ident, kids[root])
     for i, name in enumerate(cr.names):
+        if name == ROOT:
+            continue
         b, e = node_of[i]
-        if cr.parents[i] < 0:                            # COM_Twin: the model's origin is COM itself
+        if name == COM:                                  # COM_Twin: the model's origin is COM itself
             xform = ident
         else:
             xform = struct.pack("<3f", *map(float, cr.t[i])) + struct.pack("<9ff", *quat_to_rot9(cr.q[i]), 1.0)
@@ -193,10 +233,12 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
 
 
 def com_world(cr: CreatureRig) -> np.ndarray:
-    """4x4 rest world of the rig's root (COM), metres."""
+    """4x4 rest world of COM, metres."""
+    wt, wq = cr.rig().rest_world()
+    k = cr.com_index
     m = np.eye(4)
-    m[:3, :3] = np.array(quat_to_rot9(cr.q[0])).reshape(3, 3)
-    m[:3, 3] = cr.t[0]
+    m[:3, :3] = np.array(quat_to_rot9(wq[k])).reshape(3, 3)
+    m[:3, 3] = wt[k]
     return m
 
 

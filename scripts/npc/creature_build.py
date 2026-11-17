@@ -32,7 +32,7 @@ import numpy as np  # noqa: E402
 CHICKEN = {"folder": "meshes\\actors\\ambient\\chicken\\",
            "skeleton": "meshes\\actors\\ambient\\chicken\\character assets\\skeleton.hkx",
            "model": "meshes\\actors\\ambient\\chicken\\character assets\\chicken.nif",
-           "com": "Pelvis"}
+           "com": "Pelvis", "project": "ChickenProject"}
 CRITTER = {"skeleton": "meshes/actors/critter/characterassets/skeleton.nif",
            "rig": "meshes/actors/critter/characterassets/skeleton.rig",
            "anims": "meshes/actors/critter/animations/",
@@ -139,12 +139,13 @@ def main(argv=None):
     sk_desc = max(d["skeletons"], key=lambda s: len(s["bones"]))
     sk = retarget.rig_from_hkx_skeleton(sk_desc)
     cr = creature.creature_rig(sk, CHICKEN["com"])
-    rep["rig"] = {"bones": cr.names, "com_rest_m": [round(float(v), 4) for v in cr.t[0]]}
+    ci = cr.com_index
+    rep["rig"] = {"bones": cr.names, "com_rest_m": [round(float(v), 4) for v in cr.t[ci]],
+                  "com_level_q": [round(float(v), 4) for v in (cr.level if cr.level is not None else (0, 0, 0, 1))]}
 
     # 2. the shell
-    put(CRITTER["skeleton"], creature.shell_skeleton(sf_read(CRITTER["skeleton"]), "Critter_mrRigRoot", cr.t[0],
-                                                     cr.q[0]))
-    rep["rig"]["com_rest_q"] = [round(float(v), 4) for v in cr.q[0]]
+    put(CRITTER["skeleton"], creature.shell_skeleton(sf_read(CRITTER["skeleton"]), "Critter_mrRigRoot", cr.t[ci],
+                                                     cr.q[ci]))
 
     # 3. the body
     model = sky._read(CHICKEN["model"])
@@ -186,7 +187,9 @@ def main(argv=None):
     for rel, data in files.items():
         put(rel, data)
 
-    # 4. clips (+ the rig)
+    # 4. clips (+ the rig), with Skyrim's root motion on Root and in the header (as the critter's moving clips)
+    from fo4sf import rootmotion
+    motion = motion_blocks(sky, CHICKEN["folder"], CHICKEN["project"], rep)
     plan, missing = plan_clips(sky_names, set(index))
     rep["clips_missing"] = missing
     anim_out = os.path.join(work, "anims")
@@ -195,16 +198,26 @@ def main(argv=None):
     for key, src_clip in plan:
         clip = retarget.resample(skyrimhkx.decode_clip(sky._read(src_clip), sk_desc["bones"]))
         lt, lq = creature.clip_locals(clip, sk, cr)
+        clip_stem = posixpath.basename(src_clip.replace("\\", "/"))[:-len(".hkx")].lower()
+        rt, rq = root_motion(motion.get(clip_stem), lt.shape[0], rootmotion)
+        moving = rt is not None and rootmotion.moves(rt, rq)
+        if moving:
+            lt[:, 0], lq[:, 0] = rt, rq
         vafx = sf_read(key)
         from fo4sf import agx
         stem = os.path.splitext(agx.read_descriptor(vafx)["filename"] or posixpath.basename(key))[0]
         r = af_writer.write(a.calumi, anim_out, stem, cr.names, cr.parents, cr.t, cr.q, lt, lq, rig_path=rig_file,
-                            rig_name="S2SChicken", like_afx=vafx, file_name=stem)
+                            rig_name="S2SChicken", like_afx=vafx, file_name=stem,
+                            omit=() if moving else (creature.ROOT,))
+        if moving:
+            rootmotion.patch_header(os.path.join(anim_out, stem + ".af"), rt[-1], rq[-1])
         rig_file = rig_file or r["rig"]
         for ext in (".af", ".afx"):
             with open(os.path.join(anim_out, stem + ext), "rb") as fh:
                 put(CRITTER["anims"] + stem + ext, fh.read())
-        rep["clips"].append({"critter": key, "skyrim": src_clip, "frames": r["frames"], "keys": r["keys"]})
+        rep["clips"].append({"critter": key, "skyrim": src_clip, "frames": r["frames"], "keys": r["keys"],
+                             "root_motion_m_deg": None if not moving else
+                             [round(float(v), 3) for v in rt[-1]] + [round(rootmotion.yaw_degrees(rq[-1]), 1)]})
     if rig_file:
         with open(rig_file, "rb") as fh:
             put(CRITTER["rig"], fh.read())
@@ -214,6 +227,46 @@ def main(argv=None):
     print(f"wrote {len(rep['written'])} files to {out}; clips {len(rep['clips'])}, missing {missing}")
     print(f"in game: enable the mod, then  player.placeatme {CRITTER['npc']}")
     return 0
+
+
+def motion_blocks(sky, folder: str, project: str, rep: dict) -> dict:
+    """{clip file stem: motion block} of a Skyrim creature project (animationdatasinglefile, mapped to clip files
+    through the project's behaviours; creature_probe --motion printed the chicken's: walk 0.50 m/s, run 3.6 m/s,
+    canned turns +90 / +180 deg, flee turns that also move). {} when the file is not in the archives."""
+    from fo4sf import animdata, bsa, skyrimbehavior
+    try:
+        text = sky._read("meshes\\animationdatasinglefile.txt")
+    except Exception:                                    # noqa: BLE001
+        text = None
+    if not text:
+        rep["notes"].append("animationdatasinglefile.txt not found: clips without root motion")
+        return {}
+    projects = animdata.parse(text.decode("latin-1"))
+    proj = next((p for k, p in projects.items() if k.lower() == project.lower()), None)
+    if proj is None:
+        rep["notes"].append(f"motion: project {project} not found")
+        return {}
+    behaviors = []
+    for ar in sky.archives:
+        for n in ar.names:
+            k = bsa.norm(n)
+            if k.startswith(folder) and "\\behaviors\\" in k and k.endswith(".hkx"):
+                try:
+                    behaviors.append(skyrimbehavior.read(sky._read(k)))
+                except Exception:                        # noqa: BLE001
+                    pass
+    return animdata.clip_motion(proj, animdata.clip_generators(behaviors))
+
+
+def root_motion(block, frames: int, rootmotion, fps: float = 30.0):
+    """(F, 3) metres / (F, 4) Root track of a motion block over a clip of `frames` at fps, or (None, None)."""
+    from fo4sf.retarget import SKYRIM_M_PER_UNIT
+    if not block:
+        return None, None
+    m = rootmotion.from_annotations(rootmotion.motion_annotations(block), frames, fps)
+    if m is None:
+        return None, None
+    return rootmotion.root_track(m, SKYRIM_M_PER_UNIT)
 
 
 def gearfit_find_texconv(given):

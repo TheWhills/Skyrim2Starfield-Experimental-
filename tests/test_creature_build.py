@@ -48,6 +48,19 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(r["COM"], (0.0, 0.0))
         self.assertAlmostEqual(r["HEAD"][0], 0.01, places=4)
 
+    def test_root_motion(self):
+        from fo4sf import rootmotion
+        U = retarget.SKYRIM_M_PER_UNIT
+        walk = {"duration": 1.0, "translations": [(1.0, 0.0, 0.496 / U, 0.0)], "rotations": [(1.0, 0, 0, 0, 1)]}
+        t, q = B.root_motion(walk, 31, rootmotion)
+        np.testing.assert_allclose(t[-1], (0, 0.496, 0), atol=1e-6)
+        np.testing.assert_allclose(t[15], (0, 0.496 / 2, 0), atol=1e-3)      # one key at the end: steady speed
+        s = np.sqrt(0.5)
+        turn = {"duration": 0.833, "translations": [(0.833, 0, 0, 0)], "rotations": [(0.833, 0, 0, s, s)]}
+        t, q = B.root_motion(turn, 26, rootmotion)
+        self.assertAlmostEqual(rootmotion.yaw_degrees(q[-1]), 90.0, places=3)
+        self.assertEqual(B.root_motion(None, 10, rootmotion), (None, None))
+
 
 class MainTests(unittest.TestCase):
     def test_main_with_fake_games(self):
@@ -68,7 +81,7 @@ class MainTests(unittest.TestCase):
                 self.archives = [type("Ar", (), {"names": list(sky_files)})()]
 
             def _read(self, n):
-                return sky_files[n]
+                return sky_files.get(n)
         # Starfield: the critter shell (test_creature's), the trilobite model, one descriptor
         f = nif.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                         export_script=b"\x00", sf_data=b"\x7a\x00")
@@ -129,7 +142,7 @@ class MainTests(unittest.TestCase):
                         B.CRITTER["anims"] + "Idle.afx"):
                 self.assertTrue(os.path.isfile(os.path.join(out, *rel.split("/"))), rel)
             self.assertFalse(os.path.isdir(os.path.join(out, "_work")))
-        self.assertEqual(calls, [("Idle", ["COM", "HEAD"], None, "Idle")])
+        self.assertEqual(calls, [("Idle", ["Root", "COM", "HEAD"], None, "Idle")])
         self.assertEqual(rep["bind_vs_rig_m_deg"], {"COM": [0.0, 0.0], "HEAD": [0.0, 0.0]})
         self.assertEqual(rep["rig"]["com_rest_m"], [0.0, 0.0, round(10 * U, 4)])
         self.assertTrue(any("trilobite" in n for n in rep["notes"]))

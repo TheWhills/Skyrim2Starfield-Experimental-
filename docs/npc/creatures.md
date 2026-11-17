@@ -153,4 +153,21 @@ new creature skeleton on an existing graph.
   chicken's COM rest rotation; the engine placing COM by the shell node turns the whole chicken by the difference.
   Fix 3: the shell's COM gets the chicken's COM rest rotation (com_rest_q in creature_build.json); the probe's node
   tree prints node rotations, to compare with the critter's COM.
+* Owner, 14:38 (after fix 3, screenshot): still tilted back, legs pedalling in front. Fix 3 did land (shell compare:
+  our COM q (-0.469, 0, 0, 0.883), i.e. -56 deg about x = the chicken's Pelvis rest), so the shell rotation was not
+  the cause.
+* Verified (owner's motion probe): the vanilla critter's shell COM is unrotated and its clips hold COM level
+  (yaw ~0, height 0.144-0.157 m in idle / walk / jog / run / turns); its moving clips have a Root track (walk, jog,
+  run, turns, flee) and carry their motion in the header (walk +0.504 m over 40 frames, jog +0.600, run +0.650,
+  TurnInPlace_Left90 +90 deg, Right90 -90 deg, RunDeparture_Left180 -0.783 m and +180 deg); idles have no Root.
+  Skyrim's chicken (animationdatasinglefile, ChickenProject): walk 0.496 m in 1.0 s, run 3.600 m in 1.0 s, canned
+  turns +90 / +180 deg in place, flee turns also move (L90: x -1.274 m; L180: y -0.890 m); idles none. Its behaviour
+  plays the right turns and two idles as mirrored left ones (8 "[mirror]" generators). Same sign convention as
+  Starfield's headers (left = +yaw).
+* Fix 4 (supported, to test): COM levelled like the critter's (creature_rig level_com: the Pelvis rest rotation moved
+  out of COM into its children, world pose unchanged; the shell COM and the body's COM space follow), a Root bone
+  above COM in the rig, and every moving clip gets Skyrim's root motion as its Root track and header
+  (creature_build: root_motion_m_deg in creature_build.json). Hypothesis for the tilt: the engine does not compose
+  COM's clip keys with a rotated COM rest the way af_writer assumes (rest-relative keys, verified on human bones
+  whose root carries no such rotation); with COM at identity both readings agree.
 
