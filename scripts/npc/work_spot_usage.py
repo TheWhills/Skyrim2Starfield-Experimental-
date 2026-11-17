@@ -22,7 +22,8 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
 
 BASES = ("NPCWelder", "NPCStanding_WipeWall", "NPCStanding_WipeWall_ExitToTalk", "NPCSweeping", "NPCSweeping_ExitToTalk",
-         "NPCBartender_Standing", "NPCRepairImpactWrench_Standing")
+         "NPCBartender_Standing", "NPCRepairImpactWrench_Standing", "NPCWipeTable",
+         "NPCLeaningBartopFront")
 
 
 def linked_refs(subs) -> list:

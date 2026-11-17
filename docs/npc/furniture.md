@@ -762,3 +762,11 @@ built like the working leans' (motionless, SetPos window; the sweep has none). L
 (--vanilla-enter A/B); (b) he is not trying the forge at all: the spot by the rail may be his work package's centre
 (Location: XMarkerHeading 02C308, tanning rack 1.4 m and forge 2.2 m from it), where a sandboxing NPC stays when it has
 nothing chosen. furniture_navmesh --ref 02C308 prints that marker's position and the furniture nearest it.
+Owner, 22:16 (the --vanilla-enter Forge / Grindstone / Workbench build, models back, stand spots off; pack log:
+"Starfield's own EnterFromStand copied", CK cache 789 / 792 / 8): Alvor "still just walking back and forth and not
+entering any unless there's a passtime". So Starfield's own walk-in does not get him in either (now with FurnitureSpecial
+on, a valid test): our walk-in clips are ruled out. Ruled out so far for walking in: navmesh, the model's collision and
+Is Marker (22:00 build), our walk-in clips (this build), template sharing, entry sides. The sandbox does pick the
+stations (a passtime places him in them). Next, evidence from Starfield itself: work_spot_usage.py (written 20:37,
+never run; NPCWipeTable and NPCLeaningBartopFront added) on how Starfield.esm's own NPCs reach its welder / wall-wipe /
+repair / wipe-table spots (packages naming the reference, actors' linked references and keywords, ownership).
