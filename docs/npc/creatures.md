@@ -214,4 +214,9 @@ new creature skeleton on an existing graph.
   clips were written (against the unpatched rig, every bone level 0). The vanilla walk clip has bone lists near its
   start that ours lays out differently (clip compare, 18:12). Fix 9: creature_build makes the rig first (with the
   first clip), patches its levels, then writes every clip against the patched rig.
+* Owner, 18:23: fix 9 (rig patched before the clips) did not help. 18:25, the control: the VANILLA trilobite (mod off)
+  keeps walking with its legs from afar. Verified: the freeze comes from our files, not from critter-sized creatures.
+  Fixes 7-9 (rig levels, LOD0-3 slots, rig before clips) each left it unchanged; the rig fields' meaning is
+  unresolved. Next: CALUMI / sf_animation_io's own code (owner's copy) for the rig and clip fields, and whether only
+  the legs or the whole bird freezes (per-bone vs whole-body).
 
