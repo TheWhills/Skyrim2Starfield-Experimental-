@@ -629,6 +629,7 @@ one looping scene per clip, without `unlisted`.
   mapped Skyrim annotations into the .afx (others stay in <clip>.events.json); rampout = blend-out frames.
 
 ## Creatures: lessons from TES4 AutoConvert (2026-10-19)
+Superseded 2026-11-17 by a full read of the converter: docs/research/tes4skyrim.md.
 Read from its design notes (github.com/bryantmh/tes4skyrim, docs/commentary/asset_convert_creature.md,
 docs/plans/horse_rideability.md, docs/reference/creature_race_equivalence.md; read only, no code taken). Its creature
 port (Oblivion / Morrowind / FNV -> Skyrim) is live end to end. What carries over:

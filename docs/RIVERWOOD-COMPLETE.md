@@ -24,7 +24,7 @@ times the NPCs, interiors and objects; a whole-world build has never been run).
 | People | The 12 adults: faces, hair, records | partial | faces in the face-test plugin; clothing / armor in game to check |
 | People | Children (Dorthe, Frodnar) | open | docs/npc/races-roadmap.md I2; then DorthePlay's "near the NPC" target is exercised |
 | People | Dialogue / voices | partial | Starfield generic voice types; Skyrim voice pipeline docs/npc/voice-pipeline.md |
-| Creatures | Riverwood's animals (to list from the data: chickens, a dog, ...) | open | first creature conversion: skeleton, behaviour, race |
+| Creatures | Riverwood's animals (to list from the data: chickens, a dog, ...) | open | first creature conversion: skeleton, behaviour, race; method and the open skeleton question: docs/research/tes4skyrim.md |
 | Schedules | Converted packages, settled Riverwood moment | done | docs/npc/schedules.md, docs/ai/decisions.md |
 | Schedules | Eat location, carry start | partial | INPUT_ALIAS (2026-11-17), to check in game |
 | Schedules | Sandbox moves between stations (Alvor), no endless repeat (Hilde) | open | -SitAt block test pending; docs/npc/furniture.md |
