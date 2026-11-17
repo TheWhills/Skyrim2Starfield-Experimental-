@@ -123,11 +123,28 @@ def report(refs, bases, tris) -> str:
     return "\n".join(lines)
 
 
+def ref_position(subs):
+    """A placed reference's DATA position (x, y, z), or None."""
+    import struct
+    d = next((d for s, d in subs if s == b"DATA"), None)
+    return struct.unpack_from("<3f", d, 0) if d and len(d) >= 12 else None
+
+
+def distances(name, pos, refs) -> str:
+    """How far each watched furniture reference is from pos (metres), nearest first."""
+    rows = sorted((math.dist(pos[:2], r["pos"][:2]) * UNIT_M, r["base_editor_id"], r["formkey"]) for r in refs)
+    return "\n".join([f"\n{name} at ({pos[0]:.0f}, {pos[1]:.0f}, {pos[2]:.0f})"]
+                     + [f"  {d:6.2f} m  {e} {fk}" for d, e, fk in rows[:8]])
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
     ap.add_argument("--exterior-furniture", required=True, help="make_skyrim_interior's exterior_furniture.json")
     ap.add_argument("--furniture", help="make_furniture's furniture.json (the markers; default: the reference itself)")
+    ap.add_argument("--ref", action="append", default=[], metavar="FORMID",
+                    help="also print where this Skyrim reference is (hex FormID, e.g. a package's location marker "
+                         "02C308) and the furniture nearest it")
     a = ap.parse_args(argv)
     with open(a.exterior_furniture, encoding="utf-8") as fh:
         ext = json.load(fh)
@@ -144,6 +161,21 @@ def main(argv=None):
     tris = triangles(navs)
     print(f"Skyrim navmesh cells {rect}: {len(navs)} navmeshes, {len(tris)} triangles, unreadable {len(bad)}")
     print(report(refs, bases, tris))
+    if a.ref:
+        from fo4sf import packages
+        ix = packages.Index(a.skyrim)
+        try:
+            for h in a.ref:
+                fid = int(h, 16)
+                pos = ref_position(ix.subs(fid))
+                if pos is None:
+                    print(f"\n{h}: no placed reference with a position")
+                    continue
+                on, d, _ = probe(pos, tris)
+                print(distances(f"{h} {ix.edid(fid) or ''}", pos, refs))
+                print("  itself: " + ("ON navmesh" if on else f"off ({d * UNIT_M:.2f} m)" if d is not None else "off"))
+        finally:
+            ix.close()
 
 
 if __name__ == "__main__":

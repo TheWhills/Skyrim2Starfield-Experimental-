@@ -752,3 +752,13 @@ the grindstone 2 cm: Skyrim's Alvor also has to stand on the forge spot itself. 
 navmesh (Skyrim may slide actors onto off-navmesh spots, Starfield may not). furniture_navmesh.py (read-only) prints,
 per work station and lean / sweep spot, whether the marker is on Skyrim's navmesh (ours is Skyrim's, converted), the
 distance to the nearest navmesh, and 0.5 / 1.0 m out on each side.
+furniture_navmesh (owner, 22:11, **verified**): every work station spot is ON Skyrim's navmesh (forge, armor
+workbench, both grindstones, both tanning racks), and so is the floor 0.5-1.0 m behind each (Rear: on for all but the
+Riverwood grindstone at 1.0 m). Several leans that NPCs do use are OFF it (rail leans 08B830 0.20 m, 08B821 0.04 m,
+08B824 0.15 m; wall leans 10538E 0.19 m, 054381 0.11 m, 033DC8, 08B822). So the navmesh is not what keeps Alvor out
+(hypothesis refuted). Also ruled out by the 22:00 build: the record flag Is Marker (FURNITURE_MODEL=vanilla keeps the
+template's model and the flag, as the working leans have) with the solid model. The cache shows our station walk-ins
+built like the working leans' (motionless, SetPos window; the sweep has none). Left: (a) Starfield's own walk-in
+(--vanilla-enter A/B); (b) he is not trying the forge at all: the spot by the rail may be his work package's centre
+(Location: XMarkerHeading 02C308, tanning rack 1.4 m and forge 2.2 m from it), where a sandboxing NPC stays when it has
+nothing chosen. furniture_navmesh --ref 02C308 prints that marker's position and the furniture nearest it.

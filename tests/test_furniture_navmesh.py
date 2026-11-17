@@ -47,5 +47,17 @@ class FurnitureNavmeshTest(unittest.TestCase):
         self.assertNotIn("WoodenChair01", txt)
 
 
+class RefTest(unittest.TestCase):
+    def test_ref_position_and_distances(self):
+        import struct
+        self.assertEqual(F.ref_position([(b"DATA", struct.pack("<6f", 1, 2, 3, 0, 0, 0))]), (1.0, 2.0, 3.0))
+        self.assertIsNone(F.ref_position([]))
+        refs = [{"pos": [70.0, 0.0, 0.0], "base_editor_id": "Forge", "formkey": "A"},
+                {"pos": [0.0, 140.0, 0.0], "base_editor_id": "Tanning", "formkey": "B"}]
+        txt = F.distances("XMarkerHeading", (0.0, 0.0, 0.0), refs)
+        self.assertLess(txt.index("Forge"), txt.index("Tanning"))
+        self.assertIn(f"{70 * F.UNIT_M:6.2f} m", txt)
+
+
 if __name__ == "__main__":
     unittest.main()
