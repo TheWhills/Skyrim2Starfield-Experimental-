@@ -228,3 +228,10 @@ new creature skeleton on an existing graph.
   Fix 10 (supported, not verified): af_writer.copy_rig_package gives our rig the vanilla critter rig's bone-map keys
   for the bones both name (Root, COM), its mannequin flag and its precision, as rig_prefix already did for the human
   rig. The per-bone level patch (fix 7) is now off by default (--rig-lod 0); --no-rig-package builds the old rig.
+* Owner, 18:48: fix 10 built (creature_build.json: package_keys Root 0, COM 9) and the whole chicken still freezes
+  afar. Ruled out offline: the body's bounding sphere (0 radius, FLT_MAX box) is the same in the vanilla trilobite
+  (model_compare). CALUMI's README lists "full .af/.rig decoding" as planned, so it may not write something the game
+  uses at a distance. Next, a bisect on the VANILLA trilobite with nothing of the chicken's
+  (scripts/npc/critter_roundtrip.py): `--what clips` (the critter's own clips read and rewritten by CALUMI against
+  the vanilla rig) and `--what rig` (the vanilla rig copied by CALUMI). Whichever one makes the vanilla trilobite
+  freeze afar is the part CALUMI writes wrong; if neither does, the cause is in our rig's bones or the shell.

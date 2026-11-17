@@ -187,6 +187,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Enable "S2S Chicken Test" in MO2 (loose files, no plugin). In game: `player.placeatme 2C180F`. Send
    "$mods\S2S Chicken Test\creature_build.json" and say what stands there (chicken? textured? idles / walks?).
    Disable the mod after: it replaces the critters' rig.
+7i. B + C: bisect the chicken's distance freeze on the vanilla trilobite (docs/npc/creatures.md). Starfield closed,
+   "S2S Chicken Test" disabled:
+   ```powershell
+   python -I scripts\npc\critter_roundtrip.py --starfield-data "$sf\Data" --calumi $calumi --what clips --out "$mods\S2S Critter Clip Test"
+   python -I scripts\npc\critter_roundtrip.py --starfield-data "$sf\Data" --calumi $calumi --what rig --out "$mods\S2S Critter Rig Test"
+   ```
+   Enable ONE of the two at a time; in game `player.placeatme 2C180F` and walk off. Say which (if either) makes the
+   vanilla trilobite freeze and slide a few feet away; send critter_roundtrip.json if it lists errors.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
