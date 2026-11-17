@@ -116,8 +116,11 @@ SETS = {
     "Forge": standing_set("s2s_forge", "welder", "blacksmithforgehammer.hkx",
                           ("blacksmithforgetemper.hkx", "blacksmithforgediscard.hkx+blacksmithforgepull.hkx"),
                           "blacksmithforgepull.hkx", "blacksmithforgeexit.hkx", 4, instant=True),
-    # The Grindstone set (Skyrim's sharpening wheel: Enter / Spin / Exit on the wall-wipe template) was removed
-    # 2026-11-16 (owner: "Can we remove the grindstone stuff for now"); docs/npc/furniture.md keeps its clips.
+    # 2026-11-16 21:19 (owner: "Let's add the grindstone now"): Skyrim's sharpening wheel (smithing_probe: Enter 2.0 s ->
+    # Spin 9.1 s loop; Exit 2.0 s) on the standing repair spot's folder (repair_toolstanding: 9 flavors, all the Spin)
+    "Grindstone": standing_set("s2s_grindstone", "repair_toolstanding", "blacksmithsharpeningwheelspin.hkx",
+                               (), "blacksmithsharpeningwheelenter.hkx", "blacksmithsharpeningwheelexit.hkx", 9,
+                               instant=True),
 }
 
 # Seat / stand offset per set (metres, X,Y): measured once by the Idle's --align-com and kept, so reruns skip that pass.
@@ -132,7 +135,7 @@ SETS = {
 COM_SHIFT = {"Sit": (0.027, -0.091), "WallLean": (0.0, 0.0), "RailLean": (0.0, 0.0), "Counter": (0.0, 0.0),
              "LeanTable": (0.0, 0.0), "Sweep": (0.0, 0.0), "Alchemy": (0.014, -0.037),
              "Enchant": (0.015, -0.035), "Cook": (0.015, -0.027), "Tanning": (0.0, 0.0),
-             "Forge": (0.0, 0.0)}           # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
+             "Forge": (0.0, 0.0), "Grindstone": (0.0, 0.0)}           # Skyrim's forge marker (make_furniture SKYRIM_SPOT_SETS): Skyrim's placement
 
 
 # Descriptor variables left out of our copies (2026-11-14, owner, in game: seated on our bench the arms were pulled back

@@ -172,7 +172,7 @@ class MakeFurnitureTests(unittest.TestCase):
         for e in ("CommonChair01F", "WoodenChair01", "NobleChair01", "InvisibleChairMarker", "InvisibleChairMarkerChild"):
             self.assertEqual(M.kind_of({"type": "FURN", "edid": e, "keywords": [], "entry_points": sit}), "chair", e)
         self.assertEqual(M.kind_of({"type": "FURN", "edid": "CraftingBlacksmithSharpeningWheel", "keywords": []}),
-                         "weapon_bench")                       # a crafting station, not caught by the work rule
+                         "grindstone")                         # a crafting station, not caught by the work rule
 
     def test_crafting_kinds(self):
         pot = {"type": "FURN", "edid": "CraftingCookingPotSm", "bench_type": 1,
@@ -185,14 +185,14 @@ class MakeFurnitureTests(unittest.TestCase):
                  "CraftingBlackSmithForge": (["isBlacksmithForge", "CraftingSmithingForge"], 1, "forge"),
                  "CraftingSmelterMarker1": (["isSmelter", "CraftingSmelter"], 1, "workbench"),
                  "CraftingBlacksmithAnvil": (["isBlacksmithAnvil", "CraftingSmithingForge"], 1, "hammer"),
-                 "CraftingSmithingSharpeningWheel": (["CraftingSmithingSharpeningWheel"], 2, "weapon_bench"),
+                 "CraftingSmithingSharpeningWheel": (["CraftingSmithingSharpeningWheel"], 2, "grindstone"),
                  "CraftingSmithingArmorTable": (["CraftingSmithingArmorTable"], 7, "armor_bench"),
                  "CraftingTanningRack": (["CraftingTanningRack"], 1, "scrape"),
                  "CraftingSmithingAnvil": ([], 1, "hammer"),
                  "CraftingSomethingNew": ([], 1, None)}                         # a bench we do not know: static
         for edid, (kw, bt, want) in cases.items():
             self.assertEqual(M.kind_of({"type": "FURN", "edid": edid, "keywords": kw, "bench_type": bt}), want, edid)
-        for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench", "scrape", "forge"):
+        for k in ("cook", "alchemy", "workbench", "weapon_bench", "armor_bench", "scrape", "forge", "grindstone"):
             self.assertIn(k, M.TEMPLATES)
         # 2026-11-16: the forge / wheel are NPC work furniture (the wall-wipe template: FurnitureClassWork)
         self.assertEqual(M.TEMPLATES["forge"][1], "NPCWelder")              # its own (not the tanning rack's)

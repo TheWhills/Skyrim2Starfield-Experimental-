@@ -667,4 +667,11 @@ Hilde's tanning with her chair present, would confirm it. Then: our walk-in (the
 by himself. Two different pieces chosen right after FurnitureSpecial went on them (never before in any build today):
 FurnitureSpecial is the cause (supported, strongly). Open: whether other sets NPCs should pick by themselves (cooking
 pot, alchemy, enchanting on Starfield workbench templates) need it too.
+**Grindstone back** (owner, 21:19: "Let's add the grindstone now and the workbench so everything he can do is added"):
+on a template of its own, NPCRepairImpactWrench_Standing (0007BDAA, AnimFurnRepair_ToolStanding, FurnitureClassWork;
+furniture\repair_toolstanding: Enter / EnterInstant / Exit / QuickExit, Idle, 9 flavors), FurnitureSpecial, every
+entry side, Skyrim's wheel marker; clips Enter 2.0 s / Spin 9.1 s (idle and all 9 flavors) / Exit 2.0 s.
+The armor workbench next: smithing_probe found no clip under its own name (0D932F BlacksmithWorkbench01.nif); the
+HammerTable markers' clips (AOHammer... enter / loop / idle / exit, prop AnimObjectHammerTable) are the candidate;
+smithing_probe --match on them gives the file names before a Workbench set (template: NPCWipeTable, 003B2A66).
 

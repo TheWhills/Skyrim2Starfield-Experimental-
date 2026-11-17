@@ -80,9 +80,13 @@ TEMPLATES = {
     # our sets on one Starfield template stop NPCs walking into either, so the forge has one of its own: the welder,
     # standing NPC work furniture (FurnitureClassWork, AnimFurnWelder; work_templates.py, furniture_anim_survey)
     "forge": ("0025B9D1", "NPCWelder"),                            # Skyrim's blacksmith forge (Forge set)
+    # 2026-11-16 (owner: "Let's add the grindstone now ... so everything he can do is added"): a template of its own,
+    # the standing repair spot (FurnitureClassWork, AnimFurnRepair_ToolStanding, enter / exit through geometry;
+    # furniture\repair_toolstanding: Enter / EnterInstant / Exit / QuickExit, Idle, 9 flavors), FurnitureSpecial added
+    "grindstone": ("0007BDAA", "NPCRepairImpactWrench_Standing"),  # Skyrim's sharpening wheel (Grindstone set)
 }
 SPECIAL = {"bartender", "lean_counter", "lean_table", "hammer", "sweep", "arms_crossed", "browse", "arms_front", "stand",
-           "scrape", "forge",
+           "scrape", "forge", "grindstone",
            # crafting stations (2026-11-09, owner: E on our alchemy lab put the player inside it facing away, no menu;
            # Starfield's own chem bench, same record but its own marker, worked): Skyrim's crafting NIFs all hold one
            # marker at the origin, heading 0, entry Behind (owner's furniture survey: cooking pot, alchemy lab and
@@ -94,9 +98,8 @@ CRAFT_KINDS = {"cook", "alchemy", "workbench", "weapon_bench", "armor_bench"}   
 CRAFTING = [(("craftingcookpot", "issmallcookingpot", "cookingspit", "cookingpot"), "cook"),
             (("isalchemy", "wicraftingalchemy", "craftingalchemy"), "alchemy"),
             (("isenchanting", "wicraftingenchanting", "craftingenchanting"), "workbench"),
-            # 2026-11-16 (owner: "Can we remove the grindstone stuff for now"; the tanning rack has not been used since
-            # the Grindstone set went in): the wheel is Starfield's weapon workbench again, Starfield's animations
-            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "weapon_bench"),
+            # (removed 15:02, back 21:19 on a template of its own: owner, "Let's add the grindstone now")
+            (("craftingsmithingsharpeningwheel", "sharpeningwheel", "grindstone"), "grindstone"),
             (("craftingsmithingarmortable", "armortable"), "armor_bench"),
             (("craftingtanningrack", "tanningrack"), "scrape"),
             (("craftingsmithinganvil", "anvil"), "hammer"),
@@ -193,6 +196,7 @@ ANIM_SET_RULES = (
     (("cook",), None, "Cook"),
     (("scrape",), r"tanning", "Tanning"),
     (("forge",), None, "Forge"),
+    (("grindstone",), None, "Grindstone"),
 )
 # Sets whose Skyrim clips stand at Skyrim's own marker even on a crafting station (whose Starfield template's marker
 # is kept otherwise): the forge's sequence (fire, anvil, trough) is laid out around Skyrim's forge marker, the clips
@@ -202,14 +206,14 @@ ANIM_SET_RULES = (
 # (an approach that fails), while Hilde, her chair disabled, leans on her rail. Skyrim's crafting markers allow one
 # side only (Behind), and the forge's own model (pit, trough, anvil) stands around that spot: these sets' spots may be
 # entered from every side, so the AI can take whichever approach it can path (supported hypothesis, owner's test).
-ANY_SIDE_SETS = {"Forge", "Tanning"}
+ANY_SIDE_SETS = {"Forge", "Tanning", "Grindstone"}
 # 2026-11-16 (owner, in game, energy fixed, invisible-marker A/B too): Alvor never chooses the forge or his tanning
 # rack, Hilde her rack only when nothing else is left; forced in, both play. Starfield's bartender furniture (Orgnar
 # uses ours) carries FurnitureSpecial and so do Skyrim's crafting stations, for the sandbox's "Allow Special Furniture"
 # (on in Alvor's and Hilde's packages); the wall-wipe and welder templates do not (supported hypothesis, owner's test)
-SPECIAL_SETS = {"Forge", "Tanning"}
+SPECIAL_SETS = {"Forge", "Tanning", "Grindstone"}
 ALL_SIDES = ["Front", "Rear", "Left", "Right"]
-SKYRIM_SPOT_SETS = {"Forge"}         # (the Grindstone set, removed 2026-11-16, stood at Skyrim's wheel marker too)
+SKYRIM_SPOT_SETS = {"Forge", "Grindstone"}           # the wheel's clips stand at Skyrim's wheel marker too
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
 
 

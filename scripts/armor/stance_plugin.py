@@ -89,7 +89,8 @@ FURNITURE_SETS = (
     # 2026-11-16: the forge and the sharpening wheel on the wall-wipe NPC work template (make_furniture.TEMPLATES)
     # 2026-11-16 (owner's A/B): not on the tanning rack's AnimFurnStanding_WipeWall; the welder's keyword of its own
     ("Forge", ("AnimFurnWelder",), _FURN + "s2s_forge"),
-    # ("Grindstone", ...) removed 2026-11-16 (owner): it was last, so no other keyword's FormID moves
+    # 2026-11-16 21:19 (owner): back, on the standing repair spot's keyword, a template of its own (last: no FormID moves)
+    ("Grindstone", ("AnimFurnRepair_ToolStanding",), _FURN + "s2s_grindstone"),
 )
 FURNITURE_THIRD_PERSON = "02 00 00 00"         # SRAF: role u16 2 = Furniture, perspective u16 0 = third person
 
