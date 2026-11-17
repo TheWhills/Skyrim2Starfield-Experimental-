@@ -23,7 +23,7 @@ times the NPCs, interiors and objects; a whole-world build has never been run).
 | World | Sound and ambience; outdoor effects (fog, spray) | open | |
 | People | The 12 adults: faces, hair, records | partial | faces in the face-test plugin; clothing / armor in game to check |
 | People | Children (Dorthe, Frodnar) | open | docs/npc/races-roadmap.md I2; then DorthePlay's "near the NPC" target is exercised |
-| People | Dialogue / voices | partial | Starfield generic voice types; Skyrim voice pipeline docs/npc/voice-pipeline.md |
+| People | Dialogue / voices | partial | NPCs speak their own Skyrim voice lines with lip sync (owner, confirmed 2026-11-17); dialogue topics and their conditions still to do; docs/npc/voice-pipeline.md |
 | Creatures | Riverwood's animals (to list from the data: chickens, a dog, ...) | partial | the chicken is drawn, textured and animated on its own skeleton in the critter's place (2026-11-17); upright pose / root motion fix to check, right turns (mirror), its own race open: docs/npc/creatures.md |
 | Schedules | Converted packages, settled Riverwood moment | done | docs/npc/schedules.md, docs/ai/decisions.md |
 | Schedules | Eat location, carry start | partial | INPUT_ALIAS (2026-11-17), to check in game |

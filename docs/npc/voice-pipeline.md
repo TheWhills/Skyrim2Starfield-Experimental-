@@ -1,5 +1,7 @@
 # Starfield voice + lip pipeline (what UNITY proved works)
 
+**Status (owner, confirmed 2026-11-17): Skyrim NPCs speak their own Skyrim voice lines in game, with lip sync.**
+
 Taken from UNITY's `unity_wem_gen.py` (attached), which got WAVs playing out of NPCs' mouths with lip-sync on Starfield 1.16.244. For the Skyrim-to-Starfield voice work.
 
 ## Tools (all were working)

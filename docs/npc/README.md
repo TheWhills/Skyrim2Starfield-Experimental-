@@ -33,6 +33,7 @@ Labels: **verified** (seen in files), **supported** (strong evidence), **unresol
    (`--hair-colors` palette from `scripts/npc/hair_color_probe.py`, else colour words in both games' names), and a
    vanilla template with a voice type (VTCK: the game's generic greetings; which voice is reported). Placed by console.
    Unresolved: what colour each Starfield hair colour name is (the probe looks for it), Skyrim voices.
+   [Later: Skyrim voices work in game with lip sync (owner, confirmed 2026-11-17; docs/npc/voice-pipeline.md).]
    Face-bone mods: with More Sliders (Nexus 18445) give its two regions files and head NIFs (`--regions`,
    `--head-nif`, male first) and its `--facebones-recipe` (MoreSlidersFaceBones_recipe.txt): 307 sliders per sex
    instead of the vanilla set; the NPCs then need the mod in game.

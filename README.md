@@ -18,14 +18,14 @@ Working in game (each item verified by the owner on Starfield; details and dates
 |---|---|---|
 | World | Skyrim's Tamriel terrain as a Starfield overlay on a planet, ground textures, Riverwood's river at Skyrim's level, exterior objects, grass (as static patches for now), distant-object LOD | [terrain](docs/terrain/skyrim-tamriel.md), [objects](docs/terrain/skyrim-objects.md) |
 | Interiors | Riverwood's interiors with native collision, load doors both ways, lighting, hearth and candle fires | [interiors](docs/interior/skyrim-interiors.md) |
-| People | Skyrim NPCs with fitted faces, their own hair, Skyrim races (skin, ears, hair) and their clothing as items | [NPCs](docs/npc/README.md), [races](docs/npc/races.md) |
+| People | Skyrim NPCs with fitted faces, their own hair, Skyrim races (skin, ears, hair), their clothing as items, and their own Skyrim voice lines with lip sync | [NPCs](docs/npc/README.md), [races](docs/npc/races.md) |
 | Schedules | NPC packages converted to Starfield's, in the "settled Riverwood" moment (e.g. Orgnar behind his bar) | [schedules](docs/npc/schedules.md) |
 | Furniture | Sitting, leaning, beds for the player, the alchemy lab, and NPCs working the forge, armor workbench and tanning rack, all with Skyrim's own animations and props | [furniture](docs/npc/furniture.md) |
 | Combat | Skyrim weapon animations on Starfield's skeleton, with root motion (swings carry the player, power attacks dash) | [animation](docs/armor/animation-port.md) |
 | Creatures | **New:** the first Skyrim creature on its own skeleton. Riverwood's chicken is drawn, textured and animated on Starfield's critter graph; movement is still being tuned | [creatures](docs/npc/creatures.md) |
 
-Built and tested offline but not yet confirmed in game: the walled cities as their own spaces, the Skyrim voice
-pipeline, the remaining work animations (wood chopping, the sawmill, farming), and children.
+Built and tested offline but not yet confirmed in game: the walled cities as their own spaces, Elders' aged faces,
+the remaining work animations (wood chopping, the sawmill, farming), and children.
 Open: quests, dialogue and scripts; magic ([notes](docs/magic/README.md)); beast races in cities; the whole world
 in one build. The [Riverwood checklist](docs/RIVERWOOD-COMPLETE.md) tracks each item as done, partial or open.
 
