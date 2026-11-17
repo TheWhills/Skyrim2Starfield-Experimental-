@@ -723,3 +723,10 @@ difference that stands: our stand spots are furniture (45 min, same type as the 
 markers (18 min, the other type, so the next pick favours furniture). Correction (CK wiki IdleMarker: the Idle Timer is
 "how long to wait before picking a new idle", between the marker's animations): IDLT is not how long an actor stays at
 the marker; the earlier note and the reply to the owner calling Skyrim's stand spots timed at a few seconds were wrong.
+Owner, 22:00 (the -SkipKind stand + FURNITURE_MODEL=vanilla build; screenshots: forge, anvil and grindstone gone):
+through ten `passtime 1` Alvor stays at one spot by the rail left of the shed's middle post, neutral pose, doing
+nothing. That is where he stood at 17:34 and 21:47 (between the trough and the rail, behind the forge spot). With no
+model there he is still stuck, so the model's collision is not what blocks him (supported). Left: our walk-in clips
+(Skyrim's, no root motion: Pull 13.9 s for the forge; the one sighting of him working the forge with no passtime
+first, 21:16, was on the --vanilla-enter Forge build). Next: GetSitting on him (in the furniture or not), then the
+--vanilla-enter A/B for Forge, Grindstone and Workbench with the models back and the stand spots still off.
