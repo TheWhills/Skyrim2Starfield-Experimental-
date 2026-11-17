@@ -46,6 +46,15 @@ class BuildTests(unittest.TestCase):
                               {"Pelvis": pel, "HEAD": head})
         r = B.bind_vs_rig(sh, cr)
         self.assertEqual(r["COM"], (0.0, 0.0))
+        # a pitched Pelvis (levelled out of COM) still reads 0 deg against its own bind
+        S = np.sqrt(0.5)
+        sk2 = retarget.Rig(["NPC Root [Root]", "Pelvis"], [-1, 0], [(0, 0, 0), (0, 0, 10)], [(0, 0, 0, 1), (S, 0, 0, S)])
+        cr2 = creature.creature_rig(sk2, "Pelvis")
+        pel2 = np.eye(4)
+        pel2[:3, :3] = np.array(creature.quat_to_rot9((S, 0, 0, S))).reshape(3, 3)
+        pel2[2, 3] = 10 * U
+        sh2 = gearfit.SkyShape(b"c", np.zeros((1, 3)), np.zeros((1, 3)), [], [], ["Pelvis"], [[(0, 1.0)]], {"Pelvis": pel2})
+        self.assertEqual(B.bind_vs_rig(sh2, cr2)["COM"], (0.0, 0.0))
         self.assertAlmostEqual(r["HEAD"][0], 0.01, places=4)
 
     def test_root_motion(self):

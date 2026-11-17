@@ -89,9 +89,12 @@ def bind_vs_rig(shape, cr) -> dict:
             continue
         i = cr.names.index(names[b])
         d = float(np.linalg.norm(w[:3, 3] - wt[i]))
-        from fo4sf.retarget import mat_to_quat
+        from fo4sf.retarget import mat_to_quat, qmul
         q = np.array(mat_to_quat(tuple(w[:3, :3].reshape(9))))
-        ang = float(np.degrees(2 * np.arccos(min(1.0, abs(float(np.dot(q, wq[i])))))))
+        ref = wq[i]
+        if names[b] == creature.COM and cr.level is not None:
+            ref = qmul(wq[i], cr.level)          # COM rests level: the Skyrim bone's pitch is in `level` (fix 4)
+        ang = float(np.degrees(2 * np.arccos(min(1.0, abs(float(np.dot(q, ref)))))))
         out[names[b]] = (round(d, 4), round(ang, 2))
     return out
 
