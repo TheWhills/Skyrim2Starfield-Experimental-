@@ -126,6 +126,14 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertIn("bhkNPCollisionObject -> bhkPhysicsSystem", coll)
         self.assertIn("Ragdoll_COM", coll)
 
+    def test_skin_chain(self):
+        armo = {0x10: [(b"EDID", b"SkinCritter\0"), (b"MODL", struct.pack("<I", 0x20)), (b"DATA", b"\0" * 8)]}
+        arma = {0x20: [(b"EDID", b"CritterAA\0"), (b"MOD2", b"Actors\\Critter\\Critter.nif\0")]}
+        race = [(b"EDID", b"CritterRace\0"), (b"WNAM", struct.pack("<I", 0x10)), (b"RNAM", struct.pack("<I", 0x99))]
+        chain = C.skin_chain(race, armo, arma)
+        self.assertEqual(chain, [("WNAM", "SkinCritter", [("CritterAA", [("MOD2", "Actors\\Critter\\Critter.nif")])])])
+        self.assertIn("ARMA CritterAA [MOD2 Actors\\Critter\\Critter.nif]", C.skin_lines("race skin", chain)[0])
+
 
 if __name__ == "__main__":
     unittest.main()

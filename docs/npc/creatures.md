@@ -68,6 +68,23 @@ Skyrim's TurnLoopingL has no Critter tag (Critter's idle turning graph plays the
   Unresolved: how the 4 nodes nest, and what the two physics systems are (ragdoll / controller capsule): the probe
   now prints the node tree and the bone names inside each physics blob.
 
+* Verified (third run): the critter shell nests Critter_mrRigRoot (BSBound 'BBX', BSXFlags) > Root ('sgoKeep') >
+  COM at (0, -0.113, 0.149) m ('sgoKeep'; collision: a hknpPhysicsSystem with one hknpSphereShape body), and
+  Critter_mrRigRoot > CharacterController (collision: one hknpCapsuleShape body). Neither physics blob names a bone:
+  no multi-bone ragdoll, so the shell can be copied to another creature as it is (creature.shell_skeleton renames the
+  root and moves COM).
+
+## The first test: the chicken in the critter's place (decided 2026-11-17)
+A race of our own with its own animation folders meets the problem race_heads met (docs/npc/races.md: a copied race
+with its own subgraph entries stood in the reference pose; the precomputed animation data is per race): it would need
+the Creation Kit's animation-info generation or a SAM fragment first. So the skeleton question is asked without it:
+the chicken's files replace the critter's own, at the critter's paths (skeleton.nif shell, skeleton.rig, the clips
+under the critter's file names and descriptors, its body model), as loose files in a test mod. The index still
+lists every file (same names), so any critter (placeatme) shows the chicken, or the failure is the skeleton itself.
+Second test, after: the chicken as its own race (index via CK or SAM).
+Core: src/fo4sf/creature.py (rig fold, clips, skinned mesh, shell; tests/test_creature.py). Still to find: the
+critter's body model path (the probe now follows race / NPC skin -> ARMO -> ARMA).
+
 ## What the test needs (in order)
 1. The chicken mesh as a Starfield skinned mesh bound to its own bones, plus a Starfield skeleton.nif of those
    33 bones. Unresolved: our skinned-mesh path (gearfit / sfmesh) binds to Starfield's human skeleton; a

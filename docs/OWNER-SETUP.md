@@ -174,7 +174,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\armor\creature_probe.py --skyrim-data "$sky" --starfield-data "$sf\Data" --sf-race CritterRace > creature_models.txt
    ```
    Send creature_models.txt. (Done 2026-11-17; re-run the same command once more: it now prints how the critter's
-   skeleton.nif nests and which bones its physics names; send it as creature_models2.txt.)
+   skeleton.nif nests and which bones its physics names; send it as creature_models2.txt.) Done. Next, which model
+   the critter's body is (race / NPC skin -> armor -> model), Starfield only:
+   ```powershell
+   python -I scripts\armor\creature_probe.py --starfield-data "$sf\Data" --sf-race CritterRace > critter_skin.txt
+   ```
+   Send critter_skin.txt.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

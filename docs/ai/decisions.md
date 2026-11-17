@@ -2376,3 +2376,10 @@ the script are converted. --moment start (a new game) and none (old behaviour) r
 converted with its conditions, once quests, scenes, scripts and Starfield conditions are converted; the settled moment
 is a stage, not the target. Which quests count as the arrival is supported (from the conditions' quests and names),
 not verified against Skyrim's quest stages.
+
+## 2026-11-17: first creature test replaces the critter's files (Claude)
+Decision: the Riverwood chicken is first tested in CritterRace's place (its rig, shell skeleton, clips under the
+critter's names, body model, as loose files at the vanilla paths), not as a new race.
+Why: a new race with its own animation folders needs the per-race animation index (CK GenerateAnimInfo or SAM), which
+broke race_heads' first copy; replacing keeps the index valid and isolates the question "does Starfield take a new
+creature skeleton". Alternatives: a new race + CK index step (second test), a SAM fragment (needs SAM installed).

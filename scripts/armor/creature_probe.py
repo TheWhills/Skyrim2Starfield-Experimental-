@@ -298,6 +298,33 @@ def skin_summary(data: bytes) -> list:
     return out or ["no skinned shapes"]
 
 
+def skin_chain(subs, armo: dict, arma: dict) -> list:
+    """The models a record draws through its skin: every 4-byte subrecord naming an ARMO, then that ARMO's 4-byte
+    subrecords naming ARMAs, and each ARMA's path subrecords. [(sig, armo edid, [(arma edid, [(sig, path)])])].
+    armo / arma: {FormID: subrecords}."""
+    from fo4sf import sfplugin
+    out = []
+    for sig, d in subs:
+        if len(d) != 4:
+            continue
+        a = struct.unpack("<I", bytes(d))[0]
+        if a not in armo:
+            continue
+        addons = []
+        for s2, d2 in armo[a]:
+            if len(d2) == 4 and struct.unpack("<I", bytes(d2))[0] in arma:
+                aa = arma[struct.unpack("<I", bytes(d2))[0]]
+                addons.append((sfplugin.edid(aa), path_subs(aa)))
+        out.append((sig.decode("latin-1"), sfplugin.edid(armo[a]), addons))
+    return out
+
+
+def skin_lines(label: str, chain) -> list:
+    return [f"  {label} {sig} -> ARMO {ae}: " + "; ".join(f"ARMA {ne} [{', '.join(f'{s} {t}' for s, t in ps)}]"
+                                                         for ne, ps in addons)
+            for sig, ae, addons in chain]
+
+
 def skyrim_side(sky_data: str, race_edid: str) -> list:
     from fo4sf import bsa, sfplugin, skyrimhkx
     esm = os.path.join(sky_data, "Skyrim.esm")
@@ -384,12 +411,22 @@ def starfield_side(sf_data: str, sf_races) -> list:
                 return cand, ar.read(i)
         return k, None
     keys = list(index)
+    armo = {f: subs for _t, _h, subs, f in sfplugin.records(esm, [b"ARMO"])}
+    arma = {f: subs for _t, _h, subs, f in sfplugin.records(esm, [b"ARMA"])}
+    npcs = list(sfplugin.records(esm, [b"NPC_"]))
     for want in sf_races:
         r = next((x for x in races if (x["edid"] or "").lower() == want.lower()), None)
         if r is None:
             lines.append(f"== Starfield {want}: no such RACE")
             continue
         lines.append(f"== Starfield {r['edid']} {r['form']}")
+        race_subs = next(subs for _t, _h, subs, f in sfplugin.records(esm, [b"RACE"]) if f == int(r["form"], 16))
+        lines += skin_lines("race skin", skin_chain(race_subs, armo, arma))
+        rf = struct.pack("<I", int(r["form"], 16))
+        for _t, _h, subs, f in npcs:
+            if any(sg == b"RNAM" and bytes(d)[:4] == rf for sg, d in subs):
+                lines.append(f"  NPC_ {sfplugin.edid(subs)} {f:08X}")
+                lines += skin_lines("  skin", skin_chain(subs, armo, arma))
         for s, t in dict.fromkeys(r["paths"]):
             if s == "ANAM":
                 p, d = read(t)
