@@ -242,7 +242,7 @@ def nif_summary(data: bytes) -> list:
     extras = [f"{n.type_of(i)} {name(i)!r}" for i in range(len(n.blocks))
               if "ExtraData" in n.type_of(i) or n.type_of(i) in ("SkinAttach", "BSXFlags")]
     paths = [x.decode("latin-1", "replace") for x in n.strings if PATH_RX.search(x.decode("latin-1", "replace"))]
-    tree = node_tree(n, name) if len(nodes) <= 12 else []
+    tree = node_tree(n, name) if len(nodes) <= 64 else []
     return [f"BS {n.bs_version}, {len(n.blocks)} blocks: " + ", ".join(f"{t} {c}" for t, c in sorted(types.items())),
             f"nodes ({len(nodes)}): {', '.join(nodes)}",
             f"extra data: {', '.join(extras) or '-'}",
@@ -333,6 +333,24 @@ def model_detail(data: bytes, read_mesh) -> list:
     from fo4sf import nif as nifmod, sfmesh, sfnif
     n = nifmod.parse(data)
     out = nif_summary(data)
+
+    def name(i):
+        idx = struct.unpack_from("<i", n.blocks[i], 0)[0] if len(n.blocks[i]) >= 4 else -1
+        return n.strings[idx].decode("latin-1", "replace") if 0 <= idx < len(n.strings) else ""
+    if not any(ln.startswith("node ") for ln in out):
+        out += node_tree(n, name)
+    for i in range(len(n.blocks)):
+        t = n.type_of(i)
+        if t == "BSXFlags":
+            out.append(f"BSXFlags value 0x{struct.unpack_from('<I', n.blocks[i], 4)[0]:X}")
+        elif t == "NiStringExtraData" and name(i) != "sgoKeep":
+            v = struct.unpack_from("<i", n.blocks[i], 4)[0]
+            out.append(f"NiStringExtraData {name(i)!r} = "
+                       f"{n.strings[v].decode('latin-1', 'replace') if 0 <= v < len(n.strings) else '-'}")
+        elif t == "BSSkin::Instance":
+            root, dref, cnt = struct.unpack_from("<iiI", n.blocks[i], 0)
+            refs = struct.unpack_from(f"<{cnt}i", n.blocks[i], 12)
+            out.append(f"skin instance bone refs -> {', '.join(name(r) if 0 <= r < len(n.blocks) else str(r) for r in refs)}")
     for i in range(len(n.blocks)):
         if n.type_of(i) != "BSGeometry":
             continue

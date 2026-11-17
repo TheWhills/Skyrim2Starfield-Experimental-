@@ -170,8 +170,15 @@ def main(argv=None):
     if material is None:
         material = material_of(sf_read(CRITTER["model"]))
         rep["notes"].append(f"material: the trilobite's own ({material}); pass --texconv for the chicken's texture")
+    tangents = None
+    if s.tangents and len(s.tangents) == len(shape.points):
+        from fo4sf.skyrimhair import skin_to_model
+        _to_model, rot = skin_to_model(s)
+        tangents = [rot(t) for t in s.tangents]
+    else:
+        rep["notes"].append("no tangents in the Skyrim mesh: none written")
     files = creature.skinned_files(shape, material, CRITTER["model"][len("meshes/"):-len(".nif")], CHICKEN["com"],
-                                   cr.names)
+                                   cr, tangents)
     for rel, data in files.items():
         put(rel, data)
 

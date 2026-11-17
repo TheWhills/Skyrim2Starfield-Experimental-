@@ -10,8 +10,9 @@ controller; no bones) and a .rig holding the bones, the first being COM. So the 
 * every other bone keeps its Skyrim name and its local rest; translations go to metres (retarget.SKYRIM_M_PER_UNIT).
 Clips follow the same fold, so a clip's COM track is root * pelvis on every frame (no root-motion split yet: the
 first test plays locomotion in place, unresolved where Starfield's creature clips keep root motion).
-The mesh is skinned to those bone names with binds = the inverse of each bone's bind world from the Skyrim mesh (the
-convention of the game's own hairs, skyrimhair.nif_files), so it is drawn as Skyrim draws it.
+The mesh is skinned with binds = the inverse of each bone's bind world from the Skyrim mesh (the convention of the
+game's own hairs, skyrimhair.nif_files), so it is drawn as Skyrim draws it; unlike worn gear, a creature body carries
+its own bone nodes (build_body_nif).
 """
 import struct
 from dataclasses import dataclass
@@ -114,16 +115,84 @@ def quantize_weights(weights, index: Dict[str, int], k: int = 4) -> List[Tuple[i
     return out
 
 
-def skinned_files(shape, material_path: str, out_name: str, com_source: str, rig_names: List[str]) -> Dict[str, bytes]:
+COM_NODE = "COM_Twin"     # the vanilla trilobite body's name for its COM node (owner's model compare, 2026-11-17)
+
+
+def quat_to_rot9(q) -> Tuple[float, ...]:
+    """Row-major 3x3 (v' = R v, the NIF convention of nif._compose) of a quaternion (x, y, z, w)."""
+    x, y, z, w = (float(v) for v in q)
+    n = (x * x + y * y + z * z + w * w) ** 0.5 or 1.0
+    x, y, z, w = x / n, y / n, z / n, w / n
+    return (1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
+            2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+            2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y))
+
+
+def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str]) -> nifmod.NifFile:
+    """A creature body NIF laid out like the vanilla trilobite's (verified layout, owner's model compare 2026-11-17):
+    the model carries its own bone nodes (root > COM_Twin > the rig's hierarchy at rest, each with NiStringExtraData
+    'sgoKeep'), the skin's BSSkin::Instance points at those nodes (skeleton root = the root node), and its SkinAttach
+    names are empty. Worn gear (sfnif.build_skinned_nif: names only, no nodes) drew nothing on a creature (owner,
+    2026-11-17 14:02: heard, not seen). `shape` is an sfnif.SkinnedShape whose bones / binds are in `bones` order."""
+    from . import sfnif
+    f = nifmod.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
+                       export_script=b"\x00", sf_data=b"\x7a\x00")
+    s_keep = f.string_index(b"sgoKeep")
+    root = f.add_block("NiNode", b"")
+    bsx = f.add_block("BSXFlags", struct.pack("<iI", f.string_index(b"BSX"), 0x10000))
+    node_of, kids = {}, {root: []}
+    for i, name in enumerate(cr.names):
+        b = f.add_block("NiNode", b"")
+        e = f.add_block("NiStringExtraData", struct.pack("<ii", s_keep, s_keep))
+        node_of[i] = (b, e)
+        kids[b] = []
+        kids[root if cr.parents[i] < 0 else node_of[cr.parents[i]][0]].append(b)
+    base = len(f.blocks)
+    nb = len(bones)
+    g = sfnif.BSGeometry(name_idx=f.string_index(shape.name), extra_refs=[base + 2, base + 3], sphere=(0.0, 0.0, 0.0, 0.0),
+                         box=(sfnif.FLT_MAX,) * 6, skin=base + 4, shader=base + 1,
+                         meshes=[sfnif.MeshRef(shape.indices_size, shape.num_verts, 0x40, shape.mesh_path), None, None,
+                                 None])
+    f.add_block("BSGeometry", sfnif.build_bsgeometry(g))
+    kids[root].append(base)
+    f.add_block("BSLightingShaderProperty", struct.pack("<iIi", f.string_index(shape.material_path.encode("latin-1")), 0, -1))
+    f.add_block("NiIntegerExtraData", struct.pack("<iI", f.string_index(b"MaterialID"), sfnif.material_id(shape.material_path)))
+    f.add_block("SkinAttach", struct.pack("<iI", f.string_index(b"SkinBMP"), nb) + struct.pack("<I", 0) * nb)
+    refs = [node_of[cr.names.index(b)][0] for b in bones]
+    f.add_block("BSSkin::Instance", struct.pack("<iiI", root, base + 5, nb) + struct.pack(f"<{nb}i", *refs)
+                + struct.pack("<I", 0))
+    f.add_block("BSSkin::BoneData", struct.pack("<I", nb) + b"".join(
+        struct.pack("<4f9f3ff", *sphere, *rot, *trans, scale) for sphere, rot, trans, scale in shape.binds))
+    ident = struct.pack("<3f9ff", 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0)
+
+    def node(name_idx, extra, xform, children):
+        return (struct.pack("<iI", name_idx, len(extra)) + struct.pack(f"<{len(extra)}i", *extra)
+                + struct.pack("<iI", -1, 0xE) + xform + struct.pack("<iI", -1, len(children))
+                + struct.pack(f"<{len(children)}i", *children))
+    f.blocks[root] = node(f.string_index(root_name), [bsx], ident, kids[root])
+    for i, name in enumerate(cr.names):
+        b, e = node_of[i]
+        xform = struct.pack("<3f", *map(float, cr.t[i])) + struct.pack("<9ff", *quat_to_rot9(cr.q[i]), 1.0)
+        nm = COM_NODE if name == COM else name
+        f.blocks[b] = node(f.string_index(nm.encode("latin-1")), [e], xform, kids[b])
+    f.footer = struct.pack("<II", 1, 0)
+    return f
+
+
+def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr: CreatureRig,
+                  tangents=None) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif", "geometries/<a>/<b>.mesh"}: a gearfit.SkyShape (metres, model space, bind worlds per
-    bone) skinned to the creature rig's bone names."""
+    bone) as a creature body (build_body_nif) skinned to the creature rig's bones. tangents: per-vertex model-space
+    tangents (the Skyrim mesh's, turned like its normals), else none are written."""
     from . import convert_static, sfmesh, sfnif
+    rig_names = cr.names
     names = bone_name_map(shape.bones, rig_names, com_source)
     used = sorted({names[shape.bones[b]] for vw in shape.weights for b, _w in vw}, key=lambda n: (n != COM, n))
     index = {n: i for i, n in enumerate(used)}
     pts = [tuple(map(float, p)) for p in shape.points]
     fo4 = nifmod.Fo4Shape(shape.name, (0.0, 0.0, 0.0), (1, 0, 0, 0, 1, 0, 0, 0, 1), 1.0, -1, -1, -1, pts,
-                          list(shape.uvs), [tuple(map(float, n)) for n in shape.normals], [], [],
+                          list(shape.uvs), [tuple(map(float, n)) for n in shape.normals],
+                          [tuple(map(float, t)) for t in tangents] if tangents is not None else [], [],
                           list(shape.triangles), True)
     m = convert_static.shape_to_mesh(fo4, 1.0)
     m.weights_per_vertex = 4
@@ -145,7 +214,7 @@ def skinned_files(shape, material_path: str, out_name: str, com_source: str, rig
                       tuple(map(float, inv[:3, 3])), 1.0))
     sh = sfnif.SkinnedShape(shape.name or b"Body", f"{d}\\{f}".encode(), len(m.triangles) * 3, len(m.positions),
                             material_path, [b.encode("latin-1") for b in used], binds)
-    n = sfnif.build_skinned_nif(out_name.rsplit("/", 1)[-1].encode(), [sh])
+    n = build_body_nif(b"ExportScene", sh, cr, used)
     return {f"geometries/{d}/{f}.mesh": data, f"meshes/{out_name}.nif": nifmod.serialize(n)}
 
 

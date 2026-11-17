@@ -118,4 +118,14 @@ new creature skeleton on an existing graph.
   hair always shipped in BA2s: loose geometries never tested); (2) the skin's bones not found (our bone names COM,
   Spine ... vs what the engine builds from the .rig); (3) a difference from the vanilla creature model's layout.
   Next: `creature_probe.py --model` prints the vanilla trilobite model and ours side by side.
+* Verified (owner's creature_build.json): the chicken's bind pose matches the rig on every bone (0 mm, under 0.1 deg);
+  all 15 clips written (26-201 frames).
+* Verified (owner's model compare, 2026-11-17 14:08): the vanilla body Critter_Trilobite.nif carries its OWN bone
+  nodes: 29 NiNodes (ExportScene, COM_Twin, C_spine1 ... ProjectileNode), 28 'sgoKeep' + one 'ParentBoneName'
+  NiStringExtraData, BSSkin::Instance (skeleton root 0, 26 bones) and a SkinAttach whose 26 names are all EMPTY, plus
+  a ragdoll (bhkRagdollSystem, 5 bhkNPCollisionObject); 4 LODs, tangents on every vertex. Ours was worn-gear style (one
+  node, names only, bone refs -1): the cause of the invisible body (supported).
+* Fix: creature.build_body_nif writes the vanilla layout: ExportScene > COM_Twin > the rig's bones at rest, each with
+  'sgoKeep'; the skin instance points at those nodes; empty SkinAttach names; tangents from the Skyrim mesh. Not
+  copied yet: ProjectileNode / ParentBoneName, the ragdoll, LODs 1-3.
 

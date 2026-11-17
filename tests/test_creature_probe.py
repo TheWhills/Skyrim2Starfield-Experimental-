@@ -141,7 +141,10 @@ class CreatureProbeTests(unittest.TestCase):
         sh = gearfit.SkyShape(b"chicken", np.array([[0, 0, 0.1], [0.1, 0, 0.1], [0, 0.1, 0.3]], float),
                               np.array([[0, 0, 1]] * 3, float), [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)],
                               ["Pelvis"], [[(0, 1.0)]] * 3, {"Pelvis": np.eye(4)})
-        files = creature.skinned_files(sh, "materials\\t.mat", "actors/critter/mesh/t/t", "Pelvis", ["COM"])
+        from fo4sf import retarget
+        cr = creature.creature_rig(retarget.Rig(["NPC Root [Root]", "Pelvis"], [-1, 0], [(0, 0, 0), (0, 0, 7)],
+                                                [(0, 0, 0, 1)] * 2))
+        files = creature.skinned_files(sh, "materials\\t.mat", "actors/critter/mesh/t/t", "Pelvis", cr)
         with tempfile.TemporaryDirectory() as d:
             for rel, data in files.items():
                 p = os.path.join(d, "Mod", *rel.split("/"))
@@ -154,7 +157,8 @@ class CreatureProbeTests(unittest.TestCase):
         text = "\n".join(lines)
         self.assertIn("BSGeometry 'chicken'", text)
         self.assertIn("weights/vertex 4, bone indices used [0]", text)
-        self.assertIn("skin bones (1): COM", text)
+        self.assertIn("skin instance bone refs -> COM_Twin", text)
+        self.assertIn("node 'COM_Twin' <ExportScene>", text)
         self.assertIn("MESH NOT FOUND", "\n".join(gone))
 
 

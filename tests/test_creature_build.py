@@ -116,7 +116,7 @@ class MainTests(unittest.TestCase):
                 mock.patch.object(SAS, "archives", lambda _d: [("Starfield - Animations.ba2", Ba2())]), \
                 mock.patch.object(skyrimhkx, "describe", lambda _b: desc), \
                 mock.patch.object(skyrimhkx, "decode_clip", lambda _b, _n=None: clip), \
-                mock.patch.object(skyrimskin, "skinned_shapes", lambda _n: [object()]), \
+                mock.patch.object(skyrimskin, "skinned_shapes", lambda _n: [type("S", (), {"tangents": []})()]), \
                 mock.patch.object(gearfit, "from_skyrim", lambda _s: shape), \
                 mock.patch.object(af_writer, "write", fake_write), \
                 mock.patch.object(B, "gearfit_find_texconv", lambda _g: ""):

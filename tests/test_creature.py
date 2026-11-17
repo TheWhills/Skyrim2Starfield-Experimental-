@@ -61,6 +61,11 @@ class RigTests(unittest.TestCase):
 
 
 class FileTests(unittest.TestCase):
+    def test_quat_to_rot9(self):
+        r = C.quat_to_rot9((0, 0, S, S))                                  # 90 deg about z: x -> y
+        np.testing.assert_allclose(np.array(r).reshape(3, 3) @ (1, 0, 0), (0, 1, 0), atol=1e-9)
+        np.testing.assert_allclose(retarget.mat_to_quat(r), (0, 0, S, S), atol=1e-9)
+
     def test_skinned_files(self):
         from fo4sf import gearfit
         eye = np.eye(4)
@@ -70,13 +75,28 @@ class FileTests(unittest.TestCase):
                               np.array([[0, 0, 1]] * 3, float), [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)],
                               ["Pelvis", "HEAD"], [[(0, 1.0)], [(0, 0.5), (1, 0.5)], [(1, 1.0)]],
                               {"Pelvis": eye, "HEAD": up})
-        files = C.skinned_files(sh, "materials\\s2s\\chicken.mat", "actors/s2schicken/chicken", "Pelvis",
-                                ["COM", "Head"])
+        U = retarget.SKYRIM_M_PER_UNIT
+        cr = C.creature_rig(retarget.Rig(["NPC Root [Root]", "Pelvis", "Head"], [-1, 0, 1],
+                                         [(0, 0, 0), (0, 0, 0), (0, 0, 0.2 / U)], [(0, 0, 0, 1)] * 3))
+        files = C.skinned_files(sh, "materials\\s2s\\chicken.mat", "actors/s2schicken/chicken", "Pelvis", cr,
+                                tangents=[(1, 0, 0)] * 3)
         self.assertIn("meshes/actors/s2schicken/chicken.nif", files)
         n = nif.parse(files["meshes/actors/s2schicken/chicken.nif"])
+        names = [C._node_name(n, i) for i in range(len(n.blocks)) if n.type_of(i) == "NiNode"]
+        self.assertEqual(names, [b"ExportScene", b"COM_Twin", b"Head"])
         att = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "SkinAttach")
-        self.assertIn(b"COM", att)
-        self.assertIn(b"Head", att)
+        self.assertEqual(att[4:], struct.pack("<I", 2) + b"\0" * 8)          # two empty names, as vanilla
+        inst = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSSkin::Instance")
+        root, _d, cnt = struct.unpack_from("<iiI", inst, 0)
+        refs = struct.unpack_from(f"<{cnt}i", inst, 12)
+        self.assertEqual((root, [C._node_name(n, r) for r in refs]), (0, [b"COM_Twin", b"Head"]))
+        head = next(i for i in range(len(n.blocks)) if n.type_of(i) == "NiNode" and C._node_name(n, i) == b"Head")
+        self.assertIn(head, nif.node_children(n, next(i for i in range(len(n.blocks))
+                                                      if C._node_name(n, i) == b"COM_Twin")))
+        self.assertAlmostEqual(struct.unpack_from("<3f", n.blocks[head], 8 + 4 + 8)[2], 0.2, places=6)
+        from fo4sf import sfmesh
+        mesh = sfmesh.parse(next(v for k, v in files.items() if k.endswith(".mesh")))
+        self.assertEqual(len(mesh.tangents), 3)
         bd = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSSkin::BoneData")
         # Head's bind is the inverse of its bind world: translation z -0.2
         head_t = struct.unpack_from("<3f", bd, 4 + 68 + 16 + 36)
