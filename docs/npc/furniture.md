@@ -789,3 +789,7 @@ reference, outdoors through IdFor("EXTFURN:...")) ahead of the NPC's own package
 works and the sandbox's real-time choice is what fails (fix: Sit packages for his stations by time of day); if he
 does not, the walk-in itself fails. Unverified in game; the C# case (PackageDataTarget / PackageTargetSpecificReference)
 is not compiled here.
+Owner's -SitAt "Alvor=0D6987:8:720" build (22:25, verified from the log): the C# compiled; S2S_AlvorSitAt0D6987
+000FD7:FO4Port.esm, a copy of vanilla FC_Neon_AyumiKomikoDefaultPackage (Sit), input 0 -> furniture 000F54:FO4Port.esm
+(the outdoor forge reference, EXTFURN:0D6987), first in Alvor's list ahead of S2S_AlvorWork8x12; no vanilla A/B
+copy for it. In-game result pending (getiscurrentpackage 18000FD7 on 18000EB8 says whether it runs).
