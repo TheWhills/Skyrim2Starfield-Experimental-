@@ -804,3 +804,10 @@ package current: it never sets off for the forge. Suspect (supported hypothesis)
 (FC_Neon_AyumiKomikoDefaultPackage) keeps its own Location input(s), in Neon, unreachable from here. make_schedule now
 sets every Location input of the Sit template to the furniture's spot (near_exterior_reference / near_reference,
 radius 1 m) and notes the template's inputs (index:type) in the build log.
+Owner, 22:38 (build log + screenshot, verified): the Sit template has no Location input (inputs 0:SingleRef, 1:Float,
+2:Bool, 4:Bool, 6:TargetSelector, 8:Bool), so the location change did nothing (same plugin size, 1,082,559 bytes); the
+Neon-location hypothesis is refuted. In game: "if I pass time he always works but he isn't going there himself"
+(after `moveto player` and `evp` he stays put). So with the Sit package the forge is chosen every time (a passtime
+places him in it), but in real time he does not set off. sit_package_survey.py (read-only) prints the Sit template's
+input names and every vanilla Sit package's values (UC07_Gel_Sit_Weld, the welder worker, and the copied
+FC_Neon_AyumiKomikoDefaultPackage shown in full), to find which input keeps ours from walking.
