@@ -699,3 +699,17 @@ before FurnitureSpecial, when he never chose the pieces at all, so they could no
 not rule those causes out. Next build (records only): -SkipKind stand (fewer untimed spots, more attempts at the work
 pieces) with FURNITURE_MODEL=vanilla (no solid model at the spots): if he then walks in, the model's collision blocks
 the approach; if he still circles, our walk-in clips (no root motion: the approach starts on the marker itself) are next.
+How Skyrim's sandbox chooses (owner, 21:53: "how Skyrim decides which thing they do, how often and when"). Creation Kit
+wiki, Sandbox procedure (ck.uesp.net/wiki/Sandbox_Package, falloutck.uesp.net the same; documentation, not verified in
+game): the sandbox lists nearby objects it may use (package flags: Sitting, Furniture, Special Furniture, Idle Markers,
+Eating, Sleeping, Conversation; ownership; one actor per object), scores each (zero for the object just used), and
+weights the score by the probability of its activity type (sleep, eat, furniture, idle marker, dialogue): the type just
+done drops to zero and the others rise, "so the same kind of action is not selected repeatedly unless there is no other
+option". It stays for fSandboxDurationBase * fSandboxDurationMult<Type> * (1 + Energy * fSandboxEnergyMult *
+fSandboxEnergyMult<Type>), randomised by fSandboxDurationRangeMult (game hours); meals and sleep come at the
+iSandbox... hours. Consequence for us (supported hypothesis): Skyrim's stand spots are idle markers (IDLM), ours are
+furniture (make_furniture kind_of: every IDLM becomes a FURN, Starfield having 18 IDLM), so (1) Alvor's day no longer
+alternates idle marker <-> furniture: the stand spot competes with the forge, grindstone, workbench and tanning rack
+as the same type, and (2) it gets a furniture-length stay instead of an idle marker's. sandbox_settings.py (read-only)
+prints both masters' sandbox GMSTs and the stay per type at an Energy; real values, not the wiki's example, decide
+whether Starfield's durations differ too.
