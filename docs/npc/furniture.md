@@ -857,3 +857,10 @@ Owner, 23:02: "he isn't using the hammer in the workstation": that build still h
 Forge / Grindstone / Workbench (Starfield's EnterFromStand with its prop events left out), so a walk-in loads no
 hammer (only EnterInstant, after a passtime, has our AnimObjLoad). Our own walk-ins were never the blocker (the record
 was): repack without --vanilla-enter.
+Owner, 23:19 (our walk-ins back, verified): "the hammer is back". Walk-ins with our Skyrim clips work. Seen: "a lot of
+the time he'll do the workbench or tanning rack, stop and then do it again; he doesn't necessarily move to the next
+one". Reading (supported): with -SkipKind stand every choice near his work centre is furniture (one activity type), so
+the sandbox's type rotation (CK wiki: the type just done drops to zero, the others rise) has nothing to rotate to,
+and the nearest station scores best again after each stay (whether Starfield excludes the object just used is
+unknown). Skyrim alternates furniture with idle markers (its stand spots are IDLM). Next: Skyrim's IDLM back as
+Starfield idle markers (IDLM, the idle-marker type) instead of furniture or nothing.
