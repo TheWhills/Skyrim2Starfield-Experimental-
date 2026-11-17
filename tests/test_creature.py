@@ -153,6 +153,13 @@ class FileTests(unittest.TestCase):
         np.testing.assert_allclose(moved.normals[0], (1, 0, 0), atol=1e-9)
         files = C.skinned_files(sh, "materials\\x.mat", "actors/x/x", "Pelvis", cr)
         n = nif.parse(files["meshes/actors/x/x.nif"])
+        from fo4sf import sfnif
+        g = sfnif.parse_bsgeometry(next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSGeometry"))
+        self.assertEqual(len([m for m in g.meshes if m is not None]), 4)          # LOD0-3 filled, as vanilla
+        self.assertEqual(len({m.path for m in g.meshes}), 1)
+        one = nif.parse(C.skinned_files(sh, "materials\\x.mat", "actors/x/x", "Pelvis", cr, lods=1)["meshes/actors/x/x.nif"])
+        g1 = sfnif.parse_bsgeometry(next(one.blocks[i] for i in range(len(one.blocks)) if one.type_of(i) == "BSGeometry"))
+        self.assertEqual([m is not None for m in g1.meshes], [True, False, False, False])
         names = [C._node_name(n, i) for i in range(len(n.blocks)) if n.type_of(i) == "NiNode"]
         self.assertEqual(names, [b"ExportScene", b"COM_Twin", b"Head"])            # no Root node in the body
         twin = next(i for i in range(len(n.blocks)) if C._node_name(n, i) == b"COM_Twin")

@@ -113,6 +113,8 @@ def main(argv=None):
     ap.add_argument("--rig-lod", type=int, default=2,
                     help="animation-LOD level for every bone but Root (the critter's main bones use 2; 0 = leave "
                          "CALUMI's, which stops the legs at a distance)")
+    ap.add_argument("--body-lods", type=int, default=4, choices=(1, 2, 3, 4),
+                    help="LOD slots the body mesh fills (vanilla creatures: 4; 1 = LOD0 only, the old build)")
     ap.add_argument("--opaque", action="store_true",
                     help="the chicken's material without the alpha cutout (to rule the cutout out)")
     ap.add_argument("--vanilla-material", action="store_true",
@@ -204,7 +206,8 @@ def main(argv=None):
         shape, tangents = creature.with_back_faces(shape, tangents)
         rep["skyrim_shader"]["back_faces_added"] = True
     files = creature.skinned_files(shape, material, CRITTER["model"][len("meshes/"):-len(".nif")], CHICKEN["com"],
-                                   cr, tangents)
+                                   cr, tangents, lods=a.body_lods)
+    rep["body_lods"] = a.body_lods
     for rel, data in files.items():
         put(rel, data)
 

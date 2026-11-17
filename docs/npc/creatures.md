@@ -202,4 +202,11 @@ new creature skeleton on an existing graph.
   only Root moved and the chicken slid with still legs. Fix 7: creature_build patches the rig after CALUMI (creature.
   set_rig_lod: Root -1 / 0, every other bone index = its own number, level 2; --rig-lod N; the record layout is
   checked first). To verify in game: legs keep walking at a distance.
+* Owner, 18:08 / 18:12: with the rig levels set (creature_build.json: lod_level 2, no note) the legs still stop a few
+  feet off: the rig field is not (alone) the cause. Clip compare (vanilla critter WalkForward.af vs ours): the same
+  header layout and root motion; vanilla keys 31 tracks over 40 frames, ours 33 over 31; per-bone track lists in
+  both; nothing that reads as per-LOD clip data (unresolved, not decoded further). The body models do differ: the
+  vanilla trilobite fills LOD0-3 (each skinned, 26 bones), ours only LOD0. Supported: a small creature switches to
+  LOD1 within a few feet (screen size), and an empty slot is drawn unskinned at rest, riding the moving actor.
+  Fix 8: the body fills all four LOD slots with its mesh (--body-lods, default 4). Real lower-detail meshes later.
 

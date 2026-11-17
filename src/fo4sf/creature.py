@@ -166,7 +166,11 @@ def quat_to_rot9(q) -> Tuple[float, ...]:
 BODY_BSX = 0x1004A        # the vanilla trilobite body's BSXFlags (owner's model compare 2, 2026-11-17)
 
 
-def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], bsx_flags: int = BODY_BSX) -> nifmod.NifFile:
+BODY_LODS = 4             # the vanilla trilobite body fills LOD0-3 (owner's model compare 2026-11-17)
+
+
+def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], bsx_flags: int = BODY_BSX,
+                   lods: int = BODY_LODS) -> nifmod.NifFile:
     """A creature body NIF laid out like the vanilla trilobite's (verified layout, owner's model compare 2026-11-17):
     the model carries its own bone nodes (root > COM_Twin > the rig's hierarchy at rest, each with NiStringExtraData
     'sgoKeep'), the skin's BSSkin::Instance points at those nodes (skeleton root = the root node), and its SkinAttach
@@ -174,7 +178,9 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
     2026-11-17 14:02: heard, not seen). As vanilla (model compare 2): COM_Twin sits at the model's origin and carries
     NiStringExtraData ParentBoneName = COM instead of sgoKeep, i.e. the body hangs off the skeleton's COM bone and
     the model is in COM's space (skinned_files moves the mesh there); its children carry the rig's local rest.
-    `shape` is an sfnif.SkinnedShape whose bones / binds are in `bones` order."""
+    `shape` is an sfnif.SkinnedShape whose bones / binds are in `bones` order. lods: how many of the four LOD slots
+    the mesh fills (vanilla: all four, each skinned; with only LOD0 the chicken slid with still legs a few feet away,
+    owner 2026-11-17 17:52 / 18:12, after the rig LOD fix: supported, the engine drew an empty lower LOD unskinned)."""
     from . import sfnif
     f = nifmod.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                        export_script=b"\x00", sf_data=b"\x7a\x00")
@@ -199,8 +205,8 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
     nb = len(bones)
     g = sfnif.BSGeometry(name_idx=f.string_index(shape.name), extra_refs=[base + 2, base + 3], sphere=(0.0, 0.0, 0.0, 0.0),
                          box=(sfnif.FLT_MAX,) * 6, skin=base + 4, shader=base + 1,
-                         meshes=[sfnif.MeshRef(shape.indices_size, shape.num_verts, 0x40, shape.mesh_path), None, None,
-                                 None])
+                         meshes=[sfnif.MeshRef(shape.indices_size, shape.num_verts, 0x40, shape.mesh_path)] * lods
+                         + [None] * (4 - lods))
     f.add_block("BSGeometry", sfnif.build_bsgeometry(g))
     kids[root].append(base)
     f.add_block("BSLightingShaderProperty", struct.pack("<iIi", f.string_index(shape.material_path.encode("latin-1")), 0, -1))
@@ -286,7 +292,7 @@ def with_back_faces(shape, tangents=None):
 
 
 def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr: CreatureRig,
-                  tangents=None, bsx_flags: int = BODY_BSX) -> Dict[str, bytes]:
+                  tangents=None, bsx_flags: int = BODY_BSX, lods: int = BODY_LODS) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif", "geometries/<a>/<b>.mesh"}: a gearfit.SkyShape (metres, the actor's model space,
     bind worlds per bone) as a creature body (build_body_nif, in COM's space) skinned to the creature rig's bones.
     tangents: per-vertex model-space tangents (the Skyrim mesh's, turned like its normals), else none are written."""
@@ -329,7 +335,7 @@ def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr:
                       tuple(map(float, inv[:3, 3])), 1.0))
     sh = sfnif.SkinnedShape(shape.name or b"Body", f"{d}\\{f}".encode(), len(m.triangles) * 3, len(m.positions),
                             material_path, [b.encode("latin-1") for b in used], binds)
-    n = build_body_nif(b"ExportScene", sh, cr, used, bsx_flags)
+    n = build_body_nif(b"ExportScene", sh, cr, used, bsx_flags, lods)
     return {f"geometries/{d}/{f}.mesh": data, f"meshes/{out_name}.nif": nifmod.serialize(n)}
 
 
