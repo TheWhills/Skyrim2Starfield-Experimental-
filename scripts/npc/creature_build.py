@@ -105,6 +105,8 @@ def main(argv=None):
     ap.add_argument("--texconv", default="", help="texconv.exe: the chicken's own texture (else the trilobite's material)")
     ap.add_argument("--content-resources", default="", help="ContentResources.zip (default: Starfield\\Tools)")
     ap.add_argument("--work", default="", help="scratch folder (default: <out>\\_work, removed after)")
+    ap.add_argument("--vanilla-material", action="store_true",
+                    help="give the chicken the trilobite's own material (rules the converted material out)")
     a = ap.parse_args(argv)
 
     from fo4sf import af_writer, bsa, creature, gearfit, nif as nifmod, retarget, skyrimhkx, skyrimskin
@@ -155,7 +157,7 @@ def main(argv=None):
     texconv = gearfit_find_texconv(a.texconv)
     cr_zip = a.content_resources or os.path.join(os.path.dirname(os.path.abspath(a.starfield_data)), "Tools",
                                                  "ContentResources.zip")
-    if texconv and os.path.isfile(cr_zip):
+    if texconv and os.path.isfile(cr_zip) and not a.vanilla_material:
         from fo4sf import skyrimconvert
         conv = skyrimconvert.SkyrimConverter(sky, os.path.join(work, "staging"), texconv, cr_zip, prefix="s2s")
         material = conv._shape_material(src, s)

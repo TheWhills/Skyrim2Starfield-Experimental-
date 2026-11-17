@@ -128,22 +128,32 @@ def quat_to_rot9(q) -> Tuple[float, ...]:
             2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y))
 
 
-def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str]) -> nifmod.NifFile:
+BODY_BSX = 0x1004A        # the vanilla trilobite body's BSXFlags (owner's model compare 2, 2026-11-17)
+
+
+def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], bsx_flags: int = BODY_BSX) -> nifmod.NifFile:
     """A creature body NIF laid out like the vanilla trilobite's (verified layout, owner's model compare 2026-11-17):
     the model carries its own bone nodes (root > COM_Twin > the rig's hierarchy at rest, each with NiStringExtraData
     'sgoKeep'), the skin's BSSkin::Instance points at those nodes (skeleton root = the root node), and its SkinAttach
     names are empty. Worn gear (sfnif.build_skinned_nif: names only, no nodes) drew nothing on a creature (owner,
-    2026-11-17 14:02: heard, not seen). `shape` is an sfnif.SkinnedShape whose bones / binds are in `bones` order."""
+    2026-11-17 14:02: heard, not seen). As vanilla (model compare 2): COM_Twin sits at the model's origin and carries
+    NiStringExtraData ParentBoneName = COM instead of sgoKeep, i.e. the body hangs off the skeleton's COM bone and
+    the model is in COM's space (skinned_files moves the mesh there); its children carry the rig's local rest.
+    `shape` is an sfnif.SkinnedShape whose bones / binds are in `bones` order."""
     from . import sfnif
     f = nifmod.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                        export_script=b"\x00", sf_data=b"\x7a\x00")
     s_keep = f.string_index(b"sgoKeep")
     root = f.add_block("NiNode", b"")
-    bsx = f.add_block("BSXFlags", struct.pack("<iI", f.string_index(b"BSX"), 0x10000))
+    bsx = f.add_block("BSXFlags", struct.pack("<iI", f.string_index(b"BSX"), bsx_flags))
     node_of, kids = {}, {root: []}
     for i, name in enumerate(cr.names):
         b = f.add_block("NiNode", b"")
-        e = f.add_block("NiStringExtraData", struct.pack("<ii", s_keep, s_keep))
+        if cr.parents[i] < 0:
+            e = f.add_block("NiStringExtraData", struct.pack("<ii", f.string_index(b"ParentBoneName"),
+                                                             f.string_index(name.encode("latin-1"))))
+        else:
+            e = f.add_block("NiStringExtraData", struct.pack("<ii", s_keep, s_keep))
         node_of[i] = (b, e)
         kids[b] = []
         kids[root if cr.parents[i] < 0 else node_of[cr.parents[i]][0]].append(b)
@@ -172,19 +182,44 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str]) -
     f.blocks[root] = node(f.string_index(root_name), [bsx], ident, kids[root])
     for i, name in enumerate(cr.names):
         b, e = node_of[i]
-        xform = struct.pack("<3f", *map(float, cr.t[i])) + struct.pack("<9ff", *quat_to_rot9(cr.q[i]), 1.0)
+        if cr.parents[i] < 0:                            # COM_Twin: the model's origin is COM itself
+            xform = ident
+        else:
+            xform = struct.pack("<3f", *map(float, cr.t[i])) + struct.pack("<9ff", *quat_to_rot9(cr.q[i]), 1.0)
         nm = COM_NODE if name == COM else name
         f.blocks[b] = node(f.string_index(nm.encode("latin-1")), [e], xform, kids[b])
     f.footer = struct.pack("<II", 1, 0)
     return f
 
 
+def com_world(cr: CreatureRig) -> np.ndarray:
+    """4x4 rest world of the rig's root (COM), metres."""
+    m = np.eye(4)
+    m[:3, :3] = np.array(quat_to_rot9(cr.q[0])).reshape(3, 3)
+    m[:3, 3] = cr.t[0]
+    return m
+
+
+def to_com_space(shape, cr: CreatureRig, tangents=None):
+    """(shape, tangents) moved from the actor's model space into COM's (vertices, normals, tangents, bind worlds),
+    the space of a vanilla creature body (build_body_nif)."""
+    import dataclasses
+    inv = np.linalg.inv(com_world(cr))
+    R, T = inv[:3, :3], inv[:3, 3]
+    pts = np.asarray(shape.points, float) @ R.T + T
+    nrm = np.asarray(shape.normals, float) @ R.T if len(shape.normals) else shape.normals
+    joints = {b: inv @ w for b, w in shape.joints.items()}
+    tan = None if tangents is None else [tuple(np.asarray(t, float) @ R.T) for t in tangents]
+    return dataclasses.replace(shape, points=pts, normals=nrm, joints=joints), tan
+
+
 def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr: CreatureRig,
-                  tangents=None) -> Dict[str, bytes]:
-    """{"meshes/<out_name>.nif", "geometries/<a>/<b>.mesh"}: a gearfit.SkyShape (metres, model space, bind worlds per
-    bone) as a creature body (build_body_nif) skinned to the creature rig's bones. tangents: per-vertex model-space
-    tangents (the Skyrim mesh's, turned like its normals), else none are written."""
+                  tangents=None, bsx_flags: int = BODY_BSX) -> Dict[str, bytes]:
+    """{"meshes/<out_name>.nif", "geometries/<a>/<b>.mesh"}: a gearfit.SkyShape (metres, the actor's model space,
+    bind worlds per bone) as a creature body (build_body_nif, in COM's space) skinned to the creature rig's bones.
+    tangents: per-vertex model-space tangents (the Skyrim mesh's, turned like its normals), else none are written."""
     from . import convert_static, sfmesh, sfnif
+    shape, tangents = to_com_space(shape, cr, tangents)
     rig_names = cr.names
     names = bone_name_map(shape.bones, rig_names, com_source)
     used = sorted({names[shape.bones[b]] for vw in shape.weights for b, _w in vw}, key=lambda n: (n != COM, n))
@@ -214,7 +249,7 @@ def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr:
                       tuple(map(float, inv[:3, 3])), 1.0))
     sh = sfnif.SkinnedShape(shape.name or b"Body", f"{d}\\{f}".encode(), len(m.triangles) * 3, len(m.positions),
                             material_path, [b.encode("latin-1") for b in used], binds)
-    n = build_body_nif(b"ExportScene", sh, cr, used)
+    n = build_body_nif(b"ExportScene", sh, cr, used, bsx_flags)
     return {f"geometries/{d}/{f}.mesh": data, f"meshes/{out_name}.nif": nifmod.serialize(n)}
 
 

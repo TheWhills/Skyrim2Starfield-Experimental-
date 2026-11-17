@@ -102,6 +102,33 @@ class FileTests(unittest.TestCase):
         head_t = struct.unpack_from("<3f", bd, 4 + 68 + 16 + 36)
         self.assertAlmostEqual(head_t[2], -0.2, places=6)
 
+    def test_body_in_com_space(self):
+        from fo4sf import gearfit
+        U = retarget.SKYRIM_M_PER_UNIT
+        # COM 0.3 m up, turned 90 deg about z; Head 0.1 m above it in COM's frame
+        cr = C.creature_rig(retarget.Rig(["NPC Root [Root]", "Pelvis", "Head"], [-1, 0, 1],
+                                         [(0, 0, 0), (0, 0, 0.3 / U), (0, 0, 0.1 / U)],
+                                         [(0, 0, 0, 1), (0, 0, S, S), (0, 0, 0, 1)]))
+        com = C.com_world(cr)
+        head = com @ np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0.1], [0, 0, 0, 1]])
+        p = np.array([[0.1, 0, 0.3], [0, 0, 0.45], [0, 0.1, 0.3]])     # actor model space
+        sh = gearfit.SkyShape(b"c", p, np.array([[1, 0, 0]] * 3, float), [(0, 0)] * 3, [(0, 1, 2)],
+                              ["Pelvis", "Head"], [[(0, 1.0)], [(1, 1.0)], [(0, 1.0)]], {"Pelvis": com, "Head": head})
+        moved, tan = C.to_com_space(sh, cr, [(1, 0, 0)] * 3)
+        np.testing.assert_allclose(moved.points[0], (0, -0.1, 0), atol=1e-9)    # x in the actor = -y in COM's frame
+        np.testing.assert_allclose(moved.joints["Pelvis"], np.eye(4), atol=1e-9)
+        np.testing.assert_allclose(moved.normals[0], (0, -1, 0), atol=1e-9)
+        np.testing.assert_allclose(tan[0], (0, -1, 0), atol=1e-9)
+        files = C.skinned_files(sh, "materials\\x.mat", "actors/x/x", "Pelvis", cr)
+        n = nif.parse(files["meshes/actors/x/x.nif"])
+        twin = next(i for i in range(len(n.blocks)) if C._node_name(n, i) == b"COM_Twin")
+        np.testing.assert_allclose(struct.unpack_from("<3f", n.blocks[twin], 8 + 4 + 8), (0, 0, 0), atol=1e-9)
+        e = struct.unpack_from("<i", n.blocks[twin], 8)[0]
+        self.assertEqual((C._node_name(n, e), n.strings[struct.unpack_from("<i", n.blocks[e], 4)[0]]),
+                         (b"ParentBoneName", b"COM"))
+        bsx = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSXFlags")
+        self.assertEqual(struct.unpack_from("<I", bsx, 4)[0], 0x1004A)
+
     def test_shell_skeleton(self):
         f = nif.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                         export_script=b"\x00", sf_data=b"\x7a\x00")

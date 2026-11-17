@@ -128,4 +128,13 @@ new creature skeleton on an existing graph.
 * Fix: creature.build_body_nif writes the vanilla layout: ExportScene > COM_Twin > the rig's bones at rest, each with
   'sgoKeep'; the skin instance points at those nodes; empty SkinAttach names; tangents from the Skyrim mesh. Not
   copied yet: ProjectileNode / ParentBoneName, the ragdoll, LODs 1-3.
+* Second in-game run (owner, 14:18): still heard, not seen, with our own bone nodes in the body.
+* Verified (model compare 2): the vanilla body's COM_Twin sits at the model's ORIGIN (0, 0, 0) and carries
+  NiStringExtraData ParentBoneName = COM (not sgoKeep); its children (C_spine1 at 0, C_hips1 at 0, ...) are in COM's
+  frame; BSXFlags 0x1004A; the skin's 26 bone refs do not include COM_Twin. Ours had COM_Twin at the COM's height in
+  the actor's space, sgoKeep on it, BSXFlags 0x10000. Supported: the body is hung off the skeleton's COM bone by
+  ParentBoneName, so a body without it is never attached (not drawn).
+* Fix 2: the body is written in COM's space (creature.to_com_space: vertices, normals, tangents, bind worlds),
+  COM_Twin at the origin with ParentBoneName = COM, BSXFlags 0x1004A. `--vanilla-material` gives the chicken the
+  trilobite's material to rule the converted (loose) material out.
 
