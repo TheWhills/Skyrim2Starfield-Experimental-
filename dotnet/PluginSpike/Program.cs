@@ -824,6 +824,19 @@ FormKey? FurnitureBase(string key)
         if (!animMasters.Contains(akk.ModKey)) animMasters.Add(akk.ModKey);
         modelNote += $", Skyrim animations ({b.GetProperty("anim_set").GetString()} {akw.GetString()})";
     }
+    // extra_keywords (make_furniture.py, 2026-11-16): Starfield.esm keywords by EditorID added to the copy, e.g.
+    // FurnitureSpecial, which Starfield's bartender furniture carries and Skyrim's crafting stations carry for the
+    // sandbox's "Allow Special Furniture" (owner, in game: Alvor and Hilde never chose the forge / tanning racks)
+    if (b.TryGetProperty("extra_keywords", out var xk) && xk.ValueKind == JsonValueKind.Array)
+        foreach (var xe in xk.EnumerateArray())
+        {
+            var xedid = xe.GetString()!;
+            if (!SfCache().TryResolve<IKeywordGetter>(xedid, out var xkw))
+                throw new InvalidOperationException($"extra_keywords: no KYWD {xedid} in Starfield.esm");
+            f.Keywords ??= new ExtendedList<IFormLinkGetter<IKeywordGetter>>();
+            if (!f.Keywords.Any(k => k.FormKey == xkw.FormKey)) f.Keywords.Add(xkw.FormKey.ToLink<IKeywordGetter>());
+            modelNote += $", +{xedid}";
+        }
     mod.Furniture.Add(f);
     if (furnBases.Count < 40)
         furnNotes.Add($"{f.EditorID} {f.FormKey}: copy of {tpl.EditorID} ({b.GetProperty("kind").GetString()}), {modelNote}, " +

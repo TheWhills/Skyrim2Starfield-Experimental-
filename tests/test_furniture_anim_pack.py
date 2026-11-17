@@ -416,6 +416,9 @@ class AnimKeywordTests(unittest.TestCase):
                                "skyrim_markers": [{"offset_m": [0, 0, 0], "rot_deg": 0.0, "entry": ["Rear"]}]}}}
         MF.add_anim_keywords(tan, "S2SStances.esm", read_keywords=lambda p: {"S2S_AnimFurnSkyrimTanning": 0x01000819})
         self.assertEqual(tan["bases"]["t"]["markers"][0]["entry"], MF.ALL_SIDES)
+        # FurnitureSpecial on both (2026-11-16: the sandbox's "Allow Special Furniture", like Starfield's bartender)
+        self.assertEqual(tan["bases"]["t"]["extra_keywords"], ["FurnitureSpecial"])
+        self.assertEqual(forge["bases"]["f"]["extra_keywords"], ["FurnitureSpecial"])
         none = {"bases": {"r": {"kind": "lean_counter", "edid": "RailLeanMarker", "markers": [], "skyrim_markers": sky}}}
         MF.add_anim_keywords(none, "S2SStances.esm", read_keywords=lambda p: {})
         self.assertEqual(none["bases"]["r"]["markers"], [])

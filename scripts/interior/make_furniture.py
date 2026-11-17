@@ -203,6 +203,11 @@ ANIM_SET_RULES = (
 # side only (Behind), and the forge's own model (pit, trough, anvil) stands around that spot: these sets' spots may be
 # entered from every side, so the AI can take whichever approach it can path (supported hypothesis, owner's test).
 ANY_SIDE_SETS = {"Forge", "Tanning"}
+# 2026-11-16 (owner, in game, energy fixed, invisible-marker A/B too): Alvor never chooses the forge or his tanning
+# rack, Hilde her rack only when nothing else is left; forced in, both play. Starfield's bartender furniture (Orgnar
+# uses ours) carries FurnitureSpecial and so do Skyrim's crafting stations, for the sandbox's "Allow Special Furniture"
+# (on in Alvor's and Hilde's packages); the wall-wipe and welder templates do not (supported hypothesis, owner's test)
+SPECIAL_SETS = {"Forge", "Tanning"}
 ALL_SIDES = ["Front", "Rear", "Left", "Right"]
 SKYRIM_SPOT_SETS = {"Forge"}         # (the Grindstone set, removed 2026-11-16, stood at Skyrim's wheel marker too)
 ANIM_SETS = sorted({st for _k, _e, st in ANIM_SET_RULES})
@@ -267,6 +272,8 @@ def add_anim_keywords(out, plugin_path, read_keywords=None):
             # line (different from the default) stays.
             if b.get("shift_m") is not None and list(b["shift_m"]) == list(DEFAULT_SHIFT.get(b.get("kind"), [])):
                 del b["shift_m"]
+        if st in SPECIAL_SETS:
+            b["extra_keywords"] = ["FurnitureSpecial"]
         if st in ANY_SIDE_SETS and b.get("markers"):
             b["markers"] = [dict(m, entry=list(ALL_SIDES)) for m in b["markers"]]
         done[st] = done.get(st, 0) + 1

@@ -647,4 +647,10 @@ the tanning rack) and Hilde leans: the energy fix works. At the forge he stands 
 starts; the console `activate <Alvor>` on the forge does nothing. Suspect: our walk-in, Skyrim's 13.9 s Pull as
 EnterFromStand. A/B: furniture_anim_pack --vanilla-enter Forge leaves the welder's own walk-in (our props then load
 only with EnterInstant; the hammer may be missing after a walk-in in that test).
+Owner, 20:27 (invisible-marker A/B with energy 50, --vanilla-enter forge): Alvor still never works the (invisible)
+forge or his tanning rack; Hilde sits. So neither the solid model nor our walk-in is the cause (the walk-in A/B:
+"nothing"). Common to the forge and tanning racks and not to the bar (Orgnar uses it): FurnitureSpecial, which
+Starfield's NPCBartender_Standing carries and Skyrim's crafting stations carry for the sandbox's "Allow Special
+Furniture" (on in Alvor's and Hilde's packages). make_furniture SPECIAL_SETS (Forge, Tanning) -> extra_keywords
+["FurnitureSpecial"], PluginSpike adds them by EditorID (supported hypothesis; next build tests it).
 

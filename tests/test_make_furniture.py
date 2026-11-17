@@ -228,5 +228,15 @@ class BoundsTests(unittest.TestCase):
             self.assertEqual(M.add_bounds(out, os.path.join(d, "nothing")), 0)
 
 
+class ExtraKeywordsCsTest(unittest.TestCase):
+    def test_plugin_spike_reads_extra_keywords(self):
+        """2026-11-16: PluginSpike adds make_furniture's extra_keywords (Starfield EditorIDs) to the furniture copy."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('b.TryGetProperty("extra_keywords"', cs)
+        self.assertIn("TryResolve<IKeywordGetter>(xedid", cs)
+
+
 if __name__ == "__main__":
     unittest.main()
