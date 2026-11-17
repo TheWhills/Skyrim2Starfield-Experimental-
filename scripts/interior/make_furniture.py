@@ -256,7 +256,7 @@ def anim_keyword_edid(anim_set: str) -> str:
     return f"S2S_AnimFurnSkyrim{anim_set}"
 
 
-def add_anim_keywords(out, plugin_path, read_keywords=None, plain=False):
+def add_anim_keywords(out, plugin_path, read_keywords=None, plain=False, keep_keywords=()):
     """Give each base whose kind has an animation set its keyword's FormKey from the animations plugin (S2SStances.esm):
     "anim_keyword" ("XXXXXX:S2SStances.esm"), "anim_set". Returns {set: count}; sets whose keyword the plugin lacks are
     reported under "missing".
@@ -292,8 +292,8 @@ def add_anim_keywords(out, plugin_path, read_keywords=None, plain=False):
             # line (different from the default) stays.
             if b.get("shift_m") is not None and list(b["shift_m"]) == list(DEFAULT_SHIFT.get(b.get("kind"), [])):
                 del b["shift_m"]
-        if st in SPECIAL_SETS and not plain:
-            b["extra_keywords"] = list(SPECIAL_KEYWORDS)
+        if st in SPECIAL_SETS and (not plain or keep_keywords):
+            b["extra_keywords"] = list(SPECIAL_KEYWORDS) if not plain else list(keep_keywords)
         if st in ANY_SIDE_SETS and b.get("markers"):
             b["markers"] = [dict(m, entry=[] if plain else list(ALL_SIDES)) for m in b["markers"]]
         done[st] = done.get(st, 0) + 1
@@ -479,6 +479,8 @@ def main(argv=None):
                          "(bed -90: Starfield's sleep animation lies across Skyrim's beds); bed=0 turns it off")
     ap.add_argument("--plain-stations", action="store_true",
                     help="A/B: work stations without FurnitureSpecial / IgnoreCollision and with the template's entry sides")
+    ap.add_argument("--station-keyword", action="append", default=[], metavar="EDID",
+                    help="with --plain-stations: still give the stations this keyword (A/B, e.g. FurnitureSpecial)")
     ap.add_argument("--skip-kind", action="append", default=[], metavar="KIND",
                     help="leave this kind as statics (repeatable; A/B: 2026-11-16, owner: the tanning rack was used "
                          "before the forge joined its template, so a build without the forge)")
@@ -512,7 +514,8 @@ def main(argv=None):
         ix.close()
     if a.anim_plugin:
         if os.path.exists(a.anim_plugin):
-            got = add_anim_keywords(out, a.anim_plugin, plain=a.plain_stations)
+            got = add_anim_keywords(out, a.anim_plugin, plain=a.plain_stations,
+                                    keep_keywords=a.station_keyword)
             print(f"Skyrim animation sets from {os.path.basename(a.anim_plugin)}: "
                   + (", ".join(f"{k} {v}" for k, v in got.items()) or "none"))
         else:

@@ -541,6 +541,12 @@ class PlainStationsTest(unittest.TestCase):
         self.assertNotIn("extra_keywords", plain["bases"]["f"])
         self.assertEqual(plain["bases"]["f"]["markers"][0]["entry"], [])     # PluginSpike: the template's sides
         self.assertEqual(plain["bases"]["f"]["anim_set"], "Forge")
+        kept = {"bases": {"f": {"kind": "forge", "edid": "CraftingBlackSmithForge", "markers": [],
+                                "skyrim_markers": [dict(m) for m in sky]}}}
+        MF.add_anim_keywords(kept, "S2SStances.esm", read_keywords=lambda p: kws, plain=True,
+                             keep_keywords=["FurnitureSpecial"])
+        self.assertEqual(kept["bases"]["f"]["extra_keywords"], ["FurnitureSpecial"])
+        self.assertEqual(kept["bases"]["f"]["markers"][0]["entry"], [])
 
 
 if __name__ == "__main__":

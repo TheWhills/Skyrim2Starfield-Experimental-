@@ -33,7 +33,8 @@ param(
     # a Starfield Sit package into one Skyrim furniture reference, ahead of the NPC's own (make_schedule --sit-at), e.g.
     # -SitAt "Alvor=0D6987:8:720" (his forge, 8:00 for 12 h)
     [string[]]$SitAt = @(),
-    [switch]$PlainStations,    # with -Furniture (A/B): work stations without FurnitureSpecial / IgnoreCollision, template's entry sides
+    [switch]$PlainStations,
+    [string[]]$StationKeyword = @(),  # with -PlainStations: keywords the stations still get, e.g. FurnitureSpecial    # with -Furniture (A/B): work stations without FurnitureSpecial / IgnoreCollision, template's entry sides
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
     # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
@@ -150,6 +151,7 @@ if ($Furniture) {
     if ($NoCrafting) { $fa += @("--no-crafting") }
     foreach ($sk in $SkipKind) { if ($sk.Trim()) { $fa += @("--skip-kind", $sk.Trim()) } }
     if ($PlainStations) { $fa += @("--plain-stations") }
+    foreach ($kw in $StationKeyword) { if ($kw.Trim()) { $fa += @("--station-keyword", $kw.Trim()) } }
     if ($AnimPlugin -and (Test-Path $AnimPlugin)) { $fa += @("--anim-plugin", $AnimPlugin) }
     python -I scripts\interior\make_furniture.py @fa
     if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }

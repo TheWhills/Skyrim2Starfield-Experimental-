@@ -841,3 +841,10 @@ marker is at (-0.883, 0, 0) turned 90 deg (Skyrim's). make_furniture --plain-sta
 animation keyword and the spot different from Starfield's own. With the Sit package (which needs no FurnitureSpecial
 to choose): walks in -> one of those two; still not -> the animation keyword's set (our walk-in through the
 HumanRace entry) or the spot.
+**Owner, 22:54: "this round it entered the animation"** (the -PlainStations build: no FurnitureSpecial, no
+IgnoreCollisionAtRefForInteractionsKeyword, the template's entry sides 0xFFFFFFFF; Starfield's model
+(FURNITURE_MODEL=vanilla); the Sit package naming the forge). First walk-in into the forge after a `moveto player`
+(to be confirmed: walked in, not placed by a passtime). So one of those three record differences blocked the walk-in
+(supported, strongly). Split next: our model back (FURNITURE_MODEL unset); then --station-keyword (-StationKeyword,
+with -PlainStations: keywords the stations still get) FurnitureSpecial alone, which the sandbox needs to pick them
+without a Sit package.
