@@ -688,3 +688,14 @@ kind smith_table on NPCWipeTable (003B2A66, AnimFurnWipeTable, its own), idle = 
 Exit, EnterInstant = Loop; prop S2S_AnimObjectHammerTableSkyrim (stance_plugin PROP_OBJECTS, last;
 anim_object_convert); FurnitureSpecial + IgnoreCollision..., every side, Skyrim's marker.
 
+Owner, 21:47-21:51 (Grindstone + Workbench build): Alvor is seen in the forge / workbench only right after a passtime
+(screenshot: hammering at the armor workbench, the hammer prop in hand), never walking in; he "walks in circles around
+his workstation" and then goes to the PatrolIdleMarker in front of the shed (our "stand", NPCStanding: Starfield's
+hands-behind-the-back idle), where he stays "for a long time" (Skyrim's idle markers had IDLT timers, ours none). The
+grindstone not seen in use yet. Two problems, as before: (1) choosing: the untimed stand spot takes most of his day;
+(2) walking in: circling near the pieces fits an approach that fails at each entry side (every side allowed since
+ANY_SIDE_SETS). Correction: the earlier solid-model (FURNITURE_MODEL=vanilla) and walk-in (--vanilla-enter) A/Bs ran
+before FurnitureSpecial, when he never chose the pieces at all, so they could not show a walk-in either way; they do
+not rule those causes out. Next build (records only): -SkipKind stand (fewer untimed spots, more attempts at the work
+pieces) with FURNITURE_MODEL=vanilla (no solid model at the spots): if he then walks in, the model's collision blocks
+the approach; if he still circles, our walk-in clips (no root motion: the approach starts on the marker itself) are next.
