@@ -196,6 +196,42 @@ def convert_package(sky, sf_tpls, pack_fid, cell_names, notes, keep_conditioned=
             "conditions_dropped": p["conditions"], "inputs": inputs}
 
 
+def target_index(sf_tpl):
+    """The UNAM index of a Starfield template's first single-reference input (Sit: the furniture to use), or None."""
+    for idx, inp in zip(value_indexes(sf_tpl["pack"]), sf_tpl["pack"]["inputs"]):
+        if (inp.get("type") or "").lower() in ("singleref", "target"):
+            return idx
+    return None
+
+
+def parse_sit_at(specs) -> dict:
+    """--sit-at NPC=SKYRIMREF:HOUR:MINUTES ... -> {npc lower: [(ref formkey, hour, minutes)]}."""
+    out = {}
+    for spec in specs or []:
+        npc, _, rest = spec.partition("=")
+        parts = rest.split(":")
+        if not npc or len(parts) != 3:
+            raise ValueError(f"--sit-at {spec!r}: expected NPC=SKYRIMREF:HOUR:MINUTES, e.g. Alvor=0D6987:8:720")
+        ref = parts[0].upper().rjust(6, "0")
+        out.setdefault(npc.strip().lower(), []).append((f"{ref}:Skyrim.esm", int(parts[1]), int(parts[2])))
+    return out
+
+
+def sit_package(npc_edid, ref, hour, minutes, sf_tpl, n=0):
+    """A package of Starfield's Sit template that sends the NPC into one furniture reference for a time of day
+    (2026-11-16, work_spot_usage.py on Starfield.esm: its own NPCs reach work spots through Sit packages naming the
+    reference, e.g. UC07_Gel_Sit_Weld on a welder, and linked references; a sandbox only places Alvor in his forge
+    during a passtime). PluginSpike resolves the Skyrim reference to the furniture it places for it."""
+    idx = target_index(sf_tpl)
+    if idx is None:
+        return None
+    return {"edid": f"S2S_{npc_edid}SitAt{ref.split(':')[0]}" + (f"_{n}" if n else ""), "skyrim": None,
+            "schedule": {"month": 0, "day_of_week": -1, "date": 0, "hour": hour, "minute": -1, "duration_min": minutes},
+            "skyrim_schedule": None, "speed": 0, "skyrim_template": None, "sf_template": "Sit",
+            "sf_template_form": f"{sf_tpl['form']:08X}", "conditions_dropped": 0,
+            "inputs": {str(idx): {"kind": "ref", "source": ref, "skyrim": "(--sit-at)"}}}
+
+
 def load_sf_templates(path):
     """({template EditorID lower: {form, pack}}, XMarker STAT FormID or None) of Starfield.esm."""
     ix = packages.Index(path)
@@ -253,7 +289,12 @@ def main(argv=None):
     ap.add_argument("--exterior", default="", help="the installed exterior's staging folder (formids.json): package "
                                                    "locations near references in its converted cells are kept (NPCs "
                                                    "go outdoors); without it they are left out as before")
+    ap.add_argument("--sit-at", action="append", default=[], metavar="NPC=SKYRIMREF:HOUR:MINUTES",
+                    help="also give the NPC a Starfield Sit package into this Skyrim furniture reference for that time, "
+                         "ahead of its own packages (A/B, 2026-11-16: does Alvor walk into his forge when a package "
+                         "names it?), e.g. Alvor=0D6987:8:720")
     a = ap.parse_args(argv)
+    sit_at = parse_sit_at(a.sit_at)
     notes = []
     cells_txt = os.path.join(a.work, "cells.txt")
     cell_names = set()
@@ -326,6 +367,12 @@ def main(argv=None):
                 continue
             pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned,
                                   a.keep_furniture_only, ext_cells) for p in src["packages"]]
+            for n, (ref, hour, minutes) in enumerate(sit_at.get(edid.lower(), [])):
+                sp = sit_package(edid, ref, hour, minutes, sf_tpls["sit"], n) if "sit" in sf_tpls else None
+                if sp is None:
+                    notes.append(f"{edid}: --sit-at {ref}: Starfield.esm has no Sit template with a reference input")
+                else:
+                    pk.insert(n, sp)
             name = npc.get("full_name") or edid
             ac = {"skyrim": edid, "skyrim_form": f"{fid:08X}", "name": name, "female": npc["female"],
                   "template_npc": tpl, "template_why": why, **spot, "packages": [p for p in pk if p]}
@@ -348,8 +395,8 @@ def main(argv=None):
         print(f"{ac['skyrim']} in {ac['cell']} at {ac['pos']} ({look}):")
         for p in ac["packages"]:
             s = p["schedule"] or {}
-            ins = ", ".join(f"{v['skyrim']}={v.get('value', v.get('type'))}" for v in p["inputs"].values())
-            print(f"  {p['edid']}: {p['skyrim_template']} -> {p['sf_template']}, hour {s.get('hour')} for "
+            ins = ", ".join(f"{v['skyrim']}={v.get('value', v.get('type', v.get('source')))}" for v in p["inputs"].values())
+            print(f"  {p['edid']}: {p['skyrim_template'] or '(added)'} -> {p['sf_template']}, hour {s.get('hour')} for "
                   f"{s.get('duration_min')} min; inputs {ins}")
     for n in notes:
         print("  note: " + n)

@@ -776,3 +776,16 @@ forge, 3.2-3.3 m from the grindstone and armor workbench. The spot where he keep
 tanning rack and the forge) fits it (supported, from the screenshots only): he idles at his work centre and walks
 between it and the stations without entering, so the sandbox in real time either never commits to a station or gives
 up at it; in a passtime (low process) it places him straight in. work_spot_usage.py next.
+work_spot_usage (owner, 22:19, **verified**): Starfield.esm places 99 welders, 101 standing-repair spots, 45 wall-wipes,
+35 wipe tables, 326 sweep spots. Few are reached by name: actors linking to one (XLKR, mostly the default keyword):
+welder 6, repair 13, wall-wipe 2, wipe table 1, sweep 6; packages naming one, all with the Sit template and a
+SingleRef input: bartender 12, welder 1 (UC07_Gel_Sit_Weld), repair 2, bar lean 2, sweep 1 (and one Sandbox naming a
+location). The rest are left to sandboxes, if used at all. So Starfield's own way to put a worker on a work spot is a
+Sit package naming the furniture (supported: no evidence yet how often its sandboxes use them).
+**Sit-package A/B** (make_schedule --sit-at NPC=SKYRIMREF:HOUR:MINUTES, riverwood_doors -SitAt): adds a Starfield Sit
+package (template from Starfield.esm, its SingleRef input = the furniture PluginSpike places for that Skyrim
+reference, outdoors through IdFor("EXTFURN:...")) ahead of the NPC's own packages, with no vanilla A/B fallback.
+-SitAt "Alvor=0D6987:8:720" sends Alvor into his forge for his work day: if he then walks in by himself, the walk-in
+works and the sandbox's real-time choice is what fails (fix: Sit packages for his stations by time of day); if he
+does not, the walk-in itself fails. Unverified in game; the C# case (PackageDataTarget / PackageTargetSpecificReference)
+is not compiled here.

@@ -2343,3 +2343,9 @@ empty nodes; the effect system behind them is unknown).
   and welder templates lack it. make_furniture SPECIAL_SETS (Forge, Tanning) add it (PluginSpike extra_keywords):
   Alvor then used the forge and his tanning rack by himself for the first time.
 
+- 2026-11-16 Claude: furniture an NPC must use goes into a Starfield Sit package naming the reference when the sandbox
+  will not enter it (make_schedule --sit-at; PluginSpike "ref" inputs). Why: Starfield.esm's own work spots are
+  reached by Sit packages and linked references (work_spot_usage, verified); Alvor's sandbox enters his stations only
+  during a passtime, with navmesh, model, flags, walk-in clips and entry sides ruled out. Alternatives: linked
+  references with a "use linked ref" package (no such Skyrim data), scripts (none in this pipeline). Supported
+  hypothesis; first an A/B on the forge.

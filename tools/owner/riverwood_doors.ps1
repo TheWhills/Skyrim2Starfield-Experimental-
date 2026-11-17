@@ -30,6 +30,9 @@ param(
     [string[]]$FurnTurn = @(),    # turn a furniture kind's markers (degrees), e.g. -FurnTurn "bed=90" (default bed -90)
     [switch]$NoCrafting,       # with -Furniture: leave crafting stations (cooking pots, alchemy, smithing) as statics
     [string[]]$SkipKind = @(), # with -Furniture: leave these furniture kinds as statics, e.g. -SkipKind forge (A/B)
+    # a Starfield Sit package into one Skyrim furniture reference, ahead of the NPC's own (make_schedule --sit-at), e.g.
+    # -SitAt "Alvor=0D6987:8:720" (his forge, 8:00 for 12 h)
+    [string[]]$SitAt = @(),
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
     # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
@@ -132,6 +135,7 @@ if ($Actors.Count -gt 0) {
     # puts a marker there in the exterior's persistent cell), so the NPCs walk out of their houses and around town
     $sa += @("--exterior", $Exterior)
     if (Test-Path $Faces) { $sa += @("--faces", $Faces) } else { Write-Host "no faces.json at $Faces" -ForegroundColor Yellow }
+    foreach ($st in $SitAt) { if ($st.Trim()) { $sa += @("--sit-at", $st.Trim()) } }
     python -I scripts\npc\make_schedule.py @sa
     if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }
 }

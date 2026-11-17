@@ -41,6 +41,12 @@ var sourceMap = new SortedDictionary<string, string>();      // source form key 
 // every navmesh written (interiors and exterior), for the NAVI entries and the load doors' XNDP: its key, geometry and
 // parent (world + grid, or cell)
 var navInfos = new List<(FormKey nav, NavmeshGeometry geo, FormKey? world, short gx, short gy, FormKey? cell)>();
+// the FormKey a later Id(key) will give, without claiming the key (a package naming furniture placed further on)
+FormKey IdFor(string key)
+{
+    if (!ids.TryGetValue(key, out var v)) { v = next++; ids[key] = v; }
+    return new FormKey(modKey, v);
+}
 FormKey Id(string key)
 {
     if (!usedThisRun.Add(key)) throw new InvalidOperationException($"duplicate identity key {key}");
@@ -674,6 +680,22 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
                     l.Location = new LocationTargetRadius { Target = target, Radius = BitConverter.SingleToUInt32Bits(r), CollectionIndex = l.Location.CollectionIndex };
                     break;
                 }
+                // make_schedule --sit-at (2026-11-16): a Sit package's furniture, a Skyrim reference this build places
+                // (interior: placedBySource; outdoors: the EXTFURN reference placed further on, same FormKey via IdFor)
+                case "ref" when d is PackageDataTarget pt:
+                {
+                    var srcF = v.GetProperty("source").GetString()!;
+                    var fk = placedBySource.TryGetValue(srcF, out var inKey) ? inKey : IdFor("EXTFURN:" + srcF);
+                    if (pt.Target is PackageTargetSpecificReference sr) sr.Reference.SetTo(fk);
+                    else
+                    {
+                        var nr = new PackageTargetSpecificReference();
+                        nr.Reference.SetTo(fk);
+                        pt.Target = nr;
+                    }
+                    notes.Add($"{edid}: input {idx} -> furniture {fk} (Skyrim {srcF})");
+                    break;
+                }
                 default: notes.Add($"{edid}: input {idx} is {d.GetType().Name}, not {v.GetProperty("kind").GetString()}; vanilla kept"); break;
             }
         }
@@ -691,6 +713,9 @@ void PlaceActor(Cell cell, string cellName, JsonElement ac, Dictionary<string, F
     if (Environment.GetEnvironmentVariable("ACTOR_AB") != "0")
         foreach (var pj in ac.GetProperty("packages").EnumerateArray())
         {
+            // packages make_schedule adds (--sit-at: "skyrim" null) get no vanilla fallback: a vanilla Sit package names
+            // some vanilla furniture elsewhere
+            if (pj.TryGetProperty("skyrim", out var skj) && skj.ValueKind == JsonValueKind.Null) continue;
             var tkey = new FormKey(sfEsm, Convert.ToUInt32(pj.GetProperty("sf_template_form").GetString(), 16) & 0xFFFFFF);
             if (vanillaPackage.TryGetValue(tkey, out var vp0) && !npc.Packages.Any(l => l.FormKey == vp0.FormKey))
             {

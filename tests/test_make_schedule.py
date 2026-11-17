@@ -247,3 +247,36 @@ class ExteriorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SitAtTests(unittest.TestCase):
+    """--sit-at: a Starfield Sit package naming one Skyrim furniture reference (2026-11-16, Alvor's forge)."""
+    SIT = {"form": 0x123, "pack": {"inputs": [{"type": "Location", "value": None}, {"type": "SingleRef", "value": None}],
+                                   "input_names": [{"index": 0, "name": None}, {"index": 5, "name": None},
+                                                   {"index": 0, "name": "Place"}, {"index": 5, "name": "Furniture"}]}}
+
+    def test_parse(self):
+        self.assertEqual(M.parse_sit_at(["Alvor=0D6987:8:720", "alvor=1C785:12:60"]),
+                         {"alvor": [("0D6987:Skyrim.esm", 8, 720), ("01C785:Skyrim.esm", 12, 60)]})
+        with self.assertRaises(ValueError):
+            M.parse_sit_at(["Alvor=0D6987"])
+
+    def test_package(self):
+        self.assertEqual(M.target_index(self.SIT), 5)
+        p = M.sit_package("Alvor", "0D6987:Skyrim.esm", 8, 720, self.SIT)
+        self.assertEqual(p["edid"], "S2S_AlvorSitAt0D6987")
+        self.assertIsNone(p["skyrim"])                       # PluginSpike: no vanilla A/B fallback for it
+        self.assertEqual(p["sf_template_form"], "00000123")
+        self.assertEqual(p["schedule"]["hour"], 8)
+        self.assertEqual(p["schedule"]["duration_min"], 720)
+        self.assertEqual(p["schedule"]["month"], 0)
+        self.assertEqual(p["inputs"], {"5": {"kind": "ref", "source": "0D6987:Skyrim.esm", "skyrim": "(--sit-at)"}})
+        self.assertIsNone(M.sit_package("Alvor", "0D6987:Skyrim.esm", 8, 720,
+                                        {"form": 1, "pack": {"inputs": [], "input_names": []}}))
+
+    def test_plugin_spike_handles_ref_inputs(self):
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('case "ref" when d is PackageDataTarget', cs)
+        self.assertIn('IdFor("EXTFURN:" + srcF)', cs)
+        self.assertIn("skj.ValueKind == JsonValueKind.Null) continue;", cs)
