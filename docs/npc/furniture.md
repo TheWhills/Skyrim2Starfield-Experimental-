@@ -793,3 +793,9 @@ Owner's -SitAt "Alvor=0D6987:8:720" build (22:25, verified from the log): the C#
 000FD7:FO4Port.esm, a copy of vanilla FC_Neon_AyumiKomikoDefaultPackage (Sit), input 0 -> furniture 000F54:FO4Port.esm
 (the outdoor forge reference, EXTFURN:0D6987), first in Alvor's list ahead of S2S_AlvorWork8x12; no vanilla A/B
 copy for it. In-game result pending (getiscurrentpackage 18000FD7 on 18000EB8 says whether it runs).
+Owner, 22:31 (screenshot, **verified**): GetIsCurrentPackage 18000FD7 = 1 on Alvor (18000EB8): the Sit package naming
+the forge runs, and he stands in the forge area (between the forge pit and the anvil table, neutral pose) without
+entering. So walking in fails however he is sent (sandbox or a package naming the furniture); the sandbox's choice is
+not the (only) problem. Forced in (SnapIntoInteraction) and placed in (passtime) both play, so the record and clips
+work once inside: what fails is the approach / entry step. Next: where he stops against the marker (GetDistance /
+GetHeadingAngle to the forge reference 18000F54): at the spot (the entry will not start) or short of it (cannot reach).
