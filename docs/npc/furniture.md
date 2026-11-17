@@ -730,3 +730,5 @@ model there he is still stuck, so the model's collision is not what blocks him (
 (Skyrim's, no root motion: Pull 13.9 s for the forge; the one sighting of him working the forge with no passtime
 first, 21:16, was on the --vanilla-enter Forge build). Next: GetSitting on him (in the furniture or not), then the
 --vanilla-enter A/B for Forge, Grindstone and Workbench with the models back and the stand spots still off.
+Owner, 22:02 (same build): GetSitting on Alvor (18000EB8) at that spot = 0.00: he is not in any furniture, standing
+outside it (verified). Consistent with an entry he cannot start; the --vanilla-enter A/B above is the next test.
