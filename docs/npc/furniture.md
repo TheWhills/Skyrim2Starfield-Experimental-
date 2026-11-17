@@ -873,3 +873,9 @@ make_furniture marks every station sandbox_usable; PluginSpike clears FNAM bit 1
 naming it Alvor walks in (22:54), so the furniture can be entered; the sandbox does not pick it. Starfield.esm itself
 names its welders through packages or linked references more than it leaves them to sandboxes (work_spot_usage).
 Options: a Sit package for a slice of his work day (Starfield's own way, verified to walk in), or another template.
+**Owner, 23:27: "I moved the forge and it started working, so its position is affecting it"** (moved in game; how far /
+which way to be asked). So the forge record and clips are fine for the sandbox; where it stands decides. At its Skyrim
+spot the work marker sits at the reference origin, inside the forge model's bounds (x -2.4..2.3 m, y -1.3..4.2 m:
+pit, anvil, trough): supported reading, the model's own collision around the spot makes the sandbox reject it as
+unreachable (a Sit package or a passtime does not test that). Earlier "model ruled out" tests used the invisible model
+together with the other blockers (IgnoreCollision / 0xF sides) still on, so they did not separate this.
