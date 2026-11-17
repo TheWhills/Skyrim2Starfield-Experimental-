@@ -799,3 +799,8 @@ entering. So walking in fails however he is sent (sandbox or a package naming th
 not the (only) problem. Forced in (SnapIntoInteraction) and placed in (passtime) both play, so the record and clips
 work once inside: what fails is the approach / entry step. Next: where he stops against the marker (GetDistance /
 GetHeadingAngle to the forge reference 18000F54): at the spot (the entry will not start) or short of it (cannot reach).
+Owner, 22:32 (screenshot): after `moveto player` Alvor stays where he is put (in the road, greeting), with the Sit
+package current: it never sets off for the forge. Suspect (supported hypothesis): the copied vanilla Sit package
+(FC_Neon_AyumiKomikoDefaultPackage) keeps its own Location input(s), in Neon, unreachable from here. make_schedule now
+sets every Location input of the Sit template to the furniture's spot (near_exterior_reference / near_reference,
+radius 1 m) and notes the template's inputs (index:type) in the build log.

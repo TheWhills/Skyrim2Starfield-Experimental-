@@ -217,7 +217,13 @@ def parse_sit_at(specs) -> dict:
     return out
 
 
-def sit_package(npc_edid, ref, hour, minutes, sf_tpl, n=0):
+def location_indexes(sf_tpl) -> list:
+    """The UNAM indexes of a Starfield template's Location inputs."""
+    return [idx for idx, inp in zip(value_indexes(sf_tpl["pack"]), sf_tpl["pack"]["inputs"])
+            if (inp.get("type") or "").lower() == "location"]
+
+
+def sit_package(npc_edid, ref, hour, minutes, sf_tpl, n=0, place=None):
     """A package of Starfield's Sit template that sends the NPC into one furniture reference for a time of day
     (2026-11-16, work_spot_usage.py on Starfield.esm: its own NPCs reach work spots through Sit packages naming the
     reference, e.g. UC07_Gel_Sit_Weld on a welder, and linked references; a sandbox only places Alvor in his forge
@@ -225,11 +231,18 @@ def sit_package(npc_edid, ref, hour, minutes, sf_tpl, n=0):
     idx = target_index(sf_tpl)
     if idx is None:
         return None
+    inputs = {str(idx): {"kind": "ref", "source": ref, "skyrim": "(--sit-at)"}}
+    # 2026-11-16 (owner, in game: with the Sit package running Alvor stood wherever he was put and never set off): the
+    # copied vanilla package keeps its own Location inputs (somewhere in its own world) unless they are set; every one
+    # goes to the furniture's spot (place: a location input as convert_package writes them)
+    if place:
+        for li in location_indexes(sf_tpl):
+            inputs[str(li)] = dict(place, skyrim="(--sit-at place)")
     return {"edid": f"S2S_{npc_edid}SitAt{ref.split(':')[0]}" + (f"_{n}" if n else ""), "skyrim": None,
             "schedule": {"month": 0, "day_of_week": -1, "date": 0, "hour": hour, "minute": -1, "duration_min": minutes},
             "skyrim_schedule": None, "speed": 0, "skyrim_template": None, "sf_template": "Sit",
             "sf_template_form": f"{sf_tpl['form']:08X}", "conditions_dropped": 0,
-            "inputs": {str(idx): {"kind": "ref", "source": ref, "skyrim": "(--sit-at)"}}}
+            "inputs": inputs}
 
 
 def load_sf_templates(path):
@@ -368,7 +381,23 @@ def main(argv=None):
             pk = [convert_package(sky, sf_tpls, p, cell_names, notes, a.keep_conditioned,
                                   a.keep_furniture_only, ext_cells) for p in src["packages"]]
             for n, (ref, hour, minutes) in enumerate(sit_at.get(edid.lower(), [])):
-                sp = sit_package(edid, ref, hour, minutes, sf_tpls["sit"], n) if "sit" in sf_tpls else None
+                rfid = int(ref.split(":")[0], 16)
+                rpos, rrot = ref_place(sky, rfid)
+                place = None
+                if rpos is not None:
+                    rcell = sky.edid(sky.cell_of.get(rfid, 0) or 0)
+                    if rcell in cell_names:
+                        place = {"kind": "location", "radius_m": 1.0, "type": "near_reference", "source": ref,
+                                 "pos": rpos, "rot": rrot, "cell": rcell}
+                    elif ext_cells and sky.cell_of.get(rfid) in ext_cells:
+                        place = {"kind": "location", "radius_m": 1.0, "type": "near_exterior_reference",
+                                 "source": ref, "pos": rpos, "rot": rrot, "cell": "exterior"}
+                if "sit" in sf_tpls:
+                    ins = [f"{i}:{(inp.get('type') or '?')}" for i, inp in
+                           zip(value_indexes(sf_tpls["sit"]["pack"]), sf_tpls["sit"]["pack"]["inputs"])]
+                    notes.append(f"{edid}: --sit-at {ref}: Sit template inputs {ins}; place "
+                                 f"{place['type'] if place else 'none'}")
+                sp = sit_package(edid, ref, hour, minutes, sf_tpls["sit"], n, place) if "sit" in sf_tpls else None
                 if sp is None:
                     notes.append(f"{edid}: --sit-at {ref}: Starfield.esm has no Sit template with a reference input")
                 else:

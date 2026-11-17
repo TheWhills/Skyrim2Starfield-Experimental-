@@ -274,6 +274,16 @@ class SitAtTests(unittest.TestCase):
         self.assertIsNone(M.sit_package("Alvor", "0D6987:Skyrim.esm", 8, 720,
                                         {"form": 1, "pack": {"inputs": [], "input_names": []}}))
 
+    def test_place_fills_location_inputs(self):
+        self.assertEqual(M.location_indexes(self.SIT), [0])
+        place = {"kind": "location", "radius_m": 1.0, "type": "near_exterior_reference", "source": "0D6987:Skyrim.esm",
+                 "pos": [1.0, 2.0, 3.0], "rot": [0, 0, 0], "cell": "exterior"}
+        p = M.sit_package("Alvor", "0D6987:Skyrim.esm", 8, 720, self.SIT, place=place)
+        self.assertEqual(p["inputs"]["0"]["type"], "near_exterior_reference")
+        self.assertEqual(p["inputs"]["0"]["skyrim"], "(--sit-at place)")
+        self.assertEqual(p["inputs"]["5"]["kind"], "ref")
+        self.assertNotIn("0", M.sit_package("Alvor", "0D6987:Skyrim.esm", 8, 720, self.SIT)["inputs"])
+
     def test_plugin_spike_handles_ref_inputs(self):
         with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
             cs = fh.read()
