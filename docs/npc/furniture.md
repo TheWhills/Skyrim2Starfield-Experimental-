@@ -884,3 +884,12 @@ cleared" (Mutagen's Furniture.Flags is the FNAM property, bit 1 found set and cl
 +FurnitureSpecial only, our models, 1 Skyrim marker each; build and install OK. In game pending: does Alvor now pick
 the grindstone by himself. The forge stays at its Skyrim spot until the owner says how far / which way moving it
 made it work.
+Owner, 2026-11-17 09:54: with Ignored By Sandbox cleared he still never uses the grindstone. Compared with the stations
+he uses (furniture_record_probe 22:47, furniture.json): the grindstone's template differs in MNAM high bits, 0x40800001
+(furniture_survey's SF names: "Enter With Weapon Drawn", "Has Model?") where the welder, wall-wipe and wipe-table have
+0x40100001 ("Allow Cloth Sim", "Has Model?"); the impact-wrench template has the actor hold a tool (supported reading:
+the sandbox would want a weapon drawn). PluginSpike now clears MNAM bit 23 on the stations too (log: "Enter With Weapon
+Drawn cleared"). Skyrim side: forge, grindstone and tanning rack all have their one marker at the model's origin,
+entry Rear (furniture.json skyrim_markers), the same as each other; the grindstone's Skyrim model is the animating
+wheel (its spin is not converted), nothing in how NPCs pick it differs from the forge in Skyrim. If the flag is not it,
+the forge's lesson applies (moved, the forge was used): test by moving the grindstone in game.

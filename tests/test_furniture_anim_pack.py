@@ -553,6 +553,7 @@ class PlainStationsTest(unittest.TestCase):
             cs = fh.read()
         self.assertIn('b.TryGetProperty("sandbox_usable"', cs)
         self.assertIn("fv & ~2L", cs)
+        self.assertIn("mv & ~0x00800000L", cs)                 # MNAM "Enter With Weapon Drawn" (the wrench template)
 
 
 if __name__ == "__main__":

@@ -850,6 +850,20 @@ FormKey? FurnitureBase(string key)
                 modelNote += ", Ignored By Sandbox cleared";
             }
         }
+        // 2026-11-17 (owner: the grindstone still never used): its template's MNAM also has bit 23, "Enter With Weapon
+        // Drawn" (furniture_survey's names; the impact-wrench template has the actor hold a tool). Skyrim's grindstone needs
+        // no weapon: cleared like FNAM's flag
+        var mp = typeof(Furniture).GetProperty("MarkerFlags");
+        if (mp != null)
+        {
+            var mt = Nullable.GetUnderlyingType(mp.PropertyType) ?? mp.PropertyType;
+            var mv = mp.GetValue(f) is object mo ? Convert.ToInt64(mo) : 0L;
+            if ((mv & 0x00800000L) != 0)
+            {
+                mp.SetValue(f, Enum.ToObject(mt, mv & ~0x00800000L));
+                modelNote += ", Enter With Weapon Drawn cleared";
+            }
+        }
     }
     // shift_m (make_furniture.py --shift): every marker moved in the furniture's frame (furniture_standoff.py measures it)
     if (b.TryGetProperty("shift_m", out var sh) && f.MarkerParameters != null)
