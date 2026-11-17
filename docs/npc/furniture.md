@@ -51,7 +51,8 @@ furniture keeps our converted model; markers from the Skyrim NIF (x / y in metre
 --marker-z skyrim to try Skyrim's seat height) with Skyrim's entry sides. Marker-type ones keep the template's markers
 and invisible model. Crafting stations and quest furniture stay statics. The furniture reference replaces the static of
 the same Skyrim reference; one an NPC package names is persistent. Unverified in game: seat / bed height, the lean
-stand-off, rotation sign of SNAM (Mutagen exposes degrees).
+stand-off, rotation sign of SNAM (Mutagen exposes degrees). [Later: seat height right (2026-11-14), leans right
+(2026-11-15); NPCs still sleep across their beds (open, 2026-11-15).]
 
 ## First in-game look (owner, 2026-11-08)
 - Benches on the inn's tables missing. Cause (verified from the survey: record flags 10802010 on NPCInvBenchSit /
@@ -145,6 +146,7 @@ name holds "Marker" was dropped as an editor marker (CraftingBlackSmithForge, Fu
   make_furniture.py makes them the same furniture as indoors (cell "exterior", persistent); PluginSpike places them in
   the exterior world's persistent cell (ExtPos) and disables the exterior's static copy of each (an Initially Disabled
   override, as for the load doors). No exterior rebuild. Unverified in game: placement, sitting, the forge's E.
+  [Later: outdoor furniture placed and sat on (2026-11-14); the forge works with Alvor at it (2026-11-16).]
 Owner, first outdoor look (2026-11-13): benches and chairs outside are ours (console: FURN refs in FO4Port.esm), NPCs
 use the markers; the Sit / Sleep prompt only shows when looking at the furniture's very centre; a bench offers Sit
 but sitting does nothing; one chair (against a wall, a post and the tanning rack beside it) offers nothing. Changed:
@@ -307,6 +309,7 @@ stores skyrim_markers for those bases (the Skyrim NIF's furniture markers, or th
 marker), and add_anim_keywords uses them when the base gets one of our animation keywords; crafting stations keep the
 template's (Starfield's menu needs its marker). COM_SHIFT for RailLean / Counter / LeanTable / Sweep back to (0, 0):
 Skyrim's clips at Skyrim's spots. Needs the pack for those sets and the Riverwood build. Unverified in game.
+[Later: leans verified in game 2026-11-15, after Stand_Start and a 0.30 m shift.]
 Owner's build after the switch (2026-11-15): every lean / counter / table / sweep base "1 markers from Skyrim"; model
 cache "reused": 0 once more (the first build after the signature change; the next should reuse all 265).
 Talking on our furniture (2026-11-15, owner: seated Hilde crossed her arms while talking, fine, then "puts them down
@@ -382,7 +385,8 @@ Beds (owner, in game: NPCs sleep sideways): Skyrim's bed markers and the cot tem
 left / right; Skyrim's double bed sleepers side by side along x, so the beds run along y), so Starfield's sleep
 animation lies along the marker's x: make_furniture.DEFAULT_TURN bed -90 (the head pointed at the wall with the pillow
 to the left: a quarter turn counter-clockwise from above; Bethesda's z is clockwise). --turn bed=90 / riverwood_doors
--FurnTurn "bed=90" if the head ends at the foot. Unverified in game.
+-FurnTurn "bed=90" if the head ends at the foot. Unverified in game. [Later: still sideways (Faendal, Delphine,
+2026-11-15): open.]
 Owner's anim_cache_clips (2026-11-15, after the CK cache run): the 8 cache files naming s2s_sit resolve 862 clips
 elsewhere: 263 chair\animflavor, 181 chair\female\animflavor, 158 bench\animflavor, 136 bench\female\animflavor
 (<mood>_<clip>.af: thinking, confident, crosslegs, executive, relaxed, tablet, analyzeangry, bored, depressed, fancy,
@@ -503,7 +507,8 @@ broom); SET_PROP_OBJECTS: our enter descriptors load and draw S2S_AnimObjectForg
 S2S_AnimObjectForgeIronSkyrim at frame 0 (the iron then sits in the fire until the Pull lifts it), the exits unequip
 all; stance_plugin.PROP_OBJECTS: their ANIO records (PROP_INDEX + 1 / + 2); anim_object_convert converts every
 PROP_SOURCES model (Skyrim's AnimObjectBlacksmithForgeHammer / Iron.nif, the broom), the attach bone from the Skyrim
-model's own Prn (AnimObjectR / L -> R_ / L_AnimObject1; printed) else the default. Unverified in game.
+model's own Prn (AnimObjectR / L -> R_ / L_AnimObject1; printed) else the default. Unverified in game. [Later:
+verified in game, the whole forge sequence with the hammer and the iron swap (2026-11-16 13:34, 17:15).]
 Owner's run (2026-11-16 12:10, **verified** from its log): Skyrim's hammer model's Prn is AnimObjectR, the iron's
 AnimObjectL (-> R_AnimObject1 / L_AnimObject1); both converted (the iron 2 shapes, one effect shape without a
 material); the pack placed both props in every clip (hammer 2-8 cm from the right wrist; the iron 0.2-0.4 m from the

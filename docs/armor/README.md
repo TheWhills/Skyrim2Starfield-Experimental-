@@ -1,6 +1,8 @@
 # Armor, skeletons and animation: what exists on branch `skyrim/armor`
 
-Status: **offline tools on synthetic data; nothing run on real game files or in game yet.** Labels as elsewhere.
+Status (updated 2026-11-17): the table lists the first offline tools; since then clothing as items (2026-11-09) and
+Skyrim weapon animations with root motion (2026-10-19, docs/armor/animation-port.md) are **verified in game**, see the
+dated sections below. Labels as elsewhere.
 
 | Piece | File | Status |
 |---|---|---|
@@ -37,7 +39,7 @@ Status: **offline tools on synthetic data; nothing run on real game files or in 
 Skeleton map (Skyrim bone -> Starfield bone(s), rest-pose offsets, length ratios) from the fetched skeletons; then the
 armor fitting path (re-pose + body correction field, or body-surface weight transfer), then .hkx track decoding.
 
-## Clothing as items, both sexes (owner 2026-11-09; built, untested in game)
+## Clothing as items, both sexes (owner 2026-11-09; verified in game the same day, see "first run" below)
 Owner: today Ysolda's outfit is "Ysolda's outfit" for whoever wears it; eventually each Skyrim clothing piece is one
 converted item, with the right ids, worn by every NPC who should wear it, male or female, each seeing its own version.
 How both games do it (xEdit wbDefinitionsTES5 / wbDefinitionsSF1, verified field layout): an ARMO lists ARMA addons;

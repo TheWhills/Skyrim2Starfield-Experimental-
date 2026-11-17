@@ -1,7 +1,9 @@
 # Skyrim's Tamriel as native Starfield terrain (core64 recipe, Skyrim source)
 
-Branch `skyrim/terrain-tamriel`, stacked on `claude/terrain-core64-objects` (86e214a). Status: **built and checked
-offline on synthetic Skyrim plugins only; not run on the real Skyrim.esm, not deployed, not run in game.**
+Branch `skyrim/terrain-tamriel`, stacked on `claude/terrain-core64-objects` (86e214a). Status (updated 2026-11-17):
+**run on the real Skyrim.esm and verified in game** since 2026-10-15: Tamriel on Mars, then Riverwood on Jemison
+(2026-10-16) with Skyrim's own ground textures and the river at Skyrim's level; details in the dated sections below
+(the first status, "synthetic plugins only, not run in game", was the state before those runs).
 Labels as elsewhere: **verified** = measured here, number given; **supported** = supported hypothesis; **unresolved**.
 
 ## What it is
@@ -78,7 +80,7 @@ picks, per category, the matching LTEX that vanilla terrain uses most; a categor
 plain ground (LDirtFootprints01). The picks and their vanilla BTD counts are printed and kept in `ltex_mapping.json`.
 `scripts\terrain\survey_ltex.py` prints the whole usage table, the unused LTEX and each record's fields.
 
-### Skyrim's own ground textures (`--skyrim-ground`; supported hypothesis, not yet tested in game)
+### Skyrim's own ground textures (`--skyrim-ground`; in game since 2026-10-16, see "Riverwood on Jemison")
 The BTD's LTEX table stores raw FormIDs, and a new LTEX in a mod plugin has no fixed FormID at run time, so
 `src/fo4sf/skyrimground.py` reuses spare Starfield.esm LTEX records instead: ones no vanilla BTD lists and no BIOM / GCVR
 / PNDT / SFBK record names. The most-covering Skyrim landscape texture sets (TXST TX00 diffuse, TX01 normal; flat normal
@@ -144,7 +146,7 @@ The template (owner's `ground_template.mat.json`, `Materials\Terrain\DirtFootpri
 ground materials now get a shared white AO and mid-grey (flat) height map, MaxDisplacement 0, and TilingDistance 9.75 m
 (Skyrim repeats a landscape texture ~6 times per 4,096-unit cell; `--skyrim-ground-tiling` to change).
 
-### Another planet (`--planet`; owner's idea: Jemison, away from New Atlantis; not tested in game)
+### Another planet (`--planet`; owner's idea: Jemison, away from New Atlantis; verified in game 2026-10-16, below)
 Mars's atmosphere and weather tint everything (stone, wood and snow share the ground's sepia cast). Owner's SfInspect
 dumps: the Mars template world `LC172World` carries the Mars biome `2A3777` and no climate; its location
 `LC172WorldLocation` sits under `SSol_PMars_Surface` (01B736). Jemison registers only `NewAtlantis` (stored latitude

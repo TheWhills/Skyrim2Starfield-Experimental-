@@ -1,7 +1,8 @@
 # Skyrim interiors (houses, inns, caves, barrows, ruins)
 
-Branch `skyrim/armor` (on top of the exterior work). Status: **export and checks offline on synthetic data; not run on
-the real Skyrim.esm, not built into a plugin, not in game.**
+Branch `skyrim/armor` (on top of the exterior work). Status (updated 2026-11-17): **built and verified in game** for
+Riverwood's interiors: native collision and load doors (2026-10-23, 2026-11-08), lighting and fires (2026-11-15/16);
+details in the dated sections below (the first status, "offline only, not in game", was the state before those runs).
 
 ## Path (one cell at a time)
 1. `scripts/interior/make_skyrim_interior.py list --find <regex>`: interior cells with reference, light, door and

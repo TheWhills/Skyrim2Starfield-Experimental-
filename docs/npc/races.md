@@ -407,6 +407,7 @@ why the mod needs no clothes of its own.
   vertex count ours) and of the teeth part (S2S_OrcRace_Mouth_M|F) on the race's list; every vanilla teeth part of
   that sex maps to it (race defaults, NPCs, player patch); the baked teeth copies are skipped for that race / sex.
   race_heads.json: mouths. Unverified in game (does the game take a performance morph.dat of our own for teeth?).
+  [Later: the Orc mouth (tusks / teeth) verified in game 2026-11-11, below.]
 
 - 2026-11-10 scripts/npc/look_probe.py (read-only, owner away): how Starfield stores skin tones and eye colours, for
   per-race tones (Orc green, Dunmer grey ...) and eyes (Dunmer red, Altmer gold). HumanRace's per-sex chargen strings

@@ -24,21 +24,23 @@ times the NPCs, interiors and objects; a whole-world build has never been run).
 | People | The 12 adults: faces, hair, records | partial | faces in the face-test plugin; clothing / armor in game to check |
 | People | Children (Dorthe, Frodnar) | open | docs/npc/races-roadmap.md I2; then DorthePlay's "near the NPC" target is exercised |
 | People | Dialogue / voices | partial | Starfield generic voice types; Skyrim voice pipeline docs/npc/voice-pipeline.md |
-| Creatures | Riverwood's animals (to list from the data: chickens, a dog, ...) | open | first creature conversion: skeleton, behaviour, race; method and the open skeleton question: docs/research/tes4skyrim.md |
+| Creatures | Riverwood's animals (to list from the data: chickens, a dog, ...) | partial | the chicken is drawn, textured and animated on its own skeleton in the critter's place (2026-11-17); upright pose / root motion fix to check, right turns (mirror), its own race open: docs/npc/creatures.md |
 | Schedules | Converted packages, settled Riverwood moment | done | docs/npc/schedules.md, docs/ai/decisions.md |
 | Schedules | Eat location, carry start | partial | INPUT_ALIAS (2026-11-17), to check in game |
 | Schedules | Sandbox moves between stations (Alvor), no endless repeat (Hilde) | open | -SitAt block test pending; docs/npc/furniture.md |
 | Schedules | Play-dependent conditions (Frodnar near the player, Delphine's return) | open | Starfield conditions not written |
 | Schedules | Carry and drop (Faendal's firewood), multi-location days (Faendal, Gerdur), Hod at the inn | open | rebuild from Starfield procedures |
 | Schedules | Patrol routes (Camilla, Embry, Hilde), bed / food / chair choice | open | Patrol Start, Sleep / Eat criteria kept vanilla |
-| Furniture | Sit, lean, sweep (broom), cook, alchemy, enchant, beds | done | Skyrim's own clips |
-| Furniture | Forge, grindstone, armor workbench, tanning rack | partial | clips and props done; walk-in to forge / grindstone open |
+| Furniture | Sit, lean, cook, alchemy, enchant | done | Skyrim's own clips (sit 2026-11-14, lean 2026-11-15) |
+| Furniture | Beds, sweep | partial | the player uses beds, NPCs sleep across them; the broom appears but detaches at the end |
+| Furniture | Forge, armor workbench, tanning rack | done | NPCs walk in and work with Skyrim's clips and props (forge 2026-11-16) |
+| Furniture | Grindstone | open | never chosen by the sandbox (docs/npc/furniture.md 2026-11-17) |
 | Furniture | Idle markers (patrol, flowers, drunk, farming, lockpick, ...) | open | skipped as "stand" today |
 | Work | Wood chopping (axe, wood halves) | open | next; probe done (props on state enter, 10.9 s loop) |
 | Work | Woodpile pick-up / put-down, carrying firewood (arm offset) | open | |
 | Work | Sawmill: log loading, the mill's own animation, its script | open | Hod's packages wait on the script |
 | Work | Farming (hoe), buckets, lever | open | |
-| Props | Automatic prop conversion (clip triggers and state enter events) | open | docs/npc/furniture.md 2026-11-17 |
+| Props | Automatic prop conversion (clip triggers and state enter events) | partial | broom, forge hammer and iron in game; the tracer for new sets done (2026-11-17), chopping block next |
 | Items | Loose items as real items (food, wine, clutter), ownership | open | docs/interior/items.md |
 | Items | Containers, merchant inventories | open | |
 | Scripts | The sawmill and other scripted activators in Riverwood | open | no Papyrus translation yet |

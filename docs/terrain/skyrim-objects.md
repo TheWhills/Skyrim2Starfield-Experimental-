@@ -1,8 +1,9 @@
 # Skyrim's exterior objects on the Tamriel overlay
 
-Branch `skyrim/objects`, on top of [skyrim-tamriel.md](skyrim-tamriel.md) (the terrain). Status: **built and tested
-offline on synthetic Skyrim data only (16 tests + the full export -> stage -> check path); not run on the real
-Skyrim.esm / BSAs, not deployed, not run in game.** Labels: **verified** = measured here; **supported** = supported
+Branch `skyrim/objects`, on top of [skyrim-tamriel.md](skyrim-tamriel.md) (the terrain). Status (updated
+2026-11-17): **run on the real game files and verified in game** since 2026-10-15 (Riverwood's objects on the
+overlay; distant-object LOD 2026-10-17; grass as static patches); details in the dated sections below (the first
+status, "synthetic data only, not run in game", was the state before those runs). Labels: **verified** = measured here; **supported** = supported
 hypothesis; **unresolved**.
 
 ## What it does
