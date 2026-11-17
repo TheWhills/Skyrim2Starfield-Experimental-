@@ -157,6 +157,7 @@ class MainTests(unittest.TestCase):
         self.assertTrue(any("trilobite" in n for n in rep["notes"]))
         self.assertIn("Starfield meshes/actors/critter/animations/walkforward.afx", rep["clips_missing"])
         self.assertEqual(rep["skyrim_shader"]["double_sided"], False)
+        self.assertTrue(any("rig LOD not set" in n for n in rep["notes"]))   # the fake rig is not CALUMI's
         self.assertNotIn("back_faces_added", rep["skyrim_shader"])
 
 

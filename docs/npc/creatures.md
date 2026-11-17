@@ -194,4 +194,12 @@ new creature skeleton on an existing graph.
   leaves any per-bone LOD / flag field at its default, so at distance only the root moves. Next: creature_probe.py
   --rig lays a vanilla rig and ours open field by field (96-byte records) to find it. Less likely: the body has one
   mesh LOD where the trilobite has four.
+* Owner's rig dump (vanilla critter, vanilla human, ours), 17:55. Verified (same offsets in all three files): bone
+  k's record has, after three -1 fields, a 32-bit index at byte 152 + 96 k and a small level at 156 + 96 k. Vanilla:
+  Root -1 / 0; critter COM, spine and legs level 2, back-leg tips 1, antenna tips 0; human 4 down to 0 (camera
+  bones); records sorted by level; the index a permutation of the bone numbers within level groups (meaning
+  unresolved). Ours (CALUMI): -1 / 0 on every bone. Supported: the level is the bone's animation LOD, so at a distance
+  only Root moved and the chicken slid with still legs. Fix 7: creature_build patches the rig after CALUMI (creature.
+  set_rig_lod: Root -1 / 0, every other bone index = its own number, level 2; --rig-lod N; the record layout is
+  checked first). To verify in game: legs keep walking at a distance.
 

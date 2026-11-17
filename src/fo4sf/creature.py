@@ -16,7 +16,7 @@ its own bone nodes (build_body_nif).
 """
 import struct
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -372,3 +372,41 @@ def shell_skeleton(data: bytes, root_name: str, com_t, com_q=None) -> bytes:
         b = b[:p + 12] + struct.pack("<9f", *quat_to_rot9(com_q)) + b[p + 48:]
     n.blocks[coms[0]] = b
     return nifmod.serialize(n)
+
+
+RIG_LOD_INDEX, RIG_LOD_LEVEL, RIG_RECORD = 152, 156, 96   # absolute offsets of bone 0's two fields; record stride
+
+
+def set_rig_lod(data: bytes, levels: Sequence[int], ranks: Optional[Sequence[int]] = None) -> bytes:
+    """A .rig with each bone's animation-LOD fields set (supported hypothesis; owner's rig dump 2026-11-17).
+
+    Found by laying a vanilla critter rig, the vanilla human rig and ours (CALUMI) side by side: bone k's record has,
+    after three -1 fields, a 32-bit index at byte 152 + 96 k and a small level at 156 + 96 k (same offsets in all
+    three files). Vanilla: Root -1 / 0; the critter's COM, spine and legs level 2, back-leg tips 1, antenna tips 0;
+    the human's levels 4 down to 0 (camera bones), records sorted by level, the index a permutation of the bone
+    numbers within the level groups. CALUMI writes -1 / 0 for every bone: in game the chicken animates up close,
+    and a little way off its legs stop and it slides (owner, 2026-11-17 17:52), i.e. only bones with a level keep
+    animating at a distance. levels[k]: the level of bone k (rig order); ranks[k]: its index (default k; -1 where the
+    level is 0 and k is the root). The layout is checked first: each field pair must sit after a run of 12 x 0xFF and
+    hold CALUMI's -1 / 0, else ValueError (a rig not written by CALUMI's path is left alone)."""
+    data = bytearray(data)
+    n = len(levels)
+    end = RIG_LOD_LEVEL + RIG_RECORD * (n - 1) + 4
+    if end > len(data):
+        raise ValueError(f"rig of {len(data)} bytes too short for {n} bone records")
+    for k in range(n):
+        a = RIG_LOD_INDEX + RIG_RECORD * k
+        if data[a - 12:a] != b"\xff" * 12 or struct.unpack_from("<ii", data, a) != (-1, 0):
+            raise ValueError(f"bone {k}: unexpected record layout at {a}")
+    for k, lv in enumerate(levels):
+        a = RIG_LOD_INDEX + RIG_RECORD * k
+        rank = (ranks[k] if ranks is not None else (k if lv > 0 else -1))
+        struct.pack_into("<ii", data, a, int(rank), int(lv))
+    return bytes(data)
+
+
+def lod_levels(cr: CreatureRig, level: int = 2) -> List[int]:
+    """Per bone (rig order): 0 for Root (vanilla: Root -1 / 0, root motion moves it), `level` for the rest (the
+    critter's main bones use 2, its highest)."""
+    return [0 if n == ROOT else level for n in cr.names]
+

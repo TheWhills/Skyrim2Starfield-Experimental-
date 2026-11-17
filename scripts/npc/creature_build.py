@@ -110,6 +110,9 @@ def main(argv=None):
     ap.add_argument("--work", default="", help="scratch folder (default: <out>\\_work, removed after)")
     ap.add_argument("--double-sided", choices=("auto", "on", "off"), default="auto",
                     help="add back faces: auto = when Skyrim's shader sets SLSF2_Double_Sided")
+    ap.add_argument("--rig-lod", type=int, default=2,
+                    help="animation-LOD level for every bone but Root (the critter's main bones use 2; 0 = leave "
+                         "CALUMI's, which stops the legs at a distance)")
     ap.add_argument("--opaque", action="store_true",
                     help="the chicken's material without the alpha cutout (to rule the cutout out)")
     ap.add_argument("--vanilla-material", action="store_true",
@@ -238,7 +241,14 @@ def main(argv=None):
                              [round(float(v), 3) for v in rt[-1]] + [round(rootmotion.yaw_degrees(rq[-1]), 1)]})
     if rig_file:
         with open(rig_file, "rb") as fh:
-            put(CRITTER["rig"], fh.read())
+            rig_bytes = fh.read()
+        if a.rig_lod > 0:
+            try:
+                rig_bytes = creature.set_rig_lod(rig_bytes, creature.lod_levels(cr, a.rig_lod))
+                rep["rig"]["lod_level"] = a.rig_lod
+            except ValueError as e:
+                rep["notes"].append(f"rig LOD not set: {e}")
+        put(CRITTER["rig"], rig_bytes)
     shutil.rmtree(work, ignore_errors=True)
     with open(os.path.join(out, "creature_build.json"), "w") as fh:
         json.dump(rep, fh, indent=1)

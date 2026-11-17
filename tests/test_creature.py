@@ -193,6 +193,23 @@ class FileTests(unittest.TestCase):
         np.testing.assert_allclose(d.normals[3], (0, 0, -1))
         self.assertEqual((len(d.uvs), len(d.weights), len(tan)), (6, 6, 6))
 
+    def test_set_rig_lod(self):
+        # three records shaped like CALUMI's: three -1 fields, then index -1 / level 0
+        n = 3
+        data = bytearray(C.RIG_LOD_LEVEL + C.RIG_RECORD * (n - 1) + 4 + 40)
+        for k in range(n):
+            a = C.RIG_LOD_INDEX + C.RIG_RECORD * k
+            data[a - 12:a] = b"\xff" * 12
+            struct.pack_into("<ii", data, a, -1, 0)
+        out = C.set_rig_lod(bytes(data), [0, 2, 2])
+        got = [struct.unpack_from("<ii", out, C.RIG_LOD_INDEX + C.RIG_RECORD * k) for k in range(n)]
+        self.assertEqual(got, [(-1, 0), (1, 2), (2, 2)])
+        self.assertEqual(len(out), len(data))
+        with self.assertRaises(ValueError):                 # a layout it does not know is left alone
+            C.set_rig_lod(bytes(len(data)), [0, 2, 2])
+        cr = C.creature_rig(sky())
+        self.assertEqual(C.lod_levels(cr), [0, 2, 2, 2])
+
     def test_shell_skeleton(self):
         f = nif.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                         export_script=b"\x00", sf_data=b"\x7a\x00")
