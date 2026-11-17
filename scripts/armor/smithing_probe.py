@@ -140,6 +140,64 @@ def records(sky_data: str, rx) -> list:
     return lines
 
 
+def prop_sources(b: dict, rx=re.compile(r"animobj", re.I)) -> dict:
+    """{prop payload text: [where it is sent]} for string payloads matching rx: a clip trigger ("clip <name> <time>
+    s <event>"), a state's enter / exit events ("state <name> enter <event>"), or else the nearest named node that
+    points at it ("<class> <name>"). 2026-11-17 (owner's work_probe2): the axe, hoe and pickaxe are payloads in the
+    graph but in no clip trigger, so where they are sent is what a prop conversion has to read."""
+    nodes, events = b["nodes"], b["events"]
+
+    def ev(i):
+        return events[i] if 0 <= i < len(events) else f"#{i}"
+
+    def text(pid):
+        d = nodes.get(pid, {}).get("data")
+        return d if d and rx.search(d) else None
+
+    out, seen = {}, set()
+    for o, n in nodes.items():
+        if n["class"] == "hkbStateMachineStateInfo":
+            for key, how in (("enter_events", "enter"), ("exit_events", "exit")):
+                for e in nodes.get(n.get(key), {}).get("events") or []:
+                    t = text(e["payload"])
+                    if t:
+                        out.setdefault(t, []).append(f"state {n.get('name')!r} {how} {ev(e['event'])}")
+                        seen.add(e["payload"])
+        elif n["class"] == "hkbClipGenerator":
+            for tr in nodes.get(n.get("triggers"), {}).get("triggers") or []:
+                t = text(tr["payload"])
+                if t:
+                    out.setdefault(t, []).append(f"clip {n.get('name')!r} {tr['time']:g} s {ev(tr['event'])}")
+                    seen.add(tr["payload"])
+    parents = {}
+    for o, n in nodes.items():
+        for c in n.get("children", []):
+            parents.setdefault(c, []).append(o)
+    for pid, n in nodes.items():
+        t = text(pid) if n["class"] == "hkbStringEventPayload" else None
+        if not t or pid in seen:
+            continue
+        found = []
+        for par in parents.get(pid, []):
+            cur, depth = par, 0
+            while cur is not None and not nodes[cur].get("name") and depth < 4:
+                cur, depth = (parents.get(cur) or [None])[0], depth + 1
+            if cur is not None:
+                found.append(f"{nodes[cur]['class']} {nodes[cur].get('name')!r}")
+        out.setdefault(t, []).extend(found or ["(not referenced)"])
+    return {k: sorted(set(v)) for k, v in sorted(out.items())}
+
+
+def clip_file_index(names) -> dict:
+    """{clip file name (lower): archive path} for character animations, third person first (2026-11-17: sorted
+    paths put _1stperson before animations, so the chop and mill-load clips came out as their first-person files)."""
+    by_base = {}
+    for n in sorted(names, key=lambda x: ("\\_1stperson\\" in x, x)):
+        if n.startswith("meshes\\actors\\character\\") and n.endswith(".hkx"):
+            by_base.setdefault(n.replace("/", "\\").rsplit("\\", 1)[-1], n)
+    return by_base
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data", required=True)
@@ -182,14 +240,14 @@ def main(argv=None):
         props = payload_strings(b)
         if props:
             print(f"  prop payloads: {props}")
+        for prop, where in prop_sources(b).items():
+            if rx.search(prop) or any(rx.search(w) for w in where):
+                print(f"  prop {prop}: " + "; ".join(where))
         for node in b["nodes"].values():
             if node["class"] == "hkbClipGenerator" and rx.search(node.get("animation") or ""):
                 clip_paths[os.path.basename(node["animation"].replace("\\", "/")).lower()] = node["animation"]
     print("== 3. clip files")
-    by_base = {}
-    for n in names:
-        if n.startswith("meshes\\actors\\character\\") and n.endswith(".hkx"):
-            by_base.setdefault(os.path.basename(n), n)
+    by_base = clip_file_index(names)
     for base in sorted(clip_paths):
         path = by_base.get(base)
         if not path:

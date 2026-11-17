@@ -14,7 +14,7 @@ from fo4sf import skyrimbehavior as SB  # noqa: E402
 from test_skyrim_hkx import Hkx2010  # noqa: E402
 
 
-def graph(bias=0, triggers=False):
+def graph(bias=0, triggers=False, enter=False):
     h = Hkx2010()
     B = bias
     root = h.obj("hkRootLevelContainer", 16 + B)
@@ -30,6 +30,9 @@ def graph(bias=0, triggers=False):
     if triggers:                                       # objects first: data allocated later is outside their ranges
         ta2 = h.obj("hkbClipTriggerArray", 32 + B)
         pay = h.obj("hkbStringEventPayload", 24 + B)
+    if enter:                                          # Walk's enter events: moveStart with a prop payload
+        epa = h.obj("hkbStateMachineEventPropertyArray", 32 + B)
+        pay2 = h.obj("hkbStringEventPayload", 24 + B)
     nv = h.alloc(24)
     h.array(root + B, nv, 1)
     h.ptr(nv + 16, g)
@@ -71,6 +74,13 @@ def graph(bias=0, triggers=False):
         h.put(rec2 + 24, "<3B", 0, 1, 0)
         h.array(ta2 + B + 16, rec2, 1)
         h.ptr(c0 + B + 80, ta2)
+    if enter:
+        h.string(pay2 + B + 16, "AnimObjectAxe")
+        rec3 = h.alloc(16)
+        h.put(rec3, "<i", 0)
+        h.ptr(rec3 + 8, pay2)
+        h.array(epa + B + 16, rec3, 1)
+        h.ptr(s1 + B + 64, epa)
     return h.bytes()
 
 
@@ -112,6 +122,26 @@ class SkyrimBehaviorTests(unittest.TestCase):
         self.assertEqual(P.clip_triggers(b, rx), [("IdleClip", "Idle.hkx", [(0.5, "moveStop", "AnimObjectHammer")])])
         self.assertEqual(P.payload_strings(b), ["AnimObjectHammer"])
         self.assertEqual(P.machines_with(b, re.compile("anvil")), [])
+
+    def test_state_enter_events_and_prop_sources(self):
+        """2026-11-17: a state's enter events (the axe / hoe / pickaxe are sent there, not in clip triggers)."""
+        import smithing_probe as P
+        for bias in (0, 8):
+            b = SB.read(graph(bias, triggers=True, enter=True))
+            walk = next(n for n in b["nodes"].values() if n.get("name") == "Walk")
+            e, = b["nodes"][walk["enter_events"]]["events"]
+            self.assertEqual((b["events"][e["event"]], b["nodes"][e["payload"]]["data"]), ("moveStart", "AnimObjectAxe"))
+            self.assertEqual(P.prop_sources(b), {"AnimObjectAxe": ["state 'Walk' enter moveStart"],
+                                                 "AnimObjectHammer": ["clip 'IdleClip' 0.5 s moveStop"]})
+
+    def test_clip_file_index_prefers_third_person(self):
+        import smithing_probe as P
+        names = ["meshes\\actors\\character\\_1stperson\\animations\\animobjectmillloadstart.hkx",
+                 "meshes\\actors\\character\\animations\\animobjectmillloadstart.hkx",
+                 "meshes\\actors\\character\\_1stperson\\animations\\only1st.hkx"]
+        ix = P.clip_file_index(names)
+        self.assertEqual(ix["animobjectmillloadstart.hkx"], names[1])
+        self.assertEqual(ix["only1st.hkx"], names[2])
 
     def test_checks_catch_a_bad_target(self):
         data = bytearray(graph())

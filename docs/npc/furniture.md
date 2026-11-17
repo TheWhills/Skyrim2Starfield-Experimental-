@@ -932,3 +932,24 @@ with the lumber mill, farming". **Verified** from the probe (Skyrim.esm + behavi
 schedule_readiness now takes --exterior (as the build passes make_schedule) and lists every package per NPC (time,
 template, the object its area is centred on and that object's kind): the owner's first readiness.md counted outdoor
 packages as "outside the converted cells" because the tool did not pass the exterior (make_schedule keeps them).
+Owner's rerun (2026-11-17, work_probe2.txt + readiness.md with --exterior), **verified** from the output:
+- Who does what (readiness, exterior passed): Hod HodSawmillSawLog8x11 and HodSawmillLoadLog8x11 are left out
+  (conditions / quest-owned), HodSawmillSandbox8x11 converts (Sandbox near an XMarker). Faendal
+  FaendalCarryFirewood 7 / 11 / 15 x2 h are CarryAndDropItem, converted to a plain Sandbox (the carrying is lost);
+  FaendalWork7x12 and GerdurWorkPackage7x12 are SandboxWorkingMultiLocation -> Sandbox. Sigrid SigridHoeGarden8x8
+  (SandboxWorking) is the farming. No converted package is centred on work furniture (all on XMarkers): those
+  sandboxes find the chopping blocks / woodpile / mill pile / farming markers by themselves.
+- Wood chop (0_Master WoodChopBehavior): AnimObjectChopStart -> 00NextClip -> AnimObjectChopLoop -> on
+  IdleChairExitStart -> AnimObjectChopStop; Loop: AddToInventory 7.33 s, Stop: AnimObjectUnequip 0 s. No clip
+  draws the axe or the wood (AnimObjectAxe / ChopWoodLeft / Right are payloads elsewhere in the graph).
+- Woodpile: AOWoodPickUp (6.67 s): AnimObjDraw AnimObjectCarryFirewood01/02/03 at 1 s, AddToInventory 6 s,
+  OffsetWoodStart at the end (then the arm offset while walking); AOWoodPutDown (2.83 s): AnimObjectUnequip,
+  RemoveFromInventory, wood-drop sound.
+- Mill load: AnimObjectMillLoadStart: AnimObjDraw AnimObjectHook 0.33 s and MillLogPileLoadStart 0 s (an event for
+  the log pile's own animation).
+- Farming: IdleHoe (6.67 s, hoe sounds) and IdlePickup_Ground (PickUp 1.33 s); the hoe is drawn elsewhere.
+- smithing_probe fixes: section 3 took the _1stperson file where both exist (sorted paths; the 0.33 s / 2-frame
+  mill-load and the chop clips' 7.33 s were first-person files): clip_file_index now prefers third person.
+  skyrimbehavior now decodes a state's enter / exit events (hkbStateMachineEventPropertyArray, 16-byte
+  hkbEventProperty: supported layout, synthetic test); the probe prints, per prop, where it is sent (clip trigger,
+  state enter / exit, or the nearest named node pointing at it).

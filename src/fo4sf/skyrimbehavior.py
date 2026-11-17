@@ -38,6 +38,7 @@ from . import hkpackfile
 
 NODE_NAME, NODE_BINDINGS = 56, 16
 TRANSITION_SIZE = 72
+EVENT_PROPERTY_SIZE = 16
 TRIGGER_SIZE = 32
 BINDING_SIZE = 40
 SM_MODES = {0: "default", 1: "sync", 2: "random", 3: "chooser"}
@@ -200,6 +201,16 @@ def read(data: bytes) -> Dict:
                 rel, acyc, ann = r.pf.unpack("<3B", b + 24)
                 n["triggers"].append({"time": round(t, 4), "event": ev, "payload": r.ptr.get(b + 16),
                                       "relative_to_end": bool(rel), "acyclic": bool(acyc), "annotation": bool(ann)})
+        elif c == "hkbStateMachineEventPropertyArray":
+            # a state's enter / exit events (2026-11-17: Skyrim's pickaxe, axe and hoe props are named in the graph
+            # but in no clip trigger): hkArray<hkbEventProperty> @16, each 16 bytes: id i32 @0, payload ptr @8
+            # (supported: hk_2010 hkbEventBase layout; checked on data by ids landing in the event list)
+            d, cnt = r.array(o, 16)
+            n["events"] = []
+            for k in range(cnt if d is not None else 0):
+                b = d + EVENT_PROPERTY_SIZE * k
+                ev, = r.pf.unpack("<i", b)
+                n["events"].append({"event": ev, "payload": r.ptr.get(b + 8)})
         elif c == "hkbStringEventPayload":
             n["data"] = r.string(o, 16)                 # hkStringPtr data after hkReferencedObject
         nodes[o] = n
