@@ -2391,6 +2391,8 @@ describes this project (Skyrim -> Starfield) instead of the upstream Fallout 4 o
 Why: owner, 2026-11-17: the repo "still looks like it's the fallout converter, and everything is on the armor
 [branch] instead of main". Kept: `skyrim/armor` and the other branches (not deleted); `claude/headless-test-instance`
 has 3 commits of its own, unmerged.
+Later (owner, 2026-11-17 18:45): push to `main` only; `skyrim/armor` is no longer kept identical to it ("we don't
+need identical branches"). It stays at 04bfe01.
 
 ## 2026-11-17: children convert from Realistic RS Children (owner)
 Decision: Skyrim's children are converted with Realistic RS Children's faces (Nexus 39359, 4.5 + 4.7) over RS
