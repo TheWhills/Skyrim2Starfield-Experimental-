@@ -217,9 +217,9 @@ def main(argv=None):
     plan, missing = plan_clips(sky_names, set(index))
     rep["clips_missing"] = missing
     anim_out = os.path.join(work, "anims")
-    rig_file = None
-    rep["clips"] = []
-    for key, src_clip in plan:
+    from fo4sf import agx
+
+    def prepared(key, src_clip):
         clip = retarget.resample(skyrimhkx.decode_clip(sky._read(src_clip), sk_desc["bones"]))
         lt, lq = creature.clip_locals(clip, sk, cr)
         clip_stem = posixpath.basename(src_clip.replace("\\", "/"))[:-len(".hkx")].lower()
@@ -228,30 +228,44 @@ def main(argv=None):
         if moving:
             lt[:, 0], lq[:, 0] = rt, rq
         vafx = sf_read(key)
-        from fo4sf import agx
         stem = os.path.splitext(agx.read_descriptor(vafx)["filename"] or posixpath.basename(key))[0]
-        r = af_writer.write(a.calumi, anim_out, stem, cr.names, cr.parents, cr.t, cr.q, lt, lq, rig_path=rig_file,
+        return lt, lq, rt, rq, moving, vafx, stem
+
+    # The rig first: CALUMI writes it with the first clip; its animation-LOD levels are set (creature.set_rig_lod)
+    # BEFORE any clip is written against it, since a clip may take the rig's levels when it is written (owner,
+    # 2026-11-17 18:18: with the rig patched after the clips, the legs still stopped a few feet off).
+    rig_file = None
+    if plan:
+        lt, lq, _rt, _rq, moving, vafx, stem = prepared(*plan[0])
+        r = af_writer.write(a.calumi, os.path.join(work, "rig"), stem, cr.names, cr.parents, cr.t, cr.q, lt, lq,
                             rig_name="S2SChicken", like_afx=vafx, file_name=stem,
                             omit=() if moving else (creature.ROOT,))
-        if moving:
-            rootmotion.patch_header(os.path.join(anim_out, stem + ".af"), rt[-1], rq[-1])
-        rig_file = rig_file or r["rig"]
-        for ext in (".af", ".afx"):
-            with open(os.path.join(anim_out, stem + ext), "rb") as fh:
-                put(CRITTER["anims"] + stem + ext, fh.read())
-        rep["clips"].append({"critter": key, "skyrim": src_clip, "frames": r["frames"], "keys": r["keys"],
-                             "root_motion_m_deg": None if not moving else
-                             [round(float(v), 3) for v in rt[-1]] + [round(rootmotion.yaw_degrees(rq[-1]), 1)]})
-    if rig_file:
+        rig_file = r["rig"]
         with open(rig_file, "rb") as fh:
             rig_bytes = fh.read()
         if a.rig_lod > 0:
             try:
                 rig_bytes = creature.set_rig_lod(rig_bytes, creature.lod_levels(cr, a.rig_lod))
                 rep["rig"]["lod_level"] = a.rig_lod
+                with open(rig_file, "wb") as fh:
+                    fh.write(rig_bytes)
             except ValueError as e:
                 rep["notes"].append(f"rig LOD not set: {e}")
         put(CRITTER["rig"], rig_bytes)
+    rep["clips"] = []
+    for key, src_clip in plan:
+        lt, lq, rt, rq, moving, vafx, stem = prepared(key, src_clip)
+        r = af_writer.write(a.calumi, anim_out, stem, cr.names, cr.parents, cr.t, cr.q, lt, lq, rig_path=rig_file,
+                            rig_name="S2SChicken", like_afx=vafx, file_name=stem,
+                            omit=() if moving else (creature.ROOT,))
+        if moving:
+            rootmotion.patch_header(os.path.join(anim_out, stem + ".af"), rt[-1], rq[-1])
+        for ext in (".af", ".afx"):
+            with open(os.path.join(anim_out, stem + ext), "rb") as fh:
+                put(CRITTER["anims"] + stem + ext, fh.read())
+        rep["clips"].append({"critter": key, "skyrim": src_clip, "frames": r["frames"], "keys": r["keys"],
+                             "root_motion_m_deg": None if not moving else
+                             [round(float(v), 3) for v in rt[-1]] + [round(rootmotion.yaw_degrees(rq[-1]), 1)]})
     shutil.rmtree(work, ignore_errors=True)
     with open(os.path.join(out, "creature_build.json"), "w") as fh:
         json.dump(rep, fh, indent=1)

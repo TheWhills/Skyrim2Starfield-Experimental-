@@ -209,4 +209,9 @@ new creature skeleton on an existing graph.
   vanilla trilobite fills LOD0-3 (each skinned, 26 bones), ours only LOD0. Supported: a small creature switches to
   LOD1 within a few feet (screen size), and an empty slot is drawn unskinned at rest, riding the moving actor.
   Fix 8: the body fills all four LOD slots with its mesh (--body-lods, default 4). Real lower-detail meshes later.
+* Owner, 18:18: with LOD0-3 filled the legs still stop ~5 ft off. Next hypothesis (supported, not verified): a clip
+  takes the rig's per-bone levels when CALUMI writes it against the rig, and fix 7 patched the rig only AFTER all 15
+  clips were written (against the unpatched rig, every bone level 0). The vanilla walk clip has bone lists near its
+  start that ours lays out differently (clip compare, 18:12). Fix 9: creature_build makes the rig first (with the
+  first clip), patches its levels, then writes every clip against the patched rig.
 

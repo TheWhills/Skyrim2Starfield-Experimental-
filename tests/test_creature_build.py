@@ -151,7 +151,10 @@ class MainTests(unittest.TestCase):
                         B.CRITTER["anims"] + "Idle.afx"):
                 self.assertTrue(os.path.isfile(os.path.join(out, *rel.split("/"))), rel)
             self.assertFalse(os.path.isdir(os.path.join(out, "_work")))
-        self.assertEqual(calls, [("Idle", ["Root", "COM", "HEAD"], None, "Idle")])
+        # the rig is made first (no rig_path), then every clip is written against it
+        self.assertEqual([c[2] is None for c in calls], [True, False])
+        self.assertTrue(calls[1][2].endswith("skeleton.rig"))
+        self.assertEqual(calls[1][:2], ("Idle", ["Root", "COM", "HEAD"]))
         self.assertEqual(rep["bind_vs_rig_m_deg"], {"COM": [0.0, 0.0], "HEAD": [0.0, 0.0]})
         self.assertEqual(rep["rig"]["com_rest_m"], [0.0, 0.0, round(10 * U, 4)])
         self.assertTrue(any("trilobite" in n for n in rep["notes"]))
