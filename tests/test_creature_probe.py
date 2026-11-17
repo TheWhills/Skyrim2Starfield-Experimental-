@@ -185,6 +185,18 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertIn("[ 1] Spine", lines[5])
         self.assertIn("+0.100", lines[7])
 
+    def test_af_dump(self):
+        from fo4sf import rootmotion
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            af = os.path.join(d, "w.af")
+            open(af, "wb").write(bytes(80))
+            rootmotion.patch_header(af, (0, 0.5, 0), (0, 0, 0, 1))
+            lines = C.af_dump(open(af, "rb").read())
+        self.assertIn("80 bytes; header root motion t (+0.000, +0.500, +0.000) m", lines[0])
+        self.assertTrue(lines[1].startswith("     0: "))
+        self.assertEqual(len(lines), 1 + 2 * 3)                  # 20 words: three lines of up to 8
+
 
 if __name__ == "__main__":
     unittest.main()

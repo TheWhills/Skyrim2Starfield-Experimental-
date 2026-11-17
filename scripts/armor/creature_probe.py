@@ -690,6 +690,26 @@ def rig_dump(data: bytes) -> list:
     return out
 
 
+def af_dump(data: bytes, head: int = 384) -> list:
+    """An .af laid open for comparison: size, the root-motion header (rootmotion.read_header) and the first `head`
+    bytes as 32-bit words (hex, plus floats where plausible), 8 words a line."""
+    from fo4sf import rootmotion
+    data = bytes(data)
+    q, t = rootmotion.read_header(data) if len(data) >= 36 else ((0, 0, 0, 1), (0, 0, 0))
+    out = [f"{len(data)} bytes; header root motion t ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f}) m, "
+           f"yaw {rootmotion.yaw_degrees(q):+.1f} deg"]
+    n = min(len(data), head) // 4
+    words = struct.unpack(f"<{n}I", data[:4 * n])
+    fl = struct.unpack(f"<{n}f", data[:4 * n])
+    for i in range(0, n, 8):
+        hx = " ".join(f"{w:08x}" for w in words[i:i + 8])
+        fs = " ".join(f"{f:+.3f}" if w and 1e-6 < abs(f) < 1e5 else (str(w) if w < 100000 else ".")
+                      for w, f in zip(words[i:i + 8], fl[i:i + 8]))
+        out.append(f"  {4 * i:4d}: {hx}")
+        out.append(f"        {fs}")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data")
@@ -704,7 +724,26 @@ def main(argv=None):
     ap.add_argument("--calumi", default="", help="with --motion: CALUMI.Animation.dll, to read the critter clips' tracks")
     ap.add_argument("--rig", action="append", default=[],
                     help="a .rig to lay open: an archive path (meshes\\...\\skeleton.rig) or a file on disk (repeatable)")
+    ap.add_argument("--af", action="append", default=[],
+                    help="an .af clip to lay open: an archive path or a file on disk (repeatable)")
     a = ap.parse_args(argv)
+    if a.af:
+        import sf_anim_survey as SAS
+        index = {}
+        if a.starfield_data:
+            for _label, ar in SAS.archives(a.starfield_data):
+                for i, nm in enumerate(ar.names):
+                    index.setdefault(SAS.norm(nm), (ar, i))
+        for r in a.af:
+            if os.path.isfile(r):
+                with open(r, "rb") as fh:
+                    d = fh.read()
+            else:
+                hit = index.get(SAS.norm(r))
+                d = hit[0].read(hit[1]) if hit else None
+            print(f"== af {r}")
+            print("\n".join(["  not found"] if d is None else af_dump(d)))
+        return 0
     if a.rig:
         import sf_anim_survey as SAS
         index = {}
