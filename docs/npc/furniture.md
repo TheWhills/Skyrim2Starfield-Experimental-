@@ -732,3 +732,23 @@ first, 21:16, was on the --vanilla-enter Forge build). Next: GetSitting on him (
 --vanilla-enter A/B for Forge, Grindstone and Workbench with the models back and the stand spots still off.
 Owner, 22:02 (same build): GetSitting on Alvor (18000EB8) at that spot = 0.00: he is not in any furniture, standing
 outside it (verified). Consistent with an entry he cannot start; the --vanilla-enter A/B above is the next test.
+**How furniture is entered, Skyrim vs Starfield** (owner, 22:05: "investigate how the animations are entered into for
+Skyrim vs Starfield"). Starfield, **verified** from the CK's animation cache (owner's AnimTextData of 14:48,
+AnimationOffsets: per subgraph, each clip's path, then duration f32, flags u32, u32, a root-translation track u32 n x
+(t, x, y, z), a rotation track u32 n x 5 f32, then u32 n events (time f32, length-prefixed name)):
+- side-specific entries where the template has them (chair / bench / sittable: Front / Left / Right / Rear
+  EnterFromStand), one EnterFromStand for the standing work and lean sets;
+- vanilla seat entries carry root motion: chair EnterFromStand 7.33 s walks (-0.71, +0.89) m, bench front +0.93 m,
+  bed +0.75 m; vanilla standing ones (furniture\standing 0.53 s, wallow, searchingfloor) move nothing;
+- most carry SetPosBegin / SetPosEnd (chair 0.67 / 4.43 s): the window in which the engine moves the actor onto the
+  marker (supported reading of the names).
+- Ours: every s2s_* EnterFromStand moves nothing (Skyrim's clips, --no-root-motion) and has a SetPos window (forge
+  13.87 s, 1.37 / 7.93 s; tanning and grindstone 2.0 s, 0.2 / 1.13 s; rail / wall lean 2.67 s, 0.23 / 1.9 s). Rail and
+  wall leans are built the same way and work, so a motionless entry alone does not stop NPCs.
+- Our markers: forge / tanning / grindstone at the reference's origin, entry Rear in Skyrim (0x0F every side since
+  ANY_SIDE_SETS); the rail lean Rear turned 180 deg (works); vanilla templates allow every side (0xFFFFFFFF).
+Skyrim, **verified** earlier (furniture_motion): chair enters move 0.7-0.9 m; the forge, anvil and smelter clips none,
+the grindstone 2 cm: Skyrim's Alvor also has to stand on the forge spot itself. Open: whether that spot is on the
+navmesh (Skyrim may slide actors onto off-navmesh spots, Starfield may not). furniture_navmesh.py (read-only) prints,
+per work station and lean / sweep spot, whether the marker is on Skyrim's navmesh (ours is Skyrim's, converted), the
+distance to the nearest navmesh, and 0.5 / 1.0 m out on each side.
