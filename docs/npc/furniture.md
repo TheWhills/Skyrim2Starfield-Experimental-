@@ -827,3 +827,6 @@ owner's word on whether he walked there by himself after `moveto player`. If he 
 model too, the spot / markers are what fails. furniture_record_probe now pairs each station with its own template
 (forge / NPCWelder, grindstone / NPCRepairImpactWrench_Standing, workbench / NPCWipeTable, tanning / NPCStanding_WipeWall)
 and decodes SNAM (offset, rotation, keyword, entry / exit) and JNAM / GNAM / FNAM.
+Owner, 22:46: "he still isn't entering the anim" (Starfield's model + the Sit package). The converted model is ruled
+out as the blocker (with the package that always picks the forge). Left: the record's marker data against NPCWelder's
+(furniture_record_probe), then the template / keyword pairing.
