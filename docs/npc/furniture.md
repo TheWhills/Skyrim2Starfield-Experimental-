@@ -953,3 +953,12 @@ Owner's rerun (2026-11-17, work_probe2.txt + readiness.md with --exterior), **ve
   skyrimbehavior now decodes a state's enter / exit events (hkbStateMachineEventPropertyArray, 16-byte
   hkbEventProperty: supported layout, synthetic test); the probe prints, per prop, where it is sent (clip trigger,
   state enter / exit, or the nearest named node pointing at it).
+Owner's work_probe3 (2026-11-17), **verified**: state enter events decode (the 16-byte hkbEventProperty layout is
+now verified on data: ids resolve to AnimObjLoad / AnimObjDraw with prop payloads). Props: AnimObjectAxe loaded and
+drawn on entering WoodChop_State; AnimObjectChopWoodLeft / Right loaded there, drawn on entering the
+AnimObjectChopLoop state; AnimObjectCarryFirewood01-03 loaded on entering WoodPickUp_State, drawn by AOWoodPickUp at
+1 s; AnimObjectHoe loaded and drawn on entering the IdleHoe state; AnimObjectHook loaded on entering MillLoad_State,
+drawn by AnimObjectMillLoadStart at 0.33 s; AnimObjectWoodScrap on a hammer-table loop state. So a prop conversion
+reads state enter events as well as clip triggers. Third-person clip lengths: AnimObjectChopStart 1.30 s, Loop
+10.90 s (annotations: NPCHumanWoodPlace 1.8 s, NPCHumanWoodChop 7.23 s), Stop 1.17 s; AnimObjectMillLoadStart
+13.33 s; AOWoodPickUp 6.67 s; AOWoodPutDown 2.83 s; IdleHoe 6.67 s; OffsetCarryLog 10.0 s; OffsetWoodPosture 6.67 s.

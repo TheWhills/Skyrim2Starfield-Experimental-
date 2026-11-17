@@ -137,6 +137,10 @@ class StartStateTests(unittest.TestCase):
         self.assertEqual(self.v([cond("GetDead", 0x9999, 0.0)]), "keep")
         self.assertEqual(self.v([cond("IsInList", 0x800)]), "keep")
         self.assertEqual(self.v([cond("GetGlobalValue", 0x700, 0x701, use_global=True)]), "drop")   # 1 == 0?
+        # 2026-11-17: no Skyrim scene plays in the conversion; a script variable needs its script
+        self.assertEqual(self.v([cond("IsScenePlaying", 0x601, 0.0)]), "keep")
+        self.assertEqual(self.v([cond("IsScenePlaying", 0x601, 1.0)]), "drop")
+        self.assertEqual(SD.evaluate(cond("GetVMScriptVariable", 0x601, 2.0), self.ralof, self.world), (None, "script"))
 
     def test_or_groups_and_ambient(self):
         # (GetStage MQ >= 10 OR GetIsID Ralof) AND GetCurrentTime < 12

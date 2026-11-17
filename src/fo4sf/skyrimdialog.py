@@ -225,7 +225,10 @@ F = {"GetDistance": 1, "GetCurrentTime": 18, "GetDead": 46, "GetItemCount": 47, 
      "GetKeywordItemCount": 465, "GetQuestCompleted": 543, "HasKeyword": 560, "LocationHasKeyword": 562,
      "GetIsEditorLocation": 565, "GetIsAliasRef": 566, "IsInSameCurrentLocAsRef": 603,
      "IsInSameCurrentLocAsRefAlias": 604, "LocAliasHasKeyword": 610, "GetVMQuestVariable": 629,
-     "WornHasKeyword": 682, "GetActorValue": 14}
+     "WornHasKeyword": 682, "GetActorValue": 14,
+     # 2026-11-17 (schedule_readiness on Riverwood's packages: DelphineSkyHaven*, DorthePlay, HodSawmill*; supported:
+     # xEdit's TES5 table indices, not re-checked against the file)
+     "GetDisabled": 35, "IsScenePlaying": 248, "GetVMScriptVariable": 630}
 NAME_OF = {v: k for k, v in F.items()}
 # what changes during play without the story moving: time, weather, chance, where the NPC stands, combat, what it is
 # doing. A line under these plays when they happen to hold; kept by default (verdict 'ambient')
@@ -240,7 +243,12 @@ START_ZERO = {F[n] for n in ("GetStage", "GetStageDone", "GetQuestCompleted", "G
                              "GetLocationCleared", "GetCrimeGold", "GetCrimeGoldViolent", "GetCrimeGoldNonviolent",
                              "IsPCAMurderer", "IsBribedbyPlayer", "GetPCMiscStat", "GetPlayerTeammate",
                              "GetPlayerTeammateCount", "IsHorseStolen", "IsTrespassing", "GetQuestVariable",
-                             "GetVMQuestVariable")}
+                             "GetVMQuestVariable",
+                             # no Skyrim scene runs in the conversion (quests are not converted), so none is playing
+                             "IsScenePlaying")}
+# a variable of a reference's Papyrus script (Hod's sawmill: ResourceObjectSawRiverwood's state): only that script,
+# converted, can answer
+SCRIPT_STATE = {F["GetVMScriptVariable"]}
 STORY_ALIAS = {F[n] for n in ("GetIsAliasRef", "GetInCurrentLocAlias", "IsInSameCurrentLocAsRefAlias",
                               "LocAliasHasKeyword")}
 OPS = {0: lambda a, b: a == b, 1: lambda a, b: a != b, 2: lambda a, b: a > b, 3: lambda a, b: a >= b,
@@ -306,7 +314,8 @@ def _actor(c, speaker, world):
 def evaluate(c: Dict, speaker: Dict, world: World) -> Tuple[Optional[bool], str]:
     """(True / False / None, kind) of one condition at the start of a new game; kind 'start' (decided), 'ambient'
     (varies in play, AMBIENT), 'player' (the player's race / sex / class: chosen later), 'story' (quest aliases,
-    relationships with others: unknown), 'unknown' (a function not modelled)."""
+    relationships with others: unknown), 'script' (a script variable: needs the script), 'unknown' (a function not
+    modelled)."""
     f = c.get("function")
     op = OPS.get(c.get("op", 0), OPS[0])
     want = c.get("value")
@@ -323,6 +332,8 @@ def evaluate(c: Dict, speaker: Dict, world: World) -> Tuple[Optional[bool], str]
         return op(0.0, want), "start"
     if f in STORY_ALIAS:
         return None, "story"
+    if f in SCRIPT_STATE:
+        return None, "script"
     who = _actor(c, speaker, world)
     if f == F["GetQuestRunning"]:
         return op(1.0 if world.running(p1) else 0.0, want), "start"
