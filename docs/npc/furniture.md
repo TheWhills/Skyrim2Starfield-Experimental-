@@ -713,3 +713,13 @@ alternates idle marker <-> furniture: the stand spot competes with the forge, gr
 as the same type, and (2) it gets a furniture-length stay instead of an idle marker's. sandbox_settings.py (read-only)
 prints both masters' sandbox GMSTs and the stay per type at an Energy; real values, not the wiki's example, decide
 whether Starfield's durations differ too.
+sandbox_settings (owner, 21:58, **verified** values): both masters nearly alike. fSandboxDurationBase 0.2 (Skyrim) /
+0.25 (Starfield); type multipliers equal (Furniture 3.0, IdleMarker 1.5, Eat 1.5; Starfield adds Wandering 2.0);
+fSandboxEnergyMultIdleMarker -0.05 in both; meal hours equal; distances the same in metres (Starfield 1.42875 = Skyrim
+100 units). Neither master carries fSandboxEnergyMult, fSandboxEnergyMultFurniture or fSandboxDurationRangeMult
+(engine defaults, unreadable), so the stays printed leave out Energy and randomness: Skyrim furniture 36 game minutes,
+idle marker 18; Starfield 45 / 22.5. So Starfield's settings are not the difference (25% longer stays at most). The
+difference that stands: our stand spots are furniture (45 min, same type as the work pieces) where Skyrim's are idle
+markers (18 min, the other type, so the next pick favours furniture). Correction (CK wiki IdleMarker: the Idle Timer is
+"how long to wait before picking a new idle", between the marker's animations): IDLT is not how long an actor stays at
+the marker; the earlier note and the reply to the owner calling Skyrim's stand spots timed at a few seconds were wrong.
