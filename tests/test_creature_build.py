@@ -103,6 +103,7 @@ class MainTests(unittest.TestCase):
                                                                    [b"COM"], [((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1),
                                                                                (0, 0, 0), 1.0)])])
         sf_files = {B.CRITTER["skeleton"]: nif.serialize(f), B.CRITTER["model"]: nif.serialize(trilo),
+                    B.CRITTER["rig"]: b"vanilla rig",
                     B.CRITTER["anims"] + "idle.afx": b"<root><is_state>1</is_state><tag>Idle</tag>"
                                                      b"<filename>Idle.af</filename></root>"}
 
@@ -126,7 +127,7 @@ class MainTests(unittest.TestCase):
         calls = []
 
         def fake_write(lib, out_dir, name, bones, parents, rest_t, rest_q, clip_t, clip_q, rig_path=None, **kw):
-            calls.append((name, bones, rig_path, kw.get("file_name")))
+            calls.append((name, bones, rig_path, kw.get("file_name"), kw.get("package_like")))
             os.makedirs(out_dir, exist_ok=True)
             for ext in (".af", ".afx"):
                 open(os.path.join(out_dir, kw["file_name"] + ext), "wb").write(b"x")
@@ -155,12 +156,14 @@ class MainTests(unittest.TestCase):
         self.assertEqual([c[2] is None for c in calls], [True, False])
         self.assertTrue(calls[1][2].endswith("skeleton.rig"))
         self.assertEqual(calls[1][:2], ("Idle", ["Root", "COM", "HEAD"]))
+        self.assertTrue(calls[0][4].endswith("critter_vanilla.rig"))          # the rig takes the critter's package
+        self.assertIsNone(calls[1][4])
         self.assertEqual(rep["bind_vs_rig_m_deg"], {"COM": [0.0, 0.0], "HEAD": [0.0, 0.0]})
         self.assertEqual(rep["rig"]["com_rest_m"], [0.0, 0.0, round(10 * U, 4)])
         self.assertTrue(any("trilobite" in n for n in rep["notes"]))
         self.assertIn("Starfield meshes/actors/critter/animations/walkforward.afx", rep["clips_missing"])
         self.assertEqual(rep["skyrim_shader"]["double_sided"], False)
-        self.assertTrue(any("rig LOD not set" in n for n in rep["notes"]))   # the fake rig is not CALUMI's
+        self.assertNotIn("lod_level", rep["rig"])                             # the per-bone patch is off by default
         self.assertNotIn("back_faces_added", rep["skyrim_shader"])
 
 

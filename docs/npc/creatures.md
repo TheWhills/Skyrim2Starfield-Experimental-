@@ -220,3 +220,11 @@ new creature skeleton on an existing graph.
   unresolved. Next: CALUMI / sf_animation_io's own code (owner's copy) for the rig and clip fields, and whether only
   the legs or the whole bird freezes (per-bone vs whole-body).
 
+* Owner, 18:33: the WHOLE chicken freezes and slides, not just the legs, so the per-bone levels (fixes 7-9) were
+  never the cause. Read (not run) the owner's sf_animation_io-master: its ExportRig adds the rig package and then
+  maps bones into it (SFBGSRigPackage_AddBoneNameToMapC; key 0 = Root, 9 = COM, ...), and its docs say "at least,
+  the Root bone should be mapped as Root"; rigs also carry a precision (DEFAULT / FIRST_PERSON / SHIP). Ours added
+  an empty package: no Root / COM mapping, zero precision (the zeroed header values in the rig compare, supported).
+  Fix 10 (supported, not verified): af_writer.copy_rig_package gives our rig the vanilla critter rig's bone-map keys
+  for the bones both name (Root, COM), its mannequin flag and its precision, as rig_prefix already did for the human
+  rig. The per-bone level patch (fix 7) is now off by default (--rig-lod 0); --no-rig-package builds the old rig.

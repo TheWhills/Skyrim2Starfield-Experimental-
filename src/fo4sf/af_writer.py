@@ -430,12 +430,14 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
           clip_t, clip_q, tag: Optional[str] = None, rig_path: Optional[str] = None, rig_name: str = "SkyrimPort",
           tolerance: float = 1e-4, events: Optional[list] = None, fps: float = 30.0, is_state: bool = False,
           variables=(), like_afx: Optional[bytes] = None, like_last: Optional[int] = None, file_name: Optional[str] = None,
-          omit=(), hit_frame: Optional[int] = None, plugin_event_host=None) -> Dict:
+          omit=(), hit_frame: Optional[int] = None, plugin_event_host=None, package_like: Optional[str] = None) -> Dict:
     """Write <out>/<name>.af (+ skeleton.rig unless rig_path, + <name>.afx, + <name>.events.json). Translations in
     metres, quaternions (x, y, z, w). Bones named in `omit` get no track (the game keeps driving them, e.g.
     skeletonmap.NOT_ANIMATED). hit_frame: see retime_descriptor. plugin_event_host: None = no plugin events, "" =
-    plugin events in Skyrim's split, a name = all under that host (plugin_events). Returns {"af", "rig", "keys",
-    "frames"}."""
+    plugin events in Skyrim's split, a name = all under that host (plugin_events). package_like: a game .rig whose
+    rig-package settings (bone-map keys of the bones both rigs name, mannequin flag, precision) the rig written here
+    takes (copy_rig_package); only when this call writes the rig (rig_path None). Returns {"af", "rig", "keys",
+    "frames", "package_keys"}."""
     out = pathlib.Path(out_dir).resolve()
     repo = pathlib.Path(__file__).resolve().parents[2]
     if out == repo or repo in out.parents:
@@ -476,6 +478,14 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             L.require(add(rig, x, y, z, w, *(float(v) for v in rest_t[i]), n.encode("utf-8"), int(parents[i]), True,
                           L.error), f"bone {n}")
         rig_file = out / "skeleton.rig"
+        package_keys = {}
+        if rig_path is None and package_like:
+            src = L.require(L.fn("LoadSFBGSSkeletonRigFromFileC", [c.c_wchar_p, p], p)(str(package_like), L.error),
+                            "load package rig")
+            try:
+                package_keys = copy_rig_package(L, src, rig, bones)
+            finally:
+                L.fn("DeleteSkeletonRigC", [p], b)(src)
         if rig_path is None:
             L.require(L.fn("SaveSkeletonRigToSFBGSFormatDirectC", [p, c.c_wchar_p, p], b)(rig, str(rig_file), L.error),
                       "save rig")
@@ -541,6 +551,7 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             (out / f"{af.stem}.events.json").write_text(json.dumps({"in_afx": mapped, "not_mapped": unmapped},
                                                                    indent=1))
         return {"af": str(af), "rig": str(rig_path or rig_file), "keys": keys, "frames": F, "bones": B,
+                "package_keys": package_keys,
                 "events_in_afx": len(mapped), "events_not_mapped": len(unmapped), "plugin_events": len(extra),
                 "dropped_unnamed": dropped, "retime": retime, "omitted": sorted(skip & set(bones))}
     finally:
@@ -586,6 +597,30 @@ def load_rig(lib_path: str, rig_path: str) -> Dict:
         if rig:
             L.fn("DeleteSkeletonRigC", [p], c.c_bool)(rig)
         L.close()
+
+
+def copy_rig_package(L, src, dst, names) -> Dict[str, int]:
+    """Give rig `dst` the rig-package settings of game rig `src` (both CALUMI rig pointers): the bone-map key of every
+    bone named in `names` that `src` maps (e.g. Root 0, COM 9), the mannequin flag and the translation precision, as
+    rig_prefix does for its copies and as the sf_animation_io add-on's ExportRig maps bones. Returns {name: key}.
+    Why (owner, 2026-11-17 18:33): a rig built here had the package but nothing in it (no Root / COM mapping, zero
+    precision); the converted chicken froze whole a few feet off while the vanilla critter kept walking."""
+    p, b = L.p, L.b
+    key_of = L.fn("SFBGSRigPackage_GetBoneKeyC", [p, c.c_char_p], c.c_uint8)
+    mapped = L.fn("SFBGSRigPackage_BoneIsMappedC", [p, c.c_char_p], b)
+    add_key = L.fn("SFBGSRigPackage_AddBoneNameToMapC", [p, c.c_uint8, c.c_char_p, p, b], b)
+    keys = {}
+    for n in names:
+        nm = n.encode("utf-8")
+        if mapped(src, nm):
+            k = int(key_of(src, nm))
+            L.require(add_key(dst, k, nm, L.error, True), f"key {n}")
+            keys[n] = k
+    L.fn("SFBGSRigPackage_SetMannequinC", [p, b], b)(dst, L.fn("SFBGSRigPackage_IsMannequinC", [p], b)(src))
+    hi = L.fn("SFBGSRigPackage_GetHighPrecisionValueC", [p], c.c_float)(src)
+    lo = L.fn("SFBGSRigPackage_GetLowPrecisionValueC", [p], c.c_float)(src)
+    L.fn("SFBGSRigPackage_SetPrecisionToCustomC", [p, c.c_float, c.c_float], None)(dst, lo, hi)
+    return keys
 
 
 def rig_prefix(lib_path: str, rig_path: str, count: int, out_path: str) -> str:

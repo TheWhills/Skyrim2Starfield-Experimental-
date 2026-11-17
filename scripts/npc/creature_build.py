@@ -110,9 +110,11 @@ def main(argv=None):
     ap.add_argument("--work", default="", help="scratch folder (default: <out>\\_work, removed after)")
     ap.add_argument("--double-sided", choices=("auto", "on", "off"), default="auto",
                     help="add back faces: auto = when Skyrim's shader sets SLSF2_Double_Sided")
-    ap.add_argument("--rig-lod", type=int, default=2,
-                    help="animation-LOD level for every bone but Root (the critter's main bones use 2; 0 = leave "
-                         "CALUMI's, which stops the legs at a distance)")
+    ap.add_argument("--rig-lod", type=int, default=0,
+                    help="patch every bone but Root to this level in the rig's per-bone field (creature.set_rig_lod; "
+                         "0 = off, the default since the rig package: fixes 7-9 did not help)")
+    ap.add_argument("--no-rig-package", action="store_true",
+                    help="build the rig without the vanilla critter rig's package settings (the old rig)")
     ap.add_argument("--body-lods", type=int, default=4, choices=(1, 2, 3, 4),
                     help="LOD slots the body mesh fills (vanilla creatures: 4; 1 = LOD0 only, the old build)")
     ap.add_argument("--opaque", action="store_true",
@@ -237,9 +239,17 @@ def main(argv=None):
     rig_file = None
     if plan:
         lt, lq, _rt, _rq, moving, vafx, stem = prepared(*plan[0])
+        # the vanilla critter rig lends its rig package (Root / COM bone-map keys, precision, mannequin flag): the
+        # sf_animation_io add-on maps at least Root when it exports a rig; ours had none (whole chicken froze afar)
+        vanilla_rig = os.path.join(work, "critter_vanilla.rig")
+        os.makedirs(work, exist_ok=True)
+        with open(vanilla_rig, "wb") as fh:
+            fh.write(sf_read(CRITTER["rig"]))
         r = af_writer.write(a.calumi, os.path.join(work, "rig"), stem, cr.names, cr.parents, cr.t, cr.q, lt, lq,
                             rig_name="S2SChicken", like_afx=vafx, file_name=stem,
-                            omit=() if moving else (creature.ROOT,))
+                            omit=() if moving else (creature.ROOT,),
+                            package_like=None if a.no_rig_package else vanilla_rig)
+        rep["rig"]["package_keys"] = r.get("package_keys", {})
         rig_file = r["rig"]
         with open(rig_file, "rb") as fh:
             rig_bytes = fh.read()

@@ -230,5 +230,35 @@ class GroundFlagTests(unittest.TestCase):
         self.assertEqual(self.flags(af_writer.ground_flags(standing)), ["Allow Rotation"])
 
 
+class CopyPackageTests(unittest.TestCase):
+    def test_copy_rig_package(self):
+        calls = []
+
+        class FakeL:
+            p, b, error = object(), object(), "err"
+
+            def fn(self, name, args, result):
+                def f(*a):
+                    calls.append((name, a))
+                    return {"SFBGSRigPackage_BoneIsMappedC": lambda: a[1] in (b"Root", b"COM"),
+                            "SFBGSRigPackage_GetBoneKeyC": lambda: {b"Root": 0, b"COM": 9}[a[1]],
+                            "SFBGSRigPackage_AddBoneNameToMapC": lambda: True,
+                            "SFBGSRigPackage_IsMannequinC": lambda: False,
+                            "SFBGSRigPackage_GetHighPrecisionValueC": lambda: 2.5,
+                            "SFBGSRigPackage_GetLowPrecisionValueC": lambda: 0.5}.get(name, lambda: True)()
+                return f
+
+            def require(self, ok, what=""):
+                if not ok:
+                    raise AF.CalumiError(what)
+                return ok
+        keys = AF.copy_rig_package(FakeL(), "SRC", "DST", ["Root", "COM", "Spine"])
+        self.assertEqual(keys, {"Root": 0, "COM": 9})
+        added = [a for n, a in calls if n == "SFBGSRigPackage_AddBoneNameToMapC"]
+        self.assertEqual([(a[0], a[1], a[2]) for a in added], [("DST", 0, b"Root"), ("DST", 9, b"COM")])
+        self.assertIn(("SFBGSRigPackage_SetPrecisionToCustomC", ("DST", 0.5, 2.5)), calls)
+        self.assertIn(("SFBGSRigPackage_SetMannequinC", ("DST", False)), calls)
+
+
 if __name__ == "__main__":
     unittest.main()
