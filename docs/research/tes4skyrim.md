@@ -107,7 +107,27 @@ Plus five SKSE plugins for what Skyrim lacks: jail / journal (TESRuntime), the c
    Probe (2026-11-17, read-only): `scripts/armor/creature_probe.py` prints Skyrim's ChickenRace (path subrecords,
    NPC count, behaviour project -> character -> rig bones, behaviours, clip list) and every Starfield RACE's path
    subrecords (skeleton / rig / root graph / folder, unresolved which signature is which until the run) with
-   NPC counts; `--sf-race` opens a race's rig strings and root graph. Results: pending the owner's run.
+   NPC counts; `--sf-race` opens a race's rig strings and root graph.
+   Owner's run, 2026-11-17:
+   * Verified, Skyrim ChickenRace 000A919D (3 NPC_): ChickenProject.hkx -> Characters\ChickenCharater.hkx
+     (Bethesda's spelling) -> rig Character Assets\skeleton.hkx with two skeletons, 'NPC Root [Root]' 33 bones
+     (pelvis, spine, ribcage, 3 neck, head + comb + 2 wattles, 2 legs of thigh / calf ('LeftCafe') / ankle and 4 toes
+     of 2 bones each) and a 7-bone ragdoll 'Ragdoll_Pelvis01'; one behaviour ChickenBehavior.hkx (58,960 bytes);
+     20 clips: MT_Idle, WalkForward, RunForward, TurnLoopingL, 4 canned turns (TurnLCannedL90/180, TurnCannedFlee
+     L90/180), 3 Idle_Fulbody, Idle_Head1, sit down / sitting (Idle_SitdownStart, Idle_Sitd1, Idle_SitdHeadturn,
+     Idle_SitdPeck, Idle_Setgetup), GETUP, GETUPStance, AggroWarning1.
+   * Verified, Starfield's creature race layout (31 RACE): ANAM skeleton .nif, NAM5 .rig, NAM6 root graph .agx, DNAM
+     default animation folder; then SGNM (a subgraph) each followed by its SAPT animation folders (one or more, most
+     specific first, as on HumanRace). The block repeats for the female when a race has one.
+   * Verified, graphs are shared across skeletons: Creature_Root.agx (+ Creature_NonStrafing / _Strafing / _Flying)
+     drives BipedA, FlyerA, HexapodA, HopperA, MantaA, MantidA, MiniBotA, OctopedeA, QuadrupedA/B/C, SwimmerA and
+     Terrormorph, each with its own skeleton.nif, .rig and Animations folder; Critter_Root.agx
+     (+ Critter_NonStrafing) drives Critter, FloaterA, LarvaA and ParasiteA. Supported (to test in game): a new
+     skeleton with its own .rig and folder runs on an existing graph, so the chicken needs no new graph at first,
+     only clips whose .afx tags are the ones the graph plays.
+   * The chicken's template: CritterRace 000176B6 (11 NPC_; Critter_Root + Critter_NonStrafing, Furniture).
+     Next run: `--sf-race CritterRace` lists the tags its graphs play and the .afx its folders supply, i.e. the
+     list the 20 Skyrim clips have to be mapped onto.
 2. Read our AnimTextData files the way they read animationdata (grammar, hashes), to generate them without the CK.
 3. A small SFSE live-readback plugin: current package, sandbox target, furniture, graph variables of a ref.
 4. Check Starfield's physics range on the planet before scaling up.

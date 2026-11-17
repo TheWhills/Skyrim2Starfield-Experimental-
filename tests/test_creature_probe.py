@@ -52,6 +52,45 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertIn("NAM5 Actors\\Ashta\\CharacterAssets\\skeleton.rig", row)
         self.assertIn("NAM6 AnimTextData\\Tables\\Graphs\\Ashta_Root.agx", row)
 
+    def test_graph_path(self):
+        self.assertEqual(C.graph_path("AnimTextData\\Tables\\Graphs\\Critter_Root.agx"),
+                         "meshes/animtextdata/tables/graphs/critter_root.agx")
+        self.assertEqual(C.graph_path("Data\\Meshes\\AnimTextData\\Tables\\Graphs\\X.agx"),
+                         "meshes/animtextdata/tables/graphs/x.agx")
+        self.assertEqual(C.graph_path("Locomotion"), "meshes/animtextdata/tables/graphs/locomotion.agx")
+
+    def test_contract_follows_graph_refs_and_finds_missing_tags(self):
+        def sheet(rows):
+            return "<property_sheet>" + "".join(f"<row><prop><value>{k}</value></prop><prop><value>{v}</value></prop></row>"
+                                                for k, v in rows) + "</property_sheet>"
+
+        def graph(*nodes):
+            return ("<root><Name>x</Name>" + "".join(f"<node><node_type>{ty}</node_type>{sheet(p)}</node>"
+                                                    for ty, p in nodes) + "</root>").encode()
+
+        def afx(tag, fn, state="0"):
+            return f"<root><is_state>{state}</is_state><tag>{tag}</tag><filename>{fn}</filename></root>".encode()
+        G = "meshes/animtextdata/tables/graphs/"
+        files = {G + "critter_root.agx": graph(("NT_GRAPH_REF", [("Graph Ref", "Locomotion")])),
+                 G + "locomotion.agx": graph(("NT_ANIMATION_NODE", [("TagName", "Idle")]),
+                                             ("NT_ANIMATION_NODE", [("TagName", "WalkForward")])),
+                 "meshes/actors/critter/animations/idle.afx": afx("Idle", "Idle.af", "1"),
+                 "meshes/actors/critter/animations/idle.af": b"",
+                 "meshes/actors/critterb/animations/walkforward.afx": afx("WalkForward", "W.af")}
+        race = {"paths": [("NAM6", "AnimTextData\\Tables\\Graphs\\Critter_Root.agx"),
+                          ("DNAM", "Actors\\Critter\\Animations"), ("DNAM", "Actors\\Critter\\Animations")]}
+        lines = C.contract_lines(race, files.get, list(files))
+        text = "\n".join(lines)
+        self.assertIn("refs ['Locomotion']", text)
+        self.assertIn("tags (2): Idle, WalkForward", text)
+        self.assertIn("folder Actors\\Critter\\Animations: 1 .afx, 1 .af", text)   # listed once; critterb not under it
+        self.assertIn("idle.afx: tag Idle (state) -> Idle.af", text)
+        self.assertTrue(lines[-1].endswith("(1): WalkForward"), lines[-1])
+
+    def test_character_refs_dedupes(self):
+        refs = C.character_refs(["Character Assets\\skeleton.HKX", "Character Assets\\skeleton.HKX"])
+        self.assertEqual(refs["rig"], ["Character Assets\\skeleton.HKX"])
+
 
 if __name__ == "__main__":
     unittest.main()

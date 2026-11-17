@@ -88,7 +88,7 @@ def character_refs(strings) -> dict:
             out["behaviors"].append(s)
         else:
             out["animations"].append(s)
-    return out
+    return {k: list(dict.fromkeys(v)) for k, v in out.items()}     # the character file names its rig twice
 
 
 def hkx_strings(data: bytes) -> list:
@@ -97,6 +97,95 @@ def hkx_strings(data: bytes) -> list:
     import behavior_inventory as BI
     pf = hkpackfile.Packfile(data)
     return [s for _o, _c, strs in BI.object_strings(pf) for s in strs]
+
+
+GRAPHS = "meshes/animtextdata/tables/graphs/"
+
+
+def graph_path(ref: str) -> str:
+    """An archive key (lower case, forward slashes, under meshes/) for a graph named in a RACE (a path) or in a
+    NT_GRAPH_REF (a bare name, e.g. MeleeActions)."""
+    k = ref.replace("\\", "/").lower().strip()
+    if not k.endswith(".agx"):
+        return GRAPHS + posixpath.basename(k) + ".agx"
+    k = k[len("data/"):] if k.startswith("data/") else k
+    return k if k.startswith("meshes/") else "meshes/" + k
+
+
+def walk_graphs(roots, read, limit: int = 60) -> list:
+    """[(key, summary or None)] for the graphs reachable from roots through NT_GRAPH_REF, breadth first, each once.
+    read(key) -> bytes or None."""
+    from fo4sf import agx
+    seen, out, queue = set(), [], [graph_path(r) for r in roots]
+    while queue and len(out) < limit:
+        k = queue.pop(0)
+        if k in seen:
+            continue
+        seen.add(k)
+        d = read(k)
+        if d is None:
+            out.append((k, None))
+            continue
+        sm = agx.summary(agx.read_graph(d))
+        out.append((k, sm))
+        queue += [graph_path(r) for r in sm["graph_refs"]]
+    return out
+
+
+def folder_descriptors(folders, names, read) -> list:
+    """[(folder, [{"file", "tag", "prefix", "is_state", "filename"}], af count)] for each animation folder (a RACE's
+    DNAM / SAPT: every .afx beneath it, at any depth). names: archive keys (lower case, forward slashes)."""
+    import xml.etree.ElementTree as ET
+    out = []
+    for f in dict.fromkeys(folders):
+        base = f.replace("\\", "/").lower().strip("/")
+        base = base if base.startswith("meshes/") else "meshes/" + base
+        under = [n for n in names if n.startswith(base + "/")]
+        rows = []
+        for n in sorted(x for x in under if x.endswith(".afx")):
+            d = read(n)
+            row = {"file": n[len(base) + 1:], "tag": None, "prefix": None, "is_state": None, "filename": None}
+            if d is not None:
+                try:
+                    r = ET.fromstring(d.decode("utf-8-sig", "replace"))
+                    row.update({k: r.findtext(k) for k in ("tag", "prefix", "is_state", "filename")})
+                except ET.ParseError:
+                    row["tag"] = "(not XML)"
+            rows.append(row)
+        out.append((f, rows, sum(1 for n in under if n.endswith(".af"))))
+    return out
+
+
+def contract_lines(race: dict, read, names) -> list:
+    """What a race's graphs play and what its folders supply: the list a new creature has to fill."""
+    lines = []
+    paths = list(dict.fromkeys(race["paths"]))
+    graphs = [t for s, t in paths if s in ("NAM6", "SGNM")]
+    folders = [t for s, t in paths if s in ("DNAM", "SAPT")]
+    played = []
+    for k, sm in walk_graphs(graphs, read):
+        if sm is None:
+            lines.append(f"  graph {k}: not found")
+            continue
+        played += sm["tags"]
+        lines.append(f"  graph {k}: {sm['nodes']} nodes; refs {sm['graph_refs']}")
+        lines.append(f"    tags ({len(sm['tags'])}): {', '.join(dict.fromkeys(sm['tags']))}")
+        if sm["tag_alterations"]:
+            lines.append("    tag variants: " + "; ".join(f"{a['mode']} by {a['variable']}: {a['cases']}"
+                                                       for a in sm["tag_alterations"]))
+        lines.append(f"    events: {', '.join(sm['events'])}")
+        lines.append(f"    variables: {', '.join(sm['variables'])}")
+    supplied = set()
+    for f, rows, n_af in folder_descriptors(folders, names, read):
+        lines.append(f"  folder {f}: {len(rows)} .afx, {n_af} .af")
+        for r in rows:
+            supplied.add((r["tag"] or "").lower())
+            lines.append(f"    {r['file']}: tag {r['tag']}" + (f" prefix {r['prefix']}" if r["prefix"] else "")
+                         + (" (state)" if r["is_state"] == "1" else "") + f" -> {r['filename']}")
+    missing = [t for t in dict.fromkeys(played) if t.lower() not in supplied]
+    lines.append(f"  tags the graphs play that no descriptor in the race's folders has ({len(missing)}): "
+                 + ", ".join(missing))
+    return lines
 
 
 def skyrim_side(sky_data: str, race_edid: str) -> list:
@@ -176,27 +265,20 @@ def starfield_side(sf_data: str, sf_races) -> list:
                 ar, i = index[cand]
                 return cand, ar.read(i)
         return k, None
+    keys = list(index)
     for want in sf_races:
         r = next((x for x in races if (x["edid"] or "").lower() == want.lower()), None)
         if r is None:
             lines.append(f"== Starfield {want}: no such RACE")
             continue
         lines.append(f"== Starfield {r['edid']} {r['form']}")
-        for s, t in r["paths"]:
-            p, d = read(t)
-            if d is None:
-                lines.append(f"  {s} {t}: not found in the archives")
-                continue
-            if p.endswith(".rig"):
-                strs = SAS.strings_of(d, 3)
-                lines.append(f"  {s} {p}: {len(d)} bytes; strings ({len(strs)}): {', '.join(strs[:120])}")
-            elif p.endswith(".agx"):
-                text = d.decode("utf-8", "replace")
-                refs = sorted(set(re.findall(r"[\w\\/]+\.agx", text, re.I)))
-                lines.append(f"  {s} {p}: {len(d)} bytes, graphs named: {refs}")
-                lines += ["    " + ln for ln in text.splitlines()[:40]]
-            else:
-                lines.append(f"  {s} {p}: {len(d)} bytes")
+        for s, t in dict.fromkeys(r["paths"]):
+            if s == "NAM5":
+                p, d = read(t)
+                strs = SAS.strings_of(d, 3) if d is not None else []
+                lines.append(f"  rig {p}: " + ("not found" if d is None else
+                                               f"{len(d)} bytes; strings ({len(strs)}): {', '.join(strs[:200])}"))
+        lines += contract_lines(r, lambda k: read(k)[1], keys)
     return lines
 
 
