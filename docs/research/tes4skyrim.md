@@ -104,6 +104,10 @@ Plus five SKSE plugins for what Skyrim lacks: jail / journal (TESRuntime), the c
 1. Answer the creature-skeleton question on one Riverwood animal (a chicken: few bones, few clips): Starfield rig from
    Skyrim's skeleton, a few clips through our .hkx -> .af path, a scaffold graph (a vanilla Starfield creature's) as the
    test jig, then a translated Skyrim graph.
+   Probe (2026-11-17, read-only): `scripts/armor/creature_probe.py` prints Skyrim's ChickenRace (path subrecords,
+   NPC count, behaviour project -> character -> rig bones, behaviours, clip list) and every Starfield RACE's path
+   subrecords (skeleton / rig / root graph / folder, unresolved which signature is which until the run) with
+   NPC counts; `--sf-race` opens a race's rig strings and root graph. Results: pending the owner's run.
 2. Read our AnimTextData files the way they read animationdata (grammar, hashes), to generate them without the CK.
 3. A small SFSE live-readback plugin: current package, sandbox target, furniture, graph variables of a ref.
 4. Check Starfield's physics range on the planet before scaling up.

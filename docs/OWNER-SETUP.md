@@ -163,6 +163,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\interior\item_physics_probe.py --sf-data "$sf\Data" --out C:\Modding\work\items
    ```
    Send C:\Modding\work\items\item_physics_probe.md.
+7g. A (read-only): what a creature is made of in both games, for the Riverwood chicken test
+   (docs/research/tes4skyrim.md, "Suggested next steps"):
+   ```powershell
+   python -I scripts\armor\creature_probe.py --skyrim-data "$sky" --starfield-data "$sf\Data" > creature_probe.txt
+   ```
+   Send creature_probe.txt.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
