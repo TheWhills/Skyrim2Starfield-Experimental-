@@ -26,6 +26,16 @@ class SitSurveyTest(unittest.TestCase):
         self.assertEqual(rs, [("UC07_Gel_Sit_Weld", [(0, "Target", "SingleRef", "form 0020B7B4"),
                                                      (1, "Radius", "Float", "0")])])
 
+    def test_form_uses_and_holders(self):
+        rs = [("PkgA", [(24, "Restrict Sandbox Targets", "TargetSelector", "form 0018F691 (Keyword)"),
+                        (2, "Location", "Location", "form 00000000 (Near linked reference)")]),
+              ("PkgB", [(24, "Restrict Sandbox Targets", "TargetSelector", "form 0018F691 (Keyword)")])]
+        self.assertEqual(S.form_uses(rs), {(24, "Restrict Sandbox Targets", 0x18F691): ["PkgA", "PkgB"]})
+        import struct
+        objs = [("FURN", "Bench", struct.pack("<2I", 5, 0x18F691)), ("IDLM", "Lean", struct.pack("<I", 7))]
+        self.assertEqual(S.keywords_of(struct.pack("<2I", 5, 9)), [5, 9])
+        self.assertEqual(S.holders(objs, 0x18F691), [("FURN", "Bench")])
+
 
 if __name__ == "__main__":
     unittest.main()

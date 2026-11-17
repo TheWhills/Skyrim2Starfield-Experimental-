@@ -893,3 +893,16 @@ Drawn cleared"). Skyrim side: forge, grindstone and tanning rack all have their 
 entry Rear (furniture.json skyrim_markers), the same as each other; the grindstone's Skyrim model is the animating
 wheel (its spin is not converted), nothing in how NPCs pick it differs from the forge in Skyrim. If the flag is not it,
 the forge's lesson applies (moved, the forge was used): test by moving the grindstone in game.
+
+### Does Starfield have a built-in "don't reuse the last object" option? (2026-11-17)
+- **Verified (owner's `sit_package_survey --template Sandbox`, Starfield.esm):** the Sandbox template 00002CB1 has 15
+  inputs (Location, Unlock on Arrival, Allow Eating / Sleeping / Conversation / Idle Markers / Sitting / Special
+  Furniture / Wandering, Wander Preferred Path Only, Energy, UseOwnedRefsOnly, Travel: Prefer Preferred Path,
+  Restrict Sandbox Targets, Allowed Height Difference). None is a repeat, cooldown or last-used switch. 577 packages
+  use it.
+- **Verified:** input 24 'Restrict Sandbox Targets' is a TargetSelector that vanilla sets to a keyword on 9 packages
+  (0018F691 x4, 0018F692 x3, 0028FBED x1, 0013036A x1); the other 568 leave it at "any object type". A
+  keyword-restricted sandbox per time block is a possible native rotation (e.g. one block limited to the forge and
+  grindstone). **Unresolved:** the keywords' names and which objects carry them (the survey now prints both).
+- **Unresolved:** engine-only settings (not in Starfield.esm) for repeats; asked the owner for `help sandbox 2` in
+  game.
