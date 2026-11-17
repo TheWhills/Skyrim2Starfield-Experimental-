@@ -232,6 +232,18 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
     return f
 
 
+def rest_worlds(cr: CreatureRig) -> Dict[str, np.ndarray]:
+    """{bone: 4x4 rest world (metres, the actor's model space)} of the rig."""
+    wt, wq = cr.rig().rest_world()
+    out = {}
+    for i, n in enumerate(cr.names):
+        m = np.eye(4)
+        m[:3, :3] = np.array(quat_to_rot9(wq[i])).reshape(3, 3)
+        m[:3, 3] = wt[i]
+        out[n] = m
+    return out
+
+
 def com_world(cr: CreatureRig) -> np.ndarray:
     """4x4 rest world of COM, metres."""
     wt, wq = cr.rig().rest_world()
@@ -294,7 +306,15 @@ def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr:
     m.weights = quantize_weights([[(names[shape.bones[b]], w) for b, w in vw] for vw in shape.weights], index)
     data = sfmesh.serialize(m)
     d, f = convert_static.mesh_file_path(data)
+    # Binds from the RIG's rest pose (in COM's space), not the Skyrim mesh's bind worlds: the engine draws a vertex at
+    # bone_world * bind * v, so at rest bone_world must cancel the bind. With COM levelled (fix 4) the mesh's Pelvis
+    # bind (pitched -56 deg) no longer matches COM's rest (level): every vertex weighted to COM (belly, lower breast)
+    # was swung 56 deg up into the body at rest (owner, 2026-11-17 17:35-17:46: "missing a piece or underbelly",
+    # unchanged by --opaque). Every other bone's mesh bind equals the rig's within 0.1 deg (creature_build.json).
     joints = {names[b]: w for b, w in shape.joints.items() if b in names}
+    rest = rest_worlds(cr)
+    to_com = np.linalg.inv(com_world(cr))
+    joints.update({b: to_com @ rest[b] for b in rest if b in joints or b == COM})
     binds = []
     P = np.asarray(shape.points, float)
     for b in used:

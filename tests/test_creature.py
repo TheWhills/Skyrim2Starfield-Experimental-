@@ -162,6 +162,26 @@ class FileTests(unittest.TestCase):
                          (b"ParentBoneName", b"COM"))
         bsx = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSXFlags")
         self.assertEqual(struct.unpack_from("<I", bsx, 4)[0], 0x1004A)
+        # at rest every bone's model world cancels its bind: COM (the pitched Pelvis, levelled) included
+        bd = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSSkin::BoneData")
+        inst = next(n.blocks[i] for i in range(len(n.blocks)) if n.type_of(i) == "BSSkin::Instance")
+        cnt = struct.unpack_from("<I", inst, 8)[0]
+        refs = struct.unpack_from(f"<{cnt}i", inst, 12)
+
+        def node_world(i):
+            m = np.eye(4)
+            b = n.blocks[i]
+            m[:3, 3] = struct.unpack_from("<3f", b, 20)
+            m[:3, :3] = np.array(struct.unpack_from("<9f", b, 32)).reshape(3, 3)
+            par = next((p for p in range(len(n.blocks)) if n.type_of(p) == "NiNode" and i in nif.node_children(n, p)), None)
+            return (node_world(par) if par is not None else np.eye(4)) @ m
+        for k, r in enumerate(refs):
+            rot = np.array(struct.unpack_from("<9f", bd, 4 + k * 68 + 16)).reshape(3, 3)
+            tr = np.array(struct.unpack_from("<3f", bd, 4 + k * 68 + 52))
+            bind = np.eye(4)
+            bind[:3, :3], bind[:3, 3] = rot, tr
+            np.testing.assert_allclose(node_world(r) @ bind, np.eye(4), atol=1e-5,
+                                       err_msg=C._node_name(n, r).decode())
 
     def test_with_back_faces(self):
         from fo4sf import gearfit

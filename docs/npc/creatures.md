@@ -177,4 +177,10 @@ new creature skeleton on an existing graph.
   (2) the alpha cutout removing more than Skyrim's test does. Fix 5: back faces added when Skyrim's shader is
   double-sided (--double-sided auto|on|off), the shader / alpha flags recorded in creature_build.json
   ("skyrim_shader"), and --opaque to rule the cutout out.
+* Owner, 17:43 / 17:46: the json shows Skyrim's chicken shader is NOT double-sided (alpha test at 128, no blend), and
+  --opaque changed nothing: neither the culling nor the cutout. Cause found (verified by a test that fails on the
+  old code): since fix 4 COM rests level, but the body's COM bind was still the Skyrim Pelvis bind (pitched -56 deg),
+  so at rest every vertex weighted to COM (belly, lower breast) was swung 56 deg up into the body. Fix 6: every bind
+  from the rig's rest pose in COM's space (creature.rest_worlds); the mesh's own binds agree with the rig on all other
+  bones within 0.1 deg. tests/test_creature.py checks that each bone's rest world cancels its bind.
 
