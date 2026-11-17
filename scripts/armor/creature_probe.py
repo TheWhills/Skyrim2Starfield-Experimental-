@@ -225,6 +225,42 @@ def contract_lines(race: dict, read, names) -> list:
     return lines
 
 
+NODE_TYPES = ("NiNode", "BSFadeNode", "BSLeafAnimNode", "BSMultiBoundNode", "NiBillboardNode", "BSWeakReferenceNode")
+
+
+def nif_summary(data: bytes) -> list:
+    """A model at a glance: block type counts, node names (NiNode family: the bones of a skeleton.nif), extra data
+    (type and name) and strings that look like paths. Readable for Skyrim (BS 100) and Starfield (BS 172+) files."""
+    from fo4sf import nif as nifmod
+    n = nifmod.parse(data)
+    types = Counter(n.type_of(i) for i in range(len(n.blocks)))
+
+    def name(i):
+        idx = struct.unpack_from("<i", n.blocks[i], 0)[0] if len(n.blocks[i]) >= 4 else -1
+        return n.strings[idx].decode("latin-1", "replace") if 0 <= idx < len(n.strings) else ""
+    nodes = [name(i) for i in range(len(n.blocks)) if n.type_of(i) in NODE_TYPES]
+    extras = [f"{n.type_of(i)} {name(i)!r}" for i in range(len(n.blocks))
+              if "ExtraData" in n.type_of(i) or n.type_of(i) in ("SkinAttach", "BSXFlags")]
+    paths = [x.decode("latin-1", "replace") for x in n.strings if PATH_RX.search(x.decode("latin-1", "replace"))]
+    return [f"BS {n.bs_version}, {len(n.blocks)} blocks: " + ", ".join(f"{t} {c}" for t, c in sorted(types.items())),
+            f"nodes ({len(nodes)}): {', '.join(nodes)}",
+            f"extra data: {', '.join(extras) or '-'}",
+            f"path strings: {', '.join(paths) or '-'}"]
+
+
+def skin_summary(data: bytes) -> list:
+    """The skinned shapes of a Skyrim model (skyrimskin): name, vertices, triangles, bones, weight checks."""
+    from fo4sf import nif as nifmod, skyrimskin
+    out = []
+    for sh in skyrimskin.skinned_shapes(nifmod.parse(data)):
+        c = skyrimskin.check(sh)
+        out.append(f"skinned {sh.name.decode('latin-1', 'replace')!r}: {c['vertices']} verts, {c['triangles']} tris, "
+                   f"{c['bones']} bones, unweighted {c['unweighted_vertices']}, max influences {c['max_influences']}, "
+                   f"bad tris {c['out_of_range_triangles']}, weights from {c['weight_source']}; bones: "
+                   + ", ".join(b.decode("latin-1", "replace") for b in sh.bones))
+    return out or ["no skinned shapes"]
+
+
 def skyrim_side(sky_data: str, race_edid: str) -> list:
     from fo4sf import bsa, sfplugin, skyrimhkx
     esm = os.path.join(sky_data, "Skyrim.esm")
@@ -244,6 +280,14 @@ def skyrim_side(sky_data: str, race_edid: str) -> list:
         p = bsa.norm(p if p.lower().startswith("meshes\\") else "meshes\\" + p)
         return (p, arcs._read(p)) if p in names else (p, None)
     for proj in dict.fromkeys(t for _s, t in row["paths"] if t.lower().endswith("project.hkx")):
+        folder = bsa.norm("meshes\\" + posixpath.dirname(proj.replace("\\", "/")).replace("/", "\\")) + "\\"
+        for nf in sorted(x for x in names if x.startswith(folder) and x.endswith(".nif")):
+            try:
+                lines.append(f"  model {nf}:")
+                lines += ["    " + ln for ln in nif_summary(arcs._read(nf))]
+                lines += ["    " + ln for ln in skin_summary(arcs._read(nf))]
+            except Exception as e:                       # noqa: BLE001  (a probe: report and go on)
+                lines.append(f"    unreadable: {type(e).__name__}: {e}")
         pp, pdata = read(proj)
         if pdata is None:
             lines.append(f"  project {pp}: not in the archives")
@@ -310,6 +354,15 @@ def starfield_side(sf_data: str, sf_races) -> list:
             continue
         lines.append(f"== Starfield {r['edid']} {r['form']}")
         for s, t in dict.fromkeys(r["paths"]):
+            if s == "ANAM":
+                p, d = read(t)
+                if d is None:
+                    lines.append(f"  skeleton {p}: not found")
+                    continue
+                try:
+                    lines += [f"  skeleton {p}:"] + ["    " + ln for ln in nif_summary(d)]
+                except Exception as e:                   # noqa: BLE001
+                    lines.append(f"  skeleton {p}: unreadable: {type(e).__name__}: {e}")
             if s == "NAM5":
                 p, d = read(t)
                 names = rig_names(d) if d is not None else []

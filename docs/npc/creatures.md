@@ -47,6 +47,13 @@ Probe: `scripts/armor/creature_probe.py` (read-only).
 | Stagger*, MeleeAttack*, FireSingle, Tunnel*, Ambush, Diversion, WalkBackward, Jump* | none (a chicken doesn't do these; the graph only plays them when asked) |
 Skyrim's TurnLoopingL has no Critter tag (Critter's idle turning graph plays the TurnInPlace set).
 
+## Reuse found for step 1 (2026-11-17)
+* sfnif.build_skinned_nif takes bone NAMES and per-bone binds, nothing human-specific (used by worn gear, hair and
+  rigid weapons), and sfmesh writes per-vertex bone weights: the chicken's mesh can be written against its own
+  33 bones. skyrimskin.skinned_shapes reads Skyrim's bones, binds and weights.
+* Missing: a Starfield skeleton.nif writer (a NiNode tree of the bones at rest). The probe now prints a vanilla
+  creature skeleton.nif's nodes and extra data (to copy what it carries) and checks the chicken's own models.
+
 ## What the test needs (in order)
 1. The chicken mesh as a Starfield skinned mesh bound to its own bones, plus a Starfield skeleton.nif of those
    33 bones. Unresolved: our skinned-mesh path (gearfit / sfmesh) binds to Starfield's human skeleton; a

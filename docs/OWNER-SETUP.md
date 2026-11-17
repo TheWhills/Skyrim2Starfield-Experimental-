@@ -168,8 +168,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    python -I scripts\armor\creature_probe.py --starfield-data "$sf\Data" --sf-race CritterRace --sf-race QuadrupedARace > critter_probe.txt
    ```
-   Done 2026-11-17 (both runs; docs/npc/creatures.md). Optional re-run of the same command: the probe now reads tags
-   inside nested graph nodes and the rig's bone names.
+   Done 2026-11-17 (three runs; docs/npc/creatures.md). Next: the chicken's models and a vanilla creature
+   skeleton.nif (what nodes and extra data a Starfield creature skeleton carries):
+   ```powershell
+   python -I scripts\armor\creature_probe.py --skyrim-data "$sky" --starfield-data "$sf\Data" --sf-race CritterRace > creature_models.txt
+   ```
+   Send creature_models.txt.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

@@ -101,6 +101,23 @@ class CreatureProbeTests(unittest.TestCase):
         refs = C.character_refs(["Character Assets\\skeleton.HKX", "Character Assets\\skeleton.HKX"])
         self.assertEqual(refs["rig"], ["Character Assets\\skeleton.HKX"])
 
+    def test_nif_and_skin_summaries(self):
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        import test_skyrim_armor as A
+        data = A.skinned_nif_bytes()
+        summ = C.nif_summary(data)
+        self.assertIn("NiNode 4", summ[0])
+        self.assertIn("NPC Spine2 [Spn2]", summ[1])
+        skin = C.skin_summary(data)
+        self.assertEqual(len(skin), 1)
+        self.assertIn("6 verts, 2 tris, 3 bones, unweighted 0", skin[0])
+        from fo4sf import nif, sfnif
+        sf = sfnif.build_skinned_nif(b"Chicken", [sfnif.SkinnedShape(
+            b"Body", b"a\\b", 3, 3, "materials\\x.mat", [b"Pelvis"], [((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])])
+        ss = C.nif_summary(nif.serialize(sf))
+        self.assertIn("nodes (1): Chicken", ss[1])
+        self.assertIn("SkinAttach 'SkinBMP'", ss[2])
+
 
 if __name__ == "__main__":
     unittest.main()
