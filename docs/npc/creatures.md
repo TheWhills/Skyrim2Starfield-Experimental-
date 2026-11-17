@@ -16,6 +16,15 @@ Probe: `scripts/armor/creature_probe.py` (read-only).
 * Verified: QuadrupedARace (Creature_Root -> Creature_NonStrafing, 22 subgraphs incl. graze, hide, bleed-out,
   dodges) has 159 clips, Relaxed_ / Ready_ prefixed idles and turns, Graze_ / Hide_ / BleedOut_ sets: the template for
   Riverwood's bigger animals later (cow, goat, horse, dog: unresolved which fits each).
+* Verified (second run, nested nodes read): Critter_NonStrafing_IdleLocomotion plays WalkForward, JogForward,
+  RunForward (and Walk / Jog / RunBackward; only WalkBackward ships); Creature_IdleTurning plays Idle and
+  TurnInPlace_Left / Right 30 / 90 / 180; Critter_Root plays FurnitureDeath; NPC_Jumping the Jump* set. Idle_Flavor*,
+  Idle_Feeding, Warn, Diversion, Ambush are named by no graph node: supported, they come through IDLE records
+  (DynamicIdle / IdleFlavor events), so the chicken's flavour idles need IDLE forms too.
+* Verified: CritterRace's rig has its own 30 bones (COM, C_spine1-2, C_Head1, C_hips1 / C_Hips2, six legs of 2-3
+  bones, antennae of 3): no human bone names, so a creature rig is just its own bone table.
+* The minimum clip set for the first test: Idle, WalkForward, JogForward, RunForward, TurnInPlace_Left / Right
+  30 / 90 / 180 (graph-driven, no IDLE records needed).
 * Correction: the first probe read only a graph's top-level nodes, so locomotion tags inside embedded state machines
   were missing; fixed (deep_tags_refs). The race's own folder is its real clip list either way.
 
