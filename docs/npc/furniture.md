@@ -830,3 +830,14 @@ and decodes SNAM (offset, rotation, keyword, entry / exit) and JNAM / GNAM / FNA
 Owner, 22:46: "he still isn't entering the anim" (Starfield's model + the Sit package). The converted model is ruled
 out as the blocker (with the package that always picks the forge). Left: the record's marker data against NPCWelder's
 (furniture_record_probe), then the template / keyword pairing.
+furniture_record_probe (owner, 22:47, the FURNITURE_MODEL=vanilla build, **verified**): our forge, grindstone, armor
+workbench and tanning rack records equal their templates (NPCWelder, NPCRepairImpactWrench_Standing, NPCWipeTable,
+NPCStanding_WipeWall) in header flags, model, MNAM, JNAM / GNAM (360), FNAM, XMRK and bounds. Differences: keywords
+(+ our animation keyword, which the working leans and sweep also carry, + FurnitureSpecial,
++ IgnoreCollisionAtRefForInteractionsKeyword) and SNAM entry / exit sides (ours 0xF, the templates 0xFFFFFFFF; the
+wipe table's 0xFFFFFFF3; the working leans 0x2 and sweep 0x1, so few sides alone do not stop NPCs); the workbench's
+marker is at (-0.883, 0, 0) turned 90 deg (Skyrim's). make_furniture --plain-stations / riverwood_doors
+-PlainStations (A/B): no FurnitureSpecial / IgnoreCollision and the template's entry sides, leaving only the
+animation keyword and the spot different from Starfield's own. With the Sit package (which needs no FurnitureSpecial
+to choose): walks in -> one of those two; still not -> the animation keyword's set (our walk-in through the
+HumanRace entry) or the spot.

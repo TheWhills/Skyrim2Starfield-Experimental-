@@ -524,5 +524,24 @@ class FreshDirTest(unittest.TestCase):
             self.assertEqual(os.listdir(os.path.join(d, "all")), [])
 
 
+class PlainStationsTest(unittest.TestCase):
+    """--plain-stations (A/B, 2026-11-16): stations without the extra keywords and with the template's entry sides."""
+
+    def test_plain(self):
+        import make_furniture as MF
+        sky = [{"offset_m": [0, 0, 0], "rot_deg": 0.0, "entry": ["Rear"]}]
+        kws = {"S2S_AnimFurnSkyrimForge": 0x0100081A}
+        normal = {"bases": {"f": {"kind": "forge", "edid": "CraftingBlackSmithForge", "markers": [],
+                                  "skyrim_markers": [dict(m) for m in sky]}}}
+        plain = {"bases": {"f": {"kind": "forge", "edid": "CraftingBlackSmithForge", "markers": [],
+                                 "skyrim_markers": [dict(m) for m in sky]}}}
+        MF.add_anim_keywords(normal, "S2SStances.esm", read_keywords=lambda p: kws)
+        MF.add_anim_keywords(plain, "S2SStances.esm", read_keywords=lambda p: kws, plain=True)
+        self.assertEqual(normal["bases"]["f"]["extra_keywords"], MF.SPECIAL_KEYWORDS)
+        self.assertNotIn("extra_keywords", plain["bases"]["f"])
+        self.assertEqual(plain["bases"]["f"]["markers"][0]["entry"], [])     # PluginSpike: the template's sides
+        self.assertEqual(plain["bases"]["f"]["anim_set"], "Forge")
+
+
 if __name__ == "__main__":
     unittest.main()
