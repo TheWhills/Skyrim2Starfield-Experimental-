@@ -126,8 +126,7 @@ Plus five SKSE plugins for what Skyrim lacks: jail / journal (TESRuntime), the c
      skeleton with its own .rig and folder runs on an existing graph, so the chicken needs no new graph at first,
      only clips whose .afx tags are the ones the graph plays.
    * The chicken's template: CritterRace 000176B6 (11 NPC_; Critter_Root + Critter_NonStrafing, Furniture).
-     Next run: `--sf-race CritterRace` lists the tags its graphs play and the .afx its folders supply, i.e. the
-     list the 20 Skyrim clips have to be mapped onto.
+     Second run (CritterRace, QuadrupedARace): results, the clip mapping and the test's steps in docs/npc/creatures.md.
 2. Read our AnimTextData files the way they read animationdata (grammar, hashes), to generate them without the CK.
 3. A small SFSE live-readback plugin: current package, sandbox target, furniture, graph variables of a ref.
 4. Check Starfield's physics range on the planet before scaling up.

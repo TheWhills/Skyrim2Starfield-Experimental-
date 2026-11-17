@@ -168,7 +168,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    python -I scripts\armor\creature_probe.py --starfield-data "$sf\Data" --sf-race CritterRace --sf-race QuadrupedARace > critter_probe.txt
    ```
-   Send critter_probe.txt. (Done 2026-11-17: the first run without --sf-race; docs/research/tes4skyrim.md.)
+   Done 2026-11-17 (both runs; docs/npc/creatures.md). Optional re-run of the same command: the probe now reads tags
+   inside nested graph nodes and the rig's bone names.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

@@ -87,6 +87,16 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertIn("idle.afx: tag Idle (state) -> Idle.af", text)
         self.assertTrue(lines[-1].endswith("(1): WalkForward"), lines[-1])
 
+    def test_nested_tags_and_rig_names(self):
+        nested = (b"<root><Name>x</Name><node><node_type>NT_STATE_MACHINE_EMBEDDED</node_type><graph>"
+                  b"<node><node_type>NT_ANIMATION_NODE</node_type><property_sheet><row><prop><value>TagName</value></prop>"
+                  b"<prop><value>WalkForward</value></prop></row></property_sheet></node>"
+                  b"<node><node_type>NT_GRAPH_REF</node_type><property_sheet><row><prop><value>Graph Ref</value></prop>"
+                  b"<prop><value>LookAt</value></prop></row></property_sheet></node></graph></node></root>")
+        self.assertEqual(C.deep_tags_refs(nested), (["WalkForward"], ["LookAt"]))
+        rig = b"\x01\x02?>\x00" + b"\x9a\x99\x19\x3f" * 24 + b"\0Root\0Pelvis\0Head [Head]\0"
+        self.assertEqual(C.rig_names(rig), ["Root", "Pelvis", "Head [Head]"])
+
     def test_character_refs_dedupes(self):
         refs = C.character_refs(["Character Assets\\skeleton.HKX", "Character Assets\\skeleton.HKX"])
         self.assertEqual(refs["rig"], ["Character Assets\\skeleton.HKX"])

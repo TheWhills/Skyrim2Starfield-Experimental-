@@ -112,6 +112,41 @@ def graph_path(ref: str) -> str:
     return k if k.startswith("meshes/") else "meshes/" + k
 
 
+def deep_tags_refs(data: bytes):
+    """(clip tags, graph refs) of every node at any depth: agx.read_graph sees the top level only, but
+    NT_STATE_MACHINE_EMBEDDED / NT_BLEND_TREE_EMBEDDED nodes hold nested <graph><node>s (the critter's locomotion
+    tags were missing from the 2026-11-17 run because of this)."""
+    import xml.etree.ElementTree as ET
+    from fo4sf import agx
+    tags, refs = [], []
+    for n in ET.fromstring(data.decode("utf-8-sig", "replace")).iter("node"):
+        p = agx._props(n)
+        ty = n.findtext("node_type")
+        if ty == "NT_ANIMATION_NODE" and p.get("TagName"):
+            tags.append(p["TagName"])
+        if ty == "NT_GRAPH_REF" and p.get("Graph Ref"):
+            refs.append(p["Graph Ref"])
+    return tags, list(dict.fromkeys(refs))
+
+
+NAME_RX = re.compile(r"^[A-Za-z_][\w \[\]\.\-]{2,}$")
+
+
+def rig_names(data: bytes) -> list:
+    """Bone names of a Starfield .rig: the name table at its end (docs/spikes/WP-doors-research.md: 96-byte bone
+    records, then the names), read as the trailing run of 0-terminated identifier-like strings."""
+    parts = bytes(data).split(b"\0")
+    out = []
+    for raw in reversed(parts):
+        if not raw:
+            continue
+        t = raw.decode("latin-1")
+        if not NAME_RX.match(t):
+            break
+        out.append(t)
+    return out[::-1]
+
+
 def walk_graphs(roots, read, limit: int = 60) -> list:
     """[(key, summary or None)] for the graphs reachable from roots through NT_GRAPH_REF, breadth first, each once.
     read(key) -> bytes or None."""
@@ -127,6 +162,7 @@ def walk_graphs(roots, read, limit: int = 60) -> list:
             out.append((k, None))
             continue
         sm = agx.summary(agx.read_graph(d))
+        sm["tags"], sm["graph_refs"] = deep_tags_refs(d)     # nested state machines / blend trees included
         out.append((k, sm))
         queue += [graph_path(r) for r in sm["graph_refs"]]
     return out
@@ -183,7 +219,8 @@ def contract_lines(race: dict, read, names) -> list:
             lines.append(f"    {r['file']}: tag {r['tag']}" + (f" prefix {r['prefix']}" if r["prefix"] else "")
                          + (" (state)" if r["is_state"] == "1" else "") + f" -> {r['filename']}")
     missing = [t for t in dict.fromkeys(played) if t.lower() not in supplied]
-    lines.append(f"  tags the graphs play that no descriptor in the race's folders has ({len(missing)}): "
+    lines.append(f"  tags the graphs name that the race's folders do not supply (other races' actions, or unused by "
+                 f"this one; the folders are the race's real list) ({len(missing)}): "
                  + ", ".join(missing))
     return lines
 
@@ -275,9 +312,9 @@ def starfield_side(sf_data: str, sf_races) -> list:
         for s, t in dict.fromkeys(r["paths"]):
             if s == "NAM5":
                 p, d = read(t)
-                strs = SAS.strings_of(d, 3) if d is not None else []
+                names = rig_names(d) if d is not None else []
                 lines.append(f"  rig {p}: " + ("not found" if d is None else
-                                               f"{len(d)} bytes; strings ({len(strs)}): {', '.join(strs[:200])}"))
+                                               f"{len(d)} bytes; bone names at the end ({len(names)}): {', '.join(names)}"))
         lines += contract_lines(r, lambda k: read(k)[1], keys)
     return lines
 
