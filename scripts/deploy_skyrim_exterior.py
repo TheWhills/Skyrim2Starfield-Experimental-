@@ -165,6 +165,24 @@ def install(a):
     return 0
 
 
+# Our own tools change installed plugins in place (2026-11-18, owner: exterior_collision.ps1's uninstall stopped on
+# both plugins after riverwood_doors.ps1): apply_ref_overrides.py patches the exterior plugin (backup
+# <name>.before_ref_overrides = the file as installed), set_planet_latlon.py --starfield patches the installed planet
+# plugin together with the staged one (so it equals the staging). Those changes are not the owner's edits.
+REF_OVERRIDES_BACKUP = ".before_ref_overrides"
+
+
+def known_change(path, rel, installed_sha, staging=""):
+    """Which tool of ours changed an installed file (None: unknown, keep it): the ref-overrides backup is the file as
+    installed, or the file equals the staging's copy."""
+    if installed_sha and os.path.exists(path + REF_OVERRIDES_BACKUP) and sha256(path + REF_OVERRIDES_BACKUP) == installed_sha:
+        return "apply_ref_overrides.py"
+    s = os.path.join(staging, rel) if staging else ""
+    if s and os.path.isfile(s) and sha256(s) == sha256(path):
+        return "a patch also made to the staging (set_planet_latlon.py)"
+    return None
+
+
 def uninstall(a):
     data = os.path.join(a.starfield, "Data")
     man_path = os.path.join(data, MANIFEST)
@@ -182,11 +200,16 @@ def uninstall(a):
             continue
         p = os.path.join(data, rel)
         if os.path.exists(p):
-            if sha256(p) != m["artifacts"].get(rel):
+            why = known_change(p, rel, m["artifacts"].get(rel), getattr(a, "staging", ""))
+            if sha256(p) != m["artifacts"].get(rel) and why is None:
                 print(f"  {rel} changed since install: kept")
                 left.append(rel)
                 continue
+            if why:
+                print(f"  {rel} changed since install by {why}: removed")
             os.remove(p)
+            if os.path.exists(p + REF_OVERRIDES_BACKUP) and why == "apply_ref_overrides.py":
+                os.remove(p + REF_OVERRIDES_BACKUP)        # the next patch backs up the new install
     pt = m["plugins_txt"]
     original, lines = read_plugins(pt)
     drop = {x.lower() for x in m["plugins_added"]}
@@ -205,7 +228,8 @@ def uninstall(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("action", choices=("install", "uninstall"))
-    ap.add_argument("--staging", default="", help="install: the staged build (objects stage --out, or overlay build --out)")
+    ap.add_argument("--staging", default="", help="install: the staged build (objects stage --out, or overlay build --out); "
+                    "uninstall: also remove installed files that equal the staged ones")
     ap.add_argument("--starfield", required=True, help="the Starfield game folder")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)

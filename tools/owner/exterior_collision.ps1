@@ -31,9 +31,17 @@ python -I scripts\terrain\refresh_models.py --work $Work --staging $Staging
 if ($LASTEXITCODE -ne 0) { Fail "refresh" }
 if ($NoInstall) { Write-Host "staged in $Staging (not installed: -NoInstall)"; exit 0 }
 Step "3. reinstall the exterior"
-python -I scripts\deploy_skyrim_exterior.py uninstall --starfield $SF
-if ($LASTEXITCODE -ne 0) { Fail "uninstall (a file changed since install? see above; remove it from Data by hand, then rerun with the convert already done)" }
+if (Test-Path "$SF\Data\SkyrimExterior.deploy.json") {
+    python -I scripts\deploy_skyrim_exterior.py uninstall --starfield $SF --staging $Staging
+    if ($LASTEXITCODE -ne 0) { Fail "uninstall (a file changed since install? see above; remove it from Data by hand, then rerun with the convert already done)" }
+}
 python -I scripts\deploy_skyrim_exterior.py install --staging $Staging --starfield $SF
 if ($LASTEXITCODE -ne 0) { Fail "install" }
+# the fresh exterior plugin is unpatched: hide the statics FO4Port.esm replaces again (as riverwood_doors.ps1 step 5)
+if (Test-Path "$SF\Data\FO4Port.esm") {
+    $extPlugin = (Get-Content "$Staging\formids.json" -Raw | ConvertFrom-Json).plugin
+    python -I scripts\terrain\apply_ref_overrides.py --from "$SF\Data\FO4Port.esm" --into "$SF\Data\$extPlugin"
+    if ($LASTEXITCODE -ne 0) { Fail "apply_ref_overrides" }
+}
 Write-Host "`nIn game: coc SKY_TamrielRiverwoodSpawn and walk over the road where the hump was." -ForegroundColor Green
 try { notify "exterior_collision: done" } catch {}

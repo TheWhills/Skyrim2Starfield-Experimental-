@@ -93,6 +93,24 @@ class DeployTests(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.game, "Data", "SkyrimTerrainTamriel.esm")))
         self.assertFalse(os.path.exists(os.path.join(self.game, "Data", "SkyrimTerrainTamriel - Main.ba2")))
 
+    def test_uninstall_removes_our_own_patches(self):
+        """2026-11-18 (owner): after riverwood_doors.ps1 (apply_ref_overrides.py on the exterior plugin) and
+        set_planet_latlon.py (planet plugin patched in the staging and the game alike), uninstall stopped on both."""
+        self.run_main("install", "--staging", self.staging, "--starfield", self.game)
+        data = os.path.join(self.game, "Data")
+        main = os.path.join(data, "SkyrimTerrainTamriel.esm")
+        import shutil
+        shutil.copy2(main, main + d.REF_OVERRIDES_BACKUP)
+        open(main, "ab").write(b"patched")
+        for where in (os.path.join(data, "SkyrimTerrainTamriel_Mars.esm"),
+                      os.path.join(self.staging, "SkyrimTerrainTamriel_Mars.esm")):
+            open(where, "ab").write(b"latlon")
+        with self.assertRaises(SystemExit):                    # without --staging the planet plugin is unknown
+            self.run_main("uninstall", "--starfield", self.game)
+        self.assertFalse(os.path.exists(main) or os.path.exists(main + d.REF_OVERRIDES_BACKUP))
+        self.run_main("uninstall", "--starfield", self.game, "--staging", self.staging)
+        self.assertEqual(os.listdir(data), [])
+
 
 if __name__ == "__main__":
     unittest.main()
