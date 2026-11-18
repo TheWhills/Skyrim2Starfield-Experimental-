@@ -100,6 +100,16 @@ def patch_f32(path, offset, value):
         fh.write(struct.pack("<f", value))
 
 
+
+def plugins_current(staging, prm):
+    """Touch the staged plugins after overlays_params.json is rewritten (2026-11-18, owner: deploy_skyrim_exterior.py
+    refused the exterior as "older than overlays_params.json", its guard against a failed plugin build): this tool
+    patched them in place, so they are as current as the params."""
+    for p in [prm.get("plugin")] + [(prm.get("mars") or {}).get("plugin")]:
+        if p and os.path.isfile(os.path.join(staging, p)):
+            os.utime(os.path.join(staging, p))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--staging", required=True, help="the staged exterior (overlays_params.json, the planet plugin)")
@@ -153,6 +163,7 @@ def main(argv=None):
     if not a.latlon:
         with open(os.path.join(a.staging, "overlays_params.json"), "w", encoding="utf-8") as fh:
             json.dump(prm, fh, indent=1)
+        plugins_current(a.staging, prm)
         print("overlays_params.json updated (make_planet.py keeps these)")
         return 0
     lat, lon = a.latlon
@@ -168,6 +179,7 @@ def main(argv=None):
         o["latitude"], o["longitude"] = lat, lon
     with open(os.path.join(a.staging, "overlays_params.json"), "w", encoding="utf-8") as fh:
         json.dump(prm, fh, indent=1)
+    plugins_current(a.staging, prm)
     print(f"moved to latitude {lat} rad ({math.degrees(lat):.2f} deg), longitude {lon} rad: {plugin}"
           + (f" and {installed}" if same else "") + "; overlays_params.json updated")
     return 0

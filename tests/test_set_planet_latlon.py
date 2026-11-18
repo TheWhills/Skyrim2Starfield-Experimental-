@@ -32,7 +32,10 @@ class SetLatLonTests(unittest.TestCase):
                 json.dump({"mars": {"plugin": "Planet.esm"}, "overlays": [{"latitude": -1.5707963, "longitude": 0}]},
                           fh)
             self.assertEqual(S.main(["--staging", stage]), 0)
+            os.utime(plugin, (1e9, 1e9))                          # built long ago
             self.assertEqual(S.main(["--staging", stage, "--latlon", "0.3", "0.1", "--starfield", game]), 0)
+            # patched in place: not older than the params it rewrote (deploy_skyrim_exterior's failed-build guard)
+            self.assertGreaterEqual(os.path.getmtime(plugin), os.path.getmtime(os.path.join(stage, "overlays_params.json")))
             for p in (plugin, os.path.join(game, "Data", "Planet.esm")):
                 (r,) = S.cnam_entries(p)
                 self.assertEqual(r["cnam"][1], [(0.3, 0.1, 0x01000800)])

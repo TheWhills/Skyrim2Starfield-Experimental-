@@ -92,6 +92,16 @@ def sha(path):
         return hashlib.sha256(fh.read()).hexdigest()
 
 
+
+def plugins_current(staging, prm):
+    """Touch the staged plugins after overlays_params.json is rewritten (2026-11-18, owner: deploy_skyrim_exterior.py
+    refused the exterior as "older than overlays_params.json", its guard against a failed plugin build): this tool
+    patched them in place, so they are as current as the params."""
+    for p in [prm.get("plugin")] + [(prm.get("mars") or {}).get("plugin")]:
+        if p and os.path.isfile(os.path.join(staging, p)):
+            os.utime(os.path.join(staging, p))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
@@ -164,6 +174,7 @@ def main(argv=None):
     prm["landing"] = dict(site, place=label)
     with open(prm_path, "w", encoding="utf-8") as fh:
         json.dump(prm, fh, indent=1)
+    plugins_current(a.staging, prm)
     print(f"overlays_params.json: landing at {label}")
     return 0
 
