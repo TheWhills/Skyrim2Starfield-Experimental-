@@ -528,7 +528,10 @@ unverified):
   PRPS with rate exterior.spin_speed(period) = 4.2 s / Skyrim's loop (rotate_y01's 4.2 s per turn is the owner's
   estimate; its .af did not decode): 0.252 for the wheel. PluginSpike (SPIN_PARTS) and TerrainOverlays
   (anim_template / anim_speed / anim_speed_from) set it through Mutagen's Activator.Properties by reflection.
-  Unverified in game: that a STAT-less ACTI copy turns the same and honours the rate.
+  In game 2026-11-18 (owner, verified, fresh coc from the main menu): the ACTI copy turns, but still about 3 s per
+  turn: the PRPS rate (written, 0.252, checked with the probe's --plugin dump) is not applied to this graph / rig.
+  Next: a slower vanilla spin clip if one exists (probe --files idlebehaviors, --all-of SimpleIdleLoop01), else our
+  own rig + looping .af at Skyrim's period (as the dartboard: rig bones named after the model's sgoKeep nodes).
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
   their placement handles "spin" (interior Dwemer gears would otherwise vanish).

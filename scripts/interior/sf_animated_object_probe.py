@@ -128,9 +128,19 @@ def main(argv=None):
                                                       "(outside the repository: game files stay out of Git)")
     ap.add_argument("--plugin", default="", help="with --dump: dump this plugin in Data (FO4Port.esm, our turning parts) "
                                                  "instead of Starfield.esm, and stop there")
+    ap.add_argument("--all-of", default="", help="regex on graph names: list every record of these graphs, not 12")
+    ap.add_argument("--files", default="", help="regex on archive paths: list the matching files in the game's "
+                                                "archives (e.g. idlebehaviors) and stop")
     a = ap.parse_args(argv)
     data = os.path.join(a.starfield, "Data")
     esm = os.path.join(data, "Starfield.esm")
+    if a.files:                                # 2026-11-18: which vanilla spin clips exist (rotate_y01's speed is fixed)
+        import sf_anim_survey as SAS
+        pat = re.compile(a.files, re.I)
+        names = sorted({SAS.norm(nm) for _label, ar in SAS.archives(data) for nm in ar.names if pat.search(SAS.norm(nm))})
+        print("\n".join(names))
+        print(f"== {len(names)} files")
+        return 0
     if a.dump:
         dmp = re.compile(a.dump, re.I)
         src = os.path.join(data, a.plugin) if a.plugin else esm
@@ -150,11 +160,12 @@ def main(argv=None):
     for g in order:
         rs = by_graph[g]
         print(f"\n-- graph {rs[0]['graph']}  ({len(rs)} records){'  [loopy names]' if any(loopy(r) for r in rs) else ''}")
-        for r in rs[:12]:
+        cap = len(rs) if a.all_of and re.search(a.all_of, g, re.I) else 12
+        for r in rs[:cap]:
             print(f"   {r['type']} {r['fid']:08X} {r['edid']}: model {r['model']}  rig {r['rig']}  anims {r['anims']}"
                   f"  (fields {r['where']})")
-        if len(rs) > 12:
-            print(f"   ... {len(rs) - 12} more")
+        if len(rs) > cap:
+            print(f"   ... {len(rs) - cap} more")
     match = re.compile(a.match, re.I) if a.match else None
     picks = [g for g in order if (match and any(match.search(" ".join((r["edid"], r["model"], r["graph"])))
                                                 for r in by_graph[g])) or (not match and any(loopy(r) for r in by_graph[g]))]

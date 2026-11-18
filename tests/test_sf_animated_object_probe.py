@@ -130,6 +130,17 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(seen, [os.path.join("S", "Data", "FO4Port.esm")])
         self.assertIn("== ACTI 00000100 ShipFan01", out.getvalue())
 
+    def test_files(self):
+        import sf_anim_survey as SAS
+
+        class Ba2:
+            names = ["Meshes\\GenericBehaviors\\IdleBehaviors\\Rotate_Y01\\Animations\\Idle.af", "Meshes\\x.nif"]
+        out = io.StringIO()
+        with mock.patch.object(SAS, "archives", lambda _d: [("x", Ba2())]), contextlib.redirect_stdout(out):
+            self.assertEqual(P.main(["--starfield", "S", "--files", "idlebehaviors"]), 0)
+        self.assertIn("rotate_y01", out.getvalue().lower())
+        self.assertIn("== 1 files", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
