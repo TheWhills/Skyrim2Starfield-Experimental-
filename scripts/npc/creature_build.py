@@ -56,6 +56,21 @@ MIRRORED = [("turninplace_right30", "turninplace_left30"), ("turninplace_right90
             ("turninplace_right180", "turninplace_left180"), ("rundeparture_right180", "rundeparture_left180")]
 
 
+# critter death descriptor -> the side the chicken falls on (creature.death_clip): Skyrim's chicken has no death clip,
+# and the critter graph's death clip sets the pose the body keeps until hit (owner, 2026-11-17 22:38)
+DEATHS = [("death_left01", -1), ("death_right01", 1), ("death_forward01", 1), ("death_backward01", -1),
+          ("death_backward02", 1), ("death_backward03", -1), ("death_moving_forward01", 1),
+          ("death_runningforward01", -1)]
+DEATH_SRC = "death:"
+
+
+def plan_deaths(plan, sf_names, deaths=DEATHS, anims=CRITTER["anims"]):
+    """[(critter death .afx key, "death:<side>")] for each death descriptor the game has and the plan leaves out."""
+    have = {k for k, _s in plan}
+    return [(anims + d + ".afx", f"{DEATH_SRC}{side}") for d, side in deaths
+            if anims + d + ".afx" in sf_names and anims + d + ".afx" not in have]
+
+
 def plan_mirrors(plan, sf_names, mirrored=MIRRORED, anims=CRITTER["anims"]):
     """[(critter right .afx key, Skyrim .hkx path of the left clip)] for each planned left clip whose right
     descriptor the game has, and [missing descriptions]."""
@@ -278,6 +293,9 @@ def main(argv=None):
     mirrors, m_missing = plan_mirrors(plan, set(index))
     mirrored_keys = {k for k, _s in mirrors}
     plan += mirrors
+    idle_src = next((src for k, src in plan if k == CRITTER["anims"] + "idle.afx"), None)
+    if idle_src:
+        plan += plan_deaths(plan, set(index))
     if a.own_race:
         fill = plan_fill(plan, set(index))
         plan += fill
@@ -289,6 +307,13 @@ def main(argv=None):
     from fo4sf import agx
 
     def prepared(key, src_clip):
+        if src_clip.startswith(DEATH_SRC):            # a fall-over from the idle's first pose (creature.death_clip)
+            clip = retarget.resample(skyrimhkx.decode_clip(sky._read(idle_src), sk_desc["bones"]))
+            st, sq = creature.clip_locals(clip, sk, cr)
+            lt, lq = creature.death_clip(cr, st[0], sq[0], int(src_clip[len(DEATH_SRC):]))
+            vafx = sf_read(key)
+            stem = os.path.splitext(agx.read_descriptor(vafx)["filename"] or posixpath.basename(key))[0]
+            return lt, lq, None, None, False, vafx, stem
         clip = retarget.resample(skyrimhkx.decode_clip(sky._read(src_clip), sk_desc["bones"]))
         lt, lq = creature.clip_locals(clip, sk, cr)
         clip_stem = posixpath.basename(src_clip.replace("\\", "/"))[:-len(".hkx")].lower()
@@ -374,6 +399,9 @@ def main(argv=None):
     return 0
 
 
+RAGDOLL_KG = 2.0          # a chicken; Skyrim's ragdoll bodies add up to 40 kg (masses, inertia, friction scaled)
+
+
 def build_ragdoll(sky_skeleton_nif, vanilla_body, cr, rep: dict, com_source: str = CHICKEN["com"]):
     """(tagfile, [rig bone per body]) for creature.skinned_files, or None with a note: Skyrim's ragdoll bodies from
     its skeleton NIF moved into the rig's bone frames (creature_ragdoll.to_rig_frames; the levelled COM takes the
@@ -388,12 +416,13 @@ def build_ragdoll(sky_skeleton_nif, vanilla_body, cr, rep: dict, com_source: str
         name_map = {b["node"]: (creature.COM if b["node"].lower() == com_source.lower() else low.get(b["node"].lower()))
                     for b in bodies}
         rb = creature_ragdoll.to_rig_frames(bodies, creature.rest_worlds(cr), {k: v for k, v in name_map.items() if v})
-        blob = creature_ragdoll.build_ragdoll(creature_ragdoll.template_from_body(vanilla_body), rb)
+        blob = creature_ragdoll.build_ragdoll(creature_ragdoll.template_from_body(vanilla_body), rb, RAGDOLL_KG)
     except Exception as e:                                # noqa: BLE001  (a body without a ragdoll still works)
         rep["notes"].append(f"no ragdoll: {type(e).__name__}: {e}")
         return None
     rep["ragdoll"] = [{"bone": b["bone"], "skyrim": b["node"], "parent": rb[b["parent"]]["bone"] if b["parent"] >= 0
-                       else None, "mass": round(float(b["mass"]), 3), "radius": round(float(b["radius"]), 4),
+                       else None, "mass": round(float(b["mass"]) * RAGDOLL_KG / sum(float(x["mass"]) for x in rb), 3),
+                       "radius": round(float(b["radius"]), 4),
                        "offset_mm": round(float(np.linalg.norm(b["offset"])) * 1000, 2)} for b in rb]
     return blob, [b["bone"] for b in rb]
 

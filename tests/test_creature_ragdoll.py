@@ -156,6 +156,16 @@ class RagdollTests(unittest.TestCase):
         self.assertEqual(root["skeleton"]["parentIndices"], [-1, 0])
         self.assertEqual(root["boneToBodyMap"], [0, 1])
         self.assertEqual([b["lockTranslation"] for b in root["skeleton"]["bones"]], [False, True])
+        # total_mass: two 4 kg bodies -> 1 kg each; friction scales with them (the template object is reused)
+        tpl["bodyCinfos"], tpl["constraintCinfos"] = [root_body, cap], [{"constraintData": {"atoms": atoms}}]
+        got.clear()
+        with mock.patch.object(hktagfile, "Tagfile", lambda _b: type("T", (), {"item_value": lambda s, k: tpl})()), \
+                mock.patch.object(R, "rewrite", lambda _b, root: got.setdefault("root", root) and b"blob"):
+            R.build_ragdoll(b"template", rb, total_mass=2.0)
+        light = got["root"]
+        self.assertAlmostEqual(light["bodyCinfos"][1]["mass"], 1.0, 6)
+        self.assertAlmostEqual(light["constraintCinfos"][0]["constraintData"]["atoms"]["angFriction"]
+                               ["maxFrictionTorque"], 10 * 0.25, 6)
 
 
 class WriterAlignTests(unittest.TestCase):

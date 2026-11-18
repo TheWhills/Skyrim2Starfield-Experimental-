@@ -14,6 +14,7 @@ The mesh is skinned with binds = the inverse of each bone's bind world from the 
 game's own hairs, skyrimhair.nif_files), so it is drawn as Skyrim draws it; unlike worn gear, a creature body carries
 its own bone nodes (build_body_nif).
 """
+import math
 import re
 import struct
 from dataclasses import dataclass
@@ -511,6 +512,40 @@ def mirror_clip(cr: "CreatureRig", lt, lq, mirror: Sequence[int]):
         src = lt[:, m[b]]
         out_t[:, b] = cr.t[b] if np.allclose(src, src[:1], atol=1e-6) else qrot(inv, nt[:, b] - nt[:, p])
     return out_t, out_q
+
+
+DEATH_FRAMES, DEATH_ROLL_DEG, DEATH_LIE_M = 21, 85.0, 0.09
+DEATH_DROOP = (("Neck0", -25.0), ("Neck1", -20.0), ("Neck2", -15.0))
+
+
+def death_clip(cr: "CreatureRig", start_t, start_q, side: int = 1, frames: int = DEATH_FRAMES,
+               roll_deg: float = DEATH_ROLL_DEG, lie_height: float = DEATH_LIE_M, droop=DEATH_DROOP):
+    """A fall-over clip (frames, B, 3) / (frames, B, 4) from one pose (start_t / start_q (B, 3) / (B, 4) locals, e.g.
+    the idle's first frame): COM rolls roll_deg about the actor's forward axis (+y; side +1 onto its right side, -1
+    its left) and sinks to lie_height metres, the neck bones in `droop` bend down (about the body's side axis, in their
+    parent's rest frame), all eased in (s = t^2) and held on the last frame. Skyrim's chicken has no death clip (its
+    ragdoll takes over at once); in Starfield the critter graph plays a death clip and the body keeps that clip's last
+    pose until hit (owner, 2026-11-17 22:38: the chicken died standing on its idle)."""
+    start_t, start_q = np.asarray(start_t, float), np.asarray(start_q, float)
+    lt = np.repeat(start_t[None], frames, 0)
+    lq = np.repeat(start_q[None], frames, 0)
+    ci = cr.names.index(COM)
+    rest = rest_worlds(cr)
+    for f in range(frames):
+        u = (f / (frames - 1)) ** 2 if frames > 1 else 1.0
+        a = math.radians(roll_deg) * u * (1 if side >= 0 else -1)
+        roll = np.array([0.0, math.sin(a / 2), 0.0, math.cos(a / 2)])
+        lq[f, ci] = qmul(roll, start_q[ci])
+        lt[f, ci] = start_t[ci] + np.array([0.0, 0.0, (lie_height - start_t[ci][2]) * u])
+        for bone, deg in droop:
+            if bone not in cr.names:
+                continue
+            b = cr.names.index(bone)
+            p = cr.parents[b]
+            axis = rest[cr.names[p]][:3, :3].T @ np.array([1.0, 0.0, 0.0]) if p >= 0 else np.array([1.0, 0, 0])
+            h = math.radians(deg) * u / 2
+            lq[f, b] = qmul(np.array([*(axis * math.sin(h)), math.cos(h)]), start_q[b])
+    return lt, lq
 
 
 def sorted_by_level(cr: "CreatureRig") -> "CreatureRig":

@@ -154,10 +154,15 @@ def _limit(atom: Dict, lo: float, hi: float):
     atom["tanMinAngle"], atom["tanMaxAngle"] = math.tan(lo), math.tan(hi)
 
 
-def build_ragdoll(template_blob: bytes, bodies: List[Dict]) -> bytes:
+def build_ragdoll(template_blob: bytes, bodies: List[Dict], total_mass: Optional[float] = None) -> bytes:
     """An hknpRagdollData tagfile for `bodies` (to_rig_frames output, parents first) on the template's types and
     settings: body 0 takes the template root body's ids / filter, the others its first capsule body's; constraints
-    copy the template's first one with this joint's frames and limits."""
+    copy the template's first one with this joint's frames and limits. total_mass: scale every mass, inertia and joint
+    friction torque by total_mass / sum of masses (Skyrim's chicken bodies add up to 40 kg; friction scales with them
+    so the joints keep Skyrim's stiffness relative to the bodies)."""
+    k_mass = 1.0
+    if total_mass:
+        k_mass = float(total_mass) / max(sum(float(b["mass"]) for b in bodies), 1e-9)
     tf = hktagfile.Tagfile(template_blob)
     root = tf.item_value(1)
     if root.get("$class") not in (None, RAGDOLL_TYPE) or not root.get("bodyCinfos") or not root.get("constraintCinfos"):
@@ -175,8 +180,8 @@ def build_ragdoll(template_blob: bytes, bodies: List[Dict]) -> bytes:
         shape = ci["shape"]
         shape["convexRadius"] = float(b["radius"])
         shape["hull"]["vertices"] = [{"x": float(p[0]), "y": float(p[1]), "z": float(p[2])} for p in (b["a"], b["b"])]
-        ci["mass"] = float(b["mass"])
-        vals, vecs = np.linalg.eigh((b["inertia"] + b["inertia"].T) / 2)
+        ci["mass"] = float(b["mass"]) * k_mass
+        vals, vecs = np.linalg.eigh((b["inertia"] + b["inertia"].T) / 2 * k_mass)
         if np.linalg.det(vecs) < 0:
             vecs[:, 0] = -vecs[:, 0]
         md = ci["massDistribution"]["massDistribution"]
@@ -198,7 +203,7 @@ def build_ragdoll(template_blob: bytes, bodies: List[Dict]) -> bytes:
         cone["maxAngle"] = float(k["cone"])
         cone["invCosMaxAngle"], cone["tanMaxAngle"] = 1.0 / math.cos(k["cone"]), math.tan(k["cone"])
         _limit(at["planesLimit"], math.pi / 2 + k["plane_min"], math.pi / 2 + k["plane_max"])
-        at["angFriction"]["maxFrictionTorque"] = float(k["friction"])
+        at["angFriction"]["maxFrictionTorque"] = float(k["friction"]) * k_mass
         c["bodyA"] = {"serialAndIndex": i}
         c["bodyB"] = {"serialAndIndex": int(b["parent"])}
         cons.append(c)

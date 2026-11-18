@@ -324,3 +324,10 @@ new creature skeleton on an existing graph.
 * Owner, 20:17-20:20: a killed vanilla trilobite flips onto its back (its normal death); with writer test 2 (its own
   ragdoll rewritten by hktagwrite with vanilla alignment) the corpse moves on the ground when shot, i.e. the ragdoll
   is live. Verified: our ragdoll writer works in game (test 1, 4-byte arrays, had it spin).
+* Owner, 22:38 / 22:42: the chicken's ragdoll is live (moves when hit) but it dies standing, and seems to finish its
+  animation first. Supported: the critter graph plays a death clip and the body keeps that clip's last pose until
+  hit (the vanilla trilobite's death clips flip it over); ours were the idle (201 frames, filled in), so death played
+  the whole idle and held it standing. Fix 15 (offline checks only): the eight critter death descriptors get a
+  fall-over clip (creature.death_clip, 21 frames from the idle's first pose: COM rolls 85 deg about the forward axis
+  onto the side named in creature_build.DEATHS and sinks to 0.09 m, the neck droops, eased in), and the ragdoll's
+  masses, inertia and joint friction are scaled to a 2 kg chicken (Skyrim's bodies add up to 40 kg).

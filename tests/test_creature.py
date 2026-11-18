@@ -320,6 +320,21 @@ class FileTests(unittest.TestCase):
         np.testing.assert_allclose(mq[1, 0], (0, 0, -h, h), atol=1e-9)                # a right turn
         np.testing.assert_allclose(mt[1, 0], (-0.2, 0.1, 0), atol=1e-9)
 
+    def test_death_clip(self):
+        from fo4sf.retarget import qrot
+        cr = self._legs()
+        st, sq = cr.t.copy(), cr.q.copy()
+        st[1] = (0, 0, 0.3)
+        for side in (1, -1):
+            lt, lq = C.death_clip(cr, st, sq, side, frames=5, roll_deg=90, lie_height=0.1, droop=())
+            np.testing.assert_allclose(lt[0], st)                                   # starts on the pose
+            np.testing.assert_allclose(np.abs(np.sum(lq[0] * sq, -1)), 1, atol=1e-9)
+            self.assertAlmostEqual(lt[-1, 1, 2], 0.1, 9)                            # COM down at lying height
+            up = qrot(lq[-1, 1], np.array([0, 0, 1.0]))                             # COM's up now points sideways
+            np.testing.assert_allclose(up, (side, 0, 0), atol=1e-9)                 # +1: onto its right side (+x)
+            np.testing.assert_allclose(lq[-1, 2], sq[2])                            # the legs keep their pose
+            self.assertLess(lt[2, 1, 2] - 0.1, 0.3 - 0.1)                          # eased: falling by mid-clip
+
     def test_mirror_names_chicken(self):
         for a, b in (("LeftThigh", "RightThigh"), ("LAnkleToe00", "RAnkleToe00"), ("HeadWattleL", "HeadWattleR"),
                      ("L_Clavicle", "R_Clavicle"), ("Spine", "Spine"), ("HeadComb", "HeadComb"), ("COM", "COM")):

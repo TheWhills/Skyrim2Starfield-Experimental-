@@ -28,15 +28,23 @@ class BuildTests(unittest.TestCase):
         cr = creature.creature_rig(sk, "Pelvis")
         rep = {"notes": []}
         with mock.patch.object(creature_ragdoll, "template_from_body", lambda _b: b"tpl"), \
-                mock.patch.object(creature_ragdoll, "build_ragdoll", lambda _t, rb: b"blob"):
+                mock.patch.object(creature_ragdoll, "build_ragdoll", lambda _t, rb, kg: kg == B.RAGDOLL_KG and b"blob"):
             out = B.build_ragdoll(TR.skyrim_ragdoll_nif(), b"body", cr, rep)
         self.assertEqual(out, (b"blob", ["COM", "Neck0"]))
         self.assertEqual([(r["bone"], r["skyrim"], r["parent"]) for r in rep["ragdoll"]],
                          [("COM", "Pelvis", None), ("Neck0", "Neck0", "COM")])
         self.assertLess(max(r["offset_mm"] for r in rep["ragdoll"]), 0.01)       # the NIF and the rig agree
+        self.assertAlmostEqual(sum(r["mass"] for r in rep["ragdoll"]), B.RAGDOLL_KG, 2)   # a chicken's weight
         rep2 = {"notes": []}
         self.assertIsNone(B.build_ragdoll(None, b"body", cr, rep2))           # no skeleton NIF: a body without one
         self.assertTrue(rep2["notes"][0].startswith("no ragdoll"))
+
+    def test_plan_deaths(self):
+        A = B.CRITTER["anims"]
+        sf = {A + "death_left01.afx", A + "death_right01.afx", A + "idle.afx"}
+        self.assertEqual(B.plan_deaths([(A + "idle.afx", "i")], sf),
+                         [(A + "death_left01.afx", "death:-1"), (A + "death_right01.afx", "death:1")])
+        self.assertEqual(B.plan_deaths([(A + "death_left01.afx", "x")], sf), [(A + "death_right01.afx", "death:1")])
 
     def test_own_paths_and_fill(self):
         mine = B.own_paths()
@@ -215,7 +223,9 @@ class MainTests(unittest.TestCase):
                 self.assertTrue(rel.startswith("meshes/actors/s2s/chicken/"), rel)
                 self.assertTrue(os.path.isfile(os.path.join(own, *rel.split("/"))), rel)
             self.assertFalse(os.path.isdir(os.path.join(own, "meshes", "actors", "critter")))
-            self.assertEqual(orep["clips_idle_filled"], ["death_right01.afx"])
+            self.assertEqual(orep["clips_idle_filled"], [])                     # deaths get a fall-over instead
+            death = next(c for c in orep["clips"] if c["critter"].endswith("death_right01.afx"))
+            self.assertEqual(death["skyrim"], "death:1")
             self.assertTrue(os.path.isfile(os.path.join(own, B.PLUGIN)))
             self.assertIn("S2S_ChickenRace", orep["plugin"]["form_ids"])
         # the rig is made first (no rig_path), then every clip is written against it (first run: calls 0-1)
