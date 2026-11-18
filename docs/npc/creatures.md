@@ -321,3 +321,6 @@ new creature skeleton on an existing graph.
   chicken's body NIF (COM's on COM_Twin). Checked on the owner's files: every joint's pivot is the same model-space
   point from both bodies and both twist axes agree at rest; the Skyrim nodes sit on the rig bones (0 mm).
   creature_build.json "ragdoll" lists the bodies; --no-ragdoll builds without.
+* Owner, 20:17-20:20: a killed vanilla trilobite flips onto its back (its normal death); with writer test 2 (its own
+  ragdoll rewritten by hktagwrite with vanilla alignment) the corpse moves on the ground when shot, i.e. the ragdoll
+  is live. Verified: our ragdoll writer works in game (test 1, 4-byte arrays, had it spin).
