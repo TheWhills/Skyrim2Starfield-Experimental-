@@ -32,7 +32,8 @@ import numpy as np  # noqa: E402
 CHICKEN = {"folder": "meshes\\actors\\ambient\\chicken\\",
            "skeleton": "meshes\\actors\\ambient\\chicken\\character assets\\skeleton.hkx",
            "model": "meshes\\actors\\ambient\\chicken\\character assets\\chicken.nif",
-           "com": "Pelvis", "project": "ChickenProject"}
+           "com": "Pelvis", "project": "ChickenProject",
+           "skeleton_nif": "meshes\\actors\\ambient\\chicken\\character assets\\skeleton.nif"}   # its ragdoll
 CRITTER = {"skeleton": "meshes/actors/critter/characterassets/skeleton.nif",
            "rig": "meshes/actors/critter/characterassets/skeleton.rig",
            "anims": "meshes/actors/critter/animations/",
@@ -162,6 +163,8 @@ def main(argv=None):
     ap.add_argument("--own-race", action="store_true",
                     help="the chicken as a race of its own (S2SCreatures.esm, files under actors\\s2s\\chicken) instead "
                          "of in the critter's place; needs the Creation Kit's GenerateAnimInfo run after")
+    ap.add_argument("--no-ragdoll", action="store_true",
+                    help="build the body without the ragdoll (Skyrim's chicken bodies on the trilobite's template)")
     ap.add_argument("--no-rig-package", action="store_true",
                     help="build the rig without the vanilla critter rig's package settings (the old rig)")
     ap.add_argument("--body-lods", type=int, default=4, choices=(1, 2, 3, 4),
@@ -259,8 +262,11 @@ def main(argv=None):
     if a.double_sided == "on" or (a.double_sided == "auto" and two_sided):
         shape, tangents = creature.with_back_faces(shape, tangents)
         rep["skyrim_shader"]["back_faces_added"] = True
+    ragdoll = None
+    if not a.no_ragdoll:
+        ragdoll = build_ragdoll(sky._read(CHICKEN["skeleton_nif"]), sf_read(CRITTER["model"]), cr, rep)
     files = creature.skinned_files(shape, material, dest["model"][len("meshes/"):-len(".nif")], CHICKEN["com"],
-                                   cr, tangents, lods=a.body_lods)
+                                   cr, tangents, lods=a.body_lods, ragdoll=ragdoll)
     rep["body_lods"] = a.body_lods
     for rel, data in files.items():
         put(rel, data)
@@ -365,6 +371,30 @@ def main(argv=None):
     else:
         print(f"in game: enable the mod, then  player.placeatme {CRITTER['npc']}")
     return 0
+
+
+def build_ragdoll(sky_skeleton_nif, vanilla_body, cr, rep: dict, com_source: str = CHICKEN["com"]):
+    """(tagfile, [rig bone per body]) for creature.skinned_files, or None with a note: Skyrim's ragdoll bodies from
+    its skeleton NIF moved into the rig's bone frames (creature_ragdoll.to_rig_frames; the levelled COM takes the
+    pelvis' pitch) and written on the vanilla body's ragdoll as the template. rep["ragdoll"] lists the bodies; offset_mm
+    is how far each Skyrim node sits from its rig bone (about 0 when the skeleton NIF and the .hkx agree)."""
+    from fo4sf import creature, creature_ragdoll
+    try:
+        if not sky_skeleton_nif:
+            raise ValueError("the Skyrim skeleton NIF is not in the archives")
+        bodies = creature_ragdoll.skyrim_bodies(sky_skeleton_nif)
+        low = {n.lower(): n for n in cr.names}
+        name_map = {b["node"]: (creature.COM if b["node"].lower() == com_source.lower() else low.get(b["node"].lower()))
+                    for b in bodies}
+        rb = creature_ragdoll.to_rig_frames(bodies, creature.rest_worlds(cr), {k: v for k, v in name_map.items() if v})
+        blob = creature_ragdoll.build_ragdoll(creature_ragdoll.template_from_body(vanilla_body), rb)
+    except Exception as e:                                # noqa: BLE001  (a body without a ragdoll still works)
+        rep["notes"].append(f"no ragdoll: {type(e).__name__}: {e}")
+        return None
+    rep["ragdoll"] = [{"bone": b["bone"], "skyrim": b["node"], "parent": rb[b["parent"]]["bone"] if b["parent"] >= 0
+                       else None, "mass": round(float(b["mass"]), 3), "radius": round(float(b["radius"]), 4),
+                       "offset_mm": round(float(np.linalg.norm(b["offset"])) * 1000, 2)} for b in rb]
+    return blob, [b["bone"] for b in rb]
 
 
 def motion_blocks(sky, folder: str, project: str, rep: dict) -> dict:

@@ -131,6 +131,32 @@ class FileTests(unittest.TestCase):
         head_t = struct.unpack_from("<3f", bd, 4 + 68 + 16 + 36)
         self.assertAlmostEqual(head_t[2], -0.2, places=6)
 
+    def test_body_with_ragdoll(self):
+        from fo4sf import gearfit
+        eye = np.eye(4)
+        sh = gearfit.SkyShape(b"chicken", np.array([[0, 0, 0.1], [0.1, 0, 0.1], [0, 0.1, 0.3]], float),
+                              np.array([[0, 0, 1]] * 3, float), [(0, 0), (1, 0), (0, 1)], [(0, 1, 2)],
+                              ["Pelvis"], [[(0, 1.0)]] * 3, {"Pelvis": eye})
+        U = retarget.SKYRIM_M_PER_UNIT
+        cr = C.creature_rig(retarget.Rig(["NPC Root [Root]", "Pelvis", "Head"], [-1, 0, 1],
+                                         [(0, 0, 0), (0, 0, 0), (0, 0, 0.2 / U)], [(0, 0, 0, 1)] * 3))
+        files = C.skinned_files(sh, "materials\\x.mat", "actors/x/x", "Pelvis", cr, ragdoll=(b"TAGBLOB", ["COM", "Head"]))
+        n = nif.parse(files["meshes/actors/x/x.nif"])
+        sys_i = next(i for i in range(len(n.blocks)) if n.type_of(i) == "bhkRagdollSystem")
+        self.assertEqual(n.blocks[sys_i], struct.pack("<I", 7) + b"TAGBLOB")
+        objs = [i for i in range(len(n.blocks)) if n.type_of(i) == "bhkNPCollisionObject"]
+        got = []
+        for o in objs:
+            target, flags, system, body = struct.unpack_from("<iHiI", n.blocks[o], 0)
+            self.assertEqual((flags, system), (0x80, sys_i))
+            ni, ne = struct.unpack_from("<iI", n.blocks[target], 0)
+            coll, = struct.unpack_from("<i", n.blocks[target], 8 + 4 * ne + 4 + 4 + 52)
+            self.assertEqual(coll, o)                                     # the node points back at its object
+            got.append((C._node_name(n, target), body))
+        self.assertEqual(sorted(got), [(b"COM_Twin", 0), (b"Head", 1)])
+        with self.assertRaises(ValueError):
+            C.skinned_files(sh, "materials\\x.mat", "actors/x/x", "Pelvis", cr, ragdoll=(b"x", ["Tail"]))
+
     def test_body_in_com_space(self):
         from fo4sf import gearfit
         U = retarget.SKYRIM_M_PER_UNIT

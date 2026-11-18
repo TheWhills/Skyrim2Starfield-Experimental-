@@ -32,7 +32,13 @@ def _section(tag: str, payload: bytes, leaf: bool) -> bytes:
 
 
 class Writer:
-    def __init__(self, template: bytes):
+    def __init__(self, template: bytes, array_align: int = 1, object_align: int = 1):
+        """array_align / object_align: the least alignment of array items (flag 0x20) and object items (0x10) in DATA.
+        The defaults keep the cloth layout (byte-identical round trips). Ragdolls need 16 / 8: in the vanilla trilobite
+        ragdoll every array item sits on 16 and every object on 8 or 16, and ours with 4-byte arrays (hkFloat3 hull
+        vertices, the compound shape's instances holding SIMD transforms) made the killed trilobite flip and spin
+        (owner, 2026-11-17 20:10)."""
+        self.array_align, self.object_align = array_align, object_align
         self.tf = Tagfile(template)
         top = sections(template, 0, len(template))
         secs = {t: (s, e) for t, s, e in sections(template, top[0][1], top[0][2])}
@@ -87,6 +93,7 @@ class Writer:
 
     def _new_item(self, ti: int, flags: int, vals: list) -> int:
         a = self._align(ti)
+        a = max(a, self.array_align if flags & 0x20 else self.object_align)
         while len(self.data) % a:
             self.data.append(0)
         off = len(self.data)

@@ -183,7 +183,7 @@ BODY_LODS = 4             # the vanilla trilobite body fills LOD0-3 (owner's mod
 
 
 def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], bsx_flags: int = BODY_BSX,
-                   lods: int = BODY_LODS) -> nifmod.NifFile:
+                   lods: int = BODY_LODS, ragdoll=None) -> nifmod.NifFile:
     """A creature body NIF laid out like the vanilla trilobite's (verified layout, owner's model compare 2026-11-17):
     the model carries its own bone nodes (root > COM_Twin > the rig's hierarchy at rest, each with NiStringExtraData
     'sgoKeep'), the skin's BSSkin::Instance points at those nodes (skeleton root = the root node), and its SkinAttach
@@ -193,7 +193,10 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
     the model is in COM's space (skinned_files moves the mesh there); its children carry the rig's local rest.
     `shape` is an sfnif.SkinnedShape whose bones / binds are in `bones` order. lods: how many of the four LOD slots
     the mesh fills (vanilla: all four, each skinned; with only LOD0 the chicken slid with still legs a few feet away,
-    owner 2026-11-17 17:52 / 18:12, after the rig LOD fix: supported, the engine drew an empty lower LOD unskinned)."""
+    owner 2026-11-17 17:52 / 18:12, after the rig LOD fix: supported, the engine drew an empty lower LOD unskinned).
+    ragdoll: (Havok tagfile of an hknpRagdollData, [rig bone of body 0, body 1, ...]) adds, as the vanilla trilobite
+    body, one bhkRagdollSystem block (u32 size + tagfile) and per body a bhkNPCollisionObject (target node, flags 0x80,
+    system block, body index) on that bone's node (COM's body on COM_Twin) (creature_ragdoll)."""
     from . import sfnif
     f = nifmod.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,
                        export_script=b"\x00", sf_data=b"\x7a\x00")
@@ -231,10 +234,19 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
     f.add_block("BSSkin::BoneData", struct.pack("<I", nb) + b"".join(
         struct.pack("<4f9f3ff", *sphere, *rot, *trans, scale) for sphere, rot, trans, scale in shape.binds))
     ident = struct.pack("<3f9ff", 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0)
+    collision = {}
+    if ragdoll is not None:
+        blob, body_bones = ragdoll
+        system = f.add_block("bhkRagdollSystem", struct.pack("<I", len(blob)) + blob)
+        for k, bone in enumerate(body_bones):
+            if bone == ROOT or bone not in cr.names:
+                raise ValueError(f"ragdoll body {k}: no node for bone {bone!r}")
+            nb_ = node_of[cr.names.index(bone)][0]
+            collision[nb_] = f.add_block("bhkNPCollisionObject", struct.pack("<iHiI", nb_, 0x80, system, k))
 
-    def node(name_idx, extra, xform, children):
+    def node(name_idx, extra, xform, children, coll=-1):
         return (struct.pack("<iI", name_idx, len(extra)) + struct.pack(f"<{len(extra)}i", *extra)
-                + struct.pack("<iI", -1, 0xE) + xform + struct.pack("<iI", -1, len(children))
+                + struct.pack("<iI", -1, 0xE) + xform + struct.pack("<iI", coll, len(children))
                 + struct.pack(f"<{len(children)}i", *children))
     f.blocks[root] = node(f.string_index(root_name), [bsx], ident, kids[root])
     for i, name in enumerate(cr.names):
@@ -246,7 +258,7 @@ def build_body_nif(root_name: bytes, shape, cr: CreatureRig, bones: List[str], b
         else:
             xform = struct.pack("<3f", *map(float, cr.t[i])) + struct.pack("<9ff", *quat_to_rot9(cr.q[i]), 1.0)
         nm = COM_NODE if name == COM else name
-        f.blocks[b] = node(f.string_index(nm.encode("latin-1")), [e], xform, kids[b])
+        f.blocks[b] = node(f.string_index(nm.encode("latin-1")), [e], xform, kids[b], collision.get(b, -1))
     f.footer = struct.pack("<II", 1, 0)
     return f
 
@@ -305,7 +317,7 @@ def with_back_faces(shape, tangents=None):
 
 
 def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr: CreatureRig,
-                  tangents=None, bsx_flags: int = BODY_BSX, lods: int = BODY_LODS) -> Dict[str, bytes]:
+                  tangents=None, bsx_flags: int = BODY_BSX, lods: int = BODY_LODS, ragdoll=None) -> Dict[str, bytes]:
     """{"meshes/<out_name>.nif", "geometries/<a>/<b>.mesh"}: a gearfit.SkyShape (metres, the actor's model space,
     bind worlds per bone) as a creature body (build_body_nif, in COM's space) skinned to the creature rig's bones.
     tangents: per-vertex model-space tangents (the Skyrim mesh's, turned like its normals), else none are written."""
@@ -348,7 +360,7 @@ def skinned_files(shape, material_path: str, out_name: str, com_source: str, cr:
                       tuple(map(float, inv[:3, 3])), 1.0))
     sh = sfnif.SkinnedShape(shape.name or b"Body", f"{d}\\{f}".encode(), len(m.triangles) * 3, len(m.positions),
                             material_path, [b.encode("latin-1") for b in used], binds)
-    n = build_body_nif(b"ExportScene", sh, cr, used, bsx_flags, lods)
+    n = build_body_nif(b"ExportScene", sh, cr, used, bsx_flags, lods, ragdoll)
     return {f"geometries/{d}/{f}.mesh": data, f"meshes/{out_name}.nif": nifmod.serialize(n)}
 
 

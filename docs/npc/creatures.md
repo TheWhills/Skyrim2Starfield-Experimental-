@@ -307,3 +307,17 @@ new creature skeleton on an existing graph.
   first: the trilobite with its ragdoll rewritten (S2S Ragdoll Writer Test). Skyrim's chicken ragdoll lives in its
   skeleton.nif (7 bhkRigidBody + bhkCapsuleShape on bhkBlendCollisionObject, 6 bhkRagdollConstraint);
   creature_probe --extract-skyrim copies it out.
+* Owner, 20:09-20:10: writer test 1 (the trilobite's ragdoll rewritten): killed, it stayed standing and animated or
+  flipped over and spun. Verified offline: the vanilla ragdoll puts every array item on 16 bytes and every object on
+  8; ours had hkFloat3 hull vertices and the compound shape's instances (SIMD transforms, read in place) on 4.
+  hktagwrite.Writer now takes least alignments (array 16 / object 8 for ragdolls; the cloth default unchanged).
+  Writer test 2 (same edit, vanilla alignment) sent; result pending.
+* Fix 14 (built, offline checks only): the chicken's ragdoll. creature_ragdoll reads Skyrim's (skeleton.nif:
+  7 capsule bodies on Pelvis, Neck0-2, HEAD, Right / LeftAnkle, 6 ragdoll constraints, child = A, parent = B, masses
+  10 / 5, cone 0.377, planes +-0.26 (ankles +-0.17), twist +-0.70 (ankles +-0.17), friction 10), moves every point
+  and axis into the rig bone's frame (identity for all but COM, which takes the pelvis' 56 deg pitch), and writes an
+  hknpRagdollData on the vanilla trilobite's (ids, filter, motion properties, motors, friction atoms from its root and
+  first capsule body / first constraint), plus a bhkRagdollSystem and one bhkNPCollisionObject per body in the
+  chicken's body NIF (COM's on COM_Twin). Checked on the owner's files: every joint's pivot is the same model-space
+  point from both bodies and both twist axes agree at rest; the Skyrim nodes sit on the rig bones (0 mm).
+  creature_build.json "ragdoll" lists the bodies; --no-ragdoll builds without.

@@ -14,6 +14,30 @@ from fo4sf import creature, gearfit, nif, retarget, sfnif  # noqa: E402
 
 
 class BuildTests(unittest.TestCase):
+    def test_build_ragdoll(self):
+        from unittest import mock
+        sys.path.insert(0, os.path.join(ROOT, "tests"))
+        import test_creature_ragdoll as TR
+        from fo4sf import creature_ragdoll
+        U = retarget.SKYRIM_M_PER_UNIT
+        Rp = TR.rot_x(60)
+        q = retarget.mat_to_quat(Rp)
+        sk = retarget.Rig(["NPC Root [Root]", "Pelvis", "Neck0"], [-1, 0, 1],
+                          [(0, 0, 0), (0, 0, 0.3 / U), (0, 0.1 / U, 0.1 / U)],          # as the Skyrim NIF's nodes
+                          [(0, 0, 0, 1), tuple(q), (0, 0, 0, 1)])
+        cr = creature.creature_rig(sk, "Pelvis")
+        rep = {"notes": []}
+        with mock.patch.object(creature_ragdoll, "template_from_body", lambda _b: b"tpl"), \
+                mock.patch.object(creature_ragdoll, "build_ragdoll", lambda _t, rb: b"blob"):
+            out = B.build_ragdoll(TR.skyrim_ragdoll_nif(), b"body", cr, rep)
+        self.assertEqual(out, (b"blob", ["COM", "Neck0"]))
+        self.assertEqual([(r["bone"], r["skyrim"], r["parent"]) for r in rep["ragdoll"]],
+                         [("COM", "Pelvis", None), ("Neck0", "Neck0", "COM")])
+        self.assertLess(max(r["offset_mm"] for r in rep["ragdoll"]), 0.01)       # the NIF and the rig agree
+        rep2 = {"notes": []}
+        self.assertIsNone(B.build_ragdoll(None, b"body", cr, rep2))           # no skeleton NIF: a body without one
+        self.assertTrue(rep2["notes"][0].startswith("no ragdoll"))
+
     def test_own_paths_and_fill(self):
         mine = B.own_paths()
         self.assertEqual(mine["rig"], "meshes/actors/s2s/chicken/characterassets/skeleton.rig")
