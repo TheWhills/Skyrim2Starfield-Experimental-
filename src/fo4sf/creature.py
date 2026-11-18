@@ -77,6 +77,18 @@ class CreatureRig:
     def rig(self) -> Rig:
         return Rig(self.names, self.parents, self.t, self.q)
 
+    def reordered(self, order: Sequence[int]) -> "CreatureRig":
+        """The same rig with its bones in `order` (old indices; every parent must come before its children)."""
+        order = list(order)
+        if sorted(order) != list(range(len(self.names))):
+            raise ValueError("order is not a permutation of the bones")
+        new = {old: i for i, old in enumerate(order)}
+        parents = [new[self.parents[o]] if self.parents[o] >= 0 else -1 for o in order]
+        if any(p >= i for i, p in enumerate(parents)):
+            raise ValueError("a parent would follow its child")
+        return CreatureRig([self.names[o] for o in order], parents, np.asarray(self.t)[order],
+                           np.asarray(self.q)[order], [self.sources[o] for o in order], self.root, self.com, self.level)
+
 
 def creature_rig(sk: Rig, com: str = "Pelvis", root: Optional[str] = None,
                  unit: float = SKYRIM_M_PER_UNIT, add_root: bool = True, level_com: bool = True) -> CreatureRig:
@@ -457,6 +469,17 @@ def rig_fields(cr: "CreatureRig", trunk_share: float = 0.4):
         level.append(lv)
         weight.append(w)
     return mirror, level, weight
+
+
+def sorted_by_level(cr: "CreatureRig") -> "CreatureRig":
+    """The rig with its bones sorted by rig_fields level, highest first (stable, so parents stay before children:
+    a child's level never exceeds its parent's). Vanilla rigs are in this order (the critter: 5, 4, 3, 3, 2 x 19,
+    1 x 6, 0 x 2), and the game seems to animate only a leading run of the list far off: with the chicken's legs
+    (level 2) listed after its comb and wattles (0), its head (1) animated afar and its legs did not (owner,
+    2026-11-17 19:20)."""
+    _m, level, _w = rig_fields(cr)
+    order = sorted(range(len(cr.names)), key=lambda i: -level[i])
+    return cr.reordered(order)
 
 
 def _under(parents, i, anc) -> bool:

@@ -152,6 +152,8 @@ def main(argv=None):
     sk_desc = max(d["skeletons"], key=lambda s: len(s["bones"]))
     sk = retarget.rig_from_hkx_skeleton(sk_desc)
     cr = creature.creature_rig(sk, CHICKEN["com"])
+    if not a.no_rig_fields:
+        cr = creature.sorted_by_level(cr)             # vanilla order: the bones animated far off come first
     ci = cr.com_index
     rep["rig"] = {"bones": cr.names, "com_rest_m": [round(float(v), 4) for v in cr.t[ci]],
                   "com_level_q": [round(float(v), 4) for v in (cr.level if cr.level is not None else (0, 0, 0, 1))]}

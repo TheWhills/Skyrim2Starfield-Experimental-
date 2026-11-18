@@ -233,6 +233,27 @@ class FileTests(unittest.TestCase):
         self.assertEqual(level, vanilla_level)
         self.assertEqual(weight[:4], [1.0, 1.0, 2.0, 2.0])
 
+    def test_sorted_by_level(self):
+        # COM > [Spine > Head > Comb (deep chain), Leg > Foot]: Comb (level 0) is listed before the legs (2)
+        rig = retarget.Rig(["Pelvis", "Spine", "Head", "Comb", "Leg", "Foot"], [-1, 0, 1, 2, 0, 4],
+                           np.array([[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1], [1, 0, 0], [0, 0, -1]], float),
+                           np.tile([0, 0, 0, 1.0], (6, 1)))
+        cr = C.creature_rig(rig, "Pelvis", level_com=False)
+        s = C.sorted_by_level(cr)
+        _m, lv, _w = C.rig_fields(s)
+        self.assertEqual(lv, sorted(lv, reverse=True))
+        self.assertTrue(all(p < i for i, p in enumerate(s.parents)))
+        self.assertLess(s.names.index("Foot"), s.names.index("Comb"))
+        # the same clip folds to the same per-bone locals, in the new order
+        lt = np.random.default_rng(1).normal(size=(2, 6, 3))
+        lq = np.tile([0, 0, 0, 1.0], (2, 6, 1))
+        t0, q0 = cr.fold(lt, lq)
+        t1, q1 = s.fold(lt, lq)
+        for i, n in enumerate(s.names):
+            np.testing.assert_allclose(t1[:, i], t0[:, cr.names.index(n)])
+        with self.assertRaises(ValueError):
+            cr.reordered([1, 0, 2, 3, 4, 5, 6])
+
     def test_mirror_names_chicken(self):
         for a, b in (("LeftThigh", "RightThigh"), ("LAnkleToe00", "RAnkleToe00"), ("HeadWattleL", "HeadWattleR"),
                      ("L_Clavicle", "R_Clavicle"), ("Spine", "Spine"), ("HeadComb", "HeadComb"), ("COM", "COM")):

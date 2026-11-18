@@ -263,3 +263,9 @@ new creature skeleton on an existing graph.
   5, COM 4, trunk 3, else min(2, deepest - depth below COM); this reproduces all 31 vanilla critter levels. Weight:
   1 / 2 / 5 / 30 / 60 by role and level (vanilla's own values are hand-set; meaning unresolved). Chicken: body and
   legs 2, head 1, comb and wattles 0 (like the trilobite's antenna tips: may stop far off).
+* Owner, 19:20: with fix 11 the head animates afar, the legs still do not. The vanilla rigs list their bones sorted
+  by level, highest first (critter 5, 4, 3, 3, 2 x 19, 1 x 6, 0 x 2); ours listed the chicken's legs (2) after its
+  head (1) and comb / wattles (0). Supported hypothesis: far off the game animates only the leading run of bones
+  down to some level, so a level-0 bone ends the run and every bone after it stays still. Fix 12:
+  creature.sorted_by_level reorders the chicken's rig (stable, parents stay first) before anything is written; the
+  body's skin, binds and clips follow the rig by name.
