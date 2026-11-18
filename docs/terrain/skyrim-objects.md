@@ -464,3 +464,14 @@ Cell_TestVideoCube); NewAtlantis also XWEM (water environment map) and world wat
 ours none of them. DNAM default water: Neon 236, NewAtlantis 41, ours -200 m. `lod --world-env-from NewAtlantis` copies
 ZNAM / WAMB / XEMP / XWEM into our world (then the cell index is rewritten). Supported hypothesis: the missing
 environment map is the coating.
+
+## Animated objects: the mill water wheel (2026-11-18)
+Owner, in game: Riverwood's mill water wheel stands still (it should spin) and its axle renders plain white. Skyrim's
+wheel (SKY_Lumbermill01WaterWheel01 / 02 in our plugin: architecture\farmhouse\lumbermill01waterwheel01.nif, 02.nif;
+Solitude's ssawwaterwheel.nif the same kind) spins by keyframes in its NIF. Starfield NIFs hold no controllers; a
+record attaches a graph (.agx), a .rig and an animations folder (WP-doors-research.md), and since the chicken we write
+.rig / .af ourselves (CALUMI). Plan: a vanilla Starfield object that loops one clip as the template (graph + record
+form), the wheel's rotating node as a one-bone rig, its Skyrim keyframes as a looping .af. Read-only first:
+scripts/interior/sf_animated_object_probe.py lists Starfield's records with a graph and a rig, looping-sounding ones
+first, with their folders' clips; the Skyrim wheel NIFs (creature_probe --extract-skyrim) give the spin axis, speed,
+pivot and the axle's material.
