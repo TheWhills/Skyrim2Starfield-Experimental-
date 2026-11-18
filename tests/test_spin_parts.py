@@ -184,6 +184,16 @@ class SpinPartsScriptTests(unittest.TestCase):
         p = spin_parts.plan(o, man)
         self.assertEqual((p["refs"], p["already_staged"]), ([], 1))
 
+    def test_split_only_where_placed(self):
+        """Interiors / weapons (convert_batch.py etc.) place no turning parts: there the part stays in the model."""
+        src = open(os.path.join(ROOT, "src", "fo4sf", "skyrimconvert.py"), encoding="utf-8").read()
+        self.assertIn("self.split_spin = False", src)
+        self.assertIn("skyrimnif.spin_part(src) if self.split_spin", src)
+        objs = open(os.path.join(ROOT, "scripts", "terrain", "make_skyrim_objects.py"), encoding="utf-8").read()
+        self.assertIn("conv.split_spin = True", objs)
+        for other in ("convert_batch.py", os.path.join("armor", "weapon_test_pack.py")):
+            self.assertNotIn("split_spin", open(os.path.join(ROOT, "scripts", other), encoding="utf-8").read())
+
     def test_plugin_and_owner_script_read_it(self):
         cs = open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8").read()
         self.assertIn('GetEnvironmentVariable("SPIN_PARTS")', cs)

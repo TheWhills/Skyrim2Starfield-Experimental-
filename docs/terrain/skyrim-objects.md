@@ -510,6 +510,9 @@ unverified):
   reference's rotation (exterior.ref_angles inverts ref_matrix).
 - TerrainOverlays: a base with "anim_template" is a copy of that Starfield.esm static (12F12F, AK_Fan_Yard_03_Blade:
   the graph component and keyword come along) with our model and bounds.
+- Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
+  convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
+  their placement handles "spin" (interior Dwemer gears would otherwise vanish).
 - For the installed exterior (no restage: its plugin, FormIDs, LOD stay): scripts/terrain/spin_parts.py lists the
   parts from the staged objects.json and the reconverted manifest and copies their models into FO4Port.esm's staging;
   riverwood_doors.ps1 runs it and PluginSpike (SPIN_PARTS) adds the static copies and persistent references in the

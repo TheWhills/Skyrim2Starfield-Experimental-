@@ -365,6 +365,9 @@ class SkyrimConverter(pipeline.Converter):
         self.flame_style = "skyrim"                   # skyrimfire.FLAME_STYLES
         self.sf_candle_mesh = None                    # sfmesh.SfMesh of Starfield's candle flame (candle_style starfield)
         self._layered = set()                         # material paths that take normalize_card_uvs
+        # turning parts (skyrimnif.spin_part) as models of their own: only for callers that place them (make_skyrim_objects
+        # convert); elsewhere (interiors, weapons, first run) the part stays in the model, standing still
+        self.split_spin = False
 
     def skyrim_material(self, diffuse: str, normal: str, test: bool, blend: bool, ref: int,
                         flat_normal_ok: bool = False, albedo_tint: Optional[tuple] = None,
@@ -855,7 +858,8 @@ class SkyrimConverter(pipeline.Converter):
             dropped = [f"{(s.name or b'').decode('latin-1')} ({w})" for s, w in zip(shapes, why) if w]
             editor_shapes = len(dropped)
             shapes = [s for s, w in zip(shapes, why) if not w]
-            spin, spin_shapes = (None if skin_bone or out_suffix else skyrimnif.spin_part(src)), []
+            spin, spin_shapes = (skyrimnif.spin_part(src) if self.split_spin and not (skin_bone or out_suffix)
+                                 else None), []
             if spin is not None:                          # the turning part: a model of its own (below)
                 sub = skyrimnif.subtree(src, spin["block"])
                 spin_shapes = [s for s in shapes if s.block in sub]

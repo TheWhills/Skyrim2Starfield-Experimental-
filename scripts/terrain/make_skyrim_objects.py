@@ -340,6 +340,7 @@ def cmd_convert(a):
                 conv.particle_fire = parse_particle_fire(getattr(a, "particle_fire", ""))
                 conv.candle_style = getattr(a, "candle_style", "skyrim")
                 conv.sf_candle_mesh = candle_mesh
+                conv.split_spin = True                 # turning parts placed by stage / spin_parts.py
             r = conv.convert_nif(name)
             if flame_relevant(r):
                 r["flame_key"] = fkey
