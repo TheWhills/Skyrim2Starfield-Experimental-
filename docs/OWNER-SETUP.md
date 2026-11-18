@@ -398,6 +398,10 @@ meshes in the staging and reinstalls; long; Starfield closed):
 powershell -ExecutionPolicy Bypass -File tools\owner\exterior_collision.ps1
 ```
 
+Since 2026-11-18 this also takes the mill water wheel's turning part out of the wheel model (and the white hidden
+axle); the turning part is placed by the next riverwood_doors.ps1 run (spin_parts.py, `-NoSpin` to leave it out;
+`-ExteriorWork` if the exterior's work folder is not C:\Modding\work\sky_all).
+
 NPC schedules, step 1 (read-only survey of an NPC's AI packages and Starfield's package templates):
 
 ```powershell

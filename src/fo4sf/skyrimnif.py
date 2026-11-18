@@ -675,3 +675,106 @@ def collision_triangles(n: nifmod.NifFile, report: Optional[dict] = None,
         if skipped:
             report["skipped_layers"] = {str(k): v for k, v in sorted(skipped.items())}
     return points, tris
+
+
+# ------------------------------------------------------------------------------------------------- spinning parts
+# 2026-11-18 (owner: Riverwood's mill water wheel should spin). Skyrim turns a part in place with a looping
+# NiControllerSequence on one node (lumbermill01waterwheel01.nif: "Idle", cycle 0 = loop, 0-16.667 s, controlled block
+# SawWaterWheel03 -> NiTransformInterpolator -> NiTransformData with XYZ euler keys x 0, z 90 deg fixed, y 0 -> -2 pi).
+# The wheel and its hub are thin along their own Y (verified on the shapes), so the varying y key turns the node about
+# its own Y axis: R(t) = Rz(z) Ry(y(t)) [Rx(x)], the varying angle innermost. spin_part reads that; Starfield turns the
+# part with a graph on a separate static (skyrimconvert.convert_nif, make_skyrim_objects).
+FULL_TURN = 2 * math.pi
+
+
+def _xyz_keys(d: bytes, p: int):
+    """([x keys], [y keys], [z keys], end offset) of an XYZ-rotation block: per axis count, interpolation and
+    (time, value) pairs (linear 8 bytes, quadratic 16, TBC 20 per key)."""
+    out = []
+    for _axis in range(3):
+        nk, = struct.unpack_from("<I", d, p)
+        p += 4
+        it = 0
+        if nk:
+            it, = struct.unpack_from("<I", d, p)
+            p += 4
+        size = {1: 8, 2: 16, 3: 20}.get(it, 8)
+        keys = []
+        for _k in range(nk):
+            keys.append(struct.unpack_from("<2f", d, p))
+            p += size
+        out.append(keys)
+    return out[0], out[1], out[2], p
+
+
+def spin_part(n: nifmod.NifFile) -> Optional[dict]:
+    """The part a Skyrim model turns in place, or None: {"node": name, "block": node index, "axis": 0 / 1 / 2 (the
+    node's own x / y / z), "sign": +1 / -1 (direction of the turn about that axis), "period": seconds per loop}.
+    Only a looping sequence (cycle type 0) whose transform data has XYZ euler keys with exactly one axis changing by a
+    full turn, the others constant; when that axis is y or x, the inner angles (x for y) must be 0 so the turn stays
+    about the node's own axis."""
+    names = {}
+    for i in range(len(n.blocks)):
+        if n.type_of(i).endswith("Node"):
+            names[_name(n, n.blocks[i])] = i
+    for i in range(len(n.blocks)):
+        if n.type_of(i) != "NiControllerSequence":
+            continue
+        b = n.blocks[i]
+        try:
+            count, = struct.unpack_from("<I", b, 4)
+            at = 12 + 29 * count
+            _w, _txt, cycle, _freq, start, stop = struct.unpack_from("<fiIfff", b, at)
+        except struct.error:
+            continue
+        if cycle != 0 or stop <= start:
+            continue
+        for k in range(count):
+            interp, _ctrl = struct.unpack_from("<ii", b, 12 + 29 * k)
+            node_idx, = struct.unpack_from("<i", b, 12 + 29 * k + 9)
+            if not (0 <= interp < len(n.blocks)) or n.type_of(interp) != "NiTransformInterpolator":
+                continue
+            data_ref, = struct.unpack_from("<i", n.blocks[interp], 32)
+            if not (0 <= data_ref < len(n.blocks)) or n.type_of(data_ref) != "NiTransformData":
+                continue
+            d = n.blocks[data_ref]
+            nrk, = struct.unpack_from("<I", d, 0)
+            if not nrk:
+                continue
+            rtype, = struct.unpack_from("<I", d, 4)
+            if rtype != 4:                                    # XYZ euler keys only
+                continue
+            axes = _xyz_keys(d, 8)[:3]
+            moving = []
+            for ax, keys in enumerate(axes):
+                vals = [v for _t, v in keys]
+                if vals and abs(max(vals) - min(vals)) > 1e-3:
+                    moving.append((ax, vals[-1] - vals[0]))
+            if len(moving) != 1 or abs(abs(moving[0][1]) - FULL_TURN) > 0.05:
+                continue
+            ax, turn = moving[0]
+            inner = [v for a2 in range(ax) for _t, v in axes[a2]]     # angles applied inside the turning one
+            if any(abs(v) > 1e-3 for v in inner):
+                continue
+            nm = n.strings[node_idx] if 0 <= node_idx < len(n.strings) else b""
+            if nm not in names:
+                continue
+            return {"node": nm.decode("latin-1"), "block": names[nm], "axis": ax, "sign": 1 if turn > 0 else -1,
+                    "period": float(stop - start)}
+    return None
+
+
+def subtree(n: nifmod.NifFile, root: int) -> set:
+    """Block indices under (and including) a node."""
+    out, todo = set(), [root]
+    while todo:
+        i = todo.pop()
+        if i in out:
+            continue
+        out.add(i)
+        if n.type_of(i).endswith("Node"):
+            try:
+                todo += [c for c in nifmod.node_children(n, i) if c >= 0]
+            except struct.error:
+                pass
+    return out

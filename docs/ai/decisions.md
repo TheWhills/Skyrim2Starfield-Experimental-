@@ -2401,3 +2401,15 @@ Why: owner: vanilla children are "quite ugly"; of the three mods compared (docs/
 each child its own face, and its head is Skyrim's adult female head layout, the case our face fitter already handles.
 Alternatives: SkyChild (standalone, custom high-detail heads, own races), RS Children Overhaul alone.
 Consequence: our Skyrim reader gains a load order (--skyrim-mod folders: plugins, BSAs, loose files over Skyrim's).
+
+## 2026-11-18: turning parts on a copy of a vanilla turning static (Claude)
+Decision: the mill water wheel turns as a separate reference: its turning node becomes its own model, placed at the
+axle on a copy of Starfield's AK_Fan_Yard_03_Blade (12F12F: SimpleIdleLoop01 + the generic one-bone rig +
+rotate_y01), not as a .rig / .af of our own.
+Why: the owner asked for the wheel to spin; the vanilla rig and clip need no animation index run and no CALUMI step,
+so the first test only asks whether a copied graph component turns our model. Alternatives: our own rig and looping
+.af (exact Skyrim speed, needs a new animations folder), one model with a rigged node (as the dartboard).
+Consequence: speed is rotate_y01's (about 1.4 times Skyrim's); direction is set by VANILLA_SPIN_SIGN, unverified.
+For the installed exterior the parts go into FO4Port.esm (spin_parts.py + PluginSpike, persistent references as the
+verified outdoor furniture) rather than a restage of the exterior, which would change its FormIDs and LOD.
+

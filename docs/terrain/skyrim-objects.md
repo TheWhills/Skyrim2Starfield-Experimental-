@@ -494,3 +494,28 @@ part (SawWaterWheel03) as a model of its own centred on the axle, axle along Y, 
 generic rig + rotate_y01 (a vanilla folder: no animation index run); the frame and hub stay static. Open: how a fan
 blade NIF binds to the generic rig (node names), rotate_y01's speed and direction (probe --match Fan_Yard_03
 --calumi --extract-to).
+Built (2026-11-18, synthetic tests in tests/test_spin_parts.py and a local run on the owner's wheel 01; in game
+unverified):
+- skyrimnif.spin_part finds the turning node: a looping NiControllerSequence whose NiTransformData has XYZ euler keys
+  with exactly one axis turning a full 2 pi, the others constant, nothing tilted inside it. On the wheels:
+  SawWaterWheel03 / 02, the node's own Y, 16.667 s. Checked against the shapes: the wheel disc is thin along world X,
+  which is the node's own Y after its 90 deg about Z (so the keys compose as Rz Ry Rx, the turning angle inside).
+- skyrimconvert.convert_nif takes the node's shapes (hidden ones already dropped) out of the model and writes them as
+  `<model>_spin.nif`, no collision, in the node's frame turned so the axis is +Y (rotate_y01 turns about Y). Where
+  Skyrim turns the other way from rotate_y01 the part is written turned 180 deg about Z. rotate_y01's own direction is
+  assumed: `VANILLA_SPIN_SIGN = +1`, unverified. The result's "spin" entry gives the model, pivot (metres), frame,
+  bounds and period. Wheel 01: pivot (6.56, 0, -2.29) m, radius 3.66 m, written turned (Skyrim's sign -1).
+- make_skyrim_objects stage (exterior.place spin=True; `--no-spin` leaves the parts out) adds a base `<edid>_Spin`
+  and, with each reference of the model, a reference `<src>#spin` at the pivot, rotated by the frame composed with the
+  reference's rotation (exterior.ref_angles inverts ref_matrix).
+- TerrainOverlays: a base with "anim_template" is a copy of that Starfield.esm static (12F12F, AK_Fan_Yard_03_Blade:
+  the graph component and keyword come along) with our model and bounds.
+- For the installed exterior (no restage: its plugin, FormIDs, LOD stay): scripts/terrain/spin_parts.py lists the
+  parts from the staged objects.json and the reconverted manifest and copies their models into FO4Port.esm's staging;
+  riverwood_doors.ps1 runs it and PluginSpike (SPIN_PARTS) adds the static copies and persistent references in the
+  world's persistent cell, as the outdoor furniture (`-NoSpin` leaves them out). The exterior's own wheel model loses
+  its wheel when exterior_collision.ps1 refreshes the models. An exterior restaged with the parts gets none from here.
+Unknown until in game: whether the copied component turns a model whose root node is not a rig bone (the generic rig's
+one bone is "Root"; Starfield's AnimTemplate01.nif has no node of that name either, so the rig is taken to drive the
+model root), the direction (flip VANILLA_SPIN_SIGN if it turns backwards), and the speed (rotate_y01's 11.66 s per turn
+against Skyrim's 16.7 s: about 1.4 times fast; a slower clip would need our own .af in a new folder).

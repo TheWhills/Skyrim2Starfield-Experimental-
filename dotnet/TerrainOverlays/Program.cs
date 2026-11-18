@@ -314,6 +314,7 @@ if (Has(prm, "objects"))
             Console.WriteLine($"{world} overlay component: SNAM = anchor {anchorRef.FormKey} (raw {BitConverter.ToUInt32(snam):X8}), PNAM = [{string.Join(", ", pnam)}]");
         }
     }
+    var animTemplates = new Dictionary<uint, IStaticGetter>();
     foreach (var b in o.GetProperty("bases").EnumerateArray())
     {
         var edid = b.GetProperty("edid").GetString()!;
@@ -362,6 +363,31 @@ if (Has(prm, "objects"))
             mod.Doors.Add(rec);
             baseKeys.Add(rec.FormKey);
             nDoor++;
+        }
+        else if (b.TryGetProperty("anim_template", out var atj) && atj.ValueKind == JsonValueKind.String)
+        {
+            // turning part (make_skyrim_objects.py stage: the mill water wheel): a copy of a vanilla turning static
+            // (AK_Fan_Yard_03_Blade 12F12F: its BGSAnimationGraph_Component, SimpleIdleLoop01 + generic rig +
+            // rotate_y01, and keyword) with our model and bounds. docs/terrain/skyrim-objects.md "Animated objects".
+            var tid = Convert.ToUInt32(atj.GetString(), 16);
+            if (!animTemplates.TryGetValue(tid, out var tpl))
+            {
+                tpl = sf.Statics.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid)
+                      ?? throw new InvalidDataException($"anim_template {tid:X6} is not a static in Starfield.esm");
+                animTemplates[tid] = tpl;
+            }
+            var spin = (Static)tpl.Duplicate(NewKey());
+            spin.EditorID = edid;
+            spin.Model = new Model { File = model };
+            if (b.TryGetProperty("bounds", out var spb) && spb.ValueKind == JsonValueKind.Array)
+                spin.ObjectBounds = new ObjectBounds
+                {
+                    First = new P3Float(spb[0][0].GetSingle(), spb[0][1].GetSingle(), spb[0][2].GetSingle()),
+                    Second = new P3Float(spb[1][0].GetSingle(), spb[1][1].GetSingle(), spb[1][2].GetSingle()),
+                };
+            mod.Statics.Add(spin);
+            baseKeys.Add(spin.FormKey);
+            nStat++;
         }
         else
         {

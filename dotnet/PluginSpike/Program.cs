@@ -1334,6 +1334,55 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
         extMarkers.Clear();
     }
 
+    // ---- turning parts (2026-11-18, owner: Riverwood's mill water wheel should spin) ---------------------------------
+    // SPIN_PARTS: scripts/terrain/spin_parts.py's spin_parts.json (positions already in the exterior's frame, metres;
+    // radians). Each base: a copy of the vanilla turning static "template" (AK_Fan_Yard_03_Blade 12F12F: its
+    // BGSAnimationGraph_Component SimpleIdleLoop01 + generic rig + rotate_y01, and keyword) with the part's model and
+    // bounds; each reference persistent in the world's persistent cell, as the outdoor furniture. Unverified in game.
+    if (Environment.GetEnvironmentVariable("SPIN_PARTS") is string spinPath && File.Exists(spinPath))
+    {
+        var spinRoot = JsonDocument.Parse(File.ReadAllText(spinPath)).RootElement.Clone();
+        SfCache();
+        var spinBases = new List<FormKey>();
+        foreach (var sbj in spinRoot.GetProperty("bases").EnumerateArray())
+        {
+            var stid = Convert.ToUInt32(sbj.GetProperty("template").GetString(), 16);
+            var stpl = sfMod!.Statics.FirstOrDefault(st => st.FormKey.ID == stid)
+                       ?? throw new InvalidDataException($"spin template {stid:X6} is not a static in Starfield.esm");
+            var sedid = sbj.GetProperty("edid").GetString()!;
+            var srec = (Static)stpl.Duplicate(Id("SPINSTAT:" + sedid));
+            srec.EditorID = sedid;
+            srec.Model = new Model { File = sbj.GetProperty("model").GetString()! };
+            var sbb = sbj.GetProperty("bounds");
+            srec.ObjectBounds = new ObjectBounds
+            {
+                First = new P3Float(sbb[0][0].GetSingle(), sbb[0][1].GetSingle(), sbb[0][2].GetSingle()),
+                Second = new P3Float(sbb[1][0].GetSingle(), sbb[1][1].GetSingle(), sbb[1][2].GetSingle()),
+            };
+            mod.Statics.Add(srec);
+            spinBases.Add(srec.FormKey);
+        }
+        int spinRefs = 0;
+        foreach (var srj in spinRoot.GetProperty("refs").EnumerateArray())
+        {
+            if (srj.TryGetProperty("disabled", out var sdj) && sdj.ValueKind == JsonValueKind.True) continue;
+            var sp = srj.GetProperty("pos");
+            var spo = new PlacedObject(Id("SPINREF:" + srj.GetProperty("src").GetString()!), release)
+            {
+                Base = new FormLinkNullable<IPlaceableObjectGetter>(spinBases[srj.GetProperty("base").GetInt32()]),
+                Position = new P3Float(sp[0].GetSingle(), sp[1].GetSingle(), sp[2].GetSingle()),
+                Rotation = Rot(srj.GetProperty("rot")),
+            };
+            var ssc = srj.GetProperty("scale").GetSingle();
+            if (Math.Abs(ssc - 1f) > 1e-4) spo.Scale = ssc;
+            spo.MajorRecordFlagsRaw |= 0x400;                                  // persistent
+            tco.Persistent.Add(spo);
+            spinRefs++;
+        }
+        Console.WriteLine($"turning parts: {spinRefs} references of {spinBases.Count} copies of a vanilla turning static " +
+                          $"in {wg.EditorID}'s persistent cell");
+    }
+
     // ---- exterior navmeshes (2026-11-08, owner: "convert the exterior mesh"; docs/terrain/exterior-navmesh.md) -------
     // make_skyrim_navmesh.py export: Skyrim's navmeshes around a place, in the overlay frame (Skyrim units), split at the
     // 100 m Starfield cells, each piece with its Starfield cell. Each goes into an override of that exterior cell, parent

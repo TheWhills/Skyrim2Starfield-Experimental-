@@ -55,7 +55,11 @@ param(
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
     # reused). Not for changes to records (doors, NPCs, furniture, lights).
-    [switch]$AssetsOnly
+    [switch]$AssetsOnly,
+    # turning parts (2026-11-18, the mill water wheel): copies of a vanilla turning static at the exterior's wheels, from
+    # the exterior's own converted models (scripts\terrain\spin_parts.py; reconvert first: exterior_collision.ps1)
+    [string]$ExteriorWork = "C:\Modding\work\sky_all",
+    [switch]$NoSpin
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -159,6 +163,12 @@ if ($Furniture) {
 
 Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
+Remove-Item Env:SPIN_PARTS -ErrorAction SilentlyContinue
+if (-not $NoSpin -and (Test-Path "$ExteriorWork\convert\manifest.json") -and (Test-Path "$Exterior\objects.json")) {
+    python -I scripts\terrain\spin_parts.py --exterior $Exterior --work $ExteriorWork --out $staging
+    if ($LASTEXITCODE -ne 0) { Fail "spin_parts" }
+    $env:SPIN_PARTS = Join-Path $staging "spin_parts.json"
+}
 $env:STARFIELD_DATA = "$SF\Data"
 $env:EXTERIOR_DIR = $Exterior
 $env:EXTERIOR_DOORS = Join-Path $Work "exterior_doors.json"
@@ -167,7 +177,7 @@ if ($Actors.Count -gt 0) { $env:ACTORS = Join-Path $Work "actors.json" }
 if ($Furniture) { $env:FURNITURE = Join-Path $Work "furniture.json" }
 dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
 $rc = $LASTEXITCODE
-Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS, Env:FURNITURE -ErrorAction SilentlyContinue
+Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS, Env:FURNITURE, Env:SPIN_PARTS -ErrorAction SilentlyContinue
 if ($rc -ne 0) { Fail "PluginSpike (paste its output: compile errors name the Mutagen property)" }
 
 if ($Navmesh) {

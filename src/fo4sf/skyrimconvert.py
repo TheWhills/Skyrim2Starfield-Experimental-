@@ -265,6 +265,51 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
     return files
 
 
+# Spinning parts (skyrimnif.spin_part; 2026-11-18, the mill water wheel): written as a model of their own in the part's
+# frame turned so its axis is +Y (the axis Starfield's generic rotate_y01 turns about: the yard fan blades'
+# SimpleIdleLoop01 + genericrig + rotate_y01, sf_animated_object_probe), placed by make_skyrim_objects / exterior.place
+# on a copy of that fan static. VANILLA_SPIN_SIGN: the direction rotate_y01 turns about +Y (assumed +1, unverified:
+# if the wheel turns backwards in game, change it to -1); a part Skyrim turns the other way is written turned 180 deg
+# about its Z, which reverses its +Y.
+SPIN_SUFFIX = "_spin"
+VANILLA_SPIN_SIGN = 1
+_TO_Y = {0: (0, -1, 0, 1, 0, 0, 0, 0, 1),        # node x -> +y (row-major, v_spin = Q v_node)
+         1: (1, 0, 0, 0, 1, 0, 0, 0, 1),
+         2: (1, 0, 0, 0, 0, 1, 0, -1, 0)}         # node z -> +y
+_FLIP_Z = (-1, 0, 0, 0, -1, 0, 0, 0, 1)
+
+
+def _m3(a, b):
+    return tuple(sum(a[3 * r + k] * b[3 * k + c] for k in range(3)) for r in range(3) for c in range(3))
+
+
+def _t3(a):
+    return (a[0], a[3], a[6], a[1], a[4], a[7], a[2], a[5], a[8])
+
+
+def _mv(a, v):
+    return tuple(a[3 * r] * v[0] + a[3 * r + 1] * v[1] + a[3 * r + 2] * v[2] for r in range(3))
+
+
+def spin_frame(axis: int, sign: int, vanilla_sign: int = VANILLA_SPIN_SIGN):
+    """Q (row-major, node frame -> spin model frame): the node's turning axis onto +Y, then 180 deg about Z when the
+    part turns the other way from Starfield's rotate_y01."""
+    q = _TO_Y[axis]
+    return _m3(_FLIP_Z, q) if sign != vanilla_sign else q
+
+
+def to_spin_frame(shapes, node_t, node_r, node_s, q):
+    """The shapes (world transforms in the source model) moved into the spin model's frame: v_spin =
+    Q R_n^T (v_world - t_n) / s_n."""
+    inv = _m3(q, _t3(node_r))
+    out = []
+    for s in shapes:
+        t = _mv(inv, tuple(s.translation[a] - node_t[a] for a in range(3)))
+        out.append(dataclasses.replace(s, translation=tuple(v / node_s for v in t),
+                                       rotation=_m3(inv, s.rotation), scale=s.scale / node_s))
+    return out
+
+
 def convert_skinned_sse(shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list, bone: str,
                         report: dict) -> Dict[str, bytes]:
     """A worn NIF in which every vertex rides one Starfield bone (rigid skinning, e.g. a weapon held by a bone):
@@ -763,6 +808,30 @@ class SkyrimConverter(pipeline.Converter):
                             sc * (r[6] * x + r[7] * y + r[8] * z) + t[2]))
         return pts
 
+    def _spin_model(self, src, spin: dict, shapes, out_name: str, res: dict) -> Dict[str, bytes]:
+        """The spinning part as its own static model (no collision: it turns) in the spin frame; res["spin"] tells
+        make_skyrim_objects where to place it: model, pivot (metres, source model space), frame (row-major rotation of
+        the spin model's axes in the source model), the Skyrim node, direction and period."""
+        t, r, sc = nifmod.world_transforms(src)(spin["block"])
+        q = spin_frame(spin["axis"], spin["sign"])
+        moved = to_spin_frame(shapes, t, r, sc, q)
+        mats = [self._shape_material(src, s) for s in moved]
+        report = {}
+        files = convert_static_sse(src, moved, out_name, mats, None, report)
+        lo, hi = [float("inf")] * 3, [float("-inf")] * 3
+        for m in moved:
+            for v in m.positions:
+                w = _mv(m.rotation, v)
+                for a in range(3):
+                    c = (m.scale * w[a] + m.translation[a]) * UNIT
+                    lo[a], hi[a] = min(lo[a], c), max(hi[a], c)
+        res["spin"] = {"model": out_name.replace("/", "\\") + ".nif", "pivot_m": [round(v * UNIT, 5) for v in t],
+                       "frame": [round(v, 6) for v in _m3(r, _t3(q))], "scale": round(sc, 6), "node": spin["node"], "axis": spin["axis"],
+                       "sign": spin["sign"], "period_s": round(spin["period"], 3), "shapes": len(moved),
+                       "bounds": [[round(v, 4) for v in lo], [round(v, 4) for v in hi]],
+                       "flipped": q != _TO_Y[spin["axis"]]}
+        return files
+
     def convert_nif(self, nif_name: str, skin_bone: Optional[str] = None, out_suffix: str = "") -> dict:
         """skin_bone: write a worn NIF rigidly skinned to that Starfield bone (the shape hook must put the geometry in
         the bone's frame) instead of a static model; out_suffix is appended to the output name."""
@@ -786,10 +855,17 @@ class SkyrimConverter(pipeline.Converter):
             dropped = [f"{(s.name or b'').decode('latin-1')} ({w})" for s, w in zip(shapes, why) if w]
             editor_shapes = len(dropped)
             shapes = [s for s, w in zip(shapes, why) if not w]
+            spin, spin_shapes = (None if skin_bone or out_suffix else skyrimnif.spin_part(src)), []
+            if spin is not None:                          # the turning part: a model of its own (below)
+                sub = skyrimnif.subtree(src, spin["block"])
+                spin_shapes = [s for s in shapes if s.block in sub]
+                shapes = [s for s in shapes if s.block not in sub]
+                if not spin_shapes:
+                    spin = None
             if editor_shapes:
                 self.stats["editor_marker_shapes"] = self.stats.get("editor_marker_shapes", 0) + editor_shapes
                 self.stats.setdefault("editor_marker_models", {})[os.path.basename(nif_name).lower()] = dropped
-            if not shapes and not editor_shapes:
+            if not shapes and not editor_shapes and not spin_shapes:
                 raise ValueError("no triangle geometry")
             mats = [self._shape_material(src, s) for s in shapes]
             flame_shapes = sum(1 for s, m in zip(shapes, mats) if m and "\\effects\\" in m)
@@ -821,7 +897,10 @@ class SkyrimConverter(pipeline.Converter):
                 files = convert_static_sse(src, shapes, out_name, mats, self.collision_template, report,
                                            landscape=bool(LANDSCAPE_RE.search(nif_name)),
                                            sf_mesh_template=self.sf_mesh_template,
-                                           stair_layer=self.stair_layer, allow_empty=editor_shapes > 0)
+                                           stair_layer=self.stair_layer,
+                                           allow_empty=editor_shapes > 0 or bool(spin_shapes))
+            if spin is not None:
+                files.update(self._spin_model(src, spin, spin_shapes, out_name + SPIN_SUFFIX, res))
             for relp, data in files.items():
                 p = os.path.join(self.staging, *relp.split("/"))
                 os.makedirs(os.path.dirname(p), exist_ok=True)

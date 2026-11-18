@@ -38,18 +38,21 @@ def local_path(staging, relative):
 
 def output_inventory(staging, result, prefix="fo4port"):
     """Follow generated NIF -> mesh/material -> texture dependencies."""
-    paths = {"meshes/" + result["out_name"] + ".nif"}
-    model = nif.parse(local_path(staging, next(iter(paths))).read_bytes())
-    for i, block in enumerate(model.blocks):
-        if model.type_of(i) == "BSGeometry":
-            for mesh in sfnif.parse_bsgeometry(block).meshes:
-                if mesh is not None:
-                    paths.add("geometries/" + mesh.path.decode("latin-1").replace("\\", "/") + ".mesh")
-    materials = set()
-    for value in model.strings:
-        name = value.decode("latin-1").replace("\\", "/")
-        if name.lower().startswith(f"materials/{prefix}/") and name.lower().endswith(".mat"):
-            materials.add(name)
+    models = ["meshes/" + result["out_name"] + ".nif"]
+    if isinstance(result.get("spin"), dict):           # a turning part's own model (skyrimconvert._spin_model)
+        models.append("meshes/" + result["spin"]["model"].replace("\\", "/"))
+    paths, materials = set(models), set()
+    for model_path in models:
+        model = nif.parse(local_path(staging, model_path).read_bytes())
+        for i, block in enumerate(model.blocks):
+            if model.type_of(i) == "BSGeometry":
+                for mesh in sfnif.parse_bsgeometry(block).meshes:
+                    if mesh is not None:
+                        paths.add("geometries/" + mesh.path.decode("latin-1").replace("\\", "/") + ".mesh")
+        for value in model.strings:
+            name = value.decode("latin-1").replace("\\", "/")
+            if name.lower().startswith(f"materials/{prefix}/") and name.lower().endswith(".mat"):
+                materials.add(name)
     paths.update(materials)
 
     def textures(value):

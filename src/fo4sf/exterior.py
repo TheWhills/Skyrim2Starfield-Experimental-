@@ -105,6 +105,16 @@ def ref_matrix(rot) -> Tuple[float, ...]:
     return _mul(rz, _mul(ry, rx))
 
 
+def ref_angles(m) -> Tuple[float, float, float]:
+    """The reference angles (radians, as ref_matrix takes them) of a row-major rotation matrix: ref_matrix's inverse."""
+    b = math.asin(max(-1.0, min(1.0, -m[6])))
+    if abs(m[6]) < 1 - 1e-9:
+        a, c = math.atan2(m[3], m[0]), math.atan2(m[7], m[8])
+    else:                                              # gimbal lock: put it all in z
+        a, c = math.atan2(-m[1], m[4]), 0.0
+    return (-c, -b, -a)
+
+
 def _mul(a, b):
     return tuple(sum(a[3 * r + k] * b[3 * k + c] for k in range(3)) for r in range(3) for c in range(3))
 
@@ -127,11 +137,28 @@ def plugin_editor_id(manifest_editor_id: str, prefix: str) -> str:
         else prefix + manifest_editor_id
 
 
-def place(selected: dict, manifest: dict, cell_min: int, cell_max: int, edid_prefix: str = "FO4CW_"):
+def spin_pose(pos, rot, scale, spin: dict):
+    """(pos, rot, scale) of a turning part's reference (skyrimconvert._spin_model's "spin" entry: pivot_m, frame,
+    scale) for a reference of its model at pos (metres) / rot (radians) / scale."""
+    spos = to_world(spin["pivot_m"], pos, rot, scale)
+    srot = ref_angles(_mul(ref_matrix(rot), tuple(spin["frame"])))
+    return [round(v, 5) for v in spos], [round(v, 6) for v in srot], scale * float(spin.get("scale", 1.0))
+
+
+SPIN_EDID_SUFFIX = "_Spin"
+SPIN_SRC_SUFFIX = "#spin"
+
+
+def place(selected: dict, manifest: dict, cell_min: int, cell_max: int, edid_prefix: str = "FO4CW_",
+          spin: bool = False):
     """Join the selected references with the converter manifest.
     Returns (bases, placed, skipped): bases = [{"key", "edid", "model", "door"?}] in first-use order;
     placed = [{"src", "base", "cell", "pos", "rot", "scale", "disabled", ...}] (pos in metres, door origin offsets
-    applied); skipped = [{..., "reason", "detail"}]."""
+    applied); skipped = [{..., "reason", "detail"}].
+    spin: a model with a turning part (manifest item "spin", skyrimconvert._spin_model) also gets a base for that part
+    ({"key": <key>#spin, "edid": <edid>_Spin, "model", "spin": the item's spin entry}) and a reference of it with each
+    reference of the model ({"src": <src>#spin, "spin_of": <src>, ...}), at the part's pivot, its frame composed with
+    the reference's rotation. Callers that count references against the selection leave out the "spin_of" ones."""
     items = {i["source"].replace("/", "\\").lower(): i for i in manifest["items"]}
     failures = {f["nif"].replace("/", "\\").lower(): f["reason"] for f in manifest.get("failures", [])}
     bases, base_index, placed, skipped = [], {}, [], []
@@ -171,6 +198,20 @@ def place(selected: dict, manifest: dict, cell_min: int, cell_max: int, edid_pre
                        "pos": [round(v, 5) for v in pos], "rot": rot, "scale": scale,
                        "disabled": bool(r.get("disabled")), "fo4_persistent": bool(r.get("persistent")),
                        "fo4_cell": r.get("exterior_cell"), "enable_parent": r.get("enable_parent") is not None})
+        if spin and item.get("spin"):
+            sp, skey = item["spin"], key + SPIN_SRC_SUFFIX
+            if skey not in base_index:
+                sedid = bases[base_index[key]]["edid"] + SPIN_EDID_SUFFIX
+                if sedid.lower() in edids:
+                    raise ValueError(f"duplicate base EditorID {sedid}")
+                edids.add(sedid.lower())
+                base_index[skey] = len(bases)
+                bases.append({"key": skey, "edid": sedid, "model": sp["model"], "source": item["source"], "spin": sp})
+            spos, srot, sscale = spin_pose(pos, rot, scale, sp)
+            scell = tg.sf_cell_of(spos[0], spos[1])
+            if cell_min <= scell[0] <= cell_max and cell_min <= scell[1] <= cell_max:
+                placed.append(dict(placed[-1], src=r["formkey"] + SPIN_SRC_SUFFIX, spin_of=r["formkey"],
+                                   base=base_index[skey], cell=list(scell), pos=spos, rot=srot, scale=sscale))
     return bases, placed, skipped
 
 
