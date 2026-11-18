@@ -981,3 +981,10 @@ the console passtime passes odd amounts on Nirn: watch in real time or use the W
 Owner, 23:02 (verified): "every time I passtime after moving him he uses the forge, and I even saw him enter it"; then
 "he started using the workbench after a while": the blocks switch and he walks into the next station. Pending: the
 grindstone (10-11, 17-18) and the tanning rack (15-16) blocks.
+Owner, 23:02-23:04 (verified): with the blocks he also walks into the tanning rack; the grindstone not seen yet. Snapped
+in (`cf "Actor.SnapIntoInteraction" <grindstone>`), Alvor sits at the wheel and plays Skyrim's sharpening clips, so the
+grindstone's record and clips work; no sword in his hands: the Grindstone set has no Skyrim prop (SET_PROPS /
+SET_PROP_OBJECTS hold the Sweep, Forge and Workbench only). Skyrim's graph has AnimObjectIronSword / IronDagger among its
+prop payloads; which one the sharpening wheel loads, on which bone, and where (clip trigger or SharpeningWheel_State
+enter event) is unread: smithing_probe --match SharpeningWheel and anim_object_probe --match IronSword asked for.
+Still to see: whether he walks into the grindstone by himself in its block (10-11, 17-18 UT).
