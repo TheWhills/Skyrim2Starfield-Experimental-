@@ -115,10 +115,15 @@ class StaticShape:
 def build_static_nif(node_name: bytes, shapes: List[StaticShape], bs_version: int = 173,
                      collision_blob: Optional[bytes] = None,
                      child_collision_blobs: Optional[List[bytes]] = None,
-                     bsx: Optional[int] = None) -> nifmod.NifFile:
+                     bsx: Optional[int] = None, animated_node: Optional[bytes] = None) -> nifmod.NifFile:
     """A static prop NIF laid out like vanilla `setdressing` props: NiNode, BSXFlags, [bhkNPCollisionObject,
     bhkPhysicsSystem,] then per shape BSGeometry + NiIntegerExtraData("MaterialID") + BSLightingShaderProperty
-    (named by its .mat path). The root node owns the collision object; BSXFlags is 2 when there is collision."""
+    (named by its .mat path). The root node owns the collision object; BSXFlags is 2 when there is collision.
+    animated_node: the root's children move under one child node of that name carrying NiStringExtraData "sgoKeep",
+    the node a record's animation graph turns (verified layout 2026-11-18: Starfield's AK_Fan_Yard_03_Blade.nif is
+    root -> NiNode "Rotate_Y01" (sgoKeep; its local Y is the fan's axis) -> the blade shapes, for its graph
+    SimpleIdleLoop01 + genericrig + genericbehaviors\idlebehaviors\rotate_y01; a model without that node stands
+    still in game, the mill wheel 2026-11-18)."""
     f = nifmod.NifFile(endian=1, user_version=12, bs_version=bs_version, author=b"\x00", unknown_int=0,
                        export_script=b"\x00", sf_data=b"\x7a\x00")
     s_node = f.string_index(node_name)
@@ -156,6 +161,14 @@ def build_static_nif(node_name: bytes, shapes: List[StaticShape], bs_version: in
                     + struct.pack("<iI", node + 1, 0))
         f.add_block("bhkNPCollisionObject", struct.pack("<iHiI", node, 0x80, node + 2, 0))
         f.add_block("bhkPhysicsSystem", struct.pack("<I", len(blob)) + blob)
+    if animated_node:                              # root -> <animated_node> (sgoKeep) -> the shapes, as vanilla
+        k = len(f.blocks)
+        f.add_block("NiNode", struct.pack("<iIiiI", f.string_index(animated_node), 1, k + 1, -1, 0xE) + ident
+                    + struct.pack("<iI", -1, len(children)) + struct.pack(f"<{len(children)}i", *children))
+        s_keep = f.string_index(b"sgoKeep")
+        f.add_block("NiStringExtraData", struct.pack("<ii", s_keep, s_keep))
+        root = f.blocks[0]
+        f.blocks[0] = root[:len(root) - 4 * len(children) - 4] + struct.pack("<Ii", 1, k)
     f.footer = struct.pack("<II", 1, 0)
     return f
 

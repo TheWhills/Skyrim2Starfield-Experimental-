@@ -214,7 +214,8 @@ def with_back_faces(s: nifmod.Fo4Shape) -> Optional[nifmod.Fo4Shape]:
 def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_name: str, material_paths: list,
                        collision_template: Optional[bytes], report: dict, landscape: bool = False,
                        sf_mesh_template: Optional[bytes] = None,
-                       stair_layer: Optional[int] = STAIR_HELPER_LAYER, allow_empty: bool = False) -> Dict[str, bytes]:
+                       stair_layer: Optional[int] = STAIR_HELPER_LAYER, allow_empty: bool = False,
+                       animated_node: Optional[bytes] = None) -> Dict[str, bytes]:
     """sf_mesh_template (a vanilla Starfield multi-shape physics blob, meshcollision.UNIVERSAL_TEMPLATE_NIF): Skyrim's
     own collision becomes native Starfield mesh bodies (native_collision, with stair ramps on stair_layer); boxes are
     the fallback, with the reason in report["native_error"]."""
@@ -260,7 +261,8 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
         overlap = all(cl[a] <= hi[a] + 0.5 and ch[a] >= lo[a] - 0.5 for a in range(3))
         report["collision_overlaps_render"] = overlap
     node = out_name.rsplit("/", 1)[-1].encode()
-    out = sfnif.build_static_nif(node, static_shapes, child_collision_blobs=blobs)
+    out = sfnif.build_static_nif(node, static_shapes, child_collision_blobs=blobs,
+                                 **({"animated_node": animated_node} if animated_node else {}))
     files[f"meshes/{out_name}.nif"] = nifmod.serialize(out)
     return files
 
@@ -272,6 +274,7 @@ def convert_static_sse(src: nifmod.NifFile, shapes: List[nifmod.Fo4Shape], out_n
 # if the wheel turns backwards in game, change it to -1); a part Skyrim turns the other way is written turned 180 deg
 # about its Z, which reverses its +Y.
 SPIN_SUFFIX = "_spin"
+SPIN_NODE = b"Rotate_Y01"         # the node rotate_y01 turns (the vanilla fan blade's own; sfnif.build_static_nif)
 VANILLA_SPIN_SIGN = 1
 _TO_Y = {0: (0, -1, 0, 1, 0, 0, 0, 0, 1),        # node x -> +y (row-major, v_spin = Q v_node)
          1: (1, 0, 0, 0, 1, 0, 0, 0, 1),
@@ -820,7 +823,7 @@ class SkyrimConverter(pipeline.Converter):
         moved = to_spin_frame(shapes, t, r, sc, q)
         mats = [self._shape_material(src, s) for s in moved]
         report = {}
-        files = convert_static_sse(src, moved, out_name, mats, None, report)
+        files = convert_static_sse(src, moved, out_name, mats, None, report, animated_node=SPIN_NODE)
         lo, hi = [float("inf")] * 3, [float("-inf")] * 3
         for m in moved:
             for v in m.positions:

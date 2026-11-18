@@ -107,6 +107,35 @@ class SpinFrameTests(unittest.TestCase):
             self.assertAlmostEqual(a, b, places=6)
 
 
+class AnimatedNodeTests(unittest.TestCase):
+    """The turning part's model is laid out like Starfield's AK_Fan_Yard_03_Blade.nif: root -> NiNode "Rotate_Y01"
+    (NiStringExtraData sgoKeep) -> the shapes. Without that node the wheel stood still in game (2026-11-18)."""
+
+    def test_layout(self):
+        from fo4sf import sfnif
+        shape = sfnif.StaticShape(b"Wheel:0", b"0123456789abcdef0123\\0123456789abcdef0123", 3, 3,
+                                  "Materials\\x.mat", (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))
+        f = nifmod.parse(nifmod.serialize(sfnif.build_static_nif(b"Mill_spin", [shape, shape],
+                                                                    animated_node=sc.SPIN_NODE)))
+        def node(i):
+            b = f.blocks[i]
+            name, ne = struct.unpack_from("<iI", b, 0)
+            extra = struct.unpack_from(f"<{ne}i", b, 8)
+            p = 8 + 4 * ne + 8 + 52 + 4
+            nk, = struct.unpack_from("<I", b, p)
+            return f.strings[name], extra, struct.unpack_from(f"<{nk}i", b, p + 4)
+        root_name, root_extra, root_kids = node(0)
+        self.assertEqual((root_name, f.type_of(root_extra[0])), (b"Mill_spin", "BSXFlags"))
+        self.assertEqual(len(root_kids), 1)
+        name, extra, kids = node(root_kids[0])
+        self.assertEqual(name, b"Rotate_Y01")
+        self.assertEqual(f.type_of(extra[0]), "NiStringExtraData")
+        self.assertEqual([f.type_of(k) for k in kids], ["BSGeometry", "BSGeometry"])
+        self.assertEqual(f.footer, struct.pack("<II", 1, 0))
+        plain = nifmod.parse(nifmod.serialize(sfnif.build_static_nif(b"Mill", [shape])))
+        self.assertNotIn(b"Rotate_Y01", plain.strings)                  # other models unchanged
+
+
 class PlaceSpinTests(unittest.TestCase):
     def manifest(self):
         frame = sc._m3(rz(math.pi / 2), sc._t3(sc.spin_frame(1, 1)))

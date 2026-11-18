@@ -514,6 +514,13 @@ unverified):
   stream; the white axle gone) but does not turn. Next: is the copied component alive on Nirn (the vanilla fan blade
   placed with placeatme) and how the vanilla blade NIF binds to the generic rig's bone "Root" (its node names, BSX;
   sf_animated_object_probe --extract-to now copies every matched record's model).
+  Found (verified on the owner's extract, 2026-11-18): AK_Fan_Yard_03_Blade.nif is root "AK_Fan_Yard_03_Blade"
+  (BSXFlags 2, its collision) -> NiNode "Rotate_Y01" with NiStringExtraData "sgoKeep", rotated so its local Y is the
+  fan's (vertical) axis -> the three blade shapes. The generic rig's only bone is "Root"; the node the clip turns is
+  named after the clip folder (rotate_y01), not the bone (supported: the one vanilla example read). Our part model
+  had its shapes straight under the root, so nothing turned. Now the part model has the same "Rotate_Y01" (sgoKeep)
+  node (skyrimconvert.SPIN_NODE, sfnif.build_static_nif animated_node), identity, since the part is already written
+  with its axis on +Y. Unverified in game.
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
   their placement handles "spin" (interior Dwemer gears would otherwise vanish).
