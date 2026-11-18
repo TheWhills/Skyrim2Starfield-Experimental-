@@ -200,22 +200,44 @@ class FileTests(unittest.TestCase):
         np.testing.assert_allclose(d.normals[3], (0, 0, -1))
         self.assertEqual((len(d.uvs), len(d.weights), len(tan)), (6, 6, 6))
 
-    def test_set_rig_lod(self):
-        # three records shaped like CALUMI's: three -1 fields, then index -1 / level 0
+    def test_set_rig_fields(self):
+        # three records shaped like CALUMI's: 12 x 0xFF, then mirror -1 / level 0, weight 0.0 at +40
         n = 3
-        data = bytearray(C.RIG_LOD_LEVEL + C.RIG_RECORD * (n - 1) + 4 + 40)
+        data = bytearray(C.RIG_RECORDS + C.RIG_RECORD * n + 40)
         for k in range(n):
-            a = C.RIG_LOD_INDEX + C.RIG_RECORD * k
-            data[a - 12:a] = b"\xff" * 12
-            struct.pack_into("<ii", data, a, -1, 0)
-        out = C.set_rig_lod(bytes(data), [0, 2, 2])
-        got = [struct.unpack_from("<ii", out, C.RIG_LOD_INDEX + C.RIG_RECORD * k) for k in range(n)]
-        self.assertEqual(got, [(-1, 0), (1, 2), (2, 2)])
+            r = C.RIG_RECORDS + C.RIG_RECORD * k
+            data[r + 12:r + 24] = b"\xff" * 12
+            struct.pack_into("<ii", data, r + C.RIG_MIRROR, -1, 0)
+        out = C.set_rig_fields(bytes(data), [0, 2, 1], [5, 4, 2], [1.0, 1.0, 5.0])
+        got = [struct.unpack_from("<ii", out, C.RIG_RECORDS + C.RIG_RECORD * k + C.RIG_MIRROR)
+               + struct.unpack_from("<f", out, C.RIG_RECORDS + C.RIG_RECORD * k + C.RIG_WEIGHT) for k in range(n)]
+        self.assertEqual(got, [(0, 5, 1.0), (2, 4, 1.0), (1, 2, 5.0)])
         self.assertEqual(len(out), len(data))
         with self.assertRaises(ValueError):                 # a layout it does not know is left alone
-            C.set_rig_lod(bytes(len(data)), [0, 2, 2])
-        cr = C.creature_rig(sky())
-        self.assertEqual(C.lod_levels(cr), [0, 2, 2, 2])
+            C.set_rig_fields(bytes(len(data)), [0, 1, 2], [5, 4, 2], [1.0] * 3)
+
+    def test_rig_fields_vanilla_critter(self):
+        # the vanilla critter rig's bones and parents (owner's rig, 2026-11-17): Root 5, COM 4, the two spines 3
+        names = ("Root COM C_spine1 C_spine2 C_Head1 R_FrontLegA1 R_FrontLegB1 L_FrontLegA1 L_FrontLegB1 R_Antenna1 "
+                 "L_Antenna1 R_MiddleLegA1 R_MiddleLegB1 L_MiddleLegA1 L_MiddleLegB1 C_hips1 C_Hips2 R_BackLegC1 "
+                 "L_BackLegC1 R_BackLegA1 R_BackLegB1 L_BackLegA1 L_BackLegB1 R_FrontLegA2 L_FrontLegA2 R_Antenna2 "
+                 "L_Antenna2 R_BackLegC2 L_BackLegC2 R_Antenna3 L_Antenna3").split()
+        parents = [-1, 0, 1, 2, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 1, 15, 16, 16, 15, 15, 15, 15, 5, 7, 9, 10, 17, 18,
+                   25, 26]
+        cr = type("R", (), {"names": names, "parents": parents})()
+        mirror, level, weight = C.rig_fields(cr)
+        vanilla_mirror = [0, 1, 2, 3, 4, 7, 8, 5, 6, 10, 9, 13, 14, 11, 12, 15, 16, 18, 17, 21, 22, 19, 20, 24, 23, 26,
+                          25, 28, 27, 30, 29]
+        self.assertEqual(mirror, vanilla_mirror)
+        vanilla_level = [5, 4, 3, 3] + [2] * 19 + [1] * 6 + [0] * 2
+        self.assertEqual(level, vanilla_level)
+        self.assertEqual(weight[:4], [1.0, 1.0, 2.0, 2.0])
+
+    def test_mirror_names_chicken(self):
+        for a, b in (("LeftThigh", "RightThigh"), ("LAnkleToe00", "RAnkleToe00"), ("HeadWattleL", "HeadWattleR"),
+                     ("L_Clavicle", "R_Clavicle"), ("Spine", "Spine"), ("HeadComb", "HeadComb"), ("COM", "COM")):
+            self.assertEqual(C.mirror_name(a), b)
+            self.assertEqual(C.mirror_name(b), a)
 
     def test_shell_skeleton(self):
         f = nif.NifFile(endian=1, user_version=12, bs_version=173, author=b"\x00", unknown_int=0,

@@ -255,3 +255,11 @@ new creature skeleton on an existing graph.
     byte 65 is 01 in vanilla, where CALUMI writes "CALUMIDVRSJOJO".
   Restoring all three groups from vanilla gives the vanilla file but for 24 rounding bytes. Bisect sent to the
   owner: A header only, B +24/+28/+40 only, C +64 only (one mod each on the vanilla trilobite).
+* Owner, 19:11: of the three, only B (+24 mirror, +28 level, +40 weight restored from vanilla) keeps the vanilla
+  trilobite animating afar; A (header) and C (+64 rotation) do not. Verified: the distance freeze is those per-bone
+  fields. Why fix 7 failed (supported): it wrote Root level 0 (vanilla Root 5) and no mirror / weight.
+  Fix 11: creature.rig_fields gives every bone vanilla's pattern and creature_build writes it into the chicken's rig
+  (creature.set_rig_fields; replaces set_rig_lod / --rig-lod). Mirror: the left/right partner by name. Level: Root
+  5, COM 4, trunk 3, else min(2, deepest - depth below COM); this reproduces all 31 vanilla critter levels. Weight:
+  1 / 2 / 5 / 30 / 60 by role and level (vanilla's own values are hand-set; meaning unresolved). Chicken: body and
+  legs 2, head 1, comb and wattles 0 (like the trilobite's antenna tips: may stop far off).

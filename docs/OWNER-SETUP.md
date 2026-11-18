@@ -195,6 +195,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable ONE of the two at a time; in game `player.placeatme 2C180F` and walk off. Say which (if either) makes the
    vanilla trilobite freeze and slide a few feet away; send critter_roundtrip.json if it lists errors.
+   [Later, 2026-11-17 19:11: done; the rig test froze, fixed by the per-bone rig fields (creatures.md fix 11).
+   Delete the "S2S Critter Clip Test", "S2S Critter Rig Test" and "S2S Rig Fix A/B/C" mods.]
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

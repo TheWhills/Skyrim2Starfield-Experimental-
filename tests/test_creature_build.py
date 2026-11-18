@@ -163,7 +163,7 @@ class MainTests(unittest.TestCase):
         self.assertTrue(any("trilobite" in n for n in rep["notes"]))
         self.assertIn("Starfield meshes/actors/critter/animations/walkforward.afx", rep["clips_missing"])
         self.assertEqual(rep["skyrim_shader"]["double_sided"], False)
-        self.assertNotIn("lod_level", rep["rig"])                             # the per-bone patch is off by default
+        self.assertTrue(any("rig fields not set" in n for n in rep["notes"]))  # the fake rig is not CALUMI's layout
         self.assertNotIn("back_faces_added", rep["skyrim_shader"])
 
 

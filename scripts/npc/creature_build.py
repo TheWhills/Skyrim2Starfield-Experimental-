@@ -110,9 +110,8 @@ def main(argv=None):
     ap.add_argument("--work", default="", help="scratch folder (default: <out>\\_work, removed after)")
     ap.add_argument("--double-sided", choices=("auto", "on", "off"), default="auto",
                     help="add back faces: auto = when Skyrim's shader sets SLSF2_Double_Sided")
-    ap.add_argument("--rig-lod", type=int, default=0,
-                    help="patch every bone but Root to this level in the rig's per-bone field (creature.set_rig_lod; "
-                         "0 = off, the default since the rig package: fixes 7-9 did not help)")
+    ap.add_argument("--no-rig-fields", action="store_true",
+                    help="leave CALUMI's empty per-bone mirror / level / weight fields (the old rig, freezes afar)")
     ap.add_argument("--no-rig-package", action="store_true",
                     help="build the rig without the vanilla critter rig's package settings (the old rig)")
     ap.add_argument("--body-lods", type=int, default=4, choices=(1, 2, 3, 4),
@@ -233,9 +232,9 @@ def main(argv=None):
         stem = os.path.splitext(agx.read_descriptor(vafx)["filename"] or posixpath.basename(key))[0]
         return lt, lq, rt, rq, moving, vafx, stem
 
-    # The rig first: CALUMI writes it with the first clip; its animation-LOD levels are set (creature.set_rig_lod)
-    # BEFORE any clip is written against it, since a clip may take the rig's levels when it is written (owner,
-    # 2026-11-17 18:18: with the rig patched after the clips, the legs still stopped a few feet off).
+    # The rig first: CALUMI writes it with the first clip; its per-bone mirror / level / weight fields are set
+    # (creature.set_rig_fields) before any clip is written against it. Without them the whole creature froze a few
+    # feet off (owner, 2026-11-17: the vanilla rig copied by CALUMI froze the trilobite; restoring them fixed it).
     rig_file = None
     if plan:
         lt, lq, _rt, _rq, moving, vafx, stem = prepared(*plan[0])
@@ -253,14 +252,15 @@ def main(argv=None):
         rig_file = r["rig"]
         with open(rig_file, "rb") as fh:
             rig_bytes = fh.read()
-        if a.rig_lod > 0:
+        if not a.no_rig_fields:
+            mirror, level, weight = creature.rig_fields(cr)
             try:
-                rig_bytes = creature.set_rig_lod(rig_bytes, creature.lod_levels(cr, a.rig_lod))
-                rep["rig"]["lod_level"] = a.rig_lod
+                rig_bytes = creature.set_rig_fields(rig_bytes, mirror, level, weight)
+                rep["rig"]["fields"] = {n: [cr.names[m], lv, w] for n, m, lv, w in zip(cr.names, mirror, level, weight)}
                 with open(rig_file, "wb") as fh:
                     fh.write(rig_bytes)
             except ValueError as e:
-                rep["notes"].append(f"rig LOD not set: {e}")
+                rep["notes"].append(f"rig fields not set: {e}")
         put(CRITTER["rig"], rig_bytes)
     rep["clips"] = []
     for key, src_clip in plan:

@@ -14,6 +14,7 @@ The mesh is skinned with binds = the inverse of each bone's bind world from the 
 game's own hairs, skyrimhair.nif_files), so it is drawn as Skyrim draws it; unlike worn gear, a creature body carries
 its own bone nodes (build_body_nif).
 """
+import re
 import struct
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -380,39 +381,110 @@ def shell_skeleton(data: bytes, root_name: str, com_t, com_q=None) -> bytes:
     return nifmod.serialize(n)
 
 
-RIG_LOD_INDEX, RIG_LOD_LEVEL, RIG_RECORD = 152, 156, 96   # absolute offsets of bone 0's two fields; record stride
+# A .rig bone record is 96 bytes from byte 128 (record k at 128 + 96 k). Verified 2026-11-17 by a byte diff of the vanilla
+# critter rig against CALUMI's copy of it (docs/npc/creatures.md): +24 mirror partner index, +28 level, +40 a float;
+# CALUMI writes -1 / 0 / 0.0 there. With those three restored from vanilla the vanilla trilobite keeps animating at a
+# distance; without them it (and the chicken) freezes and slides a few feet off (owner, 2026-11-17 19:11).
+RIG_RECORDS, RIG_RECORD = 128, 96
+RIG_MIRROR, RIG_LEVEL, RIG_WEIGHT = 24, 28, 40
+# vanilla critter levels: Root 5, COM 4, the core spine 3, the body 2, the last two depths 1 / 0
+LEVEL_ROOT, LEVEL_COM, LEVEL_TRUNK, LEVEL_BODY = 5, 4, 3, 2
+WEIGHT_CORE, WEIGHT_TRUNK = 1.0, 2.0
+WEIGHT_BY_LEVEL = {2: 5.0, 1: 30.0, 0: 60.0}
 
 
-def set_rig_lod(data: bytes, levels: Sequence[int], ranks: Optional[Sequence[int]] = None) -> bytes:
-    """A .rig with each bone's animation-LOD fields set (supported hypothesis; owner's rig dump 2026-11-17).
+def mirror_name(name: str) -> str:
+    """The left/right partner's name (Left <-> Right, L_ <-> R_, a leading L/R before a capital, a trailing L/R), or
+    the name itself for a centre bone."""
+    for a, b in (("Left", "Right"), ("Right", "Left")):
+        if a in name:
+            return name.replace(a, b, 1)
+    m = re.match(r"^([LR])(_|(?=[A-Z]))(.*)$", name)
+    if m:
+        return ("R" if m.group(1) == "L" else "L") + m.group(2) + m.group(3)
+    m = re.match(r"^(.*[a-z0-9])([LR])$", name)
+    if m:
+        return m.group(1) + ("R" if m.group(2) == "L" else "L")
+    return name
 
-    Found by laying a vanilla critter rig, the vanilla human rig and ours (CALUMI) side by side: bone k's record has,
-    after three -1 fields, a 32-bit index at byte 152 + 96 k and a small level at 156 + 96 k (same offsets in all
-    three files). Vanilla: Root -1 / 0; the critter's COM, spine and legs level 2, back-leg tips 1, antenna tips 0;
-    the human's levels 4 down to 0 (camera bones), records sorted by level, the index a permutation of the bone
-    numbers within the level groups. CALUMI writes -1 / 0 for every bone: in game the chicken animates up close,
-    and a little way off its legs stop and it slides (owner, 2026-11-17 17:52), i.e. only bones with a level keep
-    animating at a distance. levels[k]: the level of bone k (rig order); ranks[k]: its index (default k; -1 where the
-    level is 0 and k is the root). The layout is checked first: each field pair must sit after a run of 12 x 0xFF and
-    hold CALUMI's -1 / 0, else ValueError (a rig not written by CALUMI's path is left alone)."""
+
+def rig_fields(cr: "CreatureRig", trunk_share: float = 0.4):
+    """(mirror, level, weight) per bone (rig order) in the vanilla critter rig's pattern: mirror = the partner's index
+    (itself for centre bones or when the partner is missing); level Root 5, COM 4, trunk 3 (from COM down the child
+    with the most descendants while that subtree holds >= trunk_share of all bones: the critter's two spine bones),
+    every other bone min(2, deepest - depth) with depth counted from COM (2 for the body, 1 and 0 for the last two
+    depths). That rule gives every level of the vanilla critter rig (test_creature). Weight (meaning unresolved;
+    vanilla grows from 1 at the core to 60 at the tips) 1 core, 2 trunk, then 5 / 30 / 60 for levels 2 / 1 / 0.
+    Levels are what the distance freeze turned on: a Root at 0 (fix 7) froze the whole body."""
+    names, parents = list(cr.names), list(cr.parents)
+    n = len(names)
+    idx = {nm.lower(): i for i, nm in enumerate(names)}
+    kids = [[] for _ in range(n)]
+    for i, p in enumerate(parents):
+        if p >= 0:
+            kids[p].append(i)
+    size = [1] * n
+    for i in reversed(range(n)):                       # parents precede children in a rig
+        if parents[i] >= 0:
+            size[parents[i]] += size[i]
+    trunk = set()
+    ci = names.index(COM) if COM in names else None
+    cur = ci
+    while cur is not None and kids[cur]:
+        best = max(kids[cur], key=lambda j: size[j])
+        if size[best] < trunk_share * n:
+            break
+        trunk.add(best)
+        cur = best
+    depth = [0] * n                                     # from COM (COM's children 1)
+    for i in range(n):
+        if ci is not None and i != ci and parents[i] >= 0:
+            depth[i] = depth[parents[i]] + 1 if parents[i] != ci else 1
+    below = [i for i in range(n) if ci is not None and i != ci and parents[i] >= 0 and _under(parents, i, ci)]
+    deepest = max((depth[i] for i in below), default=0)
+    mirror, level, weight = [], [], []
+    for i, nm in enumerate(names):
+        mirror.append(idx.get(mirror_name(nm).lower(), i))
+        if nm == ROOT or parents[i] < 0:
+            lv, w = LEVEL_ROOT, WEIGHT_CORE
+        elif i == ci:
+            lv, w = LEVEL_COM, WEIGHT_CORE
+        elif i in trunk:
+            lv, w = LEVEL_TRUNK, WEIGHT_TRUNK
+        else:
+            lv = max(0, min(LEVEL_BODY, deepest - depth[i]))
+            w = WEIGHT_BY_LEVEL[lv]
+        level.append(lv)
+        weight.append(w)
+    return mirror, level, weight
+
+
+def _under(parents, i, anc) -> bool:
+    while i >= 0:
+        if i == anc:
+            return True
+        i = parents[i]
+    return False
+
+
+def set_rig_fields(data: bytes, mirror: Sequence[int], level: Sequence[int], weight: Sequence[float]) -> bytes:
+    """A CALUMI-written .rig with each bone record's mirror (+24), level (+28) and weight (+40) set. The layout is
+    checked first: 12 x 0xFF before +24 and CALUMI's -1 / 0 / 0.0 in the three fields, else ValueError."""
     data = bytearray(data)
-    n = len(levels)
-    end = RIG_LOD_LEVEL + RIG_RECORD * (n - 1) + 4
+    n = len(level)
+    if not len(mirror) == len(weight) == n:
+        raise ValueError("mirror, level and weight differ in length")
+    end = RIG_RECORDS + RIG_RECORD * n
     if end > len(data):
         raise ValueError(f"rig of {len(data)} bytes too short for {n} bone records")
     for k in range(n):
-        a = RIG_LOD_INDEX + RIG_RECORD * k
-        if data[a - 12:a] != b"\xff" * 12 or struct.unpack_from("<ii", data, a) != (-1, 0):
-            raise ValueError(f"bone {k}: unexpected record layout at {a}")
-    for k, lv in enumerate(levels):
-        a = RIG_LOD_INDEX + RIG_RECORD * k
-        rank = (ranks[k] if ranks is not None else (k if lv > 0 else -1))
-        struct.pack_into("<ii", data, a, int(rank), int(lv))
+        r = RIG_RECORDS + RIG_RECORD * k
+        if data[r + 12:r + RIG_MIRROR] != b"\xff" * 12 or struct.unpack_from("<ii", data, r + RIG_MIRROR) != (-1, 0) \
+                or struct.unpack_from("<f", data, r + RIG_WEIGHT) != (0.0,):
+            raise ValueError(f"bone {k}: unexpected record layout at {r}")
+    for k in range(n):
+        r = RIG_RECORDS + RIG_RECORD * k
+        struct.pack_into("<ii", data, r + RIG_MIRROR, int(mirror[k]), int(level[k]))
+        struct.pack_into("<f", data, r + RIG_WEIGHT, float(weight[k]))
     return bytes(data)
-
-
-def lod_levels(cr: CreatureRig, level: int = 2) -> List[int]:
-    """Per bone (rig order): 0 for Root (vanilla: Root -1 / 0, root motion moves it), `level` for the rest (the
-    critter's main bones use 2, its highest)."""
-    return [0 if n == ROOT else level for n in cr.names]
 
