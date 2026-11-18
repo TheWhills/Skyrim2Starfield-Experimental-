@@ -331,3 +331,7 @@ new creature skeleton on an existing graph.
   fall-over clip (creature.death_clip, 21 frames from the idle's first pose: COM rolls 85 deg about the forward axis
   onto the side named in creature_build.DEATHS and sinks to 0.09 m, the neck droops, eased in), and the ragdoll's
   masses, inertia and joint friction are scaled to a 2 kg chicken (Skyrim's bodies add up to 40 kg).
+* Owner, 22:47: verified in game: the chicken dies now (falls over, ragdoll after). It falls "a bit like an object"
+  and rocks when it lands rather than looking like it has weight; good enough for now. Tuning ideas, not done: a
+  settle at the end of the fall-over (a small overshoot and back), legs and neck going slack during the fall, more
+  joint friction (the scaled 0.5 Nm lets it rock), or a slower start.
