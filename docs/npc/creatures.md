@@ -290,3 +290,8 @@ new creature skeleton on an existing graph.
   so no tag the critter graph asks for is missing from our folder.
   Unresolved: whether the CK's run over S2SCreatures.esm alone keeps the stance sets (the test disables the stance
   index); whether our race needs the CK's GeneratedSubgraphData table (the listing tells).
+* Owner, 19:52: verified in game: S2S_Chicken (1A000803 in the owner's load order) spawns and walks as its own race
+  after the CK run over S2SCreatures.esm (S2S Creature AnimInfo: AnimationFileData + AnimationOffsets only; the CK's
+  GeneratedSubgraphData tables, ours included, were header-only stubs and were left out). The chicken's folder is
+  listed in one set file of the generated index. `help S2S_Chicken 4` lists the race, skin and addon but not the NPC.
+  (The trilobite still showed the chicken because the critter-replacing test mod was still enabled.)
