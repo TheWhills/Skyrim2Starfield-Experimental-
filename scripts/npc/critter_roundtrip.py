@@ -3,7 +3,8 @@ critter's own clips or its own rig through CALUMI, with nothing of the chicken's
 
   --what clips  every critter .af read back with CALUMI against the vanilla rig and written again against it
                 (keys made dense, header root motion copied from the vanilla clip; the .afx stay vanilla)
-  --what rig    the vanilla rig copied through CALUMI (af_writer.rig_prefix with all bones); clips stay vanilla
+  --what rig    the vanilla rig copied through CALUMI (af_writer.rig_prefix with all bones); clips stay vanilla;
+                the vanilla rig is also saved as <out>\critter_vanilla.rig (top level, not loaded) for comparison
 
 Then `player.placeatme 2C180F` (vanilla trilobite) and walk off: if it now freezes a few feet away as the chicken did,
 the part rebuilt by CALUMI is the cause. Disable the mod after.
@@ -109,6 +110,9 @@ def main(argv=None):
         copy = af_writer.rig_prefix(a.calumi, vanilla_rig, len(rig["names"]), os.path.join(work, "skeleton.rig"))
         with open(copy, "rb") as fh:
             put(RIG, fh.read())
+        # the vanilla rig beside it, at the mod's top level (not a game path), to compare byte for byte
+        shutil.copyfile(vanilla_rig, os.path.join(out, "critter_vanilla.rig"))
+        rep["written"].append("critter_vanilla.rig (not loaded by the game)")
     else:
         only = {s.strip().lower() for s in a.only.split(",") if s.strip()}
         clips = sorted(k for k in index if k.startswith(ANIMS) and k.endswith(".af")

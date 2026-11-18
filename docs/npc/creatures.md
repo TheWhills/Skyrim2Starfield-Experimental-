@@ -235,3 +235,8 @@ new creature skeleton on an existing graph.
   (scripts/npc/critter_roundtrip.py): `--what clips` (the critter's own clips read and rewritten by CALUMI against
   the vanilla rig) and `--what rig` (the vanilla rig copied by CALUMI). Whichever one makes the vanilla trilobite
   freeze afar is the part CALUMI writes wrong; if neither does, the cause is in our rig's bones or the shell.
+* Owner, 19:00: clip test keeps animating afar; rig test (the vanilla rig copied by CALUMI, clips vanilla) freezes
+  and slides like the chicken. Verified: the freeze comes from the rig CALUMI writes, not from its clips nor from
+  anything of the chicken's. CALUMI's copy keeps names, parents, rest pose, bone-map keys, mannequin flag and
+  precision (rig_prefix), so the lost data is elsewhere in the rig. Next: a byte diff of the vanilla rig against
+  CALUMI's copy (critter_roundtrip --what rig now saves both), then write the chicken rig with what is missing.

@@ -93,7 +93,7 @@ class MainTests(unittest.TestCase):
     def test_rig_mode(self):
         rep, calls, listing = self.run_main("rig")
         self.assertEqual(calls, [("prefix", 2)])
-        self.assertEqual(listing, ["critter_roundtrip.json", R.RIG])
+        self.assertEqual(listing, ["critter_roundtrip.json", "critter_vanilla.rig", R.RIG])
 
 
 if __name__ == "__main__":
