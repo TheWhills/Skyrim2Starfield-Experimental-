@@ -269,3 +269,7 @@ new creature skeleton on an existing graph.
   down to some level, so a level-0 bone ends the run and every bone after it stays still. Fix 12:
   creature.sorted_by_level reorders the chicken's rig (stable, parents stay first) before anything is written; the
   body's skin, binds and clips follow the rig by name.
+* Owner, 19:25: fix 12 works: the chicken keeps walking with its legs at a distance. Verified in game: a rig written
+  by CALUMI needs (1) each record's mirror / level / weight (creature.rig_fields, set_rig_fields) and (2) its bones
+  sorted by level, highest first (sorted_by_level). Fixes 7-10 (old level patch, LOD0-3 body slots, rig before clips,
+  rig package) stay in but were not the cause. Applies to every creature rig we build with CALUMI.
