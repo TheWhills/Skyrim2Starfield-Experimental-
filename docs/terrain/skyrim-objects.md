@@ -530,8 +530,15 @@ unverified):
   (anim_template / anim_speed / anim_speed_from) set it through Mutagen's Activator.Properties by reflection.
   In game 2026-11-18 (owner, verified, fresh coc from the main menu): the ACTI copy turns, but still about 3 s per
   turn: the PRPS rate (written, 0.252, checked with the probe's --plugin dump) is not applied to this graph / rig.
-  Next: a slower vanilla spin clip if one exists (probe --files idlebehaviors, --all-of SimpleIdleLoop01), else our
-  own rig + looping .af at Skyrim's period (as the dartboard: rig bones named after the model's sgoKeep nodes).
+  Found (owner's dumps, verified): no other rotate clip ships (probe --files: only rotate_y01, the oscillate rig and
+  the animhelper_30/60/90/120 state sets). The Akila fans set the rate on the STAT itself, with the same PRPS entry:
+  AK_FanCeiling01_Blades Speed01-Lazy 0.1, 02-Low 0.25, 03-Mid 0.5, 04-High 0.75; AK_FanWall01_Blade 1.5, _Lazy 0.75,
+  _OFF 0; the yard fans and AK_Fan_Yard_03_Blade_Slow carry none (so _Slow's rate lives elsewhere, perhaps on its
+  references). So the parts now go on a copy of STAT AK_FanWall01_Blade_Lazy (1A6C70) with that entry set
+  (SpinRate in PluginSpike / TerrainOverlays). Rate: rotate_y01 turns in about 3 s at rate 1 (owner, twice; the
+  clip is 11.659 s, so 4 turns), exterior.spin_speed = 2.915 s / Skyrim's loop: 0.175 for the wheel.
+  Unverified in game. If the rate still does nothing: our own rig + looping .af at Skyrim's period (as the dartboard:
+  rig bones named after the model's sgoKeep nodes), with a Creation Kit index run.
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
   their placement handles "spin" (interior Dwemer gears would otherwise vanish).

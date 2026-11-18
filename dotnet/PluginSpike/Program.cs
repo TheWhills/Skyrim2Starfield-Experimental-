@@ -1346,10 +1346,9 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
         var spinBases = new List<FormKey>();
         foreach (var sbj in spinRoot.GetProperty("bases").EnumerateArray())
         {
-            // template: a vanilla STAT (AK_Fan_Yard_03_Blade 12F12F) or ACTI (_AnimGraph_Standard_Idle_Loop_RotateY
-            // 304C45) with the turning graph. "speed" (ACTI only): the graph's play rate, copied as the Properties
-            // entry (PRPS, actor value 001B220E) of "speed_from" (FloatSpinHelperFree01_Slow 34F53D: 0.25; _Slower
-            // 0.15, _Slowest 0.1; none = 1) with our value: the vanilla way the spin helpers run slower.
+            // template: a vanilla turning STAT whose Properties (PRPS) entry, actor value 001B220E, is the graph's play
+            // rate (AK_FanWall01_Blade_Lazy 1A6C70: 0.75; the Akila ceiling fans 0.1 / 0.25 / 0.5 / 0.75, wall fan 1.5,
+            // _OFF 0: owner's dump 2026-11-18). "speed": our rate, written into that entry (SpinRate).
             var stid = Convert.ToUInt32(sbj.GetProperty("template").GetString(), 16);
             var sedid = sbj.GetProperty("edid").GetString()!;
             var sbb = sbj.GetProperty("bounds");
@@ -1358,42 +1357,16 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
                 First = new P3Float(sbb[0][0].GetSingle(), sbb[0][1].GetSingle(), sbb[0][2].GetSingle()),
                 Second = new P3Float(sbb[1][0].GetSingle(), sbb[1][1].GetSingle(), sbb[1][2].GetSingle()),
             };
-            var smodel = new Model { File = sbj.GetProperty("model").GetString()! };
-            var stpl = sfMod!.Statics.FirstOrDefault(st => st.FormKey.ID == stid);
-            if (stpl != null)
-            {
-                var srec = (Static)stpl.Duplicate(Id("SPINSTAT:" + sedid));
-                srec.EditorID = sedid;
-                srec.Model = smodel;
-                srec.ObjectBounds = sbounds;
-                mod.Statics.Add(srec);
-                spinBases.Add(srec.FormKey);
-                continue;
-            }
-            var atpl = sfMod!.Activators.FirstOrDefault(st => st.FormKey.ID == stid)
-                       ?? throw new InvalidDataException($"spin template {stid:X6} is neither a static nor an activator in Starfield.esm");
-            var arec = (Mutagen.Bethesda.Starfield.Activator)atpl.Duplicate(Id("SPINSTAT:" + sedid));
-            arec.EditorID = sedid;
-            arec.Model = smodel;
-            arec.ObjectBounds = sbounds;
+            var stpl = sfMod!.Statics.FirstOrDefault(st => st.FormKey.ID == stid)
+                       ?? throw new InvalidDataException($"spin template {stid:X6} is not a static in Starfield.esm");
+            var srec = (Static)stpl.Duplicate(Id("SPINSTAT:" + sedid));
+            srec.EditorID = sedid;
+            srec.Model = new Model { File = sbj.GetProperty("model").GetString()! };
+            srec.ObjectBounds = sbounds;
             if (sbj.TryGetProperty("speed", out var spdj) && spdj.ValueKind == JsonValueKind.Number)
-            {
-                var sfrom = Convert.ToUInt32(sbj.GetProperty("speed_from").GetString(), 16);
-                var slow = sfMod!.Activators.FirstOrDefault(st => st.FormKey.ID == sfrom)
-                           ?? throw new InvalidDataException($"speed_from {sfrom:X6} is not an activator in Starfield.esm");
-                var props = typeof(Mutagen.Bethesda.Starfield.Activator).GetProperty("Properties")
-                            ?? throw new InvalidDataException("Mutagen's Activator has no Properties");
-                var plist = props.GetValue((Mutagen.Bethesda.Starfield.Activator)slow.Duplicate(arec.FormKey))
-                            as System.Collections.IList;
-                if (plist == null || plist.Count == 0)
-                    throw new InvalidDataException($"speed_from {sfrom:X6} has no Properties (PRPS)");
-                var p0 = plist[0]!;
-                (p0.GetType().GetProperty("Value") ?? throw new InvalidDataException("ObjectProperty has no Value"))
-                    .SetValue(p0, spdj.GetSingle());
-                props.SetValue(arec, plist);
-            }
-            mod.Activators.Add(arec);
-            spinBases.Add(arec.FormKey);
+                SpinRate(srec, spdj.GetSingle());
+            mod.Statics.Add(srec);
+            spinBases.Add(srec.FormKey);
         }
         int spinRefs = 0;
         foreach (var srj in spinRoot.GetProperty("refs").EnumerateArray())
@@ -1670,3 +1643,18 @@ File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).
 File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));
 foreach (var fnote in furnNotes) Console.WriteLine("furniture: " + fnote);
 Console.WriteLine($"wrote {path} ({new FileInfo(path).Length:N0} bytes); {ids.Count} stable FormIDs in {mapPath}; source_map.json");
+
+// The play rate of a turning part (2026-11-18): the first Properties (PRPS) entry of a record copied from a vanilla
+// turning STAT, set by reflection so it does not depend on Mutagen's member types (layout in Starfield.esm, verified
+// on the owner's dump: actor value 001B220E, float rate, 0).
+static void SpinRate(object rec, float rate)
+{
+    var props = rec.GetType().GetProperty("Properties")
+                ?? throw new InvalidDataException($"{rec.GetType().Name} has no Properties in this Mutagen");
+    var plist = props.GetValue(rec) as System.Collections.IList;
+    if (plist == null || plist.Count == 0)
+        throw new InvalidDataException("the spin template has no Properties (PRPS) entry to set the rate in");
+    var p0 = plist[0]!;
+    var vp = p0.GetType().GetProperty("Value") ?? throw new InvalidDataException("ObjectProperty has no Value");
+    vp.SetValue(p0, Convert.ChangeType(rate, vp.PropertyType, System.Globalization.CultureInfo.InvariantCulture));
+}

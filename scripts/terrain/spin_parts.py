@@ -26,13 +26,13 @@ sys.path.insert(0, os.path.join(REPO, "src"))
 
 from fo4sf import checkpoints, exterior  # noqa: E402
 
-TEMPLATE = exterior.SPIN_TEMPLATE          # ACTI _AnimGraph_Standard_Idle_Loop_RotateY, slowed (exterior.spin_speed)
+TEMPLATE = exterior.SPIN_TEMPLATE          # STAT AK_FanWall01_Blade_Lazy, its PRPS rate set (exterior.spin_speed)
 EDID_PREFIX = "S2SSpin_"
 
 
 def plan(objects: dict, manifest: dict, around=None) -> dict:
-    """spin_parts.json: {"template", "bases": [{"edid", "model", "bounds", "source", "template", "speed",
-    "speed_from"}], "refs": [{"src", "of", "base",
+    """spin_parts.json: {"template", "bases": [{"edid", "model", "bounds", "source", "template", "speed"}],
+    "refs": [{"src", "of", "base",
     "pos", "rot", "scale", "disabled"}], "already_staged": n}. around = (x, y, r) metres or None."""
     items = {i["source"].replace("/", "\\").lower(): i for i in manifest["items"] if i.get("spin")}
     staged = sum(1 for b in objects["bases"] if b.get("anim_template"))
@@ -54,8 +54,7 @@ def plan(objects: dict, manifest: dict, around=None) -> dict:
             base_of[key] = len(out["bases"])
             out["bases"].append({"edid": EDID_PREFIX + stem, "model": item["spin"]["model"],
                                  "bounds": item["spin"]["bounds"], "source": item["source"],
-                                 "template": TEMPLATE, "speed_from": exterior.SPIN_SPEED_FROM,
-                                 "speed": exterior.spin_speed(item["spin"]["period_s"])})
+                                 "template": TEMPLATE, "speed": exterior.spin_speed(item["spin"]["period_s"])})
         pos, rot, scale = exterior.spin_pose(r["pos"], r["rot"], float(r.get("scale") or 1.0), item["spin"])
         out["refs"].append({"src": r["src"] + exterior.SPIN_SRC_SUFFIX, "of": r["src"], "base": base_of[key],
                             "pos": pos, "rot": rot, "scale": round(scale, 6), "disabled": bool(r.get("disabled"))})

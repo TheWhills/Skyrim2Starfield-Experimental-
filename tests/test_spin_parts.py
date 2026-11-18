@@ -174,8 +174,8 @@ class PlaceSpinTests(unittest.TestCase):
         self.assertEqual(skipped, [])
 
     def test_spin_speed(self):
-        """2026-11-18 (owner): the copied fan spin turned the wheel about 4 times Skyrim's 16.7 s per turn."""
-        self.assertAlmostEqual(ex.spin_speed(16.667), 0.252, places=3)          # about vanilla _Slow's 0.25
+        """2026-11-18 (owner): the copied fan spin turned the wheel once in about 3 s, Skyrim's in 16.7 s."""
+        self.assertAlmostEqual(ex.spin_speed(16.667), 0.175, places=3)
         self.assertEqual(ex.spin_speed(ex.ROTATE_Y01_TURN_S), 1.0)
         self.assertEqual(ex.spin_speed(1e6), 0.01)
 
@@ -205,7 +205,8 @@ class SpinPartsScriptTests(unittest.TestCase):
         man["items"][0]["source"] = "meshes\\mill.nif"
         p = spin_parts.plan(self.objects(), man)
         self.assertEqual([b["edid"] for b in p["bases"]], ["S2SSpin_Mill"])
-        self.assertEqual((p["bases"][0]["template"], p["bases"][0]["speed_from"]), ("304C45", "34F53D"))
+        self.assertEqual(p["bases"][0]["template"], "1A6C70")
+        self.assertNotIn("speed_from", p["bases"][0])
         self.assertEqual(p["bases"][0]["speed"], ex.spin_speed(16.667))
         self.assertEqual([(r["src"], r["of"], r["disabled"]) for r in p["refs"]], [("A#spin", "A", False), ("C#spin", "C", True)])
         want = ex.spin_pose([10.0, 10.0, 0.0], [0, 0, math.pi / 2], 1.0, man["items"][0]["spin"])
@@ -239,9 +240,10 @@ class SpinPartsScriptTests(unittest.TestCase):
         self.assertIn("$env:SPIN_PARTS", ps)
         to = open(os.path.join(ROOT, "dotnet", "TerrainOverlays", "Program.cs"), encoding="utf-8").read()
         self.assertIn('TryGetProperty("anim_template"', to)
-        for src in (cs, to):                       # the speed: the Properties entry of the vanilla _Slow helper
+        for src in (cs, to):                       # the rate: the template STAT's own Properties (PRPS) entry
             self.assertIn('GetProperty("Properties")', src)
-            self.assertIn("Activators.FirstOrDefault", src)
+            self.assertIn("SpinRate(", src)
+            self.assertNotIn("Activators.FirstOrDefault", src)
 
 
 if __name__ == "__main__":

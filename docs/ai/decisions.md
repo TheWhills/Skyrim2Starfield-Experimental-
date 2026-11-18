@@ -2415,3 +2415,5 @@ verified outdoor furniture) rather than a restage of the exterior, which would c
 2026-11-18 update: the wheel turned about 4 times too fast; the parts move to a copy of the vanilla ACTI
 _AnimGraph_Standard_Idle_Loop_RotateY slowed with a PRPS entry copied from FloatSpinHelperFree01_Slow (vanilla's own
 way to slow the same graph), still no animation files of our own.
+2026-11-18 later: the PRPS rate on the ACTI copy did nothing in game; vanilla Akila fans carry the rate on STATs, so
+the parts go on a copy of STAT AK_FanWall01_Blade_Lazy with its own PRPS entry set to the part's rate.

@@ -145,15 +145,15 @@ def spin_pose(pos, rot, scale, spin: dict):
     return [round(v, 5) for v in spos], [round(v, 6) for v in srot], scale * float(spin.get("scale", 1.0))
 
 
-# The record a turning part is placed on (docs/terrain/skyrim-objects.md "Animated objects"). 2026-11-18, verified:
-# a copy of STAT AK_Fan_Yard_03_Blade (12F12F) turns the mill wheel, about 4 times Skyrim's speed (owner's estimate:
-# rotate_y01 about 4.2 s per turn, the wheel 16.7 s). Vanilla runs the same graph slower with a Properties entry
-# (PRPS, actor value 001B220E) on an ACTI: FloatSpinHelperFree01 none (1), _Slow 0.25, _Slower 0.15, _Slowest 0.1,
-# _Slowest02/03 0.05 (owner's dump). So the part goes on a copy of ACTI _AnimGraph_Standard_Idle_Loop_RotateY
-# (304C45: SimpleIdleLoop01 + genericrig + rotate_y01) with _Slow's PRPS at the part's own rate (spin_speed).
-SPIN_TEMPLATE = "304C45"
-SPIN_SPEED_FROM = "34F53D"
-ROTATE_Y01_TURN_S = 4.2           # supported (owner's estimate in game); the .af did not decode
+# The record a turning part is placed on (docs/terrain/skyrim-objects.md "Animated objects"). 2026-11-18, verified in
+# game: a copy of STAT AK_Fan_Yard_03_Blade (12F12F) turns the mill wheel, a turn in about 3 s. Vanilla sets the rate
+# of the same graph with a Properties entry (PRPS: actor value 001B220E, float rate, 0) on the STAT: Akila ceiling fans
+# 0.1 / 0.25 / 0.5 / 0.75, wall fan 1.5, _Lazy 0.75, _OFF 0 (owner's dump). Written on an ACTI copy it changed nothing
+# (owner, fresh coc). So the part goes on a copy of STAT AK_FanWall01_Blade_Lazy (1A6C70: SimpleIdleLoop01 +
+# genericrig + rotate_y01, PRPS 0.75) with that entry set to the part's own rate (spin_speed).
+SPIN_TEMPLATE = "1A6C70"
+# rotate_y01 at rate 1: about 3 s per turn (owner, twice); its clip is 11.659 s long, so 4 turns per clip (supported)
+ROTATE_Y01_TURN_S = 11.659 / 4
 
 
 def spin_speed(period_s: float) -> float:

@@ -846,7 +846,7 @@ def cmd_stage(a):
         b["collision"] = "none" if "spin" in b else collision_kind(items[b["key"]])
         if "spin" in b:                            # a copy of the vanilla turning static (TerrainOverlays)
             b["anim_template"], b["bounds"] = SPIN_TEMPLATE, b["spin"]["bounds"]
-            b["anim_speed"], b["anim_speed_from"] = exterior.spin_speed(b["spin"]["period_s"]), exterior.SPIN_SPEED_FROM
+            b["anim_speed"] = exterior.spin_speed(b["spin"]["period_s"])
     spins = sum(1 for p in placed if "spin_of" in p)
     if spins:
         print(f"turning parts: {spins} references of {sum(1 for b in bases if 'spin' in b)} models "
@@ -873,7 +873,7 @@ def cmd_stage(a):
         print(f"Data\\{tree}: {n:,} files")
     objects = {"world": ov["world"], "edid_prefix": EDID_PREFIX,
                "bases": [{k: b[k] for k in ("edid", "model", "source", "collision", "anim_template", "bounds",
-                                            "anim_speed", "anim_speed_from")
+                                            "anim_speed")
                           if k in b} for b in bases],
                "refs": [{k: p[k] for k in ("src", "base", "cell", "pos", "rot", "scale", "disabled")} for p in placed]}
     if a.interiors:

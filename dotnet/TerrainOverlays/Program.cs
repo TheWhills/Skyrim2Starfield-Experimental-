@@ -365,56 +365,26 @@ if (Has(prm, "objects"))
         }
         else if (b.TryGetProperty("anim_template", out var atj) && atj.ValueKind == JsonValueKind.String)
         {
-            // turning part (make_skyrim_objects.py stage: the mill water wheel): a copy of a vanilla turning record
-            // (STAT AK_Fan_Yard_03_Blade 12F12F, or ACTI _AnimGraph_Standard_Idle_Loop_RotateY 304C45: graph
-            // SimpleIdleLoop01 + generic rig + rotate_y01) with our model and bounds; "anim_speed" (ACTI only): the
-            // play rate, as the Properties entry of "anim_speed_from" (FloatSpinHelperFree01_Slow 34F53D) with our
-            // value (dotnet/PluginSpike SPIN_PARTS does the same). docs/terrain/skyrim-objects.md "Animated objects".
+            // turning part (make_skyrim_objects.py stage: the mill water wheel): a copy of a vanilla turning STAT whose
+            // Properties (PRPS) entry is the graph's play rate (AK_FanWall01_Blade_Lazy 1A6C70: graph SimpleIdleLoop01
+            // + generic rig + rotate_y01) with our model, bounds and "anim_speed" as that rate (SpinRate; PluginSpike
+            // SPIN_PARTS does the same). docs/terrain/skyrim-objects.md "Animated objects".
             var tid = Convert.ToUInt32(atj.GetString(), 16);
-            ObjectBounds? sbounds = null;
+            var stpl = sf.Statics.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid)
+                       ?? throw new InvalidDataException($"anim_template {tid:X6} is not a static in Starfield.esm");
+            var spin = (Static)stpl.Duplicate(NewKey());
+            spin.EditorID = edid;
+            spin.Model = new Model { File = model };
             if (b.TryGetProperty("bounds", out var spb) && spb.ValueKind == JsonValueKind.Array)
-                sbounds = new ObjectBounds
+                spin.ObjectBounds = new ObjectBounds
                 {
                     First = new P3Float(spb[0][0].GetSingle(), spb[0][1].GetSingle(), spb[0][2].GetSingle()),
                     Second = new P3Float(spb[1][0].GetSingle(), spb[1][1].GetSingle(), spb[1][2].GetSingle()),
                 };
-            var stpl = sf.Statics.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid);
-            if (stpl != null)
-            {
-                var spin = (Static)stpl.Duplicate(NewKey());
-                spin.EditorID = edid;
-                spin.Model = new Model { File = model };
-                if (sbounds != null) spin.ObjectBounds = sbounds;
-                mod.Statics.Add(spin);
-                baseKeys.Add(spin.FormKey);
-            }
-            else
-            {
-                var atpl = sf.Activators.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid)
-                           ?? throw new InvalidDataException($"anim_template {tid:X6} is neither a static nor an activator in Starfield.esm");
-                var aspin = (Mutagen.Bethesda.Starfield.Activator)atpl.Duplicate(NewKey());
-                aspin.EditorID = edid;
-                aspin.Model = new Model { File = model };
-                if (sbounds != null) aspin.ObjectBounds = sbounds;
-                if (b.TryGetProperty("anim_speed", out var aspj) && aspj.ValueKind == JsonValueKind.Number)
-                {
-                    var sfrom = Convert.ToUInt32(b.GetProperty("anim_speed_from").GetString(), 16);
-                    var slow = sf.Activators.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == sfrom)
-                               ?? throw new InvalidDataException($"anim_speed_from {sfrom:X6} is not an activator in Starfield.esm");
-                    var props = typeof(Mutagen.Bethesda.Starfield.Activator).GetProperty("Properties")
-                                ?? throw new InvalidDataException("Mutagen's Activator has no Properties");
-                    var plist = props.GetValue((Mutagen.Bethesda.Starfield.Activator)slow.Duplicate(aspin.FormKey))
-                                as System.Collections.IList;
-                    if (plist == null || plist.Count == 0)
-                        throw new InvalidDataException($"anim_speed_from {sfrom:X6} has no Properties (PRPS)");
-                    var p0 = plist[0]!;
-                    (p0.GetType().GetProperty("Value") ?? throw new InvalidDataException("ObjectProperty has no Value"))
-                        .SetValue(p0, aspj.GetSingle());
-                    props.SetValue(aspin, plist);
-                }
-                mod.Activators.Add(aspin);
-                baseKeys.Add(aspin.FormKey);
-            }
+            if (b.TryGetProperty("anim_speed", out var aspj) && aspj.ValueKind == JsonValueKind.Number)
+                SpinRate(spin, aspj.GetSingle());
+            mod.Statics.Add(spin);
+            baseKeys.Add(spin.FormKey);
             nStat++;
         }
         else
@@ -564,4 +534,19 @@ if (Has(prm, "mars"))
     mars.BeginWrite.ToPath(marsPath).WithLoadOrder(sfEsm, modKey)
         .WithKnownMasters(new KeyedMasterStyle(sfEsm, MasterStyle.Full), new KeyedMasterStyle(modKey, MasterStyle.Full)).Write();
     Console.WriteLine($"wrote {marsPath} ({new FileInfo(marsPath).Length:N0} bytes); {planetEdid} master worldspaces now {planet.MasterWorldspaces!.Count}");
+}
+
+// The play rate of a turning part (2026-11-18): the first Properties (PRPS) entry of a record copied from a vanilla
+// turning STAT, set by reflection so it does not depend on Mutagen's member types (layout in Starfield.esm, verified
+// on the owner's dump: actor value 001B220E, float rate, 0).
+static void SpinRate(object rec, float rate)
+{
+    var props = rec.GetType().GetProperty("Properties")
+                ?? throw new InvalidDataException($"{rec.GetType().Name} has no Properties in this Mutagen");
+    var plist = props.GetValue(rec) as System.Collections.IList;
+    if (plist == null || plist.Count == 0)
+        throw new InvalidDataException("the spin template has no Properties (PRPS) entry to set the rate in");
+    var p0 = plist[0]!;
+    var vp = p0.GetType().GetProperty("Value") ?? throw new InvalidDataException("ObjectProperty has no Value");
+    vp.SetValue(p0, Convert.ChangeType(rate, vp.PropertyType, System.Globalization.CultureInfo.InvariantCulture));
 }
