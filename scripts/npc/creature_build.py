@@ -71,6 +71,30 @@ def plan_mirrors(plan, sf_names, mirrored=MIRRORED, anims=CRITTER["anims"]):
     return out, missing
 
 
+# own race (--own-race): the critter's paths moved to ours (creature_race.redirect), same relative paths
+OWN_PREFIX = ("meshes/actors/critter/", "meshes/actors/s2s/chicken/")
+PLUGIN_PREFIX = ("Actors\\Critter", "Actors\\S2S\\Chicken")
+PLUGIN = "S2SCreatures.esm"
+
+
+def own_paths(paths=CRITTER, prefix=OWN_PREFIX):
+    """CRITTER's file paths under our folder (the npc entry unchanged)."""
+    from fo4sf import creature_race
+    return {k: (creature_race.redirect(v, *prefix).replace("\\", "/") if k != "npc" else v) for k, v in paths.items()}
+
+
+def plan_fill(plan, sf_names, anims=CRITTER["anims"], idle="idle"):
+    """[(critter .afx key, Skyrim .hkx path of the idle)] for every critter descriptor the plan leaves out: with a
+    race of its own the chicken's folder must hold every clip the critter graph asks for (a missing one would leave it
+    in the reference pose), so those get the idle until they have a clip of their own."""
+    have = {k for k, _s in plan}
+    src = next((s for k, s in plan if k == anims + idle + ".afx"), None)
+    if src is None:
+        return []
+    return [(k, src) for k in sorted(sf_names) if k.startswith(anims) and k.endswith(".afx") and k not in have
+            and "/" not in k[len(anims):]]
+
+
 def find_clip(names, folder: str, clip: str):
     """The Skyrim archive path of <clip>.hkx anywhere under folder (names: bsa-normalised, lower case)."""
     want = "\\" + clip.lower() + ".hkx"
@@ -135,6 +159,9 @@ def main(argv=None):
                     help="add back faces: auto = when Skyrim's shader sets SLSF2_Double_Sided")
     ap.add_argument("--no-rig-fields", action="store_true",
                     help="leave CALUMI's empty per-bone mirror / level / weight fields (the old rig, freezes afar)")
+    ap.add_argument("--own-race", action="store_true",
+                    help="the chicken as a race of its own (S2SCreatures.esm, files under actors\\s2s\\chicken) instead "
+                         "of in the critter's place; needs the Creation Kit's GenerateAnimInfo run after")
     ap.add_argument("--no-rig-package", action="store_true",
                     help="build the rig without the vanilla critter rig's package settings (the old rig)")
     ap.add_argument("--body-lods", type=int, default=4, choices=(1, 2, 3, 4),
@@ -150,7 +177,8 @@ def main(argv=None):
     out = os.path.abspath(a.out)
     work = os.path.abspath(a.work or os.path.join(out, "_work"))
     os.makedirs(out, exist_ok=True)
-    rep = {"written": [], "notes": []}
+    rep = {"written": [], "notes": [], "own_race": bool(a.own_race)}
+    dest = own_paths() if a.own_race else dict(CRITTER)   # where our files go (CRITTER: what is read from the game)
 
     def put(rel, data):
         p = os.path.join(out, *rel.replace("\\", "/").split("/"))
@@ -182,7 +210,7 @@ def main(argv=None):
                   "com_level_q": [round(float(v), 4) for v in (cr.level if cr.level is not None else (0, 0, 0, 1))]}
 
     # 2. the shell
-    put(CRITTER["skeleton"], creature.shell_skeleton(sf_read(CRITTER["skeleton"]), "Critter_mrRigRoot", cr.t[ci],
+    put(dest["skeleton"], creature.shell_skeleton(sf_read(CRITTER["skeleton"]), "Critter_mrRigRoot", cr.t[ci],
                                                      cr.q[ci]))
 
     # 3. the body
@@ -231,7 +259,7 @@ def main(argv=None):
     if a.double_sided == "on" or (a.double_sided == "auto" and two_sided):
         shape, tangents = creature.with_back_faces(shape, tangents)
         rep["skyrim_shader"]["back_faces_added"] = True
-    files = creature.skinned_files(shape, material, CRITTER["model"][len("meshes/"):-len(".nif")], CHICKEN["com"],
+    files = creature.skinned_files(shape, material, dest["model"][len("meshes/"):-len(".nif")], CHICKEN["com"],
                                    cr, tangents, lods=a.body_lods)
     rep["body_lods"] = a.body_lods
     for rel, data in files.items():
@@ -244,6 +272,10 @@ def main(argv=None):
     mirrors, m_missing = plan_mirrors(plan, set(index))
     mirrored_keys = {k for k, _s in mirrors}
     plan += mirrors
+    if a.own_race:
+        fill = plan_fill(plan, set(index))
+        plan += fill
+        rep["clips_idle_filled"] = [posixpath.basename(k) for k, _s in fill]
     missing += m_missing
     rep["clips_missing"] = missing
     mirror_of = creature.rig_fields(cr)[0]
@@ -295,7 +327,7 @@ def main(argv=None):
                     fh.write(rig_bytes)
             except ValueError as e:
                 rep["notes"].append(f"rig fields not set: {e}")
-        put(CRITTER["rig"], rig_bytes)
+        put(dest["rig"], rig_bytes)
     rep["clips"] = []
     for key, src_clip in plan:
         lt, lq, rt, rq, moving, vafx, stem = prepared(key, src_clip)
@@ -306,16 +338,32 @@ def main(argv=None):
             rootmotion.patch_header(os.path.join(anim_out, stem + ".af"), rt[-1], rq[-1])
         for ext in (".af", ".afx"):
             with open(os.path.join(anim_out, stem + ext), "rb") as fh:
-                put(CRITTER["anims"] + stem + ext, fh.read())
+                put(dest["anims"] + stem + ext, fh.read())
         rep["clips"].append({"critter": key, "skyrim": src_clip, "mirrored": key in mirrored_keys,
                              "frames": r["frames"], "keys": r["keys"],
                              "root_motion_m_deg": None if not moving else
                              [round(float(v), 3) for v in rt[-1]] + [round(rootmotion.yaw_degrees(rq[-1]), 1)]})
+    if a.own_race:
+        from fo4sf import creature_race, sfplugin
+        esm = os.path.join(a.starfield_data, "Starfield.esm")
+        by_type = {}
+        for r in sfplugin.records(esm, [b"RACE", b"ARMO", b"ARMA", b"NPC_"]):
+            by_type.setdefault(r[0], []).append(r)
+        chain = creature_race.find_chain(by_type, "CritterRace", int(CRITTER["npc"], 16))
+        data, prep = creature_race.build_plugin(*chain, sfplugin.header_info(esm), *PLUGIN_PREFIX, "Chicken")
+        with open(os.path.join(out, PLUGIN), "wb") as fh:
+            fh.write(data)
+        rep["written"].append(PLUGIN)
+        rep["plugin"] = prep
     shutil.rmtree(work, ignore_errors=True)
     with open(os.path.join(out, "creature_build.json"), "w") as fh:
         json.dump(rep, fh, indent=1)
     print(f"wrote {len(rep['written'])} files to {out}; clips {len(rep['clips'])}, missing {missing}")
-    print(f"in game: enable the mod, then  player.placeatme {CRITTER['npc']}")
+    if a.own_race:
+        print(f"next: the Creation Kit's GenerateAnimInfo run over {PLUGIN} (docs/OWNER-SETUP.md); in game:  "
+              "help S2S_Chicken 4  (its FormID), then  player.placeatme <that id>")
+    else:
+        print(f"in game: enable the mod, then  player.placeatme {CRITTER['npc']}")
     return 0
 
 

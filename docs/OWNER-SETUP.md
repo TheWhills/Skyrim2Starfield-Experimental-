@@ -197,6 +197,25 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    vanilla trilobite freeze and slide a few feet away; send critter_roundtrip.json if it lists errors.
    [Later, 2026-11-17 19:11: done; the rig test froze, fixed by the per-bone rig fields (creatures.md fix 11).
    Delete the "S2S Critter Clip Test", "S2S Critter Rig Test" and "S2S Rig Fix A/B/C" mods.]
+7j. B + C: the chicken as a race of its own (docs/npc/creatures.md, "own race"). Starfield closed; disable
+   "S2S Chicken Test" (the critter-replacing build) and, for this test, "S2S AnimInfo" (the stance index; one loose
+   index at a time):
+   ```powershell
+   python -I scripts\npc\creature_build.py --skyrim-data "$sky" --starfield-data "$sf\Data" --calumi $calumi --out "$mods\S2S Chicken Race" --own-race
+   ```
+   Enable "S2S Chicken Race" and S2SCreatures.esm in MO2. Then the Creation Kit index for the new folder: in MO2's
+   executables, copy "CreationKit (1)" as "CreationKit (creatures)" with the argument
+   `-GenerateAnimInfo:S2SCreatures.esm` instead of S2SStances.esm and the output folder
+   `C:\Modding\work\s2s\animinfo_creatures`; run it, wait for it to close, then:
+   ```powershell
+   $src="C:\Modding\work\s2s\animinfo_creatures\Meshes\AnimTextData"; $dst="$mods\S2S Creature AnimInfo\Meshes\AnimTextData"
+   robocopy "$src\AnimationFileData" "$dst\AnimationFileData" /MIR
+   robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubgraphInfoAndOffsetData.txt
+   Get-ChildItem "$src\GeneratedSubgraphData" | Select-Object Name, Length
+   ```
+   Enable "S2S Creature AnimInfo". In game: `help S2S_Chicken 4` gives the NPC's FormID; `player.placeatme <id>`.
+   Say whether it animates (or stands in the reference pose), and send creature_build.json and the
+   GeneratedSubgraphData listing. A vanilla trilobite (`player.placeatme 2C180F`) should look like a trilobite again.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

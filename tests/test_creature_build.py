@@ -14,6 +14,17 @@ from fo4sf import creature, gearfit, nif, retarget, sfnif  # noqa: E402
 
 
 class BuildTests(unittest.TestCase):
+    def test_own_paths_and_fill(self):
+        mine = B.own_paths()
+        self.assertEqual(mine["rig"], "meshes/actors/s2s/chicken/characterassets/skeleton.rig")
+        self.assertEqual(mine["anims"], "meshes/actors/s2s/chicken/animations/")
+        self.assertEqual(mine["npc"], B.CRITTER["npc"])
+        A = B.CRITTER["anims"]
+        plan = [(A + "idle.afx", "idle.hkx"), (A + "walkforward.afx", "walk.hkx")]
+        sf = {A + "idle.afx", A + "walkforward.afx", A + "warn.afx", A + "furniture/sit.afx", A + "warn.af"}
+        self.assertEqual(B.plan_fill(plan, sf), [(A + "warn.afx", "idle.hkx")])
+        self.assertEqual(B.plan_fill([(A + "walkforward.afx", "w")], sf), [])          # no idle: nothing to fill with
+
     def test_plan_mirrors(self):
         A = B.CRITTER["anims"]
         plan = [(A + "turninplace_left90.afx", "l90.hkx"), (A + "idle.afx", "idle.hkx"),
@@ -114,7 +125,9 @@ class MainTests(unittest.TestCase):
         sf_files = {B.CRITTER["skeleton"]: nif.serialize(f), B.CRITTER["model"]: nif.serialize(trilo),
                     B.CRITTER["rig"]: b"vanilla rig",
                     B.CRITTER["anims"] + "idle.afx": b"<root><is_state>1</is_state><tag>Idle</tag>"
-                                                     b"<filename>Idle.af</filename></root>"}
+                                                     b"<filename>Idle.af</filename></root>",
+                    B.CRITTER["anims"] + "death_right01.afx": b"<root><tag>Death</tag>"
+                                                              b"<filename>Death_Right01.af</filename></root>"}
 
         class Ba2:
             names = list(sf_files)
@@ -161,8 +174,28 @@ class MainTests(unittest.TestCase):
                         B.CRITTER["anims"] + "Idle.afx"):
                 self.assertTrue(os.path.isfile(os.path.join(out, *rel.split("/"))), rel)
             self.assertFalse(os.path.isdir(os.path.join(out, "_work")))
-        # the rig is made first (no rig_path), then every clip is written against it
-        self.assertEqual([c[2] is None for c in calls], [True, False])
+            # --own-race: our folder, every critter descriptor filled, S2SCreatures.esm
+            sys.path.insert(0, os.path.join(ROOT, "tests"))
+            import test_creature_race as TR
+            from fo4sf import sfplugin
+            own = os.path.join(d, "S2S Chicken Race")
+            with mock.patch.object(sfplugin, "records", lambda _p, _t: [TR.RACE, TR.SKIN, TR.ADDON, TR.NPC]), \
+                    mock.patch.object(sfplugin, "header_info", lambda _p: {"hedr_version": 0.96, "form_version": 555}):
+                self.assertEqual(B.main(["--skyrim-data", d, "--starfield-data", d, "--calumi", "x.dll", "--out", own,
+                                         "--own-race"]), 0)
+            with open(os.path.join(own, "creature_build.json")) as fh:
+                orep = json.load(fh)
+            mine = B.own_paths()
+            for rel in (mine["skeleton"], mine["rig"], mine["model"], mine["anims"] + "Idle.af",
+                        mine["anims"] + "Death_Right01.af"):
+                self.assertTrue(rel.startswith("meshes/actors/s2s/chicken/"), rel)
+                self.assertTrue(os.path.isfile(os.path.join(own, *rel.split("/"))), rel)
+            self.assertFalse(os.path.isdir(os.path.join(own, "meshes", "actors", "critter")))
+            self.assertEqual(orep["clips_idle_filled"], ["death_right01.afx"])
+            self.assertTrue(os.path.isfile(os.path.join(own, B.PLUGIN)))
+            self.assertIn("S2S_ChickenRace", orep["plugin"]["form_ids"])
+        # the rig is made first (no rig_path), then every clip is written against it (first run: calls 0-1)
+        self.assertEqual([c[2] is None for c in calls[:2]], [True, False])
         self.assertTrue(calls[1][2].endswith("skeleton.rig"))
         self.assertEqual(calls[1][:2], ("Idle", ["Root", "COM", "HEAD"]))
         self.assertTrue(calls[0][4].endswith("critter_vanilla.rig"))          # the rig takes the critter's package

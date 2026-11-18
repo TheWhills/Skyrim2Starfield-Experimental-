@@ -278,3 +278,15 @@ new creature skeleton on an existing graph.
   actor's YZ plane (creature.mirror_clip: each bone takes its rig_fields partner's model-space pose reflected, with
   the partners' rest-frame difference kept; Root's turn and sideways drift flip), as Skyrim's "[mirror]" generators
   play them. creature_build.json marks them "mirrored". Offline checks only.
+* Owner, 19:28: next, the chicken as its own race and its death ragdoll. Built (offline checks only):
+  `creature_build --own-race` writes the same files under actors\s2s\chicken (each critter path moved, same relative
+  path: creature_race.redirect) plus S2SCreatures.esm: copies of CritterRace, Skin_Critter_Trilobite, its addon
+  AA_Critter_Trilobite and Traits_Critter_Trilobite (S2S_ChickenRace / _Skin / _SkinAA / S2S_Chicken, objects
+  0x800-0x803) with the race's ANAM / NAM5 / DNAM / SAPT and the addon's model paths redirected, graphs (NAM6, SGNM)
+  kept, every 4-byte field naming one of the four vanilla FormIDs pointed at its copy, FULL as text, DESC and SRAC
+  dropped. The race keeps its own subgraph entries, so it needs its own animation data: the Creation Kit's
+  GenerateAnimInfo run over S2SCreatures.esm (OWNER-SETUP 7j); without it a copied race stood in the reference pose
+  (race_heads, 2026-11-09). Every critter descriptor the chicken has no clip for gets its idle (clips_idle_filled),
+  so no tag the critter graph asks for is missing from our folder.
+  Unresolved: whether the CK's run over S2SCreatures.esm alone keeps the stance sets (the test disables the stance
+  index); whether our race needs the CK's GeneratedSubgraphData table (the listing tells).
