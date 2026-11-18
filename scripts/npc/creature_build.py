@@ -366,8 +366,9 @@ def main(argv=None):
         json.dump(rep, fh, indent=1)
     print(f"wrote {len(rep['written'])} files to {out}; clips {len(rep['clips'])}, missing {missing}")
     if a.own_race:
-        print(f"next: the Creation Kit's GenerateAnimInfo run over {PLUGIN} (docs/OWNER-SETUP.md); in game:  "
-              "help S2S_Chicken 4  (its FormID), then  player.placeatme <that id>")
+        print(f"the Creation Kit's GenerateAnimInfo run over {PLUGIN} (docs/OWNER-SETUP.md 7j) is needed only the "
+              "first time and when clips or descriptors are added or removed (not for body / rig / clip-content "
+              "changes); in game:  help Chicken 4  (its FormID), then  player.placeatme <that id>")
     else:
         print(f"in game: enable the mod, then  player.placeatme {CRITTER['npc']}")
     return 0
