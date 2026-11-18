@@ -141,7 +141,8 @@ class PlaceSpinTests(unittest.TestCase):
         frame = sc._m3(rz(math.pi / 2), sc._t3(sc.spin_frame(1, 1)))
         return {"items": [{"editor_id": "FO4Port_mill", "model": "skyrim\\mill.nif", "source": "meshes\\mill.nif",
                            "spin": {"model": "skyrim\\mill_spin.nif", "pivot_m": [6.56, 0.0, -2.29], "frame": list(frame),
-                                    "scale": 1.0, "bounds": [[-1, -1, -1], [1, 1, 1]], "template": "12F12F"}}]}
+                                    "scale": 1.0, "bounds": [[-1, -1, -1], [1, 1, 1]], "template": "12F12F",
+                                    "period_s": 16.667}}]}
 
     def ref(self, fk, pos, rot):
         return {"formkey": fk, "type": "Static", "base_editor_id": "B", "model": "mill.nif", "pos": list(pos),
@@ -172,6 +173,12 @@ class PlaceSpinTests(unittest.TestCase):
             self.assertAlmostEqual(x, y, places=6)
         self.assertEqual(skipped, [])
 
+    def test_spin_speed(self):
+        """2026-11-18 (owner): the copied fan spin turned the wheel about 4 times Skyrim's 16.7 s per turn."""
+        self.assertAlmostEqual(ex.spin_speed(16.667), 0.252, places=3)          # about vanilla _Slow's 0.25
+        self.assertEqual(ex.spin_speed(ex.ROTATE_Y01_TURN_S), 1.0)
+        self.assertEqual(ex.spin_speed(1e6), 0.01)
+
     def test_off_by_default(self):
         bases, placed, _ = ex.place({"refs": [self.ref("A", (0, 0, 0), (0, 0, 0))]}, self.manifest(), -14, 14, "SKY_")
         self.assertEqual((len(bases), len(placed)), (1, 1))
@@ -198,7 +205,8 @@ class SpinPartsScriptTests(unittest.TestCase):
         man["items"][0]["source"] = "meshes\\mill.nif"
         p = spin_parts.plan(self.objects(), man)
         self.assertEqual([b["edid"] for b in p["bases"]], ["S2SSpin_Mill"])
-        self.assertEqual(p["bases"][0]["template"], "12F12F")
+        self.assertEqual((p["bases"][0]["template"], p["bases"][0]["speed_from"]), ("304C45", "34F53D"))
+        self.assertEqual(p["bases"][0]["speed"], ex.spin_speed(16.667))
         self.assertEqual([(r["src"], r["of"], r["disabled"]) for r in p["refs"]], [("A#spin", "A", False), ("C#spin", "C", True)])
         want = ex.spin_pose([10.0, 10.0, 0.0], [0, 0, math.pi / 2], 1.0, man["items"][0]["spin"])
         self.assertEqual((p["refs"][0]["pos"], p["refs"][0]["rot"]), (want[0], want[1]))
@@ -231,6 +239,9 @@ class SpinPartsScriptTests(unittest.TestCase):
         self.assertIn("$env:SPIN_PARTS", ps)
         to = open(os.path.join(ROOT, "dotnet", "TerrainOverlays", "Program.cs"), encoding="utf-8").read()
         self.assertIn('TryGetProperty("anim_template"', to)
+        for src in (cs, to):                       # the speed: the Properties entry of the vanilla _Slow helper
+            self.assertIn('GetProperty("Properties")', src)
+            self.assertIn("Activators.FirstOrDefault", src)
 
 
 if __name__ == "__main__":

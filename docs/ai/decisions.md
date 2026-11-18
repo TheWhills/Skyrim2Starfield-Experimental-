@@ -2412,4 +2412,6 @@ so the first test only asks whether a copied graph component turns our model. Al
 Consequence: speed is rotate_y01's (about 1.4 times Skyrim's); direction is set by VANILLA_SPIN_SIGN, unverified.
 For the installed exterior the parts go into FO4Port.esm (spin_parts.py + PluginSpike, persistent references as the
 verified outdoor furniture) rather than a restage of the exterior, which would change its FormIDs and LOD.
-
+2026-11-18 update: the wheel turned about 4 times too fast; the parts move to a copy of the vanilla ACTI
+_AnimGraph_Standard_Idle_Loop_RotateY slowed with a PRPS entry copied from FloatSpinHelperFree01_Slow (vanilla's own
+way to slow the same graph), still no animation files of our own.

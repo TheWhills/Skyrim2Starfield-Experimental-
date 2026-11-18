@@ -520,7 +520,15 @@ unverified):
   named after the clip folder (rotate_y01), not the bone (supported: the one vanilla example read). Our part model
   had its shapes straight under the root, so nothing turned. Now the part model has the same "Rotate_Y01" (sgoKeep)
   node (skyrimconvert.SPIN_NODE, sfnif.build_static_nif animated_node), identity, since the part is already written
-  with its axis on +Y. Unverified in game.
+  with its axis on +Y. Verified in game 2026-11-18 (owner): the wheel turns, about 4 times too fast.
+- Speed (2026-11-18): vanilla runs one graph at different rates with a Properties entry (PRPS: actor value 001B220E,
+  float rate, 0) on ACTI records: FloatSpinHelperFree01 (none = 1), _Slow 0.25, _Slower 0.15, _Slowest 0.1,
+  _Slowest02/03 0.05 (verified, owner's dump; same graph / rig / animations folder otherwise). The parts now go on a copy
+  of ACTI _AnimGraph_Standard_Idle_Loop_RotateY (304C45: SimpleIdleLoop01 + genericrig + rotate_y01) carrying _Slow's
+  PRPS with rate exterior.spin_speed(period) = 4.2 s / Skyrim's loop (rotate_y01's 4.2 s per turn is the owner's
+  estimate; its .af did not decode): 0.252 for the wheel. PluginSpike (SPIN_PARTS) and TerrainOverlays
+  (anim_template / anim_speed / anim_speed_from) set it through Mutagen's Activator.Properties by reflection.
+  Unverified in game: that a STAT-less ACTI copy turns the same and honours the rate.
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
   their placement handles "spin" (interior Dwemer gears would otherwise vanish).

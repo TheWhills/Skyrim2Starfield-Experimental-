@@ -314,7 +314,6 @@ if (Has(prm, "objects"))
             Console.WriteLine($"{world} overlay component: SNAM = anchor {anchorRef.FormKey} (raw {BitConverter.ToUInt32(snam):X8}), PNAM = [{string.Join(", ", pnam)}]");
         }
     }
-    var animTemplates = new Dictionary<uint, IStaticGetter>();
     foreach (var b in o.GetProperty("bases").EnumerateArray())
     {
         var edid = b.GetProperty("edid").GetString()!;
@@ -366,27 +365,56 @@ if (Has(prm, "objects"))
         }
         else if (b.TryGetProperty("anim_template", out var atj) && atj.ValueKind == JsonValueKind.String)
         {
-            // turning part (make_skyrim_objects.py stage: the mill water wheel): a copy of a vanilla turning static
-            // (AK_Fan_Yard_03_Blade 12F12F: its BGSAnimationGraph_Component, SimpleIdleLoop01 + generic rig +
-            // rotate_y01, and keyword) with our model and bounds. docs/terrain/skyrim-objects.md "Animated objects".
+            // turning part (make_skyrim_objects.py stage: the mill water wheel): a copy of a vanilla turning record
+            // (STAT AK_Fan_Yard_03_Blade 12F12F, or ACTI _AnimGraph_Standard_Idle_Loop_RotateY 304C45: graph
+            // SimpleIdleLoop01 + generic rig + rotate_y01) with our model and bounds; "anim_speed" (ACTI only): the
+            // play rate, as the Properties entry of "anim_speed_from" (FloatSpinHelperFree01_Slow 34F53D) with our
+            // value (dotnet/PluginSpike SPIN_PARTS does the same). docs/terrain/skyrim-objects.md "Animated objects".
             var tid = Convert.ToUInt32(atj.GetString(), 16);
-            if (!animTemplates.TryGetValue(tid, out var tpl))
-            {
-                tpl = sf.Statics.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid)
-                      ?? throw new InvalidDataException($"anim_template {tid:X6} is not a static in Starfield.esm");
-                animTemplates[tid] = tpl;
-            }
-            var spin = (Static)tpl.Duplicate(NewKey());
-            spin.EditorID = edid;
-            spin.Model = new Model { File = model };
+            ObjectBounds? sbounds = null;
             if (b.TryGetProperty("bounds", out var spb) && spb.ValueKind == JsonValueKind.Array)
-                spin.ObjectBounds = new ObjectBounds
+                sbounds = new ObjectBounds
                 {
                     First = new P3Float(spb[0][0].GetSingle(), spb[0][1].GetSingle(), spb[0][2].GetSingle()),
                     Second = new P3Float(spb[1][0].GetSingle(), spb[1][1].GetSingle(), spb[1][2].GetSingle()),
                 };
-            mod.Statics.Add(spin);
-            baseKeys.Add(spin.FormKey);
+            var stpl = sf.Statics.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid);
+            if (stpl != null)
+            {
+                var spin = (Static)stpl.Duplicate(NewKey());
+                spin.EditorID = edid;
+                spin.Model = new Model { File = model };
+                if (sbounds != null) spin.ObjectBounds = sbounds;
+                mod.Statics.Add(spin);
+                baseKeys.Add(spin.FormKey);
+            }
+            else
+            {
+                var atpl = sf.Activators.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == tid)
+                           ?? throw new InvalidDataException($"anim_template {tid:X6} is neither a static nor an activator in Starfield.esm");
+                var aspin = (Mutagen.Bethesda.Starfield.Activator)atpl.Duplicate(NewKey());
+                aspin.EditorID = edid;
+                aspin.Model = new Model { File = model };
+                if (sbounds != null) aspin.ObjectBounds = sbounds;
+                if (b.TryGetProperty("anim_speed", out var aspj) && aspj.ValueKind == JsonValueKind.Number)
+                {
+                    var sfrom = Convert.ToUInt32(b.GetProperty("anim_speed_from").GetString(), 16);
+                    var slow = sf.Activators.FirstOrDefault(st => st.FormKey.ModKey == sfEsm && st.FormKey.ID == sfrom)
+                               ?? throw new InvalidDataException($"anim_speed_from {sfrom:X6} is not an activator in Starfield.esm");
+                    var props = typeof(Mutagen.Bethesda.Starfield.Activator).GetProperty("Properties")
+                                ?? throw new InvalidDataException("Mutagen's Activator has no Properties");
+                    var plist = props.GetValue((Mutagen.Bethesda.Starfield.Activator)slow.Duplicate(aspin.FormKey))
+                                as System.Collections.IList;
+                    if (plist == null || plist.Count == 0)
+                        throw new InvalidDataException($"anim_speed_from {sfrom:X6} has no Properties (PRPS)");
+                    var p0 = plist[0]!;
+                    (p0.GetType().GetProperty("Value") ?? throw new InvalidDataException("ObjectProperty has no Value"))
+                        .SetValue(p0, aspj.GetSingle());
+                    props.SetValue(aspin, plist);
+                }
+                mod.Activators.Add(aspin);
+                baseKeys.Add(aspin.FormKey);
+            }
             nStat++;
         }
         else

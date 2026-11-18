@@ -47,9 +47,9 @@ from fo4sf import terrain_grid as tg  # noqa: E402
 
 EDID_PREFIX = "SKY_"
 ASSET_PREFIX = "skyrim"
-# Turning parts (the mill water wheel, docs/terrain/skyrim-objects.md "Animated objects"): placed on a copy of this
-# vanilla static, AK_Fan_Yard_03_Blade (graph SimpleIdleLoop01, generic one-bone rig, rotate_y01 animations).
-SPIN_TEMPLATE = "12F12F"
+# Turning parts (the mill water wheel, docs/terrain/skyrim-objects.md "Animated objects"): placed on a slowed copy of
+# a vanilla turning record (exterior.SPIN_TEMPLATE / spin_speed).
+SPIN_TEMPLATE = exterior.SPIN_TEMPLATE      # the record turning parts are placed on (a slowed copy)
 # the identity-rotation plain-box prop the FO4 converter uses as its box template (docs/spikes/S6-collision.md)
 BOX_TEMPLATE_NIF = "meshes/setdressing/historicaloilportraits/historicaloilportraits_shackleton.nif"
 DATA_TREES = ("meshes", "geometries", "materials", "textures")
@@ -845,11 +845,12 @@ def cmd_stage(a):
     for b in bases:
         b["collision"] = "none" if "spin" in b else collision_kind(items[b["key"]])
         if "spin" in b:                            # a copy of the vanilla turning static (TerrainOverlays)
-            b["anim_template"], b["bounds"] = b["spin"].get("template", SPIN_TEMPLATE), b["spin"]["bounds"]
+            b["anim_template"], b["bounds"] = SPIN_TEMPLATE, b["spin"]["bounds"]
+            b["anim_speed"], b["anim_speed_from"] = exterior.spin_speed(b["spin"]["period_s"]), exterior.SPIN_SPEED_FROM
     spins = sum(1 for p in placed if "spin_of" in p)
     if spins:
         print(f"turning parts: {spins} references of {sum(1 for b in bases if 'spin' in b)} models "
-              f"(copies of vanilla static {SPIN_TEMPLATE})")
+              f"(copies of vanilla {SPIN_TEMPLATE}, slowed)")
     skipped = selrep["skipped_refs"] + skipped_conv
     total = selrep["refs"] + selrep["deferred"]
     if len(placed) - spins + len(skipped) != total:          # selection's skipped list already holds the deferred actors
@@ -871,7 +872,8 @@ def cmd_stage(a):
         n = link_tree(os.path.join(a.work, "convert", tree), os.path.join(out, "Data", tree))
         print(f"Data\\{tree}: {n:,} files")
     objects = {"world": ov["world"], "edid_prefix": EDID_PREFIX,
-               "bases": [{k: b[k] for k in ("edid", "model", "source", "collision", "anim_template", "bounds")
+               "bases": [{k: b[k] for k in ("edid", "model", "source", "collision", "anim_template", "bounds",
+                                            "anim_speed", "anim_speed_from")
                           if k in b} for b in bases],
                "refs": [{k: p[k] for k in ("src", "base", "cell", "pos", "rot", "scale", "disabled")} for p in placed]}
     if a.interiors:
@@ -1099,7 +1101,7 @@ def main(argv=None):
     ap.add_argument("--no-grass", action="store_true", help="stage: leave out <work>/grass even if it exists")
     ap.add_argument("--no-spin", action="store_true",
                     help="stage: leave turning parts (the mill water wheel) out instead of placing them on a copy of "
-                         f"the vanilla turning static {SPIN_TEMPLATE}")
+                         f"the vanilla turning record {SPIN_TEMPLATE}")
     ap.add_argument("--interiors", default="",
                     help="stage: make_skyrim_interior.py batch --exterior work folder (or its exterior_doors.json): "
                          "the worldspace doors into those interiors become persistent load doors")

@@ -1336,9 +1336,9 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
 
     // ---- turning parts (2026-11-18, owner: Riverwood's mill water wheel should spin) ---------------------------------
     // SPIN_PARTS: scripts/terrain/spin_parts.py's spin_parts.json (positions already in the exterior's frame, metres;
-    // radians). Each base: a copy of the vanilla turning static "template" (AK_Fan_Yard_03_Blade 12F12F: its
-    // BGSAnimationGraph_Component SimpleIdleLoop01 + generic rig + rotate_y01, and keyword) with the part's model and
-    // bounds; each reference persistent in the world's persistent cell, as the outdoor furniture. Unverified in game.
+    // radians). Each base: a copy of the vanilla turning record "template" (its BGSAnimationGraph_Component
+    // SimpleIdleLoop01 + generic rig + rotate_y01) with the part's model and bounds; each reference persistent in the
+    // world's persistent cell, as the outdoor furniture. Verified 2026-11-18: the mill wheel turns (STAT 12F12F copy).
     if (Environment.GetEnvironmentVariable("SPIN_PARTS") is string spinPath && File.Exists(spinPath))
     {
         var spinRoot = JsonDocument.Parse(File.ReadAllText(spinPath)).RootElement.Clone();
@@ -1346,21 +1346,54 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
         var spinBases = new List<FormKey>();
         foreach (var sbj in spinRoot.GetProperty("bases").EnumerateArray())
         {
+            // template: a vanilla STAT (AK_Fan_Yard_03_Blade 12F12F) or ACTI (_AnimGraph_Standard_Idle_Loop_RotateY
+            // 304C45) with the turning graph. "speed" (ACTI only): the graph's play rate, copied as the Properties
+            // entry (PRPS, actor value 001B220E) of "speed_from" (FloatSpinHelperFree01_Slow 34F53D: 0.25; _Slower
+            // 0.15, _Slowest 0.1; none = 1) with our value: the vanilla way the spin helpers run slower.
             var stid = Convert.ToUInt32(sbj.GetProperty("template").GetString(), 16);
-            var stpl = sfMod!.Statics.FirstOrDefault(st => st.FormKey.ID == stid)
-                       ?? throw new InvalidDataException($"spin template {stid:X6} is not a static in Starfield.esm");
             var sedid = sbj.GetProperty("edid").GetString()!;
-            var srec = (Static)stpl.Duplicate(Id("SPINSTAT:" + sedid));
-            srec.EditorID = sedid;
-            srec.Model = new Model { File = sbj.GetProperty("model").GetString()! };
             var sbb = sbj.GetProperty("bounds");
-            srec.ObjectBounds = new ObjectBounds
+            var sbounds = new ObjectBounds
             {
                 First = new P3Float(sbb[0][0].GetSingle(), sbb[0][1].GetSingle(), sbb[0][2].GetSingle()),
                 Second = new P3Float(sbb[1][0].GetSingle(), sbb[1][1].GetSingle(), sbb[1][2].GetSingle()),
             };
-            mod.Statics.Add(srec);
-            spinBases.Add(srec.FormKey);
+            var smodel = new Model { File = sbj.GetProperty("model").GetString()! };
+            var stpl = sfMod!.Statics.FirstOrDefault(st => st.FormKey.ID == stid);
+            if (stpl != null)
+            {
+                var srec = (Static)stpl.Duplicate(Id("SPINSTAT:" + sedid));
+                srec.EditorID = sedid;
+                srec.Model = smodel;
+                srec.ObjectBounds = sbounds;
+                mod.Statics.Add(srec);
+                spinBases.Add(srec.FormKey);
+                continue;
+            }
+            var atpl = sfMod!.Activators.FirstOrDefault(st => st.FormKey.ID == stid)
+                       ?? throw new InvalidDataException($"spin template {stid:X6} is neither a static nor an activator in Starfield.esm");
+            var arec = (Mutagen.Bethesda.Starfield.Activator)atpl.Duplicate(Id("SPINSTAT:" + sedid));
+            arec.EditorID = sedid;
+            arec.Model = smodel;
+            arec.ObjectBounds = sbounds;
+            if (sbj.TryGetProperty("speed", out var spdj) && spdj.ValueKind == JsonValueKind.Number)
+            {
+                var sfrom = Convert.ToUInt32(sbj.GetProperty("speed_from").GetString(), 16);
+                var slow = sfMod!.Activators.FirstOrDefault(st => st.FormKey.ID == sfrom)
+                           ?? throw new InvalidDataException($"speed_from {sfrom:X6} is not an activator in Starfield.esm");
+                var props = typeof(Mutagen.Bethesda.Starfield.Activator).GetProperty("Properties")
+                            ?? throw new InvalidDataException("Mutagen's Activator has no Properties");
+                var plist = props.GetValue((Mutagen.Bethesda.Starfield.Activator)slow.Duplicate(arec.FormKey))
+                            as System.Collections.IList;
+                if (plist == null || plist.Count == 0)
+                    throw new InvalidDataException($"speed_from {sfrom:X6} has no Properties (PRPS)");
+                var p0 = plist[0]!;
+                (p0.GetType().GetProperty("Value") ?? throw new InvalidDataException("ObjectProperty has no Value"))
+                    .SetValue(p0, spdj.GetSingle());
+                props.SetValue(arec, plist);
+            }
+            mod.Activators.Add(arec);
+            spinBases.Add(arec.FormKey);
         }
         int spinRefs = 0;
         foreach (var srj in spinRoot.GetProperty("refs").EnumerateArray())

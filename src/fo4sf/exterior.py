@@ -145,6 +145,22 @@ def spin_pose(pos, rot, scale, spin: dict):
     return [round(v, 5) for v in spos], [round(v, 6) for v in srot], scale * float(spin.get("scale", 1.0))
 
 
+# The record a turning part is placed on (docs/terrain/skyrim-objects.md "Animated objects"). 2026-11-18, verified:
+# a copy of STAT AK_Fan_Yard_03_Blade (12F12F) turns the mill wheel, about 4 times Skyrim's speed (owner's estimate:
+# rotate_y01 about 4.2 s per turn, the wheel 16.7 s). Vanilla runs the same graph slower with a Properties entry
+# (PRPS, actor value 001B220E) on an ACTI: FloatSpinHelperFree01 none (1), _Slow 0.25, _Slower 0.15, _Slowest 0.1,
+# _Slowest02/03 0.05 (owner's dump). So the part goes on a copy of ACTI _AnimGraph_Standard_Idle_Loop_RotateY
+# (304C45: SimpleIdleLoop01 + genericrig + rotate_y01) with _Slow's PRPS at the part's own rate (spin_speed).
+SPIN_TEMPLATE = "304C45"
+SPIN_SPEED_FROM = "34F53D"
+ROTATE_Y01_TURN_S = 4.2           # supported (owner's estimate in game); the .af did not decode
+
+
+def spin_speed(period_s: float) -> float:
+    """The graph play rate that turns a part once per period_s (Skyrim's loop length)."""
+    return round(min(4.0, max(0.01, ROTATE_Y01_TURN_S / float(period_s))), 3)
+
+
 SPIN_EDID_SUFFIX = "_Spin"
 SPIN_SRC_SUFFIX = "#spin"
 
