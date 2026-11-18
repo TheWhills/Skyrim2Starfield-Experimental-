@@ -198,5 +198,29 @@ class CreatureProbeTests(unittest.TestCase):
         self.assertEqual(len(lines), 1 + 2 * 3)                  # 20 words: three lines of up to 8
 
 
+class ExtractTests(unittest.TestCase):
+    def test_extract(self):
+        import tempfile
+        from unittest import mock
+        import sf_anim_survey as SAS
+        files = {"meshes/actors/critter/mesh/critter_trilobite/critter_trilobite.nif": b"nifbytes"}
+
+        class Ba2:
+            names = list(files)
+
+            def read(self, i):
+                return files[self.names[i]]
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(SAS, "archives", lambda _d: [("Starfield - Meshes01.ba2", Ba2())]):
+            out = os.path.join(d, "x")
+            self.assertEqual(C.main(["--starfield-data", d, "--extract-to", out, "--extract",
+                                     "Meshes\\Actors\\Critter\\Mesh\\Critter_Trilobite\\Critter_Trilobite.nif",
+                                     "--extract", "meshes\\nope.nif"]), 0)
+            with open(os.path.join(out, "Critter_Trilobite.nif"), "rb") as fh:
+                self.assertEqual(fh.read(), b"nifbytes")
+            with self.assertRaises(SystemExit):                       # never into the repository
+                C.main(["--starfield-data", d, "--extract-to", ROOT, "--extract", "a.nif"])
+
+
 if __name__ == "__main__":
     unittest.main()
