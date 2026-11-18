@@ -218,6 +218,19 @@ class ExtractTests(unittest.TestCase):
                                      "--extract", "meshes\\nope.nif"]), 0)
             with open(os.path.join(out, "Critter_Trilobite.nif"), "rb") as fh:
                 self.assertEqual(fh.read(), b"nifbytes")
+            from fo4sf import bsa
+
+            class Sky:
+                def __init__(self, *_a, **_k):
+                    pass
+
+                def _read(self, n):
+                    return b"skybytes" if n == "meshes\\actors\\ambient\\chicken\\character assets\\skeleton.nif" else None
+            with mock.patch.object(bsa, "SkyrimArchives", Sky):
+                C.main(["--skyrim-data", d, "--extract-to", out, "--extract-skyrim",
+                        "meshes\\actors\\ambient\\chicken\\character assets\\skeleton.nif"])
+            with open(os.path.join(out, "skeleton.nif"), "rb") as fh:
+                self.assertEqual(fh.read(), b"skybytes")
             with self.assertRaises(SystemExit):                       # never into the repository
                 C.main(["--starfield-data", d, "--extract-to", ROOT, "--extract", "a.nif"])
 

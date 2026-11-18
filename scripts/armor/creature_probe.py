@@ -713,17 +713,11 @@ def af_dump(data: bytes, head: int = 384) -> list:
 def extract(starfield_data: str, paths, out_dir: str) -> int:
     """Copy archive files out unchanged (to read their bytes elsewhere); prints what was written or not found."""
     import sf_anim_survey as SAS
-    if not out_dir:
-        raise SystemExit("--extract needs --extract-to")
-    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    out = os.path.abspath(out_dir)
-    if out == repo or out.startswith(repo + os.sep):
-        raise SystemExit("--extract-to must be outside the repository (game files stay out of Git)")
+    out = _out_dir(out_dir)
     index = {}
     for _label, ar in SAS.archives(starfield_data):
         for i, nm in enumerate(ar.names):
             index.setdefault(SAS.norm(nm), (ar, i))
-    os.makedirs(out, exist_ok=True)
     for r in paths:
         hit = index.get(SAS.norm(r))
         if hit is None:
@@ -732,6 +726,34 @@ def extract(starfield_data: str, paths, out_dir: str) -> int:
         dst = os.path.join(out, os.path.basename(r.replace("\\", "/")))
         with open(dst, "wb") as fh:
             fh.write(hit[0].read(hit[1]))
+        print(f"wrote {dst}")
+    return 0
+
+
+def _out_dir(out_dir: str) -> str:
+    if not out_dir:
+        raise SystemExit("--extract needs --extract-to")
+    repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    out = os.path.abspath(out_dir)
+    if out == repo or out.startswith(repo + os.sep):
+        raise SystemExit("--extract-to must be outside the repository (game files stay out of Git)")
+    os.makedirs(out, exist_ok=True)
+    return out
+
+
+def extract_skyrim(skyrim_data: str, paths, out_dir: str) -> int:
+    """Copy Skyrim archive files out unchanged (as extract)."""
+    from fo4sf import bsa
+    out = _out_dir(out_dir)
+    sky = bsa.SkyrimArchives(skyrim_data, loose=False)
+    for r in paths:
+        data = sky._read(r.replace("/", "\\").lower())
+        if not data:
+            print(f"not found: {r}")
+            continue
+        dst = os.path.join(out, os.path.basename(r.replace("\\", "/")))
+        with open(dst, "wb") as fh:
+            fh.write(data)
         print(f"wrote {dst}")
     return 0
 
@@ -754,10 +776,16 @@ def main(argv=None):
                     help="an .af clip to lay open: an archive path or a file on disk (repeatable)")
     ap.add_argument("--extract", action="append", default=[],
                     help="a Starfield archive path to copy out as it is (repeatable), into --extract-to")
+    ap.add_argument("--extract-skyrim", action="append", default=[],
+                    help="a Skyrim archive path to copy out as it is (repeatable), into --extract-to")
     ap.add_argument("--extract-to", default="", help="folder for --extract (outside the repo: game files stay out of Git)")
     a = ap.parse_args(argv)
-    if a.extract:
-        return extract(a.starfield_data, a.extract, a.extract_to)
+    if a.extract or a.extract_skyrim:
+        if a.extract:
+            extract(a.starfield_data, a.extract, a.extract_to)
+        if a.extract_skyrim:
+            extract_skyrim(a.skyrim_data, a.extract_skyrim, a.extract_to)
+        return 0
     if a.af:
         import sf_anim_survey as SAS
         index = {}

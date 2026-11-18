@@ -295,3 +295,15 @@ new creature skeleton on an existing graph.
   GeneratedSubgraphData tables, ours included, were header-only stubs and were left out). The chicken's folder is
   listed in one set file of the generated index. `help S2S_Chicken 4` lists the race, skin and addon but not the NPC.
   (The trilobite still showed the chicken because the critter-replacing test mod was still enabled.)
+* Owner, 19:56: killed, the chicken freezes standing (no ragdoll in its body). Read the vanilla trilobite body
+  (owner's file, not in Git), verified: one bhkRagdollSystem block (u32 size + Havok tagfile, root hknpRagdollData)
+  and five bhkNPCollisionObject (target node i32, flags u16 0x80, system block i32, body index u32) on COM_Twin (0),
+  C_hips1 (1), C_spine1 (2), C_Hips2 (3), C_spine2 (4). hknpRagdollData: 5 materials, 5 motionProperties, 5
+  bodyCinfos (COM a sphere, the others capsules, C_spine2 a compound of two capsules; all at the bone's own frame:
+  position 0, orientation identity, motionType 2, mass 2 each), 4 constraintCinfos (hkpRagdollConstraintData: pivot
+  frames A / B, twist / cone / plane limits, position motors off, friction), an unnamed 5-bone hkaSkeleton (parents
+  -1, 0, 0, 1, 2) and boneToBodyMap 0-4. hktagwrite round trip (root type hknpRagdollData): every value read back
+  equal; the byte order of items differs from Havok's own (the writer is breadth-first per element), so a game check
+  first: the trilobite with its ragdoll rewritten (S2S Ragdoll Writer Test). Skyrim's chicken ragdoll lives in its
+  skeleton.nif (7 bhkRigidBody + bhkCapsuleShape on bhkBlendCollisionObject, 6 bhkRagdollConstraint);
+  creature_probe --extract-skyrim copies it out.
