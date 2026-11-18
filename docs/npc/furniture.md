@@ -967,3 +967,17 @@ drawn by AnimObjectMillLoadStart at 0.33 s; AnimObjectWoodScrap on a hammer-tabl
 reads state enter events as well as clip triggers. Third-person clip lengths: AnimObjectChopStart 1.30 s, Loop
 10.90 s (annotations: NPCHumanWoodPlace 1.8 s, NPCHumanWoodChop 7.23 s), Stop 1.17 s; AnimObjectMillLoadStart
 13.33 s; AOWoodPickUp 6.67 s; AOWoodPutDown 2.83 s; IdleHoe 6.67 s; OffsetCarryLog 10.0 s; OffsetWoodPosture 6.67 s.
+
+## Alvor's work day as time blocks (2026-11-17 evening)
+Owner, 22:53: back to the timed Sit packages instead of rebuilding Skyrim's idle markers (which was started: Starfield's
+own NPC idles are marker furniture, its 18 IDLM barely used). Since the -PlainStations fix (23:01 the day before) a Sit
+package naming a station sends him walking in, so one per station and time block covers the forge at its Skyrim spot
+(the sandbox never picks it there), the grindstone (never picked) and the repeats. Build: riverwood_doors.ps1 -SitAt
+"Alvor=0D6987:8:120","Alvor=01C785:10:60","Alvor=03550D:11:60","Alvor=0D6987:13:120","Alvor=105390:15:60",
+"Alvor=03550D:16:60","Alvor=01C785:17:60","Alvor=0D6987:18:120" (forge 0D6987, grindstone 01C785, armor workbench
+03550D, tanning rack 105390; 12-13 left to his own packages). Blocks run on UT (docs/terrain/skyrim-tamriel.md: the
+package clock is UT; S2STimeSync unverified). Testing note: he finishes the clip he is in before a block change, and
+the console passtime passes odd amounts on Nirn: watch in real time or use the Wait menu.
+Owner, 23:02 (verified): "every time I passtime after moving him he uses the forge, and I even saw him enter it"; then
+"he started using the workbench after a while": the blocks switch and he walks into the next station. Pending: the
+grindstone (10-11, 17-18) and the tanning rack (15-16) blocks.
