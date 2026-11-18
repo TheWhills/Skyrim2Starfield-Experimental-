@@ -273,3 +273,8 @@ new creature skeleton on an existing graph.
   by CALUMI needs (1) each record's mirror / level / weight (creature.rig_fields, set_rig_fields) and (2) its bones
   sorted by level, highest first (sorted_by_level). Fixes 7-10 (old level patch, LOD0-3 body slots, rig before clips,
   rig package) stay in but were not the cause. Applies to every creature rig we build with CALUMI.
+* Owner, 19:28: right turns move the legs oddly (they were still the trilobite's clips). Fix 13: the critter's
+  turninplace_right30 / 90 / 180 and rundeparture_right180 get the chicken's left-turn clips mirrored across the
+  actor's YZ plane (creature.mirror_clip: each bone takes its rig_fields partner's model-space pose reflected, with
+  the partners' rest-frame difference kept; Root's turn and sideways drift flip), as Skyrim's "[mirror]" generators
+  play them. creature_build.json marks them "mirrored". Offline checks only.

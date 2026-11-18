@@ -471,6 +471,36 @@ def rig_fields(cr: "CreatureRig", trunk_share: float = 0.4):
     return mirror, level, weight
 
 
+def mirror_clip(cr: "CreatureRig", lt, lq, mirror: Sequence[int]):
+    """A clip (F, B, 3) / (F, B, 4) on this rig as its mirror image across the actor's YZ plane (x = right): every
+    bone takes its partner's (mirror[b]) model-space pose reflected, so a left turn becomes a right turn and Root's
+    root motion turns the other way. The partners' rest frames need not be mirror images (a fixed per-bone turn
+    K_b = mirror(rest_m)^-1 rest_b is kept, as retarget.mirror_grip does); bones whose partner's local translation never
+    changes keep their own rest offset, so bone lengths stay the rig's. Skyrim plays the chicken's right turns this
+    way (its behaviour's "[mirror]" generators)."""
+    from .retarget import qinv, qmirror_x
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float)
+    rig = cr.rig()
+    wt, wq = rig.fk(lt, lq)
+    _rt0, rq0 = rig.rest_world()
+    m = np.asarray(mirror, int)
+    flip = np.array([-1.0, 1.0, 1.0])
+    K = qmul(qinv(qmirror_x(rq0[m])), rq0)                               # (B, 4)
+    nq = qmul(qmirror_x(wq[:, m]), K[None])
+    nq /= np.linalg.norm(nq, axis=-1, keepdims=True)
+    nt = wt[:, m] * flip
+    out_t, out_q = np.empty_like(lt), np.empty_like(lq)
+    for b, p in enumerate(cr.parents):
+        if p < 0:
+            out_t[:, b], out_q[:, b] = nt[:, b], nq[:, b]
+            continue
+        inv = qinv(nq[:, p])
+        out_q[:, b] = qmul(inv, nq[:, b])
+        src = lt[:, m[b]]
+        out_t[:, b] = cr.t[b] if np.allclose(src, src[:1], atol=1e-6) else qrot(inv, nt[:, b] - nt[:, p])
+    return out_t, out_q
+
+
 def sorted_by_level(cr: "CreatureRig") -> "CreatureRig":
     """The rig with its bones sorted by rig_fields level, highest first (stable, so parents stay before children:
     a child's level never exceeds its parent's). Vanilla rigs are in this order (the critter: 5, 4, 3, 3, 2 x 19,

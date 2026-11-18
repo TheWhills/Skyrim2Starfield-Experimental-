@@ -10,7 +10,7 @@ Writes, under --out:
   materials\\, textures\\ (with --texconv: the chicken's own texture; else the trilobite's material)
   creature_build.json (what was written, and checks: bind pose vs rig, clip frames)
 Side effects of the test (disable the mod after): the other critters sharing the rig (trident, thorn, spaceroach) lose
-their bones; the critter clips not in CLIP_MAP (right turns, deaths, staggers, attacks) stay the critter's and move
+their bones; the critter clips not in CLIP_MAP or MIRRORED (deaths, staggers, attacks) stay the critter's and move
 no chicken bone (the chicken holds its rest pose in them).
 
     python -I scripts\\npc\\creature_build.py --skyrim-data "$sky" --starfield-data "$sf\\Data" --calumi $calumi --out "$mods\\S2S Chicken Test"
@@ -46,6 +46,29 @@ CLIP_MAP = [("idle", "MT_Idle"), ("walkforward", "WalkForward"), ("jogforward", 
             ("idle_flavor01", "Idle_Fulbody1"), ("idle_flavor02", "Idle_Fulbody2"),
             ("idle_flavor03", "Idle_Fulbody3"), ("idle_flavor04", "Idle_Head1"),
             ("getup_front", "GETUP"), ("getup_back", "GETUP")]
+
+
+# critter right-turn descriptor <- the chicken's clip for the left one, mirrored (creature.mirror_clip): Skyrim plays the
+# chicken's right turns as mirrored left ones; the critter's own right turns left in place moved the legs oddly
+# (owner, 2026-11-17 19:28)
+MIRRORED = [("turninplace_right30", "turninplace_left30"), ("turninplace_right90", "turninplace_left90"),
+            ("turninplace_right180", "turninplace_left180"), ("rundeparture_right180", "rundeparture_left180")]
+
+
+def plan_mirrors(plan, sf_names, mirrored=MIRRORED, anims=CRITTER["anims"]):
+    """[(critter right .afx key, Skyrim .hkx path of the left clip)] for each planned left clip whose right
+    descriptor the game has, and [missing descriptions]."""
+    left = {key: src for key, src in plan}
+    out, missing = [], []
+    for right, lft in mirrored:
+        rk, lk = anims + right + ".afx", anims + lft + ".afx"
+        if lk not in left:
+            continue
+        if rk not in sf_names:
+            missing.append(f"Starfield {rk}")
+        else:
+            out.append((rk, left[lk]))
+    return out, missing
 
 
 def find_clip(names, folder: str, clip: str):
@@ -218,7 +241,12 @@ def main(argv=None):
     from fo4sf import rootmotion
     motion = motion_blocks(sky, CHICKEN["folder"], CHICKEN["project"], rep)
     plan, missing = plan_clips(sky_names, set(index))
+    mirrors, m_missing = plan_mirrors(plan, set(index))
+    mirrored_keys = {k for k, _s in mirrors}
+    plan += mirrors
+    missing += m_missing
     rep["clips_missing"] = missing
+    mirror_of = creature.rig_fields(cr)[0]
     anim_out = os.path.join(work, "anims")
     from fo4sf import agx
 
@@ -230,6 +258,10 @@ def main(argv=None):
         moving = rt is not None and rootmotion.moves(rt, rq)
         if moving:
             lt[:, 0], lq[:, 0] = rt, rq
+        if key in mirrored_keys:                     # a right turn: the left one's mirror image (Root's turn too)
+            lt, lq = creature.mirror_clip(cr, lt, lq, mirror_of)
+            if moving:
+                rt, rq = lt[:, 0].copy(), lq[:, 0].copy()
         vafx = sf_read(key)
         stem = os.path.splitext(agx.read_descriptor(vafx)["filename"] or posixpath.basename(key))[0]
         return lt, lq, rt, rq, moving, vafx, stem
@@ -275,7 +307,8 @@ def main(argv=None):
         for ext in (".af", ".afx"):
             with open(os.path.join(anim_out, stem + ext), "rb") as fh:
                 put(CRITTER["anims"] + stem + ext, fh.read())
-        rep["clips"].append({"critter": key, "skyrim": src_clip, "frames": r["frames"], "keys": r["keys"],
+        rep["clips"].append({"critter": key, "skyrim": src_clip, "mirrored": key in mirrored_keys,
+                             "frames": r["frames"], "keys": r["keys"],
                              "root_motion_m_deg": None if not moving else
                              [round(float(v), 3) for v in rt[-1]] + [round(rootmotion.yaw_degrees(rq[-1]), 1)]})
     shutil.rmtree(work, ignore_errors=True)

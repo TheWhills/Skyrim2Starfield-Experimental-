@@ -254,6 +254,46 @@ class FileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cr.reordered([1, 0, 2, 3, 4, 5, 6])
 
+    def _legs(self, r_rest_q=(0, 0, 0, 1.0)):
+        # Root > COM > LeftLeg (-x), RightLeg (+x); RightLeg's rest frame may carry its own turn
+        q = np.array([[0, 0, 0, 1.0], [0, 0, 0, 1.0], [0, 0, 0, 1.0], r_rest_q], float)
+        return C.CreatureRig(["Root", "COM", "LeftLeg", "RightLeg"], [-1, 0, 1, 1],
+                             np.array([[0, 0, 0], [0, 0, 0.3], [-0.1, 0, 0], [0.1, 0, 0]], float), q,
+                             [-1, 0, 1, 2], -1, 0)
+
+    def test_mirror_clip_rest_and_swing(self):
+        from fo4sf.retarget import qinv, qrot
+        down = np.array([0, 0, -0.2])
+        for r_rest in ((0, 0, 0, 1.0), (0, 0, 1.0, 0)):                     # mirrored, or turned 180 about z
+            cr = self._legs(r_rest)
+            mirror = C.rig_fields(cr)[0]
+            self.assertEqual(mirror, [0, 1, 3, 2])
+            rest_t, rest_q = np.tile(cr.t, (2, 1, 1)), np.tile(cr.q, (2, 1, 1))
+            t, q = C.mirror_clip(cr, rest_t, rest_q, mirror)
+            np.testing.assert_allclose(t, rest_t, atol=1e-9)
+            np.testing.assert_allclose(np.abs(np.sum(q * rest_q, -1)), 1, atol=1e-9)        # rest stays rest
+            foot_local_r = qrot(qinv(np.array(r_rest, float)), down)       # the right foot in its leg's frame
+            for axis in ((1, 0, 0), (0, 1, 0)):                            # swing forward, swing out sideways
+                lq = rest_q.copy()
+                ang = np.radians(30)
+                lq[1, 2] = tuple(np.sin(ang / 2) * np.array(axis)) + (np.cos(ang / 2),)
+                _t, q = C.mirror_clip(cr, rest_t, lq, mirror)
+                left_foot = qrot(lq[1, 2], down)                            # COM rests unrotated
+                right_foot = qrot(C.qmul(q[1, 1], q[1, 3]), foot_local_r)
+                np.testing.assert_allclose(right_foot, left_foot * np.array([-1, 1, 1]), atol=1e-9)
+                np.testing.assert_allclose(np.abs(np.sum(q[1, 2] * rest_q[1, 2])), 1, atol=1e-9)  # left leg rests
+
+    def test_mirror_clip_root_turn(self):
+        cr = self._legs()
+        mirror = C.rig_fields(cr)[0]
+        t, q = np.tile(cr.t, (2, 1, 1)), np.tile(cr.q, (2, 1, 1))
+        h = np.sqrt(0.5)
+        q[1, 0] = (0, 0, h, h)                                                         # +90 yaw (a left turn)
+        t[1, 0] = (0.2, 0.1, 0)
+        mt, mq = C.mirror_clip(cr, t, q, mirror)
+        np.testing.assert_allclose(mq[1, 0], (0, 0, -h, h), atol=1e-9)                # a right turn
+        np.testing.assert_allclose(mt[1, 0], (-0.2, 0.1, 0), atol=1e-9)
+
     def test_mirror_names_chicken(self):
         for a, b in (("LeftThigh", "RightThigh"), ("LAnkleToe00", "RAnkleToe00"), ("HeadWattleL", "HeadWattleR"),
                      ("L_Clavicle", "R_Clavicle"), ("Spine", "Spine"), ("HeadComb", "HeadComb"), ("COM", "COM")):

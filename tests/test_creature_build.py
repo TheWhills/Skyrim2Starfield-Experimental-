@@ -14,6 +14,15 @@ from fo4sf import creature, gearfit, nif, retarget, sfnif  # noqa: E402
 
 
 class BuildTests(unittest.TestCase):
+    def test_plan_mirrors(self):
+        A = B.CRITTER["anims"]
+        plan = [(A + "turninplace_left90.afx", "l90.hkx"), (A + "idle.afx", "idle.hkx"),
+                (A + "turninplace_left180.afx", "l180.hkx")]
+        sf = {A + "turninplace_right90.afx"}
+        out, missing = B.plan_mirrors(plan, sf)
+        self.assertEqual(out, [(A + "turninplace_right90.afx", "l90.hkx")])
+        self.assertEqual(missing, ["Starfield " + A + "turninplace_right180.afx"])
+
     def test_plan(self):
         sky = {"meshes\\actors\\ambient\\chicken\\animations\\mt_idle.hkx",
                "meshes\\actors\\ambient\\chicken\\animations\\walkforward.hkx",
