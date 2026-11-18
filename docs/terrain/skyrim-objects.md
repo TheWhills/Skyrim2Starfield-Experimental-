@@ -510,6 +510,10 @@ unverified):
   reference's rotation (exterior.ref_angles inverts ref_matrix).
 - TerrainOverlays: a base with "anim_template" is a copy of that Starfield.esm static (12F12F, AK_Fan_Yard_03_Blade:
   the graph component and keyword come along) with our model and bounds.
+- In game 2026-11-18 (owner, verified): the wheel part stands in the right place (round, on the axle, edge-on to the
+  stream; the white axle gone) but does not turn. Next: is the copied component alive on Nirn (the vanilla fan blade
+  placed with placeatme) and how the vanilla blade NIF binds to the generic rig's bone "Root" (its node names, BSX;
+  sf_animated_object_probe --extract-to now copies every matched record's model).
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
   their placement handles "spin" (interior Dwemer gears would otherwise vanish).

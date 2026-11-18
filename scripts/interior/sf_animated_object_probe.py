@@ -161,6 +161,11 @@ def main(argv=None):
     for _label, ar in SAS.archives(data):
         for i, nm in enumerate(ar.names):
             index.setdefault(SAS.norm(nm), (ar, i))
+    if a.extract_to and match:                 # every matched record's own model (2026-11-18: the loop below only
+        for g in picks:                        # copies the first record per animations folder: a Stroud miniature
+            for r in by_graph[g]:              # before the fan blade)
+                if r["model"] and match.search(" ".join((r["edid"], r["model"], r["graph"]))):
+                    _extract(a.extract_to, index, [SAS.norm("meshes\\" + r["model"])])
     print("\n== clips in the animations folders")
     for g in picks[:a.max_clips]:
         seen = set()

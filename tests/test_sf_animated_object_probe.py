@@ -98,6 +98,27 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(got, ["meshes_ships_animated_fan01_animations_idle.afx",
                                "meshes_ships_animated_fan01_characterassets_skeleton.rig", "meshes_ships_fan01.nif"])
 
+    def test_extract_every_matched_model(self):
+        """2026-11-18: the yard fan blade's model was not copied: a Stroud miniature came first in the shared
+        rotate_y01 folder, and only the first record per folder was extracted."""
+        import sf_anim_survey as SAS
+        import tempfile
+        mini = [(b"EDID", b"Miniature01\0"), (b"MODL", b"Mini.nif\0")] + FAN[2:]
+        files = {"meshes/ships/fan01.nif": b"nif", "meshes/mini.nif": b"mini",
+                 "meshes/ships/animated/fan01/animations/idle.af": b"af"}
+
+        class Ba2:
+            names = list(files)
+
+            def read(self, i):
+                return files[self.names[i]]
+        recs = [(b"STAT", b"", mini, 0x99), (b"STAT", b"", FAN, 0x100)]
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(P.sfplugin, "records", lambda _p, _t: recs), \
+                mock.patch.object(SAS, "archives", lambda _d: [("x", Ba2())]), contextlib.redirect_stdout(io.StringIO()):
+            dst = os.path.join(d, "fan")
+            P.main(["--starfield", "S", "--match", "Fan01", "--extract-to", dst])
+            self.assertIn("meshes_ships_fan01.nif", os.listdir(dst))
+
 
 if __name__ == "__main__":
     unittest.main()
