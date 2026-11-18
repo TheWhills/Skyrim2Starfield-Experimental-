@@ -119,6 +119,17 @@ class ProbeTests(unittest.TestCase):
             P.main(["--starfield", "S", "--match", "Fan01", "--extract-to", dst])
             self.assertIn("meshes_ships_fan01.nif", os.listdir(dst))
 
+    def test_dump_other_plugin(self):
+        """--plugin: dump our own plugin's records (FO4Port.esm turning parts) and stop."""
+        seen = []
+        recs = [(b"ACTI", b"", FAN, 0x100)]
+        out = io.StringIO()
+        with mock.patch.object(P.sfplugin, "records", lambda p, _t: seen.append(p) or recs), \
+                mock.patch.object(P, "survey", side_effect=AssertionError("no survey")), contextlib.redirect_stdout(out):
+            self.assertEqual(P.main(["--starfield", "S", "--dump", "Fan", "--plugin", "FO4Port.esm"]), 0)
+        self.assertEqual(seen, [os.path.join("S", "Data", "FO4Port.esm")])
+        self.assertIn("== ACTI 00000100 ShipFan01", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

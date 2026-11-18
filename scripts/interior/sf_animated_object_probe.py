@@ -126,16 +126,21 @@ def main(argv=None):
     ap.add_argument("--calumi", help="CALUMI.Animation.dll: with --match, each listed .af's bones and rotation")
     ap.add_argument("--extract-to", default="", help="with --match: copy the records' model, rig and clips here "
                                                       "(outside the repository: game files stay out of Git)")
+    ap.add_argument("--plugin", default="", help="with --dump: dump this plugin in Data (FO4Port.esm, our turning parts) "
+                                                 "instead of Starfield.esm, and stop there")
     a = ap.parse_args(argv)
     data = os.path.join(a.starfield, "Data")
     esm = os.path.join(data, "Starfield.esm")
     if a.dump:
         dmp = re.compile(a.dump, re.I)
-        for typ, _h, subs, fid in sfplugin.records(esm, [t.encode() for t in a.types.split(",")]):
+        src = os.path.join(data, a.plugin) if a.plugin else esm
+        for typ, _h, subs, fid in sfplugin.records(src, [t.encode() for t in a.types.split(",")]):
             r = scan_record(subs)
             if r["edid"] and dmp.search(r["edid"]):
                 print(f"== {typ.decode('latin-1')} {fid:08X} {r['edid']}")
                 print("\n".join(dump_fields(subs)))
+        if a.plugin:
+            return 0
     rows = survey(esm, a.types.split(","))
     print(f"== {len(rows)} records with a graph and a rig ({a.types})")
     by_graph = defaultdict(list)
