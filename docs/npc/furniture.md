@@ -988,3 +988,6 @@ SET_PROP_OBJECTS hold the Sweep, Forge and Workbench only). Skyrim's graph has A
 prop payloads; which one the sharpening wheel loads, on which bone, and where (clip trigger or SharpeningWheel_State
 enter event) is unread: smithing_probe --match SharpeningWheel and anim_object_probe --match IronSword asked for.
 Still to see: whether he walks into the grindstone by himself in its block (10-11, 17-18 UT).
+Owner, 23:06: with the other stations disabled in game, after a passtime he used the grindstone (placed in by the
+passtime, not seen walking in). So the grindstone is chosen when it is the only station; the walk-in in real time
+during its block is still to be seen.
