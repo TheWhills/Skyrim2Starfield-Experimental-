@@ -10,6 +10,7 @@ prints, for every record of --types that names an .agx graph and a .rig (doors a
   3. for the --loopy ones (or --match): the clips (.af / .afx) in their animations folder and each descriptor's tag.
 
     python -I scripts\\interior\\sf_animated_object_probe.py --starfield "<Starfield>" > animated_objects.txt
+    ... --match Fan_Yard_03 --dump Fan_Yard_03 --calumi "<CALUMI.Animation.dll>" --extract-to C:\\Modding\\work\\fan
 """
 import argparse
 import os
@@ -70,15 +71,72 @@ def loopy(r) -> bool:
     return bool(LOOPY.search(" ".join((r["edid"], r["model"], r["graph"], r["rig"]))))
 
 
+def dump_fields(subs) -> list:
+    """Every subrecord: signature, size, its text (printable runs) or, when short and not text, its hex."""
+    out = []
+    for sig, d in subs:
+        t = " | ".join(texts(d))
+        out.append(f"     {sig.decode('latin-1')} {len(d):5d}  " + (t[:200] if t else d[:48].hex(" ")))
+    return out
+
+
+def axis_angle(q) -> tuple:
+    """(unit axis, degrees) of an x y z w quaternion."""
+    import math
+    x, y, z, w = (float(v) for v in q)
+    s = math.sqrt(max(1e-12, x * x + y * y + z * z))
+    ang = 2 * math.degrees(math.atan2(s, w))
+    return (round(x / s, 3), round(y / s, 3), round(z / s, 3)), round(ang, 2)
+
+
+def track_lines(calumi: str, rig_bytes: bytes, clip: bytes, work: str) -> list:
+    """Through CALUMI: the clip's frames, and per bone its key count and the rotation from the first key to each
+    quarter of the clip as (axis, degrees): a looping spin shows one axis and a steadily growing angle."""
+    from fo4sf import af_writer
+    from fo4sf.retarget import qinv, qmul
+    import numpy as np
+    os.makedirs(work, exist_ok=True)
+    rig, af = os.path.join(work, "probe.rig"), os.path.join(work, "probe.af")
+    with open(rig, "wb") as fh:
+        fh.write(rig_bytes)
+    with open(af, "wb") as fh:
+        fh.write(clip)
+    rb = af_writer.read_back(calumi, af, rig)
+    out = [f"     {rb['frames']} frames, bones {rb['bones']}"]
+    for b in rb["bones"]:
+        keys = rb["rotations"].get(b) or []
+        tr = rb["translations"].get(b) or []
+        line = f"     {b}: {len(keys)} rotation keys, {len(tr)} translation keys"
+        if len(keys) > 1:
+            q0 = np.asarray(keys[0][1], float)
+            for frac in (0.25, 0.5, 0.75, 1.0):
+                f, q = keys[min(len(keys) - 1, int(round(frac * (len(keys) - 1))))]
+                line += f"; frame {f}: {axis_angle(qmul(qinv(q0), np.asarray(q, float)))}"
+        out.append(line)
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--starfield", required=True, help="the Starfield install (with Data)")
     ap.add_argument("--types", default=TYPES)
     ap.add_argument("--match", default="", help="regex on EditorID / model / graph: list these records' clips too")
     ap.add_argument("--max-clips", type=int, default=12, help="graphs whose folders are listed (loopy / match first)")
+    ap.add_argument("--dump", default="", help="regex on EditorID: print every subrecord of these records")
+    ap.add_argument("--calumi", help="CALUMI.Animation.dll: with --match, each listed .af's bones and rotation")
+    ap.add_argument("--extract-to", default="", help="with --match: copy the records' model, rig and clips here "
+                                                      "(outside the repository: game files stay out of Git)")
     a = ap.parse_args(argv)
     data = os.path.join(a.starfield, "Data")
-    rows = survey(os.path.join(data, "Starfield.esm"), a.types.split(","))
+    esm = os.path.join(data, "Starfield.esm")
+    if a.dump:
+        dmp = re.compile(a.dump, re.I)
+        for typ, _h, subs, fid in sfplugin.records(esm, [t.encode() for t in a.types.split(",")]):
+            r = scan_record(subs)
+            if r["edid"] and dmp.search(r["edid"]):
+                print(f"== {typ.decode('latin-1')} {fid:08X} {r['edid']}")
+                print("\n".join(dump_fields(subs)))
+    rows = survey(esm, a.types.split(","))
     print(f"== {len(rows)} records with a graph and a rig ({a.types})")
     by_graph = defaultdict(list)
     for r in rows:
@@ -114,6 +172,13 @@ def main(argv=None):
             seen.add(folder)
             files = sorted(k for k in index if k.startswith(folder) and "/" not in k[len(folder):])
             print(f"\n-- {r['edid']} ({r['graph']}): {folder}  {len(files)} files")
+            rig_key = SAS.norm("meshes\\" + r["rig"]) if not r["rig"].lower().startswith("meshes") else SAS.norm(r["rig"])
+            rig_bytes = index[rig_key][0].read(index[rig_key][1]) if rig_key in index else None
+            if a.extract_to and match:
+                _extract(a.extract_to, index, [rig_key, SAS.norm("meshes\\" + r["model"])] + files)
+            if rig_bytes is not None:
+                from creature_probe import rig_names
+                print(f"   rig {rig_key}: bones {rig_names(rig_bytes)}")
             for k in files[:30]:
                 line = f"   {k[len(folder):]}"
                 if k.endswith(".afx"):
@@ -124,7 +189,27 @@ def main(argv=None):
                     except Exception as e:                      # noqa: BLE001  (one odd descriptor must not stop it)
                         line += f"  ({type(e).__name__})"
                 print(line)
+                if a.calumi and match and k.endswith(".af") and rig_bytes is not None:
+                    try:
+                        ar, i = index[k]
+                        print("\n".join(track_lines(a.calumi, rig_bytes, ar.read(i),
+                                                     os.path.join(os.environ.get("TEMP", "/tmp"), "s2s_probe"))))
+                    except Exception as e:                      # noqa: BLE001
+                        print(f"     tracks unreadable: {type(e).__name__}: {e}")
     return 0
+
+
+def _extract(out_dir: str, index, keys):
+    repo = os.path.abspath(REPO)
+    out = os.path.abspath(out_dir)
+    if out == repo or out.startswith(repo + os.sep):
+        raise SystemExit("--extract-to must be outside the repository (game files stay out of Git)")
+    os.makedirs(out, exist_ok=True)
+    for k in keys:
+        if k in index:
+            ar, i = index[k]
+            with open(os.path.join(out, k.replace("/", "_")), "wb") as fh:
+                fh.write(ar.read(i))
 
 
 if __name__ == "__main__":

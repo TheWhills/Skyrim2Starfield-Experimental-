@@ -57,5 +57,47 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("Crate01", text)
 
 
+    def test_axis_angle_and_tracks(self):
+        import math
+        h = math.sqrt(0.5)
+        self.assertEqual(P.axis_angle((0, h, 0, h)), ((0.0, 1.0, 0.0), 90.0))
+        from fo4sf import af_writer
+        rb = {"frames": 5, "bones": ["Root", "Spin"], "translations": {},
+              "rotations": {"Spin": [(f, (0, math.sin(math.radians(22.5 * f)), 0, math.cos(math.radians(22.5 * f))))
+                                     for f in range(5)]}}
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(af_writer, "read_back", lambda *_a, **_k: rb):
+            lines = P.track_lines("x.dll", b"rig", b"af", d)
+        self.assertIn("5 frames", lines[0])
+        self.assertIn("frame 4: ((0.0, 1.0, 0.0), 180.0)", lines[2])            # half a turn over the clip
+        self.assertIn("Root: 0 rotation keys", lines[1])
+
+    def test_dump_and_extract(self):
+        import sf_anim_survey as SAS
+        import tempfile
+        files = {"meshes/ships/animated/fan01/animations/idle.afx": b"<root><tag>Idle</tag></root>",
+                 "meshes/ships/animated/fan01/characterassets/skeleton.rig": b"rig",
+                 "meshes/ships/fan01.nif": b"nif"}
+
+        class Ba2:
+            names = list(files)
+
+            def read(self, i):
+                return files[self.names[i]]
+        recs = [(b"STAT", b"", FAN, 0x100)]
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(P.sfplugin, "records", lambda _p, _t: recs), \
+                mock.patch.object(SAS, "archives", lambda _d: [("x", Ba2())]), contextlib.redirect_stdout(out):
+            dst = os.path.join(d, "fan")
+            P.main(["--starfield", "S", "--match", "Fan01", "--dump", "Fan01", "--extract-to", dst])
+            got = sorted(os.listdir(dst))
+            with self.assertRaises(SystemExit):                        # never into the repository
+                P.main(["--starfield", "S", "--match", "Fan01", "--extract-to", ROOT])
+        self.assertIn("== STAT 00000100 ShipFan01", out.getvalue())
+        self.assertIn("BNAM", out.getvalue())
+        self.assertEqual(got, ["meshes_ships_animated_fan01_animations_idle.afx",
+                               "meshes_ships_animated_fan01_characterassets_skeleton.rig", "meshes_ships_fan01.nif"])
+
+
 if __name__ == "__main__":
     unittest.main()

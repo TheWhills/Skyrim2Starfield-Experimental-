@@ -37,6 +37,25 @@ class EditorMarkerTest(unittest.TestCase):
             nifmod.node_children = orig
         self.assertEqual(got, {1, 2, 4})
 
+    def test_hidden_flag(self):
+        """2026-11-18 (owner: the mill wheel's axle drawn white): shapes with the NiAVObject hidden flag, or under a
+        node with it, are left out like editor markers."""
+        n = FakeNif([("BSFadeNode", b"Wheel"), ("BSTriShape", b"WheelEmitGeo01:0"), ("NiNode", b"Ragdoll_Object02"),
+                     ("BSTriShape", b"Ragdoll_Object02:0"), ("BSTriShape", b"SawWaterWheel03:5"),
+                     ("NiNode", b"PArray07-Emitter")], {0: [1, 2, 4, 5], 2: [3]})
+        for i, flags in ((1, 0xF), (2, 0xF), (3, 0xE), (4, 0xE), (5, 0xE)):
+            n.blocks[i] = n.blocks[i][:12] + struct.pack("<I", flags) + n.blocks[i][16:]
+        orig = nifmod.node_children
+        nifmod.node_children = lambda nn, i: nn.children.get(i, [])
+        try:
+            got = skyrimnif.hidden_blocks(n)
+        finally:
+            nifmod.node_children = orig
+        self.assertEqual(got, {1, 2, 3})                       # the hidden shape, the hidden node and its shape
+        from types import SimpleNamespace as S
+        self.assertEqual(skyrimnif.editor_only(n, S(block=3, shader_ref=-1), False, set(), frozenset(got)), "hidden")
+        self.assertIsNone(skyrimnif.editor_only(n, S(block=4, shader_ref=-1), False, set(), frozenset(got)))
+
     def test_marker_models_by_file_name(self):
         rx = skyrimnif.MARKER_MODEL_RE
         for m in ("meshes\\furniture\\BlacksmithForgeMarker.nif", "Furniture\\SmelterMarker.nif",

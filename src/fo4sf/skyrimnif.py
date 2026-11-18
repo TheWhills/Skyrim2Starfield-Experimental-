@@ -83,11 +83,53 @@ def editor_marker_blocks(n: nifmod.NifFile) -> set:
     return out
 
 
-def editor_only(n, shape, marker_model: bool, hidden: set) -> Optional[str]:
-    """Why a shape is editor-only geometry (None: drawn): "EditorMarker" (in editor_marker_blocks) or, in a *Marker.nif
-    model, "untextured" (a lighting shader with no diffuse, or no shader). Effect shaders are left to the flame code."""
+APP_CULLED = 0x1          # NiAVObject flags bit 0: hidden in game
+
+
+def hidden_blocks(n: nifmod.NifFile) -> set:
+    """Block indices Skyrim does not draw because they or a node above them carry the NiAVObject hidden flag (bit 0).
+    2026-11-18 (owner: Riverwood's mill wheel axle drawn plain white): lumbermill01waterwheel01.nif's particle emitter
+    meshes (WheelEmitGeo01:0, WheelEmitGeoOld01:0) and its axle cylinder Ragdoll_Object02:0 have flags 0xF (hidden);
+    the converter drew them untextured."""
+    parent, flagged = {}, set()
+    for i in range(len(n.blocks)):
+        t = n.type_of(i)
+        if not (t.endswith("Node") or t in TRI_TYPES or t in NITRI_TYPES):
+            continue
+        blk = n.blocks[i]
+        try:
+            _nm, nextra = struct.unpack_from("<iI", blk, 0)
+            flags, = struct.unpack_from("<I", blk, 8 + 4 * nextra + 4)
+        except struct.error:
+            continue
+        if flags & APP_CULLED:
+            flagged.add(i)
+        if t.endswith("Node"):
+            try:
+                for c in nifmod.node_children(n, i):
+                    parent.setdefault(c, i)
+            except struct.error:
+                pass
+    out = set()
+    for i in range(len(n.blocks)):
+        j, seen = i, set()
+        while j is not None and j not in seen:
+            seen.add(j)
+            if j in flagged:
+                out.add(i)
+                break
+            j = parent.get(j)
+    return out
+
+
+def editor_only(n, shape, marker_model: bool, hidden: set, culled: frozenset = frozenset()) -> Optional[str]:
+    """Why a shape is editor-only geometry (None: drawn): "EditorMarker" (in editor_marker_blocks), "hidden" (in
+    hidden_blocks: the hidden flag on it or above it) or, in a *Marker.nif model, "untextured" (a lighting shader with
+    no diffuse, or no shader). Effect shaders are left to the flame code."""
     if shape.block in hidden:
         return "EditorMarker"
+    if shape.block in culled:
+        return "hidden"
     if not marker_model:
         return None
     if shape.shader_ref < 0 or shape.shader_ref >= len(n.blocks):

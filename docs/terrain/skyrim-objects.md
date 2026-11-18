@@ -475,3 +475,22 @@ form), the wheel's rotating node as a one-bone rig, its Skyrim keyframes as a lo
 scripts/interior/sf_animated_object_probe.py lists Starfield's records with a graph and a rig, looping-sounding ones
 first, with their folders' clips; the Skyrim wheel NIFs (creature_probe --extract-skyrim) give the spin axis, speed,
 pivot and the axle's material.
+Read the owner's Skyrim wheel NIFs (2026-11-18, not in Git), verified: lumbermill01waterwheel01.nif = BSFadeNode >
+SawWaterWheel03 (NiNode at (459, 0, -160) units, rotated 90 deg about z: the wheel + spokes, SawWaterWheel03:5 / :19),
+L1_SawWaterWheelHub (the fixed hub, a 16 x 406 x 16 cylinder), two particle systems (water off the wheel) with their
+emitter meshes WheelEmitGeo01:0 / WheelEmitGeoOld01:0, and Ragdoll_Object02:0 (a cylinder along the axle); the emitter
+meshes and the cylinder carry the NiAVObject hidden flag (0xF). NiControllerSequence "Idle" (cycle 0 = loop, 0 -
+16.667 s) turns SawWaterWheel03 about its own Y (XYZ euler keys: x 0, z 90 deg fixed, y 0 -> -2 pi; wheel 02 +2 pi):
+one turn per 16.7 s about the axle (the wheel is thin along its local Y).
+The white axle: the converter drew hidden-flagged shapes. skyrimnif.hidden_blocks (flag bit 0 on a shape or on a node
+above it) now leaves them out like EditorMarker geometry (reason "hidden" in the conversion report); on the wheels it
+drops exactly the two emitter meshes and the axle cylinder. Needs the objects reconverted.
+Starfield (owner's sf_animated_object_probe, verified): 3169 records with a graph and a rig. Constant spinners use
+SimpleIdleLoop01.agx (31 records): Akila's yard fan blades (AK_Fan_Yard_02 / 03_Blade, STAT), the desk fan (MISC),
+the Stroud miniatures (STAT) all on genericbehaviors\genericrig\characterassets\skeleton.rig with
+genericbehaviors\idlebehaviors\rotate_y01\animations (a generic turn about Y); FloatSpinHelperFree01 (ACTI) has its own.
+GenericIdleLoop.agx drives wind turbines / harvesters (On / Off / Idle states). Plan (unverified): the wheel's spinning
+part (SawWaterWheel03) as a model of its own centred on the axle, axle along Y, on a STAT with SimpleIdleLoop01 + the
+generic rig + rotate_y01 (a vanilla folder: no animation index run); the frame and hub stay static. Open: how a fan
+blade NIF binds to the generic rig (node names), rotate_y01's speed and direction (probe --match Fan_Yard_03
+--calumi --extract-to).

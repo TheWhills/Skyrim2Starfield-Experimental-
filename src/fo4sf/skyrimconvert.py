@@ -781,7 +781,8 @@ class SkyrimConverter(pipeline.Converter):
             # BlacksmithForgeMarker.nif holds the real forge too); a model with nothing else becomes an empty model
             marker_model = bool(skyrimnif.MARKER_MODEL_RE.search(nif_name.replace("/", "\\")))
             hidden = skyrimnif.editor_marker_blocks(src)
-            why = [skyrimnif.editor_only(src, s, marker_model, hidden) for s in shapes]
+            culled = frozenset(skyrimnif.hidden_blocks(src))      # the hidden flag (2026-11-18: the mill wheel axle)
+            why = [skyrimnif.editor_only(src, s, marker_model, hidden, culled) for s in shapes]
             dropped = [f"{(s.name or b'').decode('latin-1')} ({w})" for s, w in zip(shapes, why) if w]
             editor_shapes = len(dropped)
             shapes = [s for s, w in zip(shapes, why) if not w]
