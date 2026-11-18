@@ -240,3 +240,18 @@ new creature skeleton on an existing graph.
   anything of the chicken's. CALUMI's copy keeps names, parents, rest pose, bone-map keys, mannequin flag and
   precision (rig_prefix), so the lost data is elsewhere in the rig. Next: a byte diff of the vanilla rig against
   CALUMI's copy (critter_roundtrip --what rig now saves both), then write the chicken rig with what is missing.
+* 19:04, byte diff of the vanilla critter rig against CALUMI's copy (same 3717 bytes; owner's files, not in Git).
+  Verified layout: header, then 96-byte bone records from byte 128 (record k at 128 + 96k): +0 name offset, +8
+  parent, +12/+16/+20 -1 (both), +48 local rotation (x, y, z, w), +80 local translation (both, equal to float
+  rounding). What CALUMI does not write:
+  - +24 mirror partner index (R_FrontLegA1 7 <-> L_FrontLegA1 5; centre bones themselves). CALUMI -1.
+  - +28 level: Root 5, COM 4, C_spine1/2 3, the body 2, leg tips and antenna2 1, antenna3 0. CALUMI 0. (Fix 7
+    wrote Root 0 and every other bone 2 here, and k at +24.)
+  - +40 float: Root/COM 1, spines 2, legs 5, head 10, antenna1 20, back-leg C 30, antenna2 45, the tips 60.
+    CALUMI 0. Meaning unresolved (grows toward the extremities: a size or distance per bone?).
+  - +64 a second rotation per bone: equal to +48 for COM; otherwise vanilla's and CALUMI's differ, and neither is
+    the parent-composed rest rotation in the conventions tried (unresolved).
+  - header: bytes 24-47 hold one 8-byte value three times in vanilla (30 90 c8 21 f5 fd ff ff), CALUMI zeros;
+    byte 65 is 01 in vanilla, where CALUMI writes "CALUMIDVRSJOJO".
+  Restoring all three groups from vanilla gives the vanilla file but for 24 rounding bytes. Bisect sent to the
+  owner: A header only, B +24/+28/+40 only, C +64 only (one mod each on the vanilla trilobite).
