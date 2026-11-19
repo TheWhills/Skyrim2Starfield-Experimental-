@@ -506,6 +506,28 @@ class RaceNpcTests(unittest.TestCase):
         out2, n2 = S.on_race(subs, c, False, 3, sf_hdpt, S.hdpt_type)
         self.assertEqual((out2, n2), (out, n))                      # no skin tones in that race_heads.json
 
+    def test_converted_races_from_the_plugin(self):
+        """2026-11-19 (Faendal human again): a race_heads.json that lists none of the plugin's races (older than it)
+        no longer loses them - the plugin's RACE records give the races and their FormIDs."""
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        h = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)   # noqa: E731
+        with tempfile.TemporaryDirectory() as d:
+            plug = os.path.join(d, "S2SRaceTest.esm")
+            recs = [(b"RACE", h(b"RACE"), [(b"EDID", Z("S2S_BosmerRace"))], 0x01000820),
+                    (b"RACE", h(b"RACE"), [(b"EDID", Z("S2S_BosmerChildRace"))], 0x01000821),
+                    (b"HDPT", h(b"HDPT"), [(b"EDID", Z("S2S_BosmerRace_male_Head"))], 0x01000810)]
+            with open(plug, "wb") as fh:
+                fh.write(sfplugin.build(recs, {"hedr_version": 0.96, "form_version": 555}))
+            with open(os.path.join(d, "race_heads.json"), "w") as fh:
+                json.dump({"new_races": {"WoodElfRace": {"form_id": "01000999", "edid": "S2S_BosmerRace"},
+                                         "OrcRace": {"form_id": "01000900", "edid": "S2S_OrcRace"}}}, fh)
+            conv = S.converted_races(plug)
+            self.assertEqual(conv["WoodElfRace"]["form_id"], 0x820)          # the plugin's, not the stale file's
+            self.assertNotIn("OrcRace", conv)                                 # listed, but not in the plugin
+            self.assertEqual(conv["WoodElfRace"]["head"], {False: 0x810})
+            os.remove(os.path.join(d, "race_heads.json"))
+            self.assertEqual(list(S.converted_races(plug)), ["WoodElfRace"])  # no race_heads.json at all
+
     def test_race_skin(self):
         """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a
         human skin tone). An NPC of a race with tones of its own: STON = the race's first tone + the slot nearest its

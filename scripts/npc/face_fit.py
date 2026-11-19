@@ -142,15 +142,28 @@ def converted_races(races_plugin):
     stale = race_heads_stale(races_plugin)
     if stale:
         print(f"WARNING: {stale}")
-    with open(os.path.join(folder, "race_heads.json"), encoding="utf-8") as fh:
-        rep = json.load(fh)
-    hd = {sfplugin.edid(sb): fid & 0xFFFFFF for _t, _h, sb, fid in sfplugin.records(races_plugin, [b"HDPT"])}
+    try:
+        with open(os.path.join(folder, "race_heads.json"), encoding="utf-8") as fh:
+            rep = json.load(fh)
+    except (OSError, ValueError):
+        rep = {}
+    recs = sfplugin.records(races_plugin, [b"HDPT", b"RACE"])
+    hd = {sfplugin.edid(sb): fid & 0xFFFFFF for t, _h, sb, fid in recs if t == b"HDPT"}
+    # the plugin's own races, by EditorID (2026-11-19, owner: "why did this happen to faendal AGAIN, hes human AGAIN" -
+    # race_heads.json beside the plugin was older than it on every run that day, the warning lost in the log; on
+    # 11-13 the same: 1 race of 10). FormIDs come from the plugin; race_heads.json only adds the skin tones.
+    import race_heads
+    by_name = {v: k for k, v in race_heads.NAMES.items()}
+    plugin_races = {}
+    for t, _h, sb, fid in recs:
+        mm = re.match(r"^S2S_(.+)Race$", sfplugin.edid(sb) or "") if t == b"RACE" else None
+        if mm and mm.group(1) in by_name:
+            plugin_races[by_name[mm.group(1)]] = {"edid": sfplugin.edid(sb), "form_id": f"{fid:08X}",
+                                                  "from": "plugin"}
+    listed = {k: v for k, v in (rep.get("new_races") or {}).items() if "form_id" in v and v.get("edid")}
+    merged = plugin_races if plugin_races else listed   # the file's only for a plugin without RACE records
     out = {}
-    for race, r in (rep.get("new_races") or {}).items():
-        if "form_id" not in r:
-            continue
-        if not r.get("edid"):
-            continue                                  # a race_heads.json from before 2026-11-10: rebuild the races
+    for race, r in merged.items():
         name = re.sub(r"^S2S_|Race$", "", r["edid"])
         pre = f"S2S_{name}Race_"
         parts = {False: {}, True: {}}

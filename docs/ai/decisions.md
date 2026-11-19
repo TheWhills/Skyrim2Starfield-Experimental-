@@ -2429,3 +2429,10 @@ race tones already are.
 2026-11-19 (owner): every converted child gets a European face skin (template child picked by it), whatever its
 Skyrim race. Why: Skyrim's face sliders shape one European-looking base face; the adults already take the generic
 western (eu) face material for the same reason (2026-11-12). Alternative: by race (Redguard -> African), dropped.
+- 2026-11-19 Converted races come from the race plugin itself (owner: "why did this happen to faendal AGAIN, hes
+  human AGAIN, we've fixed this so many times"). Every face_fit run that day warned that race_heads.json was older
+  than S2SRaceTest.esm, as on 11-13 (then: 1 race of 10, every NPC human); a warning in a long log is not a fix.
+  face_fit.converted_races now reads the plugin's RACE records (S2S_<Name>Race, race_heads.NAMES) for the races and
+  their FormIDs, the head parts as before; race_heads.json only adds the skin tones (and the race list for a
+  plugin without RACE records). The fit key holds whether an NPC is on a converted race, so Faendal refits.
+  Alternative kept: failing the run on a stale file (owner would still have to copy it).
