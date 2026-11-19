@@ -134,6 +134,39 @@ class FaceSmoothTests(unittest.TestCase):
         np.testing.assert_allclose(CS.smooth_moves(gv, gt, disp, eyes, 0), disp * CS.socket_lock(gv, eyes)[:, None])
 
 
+class AlmondTests(unittest.TestCase):
+    def test_upper_lid_lowered_in_the_middle(self):
+        """An eye opening (an open loop in a flat face): its upper edge comes down most at the middle, not at the
+        corners; the lid skin above follows; the lower edge stays."""
+        n = 41
+        g = np.linspace(-0.04, 0.04, n)
+        v = np.array([(x, 0.09, 1.684 + z) for z in g for x in g])
+        tris = []
+        for i in range(n - 1):
+            for j in range(n - 1):
+                q = [i * n + j, i * n + j + 1, (i + 1) * n + j, (i + 1) * n + j + 1]
+                c = v[q].mean(0)
+                if ((c[0] - 0.0) / 0.015) ** 2 + ((c[2] - 1.684) / 0.006) ** 2 < 1:
+                    continue                                  # the opening: an almond-ish hole
+                tris += [(q[0], q[1], q[2]), (q[1], q[3], q[2])]
+        t = np.array(tris)
+        eyes = np.array([(0.0, 0.09, 1.684), (0.5, 0.09, 1.684)])     # the second has no opening
+        mv, rep = CS.almond_moves(v, t, eyes, 0.2)
+        self.assertEqual(rep["eyes"][1], "no opening edge found")
+        rim = CS.eye_rims(v, t, eyes[:1])[0]
+        up = rim[v[rim, 2] > 1.684]
+        lo = rim[v[rim, 2] < 1.684]
+        mid = up[np.argmin(np.abs(v[up, 0]))]
+        corner = up[np.argmax(np.abs(v[up, 0]))]
+        self.assertLess(mv[mid, 2], -0.001)                           # down at the middle
+        self.assertGreater(mv[corner, 2], mv[mid, 2] * 0.5)           # little at the corners
+        self.assertTrue(np.all(mv[lo] == 0))
+        self.assertGreater(mv[mid, 1], 0)                             # forward: stays on the eyeball
+        above = np.argmin(np.linalg.norm(v - (v[mid] + (0, 0, 0.004)), axis=1))
+        self.assertLess(mv[above, 2], 0)
+        self.assertGreater(mv[above, 2], mv[mid, 2])                  # the skin follows, less
+
+
 class FitTests(unittest.TestCase):
     def test_fit_narrows_the_face_and_keeps_the_sockets(self):
         """Starfield: a round head; Skyrim: the same 12 % narrower across. The face (front) narrows towards it, the

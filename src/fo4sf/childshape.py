@@ -56,7 +56,12 @@ FACE_SMOOTH = 200      # passes over the moves on the whole head at the end (202
 # bumps sat on a ring around each eye - the locked sockets (0 move) against the face's 1.4 mm moves 22 mm out, over a
 # 12 mm fade - and in folds from the Skyrim sculpt (nasolabial, under the lips). EYE_FADE 25 mm and 200 passes:
 # both gone on the preview, nose widths unchanged.
-VERSION = 10
+ALMOND = 0.12          # of the eye opening's height: the upper lid lowered at its middle (none at the corners;
+                       # 2026-11-19, owner: "his eyes could stand to be slightly more almondy" - Starfield's child eye
+                       # openings are round, 29.5 x 12.3 mm on Frodnar)
+LID_FALLOFF = 0.008    # m above the upper lid's edge over which the lid skin follows it
+EYEBALL_R = 0.012      # m: the lid edge is moved forward by the sagitta of an eyeball this round, so it stays on it
+VERSION = 11
 
 
 def apply4(m, p):
@@ -464,7 +469,60 @@ def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[
     disp = smooth_under_eyes(sf_model, sf_t, disp, eyes)
     disp = smooth_moves(sf_model, sf_t, disp, eyes, FACE_SMOOTH)
     rep["smoothed_passes"] = FACE_SMOOTH
-    return disp, rep
+    lids, rep["almond"] = almond_moves(np.asarray(sf_model, float) + disp, sf_t, eyes)
+    return disp + lids, rep
+
+
+def eye_rims(v, t, eyes, near: float = 0.005):
+    """Per eye, the vertex indices of its opening's edge (the unwelded open loops of 12+ vertices whose centre is
+    within `near` of the eye's centre; Starfield doubles the edge: both loops)."""
+    v = np.asarray(v, float)
+    out = []
+    for c in np.asarray(eyes, float):
+        idx = [i for lp in headcorr.boundary_loops(np.asarray(t, int)) if len(lp) >= 12 and
+               np.linalg.norm(v[lp].mean(0) - c) < near for i in lp]
+        out.append(np.array(sorted(set(idx)), int))
+    return out
+
+
+def almond_moves(v, t, eyes, close: float = ALMOND) -> Tuple[np.ndarray, Dict]:
+    """(moves (V, 3), report): each upper lid edge vertex moved `close` of the way to the lower edge below it, most at
+    the middle (a sine across the opening), forward by the eyeball's sagitta so the edge stays on the eye; the lid
+    skin within LID_FALLOFF above the edge follows its nearest edge vertex, fading."""
+    v = np.asarray(v, float)
+    moves = np.zeros_like(v)
+    rep = {"close": close, "eyes": []}
+    for c, rim in zip(np.asarray(eyes, float), eye_rims(v, t, eyes)):
+        if len(rim) < 12:
+            rep["eyes"].append("no opening edge found")
+            continue
+        p = v[rim]
+        x0, x1 = p[:, 0].min(), p[:, 0].max()
+        up = p[:, 2] > c[2]
+        lo = p[~up]
+        if not up.any() or len(lo) < 3:
+            rep["eyes"].append("no upper / lower edge")
+            continue
+        order = np.argsort(lo[:, 0])
+        lx = lo[order, 0]
+        lz = np.interp(p[up, 0], lx, lo[order, 2])
+        ly = np.interp(p[up, 0], lx, lo[order, 1])
+        taper = np.sin(np.pi * np.clip((p[up, 0] - x0) / max(x1 - x0, 1e-6), 0, 1))
+        a = close * taper
+        h = p[up, 2] - lz
+        mv = np.stack([np.zeros(len(h)), a * (ly - p[up, 1]), a * (lz - p[up, 2])], 1)
+        mv[:, 1] += a * (1 - a) * h ** 2 / (2 * EYEBALL_R)          # stay on the eyeball, not inside it
+        edge_pts, edge_mv = p[up], mv
+        # every vertex at an edge point's place (the doubled edge) and the lid skin above it
+        d = np.linalg.norm(v[:, None, :] - edge_pts[None, :, :], axis=2)
+        j = d.argmin(1)
+        dist = d[np.arange(len(v)), j]
+        above = (v[:, 2] >= edge_pts[j, 2] - 1e-6) & (v[:, 1] > c[1] - 0.006)
+        w = np.where(dist < 1e-6, 1.0, np.clip(1 - dist / LID_FALLOFF, 0, 1) * above)
+        moves += w[:, None] * edge_mv[j]
+        rep["eyes"].append({"opening_mm": [round(float(x1 - x0) * 1000, 1), round(float(h.max()) * 1000, 1)],
+                            "lowered_mm": round(float(-mv[:, 2].min()) * 1000, 2)})
+    return moves, rep
 
 
 def smooth_moves(sf_model, sf_t, disp, eyes, passes: int, weight=None) -> np.ndarray:

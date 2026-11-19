@@ -378,8 +378,10 @@ def child_paint_points(ctx, fg, fg_bytes, disp, shape, n, a, out, sf_data) -> di
         tint = mesh.replace("meshes", "textures", 1).replace("facegeom", "facetint").rsplit(".", 1)[0] + ".dds"
     path = os.path.join(out, PAINT_DIR, f"{n['edid'].lower()}.npz")
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    lips, eye_w = childpaint.lip_eye_weights(sf_model, eyes, mouth)
     np.savez_compressed(path, sf_uv=sf_uv.astype(np.float32), sf_tris=sf_t.astype(np.int32),
-                        sky_uv=uv.astype(np.float32), weight=wt.astype(np.float32))
+                        sky_uv=uv.astype(np.float32), weight=wt.astype(np.float32),
+                        lips=lips.astype(np.float32), eyes=eye_w.astype(np.float32))
     return {"file": f"{PAINT_DIR}/{n['edid'].lower()}.npz", "tint": tint, "version": childpaint.VERSION,
             "uv_flipped": {"starfield": sf_flip, "skyrim": sky_flip},
             "vertices_painted": int((wt > 0.5).sum())}
@@ -400,7 +402,9 @@ def child_paint_face(row, sky, texconv, out):
     tint = race_heads.decode_any_dds(data, texconv)
 
     def paint(edid, face_rgba):
-        layer = childpaint.paint_layer(z["sf_uv"], z["sf_tris"], z["sky_uv"], z["weight"], tint, face_rgba.shape[0])
+        layer = childpaint.paint_layer(z["sf_uv"], z["sf_tris"], z["sky_uv"], z["weight"], tint, face_rgba.shape[0],
+                                       z["lips"] if "lips" in z.files else None,
+                                       z["eyes"] if "eyes" in z.files else None)
         row["child"]["paint"]["tint_skin_linear"] = [round(x, 4) for x in layer["tint_skin"]]
         return childpaint.painted_face(face_rgba, layer)
     return paint

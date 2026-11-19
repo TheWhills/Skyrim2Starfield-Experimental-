@@ -46,6 +46,23 @@ class PaintTests(unittest.TestCase):
         self.assertAlmostEqual(luma(CP.paint_factor(red, 1.0, 1.0)), luma(red))
         np.testing.assert_allclose(CP.paint_factor(np.ones(3)), np.ones(3))
 
+    def test_lips_and_eyes(self):
+        """The lips get LIP_TINT (darker, rosier); the eye surroundings no colour boost."""
+        v = np.array([(0.0, 0.098, 1.608), (0.03, 0.098, 1.608), (-0.04, 0.083, 1.684), (0.0, 0.1, 1.64)])
+        eyes = np.array([(-0.04, 0.083, 1.684), (0.04, 0.083, 1.684)])
+        lips, ew = CP.lip_eye_weights(v, eyes, np.array([0.0, 0.098, 1.608]))
+        self.assertEqual(list(lips), [1.0, 0.0, 0.0, 0.0])
+        self.assertEqual(list(ew), [0.0, 0.0, 1.0, 0.0])
+        vv, t, uv = grid(17)
+        tint = np.full((32, 32, 4), 200, np.uint8)
+        lip_w = (np.abs(uv[:, 0] - 0.25) < 0.2).astype(float)          # the left part is "lips"
+        layer = CP.paint_layer(uv, t, uv, np.ones(len(uv)), tint, 64, lips=lip_w)
+        face = np.full((64, 64, 4), 200, np.uint8)
+        out = CP.painted_face(face, layer)
+        lip_px, skin_px = out[32, 16, :3].astype(int), out[32, 56, :3].astype(int)
+        self.assertLess(lip_px[1], skin_px[1] - 20)                    # darker green: rosier, darker
+        self.assertGreater(lip_px[0] - lip_px[1], skin_px[0] - skin_px[1])
+
     def test_upright_uv(self):
         v, _t, uv = grid(9)                       # x right, y up: eyes at y 0.8, mouth at y 0.2
         eyes, mouth = np.array([(0.3, 0.8, 0), (0.7, 0.8, 0)]), np.array([0.5, 0.2, 0])

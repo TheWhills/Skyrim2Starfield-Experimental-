@@ -314,3 +314,11 @@ both gone on the preview (fadecmp2), nose widths unchanged (26.9/32.8/36.6/40.0 
 Owner's reference (17:07, a photo-real boy): almond, slightly hooded eyes, straight brows close above them, full
 neutral lips, freckles, ruddy cheeks. Still different on ours: Starfield's eye openings (round, more white showing:
 the lids are locked to Starfield's) and its brows.
+Owner (17:20): "his lips still look light, and off in a way and his eyes could stand to be slightly more almondy";
+(17:22) a goal image (our in-game shot made photo-real): the same face shape; the gap is the surface - skin
+detail, crisp freckles, rosy lips, soft blond-brown brows, a clean hairline, lightly pink lower lids.
+- childpaint v3: LIP_TINT (0.80, 0.56, 0.58) linear on the lips (an ellipse around the mouth centre,
+  lip_eye_weights), no colour boost within 20 mm of the eyes (the raw-red lower lids at CHROMA 2); npz lips / eyes.
+- childshape v11: almond_moves - each upper lid edge vertex 12% of the way to the lower edge below it, most at the
+  middle (sine), forward by an r=12 mm eyeball's sagitta, lid skin within 8 mm following: 1.45 / 1.34 mm lower on
+  Frodnar (openings 29.5 x 12.2 / 30.4 x 11.4 mm; Starfield's eye rims are the unwelded open loops, doubled).

@@ -25,7 +25,10 @@ STRENGTH = 0.9       # the paint's contrast against its own skin (1 = as in Skyr
 CHROMA = 2.0         # the paint's colour against its skin, apart from its lightness (2026-11-19, owner: "maybe we
                      # need to darken/pinken the lips and cheek" - the blur takes Starfield's own lip colour away,
                      # and the Skyrim tint's lips / cheeks are only a little redder than its skin)
-VERSION = 2
+LIP_TINT = (0.80, 0.56, 0.58)   # linear-light multiplier on the lips (2026-11-19, owner: "his lips still look light,
+                                # and off in a way"; the goal shot: rosy, darker lips)
+EYE_CHROMA = 1.0     # the colour boost around the eyes (owner's close-up: raw red lower lids at CHROMA 2)
+VERSION = 3
 
 
 def barycentric(p, a, b, c) -> np.ndarray:
@@ -41,6 +44,19 @@ def barycentric(p, a, b, c) -> np.ndarray:
     w = (d00 * d21 - d01 * d20) / den
     out = np.clip(np.stack([1 - v - w, v, w], 1), 0, 1)
     return out / np.maximum(out.sum(1, keepdims=True), 1e-12)
+
+
+def lip_eye_weights(v, eyes, mouth) -> Tuple[np.ndarray, np.ndarray]:
+    """(lips, eye surroundings) weights per Starfield head vertex (model space, +Y forward, +Z up): the lips an
+    ellipse around the mouth centre (24 mm across each way, 9 mm up / down, on the front), fading over its outer
+    third; the eye surroundings within 20 mm of an eye opening's centre, fading over 8 mm."""
+    v = np.asarray(v, float)
+    m = np.asarray(mouth, float)
+    r = np.sqrt(((v[:, 0] - m[0]) / 0.024) ** 2 + ((v[:, 2] - m[2]) / 0.009) ** 2)
+    lips = np.clip((1.0 - r) / 0.33, 0, 1) * (v[:, 1] > m[1] - 0.008)
+    d = np.min([np.linalg.norm(v - c, axis=1) for c in np.asarray(eyes, float)], axis=0)
+    eye_w = np.clip((0.020 - d) / 0.008, 0, 1)
+    return lips.astype(float), eye_w
 
 
 def upright_uv(uv, v, eyes, mouth, near: float = 0.02) -> Tuple[np.ndarray, bool]:
@@ -148,11 +164,19 @@ def paint_factor(ratio, strength: float = STRENGTH, chroma: float = CHROMA) -> n
     return np.power(luma, strength) * np.power(ratio / luma, chroma)
 
 
-def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int) -> Dict:
+def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int, lips=None, eyes=None) -> Dict:
     """{"factor": (size, size, 3) linear-light multiplier (1 off the face), "weight": (size, size)}: the Skyrim tint
-    read through each Starfield pixel's Skyrim UV, over its own skin colour (median where the weight is full)."""
-    attrs = np.concatenate([np.asarray(sky_uv_per_vertex, float), np.asarray(weight, float)[:, None]], 1)
+    read through each Starfield pixel's Skyrim UV, over its own skin colour (median where the weight is full).
+    lips / eyes (V,) 0-1: where the lips are (LIP_TINT on them) and the eye surroundings (colour boost EYE_CHROMA
+    there)."""
+    n = len(np.asarray(weight))
+    lips = np.zeros(n) if lips is None else np.asarray(lips, float)
+    eyes = np.zeros(n) if eyes is None else np.asarray(eyes, float)
+    attrs = np.concatenate([np.asarray(sky_uv_per_vertex, float), np.asarray(weight, float)[:, None],
+                            lips[:, None], eyes[:, None]], 1)
     img, cov = raster(sf_uv, sf_t, attrs, size)
+    lip_img = np.where(cov, img[..., 3], 0.0)[..., None]
+    eye_img = np.where(cov, img[..., 4], 0.0)[..., None]
     w = np.where(cov, img[..., 2], 0.0)
     feather = max(1, int(round(FEATHER * size)))
     w = np.minimum(w, blur(w, feather)) if feather > 1 else w
@@ -161,7 +185,9 @@ def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int) ->
     if full.sum() < 16:
         raise ValueError("the Skyrim face covers almost none of the Starfield head's texture")
     skin = np.median(tint[full], axis=0)
-    factor = paint_factor(tint / np.maximum(skin, 1e-4))
+    chroma = CHROMA + (EYE_CHROMA - CHROMA) * eye_img
+    factor = paint_factor(tint / np.maximum(skin, 1e-4), STRENGTH, chroma)
+    factor = factor * (1.0 + lip_img * (np.array(LIP_TINT) - 1.0))
     factor = 1.0 + w[..., None] * (factor - 1.0)
     return {"factor": factor, "weight": w, "tint_skin": [float(x) for x in skin]}
 
