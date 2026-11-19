@@ -78,6 +78,23 @@ def missing_textures(shapes: List[Dict], src) -> List[str]:
     return miss
 
 
+def usable_shapes(names: List[str], shapes: List[Dict], src) -> tuple:
+    """(names, shapes, left out {shape: missing texture}): the hair without its extra layers whose texture `src` lacks
+    (2026-11-19, owner's run: KS Hairdos SMP has no hairline\\scalp.dds, Frodnar's scalp layer; the layer is a
+    shadow under the hair). Nothing is kept when the hair part's own shape (names[0]) lacks its texture."""
+    left = {}
+    for sh in shapes:
+        miss = missing_textures([sh], src)
+        if miss:
+            left[sh["name"]] = miss[0]
+    main = names[0].lower() if names else None
+    if any(k.lower() == main for k in left) or not any(sh["name"].lower() == main for sh in shapes):
+        return names, [], left or {main: "no shape of the hair part"}
+    keep = [sh for sh in shapes if sh["name"] not in left]
+    dropped = {k.lower() for k in left}
+    return [n for n in names if n not in dropped], keep, left
+
+
 def sky_to_starfield(ctx) -> np.ndarray:
     """4x4 Skyrim model space (units) -> Starfield child model space (m): the face alignment (ctx["al"]: Skyrim model
     -> the head's mesh-local frame) followed by the head node (local -> model). A scale and shift (align_to_local

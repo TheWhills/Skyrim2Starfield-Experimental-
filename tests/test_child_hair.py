@@ -49,6 +49,27 @@ class ShapeNameTests(unittest.TestCase):
         self.assertEqual(CH.missing_textures(got + got, none), [got[0]["textures"][0]])
 
 
+class UsableShapeTests(unittest.TestCase):
+    def test_layers_without_textures_left_out(self):
+        """2026-11-19 (owner's run): KS Hairdos SMP lacks the scalp layer's texture; the hair is built without it,
+        and not at all when the hair part's own texture is missing."""
+        names = ["0chainreactionduplicate001", "0chainreactionhlduplicate001", "0_hairline_scalp"]
+        shapes = [{"name": "0ChainReactionDUPLICATE001", "textures": ["textures\\ks\\chain.dds"]},
+                  {"name": "0ChainReactionHLDUPLICATE001", "textures": ["textures\\ks\\chain.dds"]},
+                  {"name": "0_HAIRLINE_Scalp", "textures": ["textures\\ks\\scalp.dds"]}]
+        src = types.SimpleNamespace(texture=lambda p: None if "scalp" in p else b"dds")
+        n, sh, left = CH.usable_shapes(names, shapes, src)
+        self.assertEqual(n, names[:2])
+        self.assertEqual([x["name"] for x in sh], ["0ChainReactionDUPLICATE001", "0ChainReactionHLDUPLICATE001"])
+        self.assertEqual(left, {"0_HAIRLINE_Scalp": "textures\\ks\\scalp.dds"})
+        src = types.SimpleNamespace(texture=lambda p: None if "chain" in p else b"dds")
+        n, sh, left = CH.usable_shapes(names, shapes, src)
+        self.assertEqual(sh, [])
+        self.assertIn("0ChainReactionDUPLICATE001", left)
+        n, sh, left = CH.usable_shapes(names, shapes[2:], types.SimpleNamespace(texture=lambda p: b"dds"))
+        self.assertEqual(sh, [])
+
+
 class PlacementTests(unittest.TestCase):
     def test_convert_puts_points_where_the_face_alignment_does(self):
         raw = hair_nif_bytes()

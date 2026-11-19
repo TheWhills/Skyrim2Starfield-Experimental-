@@ -107,3 +107,14 @@ slot 0 need not be the lightest child tone (supported hypothesis for the darker 
 ChildRace's body tone group's textures by median lightness (child_hair.child_tone_slots, the BSTT string of the
 sex -> its AVMD's VNAM textures) and gives each child the slot of its rank; faces.json: child_skin_tones and each
 child's child_tone.
+Owner's run 2026-11-19 (verified from faces.json): load order with KS Hairdos SMP, the Salt and Wind retextures and
+Realistic RS Children 4.5 from C:\Modding\work\child mods. Dorthe's hair built (Mellow + its straight hairline, the
+HL copy dropped; Skyrim HairColor06Auburn -> Starfield "Amber"; median gap to her baked head 8-16 mm by region,
+Skyrim's own 13-20 mm). The template hair whose _facebones twin was copied is Human_Female_Hair_Bob (Bob_F, an adult
+hair worn by the template child COM_Quest_Sona); Starfield's child skeleton has C_Head where the adult one has it
+(0, -0.0018, 1.6323 m), so the adult face-bone frames fit. Frodnar's was skipped: KS Hairdos SMP has no
+textures\ks hairdo's\hairline\scalp.dds (his scalp layer). Now a layer whose texture is missing is left out
+(faces.json hair.left_out) and the hair built without it; only a missing hair texture keeps the template's hair.
+Skin tones: ChildRace's body groups (Child_Male_Body_Skin_Tones / Child_Female_Body_Skin_Tones, the same three
+textures) by median: slot 1 (164,126,103), slot 0 (139,109,82), slot 2 (79,65,49), so slot 0 was the middle one
+(the darker skin seen on Frodnar); both children now STON 1.

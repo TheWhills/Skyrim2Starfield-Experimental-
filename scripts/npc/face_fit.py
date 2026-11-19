@@ -1079,10 +1079,12 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
             if not shapes:
                 info["error"] = f"no shape named {', '.join(names)} in its FaceGen NIF: the template's hair"
                 continue
-            miss = child_hair.missing_textures(shapes, sky)
-            if miss:
-                info["error"] = (f"textures not in the Skyrim load order: {', '.join(miss)} (KS Hairdos: add its "
-                                 "mod folder with --skyrim-mod): the template's hair")
+            names, shapes, left = child_hair.usable_shapes(names, shapes, sky)
+            if left:
+                info["left_out"] = left
+            if not shapes:
+                info["error"] = (f"textures not in the Skyrim load order: {', '.join(sorted(set(left.values())))} "
+                                 "(KS Hairdos: add its mod folder with --skyrim-mod): the template's hair")
                 continue
             k = test_subs[row["edid"]]
             tpl = npc_hair.starfield_part_template(recs[k][2], sf_hdpt, child_hair.HAIR, n["female"])
