@@ -34,6 +34,18 @@ class PaintTests(unittest.TestCase):
         self.assertLess(CP.blur(noisy, 3).std(), 0.3 * noisy.std())
         self.assertAlmostEqual(float(CP.blur(np.full((8, 8), 0.4), 2).mean()), 0.4)
 
+    def test_paint_factor(self):
+        """Lightness to STRENGTH, colour to CHROMA: a redder-than-skin spot gets redder, a grey one only lighter or
+        darker."""
+        grey = CP.paint_factor(np.array([0.5, 0.5, 0.5]), 0.8, 2.0)
+        np.testing.assert_allclose(grey, [0.5 ** 0.8] * 3, rtol=1e-6)
+        red = np.array([1.2, 0.9, 0.9])
+        f = CP.paint_factor(red, 1.0, 2.0)
+        self.assertGreater(f[0] / f[1], red[0] / red[1])          # pinker than the tint alone
+        luma = lambda c: float((np.asarray(c) * CP.LUMA).sum())    # noqa: E731
+        self.assertAlmostEqual(luma(CP.paint_factor(red, 1.0, 1.0)), luma(red))
+        np.testing.assert_allclose(CP.paint_factor(np.ones(3)), np.ones(3))
+
     def test_upright_uv(self):
         v, _t, uv = grid(9)                       # x right, y up: eyes at y 0.8, mouth at y 0.2
         eyes, mouth = np.array([(0.3, 0.8, 0), (0.7, 0.8, 0)]), np.array([0.5, 0.2, 0])

@@ -20,9 +20,12 @@ from fo4sf.textures import linear_to_srgb, srgb_to_linear
 REACH = 0.008        # m: a Starfield vertex this far or farther from the Skyrim face takes no paint (fading from half)
 BLUR = 0.02          # of the texture size: the Starfield face's painted features softened away under the paint
 FEATHER = 0.015      # of the texture size: the painted area's edge
-STRENGTH = 0.8       # the paint's contrast against its own skin (1 = as in Skyrim; a little less on Starfield's
+STRENGTH = 0.9       # the paint's contrast against its own skin (1 = as in Skyrim; a little less on Starfield's
                      # lighting: Frodnar's freckles and cheeks read grimy at full strength on the preview)
-VERSION = 1
+CHROMA = 2.0         # the paint's colour against its skin, apart from its lightness (2026-11-19, owner: "maybe we
+                     # need to darken/pinken the lips and cheek" - the blur takes Starfield's own lip colour away,
+                     # and the Skyrim tint's lips / cheeks are only a little redder than its skin)
+VERSION = 2
 
 
 def barycentric(p, a, b, c) -> np.ndarray:
@@ -133,6 +136,18 @@ def blur(img, radius: int, passes: int = 3) -> np.ndarray:
     return out
 
 
+LUMA = np.array([0.2126, 0.7152, 0.0722])
+
+
+def paint_factor(ratio, strength: float = STRENGTH, chroma: float = CHROMA) -> np.ndarray:
+    """Linear-light multiplier from the tint's ratio to its own skin (..., 3): its lightness (luma) to the power
+    strength, its colour (the ratio over its luma) to the power chroma - lips and cheeks pinker, freckles no
+    darker."""
+    ratio = np.maximum(np.asarray(ratio, float), 1e-4)
+    luma = np.maximum((ratio * LUMA).sum(-1, keepdims=True), 1e-4)
+    return np.power(luma, strength) * np.power(ratio / luma, chroma)
+
+
 def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int) -> Dict:
     """{"factor": (size, size, 3) linear-light multiplier (1 off the face), "weight": (size, size)}: the Skyrim tint
     read through each Starfield pixel's Skyrim UV, over its own skin colour (median where the weight is full)."""
@@ -146,7 +161,7 @@ def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int) ->
     if full.sum() < 16:
         raise ValueError("the Skyrim face covers almost none of the Starfield head's texture")
     skin = np.median(tint[full], axis=0)
-    factor = np.power(np.maximum(tint / np.maximum(skin, 1e-4), 1e-4), STRENGTH)
+    factor = paint_factor(tint / np.maximum(skin, 1e-4))
     factor = 1.0 + w[..., None] * (factor - 1.0)
     return {"factor": factor, "weight": w, "tint_skin": [float(x) for x in skin]}
 

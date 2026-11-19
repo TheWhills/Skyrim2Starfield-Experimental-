@@ -302,3 +302,7 @@ Owner (16:53-16:55): "what is it that is causing him to look kind've off. or oth
 shape: MOUTH_FREE), his brows are Starfield's thin dark arched part, and the fitted surface carries the Realistic
 RS sculpt's creases (forehead, cheeks, around the mouth), which read as aged. childshape v9: FACE_SMOOTH 80 passes
 over the moves on the whole head at the end (0.65 mm rms change on Frodnar, nose widths unchanged; preview checked).
+Owner (17:00): "maybe we need to darken/pinken the lips and cheek" - pale in game: the blur under the paint takes
+Starfield's own lip colour, and the tint's lips / cheeks are only a little redder than its skin. childpaint v2:
+paint_factor = the tint ratio's lightness ^ 0.9 times its colour (ratio over lightness) ^ 2.0: lips, cheeks and
+nose tip pinker, freckles about as before (preview paint_v2, per vertex).
