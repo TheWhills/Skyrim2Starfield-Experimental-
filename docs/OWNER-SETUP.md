@@ -232,7 +232,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    $ks=@(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 4 -Filter "KS*Hairdo*.es?" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "SMP|Wigs" } | ForEach-Object DirectoryName | Select-Object -Unique)
    $skyargs=@(); foreach ($m in @($ks) + @($rsc,$rrsc,$rrsc47)) { if ($m) { $skyargs += "--skyrim-mod"; $skyargs += $m } }
    "RS: $rsc`nRealistic: $rrsc`nupdate: $rrsc47`nKS Hairdos: $($ks -join ' | ')"
-   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @skyargs
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @skyargs --child-shape-npc Frodnar --child-controls
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
    (--items-plugin: the shared item outfits every adult wears since 9c; 2026-11-19 a run without it left Hilde
@@ -241,6 +241,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    C:\Modding\work\child mods and run again. Send faces.json's child_hair, child_skin_tones and Dorthe / Frodnar rows. In game:
    Dorthe and Frodnar in Riverwood (or placeatme their test NPCs, faces.json "console"): child size, their own faces
    and hair, a lighter skin; clothes are still the template child's.
+   2026-11-19 face colour test (--child-controls): Frodnar (0A000814) has the "divide" face colour; faces.json
+   Frodnar control_npcs gives the placeatme lines of FaceMatchBody (the previous build), FaceX1_5 and FaceX2. Stand
+   them side by side in daylight: whose face matches his hands? (--child-shape-npc Frodnar: his feature-matched face
+   shape; Dorthe waits.)
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

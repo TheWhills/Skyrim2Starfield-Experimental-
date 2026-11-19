@@ -222,3 +222,21 @@ face picked by skin (pick_template), its textures copied under the child's FormI
 head's layout), the colour texture matched to the median of the child's own body tone (the hands'). faces.json:
 test_npc.baked_face. Unverified: that the game uses baked face textures on a ChildRace NPC, and that the adult
 face textures sit right on the child head's UVs.
+- child_skin_preview.py (owner's run): the adult template picked for Frodnar (ChargenPresetMale16) has light
+  stubble painted into its face texture; Starfield's own child face tone textures are a painted child face in the
+  child head's layout (a possible face source later).
+**Verified in game (owner, 13:09-13:16):** the baked face shows on a ChildRace NPC and sits right on the child head
+(eyes, nose, lips line up), so child and adult heads share the face UV layout. The feature-matched shape reads as
+him.
+Owner: "his skin is too dark, he needs to be nord looking ... those hands are pale white and the face isn't". The
+body / hands (STON 1, Starfield's lightest child body) are pale; the face, matched to that body texture's median
+(164,126,103), came out tan-orange. Measured on the owner's daylight screenshot: the face about 2-3x darker than the
+hands in linear light and more saturated (blue / red about half the hands'). Guess: the game multiplies a child's
+baked face colour by the face tone texture of its STON (vanilla child face tones run lighter than the body ones:
+slot 0 face (189,143,115) vs body (139,109,82)), so the face colour should be the body tone divided by the face
+tone. face_fit.CHILD_FACE_MODE = "divide": the baked face colour's median = body median / face tone median at the
+STON (linear light; Frodnar: (243,255,255), a near-white face texture). --child-controls adds copies of the
+finished NPC with the face matched to the body times 1.0 / 1.5 / 2.0 (FaceMatchBody = the previous build,
+FaceX1_5, FaceX2) to compare in game. faces.json: test_npc.baked_face {mode, body_tone, face_tone, baked_median},
+control_faces. Unverified: the multiply guess (in game: a pale face on Frodnar means it is right; a white one, that
+the controls' gain is the way).
