@@ -224,10 +224,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    $rrsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "RealisticRSChildren.esp") }).Name
    $rrsc47=(Get-ChildItem $skymods -Directory | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" }).Name
    "RS: $rsc | Realistic: $rrsc | update: $rrsc47"
-   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --skyrim-mods-dir $skymods --skyrim-mod $rsc --skyrim-mod $rrsc --skyrim-mod $rrsc47
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --skyrim-mods-dir $skymods --skyrim-mod $rsc --skyrim-mod $rrsc --skyrim-mod $rrsc47
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
-   Send faces.json's Dorthe / Frodnar rows. In
+   (--items-plugin: the shared item outfits every adult wears since 9c; 2026-11-19 a run without it left Hilde
+   unclothed.) Send faces.json's Dorthe / Frodnar rows. In
    game: Dorthe and Frodnar in Riverwood (or placeatme their test NPCs, faces.json "console"): child size, their own
    faces; hair and clothes are still the template child's.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
