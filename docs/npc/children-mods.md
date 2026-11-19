@@ -214,3 +214,11 @@ Owner in game on that (12:46): "that nose is still big and he's not quite white 
 - Owner asked whether face sliders work on children: no vanilla child uses them (no dials, blends or baked faces on
   any of the 51), but the child head has the adult layout and its chargen morph points at the adult morph.dat
   (races-roadmap), so they may; untested. The baked head stays (exact shape).
+Owner (12:59): "the hands look lighter than the face, all those faces came out the same color" - the European face
+skin copies changed nothing, so the face skin layer does nothing on a child NPC (as on adult NPCs: a non-player
+face is its pre-built face textures; a new NPC has none and the game draws a default one). Now each child's test NPC
+gets baked face textures as the adults do (face_fit.child_baked_face): a European HumanRace template with a baked
+face picked by skin (pick_template), its textures copied under the child's FormID (the child head has the adult
+head's layout), the colour texture matched to the median of the child's own body tone (the hands'). faces.json:
+test_npc.baked_face. Unverified: that the game uses baked face textures on a ChildRace NPC, and that the adult
+face textures sit right on the child head's UVs.

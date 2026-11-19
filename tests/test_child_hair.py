@@ -260,6 +260,32 @@ class PreviewTests(unittest.TestCase):
         self.assertLess(int(img.min()), 235)                 # something drawn
 
 
+class BakedFaceTests(unittest.TestCase):
+    def test_child_baked_face(self):
+        """A child's test NPC gets an adult European template's baked face, matched to its own body tone."""
+        import face_fit as S
+        tpl = (b"NPC_", b"", [(b"EDID", Z("YoungEuro")), (b"STON", b"\x02"), (b"TNAM", Z("Dermaesthetic")),
+                              (b"QNAM", Z("European_Male_yo1_Sk2"))], 0x123)
+        row = {"edid": "Frodnar", "female": False, "test_npc": {"form_id": "0A000814", "ston": 1}}
+        seen = {}
+
+        def write(index, tpl_fid, new_fid, data_dir, out, plugin=None, colour=None):
+            seen.update(tpl=tpl_fid, new=new_fid, colour=colour)
+            return [os.path.join(out, "x", "00000814_color.dds")]
+        tones = {"male": {"medians": {1: [164, 126, 103], 0: [139, 109, 82]}}}
+        with mock.patch.object(S, "pick_template", lambda *a, **k: tpl), \
+                mock.patch.object(S, "write_baked_face", write), \
+                mock.patch.object(S, "target_skin", lambda n, npcs, real: (2, "european")):
+            got = S.child_baked_face(row, {}, {}, {}, [tpl], 0x3CDB, {0x123: {}}, "sf", "out", tones)
+        self.assertEqual(got["template"], "YoungEuro")
+        self.assertEqual(got["matched_to_body"], [164, 126, 103])
+        self.assertEqual((seen["tpl"], seen["new"]), (0x123, 0x0A000814))
+        self.assertTrue(callable(seen["colour"]))
+        with mock.patch.object(S, "pick_template", lambda *a, **k: None), \
+                mock.patch.object(S, "target_skin", lambda n, npcs, real: (2, "european")):
+            self.assertIn("none", S.child_baked_face(row, {}, {}, {}, [], 0x3CDB, {}, "sf", "out", tones))
+
+
 class BuildPartFilterTests(unittest.TestCase):
     def test_keep_shapes(self):
         import skyrim_hairs as SH

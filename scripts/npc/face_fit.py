@@ -1116,6 +1116,30 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
 CHILD_CONTROLS = ("VanillaHead", "NoFaceSkin", "Tone0", "Tone1", "Tone2")
 
 
+def child_baked_face(row, n, npcs, real, npc_recs, human, baked, sf_data, out, tone_report):
+    """Pre-built face textures for a child's test NPC (2026-11-19, owner: "the hands look lighter than the face, all
+    those faces came out the same color" - no face skin layer changed it): a new NPC has no baked face and the game
+    draws a default one. As for the adults: a European HumanRace template with a baked face, by skin
+    (pick_template), its textures copied under the child's FormID (Starfield's child head has the adult head's
+    layout, races-roadmap), the colour texture matched to the median of the child's own body tone (the hands').
+    Returns the report entry."""
+    import race_heads as rh
+    female = row["female"]
+    adult = target_skin(n, npcs, real)[0] if real is not None else None
+    tpl = pick_template(npc_recs, human, female, None, skin=(adult, FACE_ETHNICITY), baked=baked)
+    if tpl is None:
+        return "none: no template with a baked face"
+    sex = "female" if female else "male"
+    ston = row["test_npc"].get("ston")
+    med = ((tone_report or {}).get(sex) or {}).get("medians") or {}
+    target = med.get(ston, med.get(str(ston))) if ston is not None else None
+    colour = rh.face_tone(tuple(target)) if target else None
+    fid = int(row["test_npc"]["form_id"], 16)
+    files = write_baked_face(baked, tpl[3], fid, sf_data, out, colour=colour)
+    return {"template": sfplugin.edid(tpl[2]), "template_skin": list(template_skin(tpl[2])),
+            "matched_to_body": list(target) if target else None, "files": [os.path.basename(f) for f in files]}
+
+
 def derma_names(npc_recs) -> list:
     """Every Dermaesthetic face skin texture name Starfield's NPCs use (TNAM Dermaesthetic -> its QNAM)."""
     out = set()
@@ -1767,6 +1791,13 @@ def main(argv=None):
                     report["child_skin_tones"] = tone_slots.pop("_report", None)
                 write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
                                 child_race, conv_child, race_index, recs, masters, test_subs, tone_slots)
+                if baked and isinstance(row.get("test_npc"), dict):
+                    try:
+                        row["test_npc"]["baked_face"] = child_baked_face(
+                            row, by_edid[row["edid"].lower()], npcs, real, npc_recs, human, baked, sf_data, out,
+                            report.get("child_skin_tones"))
+                    except (KeyError, ValueError, OSError) as e:
+                        row["test_npc"]["baked_face"] = f"none: {type(e).__name__}: {e}"
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
             elder = None
