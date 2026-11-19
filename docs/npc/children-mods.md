@@ -118,3 +118,7 @@ textures\ks hairdo's\hairline\scalp.dds (his scalp layer). Now a layer whose tex
 Skin tones: ChildRace's body groups (Child_Male_Body_Skin_Tones / Child_Female_Body_Skin_Tones, the same three
 textures) by median: slot 1 (164,126,103), slot 0 (139,109,82), slot 2 (79,65,49), so slot 0 was the middle one
 (the darker skin seen on Frodnar); both children now STON 1.
+Correction (owner, 2026-11-19): that run's KS textures came from KS Hairdos SMP plus the Salt and Wind retextures
+(and VIGILANT - Alessia Replacer), which the search took because they hold textures\KS Hairdo's - not asked for.
+Realistic RS Children is made against the regular KS Hairdos SSE; the search now takes only that, its .7z unpacked
+in C:\Modding\work\child mods and found by its plugin (no retextures, no SMP repack).

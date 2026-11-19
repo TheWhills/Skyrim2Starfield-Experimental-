@@ -218,15 +218,18 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    GeneratedSubgraphData listing. A vanilla trilobite (`player.placeatme 2C180F`) should look like a trilobite again.
 7k. B + C: Dorthe and Frodnar from Realistic RS Children (docs/npc/children-mods.md). Starfield closed. The three
    Skyrim mods are found by their files in MO2's Skyrim mods folder or C:\Modding\work\child mods (2026-11-19: the
-   4.5 unpacked there was missed, an empty --skyrim-mod stopped the run), and any KS Hairdos folder (their hair
-   textures) by its plugin or textures\KS Hairdo's folder; a mod not found is left out (check the printed paths):
+   4.5 unpacked there was missed, an empty --skyrim-mod stopped the run); a mod not found is left out (check the
+   printed paths). Hair textures: only the regular KS Hairdos SSE (Nexus SSE 6817, the one Realistic RS Children is
+   made against), its .7z unpacked in C:\Modding\work\child mods and found by its plugin - no retextures, no SMP
+   repack (2026-11-19, owner: the first search also took the Salt and Wind retextures and KS Hairdos SMP unasked):
    ```powershell
    git pull
    $skymods="$env:LOCALAPPDATA\ModOrganizer\Skyrim Special Edition\mods"; $childmods="C:\Modding\work\child mods"
    $findmod={ param($file) @(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName $file) } | ForEach-Object FullName) + @(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 3 -Filter $file -File -ErrorAction SilentlyContinue | ForEach-Object DirectoryName) | Select-Object -First 1 }
    $rsc=& $findmod "RSkyrimChildren.esm"; $rrsc=& $findmod "RealisticRSChildren.esp"
    $rrsc47=@(Get-ChildItem $skymods,$childmods -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" } | ForEach-Object FullName) | Select-Object -First 1
-   $ks=@(Get-ChildItem $skymods -Directory | Where-Object { $_.FullName -notin @($rsc,$rrsc,$rrsc47) -and ((Get-ChildItem -LiteralPath $_.FullName -Filter "KSHairdo*.es?" -File -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $_.FullName "textures\KS Hairdo's"))) } | ForEach-Object FullName)
+   Get-ChildItem -LiteralPath $childmods -Filter "*.7z" | Where-Object { $_.Name -match "KS.*Hairdo" -and $_.Name -notmatch "SMP|Salt|Sassy|Retex" -and -not (Test-Path -LiteralPath (Join-Path $childmods $_.BaseName)) } | ForEach-Object { New-Item -ItemType Directory -Path (Join-Path $childmods $_.BaseName) | Out-Null; tar -xf $_.FullName -C (Join-Path $childmods $_.BaseName) }
+   $ks=@(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 4 -Filter "KSHairdo*.es?" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "SMP|Wigs" } | ForEach-Object DirectoryName | Select-Object -Unique)
    $skyargs=@(); foreach ($m in @($ks) + @($rsc,$rrsc,$rrsc47)) { if ($m) { $skyargs += "--skyrim-mod"; $skyargs += $m } }
    "RS: $rsc`nRealistic: $rrsc`nupdate: $rrsc47`nKS Hairdos: $($ks -join ' | ')"
    python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @skyargs
@@ -234,8 +237,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    (--items-plugin: the shared item outfits every adult wears since 9c; 2026-11-19 a run without it left Hilde
    unclothed. --texconv: the children's own hair, from their FaceGen NIFs, since 2026-11-19.) KS Hairdos empty: the
-   children's hair textures are missing (faces.json says which) - install KS Hairdos SSE (Nexus SSE 6817) in MO2's
-   Skyrim mods and run again. Send faces.json's child_hair, child_skin_tones and Dorthe / Frodnar rows. In game:
+   children's hair textures are missing (faces.json says which) - put KS Hairdos SSE's .7z (Nexus SSE 6817) in
+   C:\Modding\work\child mods and run again. Send faces.json's child_hair, child_skin_tones and Dorthe / Frodnar rows. In game:
    Dorthe and Frodnar in Riverwood (or placeatme their test NPCs, faces.json "console"): child size, their own faces
    and hair, a lighter skin; clothes are still the template child's.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
