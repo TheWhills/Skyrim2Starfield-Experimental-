@@ -296,9 +296,9 @@ def fit_settings(a, sf_data):
     return {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit, "ridge": a.ridge,
             "symmetry": not a.no_symmetry, "transfer": a.transfer, "legacy": bool(a.legacy_alignment),
             "blends": None if a.no_blends else a.blend_ethnicity,
-            "files": files, "games": games,
-            "skyrim_mods": [os.path.basename(m) for m in skyrimload.mod_folders(getattr(a, "skyrim_mods_dir", ""),
-                                                                                getattr(a, "skyrim_mod", []))]}
+            "files": files, "games": games}
+    # Skyrim mods (--skyrim-mod) are not a setting here (2026-11-19, owner: "why is every adult refitting"): an NPC a
+    # mod changes has other FaceGen bytes, which its own key already holds (npc_fit_key)
 
 
 def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted):

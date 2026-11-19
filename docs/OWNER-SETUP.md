@@ -227,7 +227,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --skyrim-mods-dir $skymods --skyrim-mod $rsc --skyrim-mod $rrsc --skyrim-mod $rrsc47
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
-   (Every adult refits once: the mods are part of the fit settings.) Send faces.json's Dorthe / Frodnar rows. In
+   Send faces.json's Dorthe / Frodnar rows. In
    game: Dorthe and Frodnar in Riverwood (or placeatme their test NPCs, faces.json "console"): child size, their own
    faces; hair and clothes are still the template child's.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
