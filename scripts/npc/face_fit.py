@@ -1026,7 +1026,8 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
             "face_layers": [f"{n}: {t} ({i})" for n, t, i in face_layers(subs)],
             "face_fields": sorted({s_.decode("latin-1") for s_, _d in subs
                                    if s_ in (b"FMRI", b"FMRS", b"FMSI", b"BMPN", b"MSDK", b"TNAM", b"QNAM", b"FTSM",
-                                             b"FTST", b"NAM9", b"NAMA", b"MRSV")})}
+                                             b"FTST", b"NAM9", b"NAMA", b"MRSV")}),
+            "all_fields": sorted({s_.decode("latin-1") for s_, _d in subs})}
 
 
 CHILD_CONTROLS = ("VanillaHead", "Tone0", "Tone1", "Tone2")
