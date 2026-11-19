@@ -41,18 +41,22 @@ EAR_ROUNDS = 400       # the ears take part in rounds this coarse or coarser: si
 REACH = 0.035          # m: farthest pull
 FACING = 0.6           # pull only to a Skyrim surface facing within ~53 degrees of the vertex's own normal
 EYE_LOCK = 0.010       # m around each eye opening's centre (and its socket behind) that does not move, fading
-EYE_FADE = 0.012       # over EYE_FADE: the eyeballs stay covered, the lids take the child's shape (owner: "the eyes
+EYE_FADE = 0.025       # over EYE_FADE: the eyeballs stay covered, the lids take the child's shape (owner: "the eyes
 #                        are unchanged" with 14 + 12 mm)
 MOUTH_FREE = 0.010     # m around the mouth centre that does not pull (moves with the face); 16 left the skin above
 #                        the upper lip standing out
-UNDER_EYE = 0.034      # m from an eye opening's centre, below it and to its side: the moves smoothed there (2026-11-19,
+UNDER_EYE = 0.045      # m from an eye opening's centre, below it and to its side: the moves smoothed there (2026-11-19,
 UNDER_EYE_PASSES = 40  # owner: "kind've creepy, like in the eyes" - the Realistic RS face's under-eye creases came
                        # through as bags on Starfield's smooth head)
-FACE_SMOOTH = 80       # passes over the moves on the whole head at the end (2026-11-19, owner: "maybe he needs some
+FACE_SMOOTH = 200      # passes over the moves on the whole head at the end (2026-11-19, owner: "maybe he needs some
                        # smoothing overall?" - the Realistic RS sculpt's creases on forehead, cheeks and around the
                        # mouth read as aged on Starfield's lighting; 80 passes change the moves 0.65 mm rms, the
                        # nose, chin and cheeks keep their shape)
-VERSION = 9
+# 2026-11-19 (owner: "whats causing the bottom to not be smooth like the top"): measured on Frodnar, the extra
+# bumps sat on a ring around each eye - the locked sockets (0 move) against the face's 1.4 mm moves 22 mm out, over a
+# 12 mm fade - and in folds from the Skyrim sculpt (nasolabial, under the lips). EYE_FADE 25 mm and 200 passes:
+# both gone on the preview, nose widths unchanged.
+VERSION = 10
 
 
 def apply4(m, p):

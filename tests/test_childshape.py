@@ -105,7 +105,7 @@ class UnderEyeTests(unittest.TestCase):
         out = CS.smooth_under_eyes(gv, gt, disp, eyes)
         w = CS.under_eye_weight(gv, eyes)
         lock = CS.socket_lock(gv, eyes)
-        band = (w > 0.99) & (lock > 0.99)
+        band = (w > 0.99) & (lock > 0.5)
         self.assertTrue(band.any())
         self.assertLess(np.std(out[band, 1]), 0.4 * np.std(disp[band, 1]))   # bumps gone
         self.assertAlmostEqual(float(out[band, 1].mean()), 0.002, delta=0.0005)   # the overall move kept

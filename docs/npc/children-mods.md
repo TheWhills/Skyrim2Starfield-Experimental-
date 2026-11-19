@@ -306,3 +306,11 @@ Owner (17:00): "maybe we need to darken/pinken the lips and cheek" - pale in gam
 Starfield's own lip colour, and the tint's lips / cheeks are only a little redder than its skin. childpaint v2:
 paint_factor = the tint ratio's lightness ^ 0.9 times its colour (ratio over lightness) ^ 2.0: lips, cheeks and
 nose tip pinker, freckles about as before (preview paint_v2, per vertex).
+Owner (17:06, the v9 preview): "whats causing the bottom to not be smooth like the top". Measured (surface minus
+its own smoothing, along the normals): the extra bumps sit on a ring around each eye - the locked sockets don't move
+while the face 22 mm out moves 1.4 mm, over a 12 mm fade - and in folds copied from the Skyrim sculpt (nasolabial,
+under the lips). childshape v10: EYE_FADE 25 mm, FACE_SMOOTH 200 passes (UNDER_EYE 45 mm to reach past the fade):
+both gone on the preview (fadecmp2), nose widths unchanged (26.9/32.8/36.6/40.0 mm).
+Owner's reference (17:07, a photo-real boy): almond, slightly hooded eyes, straight brows close above them, full
+neutral lips, freckles, ruddy cheeks. Still different on ours: Starfield's eye openings (round, more white showing:
+the lids are locked to Starfield's) and its brows.
