@@ -337,6 +337,18 @@ def with_appended_entry(subs, label: str, path: str, index: int):
 FACE_HUE = (1.0, 1.3, 1.8)
 FACE_LEVELS = (("Face13", 1.3), ("Face17", 1.7), ("Face22", 2.2))
 FACE_MAIN = 1              # the level the converted children get; the others go to the comparison copies
+# A slight tan on a painted child's own tone, face and body / hands alike (linear-light multiplier; 2026-11-19, owner:
+# "could we slightlyyy tan his skin a bit"): Frodnar's body skin (172,125,95) -> about (163,115,84).
+CHILD_TAN = (0.90, 0.84, 0.78)
+
+
+def tanned(rgba, tan=CHILD_TAN):
+    """RGBA uint8 with its colour times tan in linear light (alpha kept)."""
+    from fo4sf.textures import srgb_to_linear, linear_to_srgb
+    rgba = np.asarray(rgba)
+    lin = srgb_to_linear(rgba[..., :3].astype(np.float32)) * np.asarray(tan, np.float32)
+    out = np.round(linear_to_srgb(np.clip(lin, 0.0, 1.0))).clip(0, 255).astype(np.uint8)
+    return np.concatenate([out, rgba[..., 3:4]], -1)
 
 
 def face_level_target(body_skin, level: float, hue=FACE_HUE):
@@ -346,7 +358,8 @@ def face_level_target(body_skin, level: float, hue=FACE_HUE):
     return [int(round(float(v))) for v in np.clip(linear_to_srgb(np.clip(lin, 0.0, 1.0)), 0, 255)]
 
 
-def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, children=(), paint=None):
+def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, children=(), paint=None,
+                     tan=CHILD_TAN):
     """Light child tones pairing Starfield's lightest child body with lighter faces (2026-11-19, owner: Frodnar's
     hands pale white, his face tan. ChildRace's three tones pair body and face texture by index, and index 1 - the
     lightest body - is the middle, orange face; the baked face textures are not drawn on a child: the adult
@@ -355,7 +368,8 @@ def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, c
     lightest vanilla texture recoloured so its skin is face_level_target of that body's skin (skin_median).
     children [(edid, female)] with paint(edid, face_rgba) -> RGBA or None: after the levels, one more tone per child
     whose face is its painted face (fo4sf.childpaint, on the main level's face; 2026-11-19, owner: "looks like
-    he's someone ethnic or someone doing whiteface") - its own entry in its sex's groups.
+    he's someone ethnic or someone doing whiteface") - its own entry in its sex's groups; tan (CHILD_TAN, None for
+    none) on its face and on its own copies of the lightest body / hands.
     Returns {"index": first STON, "indices": {label: STON}, "children": {edid: STON}, "records": [AVMD overrides],
     "textures": {path under textures/: rgba}, "report": {...}}."""
     from fo4sf import skintone
@@ -421,15 +435,24 @@ def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, c
             continue
         sex = "female" if female else "male"
         rel = f"{TONE_DIR}/{edid.lower()}_face_color.dds"
-        textures[rel] = got
+        textures[rel] = tanned(got, tan) if tan is not None else got
         for fid, (avmd, sig, sexes) in groups.items():
             if female not in sexes:
                 continue
             body = found[(female, sig)] if (female, sig) in found else found[(not female, sig)]
-            path = prefix + rel if sig == b"FSTT" else body[2][body[4]]
+            if sig == b"FSTT":
+                path = prefix + rel
+            elif tan is not None:          # its own tanned body / hands, as the face
+                brel = f"{TONE_DIR}/{edid.lower()}_{sig.decode().lower()}_color.dds"
+                textures[brel] = tanned(body[3][body[4]], tan)
+                bpre = "textures/" if body[2][body[4]].lower().startswith("textures") else ""
+                path = bpre + brel
+            else:
+                path = body[2][body[4]]
             entries[fid][nxt] = (f"{LIGHT_LABEL}_{edid.lower()}", path)
         child_idx[edid] = nxt
-        child_rep[edid] = {"ston": nxt, "texture": prefix + rel, "sex": sex}
+        child_rep[edid] = {"ston": nxt, "texture": prefix + rel, "sex": sex,
+                           "tan": list(tan) if tan is not None else None}
         nxt += 1
     records = []
     for fid, (avmd, _sig, _sexes) in groups.items():

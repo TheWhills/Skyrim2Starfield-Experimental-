@@ -319,6 +319,15 @@ class LightToneTests(unittest.TestCase):
         fface = [d for s_, d in by[6] if s_ == b"VNAM"]
         self.assertEqual(fface[n + 1], Z("textures/s2s/children/tones/dorthe_face_color.dds"))
         self.assertEqual(len(fface), n + 2)                             # padded at Frodnar's index
+        self.assertEqual([d for s_, d in by[2] if s_ == b"VNAM"][n],
+                         Z("textures/s2s/children/tones/frodnar_bstt_color.dds"))        # its own tanned body
+        face = got["textures"]["s2s/children/tones/frodnar_face_color.dds"]
+        np.testing.assert_array_equal(face, CH.tanned(np.full_like(face, 77)))
+        body = got["textures"]["s2s/children/tones/frodnar_bstt_color.dds"]
+        self.assertLess(int(body[1, 1, 2]), int(decode("textures/b1.dds")[1, 1, 2]))     # tanned: less blue
+        got = CH.light_child_tone([race, mb, fb, cx, fm, ff], lambda p: p, decode, children=[("Frodnar", False)],
+                                  paint=paint, tan=None)
+        by = {r[3]: r[2] for r in got["records"]}
         self.assertEqual([d for s_, d in by[2] if s_ == b"VNAM"][n], Z("textures/b1.dds"))
         self.assertTrue((got["textures"]["s2s/children/tones/frodnar_face_color.dds"] == 77).all())
         got = CH.light_child_tone([race, mb, fb, cx, fm, ff], lambda p: p, decode,

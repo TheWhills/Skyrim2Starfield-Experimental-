@@ -322,3 +322,7 @@ detail, crisp freckles, rosy lips, soft blond-brown brows, a clean hairline, lig
 - childshape v11: almond_moves - each upper lid edge vertex 12% of the way to the lower edge below it, most at the
   middle (sine), forward by an r=12 mm eyeball's sagitta, lid skin within 8 mm following: 1.45 / 1.34 mm lower on
   Frodnar (openings 29.5 x 12.2 / 30.4 x 11.4 mm; Starfield's eye rims are the unwelded open loops, doubled).
+Owner (17:29): "could we slightlyyy tan his skin a bit". child_hair.CHILD_TAN (0.90, 0.84, 0.78) linear on a painted
+child's own tone: its face and its own copies of the lightest body / hands texture
+(textures/s2s/children/tones/<edid>_bstt / _hstt_color.dds, uncompressed), so face and hands stay matched; Frodnar's
+body skin (172,125,95) -> about (163,115,84). child_light_tone.children report: tan.
