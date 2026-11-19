@@ -22,13 +22,17 @@ BLUR = 0.02          # of the texture size: the Starfield face's painted feature
 FEATHER = 0.015      # of the texture size: the painted area's edge
 STRENGTH = 0.9       # the paint's contrast against its own skin (1 = as in Skyrim; a little less on Starfield's
                      # lighting: Frodnar's freckles and cheeks read grimy at full strength on the preview)
-CHROMA = 2.0         # the paint's colour against its skin, apart from its lightness (2026-11-19, owner: "maybe we
+CHROMA = 1.4         # the paint's colour against its skin, apart from its lightness (2026-11-19, owner: "maybe we
                      # need to darken/pinken the lips and cheek" - the blur takes Starfield's own lip colour away,
                      # and the Skyrim tint's lips / cheeks are only a little redder than its skin)
 LIP_TINT = (0.80, 0.56, 0.58)   # linear-light multiplier on the lips (2026-11-19, owner: "his lips still look light,
                                 # and off in a way"; the goal shot: rosy, darker lips)
 EYE_CHROMA = 1.0     # the colour boost around the eyes (owner's close-up: raw red lower lids at CHROMA 2)
-VERSION = 3
+GRAIN = 0.004        # of the texture size: detail finer than this (pores, grain) is kept from Starfield's face under
+                     # the paint; only the features between it and BLUR are softened away (2026-11-19, owner's goal
+                     # shot vs ours: ours airbrushed - the blur had taken the skin grain too)
+# 2026-11-19 (owner's goal shot): CHROMA 2.0 -> 1.4: the cheeks and nose read as blush / sunburn; the lips have LIP_TINT.
+VERSION = 5
 
 
 def barycentric(p, a, b, c) -> np.ndarray:
@@ -189,19 +193,25 @@ def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int, li
     factor = paint_factor(tint / np.maximum(skin, 1e-4), STRENGTH, chroma)
     factor = factor * (1.0 + lip_img * (np.array(LIP_TINT) - 1.0))
     factor = 1.0 + w[..., None] * (factor - 1.0)
-    return {"factor": factor, "weight": w, "tint_skin": [float(x) for x in skin]}
+    return {"factor": factor, "weight": w, "lips": lip_img[..., 0], "tint_skin": [float(x) for x in skin]}
 
 
 def painted_face(face_rgba, layer, blur_frac: float = BLUR) -> np.ndarray:
     """Starfield face texture (RGBA uint8) with the paint layer on it: under the paint its own painted features
-    softened (blurred, by the paint's weight), then multiplied by the paint's factor (linear light)."""
+    softened (blurred, by the paint's weight) but its fine grain kept (detail under GRAIN of the size), then
+    multiplied by the paint's factor (linear light)."""
     face = np.asarray(face_rgba)
     size = face.shape[0]
     if layer["factor"].shape[:2] != face.shape[:2]:
         raise ValueError(f"paint layer {layer['factor'].shape[:2]} for a {face.shape[:2]} texture")
     lin = srgb_to_linear(face[..., :3].astype(float))
-    w = layer["weight"][..., None]
+    # no softening on the lips: Starfield's painted lip outline (vermilion border, cupid's bow) stays crisp under the
+    # lip colour (2026-11-19, owner: "the mouth just looks so different" - ours had no lip edge at all)
+    lips = layer.get("lips")
+    w = (layer["weight"] * (1.0 - (lips if lips is not None else 0.0)))[..., None]
     soft = blur(lin, max(1, int(round(blur_frac * size))))
-    base = lin * (1 - w) + soft * w
+    fine = blur(lin, max(1, int(round(GRAIN * size))), passes=2)
+    grain = lin / np.maximum(fine, 1e-4)                 # the fine detail, as a ratio around 1
+    base = lin * (1 - w) + soft * grain * w
     out = linear_to_srgb(np.clip(base * layer["factor"], 0.0, 1.0))
     return np.concatenate([np.round(out).clip(0, 255).astype(np.uint8), face[..., 3:4]], -1)

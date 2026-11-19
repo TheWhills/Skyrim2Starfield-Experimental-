@@ -46,6 +46,32 @@ class PaintTests(unittest.TestCase):
         self.assertAlmostEqual(luma(CP.paint_factor(red, 1.0, 1.0)), luma(red))
         np.testing.assert_allclose(CP.paint_factor(np.ones(3)), np.ones(3))
 
+    def test_grain_kept_features_softened(self):
+        """Under the paint, Starfield's fine skin grain stays; its larger painted features go."""
+        size = 256
+        rng = np.random.default_rng(3)
+        face = np.full((size, size, 4), 180, np.uint8)
+        grain = rng.integers(-12, 13, size=(size, size))
+        face[..., :3] = np.clip(180 + grain, 0, 255)[..., None]
+        face[117:123, 60:120, :3] -= 60                               # a painted feature (a lid line)
+        layer = {"factor": np.ones((size, size, 3)), "weight": np.ones((size, size))}
+        out = CP.painted_face(face, layer).astype(int)
+        flat = out[10:60, 150:240, 0]
+        self.assertGreater(flat.std(), 0.5 * face[10:60, 150:240, 0].astype(int).std())   # grain kept
+        self.assertGreater(out[118:122, 80:100, 0].mean(), face[118:122, 80:100, 0].mean() + 30)  # the line mostly gone
+
+    def test_lip_outline_not_softened(self):
+        """Starfield's painted lip edge survives under the lip colour; the same line off the lips is softened."""
+        size = 256
+        face = np.full((size, size, 4), 180, np.uint8)
+        face[117:123, 20:120, :3] = 120                              # a painted line, half on the lips
+        lips = np.zeros((size, size))
+        lips[:, :70] = 1.0
+        layer = {"factor": np.ones((size, size, 3)), "weight": np.ones((size, size)), "lips": lips}
+        out = CP.painted_face(face, layer).astype(int)
+        self.assertLessEqual(abs(out[120, 40, 0] - 120), 2)          # on the lips: crisp as painted
+        self.assertGreater(out[120, 100, 0], 140)                    # off them: softened
+
     def test_lips_and_eyes(self):
         """The lips get LIP_TINT (darker, rosier); the eye surroundings no colour boost."""
         v = np.array([(0.0, 0.098, 1.608), (0.03, 0.098, 1.608), (-0.04, 0.083, 1.684), (0.0, 0.1, 1.64)])

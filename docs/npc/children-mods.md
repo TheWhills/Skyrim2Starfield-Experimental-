@@ -326,3 +326,12 @@ Owner (17:29): "could we slightlyyy tan his skin a bit". child_hair.CHILD_TAN (0
 child's own tone: its face and its own copies of the lightest body / hands texture
 (textures/s2s/children/tones/<edid>_bstt / _hstt_color.dds, uncompressed), so face and hands stay matched; Frodnar's
 body skin (172,125,95) -> about (163,115,84). child_light_tone.children report: tan.
+Owner (17:34, ours next to the goal shot): "so how do we get ours to look more like the other one". Ours: cheeks and
+nose blush-red, skin airbrushed. childpaint v4: CHROMA 2.0 -> 1.4 (the lips keep LIP_TINT); under the paint only
+the features between GRAIN (0.4% of the size) and BLUR (2%) are softened - the fine grain of Starfield's face
+texture is kept (it was blurred away). Left: crisp freckles (the tint is too coarse: would need generated detail
+where it has freckles), brows (hair colour: owner said no earlier), eye wetness / lashes / hair strands (shaders).
+Owner (17:36): "the mouth just looks so different to me ... the mouth specifically". Close-up: the goal's lips have a
+crisp edge (vermilion border, cupid's bow, colour stopping at the skin); ours none - the blur under the paint took
+Starfield's painted lip outline, and LIP_TINT is a soft ellipse. childpaint v5: no softening on the lips (the paint
+layer's lip weight), so Starfield's painted outline stays crisp under the lip colour.
