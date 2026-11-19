@@ -742,3 +742,11 @@ why the mod needs no clothes of its own.
   the eyes shape's own skin -> model matrix (facefit.skyrim_model_matrix), the one landing nearest the head's middle
   (Frodnar's eyes unchanged; Faendal's at eye height). His landmarks (m, before the prealign): eyes 1771, mouth 1702,
   nose 1734, chin 1665, forehead 1813; nasion 1800 (29 mm over the eyes: his brow ridge, weight 1 of 13).
+  First own head (owner run, 18:49, faces.json own_head + faces_preview/Faendal_child.npz): built on
+  S2S_BosmerRace's head, prealign scale 1.023 (landmarks 2.5-9.5 mm apart after it), moves max 5.6 mm, rms 2.3 mm,
+  mostly mouth / chin and forehead. Measured on the npz (face vertices, distance to his Skyrim FaceGen surface):
+  the race head alone 3.0 mm mean (p90 5.5), ours 2.4 mm (p90 4.4); ear tips within 4 mm already. So his shape was
+  already the Bosmer race head's (vanilla NPCs sit near their race preset): what is left to tell him from the
+  template is the surface, not the shape - Skyrim's 898-vertex head carries his look in the FaceGen tint / normal
+  maps (brows, skin, lips) and his eyes part, the race head's 15k vertices carry creases of their own. Next for
+  adults: his face texture painted onto the baked head (as childpaint does) and the eyes part.
