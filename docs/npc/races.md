@@ -750,3 +750,12 @@ why the mod needs no clothes of its own.
   template is the surface, not the shape - Skyrim's 898-vertex head carries his look in the FaceGen tint / normal
   maps (brows, skin, lips) and his eyes part, the race head's 15k vertices carry creases of their own. Next for
   adults: his face texture painted onto the baked head (as childpaint does) and the eyes part.
+  Eye tilt (owner, 18:51: "most elves have these... built into the eye type... npc wise"). Measured (scratch
+  scripts, not in Git): the outline of the eye mesh in Faendal's FaceGen (MaleEyesWoodElfDeepBrown) tilts +15 to +18
+  degrees outer corner up; the same outline on 15 Realistic RS Children eye types (human) -8 to +7, mostly 0 to +5.
+  With his head's lids in front, his visible opening tilts +8 to +12; our head's opening (S2S_BosmerRace) -2 to -3,
+  unchanged by the fit (the eye lock keeps the lids). So the tilt is the eye part's, and the eye part is per NPC:
+  every NPC's FaceGen NIF holds the eyes that NPC picked, so measuring it there is per NPC with no lookup. Plan: a
+  tilt step after almond_moves turning each Starfield lid opening about its centre by (the NPC's eye outline tilt -
+  Skyrim's human eye outline tilt), lid skin following, kept on the eyeball. Needs vanilla eyesmale.nif /
+  eyesfemale.nif for the human reference (asked).
