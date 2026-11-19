@@ -265,10 +265,49 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
         with open(path, "wb") as fh:
             fh.write(data)
     mag = np.linalg.norm(disp, axis=1)
+    preview = child_preview(n["edid"], ctx, fg, disp, out, cache) if previewing(a, n) else None
     return {"child": {"skyrim_race": sky_race, "head_model": child_faces.child_model_path(n["edid"]),
+                      **({"preview": preview} if preview else {}),
                       "files": sorted(files), "max_move_m": round(float(mag.max()), 4),
                       "rms_move_m": round(float(np.sqrt(np.mean(mag ** 2))), 5), "setup": ctx["report"]},
             "dials": {}}
+
+
+def previewing(a, n) -> bool:
+    """--preview (every NPC) or --preview-npc naming this one (2026-11-19: a child's preview without refitting all)."""
+    return bool(a.preview) or n["edid"].lower() in {x.lower() for x in (getattr(a, "preview_npc", None) or [])}
+
+
+def child_preview(edid, ctx, fg, disp, out, cache):
+    """--preview for a child (2026-11-19, owner: compare the faces without the game): faces_preview/<edid>_child.png,
+    columns the Skyrim FaceGen head (placed by the face alignment), Starfield's child head and ours, rows front /
+    three-quarter / side and the moves on ours as heat; and <edid>_child.npz with the shapes (Starfield's head in its
+    mesh-local frame + node, Skyrim's base and FaceGen heads in Skyrim model units with their triangles, the
+    alignment, the moves), so a fitting change can be tried and drawn without the game. Returns the paths."""
+    import child_hair
+    from fo4sf import facepreview
+    head = ctx["head"]
+    node = np.asarray(head.model_xf, float)
+    M = child_hair.sky_to_starfield(ctx)
+    sky_tris = ctx.get("base_tris")
+    sf_tris = np.asarray(head.triangles, int)
+    vanilla = facefit.apply4(node, head.vertices)
+    ours = facefit.apply4(node, head.vertices + disp)
+    cols = [(facefit.apply4(M, np.asarray(fg, float)), sky_tris)] if sky_tris is not None else []
+    cols += [(vanilla, sf_tris), (ours, sf_tris)]
+    img = facepreview.mesh_sheet(cols, heat_of=(len(cols) - 1, np.linalg.norm(disp, axis=1)))
+    folder = os.path.join(out, "faces_preview")
+    os.makedirs(folder, exist_ok=True)
+    png = os.path.join(folder, f"{edid}_child.png")
+    hair_probe.write_png(png, img)
+    npz = os.path.join(folder, f"{edid}_child.npz")
+    s_, R_, t_ = ctx["al"][:3]
+    np.savez_compressed(npz, sf_local=np.asarray(head.vertices, np.float32), sf_tris=sf_tris.astype(np.int32),
+                        sf_node=node, sky_base=np.asarray(ctx["base"], np.float32),
+                        sky_tris=np.asarray(sky_tris if sky_tris is not None else np.zeros((0, 3)), np.int32),
+                        sky_facegen=np.asarray(fg, np.float32), al_s=float(s_), al_R=np.asarray(R_, float),
+                        al_t=np.asarray(t_, float), disp=np.asarray(disp, np.float32))
+    return {"png": png, "npz": npz}
 
 
 FIT_CACHE = "_fit_cache.json"     # in --out: each NPC's fit result by an input key (2026-11-12)
@@ -1337,6 +1376,8 @@ def main(argv=None):
     ap.add_argument("--refit", action="store_true",
                     help="fit every NPC again (default: an NPC whose FaceGen head, race, fit settings and fitting "
                          "code are unchanged since the last run reuses that fit; the plugin is always rewritten)")
+    ap.add_argument("--preview-npc", action="append", default=[],
+                    help="like --preview for this NPC only (repeatable; the others reuse their fits)")
     ap.add_argument("--preview", action="store_true",
                     help="faces_preview\\<NPC>.png per NPC: Starfield's base head, the Skyrim face on it (the fit's "
                          "target), our fitted face; front, side, and a heat map of each one's change from the base")
@@ -1487,7 +1528,7 @@ def main(argv=None):
         row = {"edid": n["edid"], "form_id": f"{n['form_id']:08X}", "female": n["female"]}
         sky_race = races.get(n["race"], "")
         key = None
-        if not a.preview and not a.refit:
+        if not previewing(a, n) and not a.refit:
             try:
                 fg_bytes = hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky)
                 key = npc_fit_key(code_hash["child" in sky_race.lower()], settings_now, fg_bytes, sky_race,
@@ -1546,7 +1587,7 @@ def main(argv=None):
                                       blends=(blend_set[0], blend_set[1]) if blend_set else None,
                                       blend_groups=blend_set[2] if blend_set else None)
             names = {s.id: f"{s.region}: {s.name}" for s in sliders}
-            if a.preview and getattr(head, "triangles", None) is not None and len(head.triangles):
+            if previewing(a, n) and getattr(head, "triangles", None) is not None and len(head.triangles):
                 shaped = head
                 if rep.get("blends") and blend_set:
                     bw = np.array([rep["blends"].get(k, 0.0) for k in blend_set[0]])

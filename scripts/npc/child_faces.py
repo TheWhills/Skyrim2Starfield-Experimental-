@@ -84,6 +84,7 @@ def child_setup(sky, sf_data, female, face_fit, head_modl, transfer="surface", b
     paths, _skin = facefit.starfield_head_parts(nif_bytes)
     return {"head": head, "base": base, "al": al, "model_space": model_space, "corr": corr, "nif": nif_bytes,
             "base_matrix": face_fit.skyrim_head_matrix(base_bytes) if model_space else None,
+            "base_tris": face_fit.skyrim_head_triangles(base_bytes),
             "nif_rel": rel, "mesh_path": paths[0] if paths else None,
             "report": {"head": head_nif, "skyrim_base_head": base_rel or SKY_CHILD_HEAD,
                        "skyrim_base_vertices": int(len(base)), "alignment_rms_m": float(al[3]), "scale": float(al[0]),

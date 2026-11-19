@@ -115,3 +115,87 @@ def sheet(heads: Sequence[np.ndarray], tris: np.ndarray, size: int = 220, focus_
         rows[1].append(splat(h, n, size, 90, side_b))
         rows[2].append(splat(h, n, size, 0, bounds, color=heat(np.linalg.norm(h - base, axis=1), top)))
     return np.vstack([np.hstack(r) for r in rows])
+
+
+# ------------------------------------------------------------------ solid renders of meshes with their own triangles
+LIGHT = np.array([0.35, 0.8, 0.45]) / np.linalg.norm([0.35, 0.8, 0.45])
+
+
+def render(v: np.ndarray, tris: np.ndarray, size: int, yaw: float, bounds, color=None) -> np.ndarray:
+    """(size, size, 3) uint8: the mesh's triangles filled with a z-buffer, seen from +Y after turning by yaw (as
+    splat), smooth Lambert shading from vertex normals (or per-vertex `color` 0-255). 2026-11-19 (owner: compare the
+    children's faces without the game): points were too coarse to judge a nose or lips, and the Skyrim heads have
+    ~1,000 vertices."""
+    v = np.asarray(v, float)
+    t = np.asarray(tris, int).reshape(-1, 3)
+    p, r = _view(v, yaw)
+    n = vertex_normals(v, t) @ r.T
+    (x0, x1), (z0, z1) = bounds
+    sc = (size - 1) / max(x1 - x0, z1 - z0, 1e-12)
+    sx = (p[:, 0] - x0) * sc
+    sz = (z1 - p[:, 2]) * sc
+    depth = p[:, 1]
+    if color is None:
+        nn = np.where((n[:, 1] < 0)[:, None], -n, n)
+        shade = np.clip(nn @ LIGHT, 0, 1)
+        col = np.stack([shade * 190 + 50, shade * 175 + 50, shade * 160 + 50], 1)
+    else:
+        col = np.asarray(color, float)
+    img = np.full((size, size, 3), 235.0)
+    zb = np.full((size, size), -np.inf)
+    for a, b, c in t:
+        xs, zs = sx[[a, b, c]], sz[[a, b, c]]
+        lo_x, hi_x = int(max(np.floor(xs.min()), 0)), int(min(np.ceil(xs.max()), size - 1))
+        lo_z, hi_z = int(max(np.floor(zs.min()), 0)), int(min(np.ceil(zs.max()), size - 1))
+        if lo_x > hi_x or lo_z > hi_z:
+            continue
+        den = (zs[1] - zs[2]) * (xs[0] - xs[2]) + (xs[2] - xs[1]) * (zs[0] - zs[2])
+        if abs(den) < 1e-12:
+            continue
+        gx, gz = np.meshgrid(np.arange(lo_x, hi_x + 1) + 0.5, np.arange(lo_z, hi_z + 1) + 0.5)
+        w0 = ((zs[1] - zs[2]) * (gx - xs[2]) + (xs[2] - xs[1]) * (gz - zs[2])) / den
+        w1 = ((zs[2] - zs[0]) * (gx - xs[2]) + (xs[0] - xs[2]) * (gz - zs[2])) / den
+        w2 = 1 - w0 - w1
+        inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+        if not inside.any():
+            continue
+        d = w0 * depth[a] + w1 * depth[b] + w2 * depth[c]
+        zz, xx = gz.astype(int), gx.astype(int)
+        cur = zb[zz, xx]
+        win = inside & (d > cur)
+        if not win.any():
+            continue
+        zb[zz[win], xx[win]] = d[win]
+        img[zz[win], xx[win]] = (w0[win, None] * col[a] + w1[win, None] * col[b] + w2[win, None] * col[c])
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def face_bounds(meshes, keep, yaw: float = 0.0, margin: float = 0.05):
+    """((x0, x1), (z0, z1)) framing the points `keep` of every mesh seen at yaw (a list of (V, 3) arrays and their
+    boolean masks), with a margin (share of the size)."""
+    pts = np.vstack([_view(np.asarray(m, float)[k], yaw)[0] for m, k in zip(meshes, keep)])
+    x0, x1, z0, z1 = pts[:, 0].min(), pts[:, 0].max(), pts[:, 2].min(), pts[:, 2].max()
+    m = margin * max(x1 - x0, z1 - z0)
+    return (x0 - m, x1 + m), (z0 - m, z1 + m)
+
+
+def mesh_sheet(meshes, size: int = 360, yaws=(0, 35, 90), frame=None, heat_of=None) -> np.ndarray:
+    """Columns: meshes [(V, 3), triangles] in one model space (metres); rows: one per yaw (front, three-quarter,
+    side), solid renders on shared bounds. frame: the vertices to frame per mesh (masks), default the part above
+    each mesh's lowest 40 %. heat_of: (mesh index, per-vertex distances m) - an extra row with that mesh coloured
+    by the distances (white 0 -> red at the largest)."""
+    vs = [np.asarray(m[0], float) for m in meshes]
+    if frame is None:
+        frame = [v[:, 2] > v[:, 2].min() + 0.4 * np.ptp(v[:, 2]) for v in vs]
+    rows = []
+    for yaw in yaws:
+        b = face_bounds(vs, frame, yaw)
+        rows.append(np.hstack([render(v, m[1], size, yaw, b) for v, m in zip(vs, meshes)]))
+    if heat_of is not None:
+        k, dist = heat_of
+        b = face_bounds(vs, frame, 0)
+        top = float(np.max(dist)) or 1e-3
+        cells = [np.full((size, size, 3), 235, np.uint8) for _ in vs]
+        cells[k] = render(vs[k], meshes[k][1], size, 0, b, color=heat(np.asarray(dist, float), top))
+        rows.append(np.hstack(cells))
+    return np.vstack(rows)

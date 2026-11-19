@@ -163,3 +163,19 @@ _Female, textures female_child_01_head(_sk2 / _sk3)_color.dds for both sexes, me
 (172,126,98), 2 (106,74,57): the face's slots run lightest-first, the body's do not (1, 0, 2). One STON picks both:
 STON 1 gives face (172,126,98) with body (164,126,103), a match; STON 0 a much lighter face (189,143,115) on a
 darker body (139,109,82). So the lightest child stays STON 1 (as vanilla's blonde girls EncChildFaceF03 / F06).
+
+## 2026-11-19: the face transfer is what distorts the children (owner, in game)
+Owner's control NPCs: only "VanillaHead" (Starfield's child head with the European face skin, Frodnar's hair) looked
+decent; with Frodnar's transferred face (any tone) he read African - broad nose, wide cheeks, heavy features. So the
+transfer, not the template / skin / tone. Rendered here from the mod files (verified): RS Children Overhaul's base
+child head has ADULT proportions (adult nose and jaw; it is Skyrim's adult female head layout), and Realistic RS's
+Frodnar is a real child's face, so "FaceGen minus base" is mostly "make an adult face a child's" (front mean 5 mm,
+max 17 mm); added onto Starfield's head, which is already a child's, and with the two heads 8.5 mm rms apart after
+the alignment, the moves land beside the features they belong to (supported hypothesis for the distortion).
+Owner's choice: option 2 for the long run - line the features up (eyes, nose, mouth, chin) and carry the child's own
+shape over rather than its difference from an adult-proportioned base.
+Tool: --preview-npc <EditorID> (or --preview) on a child writes faces_preview/<EditorID>_child.png (solid renders,
+facepreview.render: the Skyrim FaceGen head placed by the alignment, Starfield's child head, ours; front /
+three-quarter / side; the moves as heat) and <EditorID>_child.npz (Starfield's head mesh-local + node + triangles,
+Skyrim's base and FaceGen heads in Skyrim model units + triangles, the alignment, the moves), so fitting changes can
+be tried and drawn outside the game.

@@ -212,6 +212,36 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(dict(got["S2SFaceControl_Frodnar_Tone0"])[b"FULL"], Z("Frodnar (Tone0)"))
 
 
+class PreviewTests(unittest.TestCase):
+    def test_child_preview(self):
+        """--preview for a child: a PNG sheet (FaceGen / Starfield / ours) and an .npz of the shapes."""
+        import face_fit as S
+        from fo4sf import facepreview
+        g = np.linspace(-1, 1, 6)
+        sf = np.array([(x, 0.05 * np.cos(x) + 0.05 * np.cos(z), z) for x in g for z in g]) * 0.1
+        tris = [(i * 6 + j, i * 6 + j + 1, (i + 1) * 6 + j) for i in range(5) for j in range(5)]
+        sky = sf / 0.0125
+        ctx = {"head": types.SimpleNamespace(vertices=sf, triangles=np.array(tris), model_xf=np.eye(4)),
+               "al": (0.0125, np.eye(3), np.zeros(3), 0.0), "model_space": True, "base": sky,
+               "base_tris": np.array(tris)}
+        disp = np.zeros_like(sf)
+        disp[14] = (0, 0.01, 0)
+        with tempfile.TemporaryDirectory() as d:
+            got = S.child_preview("Kid", ctx, sky * 1.02, disp, d, {})
+            self.assertTrue(os.path.getsize(got["png"]) > 0)
+            z = np.load(got["npz"])
+            self.assertEqual(z["sf_local"].shape, sf.shape)
+            self.assertAlmostEqual(float(z["al_s"]), 0.0125)
+            self.assertEqual(int(np.argmax(np.linalg.norm(z["disp"], axis=1))), 14)
+        a = types.SimpleNamespace(preview=False, preview_npc=["frodnar"])
+        self.assertTrue(S.previewing(a, {"edid": "Frodnar"}))
+        self.assertFalse(S.previewing(a, {"edid": "Dorthe"}))
+        self.assertTrue(S.previewing(types.SimpleNamespace(preview=True, preview_npc=[]), {"edid": "Dorthe"}))
+        img = facepreview.render(sf, tris, 64, 0, ((-0.12, 0.12), (-0.12, 0.12)))
+        self.assertEqual(img.shape, (64, 64, 3))
+        self.assertLess(int(img.min()), 235)                 # something drawn
+
+
 class BuildPartFilterTests(unittest.TestCase):
     def test_keep_shapes(self):
         import skyrim_hairs as SH
