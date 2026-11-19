@@ -158,6 +158,15 @@ class ToneSlotTests(unittest.TestCase):
         kid[2].extend([(b"TNAM", Z("ChildFace")), (b"QNAM", Z("Child_Skin_03")), (b"INTV", I(50))])
         self.assertEqual(S.child_template_looks(kid, hd)["face_layers"], ["ChildFace: Child_Skin_03 (50)"])
         self.assertEqual(S.child_template_looks(kid, hd)["face_fields"], ["QNAM", "TNAM"])
+        A = lambda f: (b"ACBS", I(1 if f else 0) + bytes(12))                       # noqa: E731
+        npcs = [rec(b"NPC_", [(b"EDID", Z("NGP_KidSarah")), A(True), (b"RNAM", I(0x77)), (b"TPLT", I(5))], 6),
+                rec(b"NPC_", [(b"EDID", Z("Kid")), A(False), (b"RNAM", I(0x77)), (b"VTCK", I(1)),
+                              (b"PNAM", I(0x10))], 5),
+                rec(b"NPC_", [(b"EDID", Z("Adult")), A(False), (b"RNAM", I(0x78))], 7)]
+        got = S.child_npc_survey(npcs, 0x77, hd)
+        self.assertEqual([(g["edid"], g["female"], g["template"], g["voiced"]) for g in got],
+                         [("Kid", False, None, True), ("NGP_KidSarah", True, "Kid", False)])
+        self.assertEqual(got[0]["head_parts"], ["Human_Child_Head_Boy (1)"])
 
     def test_missing_pieces(self):
         recs = self.records()

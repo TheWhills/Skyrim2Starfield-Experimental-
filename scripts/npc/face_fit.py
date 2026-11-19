@@ -1029,6 +1029,27 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
                                              b"FTST", b"NAM9", b"NAMA", b"MRSV")})}
 
 
+def child_npc_survey(npc_recs, child_race, sf_hdpt_recs) -> list:
+    """Every ChildRace NPC of Starfield.esm with what its look is made of (child_template_looks), its template (TPLT,
+    by EditorID) and whether it has a voice (2026-11-19, owner: the NG+ children playing the Constellation are among
+    the few children with looks of their own; templated ones are not offered as templates, so they were not listed)."""
+    edids = {fid: sfplugin.edid(sb) for _t, _h, sb, fid in npc_recs}
+    out = []
+    for r in npc_recs:
+        subs = r[2]
+        if next((struct.unpack("<I", bytes(d)[:4])[0] for s_, d in subs if s_ == b"RNAM" and len(d) >= 4), None) \
+                != child_race:
+            continue
+        acbs = next((bytes(d) for s_, d in subs if s_ == b"ACBS"), b"")
+        tplt = next((struct.unpack("<I", bytes(d)[:4])[0] for s_, d in subs if s_ == b"TPLT" and len(d) >= 4), None)
+        out.append(dict({"edid": sfplugin.edid(subs), "form_id": f"{r[3]:08X}",
+                         "female": bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1),
+                         "template": edids.get(tplt, f"{tplt:08X}") if tplt is not None else None,
+                         "voiced": any(s_ == b"VTCK" for s_, _d in subs)},
+                        **child_template_looks(r, sf_hdpt_recs)))
+    return sorted(out, key=lambda x: x["edid"].lower())
+
+
 def child_tone_order(sf_esm, sf_data, females) -> dict:
     """{female: [slot, ...] lightest first} of Starfield's child skin tones (child_hair.child_tone_slots), plus
     "_report"; a sex whose textures cannot be read is left out (reported)."""
@@ -1569,6 +1590,7 @@ def main(argv=None):
                                                       for e, p_, et, tx, r_ in
                                                       child_faces.child_templates(npc_recs, child_race, f)]
                         for f in (False, True)}
+                    report["child_npcs_all"] = child_npc_survey(npc_recs, child_race, sf_hdpt_recs)
                 if tone_slots is None and real is not None:
                     tone_slots = child_tone_order(sf_esm, sf_data, [r["female"] for r in report["npcs"]
                                                                     if r.get("child")])
