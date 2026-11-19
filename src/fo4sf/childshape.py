@@ -45,7 +45,7 @@ EYE_FADE = 0.012       # over EYE_FADE: the eyeballs stay covered, the lids take
 #                        are unchanged" with 14 + 12 mm)
 MOUTH_FREE = 0.010     # m around the mouth centre that does not pull (moves with the face); 16 left the skin above
 #                        the upper lip standing out
-VERSION = 6
+VERSION = 7
 
 
 def apply4(m, p):
@@ -336,6 +336,49 @@ def ear_weight(v, eyes) -> np.ndarray:
     return out
 
 
+NOSE_DEPTHS = (0.008, 0.012, 0.016, 0.020)   # m behind the tip where the nose's width is measured
+NOSE_FEATHER = 0.006
+
+
+def nose_widths(v, tip) -> np.ndarray:
+    """Across-widths (m) of the head at NOSE_DEPTHS behind the nose tip, in the band from 14 mm below the tip to 2 mm
+    above it: the nose wings and the cheek beside them as seen from the front."""
+    v = np.asarray(v, float)
+    band = v[(v[:, 2] > tip[2] - 0.014) & (v[:, 2] < tip[2] + 0.002)]
+    out = []
+    for dep in NOSE_DEPTHS:
+        b = band[band[:, 1] > tip[1] - dep]
+        out.append(float(b[:, 0].max() - b[:, 0].min()) if len(b) > 1 else np.nan)
+    return np.array(out)
+
+
+def narrow_nose(v, tip, nasion, target_widths) -> Tuple[np.ndarray, Dict]:
+    """v with the nose region scaled across (about the tip's x) so its widths at NOSE_DEPTHS become the target's
+    (2026-11-19, owner in game: "that nose is still big" - the fit left the wings 42 mm wide at 14 mm behind the tip
+    where his are 34). The scale varies smoothly with depth and fades out over NOSE_FEATHER around the region (from
+    the nostrils' bottom to the nasion, 2.4 cm behind the tip, 3.2 cm across). Only narrowing (scale <= 1)."""
+    v = np.asarray(v, float)
+    have = nose_widths(v, tip)
+    ok = np.isfinite(have) & np.isfinite(target_widths) & (have > 0)
+    if not ok.any():
+        return v, {"nose": "not measured"}
+    sc = np.ones(len(NOSE_DEPTHS))
+    sc[ok] = np.clip(np.asarray(target_widths)[ok] / have[ok], 0.6, 1.0)
+    depth = tip[1] - v[:, 1]
+    s = np.interp(depth, np.array(NOSE_DEPTHS), sc)
+    f = NOSE_FEATHER
+
+    def ramp(x):
+        return np.clip(x / f, 0, 1)
+    r = ramp(v[:, 2] - (tip[2] - 0.016)) * ramp(float(nasion[2]) - v[:, 2]) * ramp(0.024 + f - depth) \
+        * ramp(depth + f) * ramp(0.032 + f - np.abs(v[:, 0] - tip[0]))
+    out = v.copy()
+    out[:, 0] = tip[0] + (v[:, 0] - tip[0]) * (1 - r * (1 - s))
+    return out, {"nose_widths_mm": [round(x * 1000, 1) for x in have],
+                 "target_mm": [round(x * 1000, 1) for x in target_widths],
+                 "after_mm": [round(x * 1000, 1) for x in nose_widths(out, tip)]}
+
+
 def fit(sf_v, sf_t, sky_v, sky_t, eyes, mouth, rounds=ROUNDS, normal_rounds=NORMAL_ROUNDS) -> Tuple[np.ndarray, Dict]:
     """(moves (V, 3) per Starfield vertex, report): Starfield's head (model space, its triangles) fitted onto the
     (prealigned) Skyrim face, see the module text. eyes / mouth: Starfield's (starfield_eyes_mouth)."""
@@ -394,4 +437,12 @@ def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[
     moved, pre = prealign(sky_model, sky_lm, sf_lm)
     disp, rep = fit(sf_model, sf_t, moved, sky_t, eyes, mouth)
     rep["prealign"] = pre
+    cur = np.asarray(sf_model, float) + disp
+    lm = landmarks(cur, eyes, mouth)
+    if lm.get("nose") is not None and lm.get("nasion") is not None:
+        tv, _tt = refined_target(moved, sky_t)
+        tip_sky = landmarks(tv, eyes, mouth).get("nose")
+        if tip_sky is not None:
+            narrowed, rep["nose"] = narrow_nose(cur, lm["nose"], lm["nasion"], nose_widths(tv, tip_sky))
+            disp = (narrowed - np.asarray(sf_model, float)) * socket_lock(sf_model, eyes)[:, None]
     return disp, rep

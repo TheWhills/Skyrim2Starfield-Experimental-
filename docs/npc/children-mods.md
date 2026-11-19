@@ -203,3 +203,14 @@ use, each version judged on renders (Skyrim face / Starfield head / old transfer
   Starfield's 35 / 44). 15-50 s per child.
 Owner's notes on the first new version (12:04): not smooth, nose too wide, eyes unchanged, chin bold, ears
 different - all addressed above except the last few mm of nose wing and under-chin. In-game check pending.
+Owner in game on that (12:46): "that nose is still big and he's not quite white skinned".
+- Nose: the fit left the wings and the cheek beside them at Starfield's width (38 / 46 / 49 mm across at 12 / 16 /
+  20 mm behind the tip; his 32 / 36 / 41). childshape.narrow_nose now scales the nose region across to his widths
+  at those depths (smoothly by depth, feathered 6 mm; only narrowing): 33 / 37 / 40 mm. VERSION 7.
+- Skin: Starfield's child tones are only three and the lightest face tone is (172,126,98); the face skin layer is
+  Bobby Katz's European_Male_Md1_Sk1 (an adult tone name). --child-controls now also writes one copy per European
+  face skin the game's NPCs use for the sex (young yo1 phenotype first, else md1; lowest Sk numbers first:
+  faces.json child_skin_choices) to pick the lightest in game. Which Sk is lightest is unverified.
+- Owner asked whether face sliders work on children: no vanilla child uses them (no dials, blends or baked faces on
+  any of the 51), but the child head has the adult layout and its chargen morph points at the adult morph.dat
+  (races-roadmap), so they may; untested. The baked head stays (exact shape).

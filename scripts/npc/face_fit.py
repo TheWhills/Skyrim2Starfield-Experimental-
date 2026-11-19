@@ -1116,7 +1116,48 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
 CHILD_CONTROLS = ("VanillaHead", "NoFaceSkin", "Tone0", "Tone1", "Tone2")
 
 
-def add_child_controls(rows, recs, test_subs, masters):
+def derma_names(npc_recs) -> list:
+    """Every Dermaesthetic face skin texture name Starfield's NPCs use (TNAM Dermaesthetic -> its QNAM)."""
+    out = set()
+    for r in npc_recs:
+        layer = None
+        for s_, d in r[2]:
+            if s_ == b"TNAM":
+                layer = fo4land_zstring(d)
+            elif s_ == b"QNAM" and layer == "Dermaesthetic":
+                out.add(fo4land_zstring(d))
+    return sorted(out)
+
+
+def child_skin_choices(names, female, count=4) -> list:
+    """European face skins for a child to try (2026-11-19, owner: "he's not quite white skinned" on Bobby Katz's
+    European_Male_Md1_Sk1): the young (yo1) phenotype's, else the md1's, lowest Sk numbers first, as the game names
+    them (which Sk is lightest is not known: compared in game)."""
+    sex = "female" if female else "male"
+    got = {}
+    for n in names:
+        m = re.match(r"^european_(male|female)_(yo1|md1)_sk(\d+)$", n, re.I)
+        if m and m.group(1).lower() == sex:
+            got.setdefault(m.group(2).lower(), []).append((int(m.group(3)), n))
+    for ph in ("yo1", "md1"):
+        if got.get(ph):
+            return [n for _k, n in sorted(got[ph])[:count]]
+    return []
+
+
+def with_derma(subs, name):
+    """subs with the Dermaesthetic face layer's texture (QNAM) set to name (unchanged without such a layer)."""
+    out, layer = [], None
+    for s_, d in subs:
+        if s_ == b"TNAM":
+            layer = fo4land_zstring(d)
+        elif s_ == b"QNAM" and layer == "Dermaesthetic":
+            d = sfplugin.zs(name)
+        out.append((s_, d))
+    return out
+
+
+def add_child_controls(rows, recs, test_subs, masters, skins=None):
     """--child-controls (2026-11-19, owner: Frodnar reads African; vanilla children differ only by STON,
     hair and hair colour - no face head parts, layers or dials - so their look is the race's one child head plus the
     face tone of their STON): copies of each child's finished test NPC (its hair included) with Starfield's own
@@ -1129,13 +1170,16 @@ def add_child_controls(rows, recs, test_subs, masters):
         t, h, subs, _fid = recs[test_subs[row["edid"]]]
         head = int(tn["head_part"], 16)
         out = {}
-        for v in CHILD_CONTROLS:
+        variants = list(CHILD_CONTROLS) + [f"Skin_{n}" for n in (skins or {}).get(bool(row.get("female")), [])]
+        for v in variants:
             if v == "VanillaHead":
                 vs = [(s_, d) for s_, d in subs if not (s_ == b"PNAM" and len(d) == 4 and
                                                         struct.unpack("<I", bytes(d))[0] == head)]
             elif v == "NoFaceSkin":          # without the donor's face skin layer (the race's default face)
                 import child_faces
                 vs = [(s_, d) for s_, d in subs if s_ not in child_faces.FACE_SIGS]
+            elif v.startswith("Skin_"):           # another European face skin
+                vs = with_derma(list(subs), v[len("Skin_"):])
             else:
                 vs = npc_records.with_face_colors(list(subs), {b"STON": bytes([int(v[-1])])})
             vs = sfplugin.edit(vs, {b"EDID": sfplugin.zs(f"S2SFaceControl_{row['edid']}_{v}"),
@@ -1847,7 +1891,10 @@ def main(argv=None):
             else:
                 report["child_hair"] = "not converted: give --texconv (children keep the template's hair)"
         if recs and a.child_controls:
-            add_child_controls(report["npcs"], recs, test_subs, masters)
+            dn = derma_names(npc_recs)
+            skins = {f: child_skin_choices(dn, f) for f in (False, True)}
+            report["child_skin_choices"] = {("female" if f else "male"): v for f, v in skins.items()}
+            add_child_controls(report["npcs"], recs, test_subs, masters, skins)
         children = {}
         if recs and a.voice_lines:
             import npc_voice

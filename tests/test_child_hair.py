@@ -210,6 +210,24 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(dict(got["S2SFaceControl_Frodnar_Tone2"])[b"STON"], b"\x02")
         self.assertEqual(len([d for s_, d in got["S2SFaceControl_Frodnar_Tone0"] if s_ == b"PNAM"]), 2)
         self.assertEqual(dict(got["S2SFaceControl_Frodnar_Tone0"])[b"FULL"], Z("Frodnar (Tone0)"))
+        names = ["European_Male_Md1_Sk1", "European_Male_yo1_Sk3", "European_Male_yo1_Sk0", "African_Male_yo1_Sk0",
+                 "European_Female_md1_Sk2", "European_Male_yo1_Sk10"]
+        self.assertEqual(S.child_skin_choices(names, False), ["European_Male_yo1_Sk0", "European_Male_yo1_Sk3",
+                                                              "European_Male_yo1_Sk10"])
+        self.assertEqual(S.child_skin_choices(names, True), ["European_Female_md1_Sk2"])
+        recs2 = [(b"NPC_", b"", [(b"TNAM", Z("Dermaesthetic")), (b"QNAM", Z("European_Male_Md1_Sk1")),
+                                 (b"TNAM", Z("Scars")), (b"QNAM", Z("Scar_X"))], 9)]
+        self.assertEqual(S.derma_names(recs2), ["European_Male_Md1_Sk1"])
+        self.assertEqual([fo for s_, fo in S.with_derma(recs2[0][2], "European_Male_yo1_Sk0") if s_ == b"QNAM"],
+                         [Z("European_Male_yo1_Sk0"), Z("Scar_X")])
+        subs2 = [(b"EDID", Z("S2SFace_Frodnar")), (b"PNAM", I(0x01000805)), (b"TNAM", Z("Dermaesthetic")),
+                 (b"QNAM", Z("European_Male_Md1_Sk1")), (b"STON", b"\x01")]
+        recs3 = [(b"HDPT", b"", [], 0x01000805), (b"NPC_", b"", subs2, 0x01000807)]
+        rows3 = [{"edid": "Frodnar", "female": False, "child": {"files": []}, "test_npc": {"head_part": "01000805"}}]
+        S.add_child_controls(rows3, recs3, {"Frodnar": 1}, ["Starfield.esm"], {False: ["European_Male_yo1_Sk0"]})
+        self.assertIn("Skin_European_Male_yo1_Sk0", rows3[0]["control_npcs"])
+        sk = next(r for r in recs3 if sfplugin.edid(r[2]) == "S2SFaceControl_Frodnar_Skin_European_Male_yo1_Sk0")
+        self.assertEqual(dict(sk[2])[b"QNAM"], Z("European_Male_yo1_Sk0"))
 
 
 class PreviewTests(unittest.TestCase):
