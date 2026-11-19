@@ -135,6 +135,26 @@ class ToneSlotTests(unittest.TestCase):
         self.assertEqual(CH.tone_slot(1, None), 1)
         self.assertIsNone(CH.tone_slot(None, [1, 0, 2]))
 
+    def test_face_group_without_textures_reports_its_fields(self):
+        recs = self.records()
+        recs[0][2].append((b"FSTT", Z("FaceSkinTones_Child")))
+        recs.append(rec(b"AVMD", [(b"EDID", Z("ComplexGroup_FaceSkinTones_Child")), (b"TNAM", Z("FaceSkinTones_Child")),
+                                  (b"LNAM", Z("child_default")), (b"VNAM", b"")], 4))
+        with self.assertRaises(ValueError) as cm:
+            CH.child_tone_slots(recs, lambda p: p, False, None, b"FSTT")
+        self.assertIn(("LNAM", "child_default"), cm.exception.fields)
+
+    def test_template_looks(self):
+        import face_fit as S
+        I = lambda v: struct.pack("<I", v)                                          # noqa: E731
+        hd = [rec(b"HDPT", [(b"EDID", Z("Human_Child_Head_Boy")), (b"PNAM", I(1))], 0x10),
+              rec(b"HDPT", [(b"EDID", Z("Child_Hair_Curly")), (b"PNAM", I(3))], 0x11)]
+        kid = rec(b"NPC_", [(b"EDID", Z("Kid")), (b"PNAM", I(0x10)), (b"PNAM", I(0x11)), (b"PNAM", I(0x99)),
+                            (b"HCOL", Z("Brown")), (b"STON", b"\x02")], 5)
+        got = S.child_template_looks(kid, hd)
+        self.assertEqual(got, {"ston": 2, "hair_color": "Brown",
+                               "head_parts": ["Human_Child_Head_Boy (1)", "Child_Hair_Curly (3)", "00000099 (None)"]})
+
     def test_missing_pieces(self):
         recs = self.records()
         with self.assertRaises(KeyError):

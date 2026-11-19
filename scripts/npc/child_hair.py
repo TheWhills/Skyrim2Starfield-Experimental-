@@ -209,12 +209,13 @@ def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, name
     return row
 
 
-def child_tone_slots(sf_esm_records, read_texture, female: bool, decode) -> Dict:
+def child_tone_slots(sf_esm_records, read_texture, female: bool, decode, sig: bytes = b"BSTT") -> Dict:
     """{"slots": [slot, ...] lightest first, "group": ..., "medians": {...}} of Starfield's child body skin tone
     group of the sex (ChildRace's BSTT string naming an AVMD by TNAM / YNAM / EDID), by each slot's texture's median
     luminance (skintone.slot_ranks; vanilla's adult slots are not in brightness order, races.md 2026-11-11).
     sf_esm_records: [(type, header, subs, FormID)] holding RACE and AVMD; read_texture: path -> bytes; decode: DDS
-    bytes -> RGBA. Raises KeyError / ValueError when something is missing."""
+    bytes -> RGBA. sig: the race's tone string (BSTT body, FSTT face). Raises KeyError / ValueError when something is
+    missing (a group listing no textures: ValueError with its subrecords in .fields)."""
     from fo4sf import sfplugin, skintone
 
     def text(d):
@@ -223,10 +224,10 @@ def child_tone_slots(sf_esm_records, read_texture, female: bool, decode) -> Dict
     race = next((s for t, _h, s, _f in sf_esm_records if t == b"RACE" and sfplugin.edid(s) == "ChildRace"), None)
     if race is None:
         raise KeyError("ChildRace")
-    groups = [text(d) for s, d in race if s == b"BSTT" and len(d) > 1]
+    groups = [text(d) for s, d in race if s == sig and len(d) > 1]
     pick = [g for g in groups if ("female" in g.lower()) == bool(female)] or groups
     if not pick:
-        raise KeyError("ChildRace has no body skin tone (BSTT)")
+        raise KeyError(f"ChildRace has no {sig.decode()} skin tone string")
     name = pick[0].lower()
     avmd = next((s for t, _h, s, _f in sf_esm_records if t == b"AVMD" and
                  any(sg in (b"TNAM", b"YNAM", b"EDID") and text(d).lower() == name for sg, d in s)), None)
@@ -234,7 +235,10 @@ def child_tone_slots(sf_esm_records, read_texture, female: bool, decode) -> Dict
         raise KeyError(f"no skin tone group {pick[0]}")
     tex = [text(d) for s, d in avmd if s == b"VNAM" and len(d) > 1]
     if not tex:
-        raise ValueError(f"skin tone group {pick[0]} lists no textures")
+        err = ValueError(f"skin tone group {pick[0]} lists no textures")
+        err.fields = [(sg.decode("latin-1"), text(d) if bytes(d)[-1:] == b"\0" else bytes(d).hex()[:64])
+                      for sg, d in avmd[:60]]
+        raise err
     imgs = {k: decode(read_texture(p)) for k, p in enumerate(tex)}
     ranks = skintone.slot_ranks(imgs)
     slots = sorted(ranks, key=lambda k: ranks[k])

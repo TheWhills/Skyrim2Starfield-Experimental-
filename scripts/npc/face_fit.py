@@ -1012,6 +1012,18 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
     return res
 
 
+def child_template_looks(rec, sf_hdpt_recs) -> dict:
+    """What a vanilla child NPC's look is made of (2026-11-19: Starfield's children have no face layers, dials or
+    blends): its STON, hair colour and head parts (EditorID: type)."""
+    names = {r[3]: (sfplugin.edid(r[2]), hdpt_type(r)) for r in sf_hdpt_recs}
+    subs = rec[2]
+    parts = [names.get(struct.unpack("<I", bytes(d)[:4])[0], (f"{struct.unpack('<I', bytes(d)[:4])[0]:08X}", None))
+             for s_, d in subs if s_ == b"PNAM" and len(d) == 4]
+    return {"ston": next((bytes(d)[0] for s_, d in subs if s_ == b"STON" and len(d)), None),
+            "hair_color": next((fo4land_zstring(d) for s_, d in subs if s_ == b"HCOL"), None),
+            "head_parts": [f"{e} ({t})" for e, t in parts]}
+
+
 def child_tone_order(sf_esm, sf_data, females) -> dict:
     """{female: [slot, ...] lightest first} of Starfield's child skin tones (child_hair.child_tone_slots), plus
     "_report"; a sex whose textures cannot be read is left out (reported)."""
@@ -1025,12 +1037,17 @@ def child_tone_order(sf_esm, sf_data, females) -> dict:
     except (OSError, ValueError) as e:
         return {"_report": {"error": str(e)}}
     for female in sorted(set(females)):
+        sex = "female" if female else "male"
         try:
             got = child_hair.child_tone_slots(recs, arcs.read, female, skintone.decode_dds)
             out[female] = got["slots"]
-            rep["female" if female else "male"] = got
+            rep[sex] = got
         except (KeyError, ValueError, OSError) as e:
-            rep["female" if female else "male"] = {"error": f"{type(e).__name__}: {e}"}
+            rep[sex] = {"error": f"{type(e).__name__}: {e}"}
+        try:          # 2026-11-19: the face's tone group, for comparison (its slots may run another way)
+            rep[sex + "_face"] = child_hair.child_tone_slots(recs, arcs.read, female, skintone.decode_dds, b"FSTT")
+        except (KeyError, ValueError, OSError) as e:
+            rep[sex + "_face"] = {"error": f"{type(e).__name__}: {e}", "fields": getattr(e, "fields", None)}
     out["_report"] = rep
     return out
 
@@ -1542,8 +1559,9 @@ def main(argv=None):
                 if "child_templates" not in report:      # what the game offers (2026-11-19: face skin by ethnicity)
                     import child_faces
                     report["child_templates"] = {
-                        ("female" if f else "male"): [{"edid": e, "plain": p_, "ethnicity": et, "face_skin": tx}
-                                                      for e, p_, et, tx, _r in
+                        ("female" if f else "male"): [dict({"edid": e, "plain": p_, "ethnicity": et, "face_skin": tx},
+                                                           **child_template_looks(r_, sf_hdpt_recs))
+                                                      for e, p_, et, tx, r_ in
                                                       child_faces.child_templates(npc_recs, child_race, f)]
                         for f in (False, True)}
                 if tone_slots is None and real is not None:

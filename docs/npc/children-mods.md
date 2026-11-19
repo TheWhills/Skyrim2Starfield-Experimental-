@@ -130,3 +130,12 @@ face style because skyrim's sliders work on the default european looking base"; 
 every child template with its face skin (child_templates) and each child's (test_npc.face_skin). Unverified: how
 Starfield's child face textures are named (the regex looks for european / african / asian anywhere in them). The
 rest of the look is the head: Starfield's Child_Head_Boy plus only Frodnar's difference from RS's base child head.
+Owner's faces.json after that (2026-11-19, verified): none of the 22 vanilla child templates (11 per sex:
+EncChildFaceM01-06 / F01-06, EncChild01Template, HT_GenericKid_M01 ...) has a face layer at all, so the template's
+face skin is not what made Frodnar look African; the template pick by ethnicity stays (harmless) but decides
+nothing. What a child's face is made of is then its head part (ours: Child_Head_Boy + his own difference), its STON
+and the race's face tone textures. faces.json now lists each child template's STON, hair colour and head parts
+(how vanilla children differ from each other: perhaps a face head part of their own) and ChildRace's face tone group
+(FSTT) next to the body one (the face's slots may run another way than the body's). Frodnar's hair colour came out
+HairColor01PlatinumBlond -> "Platinum" (same name), measured (117, 90, 61), a light blond; in game his hair read
+grey-white: unresolved (Dorthe's "Amber" shows whether a child's hair takes its colour at all).
