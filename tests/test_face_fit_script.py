@@ -528,6 +528,33 @@ class RaceNpcTests(unittest.TestCase):
             os.remove(os.path.join(d, "race_heads.json"))
             self.assertEqual(list(S.converted_races(plug)), ["WoodElfRace"])  # no race_heads.json at all
 
+    def test_npc_changes(self):
+        """Each run reports which test NPCs differ from the last one (record, own head parts, head files)."""
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        I = lambda v: struct.pack("<I", v)                                              # noqa: E731
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "meshes"))
+            with open(os.path.join(d, "meshes", "kid.nif"), "wb") as fh:
+                fh.write(b"head v1")
+
+            def run(kid_bytes, ralof_name):
+                with open(os.path.join(d, "meshes", "kid.nif"), "wb") as fh:
+                    fh.write(kid_bytes)
+                recs = [(b"HDPT", b"", [(b"EDID", Z("KidHead"))], 0x0A000800),
+                        (b"NPC_", b"", [(b"EDID", Z("S2SFace_Kid")), (b"PNAM", I(0x0A000800))], 0x0A000801),
+                        (b"NPC_", b"", [(b"EDID", Z(ralof_name))], 0x0A000802)]
+                rows = [{"edid": "Kid", "test_npc": {}, "child": {"files": ["meshes/kid.nif"]}},
+                        {"edid": "Ralof", "test_npc": {}}, {"edid": "Skipped", "test_npc": "none"}]
+                rep = S.npc_changes(rows, recs, {"Kid": 1, "Ralof": 2}, d, S.previous_rows(d))
+                with open(os.path.join(d, "faces.json"), "w") as fh:
+                    json.dump({"npcs": rows}, fh)
+                return rep
+            self.assertEqual(run(b"head v1", "S2SFace_Ralof")["new"], ["Kid", "Ralof"])
+            self.assertEqual(run(b"head v1", "S2SFace_Ralof"), {"changed": [], "unchanged": ["Kid", "Ralof"],
+                                                                "new": []})
+            self.assertEqual(run(b"head v2", "S2SFace_Ralof")["changed"], ["Kid"])      # its head file changed
+            self.assertEqual(run(b"head v2", "S2SFace_Ralof2")["changed"], ["Ralof"])
+
     def test_race_skin(self):
         """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a
         human skin tone). An NPC of a race with tones of its own: STON = the race's first tone + the slot nearest its

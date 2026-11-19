@@ -2436,3 +2436,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   their FormIDs, the head parts as before; race_heads.json only adds the skin tones (and the race list for a
   plugin without RACE records). The fit key holds whether an NPC is on a converted race, so Faendal refits.
   Alternative kept: failing the run on a stale file (owner would still have to copy it).
+- 2026-11-19 face_fit prints which test NPCs changed since the last run (owner: "it feels like changing one thing about
+  one NPC causes every single NPC to get touched"). Facts: the fits are cached per NPC (adults reused when only the
+  child code changes); the plugin is rewritten in full every run, unchanged NPCs coming out the same, which the log
+  never showed. npc_changes hashes each NPC's record, the head parts of the plugin it uses and its row's head files
+  (faces.json test_npc.sha1, changed_since_last_run) and prints "NPCs changed since the last run: ...".

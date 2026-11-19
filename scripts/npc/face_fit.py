@@ -526,6 +526,50 @@ def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted, extra=N
     return h.hexdigest()
 
 
+def previous_rows(out):
+    """{edid: row} of the last run's faces.json in out ({} without one)."""
+    try:
+        with open(os.path.join(out, "faces.json"), encoding="utf-8") as fh:
+            return {r.get("edid"): r for r in json.load(fh).get("npcs", []) if isinstance(r, dict)}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def npc_changes(rows, recs, test_subs, out, before) -> dict:
+    """Which test NPCs differ from the last run (2026-11-19, owner: "it feels like changing one thing about one NPC
+    causes every single NPC to get touched"): per NPC a hash of its record, the head parts of this plugin it uses and
+    the files its row lists (a child's head files), kept as test_npc.sha1 and compared with the last run's.
+    Prints and returns {"changed": [...], "unchanged": [...], "new": [...]}."""
+    import hashlib
+    by_fid = {r[3]: r for r in recs}
+    out_rep = {"changed": [], "unchanged": [], "new": []}
+    for row in rows:
+        k = test_subs.get(row.get("edid")) if isinstance(row.get("test_npc"), dict) else None
+        if k is None or k >= len(recs):
+            continue
+        h = hashlib.sha1(repr(recs[k][2]).encode())
+        for sg, d in recs[k][2]:
+            if sg == b"PNAM" and len(d) == 4:
+                part = by_fid.get(struct.unpack("<I", bytes(d))[0])
+                if part is not None:
+                    h.update(repr(part[2]).encode())
+        for rel in sorted((row.get("child") or {}).get("files", [])):
+            try:
+                with open(os.path.join(out, *rel.split("/")), "rb") as fh:
+                    h.update(fh.read())
+            except OSError:
+                pass
+        row["test_npc"]["sha1"] = h.hexdigest()
+        old = ((before.get(row["edid"]) or {}).get("test_npc") or {})
+        old = old.get("sha1") if isinstance(old, dict) else None
+        out_rep["new" if old is None else "changed" if old != row["test_npc"]["sha1"] else "unchanged"].append(
+            row["edid"])
+    print(f"NPCs changed since the last run: {', '.join(out_rep['changed']) or 'none'}"
+          f"{'; unchanged: ' + str(len(out_rep['unchanged'])) if out_rep['unchanged'] else ''}"
+          f"{'; first time compared: ' + ', '.join(out_rep['new']) if out_rep['new'] else ''}")
+    return out_rep
+
+
 def load_fit_cache(out):
     try:
         with open(os.path.join(out, FIT_CACHE), encoding="utf-8") as fh:
@@ -2119,6 +2163,7 @@ def main(argv=None):
                                                  out, vt["GenericMaleEvenToned"], qt, report)
             recs += top
         recs.extend(late_recs)
+        report["changed_since_last_run"] = npc_changes(report["npcs"], recs, test_subs, out, previous_rows(out))
         if recs:
             with open(os.path.join(out, PLUGIN), "wb") as fh:
                 fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces", masters=masters,
