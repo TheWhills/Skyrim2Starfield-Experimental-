@@ -174,8 +174,9 @@ class PlaceSpinTests(unittest.TestCase):
         self.assertEqual(skipped, [])
 
     def test_spin_speed(self):
-        """2026-11-19 (owner): at 0.175 the wheel turned about twice Skyrim's 16.7 s per turn; half that rate."""
-        self.assertAlmostEqual(ex.spin_speed(16.667), 0.087, places=3)
+        """2026-11-19 (owner): 12 s per turn at rate 0.087; Skyrim's wheel takes 16.7 s."""
+        self.assertAlmostEqual(ex.spin_speed(16.667), 0.063, places=3)
+        self.assertAlmostEqual(ex.spin_speed(12.0), 0.087, places=3)
         self.assertEqual(ex.spin_speed(ex.ROTATE_Y01_TURN_S), 1.0)
         self.assertEqual(ex.spin_speed(1e6), 0.01)
 

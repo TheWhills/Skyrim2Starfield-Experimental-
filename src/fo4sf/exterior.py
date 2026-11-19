@@ -152,9 +152,10 @@ def spin_pose(pos, rot, scale, spin: dict):
 # (owner, fresh coc). So the part goes on a copy of STAT AK_FanWall01_Blade_Lazy (1A6C70: SimpleIdleLoop01 +
 # genericrig + rotate_y01, PRPS 0.75) with that entry set to the part's own rate (spin_speed).
 SPIN_TEMPLATE = "1A6C70"
-# rotate_y01 at rate 1: its clip is 11.659 s long. 2026-11-19 (owner, in game): at rate 0.175 (from 4 turns per clip)
-# the wheel turned about twice Skyrim's speed, so about 8 turns per clip, 1.46 s per turn (supported, eyeballed)
-ROTATE_Y01_TURN_S = 11.659 / 8
+# rotate_y01's seconds per turn at rate 1 (its clip is 11.659 s long). Owner's timings in game: about 3 s at rate 1
+# (2026-11-18), "about twice too fast" at 0.175 (2026-11-19), then counted 12 s per turn at rate 0.087 (2026-11-19
+# 08:28, the most direct one): 12 x 0.087 = 1.04 s (supported; rate taken as linear)
+ROTATE_Y01_TURN_S = 12 * 0.087
 
 
 def spin_speed(period_s: float) -> float:
