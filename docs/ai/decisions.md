@@ -2441,3 +2441,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   child code changes); the plugin is rewritten in full every run, unchanged NPCs coming out the same, which the log
   never showed. npc_changes hashes each NPC's record, the head parts of the plugin it uses and its row's head files
   (faces.json test_npc.sha1, changed_since_last_run) and prints "NPCs changed since the last run: ...".
+- 2026-11-19 Owner: "eventually everything will be in a skyrim.esm" - the test plugins (S2SFaceTest, FO4Port,
+  S2SRaceTest, S2SSkyrimHairs, S2SClothes, ...) are staging; the end product is one plugin. Consequences for the
+  NPC work: one record per NPC assembled from per-NPC parts (face, race, hair, outfit, schedule) instead of a plugin
+  copying another's record (FO4Port's copies of the face-test NPCs); FormIDs keyed by the Skyrim record, not by build
+  order (face_fit's new_form_id(len(recs)) shifted Frodnar's ID once today); per-NPC parts cached by their own
+  inputs so changing one NPC rebuilds one part and the assembly. Not designed in detail yet.
