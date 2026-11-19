@@ -537,7 +537,9 @@ unverified):
   references). So the parts now go on a copy of STAT AK_FanWall01_Blade_Lazy (1A6C70) with that entry set
   (SpinRate in PluginSpike / TerrainOverlays). Rate: rotate_y01 turns in about 3 s at rate 1 (owner, twice; the
   clip is 11.659 s, so 4 turns), exterior.spin_speed = 2.915 s / Skyrim's loop: 0.175 for the wheel.
-  Unverified in game. If the rate still does nothing: our own rig + looping .af at Skyrim's period (as the dartboard:
+  In game 2026-11-19 (owner, verified): the rate works (the wheel slowed), still about twice Skyrim's speed; so
+  rotate_y01 makes about 8 turns per clip, ROTATE_Y01_TURN_S = 11.659 / 8 and the wheel's rate 0.087. If the rate
+  had done nothing: our own rig + looping .af at Skyrim's period (as the dartboard:
   rig bones named after the model's sgoKeep nodes), with a Creation Kit index run.
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
