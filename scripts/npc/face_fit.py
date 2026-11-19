@@ -373,7 +373,7 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     import child_faces
     import child_hair
     female = row["female"]
-    eth = child_faces.child_ethnicity(races.get(n["race"], ""))
+    eth = child_faces.CHILD_ETHNICITY
     tpl = child_faces.pick_child_template(npc_recs, child_race, female, ethnicity=eth)
     if tpl is None:
         row["test_npc"] = "no vanilla child NPC of this sex"

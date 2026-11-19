@@ -125,8 +125,8 @@ in C:\Modding\work\child mods and found by its plugin (no retextures, no SMP rep
 Owner, 2026-11-19 (in game, KS Hairdos SSE build): "Is Frodnar using a black ethnic template? His features seem
 that way." His test NPC copied EncChild01Template, picked by EditorID alone; the face skin (Dermaesthetic layer)
 comes from the template, and the adults' templates have been picked by face skin ethnicity since 2026-11-12, the
-children's not. Now child_faces.pick_child_template takes the ethnicity of the Skyrim child race's adult race
-(NordRaceChild -> european) and prefers templates whose face layers name it, then ones naming none; faces.json lists
+children's not. Now child_faces.pick_child_template prefers (owner, same day: "all children should get the european
+face style because skyrim's sliders work on the default european looking base"; every race, Redguard too) templates whose face layers name european, then ones naming none; faces.json lists
 every child template with its face skin (child_templates) and each child's (test_npc.face_skin). Unverified: how
 Starfield's child face textures are named (the regex looks for european / african / asian anywhere in them). The
 rest of the look is the head: Starfield's Child_Head_Boy plus only Frodnar's difference from RS's base child head.

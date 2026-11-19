@@ -2425,3 +2425,7 @@ The textures still come from KS Hairdos (a --skyrim-mod folder). Alternatives: r
 converting each hair part (needs the meshes and a refit to the child head); a vanilla Starfield child hair matched by
 shape (loses the mod's look). Child skin tones are given by lightness rank of the vanilla child tone textures, as the
 race tones already are.
+
+2026-11-19 (owner): every converted child gets a European face skin (template child picked by it), whatever its
+Skyrim race. Why: Skyrim's face sliders shape one European-looking base face; the adults already take the generic
+western (eu) face material for the same reason (2026-11-12). Alternative: by race (Redguard -> African), dropped.

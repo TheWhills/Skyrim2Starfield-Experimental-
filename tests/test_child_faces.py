@@ -51,9 +51,7 @@ class ChildFaceTests(unittest.TestCase):
         self.assertIsNone(C.pick_child_template(recs, child, True, ethnicity="european"))
         self.assertEqual(C.face_ethnicity(recs[3][2]), ("european", "European_Child_Male_03"))
         self.assertEqual(C.face_ethnicity(recs[1][2]), (None, None))
-        self.assertEqual(C.child_ethnicity("NordRaceChild"), "european")
-        self.assertEqual(C.child_ethnicity("RedguardRaceChild"), "african")
-        self.assertEqual(C.child_ethnicity(""), "european")
+        self.assertEqual(C.CHILD_ETHNICITY, "european")              # owner 2026-11-19: every child
         self.assertEqual([t[0] for t in C.child_templates(recs, child, False)],
                          ["AChildAfrican", "BChildPlain", "CChildEuroScript", "DChildEuro"])
 

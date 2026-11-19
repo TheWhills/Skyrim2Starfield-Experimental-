@@ -163,12 +163,8 @@ def face_ethnicity(subs):
     return None, derma
 
 
-def child_ethnicity(race_edid):
-    """The face skin ethnicity for a Skyrim child race (NordRaceChild -> european: npc_records.SKYRIM_ETHNICITY of
-    the adult race), european when unknown."""
-    import npc_records
-    key = (race_edid or "").lower().split("race")[0]
-    return npc_records.SKYRIM_ETHNICITY.get(key, "european")
+CHILD_ETHNICITY = "european"   # owner 2026-11-19: every child, whatever its race - Skyrim's face sliders shape a
+#                                 European-looking base, so the face skin under them is European too (as the adults)
 
 
 def child_templates(npc_recs, child_race, female):
