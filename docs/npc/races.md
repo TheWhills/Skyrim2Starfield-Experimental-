@@ -734,3 +734,11 @@ why the mod needs no clothes of its own.
   opening not found" (the finders were written on Realistic RS Children's heads). The error now names which one
   and what the NIF holds (its shapes; the head's open loops with sizes and centres); his FaceGen NIF and Skyrim's
   malehead.nif asked for, to fix it offline.
+  From his files (owner, 18:38: Faendal's FaceGen 00013480.nif and Skyrim's malehead.nif, kept outside Git): the
+  mouth was found; the eyes were not, twice over - (1) the eye-shape test skipped any name with "brow" in it, and
+  his eyes are MaleEyesWoodElfDeepBrown; (2) vanilla FaceGen NIFs keep the head bone's node at the origin, so the
+  route verified on Realistic RS Children (head bone rest @ inverse(bind)) left his eyes 120 units below his head.
+  childshape v14: is_eye_shape (brows?(?!n) / lash excluded); facegen_eyes(nif, head_points) takes, of that route and
+  the eyes shape's own skin -> model matrix (facefit.skyrim_model_matrix), the one landing nearest the head's middle
+  (Frodnar's eyes unchanged; Faendal's at eye height). His landmarks (m, before the prealign): eyes 1771, mouth 1702,
+  nose 1734, chin 1665, forehead 1813; nasion 1800 (29 mm over the eyes: his brow ridge, weight 1 of 13).

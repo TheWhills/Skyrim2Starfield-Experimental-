@@ -393,7 +393,7 @@ def child_shape_disp(ctx, fg, fg_bytes):
     if sky_tris is None:
         raise ValueError("no Skyrim base head triangles")
     sky_model = facefit.apply4(M, np.asarray(fg, float))
-    eyes = childshape.facegen_eyes(fg_bytes)
+    eyes = childshape.facegen_eyes(fg_bytes, fg)
     if eyes is None:                   # what the FaceGen NIF holds (2026-11-19, Faendal: no eyes found)
         try:
             shapes = [(x.name or b"").decode("latin-1") for x in skyrimskin.skinned_shapes(nifmod.parse(fg_bytes))]
@@ -507,7 +507,7 @@ def child_paint_points(ctx, fg, fg_bytes, disp, shape, n, a, out, sf_data) -> di
         dax = np.linalg.norm((sf_model - c)[:, [0, 2]], axis=1)
         w = np.where((dax < 0.016) & (sf_model[:, 1] < c[1] - 0.004), 0.0, w)
     sky_mouth = childshape.skyrim_mouth(sky_model, ctx["base_tris"])
-    sky_eyes = childshape.facegen_eyes(fg_bytes)
+    sky_eyes = childshape.facegen_eyes(fg_bytes, fg)
     sky_flip = False
     if sky_eyes is not None and sky_mouth is not None:
         sky_uv, sky_flip = childpaint.upright_uv(sky_uv, sky_model, facefit.apply4(M, sky_eyes), sky_mouth)

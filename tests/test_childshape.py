@@ -170,6 +170,13 @@ class AlmondTests(unittest.TestCase):
 
 
 class LandmarkTests(unittest.TestCase):
+    def test_eye_shape_names(self):
+        """2026-11-19 (Faendal): 'Brown' in an eyes shape's name is not a brow."""
+        for name in ("MaleEyesWoodElfDeepBrown", "0RCOChildEyesBlue", "EyesFemaleHumanBrownBlind"):
+            self.assertTrue(CS.is_eye_shape(name), name)
+        for name in ("BrowsMaleHumanoid04", "FemaleEyeBrow02", "EyelashesFemale", "MaleHeadWoodElf"):
+            self.assertFalse(CS.is_eye_shape(name), name)
+
     def test_mouth_is_the_largest_midline_opening(self):
         """2026-11-19 (Dorthe): a small opening by the nose, in front of the mouth, is not the mouth."""
         n = 81

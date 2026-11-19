@@ -21,6 +21,7 @@ What this does instead, in Starfield model space (metres):
 Result: Starfield's mesh and detail with the child's own proportions. Tried and drawn on Frodnar's shapes before use
 (work notes: docs/npc/children-mods.md).
 """
+import re
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -61,7 +62,7 @@ ALMOND = 0.12          # of the eye opening's height: the upper lid lowered at i
                        # openings are round, 29.5 x 12.3 mm on Frodnar)
 LID_FALLOFF = 0.008    # m above the upper lid's edge over which the lid skin follows it
 EYEBALL_R = 0.012      # m: the lid edge is moved forward by the sagitta of an eyeball this round, so it stays on it
-VERSION = 13
+VERSION = 14
 
 
 def apply4(m, p):
@@ -116,23 +117,40 @@ def skyrim_mouth(v, t) -> Optional[np.ndarray]:
     return max(cand, key=lambda c: c[1]) if cand else None
 
 
-def facegen_eyes(nif_bytes) -> Optional[np.ndarray]:
-    """(2, 3) eye centres (left, right) of a Skyrim FaceGen NIF in its model space (units): the eyes shape's
-    vertices taken to the head bone's rest place (verified on Realistic RS Children: the eyes are stored in the head
-    bone's frame with an identity bind; model = head bone at rest @ inverse(bind) @ point)."""
-    from . import nif as nifmod, skyrimhair, skyrimskin
+EYE_SHAPE = re.compile(r"eye", re.I)
+NOT_EYES = re.compile(r"brows?(?!n)|lash", re.I)      # brows / lashes, not "Brown" (2026-11-19: Faendal's
+                                                       # MaleEyesWoodElfDeepBrown was skipped as a brow)
+
+
+def is_eye_shape(name: str) -> bool:
+    return bool(EYE_SHAPE.search(name or "")) and not NOT_EYES.search(name or "")
+
+
+def facegen_eyes(nif_bytes, head_points=None) -> Optional[np.ndarray]:
+    """(2, 3) eye centres (left, right) of a Skyrim FaceGen NIF (units), in the space of head_points (its head shape's
+    points as the caller uses them) when given. Two ways to place the eyes shape, the one landing nearest the head's
+    middle is taken: (1) the head bone's rest place @ inverse(bind) (verified on Realistic RS Children, whose eyes are
+    stored in the head bone's frame with an identity bind and whose head the caller places with the base head's
+    matrix); (2) the eyes shape's own skin -> model matrix (facefit.skyrim_model_matrix; vanilla FaceGen: the head
+    bone's node is at the origin, the eyes come 120 units low by (1) - 2026-11-19, Faendal). Without head_points: (1)."""
+    from . import facefit, nif as nifmod, skyrimhair, skyrimskin
     n = nifmod.parse(nif_bytes)
     nodes, _p = skyrimhair.node_worlds(n)
     anchor = skyrimhair.head_anchor(n, nodes)
     for s in skyrimskin.skinned_shapes(n):
-        nm = (s.name or b"").decode("latin-1").lower()
-        if "eye" not in nm or "brow" in nm or "lash" in nm:
+        nm = (s.name or b"").decode("latin-1")
+        if not is_eye_shape(nm):
             continue
         names = [b.decode("latin-1") if isinstance(b, bytes) else b for b in s.bones]
         if skyrimhair.SKY_HEAD not in names:
             continue
-        to = anchor @ np.linalg.inv(skyrimhair._bind_world(s, names.index(skyrimhair.SKY_HEAD)))
-        p = apply4(to, np.asarray(s.positions, float))
+        pos = np.asarray(s.positions, float)
+        cands = [apply4(anchor @ np.linalg.inv(skyrimhair._bind_world(s, names.index(skyrimhair.SKY_HEAD))), pos)]
+        if head_points is not None:
+            cands.append(apply4(facefit.skyrim_model_matrix(n, s), pos))
+            mid = np.asarray(head_points, float).mean(0)
+            cands.sort(key=lambda p: float(np.linalg.norm(p.mean(0) - mid)))
+        p = cands[0]
         if not (p[:, 0] < 0).any() or not (p[:, 0] > 0).any():
             continue
         return np.array([p[p[:, 0] < 0].mean(0), p[p[:, 0] > 0].mean(0)])
