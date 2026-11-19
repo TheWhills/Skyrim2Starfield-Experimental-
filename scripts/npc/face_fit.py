@@ -1264,7 +1264,8 @@ def child_tone_order(sf_esm, sf_data, females) -> dict:
 
 
 def add_child_light_tone(sf_esm, sf_data, out, recs) -> dict:
-    """child_hair.light_child_tone: its AVMD overrides added to recs, its face texture written (uncompressed RGBA8
+    """child_hair.light_child_tone: its AVMD overrides added to recs (face_fit adds them after every new record:
+    2026-11-19, owner: "did his ID change" - in the middle they shifted Frodnar's FormID), its face texture written (uncompressed RGBA8
     sRGB) under out/textures/. Returns {"index": STON, ...report} or {"error": ...}."""
     import child_hair
     import skin_tone_probe
@@ -1791,6 +1792,7 @@ def main(argv=None):
         sf_hdpt_recs = None
         tone_slots = None
         light_ston = None
+        late_recs = []      # overrides added after every new record, so they do not shift the new FormIDs
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -1810,7 +1812,7 @@ def main(argv=None):
                     tone_slots = child_tone_order(sf_esm, sf_data, [r["female"] for r in report["npcs"]
                                                                     if r.get("child")])
                     report["child_skin_tones"] = tone_slots.pop("_report", None)
-                    light = add_child_light_tone(sf_esm, sf_data, out, recs)
+                    light = add_child_light_tone(sf_esm, sf_data, out, late_recs)
                     report["child_light_tone"] = light
                     light_ston = light.get("index") if isinstance(light, dict) else None
                 write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
@@ -1962,6 +1964,7 @@ def main(argv=None):
             top, children = npc_voice.add_voices(recs, test_subs, report["npcs"], a.voice_lines, len(masters), PLUGIN,
                                                  out, vt["GenericMaleEvenToned"], qt, report)
             recs += top
+        recs.extend(late_recs)
         if recs:
             with open(os.path.join(out, PLUGIN), "wb") as fh:
                 fh.write(sfplugin.build(recs, info, author="Skyrim2Starfield faces", masters=masters,
