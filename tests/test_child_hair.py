@@ -228,6 +228,19 @@ class HairPrealignTests(unittest.TestCase):
                 np.testing.assert_allclose(seen["M"], want)
 
 
+class HairLiftTests(unittest.TestCase):
+    def test_hair_lift_matrix(self):
+        """The hair is lifted with the forehead (capped), never scaled."""
+        import face_fit as S
+        row = lambda lift: {"child": {"shape": {"prealign": {"hair_lift_m": lift, "scale": 1.11}}}}   # noqa: E731
+        m = S.hair_lift_matrix(row(0.0076))
+        np.testing.assert_allclose(m[:3, :3], np.eye(3))
+        self.assertAlmostEqual(m[2, 3], 0.0076)
+        self.assertAlmostEqual(S.hair_lift_matrix(row(0.016))[2, 3], S.HAIR_LIFT_MAX)
+        self.assertIsNone(S.hair_lift_matrix({"child": {}}))
+        self.assertIsNone(S.hair_lift_matrix(row(None)))
+
+
 def CH_SF_HEAD():
     from fo4sf import skyrimhair
     return skyrimhair.SF_HEAD

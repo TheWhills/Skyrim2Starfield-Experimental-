@@ -41,8 +41,10 @@ class PieceTests(unittest.TestCase):
         np.testing.assert_allclose(moved, np.array(list(sf.values())), atol=1e-9)
         self.assertAlmostEqual(rep["scale"], 1.1, places=4)
         self.assertEqual(max(rep["after_mm"].values()), 0.0)
-        P = np.array(rep["matrix"])                    # the same move as a matrix (the child's hair follows it)
+        P = np.array(rep["matrix"])                    # the same move as a matrix
         np.testing.assert_allclose(CS.apply4(P, np.array(list(sky.values()))), moved, atol=1e-6)
+        f = np.array(sky["forehead"])                  # the hair's lift: how far the forehead goes up
+        self.assertAlmostEqual(rep["hair_lift_m"], float(CS.apply4(P, f[None])[0, 2] - f[2]), places=5)
 
     def test_closest_points_match_the_exhaustive_search(self):
         v, t = sphere(n=10, m=16)

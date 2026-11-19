@@ -61,7 +61,7 @@ ALMOND = 0.12          # of the eye opening's height: the upper lid lowered at i
                        # openings are round, 29.5 x 12.3 mm on Frodnar)
 LID_FALLOFF = 0.008    # m above the upper lid's edge over which the lid skin follows it
 EYEBALL_R = 0.012      # m: the lid edge is moved forward by the sagitta of an eyeball this round, so it stays on it
-VERSION = 12
+VERSION = 13
 
 
 def apply4(m, p):
@@ -160,9 +160,10 @@ def landmarks(v, eyes, mouth) -> Dict[str, np.ndarray]:
 
 def prealign(sky_v, sky_lm, sf_lm) -> Tuple[np.ndarray, Dict]:
     """The Skyrim head moved and scaled (no turn) so its landmarks meet Starfield's in the weighted least-squares
-    sense (LM_WEIGHTS: the eyes most). (moved points, report; report["matrix"]: the 4x4 move, for the child's hair
-    to follow the face - 2026-11-19, owner: Frodnar's eyes and brows sit too high, his hairline low on his
-    forehead: the hair had not been scaled with the face, 1.09x for him)."""
+    sense (LM_WEIGHTS: the eyes most). (moved points, report; report["matrix"]: the 4x4 move; report["hair_lift_m"]:
+    how far it raises the forehead, what the child's hair is lifted by - 2026-11-19, owner: Frodnar's hairline low
+    on his forehead. Not the whole move: scaled with the face (1.11x for Dorthe) the hair's back stood out from her
+    head like a bulb, owner: "what is this bulb in her hair")."""
     ks = [k for k in LM_WEIGHTS if sky_lm.get(k) is not None and sf_lm.get(k) is not None]
     w = np.array([LM_WEIGHTS[k] for k in ks])[:, None]
     a = np.array([sky_lm[k] for k in ks], float)
@@ -173,7 +174,11 @@ def prealign(sky_v, sky_lm, sf_lm) -> Tuple[np.ndarray, Dict]:
     P = np.eye(4)
     P[:3, :3] *= s
     P[:3, 3] = bc - s * ac
+    lift = None
+    if sky_lm.get("forehead") is not None:      # how far the move raises the forehead: the hair's lift (hair_lift)
+        lift = round(float((sky_lm["forehead"][2] - ac[2]) * s + bc[2] - sky_lm["forehead"][2]), 5)
     rep = {"scale": round(s, 4), "landmarks": ks, "matrix": [[round(float(x), 7) for x in r] for r in P],
+           "hair_lift_m": lift,
            "before_mm": {k: round(float(np.linalg.norm(sky_lm[k] - sf_lm[k])) * 1000, 1) for k in ks},
            "after_mm": {k: round(float(np.linalg.norm((sky_lm[k] - ac) * s + bc - sf_lm[k])) * 1000, 1) for k in ks}}
     return moved, rep

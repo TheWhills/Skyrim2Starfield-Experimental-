@@ -344,3 +344,8 @@ Dorthe (owner, 17:49: "lets try dorthe"), offline fit first: max move 25.6 mm, r
 20-vertex loop by the nose (6 mm off the midline, in front of the 84-vertex mouth) and starfield_eyes_mouth took it
 for the mouth (37 mm high). Now the largest midline loop below the eyes (childshape v12): max 13.0 mm, rms 3.9 mm,
 prealign 1.11, nose widths 25.1/32.8/37.2/41.0 vs her 25.1/32.5/37.4/41.9 mm. Frodnar unchanged (one loop).
+Owner (18:07, Dorthe from behind): "what is this bulb in her hair". The hair had been placed with the face shape's
+whole prealign move (scale 1.11 for Dorthe): scaled about the face, its back stood ~1 cm off her head. Now the
+hair only rises with the forehead (childshape v13 prealign hair_lift_m: Frodnar 7.6 mm, Dorthe 16 mm), capped at
+HAIR_LIFT_MAX 8 mm (the hair moves rigidly; nothing pulls it back onto the crown). face_fit.hair_lift_matrix.
+Dorthe in game otherwise (owner): "Dorthe looks good"; her own tone 6, Frodnar 7.

@@ -335,6 +335,8 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
 
 
 PAINT_DIR = "_child_paint"
+HAIR_LIFT_MAX = 0.008      # m: a child's hair is lifted at most this much with its forehead (Frodnar 7.6 mm; Dorthe's
+                           # 16 mm would float her hair off the crown: the hair moves rigidly, nothing pulls it down)
 
 
 def starfield_mesh_uvs(sf_data, mesh_path, count: int):
@@ -345,6 +347,18 @@ def starfield_mesh_uvs(sf_data, mesh_path, count: int):
     if len(mesh.uv1) != count:
         raise ValueError(f"{mesh_path}: {len(mesh.uv1)} UVs for a head of {count} vertices")
     return np.array([[sfmesh.half_to_float(u), sfmesh.half_to_float(v)] for u, v in mesh.uv1], float)
+
+
+def hair_lift_matrix(row):
+    """4x4 that lifts a child's hair with its forehead (the face shape's prealign hair_lift_m, at most
+    HAIR_LIFT_MAX), or None: raised, not scaled with the face (2026-11-19, Dorthe's hair stood out at the back like a
+    bulb when scaled 1.11x)."""
+    lift = (((row.get("child") or {}).get("shape") or {}).get("prealign") or {}).get("hair_lift_m")
+    if not lift:
+        return None
+    pre = np.eye(4)
+    pre[2, 3] = float(np.clip(lift, -HAIR_LIFT_MAX, HAIR_LIFT_MAX))
+    return pre
 
 
 def child_paint_points(ctx, fg, fg_bytes, disp, shape, n, a, out, sf_data) -> dict:
@@ -1542,7 +1556,7 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
             head_nif = next((f for f in row["child"].get("files", [])
                              if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
             surface = child_hair.baked_surface(a.starfield, out, head_nif) if head_nif else None
-            pre = ((row["child"].get("shape") or {}).get("prealign") or {}).get("matrix")
+            pre = hair_lift_matrix(row)
             hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp, sf_world,
                                                surface, fbs[model], conv, staging, settings, pre)
         except (skyrimhair.HairError, nifmod.NifError, ValueError, KeyError, OSError) as e:
