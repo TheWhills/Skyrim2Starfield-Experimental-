@@ -277,3 +277,19 @@ defintely too high compared to skyrim". Found:
 - Not changed: the eye openings stay Starfield's (the eyeballs and brows are separate head parts the face mesh does
   not move); after the prealign Skyrim's eyes are within 1-4 mm of Starfield's in height, but 3 mm closer to the
   middle each. Moving the eyes / brows means our own eye and brow head parts: later.
+Owner (16:32): "Don't do brow fix" - BCOL for children reverted (4e84cc0); his Skyrim face paint carried onto the
+Starfield head: yes.
+Owner's whiteface finding (16:26): his look comes from Starfield's painted child face, lightened. Next: carry his
+Skyrim facetint onto the Starfield head (closest points of the fitted shape -> Skyrim UVs) as his own face tone.
+Face paint (fo4sf.childpaint, 2026-11-19): his Skyrim facetint on the Starfield head. face_fit.child_paint_points
+(at the fit, --child-shape-npc children): per Starfield head vertex the Skyrim UV at the closest point of its fitted
+place on the prealigned FaceGen face, a weight (the face; not the eye sockets' or mouth's insides; fading from 4 to
+8 mm off the Skyrim face); saved as out/_child_paint/<edid>.npz with the head's UVs (its .mesh uv1) and triangles.
+At the tone build (child_paint_face): the tint (facegendata/facetint/<plugin>/<FormID>.dds, through texconv when
+BC7) read through those UVs per pixel, over its own skin median, to the power 0.8, multiplies the main light face
+(Face17) with its painted features blurred away under the paint; each lightest-rank child with paint gets a tone of
+its own (after the levels; child_light_tone.children {edid: STON}). Checked offline on Frodnar's real meshes and
+tint: lips, cheeks, nose and freckles land in place (preview, per vertex). Starfield's UV convention is not
+assumed: childpaint.upright_uv turns either side's v when its eyes sit below its mouth in UV (Frodnar's Skyrim
+UVs: upright, no turn; faces.json child.paint.uv_flipped). Unverified: the result in game. faces.json: child.paint {file, tint, vertices_painted,
+tint_skin_linear}, child_light_tone.children.

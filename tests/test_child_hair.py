@@ -301,6 +301,30 @@ class LightToneTests(unittest.TestCase):
         self.assertEqual(got["report"]["male_fstt"]["body_skin"], [210, 170, 160])
         t = CH.face_level_target((172, 125, 95), 1.7)
         self.assertTrue(t[0] > 172 and t[2] - 95 > t[0] - 172)          # lighter and less orange than the body
+        # one more tone per painted child, after the levels: its own face, the lightest body
+        seen = []
+
+        def paint(edid, face):
+            seen.append((edid, face.shape))
+            return np.full_like(face, 77)
+        got = CH.light_child_tone([race, mb, fb, cx, fm, ff], lambda p: p, decode,
+                                  children=[("Frodnar", False), ("Dorthe", True)], paint=paint)
+        n = 3 + len(CH.FACE_LEVELS)
+        self.assertEqual(got["children"], {"Frodnar": n, "Dorthe": n + 1})
+        self.assertEqual([e for e, _s in seen], ["Frodnar", "Dorthe"])
+        by = {r[3]: r[2] for r in got["records"]}
+        mface = [d for s_, d in by[5] if s_ == b"VNAM"]
+        self.assertEqual(mface[n], Z("textures/s2s/children/tones/frodnar_face_color.dds"))
+        self.assertEqual(len(mface), n + 1)                             # the male group stops at Frodnar's
+        fface = [d for s_, d in by[6] if s_ == b"VNAM"]
+        self.assertEqual(fface[n + 1], Z("textures/s2s/children/tones/dorthe_face_color.dds"))
+        self.assertEqual(len(fface), n + 2)                             # padded at Frodnar's index
+        self.assertEqual([d for s_, d in by[2] if s_ == b"VNAM"][n], Z("textures/b1.dds"))
+        self.assertTrue((got["textures"]["s2s/children/tones/frodnar_face_color.dds"] == 77).all())
+        got = CH.light_child_tone([race, mb, fb, cx, fm, ff], lambda p: p, decode,
+                                  children=[("Frodnar", False)], paint=lambda e, f: (_ for _ in ()).throw(KeyError("x")))
+        self.assertEqual(got["children"], {})
+        self.assertIn("none", got["report"]["children"]["Frodnar"])
         with self.assertRaises(KeyError):
             CH.light_child_tone([race, mb, fb], lambda p: p, decode)
 
@@ -316,7 +340,7 @@ class LightToneWiringTests(unittest.TestCase):
                 "textures": {"s2s/children/tones/male_face_light_color.dds": img}, "report": {"male_bstt": {}}}
         recs = []
         with tempfile.TemporaryDirectory() as d, \
-                mock.patch.object(CH, "light_child_tone", lambda *a: fake), \
+                mock.patch.object(CH, "light_child_tone", lambda *a, **k: fake), \
                 mock.patch.object(S.sfplugin, "records", lambda *a: []), \
                 mock.patch.object(skin_tone_probe, "TextureArchives", lambda sf: types.SimpleNamespace(read=None)):
             got = S.add_child_light_tone("sf.esm", "data", d, recs)

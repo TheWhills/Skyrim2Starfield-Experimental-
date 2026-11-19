@@ -67,6 +67,12 @@ def skyrim_head(data: bytes, model: bool = False):
     return facefit.apply4(facefit.skyrim_model_matrix(n, s), p) if model else p
 
 
+def skyrim_head_uvs(data: bytes):
+    """(N, 2) UVs of the head shape in a Skyrim head NIF (None without one or without UVs)."""
+    s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(nifmod.parse(data)))
+    return None if s is None or not s.uvs else np.asarray(s.uvs, float).reshape(-1, 2)
+
+
 def skyrim_head_triangles(data: bytes):
     """(T, 3) triangles of the head shape in a Skyrim head NIF (None without one)."""
     s = skyrimnpc.head_shape(skyrimskin.skinned_shapes(nifmod.parse(data)))
@@ -284,12 +290,19 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
     if fg is None:
         raise ValueError("FaceGen head has no head shape")
     shape = None
+    paint = None
     if uses_child_shape(a, n):         # 2026-11-19 (owner's option 2): the child's own shape, feature by feature
+        fg_bytes = hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky)
         try:
-            disp, shape = child_shape_disp(ctx, fg, hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky))
+            disp, shape = child_shape_disp(ctx, fg, fg_bytes)
         except ValueError as e:
             shape = {"error": f"{e}: the difference transfer instead"}
             disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
+        else:
+            try:
+                paint = child_paint_points(ctx, fg, fg_bytes, disp, shape, n, a, out, sf_data)
+            except (ValueError, KeyError, OSError, SystemExit) as e:
+                paint = {"error": f"{type(e).__name__}: {e}"}
     else:
         disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
     files = child_faces.child_head_files(ctx, disp, n["edid"], lambda r: hkx_to_af.vanilla_file(r, sf_data)[0])
@@ -302,9 +315,95 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
     preview = child_preview(n["edid"], ctx, fg, disp, out, cache) if previewing(a, n) else None
     return {"child": {"skyrim_race": sky_race, "head_model": child_faces.child_model_path(n["edid"]),
                       **({"preview": preview} if preview else {}), **({"shape": shape} if shape else {}),
+                      **({"paint": paint} if paint else {}),
                       "files": sorted(files), "max_move_m": round(float(mag.max()), 4),
                       "rms_move_m": round(float(np.sqrt(np.mean(mag ** 2))), 5), "setup": ctx["report"]},
             "dials": {}}
+
+
+PAINT_DIR = "_child_paint"
+
+
+def starfield_mesh_uvs(sf_data, mesh_path, count: int):
+    """(N, 2) UVs (uv1) of a Starfield .mesh (geometries/<mesh_path>.mesh), checked against the head's vertex
+    count."""
+    data, _ = hkx_to_af.vanilla_file("geometries/" + mesh_path.replace("\\", "/") + ".mesh", sf_data)
+    mesh = sfmesh.parse(data)
+    if len(mesh.uv1) != count:
+        raise ValueError(f"{mesh_path}: {len(mesh.uv1)} UVs for a head of {count} vertices")
+    return np.array([[sfmesh.half_to_float(u), sfmesh.half_to_float(v)] for u, v in mesh.uv1], float)
+
+
+def child_paint_points(ctx, fg, fg_bytes, disp, shape, n, a, out, sf_data) -> dict:
+    """Where the child's Skyrim face paint lands on Starfield's head (fo4sf.childpaint; 2026-11-19, owner: Frodnar
+    "looks like he's someone ethnic or someone doing whiteface"): per Starfield head vertex, its Skyrim UV (the
+    closest point of its fitted place on the prealigned Skyrim face) and a weight (the face, not the eye sockets'
+    or mouth's insides). Saved as out/_child_paint/<edid>.npz with the head's UVs and triangles; the bake
+    (child_paint_face) reads the tint later. Returns {"file", "tint", "vertices_painted"}."""
+    import child_hair
+    from fo4sf import childpaint, childshape
+    head = ctx["head"]
+    if not ctx.get("mesh_path"):
+        raise ValueError("Starfield child head: no .mesh path")
+    sf_uv = starfield_mesh_uvs(sf_data, ctx["mesh_path"], len(head.vertices))
+    sky_uv = skyrim_head_uvs(fg_bytes)
+    if sky_uv is None or len(sky_uv) != len(fg):
+        raise ValueError("Skyrim FaceGen head has no UVs matching its points")
+    pre = (shape.get("prealign") or {}).get("matrix")
+    if pre is None:
+        raise ValueError("no prealign move in the shape report")
+    node = np.asarray(head.model_xf, float)
+    M = np.asarray(pre, float) @ child_hair.sky_to_starfield(ctx)
+    sky_model = facefit.apply4(M, np.asarray(fg, float))
+    sf_t = np.asarray(head.triangles, int)
+    sf_model = facefit.apply4(node, head.vertices)
+    fitted = facefit.apply4(node, np.asarray(head.vertices, float) + np.asarray(disp, float))
+    eyes, mouth = childshape.starfield_eyes_mouth(sf_model, sf_t)
+    if eyes is None or mouth is None:
+        raise ValueError("Starfield head: eye / mouth openings not found")
+    w = childshape.face_weight(sf_model, eyes, mouth) * (1.0 - childshape.inside_mouth(sf_model, mouth))
+    for c in np.asarray(eyes, float):          # the socket behind each opening: no paint
+        dax = np.linalg.norm((sf_model - c)[:, [0, 2]], axis=1)
+        w = np.where((dax < 0.016) & (sf_model[:, 1] < c[1] - 0.004), 0.0, w)
+    sky_mouth = childshape.skyrim_mouth(sky_model, ctx["base_tris"])
+    sky_eyes = childshape.facegen_eyes(fg_bytes)
+    sky_flip = False
+    if sky_eyes is not None and sky_mouth is not None:
+        sky_uv, sky_flip = childpaint.upright_uv(sky_uv, sky_model, facefit.apply4(M, sky_eyes), sky_mouth)
+    sf_uv, sf_flip = childpaint.upright_uv(sf_uv, sf_model, eyes, mouth)
+    uv, wt = childpaint.vertex_sky_uv(fitted, sky_model, ctx["base_tris"], sky_uv, w)
+    tint = skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["tint"]
+    mesh = facegen_mesh(a.load_order, n["form_id"])
+    if "facegeom" in mesh.lower():
+        tint = mesh.replace("meshes", "textures", 1).replace("facegeom", "facetint").rsplit(".", 1)[0] + ".dds"
+    path = os.path.join(out, PAINT_DIR, f"{n['edid'].lower()}.npz")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    np.savez_compressed(path, sf_uv=sf_uv.astype(np.float32), sf_tris=sf_t.astype(np.int32),
+                        sky_uv=uv.astype(np.float32), weight=wt.astype(np.float32))
+    return {"file": f"{PAINT_DIR}/{n['edid'].lower()}.npz", "tint": tint, "version": childpaint.VERSION,
+            "uv_flipped": {"starfield": sf_flip, "skyrim": sky_flip},
+            "vertices_painted": int((wt > 0.5).sum())}
+
+
+def child_paint_face(row, sky, texconv, out):
+    """paint(edid, face_rgba) for child_hair.light_child_tone: the child's Skyrim face tint (row child.paint.tint,
+    decoded through texconv when compressed) on the face texture through its saved correspondences."""
+    import race_heads
+    from fo4sf import childpaint
+    info = (row.get("child") or {}).get("paint") or {}
+    if not info.get("file"):
+        raise KeyError(info.get("error") or "no paint correspondences")
+    z = np.load(os.path.join(out, *info["file"].split("/")))
+    data = hkx_to_af.read_any(info["tint"], sky)
+    if not data:
+        raise KeyError(f"{info['tint']} not in the Skyrim load order")
+    tint = race_heads.decode_any_dds(data, texconv)
+
+    def paint(edid, face_rgba):
+        layer = childpaint.paint_layer(z["sf_uv"], z["sf_tris"], z["sky_uv"], z["weight"], tint, face_rgba.shape[0])
+        row["child"]["paint"]["tint_skin_linear"] = [round(x, 4) for x in layer["tint_skin"]]
+        return childpaint.painted_face(face_rgba, layer)
+    return paint
 
 
 def previewing(a, n) -> bool:
@@ -348,8 +447,9 @@ FIT_CACHE = "_fit_cache.json"     # in --out: each NPC's fit result by an input 
 FIT_VERSION = 2                   # bump when the fit changes in a way the hashed code below does not show
 FIT_FUNCS = ("skyrim_head", "skyrim_head_triangles", "skyrim_head_matrix", "race_delta", "head_alignment",
              "starfield_head_node", "starfield_head", "child_context", "child_face", "child_shape_disp",
-             "uses_child_shape")
-CHILD_FUNCS = ("child_context", "child_face", "child_shape_disp", "uses_child_shape")
+             "uses_child_shape", "child_paint_points", "skyrim_head_uvs", "starfield_mesh_uvs")
+CHILD_FUNCS = ("child_context", "child_face", "child_shape_disp", "uses_child_shape", "child_paint_points",
+               "skyrim_head_uvs", "starfield_mesh_uvs")
 
 
 def fit_code_hash(child=False):
@@ -367,8 +467,8 @@ def fit_code_hash(child=False):
             continue
         h.update(inspect.getsource(getattr(mod, f)).encode())
     from fo4sf import headbake
-    from fo4sf import childshape
-    for m in (facefit, headcorr, headbake) + ((child_faces, childshape) if child else ()):
+    from fo4sf import childpaint, childshape
+    for m in (facefit, headcorr, headbake) + ((child_faces, childshape, childpaint) if child else ()):
         with open(m.__file__, "rb") as fh:
             h.update(fh.read())
     return h.hexdigest()
@@ -441,7 +541,7 @@ def converted_child_races(races_plugin):
 
 
 def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_race, conv_child, race_index, recs,
-                    masters, test_subs, tone_slots=None, light_ston=None):
+                    masters, test_subs, tone_slots=None, light_ston=None, own_ston=None):
     """The child's test NPC: a vanilla child NPC (child_faces.pick_child_template) with our head part (its baked
     head) as Face, on our child race when race_heads built it (else ChildRace), its STON from its Skyrim skin on
     the child scale (tone_slots {female: slots lightest first}: child_hair.child_tone_slots; 2026-11-19, owner's
@@ -471,6 +571,8 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
         ston = child_hair.tone_slot(rank, (tone_slots or {}).get(female))
         if rank == 0 and light_ston is not None:      # the added light tone (child_hair.light_child_tone)
             ston = light_ston
+        if own_ston is not None:                       # its own tone: its Skyrim face paint (fo4sf.childpaint)
+            ston = own_ston
         row["child_tone"] = {"rank_lightest_0": rank, "ston": ston,
                              "slots_by_lightness": (tone_slots or {}).get(female)}
     sky_race = races.get(n["race"], "")
@@ -1282,16 +1384,22 @@ def child_tone_order(sf_esm, sf_data, females) -> dict:
     return out
 
 
-def add_child_light_tone(sf_esm, sf_data, out, recs) -> dict:
+def add_child_light_tone(sf_esm, sf_data, out, recs, rows=(), sky=None, texconv="") -> dict:
     """child_hair.light_child_tone: its AVMD overrides added to recs (face_fit adds them after every new record:
     2026-11-19, owner: "did his ID change" - in the middle they shifted Frodnar's FormID), its face texture written (uncompressed RGBA8
     sRGB) under out/textures/. Returns {"index": STON, ...report} or {"error": ...}."""
     import child_hair
     import skin_tone_probe
     from fo4sf import skintone
+    painted = {r["edid"]: r for r in rows if ((r.get("child") or {}).get("paint") or {}).get("file")}
+
+    def paint(edid, face_rgba):
+        return child_paint_face(painted[edid], sky, texconv, out)(edid, face_rgba)
     try:
         got = child_hair.light_child_tone(sfplugin.records(sf_esm, [b"RACE", b"AVMD"]),
-                                          skin_tone_probe.TextureArchives(sf_data).read, skintone.decode_dds)
+                                          skin_tone_probe.TextureArchives(sf_data).read, skintone.decode_dds,
+                                          children=[(e, bool(r.get("female"))) for e, r in painted.items()],
+                                          paint=paint)
     except (KeyError, ValueError, OSError) as e:
         return {"error": f"{type(e).__name__}: {e}"}
     for rel, rgba in got["textures"].items():
@@ -1301,8 +1409,8 @@ def add_child_light_tone(sf_esm, sf_data, out, recs) -> dict:
             fh.write(skintone.raw_dds(rgba))
     recs.extend(got["records"])
     main = child_hair.FACE_LEVELS[child_hair.FACE_MAIN][0]
-    return {"index": got["indices"][main], "main": main, "indices": got["indices"], "groups": got["report"],
-            "textures": sorted(got["textures"])}
+    return {"index": got["indices"][main], "main": main, "indices": got["indices"],
+            "children": got.get("children", {}), "groups": got["report"], "textures": sorted(got["textures"])}
 
 
 def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, masters, real, child_ctx) -> dict:
@@ -1834,12 +1942,17 @@ def main(argv=None):
                     tone_slots = child_tone_order(sf_esm, sf_data, [r["female"] for r in report["npcs"]
                                                                     if r.get("child")])
                     report["child_skin_tones"] = tone_slots.pop("_report", None)
-                    light = add_child_light_tone(sf_esm, sf_data, out, late_recs)
+                    import child_faces
+                    lightest = [r for r in report["npcs"] if r.get("child") and real is not None and
+                                child_faces.child_tone(target_skin(by_edid[r["edid"].lower()], npcs, real)[0]) == 0]
+                    light = add_child_light_tone(sf_esm, sf_data, out, late_recs, lightest, sky,
+                                                 getattr(a, "texconv", "") or "")
                     report["child_light_tone"] = light
                     light_ston = light.get("index") if isinstance(light, dict) else None
+                own = (report.get("child_light_tone") or {}).get("children", {}).get(row["edid"])
                 write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
                                 child_race, conv_child, race_index, recs, masters, test_subs, tone_slots,
-                                light_ston)
+                                light_ston, own)
                 if baked and isinstance(row.get("test_npc"), dict):
                     try:
                         if tone_arcs is None:

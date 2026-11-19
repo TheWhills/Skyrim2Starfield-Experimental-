@@ -346,14 +346,17 @@ def face_level_target(body_skin, level: float, hue=FACE_HUE):
     return [int(round(float(v))) for v in np.clip(linear_to_srgb(np.clip(lin, 0.0, 1.0)), 0, 255)]
 
 
-def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS):
+def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, children=(), paint=None):
     """Light child tones pairing Starfield's lightest child body with lighter faces (2026-11-19, owner: Frodnar's
     hands pale white, his face tan. ChildRace's three tones pair body and face texture by index, and index 1 - the
     lightest body - is the middle, orange face; the baked face textures are not drawn on a child: the adult
     template's painted stubble never showed). Per group of ChildRace's BSTT / HSTT / FSTT strings (each sex): one new
     entry per level, at the same indices in all - the body / hands: their lightest vanilla texture; the face: its
     lightest vanilla texture recoloured so its skin is face_level_target of that body's skin (skin_median).
-    Returns {"index": first STON, "indices": {label: STON}, "records": [AVMD overrides],
+    children [(edid, female)] with paint(edid, face_rgba) -> RGBA or None: after the levels, one more tone per child
+    whose face is its painted face (fo4sf.childpaint, on the main level's face; 2026-11-19, owner: "looks like
+    he's someone ethnic or someone doing whiteface") - its own entry in its sex's groups.
+    Returns {"index": first STON, "indices": {label: STON}, "children": {edid: STON}, "records": [AVMD overrides],
     "textures": {path under textures/: rgba}, "report": {...}}."""
     from fo4sf import skintone
     found, rep = {}, {}
@@ -373,35 +376,71 @@ def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS):
         raise KeyError("ChildRace body or face tone group not found: " + str(rep))
     first = max(len(v[2]) for v in found.values())
     indices = {lab: first + k for k, (lab, _lv) in enumerate(levels)}
-    textures, done = {}, {}
+    main_level = levels[min(FACE_MAIN, len(levels) - 1)]
+    textures, entries, groups, faces = {}, {}, {}, {}
     for (female, sig), (label, avmd, tex, imgs, light) in sorted(found.items()):
         sex = "female" if female else "male"
         key = f"{sex}_{sig.decode().lower()}"
         fid = avmd[3]
-        if fid in done:            # one group shared by both sexes: already extended
+        if fid in groups:          # one group shared by both sexes: extended once
             rep[key] = {"from": tex[light], "group": label, "shared": True}
+            groups[fid][2].add(female)
             continue
-        subs, info = avmd[2], {"from": tex[light], "group": label, "vanilla_entries": len(tex)}
+        groups[fid] = (avmd, sig, {female})
+        info = {"from": tex[light], "group": label, "vanilla_entries": len(tex)}
+        ent = entries.setdefault(fid, {})
         if sig == b"FSTT":
             body = found.get((female, b"BSTT"))
             body_skin = skin_median(body[3][body[4]])
             prefix = "textures/" if tex[light].lower().startswith("textures") else ""
             info.update(face_skin=list(skin_median(imgs[light])), body_skin=list(body_skin), new={})
-        for lab, lv in levels:
-            if sig == b"FSTT":
+            for lab, lv in levels:
                 rel = f"{TONE_DIR}/{sex}_face_{lab.lower()}_color.dds"
                 target = face_level_target(body_skin, lv)
                 textures[rel] = recolour_skin(imgs[light], target)
-                path = prefix + rel
-                info["new"][lab] = {"ston": indices[lab], "face_skin": target, "texture": path}
-            else:
-                path = tex[light]
-            subs = with_appended_entry(subs, f"{LIGHT_LABEL}_{lab.lower()}", path, indices[lab])
-        if sig != b"FSTT":
-            info["new"] = path
-        done[fid] = (avmd[0], avmd[1], subs, fid)
+                ent[indices[lab]] = (f"{LIGHT_LABEL}_{lab.lower()}", prefix + rel)
+                info["new"][lab] = {"ston": indices[lab], "face_skin": target, "texture": prefix + rel}
+            faces[female] = (prefix, f"{TONE_DIR}/{sex}_face_{main_level[0].lower()}_color.dds")
+        else:
+            for lab, _lv in levels:
+                ent[indices[lab]] = (f"{LIGHT_LABEL}_{lab.lower()}", tex[light])
+            info["new"] = tex[light]
         rep[key] = info
-    return {"index": first, "indices": indices, "records": list(done.values()), "textures": textures,
+    child_idx, child_rep = {}, {}
+    nxt = first + len(levels)
+    for edid, female in children:
+        if paint is None or female not in faces:
+            continue
+        prefix, main_rel = faces[female]
+        try:
+            got = paint(edid, textures[main_rel])
+        except (KeyError, ValueError, OSError) as e:
+            child_rep[edid] = f"none: {type(e).__name__}: {e}"
+            continue
+        if got is None:
+            continue
+        sex = "female" if female else "male"
+        rel = f"{TONE_DIR}/{edid.lower()}_face_color.dds"
+        textures[rel] = got
+        for fid, (avmd, sig, sexes) in groups.items():
+            if female not in sexes:
+                continue
+            body = found[(female, sig)] if (female, sig) in found else found[(not female, sig)]
+            path = prefix + rel if sig == b"FSTT" else body[2][body[4]]
+            entries[fid][nxt] = (f"{LIGHT_LABEL}_{edid.lower()}", path)
+        child_idx[edid] = nxt
+        child_rep[edid] = {"ston": nxt, "texture": prefix + rel, "sex": sex}
+        nxt += 1
+    records = []
+    for fid, (avmd, _sig, _sexes) in groups.items():
+        subs = avmd[2]
+        for idx in sorted(entries[fid]):
+            label, path = entries[fid][idx]
+            subs = with_appended_entry(subs, label, path, idx)
+        records.append((avmd[0], avmd[1], subs, fid))
+    if child_rep:
+        rep["children"] = child_rep
+    return {"index": first, "indices": indices, "children": child_idx, "records": records, "textures": textures,
             "report": rep}
 
 
