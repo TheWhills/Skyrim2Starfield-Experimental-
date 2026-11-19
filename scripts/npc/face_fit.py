@@ -394,7 +394,13 @@ def child_shape_disp(ctx, fg, fg_bytes):
         raise ValueError("no Skyrim base head triangles")
     sky_model = facefit.apply4(M, np.asarray(fg, float))
     eyes = childshape.facegen_eyes(fg_bytes)
-    eyes = facefit.apply4(M, eyes) if eyes is not None else None
+    if eyes is None:                   # what the FaceGen NIF holds (2026-11-19, Faendal: no eyes found)
+        try:
+            shapes = [(x.name or b"").decode("latin-1") for x in skyrimskin.skinned_shapes(nifmod.parse(fg_bytes))]
+        except nifmod.NifError:
+            shapes = []
+        raise ValueError(f"Skyrim FaceGen head: no eyes shape with the head bone among {shapes}")
+    eyes = facefit.apply4(M, eyes)
     mouth = childshape.skyrim_mouth(sky_model, sky_tris)
     disp_model, rep = childshape.child_shape(facefit.apply4(node, head.vertices), np.asarray(head.triangles, int),
                                              sky_model, sky_tris, eyes, mouth)

@@ -459,7 +459,12 @@ def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[
     if eyes is None or mouth is None:
         raise ValueError("Starfield head: eye / mouth openings not found")
     if sky_eyes is None or sky_mouth is None:
-        raise ValueError("Skyrim FaceGen head: eyes shape / mouth opening not found")
+        what = [w for w, x in (("eyes shape", sky_eyes), ("mouth opening", sky_mouth)) if x is None]
+        wv, wt, _inv = welded(np.asarray(sky_model, float), sky_t)
+        found = sorted(((len(lp), [round(float(x) * 1000) for x in wv[lp].mean(0)])
+                        for lp in headcorr.boundary_loops(wt)), reverse=True)[:6]
+        raise ValueError(f"Skyrim FaceGen head: {' and '.join(what)} not found (its open loops: size, centre mm: "
+                         f"{found}; median depth {round(float(np.median(wv[:, 1])) * 1000)} mm)")
     sf_lm = landmarks(sf_model, eyes, mouth)
     sky_lm = landmarks(sky_model, np.asarray(sky_eyes, float), np.asarray(sky_mouth, float))
     moved, pre = prealign(sky_model, sky_lm, sf_lm)

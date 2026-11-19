@@ -730,3 +730,7 @@ why the mod needs no clothes of its own.
   reports prealign before / after per landmark), the result in game. Not yet: his face paint (facetint) on the
   adult's baked face texture; eye tilt (owner: in Skyrim the eye tilt comes with the eye picked - our fit keeps
   Starfield's eye openings).
+  Owner's first run (18:33): Faendal's own head fell back to the dials, "Skyrim FaceGen head: eyes shape / mouth
+  opening not found" (the finders were written on Realistic RS Children's heads). The error now names which one
+  and what the NIF holds (its shapes; the head's open loops with sizes and centres); his FaceGen NIF and Skyrim's
+  malehead.nif asked for, to fix it offline.
