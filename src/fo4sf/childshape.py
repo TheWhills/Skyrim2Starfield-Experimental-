@@ -45,7 +45,10 @@ EYE_FADE = 0.012       # over EYE_FADE: the eyeballs stay covered, the lids take
 #                        are unchanged" with 14 + 12 mm)
 MOUTH_FREE = 0.010     # m around the mouth centre that does not pull (moves with the face); 16 left the skin above
 #                        the upper lip standing out
-VERSION = 7
+UNDER_EYE = 0.034      # m from an eye opening's centre, below it and to its side: the moves smoothed there (2026-11-19,
+UNDER_EYE_PASSES = 40  # owner: "kind've creepy, like in the eyes" - the Realistic RS face's under-eye creases came
+                       # through as bags on Starfield's smooth head)
+VERSION = 8
 
 
 def apply4(m, p):
@@ -142,7 +145,9 @@ def landmarks(v, eyes, mouth) -> Dict[str, np.ndarray]:
 
 def prealign(sky_v, sky_lm, sf_lm) -> Tuple[np.ndarray, Dict]:
     """The Skyrim head moved and scaled (no turn) so its landmarks meet Starfield's in the weighted least-squares
-    sense (LM_WEIGHTS: the eyes most). (moved points, report)."""
+    sense (LM_WEIGHTS: the eyes most). (moved points, report; report["matrix"]: the 4x4 move, for the child's hair
+    to follow the face - 2026-11-19, owner: Frodnar's eyes and brows sit too high, his hairline low on his
+    forehead: the hair had not been scaled with the face, 1.09x for him)."""
     ks = [k for k in LM_WEIGHTS if sky_lm.get(k) is not None and sf_lm.get(k) is not None]
     w = np.array([LM_WEIGHTS[k] for k in ks])[:, None]
     a = np.array([sky_lm[k] for k in ks], float)
@@ -150,7 +155,10 @@ def prealign(sky_v, sky_lm, sf_lm) -> Tuple[np.ndarray, Dict]:
     ac, bc = (w * a).sum(0) / w.sum(), (w * b).sum(0) / w.sum()
     s = float((w * (a - ac) * (b - bc)).sum() / (w * (a - ac) ** 2).sum())
     moved = (np.asarray(sky_v, float) - ac) * s + bc
-    rep = {"scale": round(s, 4), "landmarks": ks,
+    P = np.eye(4)
+    P[:3, :3] *= s
+    P[:3, 3] = bc - s * ac
+    rep = {"scale": round(s, 4), "landmarks": ks, "matrix": [[round(float(x), 7) for x in r] for r in P],
            "before_mm": {k: round(float(np.linalg.norm(sky_lm[k] - sf_lm[k])) * 1000, 1) for k in ks},
            "after_mm": {k: round(float(np.linalg.norm((sky_lm[k] - ac) * s + bc - sf_lm[k])) * 1000, 1) for k in ks}}
     return moved, rep
@@ -445,4 +453,31 @@ def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[
         if tip_sky is not None:
             narrowed, rep["nose"] = narrow_nose(cur, lm["nose"], lm["nasion"], nose_widths(tv, tip_sky))
             disp = (narrowed - np.asarray(sf_model, float)) * socket_lock(sf_model, eyes)[:, None]
+    disp = smooth_under_eyes(sf_model, sf_t, disp, eyes)
     return disp, rep
+
+
+def under_eye_weight(v, eyes) -> np.ndarray:
+    """1 in the band under and beside each eye (within UNDER_EYE of its centre, below 4 mm above it), fading over
+    8 mm; 0 elsewhere."""
+    v = np.asarray(v, float)
+    out = np.zeros(len(v))
+    for c in np.asarray(eyes, float):
+        d = np.linalg.norm(v - c, axis=1)
+        w = np.clip((UNDER_EYE - d) / 0.008, 0, 1) * np.clip((c[2] + 0.004 - v[:, 2]) / 0.004, 0, 1)
+        out = np.maximum(out, w)
+    return out
+
+
+def smooth_under_eyes(sf_model, sf_t, disp, eyes, passes: int = UNDER_EYE_PASSES) -> np.ndarray:
+    """disp with its fine detail smoothed away under and beside the eyes (under_eye_weight; the eye lock kept)."""
+    wv, wt, inv = welded(np.asarray(sf_model, float), sf_t)
+    nw = len(wv)
+    cnt = np.maximum(np.bincount(inv, minlength=nw), 1)[:, None]
+    wd = np.zeros((nw, 3))
+    np.add.at(wd, inv, np.asarray(disp, float))
+    wd /= cnt
+    w = under_eye_weight(wv, eyes)[:, None]
+    sm = smooth(wd, edges(wt), nw, passes)
+    out = (wd * (1 - w) + sm * w) * socket_lock(wv, eyes)[:, None]
+    return out[inv]

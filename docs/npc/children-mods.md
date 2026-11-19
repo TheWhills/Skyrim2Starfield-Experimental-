@@ -263,3 +263,17 @@ times child_hair.FACE_HUE (1, 1.3, 1.8: the measured hue gap) times 1.3 / 1.7 / 
 (193,159,141) / (218,179,160) / (244,201,179) for Frodnar. Children of the lightest rank get the middle one (STON 4);
 --child-controls now makes only the copies at the other two strengths (Frodnar (Face13), (Face22)), added after
 every new record. faces.json: child_light_tone {index, main, indices, groups}. Unverified.
+Owner (16:08, after the three light tones): "looks much better skin wise. he does look kind've creepy, like in the
+eyes"; reference shot of Realistic RS Frodnar (blue eyes, golden hair, freckles); "the eyes and eyebrows are
+defintely too high compared to skyrim". Found:
+- Eye colour: children never got ECOL (adults do, face_colors); his Realistic RS eyes are 0RCOChildEyesBlue. Now
+  write_child_npc sets ECOL from the Skyrim eyes head part (face_fit.skyrim_eye_colour, shared with the adults);
+  faces.json test_npc.eyes. Unverified that ChildRace draws ECOL.
+- Hairline: the face shape scales the Skyrim face 1.09x onto Starfield's (prealign), but the hair was placed with
+  the face alignment alone, 1.09x smaller: it sat low on his forehead, so the eyes and brows read high. The hair now
+  takes the same move (childshape.prealign report "matrix"; child_hair.build_child_hair pre): about 5-11 mm higher.
+- Under the eyes: the Realistic RS face's creases came through as bags (preview, measured). childshape VERSION 8
+  smooths the moves within 34 mm under and beside each eye (smooth_under_eyes, 40 passes; the eye lock kept).
+- Not changed: the eye openings stay Starfield's (the eyeballs and brows are separate head parts the face mesh does
+  not move); after the prealign Skyrim's eyes are within 1-4 mm of Starfield's in height, but 3 mm closer to the
+  middle each. Moving the eyes / brows means our own eye and brow head parts: later.

@@ -190,6 +190,49 @@ class ToneSlotTests(unittest.TestCase):
             CH.child_tone_slots(recs[:1], lambda p: p, False, None)
 
 
+class EyeColourTests(unittest.TestCase):
+    def test_skyrim_eye_colour(self):
+        """A child's Starfield eye colour from its Skyrim eyes head part, as the adults' (2026-11-19: Frodnar's
+        Realistic RS eyes 0RCOChildEyesBlue; he came out brown)."""
+        import face_fit as S
+        real = {"hdpt": {1: {"edid": "0RCOChildEyesBlue", "type": 2}, 2: {"edid": "EyesHumanBrown", "type": 2},
+                         3: {"edid": "Brows", "type": 6}},
+                "races": {"NordRaceChild": ({}, {False: [2], True: [2]})}}
+        got = S.skyrim_eye_colour({"race": "NordRaceChild", "head_parts": [3, 1], "female": False}, real)
+        self.assertEqual(got[0], "Blue")
+        self.assertEqual(got[1]["from"], "own")
+        got = S.skyrim_eye_colour({"race": "NordRaceChild", "head_parts": [3], "female": False}, real)
+        self.assertEqual((got[0], got[1]["from"]), ("Brown", "race default"))
+
+
+class HairPrealignTests(unittest.TestCase):
+    def test_hair_follows_the_face_shape(self):
+        """build_child_hair places the hair with the face shape's prealign move after the face alignment."""
+        seen = {}
+
+        def fake_placement(fg, M, head_t):
+            seen["M"] = M
+            raise RuntimeError("stop")
+        P = np.eye(4)
+        P[:3, :3] *= 1.09
+        P[2, 3] = -0.148
+        M0 = np.eye(4)
+        M0[:3, :3] *= 0.0142
+        with mock.patch.object(CH, "sky_to_starfield", lambda ctx: M0), \
+                mock.patch.object(CH, "placement", fake_placement):
+            for pre, want in ((None, M0), (P.tolist(), P @ M0)):
+                with self.assertRaises(RuntimeError):
+                    CH.build_child_hair("Frodnar", False, b"", "x.nif", [], {}, None,
+                                        {CH_SF_HEAD(): np.eye(4)}, None, None, None, "st", types.SimpleNamespace(),
+                                        pre)
+                np.testing.assert_allclose(seen["M"], want)
+
+
+def CH_SF_HEAD():
+    from fo4sf import skyrimhair
+    return skyrimhair.SF_HEAD
+
+
 class LightToneTests(unittest.TestCase):
     def test_skin_median_skips_grey(self):
         """The grey background / underwear of a body tone texture does not count as skin."""

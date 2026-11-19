@@ -478,6 +478,11 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     if race_index is not None and sky_race in conv_child:
         race_fid = (race_index << 24) | conv_child[sky_race]
     subs = child_faces.child_npc_subs(tpl[2], row["edid"], full, hfid, part_types, race_fid, ston)
+    eyes = None
+    if real is not None:               # 2026-11-19, owner: Frodnar's eyes brown, blue in Skyrim - as the adults' ECOL
+        ecol, eyes = skyrim_eye_colour(n, real)
+        if ecol:
+            subs = npc_records.with_face_colors(subs, {b"ECOL": sfplugin.zs(ecol)})
     donor = next((r for r in npc_recs if sfplugin.edid(r[2]) == child_faces.FACE_DONORS[female]), None)
     if donor is not None:              # 2026-11-19: a European face skin layer from a vanilla child that has one
         subs = child_faces.with_face_block(subs, donor[2])
@@ -488,7 +493,7 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     row["name"] = full
     row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]), "template_form_id": f"{tpl[3]:08X}",
                        "head_part": f"{hfid:08X}", "race": f"S2S child race {race_fid:08X}" if race_fid else "ChildRace",
-                       "ston": ston, "face_skin": {"wanted": eth,
+                       "ston": ston, "eyes": eyes, "face_skin": {"wanted": eth,
                                                    "template": list(child_faces.face_ethnicity(tpl[2])),
                                                    "donor": sfplugin.edid(donor[2]) if donor is not None else
                                                    f"{child_faces.FACE_DONORS[female]} not found",
@@ -1003,17 +1008,25 @@ def with_race_hair(src, real):
     return dict(src, head_parts=list(src.get("head_parts", [])) + hair[:1]) if hair else src
 
 
-def face_colors(subs, src, real, hair_color_name):
-    """Eye colour (ECOL, from the Skyrim eyes head part's name), skin tone (STON 0-8, from the skin tone tint) and brow
-    colour (BCOL = the hair colour; Skyrim brows take the hair colour) on the test NPC (owner 2026-11-06). NPCs without
-    their own eyes use their race's default eyes."""
-    tints, defaults = real.get("races", {}).get(src.get("race"), ({}, {False: [], True: []}))
+def skyrim_eye_colour(src, real):
+    """(Starfield eye colour name or None, report) from the NPC's Skyrim eyes head part (its own, else its race's
+    default; npc_records.eye_color judges by the part's EditorID)."""
+    _tints, defaults = real.get("races", {}).get(src.get("race"), ({}, {False: [], True: []}))
     hdpt = real["hdpt"]
     own = [p for p in (hdpt.get(f) for f in src.get("head_parts", [])) if p and p.get("type") == 2]
     eyes, where = (own[0], "own") if own else (next(
         (hdpt[f] for f in defaults.get(src.get("female", False), []) if f in hdpt and hdpt[f].get("type") == 2),
         None), "race default")
     ecol, ehow = npc_records.eye_color(eyes.get("edid") if eyes else None)
+    return ecol, {"skyrim": eyes.get("edid") if eyes else None, "from": where, "starfield": ecol, "how": ehow}
+
+
+def face_colors(subs, src, real, hair_color_name):
+    """Eye colour (ECOL, from the Skyrim eyes head part's name), skin tone (STON 0-8, from the skin tone tint) and brow
+    colour (BCOL = the hair colour; Skyrim brows take the hair colour) on the test NPC (owner 2026-11-06). NPCs without
+    their own eyes use their race's default eyes."""
+    tints, _defaults = real.get("races", {}).get(src.get("race"), ({}, {False: [], True: []}))
+    ecol, eye_info = skyrim_eye_colour(src, real)
     rgb, shown = npc_records.skyrim_skin_rgb(src, tints)
     ston = npc_records.skin_tone(rgb)
     values = {}
@@ -1029,7 +1042,7 @@ def face_colors(subs, src, real, hair_color_name):
     if derma:
         subs, placed = npc_records.with_layer_texture(subs, "Dermaesthetic", derma,
                                                       real.get("derma_paths", {}).get(derma))
-    info = {"eyes": {"skyrim": eyes.get("edid") if eyes else None, "from": where, "starfield": ecol, "how": ehow},
+    info = {"eyes": eye_info,
             "face_skin": {"starfield": derma, "how": dhow, "set": placed},
             "skin": {"skyrim_rgb": rgb, "from": shown, "starfield_ston": ston,
                      "note": "0 = lightest, 8 = darkest (body: verified 2026-11-06)"},
@@ -1360,8 +1373,9 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
             head_nif = next((f for f in row["child"].get("files", [])
                              if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
             surface = child_hair.baked_surface(a.starfield, out, head_nif) if head_nif else None
+            pre = ((row["child"].get("shape") or {}).get("prealign") or {}).get("matrix")
             hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp, sf_world,
-                                               surface, fbs[model], conv, staging, settings)
+                                               surface, fbs[model], conv, staging, settings, pre)
         except (skyrimhair.HairError, nifmod.NifError, ValueError, KeyError, OSError) as e:
             info["error"] = f"{type(e).__name__}: {e}"
             continue

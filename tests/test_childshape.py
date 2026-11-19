@@ -41,6 +41,8 @@ class PieceTests(unittest.TestCase):
         np.testing.assert_allclose(moved, np.array(list(sf.values())), atol=1e-9)
         self.assertAlmostEqual(rep["scale"], 1.1, places=4)
         self.assertEqual(max(rep["after_mm"].values()), 0.0)
+        P = np.array(rep["matrix"])                    # the same move as a matrix (the child's hair follows it)
+        np.testing.assert_allclose(CS.apply4(P, np.array(list(sky.values()))), moved, atol=1e-6)
 
     def test_closest_points_match_the_exhaustive_search(self):
         v, t = sphere(n=10, m=16)
@@ -85,6 +87,31 @@ class PieceTests(unittest.TestCase):
         self.assertEqual(w[4], 0.0)                        # the back of the head
         self.assertEqual(w[6], 0.0)                        # the crown
         self.assertEqual(list(CS.inside_mouth(pts, mouth)[[3, 5]]), [0.0, 1.0])
+
+
+class UnderEyeTests(unittest.TestCase):
+    def test_under_eye_moves_smoothed(self):
+        """Fine bumps in the moves under an eye are smoothed away; above the eyes and far off they stay."""
+        g = np.linspace(-0.08, 0.08, 41)                                 # a face-like grid facing +Y
+        gv = np.array([(x, 0.09, 1.684 + z) for z in g for x in g])
+        n = len(g)
+        gt = np.array([(i * n + j, i * n + j + 1, (i + 1) * n + j) for i in range(n - 1) for j in range(n - 1)] +
+                      [(i * n + j + 1, (i + 1) * n + j + 1, (i + 1) * n + j) for i in range(n - 1)
+                       for j in range(n - 1)])
+        eyes = np.array([(-0.04, 0.09, 1.684), (0.04, 0.09, 1.684)])
+        rng = np.random.default_rng(5)
+        disp = np.zeros_like(gv)
+        disp[:, 1] = rng.normal(size=len(gv)) * 0.001 + 0.002
+        out = CS.smooth_under_eyes(gv, gt, disp, eyes)
+        w = CS.under_eye_weight(gv, eyes)
+        lock = CS.socket_lock(gv, eyes)
+        band = (w > 0.99) & (lock > 0.99)
+        self.assertTrue(band.any())
+        self.assertLess(np.std(out[band, 1]), 0.4 * np.std(disp[band, 1]))   # bumps gone
+        self.assertAlmostEqual(float(out[band, 1].mean()), 0.002, delta=0.0005)   # the overall move kept
+        above = (gv[:, 2] > 1.684 + 0.01) & (np.linalg.norm(gv[:, [0, 2]] - (0, 1.684), axis=1) < 0.08)
+        np.testing.assert_allclose(out[above & (lock > 0.99)], disp[above & (lock > 0.99)])
+        self.assertTrue(np.all(out[lock == 0] == 0))                          # the eye openings stay put
 
 
 class FitTests(unittest.TestCase):

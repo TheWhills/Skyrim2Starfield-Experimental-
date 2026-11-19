@@ -178,15 +178,20 @@ class _OneMesh:
 
 
 def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, names: List[str], ctx, fg_points,
-                     sf_world, surface, fb, conv, staging: str, settings) -> Dict:
+                     sf_world, surface, fb, conv, staging: str, settings, pre=None) -> Dict:
     """One child's hair converted into staging: skyrim_hairs.build_part on the FaceGen NIF's hair shapes. ctx:
     child_faces.child_setup's; fg_points: its FaceGen head in the same space as ctx["base"] (child_faces.
     facegen_points); surface: its baked head (baked_surface); fb: the template hair's _facebones template
-    (hair_pack.facebones_template) or None. Returns build_part's row (ok, model, ...) plus the placement."""
+    (hair_pack.facebones_template) or None; pre: the 4x4 move its fitted face shape made after the face alignment
+    (childshape.prealign's matrix; 2026-11-19, owner: eyes and brows too high, the hair low on the forehead - the
+    hair had stayed at the alignment's size, 1.09x smaller than the face for Frodnar), or None. Returns
+    build_part's row (ok, model, ...) plus the placement."""
     import hair_pack
     import skyrim_hairs
     from fo4sf import facefit, skyrimhair
     M = sky_to_starfield(ctx)
+    if pre is not None:
+        M = np.asarray(pre, float) @ M
     scale, offset = placement(fg_bytes, M, sf_world[skyrimhair.SF_HEAD][:3, 3])
     hc = types.SimpleNamespace(**vars(settings))
     hc.head_scale, hc.head_offset = scale, offset
