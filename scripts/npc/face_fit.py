@@ -35,7 +35,7 @@ sys.path.insert(0, HERE)
 
 import numpy as np  # noqa: E402
 
-from fo4sf import bsa, facefit, headcorr, nif as nifmod, sfmesh, sfplugin, skyrimnpc, skyrimskin  # noqa: E402
+from fo4sf import bsa, facefit, headcorr, nif as nifmod, sfmesh, sfplugin, skyrimload, skyrimnpc, skyrimskin  # noqa: E402
 import hkx_to_af  # noqa: E402  (archive helpers)
 import npc_records  # noqa: E402
 import hair_probe  # noqa: E402  (PNG writer)
@@ -210,22 +210,36 @@ def race_skin(subs, conv, female, rgb):
     return subs, info, (rh.face_tone(target) if target else None)
 
 
+def facegen_mesh(esm, fid):
+    """An NPC's baked FaceGen head path: by the plugin that defines the NPC (a LoadOrder), else Skyrim.esm."""
+    if isinstance(esm, skyrimload.LoadOrder):
+        return esm.facegen_paths(fid)["mesh"]
+    return skyrimnpc.facegen_paths("Skyrim.esm", fid)["mesh"]
+
+
 def child_face(n, sky_race, sky, sf_data, out, a, cache):
     """{"child": {...}, "dials": {}} for a Skyrim child NPC: its face baked into a head of its own on Starfield's
     child head (child_faces), the files written under out. cache: {female: child_faces.child_setup}."""
     import child_faces
+    import npc_hair
     female = n["female"]
-    if female not in cache:
+    if "_sky" not in cache:                    # the Skyrim side once: races and head parts (load order aware)
+        cache["_sky"] = ({fid: s_ for _t, _h, s_, fid in skyrimload.records(a.load_order, [b"RACE"])},
+                         npc_hair.head_parts(a.load_order)[0])
+    sky_races, sky_parts = cache["_sky"]
+    # 2026-11-19: the base head is the child race's own Face part (RS Children Overhaul: its child head)
+    base_rel = child_faces.base_head_path(sky_races.get(n["race"], []), sky_parts, female)
+    if (female, base_rel.lower()) not in cache:
         hd = {sfplugin.edid(sb).lower(): sb for _t, _h, sb, _f in
               sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
         van = hd.get(child_faces.SF_CHILD_HEAD_PART[female].lower())
         if van is None:
             raise ValueError(f"no {child_faces.SF_CHILD_HEAD_PART[female]} in Starfield.esm")
         modl = bytes(dict(van).get(b"MODL", b"")).split(b"\0")[0].decode("latin-1")
-        cache[female] = child_faces.child_setup(sky, sf_data, female, sys.modules[__name__], modl, a.transfer)
-    ctx = cache[female]
-    fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
-                     model=ctx["model_space"])
+        cache[(female, base_rel.lower())] = child_faces.child_setup(sky, sf_data, female, sys.modules[__name__], modl,
+                                                                    a.transfer, base_rel=base_rel)
+    ctx = cache[(female, base_rel.lower())]
+    fg = skyrim_head(hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky), model=ctx["model_space"])
     if fg is None:
         raise ValueError("FaceGen head has no head shape")
     disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
@@ -282,7 +296,9 @@ def fit_settings(a, sf_data):
     return {"pos_unit": a.pos_unit, "smooth": a.smooth, "dial_limit": a.dial_limit, "ridge": a.ridge,
             "symmetry": not a.no_symmetry, "transfer": a.transfer, "legacy": bool(a.legacy_alignment),
             "blends": None if a.no_blends else a.blend_ethnicity,
-            "files": files, "games": games}
+            "files": files, "games": games,
+            "skyrim_mods": [os.path.basename(m) for m in skyrimload.mod_folders(getattr(a, "skyrim_mods_dir", ""),
+                                                                                getattr(a, "skyrim_mod", []))]}
 
 
 def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted):
@@ -463,7 +479,7 @@ def starfield_head(sf_data, female, head_nif=None, recipe=None):
 def race_dials(esm):
     """{female: [face dial indices]} of HumanRace (RACE chargen: MNAM / FNAM section, FDSI per dial)."""
     out = {False: [], True: []}
-    for _t, _h, subs, _fid in sfplugin.records(esm, [b"RACE"]):
+    for _t, _h, subs, _fid in skyrimload.records(esm, [b"RACE"]):
         if sfplugin.edid(subs) != "HumanRace":
             continue
         female = None
@@ -798,7 +814,7 @@ def npc_setup(a, sky, esm, sf_esm, npc_recs, report) -> dict:
     voices = {fid: sfplugin.edid(subs) for _t, _h, subs, fid in sfplugin.records(sf_esm, [b"VTYP"])}
     strings = npc_records.skyrim_names(sky, a.strings_language)
     index = npc_records.hairs_index(hp)
-    race_recs = sfplugin.records(esm, [b"RACE"])
+    race_recs = skyrimload.records(esm, [b"RACE"])
     races = {fid: (npc_records.race_tints(rs), npc_records.race_defaults(rs)) for _t, _h, rs, fid in race_recs}
     race_edids = {fid: sfplugin.edid(rs) for _t, _h, rs, fid in race_recs}
     derma = npc_records.dermaesthetic_names(npc_recs)
@@ -999,6 +1015,11 @@ def npc_item_outfit(npc: dict, sky_otft: dict, items: dict):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
+    ap.add_argument("--skyrim-mods-dir", default="",
+                    help="folder of Skyrim mod folders (MO2: <ModOrganizer>/Skyrim Special Edition/mods), for --skyrim-mod names")
+    ap.add_argument("--skyrim-mod", action="append", default=[],
+                    help="a Skyrim mod folder (name under --skyrim-mods-dir, or a path), repeatable, in load order: its "
+                         "plugins override Skyrim.esm, its BSAs and loose files Skyrim's (src/fo4sf/skyrimload.py)")
     ap.add_argument("--starfield", required=True, help="Starfield install folder")
     ap.add_argument("--out", required=True)
     ap.add_argument("--npc", action="append", default=[], help="Skyrim NPC EditorID (repeatable)")
@@ -1115,11 +1136,19 @@ def main(argv=None):
         sys.exit("--out must be outside the repository")
     os.makedirs(out, exist_ok=True)
     sf_data = os.path.join(a.starfield, "Data")
-    sky = bsa.SkyrimArchives(a.skyrim_data)
-    esm = os.path.join(a.skyrim_data, "Skyrim.esm")
+    mods = skyrimload.mod_folders(a.skyrim_mods_dir, a.skyrim_mod)
+    if mods:                                   # 2026-11-19: Skyrim with mods over it (children: RS Children ...)
+        esm = skyrimload.LoadOrder(a.skyrim_data, mods)
+        sky = esm.archives
+        print(f"Skyrim load order: {', '.join(esm.loaded())}"
+              + (f" (masters not loaded: {', '.join(esm.missing)})" if esm.missing else ""))
+    else:
+        sky = bsa.SkyrimArchives(a.skyrim_data)
+        esm = os.path.join(a.skyrim_data, "Skyrim.esm")
+    a.load_order = esm
 
-    races = {fid: sfplugin.edid(s) for _t, _h, s, fid in sfplugin.records(esm, [b"RACE"])}
-    npcs = {fid: skyrimnpc.parse_npc(s, fid) for _t, _h, s, fid in sfplugin.records(esm, [b"NPC_"])}
+    races = {fid: sfplugin.edid(s) for _t, _h, s, fid in skyrimload.records(esm, [b"RACE"])}
+    npcs = {fid: skyrimnpc.parse_npc(s, fid) for _t, _h, s, fid in skyrimload.records(esm, [b"NPC_"])}
     faces = skyrimnpc.faces_by_template(npcs)
     by_edid = {n["edid"].lower(): n for n in npcs.values()}
     chosen = [by_edid[e.lower()] for e in (a.npc or SAMPLE) if e.lower() in by_edid]
@@ -1218,7 +1247,7 @@ def main(argv=None):
         key = None
         if not a.preview and not a.refit:
             try:
-                fg_bytes = hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky)
+                fg_bytes = hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky)
                 key = npc_fit_key(code_hash, settings_now, fg_bytes, sky_race, sky_race in conv_races)
             except (SystemExit, KeyError, OSError):
                 key = None
@@ -1249,7 +1278,7 @@ def main(argv=None):
             continue
         try:
             sliders, head, base, al, model_space, corr, blend_set = sex_setup(n["female"])
-            fg = skyrim_head(hkx_to_af.read_any(skyrimnpc.facegen_paths("Skyrim.esm", n["form_id"])["mesh"], sky),
+            fg = skyrim_head(hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky),
                              model=model_space)
             if fg is None or len(fg) != len(base):
                 raise ValueError(f"FaceGen head has {0 if fg is None else len(fg)} vertices, base head {len(base)}")
@@ -1326,7 +1355,7 @@ def main(argv=None):
         if a.items_plugin:
             masters = list(masters) + [os.path.basename(a.items_plugin)]
             items = item_outfits(a.items_plugin, len(masters) - 1)
-            sky_otft = {fid: sfplugin.edid(s_) for _t, _h, s_, fid in sfplugin.records(esm, [b"OTFT"])}
+            sky_otft = {fid: sfplugin.edid(s_) for _t, _h, s_, fid in skyrimload.records(esm, [b"OTFT"])}
         race_index = None
         if conv_races:
             masters = list(masters) + [os.path.basename(a.races_plugin)]

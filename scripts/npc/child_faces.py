@@ -44,9 +44,24 @@ def child_tone(ston):
     return int(round(min(8, max(0, ston)) * (CHILD_TONES - 1) / 8))
 
 
-def child_setup(sky, sf_data, female, face_fit, head_modl, transfer="surface"):
+def base_head_path(race_subs, head_parts, female):
+    """Data-relative path of a Skyrim child race's Face head part model for one sex (RS Children Overhaul's races
+    use its own child head, ranaline\character assets\childhead.nif: 996 vertices, the layout of Skyrim's adult female
+    head; vanilla's is SKY_CHILD_HEAD, 1,211). race_subs: the RACE (FormIDs in the head_parts' space: skyrimload);
+    head_parts: npc_hair.head_parts' HDPT dict. SKY_CHILD_HEAD when the race names no Face part with a model."""
+    from fo4sf import skyrimload
+    for fid in skyrimload.race_head_parts(race_subs).get(bool(female), []):
+        hp = head_parts.get(fid)
+        if hp and hp.get("type") == FACE_TYPE and hp.get("model"):
+            m = hp["model"].replace("/", "\\")
+            return m if m.lower().startswith("meshes\\") else "meshes\\" + m
+    return SKY_CHILD_HEAD
+
+
+def child_setup(sky, sf_data, female, face_fit, head_modl, transfer="surface", base_rel=None):
     """{head, base, al, model_space, corr, nif, mesh_path} for one sex: Starfield's child head (its _facebones twin
-    when there is one, as the adult heads), Skyrim's child head aligned onto it, and the surface correspondence."""
+    when there is one, as the adult heads), Skyrim's child head (base_rel, default SKY_CHILD_HEAD) aligned onto it, and
+    the surface correspondence."""
     from fo4sf import facefit, headcorr
     hk = face_fit.hkx_to_af
     rel = "meshes/" + head_modl.replace("\\", "/").lower()
@@ -56,7 +71,7 @@ def child_setup(sky, sf_data, female, face_fit, head_modl, transfer="surface"):
     except (SystemExit, KeyError, OSError):
         head_nif = rel
     head, _hrep = face_fit.starfield_head(sf_data, female, head_nif)
-    base_bytes = hk.read_any(SKY_CHILD_HEAD, sky)
+    base_bytes = hk.read_any(base_rel or SKY_CHILD_HEAD, sky)
     base, al, model_space = face_fit.head_alignment(head, base_bytes)
     corr = None
     if transfer == "surface" and getattr(head, "triangles", None) is not None and len(head.triangles):
@@ -69,7 +84,8 @@ def child_setup(sky, sf_data, female, face_fit, head_modl, transfer="surface"):
     paths, _skin = facefit.starfield_head_parts(nif_bytes)
     return {"head": head, "base": base, "al": al, "model_space": model_space, "corr": corr, "nif": nif_bytes,
             "nif_rel": rel, "mesh_path": paths[0] if paths else None,
-            "report": {"head": head_nif, "alignment_rms_m": float(al[3]), "scale": float(al[0]),
+            "report": {"head": head_nif, "skyrim_base_head": base_rel or SKY_CHILD_HEAD,
+                       "skyrim_base_vertices": int(len(base)), "alignment_rms_m": float(al[3]), "scale": float(al[0]),
                        "correspondence": corr.report if corr is not None else None}}
 
 

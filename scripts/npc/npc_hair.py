@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from fo4sf import nif as nifmod
-from fo4sf import sfplugin, skyrimhair, skyrimnif, skyrimnpc
+from fo4sf import sfplugin, skyrimhair, skyrimload, skyrimnif, skyrimnpc
 
 HAIR, FACIAL_HAIR = 3, 4
 KINDS = {HAIR: "hair", FACIAL_HAIR: "facial hair"}
@@ -29,9 +29,9 @@ def skeleton_world(nif_bytes: bytes) -> Dict[str, np.ndarray]:
     return nodes
 
 
-def head_parts(esm: str) -> Tuple[Dict[int, Dict], Dict[int, Dict]]:
-    """({HDPT FormID: parsed}, {CLFM FormID: parsed}) of a Skyrim plugin."""
-    recs = sfplugin.records(esm, [b"HDPT", b"CLFM"])
+def head_parts(esm) -> Tuple[Dict[int, Dict], Dict[int, Dict]]:
+    """({HDPT FormID: parsed}, {CLFM FormID: parsed}) of a Skyrim plugin (or a skyrimload.LoadOrder)."""
+    recs = skyrimload.records(esm, [b"HDPT", b"CLFM"])
     hdpt = {fid: skyrimnpc.parse_head_part(s, fid) for t, _h, s, fid in recs if t == b"HDPT"}
     clfm = {fid: skyrimnpc.parse_color(s, fid) for t, _h, s, fid in recs if t == b"CLFM"}
     return hdpt, clfm

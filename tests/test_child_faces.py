@@ -95,5 +95,24 @@ class ChildFaceTests(unittest.TestCase):
             self.assertEqual(face_fit.converted_child_races(os.path.join(d, "none", "x.esm")), {})
 
 
+class BaseHeadTests(unittest.TestCase):
+    """2026-11-19: a child's base head is its race's Face head part (RS Children Overhaul's races: its own child head,
+    996 vertices, verified on the mod files), not always vanilla's ChildHead.nif."""
+
+    def race(self, male, female):
+        def u(v):
+            return struct.pack("<I", v)
+        return ([(b"EDID", b"NordRaceChild\0"), (b"NAM0", b""), (b"MNAM", b"")] + [(b"HEAD", u(p)) for p in male]
+                + [(b"FNAM", b"")] + [(b"HEAD", u(p)) for p in female])
+
+    def test_race_face_part(self):
+        parts = {0x0100183F: {"type": 1, "model": "actors\\character\\ranaline\\character assets\\childhead.nif"},
+                 0x01001845: {"type": 2, "model": "Actors\\Character\\Character Assets\\EyesFemale.nif"}}
+        subs = self.race([0x01001845, 0x0100183F], [0x0100183F])
+        self.assertEqual(C.base_head_path(subs, parts, True),
+                         "meshes\\actors\\character\\ranaline\\character assets\\childhead.nif")
+        self.assertEqual(C.base_head_path(self.race([], []), parts, False), C.SKY_CHILD_HEAD)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -125,6 +125,60 @@ class FaceFitScriptTests(unittest.TestCase):
             (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head,
              S.bsa.SkyrimArchives) = saved
 
+    def test_skyrim_mod_load_order(self):
+        """2026-11-19 (children from RS Children mods): --skyrim-mod folders over Skyrim.esm: a mod's override of an
+        NPC is the one read; the run records the mods in its fit settings."""
+        sliders = facefit.load_regions(json.dumps(T.REGIONS))
+        sf_head = T.make_head(T.head_points())
+        sky_base = T.head_points(3000, seed=5) * 70.0
+        sky_head = T.make_head(sky_base / 70.0)
+        faces = {k: facefit.deform(sky_head, sliders, v) * 70.0 for k, v in TRUTH.items()}
+        ids = {"0A2C94": "HousecarlWhiterun", "013BAB": "Ysolda"}
+        seen = []
+
+        def read_any(path, _sky=None):
+            if "facegeom" in path.lower():
+                seen.append(path)
+                return ("face:" + ids[path[-10:-4].upper()]).encode()
+            return b"base"
+
+        def skyrim_head(data, model=False):
+            d = data.decode()
+            return sky_base.copy() if d == "base" else faces[d.split(":")[1]]
+
+        saved = (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head)
+        S.hkx_to_af.read_any = read_any
+        S.hkx_to_af.vanilla_file = lambda p, d: (json.dumps(T.REGIONS).encode(), p)
+        S.skyrim_head = skyrim_head
+        S.starfield_head = lambda d, f, h=None, r=None: (sf_head, {"face_bones": 6})
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                sky = os.path.join(tmp, "sky")
+                sf = os.path.join(tmp, "sf")
+                mods = os.path.join(tmp, "mods")
+                os.makedirs(sky)
+                os.makedirs(os.path.join(sf, "Data"))
+                os.makedirs(os.path.join(mods, "Kids"))
+                skyrim_esm(os.path.join(sky, "Skyrim.esm"))
+                starfield_esm(os.path.join(sf, "Data", "Starfield.esm"))
+                ys = [r for r in sfplugin.records(os.path.join(sky, "Skyrim.esm"), [b"NPC_"])
+                      if sfplugin.edid(r[2]) == "Ysolda"]
+                over = [(t, h, sfplugin.edit(sb, {b"EDID": b"YsoldaKid\0"}), f) for t, h, sb, f in ys]
+                with open(os.path.join(mods, "Kids", "Kids.esp"), "wb") as fh:
+                    fh.write(sfplugin.build(over, {"hedr_version": 1.71, "form_version": 44}, masters=("Skyrim.esm",)))
+                out = os.path.join(tmp, "out")
+                self.assertEqual(S.main(["--skyrim-data", sky, "--starfield", sf, "--out", out, "--npc", "YsoldaKid",
+                                         "--skyrim-mods-dir", mods, "--skyrim-mod", "Kids"]), 0)
+                with open(os.path.join(out, "faces.json"), encoding="utf-8") as fh:
+                    rep = json.load(fh)
+                self.assertEqual([r["edid"] for r in rep["npcs"]], ["YsoldaKid"])
+                self.assertTrue(any("skyrim.esm" in p.lower() and p.upper().endswith("00013BAB.NIF") for p in seen))
+                with open(os.path.join(out, S.FIT_CACHE), encoding="utf-8") as fh:
+                    cache = json.load(fh)
+                self.assertIn("ysoldakid", cache)
+        finally:
+            (S.hkx_to_af.read_any, S.hkx_to_af.vanilla_file, S.skyrim_head, S.starfield_head) = saved
+
 
 class ElderTemplateTests(unittest.TestCase):
     def test_pick_elder_template(self):

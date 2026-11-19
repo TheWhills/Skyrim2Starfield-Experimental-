@@ -46,3 +46,21 @@ Plan, in order:
 3. Hair from the FaceGen NIF's hair shapes (not the KS Hairdos head-part meshes).
 4. Children's clothes from RS Children Overhaul's outfits; then voices and packages (races-roadmap I2 steps 5-7).
 First target: Dorthe and Frodnar in Riverwood.
+
+## Built 2026-11-19: step 1, Skyrim with mods over it
+src/fo4sf/skyrimload.py (tests/test_skyrimload.py): LoadOrder(skyrim data, [mod folders]) reads Skyrim.esm, the
+vanilla masters the mods name that are in Data, then each folder's plugins; one FormID space (top byte = index in
+the order, Skyrim.esm 0), each plugin's FormIDs mapped through its masters, the last plugin's version of a record
+wins (FormID fields of NPC_ / HDPT / RACE / OTFT / ARMO / ARMA rewritten: FID_FIELDS); FaceGen paths by the plugin
+that defines the NPC; assets: the mods' BSAs after Skyrim's, their loose files over everything (case-insensitive).
+face_fit takes `--skyrim-mods-dir <MO2 Skyrim mods> --skyrim-mod <folder>` (repeatable, in load order).
+child_faces: a child's base head is its race's Face head part (child_faces.base_head_path), so RS's races use RS's
+child head.
+Checked on the mod files here (verified, with a stub Skyrim.esm): with RS Children Overhaul (core + Non Playable -
+USSEP RSChildren.esp), Realistic RS Children 4.5 and 4.7: Dorthe and Frodnar come from RealisticRSChildren.esp on
+NordRaceChild (RSChildren.esp's version: Face part 0RCOChildHeadNord, ranaline\character assets\childhead.nif from
+RSChildren.bsa, 996 vertices); their FaceGen heads (loose in Realistic RS Children, under Skyrim.esm) have 996
+vertices; their hair parts are KS Hairdos meshes (Mellow, Chain Reaction: not shipped, step 3); eyes and brows from
+RSkyrimChildren.esm.
+Next: the owner's face_fit run with Dorthe and Frodnar (OWNER-SETUP 7k), then hair from the FaceGen NIF (step 3).
+

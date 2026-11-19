@@ -216,6 +216,20 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Enable "S2S Creature AnimInfo". In game: `help S2S_Chicken 4` gives the NPC's FormID; `player.placeatme <id>`.
    Say whether it animates (or stands in the reference pose), and send creature_build.json and the
    GeneratedSubgraphData listing. A vanilla trilobite (`player.placeatme 2C180F`) should look like a trilobite again.
+7k. B + C: Dorthe and Frodnar from Realistic RS Children (docs/npc/children-mods.md). Starfield closed. The three
+   Skyrim mods are found in MO2's Skyrim mods folder by their files (check the printed names):
+   ```powershell
+   $skymods="$env:LOCALAPPDATA\ModOrganizer\Skyrim Special Edition\mods"
+   $rsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RSkyrimChildren.esm") }).Name
+   $rrsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RealisticRSChildren.esp") }).Name
+   $rrsc47=(Get-ChildItem $skymods -Directory | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" }).Name
+   "RS: $rsc | Realistic: $rrsc | update: $rrsc47"
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --skyrim-mods-dir $skymods --skyrim-mod $rsc --skyrim-mod $rrsc --skyrim-mod $rrsc47
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
+   ```
+   (Every adult refits once: the mods are part of the fit settings.) Send faces.json's Dorthe / Frodnar rows. In
+   game: Dorthe and Frodnar in Riverwood (or placeatme their test NPCs, faces.json "console"): child size, their own
+   faces; hair and clothes are still the template child's.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
