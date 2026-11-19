@@ -158,3 +158,8 @@ Sylvie Munich's face layer block (child_faces.FACE_DONORS, with_face_block: TNAM
 where the donor has it); --child-controls adds NoFaceSkin (without it) next to VanillaHead / Tone0-2. ChildRace's
 FSTT names a complex group listing SimpleGroup_FaceSkinTones_Child_Female: the tone report now follows it.
 Unverified: what MNAM / NNAM / VNAM hold, and whether the layer changes a child's face in game.
+Child face tones (owner's run 2026-11-19, verified): ChildRace's FSTT -> SimpleGroup_FaceSkinTones_Child_Male /
+_Female, textures female_child_01_head(_sk2 / _sk3)_color.dds for both sexes, medians slot 0 (189,143,115), 1
+(172,126,98), 2 (106,74,57): the face's slots run lightest-first, the body's do not (1, 0, 2). One STON picks both:
+STON 1 gives face (172,126,98) with body (164,126,103), a match; STON 0 a much lighter face (189,143,115) on a
+darker body (139,109,82). So the lightest child stays STON 1 (as vanilla's blonde girls EncChildFaceF03 / F06).
