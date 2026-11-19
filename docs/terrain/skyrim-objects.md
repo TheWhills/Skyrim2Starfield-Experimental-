@@ -540,7 +540,8 @@ unverified):
   In game 2026-11-19 (owner, verified): the rate works (the wheel slowed), still about twice Skyrim's speed; so
   rotate_y01 makes about 8 turns per clip, ROTATE_Y01_TURN_S = 11.659 / 8 and the wheel's rate 0.087. At 0.087 the
   owner counted 12 s per turn (2026-11-19 08:28): ROTATE_Y01_TURN_S = 12 x 0.087 = 1.04 s, the wheel's rate 0.063 for
-  Skyrim's 16.7 s. If the rate had done nothing: our own rig + looping .af at Skyrim's period (as the dartboard:
+  Skyrim's 16.7 s. Verified in game 2026-11-19 08:49 (owner): the wheel turns the right way (lower edge downstream,
+  so VANILLA_SPIN_SIGN = +1 holds) at Skyrim's speed as far as can be told by counting. If the rate had done nothing: our own rig + looping .af at Skyrim's period (as the dartboard:
   rig bones named after the model's sgoKeep nodes), with a Creation Kit index run.
 - Only the exterior / city converter splits the part (SkyrimConverter.split_spin, set by make_skyrim_objects
   convert): interiors, weapons and the first-run converter keep the turning part in the model, standing still, until
