@@ -399,6 +399,9 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     if race_index is not None and sky_race in conv_child:
         race_fid = (race_index << 24) | conv_child[sky_race]
     subs = child_faces.child_npc_subs(tpl[2], row["edid"], full, hfid, part_types, race_fid, ston)
+    donor = next((r for r in npc_recs if sfplugin.edid(r[2]) == child_faces.FACE_DONORS[female]), None)
+    if donor is not None:              # 2026-11-19: a European face skin layer from a vanilla child that has one
+        subs = child_faces.with_face_block(subs, donor[2])
     subs = without_templates(sfplugin.edit(subs, {}, drop=STRIP))
     fid = sfplugin.new_form_id(len(recs), masters=len(masters))
     test_subs[row["edid"]] = len(recs)
@@ -407,7 +410,10 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]), "template_form_id": f"{tpl[3]:08X}",
                        "head_part": f"{hfid:08X}", "race": f"S2S child race {race_fid:08X}" if race_fid else "ChildRace",
                        "ston": ston, "face_skin": {"wanted": eth,
-                                                   "template": list(child_faces.face_ethnicity(tpl[2]))},
+                                                   "template": list(child_faces.face_ethnicity(tpl[2])),
+                                                   "donor": sfplugin.edid(donor[2]) if donor is not None else
+                                                   f"{child_faces.FACE_DONORS[female]} not found",
+                                                   "layers": [f"{n_}: {t_} ({i_})" for n_, t_, i_ in face_layers(subs)]},
                        "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load order index)"}
 
 
@@ -1030,15 +1036,15 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
             "all_fields": sorted({s_.decode("latin-1") for s_, _d in subs})}
 
 
-CHILD_CONTROLS = ("VanillaHead", "Tone0", "Tone1", "Tone2")
+CHILD_CONTROLS = ("VanillaHead", "NoFaceSkin", "Tone0", "Tone1", "Tone2")
 
 
 def add_child_controls(rows, recs, test_subs, masters):
     """--child-controls (2026-11-19, owner: Frodnar reads African; vanilla children differ only by STON,
     hair and hair colour - no face head parts, layers or dials - so their look is the race's one child head plus the
     face tone of their STON): copies of each child's finished test NPC (its hair included) with Starfield's own
-    child head (our Face part left out: the race's) at its STON, and with our head at each child STON 0 / 1 / 2, to
-    tell the head shape from the tone. Row "control_npcs": {variant: console}."""
+    child head (our Face part left out: the race's) at its STON, without the donor face skin layer, and with our head
+    at each child STON 0 / 1 / 2, to tell the head shape from the skin and the tone. Row "control_npcs": {variant: console}."""
     for row in rows:
         tn = row.get("test_npc")
         if not row.get("child") or not isinstance(tn, dict) or row["edid"] not in test_subs:
@@ -1050,6 +1056,9 @@ def add_child_controls(rows, recs, test_subs, masters):
             if v == "VanillaHead":
                 vs = [(s_, d) for s_, d in subs if not (s_ == b"PNAM" and len(d) == 4 and
                                                         struct.unpack("<I", bytes(d))[0] == head)]
+            elif v == "NoFaceSkin":          # without the donor's face skin layer (the race's default face)
+                import child_faces
+                vs = [(s_, d) for s_, d in subs if s_ not in child_faces.FACE_SIGS]
             else:
                 vs = npc_records.with_face_colors(list(subs), {b"STON": bytes([int(v[-1])])})
             vs = sfplugin.edit(vs, {b"EDID": sfplugin.zs(f"S2SFaceControl_{row['edid']}_{v}"),

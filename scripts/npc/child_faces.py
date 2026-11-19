@@ -167,6 +167,47 @@ CHILD_ETHNICITY = "european"   # owner 2026-11-19: every child, whatever its rac
 #                                 European-looking base, so the face skin under them is European too (as the adults)
 
 
+# 2026-11-19 (owner's survey of every ChildRace NPC): only three vanilla children carry a face skin layer, all with
+# the ADULT Dermaesthetic textures (UC_NA_BobbyKatz European_Male_Md1_Sk1, UC_NH_SylvieMunich European_Female_md1_Sk1
+# + a blemish mask, UC_CY_TayeImani European_Male_yo1_Sk3); the generic children have none (the race's default face).
+# Our children take the face layer block of these (FACE_DONORS) so their face skin is a European one.
+FACE_DONORS = {False: "UC_NA_BobbyKatz", True: "UC_NH_SylvieMunich"}
+FACE_SIGS = (b"TNAM", b"QNAM", b"INTV", b"MNAM", b"NNAM", b"VNAM")
+
+
+def face_block(donor_subs):
+    """(face layer subrecords, signature before them, signature after them) of a Starfield NPC: the contiguous run of
+    FACE_SIGS from its first to its last (else just those subrecords in order)."""
+    idx = [i for i, (s, _d) in enumerate(donor_subs) if s in FACE_SIGS]
+    if not idx:
+        return [], None, None
+    a, b = idx[0], idx[-1]
+    run = donor_subs[a:b + 1]
+    if any(s not in FACE_SIGS for s, _d in run):
+        run = [donor_subs[i] for i in idx]
+    before = donor_subs[a - 1][0] if a > 0 else None
+    after = donor_subs[b + 1][0] if b + 1 < len(donor_subs) else None
+    return list(run), before, after
+
+
+def with_face_block(subs, donor_subs):
+    """subs without their own face layer subrecords and with the donor's block (face_block), placed after the
+    signature that precedes it in the donor (its last occurrence), else before the one that follows it, else at the
+    end."""
+    block, before, after = face_block(donor_subs)
+    out = [(s, d) for s, d in subs if s not in FACE_SIGS]
+    if not block:
+        return out
+    at = None
+    if before is not None:
+        hits = [i for i, (s, _d) in enumerate(out) if s == before]
+        at = hits[-1] + 1 if hits else None
+    if at is None and after is not None:
+        at = next((i for i, (s, _d) in enumerate(out) if s == after), None)
+    at = len(out) if at is None else at
+    return out[:at] + block + out[at:]
+
+
 def child_templates(npc_recs, child_race, female):
     """[(EditorID, plain, ethnicity, face skin texture, record)] of the vanilla child NPCs of the sex a test child
     may copy: on ChildRace, no template (TPLT), a voice type."""

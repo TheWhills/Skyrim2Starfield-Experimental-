@@ -144,6 +144,19 @@ class ToneSlotTests(unittest.TestCase):
             CH.child_tone_slots(recs, lambda p: p, False, None, b"FSTT")
         self.assertIn(("LNAM", "child_default"), cm.exception.fields)
 
+    def test_face_group_through_its_complex_group(self):
+        """2026-11-19 (owner's run): ChildRace's FSTT names a group listing simple groups, not textures."""
+        recs = self.records()
+        recs[0][2].append((b"FSTT", Z("FaceSkinTones_Child")))
+        recs.append(rec(b"AVMD", [(b"EDID", Z("Complex")), (b"TNAM", Z("FaceSkinTones_Child")),
+                                  (b"VNAM", Z("SimpleGroup_FaceSkinTones_Child_Female"))], 4))
+        recs.append(rec(b"AVMD", [(b"EDID", Z("SimpleGroup_FaceSkinTones_Child_Female")),
+                                  (b"VNAM", Z("c0.dds")), (b"VNAM", Z("c1.dds")), (b"VNAM", Z("c2.dds"))], 5))
+        level = {"c0.dds": 90, "c1.dds": 200, "c2.dds": 40}
+        got = CH.child_tone_slots(recs, lambda p: p, False, lambda k: np.full((2, 2, 4), level[k], np.uint8), b"FSTT")
+        self.assertEqual(got["slots"], [1, 0, 2])
+        self.assertIn("SimpleGroup_FaceSkinTones_Child_Female", got["group"])
+
     def test_template_looks(self):
         import face_fit as S
         I = lambda v: struct.pack("<I", v)                                          # noqa: E731

@@ -241,6 +241,16 @@ def child_tone_slots(sf_esm_records, read_texture, female: bool, decode, sig: by
         err.fields = [("child AVMD EditorIDs", ", ".join(near[:40]))]
         raise err
     tex = [text(d) for s, d in avmd if s == b"VNAM" and len(d) > 1]
+    if tex and not any(t.lower().endswith(".dds") for t in tex):
+        # 2026-11-19 (owner's run): the face string names a complex group whose entries are simple groups
+        sub = [t for t in tex if ("female" in t.lower()) == bool(female)] or tex
+        inner = next((s for t, _h, s, _f in sf_esm_records if t == b"AVMD" and s is not avmd and
+                      any(sg in (b"EDID", b"TNAM", b"YNAM") and text(d).lower() == sub[0].lower() for sg, d in s)),
+                     None)
+        if inner is not None:
+            pick = [f"{pick[0]} -> {sub[0]}"]
+            avmd = inner
+            tex = [text(d) for s, d in avmd if s == b"VNAM" and len(d) > 1]
     if not tex:
         err = ValueError(f"skin tone group {pick[0]} lists no textures")
         err.fields = [(sg.decode("latin-1"), text(d) if bytes(d)[-1:] == b"\0" else bytes(d).hex()[:64])

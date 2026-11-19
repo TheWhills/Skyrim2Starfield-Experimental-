@@ -55,6 +55,25 @@ class ChildFaceTests(unittest.TestCase):
         self.assertEqual([t[0] for t in C.child_templates(recs, child, False)],
                          ["AChildAfrican", "BChildPlain", "CChildEuroScript", "DChildEuro"])
 
+    def test_face_block_from_donor(self):
+        """2026-11-19: our children take a vanilla child's face skin layer block (Bobby Katz / Sylvie Munich)."""
+        donor = [(b"EDID", Z("UC_NA_BobbyKatz")), (b"PNAM", I(1)), (b"HCOL", Z("Brown")),
+                 (b"TNAM", Z("Dermaesthetic")), (b"QNAM", Z("European_Male_Md1_Sk1")), (b"VNAM", I(0)),
+                 (b"INTV", I(64)), (b"MNAM", I(2)), (b"NNAM", I(3)), (b"STON", b"\x00"), (b"VTCK", I(9))]
+        ours = [(b"EDID", Z("S2SFace_Frodnar")), (b"PNAM", I(7)), (b"HCOL", Z("Platinum")), (b"STON", b"\x01"),
+                (b"VTCK", I(9))]
+        block, before, after = C.face_block(donor)
+        self.assertEqual([s for s, _d in block], [b"TNAM", b"QNAM", b"VNAM", b"INTV", b"MNAM", b"NNAM"])
+        self.assertEqual((before, after), (b"HCOL", b"STON"))
+        got = C.with_face_block(ours, donor)
+        self.assertEqual([s for s, _d in got], [b"EDID", b"PNAM", b"HCOL", b"TNAM", b"QNAM", b"VNAM", b"INTV",
+                                                b"MNAM", b"NNAM", b"STON", b"VTCK"])
+        self.assertEqual(dict(got)[b"HCOL"], Z("Platinum"))
+        self.assertEqual(dict(got)[b"STON"], b"\x01")
+        no_hcol = [x for x in ours if x[0] != b"HCOL"]
+        self.assertEqual([s for s, _d in C.with_face_block(no_hcol, donor)][2], b"TNAM")    # before STON
+        self.assertEqual(C.with_face_block(ours, ours), ours)
+
     def test_pick_child_template(self):
         child = 0x2AABCD
         recs = [npc(1, "Kid_Templated", True, child, [(b"TPLT", I(5)), (b"VTCK", I(1))]),

@@ -147,3 +147,14 @@ tone of its STON plus its hair. ChildRace's FSTT string (SimpleGroup_FaceSkinTon
 EditorID / TNAM / YNAM: the lookup now tries every text field and else lists the child AVMD EditorIDs.
 --child-controls: each child also as copies with Starfield's own child head (our Face part left out) and with its
 head at STON 0 / 1 / 2, to tell in game what the head shape does from what the tone does.
+Owner's survey of every ChildRace NPC (2026-11-19, verified, 45 listed): the generic children (EncChildFace*,
+LvlChild*, colonist / tourist kids) have no face head part and no face layer - only STON, hair and hair colour.
+Cora Coe has head parts of her own (Human_Child_Head_CoraCoe, her own brows and lashes). Three children carry a face
+skin layer, all with ADULT Dermaesthetic textures: UC_NA_BobbyKatz (European_Male_Md1_Sk1, STON 0),
+UC_NH_SylvieMunich (European_Female_md1_Sk1 + ComplexionMask1 Blemishes_FullFace2, STON 0) and UC_CY_TayeImani
+(European_Male_yo1_Sk3, STON 2); with it come MNAM / NNAM / VNAM, which the others lack. So a generic child shows the
+race's default face skin, and a child can wear an adult European face skin. Built: our children take Bobby Katz's /
+Sylvie Munich's face layer block (child_faces.FACE_DONORS, with_face_block: TNAM QNAM INTV MNAM NNAM VNAM, placed
+where the donor has it); --child-controls adds NoFaceSkin (without it) next to VanillaHead / Tone0-2. ChildRace's
+FSTT names a complex group listing SimpleGroup_FaceSkinTones_Child_Female: the tone report now follows it.
+Unverified: what MNAM / NNAM / VNAM hold, and whether the layer changes a child's face in game.
