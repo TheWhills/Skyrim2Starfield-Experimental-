@@ -239,7 +239,8 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
         cache[(female, base_rel.lower())] = child_faces.child_setup(sky, sf_data, female, sys.modules[__name__], modl,
                                                                     a.transfer, base_rel=base_rel)
     ctx = cache[(female, base_rel.lower())]
-    fg = skyrim_head(hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky), model=ctx["model_space"])
+    fg = child_faces.facegen_points(ctx, sys.modules[__name__],
+                                    hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky))
     if fg is None:
         raise ValueError("FaceGen head has no head shape")
     disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
@@ -262,18 +263,22 @@ FIT_FUNCS = ("skyrim_head", "skyrim_head_triangles", "skyrim_head_matrix", "race
              "starfield_head_node", "starfield_head", "child_face")
 
 
-def fit_code_hash():
+def fit_code_hash(child=False):
     """The fitting code: face_fit's fit functions (FIT_FUNCS, their source), src/fo4sf facefit / headcorr / headbake,
-    child_faces.py, FIT_VERSION. The writer code is not in it (it runs every time)."""
+    FIT_VERSION; for children (child=True) also child_face and child_faces.py. 2026-11-19 (owner: "why is every adult
+    refitting"): adults' keys leave the child code out, so a change to the children's fit refits only children. The
+    writer code is not in it (it runs every time)."""
     import hashlib
     import inspect
     import child_faces
     h = hashlib.sha1(str(FIT_VERSION).encode())
     mod = sys.modules[__name__]
     for f in FIT_FUNCS:
+        if f == "child_face" and not child:
+            continue
         h.update(inspect.getsource(getattr(mod, f)).encode())
     from fo4sf import headbake
-    for m in (facefit, headcorr, headbake, child_faces):
+    for m in (facefit, headcorr, headbake) + ((child_faces,) if child else ()):
         with open(m.__file__, "rb") as fh:
             h.update(fh.read())
     return h.hexdigest()
@@ -1236,7 +1241,7 @@ def main(argv=None):
 
     dial_ids_of = [None]
     fit_cache = load_fit_cache(out)
-    code_hash = fit_code_hash()
+    code_hash = {False: fit_code_hash(), True: fit_code_hash(child=True)}
     settings_now = fit_settings(a, sf_data)
     reused = []
 
@@ -1248,7 +1253,8 @@ def main(argv=None):
         if not a.preview and not a.refit:
             try:
                 fg_bytes = hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky)
-                key = npc_fit_key(code_hash, settings_now, fg_bytes, sky_race, sky_race in conv_races)
+                key = npc_fit_key(code_hash["child" in sky_race.lower()], settings_now, fg_bytes, sky_race,
+                                  sky_race in conv_races)
             except (SystemExit, KeyError, OSError):
                 key = None
             hit = cached_fit(fit_cache, n["edid"], key, out) if key else None

@@ -113,6 +113,17 @@ class BaseHeadTests(unittest.TestCase):
                          "meshes\\actors\\character\\ranaline\\character assets\\childhead.nif")
         self.assertEqual(C.base_head_path(self.race([], []), parts, False), C.SKY_CHILD_HEAD)
 
+    def test_facegen_through_the_base_matrix(self):
+        """2026-11-19: Realistic RS Children's FaceGen heads have a near-identity skin transform, RS's child head the
+        head bone's (120 units up): the FaceGen points go through the BASE head's matrix (local points agree)."""
+        local = np.array([[0.0, 1.0, 2.0], [3.0, -1.0, 0.5]])
+        ff = types.SimpleNamespace(skyrim_head=lambda data, model=False: None if model else local.copy())
+        m = np.eye(4)
+        m[2, 3] = 120.0
+        got = C.facegen_points({"base_matrix": m}, ff, b"x")
+        np.testing.assert_allclose(got, local + [0, 0, 120.0])
+        np.testing.assert_allclose(C.facegen_points({"base_matrix": None}, ff, b"x"), local)
+
 
 if __name__ == "__main__":
     unittest.main()

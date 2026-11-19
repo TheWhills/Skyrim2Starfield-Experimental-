@@ -64,3 +64,12 @@ vertices; their hair parts are KS Hairdos meshes (Mellow, Chain Reaction: not sh
 RSkyrimChildren.esm.
 Next: the owner's face_fit run with Dorthe and Frodnar (OWNER-SETUP 7k), then hair from the FaceGen NIF (step 3).
 
+Owner's first run (2026-11-19, verified from its output): load order Skyrim, Update, Dawnguard, HearthFires,
+Dragonborn, RSkyrimChildren.esm, RSChildren Patch - BS Bruma.esp, RSChildren.esp, RealisticRSChildren.esp (BS
+Bruma's masters and USSEP not loaded); Dorthe / Frodnar fitted on RS's child head (996 vertices). But their FaceGen
+heads carry a near-identity skin transform where RS's child head carries the head bone's (120 units up), so in model
+space each face sat 120 units below its base (checked on the mod files). Fixed: the FaceGen's mesh-local points go
+through the BASE head's matrix (child_faces.facegen_points); the faces then differ from the base by 0.57 / 0.43 units
+rms (Dorthe / Frodnar), about 9 / 7 mm. The fit cache now keys adults without the child code (a child change refits
+only children).
+

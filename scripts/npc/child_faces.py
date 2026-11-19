@@ -46,7 +46,7 @@ def child_tone(ston):
 
 def base_head_path(race_subs, head_parts, female):
     """Data-relative path of a Skyrim child race's Face head part model for one sex (RS Children Overhaul's races
-    use its own child head, ranaline\character assets\childhead.nif: 996 vertices, the layout of Skyrim's adult female
+    use its own child head, ranaline/character assets/childhead.nif: 996 vertices, the layout of Skyrim's adult female
     head; vanilla's is SKY_CHILD_HEAD, 1,211). race_subs: the RACE (FormIDs in the head_parts' space: skyrimload);
     head_parts: npc_hair.head_parts' HDPT dict. SKY_CHILD_HEAD when the race names no Face part with a model."""
     from fo4sf import skyrimload
@@ -83,10 +83,25 @@ def child_setup(sky, sf_data, female, face_fit, head_modl, transfer="surface", b
     nif_bytes, _r = hk.vanilla_file(rel, sf_data)
     paths, _skin = facefit.starfield_head_parts(nif_bytes)
     return {"head": head, "base": base, "al": al, "model_space": model_space, "corr": corr, "nif": nif_bytes,
+            "base_matrix": face_fit.skyrim_head_matrix(base_bytes) if model_space else None,
             "nif_rel": rel, "mesh_path": paths[0] if paths else None,
             "report": {"head": head_nif, "skyrim_base_head": base_rel or SKY_CHILD_HEAD,
                        "skyrim_base_vertices": int(len(base)), "alignment_rms_m": float(al[3]), "scale": float(al[0]),
                        "correspondence": corr.report if corr is not None else None}}
+
+
+def facegen_points(ctx, face_fit, facegen_bytes):
+    """A child's FaceGen head in the same space as ctx["base"]: its mesh-local points taken through the BASE head's
+    skin -> model matrix. 2026-11-19 (owner's run, verified on the mod files): Realistic RS Children's FaceGen heads
+    carry a near-identity skin transform where RS's child head carries the head bone's (120 units up), so each
+    head's own matrix put the face 120 units below its base; the local points agree (rms 0.57 units, same
+    topology)."""
+    from fo4sf import facefit
+    local = face_fit.skyrim_head(facegen_bytes, model=False)
+    if local is None:
+        return None
+    m = ctx.get("base_matrix")
+    return facefit.apply4(np.asarray(m, float), local) if m is not None else local
 
 
 def child_disp(ctx, facegen_points, smooth=10, symmetry=True):
