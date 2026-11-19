@@ -217,9 +217,10 @@ def facegen_mesh(esm, fid):
     return skyrimnpc.facegen_paths("Skyrim.esm", fid)["mesh"]
 
 
-def child_face(n, sky_race, sky, sf_data, out, a, cache):
-    """{"child": {...}, "dials": {}} for a Skyrim child NPC: its face baked into a head of its own on Starfield's
-    child head (child_faces), the files written under out. cache: {female: child_faces.child_setup}."""
+def child_context(n, sky, sf_data, a, cache, transfer=None):
+    """child_faces.child_setup for the child NPC n (its race's base head, its sex), cached in cache by (female,
+    base head); transfer None = a.transfer. A setup made without the surface correspondence (transfer "none", for
+    the hair: only the alignment is needed) is kept apart and never used for a face."""
     import child_faces
     import npc_hair
     female = n["female"]
@@ -229,16 +230,29 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
     sky_races, sky_parts = cache["_sky"]
     # 2026-11-19: the base head is the child race's own Face part (RS Children Overhaul: its child head)
     base_rel = child_faces.base_head_path(sky_races.get(n["race"], []), sky_parts, female)
-    if (female, base_rel.lower()) not in cache:
-        hd = {sfplugin.edid(sb).lower(): sb for _t, _h, sb, _f in
-              sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
-        van = hd.get(child_faces.SF_CHILD_HEAD_PART[female].lower())
-        if van is None:
-            raise ValueError(f"no {child_faces.SF_CHILD_HEAD_PART[female]} in Starfield.esm")
-        modl = bytes(dict(van).get(b"MODL", b"")).split(b"\0")[0].decode("latin-1")
-        cache[(female, base_rel.lower())] = child_faces.child_setup(sky, sf_data, female, sys.modules[__name__], modl,
-                                                                    a.transfer, base_rel=base_rel)
-    ctx = cache[(female, base_rel.lower())]
+    transfer = a.transfer if transfer is None else transfer
+    key = (female, base_rel.lower())
+    if key in cache:
+        return cache[key]
+    lite = (female, base_rel.lower(), "lite")
+    if transfer == "none" and lite in cache:
+        return cache[lite]
+    hd = {sfplugin.edid(sb).lower(): sb for _t, _h, sb, _f in
+          sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
+    van = hd.get(child_faces.SF_CHILD_HEAD_PART[female].lower())
+    if van is None:
+        raise ValueError(f"no {child_faces.SF_CHILD_HEAD_PART[female]} in Starfield.esm")
+    modl = bytes(dict(van).get(b"MODL", b"")).split(b"\0")[0].decode("latin-1")
+    ctx = child_faces.child_setup(sky, sf_data, female, sys.modules[__name__], modl, transfer, base_rel=base_rel)
+    cache[lite if transfer == "none" else key] = ctx
+    return ctx
+
+
+def child_face(n, sky_race, sky, sf_data, out, a, cache):
+    """{"child": {...}, "dials": {}} for a Skyrim child NPC: its face baked into a head of its own on Starfield's
+    child head (child_faces), the files written under out. cache: child_context's."""
+    import child_faces
+    ctx = child_context(n, sky, sf_data, a, cache)
     fg = child_faces.facegen_points(ctx, sys.modules[__name__],
                                     hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky))
     if fg is None:
@@ -260,7 +274,8 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
 FIT_CACHE = "_fit_cache.json"     # in --out: each NPC's fit result by an input key (2026-11-12)
 FIT_VERSION = 2                   # bump when the fit changes in a way the hashed code below does not show
 FIT_FUNCS = ("skyrim_head", "skyrim_head_triangles", "skyrim_head_matrix", "race_delta", "head_alignment",
-             "starfield_head_node", "starfield_head", "child_face")
+             "starfield_head_node", "starfield_head", "child_context", "child_face")
+CHILD_FUNCS = ("child_context", "child_face")
 
 
 def fit_code_hash(child=False):
@@ -274,7 +289,7 @@ def fit_code_hash(child=False):
     h = hashlib.sha1(str(FIT_VERSION).encode())
     mod = sys.modules[__name__]
     for f in FIT_FUNCS:
-        if f == "child_face" and not child:
+        if f in CHILD_FUNCS and not child:
             continue
         h.update(inspect.getsource(getattr(mod, f)).encode())
     from fo4sf import headbake
@@ -349,11 +364,14 @@ def converted_child_races(races_plugin):
 
 
 def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_race, conv_child, race_index, recs,
-                    masters, test_subs):
+                    masters, test_subs, tone_slots=None):
     """The child's test NPC: a vanilla child NPC (child_faces.pick_child_template) with our head part (its baked
     head) as Face, on our child race when race_heads built it (else ChildRace), its STON from its Skyrim skin on
-    the child scale; its outfit, hair and voice the template's (children's clothes / hair not converted yet)."""
+    the child scale (tone_slots {female: slots lightest first}: child_hair.child_tone_slots; 2026-11-19, owner's
+    Frodnar came out darker than in Skyrim with STON 0); its outfit and voice the template's, its hair too until
+    add_child_hair_files gives it its own."""
     import child_faces
+    import child_hair
     female = row["female"]
     tpl = child_faces.pick_child_template(npc_recs, child_race, female)
     if tpl is None:
@@ -371,7 +389,10 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     ston = None
     if real is not None:
         full = npc_records.npc_name(n, real["strings"])
-        ston = child_faces.child_tone(target_skin(n, npcs, real)[0])
+        rank = child_faces.child_tone(target_skin(n, npcs, real)[0])
+        ston = child_hair.tone_slot(rank, (tone_slots or {}).get(female))
+        row["child_tone"] = {"rank_lightest_0": rank, "ston": ston,
+                             "slots_by_lightness": (tone_slots or {}).get(female)}
     sky_race = races.get(n["race"], "")
     race_fid = None
     if race_index is not None and sky_race in conv_child:
@@ -989,6 +1010,132 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
     return res
 
 
+def child_tone_order(sf_esm, sf_data, females) -> dict:
+    """{female: [slot, ...] lightest first} of Starfield's child skin tones (child_hair.child_tone_slots), plus
+    "_report"; a sex whose textures cannot be read is left out (reported)."""
+    import child_hair
+    import skin_tone_probe
+    from fo4sf import skintone
+    out, rep = {}, {}
+    try:
+        recs = sfplugin.records(sf_esm, [b"RACE", b"AVMD"])
+        arcs = skin_tone_probe.TextureArchives(sf_data)
+    except (OSError, ValueError) as e:
+        return {"_report": {"error": str(e)}}
+    for female in sorted(set(females)):
+        try:
+            got = child_hair.child_tone_slots(recs, arcs.read, female, skintone.decode_dds)
+            out[female] = got["slots"]
+            rep["female" if female else "male"] = got
+        except (KeyError, ValueError, OSError) as e:
+            rep["female" if female else "male"] = {"error": f"{type(e).__name__}: {e}"}
+    out["_report"] = rep
+    return out
+
+
+def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, masters, real, child_ctx) -> dict:
+    """The children's own hair from their FaceGen NIFs (scripts/npc/child_hair.py), each a head part of ours copied
+    from its template child's hair and put on its test NPC, its hair colour matched (with --hairs-plugin); files
+    packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2" (Archive2) or loose. Needs --texconv. Fills row["hair"]."""
+    import shutil
+    import child_faces
+    import child_hair
+    import hair_pack
+    import npc_hair
+    import skyrim_hairs
+    from fo4sf import skyrimconvert, skyrimhair
+    cr = a.content_resources or os.path.join(a.starfield, "Tools", "ContentResources.zip")
+    if not os.path.isfile(cr):
+        return {"error": f"ContentResources.zip (Creation Kit) not found: {cr}"}
+    try:
+        sf_world = child_hair.child_world(hkx_to_af.vanilla_file(child_hair.CHILD_SKELETON, sf_data)[0])
+    except (SystemExit, KeyError, OSError, ValueError, nifmod.NifError) as e:
+        return {"error": f"child skeleton {child_hair.CHILD_SKELETON}: {e}"}
+    staging = os.path.join(out, child_hair.STAGING)
+    shutil.rmtree(staging, ignore_errors=True)
+    conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None, prefix="s2s")
+    conv.hair_settings = dict(skyrim_hairs.VANILLA_HAIR_SETTINGS)
+    sf_hdpt = {r[3]: r for r in sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"HDPT"])}
+    hdpt = (child_ctx.get("_sky") or (None, None))[1] or npc_hair.head_parts(a.load_order)[0]
+    settings = child_hair.shape_settings(a.starfield)
+    res = {"child_skeleton_C_Head_m": [round(float(v), 4) for v in sf_world[skyrimhair.SF_HEAD][:3, 3]],
+           "facebones": {}}
+    fbs, done = {}, 0
+    for row in rows:
+        if not row.get("child") or not isinstance(row.get("test_npc"), dict) or row["edid"] not in test_subs:
+            continue
+        n = by_edid[row["edid"].lower()]
+        info = row["hair"] = {}
+        names = child_hair.hair_shape_names(n, hdpt)
+        if not names:
+            info["note"] = "no hair head part on the Skyrim NPC: the template's hair"
+            continue
+        info["skyrim"] = names[0]
+        try:
+            fg_rel = facegen_mesh(a.load_order, n["form_id"])
+            fg = hkx_to_af.read_any(fg_rel, sky)
+            shapes = child_hair.facegen_hair_shapes(fg, names)
+            info["facegen_shapes"] = [x["name"] for x in shapes]
+            if not shapes:
+                info["error"] = f"no shape named {', '.join(names)} in its FaceGen NIF: the template's hair"
+                continue
+            miss = child_hair.missing_textures(shapes, sky)
+            if miss:
+                info["error"] = (f"textures not in the Skyrim load order: {', '.join(miss)} (KS Hairdos: add its "
+                                 "mod folder with --skyrim-mod): the template's hair")
+                continue
+            k = test_subs[row["edid"]]
+            tpl = npc_hair.starfield_part_template(recs[k][2], sf_hdpt, child_hair.HAIR, n["female"])
+            if tpl is None:
+                info["error"] = "no Starfield hair head part to copy"
+                continue
+            model = skyrim_hairs.record_model(tpl)
+            if model not in fbs:
+                frep = res["facebones"].setdefault(model, {})
+                fbs[model] = hair_pack.facebones_template(a.starfield, model, frep,
+                                                          "x:meshes/" + model.replace("\\", "/"))
+            ctx = child_context(n, sky, sf_data, a, child_ctx, transfer="none")
+            fgp = child_faces.facegen_points(ctx, sys.modules[__name__], fg)
+            head_nif = next((f for f in row["child"].get("files", [])
+                             if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
+            surface = child_hair.baked_surface(a.starfield, out, head_nif) if head_nif else None
+            hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp, sf_world,
+                                               surface, fbs[model], conv, staging, settings)
+        except (skyrimhair.HairError, nifmod.NifError, ValueError, KeyError, OSError) as e:
+            info["error"] = f"{type(e).__name__}: {e}"
+            continue
+        info.update({x: hrow[x] for x in ("placement", "fit", "follow_head", "conform", "dropped_duplicate_shapes",
+                                          "shapes", "vertices", "materials", "face_bones", "skipped",
+                                          "template_reference") if x in hrow})
+        info["head_surface"] = "its baked head" if surface is not None else "none found: not conformed"
+        if not hrow.get("ok"):
+            info["error"] = hrow.get("reason") or "not converted"
+            continue
+        fid = sfplugin.new_form_id(len(recs), masters=len(masters))
+        recs.append(npc_hair.head_part_record(tpl, fid, f"S2S_ChildHair_{row['edid']}", hrow["model"]))
+        t, h, subs, nfid = recs[k]
+        subs = child_hair.hair_record_subs(subs, sf_hdpt, fid)
+        if real is not None:
+            color = real["clfm"].get(n.get("hair_color"))
+            name, how = npc_records.match_hair_color(color, real["names"], real["palette"])
+            if name:
+                subs = real["with_hair_color"](subs, name)
+            info["hair_color"] = {"skyrim": (color or {}).get("edid"),
+                                  "skyrim_rgb": list((color or {}).get("rgba") or [])[:3], "starfield": name,
+                                  "how": how}
+        recs[k] = (t, h, subs, nfid)
+        info.update(model=hrow["model"], form_id=f"{fid:08X}", starfield_template=sfplugin.edid(tpl[2]))
+        done += 1
+    res["children_with_own_hair"] = done
+    if done:
+        base = os.path.splitext(PLUGIN)[0]
+        res.update(hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2",
+                                  f"{base} - Textures.ba2"))
+    res["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
+    shutil.rmtree(staging, ignore_errors=True)
+    return res
+
+
 def outfits_by_npc(path: str, master_index: int) -> dict:
     """{Skyrim NPC EditorID, lower case: FormID as seen from the plugin that has `path` as master number
     master_index} of the outfits gear_fit wrote (EDID S2S_<NPC>_outfit_Outfit)."""
@@ -1381,14 +1528,19 @@ def main(argv=None):
                            if sfplugin.edid(s_) == "ChildRace"), None)
         conv_child = converted_child_races(a.races_plugin) if a.races_plugin else {}
         sf_hdpt_recs = None
+        tone_slots = None
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
             if row.get("child"):
                 if sf_hdpt_recs is None:
                     sf_hdpt_recs = sfplugin.records(sf_esm, [b"HDPT"])
+                if tone_slots is None and real is not None:
+                    tone_slots = child_tone_order(sf_esm, sf_data, [r["female"] for r in report["npcs"]
+                                                                    if r.get("child")])
+                    report["child_skin_tones"] = tone_slots.pop("_report", None)
                 write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
-                                child_race, conv_child, race_index, recs, masters, test_subs)
+                                child_race, conv_child, race_index, recs, masters, test_subs, tone_slots)
                 continue
             want = a.template_npc[int(row["female"])] if len(a.template_npc) > int(row["female"]) else None
             elder = None
@@ -1506,6 +1658,12 @@ def main(argv=None):
         if recs and a.hair:
             report["hair_packing"] = add_hair_files(a, out, sky, esm, sf_data, report["npcs"], npcs, chosen, recs,
                                                     test_subs)
+        elif recs and any(r.get("child") for r in report["npcs"]):
+            if a.texconv:               # 2026-11-19: the children's own hair, from their FaceGen NIFs
+                report["child_hair"] = add_child_hair_files(a, out, sky, sf_data, report["npcs"], by_edid, recs,
+                                                            test_subs, masters, real, child_ctx)
+            else:
+                report["child_hair"] = "not converted: give --texconv (children keep the template's hair)"
         children = {}
         if recs and a.voice_lines:
             import npc_voice

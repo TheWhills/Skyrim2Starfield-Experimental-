@@ -445,13 +445,14 @@ def shape_alpha(n, sh, conv, material) -> dict:
 
 
 def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, out_name=None, tint=None,
-               variant=None, strands=None) -> dict:
+               variant=None, strands=None, keep_shapes=None) -> dict:
     """Convert one head part (its models merged), shape it for ctx's head, write its NIF and _facebones twin into
     staging (as out_name, default s2s/skyrimhair/<edid>). tint: a Skyrim hair colour (0-1 RGB) multiplied into the
     albedo (an NPC's own; the looks-menu hairstyles have none). variant: a diagnostic copy ('flat' / 'solid':
     texture variants, 'shell': normals pointing away from the head, 'combed': strand directions smoothed across
     cards, 'notrans': no light through the hair, 'soft': Skyrim's blended layers keep their soft alpha, 'rough': a
-    rougher hair shader). Returns its report row (ok, model, ...)."""
+    rougher hair shader). keep_shapes: only the shapes of these names (case-insensitive; a child's hair out of its
+    FaceGen NIF, scripts/npc/child_hair.py). Returns its report row (ok, model, ...)."""
     row = {"skyrim": p["edid"], "plugin": p.get("plugin"), "models": models, "ok": False, "skipped": []}
     key = (p["edid"], tuple(models))
     last = ctx.__dict__.get("_shaped_last")
@@ -472,6 +473,13 @@ def build_part(p, models, sky, conv, sf_world, ctx, fb, staging, spread=True, ou
             except (skyrimhair.HairError, nifmod.NifError, ValueError) as e:
                 row["skipped"].append(f"{m}: {e}")
                 continue
+            if keep_shapes is not None:                  # only the named shapes (a FaceGen NIF's hair)
+                keep = {k.lower() for k in keep_shapes}
+                h = skyrimhair.Hair([sh for sh in h.shapes if (sh.name or b"").decode("latin-1").lower() in keep],
+                                    h.bones, h.host_of_root, h.report)
+                if not h.shapes:
+                    row["skipped"].append(f"{m}: no shape named {', '.join(sorted(keep))}")
+                    continue
             if ctx.hair_shader:                          # one copy of a two-pass shape (before the materials)
                 h, _dropped = skyrimhair.drop_duplicate_shapes(h)
             # 2026-11-03: the strand direction comes from each texture region (strand_orientation, after the

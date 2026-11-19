@@ -2417,3 +2417,11 @@ _AnimGraph_Standard_Idle_Loop_RotateY slowed with a PRPS entry copied from Float
 way to slow the same graph), still no animation files of our own.
 2026-11-18 later: the PRPS rate on the ACTI copy did nothing in game; vanilla Akila fans carry the rate on STATs, so
 the parts go on a copy of STAT AK_FanWall01_Blade_Lazy with its own PRPS entry set to the part's rate.
+
+2026-11-19: children's hair from their FaceGen NIF, not from the hair head parts' meshes.
+Why: Realistic RS Children's hair parts point into KS Hairdos meshes the mod does not ship; the FaceGen NIF bakes the
+same shapes already fitted to the child's own head, in the face's space, so the face alignment places them exactly.
+The textures still come from KS Hairdos (a --skyrim-mod folder). Alternatives: requiring KS Hairdos' meshes and
+converting each hair part (needs the meshes and a refit to the child head); a vanilla Starfield child hair matched by
+shape (loses the mod's look). Child skin tones are given by lightness rank of the vanilla child tone textures, as the
+race tones already are.

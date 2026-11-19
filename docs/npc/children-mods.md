@@ -73,3 +73,37 @@ through the BASE head's matrix (child_faces.facegen_points); the faces then diff
 rms (Dorthe / Frodnar), about 9 / 7 mm. The fit cache now keys adults without the child code (a child change refits
 only children).
 
+
+## Built 2026-11-19: step 3, hair from the FaceGen NIF; the child skin tone by lightness
+Owner's in-game check after the fix (verified): Frodnar is child-sized with his own face, but wears the template
+child's curly hair and outfit, and his skin is darker than Realistic RS Children's Frodnar (owner's Skyrim
+screenshot: fair skin, blue eyes, blond chin-length hair, grey tunic).
+
+Hair (scripts/npc/child_hair.py, face_fit.add_child_hair_files; tests/test_child_hair.py). Verified on the mod
+files: a FaceGen NIF holds every head part as a shape named after the part's EditorID (Frodnar:
+0ChainReactionDUPLICATE001 + its HL copy + 0_HAIRLINE_Male_Human_CurlyScalpDUPLICATE002; Dorthe: 0MellowDUPLICATE001
++ HL + 0_HAIRLINE_Female_Human_StraightDUPLICATE001), in model space with an identity skin transform, in the same
+space as the FaceGen face taken through the base head's matrix (hair z 115..133 units over a face at 110..132).
+So a child's hair = the shapes named after its hair head part and that part's extra parts, placed by the child's
+own face alignment (Skyrim model -> Starfield child model: a scale and shift; checked exact on Frodnar's NIF), then
+skyrim_hairs.build_part with the vanilla Skyrim hairs' settings (no hairline lift / volume / drape: the hair was
+made for this head; KS's HL copy dropped, cards outward, followed and pushed out against the child's baked head,
+Starfield's hair shader, _facebones twin from the template child hair's twin), on Starfield's child skeleton
+(Actors\Child\CharacterAssets\skeleton.nif). Written as S2S_ChildHair_<EditorID>, a copy of the template child's own
+hair head part; the colour is the NPC's Skyrim hair colour matched to a Starfield name (as the adults). Packed as
+S2SFaceTest - Main.ba2 / - Textures.ba2. Needs --texconv; without it the children keep the template's hair
+(reported). Rebuilt every run (not in the fit cache).
+Textures: Realistic RS Children ships only 5 KS Hairdos textures (Bourbon, Dune, Fusion, North, Sabrina; verified);
+Chain Reaction, Mellow and the KS hairline scalps come from KS Hairdos (SSE: Nexus 6817; the SMP version and
+retextures use the same texture paths), added with --skyrim-mod. A child whose textures are missing keeps the
+template's hair and the report says which file.
+Unverified until the owner's run: that the child skeleton's C_Head matches the child head mesh's space (the report
+gives C_Head and each hair's fit gaps), that Starfield's child hairs have a _facebones twin to copy (reported under
+child_hair.facebones), and how the hair looks.
+
+Skin tone: Frodnar's Skyrim skin (tint 183,156,145) gives STON 2 on the adult scale, child tone 0 (the lightest of
+three), and Dorthe's 0 too; but Starfield's adult tone slots are not in brightness order (races.md 2026-11-11), so
+slot 0 need not be the lightest child tone (supported hypothesis for the darker skin). face_fit now orders
+ChildRace's body tone group's textures by median lightness (child_hair.child_tone_slots, the BSTT string of the
+sex -> its AVMD's VNAM textures) and gives each child the slot of its rank; faces.json: child_skin_tones and each
+child's child_tone.
