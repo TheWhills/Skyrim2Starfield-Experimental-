@@ -1014,14 +1014,19 @@ def add_hair_files(a, out, sky, esm, sf_data, rows, npcs, chosen, recs, test_sub
 
 def child_template_looks(rec, sf_hdpt_recs) -> dict:
     """What a vanilla child NPC's look is made of (2026-11-19: Starfield's children have no face layers, dials or
-    blends): its STON, hair colour and head parts (EditorID: type)."""
+    blends): its STON, hair colour, head parts (EditorID: type), face texture layers (TNAM / QNAM / INTV, any name)
+    and which face fields it carries at all."""
     names = {r[3]: (sfplugin.edid(r[2]), hdpt_type(r)) for r in sf_hdpt_recs}
     subs = rec[2]
     parts = [names.get(struct.unpack("<I", bytes(d)[:4])[0], (f"{struct.unpack('<I', bytes(d)[:4])[0]:08X}", None))
              for s_, d in subs if s_ == b"PNAM" and len(d) == 4]
     return {"ston": next((bytes(d)[0] for s_, d in subs if s_ == b"STON" and len(d)), None),
             "hair_color": next((fo4land_zstring(d) for s_, d in subs if s_ == b"HCOL"), None),
-            "head_parts": [f"{e} ({t})" for e, t in parts]}
+            "head_parts": [f"{e} ({t})" for e, t in parts],
+            "face_layers": [f"{n}: {t} ({i})" for n, t, i in face_layers(subs)],
+            "face_fields": sorted({s_.decode("latin-1") for s_, _d in subs
+                                   if s_ in (b"FMRI", b"FMRS", b"FMSI", b"BMPN", b"MSDK", b"TNAM", b"QNAM", b"FTSM",
+                                             b"FTST", b"NAM9", b"NAMA", b"MRSV")})}
 
 
 def child_tone_order(sf_esm, sf_data, females) -> dict:

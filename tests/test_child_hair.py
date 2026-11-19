@@ -153,7 +153,11 @@ class ToneSlotTests(unittest.TestCase):
                             (b"HCOL", Z("Brown")), (b"STON", b"\x02")], 5)
         got = S.child_template_looks(kid, hd)
         self.assertEqual(got, {"ston": 2, "hair_color": "Brown",
-                               "head_parts": ["Human_Child_Head_Boy (1)", "Child_Hair_Curly (3)", "00000099 (None)"]})
+                               "head_parts": ["Human_Child_Head_Boy (1)", "Child_Hair_Curly (3)", "00000099 (None)"],
+                               "face_layers": [], "face_fields": []})
+        kid[2].extend([(b"TNAM", Z("ChildFace")), (b"QNAM", Z("Child_Skin_03")), (b"INTV", I(50))])
+        self.assertEqual(S.child_template_looks(kid, hd)["face_layers"], ["ChildFace: Child_Skin_03 (50)"])
+        self.assertEqual(S.child_template_looks(kid, hd)["face_fields"], ["QNAM", "TNAM"])
 
     def test_missing_pieces(self):
         recs = self.records()
