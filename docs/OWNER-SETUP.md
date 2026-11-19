@@ -220,8 +220,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Skyrim mods are found by their files in MO2's Skyrim mods folder or C:\Modding\work\child mods (2026-11-19: the
    4.5 unpacked there was missed, an empty --skyrim-mod stopped the run); a mod not found is left out (check the
    printed paths). Hair textures: only the regular KS Hairdos SSE (Nexus SSE 6817, the one Realistic RS Children is
-   made against), its .7z unpacked in C:\Modding\work\child mods and found by its plugin - no retextures, no SMP
-   repack (2026-11-19, owner: the first search also took the Salt and Wind retextures and KS Hairdos SMP unasked):
+   made against), its .7z unpacked in C:\Modding\work\child mods and found by its plugin (KS Hairdo's.esp, loose files under
+   Data) - no retextures, no SMP repack (2026-11-19, owner: the first search also took the Salt and Wind retextures and KS Hairdos SMP unasked):
    ```powershell
    git pull
    $skymods="$env:LOCALAPPDATA\ModOrganizer\Skyrim Special Edition\mods"; $childmods="C:\Modding\work\child mods"
@@ -229,7 +229,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    $rsc=& $findmod "RSkyrimChildren.esm"; $rrsc=& $findmod "RealisticRSChildren.esp"
    $rrsc47=@(Get-ChildItem $skymods,$childmods -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" } | ForEach-Object FullName) | Select-Object -First 1
    Get-ChildItem -LiteralPath $childmods -Filter "*.7z" | Where-Object { $_.Name -match "KS.*Hairdo" -and $_.Name -notmatch "SMP|Salt|Sassy|Retex" -and -not (Test-Path -LiteralPath (Join-Path $childmods $_.BaseName)) } | ForEach-Object { New-Item -ItemType Directory -Path (Join-Path $childmods $_.BaseName) | Out-Null; tar -xf $_.FullName -C (Join-Path $childmods $_.BaseName) }
-   $ks=@(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 4 -Filter "KSHairdo*.es?" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "SMP|Wigs" } | ForEach-Object DirectoryName | Select-Object -Unique)
+   $ks=@(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 4 -Filter "KS*Hairdo*.es?" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "SMP|Wigs" } | ForEach-Object DirectoryName | Select-Object -Unique)
    $skyargs=@(); foreach ($m in @($ks) + @($rsc,$rrsc,$rrsc47)) { if ($m) { $skyargs += "--skyrim-mod"; $skyargs += $m } }
    "RS: $rsc`nRealistic: $rrsc`nupdate: $rrsc47`nKS Hairdos: $($ks -join ' | ')"
    python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @skyargs
