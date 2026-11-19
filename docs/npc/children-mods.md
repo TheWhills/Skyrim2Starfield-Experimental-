@@ -296,3 +296,9 @@ tint_skin_linear}, child_light_tone.children.
 Owner's run (16:52): the paint built - child.paint {vertices_painted 10546, uv_flipped none, tint read
 (tint_skin_linear 0.63/0.52/0.47)}, child_light_tone.children {Frodnar: 6}; adults' fits reused (16 unchanged).
 In game (owner): "does look like it took" - blue eyes, his own face skin (night shot, flashlight).
+Owner (16:53-16:55): "what is it that is causing him to look kind've off. or other raced, is it the mouth?",
+"maybe he needs some smoothing overall?". Side by side with the Realistic RS shot: his eyes sit wider apart
+(Starfield's eyeballs, 81 vs 76.5 mm after the prealign), his mouth corners turn down (the lips keep Starfield's
+shape: MOUTH_FREE), his brows are Starfield's thin dark arched part, and the fitted surface carries the Realistic
+RS sculpt's creases (forehead, cheeks, around the mouth), which read as aged. childshape v9: FACE_SMOOTH 80 passes
+over the moves on the whole head at the end (0.65 mm rms change on Frodnar, nose widths unchanged; preview checked).

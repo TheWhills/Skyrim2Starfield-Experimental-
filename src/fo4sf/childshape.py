@@ -48,7 +48,11 @@ MOUTH_FREE = 0.010     # m around the mouth centre that does not pull (moves wit
 UNDER_EYE = 0.034      # m from an eye opening's centre, below it and to its side: the moves smoothed there (2026-11-19,
 UNDER_EYE_PASSES = 40  # owner: "kind've creepy, like in the eyes" - the Realistic RS face's under-eye creases came
                        # through as bags on Starfield's smooth head)
-VERSION = 8
+FACE_SMOOTH = 80       # passes over the moves on the whole head at the end (2026-11-19, owner: "maybe he needs some
+                       # smoothing overall?" - the Realistic RS sculpt's creases on forehead, cheeks and around the
+                       # mouth read as aged on Starfield's lighting; 80 passes change the moves 0.65 mm rms, the
+                       # nose, chin and cheeks keep their shape)
+VERSION = 9
 
 
 def apply4(m, p):
@@ -454,7 +458,24 @@ def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[
             narrowed, rep["nose"] = narrow_nose(cur, lm["nose"], lm["nasion"], nose_widths(tv, tip_sky))
             disp = (narrowed - np.asarray(sf_model, float)) * socket_lock(sf_model, eyes)[:, None]
     disp = smooth_under_eyes(sf_model, sf_t, disp, eyes)
+    disp = smooth_moves(sf_model, sf_t, disp, eyes, FACE_SMOOTH)
+    rep["smoothed_passes"] = FACE_SMOOTH
     return disp, rep
+
+
+def smooth_moves(sf_model, sf_t, disp, eyes, passes: int, weight=None) -> np.ndarray:
+    """disp with its fine detail smoothed away (on the welded head; weight (welded V,) 0-1: where, everywhere by
+    default), the eye lock kept."""
+    wv, wt, inv = welded(np.asarray(sf_model, float), sf_t)
+    nw = len(wv)
+    cnt = np.maximum(np.bincount(inv, minlength=nw), 1)[:, None]
+    wd = np.zeros((nw, 3))
+    np.add.at(wd, inv, np.asarray(disp, float))
+    wd /= cnt
+    sm = smooth(wd, edges(wt), nw, passes) if passes > 0 else wd
+    w = np.ones((nw, 1)) if weight is None else np.asarray(weight, float)[:, None]
+    out = (wd * (1 - w) + sm * w) * socket_lock(wv, eyes)[:, None]
+    return out[inv]
 
 
 def under_eye_weight(v, eyes) -> np.ndarray:
@@ -471,13 +492,5 @@ def under_eye_weight(v, eyes) -> np.ndarray:
 
 def smooth_under_eyes(sf_model, sf_t, disp, eyes, passes: int = UNDER_EYE_PASSES) -> np.ndarray:
     """disp with its fine detail smoothed away under and beside the eyes (under_eye_weight; the eye lock kept)."""
-    wv, wt, inv = welded(np.asarray(sf_model, float), sf_t)
-    nw = len(wv)
-    cnt = np.maximum(np.bincount(inv, minlength=nw), 1)[:, None]
-    wd = np.zeros((nw, 3))
-    np.add.at(wd, inv, np.asarray(disp, float))
-    wd /= cnt
-    w = under_eye_weight(wv, eyes)[:, None]
-    sm = smooth(wd, edges(wt), nw, passes)
-    out = (wd * (1 - w) + sm * w) * socket_lock(wv, eyes)[:, None]
-    return out[inv]
+    wv, _wt, _inv = welded(np.asarray(sf_model, float), sf_t)
+    return smooth_moves(sf_model, sf_t, disp, eyes, passes, under_eye_weight(wv, eyes))

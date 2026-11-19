@@ -114,6 +114,26 @@ class UnderEyeTests(unittest.TestCase):
         self.assertTrue(np.all(out[lock == 0] == 0))                          # the eye openings stay put
 
 
+class FaceSmoothTests(unittest.TestCase):
+    def test_smooth_moves_everywhere(self):
+        """The whole-face smoothing takes fine bumps out of the moves and keeps their overall size."""
+        g = np.linspace(-0.08, 0.08, 41)
+        gv = np.array([(x, 0.09, 1.684 + z) for z in g for x in g])
+        n = len(g)
+        gt = np.array([(i * n + j, i * n + j + 1, (i + 1) * n + j) for i in range(n - 1) for j in range(n - 1)] +
+                      [(i * n + j + 1, (i + 1) * n + j + 1, (i + 1) * n + j) for i in range(n - 1)
+                       for j in range(n - 1)])
+        eyes = np.array([(-0.04, 0.09, 1.684), (0.04, 0.09, 1.684)])
+        disp = np.zeros_like(gv)
+        disp[:, 1] = np.random.default_rng(7).normal(size=len(gv)) * 0.001 + 0.003
+        out = CS.smooth_moves(gv, gt, disp, eyes, CS.FACE_SMOOTH)
+        free = CS.socket_lock(gv, eyes) > 0.99
+        self.assertLess(np.std(out[free, 1]), 0.3 * np.std(disp[free, 1]))
+        self.assertAlmostEqual(float(out[free, 1].mean()), 0.003, delta=0.0005)
+        self.assertTrue(np.all(out[CS.socket_lock(gv, eyes) == 0] == 0))
+        np.testing.assert_allclose(CS.smooth_moves(gv, gt, disp, eyes, 0), disp * CS.socket_lock(gv, eyes)[:, None])
+
+
 class FitTests(unittest.TestCase):
     def test_fit_narrows_the_face_and_keeps_the_sockets(self):
         """Starfield: a round head; Skyrim: the same 12 % narrower across. The face (front) narrows towards it, the
