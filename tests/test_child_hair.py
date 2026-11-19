@@ -238,14 +238,26 @@ class LightToneTests(unittest.TestCase):
             return img
         got = CH.light_child_tone([race, mb, fb, cx, fm, ff], lambda p: p, decode)
         self.assertEqual(got["index"], 3)
+        labels = [lab for lab, _lv in CH.FACE_LEVELS]
+        self.assertEqual(got["indices"], {lab: 3 + k for k, lab in enumerate(labels)})
         by = {r[3]: r[2] for r in got["records"]}
         self.assertEqual(sorted(by), [2, 3, 5, 6])
-        self.assertEqual([d for s_, d in by[2] if s_ == b"VNAM"][3], Z("textures/b1.dds"))   # lightest body
-        self.assertEqual([d for s_, d in by[5] if s_ == b"VNAM"][3],
-                         Z("textures/s2s/children/tones/male_face_light_color.dds"))
-        face = got["textures"]["s2s/children/tones/male_face_light_color.dds"]
-        self.assertTrue(all(abs(a - b) <= 1 for a, b in zip(CH.skin_median(face), (210, 170, 160))))
+        body_v = [d for s_, d in by[2] if s_ == b"VNAM"]
+        self.assertEqual(body_v[3:], [Z("textures/b1.dds")] * len(labels))           # lightest body each time
+        face_v = [d for s_, d in by[5] if s_ == b"VNAM"]
+        self.assertEqual(face_v[3:], [Z(f"textures/s2s/children/tones/male_face_{lab.lower()}_color.dds")
+                                      for lab in labels])
+        self.assertEqual(dict(by[5]).get(b"ITMC"), None)
+        meds = []
+        for lab, lv in CH.FACE_LEVELS:
+            face = got["textures"][f"s2s/children/tones/male_face_{lab.lower()}_color.dds"]
+            want = CH.face_level_target((210, 170, 160), lv)
+            self.assertTrue(all(abs(a - b) <= 1 for a, b in zip(CH.skin_median(face), want)))
+            meds.append(sum(CH.skin_median(face)))
+        self.assertEqual(meds, sorted(meds))                                         # lighter level by level
         self.assertEqual(got["report"]["male_fstt"]["body_skin"], [210, 170, 160])
+        t = CH.face_level_target((172, 125, 95), 1.7)
+        self.assertTrue(t[0] > 172 and t[2] - 95 > t[0] - 172)          # lighter and less orange than the body
         with self.assertRaises(KeyError):
             CH.light_child_tone([race, mb, fb], lambda p: p, decode)
 
@@ -256,7 +268,8 @@ class LightToneWiringTests(unittest.TestCase):
         import face_fit as S
         import skin_tone_probe
         img = np.full((4, 4, 4), 200, np.uint8)
-        fake = {"index": 3, "records": [(b"AVMD", b"", [(b"EDID", Z("G"))], 5)],
+        fake = {"index": 3, "indices": {lab: 3 + k for k, (lab, _l) in enumerate(CH.FACE_LEVELS)},
+                "records": [(b"AVMD", b"", [(b"EDID", Z("G"))], 5)],
                 "textures": {"s2s/children/tones/male_face_light_color.dds": img}, "report": {"male_bstt": {}}}
         recs = []
         with tempfile.TemporaryDirectory() as d, \
@@ -266,7 +279,7 @@ class LightToneWiringTests(unittest.TestCase):
             got = S.add_child_light_tone("sf.esm", "data", d, recs)
             self.assertTrue(os.path.isfile(os.path.join(d, "textures", "s2s", "children", "tones",
                                                         "male_face_light_color.dds")))
-        self.assertEqual(got["index"], 3)
+        self.assertEqual(got["index"], 3 + CH.FACE_MAIN)                        # the main level's STON
         self.assertEqual(recs, fake["records"])
         with mock.patch.object(CH, "light_child_tone", mock.Mock(side_effect=KeyError("x"))), \
                 mock.patch.object(S.sfplugin, "records", lambda *a: []), \
@@ -312,6 +325,26 @@ class ControlTests(unittest.TestCase):
         self.assertIn("Skin_European_Male_yo1_Sk0", rows3[0]["control_npcs"])
         sk = next(r for r in recs3 if sfplugin.edid(r[2]) == "S2SFaceControl_Frodnar_Skin_European_Male_yo1_Sk0")
         self.assertEqual(dict(sk[2])[b"QNAM"], Z("European_Male_yo1_Sk0"))
+
+
+class ToneControlTests(unittest.TestCase):
+    def test_face_strength_copies(self):
+        """With the light tones: only copies at the other face strengths, for children on the main one."""
+        import face_fit as S
+        from fo4sf import sfplugin
+        I = lambda v: struct.pack("<I", v)                                          # noqa: E731
+        subs = [(b"EDID", Z("S2SFace_Frodnar")), (b"PNAM", I(0x01000805)), (b"STON", b"\x04")]
+        recs = [(b"HDPT", b"", [], 0x01000805), (b"NPC_", b"", subs, 0x01000807), (b"NPC_", b"", subs, 0x01000808)]
+        rows = [{"edid": "Frodnar", "female": False, "child": {"files": []}, "test_npc": {"head_part": "01000805", "ston": 4}},
+                {"edid": "Dark", "female": False, "child": {"files": []}, "test_npc": {"head_part": "01000805", "ston": 2}}]
+        S.add_child_controls(rows, recs, {"Frodnar": 1, "Dark": 2}, ["Starfield.esm"], None,
+                             {"Face13": 3, "Face17": 4, "Face22": 5})
+        self.assertEqual(sorted(rows[0]["control_npcs"]), ["Face13", "Face22"])
+        self.assertNotIn("control_npcs", rows[1])
+        got = {sfplugin.edid(r[2]): dict(r[2]) for r in recs[3:]}
+        self.assertEqual(got["S2SFaceControl_Frodnar_Face13"][b"STON"], b"\x03")
+        self.assertEqual(got["S2SFaceControl_Frodnar_Face22"][b"STON"], b"\x05")
+        self.assertEqual(len(recs), 5)
 
 
 class PreviewTests(unittest.TestCase):

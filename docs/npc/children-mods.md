@@ -255,3 +255,11 @@ face = the lightest vanilla face texture recoloured so its skin matches that bod
 textures/s2s/children/tones/<sex>_face_light_color.dds. Children of the lightest rank (Frodnar) get STON 3.
 faces.json: child_light_tone {index, groups, textures}. Unverified: the game taking a 4th child tone (adult groups
 took appended tones, 2026-11-11). The baked face files are still written (harmless).
+Owner's run (14:35): child_light_tone built (index 3, Frodnar STON 3, both face textures written), but "hes still
+not white". The lightest body's skin is (172,125,95) - the same colour the face got - yet in game the body reads
+"pale white" and the face tan: the game draws a face texture much darker / more orange than the same colour on the
+body. Now three light tones (indices 3 / 4 / 5), each the lightest body with a face recoloured to the body skin
+times child_hair.FACE_HUE (1, 1.3, 1.8: the measured hue gap) times 1.3 / 1.7 / 2.2 (linear light): faces
+(193,159,141) / (218,179,160) / (244,201,179) for Frodnar. Children of the lightest rank get the middle one (STON 4);
+--child-controls now makes only the copies at the other two strengths (Frodnar (Face13), (Face22)), added after
+every new record. faces.json: child_light_tone {index, main, indices, groups}. Unverified.

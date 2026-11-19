@@ -1181,7 +1181,7 @@ def with_derma(subs, name):
     return out
 
 
-def add_child_controls(rows, recs, test_subs, masters, skins=None):
+def add_child_controls(rows, recs, test_subs, masters, skins=None, tone_variants=None):
     """--child-controls (2026-11-19, owner: Frodnar reads African; vanilla children differ only by STON,
     hair and hair colour - no face head parts, layers or dials - so their look is the race's one child head plus the
     face tone of their STON): copies of each child's finished test NPC (its hair included) with Starfield's own
@@ -1195,8 +1195,14 @@ def add_child_controls(rows, recs, test_subs, masters, skins=None):
         head = int(tn["head_part"], 16)
         out = {}
         variants = list(CHILD_CONTROLS) + [f"Skin_{n}" for n in (skins or {}).get(bool(row.get("female")), [])]
+        if tone_variants is not None:       # 2026-11-19: only the face strength copies (the rest have done their job)
+            if tn.get("ston") not in tone_variants.values():
+                continue                       # a child on a vanilla tone: nothing to compare
+            variants = [k for k, st in tone_variants.items() if st != tn.get("ston")]
         for v in variants:
-            if v == "VanillaHead":
+            if tone_variants is not None and v in tone_variants:
+                vs = npc_records.with_face_colors(list(subs), {b"STON": bytes([tone_variants[v]])})
+            elif v == "VanillaHead":
                 vs = [(s_, d) for s_, d in subs if not (s_ == b"PNAM" and len(d) == 4 and
                                                         struct.unpack("<I", bytes(d))[0] == head)]
             elif v == "NoFaceSkin":          # without the donor's face skin layer (the race's default face)
@@ -1281,7 +1287,9 @@ def add_child_light_tone(sf_esm, sf_data, out, recs) -> dict:
         with open(path, "wb") as fh:
             fh.write(skintone.raw_dds(rgba))
     recs.extend(got["records"])
-    return {"index": got["index"], "groups": got["report"], "textures": sorted(got["textures"])}
+    main = child_hair.FACE_LEVELS[child_hair.FACE_MAIN][0]
+    return {"index": got["indices"][main], "main": main, "indices": got["indices"], "groups": got["report"],
+            "textures": sorted(got["textures"])}
 
 
 def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, masters, real, child_ctx) -> dict:
@@ -1955,7 +1963,9 @@ def main(argv=None):
             dn = derma_names(npc_recs)
             skins = {f: child_skin_choices(dn, f) for f in (False, True)}
             report["child_skin_choices"] = {("female" if f else "male"): v for f, v in skins.items()}
-            add_child_controls(report["npcs"], recs, test_subs, masters, skins)
+            light = report.get("child_light_tone")
+            tv = light.get("indices") if isinstance(light, dict) and light.get("indices") else None
+            add_child_controls(report["npcs"], recs, test_subs, masters, skins, tv)
         children = {}
         if recs and a.voice_lines:
             import npc_voice
