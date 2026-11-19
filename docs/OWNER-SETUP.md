@@ -220,8 +220,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Skyrim mods are found in MO2's Skyrim mods folder by their files (check the printed names):
    ```powershell
    $skymods="$env:LOCALAPPDATA\ModOrganizer\Skyrim Special Edition\mods"
-   $rsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RSkyrimChildren.esm") }).Name
-   $rrsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RealisticRSChildren.esp") }).Name
+   $rsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "RSkyrimChildren.esm") }).Name
+   $rrsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "RealisticRSChildren.esp") }).Name
    $rrsc47=(Get-ChildItem $skymods -Directory | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" }).Name
    "RS: $rsc | Realistic: $rrsc | update: $rrsc47"
    python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --skyrim-mods-dir $skymods --skyrim-mod $rsc --skyrim-mod $rrsc --skyrim-mod $rrsc47
