@@ -61,33 +61,45 @@ class PaintTests(unittest.TestCase):
         self.assertGreater(out[118:122, 80:100, 0].mean(), face[118:122, 80:100, 0].mean() + 30)  # the line mostly gone
 
     def test_lip_outline_not_softened(self):
-        """Starfield's painted lip edge survives under the lip colour; the same line off the lips is softened."""
+        """Starfield's painted lip edge survives (no softening on the lips); a painted line off the lips is softened."""
         size = 256
-        face = np.full((size, size, 4), 180, np.uint8)
-        face[117:123, 20:120, :3] = 120                              # a painted line, half on the lips
-        lips = np.zeros((size, size))
-        lips[:, :70] = 1.0
-        layer = {"factor": np.ones((size, size, 3)), "weight": np.ones((size, size)), "lips": lips}
+        face = np.full((size, size, 4), 255, np.uint8)
+        face[..., :3] = (200, 160, 140)
+        face[110:130, 20:70, :3] = (190, 110, 110)                   # lips, with a dark edge line
+        face[110:112, 20:70, :3] = (150, 80, 80)
+        face[117:123, 150:220, :3] = (120, 95, 85)                   # a painted line off the lips (a crease)
+        gate = np.zeros((size, size))
+        gate[90:150, 10:80] = 1.0
+        layer = {"factor": np.ones((size, size, 3)), "weight": np.ones((size, size)), "lips": gate}
         out = CP.painted_face(face, layer).astype(int)
-        self.assertLessEqual(abs(out[120, 40, 0] - 120), 2)          # on the lips: crisp as painted
-        self.assertGreater(out[120, 100, 0], 140)                    # off them: softened
+        self.assertLess(out[111, 45, 0], out[120, 45, 0])            # the lip edge still darker than the lip
+        self.assertGreater(out[120, 185, 0], 140)                    # the crease softened
 
     def test_lips_and_eyes(self):
-        """The lips get LIP_TINT (darker, rosier); the eye surroundings no colour boost."""
-        v = np.array([(0.0, 0.098, 1.608), (0.03, 0.098, 1.608), (-0.04, 0.083, 1.684), (0.0, 0.1, 1.64)])
+        """The lip area and eye surroundings by place."""
+        v = np.array([(0.0, 0.098, 1.608), (0.035, 0.098, 1.608), (-0.04, 0.083, 1.684), (0.0, 0.1, 1.64)])
         eyes = np.array([(-0.04, 0.083, 1.684), (0.04, 0.083, 1.684)])
         lips, ew = CP.lip_eye_weights(v, eyes, np.array([0.0, 0.098, 1.608]))
         self.assertEqual(list(lips), [1.0, 0.0, 0.0, 0.0])
         self.assertEqual(list(ew), [0.0, 0.0, 1.0, 0.0])
-        vv, t, uv = grid(17)
-        tint = np.full((32, 32, 4), 200, np.uint8)
-        lip_w = (np.abs(uv[:, 0] - 0.25) < 0.2).astype(float)          # the left part is "lips"
-        layer = CP.paint_layer(uv, t, uv, np.ones(len(uv)), tint, 64, lips=lip_w)
-        face = np.full((64, 64, 4), 200, np.uint8)
-        out = CP.painted_face(face, layer)
-        lip_px, skin_px = out[32, 16, :3].astype(int), out[32, 56, :3].astype(int)
-        self.assertLess(lip_px[1], skin_px[1] - 20)                    # darker green: rosier, darker
-        self.assertGreater(lip_px[0] - lip_px[1], skin_px[0] - skin_px[1])
+
+    def test_lip_colour_follows_the_painted_lips(self):
+        """LIP_TINT goes on the lips Starfield's texture paints (redder than the skin), all of them and only them,
+        inside the lip area."""
+        size = 128
+        face = np.full((size, size, 4), 255, np.uint8)
+        face[..., :3] = (200, 160, 140)                              # skin
+        face[56:72, 30:98, :3] = (200, 120, 115)                     # the painted lips: a wide, flat shape
+        gate = np.zeros((size, size))
+        gate[40:90, 20:108] = 1.0                                    # the lip area: bigger than the lips
+        layer = {"factor": np.ones((size, size, 3)), "weight": np.ones((size, size)), "lips": gate}
+        out = CP.painted_face(face, layer).astype(int)
+        for y, x in ((58, 33), (64, 64), (70, 95)):                  # corners and middle: all darker, rosier
+            self.assertLess(out[y, x, 1], 105)
+        self.assertGreater(out[45, 64, 1], 150)                      # skin in the area: no lip colour
+        self.assertGreater(out[5, 5, 1], 150)                        # outside the area
+        m = CP.lip_mask(np.full((8, 8, 3), 0.5), np.ones((8, 8)))    # no painted lips: the area itself
+        self.assertTrue(np.all(m == 1.0))
 
     def test_upright_uv(self):
         v, _t, uv = grid(9)                       # x right, y up: eyes at y 0.8, mouth at y 0.2

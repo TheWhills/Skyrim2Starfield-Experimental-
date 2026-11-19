@@ -335,3 +335,8 @@ Owner (17:36): "the mouth just looks so different to me ... the mouth specifical
 crisp edge (vermilion border, cupid's bow, colour stopping at the skin); ours none - the blur under the paint took
 Starfield's painted lip outline, and LIP_TINT is a soft ellipse. childpaint v5: no softening on the lips (the paint
 layer's lip weight), so Starfield's painted outline stays crisp under the lip colour.
+Owner (17:40): "will that fix how the color ... isnt applied to the whole lip shape" - no: LIP_TINT was a soft
+ellipse. childpaint v6: the lips are found on Starfield's face texture itself (lip_mask: redness, red over green,
+inside a lip area 28 x 12 mm around the mouth centre; from its skin's 25th to its lips' 95th percentile,
+smoothstepped), and get LIP_TINT and no softening over exactly that shape, edge to edge. Lip geometry is still
+Starfield's (the goal's fuller upper lip / bow: a later shape step).

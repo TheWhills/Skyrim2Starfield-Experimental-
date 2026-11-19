@@ -32,7 +32,7 @@ GRAIN = 0.004        # of the texture size: detail finer than this (pores, grain
                      # the paint; only the features between it and BLUR are softened away (2026-11-19, owner's goal
                      # shot vs ours: ours airbrushed - the blur had taken the skin grain too)
 # 2026-11-19 (owner's goal shot): CHROMA 2.0 -> 1.4: the cheeks and nose read as blush / sunburn; the lips have LIP_TINT.
-VERSION = 5
+VERSION = 6
 
 
 def barycentric(p, a, b, c) -> np.ndarray:
@@ -51,12 +51,13 @@ def barycentric(p, a, b, c) -> np.ndarray:
 
 
 def lip_eye_weights(v, eyes, mouth) -> Tuple[np.ndarray, np.ndarray]:
-    """(lips, eye surroundings) weights per Starfield head vertex (model space, +Y forward, +Z up): the lips an
-    ellipse around the mouth centre (24 mm across each way, 9 mm up / down, on the front), fading over its outer
-    third; the eye surroundings within 20 mm of an eye opening's centre, fading over 8 mm."""
+    """(lip area, eye surroundings) weights per Starfield head vertex (model space, +Y forward, +Z up): the area the
+    lips lie in, an ellipse around the mouth centre (28 mm across each way, 12 mm up / down, on the front), fading
+    over its outer third (the lips themselves are found in it on the face texture: lip_mask); the eye surroundings
+    within 20 mm of an eye opening's centre, fading over 8 mm."""
     v = np.asarray(v, float)
     m = np.asarray(mouth, float)
-    r = np.sqrt(((v[:, 0] - m[0]) / 0.024) ** 2 + ((v[:, 2] - m[2]) / 0.009) ** 2)
+    r = np.sqrt(((v[:, 0] - m[0]) / 0.028) ** 2 + ((v[:, 2] - m[2]) / 0.012) ** 2)
     lips = np.clip((1.0 - r) / 0.33, 0, 1) * (v[:, 1] > m[1] - 0.008)
     d = np.min([np.linalg.norm(v - c, axis=1) for c in np.asarray(eyes, float)], axis=0)
     eye_w = np.clip((0.020 - d) / 0.008, 0, 1)
@@ -191,7 +192,6 @@ def paint_layer(sf_uv, sf_t, sky_uv_per_vertex, weight, tint_rgba, size: int, li
     skin = np.median(tint[full], axis=0)
     chroma = CHROMA + (EYE_CHROMA - CHROMA) * eye_img
     factor = paint_factor(tint / np.maximum(skin, 1e-4), STRENGTH, chroma)
-    factor = factor * (1.0 + lip_img * (np.array(LIP_TINT) - 1.0))
     factor = 1.0 + w[..., None] * (factor - 1.0)
     return {"factor": factor, "weight": w, "lips": lip_img[..., 0], "tint_skin": [float(x) for x in skin]}
 
@@ -205,13 +205,33 @@ def painted_face(face_rgba, layer, blur_frac: float = BLUR) -> np.ndarray:
     if layer["factor"].shape[:2] != face.shape[:2]:
         raise ValueError(f"paint layer {layer['factor'].shape[:2]} for a {face.shape[:2]} texture")
     lin = srgb_to_linear(face[..., :3].astype(float))
-    # no softening on the lips: Starfield's painted lip outline (vermilion border, cupid's bow) stays crisp under the
-    # lip colour (2026-11-19, owner: "the mouth just looks so different" - ours had no lip edge at all)
-    lips = layer.get("lips")
-    w = (layer["weight"] * (1.0 - (lips if lips is not None else 0.0)))[..., None]
+    # the lips as Starfield's face texture paints them (2026-11-19, owner: "the mouth just looks so different",
+    # "when we added color it wasnt applied to the whole lip shape"): no softening there - its lip outline (vermilion
+    # border, cupid's bow) stays crisp - and LIP_TINT over exactly that shape, edge to edge
+    gate = layer.get("lips")
+    lips = lip_mask(lin, gate) if gate is not None else np.zeros(face.shape[:2])
+    w = (layer["weight"] * (1.0 - lips))[..., None]
     soft = blur(lin, max(1, int(round(blur_frac * size))))
     fine = blur(lin, max(1, int(round(GRAIN * size))), passes=2)
     grain = lin / np.maximum(fine, 1e-4)                 # the fine detail, as a ratio around 1
     base = lin * (1 - w) + soft * grain * w
-    out = linear_to_srgb(np.clip(base * layer["factor"], 0.0, 1.0))
+    factor = layer["factor"] * (1.0 + lips[..., None] * (np.array(LIP_TINT) - 1.0))
+    out = linear_to_srgb(np.clip(base * factor, 0.0, 1.0))
     return np.concatenate([np.round(out).clip(0, 255).astype(np.uint8), face[..., 3:4]], -1)
+
+
+def lip_mask(lin, gate) -> np.ndarray:
+    """(H, W) 0-1: the lips on a face texture (linear RGB), found by their redness (red over green) inside the lip
+    area (gate, 0-1): from the area's skin (25th percentile of redness) to its lips (95th), smoothstepped, feathered
+    a pixel. The gate itself when the texture shows no lips there."""
+    gate = np.asarray(gate, float)
+    red = lin[..., 0] / np.maximum(lin[..., 1], 1e-4)
+    inside = gate > 0.5
+    if inside.sum() < 16:
+        return gate
+    skin, lip = np.percentile(red[inside], 25), np.percentile(red[inside], 95)
+    if lip - skin < 0.05:
+        return gate
+    t = np.clip((red - skin) / (lip - skin), 0, 1)
+    t = t * t * (3 - 2 * t)
+    return np.clip(blur(t, 1, passes=1), 0, 1) * gate
