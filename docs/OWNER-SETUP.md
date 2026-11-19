@@ -217,18 +217,19 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Say whether it animates (or stands in the reference pose), and send creature_build.json and the
    GeneratedSubgraphData listing. A vanilla trilobite (`player.placeatme 2C180F`) should look like a trilobite again.
 7k. B + C: Dorthe and Frodnar from Realistic RS Children (docs/npc/children-mods.md). Starfield closed. The three
-   Skyrim mods are found in MO2's Skyrim mods folder by their files, and any KS Hairdos folder (their hair textures)
-   by its plugin or textures\KS Hairdo's folder (check the printed names):
+   Skyrim mods are found by their files in MO2's Skyrim mods folder or C:\Modding\work\child mods (2026-11-19: the
+   4.5 unpacked there was missed, an empty --skyrim-mod stopped the run), and any KS Hairdos folder (their hair
+   textures) by its plugin or textures\KS Hairdo's folder; a mod not found is left out (check the printed paths):
    ```powershell
    git pull
-   $skymods="$env:LOCALAPPDATA\ModOrganizer\Skyrim Special Edition\mods"
-   $rsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "RSkyrimChildren.esm") }).Name
-   $rrsc=(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "RealisticRSChildren.esp") }).Name
-   $rrsc47=(Get-ChildItem $skymods -Directory | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" }).Name
-   $ks=@(Get-ChildItem $skymods -Directory | Where-Object { $_.Name -notin @($rsc,$rrsc,$rrsc47) -and ((Get-ChildItem -LiteralPath $_.FullName -Filter "KSHairdo*.es?" -File -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $_.FullName "textures\KS Hairdo's"))) }).Name
-   $ksargs=@(); foreach ($k in $ks) { $ksargs += "--skyrim-mod"; $ksargs += $k }
-   "RS: $rsc | Realistic: $rrsc | update: $rrsc47 | KS Hairdos: $($ks -join ', ')"
-   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @ksargs --skyrim-mod $rsc --skyrim-mod $rrsc --skyrim-mod $rrsc47
+   $skymods="$env:LOCALAPPDATA\ModOrganizer\Skyrim Special Edition\mods"; $childmods="C:\Modding\work\child mods"
+   $findmod={ param($file) @(Get-ChildItem $skymods -Directory | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName $file) } | ForEach-Object FullName) + @(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 3 -Filter $file -File -ErrorAction SilentlyContinue | ForEach-Object DirectoryName) | Select-Object -First 1 }
+   $rsc=& $findmod "RSkyrimChildren.esm"; $rrsc=& $findmod "RealisticRSChildren.esp"
+   $rrsc47=@(Get-ChildItem $skymods,$childmods -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" } | ForEach-Object FullName) | Select-Object -First 1
+   $ks=@(Get-ChildItem $skymods -Directory | Where-Object { $_.FullName -notin @($rsc,$rrsc,$rrsc47) -and ((Get-ChildItem -LiteralPath $_.FullName -Filter "KSHairdo*.es?" -File -ErrorAction SilentlyContinue) -or (Test-Path -LiteralPath (Join-Path $_.FullName "textures\KS Hairdo's"))) } | ForEach-Object FullName)
+   $skyargs=@(); foreach ($m in @($ks) + @($rsc,$rrsc,$rrsc47)) { if ($m) { $skyargs += "--skyrim-mod"; $skyargs += $m } }
+   "RS: $rsc`nRealistic: $rrsc`nupdate: $rrsc47`nKS Hairdos: $($ks -join ' | ')"
+   python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @skyargs
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
    (--items-plugin: the shared item outfits every adult wears since 9c; 2026-11-19 a run without it left Hilde
