@@ -565,6 +565,7 @@ class FaceFitWiringTests(unittest.TestCase):
         pn = [struct.unpack("<I", d)[0] for s, d in recs[1][2] if s == b"PNAM"]
         self.assertEqual(pn, [0x501, new[3]])
         self.assertEqual(dict(recs[1][2])[b"HCOL"], Z("Blonde"))
+        self.assertEqual(dict(recs[1][2])[b"BCOL"], Z("Blonde"))                     # brows the hair colour
         self.assertEqual(rows[0]["hair"]["hair_color"]["starfield"], "Blonde")
         self.assertIn("KS Hairdos", rows[1]["hair"]["error"])
         self.assertEqual(recs[2][2], npc_subs)

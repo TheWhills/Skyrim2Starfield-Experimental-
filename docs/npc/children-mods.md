@@ -277,3 +277,9 @@ defintely too high compared to skyrim". Found:
 - Not changed: the eye openings stay Starfield's (the eyeballs and brows are separate head parts the face mesh does
   not move); after the prealign Skyrim's eyes are within 1-4 mm of Starfield's in height, but 3 mm closer to the
   middle each. Moving the eyes / brows means our own eye and brow head parts: later.
+Owner (16:26): eyes "less creepy"; "I can't figure out why it looks like he's someone ethnic or someone doing
+whiteface". Compared with the Realistic RS shot: thin dark brown brows (children never got BCOL; now the hair
+colour, as the adults'), and the face texture is Starfield's painted child face (its eye / lid shading and smooth
+even skin, painted for the default child) lightened - none of his own look. His Skyrim facetint
+(facegendata/facetint/skyrim.esm/0001347E.dds, BC7) holds his freckles, rosy cheeks, brows and lips: the next step
+would be to carry it onto Starfield's head (closest points of the fitted shape -> Skyrim UVs) as his own face tone.
