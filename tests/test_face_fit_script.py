@@ -555,6 +555,71 @@ class RaceNpcTests(unittest.TestCase):
             self.assertEqual(run(b"head v2", "S2SFace_Ralof")["changed"], ["Kid"])      # its head file changed
             self.assertEqual(run(b"head v2", "S2SFace_Ralof2")["changed"], ["Ralof"])
 
+    def test_adult_own_head(self):
+        """--shape-npc: an adult's own head baked on its race's head (the race plugin's mesh) by the children's fit;
+        the NPC's face part swapped for a copy of the vanilla head part with that model."""
+        import types as _types
+        from unittest import mock
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        I = lambda v: struct.pack("<I", v)                                              # noqa: E731
+        a = _types.SimpleNamespace(shape_npc=["Faendal"])
+        self.assertTrue(S.uses_adult_shape(a, {"edid": "faendal"}))
+        self.assertFalse(S.uses_adult_shape(a, {"edid": "Ralof"}))
+        v_van = np.zeros((4, 3))
+        v_race = np.full((4, 3), 0.001)
+        tris = np.array([[0, 1, 2], [0, 2, 3]])
+        seen = {}
+        with tempfile.TemporaryDirectory() as d:
+            plug = os.path.join(d, "races", "S2SRaceTest.esm")
+            os.makedirs(os.path.dirname(plug))
+            open(plug, "wb").close()
+            race_nif = os.path.join(d, "races", "meshes", "s2s", "races", "bosmer", "malehead.nif")
+            os.makedirs(os.path.dirname(race_nif))
+            with open(race_nif, "wb") as fh:
+                fh.write(b"race nif")
+
+            def head_mesh(nif, read):
+                return ("geo\\head", v_race if nif == b"race nif" else v_van, tris)
+
+            def disp_fn(ctx, fg, fg_bytes):
+                seen["on"] = ctx["head"].vertices.copy()
+                return np.full((4, 3), 0.002), {"version": 13}
+
+            def baked(nif, read, mpath, src, disp, out_nif):
+                seen.setdefault("baked", []).append((out_nif, src.copy(), disp.copy()))
+                return {out_nif: b"nif", "geometries/x/y.mesh": b"mesh"}
+            with mock.patch.object(S.hkx_to_af, "vanilla_file", lambda r, sf: (b"van nif", r)), \
+                    mock.patch("race_heads.vanilla_head_model", lambda esm, f: "Actors\\Human\\MaleHead.nif"), \
+                    mock.patch.object(S, "head_mesh", head_mesh), \
+                    mock.patch.object(S, "starfield_head_node", lambda b: np.eye(4)), \
+                    mock.patch.object(S, "skyrim_head_triangles", lambda b: tris), \
+                    mock.patch.object(S, "child_shape_disp", disp_fn), \
+                    mock.patch("fo4sf.headbake.baked_head_files", baked), \
+                    mock.patch.object(S, "child_preview", lambda *x: {"png": "p"}):
+                own = S.adult_own_head({"edid": "Faendal", "female": False}, np.zeros((5, 3)), b"fg", "al", True,
+                                       np.zeros((5, 3)), b"base", {"name": "Bosmer"}, plug, "sf", d, a, {})
+                self.assertTrue(os.path.isfile(os.path.join(d, "geometries", "x", "y.mesh")))
+        np.testing.assert_allclose(seen["on"], v_race)                       # fitted on the race's head
+        out_nif, src, total = seen["baked"][0]
+        self.assertEqual(out_nif, "meshes/s2s/faces/faendalhead.nif")
+        np.testing.assert_allclose(src, v_van)                               # baked onto the vanilla mesh ...
+        np.testing.assert_allclose(total, v_race + 0.002 - v_van)            # ... with race shape + own fit
+        self.assertEqual(own["model"], "S2S\\Faces\\FaendalHead.nif")
+        self.assertIn("Bosmer", own["on"])
+        # the NPC: its race head part (after on_race) swapped for the new head part
+        van = (b"HDPT", b"", [(b"EDID", Z("Human_Male_Head")), (b"PNAM", I(1)), (b"MODL", Z("v.nif"))], 0x123)
+        eyes = (b"HDPT", b"", [(b"EDID", Z("Eyes")), (b"PNAM", I(2))], 0x124)
+        recs = [None] * 5
+        subs = [(b"EDID", Z("S2SFace_Faendal")), (b"PNAM", I(0x03000810)), (b"PNAM", I(0x124))]
+        out, hd = S.with_own_head(subs, {"edid": "Faendal", "female": False, "own_head": own}, recs,
+                                  ["Starfield.esm", "a", "b", "S2SRaceTest.esm"], {0x123: van, 0x124: eyes},
+                                  0x03000810)
+        new = recs[-1]
+        self.assertEqual(f"{new[3]:08X}", hd)
+        self.assertEqual(dict(new[2])[b"MODL"], Z("S2S\\Faces\\FaendalHead.nif"))
+        self.assertEqual(dict(new[2])[b"PNAM"], I(1))                        # still a face part (vanilla's)
+        self.assertEqual([struct.unpack("<I", d_)[0] for s_, d_ in out if s_ == b"PNAM"], [new[3], 0x124])
+
     def test_race_skin(self):
         """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a
         human skin tone). An NPC of a race with tones of its own: STON = the race's first tone + the slot nearest its

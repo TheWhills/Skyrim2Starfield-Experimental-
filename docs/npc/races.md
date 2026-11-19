@@ -718,3 +718,15 @@ why the mod needs no clothes of its own.
   one slider at its limit: Delphine 69, Embry 77), then a TypeError writing the plugin: the head part type lambda
   indexed the PNAM bytes instead of the unpacked value (never run before: no earlier NPC was of a converted race).
   Fixed (face_fit.hdpt_type, tested through on_race).
+- 2026-11-19 Own heads for adults (owner on Faendal, now a Bosmer again: "the template the human version of Faendal
+  uses is pretty much what he looks like"; his dial fit took the error from 2.5 to 1.9 mm only). face_fit
+  --shape-npc <EditorID>: the children's feature-matched fit (fo4sf.childshape: landmarks, prealign, non-rigid fit,
+  smoothing, almond lids) on the NPC's race head - the race plugin's baked head mesh, read from the race plugin's
+  folder (else the vanilla head) - baked onto the vanilla head NIF / mesh with the race shape + the fit
+  (headbake), written as S2S\Faces\<edid>Head.nif (+ _facebones twin); the NPC's face part (the race head after
+  on_race) swapped for a copy of the vanilla head part with that model (as race_heads makes the race heads); no
+  dials, no shape blends (kept in faces.json as dials_fitted / blends_fitted). Preview: faces_preview/<edid>_child.png
+  / .npz. Fit key: ("own_head", the child code hash). Unverified: the adult FaceGen eyes / mouth landmarks (the run
+  reports prealign before / after per landmark), the result in game. Not yet: his face paint (facetint) on the
+  adult's baked face texture; eye tilt (owner: in Skyrim the eye tilt comes with the eye picked - our fit keeps
+  Starfield's eye openings).

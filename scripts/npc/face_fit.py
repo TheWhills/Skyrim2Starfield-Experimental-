@@ -267,6 +267,114 @@ def child_context(n, sky, sf_data, a, cache, transfer=None):
     return ctx
 
 
+def with_own_head(subs, row, recs, masters, sf_hdpt, race_head=None):
+    """subs with its face head part (type 1) swapped for a new one: the vanilla head part (race_heads.HEAD_PART, its
+    morph record, valid-race list and extra parts kept, as the race heads are made) with the NPC's own head model
+    (row own_head.model); race_head: the converted race's head part FormID (in this plugin's master space), the
+    face part after on_race. Returns (subs, the new head part's FormID hex)."""
+    import race_heads
+    female = row["female"]
+    van = next((r for r in sf_hdpt.values() if sfplugin.edid(r[2]) == race_heads.HEAD_PART[female]), None)
+    if van is None:
+        raise KeyError(race_heads.HEAD_PART[female])
+    fid = sfplugin.new_form_id(len(recs), masters=len(masters))
+    recs.append((b"HDPT", van[1], sfplugin.edit(list(van[2]), {
+        b"EDID": sfplugin.zs(f"S2S_Head_{row['edid']}"), b"MODL": sfplugin.zs(row["own_head"]["model"])}), fid))
+    out, swapped = [], False
+    for sg, d in subs:
+        if sg == b"PNAM" and len(d) == 4 and not swapped:
+            v = struct.unpack("<I", bytes(d))[0]
+            rec = sf_hdpt.get(v)
+            is_face = v == race_head or (rec is not None and hdpt_type(rec) == 1)
+            if is_face:
+                d, swapped = struct.pack("<I", fid), True
+        out.append((sg, d))
+    if not swapped:
+        out.append((b"PNAM", struct.pack("<I", fid)))
+    return out, f"{fid:08X}"
+
+
+def uses_adult_shape(a, n) -> bool:
+    """--shape-npc names this adult: its own head, the children's feature-matched fit (fo4sf.childshape) on its
+    race's head, instead of Starfield's face dials (2026-11-19, owner on Faendal: the dials left him "pretty much"
+    the template - his fit took the error from 2.5 to 1.9 mm only)."""
+    return n["edid"].lower() in {x.lower() for x in (getattr(a, "shape_npc", None) or [])}
+
+
+def head_mesh(nif_bytes, read):
+    """(LOD 0 mesh path as the NIF names it, mesh-local vertices (V, 3), triangles (T, 3)) of a Starfield head NIF;
+    read: Data-relative path -> bytes."""
+    paths, _skin = facefit.starfield_head_parts(nif_bytes)
+    if not paths:
+        raise ValueError("head NIF has no geometry reference")
+    mesh = sfmesh.parse(read("geometries/" + paths[0].replace("\\", "/") + ".mesh"))
+    pos, _ws = facefit.mesh_arrays(mesh)
+    return paths[0], np.asarray(pos, float), np.array([tuple(t) for t in mesh.triangles], int)
+
+
+ADULT_HEAD_DIR = "S2S\\Faces"
+
+
+def adult_own_head(n, fg, fg_bytes, al, model_space, base, base_bytes, conv, races_plugin, sf_data, out, a, cache):
+    """An adult's own head (--shape-npc): the vanilla head NIF (Human_Male_Head / _Female_Head) with a mesh baked to
+    the NPC's Skyrim FaceGen face by the children's fit (child_shape_disp), on its converted race's head (the race
+    plugin's baked mesh, from the race plugin's folder) when it has one; written under out as
+    S2S\\Faces\\<edid>Head.nif (+ its _facebones twin) with its meshes. Returns {"model", "files", "shape",
+    "on"}."""
+    import types
+    import race_heads
+    import child_faces
+    from fo4sf import headbake
+    female = n["female"]
+    esm = os.path.join(sf_data, "Starfield.esm")
+    vread = lambda r: hkx_to_af.vanilla_file(r, sf_data)[0]                      # noqa: E731
+    modl = race_heads.vanilla_head_model(esm, female)
+    nif_rel = "meshes/" + modl.replace("\\", "/").lower()
+    nif_bytes = vread(nif_rel)
+    mpath, v_van, tris = head_mesh(nif_bytes, vread)
+    v_on, on = v_van, "the vanilla head"
+    if conv is not None and races_plugin:
+        folder = os.path.dirname(os.path.abspath(races_plugin))
+
+        def rread(r):
+            path = os.path.join(folder, *r.split("/"))
+            if os.path.isfile(path):
+                with open(path, "rb") as fh:
+                    return fh.read()
+            return vread(r)
+        rnif = rread("meshes/" + race_heads.race_model_path(conv["name"], female).replace("\\", "/").lower())
+        _rp, v_race, rtris = head_mesh(rnif, rread)
+        if len(v_race) == len(v_van) and len(rtris) == len(tris):
+            v_on, on = v_race, f"S2S_{conv['name']}Race's head"
+    head = types.SimpleNamespace(vertices=v_on, triangles=tris, model_xf=starfield_head_node(nif_bytes))
+    ctx = {"head": head, "al": al, "model_space": model_space, "base": base,
+           "base_tris": skyrim_head_triangles(base_bytes)}
+    disp, shape = child_shape_disp(ctx, fg, fg_bytes)
+    total = v_on + disp - v_van
+    out_nif = "meshes/" + f"{ADULT_HEAD_DIR}\\{n['edid']}Head.nif".replace("\\", "/").lower()
+    files = headbake.baked_head_files(nif_bytes, vread, mpath, v_van, total, out_nif)
+    try:
+        fb = vread(child_faces.twin(nif_rel))
+    except (SystemExit, KeyError, OSError):
+        fb = None
+    if fb is not None:                 # the _facebones twin, what the game draws NPCs from
+        try:
+            fpaths, _s = facefit.starfield_head_parts(fb)
+        except nifmod.NifError:
+            fpaths = None
+        if fpaths:
+            files.update(headbake.baked_head_files(fb, vread, fpaths[0], v_van, total, child_faces.twin(out_nif)))
+    for rel, data in files.items():
+        path = os.path.join(out, *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(data)
+    preview = child_preview(n["edid"], ctx, fg, disp, out, cache)
+    mag = np.linalg.norm(disp, axis=1)
+    return {"model": f"{ADULT_HEAD_DIR}\\{n['edid']}Head.nif", "files": sorted(files), "shape": shape, "on": on,
+            "preview": preview, "max_move_m": round(float(mag.max()), 4)}
+
+
 def uses_child_shape(a, n) -> bool:
     """--child-shape-npc names this child (the feature-matched fit, fo4sf.childshape)."""
     return n["edid"].lower() in {x.lower() for x in (getattr(a, "child_shape_npc", None) or [])}
@@ -1708,6 +1816,9 @@ def main(argv=None):
     ap.add_argument("--refit", action="store_true",
                     help="fit every NPC again (default: an NPC whose FaceGen head, race, fit settings and fitting "
                          "code are unchanged since the last run reuses that fit; the plugin is always rewritten)")
+    ap.add_argument("--shape-npc", action="append", default=[],
+                    help="this adult (repeatable) gets its own head, fitted feature by feature as the children's "
+                         "(fo4sf.childshape) on its race's head, instead of Starfield's face dials")
     ap.add_argument("--child-shape-npc", action="append", default=[],
                     help="this child (repeatable) gets its own face shape fitted feature by feature (fo4sf.childshape) "
                          "instead of its FaceGen difference from the base child head")
@@ -1868,7 +1979,8 @@ def main(argv=None):
                 fg_bytes = hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky)
                 key = npc_fit_key(code_hash["child" in sky_race.lower()], settings_now, fg_bytes, sky_race,
                                   sky_race in conv_races,
-                                  ("child_shape",) if "child" in sky_race.lower() and uses_child_shape(a, n) else None)
+                                  ("child_shape",) if "child" in sky_race.lower() and uses_child_shape(a, n) else
+                                  (("own_head", code_hash[True]) if uses_adult_shape(a, n) else None))
             except (SystemExit, KeyError, OSError):
                 key = None
             hit = cached_fit(fit_cache, n["edid"], key, out) if key else None
@@ -1937,6 +2049,19 @@ def main(argv=None):
             row.update(rep, dials={str(k): round(v, 4) for k, v in sorted(values.items())},
                        dial_names={str(k): names.get(k, "") for k in sorted(values)},
                        skyrim_face_change_m=float(np.sqrt(np.mean(np.sum(disp ** 2, 1)))))
+            if uses_adult_shape(a, n):     # its own head instead of the dials (the children's way)
+                try:
+                    own = adult_own_head(n, fg, hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky), al,
+                                         model_space, base, base_bytes_of[n["female"]],
+                                         conv_races.get(sky_race) if conv_races else None, a.races_plugin,
+                                         sf_data, out, a, child_ctx)
+                    row["own_head"] = own
+                    row["dials_fitted"] = row.pop("dials")
+                    row["dials"] = {}
+                    if row.get("blends"):          # no shape blends on top of its own head either
+                        row["blends_fitted"] = row.pop("blends")
+                except (ValueError, KeyError, OSError, SystemExit, nifmod.NifError) as e:
+                    row["own_head"] = {"error": f"{type(e).__name__}: {e}: the dials instead"}
         except (SystemExit, ValueError, nifmod.NifError) as e:
             row["error"] = str(e)
         remember(row)
@@ -1977,6 +2102,7 @@ def main(argv=None):
             items = item_outfits(a.items_plugin, len(masters) - 1)
             sky_otft = {fid: sfplugin.edid(s_) for _t, _h, s_, fid in skyrimload.records(esm, [b"OTFT"])}
         race_index = None
+        sf_hdpt_all = None
         if conv_races:
             masters = list(masters) + [os.path.basename(a.races_plugin)]
             race_index = len(masters) - 1
@@ -2098,6 +2224,13 @@ def main(argv=None):
                                                   parts_swapped=swapped)
                 rgb = (((row.get("dressed") or {}).get("face_colors") or {}).get("skin") or {}).get("skyrim_rgb")
                 subs, rskin, face_colour = race_skin(subs, conv_races[sky_race], row["female"], rgb)
+            if isinstance(row.get("own_head"), dict) and row["own_head"].get("model"):
+                rh = None
+                if race_index is not None and sky_race in conv_races and row["female"] in conv_races[sky_race]["head"]:
+                    rh = (race_index << 24) | conv_races[sky_race]["head"][row["female"]]
+                subs, hd = with_own_head(subs, row, recs, masters, sf_hdpt_all or {r[3]: r for r in
+                                         sfplugin.records(sf_esm, [b"HDPT"])}, rh)
+                row["own_head"]["head_part"] = hd
                 if rskin:
                     row["race"]["skin"] = rskin
             body_names = (list(a.body_npc) + list(BODY_NPC)[len(a.body_npc):])[:2]
