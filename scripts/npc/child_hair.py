@@ -231,8 +231,15 @@ def child_tone_slots(sf_esm_records, read_texture, female: bool, decode, sig: by
     name = pick[0].lower()
     avmd = next((s for t, _h, s, _f in sf_esm_records if t == b"AVMD" and
                  any(sg in (b"TNAM", b"YNAM", b"EDID") and text(d).lower() == name for sg, d in s)), None)
+    if avmd is None:      # 2026-11-19: the face string matched no group by these fields; any text field then
+        avmd = next((s for t, _h, s, _f in sf_esm_records if t == b"AVMD" and
+                     any(len(d) > 1 and text(d).lower() == name for _sg, d in s)), None)
     if avmd is None:
-        raise KeyError(f"no skin tone group {pick[0]}")
+        near = sorted({text(d) for t, _h, s_, _f in sf_esm_records if t == b"AVMD" for sg, d in s_
+                       if sg == b"EDID" and "child" in text(d).lower()})
+        err = KeyError(f"no skin tone group {pick[0]}")
+        err.fields = [("child AVMD EditorIDs", ", ".join(near[:40]))]
+        raise err
     tex = [text(d) for s, d in avmd if s == b"VNAM" and len(d) > 1]
     if not tex:
         err = ValueError(f"skin tone group {pick[0]} lists no textures")

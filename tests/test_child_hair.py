@@ -176,6 +176,28 @@ class ToneSlotTests(unittest.TestCase):
             CH.child_tone_slots(recs[:1], lambda p: p, False, None)
 
 
+class ControlTests(unittest.TestCase):
+    def test_child_controls(self):
+        import face_fit as S
+        from fo4sf import sfplugin
+        I = lambda v: struct.pack("<I", v)                                          # noqa: E731
+        subs = [(b"EDID", Z("S2SFace_Frodnar")), (b"PNAM", I(0x01000805)), (b"PNAM", I(0x01000806)),
+                (b"STON", b"\x01")]
+        recs = [(b"HDPT", b"", [], 0x01000805), (b"NPC_", b"", subs, 0x01000807)]
+        rows = [{"edid": "Frodnar", "name": "Frodnar", "child": {"files": []}, "test_npc": {"head_part": "01000805"}},
+                {"edid": "Ysolda", "test_npc": {"head_part": "01000805"}}]
+        S.add_child_controls(rows, recs, {"Frodnar": 1, "Ysolda": 1}, ["Starfield.esm"])
+        self.assertEqual(sorted(rows[0]["control_npcs"]), sorted(S.CHILD_CONTROLS))
+        self.assertNotIn("control_npcs", rows[1])
+        got = {sfplugin.edid(r[2]): r[2] for r in recs[2:]}
+        van = got["S2SFaceControl_Frodnar_VanillaHead"]
+        self.assertEqual([d for s_, d in van if s_ == b"PNAM"], [I(0x01000806)])
+        self.assertEqual(dict(van)[b"STON"], b"\x01")
+        self.assertEqual(dict(got["S2SFaceControl_Frodnar_Tone2"])[b"STON"], b"\x02")
+        self.assertEqual(len([d for s_, d in got["S2SFaceControl_Frodnar_Tone0"] if s_ == b"PNAM"]), 2)
+        self.assertEqual(dict(got["S2SFaceControl_Frodnar_Tone0"])[b"FULL"], Z("Frodnar (Tone0)"))
+
+
 class BuildPartFilterTests(unittest.TestCase):
     def test_keep_shapes(self):
         import skyrim_hairs as SH

@@ -1029,6 +1029,36 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
                                              b"FTST", b"NAM9", b"NAMA", b"MRSV")})}
 
 
+CHILD_CONTROLS = ("VanillaHead", "Tone0", "Tone1", "Tone2")
+
+
+def add_child_controls(rows, recs, test_subs, masters):
+    """--child-controls (2026-11-19, owner: Frodnar reads African; vanilla children differ only by STON,
+    hair and hair colour - no face head parts, layers or dials - so their look is the race's one child head plus the
+    face tone of their STON): copies of each child's finished test NPC (its hair included) with Starfield's own
+    child head (our Face part left out: the race's) at its STON, and with our head at each child STON 0 / 1 / 2, to
+    tell the head shape from the tone. Row "control_npcs": {variant: console}."""
+    for row in rows:
+        tn = row.get("test_npc")
+        if not row.get("child") or not isinstance(tn, dict) or row["edid"] not in test_subs:
+            continue
+        t, h, subs, _fid = recs[test_subs[row["edid"]]]
+        head = int(tn["head_part"], 16)
+        out = {}
+        for v in CHILD_CONTROLS:
+            if v == "VanillaHead":
+                vs = [(s_, d) for s_, d in subs if not (s_ == b"PNAM" and len(d) == 4 and
+                                                        struct.unpack("<I", bytes(d))[0] == head)]
+            else:
+                vs = npc_records.with_face_colors(list(subs), {b"STON": bytes([int(v[-1])])})
+            vs = sfplugin.edit(vs, {b"EDID": sfplugin.zs(f"S2SFaceControl_{row['edid']}_{v}"),
+                                    b"FULL": sfplugin.zs(f"{row.get('name') or row['edid']} ({v})")})
+            fid = sfplugin.new_form_id(len(recs), masters=len(masters))
+            recs.append((t, h, vs, fid))
+            out[v] = f"player.placeatme xx{fid & 0xFFFFFF:06X}"
+        row["control_npcs"] = out
+
+
 def child_npc_survey(npc_recs, child_race, sf_hdpt_recs) -> list:
     """Every ChildRace NPC of Starfield.esm with what its look is made of (child_template_looks), its template (TPLT,
     by EditorID) and whether it has a voice (2026-11-19, owner: the NG+ children playing the Constellation are among
@@ -1274,6 +1304,9 @@ def main(argv=None):
     ap.add_argument("--template-by-tone", action="store_true",
                     help="pick each NPC's template by skin tone (before 2026-11-12) instead of the generic one per sex "
                          f"({', '.join(GENERIC_TEMPLATE)})")
+    ap.add_argument("--child-controls", action="store_true",
+                    help="with --test-plugin: each child also as copies with Starfield's own child head and with "
+                         "its head at child skin tone 0 / 1 / 2 (head shape vs tone in game)")
     ap.add_argument("--hair", action="store_true",
                     help="with --test-plugin: the test NPCs wear their Skyrim hair and beard (needs --texconv)")
     ap.add_argument("--texconv", help="texconv.exe, for --hair")
@@ -1720,6 +1753,8 @@ def main(argv=None):
                                                             test_subs, masters, real, child_ctx)
             else:
                 report["child_hair"] = "not converted: give --texconv (children keep the template's hair)"
+        if recs and a.child_controls:
+            add_child_controls(report["npcs"], recs, test_subs, masters)
         children = {}
         if recs and a.voice_lines:
             import npc_voice

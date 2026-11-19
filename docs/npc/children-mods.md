@@ -139,3 +139,11 @@ and the race's face tone textures. faces.json now lists each child template's ST
 (FSTT) next to the body one (the face's slots may run another way than the body's). Frodnar's hair colour came out
 HairColor01PlatinumBlond -> "Platinum" (same name), measured (117, 90, 61), a light blond; in game his hair read
 grey-white: unresolved (Dorthe's "Amber" shows whether a child's hair takes its colour at all).
+Owner's childlooks (2026-11-19, verified): the 22 vanilla child templates carry no face head part, no face layer
+and no face field at all (only MRSV on the two audio-only ones); they differ ONLY by STON (0 / 1 / 2), hair head
+part and hair colour (e.g. EncChildFaceM01 / HT_GenericKid_M01: STON 2, Afro_Curls, Brown; EncChildFaceF03 / F06:
+STON 1, Bob, Platinum). So every vanilla child wears the race's one child head, and its ethnic look is the face
+tone of its STON plus its hair. ChildRace's FSTT string (SimpleGroup_FaceSkinTones_Child_Female) matched no AVMD by
+EditorID / TNAM / YNAM: the lookup now tries every text field and else lists the child AVMD EditorIDs.
+--child-controls: each child also as copies with Starfield's own child head (our Face part left out) and with its
+head at STON 0 / 1 / 2, to tell in game what the head shape does from what the tone does.
