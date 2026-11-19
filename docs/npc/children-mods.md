@@ -293,3 +293,6 @@ tint: lips, cheeks, nose and freckles land in place (preview, per vertex). Starf
 assumed: childpaint.upright_uv turns either side's v when its eyes sit below its mouth in UV (Frodnar's Skyrim
 UVs: upright, no turn; faces.json child.paint.uv_flipped). Unverified: the result in game. faces.json: child.paint {file, tint, vertices_painted,
 tint_skin_linear}, child_light_tone.children.
+Owner's run (16:52): the paint built - child.paint {vertices_painted 10546, uv_flipped none, tint read
+(tint_skin_linear 0.63/0.52/0.47)}, child_light_tone.children {Frodnar: 6}; adults' fits reused (16 unchanged).
+In game (owner): "does look like it took" - blue eyes, his own face skin (night shot, flashlight).
