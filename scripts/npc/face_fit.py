@@ -1395,12 +1395,9 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
             name, how = npc_records.match_hair_color(color, real["names"], real["palette"])
             if name:
                 subs = real["with_hair_color"](subs, name)
-                # brows the hair colour, as the adults' (face_colors; 2026-11-19, owner: Frodnar "like someone doing
-                # whiteface" - thin dark brown brows over pale skin and blond hair)
-                subs = npc_records.with_face_colors(subs, {b"BCOL": sfplugin.zs(name)})
             info["hair_color"] = {"skyrim": (color or {}).get("edid"),
                                   "skyrim_rgb": list((color or {}).get("rgba") or [])[:3], "starfield": name,
-                                  "how": how, "brows": name}
+                                  "how": how}
         recs[k] = (t, h, subs, nfid)
         info.update(model=hrow["model"], form_id=f"{fid:08X}", starfield_template=sfplugin.edid(tpl[2]))
         done += 1
