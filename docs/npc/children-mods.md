@@ -225,9 +225,8 @@ face textures sit right on the child head's UVs.
 - child_skin_preview.py (owner's run): the adult template picked for Frodnar (ChargenPresetMale16) has light
   stubble painted into its face texture; Starfield's own child face tone textures are a painted child face in the
   child head's layout (a possible face source later).
-**Verified in game (owner, 13:09-13:16):** the baked face shows on a ChildRace NPC and sits right on the child head
-(eyes, nose, lips line up), so child and adult heads share the face UV layout. The feature-matched shape reads as
-him.
+In game (owner, 13:09-13:16): the feature-matched shape reads as him. (I first read these screenshots as the baked
+face showing; it does not - see 13:37 below.)
 Owner: "his skin is too dark, he needs to be nord looking ... those hands are pale white and the face isn't". The
 body / hands (STON 1, Starfield's lightest child body) are pale; the face, matched to that body texture's median
 (164,126,103), came out tan-orange. Measured on the owner's daylight screenshot: the face about 2-3x darker than the
@@ -243,3 +242,16 @@ child_baked_face does exactly what the adults get: template by the child's adult
 same human_face_colour rule; the divide mode and its controls are gone. faces.json: test_npc.baked_face
 {template, adult_ston, recoloured}. The child body stays Starfield's child tone of the matching rank (STON 1, the
 lightest, for Frodnar). Unverified in game; the adult template may carry light stubble (ChargenPresetMale16).
+Owner (13:37), after that run: "his face is the same its always been". With the preview sheet: the adult template's
+face texture has clear painted stubble, never seen in game, and the face never changed across three face-colour
+builds - so a ChildRace NPC does not draw baked face textures; its face is the child face tone texture of its STON.
+ChildRace's tones pair body and face by index: index 1 is the lightest body (the pale hands) but the middle, orange
+face (172,126,98); index 0 has the lightest face (189,143,115) but a darker body. Also: the body texture's plain
+median (164,126,103) is pulled down by its grey background and painted grey underwear; its skin alone is lighter
+and pinker (child_hair.skin_median: pixels with saturation >= 0.12).
+Now child_hair.light_child_tone adds a 4th child tone (index 3; AVMD overrides of ChildRace's tone groups in
+S2SFaceTest.esm, the alien mods' way of adding tones): body / hands = the lightest vanilla body / hands texture;
+face = the lightest vanilla face texture recoloured so its skin matches that body's skin, written as
+textures/s2s/children/tones/<sex>_face_light_color.dds. Children of the lightest rank (Frodnar) get STON 3.
+faces.json: child_light_tone {index, groups, textures}. Unverified: the game taking a 4th child tone (adult groups
+took appended tones, 2026-11-11). The baked face files are still written (harmless).

@@ -190,6 +190,90 @@ class ToneSlotTests(unittest.TestCase):
             CH.child_tone_slots(recs[:1], lambda p: p, False, None)
 
 
+class LightToneTests(unittest.TestCase):
+    def test_skin_median_skips_grey(self):
+        """The grey background / underwear of a body tone texture does not count as skin."""
+        img = np.zeros((8, 8, 4), np.uint8)
+        img[...] = (120, 120, 120, 255)                 # grey
+        img[:3] = (220, 170, 150, 255)                  # skin
+        self.assertEqual(CH.skin_median(img), (220, 170, 150))
+        out = CH.recolour_skin(img, (200, 160, 150))
+        self.assertTrue(all(abs(a - b) <= 1 for a, b in zip(CH.skin_median(out), (200, 160, 150))))
+        self.assertEqual(int(out[0, 0, 3]), 255)
+
+    def test_appended_entry(self):
+        subs = [(b"EDID", Z("G")), (b"ITMC", struct.pack("<I", 2)), (b"LNAM", Z("a")), (b"VNAM", Z("a.dds")),
+                (b"NNAM", b"\x07\0\0\0"), (b"LNAM", Z("b")), (b"VNAM", Z("b.dds")), (b"NNAM", b"\x07\0\0\0"),
+                (b"XXXX", b"tail")]
+        out = CH.with_appended_entry(subs, "new", "n.dds", 3)
+        self.assertEqual([d for s_, d in out if s_ == b"VNAM"], [Z("a.dds"), Z("b.dds"), Z("b.dds"), Z("n.dds")])
+        self.assertEqual([d for s_, d in out if s_ == b"LNAM"][-1], Z("new"))
+        self.assertEqual(dict(out)[b"ITMC"], struct.pack("<I", 4))
+        self.assertEqual(out[-1], (b"XXXX", b"tail"))
+        self.assertEqual(len([1 for s_, _d in out if s_ == b"NNAM"]), 4)
+        with self.assertRaises(ValueError):
+            CH.with_appended_entry(subs, "x", "x.dds", 1)
+
+    def test_light_child_tone(self):
+        """A 4th child tone: the lightest body with the lightest face recoloured to that body's skin."""
+        race = rec(b"RACE", [(b"EDID", Z("ChildRace")), (b"BSTT", Z("Child_Male_Body")),
+                             (b"BSTT", Z("Child_Female_Body")), (b"FSTT", Z("FaceSkinTones_Child"))], 1)
+        mb = rec(b"AVMD", [(b"EDID", Z("Child_Male_Body")), (b"VNAM", Z("textures/b0.dds")),
+                           (b"VNAM", Z("textures/b1.dds")), (b"VNAM", Z("textures/b2.dds"))], 2)
+        fb = rec(b"AVMD", [(b"EDID", Z("Child_Female_Body")), (b"VNAM", Z("textures/b0.dds")),
+                           (b"VNAM", Z("textures/b1.dds")), (b"VNAM", Z("textures/b2.dds"))], 3)
+        cx = rec(b"AVMD", [(b"EDID", Z("Complex")), (b"TNAM", Z("FaceSkinTones_Child")),
+                           (b"VNAM", Z("SimpleGroup_Face_Child_Male")), (b"VNAM", Z("SimpleGroup_Face_Child_Female"))], 4)
+        fm = rec(b"AVMD", [(b"EDID", Z("SimpleGroup_Face_Child_Male")), (b"VNAM", Z("textures/f0.dds")),
+                           (b"VNAM", Z("textures/f1.dds")), (b"VNAM", Z("textures/f2.dds"))], 5)
+        ff = rec(b"AVMD", [(b"EDID", Z("SimpleGroup_Face_Child_Female")), (b"VNAM", Z("textures/f0.dds")),
+                           (b"VNAM", Z("textures/f1.dds")), (b"VNAM", Z("textures/f2.dds"))], 6)
+        col = {"textures/b0.dds": (139, 109, 82), "textures/b1.dds": (210, 170, 160), "textures/b2.dds": (79, 65, 49),
+               "textures/f0.dds": (189, 143, 115), "textures/f1.dds": (172, 126, 98), "textures/f2.dds": (106, 74, 57)}
+
+        def decode(p):
+            img = np.zeros((4, 4, 4), np.uint8)
+            img[...] = col[p] + (255,)
+            img[0] = (128, 128, 128, 255)                 # grey patch
+            return img
+        got = CH.light_child_tone([race, mb, fb, cx, fm, ff], lambda p: p, decode)
+        self.assertEqual(got["index"], 3)
+        by = {r[3]: r[2] for r in got["records"]}
+        self.assertEqual(sorted(by), [2, 3, 5, 6])
+        self.assertEqual([d for s_, d in by[2] if s_ == b"VNAM"][3], Z("textures/b1.dds"))   # lightest body
+        self.assertEqual([d for s_, d in by[5] if s_ == b"VNAM"][3],
+                         Z("textures/s2s/children/tones/male_face_light_color.dds"))
+        face = got["textures"]["s2s/children/tones/male_face_light_color.dds"]
+        self.assertTrue(all(abs(a - b) <= 1 for a, b in zip(CH.skin_median(face), (210, 170, 160))))
+        self.assertEqual(got["report"]["male_fstt"]["body_skin"], [210, 170, 160])
+        with self.assertRaises(KeyError):
+            CH.light_child_tone([race, mb, fb], lambda p: p, decode)
+
+
+class LightToneWiringTests(unittest.TestCase):
+    def test_add_child_light_tone(self):
+        """face_fit writes the light tone's face texture and adds its AVMD overrides to the plugin's records."""
+        import face_fit as S
+        import skin_tone_probe
+        img = np.full((4, 4, 4), 200, np.uint8)
+        fake = {"index": 3, "records": [(b"AVMD", b"", [(b"EDID", Z("G"))], 5)],
+                "textures": {"s2s/children/tones/male_face_light_color.dds": img}, "report": {"male_bstt": {}}}
+        recs = []
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.object(CH, "light_child_tone", lambda *a: fake), \
+                mock.patch.object(S.sfplugin, "records", lambda *a: []), \
+                mock.patch.object(skin_tone_probe, "TextureArchives", lambda sf: types.SimpleNamespace(read=None)):
+            got = S.add_child_light_tone("sf.esm", "data", d, recs)
+            self.assertTrue(os.path.isfile(os.path.join(d, "textures", "s2s", "children", "tones",
+                                                        "male_face_light_color.dds")))
+        self.assertEqual(got["index"], 3)
+        self.assertEqual(recs, fake["records"])
+        with mock.patch.object(CH, "light_child_tone", mock.Mock(side_effect=KeyError("x"))), \
+                mock.patch.object(S.sfplugin, "records", lambda *a: []), \
+                mock.patch.object(skin_tone_probe, "TextureArchives", lambda sf: types.SimpleNamespace(read=None)):
+            self.assertIn("error", S.add_child_light_tone("sf.esm", "data", "out", []))
+
+
 class ControlTests(unittest.TestCase):
     def test_child_controls(self):
         import face_fit as S

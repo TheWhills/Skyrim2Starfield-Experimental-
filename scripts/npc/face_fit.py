@@ -441,7 +441,7 @@ def converted_child_races(races_plugin):
 
 
 def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_race, conv_child, race_index, recs,
-                    masters, test_subs, tone_slots=None):
+                    masters, test_subs, tone_slots=None, light_ston=None):
     """The child's test NPC: a vanilla child NPC (child_faces.pick_child_template) with our head part (its baked
     head) as Face, on our child race when race_heads built it (else ChildRace), its STON from its Skyrim skin on
     the child scale (tone_slots {female: slots lightest first}: child_hair.child_tone_slots; 2026-11-19, owner's
@@ -469,6 +469,8 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
         full = npc_records.npc_name(n, real["strings"])
         rank = child_faces.child_tone(target_skin(n, npcs, real)[0])
         ston = child_hair.tone_slot(rank, (tone_slots or {}).get(female))
+        if rank == 0 and light_ston is not None:      # the added light tone (child_hair.light_child_tone)
+            ston = light_ston
         row["child_tone"] = {"rank_lightest_0": rank, "ston": ston,
                              "slots_by_lightness": (tone_slots or {}).get(female)}
     sky_race = races.get(n["race"], "")
@@ -1261,6 +1263,26 @@ def child_tone_order(sf_esm, sf_data, females) -> dict:
     return out
 
 
+def add_child_light_tone(sf_esm, sf_data, out, recs) -> dict:
+    """child_hair.light_child_tone: its AVMD overrides added to recs, its face texture written (uncompressed RGBA8
+    sRGB) under out/textures/. Returns {"index": STON, ...report} or {"error": ...}."""
+    import child_hair
+    import skin_tone_probe
+    from fo4sf import skintone
+    try:
+        got = child_hair.light_child_tone(sfplugin.records(sf_esm, [b"RACE", b"AVMD"]),
+                                          skin_tone_probe.TextureArchives(sf_data).read, skintone.decode_dds)
+    except (KeyError, ValueError, OSError) as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+    for rel, rgba in got["textures"].items():
+        path = os.path.join(out, "textures", *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(skintone.raw_dds(rgba))
+    recs.extend(got["records"])
+    return {"index": got["index"], "groups": got["report"], "textures": sorted(got["textures"])}
+
+
 def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, masters, real, child_ctx) -> dict:
     """The children's own hair from their FaceGen NIFs (scripts/npc/child_hair.py), each a head part of ours copied
     from its template child's hair and put on its test NPC, its hair colour matched (with --hairs-plugin); files
@@ -1768,6 +1790,7 @@ def main(argv=None):
         conv_child = converted_child_races(a.races_plugin) if a.races_plugin else {}
         sf_hdpt_recs = None
         tone_slots = None
+        light_ston = None
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -1787,8 +1810,12 @@ def main(argv=None):
                     tone_slots = child_tone_order(sf_esm, sf_data, [r["female"] for r in report["npcs"]
                                                                     if r.get("child")])
                     report["child_skin_tones"] = tone_slots.pop("_report", None)
+                    light = add_child_light_tone(sf_esm, sf_data, out, recs)
+                    report["child_light_tone"] = light
+                    light_ston = light.get("index") if isinstance(light, dict) else None
                 write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
-                                child_race, conv_child, race_index, recs, masters, test_subs, tone_slots)
+                                child_race, conv_child, race_index, recs, masters, test_subs, tone_slots,
+                                light_ston)
                 if baked and isinstance(row.get("test_npc"), dict):
                     try:
                         if tone_arcs is None:

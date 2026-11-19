@@ -274,6 +274,105 @@ def child_tone_slots(sf_esm_records, read_texture, female: bool, decode, sig: by
             "medians": {k: list(skintone.median_colour(imgs[k])) for k in slots}}
 
 
+TONE_DIR = "s2s/children/tones"
+LIGHT_LABEL = "s2s_child_light"
+TONE_SIGS = (b"BSTT", b"HSTT", b"FSTT")
+
+
+def skin_median(rgba):
+    """sRGB median colour of a tone texture's skin: pixels with some colour (saturation >= 0.12) and brightness
+    (2026-11-19: the child body texture's grey background and painted grey underwear pulled its plain median down to
+    a dull (164,126,103); the skin itself reads lighter and pinker)."""
+    rgb = rgba[..., :3].reshape(-1, 3).astype(np.float32)
+    mx, mn = rgb.max(1), rgb.min(1)
+    sel = (mx > 40) & ((mx - mn) / np.maximum(mx, 1) >= 0.12)
+    px = rgb[sel] if sel.sum() >= 16 else rgb
+    return tuple(int(v) for v in np.median(px, axis=0))
+
+
+def recolour_skin(rgba, target):
+    """rgba with each channel scaled (linear light) so its skin_median becomes target; detail and alpha kept."""
+    from fo4sf.textures import srgb_to_linear, linear_to_srgb
+    have = srgb_to_linear(np.array(skin_median(rgba), np.float32))
+    f = srgb_to_linear(np.array(target, np.float32)) / np.maximum(have, 1e-4)
+    out = linear_to_srgb(np.clip(srgb_to_linear(rgba[..., :3].astype(np.float32)) * f[None, None, :], 0.0, 1.0))
+    return np.concatenate([np.round(out).clip(0, 255).astype(np.uint8), rgba[..., 3:4]], -1)
+
+
+def with_appended_entry(subs, label: str, path: str, index: int):
+    """A tone group's AVMD subrecords with one entry (LNAM label / VNAM path / NNAM as the first entry's) appended at
+    `index` (the alien mods' way of adding tones, skintone.appended_tones; verified for adult groups 2026-11-11). A
+    group with fewer entries is first padded with copies of its last one, so one STON names the new entry in every
+    group. ITMC raised."""
+    subs = list(subs)
+    vn = [i for i, (s_, _d) in enumerate(subs) if s_ == b"VNAM"]
+    if not vn:
+        raise ValueError("tone group has no VNAM entries")
+    ln = [i for i, (s_, _d) in enumerate(subs) if s_ == b"LNAM"]
+    n0 = len(vn)
+    if index < n0:
+        raise ValueError(f"index {index} inside the group's {n0} entries")
+    nnam0 = next((d for s_, d in subs[(ln or vn)[0]:] if s_ == b"NNAM"), struct.pack("<I", 0))
+
+    def entry(lnam, vnam):
+        return ([(b"LNAM", lnam)] if ln else []) + [(b"VNAM", vnam), (b"NNAM", nnam0)]
+    new = []
+    for _k in range(index - n0):
+        new += entry(subs[ln[-1]][1] if ln else None, subs[vn[-1]][1])
+    new += entry(label.encode("latin-1") + b"\0", path.encode("latin-1") + b"\0")
+    end = max(i for i, (s_, _d) in enumerate(subs) if s_ in (b"LNAM", b"VNAM", b"NNAM")) + 1
+    out = subs[:end] + new + subs[end:]
+    return [(s_, struct.pack("<I", index + 1) if s_ == b"ITMC" else d) for s_, d in out]
+
+
+def light_child_tone(sf_esm_records, read_texture, decode):
+    """A lighter child tone pairing Starfield's lightest child body with a face of the same colour (2026-11-19,
+    owner: Frodnar's hands pale white, his face tan. ChildRace's three tones pair body and face texture by index, and
+    index 1 - the lightest body - is the middle, orange face; the baked face textures are not drawn on a child: the
+    adult template's painted stubble never showed). Per group of ChildRace's BSTT / HSTT / FSTT strings (each sex):
+    one new entry at the same index in all - the body / hands: their lightest vanilla texture; the face: its
+    lightest vanilla texture recoloured so its skin matches the lightest body's skin (skin_median).
+    Returns {"index": STON, "records": [AVMD overrides], "textures": {path under textures/: rgba}, "report": {...}}."""
+    found, rep = {}, {}
+    for female in (False, True):
+        for sig in TONE_SIGS:
+            key = f"{'female' if female else 'male'}_{sig.decode().lower()}"
+            try:
+                label, avmd, tex = tone_group(sf_esm_records, female, sig)
+            except (KeyError, ValueError) as e:
+                rep[key] = f"none: {e}"
+                continue
+            imgs = {k: decode(read_texture(p)) for k, p in enumerate(tex)}
+            from fo4sf import skintone
+            ranks = skintone.slot_ranks(imgs)
+            light = min(ranks, key=lambda k: ranks[k])
+            found[(female, sig)] = (label, avmd, tex, imgs, light)
+    if not any(sig == b"BSTT" for _f, sig in found) or not any(sig == b"FSTT" for _f, sig in found):
+        raise KeyError("ChildRace body or face tone group not found: " + str(rep))
+    index = max(len(v[2]) for v in found.values())
+    records, textures, done = [], {}, {}
+    for (female, sig), (label, avmd, tex, imgs, light) in sorted(found.items()):
+        sex = "female" if female else "male"
+        if sig == b"FSTT":
+            body = found.get((female, b"BSTT"))
+            target = skin_median(body[3][body[4]])
+            prefix = "textures/" if tex[light].lower().startswith("textures") else ""
+            path = f"{prefix}{TONE_DIR}/{sex}_face_light_color.dds"
+            textures[f"{TONE_DIR}/{sex}_face_light_color.dds"] = recolour_skin(imgs[light], target)
+            info = {"from": tex[light], "face_skin": list(skin_median(imgs[light])), "body_skin": list(target)}
+        else:
+            path = tex[light]
+            info = {"from": tex[light]}
+        fid = avmd[3]
+        if fid in done:            # one group shared by both sexes: already extended
+            rep[f"{sex}_{sig.decode().lower()}"] = dict(info, group=label, shared=True)
+            continue
+        done[fid] = (avmd[0], avmd[1], with_appended_entry(avmd[2], LIGHT_LABEL, path, index), fid)
+        rep[f"{sex}_{sig.decode().lower()}"] = dict(info, group=label, vanilla_entries=len(tex), new=path)
+    records = list(done.values())
+    return {"index": index, "records": records, "textures": textures, "report": rep}
+
+
 def tone_slot(rank: Optional[int], slots: Optional[List[int]]) -> Optional[int]:
     """The STON slot of a child tone rank (0 = lightest, child_faces.child_tone), through the slots' lightness order
     (child_tone_slots) when known; the rank itself otherwise."""
