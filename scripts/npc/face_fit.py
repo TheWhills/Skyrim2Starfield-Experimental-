@@ -248,6 +248,32 @@ def child_context(n, sky, sf_data, a, cache, transfer=None):
     return ctx
 
 
+def uses_child_shape(a, n) -> bool:
+    """--child-shape-npc names this child (the feature-matched fit, fo4sf.childshape)."""
+    return n["edid"].lower() in {x.lower() for x in (getattr(a, "child_shape_npc", None) or [])}
+
+
+def child_shape_disp(ctx, fg, fg_bytes):
+    """(moves on Starfield's child head in its mesh-local frame, report) by fo4sf.childshape: the FaceGen head
+    (fg: in the base head's space, child_faces.facegen_points) and its eyes taken to Starfield's model space by the
+    face alignment, Starfield's head by its node; the moves back into the mesh-local frame."""
+    import child_hair
+    from fo4sf import childshape
+    head = ctx["head"]
+    node = np.asarray(head.model_xf, float)
+    M = child_hair.sky_to_starfield(ctx)
+    sky_tris = ctx.get("base_tris")
+    if sky_tris is None:
+        raise ValueError("no Skyrim base head triangles")
+    sky_model = facefit.apply4(M, np.asarray(fg, float))
+    eyes = childshape.facegen_eyes(fg_bytes)
+    eyes = facefit.apply4(M, eyes) if eyes is not None else None
+    mouth = childshape.skyrim_mouth(sky_model, sky_tris)
+    disp_model, rep = childshape.child_shape(facefit.apply4(node, head.vertices), np.asarray(head.triangles, int),
+                                             sky_model, sky_tris, eyes, mouth)
+    return disp_model @ np.linalg.inv(node[:3, :3]).T, rep
+
+
 def child_face(n, sky_race, sky, sf_data, out, a, cache):
     """{"child": {...}, "dials": {}} for a Skyrim child NPC: its face baked into a head of its own on Starfield's
     child head (child_faces), the files written under out. cache: child_context's."""
@@ -257,7 +283,15 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
                                     hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky))
     if fg is None:
         raise ValueError("FaceGen head has no head shape")
-    disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
+    shape = None
+    if uses_child_shape(a, n):         # 2026-11-19 (owner's option 2): the child's own shape, feature by feature
+        try:
+            disp, shape = child_shape_disp(ctx, fg, hkx_to_af.read_any(facegen_mesh(a.load_order, n["form_id"]), sky))
+        except ValueError as e:
+            shape = {"error": f"{e}: the difference transfer instead"}
+            disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
+    else:
+        disp = child_faces.child_disp(ctx, fg, a.smooth, not a.no_symmetry)
     files = child_faces.child_head_files(ctx, disp, n["edid"], lambda r: hkx_to_af.vanilla_file(r, sf_data)[0])
     for rel, data in files.items():
         path = os.path.join(out, *rel.split("/"))
@@ -267,7 +301,7 @@ def child_face(n, sky_race, sky, sf_data, out, a, cache):
     mag = np.linalg.norm(disp, axis=1)
     preview = child_preview(n["edid"], ctx, fg, disp, out, cache) if previewing(a, n) else None
     return {"child": {"skyrim_race": sky_race, "head_model": child_faces.child_model_path(n["edid"]),
-                      **({"preview": preview} if preview else {}),
+                      **({"preview": preview} if preview else {}), **({"shape": shape} if shape else {}),
                       "files": sorted(files), "max_move_m": round(float(mag.max()), 4),
                       "rms_move_m": round(float(np.sqrt(np.mean(mag ** 2))), 5), "setup": ctx["report"]},
             "dials": {}}
@@ -313,8 +347,9 @@ def child_preview(edid, ctx, fg, disp, out, cache):
 FIT_CACHE = "_fit_cache.json"     # in --out: each NPC's fit result by an input key (2026-11-12)
 FIT_VERSION = 2                   # bump when the fit changes in a way the hashed code below does not show
 FIT_FUNCS = ("skyrim_head", "skyrim_head_triangles", "skyrim_head_matrix", "race_delta", "head_alignment",
-             "starfield_head_node", "starfield_head", "child_context", "child_face")
-CHILD_FUNCS = ("child_context", "child_face")
+             "starfield_head_node", "starfield_head", "child_context", "child_face", "child_shape_disp",
+             "uses_child_shape")
+CHILD_FUNCS = ("child_context", "child_face", "child_shape_disp", "uses_child_shape")
 
 
 def fit_code_hash(child=False):
@@ -332,7 +367,8 @@ def fit_code_hash(child=False):
             continue
         h.update(inspect.getsource(getattr(mod, f)).encode())
     from fo4sf import headbake
-    for m in (facefit, headcorr, headbake) + ((child_faces,) if child else ()):
+    from fo4sf import childshape
+    for m in (facefit, headcorr, headbake) + ((child_faces, childshape) if child else ()):
         with open(m.__file__, "rb") as fh:
             h.update(fh.read())
     return h.hexdigest()
@@ -360,7 +396,7 @@ def fit_settings(a, sf_data):
     # mod changes has other FaceGen bytes, which its own key already holds (npc_fit_key)
 
 
-def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted):
+def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted, extra=None):
     """One NPC's fit key: the fitting code and settings, its FaceGen head, its Skyrim race and whether it is fitted
     against that race's morph (a converted race: the NPC's own features only)."""
     import hashlib
@@ -368,6 +404,8 @@ def npc_fit_key(code, settings, facegen_bytes, sky_race, race_converted):
     h.update(json.dumps(settings, sort_keys=True).encode())
     h.update(facegen_bytes)
     h.update(repr((sky_race, bool(race_converted))).encode())
+    if extra is not None:              # per-NPC fit choices (a child's --child-shape-npc); None keeps older keys
+        h.update(repr(extra).encode())
     return h.hexdigest()
 
 
@@ -1376,6 +1414,9 @@ def main(argv=None):
     ap.add_argument("--refit", action="store_true",
                     help="fit every NPC again (default: an NPC whose FaceGen head, race, fit settings and fitting "
                          "code are unchanged since the last run reuses that fit; the plugin is always rewritten)")
+    ap.add_argument("--child-shape-npc", action="append", default=[],
+                    help="this child (repeatable) gets its own face shape fitted feature by feature (fo4sf.childshape) "
+                         "instead of its FaceGen difference from the base child head")
     ap.add_argument("--preview-npc", action="append", default=[],
                     help="like --preview for this NPC only (repeatable; the others reuse their fits)")
     ap.add_argument("--preview", action="store_true",
@@ -1532,7 +1573,8 @@ def main(argv=None):
             try:
                 fg_bytes = hkx_to_af.read_any(facegen_mesh(esm, n["form_id"]), sky)
                 key = npc_fit_key(code_hash["child" in sky_race.lower()], settings_now, fg_bytes, sky_race,
-                                  sky_race in conv_races)
+                                  sky_race in conv_races,
+                                  ("child_shape",) if "child" in sky_race.lower() and uses_child_shape(a, n) else None)
             except (SystemExit, KeyError, OSError):
                 key = None
             hit = cached_fit(fit_cache, n["edid"], key, out) if key else None

@@ -179,3 +179,27 @@ facepreview.render: the Skyrim FaceGen head placed by the alignment, Starfield's
 three-quarter / side; the moves as heat) and <EditorID>_child.npz (Starfield's head mesh-local + node + triangles,
 Skyrim's base and FaceGen heads in Skyrim model units + triangles, the alignment, the moves), so fitting changes can
 be tried and drawn outside the game.
+
+## 2026-11-19: option 2 built - the child's own shape, feature by feature (fo4sf.childshape)
+`face_fit --child-shape-npc Frodnar` (repeatable; other children keep the difference transfer; Dorthe not yet,
+owner). Tried and drawn here on the owner's Frodnar shapes (faces_preview .npz, kept out of the repository) before
+use, each version judged on renders (Skyrim face / Starfield head / old transfer / new):
+- landmarks (verified on the shapes): Starfield's eye openings and lip loop are open-edge loops of its head
+  (unwelded: 58-vertex eye loops at x +-0.04, z 1.684; lip loop z 1.608); the FaceGen eyes come from its eyes shape
+  (stored in the head bone's frame, identity bind), the mouth from its welded open loops; nose tip, nasion, chin and
+  forehead on the midline. Before: eyes 7 mm apart from Starfield's, chin 13 mm, nasion 10 mm.
+- prealign: move + scale (no turn), eyes weighted 4x (scale 1.09 for Frodnar): the eyeballs are head parts placed
+  for Starfield's sockets.
+- fit: coarse-to-fine closest-point pulls smoothed over the mesh (400..100 passes), only where the Skyrim surface
+  faces the same way; then three rounds along the normals of a smoothed copy, around the nose only; the moves
+  Taubin-smoothed at the end. Eye sockets and the socket walls behind them locked; lips and the mouth's inside do not
+  pull; the ears take part in the coarsest round only (size / place, not their folds); the face fades out before
+  the ears, the crown and the neck. Target: the FaceGen head welded, subdivided twice, Taubin-smoothed.
+- what the tries showed: fine rounds everywhere copied Realistic RS's sculpted creases (frown line, eye bags) as a
+  bumpy texture; sliding sideways made lumps; a 14 + 12 mm eye lock left the lids Starfield's ("the eyes are
+  unchanged", owner) - now 10 + 12 mm; locking only the opening let the socket walls behind it be pulled forward.
+- result on Frodnar: within about +-2 mm of his Skyrim face over most of it (p5 / p95 -2.4 / +2.3 mm), chin tip
+  1 mm, the under-chin still ~3.6 mm fuller; nose 31 / 42 mm wide at 10 / 14 mm behind the tip (his 30 / 34,
+  Starfield's 35 / 44). 15-50 s per child.
+Owner's notes on the first new version (12:04): not smooth, nose too wide, eyes unchanged, chin bold, ears
+different - all addressed above except the last few mm of nose wing and under-chin. In-game check pending.
