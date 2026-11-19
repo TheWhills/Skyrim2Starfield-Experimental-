@@ -274,13 +274,6 @@ def child_tone_slots(sf_esm_records, read_texture, female: bool, decode, sig: by
             "medians": {k: list(skintone.median_colour(imgs[k])) for k in slots}}
 
 
-def lighter(rgb, gain: float):
-    """An sRGB colour with its linear light times gain (clipped)."""
-    from fo4sf.textures import srgb_to_linear, linear_to_srgb
-    lin = srgb_to_linear(np.array(rgb, np.float32)) * float(gain)
-    return [int(round(float(v))) for v in np.clip(linear_to_srgb(np.clip(lin, 0.0, 1.0)), 0, 255)]
-
-
 def tone_slot(rank: Optional[int], slots: Optional[List[int]]) -> Optional[int]:
     """The STON slot of a child tone rank (0 = lightest, child_faces.child_tone), through the slots' lightness order
     (child_tone_slots) when known; the rank itself otherwise."""

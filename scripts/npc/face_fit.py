@@ -1116,60 +1116,26 @@ def child_template_looks(rec, sf_hdpt_recs) -> dict:
 CHILD_CONTROLS = ("VanillaHead", "NoFaceSkin", "Tone0", "Tone1", "Tone2")
 
 
-# How a child's baked face colour is set (2026-11-19, owner's daylight screenshot: pale pink-white hands, a tan /
-# orange face with the face matched to the body tone's median; measured there, the face about 2-3x darker in linear
-# light and more saturated, as if the game multiplied the baked colour by the face tone texture of the STON).
-# "divide": the body median over the STON's face tone median (linear light), what the face would need if so;
-# a number: the body median times it (linear light).
-CHILD_FACE_MODE = "divide"
-CHILD_FACE_CONTROLS = {"FaceMatchBody": 1.0, "FaceX1_5": 1.5, "FaceX2": 2.0}
-
-
-def child_face_target(body, face_tone, mode):
-    """sRGB median for a child's baked face colour texture (CHILD_FACE_MODE): body / face_tone: sRGB medians of the
-    child's body and face tone textures at its STON."""
-    from fo4sf.textures import srgb_to_linear, linear_to_srgb
-    import child_hair
-    if mode == "divide":
-        if face_tone is None:
-            raise ValueError("no face tone median for the divide mode")
-        lin = srgb_to_linear(np.array(body, np.float32)) / np.maximum(
-            srgb_to_linear(np.array(face_tone, np.float32)), 1e-4)
-        return [int(round(float(v))) for v in np.clip(linear_to_srgb(np.clip(lin, 0.0, 1.0)), 0, 255)]
-    return child_hair.lighter(body, float(mode))
-
-
-def child_baked_face(row, n, npcs, real, npc_recs, human, baked, sf_data, out, tone_report, fid=None,
-                     mode=None):
-    """Pre-built face textures for a child's test NPC (2026-11-19, owner: "the hands look lighter than the face, all
-    those faces came out the same color" - no face skin layer changed it): a new NPC has no baked face and the game
-    draws a default one. As for the adults: a European HumanRace template with a baked face, by skin
-    (pick_template), its textures copied under the child's FormID (fid: another NPC's, a control's; Starfield's
-    child head has the adult head's layout, verified in game 2026-11-19), the colour texture matched to
-    child_face_target of the child's body and face tones at its STON (mode: CHILD_FACE_MODE by default).
-    Returns the report entry."""
-    import race_heads as rh
+def child_baked_face(row, n, npcs, real, npc_recs, human, baked, sf_data, out, read=None, fid=None):
+    """Pre-built face textures for a child's test NPC, made exactly as an adult test NPC's (2026-11-19, owner: "why
+    isnt it following how our npcs faces are done"): the European HumanRace template with a baked face nearest the
+    NPC's Skyrim skin tone (pick_template, adult STON from target_skin), its textures copied under the child's FormID
+    (fid: another NPC's), recoloured only when the template's tone is TONE_GAP or more from the NPC's
+    (human_face_colour, to the adult body tone of that STON; read: game texture path -> bytes). Starfield's child
+    head has the adult head's face layout (verified in game 2026-11-19). Was: always recoloured to the child body
+    tone texture's median - a tan-orange face over pale hands in game. Returns the report entry."""
     female = row["female"]
-    mode = CHILD_FACE_MODE if mode is None else mode
     adult = target_skin(n, npcs, real)[0] if real is not None else None
     tpl = pick_template(npc_recs, human, female, None, skin=(adult, FACE_ETHNICITY), baked=baked)
     if tpl is None:
         return "none: no template with a baked face"
-    sex = "female" if female else "male"
-    ston = row["test_npc"].get("ston")
-
-    def median(group):
-        med = ((tone_report or {}).get(group) or {}).get("medians") or {}
-        got = med.get(ston, med.get(str(ston))) if ston is not None else None
-        return tuple(got) if got else None
-    body, face = median(sex), median(sex + "_face")
-    target = child_face_target(body, face, mode) if body else None
-    colour = rh.face_tone(tuple(target)) if target else None
+    colour, how = (None, None)
+    if read is not None:
+        colour, how = human_face_colour(tpl[2], adult, female, read)
     fid = int(row["test_npc"]["form_id"], 16) if fid is None else fid
     files = write_baked_face(baked, tpl[3], fid, sf_data, out, colour=colour)
-    return {"template": sfplugin.edid(tpl[2]), "template_skin": list(template_skin(tpl[2])), "mode": mode,
-            "body_tone": list(body) if body else None, "face_tone": list(face) if face else None,
-            "baked_median": target, "files": [os.path.basename(f) for f in files]}
+    return {"template": sfplugin.edid(tpl[2]), "template_skin": list(template_skin(tpl[2])), "adult_ston": adult,
+            "recoloured": how or "no: the template's own tone", "files": [os.path.basename(f) for f in files]}
 
 
 def derma_names(npc_recs) -> list:
@@ -1213,7 +1179,7 @@ def with_derma(subs, name):
     return out
 
 
-def add_child_controls(rows, recs, test_subs, masters, skins=None, face_bake=None):
+def add_child_controls(rows, recs, test_subs, masters, skins=None):
     """--child-controls (2026-11-19, owner: Frodnar reads African; vanilla children differ only by STON,
     hair and hair colour - no face head parts, layers or dials - so their look is the race's one child head plus the
     face tone of their STON): copies of each child's finished test NPC (its hair included) with Starfield's own
@@ -1227,13 +1193,8 @@ def add_child_controls(rows, recs, test_subs, masters, skins=None, face_bake=Non
         head = int(tn["head_part"], 16)
         out = {}
         variants = list(CHILD_CONTROLS) + [f"Skin_{n}" for n in (skins or {}).get(bool(row.get("female")), [])]
-        if face_bake is not None:
-            variants += list(CHILD_FACE_CONTROLS)
-        faces = {}
         for v in variants:
-            if v in CHILD_FACE_CONTROLS:       # the finished NPC with another baked face colour (face_bake)
-                vs = list(subs)
-            elif v == "VanillaHead":
+            if v == "VanillaHead":
                 vs = [(s_, d) for s_, d in subs if not (s_ == b"PNAM" and len(d) == 4 and
                                                         struct.unpack("<I", bytes(d))[0] == head)]
             elif v == "NoFaceSkin":          # without the donor's face skin layer (the race's default face)
@@ -1248,11 +1209,7 @@ def add_child_controls(rows, recs, test_subs, masters, skins=None, face_bake=Non
             fid = sfplugin.new_form_id(len(recs), masters=len(masters))
             recs.append((t, h, vs, fid))
             out[v] = f"player.placeatme xx{fid & 0xFFFFFF:06X}"
-            if v in CHILD_FACE_CONTROLS:
-                faces[v] = face_bake(row, fid, CHILD_FACE_CONTROLS[v])
         row["control_npcs"] = out
-        if faces:
-            row["control_faces"] = faces
 
 
 def child_npc_survey(npc_recs, child_race, sf_hdpt_recs) -> list:
@@ -1834,9 +1791,12 @@ def main(argv=None):
                                 child_race, conv_child, race_index, recs, masters, test_subs, tone_slots)
                 if baked and isinstance(row.get("test_npc"), dict):
                     try:
+                        if tone_arcs is None:
+                            import skin_tone_probe
+                            tone_arcs = skin_tone_probe.TextureArchives(sf_data)
                         row["test_npc"]["baked_face"] = child_baked_face(
                             row, by_edid[row["edid"].lower()], npcs, real, npc_recs, human, baked, sf_data, out,
-                            report.get("child_skin_tones"))
+                            tone_arcs.read)
                     except (KeyError, ValueError, OSError) as e:
                         row["test_npc"]["baked_face"] = f"none: {type(e).__name__}: {e}"
                 continue
@@ -1966,15 +1926,7 @@ def main(argv=None):
             dn = derma_names(npc_recs)
             skins = {f: child_skin_choices(dn, f) for f in (False, True)}
             report["child_skin_choices"] = {("female" if f else "male"): v for f, v in skins.items()}
-            face_bake = None
-            if baked:
-                def face_bake(row, fid, mode):
-                    try:
-                        return child_baked_face(row, by_edid[row["edid"].lower()], npcs, real, npc_recs, human,
-                                                baked, sf_data, out, report.get("child_skin_tones"), fid, mode)
-                    except (KeyError, ValueError, OSError) as e:
-                        return f"none: {type(e).__name__}: {e}"
-            add_child_controls(report["npcs"], recs, test_subs, masters, skins, face_bake)
+            add_child_controls(report["npcs"], recs, test_subs, masters, skins)
         children = {}
         if recs and a.voice_lines:
             import npc_voice

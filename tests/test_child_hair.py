@@ -262,7 +262,8 @@ class PreviewTests(unittest.TestCase):
 
 class BakedFaceTests(unittest.TestCase):
     def test_child_baked_face(self):
-        """A child's test NPC gets an adult European template's baked face, matched to its own body tone."""
+        """A child's test NPC gets its baked face as an adult test NPC does: the European template nearest its adult
+        skin tone, recoloured (human_face_colour) only when the template's tone is far from it."""
         import face_fit as S
         tpl = (b"NPC_", b"", [(b"EDID", Z("YoungEuro")), (b"STON", b"\x02"), (b"TNAM", Z("Dermaesthetic")),
                               (b"QNAM", Z("European_Male_yo1_Sk2"))], 0x123)
@@ -272,66 +273,33 @@ class BakedFaceTests(unittest.TestCase):
         def write(index, tpl_fid, new_fid, data_dir, out, plugin=None, colour=None):
             seen.update(tpl=tpl_fid, new=new_fid, colour=colour)
             return [os.path.join(out, "x", "00000814_color.dds")]
-        tones = {"male": {"medians": {1: [164, 126, 103], 0: [139, 109, 82]}},
-                 "male_face": {"medians": {1: [172, 126, 98], 0: [189, 143, 115]}}}
+        asked = []
+
+        def hfc(tpl_subs, ston, female, read):
+            asked.append((ston, female))
+            return (None, None) if ston == 2 else ("conv", {"ston": ston})
         with mock.patch.object(S, "pick_template", lambda *a, **k: tpl), \
                 mock.patch.object(S, "write_baked_face", write), \
+                mock.patch.object(S, "human_face_colour", hfc), \
                 mock.patch.object(S, "target_skin", lambda n, npcs, real: (2, "european")):
-            got = S.child_baked_face(row, {}, {}, {}, [tpl], 0x3CDB, {0x123: {}}, "sf", "out", tones, mode=1.0)
-            self.assertEqual(got["baked_median"], [164, 126, 103])         # mode 1.0: the body tone itself
-            got = S.child_baked_face(row, {}, {}, {}, [tpl], 0x3CDB, {0x123: {}}, "sf", "out", tones)
-        self.assertEqual(got["template"], "YoungEuro")
-        self.assertEqual(got["mode"], S.CHILD_FACE_MODE)
-        self.assertEqual((got["body_tone"], got["face_tone"]), ([164, 126, 103], [172, 126, 98]))
-        self.assertEqual(got["baked_median"], S.child_face_target((164, 126, 103), (172, 126, 98), "divide"))
-        self.assertEqual((seen["tpl"], seen["new"]), (0x123, 0x0A000814))
-        self.assertTrue(callable(seen["colour"]))
+            got = S.child_baked_face(row, {}, {}, {}, [tpl], 0x3CDB, {0x123: {}}, "sf", "out", read=lambda p: b"")
+            self.assertEqual(got["template"], "YoungEuro")
+            self.assertEqual(got["adult_ston"], 2)
+            self.assertIn("no", got["recoloured"])              # the template's own face, as for adults
+            self.assertIsNone(seen["colour"])
+            self.assertEqual(asked, [(2, False)])
+            self.assertEqual((seen["tpl"], seen["new"]), (0x123, 0x0A000814))
         with mock.patch.object(S, "pick_template", lambda *a, **k: tpl), \
                 mock.patch.object(S, "write_baked_face", write), \
-                mock.patch.object(S, "target_skin", lambda n, npcs, real: (2, "european")):
-            S.child_baked_face(row, {}, {}, {}, [tpl], 0x3CDB, {0x123: {}}, "sf", "out", tones, fid=0x0A000900)
-        self.assertEqual(seen["new"], 0x0A000900)                      # a control's own FormID
+                mock.patch.object(S, "human_face_colour", hfc), \
+                mock.patch.object(S, "target_skin", lambda n, npcs, real: (6, "european")):
+            got = S.child_baked_face(row, {}, {}, {}, [tpl], 0x3CDB, {0x123: {}}, "sf", "out", read=lambda p: b"",
+                                     fid=0x0A000900)
+            self.assertEqual(got["recoloured"], {"ston": 6})
+            self.assertEqual((seen["colour"], seen["new"]), ("conv", 0x0A000900))
         with mock.patch.object(S, "pick_template", lambda *a, **k: None), \
                 mock.patch.object(S, "target_skin", lambda n, npcs, real: (2, "european")):
-            self.assertIn("none", S.child_baked_face(row, {}, {}, {}, [], 0x3CDB, {}, "sf", "out", tones))
-
-
-class FaceTargetTests(unittest.TestCase):
-    def test_child_face_target(self):
-        """The baked face colour modes: body times a gain (linear light), or body over the face tone."""
-        import face_fit as S
-        import child_hair
-        body = (164, 126, 103)
-        self.assertEqual(S.child_face_target(body, None, 1.0), [164, 126, 103])
-        x2 = S.child_face_target(body, None, 2.0)
-        self.assertTrue(all(a > b for a, b in zip(x2, body)))
-        self.assertEqual(child_hair.lighter((200, 200, 200), 100.0), [255, 255, 255])        # clipped
-        same = S.child_face_target(body, body, "divide")                   # face tone == body: plain white
-        self.assertEqual(same, [255, 255, 255])
-        half = S.child_face_target((100, 100, 100), (200, 150, 120), "divide")
-        self.assertTrue(half[0] < half[1] < half[2])        # a reddish face tone asks for a bluish-white face
-        with self.assertRaises(ValueError):
-            S.child_face_target(body, None, "divide")
-
-    def test_face_controls(self):
-        """--child-controls with baked faces: copies of the finished NPC, each baked with another face colour."""
-        import face_fit as S
-        from fo4sf import sfplugin
-        I = lambda v: struct.pack("<I", v)                                          # noqa: E731
-        subs = [(b"EDID", Z("S2SFace_Frodnar")), (b"PNAM", I(0x01000805)), (b"STON", b"\x01")]
-        recs = [(b"HDPT", b"", [], 0x01000805), (b"NPC_", b"", subs, 0x01000807)]
-        rows = [{"edid": "Frodnar", "female": False, "child": {"files": []},
-                 "test_npc": {"head_part": "01000805"}}]
-        calls = []
-        S.add_child_controls(rows, recs, {"Frodnar": 1}, ["Starfield.esm"], None,
-                             lambda row, fid, mode: calls.append((fid, mode)) or {"mode": mode})
-        self.assertEqual(sorted(m for _f, m in calls), sorted(S.CHILD_FACE_CONTROLS.values()))
-        for v, mode in S.CHILD_FACE_CONTROLS.items():
-            self.assertIn(v, rows[0]["control_npcs"])
-            self.assertEqual(rows[0]["control_faces"][v], {"mode": mode})
-            r = next(r for r in recs if sfplugin.edid(r[2]) == f"S2SFaceControl_Frodnar_{v}")
-            self.assertIn((r[3], mode), calls)
-            self.assertEqual([d for s_, d in r[2] if s_ == b"PNAM"], [I(0x01000805)])     # our head kept
+            self.assertIn("none", S.child_baked_face(row, {}, {}, {}, [], 0x3CDB, {}, "sf", "out"))
 
 
 class BuildPartFilterTests(unittest.TestCase):

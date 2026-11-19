@@ -234,9 +234,12 @@ body / hands (STON 1, Starfield's lightest child body) are pale; the face, match
 hands in linear light and more saturated (blue / red about half the hands'). Guess: the game multiplies a child's
 baked face colour by the face tone texture of its STON (vanilla child face tones run lighter than the body ones:
 slot 0 face (189,143,115) vs body (139,109,82)), so the face colour should be the body tone divided by the face
-tone. face_fit.CHILD_FACE_MODE = "divide": the baked face colour's median = body median / face tone median at the
-STON (linear light; Frodnar: (243,255,255), a near-white face texture). --child-controls adds copies of the
-finished NPC with the face matched to the body times 1.0 / 1.5 / 2.0 (FaceMatchBody = the previous build,
-FaceX1_5, FaceX2) to compare in game. faces.json: test_npc.baked_face {mode, body_tone, face_tone, baked_median},
-control_faces. Unverified: the multiply guess (in game: a pale face on Frodnar means it is right; a white one, that
-the controls' gain is the way).
+tone. Tried (commit 7edd96e, never run): the face colour = body tone / face tone, with lighter copies to compare.
+Owner (13:23): "why isnt it following how our npcs faces are done" - right: the adult test NPCs' faces are the
+European template nearest their Skyrim skin tone with its baked face as it is, recoloured (human_face_colour, to the
+adult body tone of their STON) only when the template's tone is 3 or more steps away. The child baked face had
+instead always been recoloured to the child body texture's median, which is what made it tan-orange. Now
+child_baked_face does exactly what the adults get: template by the child's adult-scale tone (target_skin), the
+same human_face_colour rule; the divide mode and its controls are gone. faces.json: test_npc.baked_face
+{template, adult_ston, recoloured}. The child body stays Starfield's child tone of the matching rank (STON 1, the
+lightest, for Frodnar). Unverified in game; the adult template may carry light stubble (ChargenPresetMale16).

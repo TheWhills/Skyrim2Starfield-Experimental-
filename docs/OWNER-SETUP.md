@@ -241,10 +241,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    C:\Modding\work\child mods and run again. Send faces.json's child_hair, child_skin_tones and Dorthe / Frodnar rows. In game:
    Dorthe and Frodnar in Riverwood (or placeatme their test NPCs, faces.json "console"): child size, their own faces
    and hair, a lighter skin; clothes are still the template child's.
-   2026-11-19 face colour test (--child-controls): Frodnar (0A000814) has the "divide" face colour; faces.json
-   Frodnar control_npcs gives the placeatme lines of FaceMatchBody (the previous build), FaceX1_5 and FaceX2. Stand
-   them side by side in daylight: whose face matches his hands? (--child-shape-npc Frodnar: his feature-matched face
-   shape; Dorthe waits.)
+   2026-11-19: the children's faces are now made as the adults' (template face by skin tone, recoloured only
+   when far off). Frodnar (0A000814) in daylight: does his face match his hands? (--child-shape-npc Frodnar: his
+   feature-matched face shape; Dorthe waits.)
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
