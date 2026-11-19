@@ -340,3 +340,7 @@ ellipse. childpaint v6: the lips are found on Starfield's face texture itself (l
 inside a lip area 28 x 12 mm around the mouth centre; from its skin's 25th to its lips' 95th percentile,
 smoothstepped), and get LIP_TINT and no softening over exactly that shape, edge to edge. Lip geometry is still
 Starfield's (the goal's fuller upper lip / bow: a later shape step).
+Dorthe (owner, 17:49: "lets try dorthe"), offline fit first: max move 25.6 mm, ripples - Starfield's girl head has a
+20-vertex loop by the nose (6 mm off the midline, in front of the 84-vertex mouth) and starfield_eyes_mouth took it
+for the mouth (37 mm high). Now the largest midline loop below the eyes (childshape v12): max 13.0 mm, rms 3.9 mm,
+prealign 1.11, nose widths 25.1/32.8/37.2/41.0 vs her 25.1/32.5/37.4/41.9 mm. Frodnar unchanged (one loop).

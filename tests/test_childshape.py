@@ -167,6 +167,29 @@ class AlmondTests(unittest.TestCase):
         self.assertGreater(mv[above, 2], mv[mid, 2])                  # the skin follows, less
 
 
+class LandmarkTests(unittest.TestCase):
+    def test_mouth_is_the_largest_midline_opening(self):
+        """2026-11-19 (Dorthe): a small opening by the nose, in front of the mouth, is not the mouth."""
+        n = 81
+        g = np.linspace(-0.08, 0.08, n)
+        v = np.array([(x, 0.1 - 3 * (x * x + (z * 0.8) ** 2), 1.65 + z) for z in g for x in g])
+        holes = [((-0.04, 1.684), 0.012, 0.005), ((0.04, 1.684), 0.012, 0.005),     # eyes
+                 ((0.0, 1.608), 0.022, 0.006),                                      # mouth (large)
+                 ((0.006, 1.645), 0.004, 0.003)]                                    # small, in front, by the nose
+        tris = []
+        for i in range(n - 1):
+            for j in range(n - 1):
+                q = [i * n + j, i * n + j + 1, (i + 1) * n + j, (i + 1) * n + j + 1]
+                c = v[q].mean(0)
+                if any(((c[0] - hx) / rx) ** 2 + ((c[2] - hz) / rz) ** 2 < 1 for (hx, hz), rx, rz in holes):
+                    continue
+                tris += [(q[0], q[1], q[2]), (q[1], q[3], q[2])]
+        eyes, mouth = CS.starfield_eyes_mouth(v, np.array(tris))
+        self.assertIsNotNone(eyes)
+        self.assertAlmostEqual(float(mouth[2]), 1.608, delta=0.003)
+        self.assertAlmostEqual(float(mouth[0]), 0.0, delta=0.003)
+
+
 class FitTests(unittest.TestCase):
     def test_fit_narrows_the_face_and_keeps_the_sockets(self):
         """Starfield: a round head; Skyrim: the same 12 % narrower across. The face (front) narrows towards it, the

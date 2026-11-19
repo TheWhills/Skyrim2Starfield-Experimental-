@@ -61,7 +61,7 @@ ALMOND = 0.12          # of the eye opening's height: the upper lid lowered at i
                        # openings are round, 29.5 x 12.3 mm on Frodnar)
 LID_FALLOFF = 0.008    # m above the upper lid's edge over which the lid skin follows it
 EYEBALL_R = 0.012      # m: the lid edge is moved forward by the sagitta of an eyeball this round, so it stays on it
-VERSION = 11
+VERSION = 12
 
 
 def apply4(m, p):
@@ -88,7 +88,7 @@ def loops(v, t):
 def starfield_eyes_mouth(v, t) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """((2, 3) eye opening centres left / right, mouth centre) of Starfield's head in model space (+Y forward, +Z
     up): the eyes are the highest pair of front loops of about the same size on either side of the midline; the
-    mouth the frontmost loop on the midline below them. (None, None) when not found."""
+    mouth the largest loop on the midline below them (the frontmost of equal ones). (None, None) when not found."""
     v = np.asarray(v, float)
     front = [(n, c) for n, c in loops(v, t) if n >= 12 and c[1] > np.median(v[:, 1])]
     best = None
@@ -101,8 +101,10 @@ def starfield_eyes_mouth(v, t) -> Tuple[Optional[np.ndarray], Optional[np.ndarra
     if best is None:
         return None, None
     eyes = best[1]
-    mid = [c for n, c in front if abs(c[0]) < 0.006 and c[2] < eyes[:, 2].mean() - 0.03]
-    mouth = max(mid, key=lambda c: c[1]) if mid else None
+    # the largest such loop (2026-11-19, Dorthe: Starfield's girl head has a 20-vertex loop by the nose, 6 mm off the
+    # midline and in front of the 84-vertex mouth; taken as the mouth it put hers 37 mm high and dragged her face)
+    mid = [(n, c) for n, c in front if abs(c[0]) < 0.008 and c[2] < eyes[:, 2].mean() - 0.03]
+    mouth = max(mid, key=lambda nc: (nc[0], nc[1][1]))[1] if mid else None
     return eyes, mouth
 
 
