@@ -373,7 +373,8 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     import child_faces
     import child_hair
     female = row["female"]
-    tpl = child_faces.pick_child_template(npc_recs, child_race, female)
+    eth = child_faces.child_ethnicity(races.get(n["race"], ""))
+    tpl = child_faces.pick_child_template(npc_recs, child_race, female, ethnicity=eth)
     if tpl is None:
         row["test_npc"] = "no vanilla child NPC of this sex"
         return
@@ -405,7 +406,8 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     row["name"] = full
     row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]), "template_form_id": f"{tpl[3]:08X}",
                        "head_part": f"{hfid:08X}", "race": f"S2S child race {race_fid:08X}" if race_fid else "ChildRace",
-                       "ston": ston,
+                       "ston": ston, "face_skin": {"wanted": eth,
+                                                   "template": list(child_faces.face_ethnicity(tpl[2]))},
                        "console": f"player.placeatme xx{fid & 0xFFFFFF:06X}  (xx = S2SFaceTest.esm's load order index)"}
 
 
@@ -1537,6 +1539,13 @@ def main(argv=None):
             if row.get("child"):
                 if sf_hdpt_recs is None:
                     sf_hdpt_recs = sfplugin.records(sf_esm, [b"HDPT"])
+                if "child_templates" not in report:      # what the game offers (2026-11-19: face skin by ethnicity)
+                    import child_faces
+                    report["child_templates"] = {
+                        ("female" if f else "male"): [{"edid": e, "plain": p_, "ethnicity": et, "face_skin": tx}
+                                                      for e, p_, et, tx, _r in
+                                                      child_faces.child_templates(npc_recs, child_race, f)]
+                        for f in (False, True)}
                 if tone_slots is None and real is not None:
                     tone_slots = child_tone_order(sf_esm, sf_data, [r["female"] for r in report["npcs"]
                                                                     if r.get("child")])

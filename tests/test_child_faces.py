@@ -33,6 +33,30 @@ class ChildFaceTests(unittest.TestCase):
         self.assertEqual(C.child_model_path("Dorthe"), "S2S\\Children\\DortheHead.nif")
         self.assertEqual(C.twin("meshes/a/b.nif"), "meshes/a/b_facebones.nif")
 
+    def test_pick_child_template_by_face_skin(self):
+        """2026-11-19 (owner: Frodnar's face read African): with an ethnicity, a template whose face skin names it
+        first, then one naming none, then the rest; plain before scripted within each."""
+        child = 0x34FB1
+        V = (b"VTCK", I(1))
+        D = lambda tex: [(b"TNAM", Z("Dermaesthetic")), (b"QNAM", Z(tex)), (b"INTV", I(64))]     # noqa: E731
+        recs = [npc(1, "AChildAfrican", False, child, [V] + D("African_Child_Male_01")),
+                npc(2, "BChildPlain", False, child, [V]),
+                npc(3, "CChildEuroScript", False, child, [V, (b"VMAD", b"x")] + D("European_Child_Male_02")),
+                npc(4, "DChildEuro", False, child, [V] + D("European_Child_Male_03"))]
+        self.assertEqual(C.pick_child_template(recs, child, False, ethnicity="european")[3], 4)
+        self.assertEqual(C.pick_child_template(recs[:3], child, False, ethnicity="european")[3], 3)
+        self.assertEqual(C.pick_child_template(recs[:2], child, False, ethnicity="european")[3], 2)
+        self.assertEqual(C.pick_child_template(recs[:1], child, False, ethnicity="european")[3], 1)
+        self.assertEqual(C.pick_child_template(recs, child, False, ethnicity="african")[3], 1)
+        self.assertIsNone(C.pick_child_template(recs, child, True, ethnicity="european"))
+        self.assertEqual(C.face_ethnicity(recs[3][2]), ("european", "European_Child_Male_03"))
+        self.assertEqual(C.face_ethnicity(recs[1][2]), (None, None))
+        self.assertEqual(C.child_ethnicity("NordRaceChild"), "european")
+        self.assertEqual(C.child_ethnicity("RedguardRaceChild"), "african")
+        self.assertEqual(C.child_ethnicity(""), "european")
+        self.assertEqual([t[0] for t in C.child_templates(recs, child, False)],
+                         ["AChildAfrican", "BChildPlain", "CChildEuroScript", "DChildEuro"])
+
     def test_pick_child_template(self):
         child = 0x2AABCD
         recs = [npc(1, "Kid_Templated", True, child, [(b"TPLT", I(5)), (b"VTCK", I(1))]),

@@ -140,9 +140,68 @@ def child_head_files(ctx, disp, edid, read):
     return files
 
 
-def pick_child_template(npc_recs, child_race, female):
-    """A vanilla child NPC of the sex to copy: on ChildRace, no template (TPLT), a voice type, no scripts / quest
-    data; the first such by EditorID. None if there is none."""
+ETHNICITIES = ("european", "african", "asian")
+
+
+def face_ethnicity(subs):
+    """(ethnicity, texture) of a Starfield NPC's face skin: the first of ETHNICITIES named in its Dermaesthetic face
+    layer's texture (TNAM / QNAM), else in any face layer's; (None, Dermaesthetic texture or None) without one."""
+    import re
+    layers, cur = [], None
+    for s, d in subs:
+        if s == b"TNAM":
+            cur = [bytes(d).split(b"\0")[0].decode("latin-1"), ""]
+            layers.append(cur)
+        elif s == b"QNAM" and cur is not None:
+            cur[1] = bytes(d).split(b"\0")[0].decode("latin-1")
+    order = sorted(layers, key=lambda x: x[0].lower() != "dermaesthetic")
+    for _name, tex in order:
+        m = re.search("|".join(ETHNICITIES), tex, re.I)
+        if m:
+            return m.group(0).lower(), tex
+    derma = next((tex for name, tex in layers if name.lower() == "dermaesthetic"), None)
+    return None, derma
+
+
+def child_ethnicity(race_edid):
+    """The face skin ethnicity for a Skyrim child race (NordRaceChild -> european: npc_records.SKYRIM_ETHNICITY of
+    the adult race), european when unknown."""
+    import npc_records
+    key = (race_edid or "").lower().split("race")[0]
+    return npc_records.SKYRIM_ETHNICITY.get(key, "european")
+
+
+def child_templates(npc_recs, child_race, female):
+    """[(EditorID, plain, ethnicity, face skin texture, record)] of the vanilla child NPCs of the sex a test child
+    may copy: on ChildRace, no template (TPLT), a voice type."""
+    out = []
+    for r in npc_recs:
+        subs = r[2]
+        sigs = {s for s, _d in subs}
+        if next((_u32(d) for s, d in subs if s == b"RNAM"), None) != child_race:
+            continue
+        acbs = next((bytes(d) for s, d in subs if s == b"ACBS"), b"")
+        if bool(acbs and struct.unpack_from("<I", acbs, 0)[0] & 1) != female:
+            continue
+        if b"TPLT" in sigs or b"VTCK" not in sigs:
+            continue
+        edid = next((bytes(d).split(b"\0")[0].decode("latin-1") for s, d in subs if s == b"EDID"), "")
+        eth, tex = face_ethnicity(subs)
+        out.append((edid, not (sigs & {b"VMAD", b"QSTA", b"BNAM"}), eth, tex, r))
+    return out
+
+
+def pick_child_template(npc_recs, child_race, female, ethnicity=None):
+    """A vanilla child NPC of the sex to copy (child_templates): with `ethnicity`, one whose face skin is of it
+    first, then one whose face skin names none, then the rest (2026-11-19, owner: Frodnar's face read African on
+    EncChild01Template, picked by EditorID alone; the adults' templates are picked by face skin ethnicity since
+    2026-11-12); then plain ones (no scripts / quest data); then by EditorID. None if there is none."""
+    if ethnicity is not None:
+        got = child_templates(npc_recs, child_race, female)
+        if not got:
+            return None
+        rank = lambda e: 0 if e == ethnicity else (1 if e is None else 2)            # noqa: E731
+        return min(got, key=lambda x: (rank(x[2]), not x[1], x[0]))[4]
     best = []
     for r in npc_recs:
         subs = r[2]
