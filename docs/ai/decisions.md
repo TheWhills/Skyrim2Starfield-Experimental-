@@ -2500,3 +2500,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   near 0 = this was not the cause). FEMALE_FIT_VERSION 4. (2) Face vs the skin piece colour (lighter chest patch on
   Gerdur, Delphine): the owner's last faces.json predates TONE_GAP 0 - only Hilde and Saadia were recoloured -
   so the face recolour (the 11-12 fix: baked face to the body tone texture's median) is not built for them yet.
+- 2026-11-20 Owner's glove run: "hand bones on the hands mesh's own binds: up to 25.5 mm from the skeleton's"
+  (verified: the hands mesh's binds sit that far from the gloves' old ones, so the mismatch was real there too; the
+  in-game result is still to see). The male gloves were refitted too (51 s): their fit predates the fit cache (11-12),
+  so no cached key matched; output the same as before (male code unchanged since 11-09 apart from the output-identical
+  speed-up; supported). Now item_convert keeps any finished male stage report as it is, --refit included, unless
+  --refit-male; a kept male fit is not recorded in the cache as made with the new inputs.

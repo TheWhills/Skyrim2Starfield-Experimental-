@@ -230,15 +230,19 @@ def fit_or_reuse(a, edid: str, sex: str, fit_args, cache: dict, save=None) -> di
     name = f"Items\\{edid}_{TAG[sex]}"
     key = fit_key(a, edid, sex, fit_args)
     path = stage_report(a.out, name)
-    known = cache.get(name) == key or getattr(a, "reuse_staged", False)
-    if not a.refit and known and os.path.isfile(path) and os.path.isdir(os.path.join(a.out, "_staging")):
+    # male fits are kept as they are (owner 2026-11-20: "we're not changing a thing on male outfits"; the farm
+    # gloves' male fit, older than the cache, was refitted along with the female one): any finished male stage report
+    # is reused, --refit included, unless --refit-male
+    keep_male = sex == "male" and not getattr(a, "refit_male", False)
+    known = cache.get(name) == key or getattr(a, "reuse_staged", False) or keep_male
+    if (not a.refit or keep_male) and known and os.path.isfile(path) and os.path.isdir(os.path.join(a.out, "_staging")):
         try:
             with open(path, encoding="utf-8") as fh:
                 rep = json.load(fh)
             rows = (rep.get("records") or {}).get("stage")
             if rows is not None and (cache.get(name) == key or staged_complete(a.out, rows, os.path.getmtime(path))):
-                if cache.get(name) != key:
-                    cache[name] = key
+                if cache.get(name) != key and (cache.get(name) is None or not keep_male):
+                    cache[name] = key            # a kept male fit is not recorded as made with today's inputs
                     if save:
                         save()
                 print(f"--- {edid} ({sex}): fitted before, reused")
@@ -310,6 +314,9 @@ def main(argv=None):
     ap.add_argument("--refit", action="store_true",
                     help="fit every item again (default: an item / sex fitted before with the same inputs and code "
                          "is reused)")
+    ap.add_argument("--refit-male", action="store_true",
+                    help="also fit male versions again (default: a male version already staged is kept as it is, even "
+                         "with --refit; owner 2026-11-20)")
     ap.add_argument("--reuse-staged", action="store_true",
                     help="take every item / sex whose stage report is already on disk (and finished) as fitted, "
                          "without checking how it was made: fits from before the cache, or from a stopped run")

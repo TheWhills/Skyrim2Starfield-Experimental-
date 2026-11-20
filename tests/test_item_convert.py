@@ -262,11 +262,19 @@ class ReuseTests(unittest.TestCase):
                 by2, _o = run(["--npc", "Ralof"])
                 self.assertEqual(calls, [])                                           # nothing fitted again
                 self.assertEqual({k: r[3] for k, r in by2.items()}, first)
+                # 2026-11-20 (owner: male outfits do not change): --refit and other --fit-args refit the female
+                # versions; the staged male ones are kept unless --refit-male
                 run(["--npc", "Ralof", "--refit"])
+                self.assertEqual(sorted(calls), [("Boots", "female"), ("Cuirass", "female")])
+                calls.clear()
+                run(["--npc", "Ralof", "--refit", "--refit-male"])
                 self.assertEqual(len(calls), 4)
                 calls.clear()
                 run(["--armor", "Boots", "--fit-args=--conform"])
-                self.assertEqual(sorted(calls), [("Boots", "female"), ("Boots", "male")])
+                self.assertEqual(calls, [("Boots", "female")])
+                calls.clear()
+                run(["--armor", "Boots", "--fit-args=--conform", "--refit-male"])
+                self.assertEqual(calls, [("Boots", "male")])            # the female one already fitted with it
 
     def test_reuse_staged_and_stopped_runs(self):
         """2026-11-12 (owner: hours of refitting outfits converted before): each finished fit is saved as it ends,
