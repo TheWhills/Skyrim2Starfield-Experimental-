@@ -1012,3 +1012,15 @@ five that hold only a header - 1490023241, 2542214846, 2852227221 among them), 1
 pick (the payload in our converted animation) in a bank the game loads, with our .wem. Open: which banks the game
 loads (all in the folder, or those listed in soundbanksinfo.json) - the json files say; and how to make the bank
 (the Creation Kit's Wwise project, Content/Tools/wwise/Starfield/Starfield.wproj, or cloned vanilla objects).
+Bank info files (owner's wwise_probe json, 2026-11-20, verified): soundbanksinfo.json lists 17 named banks (patch;
+18 in the base archive): Init (1355168291) and Starfield_FX / UI / PHY / AMB / FST / OBJ / MUS / WPN / DRS / QST / NPC /
+VEH / ITM / VOC, plus three empty ones - Starfield_XXX_Scratch (1490023241), Starfield_XXX (2542214846),
+Starfield_ZZZ_Gamejam2022 (2852227221, base only). Each event: Id (= FNV-1 hash of its Name), Name, ObjectPath,
+GUID and its streamed .wem files (e.g. WPNGrenadeThrow in Starfield_WPN, two WPN_Grenade_Throw_0N.wav). A WWED record's
+WSED is that GUID as one little-endian 128-bit number (WwiseEvent_QST_UC08_Door_Remote_Unlock: WSED 8b 44 22 34 71 a7
+4e 02 98 c9 d8 9f a7 ba ab be = {024EA771-3422-448B-BEAB-BAA79FD8C998}): records point at events by GUID, animations by
+name. Bank version 140. Route for our sounds (proposal): the Creation Kit's Wwise project (Content\Tools\wwise\
+Starfield\Starfield.wproj, opened in the Wwise version it was saved with), our events (named for Skyrim's sounds) put
+in the empty Starfield_XXX_Scratch bank so the generated 1490023241.bnk replaces an empty vanilla one the game already
+knows; media embedded in the bank. The owner's Test-Path for that project path said False although the CK is installed:
+finding it is the next step.
