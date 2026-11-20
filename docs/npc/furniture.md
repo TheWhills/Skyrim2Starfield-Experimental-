@@ -1058,3 +1058,7 @@ Owner's run (2026-11-20 12:33, verified): "Skyrim's sound triggers in 7 descript
 ...QuenchDrop, ...ForgeTake, ...Hammer, ...HammerDistant, OBJBlacksmithForge"; 46 timed events in all (40 sounds + 6
 prop events). OBJBlacksmithForge (the forge fire / bellows, triggered by a clip, so a one-shot here) is not in our bank
 yet: silent until added (sound_bank --event).
+In game after the sound triggers (owner, 2026-11-20 12:43): Alvor stands at the forge holding the hammer and does not
+hammer. Two candidates, not yet told apart: the Creation Kit cache step (robocopy /MIR from an empty or missing
+animinfo folder empties S2S AnimInfo) or the SoundPlay events in the descriptors. furniture_anim_pack --no-sounds
+gives the descriptors without them for the A/B.

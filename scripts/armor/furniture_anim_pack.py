@@ -716,6 +716,9 @@ def main(argv=None):
                     help="with one --set: use this offset instead of COM_SHIFT / the Idle's --align-com result "
                          "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
     ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
+    ap.add_argument("--no-sounds", action="store_true",
+                    help="leave Skyrim's sound triggers out of the descriptors (2026-11-20: A/B for the forge "
+                         "standing still after they were added)")
     ap.add_argument("--copy-only", action="store_true",
                     help="no conversion: copy the earlier one in --work again (descriptor clean-up, talk slots); for "
                          "changes to the copy step only")
@@ -784,7 +787,7 @@ def main(argv=None):
         parts = {x for r in rows for x in ((r.get("clip") or "").replace("/", "\\").split("\\")[-1].lower()
                                             .split("+")) if x}
         parts = {x if x.endswith(".hkx") else x + ".hkx" for x in parts}
-        sounds = skyrim_clip_sounds(a.skyrim_data, parts) if parts else {}
+        sounds = skyrim_clip_sounds(a.skyrim_data, parts) if parts and not a.no_sounds else {}
         sound_rows = sound_event_rows(rows, sounds)
         for stem, evs in sound_rows.items():
             clip_events.setdefault(stem, []).extend(evs)
