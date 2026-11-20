@@ -161,8 +161,17 @@ def build(w: "Waapi", wavs: dict, template_event: str, bank: str) -> dict:
     parent = w.get(f'$ "{target["id"]}" select parent')[0]
     rep = {"template": {"event": template_event, "target": tgt["path"], "parent": parent["path"]}, "events": {}}
     banks = w.get(f'$ from type SoundBank where name = "{bank}"')
+    rep["project_banks"] = sorted(b["name"] for b in w.get('$ from type SoundBank'))
     if not banks:
-        raise RuntimeError(f"no bank {bank} in the project")
+        # 2026-11-20 (owner's run): the CK's project has no Starfield_XXX_Scratch. A bank's id is the hash of its
+        # name, so a bank of that name made here is the game's empty 1490023241.bnk
+        units = [u for u in w.get('$ "\\SoundBanks" select children') if u["type"] == "WorkUnit"]
+        if not units:
+            raise RuntimeError("no work unit under \\SoundBanks")
+        w.call("ak.wwise.core.object.create", {"parent": units[0]["id"], "type": "SoundBank", "name": bank,
+                                                 "onNameConflict": "merge"})
+        banks = w.get(f'$ from type SoundBank where name = "{bank}"')
+        rep["bank_created_in"] = units[0]["path"]
     ids = []
     for ev, files in wavs.items():
         if not files:
@@ -241,7 +250,7 @@ def main(argv=None):
         rep["bank"] = "not generated (see generate.tail)"
     with open(os.path.join(a.work, "sound_bank.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)
-    print(json.dumps({k: rep[k] for k in ("template", "bank")}, indent=1))
+    print(json.dumps({k: rep.get(k) for k in ("template", "bank_created_in", "bank")}, indent=1))
     print(f"-> {os.path.join(a.work, 'sound_bank.json')}")
     return 0
 
