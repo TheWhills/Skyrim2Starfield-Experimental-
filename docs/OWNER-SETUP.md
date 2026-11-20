@@ -257,6 +257,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmClothes02 --armor ClothesFarmClothes03 --armor ClothesBarKeeper --fit-args="--female-strap-gap 0.012"
    ```
    In game Hilde, Gerdur, Saadia standing: shoulders covered? Still showing = a bigger number; puffy = smaller.
+   ON HOLD (owner, same evening): on the player, standing, both the per-NPC "Saadia outfit" and the shared barkeeper
+   clothes are clean, so the fit holds posed; the skin shows on NPCs only: their body (template) is the suspect. Send
+   the current faces.json first.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

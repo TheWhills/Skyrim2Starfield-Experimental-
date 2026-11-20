@@ -2467,3 +2467,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   --female-strap-gap (female fits only, so item_convert --fit-args can raise it without touching the male versions);
   test 12 mm on those three items, the default stays 8 mm until seen in game. Supported, not verified: the gap closes
   when the arms come down (weights), which the debug meshes cannot show.
+  Owner, same evening: on the player, standing, the old per-NPC Saadia outfit and the shared barkeeper clothes are both
+  clean, so the fit holds with the arms down; the skin shows on NPCs only. Suspect now the NPC body: test NPCs take
+  the template's body with only MWGT replaced (faces.json "body"), and templates have changed since 11-09 (generic per
+  sex 11-12, Elder template 11-13, by face ethnicity). The strap-gap rebuild is on hold.
