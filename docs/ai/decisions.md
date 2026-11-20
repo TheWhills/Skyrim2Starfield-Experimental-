@@ -2539,3 +2539,6 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   glove-opening skin kept, nothing did. Now hand_skin_mask: (1) near Skyrim's hand-skin surface, plus (2) the hands
   mesh's forearm part (Forearm / Wrist_Twist bones >= half the weight) wherever the item does not cover it, with 2
   rings / 1 cm under its edge. Fingers stay out unless Skyrim draws skin there.
+- 2026-11-20 Verified in game (owner, "that's looking right to me"): Gerdur's farm gloves with hand_skin_mask - forearm
+  between sleeve and glove shown, no fingers through the glove, no gap at its edge (hand skin 1443 of 7660). Cuffs /
+  bracers (whole-hand skin) not yet seen.
