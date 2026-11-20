@@ -357,6 +357,14 @@ class ChildSkinMaterialTests(unittest.TestCase):
                                                    False)
                 self.assertEqual(got["material"], "materials\\s2s\\children\\child_skin_m.mat")
                 self.assertEqual(got["texture"], "textures/s2s/children/skin/child_skin_m_color.dds")
+                win = dict(tpl["Summary"]["Layer1"]["Textures"]["Albedo"])
+                tpl2 = json.loads(json.dumps(tpl).replace("textures/actors/human/body_color.dds",
+                                                          "Data\\\\Textures\\\\Actors\\\\body_color.dds"))
+                self.assertTrue(win)
+                with mock.patch.object(cm, "read_template_path", return_value=tpl2):
+                    got2 = gear_fit.child_skin_material(conv, "cr.zip", "Data", "Materials\\Body.mat",
+                                                        (225, 190, 180), False)
+                self.assertEqual(got2["texture"], "Data\\Textures\\s2s\\children\\skin\\child_skin_m_color.dds")
                 with open(os.path.join(d, "materials", "s2s", "children", "child_skin_m.mat"), encoding="utf-8") as fh:
                     text = fh.read()
                 self.assertIn("child_skin_m_color.dds", text)
@@ -369,6 +377,14 @@ class ChildSkinMaterialTests(unittest.TestCase):
                 miss = gear_fit.child_skin_material(conv, "cr.zip", "Data", "Materials\\Body.mat", (1, 2, 3), True)
             self.assertIsNone(miss["material"])
             self.assertIn("not in ContentResources", miss["why"])
+
+
+class MaterialTextureKeyTests(unittest.TestCase):
+    def test_keys(self):
+        self.assertEqual(gear_fit.material_texture_key("Data\\Textures\\Actors\\human\\Naked_Body\\b_color.dds"),
+                         ("textures/actors/human/naked_body/b_color.dds", "Data\\Textures\\"))
+        self.assertEqual(gear_fit.material_texture_key("textures/a/b.dds"), ("textures/a/b.dds", "textures/"))
+        self.assertEqual(gear_fit.material_texture_key("a/B.dds"), ("textures/a/b.dds", ""))
 
 
 class ItemConvertArgsTests(unittest.TestCase):

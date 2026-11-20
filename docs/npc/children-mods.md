@@ -434,4 +434,8 @@ is the body's own recoloured to child_skin_colour (gear_fit.child_skin_material:
 child_skin_<m|f>.mat, textures\s2s\children\skin). Kept only in items on slot 3 (merge_child_item). If the body
 material is not in ContentResources.zip the piece keeps the body's own material (printed, report child_skin.why).
 CHILD_FIT_ARGS now --child-skin alone (RS skin shapes dropped again).
+Whole-body child skin (owner, 16:54, verified): limbs the right (slim) shape, no gaps; colour still tan-orange. The
+report said why: the body material names its colour texture "Data\Textures\Actors\human\Naked_Body\
+nakedbodym_sk3_color.dds" and child_skin_material read that path as it stood (KeyError), so the piece kept the body's
+own material. gear_fit.material_texture_key now turns such a path into the archive key and keeps its prefix for ours.
 

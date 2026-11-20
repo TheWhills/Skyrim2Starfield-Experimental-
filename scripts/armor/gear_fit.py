@@ -105,6 +105,19 @@ def child_skin_colour(sf_data: str, female: bool) -> tuple:
     return tuple(child_hair.skin_median(child_hair.tanned(light)))
 
 
+def material_texture_key(path: str) -> tuple:
+    """(archive key "textures/...", the path's own prefix up to and including its textures folder) of a texture path as
+    a material names it. 2026-11-20 (owner's run): the body material names
+    "Data\\Textures\\Actors\\human\\Naked_Body\\nakedbodym_sk3_color.dds"; read as it stood it was not found."""
+    norm = path.replace("\\", "/")
+    low = norm.lower()
+    at = low.find("textures/")
+    if at < 0:
+        return "textures/" + low, ""
+    sep = "\\" if "\\" in path else "/"
+    return low[at:], path[:at + len("textures")] + sep
+
+
 def child_skin_material(conv, content_resources: str, sf_data: str, body_mat: str, colour, female: bool) -> dict:
     """{"material": .mat path or None, ...}: a copy of the body's own material (body_mat, from ContentResources.zip)
     whose colour texture is the body's own, recoloured so its skin is `colour` (child_skin_colour), written into the
@@ -125,9 +138,9 @@ def child_skin_material(conv, content_resources: str, sf_data: str, body_mat: st
     if slot is None:
         return {"material": None, "why": f"{rel}: no _color texture in its Summary", "slots": sorted(layer)}
     old = layer[slot]["File"]
+    tex_key, prefix = material_texture_key(old)
     try:
-        src = skin_tone_probe.TextureArchives(sf_data).read(old if old.lower().startswith("textures") else
-                                                             "textures/" + old)
+        src = skin_tone_probe.TextureArchives(sf_data).read(tex_key)
         img = child_hair.recolour_skin(skintone.decode_dds(src), colour)
     except Exception as e:                          # noqa: BLE001 (report, keep the body's material)
         return {"material": None, "why": f"{old}: {type(e).__name__}: {e}"}
@@ -137,9 +150,7 @@ def child_skin_material(conv, content_resources: str, sf_data: str, body_mat: st
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(skintone.raw_dds(img))
-    new_tex = ("textures/" if old.lower().startswith("textures") else "") + tex_rel
-    if "\\" in old:
-        new_tex = new_tex.replace("/", "\\")
+    new_tex = prefix + (tex_rel.replace("/", "\\") if "\\" in old else tex_rel)
     mat = cm.build_from_template(tpl, f"S2S_ChildSkin_{sex.upper()}", {slot: new_tex})
     mat_rel = f"materials/s2s/children/child_skin_{sex}.mat"
     mp = os.path.join(conv.staging, *mat_rel.split("/"))
