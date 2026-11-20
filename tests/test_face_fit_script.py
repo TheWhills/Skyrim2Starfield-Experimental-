@@ -621,6 +621,28 @@ class RaceNpcTests(unittest.TestCase):
         self.assertEqual(dict(new[2])[b"MODL"], Z("S2S\\Faces\\FaendalHead.nif"))
         self.assertEqual(dict(new[2])[b"PNAM"], I(1))                        # still a face part (vanilla's)
         self.assertEqual([struct.unpack("<I", d_)[0] for s_, d_ in out if s_ == b"PNAM"], [new[3], 0x124])
+        # 2026-11-19: the NPC's FormID, handed out before the head part is added, is not reused for it
+        from fo4sf import sfplugin
+        recs = [None] * 5
+        npc_fid = sfplugin.new_form_id(5, masters=4)
+        _o, hd = S.with_own_head(subs, {"edid": "Faendal", "female": False, "own_head": own}, recs,
+                                 ["Starfield.esm", "a", "b", "S2SRaceTest.esm"], {0x123: van, 0x124: eyes},
+                                 0x03000810, taken={npc_fid})
+        self.assertNotEqual(int(hd, 16), npc_fid)
+        recs.append((b"NPC_", b"", [(b"EDID", Z("S2SFace_Faendal"))], npc_fid))
+        S.check_new_form_ids([r for r in recs if r], 4)                      # no clash
+
+    def test_check_new_form_ids(self):
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        recs = [(b"HDPT", b"", [(b"EDID", Z("S2S_Head_Faendal"))], 0x06000808),
+                (b"NPC_", b"", [(b"EDID", Z("S2SFace_Faendal"))], 0x06000808),
+                (b"NPC_", b"", [(b"EDID", Z("Override"))], 0x00012345),
+                (b"NPC_", b"", [(b"EDID", Z("Override2"))], 0x00012345)]          # overrides may repeat a master's
+        with self.assertRaises(ValueError) as cm:
+            S.check_new_form_ids(recs, 6)
+        self.assertIn("06000808", str(cm.exception))
+        self.assertIn("S2S_Head_Faendal", str(cm.exception))
+        S.check_new_form_ids(recs[1:], 6)
 
     def test_race_skin(self):
         """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a

@@ -771,3 +771,11 @@ why the mod needs no clothes of its own.
   the edge: the lid's layers turned unequally and the folds split; by the front view they turn together (preview
   checked). Children not turned (RS kids measure -2 to +13; Dorthe is signed off); faces.json own_head.shape.tilt and
   .eye_tilt report it.
+  In game (owner, 19:35: "he looks the same eye wise as before tilt") - found in the plugin, not the shape: his own
+  head part and his NPC record had the same FormID (faces.json own_head.head_part 06000808 = test_npc 06000808): the
+  NPC's FormID is handed out before the head part is appended, and the head part took the next free index, which
+  was that same one. So the NPC's face slot pointed at a FormID that was the NPC itself; the game showed the race
+  head, and no own-head change (fit or slant) ever reached the screen. Fixed: with_own_head(taken=) skips FormIDs
+  already handed out; check_new_form_ids refuses to write a plugin in which two new records share a FormID.
+  Also from his faces.json (dressed): hair HairColor14Grey (tint 70, 75, 85) -> Starfield Grey (measured lightness
+  52, 2026-11-13, owner-verified then as grey); in game it reads near-white on his brows: open, owner's call.

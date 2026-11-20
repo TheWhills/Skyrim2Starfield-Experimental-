@@ -269,17 +269,23 @@ def child_context(n, sky, sf_data, a, cache, transfer=None):
     return ctx
 
 
-def with_own_head(subs, row, recs, masters, sf_hdpt, race_head=None):
+def with_own_head(subs, row, recs, masters, sf_hdpt, race_head=None, taken=()):
     """subs with its face head part (type 1) swapped for a new one: the vanilla head part (race_heads.HEAD_PART, its
     morph record, valid-race list and extra parts kept, as the race heads are made) with the NPC's own head model
     (row own_head.model); race_head: the converted race's head part FormID (in this plugin's master space), the
-    face part after on_race. Returns (subs, the new head part's FormID hex)."""
+    face part after on_race. taken: FormIDs already handed out but not yet in recs (the NPC's own: 2026-11-19, the
+    head part got the NPC's FormID, 06000808 both, and the game never showed Faendal's own head). Returns (subs, the
+    new head part's FormID hex)."""
     import race_heads
     female = row["female"]
     van = next((r for r in sf_hdpt.values() if sfplugin.edid(r[2]) == race_heads.HEAD_PART[female]), None)
     if van is None:
         raise KeyError(race_heads.HEAD_PART[female])
-    fid = sfplugin.new_form_id(len(recs), masters=len(masters))
+    k = len(recs)
+    used = set(taken) | {r[3] for r in recs if r}
+    while sfplugin.new_form_id(k, masters=len(masters)) in used:
+        k += 1
+    fid = sfplugin.new_form_id(k, masters=len(masters))
     recs.append((b"HDPT", van[1], sfplugin.edit(list(van[2]), {
         b"EDID": sfplugin.zs(f"S2S_Head_{row['edid']}"), b"MODL": sfplugin.zs(row["own_head"]["model"])}), fid))
     out, swapped = [], False
@@ -294,6 +300,21 @@ def with_own_head(subs, row, recs, masters, sf_hdpt, race_head=None):
     if not swapped:
         out.append((b"PNAM", struct.pack("<I", fid)))
     return out, f"{fid:08X}"
+
+
+def check_new_form_ids(recs, masters):
+    """Raises ValueError when two of this plugin's new records share a FormID (2026-11-19: Faendal's NPC and his own
+    head part were both 06000808; the plugin loaded and the game quietly showed the race's head)."""
+    seen, dup = {}, []
+    for sig, _f, subs, fid in recs:
+        if fid >> 24 != masters:
+            continue                   # an override of a master's record
+        if fid in seen:
+            dup.append(f"{fid:08X} ({seen[fid]} and {sig.decode()} {sfplugin.edid(subs)})")
+        else:
+            seen[fid] = f"{sig.decode()} {sfplugin.edid(subs)}"
+    if dup:
+        raise ValueError("new records sharing a FormID: " + "; ".join(dup))
 
 
 def uses_adult_shape(a, n) -> bool:
@@ -2244,7 +2265,7 @@ def main(argv=None):
                 if race_index is not None and sky_race in conv_races and row["female"] in conv_races[sky_race]["head"]:
                     rh = (race_index << 24) | conv_races[sky_race]["head"][row["female"]]
                 subs, hd = with_own_head(subs, row, recs, masters, sf_hdpt_all or {r[3]: r for r in
-                                         sfplugin.records(sf_esm, [b"HDPT"])}, rh)
+                                         sfplugin.records(sf_esm, [b"HDPT"])}, rh, taken={fid})
                 row["own_head"]["head_part"] = hd
                 if rskin:
                     row["race"]["skin"] = rskin
@@ -2325,6 +2346,7 @@ def main(argv=None):
                                                  out, vt["GenericMaleEvenToned"], qt, report)
             recs += top
         recs.extend(late_recs)
+        check_new_form_ids(recs, len(masters))
         report["changed_since_last_run"] = npc_changes(report["npcs"], recs, test_subs, out, previous_rows(out))
         if recs:
             with open(os.path.join(out, PLUGIN), "wb") as fh:
