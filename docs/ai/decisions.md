@@ -2534,3 +2534,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   1.2 cm of the fitted Skyrim hand-skin shapes' surface, sampled every HAND_SAMPLE 3 mm (surface_samples; the
   corners alone left holes). Items with no Skyrim hand skin keep Starfield's hands (unchanged). To check: whole-hand
   pieces (cuffs, bracers) with Starfield's fingers posed differently from Skyrim's (holes in the fingers?).
+- 2026-11-20 Owner, in game after the surface cut: Gerdur's fingers fine, but the arm between sleeve and glove now
+  invisible. Starfield's hands mesh runs up the forearm and drew that strip; with the hands hidden and only Skyrim's
+  glove-opening skin kept, nothing did. Now hand_skin_mask: (1) near Skyrim's hand-skin surface, plus (2) the hands
+  mesh's forearm part (Forearm / Wrist_Twist bones >= half the weight) wherever the item does not cover it, with 2
+  rings / 1 cm under its edge. Fingers stay out unless Skyrim draws skin there.

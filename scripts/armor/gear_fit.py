@@ -117,6 +117,10 @@ HAND_SKIN_SHAPE = b"S2S_HandSkin"
 HAND_SLOT = 6           # Starfield's naked hands addon (AA_Naked_Hands, slot_probe 2026-11-06)
 HAND_SKIN_REACH = 0.012  # m: Starfield hands vertices this close to the surface of a fitted Skyrim hand-skin shape
 HAND_SAMPLE = 0.003     # m: that surface sampled this finely (its corners alone left holes: 2026-11-20)
+HAND_COVER_DEPTH = 0.03  # m: a hands vertex with the item this close straight out from it is covered
+HAND_MARGIN = 2         # rings of covered forearm kept under the item's edge (no gap at the cuff) ...
+HAND_MARGIN_M = 0.01    # ... and at most this far from the bare forearm
+ARM_BONES = ("Forearm", "Wrist_Twist")   # the hands mesh's forearm part (not L_Wrist / the fingers)
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
@@ -499,6 +503,29 @@ def surface_samples(points, tris, step: float = HAND_SAMPLE) -> np.ndarray:
     return np.concatenate(out)
 
 
+def hand_skin_mask(hand_pts, hand_tris, hand_w, samples, item, uvs=None) -> np.ndarray:
+    """Which Starfield hands vertices the hand skin piece keeps (2026-11-20, owner, in turn: the corners of Skyrim's
+    hand skin alone left holes; every uncovered part kept Starfield's fingers, which poked out of the glove's own
+    fingers; Skyrim's skin surface alone lost the forearm between sleeve and glove, which the hands mesh had drawn):
+    (1) within HAND_SKIN_REACH of Skyrim's hand-skin surface (samples), and (2) the forearm part of the hands mesh
+    (ARM_BONES >= half its weight) where the item does not cover it, with a narrow strip under the item's edge."""
+    from fo4sf import skyrimhair
+    hp = np.asarray(hand_pts, float)
+    keep = np.zeros(len(hp), bool)
+    if samples is not None and len(samples):
+        zero = np.tile([0.0, 0.0, 1.0], (len(samples), 1))
+        _d, dist, _i = skyrimhair.nearest_surface(hp, np.asarray(samples, float), zero)
+        keep |= dist < HAND_SKIN_REACH
+    arm = np.array([sum(x for b, x in vw if any(k in b for k in ARM_BONES)) >= 0.5 for vw in hand_w], bool)
+    if arm.any() and item:
+        _sh, bare = skin_piece(hp, hand_tris, uvs or [(0.0, 0.0)] * len(hp), hand_w, np.zeros((0, 3)), gear=item,
+                               whole=True, depth=HAND_COVER_DEPTH, margin=HAND_MARGIN, margin_m=HAND_MARGIN_M)
+        b = np.zeros(len(hp), bool)
+        b[list(bare)] = True
+        keep |= b & arm
+    return keep
+
+
 def hand_skin_part(hand_sh, info, report) -> dict:
     """The part for the hand skin piece, or None: on the hands' own slot (HAND_SLOT), so the item hides Starfield's
     bare hands as Skyrim's gloves hide Skyrim's, with the hands mesh's own binds (info: (used, mesh, binds))."""
@@ -821,8 +848,9 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                if sh.name.decode("latin-1", "replace") in set(hand_skin_names)]
         if src:
             h_uvs, h_mat, h_mesh = starfield_hands_skin(sf_data, hand_path)
-            hs, h_used = skin_piece(np.asarray(hand_pts), hand_tris, h_uvs, hand_w, np.concatenate(src),
-                                    reach=HAND_SKIN_REACH)
+            item = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)]
+            mask = hand_skin_mask(hand_pts, hand_tris, hand_w, np.concatenate(src), item, h_uvs)
+            hs, h_used = skin_piece(np.asarray(hand_pts), hand_tris, h_uvs, hand_w, np.zeros((0, 3)), extra=mask)
             if hs is not None:
                 hs.name = HAND_SKIN_SHAPE
                 hand_skin = hs

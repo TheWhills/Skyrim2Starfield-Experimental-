@@ -173,6 +173,31 @@ class ScriptTests(unittest.TestCase):
         _sh2, used2 = gear_fit.skin_piece(hand, tris, [(0, 0)] * len(hand), w, sky, reach=gear_fit.HAND_SKIN_REACH)
         self.assertLess(len(used2), len(used))                 # the corners alone: holes
 
+    def test_hand_skin_mask_keeps_the_bare_forearm(self):
+        """2026-11-20 (owner: then the arm above the gloves was invisible): the forearm part of the hands mesh is kept
+        where the glove does not cover it; the uncovered fingers are not (only near Skyrim's own hand skin)."""
+        import numpy as np
+        from fo4sf import skyrimhair
+        xs = np.linspace(0, 0.20, 41)                            # forearm 0-6 cm, glove 6-14 cm, fingers 14-20 cm
+        pts = np.array([[x, y, 0.0] for x in xs for y in (0.0, 0.01)])
+        tris = []
+        for i in range(40):
+            a, b = 2 * i, 2 * i + 2
+            tris += [(a, b, a + 1), (b, b + 1, a + 1)]
+        w = [[("L_Forearm", 1.0)] if p[0] < 0.07 else [("L_Index1", 1.0)] for p in pts]
+        gp = np.array([[0.06, -0.01, 0.005], [0.14, -0.01, 0.005], [0.06, 0.02, 0.005], [0.14, 0.02, 0.005]])
+        glove = skyrimhair.HairShape(b"Glove", gp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [],
+                                     [(0, 1, 2), (1, 3, 2)], [], -1, -1, -1)
+        sky = gear_fit.surface_samples(np.array([[0.055, -0.01, 0.004], [0.075, -0.01, 0.004],
+                                                 [0.055, 0.02, 0.004], [0.075, 0.02, 0.004]]), [(0, 1, 2), (1, 3, 2)])
+        keep = gear_fit.hand_skin_mask(pts, tris, w, sky, [glove])
+        kx = sorted({round(float(p[0]), 3) for p, k in zip(pts, keep) if k})
+        self.assertEqual(kx[0], 0.0)                              # the bare forearm
+        self.assertTrue(all(x < 0.10 for x in kx))                # no fingers (14-20 cm), nothing deep in the glove
+        self.assertIn(0.06, kx)                                   # up to the glove's edge
+        nothing = gear_fit.hand_skin_mask(pts, tris, w, np.zeros((0, 3)), [glove])
+        self.assertFalse(any(nothing[i] for i in range(len(pts)) if pts[i][0] > 0.14))
+
     def test_armpit_skin_only_for_body_gear(self):
         """2026-11-09 (Orgnar's shoes): boots / gloves bring no armpit skin; body gear (or unknown) does."""
         import numpy as np
