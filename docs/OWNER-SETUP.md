@@ -521,6 +521,11 @@ docs/npc/furniture.md). Starfield closed. Only the steps whose input changed nee
    ```powershell
    python -I scripts\armor\sound_swap.py --skyrim-data $sky --starfield $sf --work C:\Modding\work\sound_swap --mod "$mods\S2S Sounds"
    ```
+   A station whose Skyrim clips carry no sound (the grindstone: its sound is the wheel object's own) - where it comes
+   from, read-only:
+   ```powershell
+   python -I scripts\armor\object_sound_probe.py --skyrim-data $sky > C:\Modding\work\object_sound_probe.txt
+   ```
 3. Creation Kit animation cache: only when sets, folders or descriptors (.afx) changed, not for clip-only changes.
    `Remove-Item -Recurse -Force C:\Modding\work\s2s\animinfo`, run **CreationKit (1)** from MO2, wait for it to close, then:
    ```powershell

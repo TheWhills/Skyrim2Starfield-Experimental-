@@ -1125,3 +1125,12 @@ fixed table (SWAP) and gives every other sound the next free vanilla event of a 
 one-shots under Crafting_Events / Furniture, 7 m or more, files no other event uses; by name), distant variants left
 out. It prints the sounds per set; furniture_anim_pack reads the map from <work>\..\sound_swap\sound_swap.json.
 Cost grows with it: those Starfield stations (pharma, research, industrial ...) play Skyrim sounds.
+**Grindstone silent** (owner, 2026-11-20 14:08: "Grindstone isnt playing its own sound??"). Expected from the code:
+Skyrim's sharpening-wheel clips have no sound (owner's smithing_probe, verified: Enter triggers only 00NextClip, Exit
+only IdleFurnitureExit, Spin none; none of the three has annotations), so skyrim_clip_sounds found nothing for the
+Grindstone set and its descriptors kept the repair_toolstanding template's own <audios>. Supported hypothesis:
+Skyrim plays the wheel's sound from the wheel object (BlacksmithSharpeningWheelAnimating.nif, an animated model with
+a graph of its own) or a sound record outside the character graph. object_sound_probe.py reads the model (graph,
+text keys), the non-character graphs matching sharpen / grind / wheel (triggers, state events), their clips'
+annotations and the matching SOUN / SNDR records; asked for. Next: those sounds on the Grindstone set's descriptors
+through sound_swap like the others.
