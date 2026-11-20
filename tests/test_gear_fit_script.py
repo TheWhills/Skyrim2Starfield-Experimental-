@@ -198,6 +198,17 @@ class ScriptTests(unittest.TestCase):
         nothing = gear_fit.hand_skin_mask(pts, tris, w, np.zeros((0, 3)), [glove])
         self.assertFalse(any(nothing[i] for i in range(len(pts)) if pts[i][0] > 0.14))
 
+    def test_forearm_only(self):
+        """2026-11-20 (Gerdur's glove fingers stretched): an item that hides the hands is fitted against the hands'
+        forearm part only, not Starfield's fingers."""
+        import numpy as np
+        pts = np.array([[0, 0, 0], [0.01, 0, 0], [0, 0.01, 0], [0.1, 0, 0], [0.11, 0, 0], [0.1, 0.01, 0]], float)
+        tris = [(0, 1, 2), (3, 4, 5), (1, 3, 2)]
+        w = [[("L_Forearm", 1.0)]] * 3 + [[("L_Index1", 1.0)]] * 3
+        p, t, ww = gear_fit.forearm_only(pts, tris, w)
+        self.assertEqual((len(p), t.tolist(), ww), (3, [[0, 1, 2]], [[("L_Forearm", 1.0)]] * 3))
+        self.assertEqual(len(gear_fit.forearm_only(pts, tris, [])[0]), 0)
+
     def test_armpit_skin_only_for_body_gear(self):
         """2026-11-09 (Orgnar's shoes): boots / gloves bring no armpit skin; body gear (or unknown) does."""
         import numpy as np

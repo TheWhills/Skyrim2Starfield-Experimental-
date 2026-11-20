@@ -2542,3 +2542,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - 2026-11-20 Verified in game (owner, "that's looking right to me"): Gerdur's farm gloves with hand_skin_mask - forearm
   between sleeve and glove shown, no fingers through the glove, no gap at its edge (hand skin 1443 of 7660). Cuffs /
   bracers (whole-hand skin) not yet seen.
+- 2026-11-20 Owner: Gerdur's glove fingers look odd (stretched / flattened / merged). Supported cause: the fit still
+  pushed the glove out of, and gave it the weights of, Starfield's whole hands mesh - including its fingers, which do
+  not lie under the glove's own fingers. With the hands hidden that serves nothing. Items on the hands slot are now
+  fitted against the hands' forearm part only (forearm_only): the glove's fingers keep their own Skyrim finger
+  weights (mapped by skeletonmap) and are not pushed by Starfield's fingers. Both sexes (hand items, as decided).
+  Unverified in game; if the fingers still look wrong, next: gear_fit_Items_ClothesFarmGloves03_F.json's
+  hand_bind_offsets_mm (which hand bones sit 25 mm off the skeleton).

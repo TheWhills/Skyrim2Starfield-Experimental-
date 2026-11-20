@@ -526,6 +526,23 @@ def hand_skin_mask(hand_pts, hand_tris, hand_w, samples, item, uvs=None) -> np.n
     return keep
 
 
+def forearm_only(hand_pts, hand_tris, hand_w):
+    """(points, triangles, weights) of the hands mesh's forearm part (ARM_BONES >= half the weight): the only part of
+    the hands an item that hides them is pushed out of and takes weights from (2026-11-20, owner: Gerdur's glove
+    fingers looked stretched / merged - pushed out of and weighted to Starfield's fingers, which do not lie under the
+    glove's own; the hands are hidden there, so the glove's fingers keep their own (Skyrim's) finger weights)."""
+    hp = np.asarray(hand_pts, float)
+    t = np.asarray(hand_tris, int).reshape(-1, 3)
+    if len(hand_w) != len(hp):
+        return hp[:0], t[:0], []
+    arm = np.array([sum(x for b, x in vw if any(k in b for k in ARM_BONES)) >= 0.5 for vw in hand_w], bool)
+    t = t[arm[t].all(1)]
+    used = np.unique(t)
+    new = -np.ones(len(hp), int)
+    new[used] = np.arange(len(used))
+    return hp[used], new[t], [hand_w[i] for i in used]
+
+
 def hand_skin_part(hand_sh, info, report) -> dict:
     """The part for the hand skin piece, or None: on the hands' own slot (HAND_SLOT), so the item hides Starfield's
     bare hands as Skyrim's gloves hide Skyrim's, with the hands mesh's own binds (info: (used, mesh, binds))."""
@@ -764,9 +781,11 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     hand_path, hand_pts, hand_tris, hand_w, hand_binds_m, hand_frame = find_hands(sf_data, female, world,
                                                                                  with_binds=True)
     if hand_pts is not None:
-        surf_pts = np.concatenate([skel_pts, hand_pts])
-        surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
-        surf_w += hand_w if len(hand_w) == len(hand_pts) else [[] for _ in hand_pts]
+        s_pts, s_tris, s_w = forearm_only(hand_pts, hand_tris, hand_w) if hands_item else \
+            (hand_pts, hand_tris, hand_w if len(hand_w) == len(hand_pts) else [[] for _ in hand_pts])
+        surf_pts = np.concatenate([skel_pts, s_pts])
+        surf_tris = np.concatenate([tris, np.asarray(s_tris, int).reshape(-1, 3) + len(skel_pts)])
+        surf_w += list(s_w)
     head_path = SF_HEADS[female]
     weight_src, sf_head_full = None, None
     try:
