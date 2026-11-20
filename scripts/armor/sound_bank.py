@@ -158,8 +158,18 @@ def build(w: "Waapi", wavs: dict, template_event: str, bank: str) -> dict:
     if not target:
         raise RuntimeError(f"template event {template_event}: no action target")
     tgt = w.get(f'$ "{target["id"]}"')[0]
+    # the nearest Actor-Mixer above the template's sound (2026-11-20, owner's run: its direct parent was
+    # NPC_Human_FoodStation_LeftSide, which may be a container): ours sit beside its children and inherit its settings
     parent = w.get(f'$ "{target["id"]}" select parent')[0]
-    rep = {"template": {"event": template_event, "target": tgt["path"], "parent": parent["path"]}, "events": {}}
+    for _ in range(12):
+        if parent["type"] == "ActorMixer":
+            break
+        up = w.get(f'$ "{parent["id"]}" select parent')
+        if not up or up[0]["type"] in ("WorkUnit", "Folder"):
+            break
+        parent = up[0]
+    rep = {"template": {"event": template_event, "target": tgt["path"], "parent": parent["path"],
+                        "parent_type": parent["type"]}, "events": {}}
     banks = w.get(f'$ from type SoundBank where name = "{bank}"')
     rep["project_banks"] = sorted(b["name"] for b in w.get('$ from type SoundBank'))
     if not banks:
@@ -233,7 +243,8 @@ def main(argv=None):
             server.kill()
     gen_dir = os.path.join(a.work, "generated")          # the project's own output path is Bethesda's build machine
     gen = subprocess.run([a.wwise, "generate-soundbank", wproj, "--bank", a.bank, "--platform", "Windows",
-                          "--soundbank-path", "Windows", gen_dir, "--allow-migration"], capture_output=True, text=True)
+                          "--soundbank-path", "Windows", gen_dir], capture_output=True, text=True)
+    # (2026-11-20, owner's run: generate-soundbank rejects --allow-migration; the WAAPI part had worked)
     rep["generate"] = {"returncode": gen.returncode, "tail": (gen.stdout + gen.stderr)[-1500:]}
     bnk = find_bank_file(gen_dir, a.bank) or find_bank_file(os.path.join(proj_dir, "GeneratedSoundBanks"), a.bank)
     if bnk:
