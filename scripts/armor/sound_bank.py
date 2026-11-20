@@ -117,9 +117,18 @@ def extract(sky_data, events, wav_dir, ffmpeg=None) -> dict:
     return out
 
 
+def waapi_client():
+    """waapi-client's WaapiClient, or exit with how to install it (2026-11-20, owner: `pip` not on PATH)."""
+    try:
+        from waapi import WaapiClient
+    except ImportError:
+        sys.exit("waapi-client is not installed: python -m pip install waapi-client")
+    return WaapiClient
+
+
 class Waapi:
     def __init__(self, url, timeout=180):
-        from waapi import WaapiClient
+        WaapiClient = waapi_client()
         t0, err = time.time(), None
         while time.time() - t0 < timeout:
             try:
@@ -186,6 +195,9 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=8095)
     ap.add_argument("--fresh-project", action="store_true", help="copy Bethesda's project again")
     a = ap.parse_args(argv)
+    waapi_client()                                        # before the slow steps
+    if not os.path.isfile(a.wwise):
+        sys.exit(f"no WwiseConsole.exe at {a.wwise} (--wwise)")
     events = a.event or list(EVENTS)
     wavs = extract(a.skyrim_data, events, os.path.join(a.work, "wav"), a.ffmpeg)
     print("sounds:", {k: len(v) for k, v in wavs.items()})
