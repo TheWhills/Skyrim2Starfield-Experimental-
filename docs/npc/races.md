@@ -846,3 +846,10 @@ why the mod needs no clothes of its own.
   both routes), no strand cards; the differences found are its template (Bob: other colour group, its Starfield
   hairline / scalp pieces dropped) and its fitting. Not reconciled with what the owner saw; the route is no longer
   used for adults. Open for the children, who still use it: compare a child's hair with a KS conversion in game.
+  Correction (same evening, after re-reading decisions.md 2026-11-03): the shared Skyrim hairstyles were ALSO copied
+  from Human_Male_Hair_Bob / Human_Female_Hair_Bob, and those templates have no extra parts (owner's report then:
+  template_extra_parts empty). So the two explanations given above - "another colour group (Bob)" and "Starfield's
+  hairline / scalp pieces dropped" - are wrong and withdrawn. Hair colour comes from shared colour maps looked up by
+  the albedo's brightness (2026-11-03), not per template. The difference between the reconversion and the shared
+  hairstyle is unexplained. The skullcap-like patch at the back of Faendal's head (owner 21:49) is then most likely
+  his Skyrim hairstyle's own shaved layer (HairShaved texture) as converted - unverified.
