@@ -248,18 +248,17 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    feature-matched face shape; Dorthe waits.)
 7l. B + C: women's faces and shoulders (docs/npc/races.md, 2026-11-19). Every adult's baked face is now recoloured
    to its body tone: run 7k's block again, then in game Hilde, Gerdur, Delphine, Ysolda, Sigrid: face vs neck / hands.
-   Shoulders (Hilde FarmClothes02, Gerdur FarmClothes03, Saadia's barkeeper clothes): skin through the dress on the
-   shoulders / upper back standing (owner's shots). Debug fits (owner's runs): nothing comes through in the rest pose
-   or on any slider; the dress sits 0-6 mm off the skin there. Owner: "these parts just need to be slightly raised".
-   Those three items refitted with the female strap gap 12 mm (was 8; male fits unchanged), Starfield closed:
+   Shoulders (Hilde, Gerdur, the barkeeper clothes): skin through the dress on the shoulder tops / upper back on
+   NPCs standing. Owner: every outfit is converted this way now, so raise those areas slightly for all: women's
+   outfits now keep 12 mm off the skin there (was 8 mm), down to 3 cm under the collarbones (was 2), fading out by
+   9 cm (was 6). Men's unchanged. The fit version went up, so the next item_convert run refits every item (both
+   sexes; slow, around an hour). Starfield closed:
    ```powershell
    git pull
-   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmClothes02 --armor ClothesFarmClothes03 --armor ClothesBarKeeper --fit-args="--female-strap-gap 0.012"
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius
    ```
-   In game Hilde, Gerdur, Saadia standing: shoulders covered? Still showing = a bigger number; puffy = smaller.
-   ON HOLD (owner, same evening): on the player, standing, both the per-NPC "Saadia outfit" and the shared barkeeper
-   clothes are clean, so the fit holds posed; the skin shows on NPCs only: their body (template) is the suspect. Send
-   the current faces.json first.
+   Item ids stay the same, so no face_fit rerun is needed. In game: Hilde, Gerdur, Saadia standing: shoulders and
+   upper back covered? Do the dresses look puffy anywhere?
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

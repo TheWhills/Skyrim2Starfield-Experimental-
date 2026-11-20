@@ -2471,3 +2471,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   clean, so the fit holds with the arms down; the skin shows on NPCs only. Suspect now the NPC body: test NPCs take
   the template's body with only MWGT replaced (faces.json "body"), and templates have changed since 11-09 (generic per
   sex 11-12, Elder template 11-13, by face ethnicity). The strap-gap rebuild is on hold.
+- 2026-11-19 Owner: "the barkeep and other ones are how all outfits are getting converted rn so it's probably worth it
+  to raise those two areas slightly". Default for female fits: STRAP_GAP 12 mm (was 8), STRAP_RAMP (3, 9) cm under
+  Skyrim's clavicles (was (2, 6)), covering the close parts in the owner's debug fits (0-6 mm off the skin, 3-7 cm
+  under the clavicles). Male fits still off (Ralof's cowl band). gearfit.FIT_VERSION 2: item_convert refits every
+  item. Alternative kept: the NPC body (template fields beyond MWGT) if skin still shows. In game unverified.

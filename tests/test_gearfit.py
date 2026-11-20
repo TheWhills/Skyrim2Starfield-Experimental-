@@ -1056,5 +1056,17 @@ class SpeedEquivalenceTests(unittest.TestCase):
         self.assertTrue(np.array_equal(zb, ref))
 
 
+
+
+class StrapTargetTests(unittest.TestCase):
+    def test_strap_target(self):
+        """2026-11-19: shoulders / upper back 12 mm off the skin down to 3 cm under the clavicles, fading to GAP by 9."""
+        t, band = G.strap_target([-0.02, 0.0, 0.03, 0.06, 0.09, 0.12])
+        self.assertTrue(np.allclose(t[:3], G.STRAP_GAP))
+        self.assertAlmostEqual(G.STRAP_GAP, 0.012)
+        self.assertAlmostEqual(t[3], (G.STRAP_GAP + G.GAP) / 2)
+        self.assertTrue(np.allclose(t[4:], G.GAP))
+        self.assertEqual(band.tolist(), [True, True, True, True, False, False])
+
 if __name__ == "__main__":
     unittest.main()

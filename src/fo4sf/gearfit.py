@@ -32,7 +32,8 @@ CARRY = 0.10                    # m: gear takes the body offset of Skyrim body p
 KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body keeps its Skyrim gap on Starfield's
 PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
-FIT_VERSION = 1                 # bump when what a fit produces changes (item_convert reuses fits by it)
+FIT_VERSION = 2                 # bump when what a fit produces changes (item_convert reuses fits by it)
+#                                 2: 2026-11-19 strap gap 12 mm, deeper band
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
 SKIN_DEPTH = 0.003              # m: a shape whose vertices lie this close to the Skyrim body is a skin piece
@@ -1304,9 +1305,21 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
 
 BUST_FRONT = 0.5      # body normal's forward (+y) share above which a point counts as the front of the chest
 BUST_Z = (0.04, 0.30)  # m below Starfield's clavicles: the bust band for round_bust
-STRAP_GAP = 0.008     # m: visible gear round the neck and shoulders stays this far off the skin
+# 2026-11-19 (owner: skin through the dresses on the shoulder tops and upper back of Hilde, Gerdur and the barkeeper
+# NPCs, standing; "these parts just need to be slightly raised" - every outfit goes through this fit): 12 mm, down to
+# 3 cm below the clavicles before fading to GAP by 9 cm (the owner's debug fits: the dress 0-6 mm off the skin there,
+# 3-7 cm below Skyrim's clavicles). Was 8 mm, (0.02, 0.06).
+STRAP_GAP = 0.012     # m: visible gear round the neck and shoulders stays this far off the skin
 STRAP_NECK = (0.085, 0.105)  # m from the neck's axis: no strap lift inside the first, full past the second
-STRAP_RAMP = (0.02, 0.06)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second
+STRAP_RAMP = (0.03, 0.09)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second
+
+
+def strap_target(below: np.ndarray, gap: float = GAP, strap_gap: float = STRAP_GAP):
+    """(target gap per point, in the band) for gear `below` metres under Skyrim's clavicles (negative = above):
+    strap_gap down to STRAP_RAMP[0], fading to gap by STRAP_RAMP[1], where the band ends."""
+    below = np.asarray(below, float)
+    ramp = np.clip((below - STRAP_RAMP[0]) / (STRAP_RAMP[1] - STRAP_RAMP[0]), 0.0, 1.0)
+    return strap_gap + (gap - strap_gap) * ramp, below < STRAP_RAMP[1]
 
 
 def lift_to(pts: np.ndarray, target: np.ndarray, mask: np.ndarray, body_pts: np.ndarray, body_tris,
@@ -2391,8 +2404,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
             # 3-4 mm off the skin in the fit were covered by skin at every slider, also after they took the skin's
             # weights; "straps are still too close to body")
             below = sky_clav_z - np.asarray(s.points)[:, 2]
-            ramp = np.clip((below - STRAP_RAMP[0]) / (STRAP_RAMP[1] - STRAP_RAMP[0]), 0.0, 1.0)
-            target_s = strap_gap + (gap - strap_gap) * ramp
+            target_s, band = strap_target(below, gap, strap_gap)
             if heads is not None:
                 # not the collar hugging the neck (2026-11-08, owner: a brown band round Ralof's neck; on his debug
                 # meshes the cowl's inner rim, 6-11 cm from the neck's axis, was lifted 8 mm off the neck and the
@@ -2404,7 +2416,7 @@ def fit(gear: List[SkyShape], sky_body: List[SkyShape], sf_world: Dict[str, np.n
                     rad = np.hypot(*(pts[:, :2] - ring_[:, :2].mean(0)).T)
                     near_neck = np.clip((rad - STRAP_NECK[0]) / (STRAP_NECK[1] - STRAP_NECK[0]), 0.0, 1.0)
                     target_s = gap + (target_s - gap) * near_neck
-            ms = (below < STRAP_RAMP[1]) & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
+            ms = band & ~sky_hidden & ~collar_keep & ~skirt_weighted(s.bones, s.weights)
             target = np.where(ms, np.maximum(target, target_s), target)
             mask |= ms
         if mask.any():
