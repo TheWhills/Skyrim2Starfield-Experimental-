@@ -16,6 +16,18 @@ class CutTests(unittest.TestCase):
         self.assertEqual(D.cut(v, 3), {"a": [0, 1, 2, "... 10 in all"], "b": {"c": [1.234568, [1, 2, 3]]}})
         self.assertIn("error", D.decode(b"not a tagfile", 3))
 
+    def test_summary(self):
+        v = {"motionProperties": [{"gravityFactor": 1.0}], "bodyCinfos": [
+            {"motionType": 2, "mass": 2.0, "qualityId": 255, "massDistribution": {"$class": "hknpRefMassDistribution"},
+             "shape": {"$class": "hknpConvexShape", "flags": 67, "properties": {"entries": [
+                 {"object": {"$class": "hknpShapeMassProperties"}}]}}}]}
+        s = D.summary(v)
+        self.assertEqual(s[0], "motionProperties: 1")
+        self.assertIn("motionType 2, mass 2.0", s[1])
+        self.assertIn("['hknpShapeMassProperties']", s[1])
+        self.assertIn("hknpRefMassDistribution", s[1])
+        self.assertEqual(D.summary({}), ["motionProperties: 0"])
+
 
 if __name__ == "__main__":
     unittest.main()

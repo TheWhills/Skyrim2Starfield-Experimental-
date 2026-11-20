@@ -2554,3 +2554,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   Skyrim's wrist-opening skin. Now after the hand skin is cut, clear_hand_skin pushes the item's points that lie on
   or at most HAND_CLEAR_UNDER 8 mm under it (within 3 cm) out to gearfit.GAP, spread over two rings; deeper points
   (the far side of the hand under an open patch) are left. Report: hand_skin.item_vertices_cleared.
+- 2026-11-20 item_body_dump decoded nothing on the owner's run (root() looks for hkRootLevelContainer; Starfield NIF
+  physics starts with hknpPhysicsSystemData as item 1): now item 1, plus a summary per body (motionType, mass, motion
+  properties id, filter, quality, shape property classes). The owner's sound_records.txt was the pre-pull output (no
+  2b section, the old doubled quench / take paths): to run again.

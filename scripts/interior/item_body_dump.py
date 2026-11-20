@@ -47,10 +47,38 @@ def cut(v, keep):
 
 
 def decode(blob, keep):
+    """The blob's top object, lists cut. Starfield's NIF physics tagfiles have no hkRootLevelContainer: item 1 is the
+    hknpPhysicsSystemData itself (2026-11-20, owner's first run: root() gave {} for every item; checked on a fan
+    blade, the dartboard and the trilobite's ragdoll)."""
     try:
-        return cut(hktagfile.Tagfile(blob).root(), keep)
+        tf = hktagfile.Tagfile(blob)
+        v = tf.root() or tf.item_value(1) or {}
+        return cut(v, keep)
     except Exception as e:                               # noqa: BLE001
         return {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+
+
+BODY_KEYS = ("motionType", "mass", "motionPropertiesId", "collisionFilterInfo", "qualityId", "flags", "materialId",
+             "collisionCntrl")
+
+
+def summary(v) -> list:
+    """Per body the fields that make it static or dynamic, plus the shape's class, flags and property classes, and
+    how many motion properties the system has."""
+    if not isinstance(v, dict):
+        return []
+    out = [f"motionProperties: {sum(1 for m in v.get('motionProperties') or [] if isinstance(m, dict))}"]
+    for i, b in enumerate(v.get("bodyCinfos") or []):
+        if not isinstance(b, dict):
+            continue
+        sh = b.get("shape") if isinstance(b.get("shape"), dict) else {}
+        props = [e.get("object", {}).get("$class") for e in ((sh.get("properties") or {}).get("entries") or [])
+                 if isinstance(e, dict) and isinstance(e.get("object"), dict)]
+        md = b.get("massDistribution")
+        out.append(f"body {i}: " + ", ".join(f"{k} {b.get(k)}" for k in BODY_KEYS if k in b)
+                   + f"; shape {sh.get('$class')} flags {sh.get('flags')} properties {props}"
+                   + f"; massDistribution {md.get('$class') if isinstance(md, dict) else md}")
+    return out
 
 
 def picks(sf_data, arcs, edids, per):
@@ -116,6 +144,7 @@ def main(argv=None):
         L.append(f"## {r['kind']}: {r['type']} {r['edid']} {r['form_id']} - {r['model']}")
         for b in r["bodies"]:
             L.append(f"- body {b['node']}: {b['bytes']} bytes, {', '.join(b['shapes'])}")
+            L.extend(f"  - {x}" for x in summary(b["decoded"]))
             L.append("```")
             L.append(json.dumps(b["decoded"], indent=1, default=str)[:6000])
             L.append("```")

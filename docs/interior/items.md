@@ -56,3 +56,9 @@ comparison found only 10 bodies, all static cargo crates (motion word as the sta
 convex, so the dynamic fields have to be read from convex bodies. item_body_dump.py decodes a few vanilla drinks /
 foods / misc items' bodies in full with hktagfile (every field by the file's own type table) next to the static
 template; our own convex writer (meshcollision) writes static bodies ("no mass properties").
+item_body_dump first run (owner, 2026-11-20): every body decoded to {} - Starfield's NIF physics tagfiles have no
+hkRootLevelContainer, item 1 is the hknpPhysicsSystemData itself (checked here on a fan blade, the dartboard and the
+trilobite ragdoll; fixed). Seen meanwhile (verified on those three): a ragdoll body is motionType 2 with a mass, a
+hknpRefMassDistribution and a motionPropertiesId into the system's motionProperties (gravity, damping, deactivation);
+the fan blade is motionType 0, mass 0, no motion properties, but each convex piece carries hknpShapeMassProperties
+(mass, volume, compressed inertia) where our convex writer puts none. Loose items next (summary lines per body).
