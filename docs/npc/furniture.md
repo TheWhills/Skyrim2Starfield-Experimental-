@@ -1054,3 +1054,7 @@ furniture_anim_pack reads them (skyrim_clip_sounds: the character behaviours nam
 trigger_sounds: event SoundPlay + string payload, or SoundPlay.<name>) and adds SoundPlay events at the clips' frames
 (sound_event_rows: a joined clip's parts by part_starts; relative-to-end triggers from the part's end), next to
 CLIP_EVENTS; the run prints "Skyrim's sound triggers in N descriptors: <names>".
+Owner's run (2026-11-20 12:33, verified): "Skyrim's sound triggers in 7 descriptors: NPCHumanBlacksmithForgeQuench,
+...QuenchDrop, ...ForgeTake, ...Hammer, ...HammerDistant, OBJBlacksmithForge"; 46 timed events in all (40 sounds + 6
+prop events). OBJBlacksmithForge (the forge fire / bellows, triggered by a clip, so a one-shot here) is not in our bank
+yet: silent until added (sound_bank --event).
