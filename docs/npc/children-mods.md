@@ -450,4 +450,8 @@ tan as our copies - yet the hands look pale in game. So the colour is made by th
 tone, not the texture: the child skin piece now wears the child hands' own material (gear_fit.choose_child_skin;
 the recoloured copy only when the hands' material cannot be read). Supported: the child body texture shares the
 adult body's UV layout (it is a whole body texture); unverified in game.
+**Verified in game** (owner, 2026-11-20 18:03: "looks right now"): Dorthe and Frodnar in their own RS clothes, heads
+on, bare skin matching their hands - each child item one merged addon on a ChildRace-named slot (body 3, shoes 37),
+built on Starfield's child outfit records, carrying Starfield's whole body uncut on the child hands' own material
+(female_child_01_body.mat). Slots 37 (shoes) verified with it; 6 / 29 / 35 / 5 (hands, other items) still unverified.
 

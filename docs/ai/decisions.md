@@ -2586,4 +2586,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   adult-sized and shrink them with the child skeleton (RS's meshes and Starfield's Cora Coe outfit, measured), so
   the adult pipeline carries over with only the source body changed. Alternatives: rebinding child-sized meshes
   (not needed: they are not child-sized), fitting to a Starfield child body (none found besides the hands).
+- 2026-11-20 Children's items (verified in game): one addon per item on a slot ChildRace names (unnamed slots hide a
+  child's head), copied from Starfield's own child outfit; the skin is Starfield's whole body, uncut, on the child
+  hands' material (Starfield's child has no naked body, so cut skin pieces showed black gaps, and only that
+  material gets the child's tone). Alternatives tried and dropped: per-part addons on the adult slots, RS's own skin
+  shapes (grey, then blotchy orange on a plain material), recoloured copies of the adult body material (tan).
 
