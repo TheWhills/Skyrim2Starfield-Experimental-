@@ -105,6 +105,51 @@ def child_skin_colour(sf_data: str, female: bool) -> tuple:
     return tuple(child_hair.skin_median(child_hair.tanned(light)))
 
 
+def child_skin_material(conv, content_resources: str, sf_data: str, body_mat: str, colour, female: bool) -> dict:
+    """{"material": .mat path or None, ...}: a copy of the body's own material (body_mat, from ContentResources.zip)
+    whose colour texture is the body's own, recoloured so its skin is `colour` (child_skin_colour), written into the
+    converter's staging (textures\\s2s\\children\\skin, materials\\s2s\\children). 2026-11-20 (owner): the child
+    skin piece on the adult body material drew the adult default tone, tan-orange against the child's pale hands (the
+    child's tone does not reach it); RS's own skin recoloured on a plain material read blotchy orange (no skin
+    shading). None with the reason when the template or its texture is not there (the piece keeps body_mat)."""
+    import child_hair
+    import skin_tone_probe
+    from fo4sf import convert_material as cm, skintone
+    rel = body_mat.replace("\\", "/")
+    try:
+        tpl = cm.read_template_path(content_resources, rel)
+    except (StopIteration, KeyError, OSError) as e:
+        return {"material": None, "why": f"{rel} not in ContentResources.zip ({type(e).__name__})"}
+    layer = tpl.get("Summary", {}).get("Layer1", {}).get("Textures", {})
+    slot = next((k for k, v in layer.items() if str(v.get("File", "")).lower().endswith("_color.dds")), None)
+    if slot is None:
+        return {"material": None, "why": f"{rel}: no _color texture in its Summary", "slots": sorted(layer)}
+    old = layer[slot]["File"]
+    try:
+        src = skin_tone_probe.TextureArchives(sf_data).read(old if old.lower().startswith("textures") else
+                                                             "textures/" + old)
+        img = child_hair.recolour_skin(skintone.decode_dds(src), colour)
+    except Exception as e:                          # noqa: BLE001 (report, keep the body's material)
+        return {"material": None, "why": f"{old}: {type(e).__name__}: {e}"}
+    sex = "f" if female else "m"
+    tex_rel = f"s2s/children/skin/child_skin_{sex}_color.dds"
+    path = os.path.join(conv.staging, "textures", *tex_rel.split("/"))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(skintone.raw_dds(img))
+    new_tex = ("textures/" if old.lower().startswith("textures") else "") + tex_rel
+    if "\\" in old:
+        new_tex = new_tex.replace("/", "\\")
+    mat = cm.build_from_template(tpl, f"S2S_ChildSkin_{sex.upper()}", {slot: new_tex})
+    mat_rel = f"materials/s2s/children/child_skin_{sex}.mat"
+    mp = os.path.join(conv.staging, *mat_rel.split("/"))
+    os.makedirs(os.path.dirname(mp), exist_ok=True)
+    with open(mp, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(cm.dump_mat(mat))
+    return {"material": mat_rel.replace("/", "\\"), "template": body_mat, "slot": slot, "texture": new_tex,
+            "colour": list(colour)}
+
+
 def starfield_body(sf_data: str, female: bool):
     """(points mesh space, triangles, body binds {bone: bind}) of the game's naked body."""
     nif, _ = hkx_to_af.vanilla_file(os_convert.SF_BODY[female], sf_data)
@@ -888,7 +933,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
         head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
         round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False,
-        conform: bool = False, hand_skin_names=(), hands_item: bool = False, body_largest_only: bool = False):
+        conform: bool = False, hand_skin_names=(), hands_item: bool = False, body_largest_only: bool = False,
+        child_body: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -954,7 +1000,17 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                       weight_src=weight_src,
                       heads=(sky_head_full, sf_head_full) if sky_head_full and sf_head_full else None)
     skin = None
-    if body_skin_names or feet_skin:          # our own skin piece where Skyrim's body-skin pieces lie
+    if child_body:
+        # a child item's skin piece is Starfield's whole body, nothing cut away (2026-11-20: Starfield's child has no
+        # naked body - unequipall shows head and hands only - so every gap in a cut piece showed black, at the cuffs
+        # and in a shin): the item brings the body the child lacks, as the adults' body is always there under theirs
+        uvs, mat, body_mesh = starfield_body_skin(sf_data, female)
+        skel_body = pts @ frame[:3, :3].T + frame[:3, 3]
+        skin, used = skin_piece(skel_body, tris, uvs, body_w, np.zeros((0, 3)), whole=True)
+        if skin is not None:
+            res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": ["child: the whole body"]}
+            res.report["_skin_used"] = used
+    elif body_skin_names or feet_skin:          # our own skin piece where Skyrim's body-skin pieces lie
         src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
                in set(body_skin_names)]
         if src or feet_skin:
@@ -1451,7 +1507,7 @@ def main(argv=None):
                              conform=a.conform,
                              hand_skin_names=sorted(hand_skin_shapes(textures)),
                              hands_item=not a.no_skin_piece and any(33 in (m.get("slots") or []) for m in meshes),
-                             body_largest_only=child)
+                             body_largest_only=child, child_body=bool(a.child_skin and not a.keep_skin))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
@@ -1510,6 +1566,18 @@ def main(argv=None):
                 mats.update(shape_materials(conv, gb, targets))
     doubled = set(names) if a.back_faces == "all" else (double & set(names) if a.back_faces == "auto" else set())
     sp = rep.get("skin_piece")
+    if sp and a.child_skin and not a.keep_skin and conv is not None:
+        try:
+            got = child_skin_material(conv, a.content_resources or os.path.join(a.starfield, "Tools",
+                                                                                 "ContentResources.zip"),
+                                      sf_data, sp["material"], child_skin_colour(sf_data, female), female)
+        except (KeyError, ValueError, OSError) as e:
+            got = {"material": None, "why": f"{type(e).__name__}: {e}"}
+        rep["child_skin"] = got
+        print("child skin piece: " + (f"{got['material']} (colour {got['colour']})" if got["material"]
+                                      else f"the body's own material ({got['why']})"))
+        if got["material"]:
+            sp["material"] = got["material"]
     if sp:
         mats[SKIN_SHAPE.decode()] = sp["material"]
     slots = None if (a.no_skin_piece or not sp) else HIDE_BODY_SLOTS

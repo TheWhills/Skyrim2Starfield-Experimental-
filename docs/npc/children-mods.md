@@ -426,4 +426,12 @@ they are they look like grey cloth. **Built:** gear_fit --child-skin (in CHILD_F
 colour recoloured (SkyrimConverter albedo_target) to Starfield's lightest ChildRace hands texture tanned by
 CHILD_TAN, as the children's own hand tones are (gear_fit.child_skin_colour; report gear_fit_*.json child_skin).
 Unverified in game.
+RS skin recoloured on a plain converted material (owner, 16:25, verified): blotchy orange forearms, shins and neck,
+far from the pale hands - no skin shading, RS's texture detail recoloured. **Built instead:** a child item's skin
+piece is Starfield's WHOLE body, uncut (gear_fit run child_body: the body the child lacks, as the adults always have
+theirs; no gaps, so no black), on a copy of the body's own material from ContentResources.zip whose colour texture
+is the body's own recoloured to child_skin_colour (gear_fit.child_skin_material: materials\s2s\children\
+child_skin_<m|f>.mat, textures\s2s\children\skin). Kept only in items on slot 3 (merge_child_item). If the body
+material is not in ContentResources.zip the piece keeps the body's own material (printed, report child_skin.why).
+CHILD_FIT_ARGS now --child-skin alone (RS skin shapes dropped again).
 

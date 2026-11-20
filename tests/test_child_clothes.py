@@ -323,11 +323,58 @@ class ChildSkinColourTests(unittest.TestCase):
         self.assertEqual(seen, {b"Arms": (200, 160, 150), b"Shirt": None})
 
 
+class ChildSkinMaterialTests(unittest.TestCase):
+    def test_body_material_copy_with_child_colour(self):
+        import json
+        import numpy as np
+        import child_hair as CH
+        import skin_tone_probe
+        from fo4sf import convert_material as cm, skintone
+        tpl = {"Objects": [{"ID": "res:00000001:00000002:00000003",
+                            "Components": [{"Type": "BSComponentDB::CTName", "Data": {"Name": "Body"}},
+                                           {"Type": "BSMaterial::MRTextureFile",
+                                            "Data": {"FileName": "textures/actors/human/body_color.dds"}}]}],
+               "Summary": {"Layer1": {"Textures": {"Albedo": {"File": "textures/actors/human/body_color.dds"},
+                                                   "Normal": {"File": "textures/actors/human/body_normal.dds"}}}}}
+
+        class FakeArchives:
+            def __init__(self, data):
+                pass
+
+            def read(self, p):
+                return p
+
+        def decode(p):
+            img = np.zeros((4, 4, 4), np.uint8)
+            img[...] = (172, 125, 95, 255)
+            return img
+        with tempfile.TemporaryDirectory() as d:
+            conv = types.SimpleNamespace(staging=d)
+            with mock.patch.object(cm, "read_template_path", return_value=tpl), \
+                    mock.patch.object(skin_tone_probe, "TextureArchives", FakeArchives), \
+                    mock.patch.object(skintone, "decode_dds", decode):
+                got = gear_fit.child_skin_material(conv, "cr.zip", "Data", "Materials\\Body.mat", (225, 190, 180),
+                                                   False)
+                self.assertEqual(got["material"], "materials\\s2s\\children\\child_skin_m.mat")
+                self.assertEqual(got["texture"], "textures/s2s/children/skin/child_skin_m_color.dds")
+                with open(os.path.join(d, "materials", "s2s", "children", "child_skin_m.mat"), encoding="utf-8") as fh:
+                    text = fh.read()
+                self.assertIn("child_skin_m_color.dds", text)
+                self.assertIn("body_normal.dds", text)                     # the other maps: the body's own
+                self.assertNotIn("body_color.dds", text)
+            with open(os.path.join(d, "textures", "s2s", "children", "skin", "child_skin_m_color.dds"), "rb") as fh:
+                img = skintone.decode_dds(fh.read())
+            self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(CH.skin_median(img), (225, 190, 180))))
+            with mock.patch.object(cm, "read_template_path", side_effect=StopIteration):
+                miss = gear_fit.child_skin_material(conv, "cr.zip", "Data", "Materials\\Body.mat", (1, 2, 3), True)
+            self.assertIsNone(miss["material"])
+            self.assertIn("not in ContentResources", miss["why"])
+
+
 class ItemConvertArgsTests(unittest.TestCase):
     def test_child_fit_args(self):
-        self.assertEqual(IC.child_fit_args([]), ["--keep-skin", "--no-skin-piece", "--child-skin"])
-        self.assertEqual(IC.child_fit_args(["--conform", "--keep-skin"]),
-                         ["--conform", "--keep-skin", "--no-skin-piece", "--child-skin"])
+        self.assertEqual(IC.child_fit_args([]), ["--child-skin"])
+        self.assertEqual(IC.child_fit_args(["--conform", "--child-skin"]), ["--conform", "--child-skin"])
 
     def test_mod_args_and_keys(self):
         a = types.SimpleNamespace(race="NordRaceChild", helmets=False, skyrim_mods_dir="C:\\mods",

@@ -226,9 +226,11 @@ def fit_item(a, edid: str, sex: str, fit_args) -> dict:
 # - is all the body there is: it does not take the child's tone, and every gap in it shows nothing behind. RS Children
 # Overhaul's clothes carry their own bare skin (blacksmith_1.nif: 'Arms', 'malebody_0 0'), modelled to meet the cloth:
 # children's items keep those (gear_fit --keep-skin, textures converted as the cloth's) and get no skin piece.
-CHILD_FIT_ARGS = ("--keep-skin", "--no-skin-piece", "--child-skin")
-# (--child-skin, 2026-11-20 16:06, owner: the kept RS skin came out pale grey - Skyrim's skin textures are tinted by
-# the engine - so it is recoloured to Starfield's lightest child hands, tanned as the children's own tones)
+# 2026-11-20 16:25 (owner, RS's skin recoloured on a plain material: blotchy orange, no skin shading): back to a
+# Starfield skin piece, now the WHOLE body uncut on a child-coloured copy of the body's own material (gear_fit
+# --child-skin: child_skin_material, child_skin_colour); RS's skin shapes dropped again. --keep-skin --child-skin
+# still gives the recoloured RS skin, for comparison.
+CHILD_FIT_ARGS = ("--child-skin",)
 
 
 def child_fit_args(fit_args) -> list:
