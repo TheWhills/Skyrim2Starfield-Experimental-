@@ -48,3 +48,11 @@ only"): the model with a fixed box collision, no item record. Status words as in
 
 Weapons and armour already have converters (weapon_test_pack, item_convert); placed copies of them use the same
 placement step.
+
+## Probe results (owner's run, 2026-11-20)
+item_physics_probe (verified): 1290 models of 344 ALCH / 1319 MISC / 992 BOOK / 132 AMMO / 242 KEYM; shapes mostly
+hknpConvexShape (2967), hknpBoxShape 682, compound 324; tagfiles most often 7088 / 7376 bytes. The box-layout
+comparison found only 10 bodies, all static cargo crates (motion word as the static template): loose items are
+convex, so the dynamic fields have to be read from convex bodies. item_body_dump.py decodes a few vanilla drinks /
+foods / misc items' bodies in full with hktagfile (every field by the file's own type table) next to the static
+template; our own convex writer (meshcollision) writes static bodies ("no mass properties").

@@ -70,12 +70,27 @@ def skyrim_sounds(sky_data, names=SKYRIM_FORGE) -> list:
                     other = sorted({s_.decode() for s_, _d in ss} - {"ANAM", "EDID"})
                     lines.append(f"  {name}: SNDR {sf_:08X} {ix.edid(sf_)} ({', '.join(other)}), {len(files)} files")
                     for fn in files:
-                        path = "sound\\" + fn.lower().lstrip("\\") if not fn.lower().startswith("sound") else fn.lower()
+                        path = sound_path(fn)
                         d = arcs._read(bsa.norm(path))
                         lines.append(f"    {path}: {len(d)} bytes" if d is not None else f"    {path}: not found")
     finally:
         ix.close()
     return lines
+
+
+def sound_path(fn: str) -> str:
+    """A Skyrim SNDR file name (ANAM) as an archive path: 'fx\\...' -> 'sound\\fx\\...'; 'Data\\Sound\\fx\\...' (the
+    Hearthfire / Update forge sounds, 2026-11-20: read as 'sound\\data\\sound\\...', not found) -> 'sound\\fx\\...'."""
+    p = fn.lower().replace("/", "\\").lstrip("\\")
+    if p.startswith("data\\"):
+        p = p[5:]
+    return p if p.startswith("sound\\") else "sound\\" + p
+
+
+def related(edids, name: str) -> list:
+    """EditorIDs containing `name` (case-insensitive), e.g. WwiseEvent_WPNGrenadeThrow for WPNGrenadeThrow."""
+    n = name.lower()
+    return sorted(e for e in edids if e and n in e.lower())
 
 
 def sound_groups(top_types, candidates=CANDIDATES) -> list:
@@ -112,11 +127,20 @@ def main(argv=None):
         by_type[t] = [(sfplugin.edid(subs), fid) for _typ, _h, subs, fid in sfplugin.records(esm, [t])]
     print(f"== 2. {KNOWN}: " + (", ".join(f"{t.decode()} {fid:08X}" for t, rows in by_type.items()
                                          for e, fid in rows if e.lower() == KNOWN.lower()) or "not found"))
+    # 2026-11-20 (owner's run: no record has the EditorID WPNGrenadeThrow): records whose EditorID contains it, and the
+    # first WWED / SOUN records, every subrecord shown (how a sound record names its Wwise event)
+    rel = {t: related([e for e, _f in rows], KNOWN) for t, rows in by_type.items()}
+    print(f"== 2b. EditorIDs containing {KNOWN}: " + (", ".join(f"{t.decode()} {e}" for t, es in rel.items()
+                                                              for e in es) or "none"))
+    shown = {t: 0 for t in groups}
     for t in groups:
         for _typ, _h, subs, fid in sfplugin.records(esm, [t]):
-            if sfplugin.edid(subs).lower() == KNOWN.lower():
-                print(f"== 4. {t.decode()} {fid:08X} {KNOWN}: " + "; ".join(f"{sg.decode()} {len(d)}: {hexhead(d)}"
-                                                                         for sg, d in subs))
+            e = sfplugin.edid(subs)
+            if e in rel.get(t, []) or (t in (b"WWED", b"SOUN") and shown[t] < 2):
+                shown[t] += 1
+                print(f"== 4. {t.decode()} {fid:08X} {e}: " + "; ".join(
+                    f"{sg.decode('latin-1')} {len(d)}: {zstr(d) if d[-1:] == b'\0' and d[:-1].isascii() else hexhead(d)}"
+                    for sg, d in subs))
     if a.skyrim_data:
         print("== 5. Skyrim's forge sounds")
         for line in skyrim_sounds(a.skyrim_data):

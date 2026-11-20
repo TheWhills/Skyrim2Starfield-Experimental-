@@ -991,3 +991,10 @@ Still to see: whether he walks into the grindstone by himself in its block (10-1
 Owner, 23:06: with the other stations disabled in game, after a passtime he used the grindstone (placed in by the
 passtime, not seen walking in). So the grindstone is chosen when it is the only station; the walk-in in real time
 during its block is still to be seen.
+
+sound_records (owner's run, 2026-11-20, verified): Starfield.esm's sound groups are WWED (489, EditorIDs like
+WwiseEvent_PHY_Metal_Chains_Impact), SOUN 649, AMBS, ASPC, MUSC, MUST; no record has the EditorID WPNGrenadeThrow (the
+SoundPlay payload of Starfield's throw animations), so the payload names a Wwise event directly or a WwiseEvent_ record
+by part of its name (section 2b / 4 now print the related records' subrecords). Skyrim's forge: hammer (4 wav),
+hammer distant (3), forge fire (1) found; quench / quench drop / take were looked up as sound\data\sound\... (their
+ANAM starts with Data\Sound): fixed (sound_path).

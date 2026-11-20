@@ -15,6 +15,13 @@ class SoundRecordsTest(unittest.TestCase):
                          ["FX_SteamHiss", "OBJ_Hammer_Impact"])
 
 
+    def test_paths_and_related(self):
+        self.assertEqual(S.sound_path("FX\\NPC\\a.wav"), "sound\\fx\\npc\\a.wav")
+        self.assertEqual(S.sound_path("Data\\Sound\\FX\\b.wav"), "sound\\fx\\b.wav")      # was sound\\data\\sound
+        self.assertEqual(S.sound_path("sound\\fx\\c.wav"), "sound\\fx\\c.wav")
+        self.assertEqual(S.related(["WwiseEvent_WPNGrenadeThrow", "X", None, "wpngrenadethrowsd"], "WPNGrenadeThrow"),
+                         ["WwiseEvent_WPNGrenadeThrow", "wpngrenadethrowsd"])
+
     def test_helpers(self):
         self.assertEqual(S.hexhead(b"\x01\x02", 1), "01 ...")
         self.assertEqual(S.zstr(b"Sound\\FX\\a.wav\0junk"), "Sound\\FX\\a.wav")
