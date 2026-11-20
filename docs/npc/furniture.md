@@ -1119,3 +1119,9 @@ Owner, 2026-11-20 14:00: "sometimes it hammers twice before he does it again". S
 upper-body slots are copies of the Idle descriptor (talk_copies), <audios> included, and play on top of the Idle, so
 each blow sounded twice whenever one ran. The copies now have no <audios>. If it remains: Skyrim's Idle carries two
 hammer triggers (frames 7 and 30 of 52) - whether the clip strikes twice is to be checked against the motion.
+All sets' sounds (owner, 2026-11-20 14:00: "can we go ahead and do the others too"): sound_swap now collects the
+Skyrim sound triggers of every set's clips (set_clips + furniture_anim_pack.skyrim_clip_sounds), keeps the forge's
+fixed table (SWAP) and gives every other sound the next free vanilla event of a pool (pool_events: Starfield_NPC
+one-shots under Crafting_Events / Furniture, 7 m or more, files no other event uses; by name), distant variants left
+out. It prints the sounds per set; furniture_anim_pack reads the map from <work>\..\sound_swap\sound_swap.json.
+Cost grows with it: those Starfield stations (pharma, research, industrial ...) play Skyrim sounds.

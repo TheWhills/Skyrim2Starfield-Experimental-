@@ -38,6 +38,59 @@ SWAP = {"NPCHumanBlacksmithHammer": "NPC_Human_FoodStation_Stockpot_Fidget",    
         "OBJBlacksmithForge": "NPC_Human_FoodStation_Heat_Off"}                        # 1
 
 
+POOL_PATHS = ("\\Crafting_Events\\", "\\Furniture\\")
+
+
+def pool_events(sf_info: dict, users: dict, taken) -> list:
+    """Vanilla events that may carry a Skyrim sound (2026-11-20, owner: "do the others too"): Starfield_NPC one-shots
+    under the NPC crafting / furniture events, heard within 7 m or more, whose streamed files no other event uses,
+    not already taken; sorted by name so a run gives the same picks. The cost: a Starfield NPC at that station plays
+    the Skyrim sound."""
+    out = []
+    for b in sf_info["SoundBanksInfo"]["SoundBanks"]:
+        if b.get("ShortName") != "Starfield_NPC":
+            continue
+        for e in b.get("IncludedEvents", []):
+            ids = [f["Id"] for f in e.get("ReferencedStreamedFiles", [])]
+            try:
+                reach = float(str(e.get("MaxAttenuation") or "0").rstrip("."))
+            except ValueError:
+                reach = 0.0
+            if (e["Name"] in taken or e.get("DurationType") != "OneShot" or reach < 7.0 or not ids
+                    or not any(p in e.get("ObjectPath", "") for p in POOL_PATHS)
+                    or any(users.get(i, set()) - {e["Name"]} for i in ids)):
+                continue
+            out.append(e["Name"])
+    return sorted(set(out))
+
+
+def plan(names, fixed: dict, pool: list) -> dict:
+    """{Skyrim sound: vanilla event}: the fixed table first, every other name the next pool event in turn; distant
+    variants left out (they play with the near sound, from the same spot here)."""
+    out, free = {}, [e for e in pool if e not in set(fixed.values())]
+    for n in sorted(set(names) | set(fixed)):
+        if "distant" in n.lower():
+            continue
+        if n in fixed:
+            out[n] = fixed[n]
+        elif free:
+            out[n] = free.pop(0)
+    return out
+
+
+def set_clips(sets=None) -> dict:
+    """{set: {Skyrim clip file names}} from furniture_anim_pack.SETS (joined clips split)."""
+    import furniture_anim_pack as FP
+    out = {}
+    for st in sets or list(FP.SETS):
+        names = set()
+        for _afx, clip, _tag in FP.SETS[st][2]:
+            for part in clip.replace("/", "\\").split("\\")[-1].lower().split("+"):
+                names.add(part if part.endswith(".hkx") else part + ".hkx")
+        out[st] = names
+    return out
+
+
 def event_files(sf_info: dict) -> tuple:
     """({event name: [streamed file ids]}, {file id: {event names using it}})."""
     files, users = {}, collections.defaultdict(set)
@@ -133,16 +186,23 @@ def main(argv=None):
     ap.add_argument("--work", required=True)
     ap.add_argument("--mod", required=True, help="the .wem files go to <mod>\\Sound\\Soundbanks")
     ap.add_argument("--ffmpeg")
+    ap.add_argument("--set", action="append", help="furniture sets whose Skyrim sounds to carry (default: all)")
     a = ap.parse_args(argv)
     src_name, info = SB.starfield_info(os.path.join(a.starfield, "Data"))
     files, users = event_files(info)
-    wavs = SB.extract(a.skyrim_data, list(SWAP), os.path.join(a.work, "wav"), a.ffmpeg)
+    import furniture_anim_pack as FP
+    clips = set_clips(a.set)
+    triggers = FP.skyrim_clip_sounds(a.skyrim_data, set().union(*clips.values()))
+    names = {snd for rows in triggers.values() for _t, _rel, snd in rows}
+    by_set = {st: sorted({snd for c in cs for _t, _rel, snd in triggers.get(c, [])}) for st, cs in clips.items()}
+    swap = plan(names, SWAP, pool_events(info, users, set(SWAP.values())))
+    wavs = SB.extract(a.skyrim_data, list(swap), os.path.join(a.work, "wav"), a.ffmpeg)
     dst_dir = os.path.join(a.mod, "Sound", "Soundbanks")
     os.makedirs(dst_dir, exist_ok=True)
-    rep = {"info": src_name, "sounds": {}}
-    vanilla = vanilla_wems(os.path.join(a.starfield, "Data"), [t for ev in SWAP.values() for t in files.get(ev, [])])
+    rep = {"info": src_name, "sounds_by_set": by_set, "sounds": {}}
+    vanilla = vanilla_wems(os.path.join(a.starfield, "Data"), [t for ev in swap.values() for t in files.get(ev, [])])
     loaded = {}
-    for sky, ev in SWAP.items():
+    for sky, ev in swap.items():
         targets = files.get(ev, [])
         row = {"event": ev, "skyrim_files": len(wavs.get(sky, [])), "replaced": [], "shared": {}}
         for tid, wav in assign(wavs.get(sky, []), targets):
@@ -174,7 +234,10 @@ def main(argv=None):
         print(f"{sky} -> {r['event']}: {len(r['replaced'])} files"
               + (f", FAILED {r['failed']}" if r.get("failed") else "") + (f", {r['error']}" if r.get("error") else "")
               + (f", shared with {r['shared']}" if r["shared"] else ""))
-    print(f"-> {os.path.join(a.work, 'sound_swap.json')} (furniture_anim_pack --sound-map)")
+    for st, ns in by_set.items():
+        if ns:
+            print(f"  {st}: {', '.join(ns)}")
+    print(f"-> {os.path.join(a.work, 'sound_swap.json')} (furniture_anim_pack reads it from there)")
     return 0
 
 

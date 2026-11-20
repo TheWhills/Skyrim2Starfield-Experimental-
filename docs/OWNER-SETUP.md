@@ -513,9 +513,11 @@ docs/npc/furniture.md). Starfield closed. Only the steps whose input changed nee
    python -I scripts\armor\furniture_anim_pack.py --calumi $calumi --skyrim-data $sky --starfield $sf --out "$mods\S2S Furniture Anims" --work C:\Modding\work\furniture_anim_pack --body-profiles C:\Modding\work\body_profiles\body_profiles.json --shoulder-calibration C:\Modding\work\shoulders.json
    ```
    Changes to the copy step only (descriptor clean-up, talk slots): add `--copy-only` (reuses the conversion in --work).
-   Skyrim's forge sounds (once, and again after a Starfield update that changes the food-station sounds): they
-   replace the audio files of five vanilla food-station sounds (sound_swap.py; docs/npc/furniture.md), in a mod of
-   their own - enable **S2S Sounds** in MO2. The forge's descriptors name those sounds by default.
+   Skyrim's furniture sounds (every set's clip triggers: forge, workbench, sitting ...; once, and again after a
+   Starfield update or a new set): each replaces the audio files of an unshared vanilla NPC crafting / furniture
+   sound (sound_swap.py; docs/npc/furniture.md), in a mod of their own - enable **S2S Sounds** in MO2. Run it before
+   the clips (or rerun the clips with `--copy-only` after it): furniture_anim_pack reads its map from
+   C:\Modding\work\sound_swap\sound_swap.json.
    ```powershell
    python -I scripts\armor\sound_swap.py --skyrim-data $sky --starfield $sf --work C:\Modding\work\sound_swap --mod "$mods\S2S Sounds"
    ```

@@ -731,7 +731,7 @@ def main(argv=None):
                          "(PowerShell splits an unquoted X,Y in two: both forms are taken)")
     ap.add_argument("--hand-clearance", metavar="UP,OUT", help="override HAND_CLEARANCE for the sets run")
     ap.add_argument("--sound-map", help="sound_swap.json: Skyrim sound names -> the vanilla Starfield events that "
-                                        "play them (others left out); default sound_swap.SWAP")
+                                        "play them (others left out); default <work>\\..\\sound_swap\\sound_swap.json, else sound_swap.SWAP")
     ap.add_argument("--no-sounds", action="store_true",
                     help="leave Skyrim's sound triggers out of the descriptors (2026-11-20: A/B for the forge "
                          "standing still after they were added)")
@@ -809,9 +809,14 @@ def main(argv=None):
             if a.sound_map:
                 with open(a.sound_map, encoding="utf-8") as fh:
                     smap = json.load(fh)
-            else:                               # the swap table itself (verified in game 2026-11-20 13:58)
-                import sound_swap
-                smap = dict(sound_swap.SWAP)
+            else:                               # sound_swap's map next to our work folder, else its fixed table
+                guess = os.path.join(os.path.dirname(os.path.abspath(a.work)), "sound_swap", "sound_swap.json")
+                if os.path.isfile(guess):
+                    with open(guess, encoding="utf-8") as fh:
+                        smap = json.load(fh)
+                else:
+                    import sound_swap
+                    smap = dict(sound_swap.SWAP)
             sound_rows = {stem: [(f, n, smap[p]) for f, n, p in evs if p in smap]
                           for stem, evs in sound_rows.items()}
             sound_rows = {k: v for k, v in sound_rows.items() if v}

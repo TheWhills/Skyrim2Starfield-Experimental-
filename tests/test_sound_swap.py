@@ -64,6 +64,33 @@ class SwapTests(unittest.TestCase):
             self.assertEqual((x.shape, rate), ((3, 1), 44100))
             self.assertAlmostEqual(float(x[1, 0]), 0.5)
 
+    def test_pool_and_plan(self):
+        info = {"SoundBanksInfo": {"SoundBanks": [{"ShortName": "Starfield_NPC", "IncludedEvents": [
+            {"Name": "B_Station", "ObjectPath": "\\Events\\X\\Crafting_Events\\B", "DurationType": "OneShot",
+             "MaxAttenuation": "13.", "ReferencedStreamedFiles": [{"Id": "1"}]},
+            {"Name": "A_Station", "ObjectPath": "\\Events\\X\\Crafting_Events\\A", "DurationType": "OneShot",
+             "MaxAttenuation": "13.", "ReferencedStreamedFiles": [{"Id": "2"}]},
+            {"Name": "Shared", "ObjectPath": "\\Events\\X\\Crafting_Events\\S", "DurationType": "OneShot",
+             "MaxAttenuation": "13.", "ReferencedStreamedFiles": [{"Id": "3"}]},
+            {"Name": "Other", "ObjectPath": "\\Events\\X\\Furniture\\O", "DurationType": "OneShot",
+             "MaxAttenuation": "13.", "ReferencedStreamedFiles": [{"Id": "3"}]},
+            {"Name": "Quiet", "ObjectPath": "\\Events\\X\\Furniture\\Q", "DurationType": "OneShot",
+             "MaxAttenuation": "5.", "ReferencedStreamedFiles": [{"Id": "4"}]},
+            {"Name": "Loop", "ObjectPath": "\\Events\\X\\Furniture\\L", "DurationType": "Infinite",
+             "MaxAttenuation": "13.", "ReferencedStreamedFiles": [{"Id": "5"}]},
+            {"Name": "Ambient", "ObjectPath": "\\Events\\X\\AMB\\Z", "DurationType": "OneShot",
+             "MaxAttenuation": "13.", "ReferencedStreamedFiles": [{"Id": "6"}]}]}]}}
+        _files, users = S.event_files(info)
+        pool = S.pool_events(info, users, {"B_Station"})
+        self.assertEqual(pool, ["A_Station"])                # shared, quiet, looping, ambient and taken left out
+        p = S.plan({"SkyChair", "SkyChairDistant", "Hammer"}, {"Hammer": "B_Station"}, ["A_Station", "C"])
+        self.assertEqual(p, {"Hammer": "B_Station", "SkyChair": "A_Station"})
+
+    def test_set_clips(self):
+        c = S.set_clips(["Forge"])["Forge"]
+        self.assertIn("blacksmithforgehammer.hkx", c)
+        self.assertIn("blacksmithforgepull.hkx", c)              # joined clips split into their parts
+
     def test_swap_table(self):
         self.assertNotIn("NPCHumanBlacksmithHammerDistant", S.SWAP)
         self.assertEqual(len(set(S.SWAP.values())), len(S.SWAP))
