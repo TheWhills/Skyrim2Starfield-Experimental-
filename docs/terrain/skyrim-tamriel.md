@@ -368,3 +368,19 @@ printed ground range says how rough the square is; Riverwood's pad: 4.8 m); the 
 and SKY_NirnMapMarker move there in place (staged copy, and with --starfield the installed one when identical), and
 overlays_params.json "landing" is updated (old ones kept in "landing_history"). No terrain rebuild, FormIDs unchanged.
 Without --apply it only prints. Unverified on the owner's data.
+
+## Bethesda's Creation Kit wiki (owner's copies, 2026-11-20): "Creating Overlays and World Spaces", "Distant LOD"
+- Confirms (verified, official): an overlay's outer ring of cells is a blend zone where no assets or biome markers
+  may be placed ("a 3x3 overlay will have only one cell of usable space"); matches uOverlayMergeZoneSize 1
+  (commonwealth-scale.md). Ours keep it empty: Tamriel's flat border band past Skyrim's land, the cities' 4-cell
+  parent ring (skyrim-cities.md).
+- The recommended maximum overlay size is 6 x 6 cells (a recommendation: our much larger Tamriel overlay loads).
+- A unique overlay's worldspace location is parented to the planet's Surface location; interior locations to the
+  worldspace's location (as overlay_records.py does).
+- Distant LOD: `CreationKit.exe -MockWorldSpaceLOD:<plugin> <World1>,<World2>` writes Meshes\Terrain\... LOD NIFs and
+  LODSettings\...; objects need a layer with LOD enabled (Layers window). Our objectlod.py writes that same layout
+  (skyrim-objects.md: verified in game).
+- New to us: console `awpb <WorldSpace> <Planet> <biome index>` places a worldspace on a planet in one of its biomes
+  and lands the player near its centre (e.g. `awpb OEBB003World Jemison 2`): a quick in-game check of a city
+  overlay without a registration plugin. Untried.
+- Loose files: [Archive] bInvalidateOlderFiles=1 in StarfieldCustom.ini (we pack archives; not needed).
