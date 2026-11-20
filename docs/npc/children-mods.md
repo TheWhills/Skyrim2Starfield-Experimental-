@@ -438,4 +438,10 @@ Whole-body child skin (owner, 16:54, verified): limbs the right (slim) shape, no
 report said why: the body material names its colour texture "Data\Textures\Actors\human\Naked_Body\
 nakedbodym_sk3_color.dds" and child_skin_material read that path as it stood (KeyError), so the piece kept the body's
 own material. gear_fit.material_texture_key now turns such a path into the archive key and keeps its prefix for ours.
+Owner's run 17:21 (verified from its output): the child skin material is made (child_skin_m / _f.mat) and worn, but
+its colour (164, 115, 84) - child_skin_colour, the tone group's lightest hands tanned - is the lightest child BODY
+texture tanned to the unit (172,125,95 * CHILD_TAN), and in game the shins still read tan-orange beside pale hands.
+Now the colour comes from what the hands are drawn with: Child_Hands.nif's material (from ContentResources.zip), its
+colour texture's skin median (gear_fit.child_hands_colour; printed with each "child skin piece:" line; the tone
+group's colour only when that cannot be read). Unverified in game.
 

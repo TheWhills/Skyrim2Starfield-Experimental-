@@ -379,6 +379,40 @@ class ChildSkinMaterialTests(unittest.TestCase):
             self.assertIn("not in ContentResources", miss["why"])
 
 
+class ChildHandsColourTests(unittest.TestCase):
+    def test_from_the_hands_material(self):
+        import numpy as np
+        import child_hair as CH
+        import skin_tone_probe
+        import slot_probe
+        from fo4sf import convert_material as cm, skintone
+        tpl = {"Summary": {"Layer1": {"Textures": {"Albedo": {"File": "Data\\Textures\\Child\\hands_color.dds"},
+                                                   "Normal": {"File": "Data\\Textures\\Child\\hands_normal.dds"}}}}}
+        seen = {}
+
+        class FakeArchives:
+            def __init__(self, data):
+                pass
+
+            def read(self, p):
+                seen["tex"] = p
+                return p
+
+        def decode(p):
+            img = np.zeros((4, 4, 4), np.uint8)
+            img[...] = (230, 200, 190, 255)
+            return img
+        with mock.patch.object(gear_fit.hkx_to_af, "vanilla_file", return_value=(b"nif", "x")), \
+                mock.patch.object(slot_probe, "model_shapes", return_value=[{"material": "Materials\\Child\\Hands.mat"}]), \
+                mock.patch.object(cm, "read_template_path", return_value=tpl) as rt, \
+                mock.patch.object(skin_tone_probe, "TextureArchives", FakeArchives), \
+                mock.patch.object(skintone, "decode_dds", decode):
+            got = gear_fit.child_hands_colour("Data", "cr.zip")
+        self.assertEqual(rt.call_args[0][1], "Materials/Child/Hands.mat")
+        self.assertEqual(seen["tex"], "textures/child/hands_color.dds")
+        self.assertEqual(got["colour"], CH.skin_median(decode("")))
+
+
 class MaterialTextureKeyTests(unittest.TestCase):
     def test_keys(self):
         self.assertEqual(gear_fit.material_texture_key("Data\\Textures\\Actors\\human\\Naked_Body\\b_color.dds"),

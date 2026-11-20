@@ -88,6 +88,28 @@ def shape_textures(nif_bytes: bytes) -> dict:
     return out
 
 
+CHILD_HANDS_MODEL = "meshes/actors/child/mesh/child_hands.nif"     # AA_Child_Hands_NOTPLAYABLE's model
+
+
+def child_hands_colour(sf_data: str, content_resources: str) -> dict:
+    """{"colour": sRGB skin median of the colour texture the child hands are drawn with - their model's material
+    (Child_Hands.nif) read from ContentResources.zip - , "material", "texture"}. 2026-11-20 (owner's run): the tone
+    group's lightest hands texture, tanned, gave (164, 115, 84) - the lightest child BODY texture tanned, to the unit -
+    and the skin it coloured stayed tan-orange beside the pale hands in game; what the hands show is their material's."""
+    import child_hair
+    import skin_tone_probe
+    from fo4sf import convert_material as cm, skintone
+    nif, _ = hkx_to_af.vanilla_file(CHILD_HANDS_MODEL, sf_data)
+    import slot_probe
+    mat = next((r["material"] for r in slot_probe.model_shapes(nif) if r["material"]), "")
+    tpl = cm.read_template_path(content_resources, mat.replace("\\", "/"))
+    layer = tpl.get("Summary", {}).get("Layer1", {}).get("Textures", {})
+    old = next(v["File"] for v in layer.values() if str(v.get("File", "")).lower().endswith("_color.dds"))
+    key, _prefix = material_texture_key(old)
+    img = skintone.decode_dds(skin_tone_probe.TextureArchives(sf_data).read(key))
+    return {"colour": tuple(child_hair.skin_median(img)), "material": mat, "texture": old}
+
+
 def child_skin_colour(sf_data: str, female: bool) -> tuple:
     """sRGB skin colour for a child item's bare skin (--child-skin): Starfield's lightest ChildRace hands texture, tanned
     as the children's own tones are (child_hair.light_child_tone: lightest hands * CHILD_TAN), by its skin median.
@@ -1578,15 +1600,22 @@ def main(argv=None):
     doubled = set(names) if a.back_faces == "all" else (double & set(names) if a.back_faces == "auto" else set())
     sp = rep.get("skin_piece")
     if sp and a.child_skin and not a.keep_skin and conv is not None:
+        cr_zip = a.content_resources or os.path.join(a.starfield, "Tools", "ContentResources.zip")
         try:
-            got = child_skin_material(conv, a.content_resources or os.path.join(a.starfield, "Tools",
-                                                                                 "ContentResources.zip"),
-                                      sf_data, sp["material"], child_skin_colour(sf_data, female), female)
+            hands = child_hands_colour(sf_data, cr_zip)
+        except Exception as e:                       # noqa: BLE001 (report; the tone group's colour then)
+            hands = {"colour": None, "why": f"{type(e).__name__}: {e}"}
+        try:
+            colour = hands["colour"] or child_skin_colour(sf_data, female)
+            got = child_skin_material(conv, cr_zip, sf_data, sp["material"], colour, female)
         except (KeyError, ValueError, OSError) as e:
             got = {"material": None, "why": f"{type(e).__name__}: {e}"}
+        got["hands"] = hands
         rep["child_skin"] = got
         print("child skin piece: " + (f"{got['material']} (colour {got['colour']})" if got["material"]
-                                      else f"the body's own material ({got['why']})"))
+                                      else f"the body's own material ({got['why']})")
+              + (f"; child hands {hands['colour']} from {hands.get('texture')}" if hands.get("colour")
+                 else f"; child hands colour not read ({hands.get('why')})"))
         if got["material"]:
             sp["material"] = got["material"]
     if sp:
