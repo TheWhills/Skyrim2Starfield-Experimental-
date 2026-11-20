@@ -276,6 +276,32 @@ def drop_variables(afx: bytes, names) -> Tuple[bytes, List[str]]:
     return _afx_out(root, afx), dropped
 
 
+def add_audio(afx: bytes, frame: int, foley: str) -> bytes:
+    """The descriptor with one more <audios><audio><frame/><foley/></audio>, in frame order. 2026-11-20 (owner's
+    forge descriptors, verified): the welder template's own sound is <audio><frame>139</frame><foley>
+    ITM_Microscope_Up</foley></audio> - a Wwise event name (Starfield_ITM) - and it played in game, while SoundPlay
+    events in the same descriptor did not: furniture clips play sounds through <audios>."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    auds = root.find("audios")
+    if auds is None:
+        auds = ET.SubElement(root, "audios")
+    au = ET.Element("audio")
+    ET.SubElement(au, "frame").text = str(int(frame))
+    ET.SubElement(au, "foley").text = foley
+    kids = auds.findall("audio")
+    at = next((i for i, e in enumerate(kids) if int(e.findtext("frame") or 0) > frame), len(kids))
+    auds.insert(at, au)
+    return ET.tostring(root, encoding="utf-8", short_empty_elements=False)
+
+
+def drop_audios(afx: bytes) -> bytes:
+    """The descriptor without its <audios> (a template's own foley, e.g. the welder's microscope on our forge)."""
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    for a in root.findall("audios"):
+        root.remove(a)
+    return ET.tostring(root, encoding="utf-8", short_empty_elements=False)
+
+
 def add_event(afx: bytes, frame: int, name: str, payload: str = "") -> bytes:
     """The descriptor with one more <event> (kept in frame order; same layout as the shipped events)."""
     root = ET.fromstring(afx.decode("utf-8-sig"))
@@ -557,9 +583,9 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             afx, retime = retime_descriptor(like_afx, F - 1, af.name, like_last, mapped, hit_frame)
         else:
             afx = descriptor(tag or name, af.name, is_state, mapped, variables)
-        sounds = sound_events(unmapped, fps)          # not in vanilla descriptors: added, never matched
-        for frame, ev_name, payload in sounds:
-            afx = add_event(afx, min(frame, F - 1), ev_name, payload)
+        sounds = sound_events(unmapped, fps)          # Skyrim's SoundPlay.<name>: Starfield <audio> foley
+        for frame, _ev, payload in sounds:
+            afx = add_audio(afx, min(frame, F - 1), payload)
         extra = []
         if plugin_event_host is not None:
             extra = plugin_events(unmapped, fps, plugin_event_host or None)

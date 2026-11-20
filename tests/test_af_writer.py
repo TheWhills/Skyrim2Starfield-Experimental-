@@ -180,13 +180,17 @@ class SoundEventTests(unittest.TestCase):
                {"time": 0.4, "text": "SoundStop.X"}]
         self.assertEqual(AF.sound_events(ann, 30.0), [(6, "SoundPlay", "NPCHumanBlacksmithForgeTake"),
                                                       (30, "SoundPlay", "NPCHumanBlacksmithHammer")])
+        # 2026-11-20: written as <audios><audio><frame/><foley/> (the welder template's working sound), in order
         afx = AF.descriptor("Idle", "a.af", events=[(10, "AnimObjDraw", "x")])
-        for f, n, p in AF.sound_events(ann, 30.0):
-            afx = AF.add_event(afx, f, n, p)
-        got = [(int(e.findtext("frame")), e.findtext("name"), e.findtext("payload") or "")
-               for e in ET.fromstring(afx).iter("event")]
-        self.assertEqual(got, [(6, "SoundPlay", "NPCHumanBlacksmithForgeTake"), (10, "AnimObjDraw", "x"),
-                               (30, "SoundPlay", "NPCHumanBlacksmithHammer")])
+        for f, _n, p in AF.sound_events(ann, 30.0)[::-1]:
+            afx = AF.add_audio(afx, f, p)
+        root = ET.fromstring(afx)
+        got = [(int(a.findtext("frame")), a.findtext("foley")) for a in root.iter("audio")]
+        self.assertEqual(got, [(6, "NPCHumanBlacksmithForgeTake"), (30, "NPCHumanBlacksmithHammer")])
+        self.assertEqual([e.findtext("name") for e in root.iter("event")], ["AnimObjDraw"])
+        welder = b"<root><tag>E</tag><audios><audio><frame>139</frame><foley>ITM_Microscope_Up</foley></audio>" \
+                 b"</audios></root>"
+        self.assertEqual(list(ET.fromstring(AF.drop_audios(welder)).iter("audio")), [])
 
 
 class PluginEventTests(unittest.TestCase):

@@ -1062,3 +1062,10 @@ In game after the sound triggers (owner, 2026-11-20 12:43): Alvor stands at the 
 hammer. Two candidates, not yet told apart: the Creation Kit cache step (robocopy /MIR from an empty or missing
 animinfo folder empties S2S AnimInfo) or the SoundPlay events in the descriptors. furniture_anim_pack --no-sounds
 gives the descriptors without them for the A/B.
+**How furniture clips play sound** (owner's descriptors, 2026-11-20 12:46, verified): the welder template's
+EnterFromStand.afx has `<audios><audio><frame>139</frame><foley>ITM_Microscope_Up</foley></audio></audios>` - a Wwise
+event name (Starfield_ITM) - and that sound played on our Pull ("it plays a sound but not the right one"); our
+SoundPlay events in the same descriptor stayed silent. So Skyrim's sounds are now written as <audio> foley entries
+(af_writer.add_audio; furniture_anim_pack.add_sound_audios, which also drops the template's own <audios> in a set with
+Skyrim sounds), and the bank gets OBJBlacksmithForge too (three bellows one-shots in the Pull). Still unverified: that
+our 1490023241.bnk is loaded (an <audio> naming our event is the test).

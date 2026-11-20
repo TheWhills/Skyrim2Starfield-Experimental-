@@ -227,7 +227,8 @@ def trigger_sounds(behavior: dict) -> dict:
     """{animation file name (lower): [(seconds, relative_to_end, sound name)]} for every clip generator of a Skyrim
     behaviour graph (skyrimbehavior.read) whose triggers play a sound: event SoundPlay with a string payload, or an
     event named SoundPlay.<name>. 2026-11-20 (owner's forge rebuild: every clip reported 0 events): Skyrim's forge
-    sounds are the behaviour's clip triggers (smithing_probe), not annotations in the clip files."""
+    sounds are the behaviour's clip triggers (smithing_probe), not annotations in the clip files. Written as
+    <audio> foley (add_sound_audios), not SoundPlay events: those stayed silent in the owner's 12:44 test."""
     nodes, events = behavior["nodes"], behavior["events"]
     out = {}
     for n in nodes.values():
@@ -300,6 +301,16 @@ def sound_event_rows(rows, sounds, fps: float = 30.0) -> dict:
             stem = os.path.splitext(target.replace("\\", "/").split("/")[-1])[0].lower()
             out[stem] = sorted(evs)
     return out
+
+
+def add_sound_audios(afx_text: str, sounds) -> str:
+    """The descriptor with its template's <audios> dropped and Skyrim's sounds as <audio> foley entries (frame,
+    "SoundPlay", Wwise event name) - Starfield's furniture descriptors play sound that way (af_writer.add_audio)."""
+    from fo4sf import af_writer
+    data = af_writer.drop_audios(afx_text.encode("utf-8"))
+    for f, _n, name in sounds:
+        data = af_writer.add_audio(data, f, name)
+    return data.decode("utf-8")
 
 
 def add_clip_events(afx_text: str, events) -> str:
@@ -789,8 +800,6 @@ def main(argv=None):
         parts = {x if x.endswith(".hkx") else x + ".hkx" for x in parts}
         sounds = skyrim_clip_sounds(a.skyrim_data, parts) if parts and not a.no_sounds else {}
         sound_rows = sound_event_rows(rows, sounds)
-        for stem, evs in sound_rows.items():
-            clip_events.setdefault(stem, []).extend(evs)
         if sound_rows:
             print(f"{st}: Skyrim's sound triggers in {len(sound_rows)} descriptors: "
                   + ", ".join(sorted({e[2] for v in sound_rows.values() for e in v})))
@@ -808,6 +817,8 @@ def main(argv=None):
                     new = props_at_start(swap_anim_objects(new, PROP_SWAP[st]))
                 if SET_PROP_OBJECTS.get(st):
                     new = add_set_props(new, SET_PROP_OBJECTS[st])
+                if sound_rows:                 # Skyrim's sounds replace the template's own foley (the welder's)
+                    new = add_sound_audios(new, sound_rows.get(os.path.splitext(f)[0].lower(), []))
                 timed = clip_events.get(os.path.splitext(f)[0].lower())
                 if timed:
                     new = add_clip_events(new, timed)

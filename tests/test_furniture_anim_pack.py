@@ -586,3 +586,15 @@ class SoundTriggerTests(unittest.TestCase):
                                                 (159, "SoundPlay", "S3")])
         self.assertEqual(got["idle"], [(15, "SoundPlay", "S2"), (59, "SoundPlay", "S3")])
         self.assertNotIn("exit", got)
+
+    def test_add_sound_audios(self):
+        welder = ("<root><tag>EnterFromStand</tag><events><event><frame>0</frame><name>AnimObjLoad</name><payload>x"
+                  "</payload></event></events><audios><audio><frame>139</frame><foley>ITM_Microscope_Up</foley></audio>"
+                  "</audios></root>")
+        out = P.add_sound_audios(welder, [(315, "SoundPlay", "NPCHumanBlacksmithForgeTake"),
+                                          (51, "SoundPlay", "OBJBlacksmithForge")])
+        self.assertNotIn("ITM_Microscope_Up", out)
+        self.assertLess(out.index("OBJBlacksmithForge"), out.index("NPCHumanBlacksmithForgeTake"))
+        self.assertIn("<foley>NPCHumanBlacksmithForgeTake</foley>", out)
+        self.assertIn("<name>AnimObjLoad</name>", out)
+        self.assertNotIn("<audio>", P.add_sound_audios(welder, []))           # a set with sounds: no welder foley

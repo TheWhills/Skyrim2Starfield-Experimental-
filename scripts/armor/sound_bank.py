@@ -35,10 +35,10 @@ sys.path.insert(0, HERE)
 import wwise_probe as WP  # noqa: E402
 
 WWISE_CONSOLE = r"C:\Audiokinetic\Wwise_2021.1.14.8108\Authoring\x64\Release\bin\WwiseConsole.exe"
-# Skyrim's forge clip sounds (smithing_probe), one-shots; OBJBlacksmithForge (the fire's loop) left out: a loop needs a
-# stop event and an emitter, not an animation trigger
+# Skyrim's forge clip sounds (smithing_probe), one-shots. OBJBlacksmithForge added 2026-11-20: the Pull's triggers play
+# it three times (frames 51, 127, 194 of the owner's descriptor: the bellows), so it is a one-shot there too
 EVENTS = ("NPCHumanBlacksmithHammer", "NPCHumanBlacksmithHammerDistant", "NPCHumanBlacksmithForgeQuench",
-          "NPCHumanBlacksmithForgeQuenchDrop", "NPCHumanBlacksmithForgeTake")
+          "NPCHumanBlacksmithForgeQuenchDrop", "NPCHumanBlacksmithForgeTake", "OBJBlacksmithForge")
 BANK = "Starfield_XXX_Scratch"
 TEMPLATE_EVENT = "NPC_Human_FoodStation_Drawer_Close"
 ACTION_PLAY = 1
