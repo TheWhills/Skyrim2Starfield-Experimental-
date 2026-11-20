@@ -2491,3 +2491,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   Male fits unchanged (owner); they carry the same mismatch. The 12 mm strap raise is withdrawn (back to 8 mm,
   (2, 6) cm); gearfit.FEMALE_FIT_VERSION 3. In game unverified. Alternative: give the skin piece the skeleton's binds
   (would bring back the 11-07 seam at the head mesh's edge).
+- 2026-11-20 Owner: the body binds fixed the shoulder / chest skin on Gerdur and Delphine (verified in game). Two left:
+  (1) Gerdur's hands always show through her gloves (ClothesFarmGloves03, fingerless; Starfield's hands mesh
+  hands_3rd_f.nif is drawn under them). Same mechanism, supported not verified: the hands mesh carries its own binds,
+  the gloves had the skeleton's on the hand / finger bones (the body has none of them). Female fits now take the
+  hands mesh's binds for hand bones the body lacks (gear_fit.hand_binds_for_gear: bind_hand @ inv(hands frame) @ body
+  frame), and report how far they sit from the skeleton's (gear_fit json hand_bind_offsets_mm: the size of the fix;
+  near 0 = this was not the cause). FEMALE_FIT_VERSION 4. (2) Face vs the skin piece colour (lighter chest patch on
+  Gerdur, Delphine): the owner's last faces.json predates TONE_GAP 0 - only Hilde and Saadia were recoloured -
+  so the face recolour (the 11-12 fix: baked face to the body tone texture's median) is not built for them yet.

@@ -313,6 +313,30 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(out, {"Boots": [7], "Cuirass": [3, 5], "Body": [3, 5], "Cuffs": [8], "Belt": [9]})
 
 
+    def test_hand_binds_for_gear(self):
+        """2026-11-19 (Gerdur's hands through her gloves): a glove vertex placed on a hands-mesh point is drawn where
+        the hands mesh draws that point: bind_gear @ v == bind_hand @ u for v = inv(body frame) @ hands frame @ u."""
+        import numpy as np
+        rng = np.random.default_rng(1)
+        def rt(seed):
+            r = np.random.default_rng(seed)
+            q, _ = np.linalg.qr(r.normal(size=(3, 3)))
+            if np.linalg.det(q) < 0:
+                q[:, 0] *= -1
+            m = np.eye(4)
+            m[:3, :3] = q
+            m[:3, 3] = r.normal(size=3)
+            return m
+        hb, fh, f = rt(2), rt(3), rt(4)
+        got = gear_fit.hand_binds_for_gear({"L_Index1": hb, "L_Forearm": rt(5)}, fh, f, skip={"L_Forearm"})
+        self.assertEqual(sorted(got), ["L_Index1"])
+        m = gear_fit.bind_matrix(got["L_Index1"])
+        u = np.r_[rng.normal(size=3), 1.0]
+        v = np.linalg.inv(f) @ fh @ u
+        self.assertTrue(np.allclose(m @ v, hb @ u))
+        same = gear_fit.hand_binds_for_gear({"L_Index1": hb}, f, f)                  # same frame: the bind as is
+        self.assertTrue(np.allclose(gear_fit.bind_matrix(same["L_Index1"]), hb))
+
     def test_strap_gap_for(self):
         """--female-strap-gap raises only the female fit (item_convert --fit-args runs both sexes)."""
         import types

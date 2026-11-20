@@ -33,9 +33,10 @@ KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body 
 PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
 FIT_VERSION = 1                 # bump when what a fit produces changes (item_convert reuses fits by it)
-FEMALE_FIT_VERSION = 3          # bump when only female fits change (owner 2026-11-19: male outfits look great, not a
+FEMALE_FIT_VERSION = 4          # bump when only female fits change (owner 2026-11-19: male outfits look great, not a
 #                                 thing changes on them, not even a refit). 2: strap gap 12 mm (withdrawn); 3: the
-#                                 game body's own binds on the gear (skeleton_binds body_binds)
+#                                 game body's own binds on the gear (skeleton_binds body_binds); 4: the hands mesh's
+#                                 own binds on hand bones too (gear_fit.hand_binds_for_gear)
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
 SKIN_DEPTH = 0.003              # m: a shape whose vertices lie this close to the Skyrim body is a skin piece

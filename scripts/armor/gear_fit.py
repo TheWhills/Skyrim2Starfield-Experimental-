@@ -361,9 +361,10 @@ def skyrim_head_mesh(nif_bytes: bytes):
     return np.asarray(s.points, float), np.asarray(s.triangles, int).reshape(-1, 3)
 
 
-def find_hands(sf_data: str, female: bool, world):
+def find_hands(sf_data: str, female: bool, world, with_binds: bool = False):
     """(path, points in skeleton space, triangles) of the game's hands mesh (a separate mesh from the naked body, so
-    the push-out must see it too; 2026-11-06: Starfield fingers poked through the converted gloves), or (None, ...)."""
+    the push-out must see it too; 2026-11-06: Starfield fingers poked through the converted gloves), or (None, ...).
+    with_binds: also {bone: 4x4 bind} and the 4x4 frame (hands mesh space -> skeleton) of the hands mesh."""
     from fo4sf import sfnif
     for fn in sorted(os.listdir(sf_data)):
         low = fn.lower()
@@ -393,8 +394,36 @@ def find_hands(sf_data: str, female: bool, world):
             frame = gearfit.mesh_frame(dict(zip(bones, skin.get("binds", []))), world)
             tris = np.array([tuple(t) for t in m.triangles], int).reshape(-1, 3)
             weights = [[(bones[b], x) for b, x in vw if b < len(bones)] for vw in hw]
-            return p, pts @ frame[:3, :3].T + frame[:3, 3], tris, weights
-    return None, None, None, None
+            out = (p, pts @ frame[:3, :3].T + frame[:3, 3], tris, weights)
+            if with_binds:
+                out += ({b: bind_matrix(x) for b, x in zip(bones, skin.get("binds", []))}, frame)
+            return out
+    return (None,) * (6 if with_binds else 4)
+
+
+def bind_matrix(bind) -> np.ndarray:
+    """4x4 of a (sphere, rot 9, trans 3, scale) bind."""
+    _sp, rot, trans, scale = bind
+    m = np.eye(4)
+    m[:3, :3] = np.array(rot, float).reshape(3, 3) * float(scale or 1.0)
+    m[:3, 3] = trans
+    return m
+
+
+def hand_binds_for_gear(hand_binds: dict, hand_frame: np.ndarray, frame: np.ndarray, skip=()) -> dict:
+    """The hands mesh's own binds as binds for gear in the body mesh space ({bone: (sphere, rot 9, trans 3, scale)}):
+    bind_hand @ inverse(hands frame) @ body frame, so gear on a hand bone is drawn where the game draws the hands
+    (2026-11-19, owner: Gerdur's hands always showed through her gloves; same cause as the shoulders - the hands mesh
+    carries its own binds, the gloves had the skeleton's). Bones in skip (the body's) are left out."""
+    out = {}
+    inv_h = np.linalg.inv(hand_frame)
+    for b, hb in hand_binds.items():
+        if b in skip:
+            continue
+        m = hb @ inv_h @ frame
+        sc = float(np.cbrt(abs(np.linalg.det(m[:3, :3])))) or 1.0
+        out[b] = ((0.0, 0.0, 0.0, 0.0), tuple(map(float, (m[:3, :3] / sc).reshape(9))), tuple(map(float, m[:3, 3])), sc)
+    return out
 
 
 def merged_morph(body, head, n_body: int):
@@ -659,7 +688,8 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     frame = gearfit.mesh_frame(body_binds, world)
     skel_pts = pts @ frame[:3, :3].T + frame[:3, 3]
     surf_pts, surf_tris, surf_w = skel_pts, tris, list(body_w)
-    hand_path, hand_pts, hand_tris, hand_w = find_hands(sf_data, female, world)
+    hand_path, hand_pts, hand_tris, hand_w, hand_binds_m, hand_frame = find_hands(sf_data, female, world,
+                                                                                 with_binds=True)
     if hand_pts is not None:
         surf_pts = np.concatenate([skel_pts, hand_pts])
         surf_tris = np.concatenate([tris, hand_tris + len(skel_pts)])
@@ -752,7 +782,20 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     # female fits: the game body's own binds where it has the bone, as the skin piece (2026-11-19, skin through Hilde's
     # and Gerdur's shoulders); male fits keep the skeleton's (owner: male outfits are not to change)
-    binds = gearfit.skeleton_binds(bones, world, frame, shapes, body_binds=body_binds if female else None)
+    own_binds = None
+    if female:
+        own_binds = dict(body_binds)
+        if hand_binds_m:
+            hb = hand_binds_for_gear(hand_binds_m, hand_frame, frame, skip=set(body_binds))
+            own_binds.update(hb)
+            # how far each hand bone's own bind puts its joint from the skeleton's (the size of the fix)
+            off = {b: round(float(np.linalg.norm(np.linalg.inv(bind_matrix(v))[:3, 3]
+                                                 - np.linalg.inv(np.linalg.inv(world[b]) @ frame)[:3, 3])) * 1000, 1)
+                   for b, v in hb.items() if b in world and b in bones}
+            res.report["hand_bind_offsets_mm"] = dict(sorted(off.items(), key=lambda kv: -kv[1])[:8])
+            if off:
+                print(f"  hand bones on the hands mesh's own binds: up to {max(off.values())} mm from the skeleton's")
+    binds = gearfit.skeleton_binds(bones, world, frame, shapes, body_binds=own_binds)
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts

@@ -260,6 +260,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Male versions print "fitted before, reused". Item ids stay the same, so no face_fit rerun is needed. In game:
    Hilde, Gerdur, Saadia standing: shoulders covered? Sleeves / arms still sitting right?
+7m. B + C (2026-11-20): Gerdur's hands through her gloves (the gloves take the hands mesh's own binds, female only)
+   and the face colour on everyone (yesterday's recolour, not built yet). Starfield closed:
+   ```powershell
+   git pull
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmGloves03
+   ```
+   It prints "hand bones on the hands mesh's own binds: up to N mm" (send N). Then 7k's block again (face colour).
+   In game: Gerdur's hands vs gloves; Gerdur's / Delphine's face and neck vs the chest skin.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
