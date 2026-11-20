@@ -32,8 +32,9 @@ CARRY = 0.10                    # m: gear takes the body offset of Skyrim body p
 KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body keeps its Skyrim gap on Starfield's
 PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
-FIT_VERSION = 2                 # bump when what a fit produces changes (item_convert reuses fits by it)
-#                                 2: 2026-11-19 strap gap 12 mm, deeper band
+FIT_VERSION = 1                 # bump when what a fit produces changes (item_convert reuses fits by it)
+FEMALE_FIT_VERSION = 2          # bump when only female fits change (owner 2026-11-19: male outfits look great, not a
+#                                 thing changes on them, not even a refit). 2: strap gap 12 mm, deeper band
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
 SKIN_DEPTH = 0.003              # m: a shape whose vertices lie this close to the Skyrim body is a skin piece
@@ -1308,7 +1309,7 @@ BUST_Z = (0.04, 0.30)  # m below Starfield's clavicles: the bust band for round_
 # 2026-11-19 (owner: skin through the dresses on the shoulder tops and upper back of Hilde, Gerdur and the barkeeper
 # NPCs, standing; "these parts just need to be slightly raised" - every outfit goes through this fit): 12 mm, down to
 # 3 cm below the clavicles before fading to GAP by 9 cm (the owner's debug fits: the dress 0-6 mm off the skin there,
-# 3-7 cm below Skyrim's clavicles). Was 8 mm, (0.02, 0.06).
+# 3-7 cm below Skyrim's clavicles). Was 8 mm, (0.02, 0.06). Female fits only: male ones run with no strap gap.
 STRAP_GAP = 0.012     # m: visible gear round the neck and shoulders stays this far off the skin
 STRAP_NECK = (0.085, 0.105)  # m from the neck's axis: no strap lift inside the first, full past the second
 STRAP_RAMP = (0.03, 0.09)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second

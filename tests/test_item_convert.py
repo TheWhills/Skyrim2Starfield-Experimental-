@@ -402,5 +402,23 @@ class GearFitArgsTests(unittest.TestCase):
         self.assertEqual(os.path.basename(IC.stage_report("o", "Items\\Boots_M")), "gear_fit_Items_Boots_M.json")
 
 
+
+
+class FemaleOnlyVersionTests(unittest.TestCase):
+    def test_female_change_keeps_male_fits(self):
+        """2026-11-19 (owner: male outfits are not to change at all): a female-only fit change (the 12 mm shoulder gap)
+        bumps gearfit.FEMALE_FIT_VERSION, which only the female key carries; the male key is the one cached before."""
+        import hashlib
+        import types
+        from fo4sf import gearfit
+        a = types.SimpleNamespace(race="NordRace", helmets=False)
+        before = hashlib.sha1(repr(("clothesfarmclothes02", "male", "NordRace", False, [], IC.FIT_VERSION,
+                                    gearfit.FIT_VERSION, gear_fit.FIT_VERSION)).encode()).hexdigest()
+        self.assertEqual(IC.fit_key(a, "ClothesFarmClothes02", "male", []), before)
+        f = IC.fit_key(a, "ClothesFarmClothes02", "female", [])
+        with mock.patch.object(gearfit, "FEMALE_FIT_VERSION", gearfit.FEMALE_FIT_VERSION + 1):
+            self.assertNotEqual(IC.fit_key(a, "ClothesFarmClothes02", "female", []), f)
+            self.assertEqual(IC.fit_key(a, "ClothesFarmClothes02", "male", []), before)
+
 if __name__ == "__main__":
     unittest.main()

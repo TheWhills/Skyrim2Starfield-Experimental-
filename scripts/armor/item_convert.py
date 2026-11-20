@@ -187,8 +187,13 @@ def fit_key(a, edid: str, sex: str, fit_args) -> str:
     import hashlib
     import gear_fit
     from fo4sf import gearfit
-    return hashlib.sha1(repr((edid.lower(), sex, a.race, bool(a.helmets), list(fit_args), FIT_VERSION,
-                              gearfit.FIT_VERSION, gear_fit.FIT_VERSION)).encode()).hexdigest()
+    key = (edid.lower(), sex, a.race, bool(a.helmets), list(fit_args), FIT_VERSION, gearfit.FIT_VERSION,
+           gear_fit.FIT_VERSION)
+    if sex == "female":
+        # a female-only change refits only female versions; male keys stay as they were (2026-11-19, owner: "we're
+        # not changing a thing on male outfits")
+        key += (gearfit.FEMALE_FIT_VERSION,)
+    return hashlib.sha1(repr(key).encode()).hexdigest()
 
 
 def load_fit_cache(out: str) -> dict:

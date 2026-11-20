@@ -2476,3 +2476,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   Skyrim's clavicles (was (2, 6)), covering the close parts in the owner's debug fits (0-6 mm off the skin, 3-7 cm
   under the clavicles). Male fits still off (Ralof's cowl band). gearfit.FIT_VERSION 2: item_convert refits every
   item. Alternative kept: the NPC body (template fields beyond MWGT) if skin still shows. In game unverified.
+  Owner: "Males look great. We're not changing a thing on male outfits." The change is female-only in code (male fits
+  run with no strap gap, so the lift and its band never apply) and in reuse: gearfit.FIT_VERSION back to 1, new
+  gearfit.FEMALE_FIT_VERSION 2 carried only by female fit keys (item_convert.fit_key), so male fits stay cached and
+  are never refitted for it. Test on Hilde's dress (ClothesFarmClothes02) alone first (owner).

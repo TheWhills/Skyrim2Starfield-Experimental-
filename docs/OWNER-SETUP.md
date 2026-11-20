@@ -251,13 +251,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Shoulders (Hilde, Gerdur, the barkeeper clothes): skin through the dress on the shoulder tops / upper back on
    NPCs standing. Owner: every outfit is converted this way now, so raise those areas slightly for all: women's
    outfits now keep 12 mm off the skin there (was 8 mm), down to 3 cm under the collarbones (was 2), fading out by
-   9 cm (was 6). Men's unchanged. Owner: test on one item first (no hours-long refit of everything for a fix that
+   9 cm (was 6). Men's not touched at all. Owner: test on one item first (no hours-long refit of everything for a fix that
    may not work): Hilde's dress only, Starfield closed:
    ```powershell
    git pull
    python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmClothes02
    ```
-   (The fit version went up, so a later run with many items refits them all: only once this works.)
+   Only the female version refits; the male one is reused untouched (owner: male outfits do not change).
    Item ids stay the same, so no face_fit rerun is needed. In game: Hilde standing: shoulders covered? Puffy?
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
