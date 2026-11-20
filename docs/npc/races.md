@@ -779,3 +779,6 @@ why the mod needs no clothes of its own.
   already handed out; check_new_form_ids refuses to write a plugin in which two new records share a FormID.
   Also from his faces.json (dressed): hair HairColor14Grey (tint 70, 75, 85) -> Starfield Grey (measured lightness
   52, 2026-11-13, owner-verified then as grey); in game it reads near-white on his brows: open, owner's call.
+  Verified in game (owner, 19:55, "now its tilted"): with its own FormID the head part shows - Faendal's own head
+  with the slanted openings. Left from Skyrim's Faendal: brows / hair colour (Grey reads near-white), his face texture
+  (next: paint as for the children), the hair crest.
