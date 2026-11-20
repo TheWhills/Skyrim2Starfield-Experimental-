@@ -278,6 +278,10 @@ class MergedChildItemTests(unittest.TestCase):
 
 
 class ItemConvertArgsTests(unittest.TestCase):
+    def test_child_fit_args(self):
+        self.assertEqual(IC.child_fit_args([]), ["--keep-skin", "--no-skin-piece"])
+        self.assertEqual(IC.child_fit_args(["--conform", "--keep-skin"]), ["--conform", "--keep-skin", "--no-skin-piece"])
+
     def test_mod_args_and_keys(self):
         a = types.SimpleNamespace(race="NordRaceChild", helmets=False, skyrim_mods_dir="C:\\mods",
                                   skyrim_mod=["RS Children", "C:\\x\\Realistic RS Children"])

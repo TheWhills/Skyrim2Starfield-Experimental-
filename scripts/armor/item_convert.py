@@ -220,6 +220,20 @@ def fit_item(a, edid: str, sex: str, fit_args) -> dict:
     return {"rows": rows, "meshes": [m.get("mesh") for m in rep.get("meshes", [])]}
 
 
+# 2026-11-20 (owner, Frodnar in his clothes, after the body tone was matched to his hands: forearms / shins still
+# tan-orange, a black hole in a shin, dark rings at the cuffs): Starfield's child has no naked body (unequipall: head
+# and hands only), so our skin piece - Starfield's adult body cut where Skyrim shows skin, on the adult body's material
+# - is all the body there is: it does not take the child's tone, and every gap in it shows nothing behind. RS Children
+# Overhaul's clothes carry their own bare skin (blacksmith_1.nif: 'Arms', 'malebody_0 0'), modelled to meet the cloth:
+# children's items keep those (gear_fit --keep-skin, textures converted as the cloth's) and get no skin piece.
+CHILD_FIT_ARGS = ("--keep-skin", "--no-skin-piece")
+
+
+def child_fit_args(fit_args) -> list:
+    """fit_args with CHILD_FIT_ARGS added (once each)."""
+    return list(fit_args) + [x for x in CHILD_FIT_ARGS if x not in fit_args]
+
+
 def gear_fit_child(race: str) -> bool:
     import gear_fit
     return gear_fit.is_child_race(race)
@@ -438,6 +452,8 @@ def main(argv=None):
     import npc_records
     strings = npc_records.skyrim_names(sky)
     fit_args = shlex.split(a.fit_args)
+    if gear_fit_child(a.race):
+        fit_args = child_fit_args(fit_args)
     items, rep = [], {"items": {}, "notes": notes}
     fit_cache = {} if a.replace_all else load_fit_cache(a.out)
 

@@ -412,4 +412,12 @@ skin pieces, Naked_M_Body.mat, taking the child's BSTT tone), and ChildRace's li
 child's own body tone texture is now recoloured to its own hands' skin colour (report: children.<edid>.body_as_hands).
 Supported, not verified: that the skin pieces take the BSTT tone at all (if the forearms stay tan after this, they do
 not, and the skin piece needs a material of its own). The dark rings: open.
+After the body tone matched to the hands (owner, 15:55, verified): Frodnar's forearms and shins still tan-orange,
+a black hole in one shin, dark rings at the cuffs. So the skin piece does not take the child's BSTT tone (it shows
+Naked_M_Body.mat's default), and with no child body behind it every gap shows black. **Built:** children's items
+keep RS Children Overhaul's own skin shapes (its clothes carry 'Arms', 'malebody_0 0' modelled to meet the cloth;
+gear_fit --keep-skin, their textures converted like the cloth) and get no skin piece (--no-skin-piece):
+item_convert.CHILD_FIT_ARGS, added for a child --race (children's fits redone once: new fit key). Unverified: the RS
+skin's colour next to Starfield's child hands, and the neck skin of the shirts against the child head's neck.
+(child_hair's body-to-hands recolour stays: harmless, and right if a child body is ever drawn.)
 
