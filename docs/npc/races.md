@@ -841,3 +841,8 @@ why the mod needs no clothes of its own.
   record decides the group: the reconversion's record was a copy of Human_Male_Hair_Bob (the kids' route copies the
   NPC's template hair), the shared one a copy of the hairstyle skyrim_hairs picks (its material group). So "Grey"
   came from another group's gradient. Supported, not verified.
+  Owner (21:48): the per-NPC reconversion "wasn't how we converted the KS hair and it added some strand effect".
+  Checked in the code: same converter, same material settings (hair shader, crisp strands - defaults since 11-03,
+  both routes), no strand cards; the differences found are its template (Bob: other colour group, its Starfield
+  hairline / scalp pieces dropped) and its fitting. Not reconciled with what the owner saw; the route is no longer
+  used for adults. Open for the children, who still use it: compare a child's hair with a KS conversion in game.
