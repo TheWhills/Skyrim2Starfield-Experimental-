@@ -1024,3 +1024,12 @@ Starfield\Starfield.wproj, opened in the Wwise version it was saved with), our e
 in the empty Starfield_XXX_Scratch bank so the generated 1490023241.bnk replaces an empty vanilla one the game already
 knows; media embedded in the bank. The owner's copy (verified 2026-11-20): <Starfield>\Tools\wwise\Starfield\Starfield.wproj (no Content folder; the
 CK's tools sit in the game folder). Next: its Wwise version and work units.
+Wwise project (owner, 2026-11-20, verified): Starfield.wproj is Wwise v2021.1.10 (schema 103), the full project
+(Actor-Mixer / Events / SoundBanks work units, 618 files, no original .wav sources); the owner has Wwise 2021.1.14
+(WWISEROOT). Starfield's own NPC furniture sounds are events like NPC_Human_FoodStation_Drawer_Close (Starfield_NPC,
+13 m). **built:** scripts/armor/sound_bank.py - Skyrim's forge sounds (SOUN -> SNDR -> .wav) become Wwise events of the
+Skyrim names (the clips' SoundPlay payloads), made over WAAPI in a copy of the project: a random container next to the
+template event's container (its bus, attenuation and conversion inherited), the files imported in memory, a Play
+event, included in Starfield_XXX_Scratch (empty in vanilla), generated with WwiseConsole generate-soundbank and copied
+to <mod>\Sound\Soundbanks\1490023241.bnk. Unknown until in game: whether the game loads that bank, and the clips still
+need SoundPlay events in our descriptors.

@@ -41,6 +41,35 @@ def zstr(d: bytes) -> str:
     return d.split(b"\0")[0].decode("utf-8", "replace")
 
 
+def skyrim_sound_files(sky_data, names=SKYRIM_FORGE) -> dict:
+    """{name: [(archive path, bytes or None)]}: the sound files each Skyrim SOUN / SNDR EditorID plays (SOUN -> its
+    SNDR's ANAM list), read from Skyrim's archives (sound_bank.py, 2026-11-20)."""
+    from fo4sf import bsa, packages
+    ix = packages.Index(os.path.join(sky_data, "Skyrim.esm"))
+    arcs = bsa.SkyrimArchives(sky_data)
+    out = {}
+    try:
+        by_edid = {}
+        for typ in (b"SOUN", b"SNDR"):
+            for f in ix.by_type.get(typ, []):
+                by_edid.setdefault((ix.edid(f) or "").lower(), []).append((typ, f))
+        for name in names:
+            files = []
+            for typ, f in by_edid.get(name.lower(), [])[:1]:
+                subs = ix.subs(f)
+                if typ == b"SOUN":
+                    sd = next((int.from_bytes(d[:4], "little") for s_, d in subs if s_ == b"SDSC"), None)
+                    subs = ix.subs(sd) if sd else []
+                for s_, d in subs:
+                    if s_ == b"ANAM":
+                        path = sound_path(zstr(d))
+                        files.append((path, arcs._read(bsa.norm(path))))
+            out[name] = files
+    finally:
+        ix.close()
+    return out
+
+
 def skyrim_sounds(sky_data, names=SKYRIM_FORGE) -> list:
     """Printable lines: each name's SOUN / SNDR record and the sound files its descriptor plays (ANAM), found or not
     in Skyrim's archives."""
