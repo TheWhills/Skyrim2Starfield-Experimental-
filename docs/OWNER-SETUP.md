@@ -246,6 +246,15 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    one, --child-controls adds "Frodnar (Face13)" (darker) and "Frodnar (Face22)" (lighter) - `help Frodnar 4`.
    Side by side in daylight: whose face matches his hands? (--child-shape-npc Frodnar: his
    feature-matched face shape; Dorthe waits.)
+7l. B + C: women's faces and shoulders (docs/npc/races.md, 2026-11-19). Every adult's baked face is now recoloured
+   to its body tone: run 7k's block again, then in game Hilde, Gerdur, Delphine, Ysolda, Sigrid: face vs neck / hands.
+   Shoulders (Hilde, Gerdur), read-only, Skyrim side:
+   ```powershell
+   git pull
+   python -I scripts\armor\outfit_probe.py --skyrim-data $sky --npc Hilde --npc Gerdur --npc Ysolda --out C:\Modding\work\outfits
+   ```
+   Send C:\Modding\work\outfits\outfit_probe.json, and say whether Hilde's / Gerdur's dresses show bare shoulders in
+   Skyrim itself.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
