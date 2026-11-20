@@ -77,6 +77,9 @@ def load_lines(voice_dir: str) -> Dict[str, dict]:
     return {n["npc"].lower(): n for n in rep.get("npcs", []) if "lines" in n}
 
 
+VOICE_FIRST = 0x2000      # new-record index the voice records start at (FormID xx002800 on)
+
+
 def add_voices(recs: list, npc_index: Dict[str, int], rows: list, voice_dir: str, masters: int, plugin: str,
                out_dir: str, vtyp_template, quest_template, report: dict) -> Tuple[list, dict]:
     """Voice types, the greeting quest / topic / responses for the NPCs in npc_index ({Skyrim EditorID: index of
@@ -84,7 +87,10 @@ def add_voices(recs: list, npc_index: Dict[str, int], rows: list, voice_dir: str
     add at the top level, children for sfplugin.build)."""
     lines = load_lines(voice_dir)
     new_top, infos, children = [], [], {}
-    nxt = [len(recs)]
+    # a block of their own, not "after the last record" (2026-11-19, owner: "changing one thing about one NPC causes
+    # every single NPC to get touched"): one more head part before them (Faendal's own hair) had renumbered every
+    # voice type, so every NPC's VTCK changed, and every greeting's .wem / .ffxanim name with it
+    nxt = [max(len(recs), VOICE_FIRST)]
 
     def fid():
         f = sfplugin.new_form_id(nxt[0], masters)

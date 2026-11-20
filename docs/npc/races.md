@@ -797,3 +797,12 @@ why the mod needs no clothes of its own.
   skin_frame_shift moves them by their bone route only when they sit more than 60 units from the head (Faendal:
   114 -> 11 units; the children unchanged). Not yet: the race head's baked brows / lashes do not follow his own
   head's moves (up to 5.6 mm) or the eye turn (up to 4.8 mm).
+  Owner's run 20:50 (faces.json own_hair, verified from it): his own hair built - its three FaceGen shapes, moved by
+  the 120-unit frame shift (hair 114 units from the head's middle -> 11), conformed to his own head (184 vertices
+  out of it, deepest 8.6 mm), S2S_OwnHair_Faendal 06000816 replacing the shared hairstyle. Gap to the scalp, ours
+  vs Skyrim's own (median mm): front 4.4 / 1.8, top 15.6 / 17.1, sides 5.3-6.9 / 10.8-11.6, back 30.2 / 31.4: it
+  sits on his head as Skyrim's does. In game: asked.
+  Same run: "NPCs changed since the last run" listed all 18 with only 3 refitted. Cause: the voice records were
+  numbered after the last record, so his one new hair record renumbered every voice type: every NPC's VTCK (and
+  every greeting file's name) changed. npc_voice now numbers them from a block of their own (VOICE_FIRST); the next
+  run moves them there once, after that a new record elsewhere no longer touches them.

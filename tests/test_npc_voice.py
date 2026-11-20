@@ -76,6 +76,28 @@ class VoiceRecordTests(unittest.TestCase):
             self.assertEqual(tifl["size"], 8)
 
 
+    def test_voice_form_ids_do_not_follow_the_record_count(self):
+        """One more record before the voices (an NPC's own hair) leaves every voice FormID - and so every NPC's
+        VTCK and voice file name - as it was."""
+        got = []
+        for extra in (0, 1):
+            with tempfile.TemporaryDirectory() as d:
+                vdir = os.path.join(d, "voice")
+                os.makedirs(os.path.join(vdir, "lines", "MaleNord"))
+                open(os.path.join(vdir, "lines", "MaleNord", "000D2C26_1.wem"), "wb").write(b"wem")
+                json.dump({"npcs": [{"npc": "Ralof", "voice_type": "MaleNord", "male": True, "lines": [
+                    {"info": "000D2C26", "number": 1, "text": "Hmph.", "result": "wem"}]}]},
+                    open(os.path.join(vdir, "lines.json"), "w"))
+                npc = (b"NPC_", HDR(b"NPC_"), [(b"EDID", sfplugin.zs("S2SFace_Ralof"))], sfplugin.new_form_id(0, 3))
+                recs = [npc] + [(b"HDPT", HDR(b"HDPT"), [], sfplugin.new_form_id(1 + i, 3)) for i in range(extra)]
+                vt = (b"VTYP", HDR(b"VTYP"), [(b"EDID", sfplugin.zs("GenericMaleEvenToned"))], 0x13AD2)
+                qt = (b"QUST", HDR(b"QUST"), [(b"EDID", sfplugin.zs("DialogueGeneric")), (b"ANAM", bytes(4))], 0x1234)
+                rows = [{"edid": "Ralof", "female": False}]
+                NV.add_voices(recs, {"Ralof": 0}, rows, vdir, 3, "S2SFaceTest.esm", os.path.join(d, "mod"), vt, qt, {})
+                got.append((rows[0]["voice"]["form_id"], rows[0]["voice"]["greetings"][0]["file"], recs[0][2]))
+        self.assertEqual(got[0], got[1])
+        self.assertGreaterEqual(int(got[0][0], 16) & 0xFFFFFF, sfplugin.new_form_id(NV.VOICE_FIRST, 0))
+
 class VoiceNameMatchTests(unittest.TestCase):
     def test_names_matched_to_form_ids_and_fields(self):
         with tempfile.TemporaryDirectory() as d:

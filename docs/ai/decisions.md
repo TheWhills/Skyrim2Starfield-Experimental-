@@ -2447,3 +2447,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   copying another's record (FO4Port's copies of the face-test NPCs); FormIDs keyed by the Skyrim record, not by build
   order (face_fit's new_form_id(len(recs)) shifted Frodnar's ID once today); per-NPC parts cached by their own
   inputs so changing one NPC rebuilds one part and the assembly. Not designed in detail yet.
+- 2026-11-19 Face-test plugin FormIDs (owner: changing one NPC must not touch the others). Found: voice records
+  were numbered after whatever came before them, so one added head part renumbered every voice type and greeting
+  (every NPC's VTCK, every .wem name). Decision: records that every NPC references get a FormID block of their own
+  (npc_voice.VOICE_FIRST), and face_fit refuses a plugin in which two new records share a FormID
+  (check_new_form_ids, after Faendal's own head part took his NPC's FormID). A full EditorID -> FormID map kept
+  between runs (as FO4Port's formids.json) is the general fix if more of this shows up.
