@@ -759,3 +759,15 @@ why the mod needs no clothes of its own.
   tilt step after almond_moves turning each Starfield lid opening about its centre by (the NPC's eye outline tilt -
   Skyrim's human eye outline tilt), lid skin following, kept on the eyeball. Needs vanilla eyesmale.nif /
   eyesfemale.nif for the human reference (asked).
+  Human reference (owner, 18:59: vanilla eyesmale.nif / eyesfemale.nif, kept outside Git), measured as the long axis
+  of the eyes' visible part behind the lids: EyesMale behind vanilla malehead.nif -0.6 deg; Starfield's male / Bosmer
+  head openings -0.5 to -0.7 (so a human needs no turn); Faendal +20 / +18. EyesMale behind Faendal's lids measures
+  +19 too: the slant is his lids (his MaleHeadWoodElf head and chargen eye presets, baked in his FaceGen); the elf
+  eye mesh (its own outline +15 to +18, EyesMale -3 to 0, EyesFemaleV2 up to +10) is made to fill them. Either way
+  it is per NPC, from his own FaceGen. childshape v15 (adults' own heads): facegen_eye_tilt (head and eyes shapes
+  each by its own skin -> model matrix; 0.66 / 0.68 of his eyes showing) and tilt_moves (each opening turned about
+  its centre to that slant, up to 25 deg; the skin within 12 mm of the opening, as seen from the front, turns with
+  it). On his npz: openings -0.5 -> +20.0 / +18.4, largest move 4.8 mm. First try weighted by the 3D distance to
+  the edge: the lid's layers turned unequally and the folds split; by the front view they turn together (preview
+  checked). Children not turned (RS kids measure -2 to +13; Dorthe is signed off); faces.json own_head.shape.tilt and
+  .eye_tilt report it.

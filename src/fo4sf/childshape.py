@@ -62,7 +62,17 @@ ALMOND = 0.12          # of the eye opening's height: the upper lid lowered at i
                        # openings are round, 29.5 x 12.3 mm on Frodnar)
 LID_FALLOFF = 0.008    # m above the upper lid's edge over which the lid skin follows it
 EYEBALL_R = 0.012      # m: the lid edge is moved forward by the sagitta of an eyeball this round, so it stays on it
-VERSION = 14
+# 2026-11-19 (owner: "the titled eyes, most elves have these... built into the eye type... npc wise"). Measured
+# with the visible part of the eyes (eyeball points not hidden behind the head's lids, looking from the front), long
+# axis in the face plane, outer corner up +: vanilla eyesmale.nif behind vanilla malehead.nif's lids -0.6 deg, the
+# Starfield male / Bosmer head's openings -0.5 to -0.7; Faendal (MaleEyesWoodElfDeepBrown, MaleHeadWoodElf) +19.
+# EyesMale behind Faendal's lids +19 too: the slant is his head's lids (his race head + chargen eye presets, baked
+# in his FaceGen), the elf eye mesh is shaped to fill them. Per NPC either way: his own FaceGen NIF is measured.
+TILT_MAX = 25.0        # deg: the most an opening is turned
+TILT_FALLOFF = 0.012   # m from the opening's edge over which the lid skin turns with it
+TILT_DEPTH = 0.025     # m behind the opening: the socket turns with it, the back of the head does not
+TILT_SAMPLES = 6000    # eyeball points per eye for the visible-opening measure (fixed seed: same answer each run)
+VERSION = 15
 
 
 def apply4(m, p):
@@ -155,6 +165,156 @@ def facegen_eyes(nif_bytes, head_points=None) -> Optional[np.ndarray]:
             continue
         return np.array([p[p[:, 0] < 0].mean(0), p[p[:, 0] > 0].mean(0)])
     return None
+
+
+def long_axis_tilt(pts, side: float) -> float:
+    """Degrees (outer end up +) of the long axis of points (N, 3) in the face plane (x across, z up); side -1 for
+    the left eye (x < 0), +1 for the right."""
+    pts = np.asarray(pts, float)
+    X = pts[:, [0, 2]] - pts[:, [0, 2]].mean(0)
+    _w, V = np.linalg.eigh(X.T @ X)
+    maj = V[:, 1] * (np.sign(V[0, 1]) or 1.0) * side
+    return float(np.degrees(np.arctan2(maj[1], abs(maj[0]))))
+
+
+def _hidden_from_front(pts, v, t) -> np.ndarray:
+    """(N,) bool: a ray from each point toward +Y (forward) meets a triangle of (v, t)."""
+    a, b, c = v[t[:, 0]], v[t[:, 1]], v[t[:, 2]]
+    d = np.array([0.0, 1.0, 0.0])
+    e1, e2 = b - a, c - a
+    p = np.cross(d, e2)
+    det = (e1 * p).sum(1)
+    ok = np.abs(det) > 1e-12
+    e1, e2, a, p, det = e1[ok], e2[ok], a[ok], p[ok], det[ok]
+    out = np.zeros(len(pts), bool)
+    for i, q in enumerate(np.asarray(pts, float)):
+        s = q - a
+        u = (s * p).sum(1) / det
+        qv = np.cross(s, e1)
+        w = qv[:, 1] / det
+        tt = (e2 * qv).sum(1) / det
+        out[i] = bool(((u >= 0) & (w >= 0) & (u + w <= 1) & (tt > 1e-6)).any())
+    return out
+
+
+def _surface_samples(v, t, n: int, seed: int = 0) -> np.ndarray:
+    """n points spread over a triangle mesh by area (seeded)."""
+    rng = np.random.default_rng(seed)
+    v, t = np.asarray(v, float), np.asarray(t, int)
+    area = np.linalg.norm(np.cross(v[t[:, 1]] - v[t[:, 0]], v[t[:, 2]] - v[t[:, 0]]), axis=1)
+    if area.sum() <= 0:
+        return np.zeros((0, 3))
+    k = rng.choice(len(t), n, p=area / area.sum())
+    r = rng.random((n, 2))
+    flip = r.sum(1) > 1
+    r[flip] = 1 - r[flip]
+    a = v[t[k, 0]]
+    return a + r[:, :1] * (v[t[k, 1]] - a) + r[:, 1:] * (v[t[k, 2]] - a)
+
+
+def visible_eye_tilt(head_v, head_t, eye_v, eye_t, samples: int = TILT_SAMPLES) -> Optional[Dict]:
+    """{"tilt_deg": [left, right], "visible": [share, share]} of the eye openings a head's lids leave on its eyes
+    shape (both in one frame, +Y forward, +Z up): the front half of each eyeball sampled, the points no head triangle
+    hides from the front kept, their long axis (long_axis_tilt). None when an eye shows (almost) all or nothing (the
+    two shapes are not in one frame)."""
+    head_v, eye_v = np.asarray(head_v, float), np.asarray(eye_v, float)
+    head_t, eye_t = np.asarray(head_t, int), np.asarray(eye_t, int)
+    tilt, share = [], []
+    for side in (-1.0, 1.0):
+        tri = eye_t[side * eye_v[eye_t].mean(1)[:, 0] > 0]
+        if not len(tri):
+            return None
+        pts = _surface_samples(eye_v, tri, samples)
+        pts = pts[pts[:, 1] > np.median(pts[:, 1])]
+        if len(pts) < 50:
+            return None
+        lo, hi = pts.min(0) - 0.5 * np.ptp(pts, 0), pts.max(0) + 0.5 * np.ptp(pts, 0)
+        cen = head_v[head_t].mean(1)
+        near = head_t[((cen[:, 0] > lo[0]) & (cen[:, 0] < hi[0]) & (cen[:, 2] > lo[2]) & (cen[:, 2] < hi[2]))]
+        vis = pts[~_hidden_from_front(pts, head_v, near)] if len(near) else pts
+        f = len(vis) / max(len(pts), 1)
+        if not 0.2 < f < 0.97 or len(vis) < 50:
+            return None
+        tilt.append(round(long_axis_tilt(vis, side), 1))
+        share.append(round(f, 2))
+    return {"tilt_deg": tilt, "visible": share}
+
+
+def facegen_eye_tilt(nif_bytes) -> Optional[Dict]:
+    """visible_eye_tilt of a Skyrim FaceGen NIF: its head shape and its eyes shape, each placed by its own skin ->
+    model matrix (facefit.skyrim_model_matrix: one frame for both; verified on Faendal's FaceGen and Realistic RS
+    Children, 0.64-0.95 of the eyes showing). Adds "eyes" (the eyes shape's name). None without both shapes."""
+    from . import facefit, nif as nifmod, skyrimskin
+    n = nifmod.parse(nif_bytes)
+    head = eye = None
+    for s in skyrimskin.skinned_shapes(n):
+        nm = (s.name or b"").decode("latin-1")
+        placed = (nm, facefit.apply4(facefit.skyrim_model_matrix(n, s), np.asarray(s.positions, float)),
+                  np.asarray(s.triangles, int))
+        if is_eye_shape(nm):
+            eye = eye or placed
+        elif "head" in nm.lower():
+            head = head or placed
+    if head is None or eye is None:
+        return None
+    rep = visible_eye_tilt(head[1], head[2], eye[1], eye[2])
+    if rep is not None:
+        rep["eyes"] = eye[0]
+    return rep
+
+
+def opening_tilts(v, t, eyes) -> list:
+    """Per eye, long_axis_tilt of a Starfield head's eye opening edge (eye_rims), None where not found."""
+    v = np.asarray(v, float)
+    return [round(long_axis_tilt(v[rim], np.sign(c[0]) or 1.0), 1) if len(rim) >= 12 else None
+            for c, rim in zip(np.asarray(eyes, float), eye_rims(v, t, eyes))]
+
+
+def tilt_weight(v, rim_pts, ctr) -> np.ndarray:
+    """(V,) 0-1: how much of an eye opening's turn each vertex takes - 1 inside the opening's outline as seen from
+    the front (x, z), fading to 0 over TILT_FALLOFF outside it; front of the head only (within TILT_DEPTH behind the
+    opening). Seen from the front, so the lid's layers (skin, fold, inner lid) at one place turn alike (2026-11-19:
+    a 3D distance to the edge turned them by different amounts and the folds split)."""
+    v = np.asarray(v, float)
+    rel = (v - ctr)[:, [0, 2]]
+    rim = (np.asarray(rim_pts, float) - ctr)[:, [0, 2]]
+    ang_r = np.arctan2(rim[:, 1], rim[:, 0])
+    order = np.argsort(ang_r)
+    ang_r, rad_r = ang_r[order], np.linalg.norm(rim, axis=1)[order]
+    ang = np.arctan2(rel[:, 1], rel[:, 0])
+    edge = np.interp(ang, np.concatenate([ang_r - 2 * np.pi, ang_r, ang_r + 2 * np.pi]), np.tile(rad_r, 3))
+    out = np.clip(1 - (np.linalg.norm(rel, axis=1) - edge) / TILT_FALLOFF, 0, 1)
+    return out * np.clip((v[:, 1] - (ctr[1] - TILT_DEPTH)) / 0.005, 0, 1)
+
+
+def tilt_moves(v, t, eyes, target_deg) -> Tuple[np.ndarray, Dict]:
+    """(moves (V, 3), report): each eye opening of a Starfield head turned about its centre in the face plane so its
+    long axis tilts target_deg (outer corner up +; the turn clamped to TILT_MAX); the skin within TILT_FALLOFF of the
+    opening's edge turns with it, fading. A turn about the opening's own centre keeps it over the eyeball."""
+    v = np.asarray(v, float)
+    moves = np.zeros_like(v)
+    rep = {"target_deg": [None if x is None else round(float(x), 1) for x in target_deg], "before_deg": [],
+           "turned_deg": []}
+    for c, rim, tgt in zip(np.asarray(eyes, float), eye_rims(v, t, eyes), target_deg):
+        if len(rim) < 12 or tgt is None:
+            rep["before_deg"].append(None)
+            rep["turned_deg"].append(0.0)
+            continue
+        side = np.sign(c[0]) or 1.0
+        p = v[rim]
+        before = long_axis_tilt(p, side)
+        turn = float(np.clip(tgt - before, -TILT_MAX, TILT_MAX))
+        ctr = p.mean(0)
+        a = np.radians(turn)
+        u = side * (v[:, 0] - ctr[0])          # outward from the nose
+        h = v[:, 2] - ctr[2]
+        nu, nh = u * np.cos(a) - h * np.sin(a), u * np.sin(a) + h * np.cos(a)
+        turned = np.stack([ctr[0] + side * nu, v[:, 1], ctr[2] + nh], 1)
+        w = tilt_weight(v, p, ctr)
+        moves += w[:, None] * (turned - v)
+        rep["before_deg"].append(round(before, 1))
+        rep["turned_deg"].append(round(turn, 1))
+    return moves, rep
 
 
 def landmarks(v, eyes, mouth) -> Dict[str, np.ndarray]:
@@ -470,7 +630,7 @@ def fit(sf_v, sf_t, sky_v, sky_t, eyes, mouth, rounds=ROUNDS, normal_rounds=NORM
                   "rms_move_mm": round(float(np.sqrt(np.mean(mag ** 2))) * 1000, 2)}
 
 
-def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[np.ndarray, Dict]:
+def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth, eye_tilt=None) -> Tuple[np.ndarray, Dict]:
     """(moves (V, 3) in model space per Starfield vertex, report) for one child: landmarks, prealign, fit. Raises
     ValueError when a landmark is not found (the caller falls back to the difference transfer)."""
     eyes, mouth = starfield_eyes_mouth(sf_model, sf_t)
@@ -500,7 +660,11 @@ def child_shape(sf_model, sf_t, sky_model, sky_t, sky_eyes, sky_mouth) -> Tuple[
     disp = smooth_moves(sf_model, sf_t, disp, eyes, FACE_SMOOTH)
     rep["smoothed_passes"] = FACE_SMOOTH
     lids, rep["almond"] = almond_moves(np.asarray(sf_model, float) + disp, sf_t, eyes)
-    return disp + lids, rep
+    disp = disp + lids
+    if eye_tilt is not None:          # [left, right] degrees: the NPC's own (facegen_eye_tilt), adults so far
+        turn, rep["tilt"] = tilt_moves(np.asarray(sf_model, float) + disp, sf_t, eyes, eye_tilt)
+        disp = disp + turn
+    return disp, rep
 
 
 def eye_rims(v, t, eyes, near: float = 0.005):

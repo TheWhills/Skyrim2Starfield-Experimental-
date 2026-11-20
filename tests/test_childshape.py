@@ -249,3 +249,113 @@ class FaceFitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _sheet_with_holes(tilt_deg=0.0, y=0.09, half=(0.012, 0.005), sep=0.032):
+    """A flat face sheet (x across, z up, at depth y) with two elliptical eye holes (24-point edges) tilted tilt_deg
+    outer corner up, plus a back sheet 15 cm behind; (vertices, triangles, eye centres)."""
+    from scipy.spatial import Delaunay
+    a = np.radians(tilt_deg)
+    eyes = np.array([[-sep, y, 1.67], [sep, y, 1.67]])
+    pts, rims = [], []
+    th = np.linspace(0, 2 * np.pi, 24, endpoint=False)
+    for c in eyes:
+        side = np.sign(c[0])
+        u, h = half[0] * np.cos(th), half[1] * np.sin(th)
+        ru, rh = u * np.cos(a) - h * np.sin(a), u * np.sin(a) + h * np.cos(a)
+        rims.append(np.stack([c[0] + side * ru, c[2] + rh], 1))
+    gx, gz = np.meshgrid(np.linspace(-0.08, 0.08, 41), np.linspace(1.61, 1.73, 31))
+    grid = np.stack([gx.ravel(), gz.ravel()], 1)
+    keep = np.ones(len(grid), bool)
+    for c in eyes:
+        keep &= np.hypot((grid[:, 0] - c[0]) / (half[0] + 0.003), (grid[:, 1] - c[2]) / (half[0] + 0.003)) > 1
+    xz = np.concatenate(rims + [grid[keep]])
+    tri = Delaunay(xz).simplices
+    cen = xz[tri].mean(1)
+    inside = np.zeros(len(tri), bool)
+    for rim in rims:
+        inside |= _in_poly(cen, rim)
+    tri = tri[~inside]
+    front = np.stack([xz[:, 0], np.full(len(xz), y), xz[:, 1]], 1)
+    back = front.copy()
+    back[:, 1] = y - 0.15
+    v = np.concatenate([front, back])
+    t = np.concatenate([tri, tri[:, ::-1] + len(front)])
+    return v, t, eyes
+
+
+def _in_poly(p, poly):
+    """(N,) bool: 2D points inside a closed polygon (even-odd)."""
+    x, z = p[:, 0], p[:, 1]
+    inside = np.zeros(len(p), bool)
+    for (x1, z1), (x2, z2) in zip(poly, np.roll(poly, -1, axis=0)):
+        cross = ((z1 > z) != (z2 > z)) & (x < (x2 - x1) * (z - z1) / (z2 - z1 + 1e-15) + x1)
+        inside ^= cross
+    return inside
+
+
+class EyeTiltTests(unittest.TestCase):
+    """2026-11-19 (owner: elves' slanted eyes come with their eyes, per NPC): the slant measured on the NPC's own
+    FaceGen eyes behind its lids, Starfield's openings turned to it."""
+
+    def test_long_axis_tilt(self):
+        th = np.linspace(0, 2 * np.pi, 60, endpoint=False)
+        for deg in (0.0, 12.0, -8.0):
+            a = np.radians(deg)
+            u, h = 0.012 * np.cos(th), 0.005 * np.sin(th)
+            pts = np.stack([-0.03 - (u * np.cos(a) - h * np.sin(a)), np.zeros(60), u * np.sin(a) + h * np.cos(a)], 1)
+            self.assertAlmostEqual(CS.long_axis_tilt(pts, -1.0), deg, places=4)       # left eye: outer is -x
+            pts[:, 0] = -pts[:, 0]
+            self.assertAlmostEqual(CS.long_axis_tilt(pts, 1.0), deg, places=4)        # right eye mirrored
+
+    def test_visible_eye_tilt_follows_the_lids(self):
+        """Round eyeballs behind lids with a 15-degree opening: the visible part slants 15 degrees."""
+        head_v, head_t, eyes = _sheet_with_holes(15.0)
+        balls_v, balls_t = [], []
+        th, ph = np.meshgrid(np.linspace(0, np.pi, 16), np.linspace(0, 2 * np.pi, 24, endpoint=False))
+        for c in eyes:
+            o = sum(len(b) for b in balls_v)
+            p = np.stack([np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)], -1).reshape(-1, 3)
+            balls_v.append(c - [0, 0.009, 0] + 0.0115 * p[:, [0, 1, 2]])
+            i = np.arange(16 * 24).reshape(24, 16)
+            q = np.stack([i, np.roll(i, -1, 0), np.roll(i, -1, 0)[:, [*range(1, 16), 0]]], -1)[:, :-1].reshape(-1, 3)
+            r = np.stack([i, np.roll(i, -1, 0)[:, [*range(1, 16), 0]], i[:, [*range(1, 16), 0]]], -1)[:, :-1]
+            balls_t.append(np.concatenate([q, r.reshape(-1, 3)]) + o)
+        rep = CS.visible_eye_tilt(head_v, head_t, np.concatenate(balls_v), np.concatenate(balls_t), samples=3000)
+        self.assertIsNotNone(rep)
+        for d in rep["tilt_deg"]:
+            self.assertAlmostEqual(d, 15.0, delta=2.5)
+        for f in rep["visible"]:
+            self.assertTrue(0.2 < f < 0.97)
+
+    def test_visible_eye_tilt_none_when_not_behind_the_lids(self):
+        """Eyes nowhere near the head (two frames): None, not a made-up slant."""
+        head_v, head_t, eyes = _sheet_with_holes(0.0)
+        bv = np.array([[-0.03, 2.0, 0.0], [-0.02, 2.0, 0.0], [-0.03, 2.0, 0.01], [0.03, 2.0, 0.0], [0.02, 2.0, 0.0],
+                       [0.03, 2.0, 0.01]])
+        self.assertIsNone(CS.visible_eye_tilt(head_v, head_t, bv, np.array([[0, 1, 2], [3, 5, 4]]), samples=500))
+
+    def test_tilt_moves_turn_the_openings(self):
+        v, t, eyes = _sheet_with_holes(0.0)
+        self.assertEqual([round(x) for x in CS.opening_tilts(v, t, eyes)], [0, 0])
+        mv, rep = CS.tilt_moves(v, t, eyes, [18.0, 18.0])
+        after = CS.opening_tilts(v + mv, t, eyes)
+        for d in after:
+            self.assertAlmostEqual(d, 18.0, delta=0.5)
+        self.assertEqual(rep["turned_deg"], [18.0, 18.0])
+        mag = np.linalg.norm(mv, axis=1)
+        self.assertEqual(float(mag[len(v) // 2:].max()), 0.0)                          # the back sheet stays
+        far = np.abs(v[:, 0]) > 0.032 + 0.012 + CS.TILT_FALLOFF + 0.002
+        self.assertEqual(float(mag[far].max()), 0.0)                                   # the cheeks / temples stay
+        np.testing.assert_allclose(mv[:, 1], 0.0)                                      # turned in the face plane
+
+    def test_tilt_moves_clamped_and_skipped(self):
+        v, t, eyes = _sheet_with_holes(0.0)
+        _mv, rep = CS.tilt_moves(v, t, eyes, [80.0, None])
+        self.assertEqual(rep["turned_deg"], [CS.TILT_MAX, 0.0])
+
+    def test_human_eyes_turn_nothing(self):
+        """An NPC whose eyes slant like Starfield's opening already (a human: -0.6 vs -0.5 measured) barely moves."""
+        v, t, eyes = _sheet_with_holes(-0.5)
+        mv, rep = CS.tilt_moves(v, t, eyes, [-0.6, -0.6])
+        self.assertLess(float(np.linalg.norm(mv, axis=1).max()), 0.0002)

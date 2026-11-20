@@ -581,8 +581,9 @@ class RaceNpcTests(unittest.TestCase):
             def head_mesh(nif, read):
                 return ("geo\\head", v_race if nif == b"race nif" else v_van, tris)
 
-            def disp_fn(ctx, fg, fg_bytes):
+            def disp_fn(ctx, fg, fg_bytes, tilt=False):
                 seen["on"] = ctx["head"].vertices.copy()
+                seen["tilt"] = tilt
                 return np.full((4, 3), 0.002), {"version": 13}
 
             def baked(nif, read, mpath, src, disp, out_nif):
@@ -600,6 +601,7 @@ class RaceNpcTests(unittest.TestCase):
                                        np.zeros((5, 3)), b"base", {"name": "Bosmer"}, plug, "sf", d, a, {})
                 self.assertTrue(os.path.isfile(os.path.join(d, "geometries", "x", "y.mesh")))
         np.testing.assert_allclose(seen["on"], v_race)                       # fitted on the race's head
+        self.assertTrue(seen["tilt"])                                        # with his own eye slant
         out_nif, src, total = seen["baked"][0]
         self.assertEqual(out_nif, "meshes/s2s/faces/faendalhead.nif")
         np.testing.assert_allclose(src, v_van)                               # baked onto the vanilla mesh ...

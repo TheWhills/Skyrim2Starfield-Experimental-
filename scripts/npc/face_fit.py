@@ -349,7 +349,7 @@ def adult_own_head(n, fg, fg_bytes, al, model_space, base, base_bytes, conv, rac
     head = types.SimpleNamespace(vertices=v_on, triangles=tris, model_xf=starfield_head_node(nif_bytes))
     ctx = {"head": head, "al": al, "model_space": model_space, "base": base,
            "base_tris": skyrim_head_triangles(base_bytes)}
-    disp, shape = child_shape_disp(ctx, fg, fg_bytes)
+    disp, shape = child_shape_disp(ctx, fg, fg_bytes, tilt=True)
     total = v_on + disp - v_van
     out_nif = "meshes/" + f"{ADULT_HEAD_DIR}\\{n['edid']}Head.nif".replace("\\", "/").lower()
     files = headbake.baked_head_files(nif_bytes, vread, mpath, v_van, total, out_nif)
@@ -380,10 +380,13 @@ def uses_child_shape(a, n) -> bool:
     return n["edid"].lower() in {x.lower() for x in (getattr(a, "child_shape_npc", None) or [])}
 
 
-def child_shape_disp(ctx, fg, fg_bytes):
+def child_shape_disp(ctx, fg, fg_bytes, tilt=False):
     """(moves on Starfield's child head in its mesh-local frame, report) by fo4sf.childshape: the FaceGen head
     (fg: in the base head's space, child_faces.facegen_points) and its eyes taken to Starfield's model space by the
-    face alignment, Starfield's head by its node; the moves back into the mesh-local frame."""
+    face alignment, Starfield's head by its node; the moves back into the mesh-local frame. tilt (adults' own heads,
+    2026-11-19): the eye openings turned to the slant of the NPC's own FaceGen eyes (childshape.facegen_eye_tilt;
+    the alignment is a scale and shift, so the angle carries over as is); the report's "eye_tilt" says what was
+    measured."""
     import child_hair
     from fo4sf import childshape
     head = ctx["head"]
@@ -402,8 +405,12 @@ def child_shape_disp(ctx, fg, fg_bytes):
         raise ValueError(f"Skyrim FaceGen head: no eyes shape with the head bone among {shapes}")
     eyes = facefit.apply4(M, eyes)
     mouth = childshape.skyrim_mouth(sky_model, sky_tris)
+    measured = childshape.facegen_eye_tilt(fg_bytes) if tilt else None
     disp_model, rep = childshape.child_shape(facefit.apply4(node, head.vertices), np.asarray(head.triangles, int),
-                                             sky_model, sky_tris, eyes, mouth)
+                                             sky_model, sky_tris, eyes, mouth,
+                                             eye_tilt=measured["tilt_deg"] if measured else None)
+    if tilt:
+        rep["eye_tilt"] = measured or "not measured (no head and eyes shape in one frame)"
     return disp_model @ np.linalg.inv(node[:3, :3]).T, rep
 
 
