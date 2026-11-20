@@ -149,28 +149,29 @@ class ScriptTests(unittest.TestCase):
                                           depth=gear_fit.SKIN_UNDER_DEPTH)
         self.assertEqual(len(used3), len(body))
 
-    def test_hand_skin_is_what_the_item_leaves_bare(self):
-        """2026-11-20 (owner: skin invisible where the glove stops): the hand skin is the hands the item does not
-        cover (whole, with no Skyrim source points), and the overlap under its edge stops at margin_m."""
+    def test_hand_skin_follows_skyrims_skin_surface(self):
+        """2026-11-20 (owner: Gerdur's fingertips poked out of her gloves; her Skyrim glove's skin is the wrist
+        opening): the hand skin is the hands near the Skyrim hand-skin shape's surface, sampled finely - a coarse
+        triangle 6 cm long still keeps every hands vertex under it, and fingers away from it are left out."""
         import numpy as np
-        from fo4sf import skyrimhair
-        xs = np.linspace(0, 0.08, 17)                          # a finger-sized strip, 5 mm apart
+        xs = np.linspace(0, 0.12, 25)                            # a hand strip 12 cm long, 5 mm apart
         hand = np.array([[x, y, 0.0] for x in xs for y in (0.0, 0.01)])
         tris = []
-        for i in range(16):
+        for i in range(24):
             a, b = 2 * i, 2 * i + 2
             tris += [(a, b, a + 1), (b, b + 1, a + 1)]
-        gp = np.array([[-0.01, -0.01, 0.005], [0.04, -0.01, 0.005], [-0.01, 0.02, 0.005], [0.04, 0.02, 0.005]])
-        glove = skyrimhair.HairShape(b"Glove", gp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [],
-                                     [(0, 1, 2), (1, 3, 2)], [], -1, -1, -1)
-        w = [[("L_Index1", 1.0)]] * len(hand)
-        _sh, used = gear_fit.skin_piece(hand, tris, [(0, 0)] * len(hand), w, np.zeros((0, 3)), gear=[glove],
-                                        whole=True, depth=gear_fit.HAND_COVER_DEPTH, margin=gear_fit.HAND_MARGIN,
-                                        margin_m=gear_fit.HAND_MARGIN_M)
+        # Skyrim's skin: one big triangle pair over the first 6 cm (the wrist), 4 mm above
+        sky = np.array([[0.0, -0.01, 0.004], [0.06, -0.01, 0.004], [0.0, 0.02, 0.004], [0.06, 0.02, 0.004]])
+        src = gear_fit.surface_samples(sky, [(0, 1, 2), (1, 3, 2)])
+        self.assertGreater(len(src), 100)
+        w = [[("L_Hand", 1.0)]] * len(hand)
+        _sh, used = gear_fit.skin_piece(hand, tris, [(0, 0)] * len(hand), w, src, reach=gear_fit.HAND_SKIN_REACH)
         kept = sorted({round(float(hand[i][0]), 3) for i in used})
-        self.assertEqual(kept[-1], 0.08)                       # the bare fingertip end, all of it
-        self.assertTrue(0.03 <= kept[0] <= 0.045)              # a strip back under the glove's edge, at most 1 cm
-        self.assertEqual(len(kept), round((0.08 - kept[0]) / 0.005) + 1)      # no holes
+        self.assertEqual(kept[0], 0.0)
+        self.assertTrue(0.06 <= kept[-1] <= 0.075)            # up to the skin's edge (+ the reach), not the fingers
+        self.assertEqual(len(kept), round(kept[-1] / 0.005) + 1)                      # no holes
+        _sh2, used2 = gear_fit.skin_piece(hand, tris, [(0, 0)] * len(hand), w, sky, reach=gear_fit.HAND_SKIN_REACH)
+        self.assertLess(len(used2), len(used))                 # the corners alone: holes
 
     def test_armpit_skin_only_for_body_gear(self):
         """2026-11-09 (Orgnar's shoes): boots / gloves bring no armpit skin; body gear (or unknown) does."""

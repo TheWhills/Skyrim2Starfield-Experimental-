@@ -2527,3 +2527,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   female 4629 (fingers bare), hide bracers 7030 / 6928, cuffs 7270 / 7243 (hands bare) - each on slot 6 with the
   item. Hand bone binds vs the skeleton's: male hands 0.0 mm (male gloves' binds unchanged in effect), female 25.5 mm.
   In game to see.
+- 2026-11-20 Owner, in game: Gerdur's fingertips now poked out of her gloves ("her fingertips shouldn't be poking
+  through"). Her Skyrim glove's skin (HandFemale3rdGloveskin, z 1.01-1.12 of the glove's 0.89-1.13 in the fit pose)
+  is the wrist / back opening; the gloves cover the fingers. The "hands the item leaves bare" cut kept Starfield's
+  fingers, which do not lie under the glove's own fingers. Now the hand skin is the hands within HAND_SKIN_REACH
+  1.2 cm of the fitted Skyrim hand-skin shapes' surface, sampled every HAND_SAMPLE 3 mm (surface_samples; the
+  corners alone left holes). Items with no Skyrim hand skin keep Starfield's hands (unchanged). To check: whole-hand
+  pieces (cuffs, bracers) with Starfield's fingers posed differently from Skyrim's (holes in the fingers?).
