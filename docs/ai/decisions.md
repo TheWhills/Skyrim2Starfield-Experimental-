@@ -2523,3 +2523,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   cover (skin_piece whole=True with the item's shapes: nothing within HAND_COVER_DEPTH 3 cm straight out), plus
   HAND_MARGIN 2 rings / at most HAND_MARGIN_M 1 cm under its edge. Every item on Skyrim's hands slot gets it (full
   gloves too: their hands are then hidden like Skyrim's).
+- 2026-11-20 Owner's hand refit (log, verified): hand skin vertices of 7660 per hands mesh - farm gloves male 1337 /
+  female 4629 (fingers bare), hide bracers 7030 / 6928, cuffs 7270 / 7243 (hands bare) - each on slot 6 with the
+  item. Hand bone binds vs the skeleton's: male hands 0.0 mm (male gloves' binds unchanged in effect), female 25.5 mm.
+  In game to see.
