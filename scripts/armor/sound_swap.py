@@ -18,6 +18,7 @@ import argparse
 import collections
 import json
 import os
+import re
 import struct
 import sys
 
@@ -80,6 +81,28 @@ def pool_events(sf_info: dict, users: dict, taken) -> list:
                 continue
             out.append(e["Name"])
     return sorted(set(out))
+
+
+FOLEY_RX = re.compile(rb"<foley>\s*([^<]+?)\s*</foley>", re.I)
+
+
+def template_foley(names, read, sets=None) -> dict:
+    """{Wwise event name: [template .afx]} of every <foley> in the vanilla template folders our furniture sets are
+    built on (furniture_anim_pack.SETS: each set's second entry). 2026-11-20 (owner: "grindstone sound coming from
+    the tanning rack"): the tanning set has no Skyrim sound, so its descriptors keep the wall-wipe template's own
+    <audios>, and one of those events was in the pool sound_swap gave the grindstone loops to. These events are kept
+    out of the pool. names: the archives' file names (normalised); read: name -> bytes or None."""
+    import furniture_anim_pack as FP
+    out = {}
+    folders = {FP.SETS[st][1].replace("/", "\\").lower().rstrip("\\") + "\\" for st in (sets or FP.SETS)}
+    for n in names:
+        low = n.replace("/", "\\").lower()
+        if not low.endswith(".afx") or not any(low.startswith(f) for f in folders):
+            continue
+        data = read(n) or b""
+        for m in FOLEY_RX.finditer(data):
+            out.setdefault(m.group(1).decode("latin-1"), []).append(low)
+    return out
 
 
 def plan(names, fixed: dict, pool: list) -> dict:
@@ -213,11 +236,26 @@ def main(argv=None):
     triggers = FP.skyrim_clip_sounds(a.skyrim_data, set().union(*clips.values()))
     names = {snd for rows in triggers.values() for _t, _rel, snd in rows}
     by_set = {st: sorted({snd for c in cs for _t, _rel, snd in triggers.get(c, [])}) for st, cs in clips.items()}
-    swap = plan(names, SWAP, pool_events(info, users, set(SWAP.values())))
+    import furniture_anim_survey
+    sf_arcs = furniture_anim_survey.SfArchives(os.path.join(a.starfield, "Data"))
+    kept = template_foley(sf_arcs.names, sf_arcs.read)
+    swap = plan(names, SWAP, pool_events(info, users, set(SWAP.values()) | set(kept)))
+    clash = {sky: ev for sky, ev in SWAP.items() if ev in kept}
     wavs = SB.extract(a.skyrim_data, list(swap), os.path.join(a.work, "wav"), a.ffmpeg)
     dst_dir = os.path.join(a.mod, "Sound", "Soundbanks")
     os.makedirs(dst_dir, exist_ok=True)
-    rep = {"info": src_name, "sounds_by_set": by_set, "sounds": {}}
+    # the files of an earlier run go first: a vanilla event that is no longer ours must play its own sound again
+    # (2026-11-20: the tanning template's event kept the grindstone loop until its file was removed)
+    stale = [fn for fn in os.listdir(dst_dir) if fn.lower().endswith(".wem")]
+    for fn in stale:
+        os.remove(os.path.join(dst_dir, fn))
+    rep = {"info": src_name, "sounds_by_set": by_set, "sounds": {}, "template_foley_kept_out": sorted(kept),
+           "earlier_files_removed": len(stale),
+           "fixed_events_a_template_plays": clash}
+    if kept:
+        print(f"kept out of the pool (our sets' templates play them): {', '.join(sorted(kept))}")
+    for sky, ev in clash.items():
+        print(f"  note: {sky} -> {ev}, which a template of ours also plays")
     vanilla = vanilla_wems(os.path.join(a.starfield, "Data"), [t for ev in swap.values() for t in files.get(ev, [])])
     loaded = {}
     for sky, ev in swap.items():

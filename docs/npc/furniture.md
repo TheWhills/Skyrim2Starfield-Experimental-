@@ -1143,3 +1143,9 @@ furniture_anim_pack.OBJECT_SOUNDS adds both to the character's Spin clip (skyrim
 the Grindstone Idle and its 9 flavors get two <audio> foley entries at frame 0; sound_swap gives them pool events and
 tiles each loop to 9.1333 s (LOOPS, tile), so one Spin plays one clip-long one-shot. Cost: walking away mid-Spin
 lets the sound finish (up to 9 s). In game unverified.
+Grindstone sound heard at the tanning rack (owner, 2026-11-20 18:07, verified): the Tanning set has no Skyrim sound,
+so its descriptors keep the wall-wipe template's own <audios>, and one of those events was in the pool sound_swap
+handed the grindstone loops to. sound_swap now keeps every <foley> event of our sets' template folders out of the
+pool (template_foley; printed), and removes the .wem files of earlier runs before writing (a vanilla event no longer
+ours plays its own sound again).
+

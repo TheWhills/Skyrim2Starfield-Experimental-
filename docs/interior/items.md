@@ -83,3 +83,16 @@ hknpShapeMassProperties property (mass = volume x 1000, compressed centre / iner
 too; our convex writer (meshcollision._emit_convex) writes none. The body's mass is a round number per kind, not the
 shape's volume mass. So a dynamic body = our convex shape with the shape mass property, plus the body / system fields
 above copied from a vanilla loose item, the mass distribution computed from the hull.
+
+## Wine bottle test (2026-11-20, owner: "lets get the wine bottle test going")
+scripts/interior/item_test.py, the smallest end-to-end form of steps 1-3 before any builder places items: a Skyrim
+ALCH (default the first wine with a bottle model; --item) becomes S2SItemTest.esm's ALCH copied from a vanilla
+Starfield drink (--donor; default the first ALCH whose EditorID / model reads wine, then whiskey / liquor / bottle,
+that has a physics body): its effects, sounds, keywords, value and weight, with the Skyrim name and our model. The
+model is converted as the statics are (SkyrimConverter, no collision of ours) and gets the DONOR's physics body
+(item_test.with_physics: bhkNPCollisionObject + bhkPhysicsSystem on the root, the donor's collision flags and
+BSXFlags): dynamic as the donor's (motionType 2, mass, mass distribution, motion properties), but the donor bottle's
+hull, not ours. Unverified: that a body copied from another model falls, settles and can be taken in game; that the
+donor's hull sits right on our bottle (origin at the base in both: supported for clutter). Next after it works: our
+own dynamic convex body (the fields in the table above on meshcollision's hull, mass distribution from the hull).
+

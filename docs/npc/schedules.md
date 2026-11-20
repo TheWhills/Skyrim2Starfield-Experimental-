@@ -249,3 +249,10 @@ riverwood_doors.ps1's default -Actors now includes Dorthe and Frodnar (face_fit'
 --child-shape-npc). Their Skyrim packages go through make_schedule like the adults'. Unverified: how child packages
 (play, follow a parent) convert, and whether Starfield's child race uses the furniture the adults do. Clothes are
 still the template child's until children's outfits are converted (next).
+Children's schedules, read 2026-11-20 (owner's last readiness.md, verified): both are in the build. Dorthe 5/5
+converted (DorthePlay 7:00 for 9 h near Frodnar - his placed actor, so she follows him; DorthHelpAlvorForge 16:00
+for 3 h; the family meal 20:00; breakfast 6:00; sleep 0:00 for 8 h). Frodnar 5/6 (FrodnarPlay7x12 near a marker;
+meals 6:00 and 12:00; sleep; a default sandbox); left out FrodnarPlayNearPlayer7x12 (GetDistance player to
+FrodnarPlayMarker < 1000 units: a Starfield condition not written yet). Unverified in game: where they are by hour,
+and DorthePlay following Frodnar.
+

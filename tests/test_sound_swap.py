@@ -111,5 +111,19 @@ class LoopTests(unittest.TestCase):
             self.assertAlmostEqual(S.LOOPS[snd], 274 / 30, places=3)
 
 
+class TemplateFoleyTests(unittest.TestCase):
+    def test_foley_of_our_template_folders(self):
+        import furniture_anim_pack as FP
+        tpl = FP.SETS["Tanning"][1].lower()
+        files = {tpl + "\\idle.afx": b"<audios><audio><frame>3</frame><foley>NPC_Wipe_Wall</foley></audio></audios>",
+                 tpl + "\\exittostand.afx": b"<audio><foley> NPC_Wipe_Stop </foley></audio>",
+                 "meshes\\actors\\human\\animations\\furniture\\other\\idle.afx":
+                     b"<foley>NPC_Not_Ours</foley>",
+                 tpl + "\\idle.af": b"<foley>Binary</foley>"}
+        got = S.template_foley(list(files), files.get)
+        self.assertEqual(sorted(got), ["NPC_Wipe_Stop", "NPC_Wipe_Wall"])
+        self.assertEqual(S.template_foley(list(files), files.get, sets=["Sit"]), {})
+
+
 if __name__ == "__main__":
     unittest.main()
