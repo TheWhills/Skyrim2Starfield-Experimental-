@@ -400,7 +400,7 @@ def adult_own_head(n, fg, fg_bytes, al, model_space, base, base_bytes, conv, rac
     s_, R_, t_ = al[:3]
     np.savez_compressed(os.path.join(out, frame), al_s=float(s_), al_R=np.asarray(R_, float),
                         al_t=np.asarray(t_, float), node=np.asarray(head.model_xf, float),
-                        fg=np.asarray(fg, float), model_space=bool(model_space))
+                        fg=np.asarray(fg, float), base=np.asarray(base, float), model_space=bool(model_space))
     return {"model": f"{ADULT_HEAD_DIR}\\{n['edid']}Head.nif", "files": sorted(files), "shape": shape, "on": on,
             "preview": preview, "max_move_m": round(float(mag.max()), 4), "frame": frame.replace(os.sep, "/")}
 
@@ -417,9 +417,10 @@ def without_part(subs, fid_hex):
     return [(sg, d) for sg, d in subs if not (sg == b"PNAM" and len(d) == 4 and struct.unpack("<I", bytes(d))[0] == fid)]
 
 
-def own_head_ctx(out, row):
-    """(ctx for child_hair.sky_to_starfield / build_child_hair, FaceGen head points) of an adult's own head from its
-    frame file (adult_own_head), or (None, None)."""
+def own_head_ctx(out, row, which="fg"):
+    """(ctx for child_hair.sky_to_starfield / build_child_hair, head points) of an adult's own head from its frame
+    file (adult_own_head), or (None, None). which: "fg" its FaceGen head, "base" the Skyrim base head (what a hair
+    head part's own model was made on; the FaceGen head when the file has none)."""
     import types
     rel = (row.get("own_head") or {}).get("frame")
     path = os.path.join(out, *rel.split("/")) if rel else None
@@ -428,7 +429,23 @@ def own_head_ctx(out, row):
     z = np.load(path)
     ctx = {"al": (float(z["al_s"]), z["al_R"], z["al_t"]), "model_space": bool(z["model_space"]),
            "head": types.SimpleNamespace(model_xf=z["node"])}
-    return ctx, z["fg"]
+    return ctx, (z["base"] if which == "base" and "base" in z.files else z["fg"])
+
+
+def own_hair_models(n, hdpt, src):
+    """(model paths, main model NIF bytes or None) of the NPC's hair head part and its extra parts as the Skyrim
+    load order src has them (npc_hair.part_models; a loose remake in a --skyrim-mod folder wins)."""
+    import npc_hair
+    hair = next((f for f in n.get("head_parts") or [] if (hdpt.get(f) or {}).get("type") == 3), None)
+    models = npc_hair.part_models(hair, hdpt) if hair is not None else []
+    if not models:
+        return [], None
+    rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", models[0].replace("/", "\\"), flags=re.I)
+    try:
+        raw = src.mesh(rel) if hasattr(src, "mesh") else None
+    except (KeyError, OSError, SystemExit):
+        raw = None
+    return (models, raw) if raw else ([], None)
 
 
 def own_hair_lift(row):
@@ -1758,23 +1775,35 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
                 files = row["child"].get("files", [])
                 pre = hair_lift_matrix(row)
             else:
-                ctx, fgp = own_head_ctx(out, row)
+                # 2026-11-19 (owner, Faendal's back: his ponytail missing, parts see-through; "we were using" Vanilla
+                # hair remake SMP): an adult's own hair is its hair head part's own models, read through the Skyrim
+                # load order (the remake, given as a --skyrim-mod, wins - the hairstyles the owner chose on 11-05),
+                # shaped onto its own head; the FaceGen NIF's low-poly copy only when those cannot be read
+                models, main = own_hair_models(n, hdpt, sky)
+                ctx, fgp = own_head_ctx(out, row, "base" if main else "fg")
                 if ctx is None:
                     info["error"] = "its own head's frame file is missing (rerun with --refit): the shared hair"
                     continue
                 files = row["own_head"].get("files", [])
                 pre = own_hair_lift(row)
+                info["from"] = (f"its hair head part's models ({', '.join(models)})" if main else
+                                "its FaceGen NIF (the head part's models not readable)")
             head_nif = next((f for f in files if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
             surface = child_hair.baked_surface(a.starfield, out, head_nif) if head_nif else None
-            hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp,
-                                               world(child), surface, fbs[model], conv, staging, settings, pre,
-                                               *(() if child else ("S2S_OwnHair_", OWN_HAIR_DIR)))
+            if not child and main:
+                hrow = child_hair.build_child_hair(row["edid"], n["female"], main, models[0], names, ctx, fgp,
+                                                   world(child), surface, fbs[model], conv, staging, settings, pre,
+                                                   "S2S_OwnHair_", OWN_HAIR_DIR, models=models, src=sky)
+            else:
+                hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp,
+                                                   world(child), surface, fbs[model], conv, staging, settings, pre,
+                                                   *(() if child else ("S2S_OwnHair_", OWN_HAIR_DIR)))
         except (skyrimhair.HairError, nifmod.NifError, ValueError, KeyError, OSError) as e:
             info["error"] = f"{type(e).__name__}: {e}"
             continue
         info.update({x: hrow[x] for x in ("placement", "fit", "follow_head", "conform", "dropped_duplicate_shapes",
                                           "shapes", "vertices", "materials", "face_bones", "skipped",
-                                          "template_reference") if x in hrow})
+                                          "template_reference", "shape_detail") if x in hrow})
         info["head_surface"] = "its baked head" if surface is not None else "none found: not conformed"
         if not hrow.get("ok"):
             info["error"] = hrow.get("reason") or "not converted"

@@ -806,3 +806,14 @@ why the mod needs no clothes of its own.
   numbered after the last record, so his one new hair record renumbered every voice type: every NPC's VTCK (and
   every greeting file's name) changed. npc_voice now numbers them from a block of their own (VOICE_FIRST); the next
   run moves them there once, after that a new record elsewhere no longer touches them.
+  In game (owner, 21:01, back view): from his FaceGen copy the top shell showed but his ponytail was gone and parts
+  were see-through. Drawn from his FaceGen NIF (scratch render): HairMaleDarkElf09 is slicked back into a ponytail
+  down the back of the head, HairShaved covers the back sides, HairLine the front; in game the ponytail and shaved
+  layer did not show (cause not found from here - the converted files are in the owner's archive). Owner: "we were
+  using" Vanilla hair remake SMP (11-05: "use these hairs for conversion"; read here: maledarkelfhair09.nif 1,750
+  vertices on NPC Head + 4 'JG DE09 Tail' bones, its hairline 104, shaved 66; meshes only). Changed: an own-head
+  adult's hair is now its hair head part's own models (npc_hair.part_models: the part and its extra parts) read
+  through the Skyrim load order, so the remake given as a --skyrim-mod wins, shaped onto its own head from the
+  Skyrim base head (what the model was made on; adult_own_head now also saves it); the FaceGen copy only when the
+  models cannot be read. The remake's model sits on Skyrim's malehead.nif as read (11 units from its middle: no
+  frame shift). faces.json own_hair gains "from" and shape_detail (alpha per shape).

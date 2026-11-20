@@ -688,6 +688,32 @@ class FaceFitWiringTests(unittest.TestCase):
         self.assertEqual(pn, [0x01000900, new[3]])                     # the shared hairstyle out, its own in
         self.assertEqual(rows[0]["own_hair"]["form_id"], f"{new[3]:08X}")
         self.assertNotIn("hair", rows[0])
+        self.assertIn("FaceGen", rows[0]["own_hair"]["from"])          # no model readable here: the FaceGen copy
+
+    def test_own_hair_models(self):
+        """The hair head part's own models (+ extra parts) as the load order has them: a loose remake wins."""
+        import face_fit as S
+        hdpt = {0x10: {"edid": "HairMaleDarkElf09", "type": 3, "model": "Actors\\Character\\Hair\\H09.nif",
+                       "extra_parts": [0x11]},
+                0x11: {"edid": "HairLine09", "type": 3, "model": "Actors\\Character\\Hair\\H09_line.nif",
+                       "extra_parts": []},
+                0x20: {"edid": "Eyes", "type": 2, "model": "eyes.nif", "extra_parts": []}}
+        seen = []
+
+        class Src:
+            def mesh(self, rel):
+                seen.append(rel)
+                return b"remake" if rel.lower().endswith("h09.nif") else None
+        models, raw = S.own_hair_models({"head_parts": [0x20, 0x10]}, hdpt, Src())
+        self.assertEqual(models, ["Actors\\Character\\Hair\\H09.nif", "Actors\\Character\\Hair\\H09_line.nif"])
+        self.assertEqual(raw, b"remake")
+        self.assertEqual(seen, ["meshes\\Actors\\Character\\Hair\\H09.nif"])
+
+        class Missing:
+            def mesh(self, rel):
+                return None
+        self.assertEqual(S.own_hair_models({"head_parts": [0x10]}, hdpt, Missing()), ([], None))
+        self.assertEqual(S.own_hair_models({"head_parts": [0x20]}, hdpt, Src()), ([], None))
 
     def test_skin_frame_shift(self):
         """Hair shapes that read far from their head (vanilla FaceGen: 120 units low) take their bone route's shift;

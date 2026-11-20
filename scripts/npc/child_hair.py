@@ -221,7 +221,7 @@ class _OneMesh:
 
 def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, names: List[str], ctx, fg_points,
                      sf_world, surface, fb, conv, staging: str, settings, pre=None, prefix: str = "S2S_ChildHair_",
-                     out_dir: str = OUT_DIR) -> Dict:
+                     out_dir: str = OUT_DIR, models=None, src=None) -> Dict:
     """One child's hair converted into staging: skyrim_hairs.build_part on the FaceGen NIF's hair shapes. ctx:
     child_faces.child_setup's; fg_points: its FaceGen head in the same space as ctx["base"] (child_faces.
     facegen_points); surface: its baked head (baked_surface); fb: the template hair's _facebones template
@@ -229,14 +229,17 @@ def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, name
     (childshape.prealign's matrix; 2026-11-19, owner: eyes and brows too high, the hair low on the forehead - the
     hair had stayed at the alignment's size, 1.09x smaller than the face for Frodnar), or None. Returns
     build_part's row (ok, model, ...) plus the placement. prefix / out_dir: the hair's EditorID start and folder
-    (adults' own hair: S2S_OwnHair_, s2s/faces/hair)."""
+    (adults' own hair: S2S_OwnHair_, s2s/faces/hair). models / src: convert the hair head part's own model NIFs
+    from src (the Skyrim load order: a hair remake given as a mod wins) instead of the FaceGen NIF's hair shapes;
+    fg_bytes is then the main model NIF (its frame decides the placement) and fg_points the head it was made
+    on."""
     import hair_pack
     import skyrim_hairs
     from fo4sf import facefit, skyrimhair
     M = sky_to_starfield(ctx)
     if pre is not None:
         M = np.asarray(pre, float) @ M
-    shift, shift_rep = skin_frame_shift(fg_bytes, names, fg_points)
+    shift, shift_rep = skin_frame_shift(fg_bytes, None if models else names, fg_points)
     scale, offset = placement(fg_bytes, M, sf_world[skyrimhair.SF_HEAD][:3, 3], shift)
     hc = types.SimpleNamespace(**vars(settings))
     hc.head_scale, hc.head_offset = scale, offset
@@ -249,10 +252,10 @@ def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, name
     rep: Dict = {}
     hair_pack.setup_reference(hc, sf_world, rep, fb[4][0] if fb is not None and len(fb) > 4 and fb[4] is not None
                               else None)
-    row = skyrim_hairs.build_part({"edid": f"{prefix}{edid}", "plugin": "FaceGen"}, [fg_rel],
-                                  _OneMesh(fg_bytes), conv, sf_world, hc, fb, staging,
-                                  getattr(hc, "spread_face_bones", True), out_name=f"{out_dir}/{edid.lower()}",
-                                  keep_shapes=names)
+    row = skyrim_hairs.build_part({"edid": f"{prefix}{edid}", "plugin": "head part" if models else "FaceGen"},
+                                  list(models) if models else [fg_rel], src if models else _OneMesh(fg_bytes), conv,
+                                  sf_world, hc, fb, staging, getattr(hc, "spread_face_bones", True),
+                                  out_name=f"{out_dir}/{edid.lower()}", keep_shapes=None if models else names)
     row["placement"] = {"scale_m_per_unit": round(float(np.mean(np.diag(M)[:3])), 6),
                         "shift_m": [round(float(v), 4) for v in M[:3, 3]], "skin_frame": shift_rep}
     row["template_reference"] = rep.get("vanilla_hair")
