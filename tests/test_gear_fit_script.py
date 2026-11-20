@@ -313,6 +313,16 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(out, {"Boots": [7], "Cuirass": [3, 5], "Body": [3, 5], "Cuffs": [8], "Belt": [9]})
 
 
+    def test_strap_gap_for(self):
+        """--female-strap-gap raises only the female fit (item_convert --fit-args runs both sexes)."""
+        import types
+        f = lambda **k: types.SimpleNamespace(**{"strap_gap": None, "female_strap_gap": None, **k})   # noqa: E731
+        self.assertEqual(gear_fit.strap_gap_for(f(), True), gear_fit.gearfit.STRAP_GAP)
+        self.assertEqual(gear_fit.strap_gap_for(f(), False), 0.0)
+        self.assertEqual(gear_fit.strap_gap_for(f(female_strap_gap=0.012), True), 0.012)
+        self.assertEqual(gear_fit.strap_gap_for(f(female_strap_gap=0.012), False), 0.0)
+        self.assertEqual(gear_fit.strap_gap_for(f(strap_gap=0.0, female_strap_gap=0.012), True), 0.0)
+
     def test_distinct_slots(self):
         # Embry: one Skyrim armor, two shapes on [3, 5]: the second moves to a free Vis Only slot; order kept
         out, notes = gear_fit.distinct_slots({"robemorph": [3, 5], "Pants": [3, 5], "Boots": [7], "Belt": [10]},

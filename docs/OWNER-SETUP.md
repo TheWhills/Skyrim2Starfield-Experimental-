@@ -248,14 +248,15 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    feature-matched face shape; Dorthe waits.)
 7l. B + C: women's faces and shoulders (docs/npc/races.md, 2026-11-19). Every adult's baked face is now recoloured
    to its body tone: run 7k's block again, then in game Hilde, Gerdur, Delphine, Ysolda, Sigrid: face vs neck / hands.
-   Shoulders (Hilde FarmClothes02, Gerdur FarmClothes03; FarmClothes04 the clean one to compare): the same fit
-   item_convert makes, into a scratch folder (S2S Clothes untouched), with gear_fit's debug meshes after each step:
+   Shoulders (Hilde FarmClothes02, Gerdur FarmClothes03, Saadia's barkeeper clothes): skin through the dress on the
+   shoulders / upper back standing (owner's shots). Debug fits (owner's runs): nothing comes through in the rest pose
+   or on any slider; the dress sits 0-6 mm off the skin there. Owner: "these parts just need to be slightly raised".
+   Those three items refitted with the female strap gap 12 mm (was 8; male fits unchanged), Starfield closed:
    ```powershell
    git pull
-   $dbg="C:\Modding\work\shoulders"
-   foreach ($i in "ClothesFarmClothes02","ClothesFarmClothes03","ClothesFarmClothes04") { python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --armor $i --sex female --race NordRace --name "Items_$i" --out "$dbg\out" --stage --debug-dir "$dbg\$i" --debug-steps }
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmClothes02 --armor ClothesFarmClothes03 --armor ClothesBarKeeper --fit-args="--female-strap-gap 0.012"
    ```
-   Send the three fit_debug.zip ($dbg\ClothesFarmClothes02 etc.).
+   In game Hilde, Gerdur, Saadia standing: shoulders covered? Still showing = a bigger number; puffy = smaller.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

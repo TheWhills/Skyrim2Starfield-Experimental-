@@ -2459,3 +2459,11 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   as the race face parts already do. Why: keeps the conversion and look the owner approved; only the skull
   difference changes. Alternative dropped: per-NPC reconversion (children keep it: their hair comes only from their
   FaceGen NIFs).
+- 2026-11-19 Skin through Hilde's / Gerdur's dresses and the barkeeper clothes on the shoulders and upper back,
+  standing (owner's shots; the barkeeper's had been fixed on Saadia 11-08 with the 8 mm strap gap). Verified on the
+  owner's debug fits of FarmClothes02 / 03 / 04 (renders and ray checks): no skin through in the rest pose or on any
+  body slider, the skin pieces match Skyrim's, the dress textures have no see-through parts there; the dresses sit
+  0-6 mm off the skin over the shoulders. Owner: "these parts just need to be slightly raised". New gear_fit
+  --female-strap-gap (female fits only, so item_convert --fit-args can raise it without touching the male versions);
+  test 12 mm on those three items, the default stays 8 mm until seen in game. Supported, not verified: the gap closes
+  when the arms come down (weights), which the debug meshes cannot show.

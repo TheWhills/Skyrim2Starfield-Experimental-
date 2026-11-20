@@ -975,6 +975,18 @@ def test_morph_files(tests, morphs: dict, body_path: str, sf_data: str) -> dict:
     return out
 
 
+def strap_gap_for(a, female: bool) -> float:
+    """Metres off the skin for visible gear round the neck and shoulders: --strap-gap for both sexes, else
+    --female-strap-gap on a female fit (2026-11-19, owner: Hilde's and Gerdur's dresses and the barkeeper's show skin on
+    the shoulders standing, "these parts just need to be slightly raised"; their rest-pose debug meshes sit 0-6 mm off
+    the skin there), else gearfit.STRAP_GAP on female fits and off (0) on male ones."""
+    if a.strap_gap is not None:
+        return a.strap_gap
+    if female:
+        return gearfit.STRAP_GAP if a.female_strap_gap is None else a.female_strap_gap
+    return 0.0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim-data", required=True)
@@ -1025,6 +1037,9 @@ def main(argv=None):
     ap.add_argument("--strap-gap", type=float, default=None,
                     help=f"metres off the skin for visible gear round the neck and shoulders (default: "
                          f"{gearfit.STRAP_GAP} on female outfits, off on male ones; 0 = the normal --gap)")
+    ap.add_argument("--female-strap-gap", type=float, default=None,
+                    help=f"as --strap-gap, for female fits only (default {gearfit.STRAP_GAP}); for item_convert "
+                         "--fit-args, which runs both sexes")
     ap.add_argument("--debug-steps", action="store_true",
                     help="with --debug-dir: also the gear after each group of fit steps (fit_<shape>@step<n>.obj)")
     ap.add_argument("--conform", action="store_true",
@@ -1107,8 +1122,7 @@ def main(argv=None):
                              feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
                                            for m in meshes),
                              whole_skin=a.whole_skin, round_bust=a.round_bust and female,
-                             strap_gap=(a.strap_gap if a.strap_gap is not None else
-                                        (gearfit.STRAP_GAP if female else 0.0)), curved=a.curved,
+                             strap_gap=strap_gap_for(a, female), curved=a.curved,
                              conform=a.conform)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
