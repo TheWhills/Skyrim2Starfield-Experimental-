@@ -2480,3 +2480,14 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   run with no strap gap, so the lift and its band never apply) and in reuse: gearfit.FIT_VERSION back to 1, new
   gearfit.FEMALE_FIT_VERSION 2 carried only by female fit keys (item_convert.fit_key), so male fits stay cached and
   are never refitted for it. Test on Hilde's dress (ClothesFarmClothes02) alone first (owner).
+- 2026-11-19 Correction: the shoulder skin is not a gap problem. Verified on the owner's staged item files (weights
+  and binds): the skin piece carries the game body's own binds (d53dc4b, 11-07, for the head-edge seam) while the
+  gear carries binds from the skeleton (gearfit.skeleton_binds); on the arm bones they differ (Biceps 22 mm / 3.7
+  deg; Biceps_Twist1, Forearm, Wrist_Twist 13-14 mm), so in game the skin piece is drawn 9-14 mm (max 16) from where
+  the fit put it, relative to the dress. Redrawn that way, the skin comes through Hilde's and Gerdur's dresses on the
+  shoulder tops (13-16 cm out from the neck, as in the owner's shots) and not through Ysolda's (only the open
+  neckline, as in Skyrim). Same mismatch on all three dresses; the tight shoulders decide. Fix: female fits give the
+  gear the body's own bind for every bone the body has (skeleton_binds body_binds), so gear, skin piece and body agree.
+  Male fits unchanged (owner); they carry the same mismatch. The 12 mm strap raise is withdrawn (back to 8 mm,
+  (2, 6) cm); gearfit.FEMALE_FIT_VERSION 3. In game unverified. Alternative: give the skin piece the skeleton's binds
+  (would bring back the 11-07 seam at the head mesh's edge).

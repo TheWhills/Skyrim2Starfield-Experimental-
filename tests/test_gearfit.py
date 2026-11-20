@@ -1060,13 +1060,35 @@ class SpeedEquivalenceTests(unittest.TestCase):
 
 class StrapTargetTests(unittest.TestCase):
     def test_strap_target(self):
-        """2026-11-19: shoulders / upper back 12 mm off the skin down to 3 cm under the clavicles, fading to GAP by 9."""
-        t, band = G.strap_target([-0.02, 0.0, 0.03, 0.06, 0.09, 0.12])
+        """The strap lift: STRAP_GAP down to STRAP_RAMP[0] under the clavicles, fading to GAP by STRAP_RAMP[1]
+        (2026-11-19: 8 mm, (2, 6) cm again after the 12 mm try)."""
+        self.assertAlmostEqual(G.STRAP_GAP, 0.008)
+        t, band = G.strap_target([-0.02, 0.0, 0.02, 0.04, 0.06, 0.08])
         self.assertTrue(np.allclose(t[:3], G.STRAP_GAP))
-        self.assertAlmostEqual(G.STRAP_GAP, 0.012)
         self.assertAlmostEqual(t[3], (G.STRAP_GAP + G.GAP) / 2)
         self.assertTrue(np.allclose(t[4:], G.GAP))
         self.assertEqual(band.tolist(), [True, True, True, True, False, False])
+
+
+class BodyBindsTests(unittest.TestCase):
+    def test_gear_takes_the_body_binds(self):
+        """2026-11-19 (Hilde's / Gerdur's shoulders): with body_binds the gear gets the game body's own bind for every
+        bone the body has (as the skin piece), the skeleton's for the rest; the sphere is in that bone's space."""
+        from fo4sf.skyrimhair import HairShape
+        world = {"C_Chest": np.eye(4), "L_Biceps": np.eye(4), "L_Extra": np.eye(4)}
+        world["L_Biceps"][:3, 3] = (0.2, 0.0, 1.4)
+        world["L_Extra"][:3, 3] = (0.3, 0.0, 1.3)
+        frame = np.eye(4)
+        rot = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+        body = {"L_Biceps": ((0, 0, 0, 0), rot, (-0.222, 0.0, -1.38), 1.0)}           # 22 mm off the skeleton's
+        sh = HairShape(b"g", np.array([[0.25, 0.0, 1.4], [0.3, 0.0, 1.3]]), np.zeros((2, 3)), None, [(0, 0)] * 2,
+                       [(0, 1, 1)], [[("L_Biceps", 1.0)], [("L_Extra", 1.0)]], -1, -1, -1)
+        plain = G.skeleton_binds(["L_Biceps", "L_Extra"], world, frame, [sh])
+        got = G.skeleton_binds(["L_Biceps", "L_Extra"], world, frame, [sh], body_binds=body)
+        self.assertEqual(got["L_Biceps"][1:], (rot, (-0.222, 0.0, -1.38), 1.0))
+        self.assertNotEqual(plain["L_Biceps"][2], got["L_Biceps"][2])
+        self.assertEqual(got["L_Extra"], plain["L_Extra"])                              # not on the body: skeleton's
+        self.assertTrue(np.allclose(got["L_Biceps"][0][:3], (0.028, 0.0, 0.02)))        # the vertex in that bone space
 
 if __name__ == "__main__":
     unittest.main()

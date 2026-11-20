@@ -750,7 +750,9 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                       [body_mesh.tangents[k] for k in used] if body_mesh.tangents else None)
         shapes[i] = sh
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
-    binds = gearfit.skeleton_binds(bones, world, frame, shapes)
+    # female fits: the game body's own binds where it has the bone, as the skin piece (2026-11-19, skin through Hilde's
+    # and Gerdur's shoulders); male fits keep the skeleton's (owner: male outfits are not to change)
+    binds = gearfit.skeleton_binds(bones, world, frame, shapes, body_binds=body_binds if female else None)
     res.report.update(skipped=skipped, frame=frame.round(6).tolist(), hands=hand_path, tessellated=tess,
                       head=head_path, skyrim_head=bool(sky_head))
     res.report["_body_pts"] = pts

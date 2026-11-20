@@ -249,16 +249,17 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
 7l. B + C: women's faces and shoulders (docs/npc/races.md, 2026-11-19). Every adult's baked face is now recoloured
    to its body tone: run 7k's block again, then in game Hilde, Gerdur, Delphine, Ysolda, Sigrid: face vs neck / hands.
    Shoulders (Hilde, Gerdur, the barkeeper clothes): skin through the dress on the shoulder tops / upper back on
-   NPCs standing. Owner: every outfit is converted this way now, so raise those areas slightly for all: women's
-   outfits now keep 12 mm off the skin there (was 8 mm), down to 3 cm under the collarbones (was 2), fading out by
-   9 cm (was 6). Men's not touched at all. Owner: test on one item first (no hours-long refit of everything for a fix that
-   may not work): the three that look wrong (Hilde's, Gerdur's, the barkeeper's), Starfield closed:
+   NPCs standing. Cause (verified on the owner's staged files, 2026-11-19): the skin piece has the game body's own
+   bone binds (since 11-07), the dresses binds from the skeleton; on the arm bones they differ (Biceps 22 mm), so in
+   game the skin is drawn 9-14 mm from where the fit put it and comes through tight shoulders (Hilde's, Gerdur's;
+   Ysolda's looser dress hides it). Fix: women's outfits take the body's binds too (the 12 mm raise is undone; men's
+   outfits not touched, not refitted). The three that look wrong, female versions only, Starfield closed:
    ```powershell
    git pull
    python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmClothes02 --armor ClothesFarmClothes03 --armor ClothesBarKeeper
    ```
-   Only the female version refits; the male one is reused untouched (owner: male outfits do not change).
-   Item ids stay the same, so no face_fit rerun is needed. In game: Hilde, Gerdur, Saadia standing: shoulders covered? Puffy?
+   Male versions print "fitted before, reused". Item ids stay the same, so no face_fit rerun is needed. In game:
+   Hilde, Gerdur, Saadia standing: shoulders covered? Sleeves / arms still sitting right?
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

@@ -33,8 +33,9 @@ KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body 
 PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
 FIT_VERSION = 1                 # bump when what a fit produces changes (item_convert reuses fits by it)
-FEMALE_FIT_VERSION = 2          # bump when only female fits change (owner 2026-11-19: male outfits look great, not a
-#                                 thing changes on them, not even a refit). 2: strap gap 12 mm, deeper band
+FEMALE_FIT_VERSION = 3          # bump when only female fits change (owner 2026-11-19: male outfits look great, not a
+#                                 thing changes on them, not even a refit). 2: strap gap 12 mm (withdrawn); 3: the
+#                                 game body's own binds on the gear (skeleton_binds body_binds)
 GAP = 0.004                     # m: gear pushed this far outside the Starfield body
 PUSH_REACH = 0.06               # m: only gear this close to the Starfield body is pushed
 SKIN_DEPTH = 0.003              # m: a shape whose vertices lie this close to the Skyrim body is a skin piece
@@ -1306,13 +1307,11 @@ def final_relax(sky_pts: np.ndarray, pts: np.ndarray, tris, body_pts: np.ndarray
 
 BUST_FRONT = 0.5      # body normal's forward (+y) share above which a point counts as the front of the chest
 BUST_Z = (0.04, 0.30)  # m below Starfield's clavicles: the bust band for round_bust
-# 2026-11-19 (owner: skin through the dresses on the shoulder tops and upper back of Hilde, Gerdur and the barkeeper
-# NPCs, standing; "these parts just need to be slightly raised" - every outfit goes through this fit): 12 mm, down to
-# 3 cm below the clavicles before fading to GAP by 9 cm (the owner's debug fits: the dress 0-6 mm off the skin there,
-# 3-7 cm below Skyrim's clavicles). Was 8 mm, (0.02, 0.06). Female fits only: male ones run with no strap gap.
-STRAP_GAP = 0.012     # m: visible gear round the neck and shoulders stays this far off the skin
+# 2026-11-19: tried 12 mm over (3, 9) cm for the skin through Hilde's / Gerdur's shoulders, then back to these: the
+# cause was the dresses' binds (skeleton_binds body_binds), not the gap.
+STRAP_GAP = 0.008     # m: visible gear round the neck and shoulders stays this far off the skin
 STRAP_NECK = (0.085, 0.105)  # m from the neck's axis: no strap lift inside the first, full past the second
-STRAP_RAMP = (0.03, 0.09)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second
+STRAP_RAMP = (0.02, 0.06)  # m below Skyrim's clavicles: STRAP_GAP above the first, GAP below the second
 
 
 def strap_target(below: np.ndarray, gap: float = GAP, strap_gap: float = STRAP_GAP):
@@ -2705,12 +2704,24 @@ def mesh_frame(body_binds: Dict[str, tuple], sf_world: Dict[str, np.ndarray]) ->
     return np.median(np.stack(ms), axis=0)
 
 
-def skeleton_binds(bones, sf_world: Dict[str, np.ndarray], frame: np.ndarray, shapes=()) -> Dict[str, tuple]:
+def skeleton_binds(bones, sf_world: Dict[str, np.ndarray], frame: np.ndarray, shapes=(),
+                   body_binds: Optional[Dict[str, tuple]] = None) -> Dict[str, tuple]:
     """{bone: (sphere, rot 9, trans 3, scale)}: bind = inverse(rest world) @ frame, the game body's convention; the
-    sphere (bone space) around the vertices weighted to the bone, from shapes given in mesh space."""
+    sphere (bone space) around the vertices weighted to the bone, from shapes given in mesh space.
+    body_binds: the game body's own binds, used for every bone the body has (2026-11-19, verified on the owner's staged
+    Hilde / Gerdur / Ysolda dresses: the skin piece carries the body's binds since 2026-11-07 and the dresses these,
+    which differ on the arm bones - Biceps 22 mm / 3.7 deg, Biceps_Twist1, Forearm, Wrist_Twist 13-14 mm - so in game
+    the skin, and the body, are drawn 9-14 mm from where the fit put them; through the tight shoulders of Hilde's and
+    Gerdur's dresses, not Ysolda's looser one). Bones the body lacks keep the skeleton's."""
     out = {}
     for b in bones:
-        bind = np.linalg.inv(sf_world[b]) @ frame
+        if body_binds and b in body_binds:
+            _sp, rot, trans, scale = body_binds[b]
+            bind = np.eye(4)
+            bind[:3, :3] = np.array(rot, float).reshape(3, 3) * float(scale or 1.0)
+            bind[:3, 3] = trans
+        else:
+            bind = np.linalg.inv(sf_world[b]) @ frame
         pts = [np.asarray(sh.positions[k]) for sh in shapes for k, vw in enumerate(sh.weights)
                if any(x == b for x, _w in vw)]
         if pts:
@@ -2719,8 +2730,12 @@ def skeleton_binds(bones, sf_world: Dict[str, np.ndarray], frame: np.ndarray, sh
             r = float(np.linalg.norm(loc - c, axis=1).max())
         else:
             c, r = np.zeros(3), 0.0
-        out[b] = (tuple(map(float, c)) + (r,), tuple(map(float, bind[:3, :3].reshape(9))),
-                  tuple(map(float, bind[:3, 3])), 1.0)
+        if body_binds and b in body_binds:
+            _sp, rot, trans, scale = body_binds[b]
+            out[b] = (tuple(map(float, c)) + (r,), tuple(map(float, rot)), tuple(map(float, trans)), float(scale or 1.0))
+        else:
+            out[b] = (tuple(map(float, c)) + (r,), tuple(map(float, bind[:3, :3].reshape(9))),
+                      tuple(map(float, bind[:3, 3])), 1.0)
     return out
 
 
