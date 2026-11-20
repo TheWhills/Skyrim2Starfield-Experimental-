@@ -349,3 +349,32 @@ whole prealign move (scale 1.11 for Dorthe): scaled about the face, its back sto
 hair only rises with the forehead (childshape v13 prealign hair_lift_m: Frodnar 7.6 mm, Dorthe 16 mm), capped at
 HAIR_LIFT_MAX 8 mm (the hair moves rigidly; nothing pulls it back onto the crown). face_fit.hair_lift_matrix.
 Dorthe in game otherwise (owner): "Dorthe looks good"; her own tone 6, Frodnar 7.
+
+## 2026-11-20: Clothes (owner: "let's do the children's outfits")
+Until now every child wore its vanilla template child's outfit. RS Children Overhaul's own clothes, read here from
+its plugin and BSA (verified, Skyrim.esm stubbed):
+- **Sizes:** its child body (ranaline\character assets\malebody_1.nif: z 0.163..1.631 m, pelvis joint 0.985 m),
+  child head (childhead.nif, z 1.57..1.88 m) and clothes (childrenclothes\m\torso01_1.nif z 0.07..1.61 m, pelvis
+  0.985 m) are ADULT-sized on adult binds; the kids' skeleton (skeletonkids.nif) shrinks them - as Starfield's child
+  outfits are adult-sized on its child skeleton (Outfit_Child_CoraCoe, 1.52 m, 11-12). So a child item is fitted
+  like an adult one, from the child's body instead of Skyrim's adult body, onto Starfield's body.
+- **Records:** the child races' skin is 0RCOSkinNakedChildren: 0RCONakedTorsoChild (malebody_0 / femalebody_0),
+  0RCONakedHandsChild, 0RCONakedFeetChild, addons on DefaultRace naming the child races; the clothes' addons the
+  same (ChildTorso01AA overridden to RS's childrenclothes meshes, 0RCOClothes* for its own). The torso NIFs carry
+  underwear shapes ('Trousers 2', 'Up'). Outfits: Dorthe 0006D92E (Skyrim's), Frodnar 0RCOClothesOBlacksmithVar
+  (Realistic RS Children's override; RS's own esp gives 0RCOClothesOBlacksmith).
+- **Starfield's child body:** ChildRace's skin WNAM 00015510; of the 15 ARMA naming "child" only the hands are a
+  child body part (aa_child_hands), so supported hypothesis: the child body is the adult naked body on the child
+  skeleton (as Playable Children builds it). Our child items are fitted to the adult body on that basis.
+
+Built: gear_fit.py / item_convert.py --skyrim-mod (+ --skyrim-mods-dir), the Skyrim armor read through the load
+order (skyrimarmor.read_armor_load_order; LVLI entries remapped too); a child --race (gear_fit.is_child_race) fits
+from that race's own skin and Face head part (gear_fit.race_skin_models; the torso's largest shape only,
+body_shapes); the items' addons and armors get RNAM ChildRace (os_export.item_records race=); face_fit gives each
+child its converted Skyrim outfit (write_child_npc: npc_item_outfit; faces.json test_npc.outfit). Fit keys of runs
+without mods are unchanged (no adult refit). Offline on the real RS files: both sexes' body, hands, feet and head
+resolve and exist in its BSA; Frodnar's blacksmith clothes, shoes, ClothesChild01 and the headscarf find their
+child addons. Unverified: the fit itself (needs Starfield's body), in game: size, skin colour of the skin piece (the
+adult body's material on a child tone), Starfield's child hands under gloves (the hand skin piece is cut from the
+adult hands).
+

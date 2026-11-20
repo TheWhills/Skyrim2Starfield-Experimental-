@@ -61,62 +61,81 @@ def _edids(p, sig):
 def read_armor(esm: str) -> dict:
     """{"armo": {fid: {...}}, "arma": {fid: {...}}} for every ARMO and ARMA in the plugin."""
     with fo4land.Plugin(esm) as p:
-        races = _edids(p, b"RACE")
-        armo, arma = {}, {}
-        for fid, rflags, fields in _records(p, b"ARMO"):
-            a = {"edid": "", "slots": [], "armor_type": None, "world_model": "", "world_model_female": "",
-                 "race": None, "addons": [], "value": None, "weight": None, "rating": None, "template": None,
-                 "non_playable": bool(rflags & NON_PLAYABLE_RECORD), "full": None, "full_id": None}
-            for s, d in fields:
-                if s == b"EDID":
-                    a["edid"] = fo4land.zstring(d)
-                elif s == b"FULL" and len(d) == 4:
-                    a["full_id"] = struct.unpack_from("<I", d)[0]      # localized plugin (as skyrimnpc's FULL)
-                elif s == b"FULL":
-                    a["full"] = fo4land.zstring(d)
-                elif s in (b"BODT", b"BOD2"):
-                    flags, kind, general = _body_template(s, d)
-                    a["slots"], a["armor_type"] = slots(flags), ARMOR_TYPES.get(kind, kind)
-                    a["non_playable"] |= bool(general & 0x10)
-                elif s == b"MOD2":
-                    a["world_model"] = fo4land.zstring(d)
-                elif s == b"MOD4":
-                    a["world_model_female"] = fo4land.zstring(d)
-                elif s == b"RNAM":
-                    a["race"] = races.get(struct.unpack_from("<I", d)[0], "%08X" % struct.unpack_from("<I", d)[0])
-                elif s == b"MODL" and len(d) == 4:
-                    a["addons"].append(struct.unpack_from("<I", d)[0])
-                elif s == b"DATA" and len(d) >= 8:
-                    a["value"], a["weight"] = struct.unpack_from("<if", d)
-                elif s == b"DNAM" and len(d) >= 4:
-                    a["rating"] = struct.unpack_from("<i", d)[0] / 100.0
-                elif s == b"TNAM":
-                    a["template"] = struct.unpack_from("<I", d)[0]
-            armo[fid] = a
-        for fid, _rflags, fields in _records(p, b"ARMA"):
-            m = {"edid": "", "slots": [], "race": None, "extra_races": [], "male": "", "female": "",
-                 "male_1st": "", "female_1st": "", "priority": (0, 0), "weight_slider": (False, False),
-                 "dnam_raw": ""}
-            for s, d in fields:
-                if s == b"EDID":
-                    m["edid"] = fo4land.zstring(d)
-                elif s in (b"BODT", b"BOD2"):
-                    m["slots"] = slots(_body_template(s, d)[0])
-                elif s == b"RNAM":
-                    rid = struct.unpack_from("<I", d)[0]
-                    m["race"] = races.get(rid, "%08X" % rid)
-                elif s == b"MODL" and len(d) == 4:
-                    rid = struct.unpack_from("<I", d)[0]
-                    m["extra_races"].append(races.get(rid, "%08X" % rid))
-                elif s == b"DNAM" and len(d) >= 4:
-                    m["priority"] = (d[0], d[1])
-                    m["weight_slider"] = (bool(d[2] & WEIGHT_SLIDER_ENABLED), bool(d[3] & WEIGHT_SLIDER_ENABLED))
-                    m["dnam_raw"] = bytes(d).hex()
-                else:
-                    key = {b"MOD2": "male", b"MOD3": "female", b"MOD4": "male_1st", b"MOD5": "female_1st"}.get(s)
-                    if key:
-                        m[key] = fo4land.zstring(d)
-            arma[fid] = m
+        return parse_inventory(_edids(p, b"RACE"), _records(p, b"ARMO"), _records(p, b"ARMA"))
+
+
+def read_armor_load_order(lo) -> dict:
+    """read_armor over a skyrimload.LoadOrder: the winning ARMO / ARMA of every plugin, FormIDs in load-order space
+    (2026-11-20: children's clothes from RS Children Overhaul, whose addons name its child races)."""
+    recs = lo.flat_records([b"RACE", b"ARMO", b"ARMA"])
+    races = {fid: fo4land.zstring(dict(subs).get(b"EDID", b"")) for t, _h, subs, fid in recs if t == b"RACE"}
+
+    def of(sig):
+        for t, hdr, subs, fid in recs:
+            flags = struct.unpack_from("<I", hdr, 8)[0] if len(hdr) >= 12 else 0
+            if t == sig and not flags & DELETED:
+                yield fid, flags, subs
+    return parse_inventory(races, of(b"ARMO"), of(b"ARMA"))
+
+
+def parse_inventory(races: dict, armo_records, arma_records) -> dict:
+    """read_armor's result from (FormID, record flags, [(sig, data)]) of the ARMO and ARMA records and the RACE
+    EditorIDs by FormID."""
+    armo, arma = {}, {}
+    for fid, rflags, fields in armo_records:
+        a = {"edid": "", "slots": [], "armor_type": None, "world_model": "", "world_model_female": "",
+             "race": None, "addons": [], "value": None, "weight": None, "rating": None, "template": None,
+             "non_playable": bool(rflags & NON_PLAYABLE_RECORD), "full": None, "full_id": None}
+        for s, d in fields:
+            if s == b"EDID":
+                a["edid"] = fo4land.zstring(d)
+            elif s == b"FULL" and len(d) == 4:
+                a["full_id"] = struct.unpack_from("<I", d)[0]      # localized plugin (as skyrimnpc's FULL)
+            elif s == b"FULL":
+                a["full"] = fo4land.zstring(d)
+            elif s in (b"BODT", b"BOD2"):
+                flags, kind, general = _body_template(s, d)
+                a["slots"], a["armor_type"] = slots(flags), ARMOR_TYPES.get(kind, kind)
+                a["non_playable"] |= bool(general & 0x10)
+            elif s == b"MOD2":
+                a["world_model"] = fo4land.zstring(d)
+            elif s == b"MOD4":
+                a["world_model_female"] = fo4land.zstring(d)
+            elif s == b"RNAM":
+                a["race"] = races.get(struct.unpack_from("<I", d)[0], "%08X" % struct.unpack_from("<I", d)[0])
+            elif s == b"MODL" and len(d) == 4:
+                a["addons"].append(struct.unpack_from("<I", d)[0])
+            elif s == b"DATA" and len(d) >= 8:
+                a["value"], a["weight"] = struct.unpack_from("<if", d)
+            elif s == b"DNAM" and len(d) >= 4:
+                a["rating"] = struct.unpack_from("<i", d)[0] / 100.0
+            elif s == b"TNAM":
+                a["template"] = struct.unpack_from("<I", d)[0]
+        armo[fid] = a
+    for fid, _rflags, fields in arma_records:
+        m = {"edid": "", "slots": [], "race": None, "extra_races": [], "male": "", "female": "",
+             "male_1st": "", "female_1st": "", "priority": (0, 0), "weight_slider": (False, False),
+             "dnam_raw": ""}
+        for s, d in fields:
+            if s == b"EDID":
+                m["edid"] = fo4land.zstring(d)
+            elif s in (b"BODT", b"BOD2"):
+                m["slots"] = slots(_body_template(s, d)[0])
+            elif s == b"RNAM":
+                rid = struct.unpack_from("<I", d)[0]
+                m["race"] = races.get(rid, "%08X" % rid)
+            elif s == b"MODL" and len(d) == 4:
+                rid = struct.unpack_from("<I", d)[0]
+                m["extra_races"].append(races.get(rid, "%08X" % rid))
+            elif s == b"DNAM" and len(d) >= 4:
+                m["priority"] = (d[0], d[1])
+                m["weight_slider"] = (bool(d[2] & WEIGHT_SLIDER_ENABLED), bool(d[3] & WEIGHT_SLIDER_ENABLED))
+                m["dnam_raw"] = bytes(d).hex()
+            else:
+                key = {b"MOD2": "male", b"MOD3": "female", b"MOD4": "male_1st", b"MOD5": "female_1st"}.get(s)
+                if key:
+                    m[key] = fo4land.zstring(d)
+        arma[fid] = m
     return {"armo": armo, "arma": arma}
 
 

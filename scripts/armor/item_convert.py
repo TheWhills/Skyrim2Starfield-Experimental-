@@ -110,16 +110,18 @@ def pair_parts(male, female):
     return pairs, notes
 
 
-def skyrim_outfits(esm: str, outfit_edids=(), npc_edids=()):
-    """[{"edid", "armor": [ARMO FormIDs], "skipped", "npcs"}] for the given outfits and the NPCs' default outfits."""
+def skyrim_outfits(esm, outfit_edids=(), npc_edids=()):
+    """[{"edid", "armor": [ARMO FormIDs], "skipped", "npcs"}] for the given outfits and the NPCs' default outfits.
+    esm: Skyrim.esm's path or a skyrimload.LoadOrder (mods over it: their outfits and NPC overrides win)."""
     import os_convert
-    recs = {fid: (t, s) for t, _h, s, fid in sfplugin.records(esm, [b"OTFT", b"LVLI", b"ARMO"])}
+    from fo4sf import skyrimload
+    recs = {fid: (t, s) for t, _h, s, fid in skyrimload.records(esm, [b"OTFT", b"LVLI", b"ARMO"])}
     by_edid = {sfplugin.edid(s).lower(): fid for fid, (t, s) in recs.items() if t == b"OTFT"}
     out, notes = {}, []
     wanted = [(e, None) for e in outfit_edids]
     if npc_edids:
         npcs = {skyrimnpc.parse_npc(s, fid)["edid"].lower(): skyrimnpc.parse_npc(s, fid)
-                for _t, _h, s, fid in sfplugin.records(esm, [b"NPC_"])}
+                for _t, _h, s, fid in skyrimload.records(esm, [b"NPC_"])}
         for e in npc_edids:
             n = npcs.get(e.lower())
             if n is None:
@@ -157,7 +159,7 @@ def fit_item(a, edid: str, sex: str, fit_args) -> dict:
     name = f"Items\\{edid}_{TAG[sex]}"
     argv = ["--skyrim-data", a.skyrim_data, "--starfield", a.starfield, "--armor", edid, "--sex", sex,
             "--race", a.race, "--name", name, "--out", a.out, "--stage"] + (["--helmets"] if a.helmets else []) \
-        + list(fit_args)
+        + mod_args(a) + list(fit_args)
     print(f"--- {edid} ({sex}): gear_fit.py {' '.join(argv[8:])}")
     try:
         code = gear_fit.main(argv)
@@ -172,6 +174,14 @@ def fit_item(a, edid: str, sex: str, fit_args) -> dict:
     if rows is None:
         return {"error": f"no parts in {path}"}
     return {"rows": rows, "meshes": [m.get("mesh") for m in rep.get("meshes", [])]}
+
+
+def mod_args(a) -> list:
+    """gear_fit.py's Skyrim load-order options from ours (--skyrim-mods-dir, --skyrim-mod ...)."""
+    out = ["--skyrim-mods-dir", a.skyrim_mods_dir] if getattr(a, "skyrim_mods_dir", "") else []
+    for m in getattr(a, "skyrim_mod", None) or []:
+        out += ["--skyrim-mod", m]
+    return out
 
 
 FIT_CACHE = "_fit_cache.json"        # in --out: the inputs each item / sex fit was made from
@@ -189,6 +199,10 @@ def fit_key(a, edid: str, sex: str, fit_args) -> str:
     from fo4sf import gearfit
     key = (edid.lower(), sex, a.race, bool(a.helmets), list(fit_args), FIT_VERSION, gearfit.FIT_VERSION,
            gear_fit.FIT_VERSION)
+    if getattr(a, "skyrim_mod", None):
+        # the mods change the meshes (and a child race's body); only keys made with mods carry them, so the fits made
+        # without (every adult outfit so far) keep their keys
+        key += (tuple(os.path.basename(os.path.normpath(m)).lower() for m in a.skyrim_mod),)
     if sex == "female":
         # a female-only change refits only female versions; male keys stay as they were (2026-11-19, owner: "we're
         # not changing a thing on male outfits")
@@ -302,7 +316,13 @@ def main(argv=None):
     ap.add_argument("--armor", action="append", default=[], help="Skyrim ARMO EditorID (repeatable)")
     ap.add_argument("--outfit", action="append", default=[], help="Skyrim OTFT EditorID: its items and the outfit")
     ap.add_argument("--npc", action="append", default=[], help="Skyrim NPC EditorID: its default outfit, as --outfit")
-    ap.add_argument("--race", default="NordRace", help="the Skyrim race whose addons are fitted")
+    ap.add_argument("--race", default="NordRace", help="the Skyrim race whose addons are fitted (a child race, "
+                    "e.g. NordRaceChild: children's clothes, fitted from its own body and worn by ChildRace)")
+    ap.add_argument("--skyrim-mods-dir", default="",
+                    help="folder of Skyrim mod folders (MO2: <ModOrganizer>/Skyrim Special Edition/mods)")
+    ap.add_argument("--skyrim-mod", action="append", default=[],
+                    help="a Skyrim mod folder (name under --skyrim-mods-dir, or a path), repeatable, in load order "
+                         "(face_fit.py's: RS Children Overhaul for the children's clothes)")
     ap.add_argument("--sexes", default="male,female")
     ap.add_argument("--helmets", action="store_true", help="also head gear (gear_fit.py --helmets)")
     ap.add_argument("--fit-args", default="", help="more gear_fit.py options, e.g. \"--conform\"")
@@ -330,9 +350,14 @@ def main(argv=None):
     esm = os.path.join(a.skyrim_data, "Skyrim.esm")
     sf_data = os.path.join(a.starfield, "Data")
     sf_esm = os.path.join(sf_data, "Starfield.esm")
-    inv = skyrimarmor.read_armor(esm)
+    source = esm
+    if a.skyrim_mod:
+        from fo4sf import skyrimload
+        source = skyrimload.LoadOrder(a.skyrim_data, skyrimload.mod_folders(a.skyrim_mods_dir, a.skyrim_mod))
+        print("Skyrim load order:", ", ".join(source.loaded()))
+    inv = skyrimarmor.read_armor_load_order(source) if source is not esm else skyrimarmor.read_armor(esm)
     by_edid = {x["edid"].lower(): fid for fid, x in inv["armo"].items() if x.get("edid")}
-    outfits, notes = skyrim_outfits(esm, a.outfit, a.npc)
+    outfits, notes = skyrim_outfits(source, a.outfit, a.npc)
     edids = list(a.armor) + [inv["armo"][f]["edid"] for o in outfits for f in o["armor"] if f in inv["armo"]]
     edids = list(dict.fromkeys(e for e in edids if e.lower() in by_edid))
     notes += [f"{e}: no ARMO with this EditorID" for e in a.armor if e.lower() not in by_edid]
@@ -360,7 +385,7 @@ def main(argv=None):
     staging = os.path.join(a.out, "_staging")
     if a.replace_all:
         shutil.rmtree(staging, ignore_errors=True)
-    sky = bsa.SkyrimArchives(a.skyrim_data)
+    sky = source.archives if source is not esm else bsa.SkyrimArchives(a.skyrim_data)
     import npc_records
     strings = npc_records.skyrim_names(sky)
     fit_args = shlex.split(a.fit_args)
@@ -381,8 +406,18 @@ def main(argv=None):
             items.append({"edid": armo["edid"], "full": item_name(armo, strings), "pairs": pairs})
     import os_export
     _material, tpl_vertices = os_export.template_model(sf_data)
+    import gear_fit
+    child_race = None
+    if gear_fit.is_child_race(a.race):
+        # children's clothes on Starfield's ChildRace, as its own child outfits (and so our S2S_<Race>ChildRace,
+        # whose armor race is ChildRace: race_heads.child_race_record)
+        child_race = next((fid for _t, _h, s_, fid in sfplugin.records(sf_esm, [b"RACE"])
+                           if sfplugin.edid(s_) == "ChildRace"), None)
+        print(f"children's clothes: addons on ChildRace {child_race:08X}" if child_race is not None
+              else "children's clothes: no ChildRace in Starfield.esm (addons keep the template's race)")
     recs, prep = os_export.item_records(sf_esm, items, [{"edid": o["edid"], "items": [
-        inv["armo"][f]["edid"] for f in o["armor"] if f in inv["armo"]]} for o in outfits], ids, tpl_vertices)
+        inv["armo"][f]["edid"] for f in o["armor"] if f in inv["armo"]]} for o in outfits], ids, tpl_vertices,
+        race=child_race)
     new_edids = [sfplugin.edid(r[2]) for r in recs]
     # what this run's items and outfits wrote last time goes (renamed parts too); everything else in the plugin stays
     old_owned = {x.lower() for k in list(edids) + [o["edid"] for o in outfits] for x in ids.owned.get(k, [])}

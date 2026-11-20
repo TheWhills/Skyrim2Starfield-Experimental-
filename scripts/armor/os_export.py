@@ -548,15 +548,18 @@ def armor_records_parts(sf_esm: str, name: str, masters: int, full: str, parts, 
 SEX_FIELDS = {"male": (b"MOD2", b"NAM4", "M"), "female": (b"MOD3", b"NAM6", "F")}
 
 
-def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=None):
+def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=None, race=None):
     """ARMA (+ one MRPH per sex) per part pair, one ARMO per Skyrim armor, one OTFT per Skyrim outfit.
     items: [{"edid": Skyrim ARMO EditorID, "full", "pairs": [{"key", "skin": bool, "slots": list or None,
     "male": row or None, "female": row or None}]}], row = {"shape", "nif", "vertices"} (gear_fit --stage);
     outfits: [{"edid": Skyrim OTFT EditorID, "items": [Skyrim ARMO EditorIDs]}]; fid_of(EditorID) -> FormID (kept
     across runs by the caller). A pair with one sex only gets that sex's model and morph and no field for the other
     (in-game behaviour unchecked). EditorIDs: S2S_<ARMO>, S2S_<ARMO>_<key>_AA, S2S_<ARMO>_<key>_<M|F>_Morph,
-    S2S_<OTFT>. Returns (records, report)."""
+    S2S_<OTFT>. race: a RACE FormID for the addons' and armors' RNAM (children's clothes: ChildRace, as Starfield's
+    child outfits, AA_Clothes_Child_CoraCoe_NOTPLAYABLE RNAM 002AABCD; else the templates'). Returns (records,
+    report)."""
     t = part_templates(sf_esm)
+    race_edit = {b"RNAM": struct.pack("<I", race)} if race is not None else {}
     recs = t["recs"]
     out, armors, rep = [], [], {"template": TEMPLATE_ARMOR, "items": [], "outfits": []}
     armo_fid = {}
@@ -577,7 +580,7 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
             _t, ah, asubs = recs[tpl]
             key = part_slug(pr["key"])
             a_fid = fid_of(f"{base}_{key}_AA")
-            edits, drop, morphs = {b"EDID": sfplugin.zs(f"{base}_{key}_AA")}, [], {}
+            edits, drop, morphs = {b"EDID": sfplugin.zs(f"{base}_{key}_AA"), **race_edit}, [], {}
             if pr.get("slots") is not None:
                 edits[b"BO64"] = slot_bits(pr["slots"], dict(asubs).get(b"BO64"))
             row = {"key": key, "ARMA": f"{a_fid:08X}", "template": sfplugin.edid(asubs),
@@ -609,6 +612,8 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
         o_fid = fid_of(base)
         union = sorted({b for r in rows for b in r["slots"]})
         armor, _indx = armor_record(t, addons, base, it.get("full") or it["edid"], union, o_fid)
+        if race_edit and any(sg == b"RNAM" for sg, _d in armor[2]):
+            armor = (armor[0], armor[1], sfplugin.edit(list(armor[2]), race_edit), armor[3])
         armors.append(armor)
         armo_fid[it["edid"].lower()] = o_fid
         rep["items"].append({"edid": it["edid"], "ARMO": f"{o_fid:08X}", "full": it.get("full"), "slots": union,

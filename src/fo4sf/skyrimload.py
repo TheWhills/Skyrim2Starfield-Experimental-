@@ -212,6 +212,7 @@ FID_FIELDS = {
               b"LNAM": "fid", b"QNAM": "fid", b"UNWP": "fid", b"WKMV": "fid", b"RNMV": "fid", b"SWMV": "fid",
               b"FLMV": "fid", b"SNMV": "fid", b"SPMV": "fid", b"GNAM": "fid"},
     b"OTFT": {b"INAM": "fids"},
+    b"LVLI": {b"LVLO": "fid@4"},
     b"ARMO": {b"MODL": "fid", b"RNAM": "fid", b"KWDA": "fids", b"EITM": "fid", b"ETYP": "fid", b"BIDS": "fid",
               b"BAMT": "fid", b"YNAM": "fid", b"ZNAM": "fid", b"TNAM": "fid", b"BMCT": None},
     b"ARMA": {b"RNAM": "fid", b"MODL": "fid", b"NAM0": "fid", b"NAM1": "fid", b"NAM2": "fid", b"NAM3": "fid",
@@ -231,6 +232,9 @@ def rewrite(typ: bytes, subs, rm) -> list:
         d = bytes(d)
         if kind == "fid" and len(d) >= 4 and (sig != b"MODL" or len(d) == 4):
             d = struct.pack("<I", rm(_u32(d))) + d[4:]
+        elif kind and kind.startswith("fid@") and len(d) >= int(kind[4:]) + 4:
+            at = int(kind[4:])
+            d = d[:at] + struct.pack("<I", rm(_u32(d[at:at + 4]))) + d[at + 4:]
         elif kind == "fids" and len(d) % 4 == 0 and d:
             d = b"".join(struct.pack("<I", rm(v)) for v in struct.unpack(f"<{len(d) // 4}I", d))
         out.append((sig, d))

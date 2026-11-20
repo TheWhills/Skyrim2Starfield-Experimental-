@@ -964,12 +964,13 @@ def converted_child_races(races_plugin):
 
 
 def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_race, conv_child, race_index, recs,
-                    masters, test_subs, tone_slots=None, light_ston=None, own_ston=None):
+                    masters, test_subs, tone_slots=None, light_ston=None, own_ston=None, items=None, sky_otft=None):
     """The child's test NPC: a vanilla child NPC (child_faces.pick_child_template) with our head part (its baked
     head) as Face, on our child race when race_heads built it (else ChildRace), its STON from its Skyrim skin on
     the child scale (tone_slots {female: slots lightest first}: child_hair.child_tone_slots; 2026-11-19, owner's
-    Frodnar came out darker than in Skyrim with STON 0); its outfit and voice the template's, its hair too until
-    add_child_hair_files gives it its own."""
+    Frodnar came out darker than in Skyrim with STON 0); its voice the template's, its hair too until
+    add_child_hair_files gives it its own; its outfit its Skyrim outfit converted as items (items / sky_otft:
+    npc_item_outfit; item_convert.py --race NordRaceChild with the child mods, 2026-11-20), else the template's."""
     import child_faces
     import child_hair
     female = row["female"]
@@ -1012,12 +1013,21 @@ def write_child_npc(row, n, npcs, real, races, npc_recs, sf_hdpt_recs, child_rac
     if donor is not None:              # 2026-11-19: a European face skin layer from a vanilla child that has one
         subs = child_faces.with_face_block(subs, donor[2])
     subs = without_templates(sfplugin.edit(subs, {}, drop=STRIP))
+    outfit = None
+    if items:
+        item_fid, why = npc_item_outfit(n, sky_otft or {}, items)
+        row["item_outfit"] = why if item_fid is None else f"S2S_{why}"
+        if item_fid is not None:
+            o_ = struct.pack("<I", item_fid)
+            subs = sfplugin.edit(subs, {b"DOFT": o_, b"SOFT": o_})
+            outfit = f"{item_fid:08X}"
     fid = sfplugin.new_form_id(len(recs), masters=len(masters))
     test_subs[row["edid"]] = len(recs)
     recs.append((b"NPC_", tpl[1], subs, fid))
     row["name"] = full
     row["test_npc"] = {"form_id": f"{fid:08X}", "template": sfplugin.edid(tpl[2]), "template_form_id": f"{tpl[3]:08X}",
                        "head_part": f"{hfid:08X}", "race": f"S2S child race {race_fid:08X}" if race_fid else "ChildRace",
+                       "outfit": outfit or "the template's",
                        "ston": ston, "eyes": eyes, "face_skin": {"wanted": eth,
                                                    "template": list(child_faces.face_ethnicity(tpl[2])),
                                                    "donor": sfplugin.edid(donor[2]) if donor is not None else
@@ -2463,7 +2473,7 @@ def main(argv=None):
                 own = (report.get("child_light_tone") or {}).get("children", {}).get(row["edid"])
                 write_child_npc(row, by_edid[row["edid"].lower()], npcs, real, races, npc_recs, sf_hdpt_recs,
                                 child_race, conv_child, race_index, recs, masters, test_subs, tone_slots,
-                                light_ston, own)
+                                light_ston, own, items, sky_otft)
                 if baked and isinstance(row.get("test_npc"), dict):
                     try:
                         if tone_arcs is None:

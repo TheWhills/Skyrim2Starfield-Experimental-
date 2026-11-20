@@ -2580,3 +2580,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   events (sound_swap.py; PCM in the vanilla files' own format), the descriptors name those events in <audios>. A
   bank of our own is not loaded by the game (tested in two slots, with the bank list patched); kept as
   sound_bank.py for reference only. Cost accepted: Starfield NPCs at food stations sound like Skyrim's forge.
+- 2026-11-20 Children's clothes are converted as items like the adults' (item_convert.py --race NordRaceChild with
+  the child mods as --skyrim-mod), fitted from the child race's own body (RS Children Overhaul's, adult-sized on
+  adult binds) onto Starfield's adult body, their addons on ChildRace. Why: both games build child clothes
+  adult-sized and shrink them with the child skeleton (RS's meshes and Starfield's Cora Coe outfit, measured), so
+  the adult pipeline carries over with only the source body changed. Alternatives: rebinding child-sized meshes
+  (not needed: they are not child-sized), fitting to a Starfield child body (none found besides the hands).
+

@@ -284,6 +284,16 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    Each sex prints "hand skin: N of M Starfield hands vertices ... (naked hands hidden)". In game: Gerdur's gloves
    (fingertips show, nothing through the leather), Ralof's cuffs (whole hands), a man in the farm gloves; first
    person in gloves (hands may be missing).
+7o. B + C (2026-11-20): the children's own clothes (RS Children Overhaul's, docs/npc/children-mods.md "Clothes").
+   Starfield closed. 7k's block's first lines first (they set $skymods and $skyargs: the child mods), then:
+   ```powershell
+   git pull
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --npc Dorthe --npc Frodnar --race NordRaceChild --skyrim-mods-dir $skymods @skyargs
+   ```
+   It prints the load order, "child body (0RCOSkinNakedChildren): ..." per fit and "children's clothes: addons on
+   ChildRace ...". Then 7k's face_fit line and the Riverwood build again (the children's records now name those
+   outfits; faces.json test_npc.outfit / item_outfit per child). In game: Dorthe and Frodnar in their own clothes -
+   size, gaps or skin through them, the skin colour at the bare arms / neck.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

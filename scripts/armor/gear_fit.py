@@ -13,6 +13,7 @@ an OTFT (os_export.write_armor_parts; --one-nif: the old single NIF). gear_fit.j
 import argparse
 import json
 import os
+import struct
 import sys
 
 import numpy as np
@@ -320,6 +321,15 @@ NECK_SHARE = 0.3        # head vertices with at least this weight on neck / ches
 FLAP_ABOVE_NECK = 0.05   # m: head-mesh vertices below the neck joint + this join the surface (the chest / back flap)
 
 
+def body_shapes(nif_bytes: bytes, largest_only: bool = False) -> list:
+    """The body shapes of a Skyrim body NIF: not the underwear (is_underwear); largest_only: its biggest shape alone
+    (2026-11-20: RS Children Overhaul's child torsos carry their underwear as 'Trousers 2' / 'Up')."""
+    shapes = [s for s in sky_shapes(nif_bytes) if not is_underwear(s.name)]
+    if largest_only and shapes:
+        shapes = [max(shapes, key=lambda s: len(s.points))]
+    return shapes
+
+
 def is_underwear(name) -> bool:
     """A Skyrim body NIF's underwear shape (MaleUnderwear_1, FemaleUnderwear), not the body (FemaleUnderwearBody)."""
     n = (name.decode("latin-1", "replace") if isinstance(name, bytes) else str(name)).lower()
@@ -479,6 +489,58 @@ SKYRIM_LIMBS = {False: ["meshes\\actors\\character\\character assets\\malefeet_1
                         "meshes\\actors\\character\\character assets\\malehands_1.nif"],
                 True: ["meshes\\actors\\character\\character assets\\femalefeet_1.nif",
                        "meshes\\actors\\character\\character assets\\femalehands_1.nif"]}
+
+
+def is_child_race(race_edid: str) -> bool:
+    """A Skyrim child race (NordRaceChild, ... BretonRaceChildVampire): its clothes are fitted from its own body."""
+    return "child" in (race_edid or "").lower()
+
+
+def race_skin_models(recs, race_edid: str, female: bool) -> dict:
+    """{"torso", "limbs", "head", "skin"} of a Skyrim race: the worn models of its skin armor's (RACE WNAM) addons for
+    the race (RNAM or additional race), slot 32 the torso, the rest the limbs, and its Face head part (HDPT PNAM 1) for
+    the sex; paths under meshes\\, the _1 weight variant. recs: sfplugin.records' shape (a skyrimload LoadOrder's
+    flat_records: FormIDs in load-order space). 2026-11-20 (children's clothes; RS Children Overhaul, verified on its
+    plugin): its child races' skin 0RCOSkinNakedChildren holds 0RCONakedTorsoChild (ranaline malebody_0 /
+    femalebody_0), 0RCONakedHandsChild and 0RCONakedFeetChild, addons on DefaultRace naming the child races."""
+    from fo4sf import fo4land, skyrimload
+    by_fid = {fid: (t, subs) for t, _h, subs, fid in recs}
+    races = {fid: fo4land.zstring(dict(subs).get(b"EDID", b"")) for fid, (t, subs) in by_fid.items() if t == b"RACE"}
+    race = next((fid for fid, e in races.items() if e.lower() == (race_edid or "").lower()), None)
+    out = {"torso": None, "limbs": [], "head": None, "skin": None}
+    if race is None:
+        return out
+    rsubs = by_fid[race][1]
+    wnam = next((struct.unpack_from("<I", d)[0] for sg, d in rsubs if sg == b"WNAM" and len(d) >= 4), None)
+    inv = skyrimarmor.parse_inventory(races, [(f, 0, by_fid[f][1]) for f in by_fid if by_fid[f][0] == b"ARMO"],
+                                      [(f, 0, by_fid[f][1]) for f in by_fid if by_fid[f][0] == b"ARMA"])
+    skin = inv["armo"].get(wnam)
+    if skin is not None:
+        out["skin"] = skin["edid"]
+        for x in skin["addons"]:
+            m = inv["arma"].get(x)
+            if m is None or not (m["race"] == races[race] or races[race] in m["extra_races"]):
+                continue
+            path = m["female"] if female and m["female"] else m["male"]
+            if not path:
+                continue
+            low = path.lower()
+            if low.endswith("_0.nif"):
+                path = path[:-6] + "_1.nif"
+            path = path if low.startswith("meshes\\") else "meshes\\" + path
+            if 32 in m["slots"] and out["torso"] is None:
+                out["torso"] = path
+            elif path not in out["limbs"]:
+                out["limbs"].append(path)
+    for h in skyrimload.race_head_parts(rsubs)[female]:
+        t, hs = by_fid.get(h, (None, []))
+        d = dict(hs)
+        if t == b"HDPT" and len(d.get(b"PNAM", b"")) >= 4 and struct.unpack_from("<I", d[b"PNAM"])[0] == 1:
+            model = fo4land.zstring(d.get(b"MODL", b""))
+            if model:
+                out["head"] = model if model.lower().startswith("meshes\\") else "meshes\\" + model
+                break
+    return out
 
 
 SKIN_TEXTURES = "textures\\actors\\character\\"     # Skyrim's body / hands / feet skin
@@ -807,7 +869,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
         head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
         round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False,
-        conform: bool = False, hand_skin_names=(), hands_item: bool = False):
+        conform: bool = False, hand_skin_names=(), hands_item: bool = False, body_largest_only: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -850,7 +912,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
     # not the underwear shapes (2026-11-07, verified on Ysolda's / Saadia's debug meshes: the dresses' chest panels,
     # 3-31 mm inside Skyrim's breasts, read as outside the separate bra shape, so they were not kept hidden and showed
     # as brown patches; Starfield's body has no underwear in the surface either)
-    sky_body = [s for nb in body_nifs for s in sky_shapes(nb) if not is_underwear(s.name)]
+    sky_body = [s for nb in body_nifs for s in body_shapes(nb, body_largest_only and nb is body_nifs[0])]
     sky_head_full = None
     if sky_head:
         sky_body += skyrim_head_shapes(sky_head)
@@ -1211,7 +1273,13 @@ def main(argv=None):
     ap.add_argument("--sex", choices=("male", "female"), default="",
                     help="with --armor and no --npc: fit the armor's model for this sex onto Starfield's body of this "
                          "sex (item_convert.py runs both)")
-    ap.add_argument("--race", default="NordRace", help="with --sex: the Skyrim race whose addon is used")
+    ap.add_argument("--race", default="NordRace", help="with --sex: the Skyrim race whose addon is used (a child "
+                    "race, e.g. NordRaceChild: the clothes are fitted from that race's own body and head)")
+    ap.add_argument("--skyrim-mods-dir", default="",
+                    help="folder of Skyrim mod folders (MO2: <ModOrganizer>/Skyrim Special Edition/mods)")
+    ap.add_argument("--skyrim-mod", action="append", default=[],
+                    help="a Skyrim mod folder (name under --skyrim-mods-dir, or a path), repeatable, in load order: its "
+                         "plugins override Skyrim.esm's armor records, its BSAs and loose files Skyrim's")
     ap.add_argument("--stage", action="store_true",
                     help="write the part NIFs, morphs and converted textures only (no plugin, no archives), and the "
                          "parts in gear_fit_<name>.json, for item_convert.py to make the records of both sexes")
@@ -1290,7 +1358,13 @@ def main(argv=None):
     who = a.npc or f"{a.race} {a.sex}"
     report_name = f"gear_fit_{safe_name(a.name)}.json" if a.stage else "gear_fit.json"
     female = o["npc"]["female"]
-    inv = skyrimarmor.read_armor(esm)
+    lo = None
+    if a.skyrim_mod:
+        from fo4sf import skyrimload
+        lo = skyrimload.LoadOrder(a.skyrim_data, skyrimload.mod_folders(a.skyrim_mods_dir, a.skyrim_mod))
+        print("Skyrim load order:", ", ".join(lo.loaded()) + (f" (not found: {', '.join(lo.missing)})"
+                                                              if lo.missing else ""))
+    inv = skyrimarmor.read_armor_load_order(lo) if lo is not None else skyrimarmor.read_armor(esm)
     if a.armor:
         # given armor pieces, worn by the NPC's race and sex, instead of its outfit (2026-11-08, owner: "lets try an
         # armor now, the iron armor")
@@ -1305,7 +1379,7 @@ def main(argv=None):
         meshes = [m for m in meshes if m not in heads_]
     if not meshes:
         sys.exit(f"{who}: no worn armor meshes" + (" in the default outfit" if not a.armor else ""))
-    sky = bsa.SkyrimArchives(a.skyrim_data)
+    sky = lo.archives if lo is not None else bsa.SkyrimArchives(a.skyrim_data)
 
     def read(p):
         data = sky._read(bsa.norm(p))
@@ -1316,8 +1390,22 @@ def main(argv=None):
           *[f"{m['armor']} {m['mesh']} (Skyrim slots {m.get('slots')})" for m in meshes], sep="\n  ")
     for x in o.get("skipped", []):
         print(f"  outfit item without wearable armor (skipped): {x}")
-    body = [read(os_convert.SKYRIM_BODY[female])]
-    for p in SKYRIM_LIMBS[female]:
+    child = is_child_race(o["race"])
+    body_paths, limbs, head_path = os_convert.SKYRIM_BODY[female], SKYRIM_LIMBS[female], SKY_HEADS[female]
+    if child:
+        # 2026-11-20 (owner: "let's do the children's outfits"): a child race's clothes sit on its own body
+        # (RS Children Overhaul: an adult-sized child body on adult binds, shrunk by its kids' skeleton, as
+        # Starfield's child outfits are adult-sized on its child skeleton): that body and head are the fit's source.
+        from fo4sf import skyrimload
+        m = race_skin_models(skyrimload.records(lo if lo is not None else esm,
+                                                [b"RACE", b"ARMO", b"ARMA", b"HDPT"]), o["race"], female)
+        if not m["torso"]:
+            sys.exit(f"{o['race']}: no body in its skin armor ({m['skin'] or 'no skin'}); a child mod given with "
+                     "--skyrim-mod?")
+        body_paths, limbs, head_path = m["torso"], m["limbs"], m["head"] or SKY_HEADS[female]
+        print(f"  child body ({m['skin']}): {body_paths}; limbs {limbs}; head {head_path}")
+    body = [read(body_paths)]
+    for p in limbs:
         data = sky._read(bsa.norm(p))
         if data is None:
             print("not in Skyrim's archives (skipped):", p)
@@ -1331,7 +1419,7 @@ def main(argv=None):
     shapes, binds, rep = run(gear_bytes, body, sf_data,
                              female, [x.strip() for x in a.skip.split(",") if x.strip()], a.gap,
                              () if a.keep_skin else sorted(skin_shapes(textures)), a.size_feet, a.tessellate,
-                             sky._read(bsa.norm(SKY_HEADS[female])),
+                             sky._read(bsa.norm(head_path)),
                              () if a.no_skin_piece else sorted(body_skin_shapes(textures)), a.head_weights,
                              [n for n, sl in slots_by_shape(gear_bytes, meshes).items() if 3 in sl],
                              feet_skin=any(32 in (m.get("slots") or []) and 37 not in (m.get("slots") or [])
@@ -1340,7 +1428,8 @@ def main(argv=None):
                              strap_gap=strap_gap_for(a, female), curved=a.curved,
                              conform=a.conform,
                              hand_skin_names=sorted(hand_skin_shapes(textures)),
-                             hands_item=not a.no_skin_piece and any(33 in (m.get("slots") or []) for m in meshes))
+                             hands_item=not a.no_skin_piece and any(33 in (m.get("slots") or []) for m in meshes),
+                             body_largest_only=child)
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
@@ -1568,6 +1657,8 @@ def main(argv=None):
         print("debug meshes:", debug_meshes(a.debug_dir, shapes + ([skin_sh] if skin_sh is not None else []),
                                             frame, *dbg, extra=pngs + [o[0] for o in slider_objs]),
               f"({len(pngs)} textures)")
+    rep["skyrim_body"] = {"torso": body_paths, "limbs": list(limbs), "head": head_path, "child": child,
+                          "load_order": lo.loaded() if lo is not None else ["Skyrim.esm"]}
     rep.update(npc=a.npc, sex="female" if female else "male", race=o["race"], meshes=meshes, records=prep,
                material=material, files=sorted(files) + sorted(morphs))
     with open(os.path.join(a.out, report_name), "w", encoding="utf-8") as fh:
