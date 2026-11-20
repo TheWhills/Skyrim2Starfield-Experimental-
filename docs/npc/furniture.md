@@ -1048,3 +1048,9 @@ NPC_Human_FoodStation_Drawer_Close plays on Bus_NPC_Human_CraftingWorkbenches (f
 SoundPlay.<name> annotations become SoundPlay events (payload the name) added to every converted clip's descriptor
 (vanilla templates have none, so added rather than matched). Next in game: the forge set rebuilt, Alvor at the forge
 - hammer / quench / take sounds, or silence (then: the game does not load a bank it does not list, or the bus).
+Owner's forge rebuild (2026-11-20 12:30, verified): every forge clip reported events 0 - the clip files carry no
+SoundPlay annotations; Skyrim's forge sounds are clip triggers in its behaviour graph (smithing_probe). Now
+furniture_anim_pack reads them (skyrim_clip_sounds: the character behaviours naming the set's clips;
+trigger_sounds: event SoundPlay + string payload, or SoundPlay.<name>) and adds SoundPlay events at the clips' frames
+(sound_event_rows: a joined clip's parts by part_starts; relative-to-end triggers from the part's end), next to
+CLIP_EVENTS; the run prints "Skyrim's sound triggers in N descriptors: <names>".

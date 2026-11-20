@@ -223,6 +223,85 @@ def clip_event_rows(rows, set_events) -> dict:
     return out
 
 
+def trigger_sounds(behavior: dict) -> dict:
+    """{animation file name (lower): [(seconds, relative_to_end, sound name)]} for every clip generator of a Skyrim
+    behaviour graph (skyrimbehavior.read) whose triggers play a sound: event SoundPlay with a string payload, or an
+    event named SoundPlay.<name>. 2026-11-20 (owner's forge rebuild: every clip reported 0 events): Skyrim's forge
+    sounds are the behaviour's clip triggers (smithing_probe), not annotations in the clip files."""
+    nodes, events = behavior["nodes"], behavior["events"]
+    out = {}
+    for n in nodes.values():
+        if n["class"] != "hkbClipGenerator":
+            continue
+        anim = os.path.basename((n.get("animation") or "").replace("\\", "/")).lower()
+        rows = []
+        for t in nodes.get(n.get("triggers"), {}).get("triggers") or []:
+            name = events[t["event"]] if 0 <= t["event"] < len(events) else ""
+            head, dot, tail = (name or "").partition(".")
+            if head.lower() != "soundplay":
+                continue
+            snd = tail.strip() if dot else (nodes.get(t["payload"], {}).get("data") or "").strip()
+            if snd:
+                rows.append((float(t["time"]), bool(t.get("relative_to_end")), snd))
+        if rows and anim not in out:
+            out[anim] = sorted(set(rows))
+    return out
+
+
+def skyrim_clip_sounds(sky_data: str, clip_names) -> dict:
+    """trigger_sounds over Skyrim's character behaviour graphs that name one of clip_names (bytes searched first)."""
+    from fo4sf import bsa
+    from fo4sf import skyrimbehavior as SB
+    want = {c.lower() for c in clip_names}
+    keys = [os.path.splitext(c)[0].encode() for c in want]
+    arcs = bsa.SkyrimArchives(sky_data, loose=False)
+    out = {}
+    for ar in arcs.archives:
+        for nm in ar.names:
+            n = bsa.norm(nm)
+            if not (n.startswith("meshes\\actors\\character\\behaviors\\") and n.endswith(".hkx")):
+                continue
+            data = arcs._read(n)
+            if not data or not any(k in data.lower() for k in keys):
+                continue
+            try:
+                found = trigger_sounds(SB.read(data))
+            except Exception:                                   # noqa: BLE001
+                continue
+            for anim, rows in found.items():
+                if anim in want and anim not in out:
+                    out[anim] = rows
+    return out
+
+
+def sound_event_rows(rows, sounds, fps: float = 30.0) -> dict:
+    """{descriptor stem (lower): [(frame, "SoundPlay", name)]}: each report row's clip parts (a joined clip's
+    "a.hkx+b.hkx"), their Skyrim sound triggers placed at the part's start (part_starts) + seconds * fps; a trigger
+    relative to the end counts back from the part's last frame."""
+    out = {}
+    for r in rows:
+        target = r.get("template") or r.get("replaces")
+        if not target or "error" in r:
+            continue
+        clip = (r.get("clip") or "").replace("/", "\\").split("\\")[-1].lower()
+        parts = [x if x.endswith(".hkx") else x + ".hkx" for x in clip.split("+") if x]
+        starts = r.get("part_starts") or [0]
+        lens = r.get("concatenated_frames") or [r.get("frames") or 0]
+        evs = []
+        for p, part in enumerate(parts):
+            if p >= len(starts):
+                break
+            n = lens[p] if p < len(lens) else 0
+            for sec, rel, snd in sounds.get(part, []):
+                f = int(round(sec * fps))
+                f = n - 1 + f if rel else f
+                evs.append((int(starts[p] + max(0, min(f, max(n - 1, 0)))), "SoundPlay", snd))
+        if evs:
+            stem = os.path.splitext(target.replace("\\", "/").split("/")[-1])[0].lower()
+            out[stem] = sorted(evs)
+    return out
+
+
 def add_clip_events(afx_text: str, events) -> str:
     from fo4sf import af_writer
     data = afx_text.encode("utf-8")
@@ -702,6 +781,16 @@ def main(argv=None):
         files = sorted(f for f in os.listdir(src) if f.lower().endswith((".af", ".afx"))) if os.path.isdir(src) else []
         stripped = props = graphs_swapped = clip_events_added = 0
         clip_events = clip_event_rows(rows, CLIP_EVENTS.get(st, {}))
+        parts = {x for r in rows for x in ((r.get("clip") or "").replace("/", "\\").split("\\")[-1].lower()
+                                            .split("+")) if x}
+        parts = {x if x.endswith(".hkx") else x + ".hkx" for x in parts}
+        sounds = skyrim_clip_sounds(a.skyrim_data, parts) if parts else {}
+        sound_rows = sound_event_rows(rows, sounds)
+        for stem, evs in sound_rows.items():
+            clip_events.setdefault(stem, []).extend(evs)
+        if sound_rows:
+            print(f"{st}: Skyrim's sound triggers in {len(sound_rows)} descriptors: "
+                  + ", ".join(sorted({e[2] for v in sound_rows.values() for e in v})))
         for f in files:
             if f.lower().endswith(".afx"):
                 with open(os.path.join(src, f), encoding="utf-8", errors="replace") as fh:

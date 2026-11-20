@@ -558,3 +558,31 @@ class PlainStationsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SoundTriggerTests(unittest.TestCase):
+    """2026-11-20: Skyrim's forge sounds are clip triggers in its behaviour graph; they become SoundPlay events at
+    the clip's frames (a joined clip's parts offset by part_starts; relative-to-end triggers counted from the end)."""
+
+    def test_trigger_sounds(self):
+        b = {"events": ["SoundPlay", "AnimObjDraw", "SoundPlay.NPCHumanBlacksmithForgeTake"], "nodes": {
+            1: {"class": "hkbClipGenerator", "animation": "Furniture\\BlacksmithForgeHammer.hkx", "triggers": 2},
+            2: {"class": "hkbClipTriggerArray", "triggers": [
+                {"time": 0.5, "event": 0, "payload": 3}, {"time": 0.2, "event": 1, "payload": 4},
+                {"time": -0.1, "event": 2, "payload": None, "relative_to_end": True}]},
+            3: {"class": "hkbStringEventPayload", "data": "NPCHumanBlacksmithHammer"},
+            4: {"class": "hkbStringEventPayload", "data": "AnimObjectIron"}}}
+        self.assertEqual(P.trigger_sounds(b), {"blacksmithforgehammer.hkx": [
+            (-0.1, True, "NPCHumanBlacksmithForgeTake"), (0.5, False, "NPCHumanBlacksmithHammer")]})
+
+    def test_sound_event_rows(self):
+        sounds = {"a.hkx": [(1.0, False, "S1")], "b.hkx": [(0.5, False, "S2"), (0.0, True, "S3")]}
+        rows = [{"clip": "C:\\x\\a.hkx+b.hkx", "template": "f/welder/Idle_Flavor02.af", "part_starts": [0, 100],
+                 "concatenated_frames": [120, 60]},
+                {"clip": "C:\\x\\b.hkx", "template": "f/welder/Idle.af", "frames": 60},
+                {"clip": "C:\\x\\c.hkx", "template": "f/welder/Exit.af", "frames": 10}]
+        got = P.sound_event_rows(rows, sounds)
+        self.assertEqual(got["idle_flavor02"], [(30, "SoundPlay", "S1"), (115, "SoundPlay", "S2"),
+                                                (159, "SoundPlay", "S3")])
+        self.assertEqual(got["idle"], [(15, "SoundPlay", "S2"), (59, "SoundPlay", "S3")])
+        self.assertNotIn("exit", got)
