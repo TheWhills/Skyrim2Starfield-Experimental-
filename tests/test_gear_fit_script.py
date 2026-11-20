@@ -149,6 +149,29 @@ class ScriptTests(unittest.TestCase):
                                           depth=gear_fit.SKIN_UNDER_DEPTH)
         self.assertEqual(len(used3), len(body))
 
+    def test_hand_skin_is_what_the_item_leaves_bare(self):
+        """2026-11-20 (owner: skin invisible where the glove stops): the hand skin is the hands the item does not
+        cover (whole, with no Skyrim source points), and the overlap under its edge stops at margin_m."""
+        import numpy as np
+        from fo4sf import skyrimhair
+        xs = np.linspace(0, 0.08, 17)                          # a finger-sized strip, 5 mm apart
+        hand = np.array([[x, y, 0.0] for x in xs for y in (0.0, 0.01)])
+        tris = []
+        for i in range(16):
+            a, b = 2 * i, 2 * i + 2
+            tris += [(a, b, a + 1), (b, b + 1, a + 1)]
+        gp = np.array([[-0.01, -0.01, 0.005], [0.04, -0.01, 0.005], [-0.01, 0.02, 0.005], [0.04, 0.02, 0.005]])
+        glove = skyrimhair.HairShape(b"Glove", gp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [],
+                                     [(0, 1, 2), (1, 3, 2)], [], -1, -1, -1)
+        w = [[("L_Index1", 1.0)]] * len(hand)
+        _sh, used = gear_fit.skin_piece(hand, tris, [(0, 0)] * len(hand), w, np.zeros((0, 3)), gear=[glove],
+                                        whole=True, depth=gear_fit.HAND_COVER_DEPTH, margin=gear_fit.HAND_MARGIN,
+                                        margin_m=gear_fit.HAND_MARGIN_M)
+        kept = sorted({round(float(hand[i][0]), 3) for i in used})
+        self.assertEqual(kept[-1], 0.08)                       # the bare fingertip end, all of it
+        self.assertTrue(0.03 <= kept[0] <= 0.045)              # a strip back under the glove's edge, at most 1 cm
+        self.assertEqual(len(kept), round((0.08 - kept[0]) / 0.005) + 1)      # no holes
+
     def test_armpit_skin_only_for_body_gear(self):
         """2026-11-09 (Orgnar's shoes): boots / gloves bring no armpit skin; body gear (or unknown) does."""
         import numpy as np

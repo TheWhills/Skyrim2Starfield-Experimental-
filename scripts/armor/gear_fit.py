@@ -115,7 +115,9 @@ SKIN_REACH = 0.03       # m: Starfield body vertices this close to a fitted Skyr
 SKIN_SHAPE = b"S2S_Skin"
 HAND_SKIN_SHAPE = b"S2S_HandSkin"
 HAND_SLOT = 6           # Starfield's naked hands addon (AA_Naked_Hands, slot_probe 2026-11-06)
-HAND_SKIN_REACH = 0.02  # m: Starfield hands vertices this close to a fitted Skyrim hand-skin piece show as skin
+HAND_COVER_DEPTH = 0.03  # m: a hands vertex with the item this close straight out from it is covered (no skin)
+HAND_MARGIN = 2         # rings of covered hands vertices kept under the item's edge (no gap at the cuff) ...
+HAND_MARGIN_M = 0.01    # ... and at most this far from the visible skin (more reached back under the glove)
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
@@ -196,7 +198,7 @@ def armpit_skin(body_skel, body_w, body_piece_names):
 
 def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.ndarray, reach: float = SKIN_REACH,
                gear=(), margin: int = COVER_MARGIN, whole: bool = False, depth: float = COVER_DEPTH, extra=None,
-               always=None):
+               always=None, margin_m: float = COVER_MARGIN_M):
     """(HairShape in skeleton space, kept body vertex indices) of the Starfield body where Skyrim's bare-skin pieces
     lie after the fit (2026-11-06, owner: Skyrim's bare arm runs up under the sleeve, Starfield's skin starts lower):
     the body vertices within `reach` of them and the triangles among them, plus `extra` (the feet when the Skyrim
@@ -247,7 +249,7 @@ def skin_piece(body_skel: np.ndarray, body_tris, body_uvs, body_w, sources: np.n
             for c0 in range(0, len(cand), 512):
                 q = body_skel[cand[c0:c0 + 512]]
                 d2 = ((q[:, None, :] - vis_p[None, :, :]) ** 2).sum(-1).min(1)
-                near[cand[c0:c0 + 512]] = d2 < COVER_MARGIN_M ** 2
+                near[cand[c0:c0 + 512]] = d2 < margin_m ** 2
             grow = visible | near | (ring1 if ring1 is not None else visible)
         keep = grow
     if always is not None:
@@ -708,7 +710,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
         head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
         round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False,
-        conform: bool = False, hand_skin_names=()):
+        conform: bool = False, hand_skin_names=(), hands_item: bool = False):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -791,22 +793,25 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used
     hand_skin = None
-    if hand_skin_names and hand_pts is not None and hand_binds_m:
+    if hands_item and hand_pts is not None and hand_binds_m:
         # Skyrim's way for hand items (2026-11-20, owner: Gerdur's hands showed through her gloves even on the hands
         # mesh's own binds; Skyrim's gloves sit on the hands slot, hiding the bare hands, and bring their own skin):
         # the item hides Starfield's hands (HAND_SLOT) and brings the Starfield hands' vertices where Skyrim's
         # hand-skin pieces lie after the fit, written as the hands mesh itself (its encoding and binds)
-        src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
-               in set(hand_skin_names)]
-        if src:
+        # the hands where the item does not cover them, plus a narrow strip under its edge (2026-11-20, owner: the
+        # first cut, Starfield hands vertices within 2 cm of the Skyrim hand-skin shape's 68 vertices, left the skin
+        # invisible where the glove stops: too sparse, whole triangles only)
+        item = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in set(skin_names)]
+        if item:
             h_uvs, h_mat, h_mesh = starfield_hands_skin(sf_data, hand_path)
-            hs, h_used = skin_piece(np.asarray(hand_pts), hand_tris, h_uvs, hand_w, np.concatenate(src),
-                                    reach=HAND_SKIN_REACH)
+            hs, h_used = skin_piece(np.asarray(hand_pts), hand_tris, h_uvs, hand_w, np.zeros((0, 3)), gear=item,
+                                    whole=True, depth=HAND_COVER_DEPTH, margin=HAND_MARGIN, margin_m=HAND_MARGIN_M)
             if hs is not None:
                 hs.name = HAND_SKIN_SHAPE
                 hand_skin = hs
                 res.report["hand_skin"] = {"vertices": len(h_used), "of": len(hand_pts), "material": h_mat,
-                                           "from": sorted(hand_skin_names), "hands": hand_path}
+                                           "from": sorted(hand_skin_names) or ["the hands the item leaves bare"],
+                                           "hands": hand_path}
                 res.report["_hand_skin"] = (h_used, h_mesh, dict(hand_binds_m))
     if skin_names:                           # Skyrim's bare-skin pieces
         drop = {n for n in res.report["shapes"] if n in set(skin_names)}
@@ -1226,9 +1231,8 @@ def main(argv=None):
                              whole_skin=a.whole_skin, round_bust=a.round_bust and female,
                              strap_gap=strap_gap_for(a, female), curved=a.curved,
                              conform=a.conform,
-                             hand_skin_names=(() if a.no_skin_piece or not any(33 in (m.get("slots") or [])
-                                                                                for m in meshes)
-                                              else sorted(hand_skin_shapes(textures))))
+                             hand_skin_names=sorted(hand_skin_shapes(textures)),
+                             hands_item=not a.no_skin_piece and any(33 in (m.get("slots") or []) for m in meshes))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)

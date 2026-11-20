@@ -2517,3 +2517,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   PrisonerCuffs, refitted by name with --refit --refit-male (no fit version bump: nothing else changes). Open: a
   hand item without a hand-skin shape (full gloves) still leaves the hands drawn; first person (no 1st-person models
   on our addons: with the hands hidden, the player may see no hands in gloves). Unverified in game.
+- 2026-11-20 Owner, after the hand refit: "the skin is invisible on the hand where the glove stops". Cause
+  (supported): the hand skin was the Starfield hands vertices within 2 cm of the Skyrim hand-skin shape's vertices
+  (68, coarse), whole triangles only: holes over the fingertips. Now the hand skin is the hands the item does not
+  cover (skin_piece whole=True with the item's shapes: nothing within HAND_COVER_DEPTH 3 cm straight out), plus
+  HAND_MARGIN 2 rings / at most HAND_MARGIN_M 1 cm under its edge. Every item on Skyrim's hands slot gets it (full
+  gloves too: their hands are then hidden like Skyrim's).
