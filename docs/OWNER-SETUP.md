@@ -163,6 +163,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    python -I scripts\interior\item_physics_probe.py --sf-data "$sf\Data" --out C:\Modding\work\items
    ```
    Send C:\Modding\work\items\item_physics_probe.md.
+7f2. A (read-only, 2026-11-20): the loose items' physics in full, and how sound records name Wwise events.
+   ```powershell
+   python -I scripts\interior\item_body_dump.py --sf-data "$sf\Data" --out C:\Modding\work\items
+   python -I scripts\armor\sound_records.py --starfield "$sf" --skyrim-data "$sky" > sound_records.txt
+   ```
+   Send C:\Modding\work\items\item_bodies.md, item_bodies.json and sound_records.txt.
 7g. A (read-only): what a creature is made of in both games, for the Riverwood chicken test
    (docs/research/tes4skyrim.md, "Suggested next steps"):
    ```powershell
