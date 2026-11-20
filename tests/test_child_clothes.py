@@ -197,6 +197,52 @@ class ChildRaceRecordTests(unittest.TestCase):
         self.assertNotIn(b"RNAM", {sfplugin.edid(r[2]): dict(r[2]) for r in plain}["S2S_ClothesChild01_Torso_AA"])
 
 
+class ChildTemplateTests(unittest.TestCase):
+    def test_built_on_starfields_child_outfit(self):
+        """2026-11-20 (owner: still headless without the morphs): children's items copy Starfield's own child outfit
+        records (Clothes_Child_CoraCoe_NOTPLAYABLE and its addon), skin pieces too; our models in MOD2 / MOD3."""
+        import test_item_convert as T
+        H = T.HDR
+        child_aa = [(b"EDID", z("AA_Clothes_Child_CoraCoe_NOTPLAYABLE")), (b"BO64", (1 << 3).to_bytes(8, "little")),
+                    (b"RNAM", u32(0x2AABCD)), (b"DNAM", bytes(13)), (b"MOD2", z("Clothes\\cora.nif"))] + \
+            [(b"FLLD", u32(1))] * 6 + [(b"MNAM", u32(0)), (b"TNAM", b"\0"), (b"BSMP", u32(0)), (b"BSMP", u32(1))]
+        extra = [(b"ARMA", H(b"ARMA"), child_aa, 0x4A0C),
+                 (b"ARMO", H(b"ARMO"), [(b"EDID", z("Clothes_Child_CoraCoe_NOTPLAYABLE")), (b"FULL", z("Cora")),
+                                        (b"BO64", (1 << 3).to_bytes(8, "little")), (b"RNAM", u32(0x2AABCD)),
+                                        (b"MODL", u32(0x4A0C))], 0x22669F)]
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "Starfield.esm")
+            T.sf_esm(p)
+            base = sfplugin.records(p, [b"ARMA", b"ARMO", b"OTFT", b"MRPH", b"NPC_"])
+            with open(p, "wb") as fh:
+                fh.write(sfplugin.build(base + extra, {"hedr_version": 0.96, "form_version": 555}))
+            pairs, _n = IC.pair_parts([T.row("Torso", "male", item="ClothesChild01"),
+                                       T.row("S2S_Skin", "male", skin=True, item="ClothesChild01")],
+                                      [T.row("Torso", "female", item="ClothesChild01"),
+                                       T.row("S2S_Skin", "female", skin=True, item="ClothesChild01")])
+            items = [{"edid": "ClothesChild01", "full": "Child clothes", "pairs": pairs}]
+            recs, rep = E.item_records(p, items, [], IC.IdMap(os.path.join(d, IC.IDS)), template_vertices=2792,
+                                       race=0x2AABCD)
+        self.assertEqual(rep["template"], "Clothes_Child_CoraCoe_NOTPLAYABLE")
+        by = {sfplugin.edid(r[2]): r[2] for r in recs}
+        for key in ("Torso", "S2S_Skin"):
+            subs = by[f"S2S_ClothesChild01_{key}_AA"]
+            sigs = [sg for sg, _d in subs]
+            self.assertEqual(sigs[:7], [b"EDID", b"BO64", b"RNAM", b"DNAM", b"MOD2", b"FLLD", b"MOD3"])
+            self.assertEqual(sigs.count(b"FLLD"), 6)
+            self.assertIn(b"BSMP", sigs)
+            d_ = dict(subs)
+            self.assertEqual(d_[b"MOD2"], z(f"S2S\\Items\\ClothesChild01_M\\{key}.nif"))
+            self.assertEqual(d_[b"MOD3"], z(f"S2S\\Items\\ClothesChild01_F\\{key}.nif"))
+            self.assertNotIn(b"NAM4", d_)
+        self.assertEqual(dict(by["S2S_ClothesChild01_S2S_Skin_AA"])[b"BO64"], (1 << 13).to_bytes(8, "little"))
+        armo = dict(by["S2S_ClothesChild01"])
+        self.assertEqual(armo[b"RNAM"], u32(0x2AABCD))
+        self.assertEqual(armo[b"FULL"], z("Child clothes"))
+        self.assertEqual(E.child_models([(b"MOD2", z("x")), (b"FLLD", b"")], None, "f.nif"),
+                         [(b"MOD2", z("f.nif")), (b"FLLD", b"")])                  # one sex: MOD2 only
+
+
 class ItemConvertArgsTests(unittest.TestCase):
     def test_mod_args_and_keys(self):
         a = types.SimpleNamespace(race="NordRaceChild", helmets=False, skyrim_mods_dir="C:\\mods",

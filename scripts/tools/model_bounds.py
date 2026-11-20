@@ -22,9 +22,9 @@ from fo4sf import ba2, nif as nifmod, sfmesh, sfnif  # noqa: E402
 
 
 class Archives:
-    def __init__(self, data):
+    def __init__(self, data, first=()):
         self.arcs = []
-        for p in sorted(glob.glob(os.path.join(data, "*.ba2"))):
+        for p in list(first) + sorted(glob.glob(os.path.join(data, "*.ba2"))):
             try:
                 self.arcs.append(ba2.Ba2(p))
             except Exception:                            # noqa: BLE001 (texture archives etc.)
@@ -45,8 +45,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sf-data", required=True)
     ap.add_argument("--model", required=True, help="path under meshes\\, e.g. Water\\Water50m.nif")
+    ap.add_argument("--archive", action="append", default=[],
+                    help="a mod's .ba2 searched before the game's (repeatable; 2026-11-20: our child clothes' parts)")
     a = ap.parse_args(argv)
-    arcs = Archives(a.sf_data)
+    arcs = Archives(a.sf_data, a.archive)
     n = nifmod.parse(arcs.read("meshes\\" + a.model.replace("/", "\\")))
     print(f"{a.model}: {len(n.blocks)} blocks: {[n.type_of(i) for i in range(len(n.blocks))]}")
     allpts = []

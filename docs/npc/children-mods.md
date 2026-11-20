@@ -385,4 +385,10 @@ MODL additional race; ours had both (from the nightwear template: MODL 001EE4DA)
 0-6, 29, 31, 32, 35-38 and 63 (HumanRace names 7-28 too). Since the shoes' slot is not the dress's, the shared cause
 is supported as the morph or the additional race: children's addons now have neither (os_export.item_records with
 race=). If heads still go, next suspects are the slots ChildRace does not name (7, 10-15, 13).
+Without the morphs and MODL (owner, 15:15, verified): still headless, Dorthe and Frodnar. So children's items are now
+built from Starfield's own child outfit records: Clothes_Child_CoraCoe_NOTPLAYABLE for the armor, its addon for
+every part (skin pieces too, on slot 13), our models in MOD2 / MOD3 (MOD3 after MOD2's first FLLD, as two-sex vanilla
+addons; os_export.part_templates child=, child_models). If heads still go, the records are ruled out and the part
+NIFs (written from the adult nightwear model) or the slots are next: model_bounds.py --archive reads our parts from
+the mod's BA2 to compare with the vanilla child outfit's.
 

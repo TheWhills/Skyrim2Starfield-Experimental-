@@ -259,6 +259,7 @@ def vertex_counts(s) -> Dict[str, int]:
 # ------------------------------------------------------------------------------------------------ plugin
 SKIN_TEMPLATE_ADDON = "AA_Clothes_Nightwear_01_Skin"   # vanilla outfit skin addon (slot 13, body material)
 BODY_SLOT = 3                                          # the Starfield slot that hides the naked body
+SKIN_SLOT = 13                                         # the skin addon's slot (Misc 1)
 
 
 def armor_records(sf_esm: str, nif_rel: str, name: str, masters: int, full: str, drop=(), slots=None,
@@ -391,23 +392,49 @@ def with_fields(subs, fields: Dict[bytes, bytes]) -> list:
     return out
 
 
-def part_templates(sf_esm: str) -> dict:
+CHILD_TEMPLATE_ARMOR = "Clothes_Child_CoraCoe_NOTPLAYABLE"   # Starfield's own child outfit (one addon, slot 3)
+
+
+def part_templates(sf_esm: str, child: bool = False) -> dict:
     """The vanilla records our addons, morphs, armors and outfits are copied from: {"recs", "armo" (fid, record) of
     TEMPLATE_ARMOR, "gear" its first addon, "skin" SKIN_TEMPLATE_ADDON's addon or None, "otft" any outfit,
-    "is_addon"}."""
+    "is_addon", "child"}. child: Starfield's own child outfit (CHILD_TEMPLATE_ARMOR) for the armor, its addon for every
+    part, skin pieces too (2026-11-20, owner: children headless in our clothes built on the adult nightwear's records,
+    with or without its morphs; Starfield's child addons differ from it in every other field too)."""
     recs = {fid: (t, h, subs) for t, h, subs, fid in sfplugin.records(sf_esm, [b"ARMO", b"ARMA", b"OTFT", b"MRPH"])}
-    armo = next(((fid, r) for fid, r in recs.items() if r[0] == b"ARMO" and sfplugin.edid(r[2]) == TEMPLATE_ARMOR),
-                None)
+    name = CHILD_TEMPLATE_ARMOR if child else TEMPLATE_ARMOR
+    armo = next(((fid, r) for fid, r in recs.items() if r[0] == b"ARMO" and sfplugin.edid(r[2]) == name), None)
+    if armo is None and child:
+        return part_templates(sf_esm)
     if armo is None:
         raise SystemExit(f"no ARMO {TEMPLATE_ARMOR} in {sf_esm}")
     is_addon = lambda d: len(d) >= 4 and recs.get(_fid(d), (None,))[0] == b"ARMA"      # noqa: E731
     gear_tpl = next((_fid(d) for s, d in armo[1][2] if s == b"MODL" and is_addon(d)), None)
     if gear_tpl is None:
         raise SystemExit(f"{TEMPLATE_ARMOR}: no ARMA")
-    skin_tpl = next((fid for fid, r in recs.items() if r[0] == b"ARMA" and sfplugin.edid(r[2]) == SKIN_TEMPLATE_ADDON),
-                    None)
+    skin_tpl = gear_tpl if child else next((fid for fid, r in recs.items()
+                                            if r[0] == b"ARMA" and sfplugin.edid(r[2]) == SKIN_TEMPLATE_ADDON), None)
     otft = next(r for r in recs.values() if r[0] == b"OTFT")
-    return {"recs": recs, "armo": armo, "gear": gear_tpl, "skin": skin_tpl, "otft": otft, "is_addon": is_addon}
+    return {"recs": recs, "armo": armo, "gear": gear_tpl, "skin": skin_tpl, "otft": otft, "is_addon": is_addon,
+            "child": child, "name": name}
+
+
+def child_models(subs, male, female) -> list:
+    """An addon copied from a one-model child addon (MOD2, its FLLD run) with our models: MOD2 the male model (the
+    female's when there is none), MOD3 the female model placed after MOD2's first FLLD (as the vanilla two-sex
+    addons: MOD2, FLLD, MOD3, FLLD ...) when it differs; any MOD3 of the template dropped."""
+    first = male or female
+    out, placed = [], False
+    subs = [(s_, d) for s_, d in subs if s_ != b"MOD3"]
+    for i, (s_, d) in enumerate(subs):
+        if s_ == b"MOD2":
+            d = sfplugin.zs(first)
+        out.append((s_, d))
+        if (s_ == b"FLLD" and not placed and any(x == b"MOD2" for x, _ in out) and female and male
+                and female != male):
+            out.append((b"MOD3", sfplugin.zs(female)))
+            placed = True
+    return out
 
 
 def morph_template(t: dict, addon_subs):
@@ -558,10 +585,10 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
     S2S_<OTFT>. race: a RACE FormID for the addons' and armors' RNAM (children's clothes: ChildRace, as Starfield's
     child outfits, AA_Clothes_Child_CoraCoe_NOTPLAYABLE RNAM 002AABCD; else the templates'); those addons also have no
     morph records and no additional races, as the vanilla child addons. Returns (records, report)."""
-    t = part_templates(sf_esm)
+    t = part_templates(sf_esm, child=race is not None)
     race_edit = {b"RNAM": struct.pack("<I", race)} if race is not None else {}
     recs = t["recs"]
-    out, armors, rep = [], [], {"template": TEMPLATE_ARMOR, "items": [], "outfits": []}
+    out, armors, rep = [], [], {"template": t["name"], "items": [], "outfits": []}
     armo_fid = {}
     for it in items:
         base = f"S2S_{it['edid']}"
@@ -575,6 +602,8 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
                 # with a bit of skin claimed the shirt's skin slot. An item that does not cover the body keeps its
                 # skin piece in its own slots.
                 pr = dict(pr, slots=gear_slots)
+            if pr.get("skin") and pr.get("slots") is None and t["child"]:
+                pr = dict(pr, slots=[SKIN_SLOT])     # the child template's addon is on the body slot, not the skin's
             if tpl is None:
                 raise SystemExit(f"no ARMA {SKIN_TEMPLATE_ADDON} in {sf_esm}")
             _t, ah, asubs = recs[tpl]
@@ -599,7 +628,8 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
                     drop += [mod, nam]
                     row[sex] = None
                     continue
-                edits[mod] = sfplugin.zs(r["nif"])
+                if not t["child"]:
+                    edits[mod] = sfplugin.zs(r["nif"])
                 row[sex] = {"shape": r["shape"], "model": r["nif"], "MRPH": None}
                 if m_tpl is not None:
                     m_edid = f"{base}_{key}_{tag}_Morph"
@@ -609,7 +639,12 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
                     morphs[nam] = struct.pack("<I", m_rec[3])
                     row[sex].update(MRPH=info["MRPH"], morph_folder=info["morph_folder"])
             row["one_sex"] = None if (row["male"] and row["female"]) else ("male" if row["male"] else "female")
-            subs = with_fields(sfplugin.edit(list(asubs), edits, drop=drop), morphs)
+            if t["child"]:
+                subs = child_models(sfplugin.edit(list(asubs), edits, drop=[d_ for d_ in drop
+                                                                         if d_ not in (b"MOD2", b"MOD3")]),
+                                    (pr.get("male") or {}).get("nif"), (pr.get("female") or {}).get("nif"))
+            else:
+                subs = with_fields(sfplugin.edit(list(asubs), edits, drop=drop), morphs)
             out.append((b"ARMA", ah, subs, a_fid))
             addons.append(a_fid)
             rows.append(row)
