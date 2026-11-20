@@ -817,3 +817,12 @@ why the mod needs no clothes of its own.
   Skyrim base head (what the model was made on; adult_own_head now also saves it); the FaceGen copy only when the
   models cannot be read. The remake's model sits on Skyrim's malehead.nif as read (11 units from its middle: no
   frame shift). faces.json own_hair gains "from" and shape_detail (alpha per shape).
+  Owner, 21:20-21:24 (in game): the per-NPC reconversion from the remake's own mesh came out thin and "strandy",
+  tufts at the sides of the neck; "Faendal's looked fine, now it looks thin". The shared hairstyle (the remake
+  converted once by skyrim_hairs with the settings approved 11-05, as Alvor's) only lacked the crest fix. Decided
+  with the owner: keep that conversion and reshape it to his head. own_hair_files: the hairs plugin's NIF and its
+  _facebones twin through headbake.baked_part_files (every point moves like its nearest vanilla head vertex by that
+  vertex's move v_race + own fit - v_vanilla, as race_heads bakes the face parts per race), written as
+  S2S\Faces\Hair\<npc>.nif on a copy of the hairs plugin's head part (S2S_OwnHair_<npc>; HNAM / RNAM FormIDs moved
+  into this plugin's master space) in place of the shared one. adult_own_head saves the vanilla head points and
+  moves (_own_head/<npc>.npz). The per-NPC reconversion route for adults is removed; children keep theirs.

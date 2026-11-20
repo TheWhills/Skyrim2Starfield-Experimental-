@@ -600,12 +600,11 @@ class RaceNpcTests(unittest.TestCase):
                 al = (1.0, np.eye(3), np.zeros(3))
                 own = S.adult_own_head({"edid": "Faendal", "female": False}, np.ones((5, 3)), b"fg", al, True,
                                        np.zeros((5, 3)), b"base", {"name": "Bosmer"}, plug, "sf", d, a, {})
-                # its own hair later needs the frame (2026-11-19): saved, and read back as a ctx + FaceGen points
-                ctx, fgp = S.own_head_ctx(d, {"own_head": own})
-                np.testing.assert_allclose(fgp, np.ones((5, 3)))
-                self.assertEqual(ctx["al"][0], 1.0)
-                self.assertTrue(ctx["model_space"])
-                np.testing.assert_allclose(ctx["head"].model_xf, np.eye(4))
+                # its hair is reshaped at writing (2026-11-19): the vanilla head and each vertex's move are saved
+                z = np.load(os.path.join(d, *own["frame"].split("/")))
+                np.testing.assert_allclose(z["head_pts"], v_van)
+                np.testing.assert_allclose(z["head_disp"], v_race + 0.002 - v_van, atol=1e-6)
+                self.assertEqual(str(z["head_nif"]), "meshes/actors/human/malehead.nif")
                 self.assertTrue(os.path.isfile(os.path.join(d, "geometries", "x", "y.mesh")))
         np.testing.assert_allclose(seen["on"], v_race)                       # fitted on the race's head
         self.assertTrue(seen["tilt"])                                        # with his own eye slant
@@ -650,6 +649,84 @@ class RaceNpcTests(unittest.TestCase):
         self.assertIn("06000808", str(cm.exception))
         self.assertIn("S2S_Head_Faendal", str(cm.exception))
         S.check_new_form_ids(recs[1:], 6)
+
+    def test_own_hair_reshaped(self):
+        """2026-11-19 (owner on Faendal: the shared remake hairstyle looked fine but for the crest; a per-NPC
+        reconversion came out thin): the hairs plugin's own hairstyle, baked to the NPC's own head (every point
+        moved like its nearest vanilla head vertex by that vertex's move), on a head part of its own copied from the
+        hairs plugin's record (FormIDs moved into this plugin's master space), in place of the shared one."""
+        import face_fit as S
+        from fo4sf import sfplugin
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        I = lambda v: struct.pack("<I", v)                                            # noqa: E731
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "_own_head"))
+            pts, mv = np.zeros((4, 3), np.float32), np.full((4, 3), 0.003, np.float32)
+            np.savez_compressed(os.path.join(d, "_own_head", "Faendal.npz"), head_pts=pts, head_disp=mv,
+                                head_nif=np.array("meshes/actors/human/malehead.nif"))
+            row = {"edid": "Faendal", "female": False, "own_head": {"frame": "_own_head/Faendal.npz"},
+                   "dressed": {"hair": {"skyrim": "HairMaleDarkElf09", "form_id": "0200084F"}}}
+            seen = []
+
+            def bake(nif, read, head_pts, head_disp, head_skin, out_nif, rigid=False):
+                seen.append((nif, out_nif, np.asarray(head_pts).copy(), np.asarray(head_disp).copy(), head_skin))
+                return {out_nif: b"baked " + nif, "geometries/a/b.mesh": b"m"}, {"shapes": []}
+            hp_dir = os.path.join(d, "S2S Skyrim Hairs")
+            os.makedirs(hp_dir)
+            hp = os.path.join(hp_dir, "S2SSkyrimHairs.esm")
+            hdr = struct.pack("<4sIII", b"HDPT", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+            hair = (b"HDPT", hdr, [(b"EDID", Z("S2S_HairMaleDarkElf09")), (b"MODL", Z("s2s\\skyrimhair\\h09.nif")),
+                                   (b"PNAM", I(3)), (b"HNAM", I(0x00001234)), (b"RNAM", I(0x0024A024))], 0x0100084F)
+            with open(hp, "wb") as fh:
+                fh.write(sfplugin.build([hair], {"hedr_version": 0.96, "form_version": 555},
+                                        masters=("Starfield.esm",)))
+            for rel, data in (("meshes/s2s/skyrimhair/h09.nif", b"hair"),
+                              ("meshes/s2s/skyrimhair/h09_facebones.nif", b"twin")):
+                path = os.path.join(hp_dir, *rel.split("/"))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                open(path, "wb").write(data)
+            import types
+            a = types.SimpleNamespace(hairs_plugin=hp)
+            masters = ["Starfield.esm", "SkyrimTerrain.esm", "S2SSkyrimHairs.esm"]
+            npc_fid = sfplugin.new_form_id(0, masters=len(masters))
+            recs = []
+            subs = [(b"EDID", Z("S2SFace_Faendal")), (b"PNAM", I(0x03000900)), (b"PNAM", I(0x0200084F))]
+            with mock.patch.object(S.hkx_to_af, "vanilla_file", lambda r, sf: (b"head", r)), \
+                    mock.patch.object(S.facefit, "starfield_head_parts", lambda b: (["h"], {"bones": ["C_Head"]})), \
+                    mock.patch("fo4sf.headbake.baked_part_files", bake):
+                out = S.own_hair(a, d, row, subs, recs, masters, "sf", taken={npc_fid})
+            self.assertEqual([x[:2] for x in seen], [(b"hair", "meshes/s2s/faces/hair/faendal.nif"),
+                                                    (b"twin", "meshes/s2s/faces/hair/faendal_facebones.nif")])
+            np.testing.assert_allclose(seen[0][3], 0.003)                 # each vertex's move to its own head
+            self.assertEqual(open(os.path.join(d, "meshes", "s2s", "faces", "hair", "faendal.nif"), "rb").read(),
+                             b"baked hair")
+            new = recs[-1]
+            self.assertNotEqual(new[3], npc_fid)                             # not the NPC's FormID
+            self.assertEqual(sfplugin.edid(new[2]), "S2S_OwnHair_Faendal")
+            self.assertEqual(dict(new[2])[b"MODL"], Z("s2s\\faces\\hair\\faendal.nif"))
+            self.assertEqual(dict(new[2])[b"HNAM"], I(0x00001234))           # Starfield.esm's: index 0 both
+            pn = [struct.unpack("<I", x)[0] for sg, x in out if sg == b"PNAM"]
+            self.assertEqual(pn, [0x03000900, new[3]])                       # the shared hairstyle swapped out
+            self.assertEqual(row["own_hair"]["head_part"], f"{new[3]:08X}")
+            # a hair that is not the hairs plugin's: left as it is
+            row2 = dict(row, dressed={"hair": {"form_id": "0000ABCD"}})
+            self.assertEqual(S.own_hair(a, d, row2, subs, recs, masters, "sf"), subs)
+            self.assertIn("not the hairs plugin", row2["own_hair"]["note"])
+
+    def test_with_own_hair_remaps_its_masters(self):
+        """A hairs-plugin record naming one of that plugin's own records (index = its master count) points at the
+        same record in this plugin's master space."""
+        import face_fit as S
+        from fo4sf import sfplugin
+        Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        I = lambda v: struct.pack("<I", v)                                            # noqa: E731
+        rec = (b"HDPT", b"", [(b"EDID", Z("x")), (b"HNAM", I(0x00000123) + I(0x01000900)), (b"MODL", Z("a.nif"))],
+               0x01000800)
+        recs = []
+        _s, hd = S.with_own_hair([], {"edid": "N", "dressed": {}}, recs, ["Starfield.esm", "X.esm", "Hairs.esm"],
+                                 rec, ["Starfield.esm", "Hairs.esm"], "m.nif")
+        hn = dict(recs[-1][2])[b"HNAM"]
+        self.assertEqual(struct.unpack("<2I", hn), (0x00000123, 0x02000900))
 
     def test_race_skin(self):
         """2026-11-12, owner: a converted NPC always matches its race and skin (Faendal: the Bosmer head with a

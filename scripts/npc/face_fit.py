@@ -394,63 +394,138 @@ def adult_own_head(n, fg, fg_bytes, al, model_space, base, base_bytes, conv, rac
             fh.write(data)
     preview = child_preview(n["edid"], ctx, fg, disp, out, cache)
     mag = np.linalg.norm(disp, axis=1)
-    # what its own hair needs later (add_child_hair_files): the face alignment, the head's node, the FaceGen head
+    # what its hair needs at writing (own_hair_files): the vanilla head the shared hairstyles were fitted to and how
+    # far each of its vertices moved to make this head (its race's shape + its own fit)
     frame = os.path.join(OWN_HEAD_FRAMES, f"{n['edid']}.npz")
     os.makedirs(os.path.join(out, OWN_HEAD_FRAMES), exist_ok=True)
-    s_, R_, t_ = al[:3]
-    np.savez_compressed(os.path.join(out, frame), al_s=float(s_), al_R=np.asarray(R_, float),
-                        al_t=np.asarray(t_, float), node=np.asarray(head.model_xf, float),
-                        fg=np.asarray(fg, float), base=np.asarray(base, float), model_space=bool(model_space))
+    np.savez_compressed(os.path.join(out, frame), head_pts=np.asarray(v_van, np.float32),
+                        head_disp=np.asarray(total, np.float32), head_nif=np.array(nif_rel))
     return {"model": f"{ADULT_HEAD_DIR}\\{n['edid']}Head.nif", "files": sorted(files), "shape": shape, "on": on,
             "preview": preview, "max_move_m": round(float(mag.max()), 4), "frame": frame.replace(os.sep, "/")}
 
 
-OWN_HEAD_FRAMES = "_own_head"     # in --out: <edid>.npz per adult own head (own_head_ctx reads it)
-OWN_HAIR_DIR = "s2s/faces/hair"   # adults' own hair (add_child_hair_files)
+OWN_HEAD_FRAMES = "_own_head"     # in --out: <edid>.npz per adult own head (own_hair_files reads it)
+OWN_HAIR_DIR = "s2s/faces/hair"   # adults' own hair (own_hair_files)
 
 
-def without_part(subs, fid_hex):
-    """subs without the PNAM naming FormID fid_hex (as this plugin sees it), unchanged when None."""
-    if not fid_hex:
-        return subs
-    fid = int(fid_hex, 16)
-    return [(sg, d) for sg, d in subs if not (sg == b"PNAM" and len(d) == 4 and struct.unpack("<I", bytes(d))[0] == fid)]
+def folder_reader(folder, sf_data):
+    """Data-relative path -> bytes: a mod folder's loose file, else its .ba2 archives, else the game's (the hairs
+    plugin's converted hairstyles: S2SSkyrimHairs - Main.ba2 or loose)."""
+    from fo4sf import ba2
+    arcs = [ba2.Ba2(os.path.join(folder, f)) for f in sorted(os.listdir(folder)) if f.lower().endswith(".ba2")] \
+        if os.path.isdir(folder) else []
+
+    def read(rel):
+        rel = rel.replace("\\", "/")
+        path = os.path.join(folder, *rel.split("/"))
+        if os.path.isfile(path):
+            with open(path, "rb") as fh:
+                return fh.read()
+        for arc in arcs:
+            i = arc.find(rel)
+            if i is not None:
+                return arc.read(i)
+        return hkx_to_af.vanilla_file(rel, sf_data)[0]
+    return read
 
 
-def own_head_ctx(out, row, which="fg"):
-    """(ctx for child_hair.sky_to_starfield / build_child_hair, head points) of an adult's own head from its frame
-    file (adult_own_head), or (None, None). which: "fg" its FaceGen head, "base" the Skyrim base head (what a hair
-    head part's own model was made on; the FaceGen head when the file has none)."""
-    import types
-    rel = (row.get("own_head") or {}).get("frame")
-    path = os.path.join(out, *rel.split("/")) if rel else None
-    if not path or not os.path.isfile(path):
-        return None, None
-    z = np.load(path)
-    ctx = {"al": (float(z["al_s"]), z["al_R"], z["al_t"]), "model_space": bool(z["model_space"]),
-           "head": types.SimpleNamespace(model_xf=z["node"])}
-    return ctx, (z["base"] if which == "base" and "base" in z.files else z["fg"])
-
-
-def own_hair_models(n, hdpt, src):
-    """(model paths, main model NIF bytes or None) of the NPC's hair head part and its extra parts as the Skyrim
-    load order src has them (npc_hair.part_models; a loose remake in a --skyrim-mod folder wins)."""
-    import npc_hair
-    hair = next((f for f in n.get("head_parts") or [] if (hdpt.get(f) or {}).get("type") == 3), None)
-    models = npc_hair.part_models(hair, hdpt) if hair is not None else []
-    if not models:
-        return [], None
-    rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", models[0].replace("/", "\\"), flags=re.I)
+def own_hair_files(out, row, hair_model, read, sf_data):
+    """({Data-relative path: bytes}, report): an own-head adult's shared hairstyle (hair_model: its MODL, from the
+    hairs plugin) with every point moved like its nearest vertex of the vanilla head as that head became the NPC's
+    own (race shape + own fit; headbake.baked_part_files, as race_heads bakes the face parts for each race), the
+    NIF and its _facebones twin. 2026-11-19 (owner on Faendal: the shared remake hairstyle "looked fine", only his
+    elf skull came through it as a crest; reconverting it per NPC came out thin): the approved conversion is kept,
+    only its shape follows the head."""
+    import race_heads
+    from fo4sf import headbake
+    z = np.load(os.path.join(out, *row["own_head"]["frame"].split("/")))
+    if "head_disp" not in z.files:
+        raise ValueError("its own head's frame file is from an older run (rerun with --refit)")
+    head_raw = hkx_to_af.vanilla_file(str(z["head_nif"]), sf_data)[0]
+    _p, head_skin = facefit.starfield_head_parts(head_raw)
+    src = "meshes/" + hair_model.replace("\\", "/").lower()
+    out_nif = "meshes/" + f"{OWN_HAIR_DIR}/{row['edid'].lower()}.nif"
+    files, rep = headbake.baked_part_files(read(src), read, z["head_pts"], z["head_disp"], head_skin, out_nif)
     try:
-        raw = src.mesh(rel) if hasattr(src, "mesh") else None
-    except (KeyError, OSError, SystemExit):
-        raw = None
-    return (models, raw) if raw else ([], None)
+        fb = read(race_heads.twin(src))
+    except (SystemExit, KeyError, OSError):
+        fb = None
+    if fb is not None:
+        f2, rep["facebones_twin"] = headbake.baked_part_files(fb, read, z["head_pts"], z["head_disp"], head_skin,
+                                                              race_heads.twin(out_nif))
+        files.update(f2)
+    rep["from"] = hair_model
+    return files, rep
 
 
-def own_hair_lift(row):
-    """hair_lift_matrix for an adult's own head (its fit's prealign hair_lift_m)."""
-    return hair_lift_matrix({"child": (row.get("own_head") or {})})
+def own_hair(a, out, row, subs, recs, masters, sf_data, taken=(), cache=None):
+    """An own-head adult's hairstyle reshaped to its head (own_hair_files, written under out) on a head part of its
+    own in place of the shared one (with_own_hair); row["own_hair"] reports. subs unchanged when the NPC wears no
+    hairstyle of the hairs plugin."""
+    cache = {} if cache is None else cache
+    hp = os.path.abspath(a.hairs_plugin)
+    if "hp" not in cache:
+        hp_masters = npc_records.plugin_masters(hp) + [os.path.basename(hp)]
+        cache["hp"] = (hp_masters, {r[3]: r for r in sfplugin.records(hp, [b"HDPT"])},
+                       folder_reader(os.path.dirname(hp), sf_data))
+    hp_masters, parts, read = cache["hp"]
+    old = ((row.get("dressed") or {}).get("hair") or {}).get("form_id")
+    if not old:
+        row["own_hair"] = {"note": "no hairstyle of the hairs plugin on it"}
+        return subs
+    v = int(old, 16)
+    if masters[v >> 24].lower() != os.path.basename(hp).lower():
+        row["own_hair"] = {"note": f"its hair {old} is not the hairs plugin's"}
+        return subs
+    rec = parts.get(((len(hp_masters) - 1) << 24) | (v & 0xFFFFFF))
+    if rec is None:
+        raise KeyError(f"hair {old} not in {os.path.basename(hp)}")
+    model = next(fo4land_zstring(d) for sg, d in rec[2] if sg == b"MODL")
+    files, rep = own_hair_files(out, row, model, read, sf_data)
+    for rel, data in files.items():
+        path = os.path.join(out, *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(data)
+    new_model = f"{OWN_HAIR_DIR}/{row['edid'].lower()}.nif".replace("/", "\\")
+    subs, hd = with_own_hair(subs, row, recs, masters, rec, hp_masters, new_model, taken)
+    row["own_hair"] = dict(rep, model=new_model, head_part=hd, files=sorted(files))
+    return subs
+
+
+def with_own_hair(subs, row, recs, masters, hair_rec, hp_masters, model, taken=()):
+    """(subs with the NPC's shared hairstyle PNAM swapped for its own copy, the copy's FormID hex): the hairs
+    plugin's head part record (hair_rec, its FormIDs in that plugin's master space hp_masters + itself) copied with
+    the NPC's baked model, its HNAM / RNAM FormIDs moved into this plugin's master space (masters)."""
+    own = {i: nm.lower() for i, nm in enumerate(hp_masters)}
+    ours = {nm.lower(): i for i, nm in enumerate(masters)}
+
+    def remap(d):
+        d = bytes(d)
+        if len(d) % 4:
+            return d
+        vals = []
+        for (v,) in struct.iter_unpack("<I", d):
+            nm = own.get(v >> 24)
+            vals.append(((ours[nm] << 24) | (v & 0xFFFFFF)) if nm in ours else v)
+        return struct.pack(f"<{len(vals)}I", *vals)
+    used = set(taken) | {r[3] for r in recs if r}
+    k = len(recs)
+    while sfplugin.new_form_id(k, masters=len(masters)) in used:
+        k += 1
+    fid = sfplugin.new_form_id(k, masters=len(masters))
+    rsubs = [(sg, remap(d) if sg in (b"HNAM", b"RNAM") else d) for sg, d in hair_rec[2]]
+    rsubs = sfplugin.edit(rsubs, {b"EDID": sfplugin.zs(f"S2S_OwnHair_{row['edid']}"), b"MODL": sfplugin.zs(model)})
+    recs.append((b"HDPT", hair_rec[1], rsubs, fid))
+    old = ((row.get("dressed") or {}).get("hair") or {}).get("form_id")
+    out, done = [], False
+    for sg, d in subs:
+        if sg == b"PNAM" and len(d) == 4 and old and struct.unpack("<I", bytes(d))[0] == int(old, 16):
+            d, done = struct.pack("<I", fid), True
+        out.append((sg, d))
+    if not done:
+        out.append((b"PNAM", struct.pack("<I", fid)))
+    return out, f"{fid:08X}"
 
 
 def uses_child_shape(a, n) -> bool:
@@ -1687,19 +1762,10 @@ def add_child_light_tone(sf_esm, sf_data, out, recs, rows=(), sky=None, texconv=
             "children": got.get("children", {}), "groups": got["report"], "textures": sorted(got["textures"])}
 
 
-def wants_own_hair(row) -> bool:
-    """A child, or an adult with its own head (--shape-npc; 2026-11-19, owner on Faendal's "scalp thing": the shared
-    hairstyle was fitted to the vanilla human head, and on his elf head its thin slicked-back shell sank in, leaving
-    only its edges: a crest), gets its hair converted from its own FaceGen NIF onto its own head."""
-    return bool(row.get("child")) or bool((row.get("own_head") or {}).get("frame"))
-
-
 def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, masters, real, child_ctx) -> dict:
     """The children's own hair from their FaceGen NIFs (scripts/npc/child_hair.py), each a head part of ours copied
     from its template child's hair and put on its test NPC, its hair colour matched (with --hairs-plugin); files
-    packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2" (Archive2) or loose. Needs --texconv. Fills row["hair"].
-    Adults with their own head (wants_own_hair) the same way, on the adult skeleton and their own head, replacing
-    the shared hairstyle the hairs plugin gave them (row["own_hair"])."""
+    packed as "S2SFaceTest - Main.ba2" / "- Textures.ba2" (Archive2) or loose. Needs --texconv. Fills row["hair"]."""
     import shutil
     import child_faces
     import child_hair
@@ -1710,18 +1776,10 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
     cr = a.content_resources or os.path.join(a.starfield, "Tools", "ContentResources.zip")
     if not os.path.isfile(cr):
         return {"error": f"ContentResources.zip (Creation Kit) not found: {cr}"}
-    worlds = {}
-
-    def world(child):
-        if child not in worlds:
-            rel = child_hair.CHILD_SKELETON if child else npc_hair.SF_SKELETON
-            worlds[child] = (child_hair.child_world if child else npc_hair.skeleton_world)(
-                hkx_to_af.vanilla_file(rel, sf_data)[0])
-        return worlds[child]
     try:
-        sf_world = world(any(r.get("child") for r in rows))
+        sf_world = child_hair.child_world(hkx_to_af.vanilla_file(child_hair.CHILD_SKELETON, sf_data)[0])
     except (SystemExit, KeyError, OSError, ValueError, nifmod.NifError) as e:
-        return {"error": f"skeleton: {e}"}
+        return {"error": f"child skeleton {child_hair.CHILD_SKELETON}: {e}"}
     staging = os.path.join(out, child_hair.STAGING)
     shutil.rmtree(staging, ignore_errors=True)
     conv = skyrimconvert.SkyrimConverter(sky, staging, a.texconv, cr, collision_template=None, prefix="s2s")
@@ -1731,14 +1789,12 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
     settings = child_hair.shape_settings(a.starfield)
     res = {"child_skeleton_C_Head_m": [round(float(v), 4) for v in sf_world[skyrimhair.SF_HEAD][:3, 3]],
            "facebones": {}}
-    fbs, done, adults_done = {}, 0, 0
+    fbs, done = {}, 0
     for row in rows:
-        if not wants_own_hair(row) or not isinstance(row.get("test_npc"), dict) or row["edid"] not in test_subs:
+        if not row.get("child") or not isinstance(row.get("test_npc"), dict) or row["edid"] not in test_subs:
             continue
-        child = bool(row.get("child"))
         n = by_edid[row["edid"].lower()]
-        info = {}
-        row["hair" if child else "own_hair"] = info
+        info = row["hair"] = {}
         names = child_hair.hair_shape_names(n, hdpt)
         if not names:
             info["note"] = "no hair head part on the Skyrim NPC: the template's hair"
@@ -1769,35 +1825,14 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
                 frep = res["facebones"].setdefault(model, {})
                 fbs[model] = hair_pack.facebones_template(a.starfield, model, frep,
                                                           "x:meshes/" + model.replace("\\", "/"))
-            if child:
-                ctx = child_context(n, sky, sf_data, a, child_ctx, transfer="none")
-                fgp = child_faces.facegen_points(ctx, sys.modules[__name__], fg)
-                files = row["child"].get("files", [])
-                pre = hair_lift_matrix(row)
-            else:
-                # 2026-11-19 (owner, Faendal's back: his ponytail missing, parts see-through; "we were using" Vanilla
-                # hair remake SMP): an adult's own hair is its hair head part's own models, read through the Skyrim
-                # load order (the remake, given as a --skyrim-mod, wins - the hairstyles the owner chose on 11-05),
-                # shaped onto its own head; the FaceGen NIF's low-poly copy only when those cannot be read
-                models, main = own_hair_models(n, hdpt, sky)
-                ctx, fgp = own_head_ctx(out, row, "base" if main else "fg")
-                if ctx is None:
-                    info["error"] = "its own head's frame file is missing (rerun with --refit): the shared hair"
-                    continue
-                files = row["own_head"].get("files", [])
-                pre = own_hair_lift(row)
-                info["from"] = (f"its hair head part's models ({', '.join(models)})" if main else
-                                "its FaceGen NIF (the head part's models not readable)")
-            head_nif = next((f for f in files if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
+            ctx = child_context(n, sky, sf_data, a, child_ctx, transfer="none")
+            fgp = child_faces.facegen_points(ctx, sys.modules[__name__], fg)
+            head_nif = next((f for f in row["child"].get("files", [])
+                             if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
             surface = child_hair.baked_surface(a.starfield, out, head_nif) if head_nif else None
-            if not child and main:
-                hrow = child_hair.build_child_hair(row["edid"], n["female"], main, models[0], names, ctx, fgp,
-                                                   world(child), surface, fbs[model], conv, staging, settings, pre,
-                                                   "S2S_OwnHair_", OWN_HAIR_DIR, models=models, src=sky)
-            else:
-                hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp,
-                                                   world(child), surface, fbs[model], conv, staging, settings, pre,
-                                                   *(() if child else ("S2S_OwnHair_", OWN_HAIR_DIR)))
+            pre = hair_lift_matrix(row)
+            hrow = child_hair.build_child_hair(row["edid"], n["female"], fg, fg_rel, names, ctx, fgp, sf_world,
+                                               surface, fbs[model], conv, staging, settings, pre)
         except (skyrimhair.HairError, nifmod.NifError, ValueError, KeyError, OSError) as e:
             info["error"] = f"{type(e).__name__}: {e}"
             continue
@@ -1809,11 +1844,8 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
             info["error"] = hrow.get("reason") or "not converted"
             continue
         fid = sfplugin.new_form_id(len(recs), masters=len(masters))
-        recs.append(npc_hair.head_part_record(tpl, fid, f"{'S2S_ChildHair_' if child else 'S2S_OwnHair_'}"
-                                                         f"{row['edid']}", hrow["model"]))
+        recs.append(npc_hair.head_part_record(tpl, fid, f"S2S_ChildHair_{row['edid']}", hrow["model"]))
         t, h, subs, nfid = recs[k]
-        if not child:                  # the shared hairstyle (hairs plugin) out first: not a Starfield.esm part
-            subs = without_part(subs, ((row.get("dressed") or {}).get("hair") or {}).get("form_id"))
         subs = child_hair.hair_record_subs(subs, sf_hdpt, fid)
         if real is not None:
             color = real["clfm"].get(n.get("hair_color"))
@@ -1826,9 +1858,7 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
         recs[k] = (t, h, subs, nfid)
         info.update(model=hrow["model"], form_id=f"{fid:08X}", starfield_template=sfplugin.edid(tpl[2]))
         done += 1
-        adults_done += 0 if child else 1
-    res["children_with_own_hair"] = done - adults_done
-    res["adults_with_own_hair"] = adults_done
+    res["children_with_own_hair"] = done
     if done:
         base = os.path.splitext(PLUGIN)[0]
         res.update(hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2",
@@ -2260,6 +2290,7 @@ def main(argv=None):
         tone_slots = None
         light_ston = None
         late_recs = []      # overrides added after every new record, so they do not shift the new FormIDs
+        hair_cache = {}     # own_hair: the hairs plugin's head parts and its file reader, read once
         for row in report["npcs"]:
             if "dials" not in row:
                 continue
@@ -2369,6 +2400,11 @@ def main(argv=None):
                 row["own_head"]["head_part"] = hd
                 if rskin:
                     row["race"]["skin"] = rskin
+                if row["own_head"].get("frame") and real is not None:
+                    try:
+                        subs = own_hair(a, out, row, subs, recs, masters, sf_data, taken={fid}, cache=hair_cache)
+                    except (ValueError, KeyError, OSError, SystemExit, nifmod.NifError) as e:
+                        row["own_hair"] = {"error": f"{type(e).__name__}: {e}: the shared hairstyle as it is"}
             body_names = (list(a.body_npc) + list(BODY_NPC)[len(a.body_npc):])[:2]
             body_name = body_names[int(row["female"])]
             body_note = "template's own"
@@ -2424,8 +2460,8 @@ def main(argv=None):
         if recs and a.hair:
             report["hair_packing"] = add_hair_files(a, out, sky, esm, sf_data, report["npcs"], npcs, chosen, recs,
                                                     test_subs)
-        elif recs and any(wants_own_hair(r) for r in report["npcs"]):
-            if a.texconv:               # 2026-11-19: the children's (and own-head adults') own hair, from FaceGen
+        elif recs and any(r.get("child") for r in report["npcs"]):
+            if a.texconv:               # 2026-11-19: the children's own hair, from their FaceGen NIFs
                 report["child_hair"] = add_child_hair_files(a, out, sky, sf_data, report["npcs"], by_edid, recs,
                                                             test_subs, masters, real, child_ctx)
             else:

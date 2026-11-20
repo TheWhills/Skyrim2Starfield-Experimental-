@@ -230,15 +230,12 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    $rrsc47=@(Get-ChildItem $skymods,$childmods -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "Realistic" -and $_.Name -match "4\.7|update" } | ForEach-Object FullName) | Select-Object -First 1
    Get-ChildItem -LiteralPath $childmods -Filter "*.7z" | Where-Object { $_.Name -match "KS.*Hairdo" -and $_.Name -notmatch "SMP|Salt|Sassy|Retex" -and -not (Test-Path -LiteralPath (Join-Path $childmods $_.BaseName)) } | ForEach-Object { New-Item -ItemType Directory -Path (Join-Path $childmods $_.BaseName) | Out-Null; tar -xf $_.FullName -C (Join-Path $childmods $_.BaseName) }
    $ks=@(Get-ChildItem -LiteralPath $childmods -Recurse -Depth 4 -Filter "KS*Hairdo*.es?" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "SMP|Wigs" } | ForEach-Object DirectoryName | Select-Object -Unique)
-   $vhr=@(Get-ChildItem $skymods -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "hair remake" } | ForEach-Object FullName) | Select-Object -First 1
-   $skyargs=@(); foreach ($m in @($ks) + @($rsc,$rrsc,$rrsc47,$vhr)) { if ($m) { $skyargs += "--skyrim-mod"; $skyargs += $m } }
-   "RS: $rsc`nRealistic: $rrsc`nupdate: $rrsc47`nKS Hairdos: $($ks -join ' | ')`nhair remake: $vhr"
+   $skyargs=@(); foreach ($m in @($ks) + @($rsc,$rrsc,$rrsc47)) { if ($m) { $skyargs += "--skyrim-mod"; $skyargs += $m } }
+   "RS: $rsc`nRealistic: $rrsc`nupdate: $rrsc47`nKS Hairdos: $($ks -join ' | ')"
    python -I scripts\npc\face_fit.py --skyrim-data $sky --starfield $sf --out $face --npc Ralof --npc Ysolda --npc Nazeem --npc Saadia --npc Orgnar --npc Delphine --npc Embry --npc Faendal --npc Alvor --npc Sigrid --npc Hod --npc Gerdur --npc Sven --npc Hilde --npc CamillaValerius --npc LucanValerius --npc Dorthe --npc Frodnar --test-plugin --hairs-plugin $hairs --items-plugin "$mods\S2S Clothes\S2SClothes.esm" --outfits-plugin "$armor\S2SArmorTest.esm" --beard-map C:\Modding\work\beards\beard_match.json --voice-lines C:\Modding\work\voice --races-plugin "$mods\S2S Race Test\S2SRaceTest.esm" --texconv C:\Modding\tools\texconv.exe --skyrim-mods-dir $skymods @skyargs --child-shape-npc Frodnar --child-shape-npc Dorthe --shape-npc Faendal
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture
    ```
-   ($vhr: the owner's Vanilla hair remake SMP mod folder in MO2 (Nexus 63979, the hairstyles chosen 2026-11-05): an
-   own-head adult's (--shape-npc) hair is its hair head part's models read through this load order, so the remake
-   wins; without it the vanilla meshes. --shape-npc: Faendal's own head, 2026-11-19.)
+   (--shape-npc: Faendal's own head, 2026-11-19; his hairstyle from the hairs plugin is reshaped to it.)
    (--items-plugin: the shared item outfits every adult wears since 9c; 2026-11-19 a run without it left Hilde
    unclothed. --texconv: the children's own hair, from their FaceGen NIFs, since 2026-11-19.) KS Hairdos empty: the
    children's hair textures are missing (faces.json says which) - put KS Hairdos SSE's .7z (Nexus SSE 6817) in

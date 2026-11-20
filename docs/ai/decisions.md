@@ -2453,3 +2453,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   (npc_voice.VOICE_FIRST), and face_fit refuses a plugin in which two new records share a FormID
   (check_new_form_ids, after Faendal's own head part took his NPC's FormID). A full EditorID -> FormID map kept
   between runs (as FO4Port's formids.json) is the general fix if more of this shows up.
+- 2026-11-19 An own-head adult's hair is its shared hairstyle reshaped, not reconverted (owner, Faendal: the shared
+  remake hairstyle "looked fine"; reconverting it per NPC onto his head came out thin and strandy). Its points move
+  with the head (headbake.baked_part_files on the hairs plugin's NIF and twin, by the vanilla -> own head moves),
+  as the race face parts already do. Why: keeps the conversion and look the owner approved; only the skull
+  difference changes. Alternative dropped: per-NPC reconversion (children keep it: their hair comes only from their
+  FaceGen NIFs).
