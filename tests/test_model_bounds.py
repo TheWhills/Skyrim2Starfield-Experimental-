@@ -34,5 +34,15 @@ class ArchiveOrderTests(unittest.TestCase):
                 self.assertEqual(MB.Archives(d, [mod]).read("meshes\\a.nif"), b"S2SClothes - Main.ba2")
 
 
+    def test_loose_folder_first(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "stage", "meshes", "S2S"))
+            with open(os.path.join(d, "stage", "meshes", "S2S", "a.nif"), "wb") as fh:
+                fh.write(b"loose")
+            self.assertEqual(MB.Archives(d, loose=[os.path.join(d, "stage")]).read("meshes\\S2S\\a.nif"), b"loose")
+            with self.assertRaises(FileNotFoundError):
+                MB.Archives(d).read("meshes\\S2S\\a.nif")
+
+
 if __name__ == "__main__":
     unittest.main()

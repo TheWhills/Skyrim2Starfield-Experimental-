@@ -22,15 +22,21 @@ from fo4sf import ba2, nif as nifmod, sfmesh, sfnif  # noqa: E402
 
 
 class Archives:
-    def __init__(self, data, first=()):
-        self.arcs = []
+    def __init__(self, data, first=(), loose=()):
+        self.arcs, self.loose = [], list(loose)
         for p in list(first) + sorted(glob.glob(os.path.join(data, "*.ba2"))):
             try:
                 self.arcs.append(ba2.Ba2(p))
-            except Exception:                            # noqa: BLE001 (texture archives etc.)
-                pass
+            except Exception as e:                       # noqa: BLE001 (texture archives etc.)
+                if p in first:
+                    print(f"{p}: not read ({type(e).__name__}: {e})")
 
     def read(self, name):
+        for root in self.loose:                       # a mod's loose files first (2026-11-20: _staging)
+            p = os.path.join(root, *name.replace("/", "\\").split("\\"))
+            if os.path.isfile(p):
+                with open(p, "rb") as fh:
+                    return fh.read()
         for a in self.arcs:
             if a.find(name) is not None:
                 return a.read(name)
@@ -47,8 +53,10 @@ def main(argv=None):
     ap.add_argument("--model", required=True, help="path under meshes\\, e.g. Water\\Water50m.nif")
     ap.add_argument("--archive", action="append", default=[],
                     help="a mod's .ba2 searched before the game's (repeatable; 2026-11-20: our child clothes' parts)")
+    ap.add_argument("--loose", action="append", default=[],
+                    help="a folder holding meshes\\ and geometries\\ searched first (e.g. a mod's _staging)")
     a = ap.parse_args(argv)
-    arcs = Archives(a.sf_data, a.archive)
+    arcs = Archives(a.sf_data, a.archive, a.loose)
     n = nifmod.parse(arcs.read("meshes\\" + a.model.replace("/", "\\")))
     print(f"{a.model}: {len(n.blocks)} blocks: {[n.type_of(i) for i in range(len(n.blocks))]}")
     allpts = []
