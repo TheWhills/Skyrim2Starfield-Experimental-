@@ -420,4 +420,10 @@ gear_fit --keep-skin, their textures converted like the cloth) and get no skin p
 item_convert.CHILD_FIT_ARGS, added for a child --race (children's fits redone once: new fit key). Unverified: the RS
 skin's colour next to Starfield's child hands, and the neck skin of the shirts against the child head's neck.
 (child_hair's body-to-hands recolour stays: harmless, and right if a child body is ever drawn.)
+RS's own skin kept (owner, 16:06, verified): no more hole or black rings, but the forearms and shins read as pale
+grey sleeves / socks - Skyrim's skin textures are near-neutral and tinted by the engine's skin tint, converted as
+they are they look like grey cloth. **Built:** gear_fit --child-skin (in CHILD_FIT_ARGS): the kept skin shapes'
+colour recoloured (SkyrimConverter albedo_target) to Starfield's lightest ChildRace hands texture tanned by
+CHILD_TAN, as the children's own hand tones are (gear_fit.child_skin_colour; report gear_fit_*.json child_skin).
+Unverified in game.
 

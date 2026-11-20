@@ -473,9 +473,10 @@ class SkyrimConverter(pipeline.Converter):
         return self.hair_orientation.get(stem) if stem else None
 
     def _shape_material(self, src, s, flat_normal_ok: bool = False,
-                        albedo_tint: Optional[tuple] = None) -> Optional[str]:
+                        albedo_tint: Optional[tuple] = None, albedo_target: Optional[tuple] = None) -> Optional[str]:
         """flat_normal_ok: a diffuse without a normal map converts with a flat normal (Skyrim grass) instead of
-        falling back to the neutral material."""
+        falling back to the neutral material. albedo_target: sRGB the visible colour is recoloured to average (Skyrim's
+        skin textures are tinted by the engine; 2026-11-20 children's bare skin)."""
         if s.shader_ref < 0:
             return self.neutral
         kind = src.type_of(s.shader_ref)
@@ -498,7 +499,7 @@ class SkyrimConverter(pipeline.Converter):
         if not normal and not (blend and not test) and not flat_normal_ok:
             return self.neutral
         mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok,
-                                   albedo_tint=albedo_tint)
+                                   albedo_tint=albedo_tint, albedo_target=albedo_target)
         if mat is None and blend and not test:
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral

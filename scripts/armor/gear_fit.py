@@ -48,15 +48,16 @@ def find_texconv(given: str = "") -> str:
     return ""
 
 
-def shape_materials(conv, nif_bytes: bytes) -> dict:
+def shape_materials(conv, nif_bytes: bytes, targets=None) -> dict:
     """{shape name: Starfield .mat path} for a Skyrim NIF's skinned shapes, converted by the repo's Skyrim texture
-    pipeline (SkyrimConverter: colour / normal / rough DDS + .mat, alpha test kept); None when it fell back."""
+    pipeline (SkyrimConverter: colour / normal / rough DDS + .mat, alpha test kept); None when it fell back.
+    targets {shape name: sRGB}: those shapes' colour recoloured to average it (kept skin shapes, --child-skin)."""
     n = nifmod.parse(nif_bytes)
     out = {}
     for s in skyrimskin.skinned_shapes(n):
         name = s.name.decode("latin-1", "replace")
         try:
-            out[name] = conv._shape_material(n, s)
+            out[name] = conv._shape_material(n, s, albedo_target=(targets or {}).get(name))
         except Exception as e:                           # report, keep going: the shape keeps the fallback material
             conv.material_errors[name] = f"{type(e).__name__}: {e}"
             out[name] = None
@@ -84,6 +85,23 @@ def shape_textures(nif_bytes: bytes) -> dict:
         except Exception as e:                       # report, keep going
             out[s.name.decode("latin-1", "replace")] = [f"? {e}"]
     return out
+
+
+def child_skin_colour(sf_data: str, female: bool) -> tuple:
+    """sRGB skin colour for a child item's bare skin (--child-skin): Starfield's lightest ChildRace hands texture, tanned
+    as the children's own tones are (child_hair.light_child_tone: lightest hands * CHILD_TAN), by its skin median.
+    2026-11-20 (owner, Frodnar with RS's own arm / leg skin kept: pale grey sleeves and socks): Skyrim's skin textures
+    are near-grey and tinted by the engine's skin tint, so converted as they are they read as grey cloth."""
+    import child_hair
+    import skin_tone_probe
+    from fo4sf import sfplugin, skintone
+    recs = sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"RACE", b"AVMD"])
+    _label, _avmd, tex = child_hair.tone_group(recs, female, b"HSTT")
+    read = skin_tone_probe.TextureArchives(sf_data).read
+    imgs = {k: skintone.decode_dds(read(p)) for k, p in enumerate(tex)}
+    ranks = skintone.slot_ranks(imgs)
+    light = imgs[min(ranks, key=lambda k: ranks[k])]
+    return tuple(child_hair.skin_median(child_hair.tanned(light)))
 
 
 def starfield_body(sf_data: str, female: bool):
@@ -1305,6 +1323,9 @@ def main(argv=None):
                     help=f"split low-poly shapes (under {TESSELLATE_BELOW} vertices) n x n before the fit; 1 = off")
     ap.add_argument("--size-feet", action="store_true",
                     help="scale the boots' foot section to Starfield's foot (off: it opened a seam at the ankle)")
+    ap.add_argument("--child-skin", action="store_true",
+                    help="kept skin shapes (--keep-skin) recoloured to a Starfield child's lightest hands, tanned "
+                         "(child_skin_colour; children's items)")
     ap.add_argument("--no-skin-piece", action="store_true",
                     help="no own skin piece and the naked body left visible (the old behaviour)")
     ap.add_argument("--debug-dir", default="", help="also write the meshes as OBJ files (and a zip) into this folder")
@@ -1474,8 +1495,18 @@ def main(argv=None):
             if not (a.add or a.stage):    # --add: earlier outfits' converted textures stay and are packed again
                 shutil.rmtree(staging, ignore_errors=True)
             conv = skyrimconvert.SkyrimConverter(sky, staging, texconv, cr, collision_template=None, prefix="s2s")
+            targets = None
+            if a.child_skin and a.keep_skin:
+                try:
+                    colour = child_skin_colour(sf_data, female)
+                    targets = {n_: colour for n_ in skin_shapes(textures)}
+                    rep["child_skin"] = {"colour": list(colour), "shapes": sorted(targets)}
+                    print(f"child skin: {sorted(targets)} recoloured to {colour}")
+                except (KeyError, ValueError, OSError) as e:
+                    rep["child_skin"] = f"none: {type(e).__name__}: {e}"
+                    print(f"child skin: not recoloured ({e})")
             for gb in gear_bytes:
-                mats.update(shape_materials(conv, gb))
+                mats.update(shape_materials(conv, gb, targets))
     doubled = set(names) if a.back_faces == "all" else (double & set(names) if a.back_faces == "auto" else set())
     sp = rep.get("skin_piece")
     if sp:

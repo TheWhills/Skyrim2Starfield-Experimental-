@@ -277,10 +277,57 @@ class MergedChildItemTests(unittest.TestCase):
             self.assertIsNone(IC.merge_child_item(d, "Smith", {"male": [], "female": []}, 3))
 
 
+class ChildSkinColourTests(unittest.TestCase):
+    def test_lightest_hands_tanned(self):
+        import numpy as np
+        import child_hair as CH
+        import skin_tone_probe
+        from fo4sf import skintone
+        cols = {"textures/h0.dds": (110, 85, 70), "textures/h1.dds": (225, 190, 180)}
+        recs = [(b"RACE", HDR, [(b"EDID", z("ChildRace")), (b"HSTT", z("Child_Hands"))], 1),
+                (b"AVMD", HDR, [(b"EDID", z("Child_Hands")), (b"VNAM", z("textures/h0.dds")),
+                                (b"VNAM", z("textures/h1.dds"))], 2)]
+
+        class FakeArchives:
+            def __init__(self, data):
+                pass
+
+            def read(self, p):
+                return p
+
+        def decode(p):
+            img = np.zeros((4, 4, 4), np.uint8)
+            img[...] = cols[p] + (255,)
+            return img
+        with mock.patch.object(sfplugin, "records", return_value=recs), \
+                mock.patch.object(skin_tone_probe, "TextureArchives", FakeArchives), \
+                mock.patch.object(skintone, "decode_dds", decode):
+            got = gear_fit.child_skin_colour("Data", False)
+        self.assertEqual(got, CH.skin_median(CH.tanned(decode("textures/h1.dds"))))
+
+    def test_targets_reach_the_converter(self):
+        seen = {}
+
+        class Conv:
+            neutral = "neutral.mat"
+            material_errors = {}
+
+            def _shape_material(self, n, s, albedo_target=None):
+                seen[s.name] = albedo_target
+                return "x.mat"
+        shapes = [types.SimpleNamespace(name=b"Arms"), types.SimpleNamespace(name=b"Shirt")]
+        with mock.patch.object(gear_fit.nifmod, "parse", return_value=None), \
+                mock.patch.object(gear_fit.skyrimskin, "skinned_shapes", return_value=shapes):
+            out = gear_fit.shape_materials(Conv(), b"", {"Arms": (200, 160, 150)})
+        self.assertEqual(out, {"Arms": "x.mat", "Shirt": "x.mat"})
+        self.assertEqual(seen, {b"Arms": (200, 160, 150), b"Shirt": None})
+
+
 class ItemConvertArgsTests(unittest.TestCase):
     def test_child_fit_args(self):
-        self.assertEqual(IC.child_fit_args([]), ["--keep-skin", "--no-skin-piece"])
-        self.assertEqual(IC.child_fit_args(["--conform", "--keep-skin"]), ["--conform", "--keep-skin", "--no-skin-piece"])
+        self.assertEqual(IC.child_fit_args([]), ["--keep-skin", "--no-skin-piece", "--child-skin"])
+        self.assertEqual(IC.child_fit_args(["--conform", "--keep-skin"]),
+                         ["--conform", "--keep-skin", "--no-skin-piece", "--child-skin"])
 
     def test_mod_args_and_keys(self):
         a = types.SimpleNamespace(race="NordRaceChild", helmets=False, skyrim_mods_dir="C:\\mods",
