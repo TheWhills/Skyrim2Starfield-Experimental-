@@ -391,4 +391,8 @@ every part (skin pieces too, on slot 13), our models in MOD2 / MOD3 (MOD3 after 
 addons; os_export.part_templates child=, child_models). If heads still go, the records are ruled out and the part
 NIFs (written from the adult nightwear model) or the slots are next: model_bounds.py --archive reads our parts from
 the mod's BA2 to compare with the vanilla child outfit's.
+Copied from the vanilla child outfit's records (owner, 15:24, verified): still headless. Records ruled out as far
+as they can be copied; left: our slots or our meshes (the meshes have the vanilla layout: build_skinned_nif, no bone
+nodes). child_slot_test.py writes S2SChildTest.esm, four one-addon copies of the Cora Coe outfit: its own mesh on
+slot 3 (control) and on slot 7, our shoes and our dress mesh on slot 3, to tell the two apart in game.
 
