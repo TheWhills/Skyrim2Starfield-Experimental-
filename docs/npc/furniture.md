@@ -1082,3 +1082,9 @@ whether the game loads every bank that file lists (the scratch bank may be skipp
 sound mods use (Nexus: loose <id>.wem in Data\Sound\Soundbanks replaces a streamed file): our <audio> foley names an
 obscure vanilla event in a loaded bank, and Skyrim's sound, converted to .wem like the voices, replaces that event's
 streamed file(s).
+Bank of its own name (S2S_Sounds, listed in soundbanksinfo.json) also silent (owner, 2026-11-20 13:07): a new bank is
+not loaded by being in Data or in that file. **built: sound_swap.py** (the sound mods' route): each Skyrim forge sound
+replaces the streamed .wem files of a vanilla Starfield_NPC food-station event no other event shares (Stockpot_Fidget
+3, FryPan_FidgetSizzle 3, Drawer_Close 2, Drawer_Open 2, Heat_Off 1; the distant hammer left out), converted as the
+voices are; furniture_anim_pack --sound-map names those events in the forge's <audio> foley. Cost: a Starfield NPC
+cooking at a food station would sound like a forge. The S2S_Sounds / scratch bank files are no longer needed.
