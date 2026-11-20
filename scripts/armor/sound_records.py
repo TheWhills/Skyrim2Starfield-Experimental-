@@ -139,15 +139,39 @@ def matching(edids, match=MATCH) -> list:
     return sorted(e for e in edids if rx.search(e))
 
 
+def wwed_guid(d: bytes) -> str:
+    """A WSED (16 bytes) as {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}."""
+    h = d[::-1].hex().upper()        # reversed: Data4 (8 bytes), Data1, Data2, Data3 (checked on a known pair)
+    return "{%s-%s-%s-%s-%s}" % (h[16:24], h[24:28], h[28:32], h[0:4], h[4:16]) if len(d) == 16 else ""
+
+
+def list_wwed(esm: str, out: str) -> int:
+    """Every WWED record (EditorID, FormID, event GUID) to out, tab separated; returns the count (2026-11-20: whether a
+    descriptor's <foley> name needs a WWED record - the welder's ITM_Microscope_Up played, our food-station events
+    did not)."""
+    from fo4sf import sfplugin
+    n = 0
+    with open(out, "w", encoding="utf-8") as fh:
+        for _t, _h, subs, fid in sfplugin.records(esm, [b"WWED"]):
+            g = next((wwed_guid(d) for s_, d in subs if s_ == b"WSED"), "")
+            fh.write(f"{sfplugin.edid(subs)}\t{fid:08X}\t{g}\n")
+            n += 1
+    return n
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--match", default=MATCH)
     ap.add_argument("--max", type=int, default=400)
     ap.add_argument("--skyrim-data", help="also section 5: Skyrim's forge sounds and their files")
+    ap.add_argument("--wwed-list", help="only write every WWED record (EditorID, FormID, GUID) to this file")
     a = ap.parse_args(argv)
     from fo4sf import fo4land, sfplugin
     esm = os.path.join(a.starfield, "Data", "Starfield.esm")
+    if a.wwed_list:
+        print(f"{list_wwed(esm, a.wwed_list)} WWED records -> {a.wwed_list}")
+        return 0
     counts = {}
     with fo4land.Plugin(esm) as p:
         for item in fo4land.iter_items(p.buf, p.body, len(p.buf)):

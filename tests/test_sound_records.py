@@ -15,6 +15,11 @@ class SoundRecordsTest(unittest.TestCase):
                          ["FX_SteamHiss", "OBJ_Hammer_Impact"])
 
 
+    def test_wwed_guid(self):
+        d = bytes.fromhex("8b44223471a74e0298c9d89fa7baabbe")          # WwiseEvent_QST_UC08_Door_Remote_Unlock
+        self.assertEqual(S.wwed_guid(d), "{024EA771-3422-448B-BEAB-BAA79FD8C998}")    # its event's GUID (json)
+        self.assertEqual(S.wwed_guid(b"x"), "")
+
     def test_paths_and_related(self):
         self.assertEqual(S.sound_path("FX\\NPC\\a.wav"), "sound\\fx\\npc\\a.wav")
         self.assertEqual(S.sound_path("Data\\Sound\\FX\\b.wav"), "sound\\fx\\b.wav")      # was sound\\data\\sound

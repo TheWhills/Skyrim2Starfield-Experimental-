@@ -1088,3 +1088,8 @@ replaces the streamed .wem files of a vanilla Starfield_NPC food-station event n
 3, FryPan_FidgetSizzle 3, Drawer_Close 2, Drawer_Open 2, Heat_Off 1; the distant hammer left out), converted as the
 voices are; furniture_anim_pack --sound-map names those events in the forge's <audio> foley. Cost: a Starfield NPC
 cooking at a food station would sound like a forge. The S2S_Sounds / scratch bank files are no longer needed.
+Vanilla food-station events named in the forge's <audio> foley, their files replaced (sound_swap): still silent
+(owner, 2026-11-20 13:28). Differences from the welder's foley that played: (1) our <audios> was appended after
+<variables> (the shipped order is events, audios, variables) - add_audio / add_event now insert in that order;
+(2) the welder's ITM_Microscope_Up may have a WWED record and the food-station events not (489 WWED records for
+thousands of events): sound_records --wwed-list writes every WWED (EditorID, FormID, GUID) to check.

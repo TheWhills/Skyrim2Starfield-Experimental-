@@ -284,7 +284,14 @@ def add_audio(afx: bytes, frame: int, foley: str) -> bytes:
     root = ET.fromstring(afx.decode("utf-8-sig"))
     auds = root.find("audios")
     if auds is None:
-        auds = ET.SubElement(root, "audios")
+        # where the shipped descriptors keep it: after <events>, before <variables> (2026-11-20: ours were appended
+        # after <variables> and stayed silent, the welder's in that place played; order not proven to matter)
+        auds = ET.Element("audios")
+        kids = list(root)
+        ev = root.find("events")
+        var = root.find("variables")
+        at = kids.index(ev) + 1 if ev is not None else (kids.index(var) if var is not None else len(kids))
+        root.insert(at, auds)
     au = ET.Element("audio")
     ET.SubElement(au, "frame").text = str(int(frame))
     ET.SubElement(au, "foley").text = foley
@@ -306,8 +313,11 @@ def add_event(afx: bytes, frame: int, name: str, payload: str = "") -> bytes:
     """The descriptor with one more <event> (kept in frame order; same layout as the shipped events)."""
     root = ET.fromstring(afx.decode("utf-8-sig"))
     evs = root.find("events")
-    if evs is None:
-        evs = ET.SubElement(root, "events")
+    if evs is None:                      # before <audios> / <variables>, as the shipped descriptors order them
+        evs = ET.Element("events")
+        kids = list(root)
+        nxt = next((k for k in kids if k.tag in ("audios", "variables")), None)
+        root.insert(kids.index(nxt) if nxt is not None else len(kids), evs)
     ev = ET.Element("event")
     for tag, val in (("frame", str(int(frame))), ("name", name), ("payload", payload)):
         ET.SubElement(ev, tag).text = val

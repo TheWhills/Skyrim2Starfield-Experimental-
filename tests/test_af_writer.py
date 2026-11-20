@@ -191,6 +191,11 @@ class SoundEventTests(unittest.TestCase):
         welder = b"<root><tag>E</tag><audios><audio><frame>139</frame><foley>ITM_Microscope_Up</foley></audio>" \
                  b"</audios></root>"
         self.assertEqual(list(ET.fromstring(AF.drop_audios(welder)).iter("audio")), [])
+        # the shipped order: events, audios, variables (an Idle with only variables gets both before them)
+        idle = b"<root><is_state>1</is_state><tag>Idle</tag><variables><variable><name>v</name></variable>" \
+               b"</variables></root>"
+        out = AF.add_audio(AF.add_event(idle, 7, "AnimObjDraw", "x"), 7, "S")
+        self.assertEqual([k.tag for k in ET.fromstring(out)], ["is_state", "tag", "events", "audios", "variables"])
 
 
 class PluginEventTests(unittest.TestCase):
