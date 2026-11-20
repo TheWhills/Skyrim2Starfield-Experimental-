@@ -1033,3 +1033,11 @@ template event's container (its bus, attenuation and conversion inherited), the 
 event, included in Starfield_XXX_Scratch (empty in vanilla), generated with WwiseConsole generate-soundbank and copied
 to <mod>\Sound\Soundbanks\1490023241.bnk. Unknown until in game: whether the game loads that bank, and the clips still
 need SoundPlay events in our descriptors.
+sound_bank in the CK project (owner, 2026-11-20, verified): the WAAPI part worked (five containers under
+...\Food_Station\NPC_Human_FoodStation_LeftSide, an Actor-Mixer; the scratch bank created - the CK project's banks are
+the 14 Starfield_* plus Starfield_XXX, no Scratch), but generate-soundbank stopped: "Trial mode: Maximum number of
+media items exceeded (28451 out of the 200 permitted)" (and no licence for Convolution Reverb in Init). So the bank is
+now built in a small project of our own (WwiseConsole create-new-project; 12 media, under the trial's 200): the CK
+project is only read for the template sound's inherited output bus, spatialization and attenuation radius, and our
+containers are routed to a bus of the same name (bus ids are name hashes, resolved against Starfield's own Init bank;
+ours is not shipped). --in-ck-project keeps the old route for a licensed Wwise.

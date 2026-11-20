@@ -200,6 +200,111 @@ def build(w: "Waapi", wavs: dict, template_event: str, bank: str) -> dict:
     return rep
 
 
+MASTER_BUS = "Master Audio Bus"
+OWN_PROJECT = "S2SSounds"
+
+
+def first_set(chain, override_key, value_key):
+    """The value of value_key on the first object of chain (the sound, then its ancestors) that overrides it
+    (override_key true) or, failing that, on the top one: how Wwise inherits output bus / positioning."""
+    for o in chain:
+        if o.get(override_key):
+            return o.get(value_key), o
+    return (chain[-1].get(value_key), chain[-1]) if chain else (None, None)
+
+
+def ref_name(v):
+    return v.get("name") if isinstance(v, dict) else v
+
+
+def read_template(w: "Waapi", template_event: str) -> dict:
+    """The bus, spatialization and attenuation radius a vanilla sound plays with (inherited down the Actor-Mixer
+    chain), read from the CK's project: our own project copies them (2026-11-20, owner's run: generating a bank in
+    the CK's project fails on the Wwise trial's 200-media limit, the project has 28451)."""
+    props = ("id", "name", "type", "path", "@OverrideOutput", "@OutputBus", "@OverridePositioning",
+             "@3DSpatialization", "@EnableAttenuation", "@Attenuation")
+    tpl = w.get(f'$ from type Event where name = "{template_event}" select children', ("id", "name", "@Target"))
+    target = next((a["@Target"] for a in tpl if a.get("@Target")), None)
+    if not target:
+        raise RuntimeError(f"template event {template_event}: no action target")
+    chain = w.get(f'$ "{target["id"]}"', props)
+    for _ in range(16):
+        up = w.get(f'$ "{chain[-1]["id"]}" select parent', props)
+        if not up or up[0]["type"] in ("WorkUnit", "Folder", "ProjectFolder"):
+            break
+        chain.append(up[0])
+    bus, bus_on = first_set(chain, "@OverrideOutput", "@OutputBus")
+    _sp, pos_on = first_set(chain, "@OverridePositioning", "@3DSpatialization")
+    att = pos_on.get("@Attenuation") if pos_on else None
+    radius = None
+    if isinstance(att, dict) and att.get("id"):
+        got = w.get(f'$ "{att["id"]}"', ("id", "name", "@RadiusMax"))
+        radius = got[0].get("@RadiusMax") if got else None
+    return {"sound": chain[0]["path"], "bus": ref_name(bus), "bus_from": bus_on["path"] if bus_on else None,
+            "spatialization": pos_on.get("@3DSpatialization") if pos_on else None,
+            "attenuation": ref_name(att), "radius": radius, "positioning_from": pos_on["path"] if pos_on else None}
+
+
+def own_container_args(event: str, bus_path: str, att_path: str, spatialization: int) -> dict:
+    a = container_args("\\Actor-Mixer Hierarchy\\Default Work Unit", event)
+    a.update({"@OverrideOutput": True, "@OutputBus": bus_path, "@OverridePositioning": True,
+              "@3DSpatialization": spatialization, "@EnableAttenuation": True, "@Attenuation": att_path})
+    return a
+
+
+def build_own(w: "Waapi", wavs: dict, bank: str, bus: str, radius: float, spatialization: int) -> dict:
+    """Our events in our own small project (under the trial's 200 media): containers routed to a bus of the vanilla
+    template's name (bus ids are name hashes, so it is Starfield's bus in game; our project's Init bank is not
+    shipped), 3D with an attenuation of the template's radius, in a bank named as Starfield's empty scratch bank."""
+    master = f"\\Master-Mixer Hierarchy\\Default Work Unit\\{MASTER_BUS}"
+    bus_path = master
+    if bus and bus != MASTER_BUS:
+        b = w.call("ak.wwise.core.object.create", {"parent": master, "type": "Bus", "name": bus,
+                                                    "onNameConflict": "merge"})
+        bus_path = w.get(f'$ "{b["id"]}"')[0]["path"]
+    att = w.call("ak.wwise.core.object.create", {"parent": "\\Attenuations\\Default Work Unit",
+                                                 "type": "Attenuation", "name": "S2S_Forge",
+                                                 "onNameConflict": "replace", "@RadiusMax": float(radius)})
+    att_path = w.get(f'$ "{att["id"]}"')[0]["path"]
+    rep = {"bus": bus_path, "attenuation": {"path": att_path, "radius": radius}, "events": {}}
+    ids = []
+    for ev, files in wavs.items():
+        if not files:
+            continue
+        cont = w.call("ak.wwise.core.object.create", own_container_args(ev, bus_path, att_path, spatialization))
+        cpath = w.get(f'$ "{cont["id"]}"')[0]["path"]
+        w.call("ak.wwise.core.audio.import", import_args(cpath, files))
+        for snd in w.get(f'$ "{cont["id"]}" select children'):
+            w.call("ak.wwise.core.object.setProperty", {"object": snd["id"], "property": "IsStreamingEnabled",
+                                                        "value": False})
+        e = w.call("ak.wwise.core.object.create", event_args(ev, cpath))
+        ids.append(e["id"])
+        rep["events"][ev] = {"container": cpath, "files": len(files), "id": WP.fnv1_32(ev)}
+    b = w.call("ak.wwise.core.object.create", {"parent": "\\SoundBanks\\Default Work Unit", "type": "SoundBank",
+                                                "name": bank, "onNameConflict": "merge"})
+    w.call("ak.wwise.core.soundbank.setInclusions", inclusion_args(w.get(f'$ "{b["id"]}"')[0]["path"], ids))
+    w.call("ak.wwise.core.project.save")
+    return rep
+
+
+def serve(wwise, wproj, port, fn):
+    """fn(Waapi) with a WwiseConsole waapi-server on wproj; the server stopped afterwards."""
+    server = subprocess.Popen([wwise, "waapi-server", wproj, "--allow-migration", "--wamp-port", str(port)],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        w = Waapi(f"ws://127.0.0.1:{port}/waapi")
+        try:
+            return fn(w)
+        finally:
+            w.close()
+    finally:
+        server.terminate()
+        try:
+            server.wait(60)
+        except subprocess.TimeoutExpired:
+            server.kill()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--skyrim-data", required=True)
@@ -212,7 +317,11 @@ def main(argv=None):
     ap.add_argument("--bank", default=BANK)
     ap.add_argument("--template-event", default=TEMPLATE_EVENT)
     ap.add_argument("--port", type=int, default=8095)
-    ap.add_argument("--fresh-project", action="store_true", help="copy Bethesda's project again")
+    ap.add_argument("--fresh-project", action="store_true", help="copy Bethesda's project / make ours again")
+    ap.add_argument("--in-ck-project", action="store_true",
+                    help="build in the CK's project itself (needs a Wwise licence: the trial stops at 200 media)")
+    ap.add_argument("--bus", help="output bus name (default: the template sound's, read from the CK project)")
+    ap.add_argument("--radius", type=float, help="attenuation radius in m (default: the template's)")
     a = ap.parse_args(argv)
     waapi_client()                                        # before the slow steps
     if not os.path.isfile(a.wwise):
@@ -221,32 +330,41 @@ def main(argv=None):
     wavs = extract(a.skyrim_data, events, os.path.join(a.work, "wav"), a.ffmpeg)
     print("sounds:", {k: len(v) for k, v in wavs.items()})
     src = os.path.join(a.starfield, "Tools", "wwise", "Starfield")
-    proj_dir = os.path.join(a.work, "project")
-    if a.fresh_project and os.path.isdir(proj_dir):
-        shutil.rmtree(proj_dir)
-    if not os.path.isdir(proj_dir):
-        shutil.copytree(src, proj_dir)
-    wproj = os.path.join(proj_dir, "Starfield.wproj")
-    server = subprocess.Popen([a.wwise, "waapi-server", wproj, "--allow-migration", "--wamp-port", str(a.port)],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
-        w = Waapi(f"ws://127.0.0.1:{a.port}/waapi")
-        try:
-            rep = build(w, wavs, a.template_event, a.bank)
-        finally:
-            w.close()
-    finally:
-        server.terminate()
-        try:
-            server.wait(60)
-        except subprocess.TimeoutExpired:
-            server.kill()
+    ck_dir = os.path.join(a.work, "project")
+    own_dir = os.path.join(a.work, OWN_PROJECT)
+    if a.fresh_project:
+        for d in (ck_dir, own_dir):
+            if os.path.isdir(d):
+                shutil.rmtree(d)
+    rep = {}
+    if a.in_ck_project or not (a.bus and a.radius):
+        if not os.path.isdir(ck_dir):
+            shutil.copytree(src, ck_dir)
+        ck_proj = os.path.join(ck_dir, "Starfield.wproj")
+    if a.in_ck_project:                                  # needs a Wwise licence for the CK's 28k media
+        rep = serve(a.wwise, ck_proj, a.port, lambda w: build(w, wavs, a.template_event, a.bank))
+        wproj = ck_proj
+    else:
+        tpl = {"bus": a.bus, "radius": a.radius, "spatialization": 1}
+        if not (a.bus and a.radius):
+            tpl = serve(a.wwise, ck_proj, a.port, lambda w: read_template(w, a.template_event))
+        rep["template"] = dict(tpl, event=a.template_event)
+        bus = a.bus or tpl.get("bus") or MASTER_BUS
+        radius = a.radius or tpl.get("radius") or 20.0
+        spatial = tpl.get("spatialization") or 1
+        wproj = os.path.join(own_dir, OWN_PROJECT + ".wproj")
+        if not os.path.isfile(wproj):
+            made = subprocess.run([a.wwise, "create-new-project", wproj, "--platform", "Windows"],
+                                  capture_output=True, text=True)
+            if not os.path.isfile(wproj):
+                sys.exit("create-new-project failed:\n" + (made.stdout + made.stderr)[-1500:])
+        rep.update(serve(a.wwise, wproj, a.port, lambda w: build_own(w, wavs, a.bank, bus, radius, spatial)))
     gen_dir = os.path.join(a.work, "generated")          # the project's own output path is Bethesda's build machine
     gen = subprocess.run([a.wwise, "generate-soundbank", wproj, "--bank", a.bank, "--platform", "Windows",
                           "--soundbank-path", "Windows", gen_dir], capture_output=True, text=True)
     # (2026-11-20, owner's run: generate-soundbank rejects --allow-migration; the WAAPI part had worked)
     rep["generate"] = {"returncode": gen.returncode, "tail": (gen.stdout + gen.stderr)[-1500:]}
-    bnk = find_bank_file(gen_dir, a.bank) or find_bank_file(os.path.join(proj_dir, "GeneratedSoundBanks"), a.bank)
+    bnk = find_bank_file(gen_dir, a.bank)
     if bnk:
         dst_dir = os.path.join(a.mod, "Sound", "Soundbanks")
         os.makedirs(dst_dir, exist_ok=True)
@@ -261,7 +379,7 @@ def main(argv=None):
         rep["bank"] = "not generated (see generate.tail)"
     with open(os.path.join(a.work, "sound_bank.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)
-    print(json.dumps({k: rep.get(k) for k in ("template", "bank_created_in", "bank")}, indent=1))
+    print(json.dumps({k: rep.get(k) for k in ("template", "bus", "attenuation", "bank")}, indent=1))
     print(f"-> {os.path.join(a.work, 'sound_bank.json')}")
     return 0
 

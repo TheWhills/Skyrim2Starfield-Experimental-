@@ -32,6 +32,18 @@ class SoundBankTests(unittest.TestCase):
         inc = B.inclusion_args("\\SoundBanks\\B", ["{1}"])
         self.assertEqual(inc["inclusions"][0]["filter"], ["events", "structures", "media"])
 
+    def test_inherited_settings(self):
+        chain = [{"path": "snd", "@OverrideOutput": False, "@OutputBus": {"name": "x"}},
+                 {"path": "mix", "@OverrideOutput": True, "@OutputBus": {"name": "Bus_NPC_Foley"}},
+                 {"path": "top", "@OverrideOutput": True, "@OutputBus": {"name": "Other"}}]
+        v, o = B.first_set(chain, "@OverrideOutput", "@OutputBus")
+        self.assertEqual((B.ref_name(v), o["path"]), ("Bus_NPC_Foley", "mix"))
+        v, o = B.first_set(chain[:1], "@OverrideOutput", "@OutputBus")                # none overrides: the top's
+        self.assertEqual(o["path"], "snd")
+        a = B.own_container_args("E", "\\Bus", "\\Att", 1)
+        self.assertEqual((a["@OutputBus"], a["@Attenuation"], a["@OverrideOutput"], a["@EnableAttenuation"]),
+                         ("\\Bus", "\\Att", True, True))
+
     def test_find_bank(self):
         with tempfile.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, "Windows"))
