@@ -1004,3 +1004,11 @@ and DEVT. So the throw animation's payload names a Wwise event itself, not a rec
 (hammer 4, distant 3, quench 1, quench drop 2, take 2, forge fire 1). Next: wwise_probe.py (which bank holds an
 event, by the FNV-1 hash of its name; whether banks are one per event, named by id) - decides whether our own event
 can go in a bank of ours.
+wwise_probe (owner, 2026-11-20, verified): the FNV-1 hash of "WPNGrenadeThrow" (2467229328) is an event in
+sound/soundbanks/2439430599.bnk (1643 events): an animation's SoundPlay payload is a Wwise event name, hashed by the
+game. Starfield has 33 .bnk (each file named by its bank id; 28 shared banks of hundreds to thousands of events,
+five that hold only a header - 1490023241, 2542214846, 2852227221 among them), 19 .json beside them
+(soundbanksinfo.json, plugininfo.json, one per bank) and 276,471 .wem. So "our own sound" = an event whose name we
+pick (the payload in our converted animation) in a bank the game loads, with our .wem. Open: which banks the game
+loads (all in the folder, or those listed in soundbanksinfo.json) - the json files say; and how to make the bank
+(the Creation Kit's Wwise project, Content/Tools/wwise/Starfield/Starfield.wproj, or cloned vanilla objects).

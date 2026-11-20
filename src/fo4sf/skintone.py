@@ -281,6 +281,21 @@ def median_colour(rgba):
     return tuple(int(x) for x in np.median(px, axis=0))
 
 
+def scale_linear(rgba, factors):
+    """rgba with each channel multiplied (linear light) by factors; detail and alpha kept (2026-11-20: a baked face
+    moved from its template's body tone to the NPC's by the ratio of the two body tone textures)."""
+    f = np.asarray(factors, np.float32)
+    out = linear_to_srgb(np.clip(srgb_to_linear(rgba[..., :3]) * f[None, None, :], 0.0, 1.0))
+    return np.concatenate([np.round(out).clip(0, 255).astype(np.uint8), rgba[..., 3:4]], -1)
+
+
+def tone_ratio(from_colour, to_colour):
+    """Per-channel factors (linear light) taking one sRGB colour to another."""
+    a = srgb_to_linear(np.array(from_colour, np.float32))
+    b = srgb_to_linear(np.array(to_colour, np.float32))
+    return tuple(float(x) for x in b / np.maximum(a, 1e-4))
+
+
 def match_median(rgba, target):
     """rgba with each channel scaled (linear light) so its median colour (median_colour) becomes target; detail and
     alpha kept (2026-11-12: a template's baked face recoloured to match the race's own face tone texture)."""

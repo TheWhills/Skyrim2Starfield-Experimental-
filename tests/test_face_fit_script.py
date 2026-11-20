@@ -764,20 +764,28 @@ class RaceNpcTests(unittest.TestCase):
             self.assertEqual(S.race_skin(subs, {"tones": None}, False, [1, 2, 3]), (subs, None, None))
 
     def test_human_face_colour(self):
-        """2026-11-12: templates chosen by face ethnicity first; a template whose skin tone is TONE_GAP or more from
-        the NPC's gets its baked face recoloured to the NPC's body tone (Starfield's body tone texture at its STON).
-        2026-11-19: TONE_GAP 0 - every baked face is recoloured (a template a step off still read warmer)."""
+        """2026-11-12: templates chosen by face ethnicity first; a template whose skin tone differs from the NPC's
+        gets its baked face recoloured. 2026-11-20: by the ratio of the two body tone textures (linear light), not to
+        the body texture's median: the same tone is left as the vanilla face; another tone moves every pixel, the
+        neck edge included, the way the body moves."""
         from fo4sf import skintone
         Z = lambda t: t.encode() + b"\0"                                                # noqa: E731
+        tone = lambda k: (220 - 20 * k, 170 - 15 * k, 140 - 12 * k)                    # noqa: E731
         body = {S.HUMAN_BODY_TONE[False].format(k=k): skintone.raw_dds(skintone.solid(
-            np.full((4, 4, 4), 255, np.uint8), (220 - 20 * k, 170 - 15 * k, 140 - 12 * k))) for k in range(9)}
+            np.full((4, 4, 4), 255, np.uint8), tone(k))) for k in range(9)}
         tpl = [(b"EDID", Z("t")), (b"STON", b"\x01")]
-        colour, info = S.human_face_colour(tpl, 1, False, body.__getitem__)     # 2026-11-19: same tone too
-        self.assertEqual((info["template_ston"], info["ston"]), (1, 1))
-        self.assertIsNotNone(colour)
+        self.assertEqual(S.human_face_colour(tpl, 1, False, body.__getitem__), (None, None))   # its own tone
         colour, info = S.human_face_colour(tpl, 7, False, body.__getitem__)
-        self.assertEqual((info["template_ston"], info["ston"]), (1, 7))
-        face = skintone.raw_dds(skintone.solid(np.full((4, 4, 4), 255, np.uint8), (200, 160, 130)))
+        self.assertEqual((info["template_ston"], info["ston"], info["how"]), (1, 7, "body tone ratio"))
+        # a face pixel the colour of the template's body becomes the NPC's body colour (the neck edge matches)
+        face = skintone.raw_dds(skintone.solid(np.full((4, 4, 4), 255, np.uint8), tone(1)))
         got = skintone.median_colour(skintone.decode_dds(colour(face)))
-        self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(got, (80, 65, 56))), got)
+        self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(got, tone(7))), got)
+        # a warmer face pixel stays warmer than the body by the same ratio (not pulled onto the body median)
+        warm = (200, 140, 100)
+        f = skintone.tone_ratio(tone(1), tone(7))
+        want = skintone.linear_to_srgb(skintone.srgb_to_linear(np.array(warm, np.float32)) * np.array(f, np.float32))
+        face = skintone.raw_dds(skintone.solid(np.full((4, 4, 4), 255, np.uint8), warm))
+        got = skintone.median_colour(skintone.decode_dds(colour(face)))
+        self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(got, want)), (got, want))
         self.assertEqual(S.human_face_colour(tpl, None, False, body.__getitem__), (None, None))

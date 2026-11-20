@@ -2563,3 +2563,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   distribution and the shape's mass property. Plan: write dynamic bodies that way (fields copied from a vanilla loose
   item, mass distribution from the hull); first test one converted Skyrim item. Sounds: animation payloads name Wwise
   events directly (no record); wwise_probe.py checks how banks hold events before we write one of our own.
+- 2026-11-20 Face colour (owner: Gerdur, Delphine and Saadia still show a seam on the upper chest where the head
+  mesh meets the body, the face side warmer / darker; faces.json verified: all three recoloured - Delphine 1 -> 0,
+  Saadia 1 -> 6, Ysolda 1 -> 1 - to the body tone texture's median). Cause (supported): matching the face's median to
+  the body's median is not matching the neck edge - a face's median carries lips, cheeks and make-up, so the face
+  shifts by the wrong amount. Now human_face_colour moves the face by the per-channel factors (linear light) that take
+  the template's body tone texture to the NPC's (skintone.tone_ratio / scale_linear, race_heads.face_scale): the
+  vanilla template's face matches its own body tone at the neck and keeps matching after the move; same tone = no
+  change (TONE_GAP 1 again). Alternative if a seam remains: match the head texture's neck-edge band to the body
+  texture under it (geometry: head and body UVs at the seam). In game unverified.

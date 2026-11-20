@@ -10,6 +10,11 @@ bank ids and events (one bank per event, named by its id, or shared banks) - whi
 added as a bank of our own.
 
     python -I scripts\\armor\\wwise_probe.py --sf-data "<Starfield>\\Data" --out C:\\Modding\\work\\sound
+
+2026-11-20 first run (owner, verified): WPNGrenadeThrow's hash is an event in bank 2439430599 (1643 events): the
+payload is the event's own name. 33 banks (+ 19 .json beside them), each file named by its bank id, 28 shared banks of
+100s-1000s of events, 5 with a header only; 276k .wem. Second version: the .json files copied out (json/<archive>/)
+and each sampled bank's archive.
 """
 import argparse
 import collections
@@ -107,6 +112,11 @@ def main(argv=None):
             exts[ext] += 1
             if ext not in (".bnk", ".wem") and len(rep["other_files"]) < 60:
                 rep["other_files"].append(nm)
+            if ext == ".json":                     # 2026-11-20: the banks' info files (bank names, event names)
+                jdir = os.path.join(a.out, "json", os.path.splitext(os.path.basename(arc.path))[0])
+                os.makedirs(jdir, exist_ok=True)
+                with open(os.path.join(jdir, os.path.basename(nm)), "wb") as fh:
+                    fh.write(arc.read(i))
             if ext != ".bnk" or (a.max_banks and done >= a.max_banks):
                 continue
             try:
@@ -121,8 +131,8 @@ def main(argv=None):
             rep["name_is_bank_id"] += num is not None and num == info["bank_id"]
             rep["name_is_an_event"] += num is not None and num in info["events"]
             per_bank[min(len(info["events"]), 10)] += 1
-            if len(rep["bank_samples"]) < 25:
-                rep["bank_samples"].append({"file": nm, "version": info["version"], "bank_id": info["bank_id"],
+            if len(rep["bank_samples"]) < 40:
+                rep["bank_samples"].append({"archive": os.path.basename(arc.path), "file": nm, "version": info["version"], "bank_id": info["bank_id"],
                                             "chunks": info["chunks"], "hirc": dict(info["objects"]),
                                             "events": info["events"][:8], "media": info["media"]})
             for ev in info["events"]:

@@ -1319,25 +1319,32 @@ def template_skin(subs):
 # Starfield's body skin tone textures (owner's skin tone probe 2026-11-11), slot k = STON k
 HUMAN_BODY_TONE = {False: "textures/actors/human/naked_body/nakedbodym_sk{k}_color.dds",
                    True: "textures/actors/human/naked_body/nakedbodyf_sk{k}_color.dds"}
-# template skin tone this many steps or more from the NPC's: its baked face recoloured. 0 = always (2026-11-19, owner:
-# the women's faces warmer / darker than their necks and hands; faces.json: of Hilde, Gerdur, Delphine, Ysolda and
-# Sigrid only Hilde's face was recoloured (template tone 2, hers 0) - the one whose face matched; the others kept
-# their template's face, within a step of their tone but not of their body's colour). Was 2.
-TONE_GAP = 0
+# template skin tone this many steps or more from the NPC's: its baked face recoloured. 2026-11-19 it was 0 (always,
+# the faces then matched to the body texture's median); 2026-11-20 back to 1: the recolour is now the ratio of the two
+# body tone textures, which is no change at the same tone (the vanilla template's face, made for that body tone).
+TONE_GAP = 1
 
 
 def human_face_colour(tpl_subs, ston, female, read):
-    """bytes -> bytes recolouring a template's baked face to the body tone the NPC gets (the median colour of
-    Starfield's body tone texture at its STON), or None when the template's own tone is within TONE_GAP - 1 of it.
-    2026-11-12: the template is now chosen by face ethnicity first, so a dark Nord can get a pale European template
-    whose baked face (what a non-player NPC shows) would not match its body."""
+    """bytes -> bytes recolouring a template's baked face to the body tone the NPC gets, or None when the template's
+    own tone is within TONE_GAP - 1 of it. 2026-11-12: the template is chosen by face ethnicity first, so a dark Nord
+    can get a pale European template whose baked face (what a non-player NPC shows) would not match its body.
+    2026-11-20 (owner: Gerdur, Delphine, Saadia - all recoloured per faces.json - still show a seam where the head
+    meets the chest, the face side warmer / darker): was "scale the face until its median is the body texture's
+    median", but a face's median is not its neck edge's colour (lips, cheeks, make-up), so the edge missed the body.
+    Now the face is moved by the same per-channel factors (linear light) that take the template's body tone texture
+    to the NPC's: a vanilla baked face matches its own body tone at the neck, and keeps matching after the move."""
     tpl_ston = template_skin(tpl_subs)[0]
     if ston is None or tpl_ston is None or abs(tpl_ston - ston) < TONE_GAP:
         return None, None
     from fo4sf import skintone
     import race_heads as rh
-    target = skintone.median_colour(skintone.decode_dds(read(HUMAN_BODY_TONE[female].format(k=ston))))
-    return rh.face_tone(target), {"template_ston": tpl_ston, "ston": ston, "face_target": list(target)}
+    med = lambda k: skintone.median_colour(skintone.decode_dds(read(HUMAN_BODY_TONE[female].format(k=k))))  # noqa
+    have, want = med(tpl_ston), med(ston)
+    factors = skintone.tone_ratio(have, want)
+    return rh.face_scale(factors), {"template_ston": tpl_ston, "ston": ston, "how": "body tone ratio",
+                                    "template_body": list(have), "body": list(want),
+                                    "factors": [round(x, 4) for x in factors]}
 
 
 # Every converted NPC's template and face skin texture are of one ethnicity, the generic western one (2026-11-12,

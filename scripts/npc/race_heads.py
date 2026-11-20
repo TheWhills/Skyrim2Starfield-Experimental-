@@ -1672,6 +1672,17 @@ def face_tone(target, texconv=""):
     return convert
 
 
+def face_scale(factors, texconv=""):
+    """bytes -> bytes for a baked face colour texture: every channel multiplied (linear light) by factors
+    (skintone.scale_linear), written uncompressed RGBA8 sRGB (2026-11-20: a template's face moved to another body
+    tone by the ratio of the two body tone textures, so its neck edge keeps matching the body as in vanilla)."""
+    from fo4sf import skintone
+
+    def convert(data):
+        return skintone.raw_dds(skintone.scale_linear(decode_any_dds(data, texconv), factors))
+    return convert
+
+
 def face_targets(tone_textures, out, rank=RACE_TONE_DEFAULT, kind="body"):
     """{female: sRGB median colour} of a race's written `kind` tone textures of slot `rank` (write_skin_tones' result
     keys, e.g. textures/s2s/races/orc/body/male_sk4_color.dds). Body by default (2026-11-12, owner: matched to the
