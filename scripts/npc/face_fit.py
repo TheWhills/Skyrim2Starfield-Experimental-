@@ -1936,6 +1936,10 @@ def add_child_hair_files(a, out, sky, sf_data, rows, by_edid, recs, test_subs, m
                 pre = own_hair_lift(row)
                 info["from"] = (f"its hair head part's models ({', '.join(models)})" if main else
                                 "its FaceGen NIF (the head part's models not readable)")
+                if main and hasattr(sky, "source_of"):    # which mod folder / archive the mesh came from (2026-11-19:
+                    # the remake search took the RS children's wig mod and the vanilla mesh was used, unnoticed)
+                    rel = "meshes\\" + re.sub(r"^meshes[\\/]", "", models[0].replace("/", "\\"), flags=re.I)
+                    info["mesh_from"] = sky.source_of(rel) or "?"
             head_nif = next((f for f in files if f.lower().endswith(f"/{row['edid'].lower()}head.nif")), None)
             surface = child_hair.baked_surface(a.starfield, out, head_nif) if head_nif else None
             if not child and main:

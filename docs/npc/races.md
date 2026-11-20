@@ -862,3 +862,10 @@ why the mod needs no clothes of its own.
   looks_menu_lists then rewrites S2SLooksMenu.esm with it (enable it, loaded after S2SFaceTest.esm). The NPC
   himself keeps the reshaped shared hairstyle. The looks-menu copy is fitted to his elf head, so on a human player
   it sits as on him, not as made for that head.
+  Owner's comparison run (22:10-22:11, looks-menu shots + log): the rebuilt copy had 745 vertices = the vanilla
+  MaleDarkElfHair09 (568) + shaved (72) + hairline (105), not the remake's 1,750: the command's $vhr search ("hair
+  remake" in the MO2 folder name) took "SMP Vanilla Hair Remake wigs for RS Children (SPID)" first, which has no
+  adult Dark Elf hair, so the vanilla mesh was read. The same search fed the earlier per-NPC "remake" Faendal, so
+  that thin version was most likely the vanilla mesh too - which matches what the owner saw (coarse, jagged, unlike
+  the remake). The search now skips child / wig folders, and the report gives own_hair / hair_compare mesh_from (the
+  mod folder or archive the mesh was read from).
