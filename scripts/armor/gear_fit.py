@@ -57,7 +57,8 @@ def shape_materials(conv, nif_bytes: bytes, targets=None) -> dict:
     for s in skyrimskin.skinned_shapes(n):
         name = s.name.decode("latin-1", "replace")
         try:
-            out[name] = conv._shape_material(n, s, albedo_target=(targets or {}).get(name))
+            target = (targets or {}).get(name)
+            out[name] = conv._shape_material(n, s, **({"albedo_target": target} if target is not None else {}))
         except Exception as e:                           # report, keep going: the shape keeps the fallback material
             conv.material_errors[name] = f"{type(e).__name__}: {e}"
             out[name] = None

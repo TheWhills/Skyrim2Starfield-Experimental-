@@ -499,7 +499,8 @@ class SkyrimConverter(pipeline.Converter):
         if not normal and not (blend and not test) and not flat_normal_ok:
             return self.neutral
         mat = self.skyrim_material(paths[0], normal, test, blend, ref, flat_normal_ok=flat_normal_ok,
-                                   albedo_tint=albedo_tint, albedo_target=albedo_target)
+                                   albedo_tint=albedo_tint,
+                                   **({"albedo_target": albedo_target} if albedo_target is not None else {}))
         if mat is None and blend and not test:
             return None                               # an overlay we could not convert: leave it out, as FO4 does
         return mat or self.neutral
