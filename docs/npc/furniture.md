@@ -1099,3 +1099,8 @@ sounds when he hammers"). So the descriptor order mattered: every earlier silent
 S2S_Sounds, the swapped food-station files) had <audios> after <variables> and proves nothing about the sound side.
 Next, one run tests both routes: hammer -> our own bank's NPCHumanBlacksmithHammer (S2S_Sounds + soundbanksinfo.json),
 quench / drop / take / bellows -> the swapped food-station events.
+Control 2 (owner, 2026-11-20 13:51, verified): the unreplaced vanilla NPC_Human_FoodStation_Drawer_Close (Discard)
+and ITM_Microscope_Up (take) play from the forge's <audio> foley; the three events whose .wem files sound_swap
+replaced (hammer, quench, bellows) are silent. So vanilla NPC events play from our clips and the replacement files are
+not decoded (Vorbis from convert-external-source vs whatever codec the bank names). wem_info.py prints a vanilla file's
+header next to ours.
