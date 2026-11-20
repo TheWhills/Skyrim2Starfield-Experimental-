@@ -64,4 +64,4 @@ python -I scripts\terrain\time_sync.py --starfield $SF --out $Mod
 if ($LASTEXITCODE -ne 0) { Fail "time_sync.py" }
 
 Write-Host "`nDone: $Mod (S2STimeSync.esm + Scripts\S2S_LocalTimeSync.pex). Enable the mod and the plugin in MO2." -ForegroundColor Green
-Write-Host "In game on Nirn: the status screen's LOCAL TIME should match UT within a minute or two after loading." -ForegroundColor Green
+Write-Host "In game on Nirn: the status screen's LOCAL TIME should read 1.5 hours behind UT (SunLagHours) within a minute or two after loading." -ForegroundColor Green
