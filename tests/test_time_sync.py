@@ -74,6 +74,10 @@ class TimeSyncTests(unittest.TestCase):
         for call in ("Game.SetLocalTime(", "Game.GetLocalTime()", "Utility.GetCurrentGameTime()",
                      "StartTimer(", "GetCurrentPlanet()", '"SkyrimTerrainTamriel_Mars.esm"'):
             self.assertIn(call, src)
+        # 2026-11-20: the sun runs SunLagHours behind the schedules' clock (wrapped into 0..24)
+        self.assertIn("Float Property SunLagHours = 1.5 Auto Const", src)
+        self.assertIn("* 24.0 - SunLagHours", src)
+        self.assertIn("hour += 24.0", src)
 
 
 if __name__ == "__main__":

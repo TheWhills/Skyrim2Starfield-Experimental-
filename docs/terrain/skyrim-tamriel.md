@@ -361,6 +361,12 @@ script block copied from a vanilla one-script quest, only the name ours). Unveri
 GetCurrentPlanet, SetLocalTime's parameters), the quest starting in an existing save, SetLocalTime's cost. The console
 passtime N passed odd amounts (1 -> 30 min, later 1 -> 5.5 h): use the Wait menu for timing tests.
 
+Evenings (2026-11-20, owner: "the sun sets between 15:00 and 16:00 ... do the planet tilt, so that the sun sets round
+6-7PM or even 7-8PM, it gets sooo dark"): axial tilt 0 (set_planet_latlon --axial-tilt-deg 0) makes the day 12 hours
+at every latitude all year (sun up at local 6:00, down at 18:00; the early sunset was Earth's 23 deg tilt in winter at
+Skyrim's latitude), and S2S_LocalTimeSync now keeps the sun SunLagHours = 1.5 behind the game clock: sunrise 7:30,
+sunset 19:30 on the schedules' clock. Unverified in game (and the time sync itself still is).
+
 Landing elsewhere (2026-11-15, owner: "could we change our landing spot on the planet to the Throat of the World").
 scripts/terrain/set_landing.py: a Skyrim location's world location marker (LCTN MNAM) or --at X Y gives the place;
 skyrimsite.flat_site picks the flattest dry 80 m square within --radius (default 600 m: the summit is steep, the
