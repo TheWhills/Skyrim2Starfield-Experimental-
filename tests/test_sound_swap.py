@@ -96,5 +96,20 @@ class SwapTests(unittest.TestCase):
         self.assertEqual(len(set(S.SWAP.values())), len(S.SWAP))
 
 
+class LoopTests(unittest.TestCase):
+    def test_tile_repeats_and_cuts(self):
+        x = np.array([[0.1], [0.2], [0.3]], np.float32)
+        t = S.tile(x, 10, 0.8)
+        self.assertEqual(t.shape, (8, 1))
+        np.testing.assert_allclose(t[:, 0], [0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2])
+        self.assertEqual(len(S.tile(x, 10, 0.2)), 2)
+        self.assertEqual(len(S.tile(x[:0], 10, 1.0)), 0)
+
+    def test_grindstone_loops_cover_the_spin(self):
+        import furniture_anim_pack as FP
+        for _t, _rel, snd in FP.OBJECT_SOUNDS["blacksmithsharpeningwheelspin.hkx"]:
+            self.assertAlmostEqual(S.LOOPS[snd], 274 / 30, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

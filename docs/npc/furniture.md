@@ -1134,3 +1134,12 @@ a graph of its own) or a sound record outside the character graph. object_sound_
 text keys), the non-character graphs matching sharpen / grind / wheel (triggers, state events), their clips'
 annotations and the matching SOUN / SNDR records; asked for. Next: those sounds on the Grindstone set's descriptors
 through sound_swap like the others.
+Owner's object_sound_probe (2026-11-20 14:14, verified): the wheel model names
+meshes\furniture\clutter\blacksmithsharpeningwheelanimating\behaviors\behavior00.hkx (Idle 2.0 s / Spin 9.13 s
+states; text keys start 0, end 9.1333). Its Spin state plays SoundPlay.NPCHumanBladeGrindPedalLP on enter and
+SoundStop on exit; its Spin clip triggers SoundPlay.NPCHumanBladeGrindLPM at 0, stopped on entering Idle. Files:
+npc_human_bladegrind_pedal_lp.wav (184650 bytes), npc_human_bladegrind_lpm.wav (272412 bytes). **Built:**
+furniture_anim_pack.OBJECT_SOUNDS adds both to the character's Spin clip (skyrim_clip_sounds -> with_object_sounds), so
+the Grindstone Idle and its 9 flavors get two <audio> foley entries at frame 0; sound_swap gives them pool events and
+tiles each loop to 9.1333 s (LOOPS, tile), so one Spin plays one clip-long one-shot. Cost: walking away mid-Spin
+lets the sound finish (up to 9 s). In game unverified.

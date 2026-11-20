@@ -38,6 +38,24 @@ SWAP = {"NPCHumanBlacksmithHammer": "NPC_Human_FoodStation_Stockpot_Fidget",    
         "OBJBlacksmithForge": "NPC_Human_FoodStation_Heat_Off"}                        # 1
 
 
+# Skyrim loops (SoundPlay ... SoundStop) carried by one-shot events: tiled to this many seconds, the clip the loop runs
+# under, and played again each time the clip loops (furniture_anim_pack.OBJECT_SOUNDS: from frame 0 of the
+# sharpening wheel's Spin, 9.1333 s = 275 frames at 30 (274 intervals), the wheel model's text keys). Leaving the furniture mid-clip
+# lets the sound run to the tile's end (up to 9 s): a one-shot has no stop.
+LOOPS = {"NPCHumanBladeGrindLPM": 9.1333, "NPCHumanBladeGrindPedalLP": 9.1333}
+
+
+def tile(samples, rate: int, seconds: float):
+    """The sound repeated end to end and cut to `seconds` (a loop file made into one clip-long one-shot)."""
+    import numpy as np
+    x = np.asarray(samples, np.float32)
+    x = x[:, None] if x.ndim == 1 else x
+    n = int(round(seconds * rate))
+    if not len(x) or n <= 0:
+        return x[:0]
+    return np.tile(x, (-(-n // len(x)), 1))[:n]
+
+
 POOL_PATHS = ("\\Crafting_Events\\", "\\Furniture\\")
 
 
@@ -205,6 +223,8 @@ def main(argv=None):
     for sky, ev in swap.items():
         targets = files.get(ev, [])
         row = {"event": ev, "skyrim_files": len(wavs.get(sky, [])), "replaced": [], "shared": {}}
+        if sky in LOOPS:
+            row["loop_tiled_to_s"] = LOOPS[sky]
         for tid, wav in assign(wavs.get(sky, []), targets):
             if tid not in vanilla:
                 row.setdefault("failed", []).append(f"{tid}: vanilla file not found")
@@ -212,7 +232,10 @@ def main(argv=None):
             try:
                 if wav not in loaded:
                     loaded[wav] = read_wav(wav)
-                data = pcm_wem(vanilla[tid], *loaded[wav])
+                smp, rate = loaded[wav]
+                if sky in LOOPS:
+                    smp = tile(smp, rate, LOOPS[sky])
+                data = pcm_wem(vanilla[tid], smp, rate)
             except Exception as e:                        # noqa: BLE001
                 row.setdefault("failed", []).append(f"{os.path.basename(wav)}: {e}")
                 continue
@@ -232,6 +255,7 @@ def main(argv=None):
         json.dump(rep, fh, indent=1)
     for sky, r in rep["sounds"].items():
         print(f"{sky} -> {r['event']}: {len(r['replaced'])} files"
+              + (f" (loop, {r['loop_tiled_to_s']} s)" if r.get("loop_tiled_to_s") else "")
               + (f", FAILED {r['failed']}" if r.get("failed") else "") + (f", {r['error']}" if r.get("error") else "")
               + (f", shared with {r['shared']}" if r["shared"] else ""))
     for st, ns in by_set.items():

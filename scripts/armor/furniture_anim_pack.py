@@ -249,8 +249,37 @@ def trigger_sounds(behavior: dict) -> dict:
     return out
 
 
+# Sounds Skyrim plays from the furniture object's own graph, not the character's: {character clip (lower): [(seconds,
+# relative_to_end, sound)]}. 2026-11-20 (owner's object_sound_probe, verified): the sharpening wheel's character clips
+# have no sound; the wheel model (BlacksmithSharpeningWheelAnimating.nif) names
+# furniture\clutter\blacksmithsharpeningwheelanimating\behaviors\behavior00.hkx, whose Spin state plays
+# NPCHumanBladeGrindPedalLP on enter (SoundStop on exit) and whose Spin clip (9.13 s, as the character's) triggers
+# NPCHumanBladeGrindLPM at 0 (stopped when the Idle state is entered). Both loops: sound_swap.LOOPS tiles them to the
+# clip's length, played once per Spin from frame 0.
+OBJECT_SOUNDS = {"blacksmithsharpeningwheelspin.hkx": [(0.0, False, "NPCHumanBladeGrindLPM"),
+                                                       (0.0, False, "NPCHumanBladeGrindPedalLP")]}
+
+
 def skyrim_clip_sounds(sky_data: str, clip_names) -> dict:
-    """trigger_sounds over Skyrim's character behaviour graphs that name one of clip_names (bytes searched first)."""
+    """trigger_sounds over Skyrim's character behaviour graphs that name one of clip_names (bytes searched first),
+    with OBJECT_SOUNDS added for the clips whose sound the furniture object plays (with_object_sounds)."""
+    return with_object_sounds(_character_clip_sounds(sky_data, clip_names), clip_names)
+
+
+def with_object_sounds(found: dict, clip_names, table=None) -> dict:
+    """found plus the object-graph sounds (OBJECT_SOUNDS) of the wanted clips, each sound once per clip."""
+    table = OBJECT_SOUNDS if table is None else table
+    out = {k: list(v) for k, v in found.items()}
+    for c in {c.lower() for c in clip_names}:
+        for row in table.get(c, []):
+            if all(r[2] != row[2] for r in out.get(c, [])):
+                out.setdefault(c, []).append(row)
+        if c in out:
+            out[c] = sorted(set(out[c]))
+    return out
+
+
+def _character_clip_sounds(sky_data: str, clip_names) -> dict:
     from fo4sf import bsa
     from fo4sf import skyrimbehavior as SB
     want = {c.lower() for c in clip_names}

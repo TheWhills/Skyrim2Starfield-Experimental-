@@ -556,6 +556,28 @@ class PlainStationsTest(unittest.TestCase):
         self.assertIn("mv & ~0x00800000L", cs)                 # MNAM "Enter With Weapon Drawn" (the wrench template)
 
 
+class ObjectSoundTests(unittest.TestCase):
+    def test_object_sounds_added_once(self):
+        table = {"spin.hkx": [(0.0, False, "WheelLP")]}
+        got = P.with_object_sounds({"spin.hkx": [(1.0, False, "Other")], "x.hkx": [(0.5, False, "X")]},
+                                    ["Spin.hkx", "x.hkx"], table)
+        self.assertEqual(got["spin.hkx"], [(0.0, False, "WheelLP"), (1.0, False, "Other")])
+        self.assertEqual(got["x.hkx"], [(0.5, False, "X")])
+        again = P.with_object_sounds(got, ["spin.hkx"], table)
+        self.assertEqual(again["spin.hkx"], got["spin.hkx"])
+        self.assertNotIn("spin.hkx", P.with_object_sounds({}, ["other.hkx"], table))
+
+    def test_grindstone_spin_gets_the_wheel_sounds(self):
+        got = P.with_object_sounds({}, ["blacksmithsharpeningwheelspin.hkx"])
+        self.assertEqual({r[2] for r in got["blacksmithsharpeningwheelspin.hkx"]},
+                         {"NPCHumanBladeGrindLPM", "NPCHumanBladeGrindPedalLP"})
+        rows = P.sound_event_rows([{"template": "idle.afx", "clip": "x\\blacksmithsharpeningwheelspin.hkx",
+                                     "frames": 275}], got)
+        self.assertEqual(sorted(n for _f, _e, n in rows["idle"]),
+                         ["NPCHumanBladeGrindLPM", "NPCHumanBladeGrindPedalLP"])
+        self.assertTrue(all(f == 0 for f, _e, _n in rows["idle"]))
+
+
 if __name__ == "__main__":
     unittest.main()
 
