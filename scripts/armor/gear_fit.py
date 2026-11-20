@@ -121,6 +121,8 @@ HAND_COVER_DEPTH = 0.03  # m: a hands vertex with the item this close straight o
 HAND_MARGIN = 2         # rings of covered forearm kept under the item's edge (no gap at the cuff) ...
 HAND_MARGIN_M = 0.01    # ... and at most this far from the bare forearm
 ARM_BONES = ("Forearm", "Wrist_Twist")   # the hands mesh's forearm part (not L_Wrist / the fingers)
+HAND_CLEAR_REACH = 0.03   # m: item points this close to the hand skin are checked ...
+HAND_CLEAR_UNDER = 0.008  # ... and pushed out only from at most this deep under it
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
@@ -526,6 +528,42 @@ def hand_skin_mask(hand_pts, hand_tris, hand_w, samples, item, uvs=None) -> np.n
     return keep
 
 
+def clear_hand_skin(item, hand_skin) -> int:
+    """Push the item's shapes (skeleton space, in place) at least gearfit.GAP off the hand skin piece where they sit
+    in or on it (gearfit.conform_push, smoothed). Returns the vertices moved."""
+    from fo4sf import skyrimhair
+    hp = np.asarray(hand_skin.positions, float)
+    ht = np.asarray(hand_skin.triangles, int).reshape(-1, 3)
+    if not len(ht):
+        return 0
+    hn = skyrimhair._vertex_face_normals(hp, ht)
+    hn /= np.maximum(np.linalg.norm(hn, axis=1, keepdims=True), 1e-12)
+    moved = 0
+    for sh in item:
+        pts = np.asarray(sh.positions, float)
+        tris = np.asarray(sh.triangles, int).reshape(-1, 3)
+        if not len(pts) or not len(tris):
+            continue
+        _c, dep, dist, nrm = gearfit.closest_on_mesh(pts, hp, ht, hn, with_normals=True)
+        # only points on or just under the skin: the piece is an open patch, so a point on the far side of the
+        # wrist would read as deep inside it and be thrown through the hand
+        need = np.where((dist < HAND_CLEAR_REACH) & (dep > -HAND_CLEAR_UNDER), np.maximum(gearfit.GAP - dep, 0.0), 0.0)
+        if need.max() <= 1e-4:
+            continue
+        push = nrm * need[:, None]
+        e = np.unique(np.sort(np.concatenate([tris[:, [0, 1]], tris[:, [1, 2]], tris[:, [2, 0]]]), 1), axis=0)
+        for _r in range(2):                        # spread a little so the cloth rises, not single vertices
+            acc, cnt = push.copy(), np.ones(len(pts))
+            np.add.at(acc, e[:, 0], push[e[:, 1]])
+            np.add.at(acc, e[:, 1], push[e[:, 0]])
+            np.add.at(cnt, e.ravel(), 1)
+            avg = acc / cnt[:, None]
+            push = np.where((np.linalg.norm(push, axis=1) >= np.linalg.norm(avg, axis=1))[:, None], push, avg)
+        sh.positions = pts + push
+        moved += int((np.linalg.norm(push, axis=1) > 1e-4).sum())
+    return moved
+
+
 def forearm_only(hand_pts, hand_tris, hand_w):
     """(points, triangles, weights) of the hands mesh's forearm part (ARM_BONES >= half the weight): the only part of
     the hands an item that hides them is pushed out of and takes weights from (2026-11-20, owner: Gerdur's glove
@@ -877,6 +915,12 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
                                            "from": sorted(hand_skin_names),
                                            "hands": hand_path}
                 res.report["_hand_skin"] = (h_used, h_mesh, dict(hand_binds_m))
+                # the item clears the hand skin it keeps (2026-11-20, owner: skin through Gerdur's glove at the
+                # wrist: fitted against the hands' forearm part only, the glove sat in the wrist-opening skin)
+                moved = clear_hand_skin(item, hs)
+                res.report["hand_skin"]["item_vertices_cleared"] = moved
+                if moved:
+                    print(f"  item pushed off the hand skin: {moved} vertices")
     if skin_names:                           # Skyrim's bare-skin pieces
         drop = {n for n in res.report["shapes"] if n in set(skin_names)}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]

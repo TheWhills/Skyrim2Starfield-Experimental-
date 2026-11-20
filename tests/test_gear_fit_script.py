@@ -198,6 +198,24 @@ class ScriptTests(unittest.TestCase):
         nothing = gear_fit.hand_skin_mask(pts, tris, w, np.zeros((0, 3)), [glove])
         self.assertFalse(any(nothing[i] for i in range(len(pts)) if pts[i][0] > 0.14))
 
+    def test_clear_hand_skin(self):
+        """2026-11-20 (skin through Gerdur's glove at the wrist): item points on or just under the hand skin go GAP
+        off it; points on the far side of the hand (deep under the open patch) are left alone."""
+        import numpy as np
+        from fo4sf import gearfit, skyrimhair
+        hp = np.array([[0, 0, 0], [0.04, 0, 0], [0, 0.04, 0], [0.04, 0.04, 0]], float)     # a patch, normals +z
+        hs = skyrimhair.HairShape(b"S2S_HandSkin", hp, np.tile([0, 0, 1.0], (4, 1)), np.zeros((4, 3)), [],
+                                  [(0, 1, 2), (1, 3, 2)], [], -1, -1, -1)
+        gp = np.array([[0.02, 0.02, -0.002], [0.025, 0.02, 0.001], [0.02, 0.025, -0.025]], float)
+        glove = skyrimhair.HairShape(b"Glove", gp.copy(), np.zeros((3, 3)), np.zeros((3, 3)), [], [(0, 1, 2)], [],
+                                     -1, -1, -1)
+        moved = gear_fit.clear_hand_skin([glove], hs)
+        z = np.asarray(glove.positions)[:, 2]
+        self.assertGreaterEqual(moved, 2)
+        self.assertGreaterEqual(z[0], gearfit.GAP - 1e-6)                 # was 2 mm under: now GAP over
+        self.assertGreaterEqual(z[1], gearfit.GAP - 1e-6)
+        self.assertLess(z[2], -0.02)                                      # 2.5 cm under: the far side, left
+
     def test_forearm_only(self):
         """2026-11-20 (Gerdur's glove fingers stretched): an item that hides the hands is fitted against the hands'
         forearm part only, not Starfield's fingers."""

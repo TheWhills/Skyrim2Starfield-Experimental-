@@ -2549,3 +2549,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   weights (mapped by skeletonmap) and are not pushed by Starfield's fingers. Both sexes (hand items, as decided).
   Unverified in game; if the fingers still look wrong, next: gear_fit_Items_ClothesFarmGloves03_F.json's
   hand_bind_offsets_mm (which hand bones sit 25 mm off the skeleton).
+- 2026-11-20 Owner: glove fingers better; skin clipping through the glove at the wrist. Cause (supported): since
+  forearm_only the glove is not pushed off the hand part of the hands mesh, but the hand skin keeps the hand near
+  Skyrim's wrist-opening skin. Now after the hand skin is cut, clear_hand_skin pushes the item's points that lie on
+  or at most HAND_CLEAR_UNDER 8 mm under it (within 3 cm) out to gearfit.GAP, spread over two rings; deeper points
+  (the far side of the hand under an open patch) are left. Report: hand_skin.item_vertices_cleared.
