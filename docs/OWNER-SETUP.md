@@ -294,6 +294,13 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ChildRace ...". Then 7k's face_fit line and the Riverwood build again (the children's records now name those
    outfits; faces.json test_npc.outfit / item_outfit per child). In game: Dorthe and Frodnar in their own clothes -
    size, gaps or skin through them, the skin colour at the bare arms / neck.
+7p. B + C (2026-11-20): wine bottle item test (docs/interior/items.md). Starfield closed:
+   ```powershell
+   git pull
+   python -I scripts\interior\item_test.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Item Test"
+   ```
+   Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
+   tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
