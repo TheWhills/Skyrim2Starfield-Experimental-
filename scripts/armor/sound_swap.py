@@ -7,7 +7,8 @@ an <audio> foley of the same descriptors (the welder's ITM_Microscope_Up) played
 Data\\Sound\\Soundbanks replace a vanilla streamed file (Nexus sound mods). So each Skyrim sound gets a vanilla NPC
 event of Starfield_NPC (13 m, the crafting workbench bus, loaded by the game) whose streamed files no other event uses
 - food-station sounds, so a Starfield NPC cooking would hear the forge - and Skyrim's file(s), converted to .wem as the
-voices are (WwiseConsole convert-external-source, the CK's project, Vorbis Quality High), take those files' ids. The
+voices are, take those files' ids - 2026-11-20 (owner's wem_info): written as PCM in the vanilla file's own
+format (pcm_wem), since Vorbis replacements stayed silent. The
 forge descriptors then name the vanilla event (furniture_anim_pack --sound-map <work>\\sound_swap.json).
 
     python -I scripts\\armor\\sound_swap.py --skyrim-data "<Skyrim>\\Data" --starfield "<Starfield>" ^
@@ -17,7 +18,7 @@ import argparse
 import collections
 import json
 import os
-import shutil
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,12 +55,75 @@ def assign(ours: list, targets: list) -> list:
     return [(t, ours[k % len(ours)]) for k, t in enumerate(targets)] if ours else []
 
 
-def to_wem(wav: str, wwise: str, project: str, scratch: str):
-    """One .wav -> .wem through WwiseConsole convert-external-source (as skyrim_voice.to_wem)."""
-    sys.path.insert(0, os.path.join(REPO, "scripts", "npc"))
-    import skyrim_voice
-    stem = os.path.splitext(os.path.basename(wav))[0]
-    return skyrim_voice.to_wem(wav, stem, wwise, project, scratch)
+def riff_chunks(data: bytes) -> list:
+    """[(tag, raw chunk bytes incl. header)] of a RIFF file after 'RIFF size WAVE'."""
+    out, p = [], 12
+    while p + 8 <= len(data):
+        n = struct.unpack_from("<I", data, p + 4)[0]
+        end = p + 8 + n + (n & 1)
+        out.append((data[p:p + 4], data[p:end]))
+        p = end
+    return out
+
+
+def read_wav(path: str):
+    """(samples float32 (frames, channels) in -1..1, sample rate) of a PCM .wav (8 / 16 / 24 / 32-bit)."""
+    import wave
+    import numpy as np
+    with wave.open(path, "rb") as w:
+        ch, width, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+        raw = w.readframes(n)
+    if width == 1:
+        x = (np.frombuffer(raw, np.uint8).astype(np.float32) - 128.0) / 128.0
+    elif width == 2:
+        x = np.frombuffer(raw, "<i2").astype(np.float32) / 32768.0
+    elif width == 3:
+        b = np.frombuffer(raw, np.uint8).reshape(-1, 3).astype(np.int32)
+        v = b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)
+        x = (np.where(v >= 1 << 23, v - (1 << 24), v)).astype(np.float32) / float(1 << 23)
+    else:
+        x = np.frombuffer(raw, "<i4").astype(np.float32) / float(1 << 31)
+    return x.reshape(-1, ch), rate
+
+
+def pcm_wem(vanilla: bytes, samples, rate: int) -> bytes:
+    """Our sound as a .wem in the vanilla file's own format. 2026-11-20 (owner's wem_info, verified): Starfield's
+    food-station files are PCM - fmt 0xFFFE (extensible, 24 bytes), mono, 48000 Hz, 16-bit, then a 4-byte JUNK chunk
+    and data - while convert-external-source gave Vorbis 32000 Hz, which the game left silent. So the vanilla fmt and
+    JUNK chunks are kept byte for byte and only the data is ours: channels mixed / copied to the vanilla count,
+    resampled (linear) to its rate, 16-bit."""
+    import numpy as np
+    chunks = riff_chunks(vanilla)
+    fmt = next(c for t, c in chunks if t == b"fmt ")
+    tag, ch, sr, _abps, _ba, bits = struct.unpack_from("<HHIIHH", fmt, 8)
+    if tag not in (0x0001, 0xFFFE) or bits != 16:
+        raise ValueError(f"vanilla file is not 16-bit PCM (format 0x{tag:04X}, {bits} bits)")
+    x = np.asarray(samples, np.float32)
+    x = x.reshape(len(x), -1)
+    mono = x.mean(axis=1)
+    if rate != sr and len(mono) > 1:
+        t_new = np.arange(int(round(len(mono) * sr / rate))) * (rate / sr)
+        mono = np.interp(t_new, np.arange(len(mono)), mono).astype(np.float32)
+    out = np.repeat(mono[:, None], ch, axis=1)
+    data = (np.clip(out, -1.0, 1.0) * 32767.0).round().astype("<i2").tobytes()
+    body = b"WAVE" + fmt + b"".join(c for t, c in chunks if t == b"JUNK") + b"data" + struct.pack("<I", len(data)) \
+        + data + (b"\0" if len(data) & 1 else b"")
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
+def vanilla_wems(sf_data: str, ids) -> dict:
+    """{id: bytes} of vanilla streamed files sound/soundbanks/<id>.wem (the last archive holding each)."""
+    from fo4sf import ba2
+    want = {f"{i}.wem": i for i in ids}
+    out = {}
+    for fn in sorted(os.listdir(sf_data), key=lambda n: ("patch" in n.lower(), n.lower())):
+        if fn.lower().startswith("starfield - wwisesounds") and fn.lower().endswith(".ba2"):
+            arc = ba2.Ba2(os.path.join(sf_data, fn))
+            for k, n in enumerate(arc.names):
+                base = n.replace("\\", "/").split("/")[-1].lower()
+                if base in want:
+                    out[want[base]] = arc.read(k)
+    return out
 
 
 def main(argv=None):
@@ -68,31 +132,32 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True)
     ap.add_argument("--work", required=True)
     ap.add_argument("--mod", required=True, help="the .wem files go to <mod>\\Sound\\Soundbanks")
-    ap.add_argument("--wwise", default=SB.WWISE_CONSOLE)
     ap.add_argument("--ffmpeg")
     a = ap.parse_args(argv)
-    if not os.path.isfile(a.wwise):
-        sys.exit(f"no WwiseConsole.exe at {a.wwise} (--wwise)")
     src_name, info = SB.starfield_info(os.path.join(a.starfield, "Data"))
     files, users = event_files(info)
     wavs = SB.extract(a.skyrim_data, list(SWAP), os.path.join(a.work, "wav"), a.ffmpeg)
-    project = os.path.join(a.starfield, "Tools", "wwise", "Starfield", "Starfield.wproj")
-    scratch = os.path.join(a.work, "wem")
-    os.makedirs(scratch, exist_ok=True)
     dst_dir = os.path.join(a.mod, "Sound", "Soundbanks")
     os.makedirs(dst_dir, exist_ok=True)
     rep = {"info": src_name, "sounds": {}}
-    converted = {}
+    vanilla = vanilla_wems(os.path.join(a.starfield, "Data"), [t for ev in SWAP.values() for t in files.get(ev, [])])
+    loaded = {}
     for sky, ev in SWAP.items():
         targets = files.get(ev, [])
         row = {"event": ev, "skyrim_files": len(wavs.get(sky, [])), "replaced": [], "shared": {}}
         for tid, wav in assign(wavs.get(sky, []), targets):
-            if wav not in converted:
-                converted[wav] = to_wem(wav, a.wwise, project, scratch)
-            if not converted[wav]:
-                row.setdefault("failed", []).append(os.path.basename(wav))
+            if tid not in vanilla:
+                row.setdefault("failed", []).append(f"{tid}: vanilla file not found")
                 continue
-            shutil.copyfile(converted[wav], os.path.join(dst_dir, f"{tid}.wem"))
+            try:
+                if wav not in loaded:
+                    loaded[wav] = read_wav(wav)
+                data = pcm_wem(vanilla[tid], *loaded[wav])
+            except Exception as e:                        # noqa: BLE001
+                row.setdefault("failed", []).append(f"{os.path.basename(wav)}: {e}")
+                continue
+            with open(os.path.join(dst_dir, f"{tid}.wem"), "wb") as fh:
+                fh.write(data)
             row["replaced"].append(f"{tid}.wem <- {os.path.basename(wav)}")
             other = sorted(users.get(tid, set()) - {ev})
             if other:

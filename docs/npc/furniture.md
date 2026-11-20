@@ -1104,3 +1104,7 @@ and ITM_Microscope_Up (take) play from the forge's <audio> foley; the three even
 replaced (hammer, quench, bellows) are silent. So vanilla NPC events play from our clips and the replacement files are
 not decoded (Vorbis from convert-external-source vs whatever codec the bank names). wem_info.py prints a vanilla file's
 header next to ours.
+wem_info (owner, 2026-11-20 13:52, verified): the vanilla food-station files are RIFF PCM (fmt 0xFFFE, 24 bytes,
+mono, 48000 Hz, 16-bit, then JUNK 4 and data); ours from convert-external-source were Vorbis, mono, 32000 Hz - not
+decoded. sound_swap now writes PCM itself (pcm_wem: the vanilla fmt and JUNK chunks kept byte for byte, Skyrim's
+samples mixed to the vanilla channel count, resampled linearly to its rate, 16-bit); no Wwise needed for this route.
