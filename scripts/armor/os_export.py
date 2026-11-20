@@ -556,8 +556,8 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
     across runs by the caller). A pair with one sex only gets that sex's model and morph and no field for the other
     (in-game behaviour unchecked). EditorIDs: S2S_<ARMO>, S2S_<ARMO>_<key>_AA, S2S_<ARMO>_<key>_<M|F>_Morph,
     S2S_<OTFT>. race: a RACE FormID for the addons' and armors' RNAM (children's clothes: ChildRace, as Starfield's
-    child outfits, AA_Clothes_Child_CoraCoe_NOTPLAYABLE RNAM 002AABCD; else the templates'). Returns (records,
-    report)."""
+    child outfits, AA_Clothes_Child_CoraCoe_NOTPLAYABLE RNAM 002AABCD; else the templates'); those addons also have no
+    morph records and no additional races, as the vanilla child addons. Returns (records, report)."""
     t = part_templates(sf_esm)
     race_edit = {b"RNAM": struct.pack("<I", race)} if race is not None else {}
     recs = t["recs"]
@@ -586,6 +586,13 @@ def item_records(sf_esm: str, items, outfits=(), fid_of=None, template_vertices=
             row = {"key": key, "ARMA": f"{a_fid:08X}", "template": sfplugin.edid(asubs),
                    "slots": pr["slots"] if pr.get("slots") is not None else _slot_list(dict(asubs).get(b"BO64"))}
             m_tpl = morph_template(t, asubs)
+            if race is not None:
+                # 2026-11-20 (owner, in game: Dorthe's head, hair and neck vanished with our children's clothes on and
+                # came back with unequipall; the shoes alone, one part on slot 7, hid it too): Starfield's child addons
+                # carry no body-slider morph (NAM4 / NAM6) and no additional races (MODL; the nightwear template names
+                # 001EE4DA), our template's addons do. Children's addons get neither, as the vanilla child ones.
+                m_tpl = None
+                drop += [b"NAM4", b"NAM6", b"MODL"]
             for sex, (mod, nam, tag) in SEX_FIELDS.items():
                 r = pr.get(sex)
                 if not r:

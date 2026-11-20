@@ -187,6 +187,13 @@ class ChildRaceRecordTests(unittest.TestCase):
             plain, _r = E.item_records(p, items, [], IC.IdMap(os.path.join(d, "b.json")), template_vertices=2792)
         by = {sfplugin.edid(r[2]): dict(r[2]) for r in recs}
         self.assertEqual(by["S2S_ClothesChild01_Torso_AA"][b"RNAM"], u32(0x002AABCD))
+        child = by["S2S_ClothesChild01_Torso_AA"]
+        for sig in (b"NAM4", b"NAM6", b"MODL"):                            # as the vanilla child addons: none
+            self.assertNotIn(sig, child)
+        self.assertFalse([e for e in by if e.endswith("_Morph")])
+        adult = {sfplugin.edid(r[2]): dict(r[2]) for r in plain}
+        self.assertIn(b"NAM4", adult["S2S_ClothesChild01_Torso_AA"])     # adults' addons unchanged
+        self.assertTrue([e for e in adult if e.endswith("_Morph")])
         self.assertNotIn(b"RNAM", {sfplugin.edid(r[2]): dict(r[2]) for r in plain}["S2S_ClothesChild01_Torso_AA"])
 
 

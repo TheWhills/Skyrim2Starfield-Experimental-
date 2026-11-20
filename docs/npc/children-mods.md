@@ -377,4 +377,12 @@ resolve and exist in its BSA; Frodnar's blacksmith clothes, shoes, ClothesChild0
 child addons. Unverified: the fit itself (needs Starfield's body), in game: size, skin colour of the skin piece (the
 adult body's material on a child tone), Starfield's child hands under gloves (the hand skin piece is cut from the
 adult hands).
+In game (owner, 2026-11-20 15:04-15:11, verified): Dorthe and Frodnar wear their clothes at the right size, but with
+them on their head, hair and neck are gone; unequipall brings Dorthe's head back, and the shoes alone (two parts on
+slot 7) hide it as the dress does (slots 3 / 5 / 13). Owner's child_slots.txt: Starfield's child addons (Cora Coe,
+the Akila / New Atlantis outfits, the spacesuit parts) have RNAM ChildRace, one slot, no NAM4 / NAM6 morph and no
+MODL additional race; ours had both (from the nightwear template: MODL 001EE4DA). ChildRace names only biped slots
+0-6, 29, 31, 32, 35-38 and 63 (HumanRace names 7-28 too). Since the shoes' slot is not the dress's, the shared cause
+is supported as the morph or the additional race: children's addons now have neither (os_export.item_records with
+race=). If heads still go, next suspects are the slots ChildRace does not name (7, 10-15, 13).
 
