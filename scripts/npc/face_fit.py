@@ -123,13 +123,15 @@ def race_delta(sky, female, race_edid, base_bytes, model_space, cache):
 def race_heads_stale(races_plugin) -> str:
     """A warning when race_heads.json beside the race plugin is older than the plugin, else "" (2026-11-13: the MO2
     folder held the 11-12 plugin with the 11-11 race_heads.json, face_fit found 1 race of 10 and every NPC lost its
-    converted race, Faendal human again)."""
+    converted race, Faendal human again). Since the races are read from the plugin's RACE records the json only
+    gives skin tones; the warning says so (2026-11-19: it still said NPCs may lose their race)."""
     folder = os.path.dirname(os.path.abspath(races_plugin))
     js = os.path.join(folder, "race_heads.json")
     try:
         if os.path.getmtime(js) + 60 < os.path.getmtime(races_plugin):
-            return (f"{js} is older than {os.path.basename(races_plugin)}: copy race_heads.json from the race build's "
-                    "--out folder next to the plugin, or NPCs may lose their converted race")
+            return (f"{js} is older than {os.path.basename(races_plugin)}: the races still come from the plugin (its "
+                    "RACE records), only their skin tones from race_heads.json - copy it from the race build's --out "
+                    "folder next to the plugin if a race's skin tones changed")
     except OSError:
         pass
     return ""
