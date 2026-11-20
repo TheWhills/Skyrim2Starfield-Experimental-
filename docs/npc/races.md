@@ -853,3 +853,12 @@ why the mod needs no clothes of its own.
   the albedo's brightness (2026-11-03), not per template. The difference between the reconversion and the shared
   hairstyle is unexplained. The skullcap-like patch at the back of Faendal's head (owner 21:49) is then most likely
   his Skyrim hairstyle's own shaved layer (HairShaved texture) as converted - unverified.
+  --hair-compare-npc (owner 21:53: "add an extra copy of one of the hairs the way ... the faendal one, and all the
+  others, are built so I can compare against the shared version I like"; 21:54 "add it to the looksmenu"): with
+  --shape-npc Faendal --hair-compare-npc Faendal, face_fit also writes S2SHairCompare_Faendal, a copy of his NPC whose
+  hair is rebuilt per NPC (the route of his thin version: the hair head part's models through the Skyrim load order,
+  remake first when given as --skyrim-mod, shaped onto his own head on the adult skeleton; S2S_HairCompare_Faendal,
+  s2s\faces\haircompare), and appends that head part to HeadPartsChargenOptionsMale in S2SFaceTest.esm;
+  looks_menu_lists then rewrites S2SLooksMenu.esm with it (enable it, loaded after S2SFaceTest.esm). The NPC
+  himself keeps the reshaped shared hairstyle. The looks-menu copy is fitted to his elf head, so on a human player
+  it sits as on him, not as made for that head.

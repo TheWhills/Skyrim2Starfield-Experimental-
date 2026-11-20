@@ -617,6 +617,91 @@ class FaceFitWiringTests(unittest.TestCase):
         self.assertNotIn("hair", rows[2])
 
 
+    def test_hair_compare_copy(self):
+        """--hair-compare-npc (2026-11-19, owner: a copy built the way Faendal's thin hair was, to compare with the
+        shared hairstyle he likes): the NPC's comparison copy gets the hair rebuilt per NPC (adult skeleton, its own
+        head, the head part's models when readable), replacing the reshaped own hair and the shared one; the NPC
+        itself is left alone, and the hair part goes into the looks menu."""
+        import face_fit as S
+        from fo4sf import sfplugin
+        I = lambda v: struct.pack("<I", v)                                          # noqa: E731
+        h = struct.pack("<4sIII", b"HDPT", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+        fh_ = struct.pack("<4sIII", b"FLST", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+        sf_parts = [(b"HDPT", h, [(b"EDID", Z("Hair_Short")), (b"MODL", Z("Actors\\Human\\Hair\\Short.nif")),
+                                  (b"PNAM", I(3)), (b"DATA", b"\x02")], 0x500),
+                    (b"FLST", fh_, [(b"EDID", Z("HeadPartsChargenOptionsMale")), (b"LNAM", I(0x500))], 0x600)]
+        hdpt = {0x10: {"edid": "HairMaleDarkElf09", "type": 3, "extra_parts": [], "model": "h09.nif"}}
+        faendal = {"edid": "Faendal", "form_id": 0x13480, "female": False, "head_parts": [0x10], "hair_color": 0x77}
+        npc_subs = [(b"EDID", Z("S2SFace_Faendal")), (b"PNAM", I(0x01000900)), (b"PNAM", I(0x01000901)),
+                    (b"HCOL", Z("Grey"))]
+        cmp_subs = S.hair_compare_subs(npc_subs, {"edid": "Faendal"}, "Faendal")
+        recs = [(b"NPC_", h, list(npc_subs), 0x01000800), (b"NPC_", h, list(cmp_subs), 0x01000802)]
+        rows = [{"edid": "Faendal", "female": False, "test_npc": {"form_id": "x"},
+                 "dressed": {"hair": {"skyrim": "HairMaleDarkElf09", "form_id": "02000800"}},
+                 "own_hair": {"head_part": "01000901"}, "hair_compare": {"index": 1},
+                 "own_head": {"frame": "_own_head/Faendal.npz", "files": ["meshes/s2s/faces/faendalhead.nif"],
+                              "shape": {"prealign": {"hair_lift_m": 0.001}}}}]
+        real = {"clfm": {}, "names": {"Grey"}, "palette": None,
+                "with_hair_color": lambda subs, n: sfplugin.edit(subs, {b"HCOL": Z(n)})}
+
+        class Sky:
+            def texture(self, p):
+                return b"dds"
+
+            def mesh(self, rel):
+                return b"remake" if rel.lower().endswith("h09.nif") else None
+        with tempfile.TemporaryDirectory() as tmp:
+            sf = os.path.join(tmp, "sf")
+            os.makedirs(os.path.join(sf, "Data"))
+            esm = os.path.join(sf, "Data", "Starfield.esm")
+            with open(esm, "wb") as fh:
+                fh.write(sfplugin.build(sf_parts, {"hedr_version": 0.96, "form_version": 555}, masters=()))
+            os.makedirs(os.path.join(tmp, "_own_head"))
+            np.savez_compressed(os.path.join(tmp, "_own_head", "Faendal.npz"), al_s=1.0, al_R=np.eye(3),
+                                al_t=np.zeros(3), node=np.eye(4), fg=np.zeros((3, 3)), base=np.ones((3, 3)),
+                                model_space=True)
+            cr = os.path.join(tmp, "cr.zip")
+            open(cr, "wb").close()
+            a = types.SimpleNamespace(starfield=sf, texconv="t.exe", content_resources=cr, archive2=None,
+                                      load_order=None)
+            built, skel = [], []
+
+            def build(edid, female, fg, fg_rel, names, ctx, fgp, world, surface, fb, conv, staging, settings,
+                      pre=None, prefix="S2S_ChildHair_", out_dir=CH.OUT_DIR, models=None, src=None):
+                built.append((edid, prefix, out_dir, fg, models, float(np.asarray(fgp).mean())))
+                return {"ok": True, "model": f"{out_dir}\\{edid.lower()}.nif", "shapes": 1}
+            with mock.patch.object(S.hkx_to_af, "vanilla_file", lambda p, d: (p.encode(), p)), \
+                    mock.patch.object(S.hkx_to_af, "read_any", lambda p, s=None: b"fg"), \
+                    mock.patch.object(S, "facegen_mesh", lambda lo, fid: f"facegeom\\{fid:08X}.nif"), \
+                    mock.patch("npc_hair.skeleton_world", lambda b: skel.append(b) or {"C_Head": np.eye(4)}), \
+                    mock.patch.object(CH, "child_world", lambda b: self.fail("child skeleton for an adult")), \
+                    mock.patch.object(CH, "facegen_hair_shapes",
+                                      lambda fg, names: [{"name": names[0], "vertices": 3, "textures": ["t.dds"]}]), \
+                    mock.patch.object(CH, "baked_surface", lambda *x: None), \
+                    mock.patch.object(CH, "build_child_hair", build), \
+                    mock.patch("hair_pack.facebones_template", lambda *x: None), \
+                    mock.patch("hair_pack.pack", lambda *x: {"archives": ["m"]}), \
+                    mock.patch("npc_records.match_hair_color", lambda c, n, p: ("Grey", "same colour name")), \
+                    mock.patch("fo4sf.skyrimconvert.SkyrimConverter",
+                               lambda *x, **k: types.SimpleNamespace(stats={}, material_errors=[])):
+                S.add_child_hair_files(a, tmp, Sky(), os.path.join(sf, "Data"), rows, {"faendal": faendal},
+                                       recs, {"Faendal": 0}, ["Starfield.esm"], real, {"_sky": (None, hdpt)})
+                late = []
+                looks = S.compare_hairs_in_looks_menu(rows, esm, late)
+        self.assertEqual(skel, [b"meshes/actors/human/characterassets/skeleton.nif"])      # the adult skeleton
+        self.assertEqual([b[:3] for b in built], [("Faendal", "S2S_HairCompare_", S.COMPARE_HAIR_DIR)])
+        self.assertEqual((built[0][3], built[0][4], built[0][5]), (b"remake", ["h09.nif"], 1.0))   # models, base
+        new = recs[-1]
+        self.assertEqual(sfplugin.edid(new[2]), "S2S_HairCompare_Faendal")
+        self.assertEqual(recs[0][2], npc_subs)                          # the NPC itself untouched
+        pn = [struct.unpack("<I", d)[0] for s, d in recs[1][2] if s == b"PNAM"]
+        self.assertEqual(pn, [0x01000900, new[3]])                      # its own hair out, the rebuilt one in
+        self.assertEqual(sfplugin.edid(recs[1][2]), "S2SHairCompare_Faendal")
+        self.assertEqual(rows[0]["hair_compare"]["hair_part"], new[3])
+        self.assertEqual(looks, {"HeadPartsChargenOptionsMale": [f"{new[3]:08X}"]})
+        lst = late[0]
+        self.assertEqual([struct.unpack("<I", d)[0] for s, d in lst[2] if s == b"LNAM"], [0x500, new[3]])
+
     def test_skin_frame_shift(self):
         """Hair shapes that read far from their head (vanilla FaceGen: 120 units low) take their bone route's shift;
         ones on the head (Realistic RS Children) none."""
