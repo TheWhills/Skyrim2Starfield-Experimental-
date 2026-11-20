@@ -1319,7 +1319,11 @@ def template_skin(subs):
 # Starfield's body skin tone textures (owner's skin tone probe 2026-11-11), slot k = STON k
 HUMAN_BODY_TONE = {False: "textures/actors/human/naked_body/nakedbodym_sk{k}_color.dds",
                    True: "textures/actors/human/naked_body/nakedbodyf_sk{k}_color.dds"}
-TONE_GAP = 2       # template skin tone this many steps or more from the NPC's: its baked face recoloured
+# template skin tone this many steps or more from the NPC's: its baked face recoloured. 0 = always (2026-11-19, owner:
+# the women's faces warmer / darker than their necks and hands; faces.json: of Hilde, Gerdur, Delphine, Ysolda and
+# Sigrid only Hilde's face was recoloured (template tone 2, hers 0) - the one whose face matched; the others kept
+# their template's face, within a step of their tone but not of their body's colour). Was 2.
+TONE_GAP = 0
 
 
 def human_face_colour(tpl_subs, ston, female, read):

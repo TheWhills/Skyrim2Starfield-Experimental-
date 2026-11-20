@@ -869,3 +869,15 @@ why the mod needs no clothes of its own.
   that thin version was most likely the vanilla mesh too - which matches what the owner saw (coarse, jagged, unlike
   the remake). The search now skips child / wig folders, and the report gives own_hair / hair_compare mesh_from (the
   mod folder or archive the mesh was read from).
+- 2026-11-19 Women's faces warmer / darker than their necks and hands (owner's in-game shots of Hilde, Gerdur,
+  Delphine, Ysolda, Sigrid). faces.json (owner's dump, verified): none is on a race with tones of its own
+  (race.skin null); STON Ysolda 1, the others 0; of the five only Hilde's baked face was recoloured (template tone
+  2 -> 0, TONE_GAP 2), and hers was the one that matched. The others kept their template's face, a step or less from
+  their tone but not their body's colour. Now TONE_GAP 0: every adult's baked face is recoloured to its body tone
+  texture's median (human_face_colour). Also seen: Gerdur, Hilde and Sigrid have no skin tone tint in Skyrim, so
+  their tone comes from texture lighting (221, 221, 221: the default) -> STON 0, the lightest - possibly lighter
+  than Skyrim shows them; left as is.
+  Shoulders (Hilde: ClothesFarmClothes02, Gerdur: ClothesFarmClothes03; Ysolda / Delphine ClothesFarmClothes04,
+  Sigrid ClothesMerchantClothes clean): their item_convert fit reports (owner's S2S Clothes jsons) show nothing out
+  of line against FarmClothes04 (skin_through 0, similar push-out / lift counts). Next: outfit_probe on Hilde /
+  Gerdur / Ysolda (diffuse alpha at the shoulders; openings over Skyrim's own body piece, i.e. skin Skyrim shows too).
