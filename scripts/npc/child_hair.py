@@ -113,10 +113,50 @@ def sky_to_starfield(ctx) -> np.ndarray:
     return M
 
 
-def placement(nif_bytes: bytes, M: np.ndarray, sf_head_t) -> tuple:
+SKIN_FRAME_OFF = 60.0    # units: hair this far from its head's middle is in another frame than the head
+
+
+def skin_frame_shift(nif_bytes: bytes, names, head_points) -> tuple:
+    """((3,) units to add to the hair shapes' points as skyrimhair.convert reads them (skin_to_model), report): 0 when
+    they sit on the head (head_points: the FaceGen head as the caller places it); else the shift of their own
+    skin -> model matrix (facefit.skyrim_model_matrix) when that lands nearer. 2026-11-19 (Faendal, vanilla
+    FaceGen 00013480.nif): its hair shapes read 120 units below its head that way (the head bone's node at the
+    origin), the bone route puts them on it; Realistic RS Children's read right as they are (their bone route is 120
+    units off the other way), and stay unchanged."""
+    from fo4sf import facefit, nif as nifmod, skyrimhair, skyrimskin
+    if head_points is None:
+        return np.zeros(3), {"shift_units": [0.0, 0.0, 0.0], "why": "no head to compare"}
+    want = {x.lower() for x in (names or [])}
+    n = nifmod.parse(nif_bytes)
+    skin, bone = [], []
+    for s in skyrimskin.skinned_shapes(n):
+        nm = (s.name or b"").decode("latin-1").lower()
+        if want and nm not in want:
+            continue
+        to_model, _rot = skyrimhair.skin_to_model(s)
+        a = np.array([to_model(v) for v in s.positions], float)
+        skin.append(a)
+        bone.append(facefit.apply4(facefit.skyrim_model_matrix(n, s), np.asarray(s.positions, float)) - a)
+    if not skin or head_points is None:
+        return np.zeros(3), {"shift_units": [0.0, 0.0, 0.0], "why": "no hair shapes / head to compare"}
+    pts = np.concatenate(skin)
+    mid = np.asarray(head_points, float).mean(0)
+    off = float(np.linalg.norm(pts.mean(0) - mid))
+    if off <= SKIN_FRAME_OFF:
+        return np.zeros(3), {"shift_units": [0.0, 0.0, 0.0], "hair_to_head_middle_units": round(off, 1)}
+    shift = np.median(np.concatenate(bone), axis=0)
+    off2 = float(np.linalg.norm(pts.mean(0) + shift - mid))
+    if off2 >= off:
+        return np.zeros(3), {"shift_units": [0.0, 0.0, 0.0], "hair_to_head_middle_units": round(off, 1),
+                             "bone_route_units": round(off2, 1)}
+    return shift, {"shift_units": [round(float(v), 2) for v in shift], "hair_to_head_middle_units": round(off, 1),
+                   "after_units": round(off2, 1)}
+
+
+def placement(nif_bytes: bytes, M: np.ndarray, sf_head_t, shift=None) -> tuple:
     """(scale (3,), offset (3,)) for skyrimhair.convert, so its Placement puts a Skyrim model point p (units) at
-    M's diagonal * p + M's shift: convert maps p to sf_head + offset + scale * (p * UNIT - anchor * UNIT), with
-    anchor the NIF's head bone at skinning (skyrimhair.head_anchor)."""
+    M's diagonal * (p + shift) + M's shift: convert maps p to sf_head + offset + scale * (p * UNIT - anchor * UNIT),
+    with anchor the NIF's head bone at skinning (skyrimhair.head_anchor); shift: skin_frame_shift's, or none."""
     from fo4sf import nif as nifmod, skyrimhair
     n = nifmod.parse(nif_bytes)
     nodes, _parent = skyrimhair.node_worlds(n)
@@ -124,6 +164,8 @@ def placement(nif_bytes: bytes, M: np.ndarray, sf_head_t) -> tuple:
     d = np.diag(M)[:3]
     scale = d / skyrimhair.UNIT
     offset = M[:3, 3] + d * anchor - np.asarray(sf_head_t, float)
+    if shift is not None:
+        offset = offset + d * np.asarray(shift, float)
     return scale, offset
 
 
@@ -178,21 +220,24 @@ class _OneMesh:
 
 
 def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, names: List[str], ctx, fg_points,
-                     sf_world, surface, fb, conv, staging: str, settings, pre=None) -> Dict:
+                     sf_world, surface, fb, conv, staging: str, settings, pre=None, prefix: str = "S2S_ChildHair_",
+                     out_dir: str = OUT_DIR) -> Dict:
     """One child's hair converted into staging: skyrim_hairs.build_part on the FaceGen NIF's hair shapes. ctx:
     child_faces.child_setup's; fg_points: its FaceGen head in the same space as ctx["base"] (child_faces.
     facegen_points); surface: its baked head (baked_surface); fb: the template hair's _facebones template
     (hair_pack.facebones_template) or None; pre: the 4x4 move its fitted face shape made after the face alignment
     (childshape.prealign's matrix; 2026-11-19, owner: eyes and brows too high, the hair low on the forehead - the
     hair had stayed at the alignment's size, 1.09x smaller than the face for Frodnar), or None. Returns
-    build_part's row (ok, model, ...) plus the placement."""
+    build_part's row (ok, model, ...) plus the placement. prefix / out_dir: the hair's EditorID start and folder
+    (adults' own hair: S2S_OwnHair_, s2s/faces/hair)."""
     import hair_pack
     import skyrim_hairs
     from fo4sf import facefit, skyrimhair
     M = sky_to_starfield(ctx)
     if pre is not None:
         M = np.asarray(pre, float) @ M
-    scale, offset = placement(fg_bytes, M, sf_world[skyrimhair.SF_HEAD][:3, 3])
+    shift, shift_rep = skin_frame_shift(fg_bytes, names, fg_points)
+    scale, offset = placement(fg_bytes, M, sf_world[skyrimhair.SF_HEAD][:3, 3], shift)
     hc = types.SimpleNamespace(**vars(settings))
     hc.head_scale, hc.head_offset = scale, offset
     hc.head_surface = surface
@@ -204,12 +249,12 @@ def build_child_hair(edid: str, female: bool, fg_bytes: bytes, fg_rel: str, name
     rep: Dict = {}
     hair_pack.setup_reference(hc, sf_world, rep, fb[4][0] if fb is not None and len(fb) > 4 and fb[4] is not None
                               else None)
-    row = skyrim_hairs.build_part({"edid": f"S2S_ChildHair_{edid}", "plugin": "FaceGen"}, [fg_rel],
+    row = skyrim_hairs.build_part({"edid": f"{prefix}{edid}", "plugin": "FaceGen"}, [fg_rel],
                                   _OneMesh(fg_bytes), conv, sf_world, hc, fb, staging,
-                                  getattr(hc, "spread_face_bones", True), out_name=f"{OUT_DIR}/{edid.lower()}",
+                                  getattr(hc, "spread_face_bones", True), out_name=f"{out_dir}/{edid.lower()}",
                                   keep_shapes=names)
     row["placement"] = {"scale_m_per_unit": round(float(np.mean(np.diag(M)[:3])), 6),
-                        "shift_m": [round(float(v), 4) for v in M[:3, 3]]}
+                        "shift_m": [round(float(v), 4) for v in M[:3, 3]], "skin_frame": shift_rep}
     row["template_reference"] = rep.get("vanilla_hair")
     return row
 

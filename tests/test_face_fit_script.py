@@ -597,8 +597,15 @@ class RaceNpcTests(unittest.TestCase):
                     mock.patch.object(S, "child_shape_disp", disp_fn), \
                     mock.patch("fo4sf.headbake.baked_head_files", baked), \
                     mock.patch.object(S, "child_preview", lambda *x: {"png": "p"}):
-                own = S.adult_own_head({"edid": "Faendal", "female": False}, np.zeros((5, 3)), b"fg", "al", True,
+                al = (1.0, np.eye(3), np.zeros(3))
+                own = S.adult_own_head({"edid": "Faendal", "female": False}, np.ones((5, 3)), b"fg", al, True,
                                        np.zeros((5, 3)), b"base", {"name": "Bosmer"}, plug, "sf", d, a, {})
+                # its own hair later needs the frame (2026-11-19): saved, and read back as a ctx + FaceGen points
+                ctx, fgp = S.own_head_ctx(d, {"own_head": own})
+                np.testing.assert_allclose(fgp, np.ones((5, 3)))
+                self.assertEqual(ctx["al"][0], 1.0)
+                self.assertTrue(ctx["model_space"])
+                np.testing.assert_allclose(ctx["head"].model_xf, np.eye(4))
                 self.assertTrue(os.path.isfile(os.path.join(d, "geometries", "x", "y.mesh")))
         np.testing.assert_allclose(seen["on"], v_race)                       # fitted on the race's head
         self.assertTrue(seen["tilt"])                                        # with his own eye slant

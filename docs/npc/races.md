@@ -782,3 +782,18 @@ why the mod needs no clothes of its own.
   Verified in game (owner, 19:55, "now its tilted"): with its own FormID the head part shows - Faendal's own head
   with the slanted openings. Left from Skyrim's Faendal: brows / hair colour (Grey reads near-white), his face texture
   (next: paint as for the children), the hair crest.
+  Hair "scalp thing" (owner, 19:56, with Skyrim's Faendal: grey hair slicked straight back, tight to the skull).
+  Cause (reasoned from the pipeline, not yet seen in game): his hairstyle came from the hairs plugin, converted once
+  for Starfield's vanilla human head; race_heads bakes the face parts (eyes, brows, lashes, beards) to each race head
+  but leaves hair shared, and his own head sits on S2S_BosmerRace's head. A vanilla Skyrim hair is a thin shell on
+  the scalp, so where his elf skull stands out from the human one the shell is under the skin and only its edges and
+  the knot show: the crest. Fix: adults with their own head get their hair the children's way
+  (add_child_hair_files / child_hair.build_child_hair): converted from their own FaceGen NIF's hair shapes
+  (HairMaleDarkElf09 + its hairline and shaved layers), placed by their face alignment on the adult skeleton,
+  conformed to their own baked head, lifted with the face (hair_lift_m), as S2S_OwnHair_<NPC> in place of the
+  shared one; adult_own_head saves what that needs (_own_head/<edid>.npz: alignment, head node, FaceGen head).
+  Found on his file on the way: vanilla FaceGen hair shapes read 120 units below the head as the hair converter
+  takes them (the head bone's node at the origin; Realistic RS Children's read right), so child_hair.
+  skin_frame_shift moves them by their bone route only when they sit more than 60 units from the head (Faendal:
+  114 -> 11 units; the children unchanged). Not yet: the race head's baked brows / lashes do not follow his own
+  head's moves (up to 5.6 mm) or the eye turn (up to 4.8 mm).
