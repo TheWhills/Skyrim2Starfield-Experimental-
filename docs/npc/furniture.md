@@ -1108,3 +1108,10 @@ wem_info (owner, 2026-11-20 13:52, verified): the vanilla food-station files are
 mono, 48000 Hz, 16-bit, then JUNK 4 and data); ours from convert-external-source were Vorbis, mono, 32000 Hz - not
 decoded. sound_swap now writes PCM itself (pcm_wem: the vanilla fmt and JUNK chunks kept byte for byte, Skyrim's
 samples mixed to the vanilla channel count, resampled linearly to its rate, 16-bit); no Wwise needed for this route.
+**Verified in game** (owner, 2026-11-20 13:58: "WORKING"): Skyrim's forge sounds at Alvor's forge - sound_swap's PCM
+files in S2S Sounds (the vanilla files' own format) behind the five food-station events, named in the forge
+descriptors' <audios> (after <events>, before <variables>). furniture_anim_pack now uses sound_swap.SWAP by default.
+Dead ends, for the record: a bank of our own (in the empty scratch slot or under its own name, with or without a
+patched soundbanksinfo.json) is not loaded; Vorbis replacement files are not decoded where the bank expects PCM.
+Next sound sets the same way: other animations' Skyrim triggers (grindstone, workbench, anvil) need more unshared
+vanilla events of the right length in SWAP.

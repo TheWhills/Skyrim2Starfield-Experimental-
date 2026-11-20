@@ -2576,3 +2576,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   <variables>); appended after <variables> the game ignored it (owner's control: the welder's ITM_Microscope_Up on our
   hammer played only after the fix). Earlier "our bank is not loaded" conclusions are void (tested with the bad
   order); both routes (own bank, swapped vanilla .wem) are retested.
+- 2026-11-20 Animation sounds (verified in game): Skyrim's sounds replace the streamed .wem files of unshared vanilla
+  events (sound_swap.py; PCM in the vanilla files' own format), the descriptors name those events in <audios>. A
+  bank of our own is not loaded by the game (tested in two slots, with the bank list patched); kept as
+  sound_bank.py for reference only. Cost accepted: Starfield NPCs at food stations sound like Skyrim's forge.
