@@ -2506,3 +2506,14 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   so no cached key matched; output the same as before (male code unchanged since 11-09 apart from the output-identical
   speed-up; supported). Now item_convert keeps any finished male stage report as it is, --refit included, unless
   --refit-male; a kept male fit is not recorded in the cache as made with the new inputs.
+- 2026-11-20 Hand items done Skyrim's way, both sexes (owner's choice, after the hands mesh's own binds still left
+  Gerdur's hands showing through her gloves). Skyrim's gloves sit on the hands slot (33), hiding the bare hands, and
+  bring their own hand skin (Gerdur's: HandFemale3rdGloveskin, 68 vertices, the fingertips); ours sat on slot 8 with
+  Starfield's hands (AA_Naked_Hands, slot 6) drawn whole under them. Now an item on Skyrim's slot 33 with a
+  hand-skin shape (textured with Skyrim's hands) brings S2S_HandSkin: Starfield's hands vertices within 2 cm of where
+  that shape lies after the fit, written as the hands mesh itself (encoding, UVs, material, its own binds) on slot 6,
+  so the item hides the naked hands. Male fits of such items also take the hands' binds on hand bones (their gloves
+  meet the hand skin); other male outfits unchanged. Items so far: ClothesFarmGloves03, ArmorHideGauntlets,
+  PrisonerCuffs, refitted by name with --refit --refit-male (no fit version bump: nothing else changes). Open: a
+  hand item without a hand-skin shape (full gloves) still leaves the hands drawn; first person (no 1st-person models
+  on our addons: with the hands hidden, the player may see no hands in gloves). Unverified in game.

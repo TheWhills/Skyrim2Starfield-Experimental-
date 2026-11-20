@@ -268,6 +268,16 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    It prints "hand bones on the hands mesh's own binds: up to N mm" (send N). Then 7k's block again (face colour).
    In game: Gerdur's hands vs gloves; Gerdur's / Delphine's face and neck vs the chest skin.
+7n. B + C (2026-11-20): gloves Skyrim's way, both sexes (owner): items on Skyrim's hands slot hide Starfield's
+   hands and bring a hand skin piece cut from them where Skyrim's glove shows skin. The three hand items, both
+   sexes on purpose (--refit-male), Starfield closed:
+   ```powershell
+   git pull
+   python -I scripts\armor\item_convert.py --skyrim-data $sky --starfield $sf --out "$mods\S2S Clothes" --armor ClothesFarmGloves03 --armor ArmorHideGauntlets --armor PrisonerCuffs --refit --refit-male
+   ```
+   Each sex prints "hand skin: N of M Starfield hands vertices ... (naked hands hidden)". In game: Gerdur's gloves
+   (fingertips show, nothing through the leather), Ralof's cuffs (whole hands), a man in the farm gloves; first
+   person in gloves (hands may be missing).
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

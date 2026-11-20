@@ -313,6 +313,20 @@ class SlotTests(unittest.TestCase):
         self.assertEqual(out, {"Boots": [7], "Cuirass": [3, 5], "Body": [3, 5], "Cuffs": [8], "Belt": [9]})
 
 
+    def test_hand_skin(self):
+        """2026-11-20 (owner, "skyrim way for both sexes"): the hand-skin shapes are those on Skyrim's hands texture;
+        their part goes on Starfield's hands slot (hiding the bare hands) with the hands mesh's own binds."""
+        tex = {"gloveslow02": ["textures\\clothes\\farmclothes03\\glovesm_d.dds"],
+               "HandFemale3rdGloveskin": ["textures\\actors\\character\\female\\FemaleHands_1.dds"],
+               "FemaleBody": ["textures\\actors\\character\\female\\FemaleBody_1.dds"]}
+        self.assertEqual(gear_fit.hand_skin_shapes(tex), {"HandFemale3rdGloveskin"})
+        self.assertEqual(gear_fit.body_skin_shapes(tex), {"FemaleBody"})
+        binds = {"L_Index1": ((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)}
+        part = gear_fit.hand_skin_part("SHAPE", ([0, 1], None, binds), {"material": "hands.mat"})
+        self.assertEqual(part, {"shape": "SHAPE", "material": "hands.mat", "skin": False,
+                                "slots": [gear_fit.HAND_SLOT], "binds": binds})
+        self.assertIsNone(gear_fit.hand_skin_part(None, None, None))
+
     def test_hand_binds_for_gear(self):
         """2026-11-19 (Gerdur's hands through her gloves): a glove vertex placed on a hands-mesh point is drawn where
         the hands mesh draws that point: bind_gear @ v == bind_hand @ u for v = inv(body frame) @ hands frame @ u."""

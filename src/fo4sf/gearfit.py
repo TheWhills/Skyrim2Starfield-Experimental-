@@ -33,6 +33,9 @@ KEEP_REACH = 0.06               # m: gear that sat within this of Skyrim's body 
 PULL_MAX = 0.04                 # m: most a vertex is pulled back in
 COVER_MAX = 0.025               # m: most a gear vertex is moved to cover body points coming through it
 FIT_VERSION = 1                 # bump when what a fit produces changes (item_convert reuses fits by it)
+#                                 2026-11-20 not bumped for the hand skin piece: it changes only items on Skyrim's
+#                                 hands slot (ArmorHideGauntlets, ClothesFarmGloves03, PrisonerCuffs so far), refitted
+#                                 by name (item_convert --armor ... --refit --refit-male) instead of every item
 FEMALE_FIT_VERSION = 4          # bump when only female fits change (owner 2026-11-19: male outfits look great, not a
 #                                 thing changes on them, not even a refit). 2: strap gap 12 mm (withdrawn); 3: the
 #                                 game body's own binds on the gear (skeleton_binds body_binds); 4: the hands mesh's

@@ -113,6 +113,9 @@ def starfield_body_skin(sf_data: str, female: bool):
 HIDE_BODY_SLOTS = [3, 5, 7]   # as vanilla outfits: 3 hides the naked body (nightwear upper body 3 + 5, lower 7)
 SKIN_REACH = 0.03       # m: Starfield body vertices this close to a fitted Skyrim bare-skin piece show as skin
 SKIN_SHAPE = b"S2S_Skin"
+HAND_SKIN_SHAPE = b"S2S_HandSkin"
+HAND_SLOT = 6           # Starfield's naked hands addon (AA_Naked_Hands, slot_probe 2026-11-06)
+HAND_SKIN_REACH = 0.02  # m: Starfield hands vertices this close to a fitted Skyrim hand-skin piece show as skin
 
 
 COVER_DEPTH = 0.06      # m: a body point with gear this close straight out from it counts as covered
@@ -364,7 +367,8 @@ def skyrim_head_mesh(nif_bytes: bytes):
 def find_hands(sf_data: str, female: bool, world, with_binds: bool = False):
     """(path, points in skeleton space, triangles) of the game's hands mesh (a separate mesh from the naked body, so
     the push-out must see it too; 2026-11-06: Starfield fingers poked through the converted gloves), or (None, ...).
-    with_binds: also {bone: 4x4 bind} and the 4x4 frame (hands mesh space -> skeleton) of the hands mesh."""
+    with_binds: also {bone: (sphere, rot 9, trans 3, scale)} and the 4x4 frame (hands mesh space -> skeleton) of the
+    hands mesh."""
     from fo4sf import sfnif
     for fn in sorted(os.listdir(sf_data)):
         low = fn.lower()
@@ -396,7 +400,7 @@ def find_hands(sf_data: str, female: bool, world, with_binds: bool = False):
             weights = [[(bones[b], x) for b, x in vw if b < len(bones)] for vw in hw]
             out = (p, pts @ frame[:3, :3].T + frame[:3, 3], tris, weights)
             if with_binds:
-                out += ({b: bind_matrix(x) for b, x in zip(bones, skin.get("binds", []))}, frame)
+                out += (dict(zip(bones, skin.get("binds", []))), frame)
             return out
     return (None,) * (6 if with_binds else 4)
 
@@ -420,7 +424,7 @@ def hand_binds_for_gear(hand_binds: dict, hand_frame: np.ndarray, frame: np.ndar
     for b, hb in hand_binds.items():
         if b in skip:
             continue
-        m = hb @ inv_h @ frame
+        m = (hb if isinstance(hb, np.ndarray) else bind_matrix(hb)) @ inv_h @ frame
         sc = float(np.cbrt(abs(np.linalg.det(m[:3, :3])))) or 1.0
         out[b] = ((0.0, 0.0, 0.0, 0.0), tuple(map(float, (m[:3, :3] / sc).reshape(9))), tuple(map(float, m[:3, 3])), sc)
     return out
@@ -476,6 +480,31 @@ SKIN_TEXTURES = "textures\\actors\\character\\"     # Skyrim's body / hands / fe
 def body_skin_shapes(textures: dict) -> set:
     """The bare-skin shapes textured with Skyrim's BODY skin (not hands: Starfield's hands stay on their own slot)."""
     return {n for n in skin_shapes(textures) if "body" in textures[n][0].lower()}
+
+
+def hand_skin_part(hand_sh, info, report) -> dict:
+    """The part for the hand skin piece, or None: on the hands' own slot (HAND_SLOT), so the item hides Starfield's
+    bare hands as Skyrim's gloves hide Skyrim's, with the hands mesh's own binds (info: (used, mesh, binds))."""
+    if hand_sh is None or info is None or not report:
+        return None
+    return {"shape": hand_sh, "material": report["material"], "skin": False, "slots": [HAND_SLOT], "binds": info[2]}
+
+
+def hand_skin_shapes(textures: dict) -> set:
+    """The bare-skin shapes textured with Skyrim's hands skin (gloves' fingertips, a gauntlet's or cuffs' hands)."""
+    return {n for n in skin_shapes(textures) if "hand" in textures[n][0].lower()}
+
+
+def starfield_hands_skin(sf_data: str, hand_path: str):
+    """(UVs per vertex, material path, parsed mesh) of the game's hands mesh at hand_path: for the hand skin piece,
+    cut from it as the body skin piece is from the body."""
+    import slot_probe
+    nif, _ = hkx_to_af.vanilla_file(hand_path, sf_data)
+    paths, _skin = facefit.starfield_head_parts(nif)
+    m = sfmesh.parse(hkx_to_af.vanilla_file("geometries/" + paths[0].replace("\\", "/") + ".mesh", sf_data)[0])
+    uv = np.array(m.uv1, np.uint16).reshape(-1, 2).view(np.float16).astype(float)
+    mat = next((r["material"] for r in slot_probe.model_shapes(nif) if r["material"]), "")
+    return [tuple(map(float, x)) for x in uv], mat, m
 
 
 def skin_shapes(textures: dict) -> set:
@@ -679,7 +708,7 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
         size_feet: bool = False, tessellate: int = TESSELLATE, sky_head: bytes = None, body_skin_names=(),
         head_weights: bool = False, body_piece_names=None, feet_skin: bool = False, whole_skin: bool = False,
         round_bust: bool = False, strap_gap: float = gearfit.STRAP_GAP, curved: bool = False,
-        conform: bool = False):
+        conform: bool = False, hand_skin_names=()):
     """(shapes in mesh space with tangents, binds, report). head_weights: gear near the head takes the whole head's
     weights (off by default since 2026-11-07, owner: Skyrim's cowl sits on the outfit, low, and does not follow the
     neck or head; only the body's and neck part's weights are copied)."""
@@ -761,12 +790,32 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
             if skin is not None:
                 res.report["skin_piece"] = {"vertices": len(used), "material": mat, "from": sorted(body_skin_names)}
                 res.report["_skin_used"] = used
+    hand_skin = None
+    if hand_skin_names and hand_pts is not None and hand_binds_m:
+        # Skyrim's way for hand items (2026-11-20, owner: Gerdur's hands showed through her gloves even on the hands
+        # mesh's own binds; Skyrim's gloves sit on the hands slot, hiding the bare hands, and bring their own skin):
+        # the item hides Starfield's hands (HAND_SLOT) and brings the Starfield hands' vertices where Skyrim's
+        # hand-skin pieces lie after the fit, written as the hands mesh itself (its encoding and binds)
+        src = [np.asarray(sh.positions) for sh in res.shapes if sh.name.decode("latin-1", "replace")
+               in set(hand_skin_names)]
+        if src:
+            h_uvs, h_mat, h_mesh = starfield_hands_skin(sf_data, hand_path)
+            hs, h_used = skin_piece(np.asarray(hand_pts), hand_tris, h_uvs, hand_w, np.concatenate(src),
+                                    reach=HAND_SKIN_REACH)
+            if hs is not None:
+                hs.name = HAND_SKIN_SHAPE
+                hand_skin = hs
+                res.report["hand_skin"] = {"vertices": len(h_used), "of": len(hand_pts), "material": h_mat,
+                                           "from": sorted(hand_skin_names), "hands": hand_path}
+                res.report["_hand_skin"] = (h_used, h_mesh, dict(hand_binds_m))
     if skin_names:                           # Skyrim's bare-skin pieces
         drop = {n for n in res.report["shapes"] if n in set(skin_names)}
         res.shapes = [sh for sh in res.shapes if sh.name.decode("latin-1", "replace") not in drop]
         res.report["dropped_skin_pieces"] = sorted(drop)
     if skin is not None:
         res.shapes = list(res.shapes) + [skin]
+    if hand_skin is not None:
+        res.shapes = list(res.shapes) + [hand_skin]
     shapes = gearfit.to_mesh_space(res.shapes, frame)
     for i, sh in enumerate(shapes):
         sh.tangents = os_export.tangents(np.asarray(sh.positions), np.asarray(sh.normals), sh.uvs, sh.triangles)
@@ -778,13 +827,21 @@ def run(gear_nifs, body_nif, sf_data: str, female: bool, skip=(), gap: float = g
             sh.raw = (body_mesh.scale, [body_mesh.positions[k] for k in used],
                       [body_mesh.normals[k] for k in used] if body_mesh.normals else None,
                       [body_mesh.tangents[k] for k in used] if body_mesh.tangents else None)
+        if sh.name == HAND_SKIN_SHAPE and res.report.get("_hand_skin"):
+            # the hands mesh itself, bit for bit, on its own binds: drawn exactly where the game draws the hands
+            h_used, h_mesh, _hb = res.report["_hand_skin"]
+            sh.raw = (h_mesh.scale, [h_mesh.positions[k] for k in h_used],
+                      [h_mesh.normals[k] for k in h_used] if h_mesh.normals else None,
+                      [h_mesh.tangents[k] for k in h_used] if h_mesh.tangents else None)
         shapes[i] = sh
     bones = sorted({b for sh in shapes for vw in sh.weights for b, _w in vw} | {"C_Chest"})
     # female fits: the game body's own binds where it has the bone, as the skin piece (2026-11-19, skin through Hilde's
     # and Gerdur's shoulders); male fits keep the skeleton's (owner: male outfits are not to change)
     own_binds = None
-    if female:
-        own_binds = dict(body_binds)
+    # female fits: the body's and the hands' own binds; male fits only on hand items that now hide the hands (their
+    # gloves meet the hand skin piece, drawn on the hands' binds: owner 2026-11-20, "skyrim way for both sexes")
+    if female or hand_skin is not None:
+        own_binds = dict(body_binds) if female else {}
         if hand_binds_m:
             hb = hand_binds_for_gear(hand_binds_m, hand_frame, frame, skip=set(body_binds))
             own_binds.update(hb)
@@ -1168,11 +1225,15 @@ def main(argv=None):
                                            for m in meshes),
                              whole_skin=a.whole_skin, round_bust=a.round_bust and female,
                              strap_gap=strap_gap_for(a, female), curved=a.curved,
-                             conform=a.conform)
+                             conform=a.conform,
+                             hand_skin_names=(() if a.no_skin_piece or not any(33 in (m.get("slots") or [])
+                                                                                for m in meshes)
+                                              else sorted(hand_skin_shapes(textures))))
     os.makedirs(a.out, exist_ok=True)
     body_pts = rep.pop("_body_pts")
     dbg = rep.pop("_debug", None)
     skin_used = rep.pop("_skin_used", None)
+    hand_skin_info = rep.pop("_hand_skin", None)
     hand_mesh_pts = rep.pop("_hand_pts", None)
     body_binds_v = rep.pop("_body_binds", None)
     head_mesh_pts = rep.pop("_head_pts", None)
@@ -1190,7 +1251,12 @@ def main(argv=None):
         print(f"nothing written: broken shapes (report in {report_name})")
         return 1
     skin_sh = next((sh for sh in shapes if sh.name == SKIN_SHAPE), None)
-    shapes = [sh for sh in shapes if sh.name != SKIN_SHAPE]
+    hand_sh = next((sh for sh in shapes if sh.name == HAND_SKIN_SHAPE), None)
+    shapes = [sh for sh in shapes if sh.name not in (SKIN_SHAPE, HAND_SKIN_SHAPE)]
+    hand_part = hand_skin_part(hand_sh, hand_skin_info, rep.get("hand_skin"))
+    if hand_part is not None:
+        print(f"hand skin: {rep['hand_skin']['vertices']} of {rep['hand_skin']['of']} Starfield hands vertices where "
+              f"{', '.join(rep['hand_skin']['from'])} lies; armor slot {HAND_SLOT} (naked hands hidden)")
     names = [sh.name.decode("latin-1") for sh in shapes]
     mats, conv, staging = {}, None, None
     if not a.no_textures:
@@ -1231,6 +1297,8 @@ def main(argv=None):
             parts.append({"shape": skin_sh, "material": sp["material"], "skin": True,
                           "binds": body_binds_v if body_binds_v and all(
                               b in body_binds_v for vw in skin_sh.weights for b, _w in vw) else None})
+        if hand_part is not None:
+            parts.append(hand_part)
         material, _tv = os_export.template_model(sf_data)
         files, stage_rows, nifs = os_export.write_part_files(a.out, a.name, parts, binds, material)
         prep = {"parts": [], "stage": stage_rows}
@@ -1248,6 +1316,8 @@ def main(argv=None):
             parts.append({"shape": skin_sh, "material": sp["material"], "skin": True,
                           "binds": body_binds_v if body_binds_v and all(
                               b in body_binds_v for vw in skin_sh.weights for b, _w in vw) else None})
+        if hand_part is not None:
+            parts.append(hand_part)
         body_folder = ""
         if a.morph_test and not a.no_morphs:
             mp, _bm = find_body_morph(sf_data, len(body_pts), female)
@@ -1296,7 +1366,8 @@ def main(argv=None):
         if body_morph is None:
             print("no body morph.dat with the body's vertex count found: no slider morphs written")
         else:
-            worn = shapes + ([skin_sh] if skin_sh is not None and slots else [])
+            worn = shapes + ([skin_sh] if skin_sh is not None and slots else []) + \
+                ([hand_sh] if hand_part is not None else [])
             # the head mesh's own slider deltas too (2026-11-07, owner: Saadia's halter straps sank into the skin on
             # heavier and thinner bodies, fine at default: they lie over the female head mesh's neck / chest flap,
             # which follows the head's morph, not the body's)
@@ -1315,7 +1386,7 @@ def main(argv=None):
             for sh in worn:
                 morphs.update(morph_files([sh], nifs[sh.name.decode("latin-1")], src_pts, src_morph, doubled,
                                           skin_used, mstats, hand_mesh_pts, head_mesh_pts,
-                                          src_tris if sh.name != SKIN_SHAPE else None))
+                                          src_tris if sh.name not in (SKIN_SHAPE, HAND_SKIN_SHAPE) else None))
             rep["morph_stats"] = mstats
             if a.debug_dir:
                 # every worn shape and the head at each slider's full extreme, to look for skin coming through
