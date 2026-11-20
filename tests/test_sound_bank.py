@@ -44,6 +44,26 @@ class SoundBankTests(unittest.TestCase):
         self.assertEqual((a["@OutputBus"], a["@Attenuation"], a["@OverrideOutput"], a["@EnableAttenuation"]),
                          ("\\Bus", "\\Att", True, True))
 
+    def test_info_merge(self):
+        sf = {"SoundBanksInfo": {"Platform": "Windows", "SoundbankVersion": "140", "StreamedFiles": [1, 2],
+                                 "SoundBanks": [{"Id": "1", "ShortName": "Starfield_NPC", "IncludedEvents": [{"Id": "9"}]},
+                                                {"Id": "1490023241", "ShortName": "Starfield_XXX_Scratch",
+                                                 "GameParameters": []}]}}
+        e = B.event_entry("NPCHumanBlacksmithHammer", "{G}", 13.0)
+        self.assertEqual((e["Id"], e["MaxAttenuation"], e["GUID"]), (str(WP.fnv1_32("NPCHumanBlacksmithHammer")),
+                                                                     "13.", "{G}"))
+        m = B.merged_info(sf, "Starfield_XXX_Scratch", [e])
+        banks = {b["ShortName"]: b for b in m["SoundBanksInfo"]["SoundBanks"]}
+        self.assertEqual(banks["Starfield_XXX_Scratch"]["IncludedEvents"], [e])
+        self.assertEqual(banks["Starfield_NPC"]["IncludedEvents"], [{"Id": "9"}])
+        self.assertNotIn("IncludedEvents", sf["SoundBanksInfo"]["SoundBanks"][1])        # the input is not changed
+        self.assertEqual(B.merged_info(m, "Starfield_XXX_Scratch", [e])["SoundBanksInfo"]["SoundBanks"][1]
+                         ["IncludedEvents"], [e])                                       # run twice: listed once
+        one = B.bank_info(sf, m, "Starfield_XXX_Scratch")["SoundBanksInfo"]
+        self.assertEqual(([b["ShortName"] for b in one["SoundBanks"]], one["Platform"]),
+                         (["Starfield_XXX_Scratch"], "Windows"))
+        self.assertNotIn("StreamedFiles", one)
+
     def test_find_bank(self):
         with tempfile.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, "Windows"))

@@ -1069,3 +1069,10 @@ SoundPlay events in the same descriptor stayed silent. So Skyrim's sounds are no
 (af_writer.add_audio; furniture_anim_pack.add_sound_audios, which also drops the template's own <audios> in a set with
 Skyrim sounds), and the bank gets OBJBlacksmithForge too (three bellows one-shots in the Pull). Still unverified: that
 our 1490023241.bnk is loaded (an <audio> naming our event is the test).
+In game with <audio> foley (owner, 2026-11-20 12:56, verified): the forge clips play (hammering, the trough), the
+welder's microscope sound is gone, and none of ours play. The S2S AnimInfo cache was regenerated (789 / 793 / 8
+files). So the descriptor side works and our bank is not reached. Supported hypothesis: the game finds an event's bank
+through soundbanksinfo.json (each bank lists its IncludedEvents; Starfield_XXX_Scratch lists none). sound_bank now
+also writes <mod>\Sound\Soundbanks\soundbanksinfo.json (Starfield's, from the last WwiseSounds archive, with our events
+in the scratch bank's IncludedEvents) and 1490023241.json (that bank alone, as the patch ships per-bank files).
+Next if still silent: the bank may need explicit loading (a bank the game lists at start), or the bus.

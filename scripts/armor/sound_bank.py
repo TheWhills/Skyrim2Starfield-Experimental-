@@ -279,12 +279,63 @@ def build_own(w: "Waapi", wavs: dict, bank: str, bus: str, radius: float, spatia
                                                         "value": False})
         e = w.call("ak.wwise.core.object.create", event_args(ev, cpath))
         ids.append(e["id"])
-        rep["events"][ev] = {"container": cpath, "files": len(files), "id": WP.fnv1_32(ev)}
+        rep["events"][ev] = {"container": cpath, "files": len(files), "id": WP.fnv1_32(ev), "guid": e["id"]}
     b = w.call("ak.wwise.core.object.create", {"parent": "\\SoundBanks\\Default Work Unit", "type": "SoundBank",
                                                 "name": bank, "onNameConflict": "merge"})
     w.call("ak.wwise.core.soundbank.setInclusions", inclusion_args(w.get(f'$ "{b["id"]}"')[0]["path"], ids))
     w.call("ak.wwise.core.project.save")
     return rep
+
+
+INFO = "sound/soundbanks/soundbanksinfo.json"
+
+
+def event_entry(name: str, guid: str, radius: float) -> dict:
+    """An IncludedEvents entry as Starfield's soundbanksinfo.json writes one."""
+    return {"Id": str(WP.fnv1_32(name)), "Name": name, "ObjectPath": f"\\Events\\Default Work Unit\\{name}",
+            "GUID": guid or "", "MaxAttenuation": f"{float(radius):g}.", "DurationType": "OneShot"}
+
+
+def merged_info(sf_info: dict, bank: str, entries: list) -> dict:
+    """Starfield's soundbanksinfo.json with our events listed in the bank of that name (added to its IncludedEvents,
+    ours replacing any of the same Id). 2026-11-20 (owner, 12:56): with our <audio> foley in the forge descriptors
+    and our 1490023241.bnk in Data, nothing played while the welder's vanilla foley had: supported hypothesis, the
+    game finds an event's bank through this file (its banks list their IncludedEvents; the scratch bank lists none)."""
+    import copy
+    out = copy.deepcopy(sf_info)
+    banks = out["SoundBanksInfo"]["SoundBanks"]
+    b = next((x for x in banks if x.get("ShortName") == bank), None)
+    if b is None:
+        b = {"Id": str(WP.fnv1_32(bank)), "Language": "SFX", "ObjectPath": f"\\SoundBanks\\Default Work Unit\\{bank}",
+             "ShortName": bank, "Path": f"{WP.fnv1_32(bank)}.bnk"}
+        banks.append(b)
+    ours = {e["Id"] for e in entries}
+    b["IncludedEvents"] = [e for e in b.get("IncludedEvents", []) if e.get("Id") not in ours] + list(entries)
+    return out
+
+
+def bank_info(sf_info: dict, merged: dict, bank: str) -> dict:
+    """A per-bank <id>.json (as Starfield ships for its patched banks): the header of soundbanksinfo.json with only
+    this bank."""
+    head = {k: v for k, v in sf_info["SoundBanksInfo"].items() if k not in ("SoundBanks", "StreamedFiles",
+                                                                             "DialogueEvents", "MediaFilesNotInAnyBank")}
+    b = next(x for x in merged["SoundBanksInfo"]["SoundBanks"] if x.get("ShortName") == bank)
+    return {"SoundBanksInfo": dict(head, SoundBanks=[b])}
+
+
+def starfield_info(sf_data: str):
+    """Starfield's soundbanksinfo.json: the last WwiseSounds archive holding it (the patch over the base)."""
+    from fo4sf import ba2
+    found = None
+    for fn in sorted(os.listdir(sf_data), key=lambda n: ("patch" in n.lower(), n.lower())):
+        if fn.lower().startswith("starfield - wwisesounds") and fn.lower().endswith(".ba2"):
+            arc = ba2.Ba2(os.path.join(sf_data, fn))
+            for i, n in enumerate(arc.names):
+                if n.lower().replace("\\", "/") == INFO:
+                    found = (fn, arc.read(i))
+    if found is None:
+        raise FileNotFoundError(INFO)
+    return found[0], json.loads(found[1].decode("utf-8-sig"))
 
 
 def serve(wwise, wproj, port, fn):
@@ -320,6 +371,8 @@ def main(argv=None):
     ap.add_argument("--fresh-project", action="store_true", help="copy Bethesda's project / make ours again")
     ap.add_argument("--in-ck-project", action="store_true",
                     help="build in the CK's project itself (needs a Wwise licence: the trial stops at 200 media)")
+    ap.add_argument("--no-info", action="store_true",
+                    help="do not write the patched soundbanksinfo.json / <bank id>.json next to the bank")
     ap.add_argument("--bus", help="output bus name (default: the template sound's, read from the CK project)")
     ap.add_argument("--radius", type=float, help="attenuation radius in m (default: the template's)")
     a = ap.parse_args(argv)
@@ -375,11 +428,22 @@ def main(argv=None):
         rep["bank"] = {"from": bnk, "to": dst, "bank_id": info["bank_id"], "chunks": info["chunks"],
                        "media": info["media"], "events": len(info["events"]),
                        "ours_present": {ev: WP.fnv1_32(ev) in info["events"] for ev in rep["events"]}}
+        if not a.in_ck_project and not a.no_info:
+            src_name, sf_info = starfield_info(os.path.join(a.starfield, "Data"))
+            radius = (rep.get("attenuation") or {}).get("radius") or 20.0
+            entries = [event_entry(ev, v.get("guid"), radius) for ev, v in rep["events"].items()]
+            merged = merged_info(sf_info, a.bank, entries)
+            with open(os.path.join(dst_dir, "soundbanksinfo.json"), "w", encoding="utf-8") as fh:
+                json.dump(merged, fh, indent=1)
+            with open(os.path.join(dst_dir, f"{WP.fnv1_32(a.bank)}.json"), "w", encoding="utf-8") as fh:
+                json.dump(bank_info(sf_info, merged, a.bank), fh, indent=1)
+            rep["info"] = {"from": src_name, "events_listed": len(entries),
+                           "files": ["soundbanksinfo.json", f"{WP.fnv1_32(a.bank)}.json"]}
     else:
         rep["bank"] = "not generated (see generate.tail)"
     with open(os.path.join(a.work, "sound_bank.json"), "w", encoding="utf-8") as fh:
         json.dump(rep, fh, indent=1)
-    print(json.dumps({k: rep.get(k) for k in ("template", "bus", "attenuation", "bank")}, indent=1))
+    print(json.dumps({k: rep.get(k) for k in ("bus", "attenuation", "bank", "info")}, indent=1))
     print(f"-> {os.path.join(a.work, 'sound_bank.json')}")
     return 0
 
