@@ -835,3 +835,9 @@ why the mod needs no clothes of its own.
   737 vertices up to 18.6 mm, skull difference up to 21.7 mm inward), and took its face-bone weights from another
   template hairstyle (Bob). Supported, not verified: those moves pulled the inner layers under his scalp, leaving the
   outer strand cards. Children still use that route; worth a look if their hair ever reads thin.
+  Owner's side-by-side (21:44): the reconversion was not only thinner but dark charcoal with hard black streaks;
+  the reshaped shared one is light grey and soft. Placement does not explain colour. Starfield's hair colours are
+  textures per hairstyle group (decisions 2026-11-13: SimpleGroup_Hair_<group>, 23 names each), and the head part
+  record decides the group: the reconversion's record was a copy of Human_Male_Hair_Bob (the kids' route copies the
+  NPC's template hair), the shared one a copy of the hairstyle skyrim_hairs picks (its material group). So "Grey"
+  came from another group's gradient. Supported, not verified.
