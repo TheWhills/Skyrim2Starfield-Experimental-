@@ -444,4 +444,10 @@ texture tanned to the unit (172,125,95 * CHILD_TAN), and in game the shins still
 Now the colour comes from what the hands are drawn with: Child_Hands.nif's material (from ContentResources.zip), its
 colour texture's skin median (gear_fit.child_hands_colour; printed with each "child skin piece:" line; the tone
 group's colour only when that cannot be read). Unverified in game.
+Owner's run 17:33 (verified): the child hands' material draws a whole child BODY texture
+(Data\Textures\Actors\Human\Naked_Body\Female\female_child_01_body_color.DDS), skin median (156, 107, 82) - as
+tan as our copies - yet the hands look pale in game. So the colour is made by their material and the child's hand
+tone, not the texture: the child skin piece now wears the child hands' own material (gear_fit.choose_child_skin;
+the recoloured copy only when the hands' material cannot be read). Supported: the child body texture shares the
+adult body's UV layout (it is a whole body texture); unverified in game.
 

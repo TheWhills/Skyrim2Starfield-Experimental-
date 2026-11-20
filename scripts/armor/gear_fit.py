@@ -110,6 +110,23 @@ def child_hands_colour(sf_data: str, content_resources: str) -> dict:
     return {"colour": tuple(child_hair.skin_median(img)), "material": mat, "texture": old}
 
 
+def choose_child_skin(hands: dict, make_copy) -> dict:
+    """The child skin piece's material report: the child hands' own material when it was read (2026-11-20, owner's
+    run 17:33, verified: the hands are drawn with a material whose colour texture is a whole child BODY texture,
+    female_child_01_body_color.DDS, skin median (156, 107, 82) - as tan as our recoloured copies - and still look pale
+    in game: their material and the child's hand tone make the difference, not the texture's colour; so the skin piece
+    wears that very material, for the same shading and tone swap as the hands); else make_copy() (child_skin_material),
+    or the reason it failed."""
+    if hands.get("material"):
+        return {"material": hands["material"], "colour": "the child hands' own material", "hands": hands}
+    try:
+        got = make_copy()
+    except (KeyError, ValueError, OSError) as e:
+        got = {"material": None, "why": f"{type(e).__name__}: {e}"}
+    got["hands"] = hands
+    return got
+
+
 def child_skin_colour(sf_data: str, female: bool) -> tuple:
     """sRGB skin colour for a child item's bare skin (--child-skin): Starfield's lightest ChildRace hands texture, tanned
     as the children's own tones are (child_hair.light_child_tone: lightest hands * CHILD_TAN), by its skin median.
@@ -1605,12 +1622,8 @@ def main(argv=None):
             hands = child_hands_colour(sf_data, cr_zip)
         except Exception as e:                       # noqa: BLE001 (report; the tone group's colour then)
             hands = {"colour": None, "why": f"{type(e).__name__}: {e}"}
-        try:
-            colour = hands["colour"] or child_skin_colour(sf_data, female)
-            got = child_skin_material(conv, cr_zip, sf_data, sp["material"], colour, female)
-        except (KeyError, ValueError, OSError) as e:
-            got = {"material": None, "why": f"{type(e).__name__}: {e}"}
-        got["hands"] = hands
+        got = choose_child_skin(hands, lambda: child_skin_material(
+            conv, cr_zip, sf_data, sp["material"], hands.get("colour") or child_skin_colour(sf_data, female), female))
         rep["child_skin"] = got
         print("child skin piece: " + (f"{got['material']} (colour {got['colour']})" if got["material"]
                                       else f"the body's own material ({got['why']})")

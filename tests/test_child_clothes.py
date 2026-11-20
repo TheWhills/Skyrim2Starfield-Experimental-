@@ -413,6 +413,18 @@ class ChildHandsColourTests(unittest.TestCase):
         self.assertEqual(got["colour"], CH.skin_median(decode("")))
 
 
+class ChooseChildSkinTests(unittest.TestCase):
+    def test_hands_material_first(self):
+        hands = {"material": "Materials\\Actors\\Child\\Hands.mat", "colour": (156, 107, 82)}
+        got = gear_fit.choose_child_skin(hands, lambda: self.fail("no copy needed"))
+        self.assertEqual(got["material"], "Materials\\Actors\\Child\\Hands.mat")
+        copy = gear_fit.choose_child_skin({"colour": None, "why": "x"}, lambda: {"material": "copy.mat"})
+        self.assertEqual(copy["material"], "copy.mat")
+        failed = gear_fit.choose_child_skin({}, lambda: (_ for _ in ()).throw(KeyError("y")))
+        self.assertIsNone(failed["material"])
+        self.assertIn("KeyError", failed["why"])
+
+
 class MaterialTextureKeyTests(unittest.TestCase):
     def test_keys(self):
         self.assertEqual(gear_fit.material_texture_key("Data\\Textures\\Actors\\human\\Naked_Body\\b_color.dds"),
