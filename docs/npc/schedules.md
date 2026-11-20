@@ -243,3 +243,9 @@ note that it becomes a Sandbox at its first location was wrong). make_schedule.I
 Location and Carry Start -> Location (near that reference, CARRY_RADIUS_M 2 m: an assumption) until carry-and-drop is
 rebuilt. Still kept vanilla and to convert: Patrol Start (Camilla, Embry, Hilde patrols: Skyrim's linked-ref patrol
 chain), Sleep's bed search criteria, Eat's food / chair criteria, the multi-location times.
+
+## Children on their schedules (2026-11-20, owner's next step 1)
+riverwood_doors.ps1's default -Actors now includes Dorthe and Frodnar (face_fit's child test NPCs, built with
+--child-shape-npc). Their Skyrim packages go through make_schedule like the adults'. Unverified: how child packages
+(play, follow a parent) convert, and whether Starfield's child race uses the furniture the adults do. Clothes are
+still the template child's until children's outfits are converted (next).

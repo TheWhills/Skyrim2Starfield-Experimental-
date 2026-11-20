@@ -21,8 +21,9 @@ param(
     [switch]$Resurvey,         # redo the vanilla navmesh survey (it is kept between runs)
     # Skyrim NPCs to place with their AI packages. Default (2026-11-15, owner: "why you keep losing progress"): every
     # Riverwood adult face_fit fits, so a command without -Actors no longer drops them; -NoActors for none.
+    # 2026-11-20 (owner: children placed with their schedules): Dorthe and Frodnar, face_fit's child test NPCs.
     [string[]]$Actors = @("Orgnar", "Delphine", "Embry", "Faendal", "Alvor", "Sigrid", "Hod", "Gerdur", "Sven", "Hilde",
-                          "CamillaValerius", "LucanValerius"),
+                          "CamillaValerius", "LucanValerius", "Dorthe", "Frodnar"),
     [switch]$NoActors,
     [switch]$Furniture,        # chairs / benches / beds / lean counters / idle markers as Starfield furniture NPCs use
     [ValidateSet("floor", "skyrim")][string]$MarkerZ = "floor",   # furniture marker height (docs/npc/furniture.md)
