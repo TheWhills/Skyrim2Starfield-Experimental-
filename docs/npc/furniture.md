@@ -1022,5 +1022,5 @@ WSED is that GUID as one little-endian 128-bit number (WwiseEvent_QST_UC08_Door_
 name. Bank version 140. Route for our sounds (proposal): the Creation Kit's Wwise project (Content\Tools\wwise\
 Starfield\Starfield.wproj, opened in the Wwise version it was saved with), our events (named for Skyrim's sounds) put
 in the empty Starfield_XXX_Scratch bank so the generated 1490023241.bnk replaces an empty vanilla one the game already
-knows; media embedded in the bank. The owner's Test-Path for that project path said False although the CK is installed:
-finding it is the next step.
+knows; media embedded in the bank. The owner's copy (verified 2026-11-20): <Starfield>\Tools\wwise\Starfield\Starfield.wproj (no Content folder; the
+CK's tools sit in the game folder). Next: its Wwise version and work units.
