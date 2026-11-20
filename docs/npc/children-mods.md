@@ -403,4 +403,13 @@ too). **Built:** a child item is one addon: its parts (per sex) merged into one 
 ChildRace names by the Skyrim item's main slot (item_convert.CHILD_SLOTS: body 3, feet 37, hands 6, others
 29 / 35 / 5); the body skin piece only in items on slot 3, which hide the child's body. Slot 3 verified; 37 / 6 / 29
 / 35 / 5 named on ChildRace but unverified.
+Merged child items in game (owner, 15:41-15:44, verified): heads back; Dorthe's dress right; Frodnar's whole
+blacksmith outfit and shoes show, but his bare forearms and shins are tan-orange against pale hands, with dark rings
+at the cuffs / hems. unequipall on a child (verified): Starfield's child has NO naked body - head and hands only (and
+the game then dresses it in a vanilla child outfit). So a child's body is seen only where clothes carry skin (our
+skin pieces, Naked_M_Body.mat, taking the child's BSTT tone), and ChildRace's lightest body texture
+(172,125,95 by skin_median) is darker and more orange than its lightest hands. child_hair.light_child_tone: a painted
+child's own body tone texture is now recoloured to its own hands' skin colour (report: children.<edid>.body_as_hands).
+Supported, not verified: that the skin pieces take the BSTT tone at all (if the forearms stay tan after this, they do
+not, and the skin piece needs a material of its own). The dark rings: open.
 

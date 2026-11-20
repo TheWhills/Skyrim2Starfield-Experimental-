@@ -484,6 +484,7 @@ def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, c
         sex = "female" if female else "male"
         rel = f"{TONE_DIR}/{edid.lower()}_face_color.dds"
         textures[rel] = tanned(got, tan) if tan is not None else got
+        child_body = None
         for fid, (avmd, sig, sexes) in groups.items():
             if female not in sexes:
                 continue
@@ -493,6 +494,15 @@ def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, c
             elif tan is not None:          # its own tanned body / hands, as the face
                 brel = f"{TONE_DIR}/{edid.lower()}_{sig.decode().lower()}_color.dds"
                 textures[brel] = tanned(body[3][body[4]], tan)
+                hands = found.get((female, b"HSTT")) or found.get((not female, b"HSTT"))
+                if sig == b"BSTT" and hands is not None:
+                    # 2026-11-20 (owner, Frodnar in his converted clothes: forearms and shins tan-orange, hands pale):
+                    # a child's body is drawn only where clothes carry skin (Starfield's child has no naked body:
+                    # unequipall shows head and hands alone), and ChildRace's lightest body texture is darker and
+                    # more orange than its lightest hands; its own body takes its own hands' skin colour
+                    target = skin_median(tanned(hands[3][hands[4]], tan))
+                    textures[brel] = recolour_skin(textures[brel], target)
+                    child_body = list(target)
                 bpre = "textures/" if body[2][body[4]].lower().startswith("textures") else ""
                 path = bpre + brel
             else:
@@ -500,7 +510,8 @@ def light_child_tone(sf_esm_records, read_texture, decode, levels=FACE_LEVELS, c
             entries[fid][nxt] = (f"{LIGHT_LABEL}_{edid.lower()}", path)
         child_idx[edid] = nxt
         child_rep[edid] = {"ston": nxt, "texture": prefix + rel, "sex": sex,
-                           "tan": list(tan) if tan is not None else None}
+                           "tan": list(tan) if tan is not None else None,
+                           "body_as_hands": child_body}
         nxt += 1
     records = []
     for fid, (avmd, _sig, _sexes) in groups.items():

@@ -351,6 +351,32 @@ class LightToneTests(unittest.TestCase):
             CH.light_child_tone([race, mb, fb], lambda p: p, decode)
 
 
+    def test_child_body_takes_its_hands_colour(self):
+        """2026-11-20 (owner: Frodnar's bare forearms / shins tan-orange in his clothes, his hands pale): a painted
+        child's own body tone texture is recoloured to its own hands' skin colour (both tanned)."""
+        race = rec(b"RACE", [(b"EDID", Z("ChildRace")), (b"BSTT", Z("Child_Male_Body")),
+                             (b"HSTT", Z("Child_Hands")), (b"FSTT", Z("Face_Male"))], 1)
+        mb = rec(b"AVMD", [(b"EDID", Z("Child_Male_Body")), (b"VNAM", Z("textures/b0.dds")),
+                           (b"VNAM", Z("textures/b1.dds"))], 2)
+        hb = rec(b"AVMD", [(b"EDID", Z("Child_Hands")), (b"VNAM", Z("textures/h0.dds")),
+                           (b"VNAM", Z("textures/h1.dds"))], 3)
+        fm = rec(b"AVMD", [(b"EDID", Z("Face_Male")), (b"VNAM", Z("textures/f0.dds")), (b"VNAM", Z("textures/f1.dds"))],
+                 4)
+        col = {"textures/b0.dds": (120, 90, 70), "textures/b1.dds": (172, 125, 95), "textures/h0.dds": (110, 85, 70),
+               "textures/h1.dds": (225, 190, 180), "textures/f0.dds": (100, 80, 60), "textures/f1.dds": (190, 150, 130)}
+
+        def decode(p):
+            img = np.zeros((4, 4, 4), np.uint8)
+            img[...] = col[p] + (255,)
+            return img
+        got = CH.light_child_tone([race, mb, hb, fm], lambda p: p, decode, children=[("Frodnar", False)],
+                                  paint=lambda e, f: np.full_like(f, 150))
+        body = got["textures"]["s2s/children/tones/frodnar_bstt_color.dds"]
+        hands = got["textures"]["s2s/children/tones/frodnar_hstt_color.dds"]
+        self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(CH.skin_median(body), CH.skin_median(hands))))
+        self.assertEqual(got["report"]["children"]["Frodnar"]["body_as_hands"], list(CH.skin_median(hands)))
+
+
 class LightToneWiringTests(unittest.TestCase):
     def test_add_child_light_tone(self):
         """face_fit writes the light tone's face texture and adds its AVMD overrides to the plugin's records."""
