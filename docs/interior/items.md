@@ -62,3 +62,24 @@ trilobite ragdoll; fixed). Seen meanwhile (verified on those three): a ragdoll b
 hknpRefMassDistribution and a motionPropertiesId into the system's motionProperties (gravity, damping, deactivation);
 the fan blade is motionType 0, mass 0, no motion properties, but each convex piece carries hknpShapeMassProperties
 (mass, volume, compressed inertia) where our convex writer puts none. Loose items next (summary lines per body).
+
+### Loose item bodies, decoded (owner's item_body_dump run, 2026-11-20, verified)
+Six vanilla loose items (Digipick, Credits, onion, pear, two beer packs) against the static template (an oil
+portrait). Every loose item is one body, convex (onion, pear, digipick: hknpConvexShape) or box (credits, beer packs:
+hknpBoxShape), and differs from the static one only in:
+
+| field | loose item | static |
+|---|---|---|
+| body motionType | 2 (dynamic) | 0 |
+| body mass | 1 (digipick), 2 (credits), 5 (food, drink) | 0 |
+| body flags | 138 | 0 |
+| body collisionFilterInfo | 4 | 1 |
+| body motionPropertiesId | 0 | 65535 |
+| body massDistribution | hknpRefMassDistribution (centre of mass + volume, inertia axes quaternion, inertia diagonal) | none |
+| system motionProperties | one entry: gravity 1, linear damping 0.1, angular 0.05, max speeds 100 / 200, deactivation and cast settings | none |
+
+The same in all six: one hknpMaterial (friction 1.75, restitution 1.45-1.70), qualityId 255, the shape carrying an
+hknpShapeMassProperties property (mass = volume x 1000, compressed centre / inertia) - the static template has one
+too; our convex writer (meshcollision._emit_convex) writes none. The body's mass is a round number per kind, not the
+shape's volume mass. So a dynamic body = our convex shape with the shape mass property, plus the body / system fields
+above copied from a vanilla loose item, the mass distribution computed from the hull.

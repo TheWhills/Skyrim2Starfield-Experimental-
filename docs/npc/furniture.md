@@ -998,3 +998,9 @@ SoundPlay payload of Starfield's throw animations), so the payload names a Wwise
 by part of its name (section 2b / 4 now print the related records' subrecords). Skyrim's forge: hammer (4 wav),
 hammer distant (3), forge fire (1) found; quench / quench drop / take were looked up as sound\data\sound\... (their
 ANAM starts with Data\Sound): fixed (sound_path).
+sound_records second run (owner, 2026-11-20, verified): no EditorID contains WPNGrenadeThrow; a WWED record is EDID
+plus WSED (16 bytes, a GUID); a SOUN record is OBND, ODTY, SMLS (40 bytes: two 16-byte ids, the second often zero)
+and DEVT. So the throw animation's payload names a Wwise event itself, not a record. All Skyrim forge sounds found
+(hammer 4, distant 3, quench 1, quench drop 2, take 2, forge fire 1). Next: wwise_probe.py (which bank holds an
+event, by the FNV-1 hash of its name; whether banks are one per event, named by id) - decides whether our own event
+can go in a bank of ours.

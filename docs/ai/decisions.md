@@ -2558,3 +2558,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   physics starts with hknpPhysicsSystemData as item 1): now item 1, plus a summary per body (motionType, mass, motion
   properties id, filter, quality, shape property classes). The owner's sound_records.txt was the pre-pull output (no
   2b section, the old doubled quench / take paths): to run again.
+- 2026-11-20 Loose items: the owner's decoded vanilla bodies (docs/interior/items.md table) show a loose item is our
+  kind of convex / box body with motionType 2, a round mass, flags 138, filter 4, a motion properties entry, a mass
+  distribution and the shape's mass property. Plan: write dynamic bodies that way (fields copied from a vanilla loose
+  item, mass distribution from the hull); first test one converted Skyrim item. Sounds: animation payloads name Wwise
+  events directly (no record); wwise_probe.py checks how banks hold events before we write one of our own.
