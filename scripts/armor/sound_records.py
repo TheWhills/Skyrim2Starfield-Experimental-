@@ -87,6 +87,12 @@ def sound_path(fn: str) -> str:
     return p if p.startswith("sound\\") else "sound\\" + p
 
 
+def shown_value(d: bytes) -> str:
+    """A zero-terminated text subrecord as text, anything else as hex (outside the f-string: no backslash there
+    before Python 3.12)."""
+    return zstr(d) if d[-1:] == b"\0" and d[:-1].isascii() else hexhead(d)
+
+
 def related(edids, name: str) -> list:
     """EditorIDs containing `name` (case-insensitive), e.g. WwiseEvent_WPNGrenadeThrow for WPNGrenadeThrow."""
     n = name.lower()
@@ -139,7 +145,7 @@ def main(argv=None):
             if e in rel.get(t, []) or (t in (b"WWED", b"SOUN") and shown[t] < 2):
                 shown[t] += 1
                 print(f"== 4. {t.decode()} {fid:08X} {e}: " + "; ".join(
-                    f"{sg.decode('latin-1')} {len(d)}: {zstr(d) if d[-1:] == b'\0' and d[:-1].isascii() else hexhead(d)}"
+                    f"{sg.decode('latin-1')} {len(d)}: {shown_value(d)}"
                     for sg, d in subs))
     if a.skyrim_data:
         print("== 5. Skyrim's forge sounds")

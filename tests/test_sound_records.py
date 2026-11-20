@@ -21,6 +21,8 @@ class SoundRecordsTest(unittest.TestCase):
         self.assertEqual(S.sound_path("sound\\fx\\c.wav"), "sound\\fx\\c.wav")
         self.assertEqual(S.related(["WwiseEvent_WPNGrenadeThrow", "X", None, "wpngrenadethrowsd"], "WPNGrenadeThrow"),
                          ["WwiseEvent_WPNGrenadeThrow", "wpngrenadethrowsd"])
+        self.assertEqual(S.shown_value(b"WPNGrenadeThrow\0"), "WPNGrenadeThrow")
+        self.assertEqual(S.shown_value(b"\x01\x02"), "01 02")
 
     def test_helpers(self):
         self.assertEqual(S.hexhead(b"\x01\x02", 1), "01 ...")
