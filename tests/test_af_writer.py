@@ -171,6 +171,24 @@ class AfWriterTests(unittest.TestCase):
             self.assertLess(min(np.max(np.abs(v - q[f, 1])), np.max(np.abs(v + q[f, 1]))), 1e-3, (f, v))
 
 
+class SoundEventTests(unittest.TestCase):
+    def test_sound_events(self):
+        """2026-11-20: Skyrim's SoundPlay.<name> -> a SoundPlay event with the name as payload (a Wwise event name,
+        as Starfield's WPNGrenadeThrow); other annotations ignored."""
+        ann = [{"time": 1.0, "text": "SoundPlay.NPCHumanBlacksmithHammer"}, {"time": 0.5, "text": "weaponSwing"},
+               {"time": 0.2, "text": "soundplay.NPCHumanBlacksmithForgeTake "}, {"time": 0.3, "text": "SoundPlay."},
+               {"time": 0.4, "text": "SoundStop.X"}]
+        self.assertEqual(AF.sound_events(ann, 30.0), [(6, "SoundPlay", "NPCHumanBlacksmithForgeTake"),
+                                                      (30, "SoundPlay", "NPCHumanBlacksmithHammer")])
+        afx = AF.descriptor("Idle", "a.af", events=[(10, "AnimObjDraw", "x")])
+        for f, n, p in AF.sound_events(ann, 30.0):
+            afx = AF.add_event(afx, f, n, p)
+        got = [(int(e.findtext("frame")), e.findtext("name"), e.findtext("payload") or "")
+               for e in ET.fromstring(afx).iter("event")]
+        self.assertEqual(got, [(6, "SoundPlay", "NPCHumanBlacksmithForgeTake"), (10, "AnimObjDraw", "x"),
+                               (30, "SoundPlay", "NPCHumanBlacksmithHammer")])
+
+
 class PluginEventTests(unittest.TestCase):
     ANN = [{"time": 0.5, "text": "PIE.@SGVI|MCO_nextattack|2"}, {"time": 0.2, "text": "MCO_WinOpen"},
            {"time": 0.3, "text": "HitFrame.$ES_Strikefly"}, {"time": 0.1, "text": "SoundPlay.WPNSwing"},

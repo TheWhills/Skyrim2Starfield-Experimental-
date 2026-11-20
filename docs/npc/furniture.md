@@ -1041,3 +1041,10 @@ now built in a small project of our own (WwiseConsole create-new-project; 12 med
 project is only read for the template sound's inherited output bus, spatialization and attenuation radius, and our
 containers are routed to a bus of the same name (bus ids are name hashes, resolved against Starfield's own Init bank;
 ours is not shipped). --in-ck-project keeps the old route for a licensed Wwise.
+**Forge sound bank built** (owner, 2026-11-20 12:25, verified): sound_bank in our own project - template
+NPC_Human_FoodStation_Drawer_Close plays on Bus_NPC_Human_CraftingWorkbenches (from Crafting_Workbenches_mixer),
+3D position, attenuation SOM_m1_0013_Spread (13 m); generate-soundbank succeeded; S2S Sounds\Sound\Soundbanks\
+1490023241.bnk (BKHD, DIDX, DATA, HIRC; 12 media; 5 events, all ours). Then af_writer.sound_events: Skyrim's
+SoundPlay.<name> annotations become SoundPlay events (payload the name) added to every converted clip's descriptor
+(vanilla templates have none, so added rather than matched). Next in game: the forge set rebuilt, Alvor at the forge
+- hammer / quench / take sounds, or silence (then: the game does not load a bank it does not list, or the bus).

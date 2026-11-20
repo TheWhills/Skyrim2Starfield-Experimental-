@@ -112,6 +112,22 @@ def plugin_events(annotations, fps: float, host: Optional[str] = None):
     return sorted(out)
 
 
+SOUND_PLAY = "SoundPlay"
+
+
+def sound_events(annotations, fps: float):
+    """[(frame, "SoundPlay", name)] for Skyrim's SoundPlay.<name> annotations (2026-11-20: Starfield's descriptors
+    carry SoundPlay with a Wwise event name as payload - WPNGrenadeThrow, afx_events / wwise_probe - and the game
+    hashes that name; sound_bank.py builds Wwise events named as Skyrim's sounds, so the name is kept as it is).
+    An event no loaded bank has is not played."""
+    out = []
+    for a in annotations or []:
+        name, dot, payload = a["text"].strip().partition(".")
+        if dot and name.lower() == SOUND_PLAY.lower() and payload.strip():
+            out.append((int(round(a["time"] * fps)), SOUND_PLAY, payload.strip()))
+    return sorted(out)
+
+
 def descriptor(tag: str, filename: str, is_state: bool = False, events=(), variables=(), rampout=None) -> bytes:
     """An .afx in the shipped layout: is_state, tag, filename, rampout, flags, events (frame, name, payload),
     variables (name, start frame, end frame)."""
@@ -541,6 +557,9 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
             afx, retime = retime_descriptor(like_afx, F - 1, af.name, like_last, mapped, hit_frame)
         else:
             afx = descriptor(tag or name, af.name, is_state, mapped, variables)
+        sounds = sound_events(unmapped, fps)          # not in vanilla descriptors: added, never matched
+        for frame, ev_name, payload in sounds:
+            afx = add_event(afx, min(frame, F - 1), ev_name, payload)
         extra = []
         if plugin_event_host is not None:
             extra = plugin_events(unmapped, fps, plugin_event_host or None)
@@ -553,6 +572,7 @@ def write(lib_path: str, out_dir: str, name: str, bones: List[str], parents: Lis
         return {"af": str(af), "rig": str(rig_path or rig_file), "keys": keys, "frames": F, "bones": B,
                 "package_keys": package_keys,
                 "events_in_afx": len(mapped), "events_not_mapped": len(unmapped), "plugin_events": len(extra),
+                "sound_events": [p for _f, _n, p in sounds],
                 "dropped_unnamed": dropped, "retime": retime, "omitted": sorted(skip & set(bones))}
     finally:
         if anim:
