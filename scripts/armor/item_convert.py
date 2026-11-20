@@ -144,6 +144,50 @@ def skyrim_outfits(esm, outfit_edids=(), npc_edids=()):
     return list(out.values()), notes
 
 
+# Children's items: one addon each, on a slot Starfield's ChildRace names. 2026-11-20 (owner's child_slot_test,
+# verified): Starfield's own child outfit on slot 3 keeps the child's head, the same outfit on slot 7 hides it, and our
+# dress mesh on slot 3 shows with the head; our split items (parts on 5, 7, 10-15, 13) hid it. ChildRace names only
+# slots 0-6, 29, 31, 32, 35-38 and 63 (owner's child_slots.txt). By the Skyrim item's main slot; 3 (BODY) verified,
+# the others named on ChildRace but unverified in game.
+CHILD_SLOTS = {32: 3, 37: 37, 33: 6, 34: 6, 35: 29, 30: 35, 31: 35, 42: 35, 38: 5}
+CHILD_SLOT_OTHER = 29
+CHILD_PART = "S2S_Child"
+
+
+def child_slot(sky_slots) -> int:
+    """The Starfield slot of a child item from its Skyrim slots (CHILD_SLOTS, body first)."""
+    for s_ in (32, 37, 33, 34) + tuple(sorted(sky_slots or ())):
+        if s_ in (sky_slots or ()) and s_ in CHILD_SLOTS:
+            return CHILD_SLOTS[s_]
+    return CHILD_SLOT_OTHER
+
+
+def merge_child_item(out: str, edid: str, rows: dict, slot: int):
+    """A pair for item_records: each sex's staged parts (gear_fit --stage rows; files under out\\meshes) written as one
+    model, meshes\\S2S\\Items\\<edid>_<M|F>\\S2S_Child.nif. The body skin piece only where the item hides the body
+    (slot 3), the hand skin piece only on the hands' slot (6): elsewhere the child's own skin is still drawn under it.
+    None when no sex has parts."""
+    from fo4sf import nif as nifmod, sfnif
+    pair = {"key": "Child", "skin": False, "slots": [slot], "male": None, "female": None}
+    for sex, rs in rows.items():
+        keep = [r for r in rs if not ((r.get("skin") or r.get("shape") == "S2S_Skin") and slot != 3)
+                and not (r.get("shape") == "S2S_HandSkin" and slot != 6)]
+        if not keep:
+            continue
+        models = []
+        for r in keep:
+            with open(os.path.join(out, "meshes", *r["nif"].replace("/", "\\").split("\\")), "rb") as fh:
+                models.append(nifmod.parse(fh.read()))
+        rel = f"S2S\\Items\\{edid}_{TAG[sex]}\\{CHILD_PART}.nif"
+        dst = os.path.join(out, "meshes", *rel.split("\\"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "wb") as fh:
+            fh.write(nifmod.serialize(sfnif.merge_skinned_nifs(models, CHILD_PART.encode())))
+        pair[sex] = {"shape": CHILD_PART, "nif": rel, "vertices": sum(r.get("vertices") or 0 for r in keep),
+                     "parts": [r.get("shape") for r in keep]}
+    return pair if (pair["male"] or pair["female"]) else None
+
+
 def item_name(a: dict, strings: dict) -> str:
     return a.get("full") or strings.get(a.get("full_id") if a.get("full_id") is not None else -1) or a["edid"]
 
@@ -174,6 +218,11 @@ def fit_item(a, edid: str, sex: str, fit_args) -> dict:
     if rows is None:
         return {"error": f"no parts in {path}"}
     return {"rows": rows, "meshes": [m.get("mesh") for m in rep.get("meshes", [])]}
+
+
+def gear_fit_child(race: str) -> bool:
+    import gear_fit
+    return gear_fit.is_child_race(race)
 
 
 def mod_args(a) -> list:
@@ -399,7 +448,12 @@ def main(argv=None):
         armo = inv["armo"][by_edid[e.lower()]]
         fits = {sex: fit_or_reuse(a, armo["edid"], sex, fit_args, fit_cache, save_cache) for sex in sexes}
         rows = {sex: fits[sex].get("rows") or [] for sex in sexes}
-        pairs, slot_notes = pair_parts(rows.get("male", []), rows.get("female", []))
+        if gear_fit_child(a.race):
+            # a child item is one addon on a slot ChildRace names (CHILD_SLOTS): its parts merged per sex
+            one = merge_child_item(a.out, armo["edid"], rows, child_slot(armo.get("slots")))
+            pairs, slot_notes = ([one] if one else []), []
+        else:
+            pairs, slot_notes = pair_parts(rows.get("male", []), rows.get("female", []))
         rep["items"][armo["edid"]] = {"fits": {s: {k: v for k, v in f.items() if k != "rows"} for s, f in fits.items()},
                                       "slot_moves": slot_notes}
         if pairs:

@@ -395,4 +395,12 @@ Copied from the vanilla child outfit's records (owner, 15:24, verified): still h
 as they can be copied; left: our slots or our meshes (the meshes have the vanilla layout: build_skinned_nif, no bone
 nodes). child_slot_test.py writes S2SChildTest.esm, four one-addon copies of the Cora Coe outfit: its own mesh on
 slot 3 (control) and on slot 7, our shoes and our dress mesh on slot 3, to tell the two apart in game.
+child_slot_test in game (owner, 15:32-15:33, verified): Starfield's child outfit on slot 3 - head stays; the same
+outfit on slot 7 - head gone; our dress mesh on slot 3 - shown, head stays (our shoes on slot 3 hide the body, as
+slot 3 does). So the meshes are fine and a slot ChildRace does not name hides the child's head (7; the dress's 13
+too). **Built:** a child item is one addon: its parts (per sex) merged into one model
+(item_convert.merge_child_item, sfnif.merge_skinned_nifs; meshes\S2S\Items\<item>_<M|F>\S2S_Child.nif) on a slot
+ChildRace names by the Skyrim item's main slot (item_convert.CHILD_SLOTS: body 3, feet 37, hands 6, others
+29 / 35 / 5); the body skin piece only in items on slot 3, which hide the child's body. Slot 3 verified; 37 / 6 / 29
+/ 35 / 5 named on ChildRace but unverified.
 

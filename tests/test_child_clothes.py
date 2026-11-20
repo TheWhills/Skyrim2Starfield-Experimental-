@@ -243,6 +243,40 @@ class ChildTemplateTests(unittest.TestCase):
                          [(b"MOD2", z("f.nif")), (b"FLLD", b"")])                  # one sex: MOD2 only
 
 
+class MergedChildItemTests(unittest.TestCase):
+    def write_part(self, out, rel, name, mat):
+        from fo4sf import nif as nifmod, sfnif
+        sh = sfnif.SkinnedShape(name=name.encode(), mesh_path=b"aa\\" + name.encode(), indices_size=3, num_verts=3,
+                                material_path=mat, bones=[b"C_Spine"],
+                                binds=[((0, 0, 0, 1), (1, 0, 0, 0, 1, 0, 0, 0, 1), (0, 0, 0), 1.0)])
+        dst = os.path.join(out, "meshes", *rel.split("\\"))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "wb") as fh:
+            fh.write(nifmod.serialize(sfnif.build_skinned_nif(b"x", [sh])))
+        return {"shape": name, "nif": rel, "vertices": 3, "skin": name == "S2S_Skin", "slots": [3, 5]}
+
+    def test_parts_as_one_model_on_a_child_slot(self):
+        from fo4sf import nif as nifmod, sfnif
+        self.assertEqual((IC.child_slot([32, 34, 36, 38]), IC.child_slot([37, 38]), IC.child_slot([42]),
+                          IC.child_slot([]), IC.child_slot([33])), (3, 37, 35, 29, 6))
+        with tempfile.TemporaryDirectory() as d:
+            rows = {"male": [self.write_part(d, "S2S\\Items\\Smith_M\\Top.nif", "Top", "Materials\\t.mat"),
+                             self.write_part(d, "S2S\\Items\\Smith_M\\Apron.nif", "Apron", "Materials\\a.mat"),
+                             self.write_part(d, "S2S\\Items\\Smith_M\\S2S_Skin.nif", "S2S_Skin", "Materials\\s.mat")],
+                    "female": []}
+            pair = IC.merge_child_item(d, "Smith", rows, 3)
+            self.assertEqual((pair["slots"], pair["female"]), ([3], None))
+            self.assertEqual(pair["male"]["nif"], "S2S\\Items\\Smith_M\\S2S_Child.nif")
+            with open(os.path.join(d, "meshes", "S2S", "Items", "Smith_M", "S2S_Child.nif"), "rb") as fh:
+                shapes = sfnif.skinned_shapes_of(nifmod.parse(fh.read()))
+            self.assertEqual([(s.name, s.material_path) for s in shapes],
+                             [(b"Top", "Materials\\t.mat"), (b"Apron", "Materials\\a.mat"),
+                              (b"S2S_Skin", "Materials\\s.mat")])
+            shoes = IC.merge_child_item(d, "Smith", rows, 37)                   # not hiding the body: no skin piece
+            self.assertEqual(shoes["male"]["parts"], ["Top", "Apron"])
+            self.assertIsNone(IC.merge_child_item(d, "Smith", {"male": [], "female": []}, 3))
+
+
 class ItemConvertArgsTests(unittest.TestCase):
     def test_mod_args_and_keys(self):
         a = types.SimpleNamespace(race="NordRaceChild", helmets=False, skyrim_mods_dir="C:\\mods",

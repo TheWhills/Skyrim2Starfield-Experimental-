@@ -233,6 +233,45 @@ def build_skinned_nif(node_name: bytes, shapes: List[SkinnedShape], bs_version: 
     return f
 
 
+def skinned_shapes_of(n: nifmod.NifFile) -> List[SkinnedShape]:
+    """The SkinnedShapes of a build_skinned_nif model read back (per BSGeometry: its mesh, material, SkinAttach bone
+    names and BSSkin::BoneData binds), so several such models can be written as one."""
+    out = []
+    for i in range(len(n.blocks)):
+        if n.type_of(i) != "BSGeometry":
+            continue
+        g = parse_bsgeometry(n.blocks[i])
+        ref = next(m for m in g.meshes if m)
+        mat = n.strings[struct.unpack_from("<i", n.blocks[g.shader], 0)[0]].decode("latin-1") if g.shader >= 0 else ""
+        attach = next(r for r in g.extra_refs if r >= 0 and n.type_of(r) == "SkinAttach")
+        b = n.blocks[attach]
+        cnt, p = struct.unpack_from("<I", b, 4)[0], 8
+        bones = []
+        for _ in range(cnt):
+            ln, = struct.unpack_from("<I", b, p)
+            bones.append(bytes(b[p + 4:p + 4 + ln]))
+            p += 4 + ln
+        inst = n.blocks[g.skin]
+        bd = n.blocks[struct.unpack_from("<i", inst, 4)[0]]
+        nb, = struct.unpack_from("<I", bd, 0)
+        binds = []
+        for k in range(nb):
+            v = struct.unpack_from("<4f9f3ff", bd, 4 + 68 * k)
+            binds.append((tuple(v[:4]), tuple(v[4:13]), tuple(v[13:16]), v[16]))
+        out.append(SkinnedShape(name=n.strings[g.name_idx] if g.name_idx >= 0 else b"", mesh_path=ref.path,
+                                indices_size=ref.indices_size, num_verts=ref.num_verts, material_path=mat,
+                                bones=bones, binds=binds, translation=tuple(g.translation),
+                                rotation=tuple(g.rotation)))
+    return out
+
+
+def merge_skinned_nifs(nifs, node_name: bytes = b"S2S") -> nifmod.NifFile:
+    """One worn model holding every shape of several build_skinned_nif models (2026-11-20: a child item's parts as one
+    addon on one slot)."""
+    shapes = [sh for n in nifs for sh in skinned_shapes_of(n)]
+    return build_skinned_nif(node_name, shapes, nifs[0].bs_version if nifs else 173)
+
+
 def add_cloth(n: nifmod.NifFile, payload: bytes) -> int:
     """Append a BSClothExtraData (u32 size + Havok cloth tagfile, no name: the layout of the game's and mods' physics
     hairs) and list it in the root NiNode's extra data after the existing entries (as OC Ponytail / Eris Hairstyles:
