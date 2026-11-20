@@ -2572,3 +2572,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   vanilla template's face matches its own body tone at the neck and keeps matching after the move; same tone = no
   change (TONE_GAP 1 again). Alternative if a seam remains: match the head texture's neck-edge band to the body
   texture under it (geometry: head and body UVs at the seam). In game unverified.
+- 2026-11-20 Furniture sounds: a descriptor's <audios> must sit where the shipped ones do (after <events>, before
+  <variables>); appended after <variables> the game ignored it (owner's control: the welder's ITM_Microscope_Up on our
+  hammer played only after the fix). Earlier "our bank is not loaded" conclusions are void (tested with the bad
+  order); both routes (own bank, swapped vanilla .wem) are retested.

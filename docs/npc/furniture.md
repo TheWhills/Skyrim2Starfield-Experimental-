@@ -1093,3 +1093,9 @@ Vanilla food-station events named in the forge's <audio> foley, their files repl
 <variables> (the shipped order is events, audios, variables) - add_audio / add_event now insert in that order;
 (2) the welder's ITM_Microscope_Up may have a WWED record and the food-station events not (489 WWED records for
 thousands of events): sound_records --wwed-list writes every WWED (EditorID, FormID, GUID) to check.
+**Control test** (owner, 2026-11-20 13:36, verified): with <audios> now between <events> and <variables> (the shipped
+order) and the hammer mapped to the welder's ITM_Microscope_Up, Alvor's hammer blows play it ("hearing starfield
+sounds when he hammers"). So the descriptor order mattered: every earlier silent test (our bank in the scratch slot,
+S2S_Sounds, the swapped food-station files) had <audios> after <variables> and proves nothing about the sound side.
+Next, one run tests both routes: hammer -> our own bank's NPCHumanBlacksmithHammer (S2S_Sounds + soundbanksinfo.json),
+quench / drop / take / bellows -> the swapped food-station events.
