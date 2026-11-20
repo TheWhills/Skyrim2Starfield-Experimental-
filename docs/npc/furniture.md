@@ -1076,3 +1076,9 @@ through soundbanksinfo.json (each bank lists its IncludedEvents; Starfield_XXX_S
 also writes <mod>\Sound\Soundbanks\soundbanksinfo.json (Starfield's, from the last WwiseSounds archive, with our events
 in the scratch bank's IncludedEvents) and 1490023241.json (that bank alone, as the patch ships per-bank files).
 Next if still silent: the bank may need explicit loading (a bank the game lists at start), or the bus.
+Still silent with soundbanksinfo.json listing our events in the scratch bank (owner, 2026-11-20 13:01). Next two
+tests, cheapest first: (1) a bank of a new name (--bank S2S_Sounds) added to soundbanksinfo.json as its own entry -
+whether the game loads every bank that file lists (the scratch bank may be skipped by name); (2) fallback, the route
+sound mods use (Nexus: loose <id>.wem in Data\Sound\Soundbanks replaces a streamed file): our <audio> foley names an
+obscure vanilla event in a loaded bank, and Skyrim's sound, converted to .wem like the voices, replaces that event's
+streamed file(s).
