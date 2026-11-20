@@ -826,3 +826,12 @@ why the mod needs no clothes of its own.
   S2S\Faces\Hair\<npc>.nif on a copy of the hairs plugin's head part (S2S_OwnHair_<npc>; HNAM / RNAM FormIDs moved
   into this plugin's master space) in place of the shared one. adult_own_head saves the vanilla head points and
   moves (_own_head/<npc>.npz). The per-NPC reconversion route for adults is removed; children keep theirs.
+  Verified in game (owner, 21:42, front and back): the reshaped shared hairstyle sits on his head - slicked back,
+  ponytail down the back, shaved sides, no crest, full like Alvor's. Why the per-NPC reconversion was thin (owner
+  asked; from the code, the remake run's report not seen): same remake mesh and same material defaults in both, but
+  a different fitting path - the shared build places the hair by the measured Skyrim -> Starfield human head fit and
+  follows the skull from Skyrim's human head to Starfield's; the per-NPC route placed it by his face alignment and
+  followed from a Skyrim head to his own Starfield head, a much larger difference (FaceGen run: follow_head moved
+  737 vertices up to 18.6 mm, skull difference up to 21.7 mm inward), and took its face-bone weights from another
+  template hairstyle (Bob). Supported, not verified: those moves pulled the inner layers under his scalp, leaving the
+  outer strand cards. Children still use that route; worth a look if their hair ever reads thin.
