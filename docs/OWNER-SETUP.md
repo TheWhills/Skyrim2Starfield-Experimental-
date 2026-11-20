@@ -248,13 +248,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    feature-matched face shape; Dorthe waits.)
 7l. B + C: women's faces and shoulders (docs/npc/races.md, 2026-11-19). Every adult's baked face is now recoloured
    to its body tone: run 7k's block again, then in game Hilde, Gerdur, Delphine, Ysolda, Sigrid: face vs neck / hands.
-   Shoulders (Hilde, Gerdur), read-only, Skyrim side:
+   Shoulders (Hilde FarmClothes02, Gerdur FarmClothes03; FarmClothes04 the clean one to compare): the same fit
+   item_convert makes, into a scratch folder (S2S Clothes untouched), with gear_fit's debug meshes after each step:
    ```powershell
    git pull
-   python -I scripts\armor\outfit_probe.py --skyrim-data $sky --npc Hilde --npc Gerdur --npc Ysolda --out C:\Modding\work\outfits
+   $dbg="C:\Modding\work\shoulders"
+   foreach ($i in "ClothesFarmClothes02","ClothesFarmClothes03","ClothesFarmClothes04") { python -I scripts\armor\gear_fit.py --skyrim-data $sky --starfield $sf --armor $i --sex female --race NordRace --name "Items_$i" --out "$dbg\out" --stage --debug-dir "$dbg\$i" --debug-steps }
    ```
-   Send C:\Modding\work\outfits\outfit_probe.json, and say whether Hilde's / Gerdur's dresses show bare shoulders in
-   Skyrim itself.
+   Send the three fit_debug.zip ($dbg\ClothesFarmClothes02 etc.).
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell
