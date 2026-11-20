@@ -484,6 +484,9 @@ def talk_copies(idle_afx: str, slots=TALK_SLOTS):
     for slot in slots:
         t = re.sub(r"<tag>\s*[^<]*</tag>", f"<tag>{slot}</tag>", idle_afx, count=1)
         t = re.sub(r"<filename>\s*[^<]*</filename>", f"<filename>{slot}.af</filename>", t, count=1)
+        # no sounds in the copies (2026-11-20, owner: "sometimes it hammers twice"): a talk / upper-body clip plays
+        # on top of the Idle, so its copy of the Idle's <audios> sounded every blow a second time
+        t = re.sub(r"[ \t]*<audios>.*?</audios>[ \t]*\r?\n?", "", t, flags=re.S)
         out[slot.lower() + ".afx"] = t
     return out
 

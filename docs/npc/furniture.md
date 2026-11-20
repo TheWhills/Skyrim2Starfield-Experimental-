@@ -1115,3 +1115,7 @@ Dead ends, for the record: a bank of our own (in the empty scratch slot or under
 patched soundbanksinfo.json) is not loaded; Vorbis replacement files are not decoded where the bank expects PCM.
 Next sound sets the same way: other animations' Skyrim triggers (grindstone, workbench, anvil) need more unshared
 vanilla events of the right length in SWAP.
+Owner, 2026-11-20 14:00: "sometimes it hammers twice before he does it again". Supported cause: the 45 talk /
+upper-body slots are copies of the Idle descriptor (talk_copies), <audios> included, and play on top of the Idle, so
+each blow sounded twice whenever one ran. The copies now have no <audios>. If it remains: Skyrim's Idle carries two
+hammer triggers (frames 7 and 30 of 52) - whether the clip strikes twice is to be checked against the motion.

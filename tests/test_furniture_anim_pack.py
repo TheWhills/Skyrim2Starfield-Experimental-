@@ -598,3 +598,11 @@ class SoundTriggerTests(unittest.TestCase):
         self.assertIn("<foley>NPCHumanBlacksmithForgeTake</foley>", out)
         self.assertIn("<name>AnimObjLoad</name>", out)
         self.assertNotIn("<audio>", P.add_sound_audios(welder, []))           # a set with sounds: no welder foley
+
+    def test_talk_copies_without_sounds(self):
+        idle = ("<root><tag>Idle</tag><filename>Idle.af</filename><audios><audio><frame>7</frame><foley>X</foley>"
+                "</audio></audios><variables><variable><name>v</name></variable></variables></root>")
+        out = P.talk_copies(idle, ("Talk_L01",))["talk_l01.afx"]
+        self.assertNotIn("<audio", out)
+        self.assertIn("<tag>Talk_L01</tag>", out)
+        self.assertIn("<variables>", out)
