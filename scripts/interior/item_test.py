@@ -110,6 +110,10 @@ def with_physics(nif_bytes, blob, flags=0x80, tail=0, bsx=None) -> bytes:
 def item_record(donor, edid: str, name: str, model: str, fid: int):
     """The donor ALCH (type, header, subs, FormID) as ours: EditorID, name, model path (under meshes\\)."""
     edits = {b"EDID": sfplugin.zs(edid), b"FULL": sfplugin.zs(name), b"MODL": sfplugin.zs(model)}
+    if any(s == b"DESC" for s, _d in donor[2]):
+        # 2026-11-20 (owner, in game: the item card showed "Oõ▮" under the name): the donor's DESC is a string id
+        # into Starfield.esm's string tables, read as text in our (not localized) plugin; ours has none
+        edits[b"DESC"] = sfplugin.zs("")
     return (b"ALCH", donor[1], sfplugin.edit(list(donor[2]), edits), fid)
 
 

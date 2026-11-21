@@ -95,4 +95,10 @@ BSXFlags): dynamic as the donor's (motionType 2, mass, mass distribution, motion
 hull, not ours. Unverified: that a body copied from another model falls, settles and can be taken in game; that the
 donor's hull sits right on our bottle (origin at the base in both: supported for clutter). Next after it works: our
 own dynamic convex body (the fields in the table above on meshcollision's hull, mass distribution from the hull).
+**Verified in game** (owner, 2026-11-21 08:53): S2S_FoodWineAlto ("Alto Wine", the Skyrim bottle, donor
+Drink_Alc_Bottle_Generic_SpaceWine's body and record) placed with placeatme: about the right size, physics (falls,
+can be knocked over), picked up as "Alto Wine", drunk; the donor's effects and value (+10% persuasion, -15% O2
+recovery, 265). So a Skyrim model with a vanilla dynamic body copied onto it works as a loose item. The item card
+showed "Oõ▮" as its description (the donor's DESC string id read as text): DESC now empty. Note: MO2's Mod Index was
+19, the game's 1B (official plugins the game loads that MO2 shows unticked); use help's FormID.
 

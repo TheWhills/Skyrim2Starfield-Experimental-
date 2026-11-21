@@ -41,12 +41,14 @@ class RecordTests(unittest.TestCase):
 
     def test_item_record(self):
         donor = (b"ALCH", H, [(b"EDID", z("Drink_RedWine")), (b"FULL", struct.pack("<I", 5)),
-                              (b"MODL", z("Items\\wine.nif")), (b"ENIT", b"\1\2")], 0x123)
+                              (b"MODL", z("Items\\wine.nif")), (b"DESC", struct.pack("<I", 9)),
+                              (b"ENIT", b"\1\2")], 0x123)
         rec = T.item_record(donor, "S2S_FoodWineBottle02", "Wine", "s2s\\clutter\\wine.nif", 0x01000800)
         d = dict(rec[2])
         self.assertEqual((d[b"EDID"], d[b"FULL"], d[b"MODL"], d[b"ENIT"]),
                          (z("S2S_FoodWineBottle02"), z("Wine"), z("s2s\\clutter\\wine.nif"), b"\1\2"))
         self.assertEqual(rec[3], 0x01000800)
+        self.assertEqual(d[b"DESC"], z(""))                          # not the donor's string id as text
 
 
 class PhysicsTests(unittest.TestCase):
