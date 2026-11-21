@@ -188,4 +188,6 @@ the inn; Faendal's, Gerdur's the same). Now a holder (plate, platter, tray; "hol
 starting up to 5 cm under its bottom, is lifted only onto another holder, and holders are stacked first. Replayed on
 that items.json: 12 lifts, all food onto plates (salmon steak 3.0 cm, raw salmon / bread 1.2 cm, slaughterfish 2.5 to
 2.8 cm), no plate lifted; the 13.1 / 9.7 cm cases keep their holder static (6 cm limit).
+**Verified in game** (owner, 2026-11-21 10:23, Sleeping Giant Inn table, screenshot): the salmon steaks lie on the
+plates ("that looks right"); build 10:21: 12 lifts (largest 3.1 cm, all food onto plates), 6 holders kept static.
 
