@@ -165,3 +165,17 @@ ladle, pots, kettle, jug) prefer Starfield Kitchen_ / Bar_ / FoodDrink_ / dish i
 missing name comes from the EditorID ("Fork", "Wooden Bowl"). Quest clutter (Golden Claw, Map of Dragon Burials) are
 copies like the rest, kept initially disabled as in Skyrim.
 
+## Items on items (2026-11-21, owner in game: "the food is spawning slightly under the plates")
+Seen (screenshot, Sleeping Giant Inn): salmon / red food showing from under the wooden plates. Cause (supported): the
+plate's borrowed body (GeneticSampler01, 0.053 m) was as tall as the plate with its rim; Skyrim sets food down inside
+the dish, so the food's body started inside the plate's and the physics pushed the flat food under it. Now
+(make_items.settle_stacks, at build time):
+- plates / platters / trays are matched to a donor of their footprint but only HOLDER_HEIGHT_M (1.5 cm) tall from
+  their bottom, so their body is the dish's floor;
+- an item that starts inside another item's body (its centre over it, its bottom above the other's bottom and below
+  its top) is lifted to that body's top + 3 mm, lowest first, per cell (refs' z in items.json, "lifted_m");
+- a deep holder (basket, bucket, bowl) whose contents would need more than 15 cm of lift stays a static: its
+  converted Skyrim collision is a hollow mesh (convert: "native Starfield meshes from Skyrim's own collision"), which
+  holds the potatoes as in Skyrim, where any convex body (ours or a donor's) would fill the basket.
+Items tipped more than 0.35 rad about x / y are left out of the stacking. Unverified in game.
+

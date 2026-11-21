@@ -1,6 +1,7 @@
 """scripts/interior/make_items.py: Skyrim's placed food / drink / potions as Starfield items (a donor ALCH of the same
 kind and closest size, its physics body on our model). Synthetic records and NIFs only."""
 import json
+import math
 import os
 import struct
 import sys
@@ -114,6 +115,27 @@ class ClutterTests(unittest.TestCase):
         self.assertEqual(M.pretty_name("BasicWoodenBowl01"), "Wooden Bowl")
         self.assertEqual(M.pretty_name("Quill01"), "Quill")
 
+    def test_plate_takes_a_thin_donor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conv = os.path.join(tmp, "convert")
+            os.makedirs(os.path.join(conv, "meshes", "s2s"))
+            with open(os.path.join(conv, "meshes", "s2s", "plate.nif"), "wb") as fh:
+                fh.write(nifmod.serialize(sfnif.build_static_nif(b"P", [shape(b"A")], collision_blob=b"BOX")))
+            sky = {0x20: ("MISC", 0, [(b"EDID", z("BasicWoodenPlate01")), (b"MODL", z("Clutter\\Plate.nif"))]),
+                   0x200: ("REFR", 0, [(b"NAME", struct.pack("<I", 0x20))])}
+            cell = {"cell": "Inn", "refs": [{"formkey": "000200:Skyrim.esm", "type": "MiscItem",
+                                             "model": "Clutter\\Plate.nif", "pos": [0, 0, 0], "rot": [0, 0, 0],
+                                             "scale": 1.0}]}
+            def tray(fid, edid, h):
+                return (b"MISC", H, [(b"EDID", z(edid)), (b"OBND", struct.pack("<6f", -0.15, -0.3, 0, 0.15, 0.3, h)),
+                                     (b"MODL", z(edid + ".nif"))], fid)
+            donors = M.starfield_donors([tray(1, "Kitchen_TrayDeep", 0.057), tray(2, "Kitchen_TrayFlat", 0.015)])
+            out, _ = M.build([cell], FakeIndex(sky), {"meshes\\clutter\\plate.nif": "s2s\\plate.nif"}, donors, {},
+                             conv, lambda d: (b"DYN", 0x41, 7, 11), lambda m: [[-0.15, -0.3, 0], [0.15, 0.3, 0.057]])
+        b = out["bases"]["000020:Skyrim.esm"]
+        self.assertEqual((b["family"], b["donor_edid"]), ("kitchen", "Kitchen_TrayFlat"))
+        self.assertEqual(b["hull_m"], [[-0.15, -0.3, 0.0], [0.15, 0.3, 0.015]])
+
     def test_skyrim_misc_kind_and_data(self):
         self.assertEqual(M.skyrim_kind("MISC", "BasicPlate01", "clutter\\plate.nif", 0), "misc")
         info = M.skyrim_base([(b"EDID", z("BasicTankard01")), (b"MODL", z("Clutter\\Tankard.nif")),
@@ -147,6 +169,48 @@ class ClutterTests(unittest.TestCase):
                          ("misc", "MISC", "Clutter_Mug", "Tankard"))          # no FULL: a name from the EditorID          # a MISC donor, never the drink
         self.assertEqual([r["formkey"] for r in out["refs"]], ["000200:Skyrim.esm"])
         self.assertIn("credits", out["skipped"][0]["why"])                           # gold left static for now
+
+
+class StackTests(unittest.TestCase):
+    """2026-11-21 (owner, in game: "the food is spawning slightly under the plates")."""
+
+    def ref(self, fk, base, pos_m, rot=(0, 0, 0), cell="Inn"):
+        return {"formkey": fk, "cell": cell, "base": base, "pos": [v * M.U for v in pos_m], "rot": list(rot),
+                "scale": 1.0}
+
+    def test_holder_target_is_a_thin_base(self):
+        self.assertEqual(M.holder_target([[-0.15, -0.3, 0.0], [0.15, 0.3, 0.057]]),
+                         [[-0.15, -0.3, 0.0], [0.15, 0.3, M.HOLDER_HEIGHT_M]])
+
+    def test_world_box_turns_and_skips_tipped(self):
+        r = self.ref("a", "b", (1.0, 2.0, 0.5), rot=(0, 0, math.pi / 2))
+        box = M.world_box(r, [[-0.1, -0.3, 0.0], [0.1, 0.3, 0.05]])
+        for g, w in zip(box, (0.7, 1.9, 0.5, 1.3, 2.1, 0.55)):
+            self.assertAlmostEqual(g, w, places=6)
+        self.assertIsNone(M.world_box(self.ref("a", "b", (0, 0, 0), rot=(1.2, 0, 0)), [[0, 0, 0], [1, 1, 1]]))
+
+    def test_food_on_a_plate_is_lifted(self):
+        bases = {"plate": {"hull_m": [[-0.15, -0.3, 0.0], [0.15, 0.3, 0.015]]},
+                 "salmon": {"hull_m": [[-0.1, -0.13, 0.0], [0.1, 0.13, 0.033]]}}
+        refs = [self.ref("p", "plate", (1.0, 1.0, 1.0)), self.ref("f", "salmon", (1.0, 1.05, 1.008)),
+                self.ref("g", "salmon", (5.0, 5.0, 1.0)),                        # on the table: left alone
+                self.ref("h", "salmon", (1.0, 1.0, 1.008), cell="Other")]       # another cell: no plate there
+        got = M.settle_stacks(refs, bases)
+        self.assertEqual([(x["formkey"], x["on"]) for x in got["lifted"]], [("f", "p")])
+        self.assertAlmostEqual(refs[1]["pos"][2] / M.U, 1.015 + M.STACK_GAP_M, places=4)
+        self.assertEqual(refs[2]["pos"][2], 1.0 * M.U)
+        self.assertEqual(got["kept_static"], [])
+
+    def test_basket_of_potatoes_stays_static(self):
+        bases = {"basket": {"hull_m": [[-0.25, -0.25, 0.0], [0.25, 0.25, 0.5]]},
+                 "potato": {"hull_m": [[-0.08, -0.08, 0.0], [0.08, 0.08, 0.17]]}}
+        refs = [self.ref("b", "basket", (2.0, 2.0, 0.0)), self.ref("p1", "potato", (2.0, 2.0, 0.05)),
+                self.ref("p2", "potato", (2.05, 2.0, 0.2))]
+        got = M.settle_stacks(refs, bases)
+        self.assertEqual(got["kept_static"], [{"formkey": "b", "holds": "p2"}])
+        self.assertEqual([r["formkey"] for r in refs], ["p1", "p2"])           # the basket stays a static
+        # with the basket a static, p2 (bottom 0.2) starts inside p1 (0.05 .. 0.22): lifted onto it
+        self.assertEqual([(x["formkey"], x["on"]) for x in got["lifted"]], [("p2", "p1")])
 
 
 class FitTests(unittest.TestCase):
@@ -246,7 +310,7 @@ class BuildTests(unittest.TestCase):
                 {"formkey": "000100:Skyrim.esm", "type": "Ingestible", "model": "Clutter\\WineBottle01.nif",
                  "pos": [1, 2, 3], "rot": [0, 0, 1], "scale": 1.0},
                 {"formkey": "000101:Skyrim.esm", "type": "Ingestible", "model": "Clutter\\WineBottle01.nif",
-                 "pos": [4, 5, 6], "rot": [0, 0, 0], "scale": 1.0, "disabled": 1},
+                 "pos": [400, 500, 6], "rot": [0, 0, 0], "scale": 1.0, "disabled": 1},   # apart: not a stack
                 {"formkey": "000102:Skyrim.esm", "type": "Ingestible", "model": "Clutter\\Unconverted.nif",
                  "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0},
                 {"formkey": "000103:Skyrim.esm", "type": "Static", "model": "Clutter\\Table.nif",
