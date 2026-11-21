@@ -7,15 +7,25 @@ skyrim because like, the inn is super dark but faendals room looks less dark ...
 other rooms we haven't seen yet". Goal: a rule that lights any converted room the way Skyrim does, with one global
 brightness for taste, not per-room tuning.
 
-## What the build does now (verified, the code)
-- Every Skyrim light becomes a copy of LGT_Fire_Cauldron (3197A6, 4000 lm, 8 m) with Skyrim's radius and colour and
-  lumens = 4000 x clamp(LIGHT_POWER 2 x max(fade, 1) x max(1, (radius / 8 m)^2), 1, 16): a candle's light and a room
-  fill light both get at least 8000 lm; the largest is capped at 64000 lm (PluginSpike SkyrimLight).
-- Lights within LIGHT_MERGE_M (1 m) of an already placed one, on every axis, are dropped (PluginSpike cell loop).
-- The cell: one lighting template for every room (ship interior 006658), one image space (1C6C37), and with
-  CELL_AMBIENT skyrim its AmbientColor / DirectionalColor = Skyrim's single ambient / directional colours. Skyrim's six
-  directional ambient colours, the directional light's rotation and fade, and per-reference fade offsets (XLIG) were
-  not read before this change.
+## What the build does now (end of 2026-11-21; verified, the code)
+Lights (PluginSpike SkyrimLight, per Skyrim light):
+- a copy of LGT_Fire_Cauldron (3197A6, 4000 lm, 8 m) with Skyrim's radius and colour, 95 mired warmer
+  (LIGHT_TEMPERATURE warm), a subtle 15 % flicker every 0.5 s (LIGHT_FLICKER subtle), FalloffExponent Skyrim's (no
+  visible effect, measured below);
+- lumens = 4000 x clamp(LIGHT_POWER 2 x max(fade, 1) x max(1, (radius / 8 m)^2), 1, LIGHT_MAX_SCALE 256)
+  x the per-light distance fit (fit_scale, 0.25 .. 2; lightmodel.distance_fit); cell light_scale 1 under auto exposure;
+- lights within 1 m of one already placed are dropped (LIGHT_MERGE_M); no area light yet (the sphere rows are a test).
+Room light:
+- lighting template 006658 with Skyrim's ambient / directional colours (CELL_AMBIENT skyrim);
+- Skyrim's six directional ambient colours baked into a cube map as the cell's environment light
+  (lightmodel.ambient_env x ENV_AMBIENT_SCALE 35; -AmbientScale; 75 before 17:18, 150 earlier).
+Picture (one image space for the batch, FO4Port_IS_SkyrimAdapt; make_skyrim_interior.write_adapt_imagespace):
+- a copy of DefaultImageSpace (000167) made to look like LGT_NoLut (no tone-map override, ColorLUT, bloom 4 / 4, grey
+  tint): auto exposure EV100 0 .. 10, metering 90 .. 97 % of the histogram (-MeterDarks 90 -MeterBrights 3), adaptation
+  speed 0.5 both ways (-AdaptSpeed), Cinematic Brightness 0.75 (-ExposureBrightness), compensation curve +0.5 (has no
+  effect, verified); no Skyrim colour grade (--skyrim-grading opts in).
+Not yet seen in game: Brightness 0.75 and adapt speed 0.5 (built 17:25 / 17:34, owner paused lighting at 17:49).
+The rule before 2026-11-21 (lumens clamp 1 .. 16, image space 1C6C37, single ambient colour) is in Git history.
 
 ## Skyrim (vanilla SSE)
 - **Point lights (verified):** Community Shaders' package/Shaders/Lighting.hlsl, the vanilla loop (without its light
@@ -429,3 +439,34 @@ exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hy
   (range EV 0 .. 10) on DefaultImageSpace's adaptation speed 2 both ways (Starfield's own interiors use a fixed
   exposure and never adapt). AdaptSpeedUp / Down now 0.5 (-AdaptSpeed; unit unresolved, supported: lower = slower).
   If the size of the change is the problem rather than its speed, the range narrows instead (-ExposureMin / -Max).
+
+## Readings not recorded above (2026-11-21, owner's screenshots; display luminance unless said)
+- 16:26, the hallway down from the inn: one step forward changed the picture a lot. Metered as the build did (85 .. 95 %
+  band, geometric mean of linearised luminance) the two shots differ by 1.83 stops: the band is a tenth of the screen, so
+  a lit doorway or wall edge moving into it swings the exposure. Wider bands swung these two shots more (70 / 2: 2.1,
+  60 / 2: 2.6, 50 / 2: 6.4, vanilla 20 / 20: 5.8 stops): widening the metering is not the cure. Proposed, not built:
+  limit the range (-ExposureMin / -Max) around a level worked out per room from Skyrim's brightness, with one image space
+  per room (also needed for caves / castles with other Skyrim image spaces).
+- 16:43, estimated darkening of each metering band against 85 / 5 on five views (hall, Faendal's, map room, hallway x2),
+  from the screenshots (tone-mapped, so a lower bound): 87 / 5 +0.09 .. 0.12 stops, 85 / 3 +0.13 .. 0.16, 88 / 4 +0.20 ..
+  0.27, 90 / 5 +0.23 .. 0.33, 88 / 3 +0.27 .. 0.36, 90 / 3 +0.39 .. 0.52, 92 / 3 +0.51 .. 0.68; even across views.
+- 16:47, inn hall, "ours looks better but slightly washed out" against an earlier build the owner preferred (percentiles
+  1 / 5 / 50 / 95): earlier 0.006 / 0.021 / 0.112 / 0.327, saturation 0.38, red / blue 1.65; that build 0.058 / 0.079 /
+  0.209 / 0.451, saturation 0.26, red / blue 1.45. The 16:26 build with Skyrim's grade: 0.000 / 0.000 / 0.134 / 0.425,
+  saturation 0.48. Reading (supported hypothesis): a level change scales everything, so lifted blacks and lost
+  saturation point at an added grey light, the environment cube of Skyrim's cool ambient (45, 48, 48) at 75; that is
+  also the likelier cause of the 16:12 "devoid of color" than the missing grade. Hence ambient 35 (17:18).
+- 17:25, same hall after ambient 35 / metering 90 / 3: 0.039 / 0.059 / 0.193 / 0.435; bedroom 0.022 / 0.045 / 0.225 /
+  0.43, side room 0.003 / 0.015 / 0.212 / 0.43: blacks back down, mid-tones still near 0.2 against the preferred 0.11.
+- Owner's verdicts in order: 16:19 colours better with the grade, then 16:28 no screen filter (characters change colour
+  inside); 16:43 "everything a tiny bit too light"; 16:53 "leave it like this for now" except the bright wall at the
+  light; 17:18 darker please, the earlier build "felt more real"; 17:25 "darken the lights in general"; 17:26 the
+  exposure jumps at every change of view; 17:49 lighting paused ("tired of doing lighting rn").
+
+## Open (where lighting stands, 2026-11-21 evening)
+1. In game: Brightness 0.75 and AdaptSpeed 0.5 (the 17:25 / 17:34 defaults), against the preferred older hall shot.
+2. The calibration cell's sphere rows (test_a0.5, test_a1.5): a top-down screenshot + light_calib.py analyze, for the
+   hot spots at walls / tables right at a light (falloff shape near a light, not level).
+3. The exposure range per room from Skyrim's brightness (the hallway jump), one image space per room.
+4. Our image space based on the exterior's (same tone map / LUT inside and out, only exposure differs).
+5. The remaining warmth / saturation gap, from light colours and the ambient's share, not a screen filter.
