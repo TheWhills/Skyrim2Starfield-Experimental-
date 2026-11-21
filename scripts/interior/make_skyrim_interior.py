@@ -159,12 +159,15 @@ def write_adapt_imagespace(work, a):
         "Settings.Exposure.AutoExposure.ExposureMax.Value": float(a.exposure_max),
         # the compensation curve: every control and the default the same value (a flat offset; supported hypothesis:
         # EV, positive = brighter as a camera's exposure compensation)
-        "USER:BSFloatCurve.DefaultValue": comp, "LIST:BSFloatCurve::Control.Value": comp})
+        "USER:BSFloatCurve.DefaultValue": comp, "LIST:BSFloatCurve::Control.Value": comp,
+        # owner 2026-11-21: the curve does nothing either (-2 and +0.5 within 0.1 stop), the views adapt but 2.1 - 2.5
+        # stops over Skyrim: the cinematic brightness (vanilla LGT_LUT_Int_StarbornTemple uses 0.8) scales the result
+        "Settings.Cinematic.Brightness.Value": float(getattr(a, "exposure_brightness", 1.0))})
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(blob)
-    print(f"image space: LGT_NoLut with auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
-          f"{getattr(a, 'exposure_compensation', 0.0)} -> {path}")
+    print(f"image space: auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
+          f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)} -> {path}")
     return blob
 
 
@@ -382,6 +385,9 @@ def parser():
                     help="batch --exposure auto: the compensation curve's value (DefaultImageSpace's curve, which has controls; "
                          "-2 made every view 2.2 - 2.9 stops over Skyrim; 0.5 = 2.5 stops darker if a unit is a stop with "
                          "positive = darker)")
+    ap.add_argument("--exposure-brightness", type=float, default=0.25,
+                    help="batch --exposure auto: the image space's cinematic brightness (2026-11-21: views adapted "
+                         "2.1 - 2.5 stops over Skyrim at 1.0)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

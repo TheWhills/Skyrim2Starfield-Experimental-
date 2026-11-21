@@ -214,7 +214,8 @@ def adaptation_scale(mean_linear, ref=ADAPT_REF, strength=ADAPT_STRENGTH, limits
 # owner 2026-11-21 13:56 (auto exposure EV100 4 .. 8): bright ends of the inn views within 1.3 stops of Skyrim, dark
 # ends 4.8 - 5.7 stops under, contrast (sd log2) 2.5 - 3.1 against Skyrim's 1.2 - 1.8: the fill is too weak against
 # the lights. 38 -> 150 (2 stops)
-ENV_AMBIENT_SCALE = 150.0
+# 2026-11-21 14:55 with views adapting: contrast 1.2 - 1.5 against Skyrim's 1.5 - 2.2 (the fill too strong): 150 -> 75
+ENV_AMBIENT_SCALE = 75.0
 
 
 def ambient_env(lighting: dict, room_scale: float = 1.0, scale: float = ENV_AMBIENT_SCALE) -> tuple:

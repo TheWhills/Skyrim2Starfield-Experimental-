@@ -61,7 +61,7 @@ param(
     [double]$CandleExposure = 3,
     # Skyrim's ambient as each room's environment light: radiance per linear unit (2026-11-21: 38, then 150;
     # higher = brighter shadows / corners). Written by step 1: a full build
-    [double]$AmbientScale = 150,
+    [double]$AmbientScale = 75,
     # 2026-11-21: exposure like Skyrim's, adapting to what you look at (auto, a copy of LGT_NoLut with Starfield's auto
     # exposure between EV100 ExposureMin and ExposureMax), or fixed (EV 5, each room's lights scaled instead). Step 1
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
@@ -74,6 +74,9 @@ param(
     # the auto exposure's compensation (DefaultImageSpace's curve, which has controls; 2026-11-21: -2 gave every view
     # 2.2 - 2.9 stops over Skyrim, adapting per view; 0.5 next: higher = darker, if a unit is a stop)
     [double]$ExposureCompensation = 0.5,
+    # the image's brightness after the exposure (2026-11-21: the compensation curve does nothing; at 1.0 every view
+    # adapted 2.1 - 2.5 stops over Skyrim). Lower = darker
+    [double]$ExposureBrightness = 0.25,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -191,7 +194,8 @@ $args1 += @("--ambient-scale", $AmbientScale.ToString([cultureinfo]::InvariantCu
 $args1 += @("--exposure", $Exposure, "--starfield-esm", "$SF\Data\Starfield.esm",
             "--exposure-min", $ExposureMin.ToString([cultureinfo]::InvariantCulture),
             "--exposure-max", $ExposureMax.ToString([cultureinfo]::InvariantCulture),
-            "--exposure-compensation", $ExposureCompensation.ToString([cultureinfo]::InvariantCulture))
+            "--exposure-compensation", $ExposureCompensation.ToString([cultureinfo]::InvariantCulture),
+            "--exposure-brightness", $ExposureBrightness.ToString([cultureinfo]::InvariantCulture))
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }

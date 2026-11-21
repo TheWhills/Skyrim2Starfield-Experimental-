@@ -359,3 +359,13 @@ light_calib analyze on each (it finds the arrival tile and turns a view looking 
   and this is Starfield's own target; next build compensation +0.5 tells which (expected near Skyrim if a unit is a
   stop with positive = darker; unchanged if the curve is ignored - then Cinematic Brightness is the lever).
 - Contrast now under Skyrim's (1.2 - 1.4): the fill (AmbientScale 150) is strong for adapted views; after the level.
+
+## Compensation +0.5 (owner 14:55; vs Skyrim): the curve does nothing
+| view | comp -2 | comp +0.5 | contrast Skyrim / ours |
+|---|---|---|---|
+| Faendal's house | +2.4 | +2.5 | 1.6 / 1.4 |
+| inn hall | +2.2 | +2.1 | 1.5 / 1.2 |
+| inn bedroom | +2.4 | +2.2 | 2.2 / 1.5 |
+- Verified: the compensation curve has no visible effect (changes within 0.12 stops). The views adapt (spread 0.4 stops),
+  2.1 - 2.5 over Skyrim: Starfield's own target. Next: Cinematic Brightness 0.25 (-2 stops if it scales linear light;
+  sf_imagespace patches it; riverwood_doors -ExposureBrightness) and the fill 150 -> 75 (contrast under Skyrim's).

@@ -151,6 +151,7 @@ class AdaptImageSpaceTest(unittest.TestCase):
             self.assertEqual(seen["changes"]["USER:BSFloatCurve.DefaultValue"], -3.0)
             self.assertEqual(seen["changes"]["LIST:BSFloatCurve::Control.Value"], -3.0)
             self.assertIs(seen["changes"]["Settings.OverrideToneMapping"], False)
+            self.assertEqual(seen["changes"]["Settings.Cinematic.Brightness.Value"], 1.0)
             self.assertIsNone(MSI.write_adapt_imagespace(work, SimpleNamespace(exposure="fixed", starfield_esm="x")))
             self.assertFalse(os.path.exists(path))
 
@@ -164,6 +165,7 @@ class AdaptImageSpaceTest(unittest.TestCase):
         self.assertIn('[ValidateSet("auto", "fixed")][string]$Exposure = "auto"', ps)
         self.assertIn('"--starfield-esm"', ps)
         self.assertIn('"--exposure-compensation"', ps)
+        self.assertIn('"--exposure-brightness"', ps)
         with open(os.path.join(ROOT, "scripts", "interior", "make_skyrim_interior.py"), encoding="utf-8") as fh:
             py = fh.read()
         self.assertIn('cell["light_scale"] = 1.0', py)
