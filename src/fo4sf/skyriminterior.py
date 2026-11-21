@@ -62,6 +62,14 @@ def cell_lighting(fields, plugin_name="Skyrim.esm"):
     for sig, d in fields:
         if sig == b"XCLL" and len(d) >= 12:
             out.update(ambient=_rgb(d, 0), directional=_rgb(d, 4), fog_near_color=_rgb(d, 8))
+            if len(d) >= 64:
+                # verified layout (xEdit wbDefinitionsTES5 XCLL + wbDefinitionsCommon wbAmbientColors): directional
+                # rotation XY / Z (s32 degrees) at 20 / 24, directional fade at 28, the six directional ambient colours
+                # X+ X- Y+ Y- Z+ Z- at 40 .. 60, specular 64, fresnel power 68
+                rxy, rz = struct.unpack_from("<ii", d, 20)
+                out.update(directional_rotation=[rxy, rz],
+                           directional_fade=round(struct.unpack_from("<f", d, 28)[0], 4),
+                           directional_ambient=_ambient6(d, 40))
             if len(d) >= 92:
                 out.update(fog_far_color=_rgb(d, 72), light_fade_begin=round(struct.unpack_from("<f", d, 80)[0], 1),
                            light_fade_end=round(struct.unpack_from("<f", d, 84)[0], 1),
@@ -71,6 +79,24 @@ def cell_lighting(fields, plugin_name="Skyrim.esm"):
         elif sig == b"XCIM" and len(d) >= 4 and struct.unpack_from("<I", d)[0]:
             out["image_space"] = skyrimrefs.formkey(struct.unpack_from("<I", d)[0], plugin_name)
     return out or None
+
+
+AMBIENT_AXES = ("x+", "x-", "y+", "y-", "z+", "z-")
+
+
+def _ambient6(d, off) -> dict:
+    """The six directional ambient colours (wbAmbientColors: X+ X- Y+ Y- Z+ Z-, RGBx each) from offset `off`."""
+    return {k: _rgb(d, off + 4 * i) for i, k in enumerate(AMBIENT_AXES)}
+
+
+def _xlig(data):
+    """REFR XLIG (xEdit wbDefinitionsTES5, verified): FOV offset, fade offset ("Fade 1.35+/-"), end distance cap,
+    shadow depth bias (f32 each). None when the reference has none."""
+    for sig, d in fo4land.iter_subrecords(data):
+        if sig == b"XLIG" and len(d) >= 8:
+            fov, fade = struct.unpack_from("<ff", d)
+            return {"fov_delta": round(fov, 4), "fade_delta": round(fade, 4)}
+    return None
 
 
 def _xrds(data):
@@ -221,8 +247,9 @@ class Source:
         self._templates = None
 
     def lighting_templates(self) -> dict:
-        """{LGTM fid: {"ambient", "directional"}} (LGTM DATA starts with the ambient and directional colours; xEdit
-        wbDefinitionsTES5)."""
+        """{LGTM fid: {"ambient", "directional", "directional_rotation", "directional_fade", "directional_ambient"}}
+        (LGTM DATA as XCLL up to the fog power, its own ambient colours "Unused"; DALC = the template's directional
+        ambient; xEdit wbDefinitionsTES5, verified)."""
         if self._templates is None:
             self._templates = {}
             rng = self.p.top_group(b"LGTM")
@@ -231,7 +258,13 @@ class Source:
                     continue
                 for sig, d in fo4land.iter_subrecords(fo4land.record_data(self.p.buf, off)):
                     if sig == b"DATA" and len(d) >= 8:
-                        self._templates[fid] = {"ambient": _rgb(d, 0), "directional": _rgb(d, 4)}
+                        t = self._templates.setdefault(fid, {})
+                        t.update(ambient=_rgb(d, 0), directional=_rgb(d, 4))
+                        if len(d) >= 32:
+                            t.update(directional_rotation=list(struct.unpack_from("<ii", d, 20)),
+                                     directional_fade=round(struct.unpack_from("<f", d, 28)[0], 4))
+                    elif sig == b"DALC" and len(d) >= 24:    # the template's directional ambient (its DATA copy unused)
+                        self._templates.setdefault(fid, {})["directional_ambient"] = _ambient6(d, 0)
         return self._templates
 
     def cell_lighting(self, fields) -> dict:
@@ -245,9 +278,14 @@ class Source:
             return lt
         lt = dict(lt or {})
         inherits = lt.get("inherits")
-        for bit, key in ((0x1, "ambient"), (0x2, "directional")):
-            if key not in lt or (inherits is not None and inherits & bit):
-                lt[key] = list(tpl[key])
+        # 0x1 / 0x2 / 0x20 / 0x40: xEdit's XCLL Inherits flags; the directional ambient follows the ambient flag
+        # (supported hypothesis: the CK shows them together as "Ambient Colors")
+        for bit, key in ((0x1, "ambient"), (0x2, "directional"), (0x1, "directional_ambient"),
+                         (0x20, "directional_rotation"), (0x40, "directional_fade")):
+            if key in tpl and (key not in lt or (inherits is not None and inherits & bit)):
+                v = tpl[key]
+                lt[key] = {k: list(c) for k, c in v.items()} if isinstance(v, dict) else \
+                    (list(v) if isinstance(v, list) else v)
                 lt.setdefault("from_template", []).append(key)
         return lt
 
@@ -363,6 +401,9 @@ class Source:
                     # Sleeping Giant Inn: ~10 units on several lights turned them into 0.14 m pinpricks)
                     if xr >= MIN_REF_RADIUS:
                         light["radius"] = round(xr, 2)
+                xl = _xlig(data)
+                if xl:
+                    light["ref_fade_delta"] = xl["fade_delta"]     # recorded only; the build does not use it yet
                 entry["light"] = light
             x = _xtel(data)
             if x:

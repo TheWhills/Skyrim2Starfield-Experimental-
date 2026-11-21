@@ -2610,3 +2610,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Colours warmer (core no longer near-white), foot see-through. In game: open.
 - (11:40, soft v3) no blue foot (made pink texels), soft candle ExposureOffset 5 instead of 8, -CandleExposure to tune
   (part of flame_key, so a flame-only rebuild).
+
+## 2026-11-21: interior lighting by model, not by global brightness
+- Owner: rooms are lit inconsistently (inn very dark, Faendal's close), so one brightness knob cannot fix it. Decision:
+  model both games' light (fo4sf.lightmodel; Skyrim's point-light falloff verified from Community Shaders' vanilla
+  shader path, Starfield's to be measured with a calibration cell) and fit each room's lights to Skyrim's light, with
+  one global constant. First step: a read-only audit (scripts/interior/light_audit.py); the export now also records the
+  six directional ambient colours, the directional rotation / fade (XCLL, LGTM DALC) and the XLIG fade offset (not yet
+  used by the build). Alternatives: per-room hand tuning (does not reach rooms nobody has looked at), raising
+  LIGHT_POWER (moves every room together, the owner's point).

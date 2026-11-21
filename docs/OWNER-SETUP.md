@@ -301,6 +301,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7v. (2026-11-21) Lighting audit (read-only, no build, Starfield may stay open): how Skyrim lights each Riverwood
+   room against what we place (docs/interior/lighting-model.md). Send the printed summary (or light_audit.json):
+   python -I scripts\interior\light_audit.py --skyrim "$sky\Skyrim.esm" --work C:\Modding\work\s2s\riverwood_doors
 7u. (2026-11-21) Soft candles v3: dimmer (no longer one clipped white blob), no pink edge. `-AssetsOnly` again;
    `-CandleExposure 2` (dimmer) or `4` (brighter) to try others, default 3 (was 5: "awfully white"):
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -AssetsOnly
