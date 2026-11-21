@@ -8,6 +8,8 @@
 //   form <hex>... | form type:<TypePrefix> <EditorID substr>   one-level dump of any record      landcount
 //   layers <WRLD> [layer substr]   refs per layer; refs (and their bases) of matching layers
 //   list <TypePrefix> [EditorID substr]   FormKey + EditorID of every matching record (e.g. list Water)
+//   imgsdump <out dir> [hex | EditorID substr]...   image spaces' REFL / RDIF blobs to files + their strings (default:
+//                                                   the 15 most used by cells and the ones the interiors have tried)
 // Note: opening a plugin other than Starfield.esm needs a master flag lookup (not implemented).
 using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Starfield;
@@ -92,6 +94,39 @@ switch (args[1])
             var useCount = cells.Where(c => !c.ImageSpace.IsNull).GroupBy(c => c.ImageSpace.FormKey).ToDictionary(g => g.Key, g => g.Count());
             foreach (var i in mod.ImageSpaces.OrderByDescending(i => useCount.GetValueOrDefault(i.FormKey)).Take(30))
                 Console.WriteLine($"{useCount.GetValueOrDefault(i.FormKey),5}  {i.FormKey}  {i.EditorID}");
+        }
+        break;
+    case "imgsdump":   // imgsdump <out dir> [hex form id | EditorID substr]...: IMGS REFL / RDIF blobs + their strings
+        {                  // (2026-11-21, docs/interior/lighting-model.md: Starfield's exposure settings, unresolved)
+            var outDir = args[2];
+            Directory.CreateDirectory(outDir);
+            var sel = args.Skip(3).ToList();
+            var useCount = cells.Where(c => !c.ImageSpace.IsNull).GroupBy(c => c.ImageSpace.FormKey).ToDictionary(g => g.Key, g => g.Count());
+            var picked = sel.Count == 0
+                ? mod.ImageSpaces.OrderByDescending(i => useCount.GetValueOrDefault(i.FormKey)).Take(15)
+                    .Concat(mod.ImageSpaces.Where(i => new uint[] { 0x1C6C37, 0x122393, 0x0606C1, 0x03D206 }.Contains(i.FormKey.ID)))
+                : mod.ImageSpaces.Where(i => sel.Any(q => i.FormKey.ID.ToString("X6").Equals(q.TrimStart('0').PadLeft(6, '0'), StringComparison.OrdinalIgnoreCase)
+                                                         || (i.EditorID ?? "").Contains(q, StringComparison.OrdinalIgnoreCase)));
+            foreach (var i in picked.Distinct())
+            {
+                Console.WriteLine($"== {i.FormKey.ID:X6} {i.EditorID}  used by {useCount.GetValueOrDefault(i.FormKey)} cells  parent {i.ReflectionParent.FormKey}");
+                foreach (var (tag, blob) in new[] { ("REFL", i.Reflection), ("RDIF", i.ReflectionDiff) })
+                {
+                    if (blob is not { } b) continue;
+                    var bytes = b.ToArray();
+                    File.WriteAllBytes(Path.Combine(outDir, $"{i.FormKey.ID:X6}_{i.EditorID}_{tag}.bin"), bytes);
+                    var words = new List<string>();
+                    var cur = new System.Text.StringBuilder();
+                    foreach (var by in bytes)
+                    {
+                        if (by >= 0x20 && by < 0x7F) { cur.Append((char)by); continue; }
+                        if (cur.Length >= 4) words.Add(cur.ToString());
+                        cur.Clear();
+                    }
+                    if (cur.Length >= 4) words.Add(cur.ToString());
+                    Console.WriteLine($"   {tag} {bytes.Length} bytes: {string.Join(" | ", words.Take(80))}");
+                }
+            }
         }
         break;
     case "wrld":     // read-only: every WRLD with its terrain/planet/parent fields (reflection dump; [substr] filters EditorID)

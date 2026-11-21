@@ -81,6 +81,34 @@ Read (verified from the output unless marked):
 - Inside each room ours / Skyrim's spreads 2 - 3.5 stops: under H1, ours is much brighter right under a light and
   darker away from it (the owner, 11-16: "very bright right at the source").
 
+## Skyrim's image space and eye adaptation (owner's second audit run, 12:23; Community Shaders ISHDR.hlsl)
+- Every Riverwood room uses FarmInteriorIS (059B60): eye adapt speed 15, eye adapt strength 1.5, white 1.0, bloom 4;
+  cinematic saturation 1.05, brightness 1.15, contrast 1.2; tint 5 % of (0.63, 0.39, 0.04) (verified, the audit).
+- ISHDR.hlsl, the vanilla blend (verified): the frame is multiplied by avgValue.y / avgValue.x before the tonemap
+  (avgValue.x = the eye's adapted average luminance, smoothed over time by the DOWNADAPT pass at the image space's
+  adapt speeds; how the engine sets .y from eye adapt strength: unresolved). Reinhard with white point p:
+  L (L p + 1) / (L + 1), which at p = 1 (FarmInteriorIS's white) is L: no highlight compression. Then saturation,
+  5 % tint, x 1.15, contrast 1.2 about the average.
+- Screens (owner's six pairs, 12:03; mean linear luminance of the middle of each frame, HUD cropped; framing differs
+  a little between the games, so a stop or so is noise):
+
+| scene | Skyrim geo-mean | Starfield geo-mean | Starfield vs Skyrim |
+|---|---|---|---|
+| inn, candle table | 0.007 | 0.0003 | -5.0 st |
+| inn hall | 0.020 | 0.0008 | -4.7 st |
+| inn stairs | 0.005 | 0.0002 | -4.6 st |
+| basement | 0.010 | 0.0025 | -2.0 st |
+| Faendal's bedroom | 0.011 | 0.006 | -0.9 st |
+| a house with a hearth | 0.018 | 0.011 | -0.7 st |
+
+- Read: on Skyrim's screens the inn is as bright as the houses although its raw light is half (mean linear 0.22 vs
+  0.51 - 0.62): Skyrim's eye adaptation lifts it (supported). In Starfield the inn is 4 - 5 stops under Skyrim and the
+  houses under one: Starfield does not adapt like Skyrim, and the inn loses about 2.5 stops more than the 1.3 stops
+  adaptation explains - something in the big hall our model misses (the falloff at hall distances under H1, or what
+  the screen sees: walls and pillars far from lights, against object tops sampled). Both need the measurements below.
+- Starfield's image spaces are reflection blobs (Mutagen: IMGS = REFL / RFDP / RDIF), so their exposure settings are
+  unresolved: SfInspect imgsdump writes them out for reading.
+
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside
 its radius, a "ladder": the same tile under small lights at 0.5 m with lumens stepping by half stops around what H1
