@@ -408,6 +408,10 @@ Without --apply it only prints. Unverified on the owner's data.
   A spot check first encodes 24 bands the old way (solid; --check-blend) and needs 98 % of samples to draw what the
   installed BTD draws, else nothing is written. Heights kept byte for byte; the BTDs as built are copied to
   <staging>\btd_before_blend. (`rebuild` / `splice` remain for stagings that have build_command.txt.)
+- The owner's skyrim_all has no ltex_mapping.json either (owner 18:49). Then the mapping is read off the installed
+  terrain: for each Skyrim LTEX, the texture the staged BTD draws most where Skyrim paints it at 95 % or more (else where
+  it is the largest layer), over 48 sampled bands; the spot check uses other bands. Synthetic check: the learnt mapping
+  gives the same BTD as the saved one (tests/test_landtex.py).
 - Unresolved: the flat grey-blue "snow" patches the owner saw where Skyrim paints grey gravel and rock near Riverwood
   (owner 18:31): a texture mapping or conversion problem, not the blend; `ground_at.py` at such a spot says which
   Skyrim LTEX it is and what the BTD draws.

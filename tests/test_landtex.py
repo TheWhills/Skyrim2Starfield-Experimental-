@@ -300,7 +300,7 @@ class OverlayTextureTests(unittest.TestCase):
                 before = btd.read(f.read())
             args = SimpleNamespace(staging=out, skyrim=esm, sf_data=sfd, world="Tamriel", min_match=0.98,
                                    check_bands=24, check_blend="solid", blend="noise", warp=3.5,
-                                   dry_run=False)
+                                   infer_bands=48, dry_run=False)
             mp = os.path.join(out, "ltex_mapping.json")
             with open(mp, encoding="utf-8") as f:
                 good = f.read()
@@ -323,6 +323,20 @@ class OverlayTextureTests(unittest.TestCase):
                 self.assertEqual(btd.read(f.read()).weights.tobytes(), before.weights.tobytes())   # the build's kept
             with open(path, "rb") as f:
                 after = btd.read(f.read())
+            # the owner's October staging has no ltex_mapping.json: learnt off the installed terrain instead
+            with open(path, "wb") as f:
+                f.write(btd.write(before))
+            os.remove(mp)
+            import shutil
+            shutil.rmtree(os.path.join(out, R.BACKUP))
+            args.infer_bands = 48
+            with contextlib.redirect_stdout(io.StringIO()) as o3:
+                self.assertEqual(R.cmd_recompute(args), 0)
+            self.assertIn("read off the terrain", o3.getvalue())
+            self.assertIn("100.0% of samples draw the same texture", o3.getvalue())
+            with open(path, "rb") as f:
+                inferred = btd.read(f.read())
+            np.testing.assert_array_equal(inferred.weights, after.weights)             # the same as with the mapping
         np.testing.assert_array_equal(after.heights_raw, before.heights_raw)
         self.assertEqual((after.hmin, after.hmax, after.ltex), (before.hmin, before.hmax, before.ltex))
         self.assertFalse(np.array_equal(after.weights, before.weights))                # the noise blend went in

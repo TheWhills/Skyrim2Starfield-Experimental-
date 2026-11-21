@@ -7,7 +7,8 @@ recompute (2026-11-21; the installed exterior was built before builds kept their
 staged BTD again from Skyrim.esm, with the staging's own choices (ltex_mapping.json, the ltex_overrides in
 overlays_params.json, each BTD's LTEX table, the tiles in overlays_params.json), heights untouched. First a spot check:
 a sample of bands encoded "solid" (what the staging was built with) must match the staged BTD (--min-match, default
-0.98 of samples drawing the same texture), else nothing is written: the inputs are not the build's.
+0.98 of samples drawing the same texture), else nothing is written: the inputs are not the build's. Without
+ltex_mapping.json (the October build kept none) the mapping is learnt off the installed BTDs (infer_mapping).
 
 rebuild: runs the staging's own build (its build_command.txt) again into --fresh, with --ltex-blend / --ltex-warp
 (default noise / 3.5: landtex "noise") added last so they win. Nothing in --staging is written.
@@ -151,6 +152,98 @@ def staged_textures(staging, skyrim_esm, sf_data, world="Tamriel"):
     return planes, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS, tg.FO4_VERTEX_UNITS, {v: k for k, v in sf.items()}
 
 
+def sample_rows(size, bands):
+    """Every k-th 64-row band start of a size x size BTD, about `bands` of them."""
+    starts = list(range(0, size, 64))
+    return starts[::max(1, len(starts) // max(1, bands))]
+
+
+def skyrim_at(cells, xs_m, ys_m):
+    """(Skyrim LTEX with the most weight at the nearest LAND vertex, that weight) [len(ys), len(xs)] at CW positions
+    (metres; Skyrim units = metres x 70); -1 / 0 where Skyrim has no texture data."""
+    from fo4sf import terrain_grid as tg
+    xu = np.asarray(xs_m, np.float64) * tg.UNITS_PER_METRE
+    yu = np.asarray(ys_m, np.float64) * tg.UNITS_PER_METRE
+    cx = np.floor(xu / tg.FO4_CELL_UNITS).astype(np.int64)
+    cy = np.floor(yu / tg.FO4_CELL_UNITS).astype(np.int64)
+    vj = np.rint((xu - cx * tg.FO4_CELL_UNITS) / tg.FO4_VERTEX_UNITS).astype(np.int64).clip(0, 32)
+    vi = np.rint((yu - cy * tg.FO4_CELL_UNITS) / tg.FO4_VERTEX_UNITS).astype(np.int64).clip(0, 32)
+    fid = np.full((len(yu), len(xu)), -1, np.int64)
+    wmax = np.zeros((len(yu), len(xu)), np.float32)
+    for cyv in np.unique(cy):
+        rsel = cy == cyv
+        for cxv in np.unique(cx):
+            d = cells.get((int(cxv), int(cyv)))
+            if not d:
+                continue
+            csel = cx == cxv
+            ids = list(d)
+            stack = np.stack([d[i] for i in ids])                   # [k, 33, 33]
+            best = np.argmax(stack, axis=0)
+            r_idx, c_idx = vi[rsel], vj[csel]
+            sub_b = best[np.ix_(r_idx, c_idx)]
+            sub_w = stack.max(axis=0)[np.ix_(r_idx, c_idx)]
+            fid[np.ix_(rsel, csel)] = np.asarray(ids)[sub_b]
+            wmax[np.ix_(rsel, csel)] = sub_w
+    return fid, wmax
+
+
+def infer_mapping(cells, overlays, staging, bands=48):
+    """{Skyrim LTEX: Starfield LTEX form id} read off the installed terrain (no ltex_mapping.json: the October build did
+    not keep one): for each Skyrim texture, what the staged BTD draws most where Skyrim paints that texture almost alone
+    (95 %; else where it is the largest layer). Returns (mapping, {Skyrim LTEX: samples behind it}, the texture drawn
+    most where Skyrim has no texture data or None)."""
+    from collections import Counter
+    from fo4sf import overlay_grid as og
+    strong, weak, outside = Counter(), Counter(), Counter()
+    for o in overlays:
+        t = og.Tile(o["ix"], o["iy"], o["cells_cw"]["x"][0], o["cells_cw"]["y"][0], o["n"])
+        with open(os.path.join(staging, *o["btd_file"].split("/")), "rb") as fh:
+            old = btd.read(fh.read())
+        xs, ys = t.sample_coords()
+        for r0 in sample_rows(len(xs), bands):
+            drawn = dominant(old.weights[r0:r0 + 64], old.quad_map[r0 // 64:r0 // 64 + 1], list(old.ltex))
+            fid, w = skyrim_at(cells, xs, ys[r0:r0 + 64])
+            f, d, wv = fid.ravel(), drawn.ravel().astype(np.int64), w.ravel()
+            for sel, tally in ((f < 0, None), ((f >= 0) & (wv >= 0.95), strong), ((f >= 0) & (wv >= 0.5) & (wv < 0.95), weak)):
+                if tally is None:
+                    vals, counts = np.unique(d[sel], return_counts=True)
+                    for v, c in zip(vals.tolist(), counts.tolist()):
+                        outside[v] += c
+                    continue
+                pairs, counts = np.unique(np.stack([f[sel], d[sel]], axis=1), axis=0, return_counts=True)
+                for (fv, dv), c in zip(pairs.tolist(), counts.tolist()):
+                    tally[(fv, dv)] += c
+    mapping, support = {}, {}
+    for tally in (strong, weak):
+        best = {}
+        for (f, d), n in tally.items():
+            if f in mapping:
+                continue
+            if n > best.get(f, (0, None))[0]:
+                best[f] = (n, d)
+        for f, (n, d) in best.items():
+            mapping[f], support[f] = d, n
+    return mapping, support, (outside.most_common(1)[0][0] if outside else None)
+
+
+def planes_from(cells, mapping, default_sf, table, land):
+    """{Starfield form id: uint8 merged vertex grid} for the table, Skyrim's weights summed per mapped texture."""
+    from fo4sf import landtex
+    from fo4sf import terrain_grid as tg
+    cells_t = {}
+    for xy, ws in cells.items():
+        d = {}
+        for f, w in ws.items():
+            t = mapping.get(f, default_sf)
+            d[t] = d.get(t, 0) + w.astype(np.float32)
+        cells_t[xy] = d
+    x0, x1, y0, y1 = land.grid_bounds
+    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0),
+                                   0, 1) * 255).astype(np.uint8) for fid in table}
+    return planes, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS, tg.FO4_VERTEX_UNITS
+
+
 def dominant(words, qmap, table):
     """The texture drawn at each sample (form id) of a BTD texture part, for comparing two encodings."""
     from fo4sf import landtex
@@ -159,14 +252,36 @@ def dominant(words, qmap, table):
     return np.asarray(ids)[np.argmax(np.stack([dec[i] for i in ids]), axis=0)]
 
 
+def read_table(staging, o):
+    with open(os.path.join(staging, *o["btd_file"].split("/")), "rb") as fh:
+        return btd.read(fh.read()).ltex
+
+
 def cmd_recompute(a):
     import json
     from fo4sf import overlay_grid as og
     from make_skyrim_overlay import tile_layers
     with open(os.path.join(a.staging, "overlays_params.json"), encoding="utf-8") as fh:
         prm = json.load(fh)
-    print("reading Skyrim's ground layers and the staging's texture mapping ...")
-    planes, ox, oy, sp, names = staged_textures(a.staging, a.skyrim, a.sf_data, a.world)
+    if os.path.exists(os.path.join(a.staging, "ltex_mapping.json")):
+        print("reading Skyrim's ground layers and the staging's texture mapping ...")
+        planes, ox, oy, sp, names = staged_textures(a.staging, a.skyrim, a.sf_data, a.world)
+    else:
+        from fo4sf import landtex, skyrimland
+        print("no ltex_mapping.json in the staging: reading which texture the installed terrain draws for each Skyrim "
+              "texture ...")
+        land = skyrimland.SkyrimLand(a.skyrim, a.world)
+        cells, ltex = landtex.read_world_textures(a.skyrim, land.land_source, {})
+        mapping, support, outside = infer_mapping(cells, prm["overlays"], a.staging, a.infer_bands)
+        table = sorted({x for o in prm["overlays"] for x in read_table(a.staging, o)})
+        default_sf = mapping.get(landtex.DEFAULT_LTEX) or outside or table[0]
+        used = {f for ws in cells.values() for f in ws}
+        unseen = sorted(used - set(mapping))
+        print(f"  {len(mapping)} of {len(used)} Skyrim textures read off the terrain; {len(unseen)} not seen in the "
+              f"sampled bands (drawn as the default {default_sf:08X})")
+        for f in sorted(mapping, key=lambda f: -support[f])[:12]:
+            print(f"    {ltex.get(f, {}).get('edid', f'{f:08X}'):28} -> {mapping[f]:08X} ({support[f]} samples)")
+        planes, ox, oy, sp = planes_from(cells, mapping, default_sf, table, land)
     done = 0
     for o in prm["overlays"]:
         t = og.Tile(o["ix"], o["iy"], o["cells_cw"]["x"][0], o["cells_cw"]["y"][0], o["n"])
@@ -182,7 +297,9 @@ def cmd_recompute(a):
             for x in lack:
                 planes[x] = np.zeros(shape, np.uint8)
         size = old.weights.shape[0]
-        rows = list(range(0, size, 64))[::max(1, len(range(0, size, 64)) // a.check_bands)]
+        # the spot check uses other bands than the mapping was learnt from (offset by half a step)
+        rows = [r for r in (x + 64 * max(1, len(range(0, size, 64)) // (2 * a.check_bands))
+                            for x in sample_rows(size, a.check_bands)) if r < size]
         sw, sq, _ = tile_layers(planes, table, ox, oy, sp, t, a.check_blend, "head", 0.0, rows=rows)
         sel = np.concatenate([np.arange(r, r + 64) for r in rows])
         qsel = sorted({r // 64 for r in rows})
@@ -224,6 +341,8 @@ def main(argv=None):
     ap.add_argument("--world", default="Tamriel", help="recompute: the Skyrim worldspace (default Tamriel)")
     ap.add_argument("--min-match", type=float, default=0.98, help="recompute: spot-check agreement needed to write")
     ap.add_argument("--check-bands", type=int, default=24, help="recompute: 64-row bands in the spot check")
+    ap.add_argument("--infer-bands", type=int, default=48,
+                    help="recompute without ltex_mapping.json: 64-row bands read to learn the mapping")
     ap.add_argument("--check-blend", choices=("solid", "dither"), default="solid",
                     help="recompute: the blend the staging was built with (the spot check encodes this way)")
     ap.add_argument("--blend", choices=("solid", "dither", "noise"), default="noise", help="rebuild: --ltex-blend")

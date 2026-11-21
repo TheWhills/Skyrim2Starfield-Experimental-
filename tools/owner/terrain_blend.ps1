@@ -20,7 +20,7 @@ Set-Location $Repo
 function Step($t) { Write-Host "`n== $t" -ForegroundColor Cyan }
 function Fail($t) { Write-Host "FAILED: $t" -ForegroundColor Red; try { notify "terrain_blend: FAILED - $t" } catch {}; exit 1 }
 $t0 = Get-Date
-foreach ($p in @("$Staging\overlays_params.json", "$Staging\ltex_mapping.json", "$SKY\Skyrim.esm", "$SF\Data\Starfield.esm")) {
+foreach ($p in @("$Staging\overlays_params.json", "$SKY\Skyrim.esm", "$SF\Data\Starfield.esm")) {
     if (-not (Test-Path $p)) { Fail "missing $p" }
 }
 Step "1. the terrain's texture layers again with the $Blend blend (heights kept)"
