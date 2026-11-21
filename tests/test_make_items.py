@@ -365,5 +365,30 @@ class BuildTests(unittest.TestCase):
         json.dumps(out)                                                    # items.json is plain JSON
 
 
+class ExteriorTests(unittest.TestCase):
+    def test_read_exterior(self):
+        """2026-11-21: batch --exterior-items' exterior_items.json joins make_items as one more cell, "exterior"."""
+        with tempfile.TemporaryDirectory() as work:
+            self.assertIsNone(M.read_exterior(work))
+            with open(os.path.join(work, "exterior_items.json"), "w") as fh:
+                json.dump({"refs": []}, fh)
+            self.assertIsNone(M.read_exterior(work))
+            refs = [{"formkey": "00A101:Skyrim.esm", "type": "Ingestible", "model": "Clutter\\Cabbage01.nif",
+                     "pos": [1, 2, 3], "rot": [0, 0, 0], "scale": 1.0}]
+            with open(os.path.join(work, "exterior_items.json"), "w") as fh:
+                json.dump({"refs": refs}, fh)
+            self.assertEqual(M.read_exterior(work), {"cell": M.EXTERIOR, "refs": refs})
+
+    def test_plugin_and_build_hooks(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('if (itr.GetProperty("cell").GetString() != "exterior") continue;', cs)
+        self.assertIn('new PlacedObject(Id("EXTITEM:" + isrc), release)', cs)
+        with open(os.path.join(root, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8") as fh:
+            ps = fh.read()
+        self.assertIn('if ($Items -and -not $NoOutdoorItems) { $args1 += @("--exterior-items", $NavAround', ps)
+
+
 if __name__ == "__main__":
     unittest.main()

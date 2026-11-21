@@ -223,6 +223,40 @@ class BatchTests(unittest.TestCase):
         self.assertNotIn("Markers\\IdleMarker.nif", conv)
         self.assertEqual(len(json.load(open(os.path.join(work, "exterior_furniture.json")))["refs"]), 3)
 
+    def test_batch_exterior_items(self):
+        """2026-11-21 (owner: "lets add items to riverwood exterior too"): --exterior-items lists Riverwood's outdoor food,
+        drink, ingredients and clutter (initially disabled ones and other types left out), converts their models and
+        writes exterior_items.json for make_items.py."""
+        from unittest import mock
+        import make_skyrim_interior as mi
+        refs = [{"formkey": "00A101:Skyrim.esm", "type": "Ingestible", "model": "Clutter\\Food\\Cabbage01.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0},
+                {"formkey": "00A102:Skyrim.esm", "type": "MiscItem", "model": "Clutter\\Bucket01.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0},
+                {"formkey": "00A103:Skyrim.esm", "type": "Ingredient", "model": "Plants\\Wheat01.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0},
+                {"formkey": "00A104:Skyrim.esm", "type": "MiscItem", "model": "Clutter\\QuestThing.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0x800},
+                {"formkey": "00A105:Skyrim.esm", "type": "Static", "model": "Architecture\\Wall.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0, "disabled": 0}]
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "terrain"))
+        import make_skyrim_objects
+        with mock.patch.object(make_skyrim_objects, "around_cells", return_value=(4, 8, -12, -8)), \
+                mock.patch.object(mi.skyrimrefs, "export_world", return_value={"refs": refs}):
+            got = mi.exterior_items(self.esm, "Riverwood", 2)
+        self.assertEqual([r["formkey"] for r in got["refs"]], ["00A101:Skyrim.esm", "00A102:Skyrim.esm",
+                                                               "00A103:Skyrim.esm"])
+        work = os.path.join(self.tmp.name, "work_ext_items")
+        with mock.patch.object(mi, "exterior_items", return_value=got), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            mi.main(["batch", "--skyrim", self.esm, "--cells", "RiverwoodHouse", "--work", work,
+                     "--exterior-items", "Riverwood"])
+        self.assertIn("outdoor items around Riverwood: 3 references", out.getvalue())
+        conv = [m["model"] for m in json.load(open(os.path.join(work, "convert_input.json")))["refs"]]
+        for m in ("Clutter\\Food\\Cabbage01.nif", "Clutter\\Bucket01.nif", "Plants\\Wheat01.nif"):
+            self.assertIn(m, conv)
+        self.assertEqual(len(json.load(open(os.path.join(work, "exterior_items.json")))["refs"]), 3)
+
     def test_script_batch_and_check(self):
         import make_skyrim_interior as mi
         work = os.path.join(self.tmp.name, "work")

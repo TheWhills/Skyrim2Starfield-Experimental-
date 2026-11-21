@@ -4,6 +4,8 @@
     python -I scripts\\interior\\make_items.py --skyrim "$sky\\Skyrim.esm" --skyrim-data "$sky" --starfield "$sf" ^
         --work C:\\Modding\\work\\s2s\\riverwood_doors
 
+Outdoor items (2026-11-21): <work>\\exterior_items.json (batch --exterior-items) joins as cell "exterior".
+
 Run after the batch's models are converted (make_skyrim_objects.py convert) and before PluginSpike, which reads
 <work>\\items.json (ITEMS=<that file>). Owner, 2026-11-21 (after the wine test worked as a loose item: "yes" to making
 Riverwood's tables and shelves real items first, the items' own physics shapes and Skyrim's effects later).
@@ -484,6 +486,19 @@ def read_cells(work):
     return out
 
 
+EXTERIOR = "exterior"     # the "cell" of an outdoor item (exterior_items.json; PluginSpike puts it in the exterior)
+
+
+def read_exterior(work):
+    """The outdoor items of batch --exterior-items as one more cell ("exterior"), or None."""
+    path = os.path.join(work, "exterior_items.json")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        refs = json.load(fh).get("refs", [])
+    return {"cell": EXTERIOR, "refs": refs} if refs else None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
@@ -491,12 +506,17 @@ def main(argv=None):
     ap.add_argument("--starfield", required=True, help="Starfield install folder (Data\\Starfield.esm and archives)")
     ap.add_argument("--work", required=True, help="interior batch work folder, converted (cells.txt, convert\\)")
     ap.add_argument("--no-align", action="store_true", help="leave our geometry where it is on the donor's body")
+    ap.add_argument("--no-exterior", action="store_true",
+                    help="ignore <work>\\exterior_items.json (the outdoor items from batch --exterior-items)")
     a = ap.parse_args(argv)
     if os.path.abspath(a.work).lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--work must be outside the repository")
     cells = read_cells(a.work)
     if not cells:
         ap.error(f"no cells.txt in {a.work}")
+    ext = None if a.no_exterior else read_exterior(a.work)
+    if ext:
+        cells.append(ext)
     convert_dir = os.path.join(a.work, "convert")
     man_path = os.path.join(convert_dir, "manifest.json")
     if not os.path.exists(man_path):
@@ -559,6 +579,9 @@ def main(argv=None):
     for x in sorted(out["lifted"], key=lambda x: -x["lift_m"])[:5]:
         print(f"  lifted {edid_of.get(x['formkey'], x['formkey'])} {x['formkey']} by {x['lift_m'] * 100:.1f} cm onto "
               f"{edid_of.get(x['on'], x['on'])} {x['on']}")
+    n_out = sum(r["cell"] == EXTERIOR for r in out["refs"])
+    if ext:
+        print(f"outdoors: {n_out} items from {len(ext['refs'])} Skyrim references")
     print(f"{len(out['refs'])} placed items from {len(out['bases'])} Skyrim bases in {len(cells)} cells "
           f"({sum(r['owner'] is not None for r in out['refs'])} owned in Skyrim: not yet owned here)")
     for k, b in sorted(out["bases"].items(), key=lambda kv: (kv[1]["kind"], kv[1]["edid"])):

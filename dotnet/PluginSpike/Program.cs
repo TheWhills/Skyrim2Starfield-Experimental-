@@ -1468,6 +1468,67 @@ if (extDir != null && (extDoorsPath != null || extNavPath != null))
                               $"statics disabled under them, {furnOff.Count} statics not found, {extFurnNoBase} with no furniture base");
     }
 
+    // ---- outdoor items (2026-11-21, owner: "lets add items to riverwood exterior too") ------------------------------
+    // items.json refs with cell "exterior" (make_skyrim_interior.py batch --exterior-items -> make_items.py): the same
+    // item bases as indoors, each reference persistent in the world's persistent cell at its Skyrim spot (ExtPos, shifted
+    // by the model's origin offset as indoors); the exterior's static copy of the same Skyrim reference (formids.json)
+    // hidden as under the outdoor furniture.
+    if (itemsRoot is JsonElement ire)
+    {
+        int extItems = 0, extItemsNoBase = 0, extItemsOff = 0;
+        var itemOff = new HashSet<FormKey>();
+        foreach (var itr in ire.GetProperty("refs").EnumerateArray())
+        {
+            if (itr.GetProperty("cell").GetString() != "exterior") continue;
+            if (ItemBase(itr.GetProperty("base").GetString()!) is not { } eib) { extItemsNoBase++; continue; }
+            var isrc = itr.GetProperty("formkey").GetString()!;
+            var iscale = itr.GetProperty("scale").GetSingle();
+            var irot = Rot(itr.GetProperty("rot"));
+            var ipos = ExtPos(itr.GetProperty("pos"));
+            var ioff = RotateOffset(eib.offset, irot, iscale);
+            var ipo = new PlacedObject(Id("EXTITEM:" + isrc), release)
+            {
+                Base = new FormLinkNullable<IPlaceableObjectGetter>(eib.key),
+                Position = new P3Float(ipos.X + ioff.X, ipos.Y + ioff.Y, ipos.Z + ioff.Z),
+                Rotation = irot,
+            };
+            if (Math.Abs(iscale - 1f) > 1e-4) ipo.Scale = iscale;
+            ipo.MajorRecordFlagsRaw |= 0x400;                                  // persistent
+            if (itr.GetProperty("no_settle").GetBoolean()) ipo.MajorRecordFlagsRaw |= 0x20000000;   // Don't Havok Settle
+            if (itr.GetProperty("disabled").GetBoolean()) ipo.MajorRecordFlagsRaw |= 0x800;
+            tco.Persistent.Add(ipo);
+            placedAll[isrc] = ipo;
+            sourceMap[isrc] = ipo.FormKey.ToString();
+            if (extIds.GetProperty("refs").TryGetProperty(isrc, out var iid))
+                itemOff.Add(new FormKey(extKey!.Value, Convert.ToUInt32(iid.GetString(), 16)));
+            extItems++;
+        }
+        foreach (var blk in wg.SubCells)
+            foreach (var sb in blk.Items)
+                foreach (var c in sb.Items)
+                    foreach (var tr in c.Temporary)
+                    {
+                        if (!itemOff.Contains(tr.FormKey) || tr is not IPlacedObjectGetter tsg) continue;
+                        var toff = (PlacedObject)tsg.DeepCopy();
+                        HideExteriorStatic(toff);
+                        CellOverride(blk, sb, c).Temporary.Add(toff);
+                        itemOff.Remove(tr.FormKey);
+                        extItemsOff++;
+                    }
+        foreach (var pr in wg.TopCell!.Persistent)
+        {
+            if (!itemOff.Contains(pr.FormKey) || pr is not IPlacedObjectGetter psg) continue;
+            var poff = (PlacedObject)psg.DeepCopy();
+            HideExteriorStatic(poff);
+            tco.Persistent.Add(poff);
+            itemOff.Remove(pr.FormKey);
+            extItemsOff++;
+        }
+        if (extItems + extItemsNoBase > 0)
+            Console.WriteLine($"outdoor items: {extItems} references in {wg.EditorID}'s persistent cell, {extItemsOff} exterior " +
+                              $"statics hidden under them, {itemOff.Count} statics not found, {extItemsNoBase} with no item base");
+    }
+
     // ---- NPCs that start outdoors (2026-11-15; make_schedule.py: cell "exterior") ----------------------------------
     if (actorsRoot is JsonElement extActors)
     {

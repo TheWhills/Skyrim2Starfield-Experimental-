@@ -39,6 +39,7 @@ param(
     # 2026-11-21 (owner: wine, bread, cabbages, potions pickable): Skyrim's placed food / drink / potions / ingredients
     # and clutter (MiscItem: plates, tankards, baskets; 2026-11-21) as Starfield items with a vanilla item's physics body (make_items.py; docs/interior/items.md "Placed items")
     [switch]$Items,
+    [switch]$NoOutdoorItems,      # with -Items: leave the outdoor food / drink / clutter around -NavAround as statics
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
     # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
@@ -209,6 +210,9 @@ $args1 += @("--exposure", $Exposure, "--starfield-esm", "$SF\Data\Starfield.esm"
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }
+# outdoor items (2026-11-21, owner: "lets add items to riverwood exterior too"): food, drink, potions and clutter around
+# -NavAround become real items outside too (their models converted with the interiors)
+if ($Items -and -not $NoOutdoorItems) { $args1 += @("--exterior-items", $NavAround, "--exterior-radius", $NavRadius) }
 Run python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }
 

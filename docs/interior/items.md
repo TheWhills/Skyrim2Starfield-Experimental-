@@ -191,3 +191,15 @@ that items.json: 12 lifts, all food onto plates (salmon steak 3.0 cm, raw salmon
 **Verified in game** (owner, 2026-11-21 10:23, Sleeping Giant Inn table, screenshot): the salmon steaks lie on the
 plates ("that looks right"); build 10:21: 12 lifts (largest 3.1 cm, all food onto plates), 6 holders kept static.
 
+
+## Outdoor items (2026-11-21, owner: "lets add items to riverwood exterior too")
+- make_skyrim_interior.py batch --exterior-items <cell> (riverwood_doors -Items, around -NavAround, -NavRadius cells
+  each side; -NoOutdoorItems leaves them out): Skyrim's placed ALCH / INGR / MISC references outdoors, initially disabled
+  ones left out, into <work>\exterior_items.json; their models join the batch's conversion.
+- make_items.py reads it as one more cell, "exterior" (--no-exterior ignores it): the same donors, bodies, stacking
+  (per cell, so outdoor items never stack on indoor ones) and the same item bases as indoors.
+- PluginSpike: each outdoor item persistent in the exterior world's persistent cell at its Skyrim spot (as the outdoor
+  furniture), shifted by the model's origin offset; the exterior plugin's static copy of the same Skyrim reference
+  hidden (HideExteriorStatic; apply_ref_overrides.py carries it into the installed exterior plugin).
+- Gold stays a static outside too (credits are a later step). Unresolved: whether persistent dynamic items outdoors
+  settle and stay where Skyrim put them (in game: pending).

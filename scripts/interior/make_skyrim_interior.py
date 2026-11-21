@@ -51,6 +51,22 @@ def exterior_furniture(esm, around, radius, world="Tamriel"):
     return {"around": around, "cells": list(rect), "world": world, "refs": refs}
 
 
+ITEM_TYPES = ("Ingestible", "Ingredient", "MiscItem")       # make_items.py's (food, drink, potions, ingredients, clutter)
+
+
+def exterior_items(esm, around, radius, world="Tamriel"):
+    """(2026-11-21, owner: "lets add items to riverwood exterior too") Skyrim's food, drink, potions, ingredients and
+    clutter placed outdoors around `around` (as exterior_furniture): {"around", "cells", "world", "refs"}. Initially
+    disabled ones (quest states) are left out. Their models join the batch's conversion; make_items.py turns them into
+    Starfield items (cell "exterior") and PluginSpike puts them in the exterior, the exterior's static copies hidden."""
+    sys.path.insert(0, os.path.join(REPO, "scripts", "terrain"))
+    from make_skyrim_objects import around_cells
+    rect = around_cells(esm, around, radius)
+    exp = skyrimrefs.export_world(esm, world, rect)
+    refs = [r for r in exp["refs"] if r.get("type") in ITEM_TYPES and r.get("model") and not r.get("disabled")]
+    return {"around": around, "cells": list(rect), "world": world, "refs": refs}
+
+
 def save(path, obj):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=1)
@@ -335,6 +351,15 @@ def cmd_batch(a):
         save(os.path.join(work, "exterior_furniture.json"), ext_furn)
         print(f"outdoor furniture around {a.exterior_furniture}: {len(ext_furn['refs'])} references "
               f"(cells x {ext_furn['cells'][0]}..{ext_furn['cells'][1]}, y {ext_furn['cells'][2]}..{ext_furn['cells'][3]})")
+    if getattr(a, "exterior_items", ""):
+        ext_items = exterior_items(a.skyrim, a.exterior_items, a.exterior_radius)
+        item_types = tuple(exterior.CONVERT_TYPES) + ITEM_TYPES
+        for r in ext_items["refs"]:
+            if exterior.classify(r, item_types)[0] == "convert":
+                by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
+                                                                      "formkey": r["formkey"]})
+        save(os.path.join(work, "exterior_items.json"), ext_items)
+        print(f"outdoor items around {a.exterior_items}: {len(ext_items['refs'])} references")
     models = [by_model[k] for k in sorted(by_model)]
     save(os.path.join(work, "convert_input.json"), {"schema_version": 2, "cell": "batch", "refs": models})
     with open(os.path.join(work, "cells.txt"), "w", encoding="utf-8") as f:
@@ -458,7 +483,11 @@ def parser():
     ap.add_argument("--exterior-furniture", default="",
                     help="batch: also the outdoor furniture / idle markers around this exterior cell (e.g. Riverwood): "
                          "their models converted, exterior_furniture.json for make_furniture.py")
-    ap.add_argument("--exterior-radius", type=int, default=2, help="batch --exterior-furniture: cells each side")
+    ap.add_argument("--exterior-items", default="",
+                    help="batch: also Skyrim's outdoor food / drink / potions / clutter around this exterior cell "
+                         "(EditorID or X,Y): their models converted, exterior_items.json for make_items.py")
+    ap.add_argument("--exterior-radius", type=int, default=2,
+                    help="batch --exterior-furniture / --exterior-items: cells each side")
     ap.add_argument("--exterior", action="store_true",
                     help="batch: link doors to the worldspace too (writes exterior_doors.json for make_skyrim_objects.py "
                          "stage --interiors and PluginSpike's EXTERIOR_DOORS)")
