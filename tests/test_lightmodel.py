@@ -257,3 +257,44 @@ class PlacedLightsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AmbientCubeTest(unittest.TestCase):
+    """2026-11-21: dark corners 5 - 6 stops under Skyrim; Skyrim's ambient becomes the cell's environment cube."""
+
+    def test_colour(self):
+        lt = {"directional_ambient": {a: [60, 60, 60] for a in LM.AXES}}
+        r = LM.ambient_env(lt, room_scale=2.0, scale=10.0)
+        self.assertAlmostEqual(r[0], round(LM.srgb_to_linear(60 / 255) * 2.0 * 10.0, 5))
+        self.assertEqual(LM.ambient_env({"ambient": [0, 0, 0]}), (0.0, 0.0, 0.0))
+
+    def test_cube_dds_and_cell_json(self):
+        import numpy as np
+        import make_skyrim_interior as MSI
+        with tempfile.TemporaryDirectory() as work:
+            cell = {"cell": "Inn", "light_scale": 2.5, "skyrim_lighting": {"ambient": [45, 48, 48]}}
+            path = MSI.write_ambient_cube(work, cell, scale=38.0)
+            self.assertTrue(path.endswith(os.path.join("textures", "skyrim", "interiorambient", "Inn.dds")))
+            self.assertEqual(cell["env_map"], "Data\\textures\\skyrim\\interiorambient\\Inn.dds")
+            with open(path, "rb") as fh:
+                d = fh.read()
+            self.assertEqual(d[:4], b"DDS ")
+            mips = struct.unpack_from("<I", d, 28)[0]
+            caps2 = struct.unpack_from("<I", d, 4 + 108)[0]
+            dxgi, dim, misc, arr = struct.unpack_from("<4I", d, 128)
+            self.assertEqual((mips, caps2 & 0xFE00, dxgi, dim, misc, arr), (3, 0xFE00, 10, 3, 0x4, 1))
+            body = np.frombuffer(d[148:], dtype=np.float16).reshape(-1, 4)
+            self.assertEqual(len(body), 6 * (16 + 4 + 1))                  # six faces, 4x4, 2x2, 1x1
+            want = LM.srgb_to_linear(45 / 255) * 2.5 * 38.0
+            self.assertAlmostEqual(float(body[0, 0]), want, delta=want * 0.01)
+            self.assertTrue(np.all(body[:, 3] == 1.0))
+            self.assertIsNone(MSI.write_ambient_cube(work, {"cell": "X"}))
+
+    def test_pluginspike_uses_the_cube(self):
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('root.TryGetProperty("env_map", out var envMap)', cs)
+        self.assertIn('Setting(src4, "ENV_AMBIENT", "1") != "0"', cs)
+        with open(os.path.join(ROOT, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8") as fh:
+            ps = fh.read()
+        self.assertIn('"--ambient-scale"', ps)

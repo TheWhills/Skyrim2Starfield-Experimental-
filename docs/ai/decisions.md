@@ -2626,3 +2626,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   (0.55 / the room's mean Skyrim light), from the export (fo4sf.lightmodel), applied by PluginSpike; the lumen cap 16x ->
   256x. Alternatives: an auto-exposure image space (Starfield's own adaptation differs from Skyrim's and would act on our
   inverse-square light, not Skyrim's); per-room hand tuning (does not reach unseen rooms).
+
+## 2026-11-21: Skyrim's ambient becomes each cell's environment cube
+- Owner's screens: lit parts within 1 - 2 stops of Skyrim, unlit parts 5 - 6 under. lightstats: our light base is a
+  non-shadow omni (supported), so walls are not the cause; our cells' environment cube is black. Decision: write a cube
+  per cell from Skyrim's ambient (x the room's adaptation x ENV_AMBIENT_SCALE 38) and use it as the environment map.
+  Alternatives: fill lights in dark areas (needs geometry analysis; kept as the fallback), the cell AmbientColor alone
+  (already Skyrim's, with no visible effect in the dark areas).

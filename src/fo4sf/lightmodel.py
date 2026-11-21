@@ -162,3 +162,25 @@ def adaptation_scale(mean_linear, ref=ADAPT_REF, strength=ADAPT_STRENGTH, limits
     if not mean_linear or mean_linear <= 0:
         return 1.0
     return max(limits[0], min(limits[1], (ref / mean_linear) ** strength))
+
+
+# --- Skyrim's ambient as the cell's environment light (2026-11-21) ------------------------------------------------------
+# The owner's screens after the adaptation bake: the bright parts of each room within 1 - 2 stops of Skyrim, the dark
+# parts (stairs, corners) 5 - 6 stops under. Skyrim's ambient lights every surface (4 - 20 % of its light on objects,
+# all of it where no light reaches). Our cells give Starfield a black environment cube (PluginSpike, blackcube.dds: a
+# default sky washed the rooms out), so supported hypothesis: no ambient at all in Starfield. Here the cell's cube is
+# Skyrim's ambient instead: its six directional colours averaged (one colour on every face until the face order is
+# verified), linearised, x the room's adaptation, x ENV_AMBIENT_SCALE (Starfield radiance per linear unit: unresolved;
+# 38 is 1.2 x 2^5, what EV100 5, our fixed exposure, maps to white)
+ENV_AMBIENT_SCALE = 38.0
+
+
+def ambient_env(lighting: dict, room_scale: float = 1.0, scale: float = ENV_AMBIENT_SCALE) -> tuple:
+    """Linear RGB radiance for the cell's environment cube from Skyrim's ambient (lighting: skyrim_lighting)."""
+    amb6 = (lighting or {}).get("directional_ambient")
+    if amb6 and any(any(v) for v in amb6.values()):
+        g = [sum(amb6[a][ch] for a in AXES) / 6.0 / 255.0 for ch in range(3)]
+    else:
+        a = (lighting or {}).get("ambient") or (0, 0, 0)
+        g = [a[ch] / 255.0 for ch in range(3)]
+    return tuple(round(srgb_to_linear(v) * room_scale * scale, 5) for v in g)

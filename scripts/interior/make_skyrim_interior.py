@@ -126,6 +126,27 @@ def write_lighting(work, cell, a):
     return entry
 
 
+AMBIENT_CUBE_DIR = "textures/skyrim/interiorambient"
+
+
+def write_ambient_cube(work, cell, scale=None):
+    """The cell's environment cube from Skyrim's ambient (fo4sf.lightmodel.ambient_env) into the staging textures
+    (<work>/convert/textures/..., packed by the install), and "env_map" (its game path) + "env_ambient" (the colour)
+    into the cell JSON for PluginSpike. Nothing without Skyrim lighting data."""
+    from fo4sf import lightmodel, textures
+    if not cell.get("skyrim_lighting"):
+        return None
+    rgb = lightmodel.ambient_env(cell["skyrim_lighting"], cell.get("light_scale", 1.0),
+                                 lightmodel.ENV_AMBIENT_SCALE if scale is None else scale)
+    rel = f"{AMBIENT_CUBE_DIR}/{cell['cell']}.dds"
+    path = os.path.join(work, "convert", *rel.split("/"))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    textures.write_dds_cube_rgba16f(path, [rgb] * 6)
+    cell["env_map"] = "Data\\" + rel.replace("/", "\\")
+    cell["env_ambient"] = list(rgb)
+    return path
+
+
 def cmd_export(a):
     work = outside_repo(a.work)
     os.makedirs(work, exist_ok=True)
@@ -195,6 +216,7 @@ def cmd_batch(a):
             by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
                                                                   "formkey": r["formkey"]})
         cell = skyriminterior.plugin_cell(e, sub["refs"], batch_nav)
+        write_ambient_cube(work, cell, a.ambient_scale)
         save(os.path.join(work, "exports", e["cell"] + ".json"), e)
         path = os.path.join(work, "cells", e["cell"] + ".json")
         save(path, cell)
@@ -301,6 +323,9 @@ def parser():
     ap.add_argument("--light-merge-m", type=float, help="export: merge lights closer than this many metres (default 1)")
     ap.add_argument("--navmesh-defaults", help="export: navmesh_defaults.json from navmesh_survey.py (values of the "
                                                "Starfield-only navmesh fields; default: zeros)")
+    ap.add_argument("--ambient-scale", type=float, default=None,
+                    help="batch: the environment cube's radiance per linear unit of Skyrim's ambient (default "
+                         "fo4sf.lightmodel.ENV_AMBIENT_SCALE; docs/interior/lighting-model.md)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

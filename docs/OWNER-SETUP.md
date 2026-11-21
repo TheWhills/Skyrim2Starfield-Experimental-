@@ -301,6 +301,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7z. (2026-11-21) Lighting: Skyrim's ambient as each room's environment light (docs/interior/lighting-model.md). A full
+   build (step 1 writes it); then the same screenshots, the stairs and a dark corner most of all.
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture -Items
+   Brighter / darker corners: -AmbientScale 76 / 19 (default 38). Without it: ENV_AMBIENT 0 under "*" in lighting.json.
 7y. (2026-11-21) Starfield's own lights (read-only), for the lighting work: send the printed output.
    dotnet run --project dotnet\SfInspect -- "$sf\Data\Starfield.esm" lightstats
 7x. (2026-11-21) Lighting: each room's lights now carry Skyrim's eye adaptation (the inn brighter, Sven's dimmer;

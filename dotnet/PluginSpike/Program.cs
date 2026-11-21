@@ -1031,6 +1031,14 @@ foreach (var cellPath in cellPaths)
     // reflects a bright default sky and auto-exposure washes everything out
     cell.ImageSpace.SetTo(new FormKey(sfEsm, Convert.ToUInt32(Setting(src4, "IMAGE_SPACE", "122393"), 16)));
     cell.EnvironmentMap = Environment.GetEnvironmentVariable("ENV_MAP") ?? "Data\\Textures\\cubemaps\\blackcube.dds";
+    // 2026-11-21: Skyrim's ambient as the cell's environment light (make_skyrim_interior.write_ambient_cube; ENV_AMBIENT
+    // 0 in lighting.json keeps the black cube)
+    if (Environment.GetEnvironmentVariable("ENV_MAP") == null && Setting(src4, "ENV_AMBIENT", "1") != "0"
+        && root.TryGetProperty("env_map", out var envMap) && envMap.ValueKind == JsonValueKind.String)
+    {
+        cell.EnvironmentMap = envMap.GetString();
+        Console.WriteLine($"cell {cellName}: environment light {cell.EnvironmentMap} (Skyrim's ambient {(root.TryGetProperty("env_ambient", out var ea) ? ea.ToString() : "?")})");
+    }
     var cocMarker = new FormKey(sfEsm, 0x000032);                                        // COCMarkerHeading
     var omni = new FormKey(sfEsm, Convert.ToUInt32(Setting(src4, "OMNI_LIGHT", "03D38C"), 16)); // LGT_ShipInterior_Omni_NS_Neutral_2k
     var merge = float.Parse(Setting(src4, "LIGHT_MERGE_M", "3"), System.Globalization.CultureInfo.InvariantCulture);

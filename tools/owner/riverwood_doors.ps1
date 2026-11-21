@@ -59,6 +59,9 @@ param(
     # soft candles' brightness, stops over the scene's exposure (2026-11-21: 5 "awfully white", now 3; lower = dimmer).
     # Flame-only: -AssetsOnly
     [double]$CandleExposure = 3,
+    # Skyrim's ambient as each room's environment light: radiance per linear unit (2026-11-21: 38, a first guess;
+    # higher = brighter shadows / corners). Written by step 1: a full build
+    [double]$AmbientScale = 38,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -172,6 +175,7 @@ $nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAct
 $args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--work", $Work, "--exterior")
 if ($Find) { $args1 += @("--find", $Find) } else { $args1 += @("--cells", $Cells) }
 if ($nav) { $args1 += @("--navmesh-defaults", $nav.FullName) }
+$args1 += @("--ambient-scale", $AmbientScale.ToString([cultureinfo]::InvariantCulture))
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }

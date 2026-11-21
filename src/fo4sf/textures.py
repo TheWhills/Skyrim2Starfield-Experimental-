@@ -152,6 +152,32 @@ def write_dds_dx10(path, width, height, dxgi, pixels: bytes, bytes_per_pixel: in
         f.write(hdr + pixels)
 
 
+DXGI_R16G16B16A16_FLOAT = 10
+
+
+def write_dds_cube_rgba16f(path, faces, size: int = 4):
+    """A cube map DDS (DX10 header, TEXTURECUBE, R16G16B16A16_FLOAT, a full mip chain) whose six faces are each one
+    flat linear RGB colour, in D3D face order +X, -X, +Y, -Y, +Z, -Z (2026-11-21, a cell's environment light)."""
+    levels, s_ = 0, size
+    while s_ >= 1:
+        levels += 1
+        s_ //= 2
+    flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000                          # caps, height, width, pixel format, mip count
+    hdr = DDS_MAGIC + struct.pack("<7I", 124, flags, size, size, size * 8, 0, levels) + b"\0" * 44
+    hdr += struct.pack("<II4sIIIII", 32, 0x4, b"DX10", 0, 0, 0, 0, 0)
+    hdr += struct.pack("<5I", 0x1000 | 0x8 | 0x400000, 0x200 | 0xFC00, 0, 0, 0)   # complex + mipmap; cube, all faces
+    hdr += struct.pack("<5I", DXGI_R16G16B16A16_FLOAT, 3, 0x4, 1, 0)             # 2D, TEXTURECUBE, one cube
+    body = b""
+    for rgb in faces:
+        px = np.array([rgb[0], rgb[1], rgb[2], 1.0], dtype=np.float16).tobytes()
+        s_ = size
+        while s_ >= 1:
+            body += px * (s_ * s_)
+            s_ //= 2
+    with open(path, "wb") as f:
+        f.write(hdr + body)
+
+
 def write_r8(path, plane):
     h, w = plane.shape
     write_dds_dx10(path, w, h, DXGI_R8_UNORM, np.ascontiguousarray(plane, dtype=np.uint8).tobytes(), 1)

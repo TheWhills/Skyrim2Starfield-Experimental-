@@ -161,7 +161,30 @@ at EV 3.5 (1.5 stops brighter than ours) with a Hable curve and a LUT.
   are set (type Omnidirectional / ShadowSpotlight / NonShadowSpotlight, flags incl. DisableDistanceAttenuation,
   UseAdaptiveLighting with its EV100 range, RadiusFalloutExponent).
 - A Skyrim light whose radius dwarfs its room (Sven's 65.7 m) acts as an even fill there; as a Starfield point light it
-  floods the area near its position. Candidate: such lights become ambient / fill instead (after the shadow question).
+  floods the area near its position. Candidate: such lights become ambient / fill instead.
+
+## Starfield's lights (owner's SfInspect lightstats, 13:03; field layout verified against xEdit wbDefinitionsSF1 LIGH DAT2)
+- 1575 LIGH: types Omnidirectional / Shadow Spotlight / NonShadow Spotlight only. Omni "shadow" lights carry the
+  undocumented flag 0x400 (xEdit "Unknown 10": GenLightOrangeShadow1) while the "_NS_" (non-shadow) omnis and our base
+  LGT_Fire_Cauldron (3197A6: Omnidirectional, flags 0x1, 4000 lm, 8 m, falloff 2, radius falloff exponent 4, not
+  adaptive) do not: supported hypothesis that our lights are non-shadow omnis, so not blocked by walls - the shadow
+  question does not explain the unlit corners.
+- Every vanilla light has RadiusFalloutExponent 4 (fits H1's (1 - (d / R)^4) window, supported). 3197A4
+  LGT_Fire_Candle_Interior: 3000 lm, 2.5 m. Adaptive lights (UseAdaptiveLighting, the space-station / ship sets) pin
+  EV100 3.5; ours (Cauldron) are not adaptive: their lumens are absolute.
+- So the remaining candidate for the unlit corners: **ambient**. Skyrim's ambient lights every surface; our cells give
+  Starfield a black environment cube (PluginSpike: a default sky "washed everything out" - so the cube does light the
+  room, supported) and the cell's AmbientColor, whose effect in Starfield is unresolved.
+
+## Skyrim's ambient as the cell's environment cube (2026-11-21)
+- make_skyrim_interior batch writes <work>/convert/textures/skyrim/interiorambient/<cell>.dds (packed by the install):
+  a cube map, R16G16B16A16_FLOAT, full mips, every face one colour = Skyrim's six directional ambient colours
+  averaged, linearised, x the room's adaptation (light_scale), x ENV_AMBIENT_SCALE (38 = 1.2 x 2^5: what EV100 5 maps
+  to white; a first guess, riverwood_doors -AmbientScale). PluginSpike sets the cell's environment map to it (ENV_AMBIENT
+  0 in lighting.json keeps the black cube). One colour on every face until the D3D face order against Skyrim's
+  X+ .. Z- is checked (Riverwood: Z+ 21 vs Z- 68, the sides 40 - 50).
+- To check in game: the stairs and the dark corners lift, the lit parts stay; if nothing changes, the cube does not
+  give diffuse light (then: fill lights).
 
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside
