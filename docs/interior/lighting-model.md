@@ -369,3 +369,13 @@ light_calib analyze on each (it finds the arrival tile and turns a view looking 
 - Verified: the compensation curve has no visible effect (changes within 0.12 stops). The views adapt (spread 0.4 stops),
   2.1 - 2.5 over Skyrim: Starfield's own target. Next: Cinematic Brightness 0.25 (-2 stops if it scales linear light;
   sf_imagespace patches it; riverwood_doors -ExposureBrightness) and the fill 150 -> 75 (contrast under Skyrim's).
+
+## Cinematic brightness 0.25, fill 75 (owner 16:12; vs the owner's Skyrim shots of the same spots)
+| view | overall | dark end | bright end | contrast Skyrim / ours | red share Skyrim / ours |
+|---|---|---|---|---|---|
+| inn hall | -0.03 | +0.14 | -0.30 | 1.44 / 1.20 | 0.46 / 0.43 |
+| inn bedroom (Skyrim from the doorway, a dark post in view) | +0.62 | +0.85 | +0.16 | 1.70 / 1.48 | 0.44 / 0.44 |
+- Verified: Cinematic Brightness works as the level; with the auto exposure adapting per view the inn hall now matches
+  Skyrim's level. These are the defaults (ExposureBrightness 0.25, AmbientScale 75, auto EV 0 .. 10).
+- Left: contrast 0.2 - 0.25 under Skyrim's, the hall a little less warm, and the hot spots next to lights near walls
+  (the near-field: next, the area-light test in the calibration cell).
