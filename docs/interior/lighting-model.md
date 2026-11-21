@@ -347,3 +347,15 @@ light_calib analyze on each (it finds the arrival tile and turns a view looking 
   look like LGT_NoLut (no tone-map override, ColorLUT, bloom 4 / 4, grey tint), every curve control and the default set to
   ExposureCompensation (-2 first try; sign unresolved), range EV100 0 .. 10 so views adapt. sf_imagespace.patch edits
   LIST chunk entries ("LIST:BSFloatCurve::Control.Value").
+
+## Auto exposure on DefaultImageSpace, compensation -2, range EV 0 .. 10 (owner 2026-11-21 14:51; vs Skyrim)
+| view | before (EV min 4, LGT_NoLut) | now | dark end | bright end | contrast Skyrim / ours |
+|---|---|---|---|---|---|
+| inn hall | -0.6 | +2.2 | +2.5 | +1.9 | 1.5 / 1.2 |
+| inn bedroom | +1.4 | +2.9 | +3.0 | +2.5 | 1.8 / 1.4 |
+| Faendal's house | +1.5 | +2.4 | +2.8 | +2.2 | 1.6 / 1.3 |
+- Verified: the views now adapt - their spread fell from 2.1 stops to 0.7 (the dark hall rose 2.8, Faendal 0.9).
+- Level about 2.5 stops too bright. Either -2 pushed the wrong way (positive = darker) or the curve still does nothing
+  and this is Starfield's own target; next build compensation +0.5 tells which (expected near Skyrim if a unit is a
+  stop with positive = darker; unchanged if the curve is ignored - then Cinematic Brightness is the lever).
+- Contrast now under Skyrim's (1.2 - 1.4): the fill (AmbientScale 150) is strong for adapted views; after the level.

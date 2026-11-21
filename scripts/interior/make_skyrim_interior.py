@@ -378,9 +378,10 @@ def parser():
     ap.add_argument("--exposure-min", type=float, default=0.0,
                     help="batch --exposure auto: lowest EV100 (brightest); dark views sit at it (owner 2026-11-21)")
     ap.add_argument("--exposure-max", type=float, default=10.0, help="batch --exposure auto: highest EV100 (darkest)")
-    ap.add_argument("--exposure-compensation", type=float, default=-2.0,
+    ap.add_argument("--exposure-compensation", type=float, default=0.5,
                     help="batch --exposure auto: the compensation curve's value (DefaultImageSpace's curve, which has controls; "
-                         "-2 first try: the adapting views sat 2.5 stops over Skyrim)")
+                         "-2 made every view 2.2 - 2.9 stops over Skyrim; 0.5 = 2.5 stops darker if a unit is a stop with "
+                         "positive = darker)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")
