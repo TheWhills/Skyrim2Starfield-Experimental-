@@ -798,3 +798,37 @@ class SoftCandleTest(unittest.TestCase):
         paths = sorted(m["Data"]["Address"]["Data"]["Path"]["Data"][0]
                        for m in ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"])
         self.assertEqual(paths, ["EmissiveIntensity", "FlipbookAuto"])
+        # owner 2026-11-21 "sometimes transparent": the template's 35 cm soft fade cut to SOFT_FALLOFF_DEPTH_M
+        fx = next(x for x in comps if x["Type"] == "BSMaterial::EffectSettingsComponent")["Data"]
+        self.assertEqual(fx.get("SoftFalloffDepth"), f"{skyrimfire.SOFT_FALLOFF_DEPTH_M:g}")
+        self.assertEqual(fx.get("SoftEffect"), "true")
+
+    def test_soft_depth_replaces_the_templates_and_zero_removes_it(self):
+        t = fire_template()
+        for o in t["Objects"]:
+            for c_ in o["Components"]:
+                if c_["Type"] == "BSMaterial::EffectSettingsComponent":
+                    c_["Data"].update({"SoftEffect": "true", "SoftFalloffDepth": "0.35"})
+        files = {"Albedo": "a.dds", "Emissive": "a.dds", "Opacity": "o.dds"}
+
+        def fx(**kw):
+            m = skyrimfire.effect_material(t, "X", files, kind="candle", **kw)
+            return next(c_ for o in m["Objects"] for c_ in o["Components"]
+                        if c_["Type"] == "BSMaterial::EffectSettingsComponent")["Data"]
+        self.assertEqual(fx()["SoftFalloffDepth"], "0.35")                 # other flames: the template's own
+        self.assertEqual(fx(soft_depth=0.01)["SoftFalloffDepth"], "0.01")
+        self.assertNotIn("SoftEffect", fx(soft_depth=0))
+        self.assertNotIn("SoftFalloffDepth", fx(soft_depth=0))
+
+    def test_flame_is_warm_and_its_foot_see_through(self):
+        # owner 2026-11-21: "could stand to be a little warmer" - the brightest part is yellow, not white
+        f = skyrimfire.procedural_flame_frame(0.0).astype(float)
+        lit = f[f[:, :, 3] > 200]
+        hot = lit[np.argmax(lit[:, :3].sum(1))]
+        self.assertLess(hot[2], 0.7 * hot[0])
+        rows = np.nonzero(f[:, :, 3].max(1) > 120)[0]
+        mid_col = f.shape[1] // 2
+        top, bottom = rows.min(), rows.max()
+        upper = f[top + (bottom - top) // 2, mid_col, 3]
+        foot = f[bottom - (bottom - top) // 12, mid_col, 3]
+        self.assertLess(foot, upper - 40)

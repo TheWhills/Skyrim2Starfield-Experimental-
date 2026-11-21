@@ -2602,3 +2602,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - riverwood_doors.ps1 writes all output to <Work>\logs\riverwood_doors_last.log and filters the window with
   tools/owner/log_noise.txt; the list only hides per-record detail, never FAIL / error / WARNING lines (tested).
   -FullLog restores the old window. Each step is timed.
+
+## 2026-11-21: soft candles v2 - 1 cm soft fade, warmer
+- The effect template's SoftFalloffDepth 0.35 m made candle flames fade whenever something was within 35 cm behind them
+  (verified values, owner's flame_probe3; Starfield's FireCandleFlame.mat has no soft effect). Soft candles take 0.01 m;
+  hearths keep the template's value (big flames, the fade hides where they meet the logs).
+- Colours warmer (core no longer near-white), foot see-through. In game: open.

@@ -237,7 +237,8 @@ class FlameMixin:
                                              {"Albedo": files["color"], "Emissive": files["color"],
                                               "Opacity": files["opacity"]},
                                              kind="candle", flicker=flicker_period,
-                                             flipbook=(cols, rows, skyrimfire.SOFT_FPS))
+                                             flipbook=(cols, rows, skyrimfire.SOFT_FPS),
+                                             soft_depth=skyrimfire.SOFT_FALLOFF_DEPTH_M)
             mat_rel = f"materials/{self.prefix}/effects/{name}.mat"
             p = os.path.join(self.staging, *mat_rel.split("/"))
             os.makedirs(os.path.dirname(p), exist_ok=True)

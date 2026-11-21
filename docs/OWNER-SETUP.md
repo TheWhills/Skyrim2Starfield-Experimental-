@@ -301,6 +301,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7t. (2026-11-21) Soft candles v2: no longer see-through near walls / from above, warmer. Flame-only change, so
+   `-AssetsOnly` is enough (Starfield closed):
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -AssetsOnly
 7s. (2026-11-21) riverwood_doors.ps1 now prints a short summary per step, each step's time, and a time table at the
    end; the full output is in `C:\Modding\work\s2s\riverwood_doors\logs\riverwood_doors_last.log` (send that file
    when asked for the build output). `-FullLog` prints everything as before.

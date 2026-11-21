@@ -535,6 +535,17 @@ and the height breathing through one loop, a soft round halo (SOFT_HALO 0.3) tha
 colour BC7 sRGB + opacity BC4 on the effect template, flipbook 16 fps on its timer, the candle flicker as before. Cards:
 Skyrim's centres, SOFT_CARD (2.2 x 1.6) x larger, the flame drawn in the middle at SOFT_FLAME_SCALE 1.15 x Skyrim's.
 A flame-only change: -AssetsOnly redoes the candles. Unverified in game.
+Owner in game, soft v1 (2026-11-21 11:07, five crops): smooth, no longer pixelated, but "just looks low quality",
+"could stand to be a little warmer", "sometimes like, transparent"; from above (into a horn candle) only a faint
+streak. Cause of the transparency (verified, the owner's flame_probe3: FiresGeneric_Sm_01_14x14.mat's
+EffectSettingsComponent = BlendingMode SourceSoftAdditive, SoftEffect true, SoftFalloffDepth 0.35; flame_probe2:
+Starfield's FireCandleFlame.mat has only EmissiveOnlyEffect + VertexColorBlend): a soft effect fades where the scene
+behind it is closer than SoftFalloffDepth, and 35 cm is ten times a candle flame - the wax under it seen from above, the
+horn's inside, a wall behind the candle all thinned it. Soft v2: SoftFalloffDepth 0.01 (effect_material soft_depth;
+SOFT_FALLOFF_DEPTH_M) for the soft candle only; warmer colours (SOFT_COLOURS: core 1.0 / 0.85 / 0.55 instead of
+near-white, orange rim), a softer edge, a see-through foot (the lower quarter at about 55 % opacity), halo 0.35. The
+look ("low quality") is a supported hypothesis: the white core and the faded body read as a flat sticker; to check in
+game. Still crossed vertical cards: from straight above the flame is thin (Starfield's own candle is a 3-D mesh).
 
 ## Electrical buzz (2026-11-21, owner: "an ambient electrical buzz i hear, cant trace it")
 Supported hypothesis: a looping sound carried by a copied Starfield record. Furniture copies keep the template's
@@ -544,5 +555,6 @@ for alchemy, NPCWelder for the forge, NPCRepairImpactWrench for the grindstone),
 build log names the templates it took sounds off ("looping sounds removed from copies of: ..."). A plugin change: a
 full build. Unverified: that it was one of these.
 Owner's build (2026-11-21 10:59): "looping sounds removed from copies of: furniture WorkbenchChem, furniture
-WorkbenchIndustrial" (the alchemy tables' and the enchanting table's templates; no light carried one). In game: open.
+WorkbenchIndustrial" (the alchemy tables' and the enchanting table's templates; no light carried one).
+Owner in game (2026-11-21 11:07): "buzzing sound is gone" - verified: the workbench templates' looping sounds.
 

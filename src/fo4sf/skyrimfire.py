@@ -617,7 +617,15 @@ SOFT_FRAME = (128, 256)              # px (width, height)
 SOFT_FPS = 16.0                      # one sway loop a second
 SOFT_CARD = (2.2, 1.6)               # card half width / height x Skyrim's flame card
 SOFT_FLAME_SCALE = 1.15              # the flame itself x Skyrim's
-SOFT_HALO = 0.3                     # halo opacity at the flame
+SOFT_HALO = 0.35                    # halo opacity at the flame
+# owner 2026-11-21 in game: the flame "sometimes transparent" - verified cause: FiresGeneric_Sm_01_14x14.mat (the effect
+# template) has SoftEffect true, SoftFalloffDepth 0.35 (m): the flame fades out wherever something stands less than 35 cm
+# behind it (the wax seen from above, a wall behind the candle). Starfield's own FireCandleFlame.mat has no SoftEffect.
+# Our candles keep a 1 cm soft edge only (the card's foot meeting the wax)
+SOFT_FALLOFF_DEPTH_M = 0.01
+# owner 2026-11-21: "could stand to be a little warmer" (the core read white): colours from the rim to the core
+SOFT_COLOURS = {"rim": (0.95, 0.36, 0.07), "mid": (1.0, 0.58, 0.17), "core": (1.0, 0.85, 0.55),
+                "blue": (0.30, 0.42, 1.0), "halo": (1.0, 0.45, 0.12)}
 
 
 def _smooth(e0, e1, x):
@@ -648,26 +656,24 @@ def procedural_flame_frame(phase: float, size=SOFT_FRAME, card=SOFT_CARD, flame_
     prof = prof / 0.5 * 0.85                                 # widest ~0.85 of Skyrim's half width (a candle teardrop)
     d = np.abs(fx - sway) / np.maximum(prof, 1e-4)           # 0 on the axis, 1 at the rim
     inside = (fy > 0) & (fy < 1)
-    body = np.where(inside, _smooth(1.0, 0.55, d), 0.0)
+    body = np.where(inside, _smooth(1.0, 0.45, d), 0.0)
     body *= _smooth(0.0, 0.06, fy) * _smooth(1.0, 0.82, fy)
-    core = np.where(inside, _smooth(0.5, 0.05, d), 0.0) * _smooth(0.08, 0.25, fy) * _smooth(0.6, 0.3, fy)
+    # a real flame's foot is thin and see-through (blue, around the wick); its light is in the upper two thirds
+    base = 0.55 + 0.45 * _smooth(0.05, 0.3, fy)
+    core = np.where(inside, _smooth(0.45, 0.05, d), 0.0) * _smooth(0.12, 0.3, fy) * _smooth(0.62, 0.32, fy)
     foot = np.where(inside, _smooth(0.9, 0.3, d), 0.0) * _smooth(0.22, 0.02, fy) * _smooth(-0.02, 0.04, fy)
-    rim = np.array([1.0, 0.47, 0.12])
-    mid = np.array([1.0, 0.66, 0.22])
-    white = np.array([1.0, 0.96, 0.82])
-    blue = np.array([0.30, 0.42, 1.0])
-    col = rim[None, None] * (1 - body[..., None]) + mid[None, None] * body[..., None]
-    col = col * (1 - core[..., None]) + white[None, None] * core[..., None]
-    col = col * (1 - 0.6 * foot[..., None]) + blue[None, None] * 0.6 * foot[..., None]
+    C = {k: np.array(v) for k, v in SOFT_COLOURS.items()}
+    col = C["rim"][None, None] * (1 - body[..., None]) + C["mid"][None, None] * body[..., None]
+    col = col * (1 - core[..., None]) + C["core"][None, None] * core[..., None]
+    col = col * (1 - 0.6 * foot[..., None]) + C["blue"][None, None] * 0.6 * foot[..., None]
     # halo: a soft round glow around the flame's lower middle (Skyrim's CandleGlow01 particles, left out of the cards so
     # far), in card coordinates so it is gone well inside the card's edges (a visible box otherwise)
     hy = -1.0 / ch + 0.7 / ch                              # card y of the flame's widest part
     r2 = (X / 0.5) ** 2 + ((Y - hy) / 0.42) ** 2
     glow = halo * np.exp(-r2 * 1.6) * (0.92 + 0.08 * math.sin(two_pi * phase * 2))
-    alpha = np.clip(body * 0.95 + glow * (1 - body), 0, 1)
-    halo_col = np.array([1.0, 0.55, 0.2])
-    a_body = body * 0.95
-    col = (col * a_body[..., None] + halo_col[None, None] * (glow * (1 - body))[..., None]) / \
+    a_body = body * 0.95 * base
+    alpha = np.clip(a_body + glow * (1 - a_body), 0, 1)
+    col = (col * a_body[..., None] + C["halo"][None, None] * (glow * (1 - a_body))[..., None]) / \
         np.maximum(alpha[..., None], 1e-6)
     edge = _smooth(1.0, 0.85, np.abs(X)) * _smooth(1.0, 0.85, np.abs(Y))   # nothing at the card's edges
     alpha = alpha * edge
@@ -760,14 +766,15 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
                     scroll: Optional[Tuple[str, float, float]] = None, flicker: Optional[float] = None,
                     vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None,
                     multiple: float = 1.0, crossfade: Optional[Tuple[float, int]] = None,
-                    keep_emittance: bool = False) -> dict:
+                    keep_emittance: bool = False, soft_depth: Optional[float] = None) -> dict:
     """An emissive effect material cloned from the vanilla fire template (convert_material.build_from_template):
     files {"Albedo", "Emissive", "Opacity": game paths}; EMITTANCE[kind]; controllers for a UV scroll (axis, delta,
     seconds) and / or a flicker (loop seconds). flipbook (columns, rows, fps): the atlas plays as a looping flipbook
     driven by a TimerController on FlipbookAuto, as vanilla FireCandleFlame.mat; without it the template's flipbook
     is removed (a single-frame texture). Emittance = EMITTANCE[kind] x multiple x EMITTANCE_SCALE[kind];
     crossfade (period, phase): an OverallOpacity curve (crossfade_controller); keep_emittance: the template's own
-    emissivity stays (a vanilla material used as it is)."""
+    emissivity stays (a vanilla material used as it is); soft_depth (m): the EffectSettings SoftFalloffDepth (the
+    template's 0.35 fades a small flame wherever anything is within 35 cm behind it), 0 = no soft edge."""
     from . import convert_material as cm
     mat = cm.build_from_template(template, name, files)
     for o in mat["Objects"]:
@@ -791,6 +798,11 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
             c["Data"].update(em)
         if c.get("Type") == "BSMaterial::EffectSettingsComponent" and vertex_color:
             c["Data"]["VertexColorBlend"] = "true"
+        if c.get("Type") == "BSMaterial::EffectSettingsComponent" and soft_depth is not None:
+            c["Data"].pop("SoftFalloffDepth", None)
+            c["Data"].pop("SoftEffect", None)
+            if soft_depth > 0:
+                c["Data"].update({"SoftEffect": "true", "SoftFalloffDepth": f"{soft_depth:g}"})
     root[:] = [c for c in root if c.get("Type") not in ("BSBind::DirectoryComponent", "BSBind::ControllerComponent")]
     maps, binds = [], []
     if scroll:
