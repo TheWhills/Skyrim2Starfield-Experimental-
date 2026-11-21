@@ -205,14 +205,14 @@ def write_adapt_imagespace(work, a, skyrim_grade=None):
         # 1.4) reads about 2 stops brighter than the middle band, so it exposes about 2 stops darker (supported hypothesis)
         "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredDarksPercentile.Value": float(getattr(a, "meter_darks", 20.0)),
         "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredBrightsPercentile.Value": float(getattr(a, "meter_brights", 20.0)),
-        **(grading_changes(skyrim_grade) if getattr(a, "skyrim_grading", True) else {})})
+        **(grading_changes(skyrim_grade) if getattr(a, "skyrim_grading", False) else {})})
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(blob)
     print(f"image space: auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
           f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)}, metering "
           f"{getattr(a, 'meter_darks', 20.0)} .. {100 - getattr(a, 'meter_brights', 20.0)} % -> {path}")
-    if skyrim_grade and getattr(a, "skyrim_grading", True):
+    if skyrim_grade and getattr(a, "skyrim_grading", False):
         print(f"  Skyrim's grade from {skyrim_grade.get('editor_id')} ({skyrim_grade.get('formkey')}): "
               f"{grading_changes(skyrim_grade)}")
     return blob
@@ -436,8 +436,9 @@ def parser():
     ap.add_argument("--exposure-brightness", type=float, default=1.0,
                     help="batch --exposure auto: the image space's cinematic brightness, applied after the tone map "
                          "(0.25 matched Skyrim's level but capped whites at 0.48: 1.0, the level from --meter-*)")
-    ap.add_argument("--no-skyrim-grading", dest="skyrim_grading", action="store_false",
-                    help="batch --exposure auto: leave out Skyrim's saturation / contrast / tint")
+    ap.add_argument("--skyrim-grading", action="store_true",
+                    help="batch --exposure auto: add Skyrim's saturation / contrast / tint (off by default: a screen "
+                         "filter changes everything inside, characters included; owner 2026-11-21)")
     ap.add_argument("--meter-darks", type=float, default=85.0,
                     help="batch --exposure auto: %% of the darkest pixels the auto exposure ignores (vanilla 20; higher = "
                          "it meters brighter parts = a darker image)")

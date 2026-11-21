@@ -144,6 +144,11 @@ class SkyrimGradingTest(unittest.TestCase):
         self.assertEqual(MSI.grading_changes({}), {})
         self.assertEqual(MSI.skyrim_grading([{"lighting": {}}], ims), {})
 
+    def test_grading_off_by_default(self):
+        import make_skyrim_interior as MSI
+        self.assertFalse(MSI.parser().parse_args(["batch"]).skyrim_grading)
+        self.assertTrue(MSI.parser().parse_args(["batch", "--skyrim-grading"]).skyrim_grading)
+
 
 class AdaptImageSpaceTest(unittest.TestCase):
     """2026-11-21: Skyrim adapts per view; --exposure auto writes LGT_NoLut with Starfield's auto exposure."""

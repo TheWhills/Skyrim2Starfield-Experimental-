@@ -397,3 +397,7 @@ exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hy
   tint (colour xyz, amount w) of the batch's most used Skyrim image space into our image space; not the brightness
   (after the tone map in Starfield). --no-skyrim-grading leaves it out. One image space for the batch for now; cells with
   other Skyrim image spaces (caves, castles) will want their own copies (open).
+- Owner, 16:28: the grade is a filter on everything inside (a character's red hair changes walking in), not lighting.
+  Decision: no screen filter by default (--skyrim-grading opts in). Interiors should share the exterior's colour
+  pipeline (tone map, LUT, cinematic) and differ only in exposure; warmth comes from the lights' own colours (open:
+  base our image space on the exterior's).

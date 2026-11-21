@@ -2655,3 +2655,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Cinematic Brightness acts after Starfield's tone map (0.25 capped whites at 0.48, verified): back to 1, the level set
   by the metering band (IgnoredDarks 85 / IgnoredBrights 5). Skyrim's saturation, contrast and tint from the batch's
   image space go into the same cinematic fields (neutral 1 / 1 / w 0 in vanilla).
+
+## 2026-11-21: no screen-wide colour filter inside
+- Owner: copying Skyrim's grade filters everything inside, characters included. Off by default (--skyrim-grading opts
+  in). Rule: interiors use the exterior's colour pipeline, only exposure differs; colour comes from the lights.
