@@ -245,6 +245,7 @@ class Source:
                 self.names[fid] = _edid(fields)
         self._doors = None
         self._templates = None
+        self._imgs = None
 
     def lighting_templates(self) -> dict:
         """{LGTM fid: {"ambient", "directional", "directional_rotation", "directional_fade", "directional_ambient"}}
@@ -266,6 +267,34 @@ class Source:
                     elif sig == b"DALC" and len(d) >= 24:    # the template's directional ambient (its DATA copy unused)
                         self._templates.setdefault(fid, {})["directional_ambient"] = _ambient6(d, 0)
         return self._templates
+
+    def image_spaces(self) -> dict:
+        """{IMGS fid: {"editor_id", "hdr", "cinematic", "tint"}} (xEdit wbDefinitionsTES5 IMGS, verified: HNAM eye adapt
+        speed, bloom blur radius / threshold / scale, receive bloom threshold, white, sunlight scale, sky scale, eye
+        adapt strength; CNAM saturation, brightness, contrast; TNAM tint amount + RGB floats)."""
+        if getattr(self, "_imgs", None) is None:
+            self._imgs = {}
+            rng = self.p.top_group(b"IMGS")
+            for typ, off, flags, fid in (fo4land.iter_items(self.p.buf, *rng) if rng else ()):
+                if typ == "GRUP" or flags & skyrimrefs.DELETED:
+                    continue
+                e = {"editor_id": ""}
+                for sig, d in fo4land.iter_subrecords(fo4land.record_data(self.p.buf, off)):
+                    if sig == b"EDID":
+                        e["editor_id"] = d.rstrip(b"\0").decode("cp1252", "replace")
+                    elif sig == b"HNAM" and len(d) >= 36:
+                        v = struct.unpack_from("<9f", d)
+                        e["hdr"] = {"eye_adapt_speed": round(v[0], 3), "bloom_scale": round(v[3], 3),
+                                    "white": round(v[5], 3), "eye_adapt_strength": round(v[8], 3)}
+                    elif sig == b"CNAM" and len(d) >= 12:
+                        sat, bri, con = struct.unpack_from("<3f", d)
+                        e["cinematic"] = {"saturation": round(sat, 3), "brightness": round(bri, 3),
+                                          "contrast": round(con, 3)}
+                    elif sig == b"TNAM" and len(d) >= 16:
+                        t = struct.unpack_from("<4f", d)
+                        e["tint"] = [round(x, 3) for x in t]
+                self._imgs[fid] = e
+        return self._imgs
 
     def cell_lighting(self, fields) -> dict:
         """cell_lighting, with the colours the cell takes from its lighting template filled in: an XCLL inherit flag

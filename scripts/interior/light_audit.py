@@ -80,7 +80,7 @@ def pct(xs, q):
     return xs[lo] + (xs[hi] - xs[lo]) * (i - lo)
 
 
-def audit_cell(export, s):
+def audit_cell(export, s, image_spaces=None):
     refs = [r for r in export["refs"]]
     lighting = export.get("lighting") or {}
     lights = [r for r in refs if r.get("type") == "Light" and r.get("light")]
@@ -101,6 +101,10 @@ def audit_cell(export, s):
     ratios = [x["sf"] / x["sky_pts_linear"] for x in lit if x["sf"] > 0]
     dark = sum(1 for x in lit if x["sf"] <= 0)
     sky_tot = [x["sky"] for x in rows]
+    sky_lin = [lightmodel.srgb_to_linear(min(1.0, v)) for v in sky_tot]
+    ims = None
+    if lighting.get("image_space") and image_spaces is not None:
+        ims = image_spaces.get(int(lighting["image_space"].split(":")[0], 16))
     radii = [r["light"]["radius"] / lightmodel.UNITS_PER_M for r in lights]
     bright = [max(r["light"]["color"]) / 255.0 * (r["light"].get("fade", 1.0) + r["light"].get("ref_fade_delta", 0.0))
               for r in lights]
@@ -115,7 +119,13 @@ def audit_cell(export, s):
                    "ambient": lighting.get("ambient"), "directional_ambient": lighting.get("directional_ambient"),
                    "directional": lighting.get("directional"), "directional_fade": lighting.get("directional_fade"),
                    "directional_rotation": lighting.get("directional_rotation"),
-                   "from_template": lighting.get("from_template", []), "template": lighting.get("template")},
+                   "from_template": lighting.get("from_template", []), "template": lighting.get("template"),
+                   "image_space": lighting.get("image_space"), "image_space_data": ims},
+        "per_light": [{"light": r["base_editor_id"], "formkey": r["formkey"],
+                       "radius_m": round(r["light"]["radius"] / lightmodel.UNITS_PER_M, 2),
+                       "skyrim_brightness": round(lightmodel.luma([v / 255.0 for v in r["light"]["color"]])
+                                                  * (r["light"].get("fade", 1.0) + r["light"].get("ref_fade_delta", 0.0)), 3),
+                       "ours_lm": next((round(lm) for q, _rad, lm in placed if q is r), None)} for r in lights],
         "ours": {"placed": len(placed), "merged": [{"light": m["base_editor_id"], "into": into["base_editor_id"],
                                                      "formkey": m["formkey"]} for m, into in merged],
                  "lumens": [round(min(lm for _q, _r, lm in placed)), round(statistics.median([lm for *_x, lm in placed])),
@@ -125,6 +135,7 @@ def audit_cell(export, s):
         "points": len(rows),
         "skyrim_light": {"median": round(statistics.median(sky_tot), 3) if sky_tot else 0,
                          "p10": round(pct(sky_tot, 0.1), 3), "p90": round(pct(sky_tot, 0.9), 3),
+                         "mean_linear": round(statistics.fmean(sky_lin), 4) if sky_lin else 0,
                          "share_ambient": round(sum(x["amb"] for x in rows) / max(1e-9, sum(sky_tot)), 2),
                          "share_directional": round(sum(x["dir"] for x in rows) / max(1e-9, sum(sky_tot)), 2),
                          "share_points": round(sum(x["pts"] for x in rows) / max(1e-9, sum(sky_tot)), 2)},
@@ -172,7 +183,7 @@ def main(argv=None):
         src = skyriminterior.Source(p, "Skyrim.esm")
         for n in names:
             exp = src.export(n)
-            cells.append(audit_cell(exp, settings(a.work, exp["cell"])))
+            cells.append(audit_cell(exp, settings(a.work, exp["cell"]), src.image_spaces()))
     ref = summarise(cells)
     print(f"falloff model for ours: {lightmodel.STARFIELD_FALLOFF}; batch median ours / Skyrim = {ref}")
     print(f"{'cell':34} {'sky lights':>10} {'placed':>6} {'merged':>6} {'Skyrim light p10/med/p90':>25} "
@@ -187,6 +198,10 @@ def main(argv=None):
               f"{vs:>13} {spread:>7} {ov['lit_in_skyrim_dark_here']:>5}")
         print(f"    ambient {sk['ambient']}  directional {sk['directional']} x{sk['directional_fade']} "
               f"rot {sk['directional_rotation']}  from template {sk['from_template'] or '-'}")
+        ims = sk["image_space_data"]
+        print(f"    image space {sk['image_space'] or 'none (game default)'}"
+              + (f" {ims.get('editor_id')} hdr {ims.get('hdr')} cinematic {ims.get('cinematic')} tint {ims.get('tint')}"
+                 if ims else "") + f"; mean Skyrim light (linear) {sl['mean_linear']}")
         if sk["directional_ambient"]:
             print("    directional ambient " + " ".join(f"{k}{v}" for k, v in sk["directional_ambient"].items()))
         print(f"    Skyrim radius m min/med/max {sk['radius_m']}  colour x fade {sk['brightness']}  "

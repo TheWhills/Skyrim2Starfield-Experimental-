@@ -94,7 +94,7 @@ def xcll_full(ambient=(30, 30, 30), inherits=0):
     return (b"XCLL", d)
 
 
-LIGH_B, WALL_B, CELL_A, CELL_B, TPL = 0x110, 0x100, 0x2000, 0x2100, 0x5000
+LIGH_B, WALL_B, CELL_A, CELL_B, TPL, IMGS = 0x110, 0x100, 0x2000, 0x2100, 0x5000, 0x6000
 
 
 def plugin():
@@ -105,6 +105,10 @@ def plugin():
                                                    (b"FNAM", struct.pack("<f", 1.0))])])
     tdat = bytes([5, 6, 7, 0]) + bytes([1, 2, 3, 0]) + bytes(12) + struct.pack("<ii", 10, 20) + struct.pack("<f", 0.5)
     dalc = b"".join(bytes([100 + i] * 3) + b"\0" for i in range(6))
+    hnam = struct.pack("<9f", 0.5, 0.0, 0.0, 0.3, 0.0, 6.0, 1.0, 1.0, 0.75)
+    imgs = grup(b"IMGS", 0, [rec(b"IMGS", IMGS, [(b"EDID", b"InnIS\0"), (b"HNAM", hnam),
+                                                (b"CNAM", struct.pack("<3f", 0.9, 1.2, 1.1)),
+                                                (b"TNAM", struct.pack("<4f", 0.1, 1.0, 0.8, 0.6))])])
     lgtm = grup(b"LGTM", 0, [rec(b"LGTM", TPL, [(b"EDID", b"Tpl\0"), (b"DATA", tdat + bytes(40)), (b"DALC", dalc)])])
 
     def refr(fid, base, pos, extra=()):
@@ -116,11 +120,11 @@ def plugin():
         return [c, grup(fid, 6, [grup(fid, 9, children)])]
     a = cell(CELL_A, "OwnLight", [refr(0x2001, WALL_B, (0, 0, 0)),
                                   refr(0x2002, LIGH_B, (0, 0, 100), [(b"XLIG", struct.pack("<4f", 0, 0.4, 0, 0))])],
-             [xcll_full()])
+             [xcll_full(), (b"XCIM", struct.pack("<I", IMGS))])
     b = cell(CELL_B, "TemplateLight", [refr(0x2101, WALL_B, (0, 0, 0))],
              [xcll_full(inherits=0x1 | 0x20), (b"LTMP", struct.pack("<I", TPL))])
     cells = grup(b"CELL", 0, [grup(0, 2, [grup(0, 3, a + b)])])
-    return tes4 + stat + ligh + lgtm + cells
+    return tes4 + stat + ligh + imgs + lgtm + cells
 
 
 class SkyrimFieldsTest(unittest.TestCase):
@@ -168,6 +172,14 @@ class SkyrimFieldsTest(unittest.TestCase):
         own = data["cells"][0]
         self.assertEqual((own["skyrim"]["lights"], own["ours"]["placed"]), (1, 1))
         self.assertGreater(own["skyrim_light"]["share_points"], 0)
+        ims = own["skyrim"]["image_space_data"]
+        self.assertEqual(ims["editor_id"], "InnIS")
+        self.assertEqual((ims["hdr"]["white"], ims["hdr"]["eye_adapt_strength"]), (6.0, 0.75))
+        self.assertEqual(ims["cinematic"], {"saturation": 0.9, "brightness": 1.2, "contrast": 1.1})
+        self.assertIsNone(data["cells"][1]["skyrim"]["image_space_data"])
+        self.assertEqual(own["per_light"][0]["ours_lm"], 8000)
+        self.assertAlmostEqual(own["per_light"][0]["skyrim_brightness"], 1.4 * (0.2126 + 0.7152 * 160 / 255
+                                                                                + 0.0722 * 80 / 255), places=2)
 
 
 class PlacedLightsTest(unittest.TestCase):

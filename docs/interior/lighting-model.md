@@ -57,6 +57,30 @@ directional / point-light shares, and ours / Skyrim's (point lights, H1) as a ro
 ("vs batch", stops) and its spread inside the room (p90 / p10, stops). Output: the summary and
 <work>\light_audit.json.
 
+## Audit results, Riverwood (owner, 2026-11-21 12:18; ours under H1)
+| cell | Skyrim lights | Skyrim light at objects p10 / med / p90 | ambient share | ours vs batch | spread in room |
+|---|---|---|---|---|---|
+| AlvorsHouse | 6 | 0.15 / 0.68 / 1.38 | 0.12 | +0.11 st | 2.6 st |
+| FaendalsHouse | 5 | 0.21 / 0.77 / 1.24 | 0.11 | +0.71 st | 2.1 st |
+| GerdursHouse | 6 | 0.42 / 0.65 / 1.28 | 0.11 | -0.23 st | 2.8 st |
+| RiverwoodTrader | 5 | 0.47 / 0.78 / 1.54 | 0.10 | -0.12 st | 2.4 st |
+| SleepingGiantInn | 8 | 0.11 / 0.31 / 0.84 | 0.20 | +0.15 st | 2.0 st |
+| SvensHouse | 6 | 1.47 / 2.04 / 2.53 | 0.04 | -1.84 st | 3.5 st |
+
+Read (verified from the output unless marked):
+- Every room takes the same lighting template: ambient 45,48,48, the same six directional ambient colours, directional
+  fade 0 (no directional light). Ambient is 4 - 20 % of the light; it does not make rooms differ.
+- Every light is 512 units (7.3 m) except one 65.7 m light in Sven's house. Skyrim's brightness (colour x fade) runs
+  0.85 - 2.91; ours are all 8000 lm, the 65.7 m one 64000 (the 16x cap; uncapped the rule would give 135x): Skyrim's
+  differences between lights are flattened, and Sven's house is 1.8 stops darker than the rest relative to Skyrim.
+- **Skyrim's own light on the inn's objects is half the houses' (median 0.31 against 0.65 - 0.78), yet the owner's
+  Skyrim screenshot of the inn is bright.** Relative to Skyrim, ours puts the inn where the houses are (+0.15 st): we
+  reproduce Skyrim's raw light about right (under H1), but Skyrim then brightens the dark inn and Starfield does not.
+  Supported hypothesis: Skyrim's HDR eye adaptation (IMGS HNAM eye adapt strength / white; the cell's XCIM image space)
+  raises a dark room's exposure more than our Starfield image space does. The audit now prints each cell's image space.
+- Inside each room ours / Skyrim's spreads 2 - 3.5 stops: under H1, ours is much brighter right under a light and
+  darker away from it (the owner, 11-16: "very bright right at the source").
+
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside
 its radius, a "ladder": the same tile under small lights at 0.5 m with lumens stepping by half stops around what H1
