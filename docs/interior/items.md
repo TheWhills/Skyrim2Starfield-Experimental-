@@ -147,3 +147,13 @@ Before that test: everything in game; the C# (written without a compiler: NuGet 
 Mutagen's Starfield Ingestible.xml: Name, Description, Model, ObjectBounds, mod.Ingestibles). Next: own hulls (the
 donor's shape is wrong for odd sizes: `fit` in items.json shows how far), ownership, Skyrim's effects / value / weight.
 
+## Clutter (2026-11-21, owner: "lets do clutter next")
+make_items.py now also takes Skyrim's MiscItem references (plates, tankards, bowls, baskets, buckets, tools, ingots):
+kind misc, donors Starfield MISC records (read with the ALCH, sized the same way from their geometry), the copy a MISC
+(PluginSpike ITEMS "record": "MISC": name, model, bounds ours; the donor's short name NNAM and featured-item message
+FIMD cleared). Left out as donors: resources (Inorg / Org / Mfg ..., so a plate is not crafting iron), credits,
+digipicks, ammo, contraband, quest-prefixed EditorIDs (MQ / SQ / UC / FC / ...), any with VMAD or FIMD, any with a
+contraband / resource / unique / collectible / quest keyword. The donor's value, weight and scrap components (CVPA) are
+kept (Skyrim's in items.json). Skyrim's gold (Gold001...) stays a static: Starfield's credits are a step of their own.
+Unverified: which Starfield MISC the size picks (the owner's 2e lines will show; filters to tune like the drinks).
+

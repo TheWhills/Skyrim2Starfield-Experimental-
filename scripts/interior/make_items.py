@@ -1,4 +1,4 @@
-"""Skyrim's placed food, drink, potions and ingredients in the converted interiors as real Starfield items (docs/interior/items.md
+"""Skyrim's placed food, drink, potions, ingredients and clutter (MiscItem) in the converted interiors as real Starfield items (docs/interior/items.md
 "Placed items").
 
     python -I scripts\\interior\\make_items.py --skyrim "$sky\\Skyrim.esm" --skyrim-data "$sky" --starfield "$sf" ^
@@ -8,11 +8,12 @@ Run after the batch's models are converted (make_skyrim_objects.py convert) and 
 <work>\\items.json (ITEMS=<that file>). Owner, 2026-11-21 (after the wine test worked as a loose item: "yes" to making
 Riverwood's tables and shelves real items first, the items' own physics shapes and Skyrim's effects later).
 
-Per Skyrim ALCH / INGR base placed in the batch's cells (<work>\\cells.txt; the refs PluginSpike would otherwise place
+Per Skyrim ALCH / INGR / MISC base placed in the batch's cells (<work>\\cells.txt; the refs PluginSpike would otherwise place
 as statics):
   - its kind: drink (food flag and a bottle / jug / wine / mead / ale word), food (other food, every ingredient), potion
-    (not food: potions and poisons);
-  - a DONOR: the vanilla Starfield ALCH of the same kind (its EditorID's prefix: Drink_, Food_, Aid_ / Med_ / Chem_)
+    (not food: potions and poisons), misc (MISC clutter: plates, tankards, baskets, tools; 2026-11-21);
+  - a DONOR: the vanilla Starfield ALCH of the same kind (its EditorID's prefix: Drink_, Food_, Aid_ / Med_ / Chem_; for
+    misc a Starfield MISC that is not a resource, credits, contraband, quest, featured or scripted item)
     whose size (its own geometry's bounds; its OBND when the NIF has none) is closest to our converted model's (height against height, the two flat sides against each other, on a
     log scale), among those whose world model has a physics body. The item is a copy of the donor's record (its
     effects, sounds, keywords, value, weight: Starfield's own, items.md step 5), with the Skyrim name and our model;
@@ -41,7 +42,7 @@ from fo4sf import nif as nifmod, sfplugin  # noqa: E402
 import item_test  # noqa: E402
 
 U = 70.0                                        # Skyrim units per metre
-ITEM_TYPES = ("Ingestible", "Ingredient")       # cell.json types made items (MISC clutter stays static for now)
+ITEM_TYPES = ("Ingestible", "Ingredient", "MiscItem")   # cell.json types made items (MiscItem: 2026-11-21, clutter)
 FOOD, MEDICINE, POISON = 0x2, 0x10000, 0x20000  # ALCH ENIT flags (Skyrim and Starfield; Mutagen's Ingestible.Flag)
 NO_SETTLE, DISABLED = 0x20000000, 0x800         # REFR record flags: Don't Havok Settle, Initially Disabled
 DRINK_RX = r"wine|mead|\bale\b|ale$|beer|bottle|jug|flask|brandy|milk|skooma|spirit|tankard|honningbrew|blackbriar"
@@ -53,6 +54,13 @@ ALCOHOL_RX = r"wine|mead|\bale\b|ale$|beer|brandy|spirit|honningbrew|blackbriar|
 PRODUCE_RX = (r"cabbage|potato|leek|apple|garlic|carrot|tomato|gourd|lettuce|pear|berr|egg|root|radish|onion|melon|"
               r"corn|wheat")
 PREFER = {"alcohol": r"^drink_alc_", "produce": r"^food_produce_"}
+# MISC donors (2026-11-21, owner: "lets do clutter next"): Starfield's loose misc items, not its resources (a plate must not
+# count as iron for crafting), credits / digipicks, contraband, quest or featured items, or scripted ones
+MISC_SKIP_RX = (r"^(inorg|org|mfg|res_|resource|credits|digipick|ammo)|contraband|quest|"
+                r"^(mq|sq|uc|fc|ri|cf|bq|lc|se|oe|city|com|dlc|sfbgs|ecs|rad|mb|tm|crs)\d*_")
+MISC_SKIP_KEYWORD_RX = r"contraband|resource|unique|collectible|quest"
+SKYRIM_MISC_SKIP_RX = r"^gold0"                 # Skyrim's gold: Starfield's credits, a step of its own (left static)
+KINDS = ("drink", "food", "potion", "misc")
 MAX_TRIES = 12                                  # donors whose NIF is read for a body, best fit first
 
 
@@ -61,7 +69,9 @@ def u32(d, p=0):
 
 
 def skyrim_kind(sig: str, edid: str, model: str, flags: int) -> str:
-    """drink / food / potion of a Skyrim ALCH ("ALCH") or INGR ("INGR") by its ENIT flags and words."""
+    """drink / food / potion of a Skyrim ALCH ("ALCH") or INGR ("INGR") by its ENIT flags and words; misc for MISC."""
+    if sig == "MISC":
+        return "misc"
     if sig == "INGR":
         return "food"
     if not flags & FOOD:
@@ -171,10 +181,12 @@ def item_model_name(model: str) -> str:
 
 
 def starfield_donors(recs, keyword_edids=None):
-    """[{fid, edid, model, bounds, kinds, scripted}] of Starfield ALCH records with a model that can be donors."""
+    """[{fid, sig, edid, model, bounds, kinds, scripted}] of Starfield ALCH / MISC records with a model that can be donors.
+    keyword_edids: {KYWD FormID: EditorID} (MISC donors with a contraband / resource / unique keyword are left out)."""
+    kw = keyword_edids or {}
     out = []
     for t, _h, subs, fid in recs:
-        if t != b"ALCH":
+        if t not in (b"ALCH", b"MISC"):
             continue
         d = {}
         for s, v in subs:
@@ -183,12 +195,19 @@ def starfield_donors(recs, keyword_edids=None):
         if not model:
             continue
         e = sfplugin.edid(subs)
-        enit = d.get(b"ENIT", b"")
-        kinds = starfield_kinds(e, model, u32(enit, 4))
+        if t == b"ALCH":
+            kinds = starfield_kinds(e, model, u32(d.get(b"ENIT", b""), 4))
+        else:
+            kws = d.get(b"KWDA", b"")
+            names = [kw.get(u32(kws, i), "") for i in range(0, len(kws) - 3, 4)]
+            ok = not (b"VMAD" in d or b"FIMD" in d or re.search(SKIP_DONOR_RX, e, re.I)
+                      or re.search(MISC_SKIP_RX, e, re.I)
+                      or any(re.search(MISC_SKIP_KEYWORD_RX, n, re.I) for n in names))
+            kinds = {"misc"} if ok else set()
         if not kinds:
             continue
-        out.append({"fid": fid, "edid": e, "model": model, "bounds": obnd(d.get(b"OBND", b"")), "kinds": kinds,
-                    "scripted": b"VMAD" in d})
+        out.append({"fid": fid, "sig": t.decode(), "edid": e, "model": model, "bounds": obnd(d.get(b"OBND", b"")),
+                    "kinds": kinds, "scripted": b"VMAD" in d})
     return out
 
 
@@ -219,8 +238,12 @@ def skyrim_base(subs):
         bounds = [[x / U for x in v[:3]], [x / U for x in v[3:]]]
     return {"edid": d.get(b"EDID", b"").split(b"\0")[0].decode("latin-1"), "name": name,
             "model": d.get(b"MODL", b"").split(b"\0")[0].decode("latin-1"),
-            "value": struct.unpack_from("<i", enit)[0] if len(enit) >= 4 else 0, "flags": u32(enit, 4),
-            "weight": struct.unpack_from("<f", d[b"DATA"])[0] if len(d.get(b"DATA", b"")) == 4 else 0.0,
+            "value": (struct.unpack_from("<i", enit)[0] if len(enit) >= 4
+                      else struct.unpack_from("<i", d[b"DATA"])[0] if len(d.get(b"DATA", b"")) == 8 else 0),
+            "flags": u32(enit, 4),
+            # ALCH DATA: weight; MISC / INGR DATA: value, weight
+            "weight": (struct.unpack_from("<f", d[b"DATA"])[0] if len(d.get(b"DATA", b"")) == 4
+                       else struct.unpack_from("<f", d[b"DATA"], 4)[0] if len(d.get(b"DATA", b"")) == 8 else 0.0),
             "bounds": bounds}
 
 
@@ -283,6 +306,8 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     ours = bounds_of(ours_model) or info["bounds"]
     if not ours:
         return f"no bounds for {ours_model}"
+    if sig == "MISC" and re.search(SKYRIM_MISC_SKIP_RX, info["edid"], re.I):
+        return "gold: becomes Starfield credits in a later step"
     kind = skyrim_kind(sig, info["edid"], info["model"], info["flags"])
     family = skyrim_family(kind, info["edid"])
     donor = phys = None
@@ -306,7 +331,8 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     nifs[model] = nif
     bounds = [[ours[0][i] + d[i] for i in range(3)], [ours[1][i] + d[i] for i in range(3)]]
     name = names.get(info["name"], info["edid"]) if isinstance(info["name"], int) else (info["name"] or info["edid"])
-    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "family": family, "donor": f"{donor['fid']:08X}",
+    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "family": family,
+           "record": donor.get("sig", "ALCH"), "donor": f"{donor['fid']:08X}",
            "donor_edid": donor["edid"], "donor_model": donor["model"], "model": model,
            "bounds": [[round(v, 4) for v in b] for b in bounds], "origin_offset_m": [-v for v in d],
            "fit": round(fit(ours, donor["bounds"]), 3) if donor["bounds"] else None,
@@ -354,9 +380,11 @@ def main(argv=None):
     import item_physics_probe as P
     import npc_records
     sf_data = os.path.join(a.starfield, "Data")
-    donors = starfield_donors(sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"ALCH"]))
-    print(f"Starfield donors: {len(donors)} ALCH with a model "
-          + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}" for k in ("drink", "food", "potion")))
+    sf_recs = sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"ALCH", b"MISC", b"KYWD"])
+    kw = {fid: sfplugin.edid(subs) for t, _h, subs, fid in sf_recs if t == b"KYWD"}
+    donors = starfield_donors(sf_recs, kw)
+    print(f"Starfield donors: {len(donors)} ALCH / MISC with a model "
+          + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}" for k in KINDS))
     arcs = P.Archives(sf_data)
     physics = {}
     for dn in donors:                     # each donor's NIF once: its body, and its size from its own geometry
@@ -369,8 +397,7 @@ def main(argv=None):
         dn["size_from"] = "geometry" if geo else ("obnd" if dn["bounds"] else None)
         dn["bounds"] = geo or dn["bounds"]
     donors = [dn for dn in donors if physics[dn["fid"]] is not None]
-    print(f"  with a physics body: " + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}"
-                                                 for k in ("drink", "food", "potion"))
+    print(f"  with a physics body: " + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}" for k in KINDS)
           + f"; sized from their geometry {sum(d['size_from'] == 'geometry' for d in donors)}")
 
     def read_physics(dn):

@@ -942,28 +942,57 @@ var itemNotes = new SortedSet<string>();
     var b = itemsRoot!.Value.GetProperty("bases").GetProperty(key);
     var bedid = b.GetProperty("edid").GetString()!;
     var tk = new FormKey(sfEsm, Convert.ToUInt32(b.GetProperty("donor").GetString(), 16) & 0xFFFFFF);
-    if (!SfCache().TryResolve<IIngestibleGetter>(tk, out var tpl))
-    {
-        itemNotes.Add($"{bedid}: donor {tk} is not an ALCH in Starfield.esm; left static");
-        return itemBases[key] = null;
-    }
-    var ing = (Ingestible)tpl.Duplicate(Id("ALCH:" + key));
-    ing.EditorID = "S2S_Item_" + bedid;
-    ing.Name = b.GetProperty("name").GetString()!;
-    // the donor's DESC is a string id into Starfield.esm's tables; ours is not localized (item_test, 2026-11-21: "Oõ▮")
-    ing.Description = "";
-    ing.Model = new Model { File = b.GetProperty("model").GetString()! };
+    var name = b.GetProperty("name").GetString()!;
     var bb = b.GetProperty("bounds");
-    ing.ObjectBounds = new ObjectBounds
+    var bounds = new ObjectBounds
     {
         First = new P3Float(bb[0][0].GetSingle(), bb[0][1].GetSingle(), bb[0][2].GetSingle()),
         Second = new P3Float(bb[1][0].GetSingle(), bb[1][1].GetSingle(), bb[1][2].GetSingle()),
     };
-    mod.Ingestibles.Add(ing);
+    var model = new Model { File = b.GetProperty("model").GetString()! };
+    FormKey made;
+    string tplEdid;
+    // record (make_items.py): ALCH for food / drink / potions, MISC for clutter (2026-11-21, owner: "lets do clutter next")
+    if (b.TryGetProperty("record", out var recj) && recj.GetString() == "MISC")
+    {
+        if (!SfCache().TryResolve<IMiscItemGetter>(tk, out var mtpl))
+        {
+            itemNotes.Add($"{bedid}: donor {tk} is not a MISC in Starfield.esm; left static");
+            return itemBases[key] = null;
+        }
+        var misc = (MiscItem)mtpl.Duplicate(Id("MISC:" + key));
+        misc.EditorID = "S2S_Item_" + bedid;
+        misc.Name = name;
+        misc.ShortName = null;                       // the donor's NNAM (inventory short name) would show instead
+        misc.FeaturedItemMessage.SetToNull();        // no donor pickup message
+        misc.Model = model;
+        misc.ObjectBounds = bounds;
+        mod.MiscItems.Add(misc);
+        made = misc.FormKey;
+        tplEdid = mtpl.EditorID ?? tk.ToString();
+    }
+    else
+    {
+        if (!SfCache().TryResolve<IIngestibleGetter>(tk, out var tpl))
+        {
+            itemNotes.Add($"{bedid}: donor {tk} is not an ALCH in Starfield.esm; left static");
+            return itemBases[key] = null;
+        }
+        var ing = (Ingestible)tpl.Duplicate(Id("ALCH:" + key));
+        ing.EditorID = "S2S_Item_" + bedid;
+        ing.Name = name;
+        // the donor's DESC is a string id into Starfield.esm's tables; ours is not localized (item_test, 2026-11-21: "Oõ▮")
+        ing.Description = "";
+        ing.Model = model;
+        ing.ObjectBounds = bounds;
+        mod.Ingestibles.Add(ing);
+        made = ing.FormKey;
+        tplEdid = tpl.EditorID ?? tk.ToString();
+    }
     var o = b.GetProperty("origin_offset_m");
-    if (itemBases.Count < 60)
-        itemNotes.Add($"{ing.EditorID} {ing.FormKey}: copy of {tpl.EditorID} ({b.GetProperty("kind").GetString()}), \"{ing.Name}\"");
-    return itemBases[key] = (ing.FormKey, new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle()));
+    if (itemBases.Count < 120)
+        itemNotes.Add($"S2S_Item_{bedid} {made}: copy of {tplEdid} ({b.GetProperty("kind").GetString()}), \"{name}\"");
+    return itemBases[key] = (made, new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle()));
 }
 
 var cellPaths = args.Skip(2).SelectMany(a => a.StartsWith('@')
@@ -1113,7 +1142,7 @@ foreach (var cellPath in cellPaths)
             furnPlaced++;
         }
     if (furnPlaced > 0) Console.WriteLine($"  furniture: {furnPlaced} references");
-    if (itemsPlaced > 0) Console.WriteLine($"  items: {itemsPlaced} references (ALCH copies, dynamic)");
+    if (itemsPlaced > 0) Console.WriteLine($"  items: {itemsPlaced} references (ALCH / MISC copies, dynamic)");
     var navNote = WriteNavmeshes(cell, cellName, root, placedBySource);
     if (actorsRoot is JsonElement ar)
         foreach (var ac in ar.GetProperty("actors").EnumerateArray())

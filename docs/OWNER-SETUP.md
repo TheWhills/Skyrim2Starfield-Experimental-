@@ -301,7 +301,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
-7q. B + C (2026-11-21): Riverwood's placed food, drink, potions and ingredients as real items (docs/interior/items.md
+7q. B + C (2026-11-21): Riverwood's placed food, drink, potions, ingredients and clutter (plates, tankards, baskets ...)
+   as real items (docs/interior/items.md
    "Placed items"): the full Riverwood build with `-Items`. Starfield closed:
    ```powershell
    git pull

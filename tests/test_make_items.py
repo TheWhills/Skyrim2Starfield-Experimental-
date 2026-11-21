@@ -75,6 +75,64 @@ class KindTests(unittest.TestCase):
         self.assertEqual(M.starfield_kinds("Med_MedPack", "medpack.nif", 0), {"potion"})
 
 
+class ClutterTests(unittest.TestCase):
+    """2026-11-21 (owner: "lets do clutter next"): Skyrim MiscItem references -> copies of Starfield MISC items."""
+
+    def misc(self, fid, edid, model="plate.nif", extra=()):
+        return (b"MISC", H, [(b"EDID", z(edid)), (b"OBND", struct.pack("<6f", -0.1, -0.1, 0, 0.1, 0.1, 0.02)),
+                             (b"MODL", z(model)), *extra, (b"DATA", struct.pack("<if", 5, 1.0))], fid)
+
+    def test_misc_donors(self):
+        kw = {0x50: "ResourceTypeInorganic", 0x51: "ContrabandKeyword", 0x52: "ObjectTypeClutter"}
+        recs = [self.misc(1, "Clutter_Plate01"),
+                self.misc(2, "InorgCommonIron"),                                  # a resource
+                self.misc(3, "Credits"),
+                self.misc(4, "MQ101_Artifact"),                                   # a quest item
+                self.misc(5, "Plate_Scripted", extra=[(b"VMAD", b"\0" * 6)]),
+                self.misc(6, "Plate_Featured", extra=[(b"FIMD", struct.pack("<I", 9))]),
+                self.misc(7, "Clutter_Mug", extra=[(b"KSIZ", struct.pack("<I", 1)), (b"KWDA", struct.pack("<I", 0x52))]),
+                self.misc(8, "Clutter_Smuggled", extra=[(b"KSIZ", struct.pack("<I", 1)), (b"KWDA", struct.pack("<I", 0x51))]),
+                self.misc(9, "Clutter_Ore", extra=[(b"KSIZ", struct.pack("<I", 1)), (b"KWDA", struct.pack("<I", 0x50))]),
+                sf_alch(10, "Drink_Alc_Wine", "wine.nif", M.FOOD, [[-0.04, -0.04, 0], [0.04, 0.04, 0.3]])]
+        got = {d["edid"]: (d["sig"], d["kinds"]) for d in M.starfield_donors(recs, kw)}
+        self.assertEqual(got, {"Clutter_Plate01": ("MISC", {"misc"}), "Clutter_Mug": ("MISC", {"misc"}),
+                               "Drink_Alc_Wine": ("ALCH", {"drink"})})
+
+    def test_skyrim_misc_kind_and_data(self):
+        self.assertEqual(M.skyrim_kind("MISC", "BasicPlate01", "clutter\\plate.nif", 0), "misc")
+        info = M.skyrim_base([(b"EDID", z("BasicTankard01")), (b"MODL", z("Clutter\\Tankard.nif")),
+                              (b"DATA", struct.pack("<if", 3, 2.5))])
+        self.assertEqual((info["value"], info["weight"]), (3, 2.5))                 # MISC DATA: value, weight
+
+    def test_build_clutter_and_gold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            conv = os.path.join(tmp, "convert")
+            os.makedirs(os.path.join(conv, "meshes", "s2s"))
+            with open(os.path.join(conv, "meshes", "s2s", "tankard.nif"), "wb") as fh:
+                fh.write(nifmod.serialize(sfnif.build_static_nif(b"T", [shape(b"A")], collision_blob=b"BOX")))
+            sky = {0x20: ("MISC", 0, [(b"EDID", z("BasicTankard01")), (b"MODL", z("Clutter\\Tankard.nif")),
+                                      (b"DATA", struct.pack("<if", 3, 2.5))]),
+                   0x21: ("MISC", 0, [(b"EDID", z("Gold001")), (b"MODL", z("Clutter\\Tankard.nif"))]),
+                   0x200: ("REFR", 0, [(b"NAME", struct.pack("<I", 0x20))]),
+                   0x201: ("REFR", 0, [(b"NAME", struct.pack("<I", 0x21))])}
+            cell = {"cell": "RiverwoodRiverwoodTrader", "refs": [
+                {"formkey": "000200:Skyrim.esm", "type": "MiscItem", "model": "Clutter\\Tankard.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0},
+                {"formkey": "000201:Skyrim.esm", "type": "MiscItem", "model": "Clutter\\Tankard.nif",
+                 "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0}]}
+            donors = M.starfield_donors([self.misc(0x40, "Clutter_Mug", "mug.nif"),
+                                         sf_alch(0x41, "Drink_Alc_Wine", "wine.nif", M.FOOD,
+                                                 [[-0.1, -0.1, 0], [0.1, 0.1, 0.02]])])
+            out, _nifs = M.build([cell], FakeIndex(sky), {"meshes\\clutter\\tankard.nif": "s2s\\tankard.nif"},
+                                 donors, {}, conv, lambda d: (b"DYN", 0x41, 7, 11),
+                                 lambda m: [[-0.1, -0.1, 0], [0.1, 0.1, 0.02]])
+        b = out["bases"]["000020:Skyrim.esm"]
+        self.assertEqual((b["kind"], b["record"], b["donor_edid"], b["name"]),
+                         ("misc", "MISC", "Clutter_Mug", "BasicTankard01"))          # a MISC donor, never the drink
+        self.assertEqual([r["formkey"] for r in out["refs"]], ["000200:Skyrim.esm"])
+        self.assertIn("credits", out["skipped"][0]["why"])                           # gold left static for now
+
+
 class FitTests(unittest.TestCase):
     def test_dims_sort_flat_sides(self):
         self.assertEqual(M.dims([[0, 0, 0], [0.3, 0.1, 0.5]]), (0.1, 0.3, 0.5))
