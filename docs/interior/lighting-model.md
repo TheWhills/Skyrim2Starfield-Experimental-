@@ -295,3 +295,9 @@ global constant tuned once against the owner's same-spot screenshot pairs.
 - Left: small candle-lit rooms 1.5 - 2 stops over at their bright end while the big hall is at -0.2: light near a
   source too strong against far light (the falloff shape: H1 inverse square vs Skyrim's flat (1 - (d/r)^2)), the
   calibration cell's job. Defaults stand: AmbientScale 150, ExposureMin 4.
+- Faendal's house, same build (owner 14:07): +1.8 overall, dark end +1.4, bright end +2.1, contrast 1.6 / 1.8, red
+  share 0.43 / 0.48. The pattern across views: small rooms whose walls are 1 - 3 m from their lights (Faendal's, the
+  inn bedroom, side room) +1.4 .. +1.9 everywhere in the view, the big hall -0.6. Supported: at short range our
+  inverse-square lights are much stronger than Skyrim's flat (1 - (d/r)^2) curve relative to their light at 5 - 10 m,
+  so the auto exposure (clamped at ExposureMin in every view, supported: views never darkened on their own) cannot even
+  it out. The falloff calibration cell decides the per-light correction.
