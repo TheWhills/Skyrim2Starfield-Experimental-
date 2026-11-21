@@ -139,7 +139,11 @@ metres after all (the first run's odd picks came from the kind pools, not the un
 Skyrim's 0.4 m wine bottles, so all wine copied a TerraBrew to-go cup (coffee effects, a short cup body), and raw
 vegetables copied packaged meals (box bodies). Now a Skyrim drink with an alcohol word prefers Drink_Alc_ donors and
 raw produce (not baked / grilled / cooked) Food_Produce_ ones, when any exist; size decides within them.
-Unverified: everything in game; the C# (written without a compiler: NuGet is blocked here; API names checked against
+**Verified in game** (owner, 2026-11-21 09:21, the Sleeping Giant Inn's bar: cheese wheels and wedges, wine, mead,
+food on the counter): "looks correct, i can pick up all the wine and food items": placed where Skyrim put them, at the
+right height, picked up. Next: ownership (taking is not stealing yet), our own hulls, Skyrim's effects / value / weight,
+MiscItem clutter (plates, tankards, baskets).
+Before that test: everything in game; the C# (written without a compiler: NuGet is blocked here; API names checked against
 Mutagen's Starfield Ingestible.xml: Name, Description, Model, ObjectBounds, mod.Ingestibles). Next: own hulls (the
 donor's shape is wrong for odd sizes: `fit` in items.json shows how far), ownership, Skyrim's effects / value / weight.
 
