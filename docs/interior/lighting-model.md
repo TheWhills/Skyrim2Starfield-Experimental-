@@ -387,3 +387,13 @@ saturation 0.39 - 0.47 vs 0.56 - 0.61). Verified reading: Cinematic Brightness s
 turns white into grey. Next: Brightness 1.0, the level from the auto exposure's metering instead (IgnoredDarksPercentile
 85, IgnoredBrightsPercentile 5: it meters the 85 - 95 % band, about 2 stops above the middle in these scenes, so it
 exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hypothesis until the owner's screens.
+
+## "Colors overall are different" (owner 16:17): Skyrim's final grade carried over
+- Skyrim's interiors end with their image space's cinematic grade; Riverwood's FarmInteriorIS (verified, the audit):
+  saturation 1.05, contrast 1.2, brightness 1.15, tint 5 % of (0.63, 0.39, 0.04) orange. We carried none of it, and our
+  background light is Skyrim's ambient colour (45, 48, 48: cool grey), which Skyrim's orange tint warms.
+- Starfield's image spaces (verified, 15 read): saturation / contrast / brightness 1 = neutral, tint w = amount (0 in
+  all but LGT_LUT_Int_StarbornTemple, 0.26). make_skyrim_interior.grading_changes copies saturation, contrast and the
+  tint (colour xyz, amount w) of the batch's most used Skyrim image space into our image space; not the brightness
+  (after the tone map in Starfield). --no-skyrim-grading leaves it out. One image space for the batch for now; cells with
+  other Skyrim image spaces (caves, castles) will want their own copies (open).

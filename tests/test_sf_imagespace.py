@@ -125,6 +125,26 @@ class ListPatchTest(unittest.TestCase):
             SI.patch(data, {"LIST:Nope.Value": 1.0})
 
 
+class SkyrimGradingTest(unittest.TestCase):
+    def test_most_used_image_space_and_changes(self):
+        import make_skyrim_interior as MSI
+        exports = [{"lighting": {"image_space": "059B60:Skyrim.esm"}}] * 2 + [{"lighting": {"image_space": "000100:Skyrim.esm"}},
+                                                                           {"lighting": {}}]
+        ims = {0x059B60: {"editor_id": "FarmInteriorIS", "cinematic": {"saturation": 1.05, "brightness": 1.15,
+                                                                         "contrast": 1.2},
+                          "tint": [0.05, 0.627, 0.392, 0.039]}, 0x000100: {"editor_id": "Other"}}
+        g = MSI.skyrim_grading(exports, ims)
+        self.assertEqual((g["editor_id"], g["formkey"]), ("FarmInteriorIS", "059B60:Skyrim.esm"))
+        ch = MSI.grading_changes(g)
+        self.assertEqual(ch["Settings.Cinematic.Contrast.Value"], 1.2)
+        self.assertEqual(ch["Settings.Cinematic.Saturation.Value"], 1.05)
+        self.assertEqual(ch["Settings.Cinematic.TintColorValue.Value.w"], 0.05)
+        self.assertEqual(ch["Settings.Cinematic.TintColorValue.Value.x"], 0.627)
+        self.assertNotIn("Settings.Cinematic.Brightness.Value", ch)
+        self.assertEqual(MSI.grading_changes({}), {})
+        self.assertEqual(MSI.skyrim_grading([{"lighting": {}}], ims), {})
+
+
 class AdaptImageSpaceTest(unittest.TestCase):
     """2026-11-21: Skyrim adapts per view; --exposure auto writes LGT_NoLut with Starfield's auto exposure."""
 

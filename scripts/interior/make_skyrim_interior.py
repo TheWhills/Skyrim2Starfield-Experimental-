@@ -137,7 +137,42 @@ ADAPT_LOOK = {"Settings.OverrideToneMapping": False, "Settings.Cinematic.ColorGr
               "Settings.Cinematic.TintColorValue.Value.z": 0.50196}
 
 
-def write_adapt_imagespace(work, a):
+def skyrim_grading(exports, image_spaces) -> dict:
+    """Skyrim's final colour grade (IMGS CNAM saturation / brightness / contrast, TNAM tint amount + colour) of the image
+    space most of the batch's cells use (2026-11-21, owner: "colors overall are different": Riverwood's FarmInteriorIS
+    adds saturation 1.05, contrast 1.2, brightness 1.15 and a 5 % orange tint, which we did not carry). {} if none."""
+    from collections import Counter
+    used = Counter((e.get("lighting") or {}).get("image_space") for e in exports)
+    used.pop(None, None)
+    for fk, _n in used.most_common():
+        ims = image_spaces.get(int(fk.split(":")[0], 16)) if image_spaces else None
+        if ims:
+            return dict(ims, formkey=fk)
+    return {}
+
+
+def grading_changes(grade) -> dict:
+    """Starfield cinematic settings for a Skyrim grade. Saturation and contrast as Skyrim's (supported: same names,
+    1 = neutral in both); the tint: TintColorValue xyz = Skyrim's tint colour, w = its amount (verified neutral w = 0 in
+    every vanilla image space read, LGT_LUT_Int_StarbornTemple tints with w 0.26). Skyrim's brightness is not copied:
+    Starfield's Brightness acts after the tone map (verified 2026-11-21) and the level comes from the metering."""
+    if not grade:
+        return {}
+    out = {}
+    cin = grade.get("cinematic") or {}
+    if "saturation" in cin:
+        out["Settings.Cinematic.Saturation.Value"] = float(cin["saturation"])
+    if "contrast" in cin:
+        out["Settings.Cinematic.Contrast.Value"] = float(cin["contrast"])
+    tint = grade.get("tint")
+    if tint and len(tint) == 4:
+        amount, r, g, b = tint
+        out.update({"Settings.Cinematic.TintColorValue.Value.x": float(r), "Settings.Cinematic.TintColorValue.Value.y": float(g),
+                    "Settings.Cinematic.TintColorValue.Value.z": float(b), "Settings.Cinematic.TintColorValue.Value.w": float(amount)})
+    return out
+
+
+def write_adapt_imagespace(work, a, skyrim_grade=None):
     """--exposure auto: <work>/convert/imagespace_skyrim_adapt.bin = LGT_NoLut's settings (read from Starfield.esm) with
     Starfield's auto exposure between --exposure-min and --exposure-max (EV100), which PluginSpike copies into every
     cell's image space (docs/interior/lighting-model.md: Skyrim adapts per view). --exposure fixed removes the file
@@ -169,13 +204,17 @@ def write_adapt_imagespace(work, a):
         # brightest IgnoredBrights % (20) of the histogram. Metering the 85 - 95 % band of these scenes (log2 spread about
         # 1.4) reads about 2 stops brighter than the middle band, so it exposes about 2 stops darker (supported hypothesis)
         "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredDarksPercentile.Value": float(getattr(a, "meter_darks", 20.0)),
-        "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredBrightsPercentile.Value": float(getattr(a, "meter_brights", 20.0))})
+        "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredBrightsPercentile.Value": float(getattr(a, "meter_brights", 20.0)),
+        **(grading_changes(skyrim_grade) if getattr(a, "skyrim_grading", True) else {})})
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(blob)
     print(f"image space: auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
           f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)}, metering "
           f"{getattr(a, 'meter_darks', 20.0)} .. {100 - getattr(a, 'meter_brights', 20.0)} % -> {path}")
+    if skyrim_grade and getattr(a, "skyrim_grading", True):
+        print(f"  Skyrim's grade from {skyrim_grade.get('editor_id')} ({skyrim_grade.get('formkey')}): "
+              f"{grading_changes(skyrim_grade)}")
     return blob
 
 
@@ -260,9 +299,10 @@ def cmd_batch(a):
             sys.exit("no interior cell matches (--cells / --find / --connected-from)")
         exports = [src.export(n) for n in picked]
         ext_doors = skyriminterior.exterior_doors(src, exports) if a.exterior else []
+        skyrim_grade = skyrim_grading(exports, src.image_spaces())
     doors = skyriminterior.link_load_doors(exports, exterior=a.exterior)
     batch_nav = {n["formkey"] for e in exports for n in e["navmeshes"]}
-    adapt_blob = write_adapt_imagespace(work, a)
+    adapt_blob = write_adapt_imagespace(work, a, skyrim_grade)
     by_model, rows, cell_files = {}, [], []
     for e in exports:
         sub, skipped = exterior.select(e, skyrimrefs.CONVERT_TYPES)
@@ -396,11 +436,13 @@ def parser():
     ap.add_argument("--exposure-brightness", type=float, default=1.0,
                     help="batch --exposure auto: the image space's cinematic brightness, applied after the tone map "
                          "(0.25 matched Skyrim's level but capped whites at 0.48: 1.0, the level from --meter-*)")
+    ap.add_argument("--no-skyrim-grading", dest="skyrim_grading", action="store_false",
+                    help="batch --exposure auto: leave out Skyrim's saturation / contrast / tint")
     ap.add_argument("--meter-darks", type=float, default=85.0,
-                    help="batch --exposure auto: % of the darkest pixels the auto exposure ignores (vanilla 20; higher = "
+                    help="batch --exposure auto: %% of the darkest pixels the auto exposure ignores (vanilla 20; higher = "
                          "it meters brighter parts = a darker image)")
     ap.add_argument("--meter-brights", type=float, default=5.0,
-                    help="batch --exposure auto: % of the brightest pixels it ignores (vanilla 20)")
+                    help="batch --exposure auto: %% of the brightest pixels it ignores (vanilla 20)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

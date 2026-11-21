@@ -2650,3 +2650,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - LGT_NoLut's compensation curve has no controls and ignored its default; Starfield's auto exposure aims about 2.5
   stops brighter than Skyrim, so views pinned at the minimum and did not adapt. DefaultImageSpace has a curve with
   controls; the copy is set to LGT_NoLut's look and the controls to ExposureCompensation, range EV 0 .. 10.
+
+## 2026-11-21: Skyrim's final colour grade copied; the level from auto-exposure metering
+- Cinematic Brightness acts after Starfield's tone map (0.25 capped whites at 0.48, verified): back to 1, the level set
+  by the metering band (IgnoredDarks 85 / IgnoredBrights 5). Skyrim's saturation, contrast and tint from the batch's
+  image space go into the same cinematic fields (neutral 1 / 1 / w 0 in vanilla).
