@@ -102,3 +102,29 @@ recovery, 265). So a Skyrim model with a vanilla dynamic body copied onto it wor
 showed "Oõ▮" as its description (the donor's DESC string id read as text): DESC now empty. Note: MO2's Mod Index was
 19, the game's 1B (official plugins the game loads that MO2 shows unticked); use help's FormID.
 
+## Placed items (2026-11-21, owner: "yes" to making Riverwood's tables and shelves real items first)
+scripts/interior/make_items.py (after the batch's convert, before PluginSpike; tools\owner\riverwood_doors.ps1
+-Items) and PluginSpike ITEMS: the wine test's recipe (verified) for every Skyrim ALCH / INGR reference in the batch's
+cells. MiscItem clutter (plates, tankards, baskets) stays static for now.
+- **Kind** (Skyrim ENIT flags + words): drink (food flag and a bottle / jug / wine / mead / ale word), food (other
+  food, every INGR), potion (not food: potions, poisons). Starfield donors the same way (food flag + drink words;
+  medicine flag or med / aid / chem words; EditorIDs with test / notplayable / template left out).
+- **Donor:** of the same kind (any ALCH when the kind has none), the closest size: |log ratio| of the heights plus
+  of the sorted flat sides, our converted model's bounds against the donor's OBND (read as 6 floats, metres; a
+  donor with any other OBND layout ranks last: supported, Mutagen's Starfield ObjectBounds is P3Float and our
+  furniture OBND in metres verified in game). Unscripted (no VMAD) before scripted. The first of the best 12 whose
+  NIF has a body wins. The copy keeps the donor's effects, sounds, keywords, value and weight (step 5: Starfield's
+  own); Skyrim's value / weight are in items.json for later.
+- **Model:** <static>_item.nif next to the static in convert\meshes (packed with it): the static's own fixed box
+  body is overwritten in place by the donor's dynamic one (item_test.with_physics; appending it, as for the wine
+  test's collision-less model, left the static box first: found by test_make_items). The donor's hull is the
+  donor's shape, so our geometry is moved (every child of the root) to put its flat centre and its bottom on the
+  donor's bounds; the reference is shifted back by origin_offset_m, so the item stands where Skyrim put it. A
+  Skyrim item whose origin is its centre (unresolved which ones) would otherwise sink half into the table.
+- **References:** Skyrim's position / rotation / scale, Initially Disabled, and Don't Havok Settle (REFR flag
+  0x20000000 in Skyrim; written as the same bit, unresolved whether Starfield's REFR reads it the same). XOWN is
+  recorded, not written (no ownership yet: taking is not stealing).
+Unverified: everything in game; the C# (written without a compiler: NuGet is blocked here; API names checked against
+Mutagen's Starfield Ingestible.xml: Name, Description, Model, ObjectBounds, mod.Ingestibles). Next: own hulls (the
+donor's shape is wrong for odd sizes: `fit` in items.json shows how far), ownership, Skyrim's effects / value / weight.
+

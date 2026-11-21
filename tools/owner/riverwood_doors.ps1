@@ -36,6 +36,9 @@ param(
     [string[]]$SitAt = @(),
     [switch]$PlainStations,
     [string[]]$StationKeyword = @(),  # with -PlainStations: keywords the stations still get, e.g. FurnitureSpecial    # with -Furniture (A/B): work stations without FurnitureSpecial / IgnoreCollision, template's entry sides
+    # 2026-11-21 (owner: wine, bread, cabbages, potions pickable): Skyrim's placed food / drink / potions / ingredients
+    # as Starfield items with a vanilla item's physics body (make_items.py; docs/interior/items.md "Placed items")
+    [switch]$Items,
     [switch]$NoOutdoorFurniture,  # with -Furniture: leave the outdoor benches / chairs / forge around -NavAround as they are
     [string]$Faces = "$env:LOCALAPPDATA\ModOrganizer\Starfield\mods\S2S Face Test\faces.json",
     # with -Furniture: chairs / benches carry this plugin's Skyrim-animation keyword (stance_plugin.py; the clips:
@@ -162,6 +165,12 @@ if ($Furniture) {
     if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }
 }
 
+if ($Items) {
+    Step "2e. food, drink and potions as items"
+    python -I scripts\interior\make_items.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF --work $Work
+    if ($LASTEXITCODE -ne 0) { Fail "make_items" }
+}
+
 Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
 Remove-Item Env:SPIN_PARTS -ErrorAction SilentlyContinue
@@ -176,9 +185,10 @@ $env:EXTERIOR_DOORS = Join-Path $Work "exterior_doors.json"
 if ($Navmesh) { $env:EXTERIOR_NAVMESH = Join-Path $navWork "exterior_navmesh.json" }
 if ($Actors.Count -gt 0) { $env:ACTORS = Join-Path $Work "actors.json" }
 if ($Furniture) { $env:FURNITURE = Join-Path $Work "furniture.json" }
+if ($Items) { $env:ITEMS = Join-Path $Work "items.json" }
 dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
 $rc = $LASTEXITCODE
-Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS, Env:FURNITURE, Env:SPIN_PARTS -ErrorAction SilentlyContinue
+Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS, Env:FURNITURE, Env:ITEMS, Env:SPIN_PARTS -ErrorAction SilentlyContinue
 if ($rc -ne 0) { Fail "PluginSpike (paste its output: compile errors name the Mutagen property)" }
 
 if ($Navmesh) {

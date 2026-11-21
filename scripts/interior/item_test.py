@@ -89,16 +89,27 @@ def donor_physics(nif_bytes):
 def with_physics(nif_bytes, blob, flags=0x80, tail=0, bsx=None) -> bytes:
     """Our model (build_static_nif layout, no collision) with a physics body on its root: a bhkNPCollisionObject
     (target the root, the donor's flags) and its bhkPhysicsSystem appended, the root's collision ref set, BSXFlags
-    set to the donor's (Starfield draws and simulates the body by them). Any collision object already there is
-    replaced (its blocks left unreferenced)."""
+    set to the donor's (Starfield draws and simulates the body by them). A body already on the root (a converted
+    static's box) is overwritten in place: one body in the file."""
     n = nifmod.parse(nif_bytes)
     if n.type_of(0) != "NiNode":
         raise nifmod.NifError("root is not a NiNode")
-    obj = n.add_block("bhkNPCollisionObject", struct.pack("<iHiI", 0, flags, len(n.blocks) + 1, tail))
-    n.add_block("bhkPhysicsSystem", struct.pack("<I", len(blob)) + blob)
     root = n.blocks[0]
     _name, n_extra = struct.unpack_from("<iI", root, 0)
     p = 8 + 4 * n_extra + 8 + 52                      # controller, flags, transform (52), then the collision ref
+    have, = struct.unpack_from("<i", root, p)
+    sysblk = struct.pack("<I", len(blob)) + blob
+    old_data = (struct.unpack_from("<i", n.blocks[have], 6)[0]
+                if 0 <= have < len(n.blocks) and n.type_of(have) == "bhkNPCollisionObject" else -1)
+    if 0 <= old_data < len(n.blocks) and n.type_of(old_data) == "bhkPhysicsSystem":
+        # 2026-11-21 (make_items: a converted static's own fixed box body): overwritten in place, so the file keeps
+        # one body (appending left the static box as the first collision object)
+        n.blocks[have] = struct.pack("<iHiI", 0, flags, old_data, tail)
+        n.blocks[old_data] = sysblk
+        obj = have
+    else:
+        obj = n.add_block("bhkNPCollisionObject", struct.pack("<iHiI", 0, flags, len(n.blocks) + 1, tail))
+        n.add_block("bhkPhysicsSystem", sysblk)
     n.blocks[0] = root[:p] + struct.pack("<i", obj) + root[p + 4:]
     if bsx is not None:
         for i in range(len(n.blocks)):

@@ -72,6 +72,15 @@ class PhysicsTests(unittest.TestCase):
         self.assertEqual(out.type_of(coll), "bhkNPCollisionObject")
         self.assertEqual(sum(1 for i in range(len(out.blocks)) if out.type_of(i) == "BSGeometry"), 2)
 
+    def test_body_already_there_is_overwritten(self):
+        ours = nifmod.serialize(sfnif.build_static_nif(b"Wine", [shape(b"A")], collision_blob=b"STATICBOX"))
+        before = len(nifmod.parse(ours).blocks)
+        out = T.with_physics(ours, b"DYNAMICBODY", 0x41, 7, 11)
+        self.assertEqual(T.donor_physics(out), (b"DYNAMICBODY", 0x41, 7, 11))
+        n = nifmod.parse(out)
+        self.assertEqual(len(n.blocks), before)                     # no second collision object / system
+        self.assertEqual(sum(n.type_of(i) == "bhkPhysicsSystem" for i in range(len(n.blocks))), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

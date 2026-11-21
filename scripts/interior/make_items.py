@@ -1,0 +1,355 @@
+"""Skyrim's placed food, drink, potions and ingredients in the converted interiors as real Starfield items (docs/interior/items.md
+"Placed items").
+
+    python -I scripts\\interior\\make_items.py --skyrim "$sky\\Skyrim.esm" --skyrim-data "$sky" --starfield "$sf" ^
+        --work C:\\Modding\\work\\s2s\\riverwood_doors
+
+Run after the batch's models are converted (make_skyrim_objects.py convert) and before PluginSpike, which reads
+<work>\\items.json (ITEMS=<that file>). Owner, 2026-11-21 (after the wine test worked as a loose item: "yes" to making
+Riverwood's tables and shelves real items first, the items' own physics shapes and Skyrim's effects later).
+
+Per Skyrim ALCH / INGR base placed in the batch's cells (<work>\\cells.txt; the refs PluginSpike would otherwise place
+as statics):
+  - its kind: drink (food flag and a bottle / jug / wine / mead / ale word), food (other food, every ingredient), potion
+    (not food: potions and poisons);
+  - a DONOR: the vanilla Starfield ALCH of the same kind (Starfield's food flag, medicine flag and words) whose size
+    (its OBND) is closest to our converted model's (height against height, the two flat sides against each other, on a
+    log scale), among those whose world model has a physics body. The item is a copy of the donor's record (its
+    effects, sounds, keywords, value, weight: Starfield's own, items.md step 5), with the Skyrim name and our model;
+  - our model with the donor's dynamic body (item_test.with_physics, verified on the wine bottle 2026-11-21), written
+    next to the static as <model>_item.nif. The donor's hull is the donor's shape, so our geometry is moved to sit on
+    it: the centre of its flat sides and its bottom on the donor's bounds (--no-align leaves it where it is); the
+    reference is shifted back by the same amount (origin_offset_m), so the item stands where Skyrim put it.
+Each reference keeps Skyrim's position, rotation, scale, Initially Disabled and Don't Havok Settle flags; its owner
+(XOWN) is recorded but not written yet (no ownership: taking is not stealing).
+"""
+import argparse
+import json
+import math
+import os
+import re
+import struct
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(REPO, "src"))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(REPO, "scripts", "npc"))
+
+from fo4sf import nif as nifmod, sfplugin  # noqa: E402
+import item_test  # noqa: E402
+
+U = 70.0                                        # Skyrim units per metre
+ITEM_TYPES = ("Ingestible", "Ingredient")       # cell.json types made items (MISC clutter stays static for now)
+FOOD, MEDICINE, POISON = 0x2, 0x10000, 0x20000  # ALCH ENIT flags (Skyrim and Starfield; Mutagen's Ingestible.Flag)
+NO_SETTLE, DISABLED = 0x20000000, 0x800         # REFR record flags: Don't Havok Settle, Initially Disabled
+DRINK_RX = r"wine|mead|\bale\b|ale$|beer|bottle|jug|flask|brandy|milk|skooma|spirit|tankard|honningbrew|blackbriar"
+SF_DRINK_RX = r"drink|wine|beer|whisk|liquor|spirit|bottle|alc|brew|soda|juice|coffee|tea\b"
+SF_MED_RX = r"med|aid|chem|heal|stim|cure|pack|inject"
+SKIP_DONOR_RX = r"test|notplayable|dummy|template|deprecated|^zz|^cut|_cut\b|debug"
+MAX_TRIES = 12                                  # donors whose NIF is read for a body, best fit first
+
+
+def u32(d, p=0):
+    return struct.unpack_from("<I", d, p)[0] if len(d) >= p + 4 else 0
+
+
+def skyrim_kind(sig: str, edid: str, model: str, flags: int) -> str:
+    """drink / food / potion of a Skyrim ALCH ("ALCH") or INGR ("INGR") by its ENIT flags and words."""
+    if sig == "INGR":
+        return "food"
+    if not flags & FOOD:
+        return "potion"
+    return "drink" if re.search(DRINK_RX, f"{edid} {model}", re.I) else "food"
+
+
+def starfield_kinds(edid: str, model: str, flags: int) -> set:
+    """The kinds a vanilla Starfield ALCH can stand in for (empty: none)."""
+    words = f"{edid} {model}"
+    if re.search(SKIP_DONOR_RX, edid, re.I):
+        return set()
+    if flags & FOOD:
+        return {"drink"} if re.search(SF_DRINK_RX, words, re.I) else {"food"}
+    if flags & (MEDICINE | POISON) or re.search(SF_MED_RX, words, re.I):
+        return {"potion"}
+    if re.search(r"^drink", edid, re.I):
+        return {"drink"}
+    if re.search(r"^food", edid, re.I):
+        return {"food"}
+    return set()
+
+
+def obnd(d: bytes):
+    """[[min], [max]] metres of a Starfield OBND (6 floats); None for any other layout."""
+    if len(d) != 24:
+        return None
+    v = struct.unpack("<6f", d)
+    if not all(math.isfinite(x) for x in v):
+        return None
+    return [list(v[:3]), list(v[3:])]
+
+
+def dims(b):
+    """(flat side a, flat side b, height) metres of [[min], [max]], the flat sides sorted, each at least 5 mm."""
+    x, y, z = (max(0.005, b[1][i] - b[0][i]) for i in range(3))
+    return (*sorted((x, y)), z)
+
+
+def fit(ours, donor) -> float:
+    """How far apart two sizes are: sum of |log ratio| of height and of the sorted flat sides (0 = the same)."""
+    a, b = dims(ours), dims(donor)
+    return sum(abs(math.log(p / q)) for p, q in zip(a, b))
+
+
+def align_offset(ours, donor):
+    """(dx, dy, dz) metres moving our geometry so its flat centre and bottom sit on the donor's bounds."""
+    return tuple(round(v, 4) for v in ((donor[0][0] + donor[1][0] - ours[0][0] - ours[1][0]) / 2,
+                                       (donor[0][1] + donor[1][1] - ours[0][1] - ours[1][1]) / 2,
+                                       donor[0][2] - ours[0][2]))
+
+
+def shift_children(nif_bytes: bytes, d) -> bytes:
+    """Our static's geometry moved by d (metres, the root's frame): d added to every direct child of the root."""
+    if not any(d):
+        return nif_bytes
+    n = nifmod.parse(nif_bytes)
+    for c in nifmod.node_children(n, 0):
+        blk = n.blocks[c]
+        _name, nextra = struct.unpack_from("<iI", blk, 0)
+        p = 8 + 4 * nextra + 8
+        t = struct.unpack_from("<3f", blk, p)
+        n.blocks[c] = blk[:p] + struct.pack("<3f", *(t[i] + d[i] for i in range(3))) + blk[p + 12:]
+    return nifmod.serialize(n)
+
+
+def item_model_name(model: str) -> str:
+    return re.sub(r"\.nif$", "", model, flags=re.I) + "_item.nif"
+
+
+def starfield_donors(recs, keyword_edids=None):
+    """[{fid, edid, model, bounds, kinds, scripted}] of Starfield ALCH records with a model that can be donors."""
+    out = []
+    for t, _h, subs, fid in recs:
+        if t != b"ALCH":
+            continue
+        d = {}
+        for s, v in subs:
+            d.setdefault(s, bytes(v))
+        model = d.get(b"MODL", b"").split(b"\0")[0].decode("latin-1")
+        if not model:
+            continue
+        e = sfplugin.edid(subs)
+        enit = d.get(b"ENIT", b"")
+        kinds = starfield_kinds(e, model, u32(enit, 4))
+        if not kinds:
+            continue
+        out.append({"fid": fid, "edid": e, "model": model, "bounds": obnd(d.get(b"OBND", b"")), "kinds": kinds,
+                    "scripted": b"VMAD" in d})
+    return out
+
+
+def rank_donors(ours, kind, donors):
+    """Donors for one item, best first: its kind (else any), sized ones by fit, unscripted before scripted."""
+    pool = [x for x in donors if kind in x["kinds"]] or list(donors)
+
+    def key(x):
+        return (x["bounds"] is None, x["scripted"], fit(ours, x["bounds"]) if x["bounds"] else 0.0, x["edid"].lower())
+    return sorted(pool, key=key)
+
+
+def skyrim_base(subs):
+    """{edid, name (string id or text), model, value, weight, flags, bounds (metres from OBND)} of a Skyrim ALCH / INGR."""
+    d = {}
+    for s, v in subs:
+        d.setdefault(s, bytes(v))
+    full = d.get(b"FULL", b"")
+    name = u32(full) if len(full) == 4 else full.split(b"\0")[0].decode("latin-1")
+    enit = d.get(b"ENIT", b"")
+    ob = d.get(b"OBND", b"")
+    bounds = None
+    if len(ob) == 12:
+        v = struct.unpack("<6h", ob)
+        bounds = [[x / U for x in v[:3]], [x / U for x in v[3:]]]
+    return {"edid": d.get(b"EDID", b"").split(b"\0")[0].decode("latin-1"), "name": name,
+            "model": d.get(b"MODL", b"").split(b"\0")[0].decode("latin-1"),
+            "value": struct.unpack_from("<i", enit)[0] if len(enit) >= 4 else 0, "flags": u32(enit, 4),
+            "weight": struct.unpack_from("<f", d[b"DATA"])[0] if len(d.get(b"DATA", b"")) == 4 else 0.0,
+            "bounds": bounds}
+
+
+def ref_info(subs):
+    """(base FormID, owner FormID or None) of a placed reference's subrecords."""
+    base = owner = None
+    for s, v in subs:
+        if s == b"NAME" and len(v) == 4:
+            base = u32(v)
+        elif s == b"XOWN" and len(v) >= 4:
+            owner = u32(v)
+    return base, owner
+
+
+def build(cells, ix, manifest, donors, names, convert_dir, read_physics, bounds_of, align=True):
+    """items.json content and the item NIFs to write ({path relative to meshes: bytes}).
+    cells: [cell.json dicts]; ix: Skyrim Index (subs / records / kind); manifest: {"meshes\\<skyrim model>" lower: our
+    model}; donors: starfield_donors(); names: Skyrim string id -> text; read_physics(donor) -> with_physics args or
+    None; bounds_of(our model) -> [[min], [max]] or None."""
+    bases, refs, skipped, nifs, bodies = {}, [], [], {}, {}
+    for cell in cells:
+        for r in cell["refs"]:
+            if r.get("type") not in ITEM_TYPES or not r.get("model"):
+                continue
+            try:
+                fid = int(r["formkey"].split(":")[0], 16)
+            except ValueError:
+                continue
+            base, owner = ref_info(ix.subs(fid))
+            if base is None:
+                continue
+            key = f"{base & 0xFFFFFF:06X}:Skyrim.esm"
+            if key not in bases and key not in skipped_keys(skipped):
+                got = make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics, bounds_of,
+                                align, nifs, bodies)
+                if isinstance(got, str):
+                    skipped.append({"base": key, "edid": ix.edid(base), "why": got})
+                    continue
+                bases[key] = got
+            if key not in bases:
+                continue
+            flags = ix.records.get(fid, (None, 0, 0))[2]
+            refs.append({"formkey": r["formkey"], "cell": cell["cell"], "base": key, "pos": r["pos"], "rot": r["rot"],
+                         "scale": r.get("scale") or 1.0, "disabled": bool(r.get("disabled")) or bool(flags & DISABLED),
+                         "no_settle": bool(flags & NO_SETTLE),
+                         "owner": f"{owner & 0xFFFFFF:06X}:Skyrim.esm" if owner else None})
+    return {"bases": bases, "refs": refs, "skipped": skipped}, nifs
+
+
+def skipped_keys(skipped):
+    return {s["base"] for s in skipped}
+
+
+def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics, bounds_of, align, nifs, bodies):
+    sig = ix.kind(base)
+    info = skyrim_base(ix.subs(base))
+    ours_model = manifest.get(("meshes\\" + info["model"].lstrip("\\")).lower()) if info["model"] else None
+    if not ours_model:
+        return f"model {info['model'] or '(none)'} not converted"
+    ours = bounds_of(ours_model) or info["bounds"]
+    if not ours:
+        return f"no bounds for {ours_model}"
+    kind = skyrim_kind(sig, info["edid"], info["model"], info["flags"])
+    donor = phys = None
+    tried = []
+    for dn in rank_donors(ours, kind, donors)[:MAX_TRIES]:
+        if dn["fid"] not in bodies:
+            bodies[dn["fid"]] = read_physics(dn)
+        if bodies[dn["fid"]] is None:
+            tried.append(dn["edid"])
+            continue
+        donor, phys = dn, bodies[dn["fid"]]
+        break
+    if donor is None:
+        return f"no {kind} donor with a physics body (tried {', '.join(tried) or 'none'})"
+    src = os.path.join(convert_dir, "meshes", *ours_model.replace("\\", "/").split("/"))
+    with open(src, "rb") as fh:
+        nif = fh.read()
+    d = align_offset(ours, donor["bounds"]) if align and donor["bounds"] else (0.0, 0.0, 0.0)
+    nif = item_test.with_physics(shift_children(nif, d), *phys)
+    model = item_model_name(ours_model)
+    nifs[model] = nif
+    bounds = [[ours[0][i] + d[i] for i in range(3)], [ours[1][i] + d[i] for i in range(3)]]
+    name = names.get(info["name"], info["edid"]) if isinstance(info["name"], int) else (info["name"] or info["edid"])
+    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "donor": f"{donor['fid']:08X}",
+           "donor_edid": donor["edid"], "donor_model": donor["model"], "model": model,
+           "bounds": [[round(v, 4) for v in b] for b in bounds], "origin_offset_m": [-v for v in d],
+           "fit": round(fit(ours, donor["bounds"]), 3) if donor["bounds"] else None,
+           "size_m": [round(v, 3) for v in dims(ours)],
+           "donor_size_m": [round(v, 3) for v in dims(donor["bounds"])] if donor["bounds"] else None,
+           "skyrim_value": info["value"], "skyrim_weight": round(info["weight"], 3)}
+    if tried:
+        out["donors_without_body"] = tried
+    return out
+
+
+def read_cells(work):
+    path = os.path.join(work, "cells.txt")
+    if not os.path.exists(path):
+        return []
+    out = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                with open(line.strip(), encoding="utf-8") as c:
+                    out.append(json.load(c))
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
+    ap.add_argument("--skyrim-data", required=True, help="Skyrim Data folder (the name strings)")
+    ap.add_argument("--starfield", required=True, help="Starfield install folder (Data\\Starfield.esm and archives)")
+    ap.add_argument("--work", required=True, help="interior batch work folder, converted (cells.txt, convert\\)")
+    ap.add_argument("--no-align", action="store_true", help="leave our geometry where it is on the donor's body")
+    a = ap.parse_args(argv)
+    if os.path.abspath(a.work).lower().startswith(os.path.abspath(REPO).lower()):
+        sys.exit("--work must be outside the repository")
+    cells = read_cells(a.work)
+    if not cells:
+        ap.error(f"no cells.txt in {a.work}")
+    convert_dir = os.path.join(a.work, "convert")
+    man_path = os.path.join(convert_dir, "manifest.json")
+    if not os.path.exists(man_path):
+        sys.exit(f"{man_path} missing: convert the batch first")
+    with open(man_path, encoding="utf-8") as fh:
+        manifest = {i["source"].replace("/", "\\").lower(): i["model"] for i in json.load(fh).get("items", [])}
+    from fo4sf import bsa, packages, skyrimlod
+    import item_physics_probe as P
+    import npc_records
+    sf_data = os.path.join(a.starfield, "Data")
+    donors = starfield_donors(sfplugin.records(os.path.join(sf_data, "Starfield.esm"), [b"ALCH"]))
+    print(f"Starfield donors: {len(donors)} ALCH with a model "
+          + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}" for k in ("drink", "food", "potion")))
+    arcs = P.Archives(sf_data)
+
+    def read_physics(dn):
+        try:
+            return item_test.donor_physics(arcs.read("meshes\\" + dn["model"]))
+        except Exception:                                      # noqa: BLE001 (missing / unreadable donor NIF)
+            return None
+
+    def bounds_of(model):
+        try:
+            return skyrimlod.model_bounds(convert_dir, model)
+        except (OSError, ValueError, struct.error):
+            return None
+    names = npc_records.skyrim_names(bsa.SkyrimArchives(a.skyrim_data))
+    ix = packages.Index(a.skyrim)
+    try:
+        out, nifs = build(cells, ix, manifest, donors, names, convert_dir, read_physics, bounds_of, not a.no_align)
+    finally:
+        ix.close()
+    for model, data in nifs.items():
+        path = os.path.join(convert_dir, "meshes", *model.replace("\\", "/").split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(data)
+    path = os.path.join(a.work, "items.json")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, indent=1)
+    by_base = {}
+    for r in out["refs"]:
+        by_base[r["base"]] = by_base.get(r["base"], 0) + 1
+    print(f"{len(out['refs'])} placed items from {len(out['bases'])} Skyrim bases in {len(cells)} cells "
+          f"({sum(r['owner'] is not None for r in out['refs'])} owned in Skyrim: not yet owned here)")
+    for k, b in sorted(out["bases"].items(), key=lambda kv: (kv[1]["kind"], kv[1]["edid"])):
+        print(f"  {b['kind']:6} {b['edid'][:28]:28} x{by_base.get(k, 0):<3} -> {b['donor_edid'][:40]:40} "
+              f"size {b['size_m']} vs {b['donor_size_m']} (fit {b['fit']})")
+    for s in out["skipped"]:
+        print(f"  skipped {s['edid']}: {s['why']} (left as a static)")
+    print(f"-> {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

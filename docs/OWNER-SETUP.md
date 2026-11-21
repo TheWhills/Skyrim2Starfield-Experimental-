@@ -301,6 +301,16 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7q. B + C (2026-11-21): Riverwood's placed food, drink, potions and ingredients as real items (docs/interior/items.md
+   "Placed items"): the full Riverwood build with `-Items`. Starfield closed:
+   ```powershell
+   git pull
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture -Items
+   ```
+   Step 2e prints each Skyrim item, the vanilla Starfield item it copies (size vs size) and the skipped ones. In game:
+   the Sleeping Giant Inn's bottles, bread, cabbages: do they stay put at load (not jump or fall through), sit on
+   the tables at the right height, get knocked over, pick up with their Skyrim name, get eaten / drunk? Send
+   `C:\Modding\work\s2s\riverwood_doors\items.json` and the 2e lines.
 7c. B + C: the walled cities as their own spaces next to Tamriel (docs/terrain/skyrim-cities.md). Whiterun first
    (one city converts its models once; later runs resume):
    ```powershell

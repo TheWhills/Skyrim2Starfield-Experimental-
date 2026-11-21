@@ -924,6 +924,48 @@ FormKey? FurnitureBase(string key)
     return furnBases[key] = f.FormKey;
 }
 
+// ---- placed items (2026-11-21, owner: Riverwood's wine, bread, cabbages and potions as real items; docs/interior/items.md
+// "Placed items"). ITEMS = scripts/interior/make_items.py's items.json: per Skyrim ALCH / INGR base a vanilla Starfield ALCH
+// (the donor: same kind, closest size) to copy with the Skyrim name, our model (<model>_item.nif: the donor's dynamic body
+// on it) and our bounds; its references replace the cell.json static of the same Skyrim reference, shifted by
+// origin_offset_m (our geometry was moved onto the donor's body). A base whose donor is missing leaves its refs static.
+var itemsPath = Environment.GetEnvironmentVariable("ITEMS");
+JsonElement? itemsRoot = itemsPath == null ? null : JsonDocument.Parse(File.ReadAllText(itemsPath)).RootElement.Clone();
+var itemRefs = new Dictionary<string, JsonElement>();
+if (itemsRoot is JsonElement ir0)
+    foreach (var r in ir0.GetProperty("refs").EnumerateArray()) itemRefs[r.GetProperty("formkey").GetString()!] = r.Clone();
+var itemBases = new Dictionary<string, (FormKey key, P3Float offset)?>();
+var itemNotes = new SortedSet<string>();
+(FormKey key, P3Float offset)? ItemBase(string key)
+{
+    if (itemBases.TryGetValue(key, out var have)) return have;
+    var b = itemsRoot!.Value.GetProperty("bases").GetProperty(key);
+    var bedid = b.GetProperty("edid").GetString()!;
+    var tk = new FormKey(sfEsm, Convert.ToUInt32(b.GetProperty("donor").GetString(), 16) & 0xFFFFFF);
+    if (!SfCache().TryResolve<IIngestibleGetter>(tk, out var tpl))
+    {
+        itemNotes.Add($"{bedid}: donor {tk} is not an ALCH in Starfield.esm; left static");
+        return itemBases[key] = null;
+    }
+    var ing = (Ingestible)tpl.Duplicate(Id("ALCH:" + key));
+    ing.EditorID = "S2S_Item_" + bedid;
+    ing.Name = b.GetProperty("name").GetString()!;
+    // the donor's DESC is a string id into Starfield.esm's tables; ours is not localized (item_test, 2026-11-21: "Oõ▮")
+    ing.Description = "";
+    ing.Model = new Model { File = b.GetProperty("model").GetString()! };
+    var bb = b.GetProperty("bounds");
+    ing.ObjectBounds = new ObjectBounds
+    {
+        First = new P3Float(bb[0][0].GetSingle(), bb[0][1].GetSingle(), bb[0][2].GetSingle()),
+        Second = new P3Float(bb[1][0].GetSingle(), bb[1][1].GetSingle(), bb[1][2].GetSingle()),
+    };
+    mod.Ingestibles.Add(ing);
+    var o = b.GetProperty("origin_offset_m");
+    if (itemBases.Count < 60)
+        itemNotes.Add($"{ing.EditorID} {ing.FormKey}: copy of {tpl.EditorID} ({b.GetProperty("kind").GetString()}), \"{ing.Name}\"");
+    return itemBases[key] = (ing.FormKey, new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle()));
+}
+
 var cellPaths = args.Skip(2).SelectMany(a => a.StartsWith('@')
     ? File.ReadAllLines(a[1..]).Select(l => l.Trim()).Where(l => l.Length > 0)
     : new[] { a }).ToList();
@@ -948,7 +990,7 @@ foreach (var cellPath in cellPaths)
         SkyrimAmbient(cell, src4, skyLighting, new FormKey(sfEsm, Convert.ToUInt32(ltHex, 16)));
     var lit = new List<P3Float>();
     var placedBySource = new Dictionary<string, FormKey>();               // Skyrim / FO4 ref -> its new reference
-    int lights = 0, placed = 0, skipped = 0, disabled = 0, innerDoors = 0, effectRefs = 0;
+    int lights = 0, placed = 0, skipped = 0, disabled = 0, innerDoors = 0, effectRefs = 0, itemsPlaced = 0;
     foreach (var r in root.GetProperty("refs").EnumerateArray())
     {
         var src = r.GetProperty("formkey").GetString()!;
@@ -971,6 +1013,23 @@ foreach (var cellPath in cellPaths)
             lights++;
         }
         else if (furnRefs.Contains(src)) continue;                  // placed below as furniture
+        else if (itemRefs.TryGetValue(src, out var itr) && ItemBase(itr.GetProperty("base").GetString()!) is { } ib)
+        {
+            // an item (ITEMS): the copied ALCH, Skyrim's place shifted by the model's origin offset
+            var iscale = itr.GetProperty("scale").GetSingle();
+            var irot = Rot(itr.GetProperty("rot"));
+            var ipos = Pos(itr.GetProperty("pos"));
+            var ioff = RotateOffset(ib.offset, irot, iscale);
+            obj = new PlacedObject(Id($"REFR:{cellName}:{src}"), release)
+            {
+                Base = new FormLinkNullable<IPlaceableObjectGetter>(ib.key),
+                Position = new P3Float(ipos.X + ioff.X, ipos.Y + ioff.Y, ipos.Z + ioff.Z),
+                Rotation = irot,
+            };
+            if (Math.Abs(iscale - 1f) > 1e-4) obj.Scale = iscale;
+            if (itr.GetProperty("no_settle").GetBoolean()) obj.MajorRecordFlagsRaw |= 0x20000000;   // Don't Havok Settle, as in Skyrim
+            itemsPlaced++;
+        }
         else
         {
             var srcModel = "meshes\\" + model.TrimStart('\\');
@@ -1054,6 +1113,7 @@ foreach (var cellPath in cellPaths)
             furnPlaced++;
         }
     if (furnPlaced > 0) Console.WriteLine($"  furniture: {furnPlaced} references");
+    if (itemsPlaced > 0) Console.WriteLine($"  items: {itemsPlaced} references (ALCH copies, dynamic)");
     var navNote = WriteNavmeshes(cell, cellName, root, placedBySource);
     if (actorsRoot is JsonElement ar)
         foreach (var ac in ar.GetProperty("actors").EnumerateArray())
@@ -1642,6 +1702,7 @@ File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).
     new JsonSerializerOptions { WriteIndented = true }));
 File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));
 foreach (var fnote in furnNotes) Console.WriteLine("furniture: " + fnote);
+foreach (var inote in itemNotes) Console.WriteLine("items: " + inote);
 Console.WriteLine($"wrote {path} ({new FileInfo(path).Length:N0} bytes); {ids.Count} stable FormIDs in {mapPath}; source_map.json");
 
 // The play rate of a turning part (2026-11-18): the first Properties (PRPS) entry of a record copied from a vanilla
