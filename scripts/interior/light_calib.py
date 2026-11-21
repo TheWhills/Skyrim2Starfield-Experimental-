@@ -12,7 +12,7 @@ exponent 1 (what the converter uses) and 2 (Starfield's vanilla). The other tile
 LADDER_HEIGHT_M whose lumens step by half stops. A test tile is as bright on screen as the ladder tile whose light it
 equals, whatever the tone curve and exposure do (both are the same everywhere in one frame, and monotonic), so
 falloff(d) / falloff(LADDER_HEIGHT_M) = that ladder tile's lumens / TEST_LM. Result (owner 2026-11-21):
-lightmodel.STARFIELD_FALLOFF. Fixed exposure (LGT_NoLut), no
+lightmodel.STARFIELD_FALLOFF. Rows 4 and 5 (2026-11-21): the same test lights as spheres (AREA_RADII_M). Fixed exposure (LGT_NoLut), no
 environment light, no adaptation in this cell."""
 import argparse
 import json
@@ -28,7 +28,7 @@ sys.path.insert(0, HERE)
 
 UNITS_PER_M = 70.0
 CELL = "S2SLightCalib"
-COLS, ROWS = 6, 5
+COLS, ROWS = 6, 6
 SPACING_M = 10.0
 RADIUS_M = 8.0
 TILE_M = 1.6
@@ -37,6 +37,10 @@ TEST_LM = 4000.0
 TEST_HEIGHTS_M = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
 LADDER_HEIGHT_M = 2.0
 LADDER_STEPS = list(range(-11, 7))                      # lumens TEST_LM x 2^(k / 2): 2^-5.5 .. 2^3
+# 2026-11-21 (owner: walls and tables right at a light far too bright): the falloff exponent had no effect, so its row
+# became area-light rows: the same test lights as spheres of these radii (Light FLAD, Type Sphere; supported hypothesis:
+# metres, like the light's Radius) to measure how much a light's size flattens the curve near it
+AREA_RADII_M = (0.5, 1.5)
 FLOOR_RX = re.compile(r"floor", re.I)
 SKIP_RX = re.compile(r"candle|rug|trapdoor|door|stair|clutter", re.I)
 CALIB_LIGHTING = {"IMAGE_SPACE": "1C6C37", "ADAPT_IS": "0", "ENV_AMBIENT": "0", "CELL_AMBIENT": "template",
@@ -46,12 +50,19 @@ CALIB_LIGHTING = {"IMAGE_SPACE": "1C6C37", "ADAPT_IS": "0", "ENV_AMBIENT": "0", 
 
 def layout():
     """[(role, value, falloff exponent, light height m, lumens)] in grid order: row by row from the far row (y max),
-    column by column from x min. Rows 0 - 2: the ladder (18); row 3: test, exponent 1; row 4: test, exponent 2."""
+    column by column from x min. Rows 0 - 2: the ladder (18); row 3: test, a point light (exponent 1); rows 4, 5: test,
+    sphere lights of AREA_RADII_M (role test_a<radius>)."""
     spots = [("ladder", k, 1.0, LADDER_HEIGHT_M, TEST_LM * 2 ** (k / 2)) for k in LADDER_STEPS]
     spots += [("test_e1", d, 1.0, d, TEST_LM) for d in TEST_HEIGHTS_M]
-    spots += [("test_e2", d, 2.0, d, TEST_LM) for d in TEST_HEIGHTS_M]
+    for r in AREA_RADII_M:
+        spots += [(f"test_a{r:g}", d, 1.0, d, TEST_LM) for d in TEST_HEIGHTS_M]
     assert len(spots) == COLS * ROWS
     return spots
+
+
+def area_radius(role) -> float:
+    """The sphere radius (m) of a test_a<radius> role, 0 for any other."""
+    return float(role[6:]) if role.startswith("test_a") else 0.0
 
 
 def spot_xy(i):
@@ -104,7 +115,8 @@ def cell_json(model_rel, scale):
                      "model": "", "pos": [x * UNITS_PER_M, y * UNITS_PER_M, h * UNITS_PER_M],
                      "rot": [0.0, 0.0, 0.0], "scale": 1.0, "disabled": 0,
                      "light": {"radius": RADIUS_M * UNITS_PER_M, "color": [255, 255, 255], "fade": 1.0,
-                               "flicker": False, "falloff_exponent": fexp, "calib_lumens": round(lm, 1)}})
+                               "flicker": False, "falloff_exponent": fexp, "calib_lumens": round(lm, 1),
+                               **({"area_radius_m": area_radius(role)} if area_radius(role) else {})}})
     return {"schema_version": 2, "cell": CELL, "cell_formkey": None, "refs": refs}
 
 
@@ -258,7 +270,7 @@ def cmd_analyze(a):
     res = analyze([tile_value(lum, b) for b in blobs], spots)
     print("falloff relative to the ladder height (2 m): measured / H1 inverse square / Skyrim")
     for t in res["tests"]:
-        print(f"  {t['role']:8} {t['d']:4.1f} m  {t['measured'] if t['measured'] is not None else 'off ladder':>10}"
+        print(f"  {t['role']:9} {t['d']:4.1f} m  {t['measured'] if t['measured'] is not None else 'off ladder':>10}"
               f"  {t['h1']:8.3f}  {t['skyrim']:8.3f}")
     out = os.path.join(a.work, "light_calib_result.json")
     with open(out, "w", encoding="utf-8") as fh:

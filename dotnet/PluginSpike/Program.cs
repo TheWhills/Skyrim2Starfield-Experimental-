@@ -253,7 +253,7 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     // 135x (the audit: his house 1.8 stops under the rest); LIGHT_MAX_SCALE, default 256
     double maxScale = double.Parse(Setting(cell, "LIGHT_MAX_SCALE", "256"), CultureInfo.InvariantCulture);
     var key = string.Create(CultureInfo.InvariantCulture,
-        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}:{F("calib_lumens", 0f):0.#}:{(Setting(cell, "LIGHT_DISTANCE_FIT", "1") != "0" ? F("fit_scale", 1f) : 1f):0.##}");
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}:{F("calib_lumens", 0f):0.#}:{(Setting(cell, "LIGHT_DISTANCE_FIT", "1") != "0" ? F("fit_scale", 1f) : 1f):0.##}:{F("area_radius_m", 0f):0.###}");
     if (lightBases.TryGetValue(key, out var have)) return have;
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
@@ -298,6 +298,14 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
         SetProp(nl, "FlickerMovementAmplitude", F("flicker_movement", 0f) / UnitsPerMetre);   // Skyrim units -> metres
     }
     if (falloffMode == "skyrim") SetProp(nl, "FalloffExponent", F("falloff_exponent", 1f));
+    // 2026-11-21 (owner: walls right at a light far too bright): a light's size (FLAD AreaLight, Type Sphere) from the
+    // cell JSON's area_radius_m; the calibration cell's rows 4, 5 measure what it does to the falloff near the light
+    if (F("area_radius_m", 0f) > 0f)
+    {
+        nl.AreaLight ??= new AreaLight();
+        nl.AreaLight.Type = AreaLight.TypeOption.Sphere;
+        nl.AreaLight.Radius = F("area_radius_m", 0f);
+    }
     mod.Lights.Add(nl);
     lightBases[key] = nl.FormKey;
     if (lightBases.Count <= 12)
@@ -305,7 +313,8 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
             $"  light {nl.EditorID}: radius {tplRadius:0.##} -> {GetProp(nl, "Radius")} m, lumens {tplLm:0} -> {GetProp(nl, "PbrLuminousPowerLm")}, " +
             $"colour {cr},{cg},{cb}, {GetProp(nl, "PbrLightTemperatureK")} K, falloff {GetProp(nl, "FalloffExponent")}, flicker {(flicker ? flickerMode : "none")} " +
             $"{GetProp(nl, "FlickerPeriod")} s x{GetProp(nl, "FlickerIntensityAmplitude")} move {GetProp(nl, "FlickerMovementAmplitude")} " +
-            $"({GetProp(nl, "FlickerEffect")}, {(GetProp(nl, "Components") as System.Collections.ICollection)?.Count ?? 0} components)"));
+            $"({GetProp(nl, "FlickerEffect")}, {(GetProp(nl, "Components") as System.Collections.ICollection)?.Count ?? 0} components), " +
+            $"area {nl.AreaLight?.Type} {nl.AreaLight?.Radius:0.##} m"));
     return nl.FormKey;
 }
 void SkyrimAmbient(Cell cell, string src4, JsonElement sl, FormKey templateKey)

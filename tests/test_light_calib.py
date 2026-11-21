@@ -30,13 +30,20 @@ class LayoutTest(unittest.TestCase):
         cell = LC.cell_json("Architecture\\Farmhouse\\FarmhouseFloor01.nif", 0.4)
         lights = [r for r in cell["refs"] if r["type"] == "Light"]
         tiles = [r for r in cell["refs"] if r["base_editor_id"] == "S2SCalibTile"]
-        self.assertEqual((len(lights), len(tiles)), (30, 30))
+        self.assertEqual((len(lights), len(tiles)), (36, 36))
         for L, T, s in zip(lights, tiles, LC.layout()):
             self.assertEqual(L["pos"][:2], T["pos"][:2])                  # straight above its tile
             self.assertAlmostEqual(L["pos"][2] / LC.UNITS_PER_M, s[3])
             self.assertEqual(L["light"]["calib_lumens"], round(s[4], 1))
             self.assertEqual(L["light"]["falloff_exponent"], s[2])
         self.assertTrue(any(r["base_editor_id"] == "COCMarkerHeading" for r in cell["refs"]))
+        # rows 4, 5: the same test lights as spheres of AREA_RADII_M; no size on the others
+        areas = [L["light"].get("area_radius_m", 0.0) for L in lights]
+        for r in LC.AREA_RADII_M:
+            self.assertEqual(areas.count(r), len(LC.TEST_HEIGHTS_M))
+        self.assertEqual(areas.count(0.0), 36 - len(LC.AREA_RADII_M) * len(LC.TEST_HEIGHTS_M))
+        self.assertEqual(LC.area_radius("test_a1.5"), 1.5)
+        self.assertEqual(LC.area_radius("test_e1"), 0.0)
 
     def test_pick_floor(self):
         man = {"items": [{"source": "meshes\\Clutter\\Candles\\CandleHornFloor01.nif"},
@@ -94,7 +101,7 @@ class AnalyzeTest(unittest.TestCase):
     def check(self, img, spots, falloff):
         lum = img.mean(2)
         blobs = LC.find_tiles(img, len(spots))
-        self.assertEqual(len(blobs), 30)
+        self.assertEqual(len(blobs), len(spots))
         res = LC.analyze([LC.tile_value(lum, b) for b in blobs], spots)
         hits = [t for t in res["tests"] if t["measured"] is not None]
         for t in hits:
@@ -119,6 +126,8 @@ class PluginSpikeTest(unittest.TestCase):
     def test_calib_hooks(self):
         cs = open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8").read()
         self.assertIn('if (F("calib_lumens", 0f) > 0f) lm = F("calib_lumens", 0f);', cs)
+        self.assertIn("nl.AreaLight.Type = AreaLight.TypeOption.Sphere;", cs)
+        self.assertIn(':{F("area_radius_m", 0f):0.###}");', cs)   # the size is part of the light base key
         self.assertIn('Setting(src4, "ADAPT_IS", "1") != "0"', cs)
         ps = open(os.path.join(ROOT, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8").read()
         self.assertIn("light_calib.py make --work $Work", ps)

@@ -401,3 +401,14 @@ exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hy
   Decision: no screen filter by default (--skyrim-grading opts in). Interiors should share the exterior's colour
   pipeline (tone map, LUT, cinematic) and differ only in exposure; warmth comes from the lights' own colours (open:
   base our image space on the exterior's).
+
+## Hot spots right at a light: light size (open, 2026-11-21)
+- Owner: the wall behind a candle stand, the map under the chandelier: far too bright right at the light, the rest of
+  the room right. Supported hypothesis: the shape of the falloff, not the level. Skyrim (1 - (d/r)^2) is nearly flat near
+  a light (1 m vs 4 m, r 6 m: about 1.7x); Starfield's measured lm / (d^2 + 1.8 m^2) gives 6.4x. No single scale fixes
+  both distances, and the distance fit (relative to 4 m) only moves the level.
+- Test: the calibration cell's exponent-2 row (the exponent had no effect) became two rows of sphere lights (FLAD
+  AreaLight, Type Sphere, radius 0.5 and 1.5 m; units supported hypothesis: metres). If a size flattens the curve near
+  the light, the converter sizes each light from Skyrim's data by rule; if not (unresolved), the alternatives are a
+  near-field cap by splitting a light, or moving its origin.
+- Exposure is unchanged by owner's choice ("leave it like this for now", 16:53).
