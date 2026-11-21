@@ -94,6 +94,23 @@ class FitTests(unittest.TestCase):
         self.assertEqual(got, ["Drink_Wine", "Drink_Big", "Drink_Scripted"])    # same kind only, unscripted first
         self.assertEqual([d["edid"] for d in M.rank_donors(bottle, "potion", donors)][0], "Food_Pear")  # no potions: any
 
+    def test_family_preferred(self):
+        self.assertEqual(M.skyrim_family("drink", "FoodWineAlto"), "alcohol")
+        self.assertEqual(M.skyrim_family("drink", "FoodMead"), "alcohol")
+        self.assertEqual(M.skyrim_family("drink", "MilkBottle"), "")
+        self.assertEqual(M.skyrim_family("food", "FoodCabbage"), "produce")
+        self.assertEqual(M.skyrim_family("food", "FoodPotatoesBaked"), "")          # cooked: not raw produce
+        self.assertEqual(M.skyrim_family("food", "FoodBread01A"), "")
+        wine = [[-0.12, -0.12, 0], [0.12, 0.12, 0.4]]
+        donors = M.starfield_donors([
+            sf_alch(1, "Drink_NonAlc_ToGoCup_TerraBrew", "cup.nif", M.FOOD, [[-0.06, -0.06, 0], [0.06, 0.06, 0.2]]),
+            sf_alch(2, "Drink_Alc_Bottle_Generic_SpaceWine", "wine.nif", M.FOOD, [[-0.04, -0.04, 0], [0.04, 0.04, 0.33]])])
+        self.assertEqual(M.rank_donors(wine, "drink", donors)[0]["edid"], "Drink_NonAlc_ToGoCup_TerraBrew")
+        self.assertEqual(M.rank_donors(wine, "drink", donors, "alcohol")[0]["edid"],
+                         "Drink_Alc_Bottle_Generic_SpaceWine")
+        self.assertEqual(M.rank_donors(wine, "food", donors, "produce")[0]["edid"],   # no produce donor: the kind's pool
+                         "Drink_NonAlc_ToGoCup_TerraBrew")
+
     def test_align_offset(self):
         ours = [[-0.1, -0.1, -0.05], [0.1, 0.1, 0.05]]          # origin at the centre
         donor = [[-0.09, -0.11, 0.0], [0.11, 0.09, 0.1]]       # origin at the base

@@ -131,8 +131,14 @@ model split drink 269 / food 8 / potion 66 (drink words matched model paths; fla
 LegendaryCatalyst "potions"), so the wine copied Food_Pack_Oishii_Seaweed_Combo and a cereal box, every cabbage /
 cheese wheel / leek Food_Generic_CerealBox. Fixed: the donor's kind is its EditorID prefix (Drink_, Food_, Aid_ / Med_
 / Chem_), and its size is the union of its BSGeometry boxes (centre + half extents, node transforms applied) instead
-of OBND, whose units are unconfirmed (read as metres the seaweed pack was 0.39 m tall); OBND only when the NIF has no
-box. Donors without a physics body are dropped before ranking.
+of OBND (its units then unconfirmed; the second run showed them equal); OBND only when the NIF has no box. Donors without a physics body are dropped before ranking.
+**Second run** (owner, 09:17): donors drink 82 / food 148 / potion 53, all with a body, all sized from geometry; the
+geometry sizes equal the OBND ones (verified: Food_Generic_CerealBox 0.136 x 0.136 x 0.195 both ways), so OBND was in
+metres after all (the first run's odd picks came from the kind pools, not the units). Matches mostly by kind and size
+(mead -> Erdebrau cans, salmon steak -> naan bread, potions -> Aid_MedPack), but no Starfield drink is as tall as
+Skyrim's 0.4 m wine bottles, so all wine copied a TerraBrew to-go cup (coffee effects, a short cup body), and raw
+vegetables copied packaged meals (box bodies). Now a Skyrim drink with an alcohol word prefers Drink_Alc_ donors and
+raw produce (not baked / grilled / cooked) Food_Produce_ ones, when any exist; size decides within them.
 Unverified: everything in game; the C# (written without a compiler: NuGet is blocked here; API names checked against
 Mutagen's Starfield Ingestible.xml: Name, Description, Model, ObjectBounds, mod.Ingestibles). Next: own hulls (the
 donor's shape is wrong for odd sizes: `fit` in items.json shows how far), ownership, Skyrim's effects / value / weight.

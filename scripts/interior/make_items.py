@@ -46,6 +46,13 @@ FOOD, MEDICINE, POISON = 0x2, 0x10000, 0x20000  # ALCH ENIT flags (Skyrim and St
 NO_SETTLE, DISABLED = 0x20000000, 0x800         # REFR record flags: Don't Havok Settle, Initially Disabled
 DRINK_RX = r"wine|mead|\bale\b|ale$|beer|bottle|jug|flask|brandy|milk|skooma|spirit|tankard|honningbrew|blackbriar"
 SKIP_DONOR_RX = r"test|notplayable|dummy|template|deprecated|^zz|^cut|_cut\b|debug"
+# 2026-11-21 (owner's second -Items run): by size alone Skyrim's 0.4 m wine bottles copied a TerraBrew coffee cup (no
+# Starfield drink is that tall) and cabbages / potatoes packaged meals (box bodies that never roll). A Skyrim item of
+# these sorts prefers donors of the matching Starfield family when there are any; size decides within it.
+ALCOHOL_RX = r"wine|mead|\bale\b|ale$|beer|brandy|spirit|honningbrew|blackbriar|\brum\b|whisk"
+PRODUCE_RX = (r"cabbage|potato|leek|apple|garlic|carrot|tomato|gourd|lettuce|pear|berr|egg|root|radish|onion|melon|"
+              r"corn|wheat")
+PREFER = {"alcohol": r"^drink_alc_", "produce": r"^food_produce_"}
 MAX_TRIES = 12                                  # donors whose NIF is read for a body, best fit first
 
 
@@ -60,6 +67,15 @@ def skyrim_kind(sig: str, edid: str, model: str, flags: int) -> str:
     if not flags & FOOD:
         return "potion"
     return "drink" if re.search(DRINK_RX, f"{edid} {model}", re.I) else "food"
+
+
+def skyrim_family(kind: str, edid: str) -> str:
+    """alcohol / produce / "" : the Starfield donor family a Skyrim item prefers (PREFER), by its EditorID."""
+    if kind == "drink" and re.search(ALCOHOL_RX, edid, re.I):
+        return "alcohol"
+    if kind == "food" and re.search(PRODUCE_RX, edid, re.I) and not re.search(r"baked|grilled|cooked|soup|stew", edid, re.I):
+        return "produce"
+    return ""
 
 
 def starfield_kinds(edid: str, model: str = "", flags: int = 0) -> set:
@@ -81,8 +97,8 @@ def starfield_kinds(edid: str, model: str = "", flags: int = 0) -> set:
 def geometry_bounds(nif_bytes: bytes):
     """[[min], [max]] metres (the NIF's own frame) of a Starfield NIF's BSGeometry boxes (centre + half extents, as
     sfnif.bounds_from_points writes them), each through its node's world transform; None when it has none. Used for a
-    donor's size instead of its OBND, whose units are unconfirmed (2026-11-21: OBND read as metres gave a 0.39 m
-    seaweed pack)."""
+    donor's size first; its OBND agrees (owner's second run, 2026-11-21: all 283 donors sized from geometry gave the
+    same metres as OBND had, e.g. Food_Generic_CerealBox 0.136 x 0.136 x 0.195), so OBND stays the fallback."""
     from fo4sf import sfnif
     n = nifmod.parse(nif_bytes)
     world = nifmod.world_transforms(n)
@@ -176,9 +192,12 @@ def starfield_donors(recs, keyword_edids=None):
     return out
 
 
-def rank_donors(ours, kind, donors):
-    """Donors for one item, best first: its kind (else any), sized ones by fit, unscripted before scripted."""
+def rank_donors(ours, kind, donors, family=""):
+    """Donors for one item, best first: its kind (else any), within it its family (PREFER) when any donor is of it,
+    sized ones by fit, unscripted before scripted."""
     pool = [x for x in donors if kind in x["kinds"]] or list(donors)
+    if family in PREFER:
+        pool = [x for x in pool if re.match(PREFER[family], x["edid"], re.I)] or pool
 
     def key(x):
         return (x["bounds"] is None, x["scripted"], fit(ours, x["bounds"]) if x["bounds"] else 0.0, x["edid"].lower())
@@ -265,9 +284,10 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     if not ours:
         return f"no bounds for {ours_model}"
     kind = skyrim_kind(sig, info["edid"], info["model"], info["flags"])
+    family = skyrim_family(kind, info["edid"])
     donor = phys = None
     tried = []
-    for dn in rank_donors(ours, kind, donors)[:MAX_TRIES]:
+    for dn in rank_donors(ours, kind, donors, family)[:MAX_TRIES]:
         if dn["fid"] not in bodies:
             bodies[dn["fid"]] = read_physics(dn)
         if bodies[dn["fid"]] is None:
@@ -286,7 +306,7 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     nifs[model] = nif
     bounds = [[ours[0][i] + d[i] for i in range(3)], [ours[1][i] + d[i] for i in range(3)]]
     name = names.get(info["name"], info["edid"]) if isinstance(info["name"], int) else (info["name"] or info["edid"])
-    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "donor": f"{donor['fid']:08X}",
+    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "family": family, "donor": f"{donor['fid']:08X}",
            "donor_edid": donor["edid"], "donor_model": donor["model"], "model": model,
            "bounds": [[round(v, 4) for v in b] for b in bounds], "origin_offset_m": [-v for v in d],
            "fit": round(fit(ours, donor["bounds"]), 3) if donor["bounds"] else None,
@@ -381,7 +401,7 @@ def main(argv=None):
     print(f"{len(out['refs'])} placed items from {len(out['bases'])} Skyrim bases in {len(cells)} cells "
           f"({sum(r['owner'] is not None for r in out['refs'])} owned in Skyrim: not yet owned here)")
     for k, b in sorted(out["bases"].items(), key=lambda kv: (kv[1]["kind"], kv[1]["edid"])):
-        print(f"  {b['kind']:6} {b['edid'][:28]:28} x{by_base.get(k, 0):<3} -> {b['donor_edid'][:40]:40} "
+        print(f"  {(b['family'] or b['kind']):7} {b['edid'][:28]:28} x{by_base.get(k, 0):<3} -> {b['donor_edid'][:40]:40} "
               f"size {b['size_m']} vs {b['donor_size_m']} (fit {b['fit']})")
     for s in out["skipped"]:
         print(f"  skipped {s['edid']}: {s['why']} (left as a static)")
