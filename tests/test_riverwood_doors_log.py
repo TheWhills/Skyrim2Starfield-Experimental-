@@ -90,6 +90,12 @@ class ScriptTest(unittest.TestCase):
         self.assertGreaterEqual(self.ps.count("Timings"), 6)
         self.assertIn('PYTHONUNBUFFERED = "1"', self.ps)
 
+    def test_assets_only_skips_the_navmesh_defaults_search(self):
+        # owner 2026-11-21 -AssetsOnly: 87 s total, 75 s in steps - the C:\Modding search ran before the branch
+        search = self.ps.index("-Filter navmesh_defaults.json")
+        self.assertGreater(search, self.ps.index("assets-only build:"))
+        self.assertGreater(search, self.ps.index('Step "1. interior batch'))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -140,7 +140,6 @@ if (-not (Test-Path $Texconv)) {
     if ($t) { $Texconv = $t.FullName } else { Fail "texconv.exe not found (give -Texconv <path>)" }
 }
 $clock = [Diagnostics.Stopwatch]::StartNew()
-$nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 if ($AssetsOnly -and ($ParticleFire -or $FlameStyle -eq "particles")) {
     Write-Host "note: the hearth fires are plugin records; a different -FlameStyle / -ParticleFire takes a full build" -ForegroundColor Yellow
@@ -165,6 +164,8 @@ if ($AssetsOnly) {
 }
 
 Step "1. interior batch with doors to the exterior"
+# a search of all of C:\Modding (about 12 s, owner 2026-11-21): here, so -AssetsOnly does not pay for it
+$nav = Get-ChildItem C:\Modding -Recurse -Filter navmesh_defaults.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 $args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--work", $Work, "--exterior")
 if ($Find) { $args1 += @("--find", $Find) } else { $args1 += @("--cells", $Cells) }
 if ($nav) { $args1 += @("--navmesh-defaults", $nav.FullName) }

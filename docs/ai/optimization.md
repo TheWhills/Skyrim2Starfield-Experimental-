@@ -114,4 +114,8 @@ to <Work>\logs\riverwood_doors_last.log, the window filtered by tools/owner/log_
 105 lines, every FAIL / error / WARNING kept), -FullLog prints everything; (3) each step's time and a table at the end.
 This commit changes skyrimconvert.py once more (the methods left it), so the next build reconverts everything one last
 time. After: the first build after a flame-only change (its step table: "2. convert" time and reused count) - pending.
+Owner's first run after it (2026-11-21 11:20, -AssetsOnly with the soft candle v2 change): window 20 lines; convert
+70 s (every model, the expected one-time reconvert), install 5 s, total 87 s. The 12 s outside the steps: the
+navmesh_defaults.json search of all of C:\Modding ran before the -AssetsOnly branch; moved into step 1 (the full build
+only). After for the flame-only case: still the next flame change.
 
