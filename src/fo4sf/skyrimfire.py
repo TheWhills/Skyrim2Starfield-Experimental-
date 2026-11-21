@@ -604,7 +604,84 @@ PARTICLE_REPLACES = r"fxfireatlas"
 # candles show) on one card per Skyrim flame, the card widened so the flame - a narrow strip in each frame - takes
 # Skyrim's fuller teardrop (the "starfield" flame style on 2026-11-15 used Skyrim's card size and our emittance: "very
 # small, not bright, quite thin")
-CANDLE_STYLES = ("skyrim", "starfield")
+CANDLE_STYLES = ("skyrim", "starfield", "soft")
+# candle_style "soft" (2026-11-21, owner on Skyrim's candle cards: "the candles just look very low quality", crops: a
+# small hard-edged pixelated sliver, no glow): Skyrim's CandleFlame01 is 128 x 128 with 2 x 2 frames (64 px a flame)
+# stepped at 12 fps; Starfield's candle flipbook draws a thin streak ("a line of fire", 2026-11-16). So our own flame,
+# drawn at build time (procedural_flame_atlas, no game asset): SOFT_GRID frames of SOFT_FRAME px, a smooth teardrop
+# (white-yellow core, orange rim, faint blue foot) swaying and stretching through one loop, a soft halo around it,
+# played as a flipbook at SOFT_FPS on Skyrim's cards made SOFT_CARD x larger (the flame drawn in the middle 1 / SOFT_CARD
+# of the frame, so it keeps Skyrim's size and place; SOFT_FLAME_SCALE grows it)
+SOFT_GRID = (4, 4)
+SOFT_FRAME = (128, 256)              # px (width, height)
+SOFT_FPS = 16.0                      # one sway loop a second
+SOFT_CARD = (2.2, 1.6)               # card half width / height x Skyrim's flame card
+SOFT_FLAME_SCALE = 1.15              # the flame itself x Skyrim's
+SOFT_HALO = 0.3                     # halo opacity at the flame
+
+
+def _smooth(e0, e1, x):
+    import numpy as np
+    t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+
+
+def procedural_flame_frame(phase: float, size=SOFT_FRAME, card=SOFT_CARD, flame_scale=SOFT_FLAME_SCALE,
+                           halo=SOFT_HALO):
+    """One candle flame (RGBA uint8, straight alpha, `size` = (w, h) px, v = 0 at the top) at `phase` (0 .. 1 of its
+    loop): a teardrop whose half width along its height y (0 = foot, 1 = tip) is sqrt(y) (1 - y)^0.9 (widest about a
+    third up), the tip swaying and the height breathing with the phase; colour by depth into the flame and height
+    (white-yellow core, orange rim, a faint blue foot); a soft orange halo around it. The flame fills the middle
+    flame_scale / card of the frame (Skyrim's card inside our larger one)."""
+    import numpy as np
+    w, h = size
+    xs = (np.arange(w) + 0.5) / w * 2 - 1                    # -1 .. 1 across the card
+    ys = 1 - (np.arange(h) + 0.5) / h * 2                    # 1 at the top .. -1 at the bottom
+    X, Y = np.meshgrid(xs, ys)
+    cw, ch = card[0] / flame_scale, card[1] / flame_scale    # card / flame size ratios
+    two_pi = 2 * math.pi
+    stretch = 1.0 + 0.07 * math.sin(two_pi * phase * 2 + 0.7) + 0.04 * math.sin(two_pi * phase * 3 + 2.1)
+    fy = (Y * ch + 1.0) / 2.0 / stretch                      # flame height coordinate: 0 foot .. 1 tip
+    fx = X * cw                                              # flame width coordinate: +-1 = Skyrim's half width
+    sway = (0.10 * math.sin(two_pi * phase) + 0.05 * np.sin(7.0 * fy + two_pi * phase * 2)) * np.clip(fy, 0, 1) ** 2
+    prof = np.sqrt(np.clip(fy, 0, 1)) * np.clip(1 - fy, 0, 1) ** 0.9
+    prof = prof / 0.5 * 0.85                                 # widest ~0.85 of Skyrim's half width (a candle teardrop)
+    d = np.abs(fx - sway) / np.maximum(prof, 1e-4)           # 0 on the axis, 1 at the rim
+    inside = (fy > 0) & (fy < 1)
+    body = np.where(inside, _smooth(1.0, 0.55, d), 0.0)
+    body *= _smooth(0.0, 0.06, fy) * _smooth(1.0, 0.82, fy)
+    core = np.where(inside, _smooth(0.5, 0.05, d), 0.0) * _smooth(0.08, 0.25, fy) * _smooth(0.6, 0.3, fy)
+    foot = np.where(inside, _smooth(0.9, 0.3, d), 0.0) * _smooth(0.22, 0.02, fy) * _smooth(-0.02, 0.04, fy)
+    rim = np.array([1.0, 0.47, 0.12])
+    mid = np.array([1.0, 0.66, 0.22])
+    white = np.array([1.0, 0.96, 0.82])
+    blue = np.array([0.30, 0.42, 1.0])
+    col = rim[None, None] * (1 - body[..., None]) + mid[None, None] * body[..., None]
+    col = col * (1 - core[..., None]) + white[None, None] * core[..., None]
+    col = col * (1 - 0.6 * foot[..., None]) + blue[None, None] * 0.6 * foot[..., None]
+    # halo: a soft round glow around the flame's lower middle (Skyrim's CandleGlow01 particles, left out of the cards so
+    # far), in card coordinates so it is gone well inside the card's edges (a visible box otherwise)
+    hy = -1.0 / ch + 0.7 / ch                              # card y of the flame's widest part
+    r2 = (X / 0.5) ** 2 + ((Y - hy) / 0.42) ** 2
+    glow = halo * np.exp(-r2 * 1.6) * (0.92 + 0.08 * math.sin(two_pi * phase * 2))
+    alpha = np.clip(body * 0.95 + glow * (1 - body), 0, 1)
+    halo_col = np.array([1.0, 0.55, 0.2])
+    a_body = body * 0.95
+    col = (col * a_body[..., None] + halo_col[None, None] * (glow * (1 - body))[..., None]) / \
+        np.maximum(alpha[..., None], 1e-6)
+    edge = _smooth(1.0, 0.85, np.abs(X)) * _smooth(1.0, 0.85, np.abs(Y))   # nothing at the card's edges
+    alpha = alpha * edge
+    rgba = np.concatenate([np.clip(col, 0, 1), alpha[..., None]], 2)
+    return (rgba * 255 + 0.5).astype(np.uint8)
+
+
+def procedural_flame_atlas(grid=SOFT_GRID, size=SOFT_FRAME, **kw):
+    """grid (columns, rows) frames of procedural_flame_frame through one loop, row by row (the flipbook order)."""
+    import numpy as np
+    cols, rows = grid
+    n = cols * rows
+    frames = [procedural_flame_frame(k / n, size, **kw) for k in range(n)]
+    return np.concatenate([np.concatenate(frames[r * cols:(r + 1) * cols], 1) for r in range(rows)], 0)
 # owner 2026-11-16 08:52 at x1.8 / x1.1: "the candles are quite thin still"
 # owner 2026-11-16 10:14, Starfield's own flame mesh at x3.0 / x1.25: a small thin flicker at the wick (Skyrim's flame on
 # the same horn candle stands about as tall as the horn's cup is wide): x2 taller, wider still

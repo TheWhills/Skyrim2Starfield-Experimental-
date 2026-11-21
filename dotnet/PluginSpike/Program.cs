@@ -217,6 +217,7 @@ static uint ColourTemperature(int r8, int g8, int b8)
 // a temperature shifted by `mired` (1e6 / K) towards warm, clamped to 1000..10000 K
 static uint WarmerTemperature(uint kelvin, float mired) =>
     (uint)Math.Clamp(Math.Round(1e6 / (1e6 / Math.Max(kelvin, 1u) + mired)), 1000, 10000);
+var soundsCleared = new SortedSet<string>();         // looping sounds taken off copied Starfield lights / furniture
 FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
 {
     float F(string k, float d) => L.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetSingle() : d;
@@ -250,6 +251,9 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
     var nl = (Light)tpl.Duplicate(Id(key));
+    // 2026-11-21 (owner: "an ambient electrical buzz i hear, cant trace it"): a Starfield light can carry its own looping
+    // sound (LLSH); Skyrim's lights make none
+    if (nl.SoundReference != null) { nl.SoundReference = null; soundsCleared.Add($"light {tpl.EditorID}"); }
     nl.EditorID = $"FO4Port_SkyLight_{lightBases.Count:D3}";
     double tplRadius = ToDouble(GetProp(nl, "Radius")), tplLm = ToDouble(GetProp(nl, "PbrLuminousPowerLm"));
     SetProp(nl, "Radius", radius);
@@ -794,6 +798,10 @@ FormKey? FurnitureBase(string key)
         return furnBases[key] = null;
     }
     var f = (Furniture)tpl.Duplicate(Id("FURN:" + key));
+    // 2026-11-21 (owner: an electrical buzz in the interiors): Starfield's workbenches (the industrial / chem benches our
+    // enchanting / alchemy tables copy, the welder, the impact wrench) hum through their looping sound (ALSH); Skyrim's
+    // furniture makes none of its own (its work sounds come from the animations, sound_swap)
+    if (f.LoopingSound != null) { f.LoopingSound = null; soundsCleared.Add($"furniture {tpl.EditorID}"); }
     f.EditorID = "S2S_Furn_" + bedid;
     f.VirtualMachineAdapter = null;
     var modelNote = "template's model";
@@ -1732,6 +1740,8 @@ File.WriteAllText(mapPath, JsonSerializer.Serialize(ids.OrderBy(kv => kv.Value).
 File.WriteAllText(Path.Combine(outDir, "source_map.json"), JsonSerializer.Serialize(sourceMap, new JsonSerializerOptions { WriteIndented = true }));
 foreach (var fnote in furnNotes) Console.WriteLine("furniture: " + fnote);
 foreach (var inote in itemNotes) Console.WriteLine("items: " + inote);
+Console.WriteLine(soundsCleared.Count > 0 ? "looping sounds removed from copies of: " + string.Join(", ", soundsCleared)
+                                         : "looping sounds: none on the copied lights / furniture");
 Console.WriteLine($"wrote {path} ({new FileInfo(path).Length:N0} bytes); {ids.Count} stable FormIDs in {mapPath}; source_map.json");
 
 // The play rate of a turning part (2026-11-18): the first Properties (PRPS) entry of a record copied from a vanilla

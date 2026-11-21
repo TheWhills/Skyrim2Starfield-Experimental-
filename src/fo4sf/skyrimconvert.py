@@ -617,6 +617,19 @@ class SkyrimConverter(pipeline.Converter):
         shapes, mats = [], []
         L2 = skyrimfire.LAYER2
         for f in flames:
+            if kind == "candle" and getattr(self, "candle_style", "skyrim") == "soft":
+                mat = self.soft_candle_material(max(0.6, 3 * f["life"]))
+                if mat is None:
+                    continue
+                cw, ch = skyrimfire.SOFT_CARD
+                for c in skyrimfire.flame_card_centres(f):
+                    # same centre as Skyrim's card: the flame is drawn centred in the larger card at Skyrim's size
+                    # (x SOFT_FLAME_SCALE), so its foot and tip land where Skyrim's card had them
+                    centre = (c[0] + offset[0], c[1] + offset[1], c[2] + offset[2])
+                    shapes.append(skyrimfire.crossed_cards(centre, f["half_w"] * cw, f["half_h"] * ch,
+                                                           name=f"{tag}_{len(shapes)}".encode()))
+                    mats.append(mat)
+                continue
             if kind == "candle" and getattr(self, "candle_style", "skyrim") == "starfield":
                 mat = self.starfield_flame_material("candle", keep_emittance=True)   # Starfield's candle, as it is
                 if mat is None:
@@ -673,6 +686,57 @@ class SkyrimConverter(pipeline.Converter):
                                                            mirror=mirror))
                     mats.append(mat)
         return shapes, mats
+
+    def soft_candle_material(self, flicker_period: float) -> Optional[str]:
+        """candle_style "soft": our own flame flipbook (skyrimfire.procedural_flame_atlas, drawn here, colour BC7 sRGB +
+        opacity BC4) on the effect template, played at SOFT_FPS with a flicker; written once per flicker period."""
+        key = f"softcandle:{flicker_period:.3f}"
+        if key in self._materials:
+            return self._materials[key]
+        try:
+            import tempfile
+            import numpy as np
+            from . import convert_material as cm, textures
+            stem = "s2s_candleflame_soft"
+            tex_rel = f"textures/{self.prefix}/effects/{stem}"
+            files = {}
+            if "softcandle_tex" not in self._materials:
+                rgba = skyrimfire.procedural_flame_atlas()
+                h, w = rgba.shape[:2]
+                with tempfile.TemporaryDirectory() as tmp:
+                    colour = np.ascontiguousarray(np.concatenate([rgba[:, :, :3], np.full((h, w, 1), 255, np.uint8)], 2))
+                    textures.write_dds_dx10(os.path.join(tmp, "c_in.dds"), w, h, textures.DXGI_R8G8B8A8_UNORM,
+                                            colour.tobytes(), 4)
+                    textures.texconv(self.texconv, os.path.join(tmp, "c_in.dds"), tmp, "BC7_UNORM_SRGB")
+                    textures.write_r8(os.path.join(tmp, "o_in.dds"), np.ascontiguousarray(rgba[:, :, 3]))
+                    textures.texconv(self.texconv, os.path.join(tmp, "o_in.dds"), tmp, "BC4_UNORM")
+                    for kind_, fn in (("color", "c_in.dds"), ("opacity", "o_in.dds")):
+                        dst = os.path.join(self.staging, *f"{tex_rel}_{kind_}.dds".split("/"))
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        self._publish_texture(os.path.join(tmp, fn), dst, kind_)
+                self._materials["softcandle_tex"] = "done"
+            for kind_ in ("color", "opacity"):
+                files[kind_] = cm.game_path(f"{tex_rel}_{kind_}.dds")
+            if self._effect_template is None:
+                self._effect_template = cm.read_template_path(self.content_resources, skyrimfire.EFFECT_TEMPLATE_MAT)
+            cols, rows = skyrimfire.SOFT_GRID
+            name = f"{stem}_{int(round(flicker_period * 1000))}"
+            mat = skyrimfire.effect_material(self._effect_template, "S2S_Flame_" + name,
+                                             {"Albedo": files["color"], "Emissive": files["color"],
+                                              "Opacity": files["opacity"]},
+                                             kind="candle", flicker=flicker_period,
+                                             flipbook=(cols, rows, skyrimfire.SOFT_FPS))
+            mat_rel = f"materials/{self.prefix}/effects/{name}.mat"
+            p = os.path.join(self.staging, *mat_rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="\n") as f:
+                f.write(skyrimfire.dumps(mat))
+            self._materials[key] = mat_rel.replace("/", "\\")
+            self.stats["flame_materials"] = self.stats.get("flame_materials", 0) + 1
+        except Exception as e:                                      # noqa: BLE001  (recorded; the candle gets no flame)
+            self._materials[key] = None
+            self.material_errors[key] = f"{type(e).__name__}: {e}"
+        return self._materials[key]
 
     def layered_fire_material(self) -> Optional[str]:
         """flame_style "layered": a clone of skyrimfire.LAYERED_FIRE_MAT as it is (its textures, controllers) but with

@@ -301,6 +301,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7r. B + C (2026-11-21): soft candle flames (our own smooth flame flipbook with a halo, the default -CandleStyle now)
+   and the buzz (looping sounds taken off copied lights / furniture). A full build (the sound change is in the plugin):
+   ```powershell
+   git pull
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture -Items
+   ```
+   Step 3's log ends with "looping sounds removed from copies of: ..." (or none). In game: candles, and is the buzz gone?
+   `-CandleStyle skyrim` brings back Skyrim's own candle cards.
 7q. B + C (2026-11-21): Riverwood's placed food, drink, potions, ingredients and clutter (plates, tankards, baskets ...)
    as real items (docs/interior/items.md
    "Placed items"): the full Riverwood build with `-Items`. Starfield closed:

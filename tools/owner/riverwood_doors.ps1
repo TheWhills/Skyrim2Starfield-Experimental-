@@ -54,7 +54,8 @@ param(
     [string]$ParticleFire = "",
     # candle flames: Skyrim's textures, or Starfield's own candle flame (its mesh + material) fitted to Skyrim's teardrop (models only:
     # -AssetsOnly is enough to switch)
-    [ValidateSet("skyrim", "starfield")][string]$CandleStyle = "skyrim",
+    # 2026-11-21 (owner: "the candles just look very low quality"): "soft" = our own smooth flame flipbook with a halo
+    [ValidateSet("skyrim", "starfield", "soft")][string]$CandleStyle = "soft",
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is

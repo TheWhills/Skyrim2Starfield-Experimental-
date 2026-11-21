@@ -234,7 +234,7 @@ def flame_key(a, extra: str = "") -> str:
         h.update((Path(REPO, "src", "fo4sf") / f"{m}.py").read_bytes())
     h.update(getattr(a, "flame_style", "particles").encode())
     h.update(str(parse_particle_fire(getattr(a, "particle_fire", ""))).encode())
-    h.update(getattr(a, "candle_style", "skyrim").encode())
+    h.update(getattr(a, "candle_style", "soft").encode())
     h.update(extra.encode())
     return h.hexdigest()[:16]
 
@@ -1111,10 +1111,11 @@ def main(argv=None):
                     help="convert: flames as cards with Skyrim's textures or Starfield's fire flipbooks, "
                          "(particles) hearths as Starfield's own particle fire, or (layered) Skyrim's hearth flame "
                          "meshes and cards burning with Starfield's LayeredFireV2 (docs/interior/skyrim-interiors.md)")
-    ap.add_argument("--candle-style", default="skyrim", choices=("skyrim", "starfield"),
-                    help="convert: candle flames with Skyrim's textures (two cross-fading layers) or Starfield's own "
-                         "candle flame (its mesh, read with --starfield-data, and material) fitted to Skyrim's "
-                         "teardrop (skyrimfire.SF_CANDLE_WIDTH)")
+    ap.add_argument("--candle-style", default="soft", choices=("skyrim", "starfield", "soft"),
+                    help="convert: candle flames drawn by us (soft: a smooth high-resolution teardrop flipbook with a "
+                         "halo, skyrimfire.procedural_flame_atlas; default since 2026-11-21), Skyrim's textures (two "
+                         "cross-fading layers) or Starfield's own candle flame (its mesh, read with --starfield-data, "
+                         "and material) fitted to Skyrim's teardrop (skyrimfire.SF_CANDLE_WIDTH)")
     ap.add_argument("--particle-fire", default="",
                     help="convert, --flame-style particles: the Starfield fire to place, BASE[:SCALE], or several "
                          "comma-separated to compare side by side (default 00C78D = FireMed01 at scale 1; "

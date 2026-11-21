@@ -720,3 +720,81 @@ class ParticleScanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SoftCandleTest(unittest.TestCase):
+    """2026-11-21, owner on Skyrim's candle cards: "the candles just look very low quality" (64 px frames, no glow)."""
+
+    def test_atlas_is_a_smooth_flipbook(self):
+        a = skyrimfire.procedural_flame_atlas()
+        cols, rows = skyrimfire.SOFT_GRID
+        fw, fh = skyrimfire.SOFT_FRAME
+        self.assertEqual(a.shape, (rows * fh, cols * fw, 4))
+        self.assertEqual(a.dtype, np.uint8)
+        f0, f5 = a[:fh, :fw], a[fh:2 * fh, fw:2 * fw]
+        for f in (f0, f5):
+            # nothing at the card's edges (no box around the halo), the flame bright in the middle
+            self.assertEqual(int(f[0, :, 3].max()) + int(f[-1, :, 3].max()) + int(f[:, 0, 3].max())
+                             + int(f[:, -1, 3].max()), 0)
+            self.assertGreater(int(f[fh // 2, fw // 2, 3]), 200)
+        self.assertFalse(np.array_equal(f0, f5))                    # the flame moves through the loop
+        # white-yellow core, orange-red rim: the core is brighter in blue than the rim (a hot centre)
+        mid_row = f0[int(fh * 0.55)]
+        lit = mid_row[mid_row[:, 3] > 60]
+        self.assertGreater(int(lit[len(lit) // 2, 2]), int(lit[0, 2]) + 60)
+
+    def test_flame_keeps_skyrims_size_inside_the_larger_card(self):
+        f = skyrimfire.procedural_flame_frame(0.0)
+        fh = f.shape[0]
+        rows = np.nonzero(f[:, :, 3].max(1) > 120)[0]                # the flame body (the halo is fainter)
+        span = (rows.max() - rows.min()) / fh                        # of the card's height
+        want = skyrimfire.SOFT_FLAME_SCALE / skyrimfire.SOFT_CARD[1]
+        self.assertGreater(span, want * 0.6)
+        self.assertLess(span, want * 1.15)
+
+    def test_candles_get_the_soft_flipbook_on_larger_cards(self):
+        from fo4sf import skyrimconvert
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        c.candle_style = "soft"
+        calls = []
+        c.soft_candle_material = lambda period: calls.append(period) or "soft.mat"
+        c.flame_material = lambda *a, **k: "skyrim.mat"
+        shapes, mats = c.particle_flame_cards([FlameStyleTest.FLAME], (0, 0, 0), "candle")
+        self.assertEqual(mats, ["soft.mat"])
+        self.assertEqual(len(calls), 1)
+        P = np.array(shapes[0].positions)
+        self.assertAlmostEqual(P[:, 2].max() - P[:, 2].min(), 2 * 2.0 * skyrimfire.SOFT_CARD[1], places=4)
+        self.assertAlmostEqual(float(np.hypot(P[:, 0], P[:, 1]).max()), 1.0 * skyrimfire.SOFT_CARD[0], places=4)
+        hearth, _ = c.particle_flame_cards([FlameStyleTest.FLAME], (0, 0, 0), "hearth")
+        self.assertEqual(len(hearth), 2)                             # hearths unaffected by the candle style
+
+    def test_soft_material_written_once_with_flipbook_and_flicker(self):
+        import json
+        import shutil
+        import tempfile
+        from unittest import mock
+        from fo4sf import skyrimconvert, textures
+        c = skyrimconvert.SkyrimConverter.__new__(skyrimconvert.SkyrimConverter)
+        with tempfile.TemporaryDirectory() as tmp:
+            c.staging, c.prefix, c.texconv, c.content_resources = tmp, "s2s", "texconv.exe", "cr.zip"
+            c._materials, c.material_errors, c.stats, c._effect_template = {}, {}, {}, fire_template()
+            published = []
+            c._publish_texture = lambda src, dst, kind: published.append(os.path.basename(dst)) or \
+                shutil.copy(src, dst)
+            with mock.patch.object(textures, "texconv", lambda *a, **k: None):
+                m1 = c.soft_candle_material(1.0)
+                m2 = c.soft_candle_material(1.0)
+                m3 = c.soft_candle_material(1.5)
+            self.assertEqual(c.material_errors, {})
+            self.assertEqual(m1, m2)
+            self.assertNotEqual(m1, m3)
+            self.assertEqual(sorted(published), ["s2s_candleflame_soft_color.dds", "s2s_candleflame_soft_opacity.dds"])
+            with open(os.path.join(tmp, *m1.split("\\")), encoding="utf-8") as fh:
+                mat = json.load(fh)
+        comps = [c_ for o in mat["Objects"] for c_ in o["Components"]]
+        fb = next(x for x in comps if x["Type"] == "BSMaterial::FlipbookComponent")["Data"]
+        self.assertEqual((fb["Columns"], fb["Rows"], fb["FPS"]), ("4", "4", "16"))
+        ctrl = next(x for x in comps if x["Type"] == "BSBind::ControllerComponent")
+        paths = sorted(m["Data"]["Address"]["Data"]["Path"]["Data"][0]
+                       for m in ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"])
+        self.assertEqual(paths, ["EmissiveIntensity", "FlipbookAuto"])

@@ -523,3 +523,24 @@ Owner (2026-11-16 11:06): "that's better, let's table this for now" - interior l
 `layered` (now riverwood_doors' default -FlameStyle and make_skyrim_objects' --flame-style default), candles `skyrim`
 (the default). Open when lighting returns: hot spots next to walls (softer source), the inn's 65.7 m / 64000 lm fill
 light, the cell ambient (45,48,48, neutral).
+
+## Candles, soft style (2026-11-21, owner: "the candles just look very low quality", two crops)
+Seen: a small hard-edged, pixelated sliver over the wick, no glow. Cause (verified from flame_textures, 2026-11-15):
+Skyrim's CandleFlame01 is 128 x 128 with 2 x 2 frames, so a flame is 64 px stretched over the card, stepped at 12 fps,
+and the glow (CandleGlow01) was left out; Starfield's candle flipbook draws a thin streak ("a line of fire", 11-16).
+Now `--candle-style soft`, the default (make_skyrim_objects, riverwood_doors -CandleStyle): our own flame, drawn at
+build time by skyrimfire.procedural_flame_atlas (no game asset): 4 x 4 frames of 128 x 256 px, a teardrop (half width
+sqrt(y)(1 - y)^0.9, widest a third up), white-yellow core, yellow body, orange rim, a faint blue foot, the tip swaying
+and the height breathing through one loop, a soft round halo (SOFT_HALO 0.3) that is gone before the card's edges;
+colour BC7 sRGB + opacity BC4 on the effect template, flipbook 16 fps on its timer, the candle flicker as before. Cards:
+Skyrim's centres, SOFT_CARD (2.2 x 1.6) x larger, the flame drawn in the middle at SOFT_FLAME_SCALE 1.15 x Skyrim's.
+A flame-only change: -AssetsOnly redoes the candles. Unverified in game.
+
+## Electrical buzz (2026-11-21, owner: "an ambient electrical buzz i hear, cant trace it")
+Supported hypothesis: a looping sound carried by a copied Starfield record. Furniture copies keep the template's
+LoopingSound (ALSH: Starfield's workbenches hum; ours copy WorkbenchIndustrial for the enchanting table, WorkbenchChem
+for alchemy, NPCWelder for the forge, NPCRepairImpactWrench for the grindstone), and light copies their SoundReference
+(LLSH). Skyrim's furniture and lights make no sound of their own, so PluginSpike now clears both on every copy and the
+build log names the templates it took sounds off ("looping sounds removed from copies of: ..."). A plugin change: a
+full build. Unverified: that it was one of these.
+
