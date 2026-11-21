@@ -140,6 +140,8 @@ at EV 3.5 (1.5 stops brighter than ours) with a Hable curve and a LUT.
   the other houses within 0.2 stops of today. On the owner's screens the inn is about 3.9 stops darker than the houses
   relative to Skyrim: this explains 1.3 of them (supported hypothesis: full adaptation). The rest waits on the falloff
   measurement. The audit prints "before" (cap 16, no adaptation) and "now" per room against Skyrim's adapted screen.
+- Owner's build (12:52, verified from its log): Alvor x1.086, Faendal x0.966, Gerdur x1.044, Trader x0.888, inn x2.498,
+  Sven x0.552; 14 Starfield light bases. In game: screenshots pending.
 
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside

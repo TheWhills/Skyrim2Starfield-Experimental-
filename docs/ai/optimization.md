@@ -124,4 +124,7 @@ the convert path counts (convert_source: cmd_convert, the functions it reaches, 
 ast without comments or line numbers): new options in main and the lod / stage / check commands no longer reconvert.
 The signature's shape changed with it, so the next build reconverts once more. After (-CandleExposure N, flame_key only):
 pending.
+After (owner, 2026-11-21 12:52, full build with the lighting change: skyriminterior / lightmodel / PluginSpike, no
+converter change): convert step **15 s** (200 / 265 models at 11 s: checkpoints reused) against 70 - 77 s in the three
+runs that reconverted everything; full build **80 s** (before: 145 s). The window: about 130 lines with step times.
 
