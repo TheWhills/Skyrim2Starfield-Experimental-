@@ -198,6 +198,9 @@ def write_adapt_imagespace(work, a, skyrim_grade=None):
         # owner 2026-11-21: the curve does nothing either (-2 and +0.5 within 0.1 stop), the views adapt but 2.1 - 2.5
         # stops over Skyrim: the cinematic brightness (vanilla LGT_LUT_Int_StarbornTemple uses 0.8) scales the result
         "Settings.Cinematic.Brightness.Value": float(getattr(a, "exposure_brightness", 1.0)),
+        # owner 17:26: the exposure snapped at every change of view (the template's 2 both ways); slower
+        "Settings.Exposure.AutoExposure.AdaptSpeedUp.Value": float(getattr(a, "adapt_speed", 2.0)),
+        "Settings.Exposure.AutoExposure.AdaptSpeedDown.Value": float(getattr(a, "adapt_speed", 2.0)),
         # owner 2026-11-21 16:14 ("devoid of color and contrast"): Brightness 0.25 is applied after the tone map - the
         # brightest pixels capped at 0.48 (Skyrim's reach 0.99), the most saturated parts duller. The level is set before
         # the tone map instead, by what the auto exposure meters: ignoring the darkest IgnoredDarks % (default 20) and the
@@ -210,7 +213,7 @@ def write_adapt_imagespace(work, a, skyrim_grade=None):
     with open(path, "wb") as fh:
         fh.write(blob)
     print(f"image space: auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
-          f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)}, metering "
+          f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)}, adapt speed {getattr(a, 'adapt_speed', 2.0)}, metering "
           f"{getattr(a, 'meter_darks', 20.0)} .. {100 - getattr(a, 'meter_brights', 20.0)} % -> {path}")
     if skyrim_grade and getattr(a, "skyrim_grading", False):
         print(f"  Skyrim's grade from {skyrim_grade.get('editor_id')} ({skyrim_grade.get('formkey')}): "
@@ -442,6 +445,9 @@ def parser():
     ap.add_argument("--meter-darks", type=float, default=90.0,
                     help="batch --exposure auto: %% of the darkest pixels the auto exposure ignores (vanilla 20; higher = "
                          "it meters brighter parts = a darker image)")
+    ap.add_argument("--adapt-speed", type=float, default=0.5,
+                    help="batch --exposure auto: how fast the exposure follows a change of view, both ways (template 2; "
+                         "lower = slower)")
     ap.add_argument("--meter-brights", type=float, default=3.0,
                     help="batch --exposure auto: %% of the brightest pixels it ignores (vanilla 20)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")

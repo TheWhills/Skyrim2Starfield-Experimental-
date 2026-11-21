@@ -425,3 +425,7 @@ exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hy
 - Dimming the lights does not darken a view the auto exposure adapts (it brightens back), so the lever is the picture:
   Cinematic Brightness (after the tone map, verified) default 0.75 (about -0.4 stops, whites at about 0.88; 0.25 was too
   much: whites at 0.48, "devoid of color and contrast"). -ExposureBrightness 1 restores.
+- Owner 17:26: the picture changes at once on walking into a darker or lighter area. That is ours: the auto exposure
+  (range EV 0 .. 10) on DefaultImageSpace's adaptation speed 2 both ways (Starfield's own interiors use a fixed
+  exposure and never adapt). AdaptSpeedUp / Down now 0.5 (-AdaptSpeed; unit unresolved, supported: lower = slower).
+  If the size of the change is the problem rather than its speed, the range narrows instead (-ExposureMin / -Max).

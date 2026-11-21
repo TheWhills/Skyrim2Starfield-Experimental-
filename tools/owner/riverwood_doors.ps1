@@ -81,6 +81,9 @@ param(
     # it ignores the darkest MeterDarks % and the brightest MeterBrights % (vanilla 20 / 20). Higher MeterDarks = darker
     [double]$MeterDarks = 90,
     [double]$MeterBrights = 3,
+    # how fast the auto exposure follows a change of view (owner 17:26: "every time I go into a dark or light area it
+    # immediately changes"). DefaultImageSpace's 2 both ways; lower = a slower, eye-like adjustment
+    [double]$AdaptSpeed = 0.5,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -201,7 +204,8 @@ $args1 += @("--exposure", $Exposure, "--starfield-esm", "$SF\Data\Starfield.esm"
             "--exposure-compensation", $ExposureCompensation.ToString([cultureinfo]::InvariantCulture),
             "--exposure-brightness", $ExposureBrightness.ToString([cultureinfo]::InvariantCulture),
             "--meter-darks", $MeterDarks.ToString([cultureinfo]::InvariantCulture),
-            "--meter-brights", $MeterBrights.ToString([cultureinfo]::InvariantCulture))
+            "--meter-brights", $MeterBrights.ToString([cultureinfo]::InvariantCulture),
+            "--adapt-speed", $AdaptSpeed.ToString([cultureinfo]::InvariantCulture))
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }

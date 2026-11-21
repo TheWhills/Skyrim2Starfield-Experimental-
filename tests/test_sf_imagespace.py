@@ -158,10 +158,13 @@ class SkyrimGradingTest(unittest.TestCase):
         # owner 17:25 "darken the lights in general": dimming lights is undone by the auto exposure, so the whole
         # picture is scaled after the tone map (0.75: about -0.4 stops, whites at about 0.88 of full)
         self.assertEqual(a.exposure_brightness, 0.75)
+        # owner 17:26: the exposure snapped at every change of view: slower adaptation, both ways
+        self.assertEqual(a.adapt_speed, 0.5)
         self.assertEqual(lightmodel.ENV_AMBIENT_SCALE, 35.0)
         ps = open(os.path.join(ROOT, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8").read()
         for line in ("[double]$AmbientScale = 35,", "[double]$MeterDarks = 90,", "[double]$MeterBrights = 3,", "[double]$ExposureBrightness = 0.75,"):
             self.assertIn(line, ps)
+        self.assertIn('"--adapt-speed", $AdaptSpeed', ps)
 
 
 class AdaptImageSpaceTest(unittest.TestCase):
