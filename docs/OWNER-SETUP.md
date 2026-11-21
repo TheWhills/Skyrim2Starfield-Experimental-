@@ -301,6 +301,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+8b. (2026-11-21) Light falloff calibration (docs/interior/lighting-model.md). Build with the test cell, then in game:
+   `coc FO4Port_S2SLightCalib`, `tfc`, fly straight up about 30 - 40 m above the middle of the grid of lit tiles (north,
+   ahead of you when you arrive), look straight down so all 30 tiles are in view, `tm` (hide the HUD), screenshot.
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture -Items -LightCalib
+   Then: python -I scripts\interior\light_calib.py analyze --work C:\Modding\work\s2s\riverwood_doors --shot <screenshot.png>
 8a. (2026-11-21) Lighting: exposure that adapts to what you look at, like Skyrim's (default; -Exposure fixed for
    the previous behaviour). Full build, then the same inn screenshots (hall, side room, bedroom, stairs, basement) and
    one house. Range: -ExposureMin 4 -ExposureMax 8: ExposureMin sets the level (higher

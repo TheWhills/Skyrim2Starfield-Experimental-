@@ -65,6 +65,8 @@ param(
     # 2026-11-21: exposure like Skyrim's, adapting to what you look at (auto, a copy of LGT_NoLut with Starfield's auto
     # exposure between EV100 ExposureMin and ExposureMax), or fixed (EV 5, each room's lights scaled instead). Step 1
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
+    # 2026-11-21: add the light falloff calibration cell FO4Port_S2SLightCalib (scripts/interior/light_calib.py)
+    [switch]$LightCalib,
     # dark views sit at ExposureMin (2026-11-21: at 1 every inn view 2 - 3.7 stops over Skyrim; higher = darker)
     [double]$ExposureMin = 4,
     [double]$ExposureMax = 8,
@@ -254,6 +256,11 @@ if ($Items) {
     if ($LASTEXITCODE -ne 0) { Fail "make_items" }
 }
 
+if ($LightCalib) {
+    Step "2f. light falloff calibration cell"
+    Run python -I scripts\interior\light_calib.py make --work $Work
+    if ($LASTEXITCODE -ne 0) { Fail "light_calib" }
+}
 Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
 Remove-Item Env:SPIN_PARTS -ErrorAction SilentlyContinue

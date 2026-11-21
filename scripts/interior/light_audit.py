@@ -196,7 +196,10 @@ def main(argv=None):
     with fo4land.Plugin(a.skyrim) as p:
         src = skyriminterior.Source(p, "Skyrim.esm")
         for n in names:
-            exp = src.export(n)
+            try:
+                exp = src.export(n)
+            except KeyError:                     # not a Skyrim cell (the light calibration cell)
+                continue
             cells.append(audit_cell(exp, settings(a.work, exp["cell"]), src.image_spaces()))
     ref = summarise(cells)
     print(f"falloff model for ours: {lightmodel.STARFIELD_FALLOFF}; Skyrim's screen = its light x its eye adaptation "

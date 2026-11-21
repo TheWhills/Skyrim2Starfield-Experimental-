@@ -129,7 +129,7 @@ class AdaptImageSpaceTest(unittest.TestCase):
         with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
             cs = fh.read()
         self.assertIn('Path.Combine(outDir, "imagespace_skyrim_adapt.bin")', cs)
-        self.assertIn("if (adaptIs is FormKey aIs) cell.ImageSpace.SetTo(aIs);", cs)
+        self.assertIn("if (adaptIs is FormKey aIs && Setting(src4, \"ADAPT_IS\", \"1\") != \"0\") cell.ImageSpace.SetTo(aIs);", cs)
         with open(os.path.join(ROOT, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8") as fh:
             ps = fh.read()
         self.assertIn('[ValidateSet("auto", "fixed")][string]$Exposure = "auto"', ps)

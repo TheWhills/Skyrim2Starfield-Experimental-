@@ -253,7 +253,7 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     // 135x (the audit: his house 1.8 stops under the rest); LIGHT_MAX_SCALE, default 256
     double maxScale = double.Parse(Setting(cell, "LIGHT_MAX_SCALE", "256"), CultureInfo.InvariantCulture);
     var key = string.Create(CultureInfo.InvariantCulture,
-        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}");
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}:{F("calib_lumens", 0f):0.#}");
     if (lightBases.TryGetValue(key, out var have)) return have;
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
@@ -273,6 +273,8 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
         // bigger than the template: more lumens to reach as far; smaller: the template's (scaling down made the inn darker)
         var area = tplRadius > 0 ? Math.Max(1.0, Math.Pow(radius / tplRadius, 2)) : 1.0;
         var lm = tplLm * Math.Clamp(power * Math.Max(fade, 1f) * area, 1.0, maxScale) * cellLightScale;
+        // the light calibration cell (scripts/interior/light_calib.py): exact lumens, no rule
+        if (F("calib_lumens", 0f) > 0f) lm = F("calib_lumens", 0f);
         SetProp(nl, "PbrLuminousPowerLm", (uint)Math.Round(lm));
     }
     else lightNotes.Add($"template {template} has no PbrLuminousPowerLm: power not scaled");
@@ -1050,7 +1052,7 @@ foreach (var cellPath in cellPaths)
     // exposure + reflections like the vanilla underground interior DR017UndergroundInterior (25CAA7): without these the cell
     // reflects a bright default sky and auto-exposure washes everything out
     cell.ImageSpace.SetTo(new FormKey(sfEsm, Convert.ToUInt32(Setting(src4, "IMAGE_SPACE", "122393"), 16)));
-    if (adaptIs is FormKey aIs) cell.ImageSpace.SetTo(aIs);
+    if (adaptIs is FormKey aIs && Setting(src4, "ADAPT_IS", "1") != "0") cell.ImageSpace.SetTo(aIs);   // ADAPT_IS 0: the calibration cell
     cell.EnvironmentMap = Environment.GetEnvironmentVariable("ENV_MAP") ?? "Data\\Textures\\cubemaps\\blackcube.dds";
     // 2026-11-21: Skyrim's ambient as the cell's environment light (make_skyrim_interior.write_ambient_cube; ENV_AMBIENT
     // 0 in lighting.json keeps the black cube)

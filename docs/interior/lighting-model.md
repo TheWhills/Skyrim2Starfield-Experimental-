@@ -301,3 +301,13 @@ global constant tuned once against the owner's same-spot screenshot pairs.
   inverse-square lights are much stronger than Skyrim's flat (1 - (d/r)^2) curve relative to their light at 5 - 10 m,
   so the auto exposure (clamped at ExposureMin in every view, supported: views never darkened on their own) cannot even
   it out. The falloff calibration cell decides the per-light correction.
+
+## The calibration cell (built 2026-11-21: scripts/interior/light_calib.py, riverwood_doors -LightCalib)
+FO4Port_S2SLightCalib: 30 tiles of one converted Skyrim floor model (scaled to about 1.6 m), 10 m apart in a black
+cell (fixed exposure LGT_NoLut EV 5, no environment light, no adaptation, template ambient only), each under its own
+light (LGT_Fire_Cauldron copy, radius 8 m, white, no flicker, exact lumens via the cell JSON's calib_lumens). Rows 0 - 2:
+the ladder, 2 m above, 4000 lm x 2^(k/2), k = -11 .. 6. Row 3: 4000 lm at 1, 1.5, 2, 3, 4, 6 m, falloff exponent 1
+(ours); row 4: the same with exponent 2 (vanilla). analyze finds the 30 tiles in a straight-down screenshot, reads each
+test tile's brightness off the ladder (equal brightness = equal light, whatever the tone curve) and prints
+falloff(d) / falloff(2 m) against H1 and Skyrim. Known limits: specular highlights (light and camera both above),
+the tile surface a few cm off the model origin (light heights measured from the origin).
