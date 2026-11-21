@@ -31,7 +31,7 @@ from fo4sf import fo4land, lightmodel, skyriminterior  # noqa: E402
 DEFAULTS = {"LIGHT_MERGE_M": "1", "LIGHT_POWER": "2", "LIGHT_RADIUS_SCALE": "1", "SKYRIM_LIGHTS": "1",
             "LIGHT_MAX_SCALE": "256", "LIGHT_ADAPT": "1"}
 # the rule before 2026-11-21's eye adaptation bake: cap 16, no per-room scale (the "before" columns)
-BEFORE = {"LIGHT_MAX_SCALE": "16", "LIGHT_ADAPT": "0"}
+BEFORE = {"LIGHT_MAX_SCALE": "16", "LIGHT_ADAPT": "0", "LIGHT_DISTANCE_FIT": "0"}
 # the base the build copies (OMNI_LIGHT 3197A6 LGT_Fire_Cauldron): verified values, the owner's SfInspect 2026-11-16
 TEMPLATE_LM, TEMPLATE_RADIUS_M = 4000.0, 8.0
 SKIP_BASES = {"COCMarkerHeading"}
@@ -73,6 +73,8 @@ def placed_lights(refs, s, room_scale=1.0):
         fade = max(float(L.get("fade", 1.0)), 0.05)
         area = max(1.0, (radius / TEMPLATE_RADIUS_M) ** 2)
         lm = TEMPLATE_LM * min(cap, max(1.0, power * max(fade, 1.0) * area)) * scale
+        if s.get("LIGHT_DISTANCE_FIT", "1") != "0":
+            lm *= float(L.get("fit_scale", 1.0))
         placed.append((r, radius, lm))
     return placed, merged
 
@@ -89,6 +91,10 @@ def pct(xs, q):
 def audit_cell(export, s, image_spaces=None):
     refs = [r for r in export["refs"]]
     lighting = export.get("lighting") or {}
+    pts = lightmodel.sample_points(refs)
+    for r in refs:                               # the build's per-light distance fit (skyriminterior.plugin_cell)
+        if r.get("type") == "Light" and r.get("light") and "fit_scale" not in r["light"]:
+            r["light"] = dict(r["light"], fit_scale=lightmodel.distance_fit(r["light"], r["pos"], pts)[0])
     lights = [r for r in refs if r.get("type") == "Light" and r.get("light")]
     sky_lights = [(r["light"], r["pos"]) for r in lights if not r.get("disabled")]
     mean = lightmodel.room_mean_linear(lighting, refs)

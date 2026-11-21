@@ -253,7 +253,7 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     // 135x (the audit: his house 1.8 stops under the rest); LIGHT_MAX_SCALE, default 256
     double maxScale = double.Parse(Setting(cell, "LIGHT_MAX_SCALE", "256"), CultureInfo.InvariantCulture);
     var key = string.Create(CultureInfo.InvariantCulture,
-        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}:{F("calib_lumens", 0f):0.#}");
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}:{F("calib_lumens", 0f):0.#}:{(Setting(cell, "LIGHT_DISTANCE_FIT", "1") != "0" ? F("fit_scale", 1f) : 1f):0.##}");
     if (lightBases.TryGetValue(key, out var have)) return have;
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
@@ -273,6 +273,9 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
         // bigger than the template: more lumens to reach as far; smaller: the template's (scaling down made the inn darker)
         var area = tplRadius > 0 ? Math.Max(1.0, Math.Pow(radius / tplRadius, 2)) : 1.0;
         var lm = tplLm * Math.Clamp(power * Math.Max(fade, 1f) * area, 1.0, maxScale) * cellLightScale;
+        // 2026-11-21: fitted at the distance the light lands (fo4sf.lightmodel.distance_fit, the calibration cell's
+        // measured falloff); LIGHT_DISTANCE_FIT 0 in lighting.json turns it off
+        if (Setting(cell, "LIGHT_DISTANCE_FIT", "1") != "0") lm *= F("fit_scale", 1f);
         // the light calibration cell (scripts/interior/light_calib.py): exact lumens, no rule
         if (F("calib_lumens", 0f) > 0f) lm = F("calib_lumens", 0f);
         SetProp(nl, "PbrLuminousPowerLm", (uint)Math.Round(lm));

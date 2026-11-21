@@ -2639,3 +2639,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   adapts per view (ISHDR), so a per-cell factor cannot match it. Decision: a copy of LGT_NoLut (its settings read from
   Starfield.esm at build time, not stored) with Starfield's auto exposure EV100 3 .. 6.5; per-room scale off.
   Alternatives: per-room bake (kept as -Exposure fixed), splitting cells into zones (no data on zones).
+
+## 2026-11-21: Starfield's light falloff measured; each light's lumens fitted at the distance its light lands
+- Calibration cell (light_calib.py): E ~ lm (1 - (d/R)^4) / (d^2 + 1.8 m^2); FalloffExponent has no effect. A single
+  Starfield light cannot follow Skyrim's flat (1 - (d/r)^2) curve, so each light is matched to Skyrim at its own typical
+  distance (median distance to the room's objects), relative to 4 m. Alternatives: splitting each Skyrim light into
+  several Starfield lights (more lights, shadows / cost unknown), a global power cut (darkens the hall too).

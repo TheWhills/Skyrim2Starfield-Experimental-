@@ -1,5 +1,6 @@
 """fo4sf.lightmodel, the Skyrim lighting fields it reads (XCLL directional ambient / rotation / fade, LGTM DALC, REFR
 XLIG) and scripts/interior/light_audit.py, on synthetic data (2026-11-21, owner: "its inconsistently lit")."""
+import math
 import os
 import struct
 import sys
@@ -73,13 +74,47 @@ class AmbientTest(unittest.TestCase):
         self.assertAlmostEqual(r["total"][0], 0.2 + 0.75, places=6)
 
 
-class StarfieldHypothesisTest(unittest.TestCase):
-    def test_inverse_square_with_window(self):
-        a = LM.starfield_point(4000, 8.0, (0, 0, 70), (0, 0, 0))       # 1 m
-        b = LM.starfield_point(4000, 8.0, (0, 0, 140), (0, 0, 0))      # 2 m
-        self.assertAlmostEqual(a, 4000 / (4 * 3.141592653589793) * (1 - (1 / 8) ** 4) ** 2, places=3)
-        self.assertAlmostEqual(a / b, 4 * (1 - (1 / 8) ** 4) ** 2 / (1 - (2 / 8) ** 4) ** 2, places=6)
+class StarfieldMeasuredTest(unittest.TestCase):
+    """The calibration cell (owner 2026-11-21, three screenshots), relative to 2 m, normalised: 1 m 1.9 - 2.25,
+    1.5 m 1.39 - 1.43, 3 m 0.45 - 0.64, 4 m 0.27 - 0.33, 6 m 0.107 - 0.114 (radius 8 m)."""
+
+    def test_fits_the_measurements(self):
+        rel = {d: LM.starfield_falloff(d, 8.0) / LM.starfield_falloff(2.0, 8.0) for d in (1.0, 1.5, 3.0, 4.0, 6.0)}
+        for d, lo, hi in ((1.0, 1.9, 2.25), (1.5, 1.38, 1.46), (3.0, 0.45, 0.64), (4.0, 0.27, 0.33), (6.0, 0.10, 0.12)):
+            self.assertTrue(lo <= rel[d] <= hi, (d, rel[d]))
+
+    def test_point_light(self):
+        a = LM.starfield_point(4000, 8.0, (0, 0, 70), (0, 0, 0))
+        self.assertAlmostEqual(a, 4000 * (1 - (1 / 8) ** 4) / (1 + LM.SF_SOFT_M2) / (4 * math.pi), places=6)
         self.assertEqual(LM.starfield_point(4000, 8.0, (0, 0, 8 * 70), (0, 0, 0)), 0.0)
+
+
+class DistanceFitTest(unittest.TestCase):
+    def test_close_objects_get_fewer_lumens(self):
+        L = {"radius": 512.0}
+        near = [(70.0 * 1.5, 0, 0)] * 5                       # a small room: objects 1.5 m away
+        far = [(70.0 * 4.0, 0, 0)] * 5                        # the hall: 4 m
+        f_near, d_near = LM.distance_fit(L, (0, 0, 0), near)
+        f_far, _ = LM.distance_fit(L, (0, 0, 0), far)
+        self.assertAlmostEqual(f_far, 1.0, places=6)
+        self.assertAlmostEqual(d_near, 1.5)
+        self.assertLess(f_near, 0.5)
+        self.assertGreater(f_near, 0.3)
+        self.assertEqual(LM.distance_fit(L, (0, 0, 0), [(70.0 * 20, 0, 0)]), (1.0, None))   # nothing in reach
+        self.assertEqual(LM.distance_fit(L, (0, 0, 0), [(1.0, 0, 0)])[0], LM.distance_fit(L, (0, 0, 0), [(21.0, 0, 0)])[0])
+
+    def test_plugin_cell_and_pluginspike(self):
+        refs = [{"type": "Light", "pos": [0, 0, 0], "light": light(radius=512.0), "formkey": "L", "base_editor_id": "L",
+                 "model": ""},
+                {"type": "Static", "pos": [105, 0, -10], "model": "a.nif", "formkey": "A", "base_editor_id": "A"}]
+        cell = skyriminterior.plugin_cell({"cell": "Room", "refs": refs, "lighting": {"ambient": [0, 0, 0]}}, [])
+        L = next(r for r in cell["refs"] if r["type"] == "Light")["light"]
+        self.assertLess(L["fit_scale"], 0.5)
+        self.assertAlmostEqual(L["fit_distance_m"], 1.5, places=2)
+        self.assertNotIn("fit_scale", refs[0]["light"])                  # the export is not changed
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('if (Setting(cell, "LIGHT_DISTANCE_FIT", "1") != "0") lm *= F("fit_scale", 1f);', cs)
 
 
 XCLL_ROT = (45, 60)
@@ -177,7 +212,8 @@ class SkyrimFieldsTest(unittest.TestCase):
         self.assertEqual((ims["hdr"]["white"], ims["hdr"]["eye_adapt_strength"]), (6.0, 0.75))
         self.assertEqual(ims["cinematic"], {"saturation": 0.9, "brightness": 1.2, "contrast": 1.1})
         self.assertIsNone(data["cells"][1]["skyrim"]["image_space_data"])
-        self.assertEqual(own["per_light"][0]["ours_lm"], round(8000 * own["adaptation"]["light_scale"]))
+        fit = LM.distance_fit({"radius": 512.0}, (0, 0, 100), [(0, 0, 10)])[0]       # the wall 1.3 m below the light
+        self.assertEqual(own["per_light"][0]["ours_lm"], round(8000 * own["adaptation"]["light_scale"] * fit))
         self.assertAlmostEqual(own["per_light"][0]["skyrim_brightness"], 1.4 * (0.2126 + 0.7152 * 160 / 255
                                                                                 + 0.0722 * 80 / 255), places=2)
 
@@ -241,9 +277,9 @@ class PlacedLightsTest(unittest.TestCase):
         self.assertEqual({r["formkey"]: l for r, _r, l in scaled}["A"], 20000.0)
 
     def test_room_far_from_lights_reads_darker_than_skyrim(self):
-        # one big Skyrim light (radius 20 m), an object under it (4 m) and one 15 m away. Ours falls off faster, but
-        # only by about half a stop: Skyrim's gamma-space light, linearised (^2.2), drops nearly as fast as an inverse
-        # square (near 0.96 -> 0.90 linear, far 0.125 -> 0.014). Worked by hand: near / far = 96 (ours) vs 63 (Skyrim)
+        # one big Skyrim light (radius 20 m), an object under it (4 m) and one 15 m away. Skyrim's gamma-space light,
+        # linearised (^2.2), drops from 0.90 to 0.014 (x63); Starfield's measured falloff (with its (1 - (d/R)^4)
+        # window) about as much here: the spread between the two objects is under a tenth of a stop
         exp = {"cell": "Hall", "lighting": {"ambient": [0, 0, 0]},
                "refs": [{"type": "Light", "pos": [0, 0, 300], "formkey": "L", "base_editor_id": "Fill",
                          "light": light(radius=1400.0)},
@@ -252,7 +288,7 @@ class PlacedLightsTest(unittest.TestCase):
                          "base_editor_id": "B"}]}
         c = light_audit.audit_cell(exp, dict(light_audit.DEFAULTS))
         self.assertEqual(c["points"], 2)
-        self.assertAlmostEqual(c["ours_vs_skyrim"]["spread_stops"], 0.47, delta=0.15)
+        self.assertAlmostEqual(c["ours_vs_skyrim"]["spread_stops"], 0.05, delta=0.15)
 
 
 if __name__ == "__main__":

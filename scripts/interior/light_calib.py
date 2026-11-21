@@ -11,7 +11,8 @@ reaches a neighbouring tile. Rows of test tiles: one light of TEST_LM lumens at 
 exponent 1 (what the converter uses) and 2 (Starfield's vanilla). The other tiles are a ladder: lights at
 LADDER_HEIGHT_M whose lumens step by half stops. A test tile is as bright on screen as the ladder tile whose light it
 equals, whatever the tone curve and exposure do (both are the same everywhere in one frame, and monotonic), so
-falloff(d) / falloff(LADDER_HEIGHT_M) = that ladder tile's lumens / TEST_LM. Fixed exposure (LGT_NoLut), no
+falloff(d) / falloff(LADDER_HEIGHT_M) = that ladder tile's lumens / TEST_LM. Result (owner 2026-11-21):
+lightmodel.STARFIELD_FALLOFF. Fixed exposure (LGT_NoLut), no
 environment light, no adaptation in this cell."""
 import argparse
 import json
@@ -147,50 +148,72 @@ def cmd_make(a):
 
 
 # ---- analyze ------------------------------------------------------------------------------------------------------
-def find_tiles(lum, n, min_frac=0.0004):
-    """The n largest bright blobs of a luminance image (2-D numpy array): [(cy, cx, ys, xs)], sorted into the grid
-    (rows top to bottom by centre y, then x). Threshold: above the image's 60th percentile x 3 (the black void)."""
+def find_tiles(rgb, n):
+    """The tiles of a screenshot (H x W x 3, 0..1): [(cy, cx, ys, xs)] in grid order (row 0 = the far row, north).
+    The cell's void renders flat grey (owner 2026-11-21): a tile is any blob that differs from the image's median colour;
+    the n (+1: the arrival tile) largest are kept. With the arrival tile in view it marks south, so a view looking back
+    the other way is turned round; without it, north is up."""
     import numpy as np
-    thr = max(float(np.percentile(lum, 60)) * 3.0, 2.0 / 255)
-    mask = lum > thr
+    bg = np.median(rgb.reshape(-1, 3), 0)
+    mask = np.abs(rgb - bg).max(2) > 0.03
+    for _ in range(4):                                    # close gaps in pale tiles (4-neighbour dilation)
+        m = mask.copy()
+        m[1:] |= mask[:-1]
+        m[:-1] |= mask[1:]
+        m[:, 1:] |= mask[:, :-1]
+        m[:, :-1] |= mask[:, 1:]
+        mask = m
     h, w = mask.shape
-    lab = np.zeros((h, w), np.int32)
-    blobs, cur = [], 0
-    for y0 in range(h):
-        row = mask[y0]
-        for x0 in np.nonzero(row & (lab[y0] == 0))[0]:
-            cur += 1
-            stack, pts = [(y0, int(x0))], []
-            lab[y0, x0] = cur
-            while stack:
-                y, x = stack.pop()
-                pts.append((y, x))
-                for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
-                    if 0 <= yy < h and 0 <= xx < w and mask[yy, xx] and lab[yy, xx] == 0:
-                        lab[yy, xx] = cur
-                        stack.append((yy, xx))
-            if len(pts) >= min_frac * h * w:
-                ys = np.array([p[0] for p in pts])
-                xs = np.array([p[1] for p in pts])
-                blobs.append((float(ys.mean()), float(xs.mean()), ys, xs))
-    blobs = sorted(blobs, key=lambda b: -len(b[2]))[:n]
+    seen = np.zeros((h, w), bool)
+    blobs = []
+    for y0, x0 in zip(*np.nonzero(mask)):
+        if seen[y0, x0]:
+            continue
+        stack, ys, xs = [(int(y0), int(x0))], [], []
+        seen[y0, x0] = True
+        while stack:
+            y, x = stack.pop()
+            ys.append(y)
+            xs.append(x)
+            for yy, xx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= yy < h and 0 <= xx < w and mask[yy, xx] and not seen[yy, xx]:
+                    seen[yy, xx] = True
+                    stack.append((yy, xx))
+        ys, xs = np.array(ys), np.array(xs)
+        blobs.append(((ys.min() + ys.max()) / 2.0, (xs.min() + xs.max()) / 2.0, ys, xs))
+    blobs = sorted(blobs, key=lambda b: -len(b[2]))[:n + 1]
+    flip = False
+    if len(blobs) == n + 1:
+        # the arrival tile is 4 grid steps south of the grid: the blob farthest from its nearest neighbour
+        def nn(b):
+            return min(math.hypot(b[0] - o[0], b[1] - o[1]) for o in blobs if o is not b)
+        gaps = sorted(nn(b) for b in blobs)
+        stand = max(blobs, key=nn)
+        if nn(stand) > 2.0 * gaps[len(gaps) // 2]:
+            cy = float(np.median([b[0] for b in blobs if b is not stand]))
+            blobs = [b for b in blobs if b is not stand]
+            flip = stand[0] < cy                          # the arrival tile (south) at the top: looking back north->south
+        else:
+            blobs = blobs[:n]
     if len(blobs) < n:
         return blobs
-    blobs.sort(key=lambda b: b[0])
-    rows = [sorted(blobs[i:i + COLS], key=lambda b: b[1]) for i in range(0, n, COLS)]
+    blobs = blobs[:n]
+    sgn = -1 if flip else 1
+    blobs.sort(key=lambda b: sgn * b[0])
+    rows = [sorted(blobs[i:i + COLS], key=lambda b: sgn * b[1]) for i in range(0, n, COLS)]
     return [b for r in rows for b in r]
 
 
 def tile_value(lum, blob):
-    """Median luminance of the middle third of a blob (away from its edges)."""
+    """Median luminance of the middle 40 % of a blob's box (inside the tile whatever its outline)."""
     import numpy as np
     cy, cx, ys, xs = blob
-    ry, rx = (ys.max() - ys.min()) / 6.0, (xs.max() - xs.min()) / 6.0
-    sel = (abs(ys - cy) <= ry) & (abs(xs - cx) <= rx)
-    return float(np.median(lum[ys[sel], xs[sel]])) if sel.any() else float(np.median(lum[ys, xs]))
+    ry, rx = max(1, (ys.max() - ys.min()) * 0.2), max(1, (xs.max() - xs.min()) * 0.2)
+    return float(np.median(lum[int(cy - ry):int(cy + ry) + 1, int(cx - rx):int(cx + rx) + 1]))
 
 
 def h1(d, r=RADIUS_M):
+    """The first hypothesis (windowed inverse square), kept for the printout."""
     return max(0.0, 1 - (d / r) ** 4) ** 2 / (d * d)
 
 
@@ -229,7 +252,7 @@ def cmd_analyze(a):
     with open(os.path.join(a.work, "light_calib_layout.json"), encoding="utf-8") as fh:
         spots = [tuple(s[k] for k in ("role", "value", "falloff_exponent", "height_m", "lumens"))
                  for s in json.load(fh)["spots"]]
-    blobs = find_tiles(lum, len(spots))
+    blobs = find_tiles(img, len(spots))
     if len(blobs) != len(spots):
         sys.exit(f"found {len(blobs)} tiles, expected {len(spots)}: look straight down with the whole grid in view")
     res = analyze([tile_value(lum, b) for b in blobs], spots)

@@ -72,26 +72,47 @@ class MakeTest(unittest.TestCase):
 
 
 class AnalyzeTest(unittest.TestCase):
-    def synthetic(self, falloff):
-        """A top-down image: tiles in the grid, each tile's brightness a tone curve of its light."""
+    def synthetic(self, falloff, flip=False, stand=True):
+        """A top-down image on the cell's flat grey: tiles in the grid, brightness a tone curve of their light; the
+        arrival tile south of the grid; flip = looking back (south at the top)."""
         spots = LC.layout()
-        img = np.zeros((500, 700))
+        img = np.full((900, 760, 3), 0.83)
         for i, s in enumerate(spots):
             r, c = divmod(i, LC.COLS)
+            if flip:
+                r, c = LC.ROWS - 1 - r, LC.COLS - 1 - c
             E = s[4] / LC.TEST_LM * falloff(s[3]) / falloff(LC.LADDER_HEIGHT_M)
-            v = 0.6 * E / (1 + 0.6 * E)                                      # any monotonic tone curve
-            img[40 + r * 95: 40 + r * 95 + 50, 40 + c * 105: 40 + c * 105 + 60] = 0.02 + v
+            v = 0.95 * E / (0.4 + E)                                         # any monotonic tone curve
+            y, x = 260 + r * 90, 60 + c * 110
+            img[y:y + 40, x:x + 50] = 0.05                                    # a dark outline (the pelt's edge)
+            img[y + 3:y + 37, x + 3:x + 47] = v
+        if stand:
+            y = 10 if flip else 860
+            img[y:y + 30, 360:400] = 0.0
         return img, spots
 
-    def test_reads_the_falloff_off_the_ladder(self):
-        img, spots = self.synthetic(lambda d: LC.h1(d))
+    def check(self, img, spots, falloff):
+        lum = img.mean(2)
         blobs = LC.find_tiles(img, len(spots))
         self.assertEqual(len(blobs), 30)
-        res = LC.analyze([LC.tile_value(img, b) for b in blobs], spots)
-        for t in res["tests"]:
-            if t["measured"] is not None:
-                self.assertAlmostEqual(math.log2(t["measured"]), math.log2(t["h1"]), delta=0.05)
-        self.assertGreaterEqual(sum(t["measured"] is not None for t in res["tests"]), 10)
+        res = LC.analyze([LC.tile_value(lum, b) for b in blobs], spots)
+        hits = [t for t in res["tests"] if t["measured"] is not None]
+        for t in hits:
+            want = falloff(t["d"]) / falloff(LC.LADDER_HEIGHT_M)
+            self.assertAlmostEqual(math.log2(t["measured"]), math.log2(want), delta=0.1)
+        self.assertGreaterEqual(len(hits), 10)
+
+    def test_looking_north(self):
+        f = lambda d: 1 / (d * d + 1.3)                                     # noqa: E731
+        self.check(*self.synthetic(f), f)
+
+    def test_looking_back_south(self):
+        f = lambda d: 1 / (d * d + 1.3)                                     # noqa: E731
+        self.check(*self.synthetic(f, flip=True), f)
+
+    def test_without_the_arrival_tile(self):
+        f = lambda d: 1 / (d * d)                                           # noqa: E731
+        self.check(*self.synthetic(f, stand=False), f)
 
 
 class PluginSpikeTest(unittest.TestCase):

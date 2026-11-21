@@ -311,3 +311,25 @@ the ladder, 2 m above, 4000 lm x 2^(k/2), k = -11 .. 6. Row 3: 4000 lm at 1, 1.5
 test tile's brightness off the ladder (equal brightness = equal light, whatever the tone curve) and prints
 falloff(d) / falloff(2 m) against H1 and Skyrim. Known limits: specular highlights (light and camera both above),
 the tile surface a few cm off the model origin (light heights measured from the origin).
+
+## Calibration results (owner 2026-11-21 14:25 - 14:29; verified, three screenshots, one looking back from the north)
+light_calib analyze on each (it finds the arrival tile and turns a view looking south round); falloff relative to 2 m:
+
+| d (m) | shot 1 | shot 2 | shot 3 | model lm (1 - (d/8)^4) / (d^2 + 1.8) | Skyrim seen ((1 - (d/7.3)^2)^2.2, r 7.3) |
+|---|---|---|---|---|---|
+| 1 | 2.26 - 2.46 | 2.02 - 2.07 | 2.00 - 2.08 | 2.07 | 1.12 |
+| 1.5 | 1.37 - 1.43 | 1.46 - 1.51 | 1.42 - 1.51 | 1.43 | 1.08 |
+| 2 (self-check) | 1.03 - 1.08 | 1.02 - 1.04 | 1.04 - 1.09 | 1 | 1 |
+| 3 | 0.58 - 0.62 | 0.50 - 0.53 | 0.47 - 0.49 | 0.53 | 0.73 |
+| 4 | 0.32 - 0.35 | 0.28 - 0.30 | 0.27 - 0.30 | 0.31 | 0.50 |
+| 6 | 0.13 | 0.10 - 0.11 | 0.11 - 0.12 | 0.105 | 0.10 |
+
+- Starfield: E ~ lumens x (1 - (d / R)^4) / (d^2 + 1.8 m^2) (lightmodel.starfield_falloff). FalloffExponent 1 and 2 gave
+  the same values (verified: rows 3 and 4 agree within the shots' spread).
+- Against Skyrim's seen falloff, a Starfield light is about 2x too strong at 1 m relative to 4 m, matching the small
+  rooms' +1.4 .. +1.9 stops against the hall.
+- Fix (2026-11-21): per-light distance fit (lightmodel.distance_fit): lumens x g(D) / g(4 m), D = the median distance from
+  the light to the room's objects in its radius, g = Skyrim's seen falloff / Starfield's. A light whose objects sit
+  1.5 m away gets x0.41 (-1.3 stops); a hall light at 4 m x1. Clamped 0.25 .. 2; LIGHT_DISTANCE_FIT 0 in lighting.json
+  turns it off; plugin_cell writes fit_scale / fit_distance_m per light. Expected: small rooms -1 .. -1.3 stops, the
+  hall about unchanged. In game: pending.

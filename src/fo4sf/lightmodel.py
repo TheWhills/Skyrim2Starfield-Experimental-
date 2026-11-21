@@ -107,21 +107,60 @@ def srgb_to_linear(v: float) -> float:
     return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
 
 
-# Hypothesis H1 until measured: a windowed inverse square as in other physically based engines (UE4 / Frostbite):
-# E = lm / (4 pi d^2) x clamp(1 - (d / R)^4, 0, 1)^2, d at least NEAR_M
-STARFIELD_FALLOFF = "H1 windowed inverse square (unmeasured)"
+# Measured (the calibration cell, owner 2026-11-21 14:25 - 14:29, three screenshots from both sides; values relative to
+# the 2 m tile, divided by the measured 2 m test tile (1.04 - 1.09): 1 m 1.9 - 2.25, 1.5 m 1.39 - 1.43, 3 m 0.45 - 0.64,
+# 4 m 0.27 - 0.33, 6 m 0.107 - 0.114; docs/interior/lighting-model.md): a Starfield light straight above a surface gives
+# E ~ lumens x (1 - (d / R)^4) / (d^2 + SF_SOFT_M2), SF_SOFT_M2 1.8 m^2 (R the light's radius, 8 m in the cell). The
+# FalloffExponent field (1 vs 2) made no difference
+STARFIELD_FALLOFF = "measured: lm (1 - (d/R)^4) / (d^2 + 1.8 m^2)"
+SF_SOFT_M2 = 1.8
 NEAR_M = 0.1
 
 
+def starfield_falloff(d_m: float, radius_m: float = float("inf")) -> float:
+    win = max(0.0, 1 - (d_m / radius_m) ** 4) if math.isfinite(radius_m) else 1.0
+    return win / (d_m * d_m + SF_SOFT_M2)
+
+
 def starfield_point(lumens: float, radius_m: float, light_pos_units, p_units, n=(0.0, 0.0, 1.0)) -> float:
-    """Illuminance (lux) under H1 at p (game units) on a surface facing n."""
+    """Illuminance (arbitrary units: lumens x the measured falloff) at p (game units) on a surface facing n; nothing past
+    the radius."""
     v = _sub(light_pos_units, p_units)
     d = max(NEAR_M, math.sqrt(_dot(v, v)) / UNITS_PER_M)
     if radius_m <= 0 or d >= radius_m:
         return 0.0
-    win = max(0.0, 1.0 - (d / radius_m) ** 4) ** 2
     ndl = max(0.0, _dot(n, _norm(v)))
-    return lumens / (4 * math.pi * d * d) * win * ndl
+    return lumens * starfield_falloff(d, radius_m) / (4 * math.pi) * ndl
+
+
+# --- per-light distance fit (2026-11-21) --------------------------------------------------------------------------------
+# One Starfield light cannot follow Skyrim's curve: relative to 4 m it is 3.6x as bright at 1.5 m where Skyrim's (seen,
+# gamma 2.2) is 2.2x. Each light's lumens are fitted at the distance where its light lands: the median distance (m) from
+# the light to the room's objects inside its radius, D_FIT. factor = g(D_FIT) / g(D_REF), g(d) = Skyrim's seen falloff /
+# Starfield's = (1 - (d/r)^2)^2.2 / starfield_falloff(d, r): a light whose objects are close (a candle in a small room) gets
+# fewer lumens, one lighting a hall from afar keeps them. D_REF 4 m: the inn hall, which matched Skyrim at the old rule
+FIT_D_REF_M = 4.0
+FIT_LIMITS = (0.25, 2.0)
+SKYRIM_GAMMA = 2.2
+
+
+def _g(d, r):
+    return max(1e-6, 1 - (d / r) ** 2) ** SKYRIM_GAMMA / max(1e-9, starfield_falloff(d, r)) if d < r else 0.0
+
+
+def distance_fit(light: dict, light_pos, points) -> tuple:
+    """(factor, median distance m or None) for one Skyrim light over sample points (game units)."""
+    r = float(light.get("radius") or 0.0) / UNITS_PER_M
+    if r <= 0:
+        return 1.0, None
+    ds = sorted(math.dist(light_pos, p) / UNITS_PER_M for p in points)
+    ds = [d for d in ds if d < r]
+    if not ds:
+        return 1.0, None
+    dm = ds[len(ds) // 2]
+    gref = _g(min(FIT_D_REF_M, 0.9 * r), r)
+    f = _g(max(dm, 0.3), r) / gref if gref > 0 else 1.0
+    return max(FIT_LIMITS[0], min(FIT_LIMITS[1], f)), dm
 
 
 # --- Skyrim's eye adaptation, baked into each room's lights (2026-11-21) ---------------------------------------------

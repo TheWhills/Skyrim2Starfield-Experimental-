@@ -301,6 +301,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+8c. (2026-11-21) Lighting: each light fitted to the distance its light lands (from the calibration). Full build
+   without -LightCalib, then the usual inn shots + Faendal's house. Off for comparison: LIGHT_DISTANCE_FIT 0 under "*"
+   in C:\Modding\work\s2s\riverwood_doors\convert\lighting.json.
 8b. (2026-11-21) Light falloff calibration (docs/interior/lighting-model.md). Build with the test cell, then in game:
    `coc FO4Port_S2SLightCalib`, `tfc`, fly straight up about 30 - 40 m above the middle of the grid of lit tiles (north,
    ahead of you when you arrive), look straight down so all 30 tiles are in view, `tm` (hide the HUD), screenshot.

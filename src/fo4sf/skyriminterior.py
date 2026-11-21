@@ -605,6 +605,13 @@ def plugin_cell(export: dict, selected_refs: list, batch_navmeshes=None) -> dict
     # Skyrim's eye adaptation for this room (fo4sf.lightmodel; PluginSpike multiplies the room's lumens by it unless
     # LIGHT_ADAPT is 0): measured over every reference of the cell, selected or not
     from . import lightmodel
+    # each light's lumens fitted at the distance its light lands (lightmodel.distance_fit; PluginSpike multiplies by
+    # "fit_scale" unless LIGHT_DISTANCE_FIT is 0)
+    pts = lightmodel.sample_points(export["refs"])
+    for r in refs:
+        if r.get("type") == "Light" and isinstance(r.get("light"), dict):
+            f, dm = lightmodel.distance_fit(r["light"], r["pos"], pts)
+            r["light"] = dict(r["light"], fit_scale=round(f, 2), fit_distance_m=None if dm is None else round(dm, 2))
     mean = lightmodel.room_mean_linear(export.get("lighting") or {}, export["refs"])
     if mean is not None:
         out["skyrim_mean_light"] = round(mean, 4)
