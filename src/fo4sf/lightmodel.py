@@ -172,7 +172,10 @@ def adaptation_scale(mean_linear, ref=ADAPT_REF, strength=ADAPT_STRENGTH, limits
 # Skyrim's ambient instead: its six directional colours averaged (one colour on every face until the face order is
 # verified), linearised, x the room's adaptation, x ENV_AMBIENT_SCALE (Starfield radiance per linear unit: unresolved;
 # 38 is 1.2 x 2^5, what EV100 5, our fixed exposure, maps to white)
-ENV_AMBIENT_SCALE = 38.0
+# owner 2026-11-21 13:56 (auto exposure EV100 4 .. 8): bright ends of the inn views within 1.3 stops of Skyrim, dark
+# ends 4.8 - 5.7 stops under, contrast (sd log2) 2.5 - 3.1 against Skyrim's 1.2 - 1.8: the fill is too weak against
+# the lights. 38 -> 150 (2 stops)
+ENV_AMBIENT_SCALE = 150.0
 
 
 def ambient_env(lighting: dict, room_scale: float = 1.0, scale: float = ENV_AMBIENT_SCALE) -> tuple:

@@ -269,3 +269,15 @@ global constant tuned once against the owner's same-spot screenshot pairs.
 - Colour now close to Skyrim in the hall, bedroom, basement (red shares within 0.03); contrast still higher than
   Skyrim's everywhere (the falloff / hot spots near lights, next).
 - One light base per Skyrim light kind now (4, was 14): with light_scale 1 the cells share bases.
+
+## Owner's screens with ExposureMin 4, max 8 (13:56; vs Skyrim, all well framed)
+| scene | EV min 3 (13:28) | EV min 4 | dark end | bright end | contrast Skyrim / ours |
+|---|---|---|---|---|---|
+| inn hall | -0.5 | -2.4 | -5.7 | -1.0 | 1.5 / 2.9 |
+| inn bedroom | +2.4 | +0.8 | +0.1 | +1.3 | 1.8 / 2.5 |
+| inn stairs | +0.3 | -2.5 | -4.8 | -0.8 | 1.2 / 2.6 |
+| inn basement | +0.7 | -0.5 | -5.2 | +1.3 | 1.4 / 3.1 |
+- Level: mean -1.2 stops (an ExposureMin near 3.4 would centre it). The real gap now is contrast: bright ends within
+  -1 .. +1.3, dark ends 5 - 6 stops under. At the darker exposure ACES's toe crushes the shadows further (supported;
+  Skyrim's Reinhard at white 1 has no toe) and the red share rises (hall 0.57 vs 0.47).
+- Next: the fill (environment cube) x4: ENV_AMBIENT_SCALE / -AmbientScale 38 -> 150, ExposureMin kept at 4.

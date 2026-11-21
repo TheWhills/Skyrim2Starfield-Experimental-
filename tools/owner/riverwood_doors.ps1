@@ -59,9 +59,9 @@ param(
     # soft candles' brightness, stops over the scene's exposure (2026-11-21: 5 "awfully white", now 3; lower = dimmer).
     # Flame-only: -AssetsOnly
     [double]$CandleExposure = 3,
-    # Skyrim's ambient as each room's environment light: radiance per linear unit (2026-11-21: 38, a first guess;
+    # Skyrim's ambient as each room's environment light: radiance per linear unit (2026-11-21: 38, then 150;
     # higher = brighter shadows / corners). Written by step 1: a full build
-    [double]$AmbientScale = 38,
+    [double]$AmbientScale = 150,
     # 2026-11-21: exposure like Skyrim's, adapting to what you look at (auto, a copy of LGT_NoLut with Starfield's auto
     # exposure between EV100 ExposureMin and ExposureMax), or fixed (EV 5, each room's lights scaled instead). Step 1
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
