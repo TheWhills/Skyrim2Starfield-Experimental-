@@ -293,15 +293,25 @@ def land_textures(a, land, out):
         words = np.zeros((size, size), np.uint16)
         beyond = []
         last = next(iter(planes.values())).shape[0] - 1
+        warp_m = getattr(a, "ltex_warp", landtex.WARP_M) if a.ltex_blend == "noise" else 0.0
+        warp = warp_m > 0
+        margin = int(np.ceil(warp_m * tg.UNITS_PER_METRE / sp)) + 1 if warp else 0
         for r0 in range(0, size, 64):
             yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
-            lo = int(min(max(np.floor((yu[0] - oy) / sp), 0), last))
-            hi = int(min(max(np.floor((yu[-1] - oy) / sp) + 1, 0), last))
+            lo = int(min(max(np.floor((yu[0] - oy) / sp) - margin, 0), last))
+            hi = int(min(max(np.floor((yu[-1] - oy) / sp) + 1 + margin, 0), last))
             if hi <= lo:
                 lo, hi = max(min(lo, last - 1), 0), min(max(lo, 0) + 1, last)
-            band = np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp, sp,
-                                                  xu, yu) for f in used])
-            q, w, st = landtex.encode_quadrants(band, used, used, blend=a.ltex_blend, index_rule=a.ltex_index)
+            if warp:      # 2026-11-21: the weights read at a smoothly shifted spot, so borders wander (landtex.WARP_M)
+                dx, dy = landtex.warp_offsets(xs, ys[r0:r0 + 64], warp_m)
+                band = np.stack([landtex.sample_warped(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox,
+                                                       oy + lo * sp, sp, xu, yu, dx * tg.UNITS_PER_METRE,
+                                                       dy * tg.UNITS_PER_METRE) for f in used])
+            else:
+                band = np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox,
+                                                      oy + lo * sp, sp, xu, yu) for f in used])
+            q, w, st = landtex.encode_quadrants(band, used, used, blend=a.ltex_blend, index_rule=a.ltex_index,
+                                                coords=(xs, ys[r0:r0 + 64]))
             qmap[r0 // 64] = q[0]
             words[r0:r0 + 64] = w
             beyond.append(st["weight_beyond_six_layers"])
@@ -662,9 +672,12 @@ def main(argv=None):
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="which LTEX table entry a BTD quadrant byte b names: head = b - 1 (Starfield, default), "
                          "tail = n - b (Fallout 76, the old rule; only for comparison)")
-    ap.add_argument("--ltex-blend", choices=("solid", "dither"), default="solid",
-                    help="build --land-textures: 'solid' (default) gives each ground sample the layer covering most of "
-                         "it; 'dither' keeps partial weights, which Starfield draws as scattered specks")
+    ap.add_argument("--ltex-blend", choices=("solid", "dither", "noise"), default="noise",
+                    help="build --land-textures: 'noise' (default, 2026-11-21) cuts each layer against a coherent noise "
+                         "threshold, so Skyrim's fades become irregular patches; 'solid' gives each ground sample the "
+                         "layer covering most of it (straight borders where Skyrim fades); 'dither' keeps partial weights")
+    ap.add_argument("--ltex-warp", type=float, default=3.5,
+                    help="build --ltex-blend noise: how far (m) Skyrim's texture borders may wander (0 = not at all)")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")
     ap.add_argument("--latlon", type=float, nargs=2, metavar=("LAT", "LON"), help="build --planet: radians")
     ap.add_argument("--biome", default="", help="build --planet: hex FormID of the planet's biome for the world")

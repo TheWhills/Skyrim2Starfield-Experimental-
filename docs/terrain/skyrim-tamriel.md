@@ -390,3 +390,21 @@ Without --apply it only prints. Unverified on the owner's data.
   and lands the player near its centre (e.g. `awpb OEBB003World Jemison 2`): a quick in-game check of a city
   overlay without a registration plugin. Untried.
 - Loose files: [Archive] bInvalidateOlderFiles=1 in StarfieldCustom.ini (we pack archives; not needed).
+
+### Straight borders between ground textures (2026-11-21, owner: "spots ... supposed to fade ... got off like squares")
+- Cause (supported hypothesis, matches the screenshots): `--ltex-blend solid` cut each layer at alpha one half, and
+  Skyrim's weights, bilinear between LAND vertices 1.83 m apart, cross one half along straight lines, so every smooth
+  Skyrim fade became a dead-straight border (forest floor against dirt, snow against grass).
+- Now `--ltex-blend noise` (default): Skyrim's weights are read at a smoothly shifted spot (up to `--ltex-warp` 3.5 m,
+  `landtex.warp_offsets`, the same shift for every texture) and each sample takes one texture by summing the quadrant's
+  kept textures in a fixed order (by form id) until they pass one shared coherent noise threshold (`landtex.blend_noise`,
+  6 m patches with 2 m detail). Still only alpha 0 or 7 per sample (what rendered clean); borders wander in natural
+  curves and wide fades become irregular patches covering about each texture's weight. Both fields depend on the world
+  position only, so they continue across quadrants (whose stacks differ) and tiles. Synthetic checks: tests/test_landtex.py
+  (a sharp border bends by metres, a 100 m fade covers its weight, two halves encoded apart match the whole).
+- Installed without a full re-stage: `tools\owner\terrain_blend.ps1` reruns the staging's own build into
+  `skyrim_all_blend`, then `scripts\terrain\refresh_btd.py splice` gives the installed BTDs the fresh texture layers
+  with their own heights kept byte for byte, and reinstalls.
+- Unresolved: the flat grey-blue "snow" patches the owner saw where Skyrim paints grey gravel and rock near Riverwood
+  (owner 18:31): a texture mapping or conversion problem, not the blend; `ground_at.py` at such a spot says which
+  Skyrim LTEX it is and what the BTD draws.

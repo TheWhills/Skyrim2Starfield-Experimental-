@@ -135,6 +135,69 @@ class LayerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             landtex.encode_quadrants(w, table, table, blend="nope")
 
+    def test_noise_blend_turns_straight_fades_into_patches(self):
+        """2026-11-21 (owner: ground textures meeting "like squares"): a smooth Skyrim fade cut at one half is a straight
+        border; cut against coherent noise it wanders through the fade, the layer covering about its weight."""
+        table = [landtex.PLAIN_GROUND, 0x20]
+        rows, cols = 128, 256
+        fade = np.clip((np.arange(cols) - 64) / 128.0, 0, 1).astype(np.float32)   # 0 .. 1 over 100 m
+        w = np.zeros((2, rows, cols), np.float32)
+        w[1] = fade[None, :]
+        w[0] = 1.0 - w[1]
+        xs, ys = np.arange(cols) * 0.78125 + 1000.0, np.arange(rows) * 0.78125 - 500.0
+
+        def crossings(words, qmap):
+            dec = landtex.decode_quadrants(qmap, words, table)[0x20]
+            return dec, [int(np.argmax(r > 0.5)) for r in dec]
+        sq, sw, _ = landtex.encode_quadrants(w, table, table, blend="solid")
+        _d, solid_x = crossings(sw, sq)
+        self.assertEqual(len(set(solid_x)), 1)                                  # solid: one straight border
+        nq, nw, _ = landtex.encode_quadrants(w, table, table, blend="noise", coords=(xs, ys))
+        self.assertTrue(set(np.unique(nw & 7).tolist()) <= {0, 7})              # still only on / off per sample
+        dec, noise_x = crossings(nw, nq)
+        self.assertGreater(np.std(noise_x), 5.0)                                # the border wanders
+        cover = dec.mean(axis=0)
+        for c in (96, 128, 160):                                                # about its weight through the fade
+            self.assertAlmostEqual(float(cover[c - 8:c + 8].mean()), float(fade[c - 8:c + 8].mean()), delta=0.2)
+        # no seam at the quadrant border (column 128), where the stack flips (base and overlay swap): the coverage
+        # just either side differs no more than anywhere else in the fade
+        step = np.abs(np.diff(cover[100:156]))
+        self.assertLessEqual(float(abs(cover[128] - cover[127])), float(np.sort(step)[-2]) + 1e-6)
+        self.assertEqual(float(dec[:, :60].max()), 0.0)                          # none where Skyrim has none
+        self.assertEqual(float(dec[:, 200:].min()), 1.0)                         # all where Skyrim has all
+        # the threshold belongs to the world position: two halves encoded apart match the whole
+        lq, lw, _ = landtex.encode_quadrants(w[:, :, :128], table, table, blend="noise", coords=(xs[:128], ys))
+        rq, rw, _ = landtex.encode_quadrants(w[:, :, 128:], table, table, blend="noise", coords=(xs[128:], ys))
+        np.testing.assert_array_equal(np.concatenate([lw, rw], axis=1), nw)
+        n1 = landtex.blend_noise(xs, ys, 0x20)
+        np.testing.assert_array_equal(n1, landtex.blend_noise(xs, ys, 0x20))
+        self.assertFalse(np.array_equal(n1, landtex.blend_noise(xs, ys, 0x21)))   # each texture its own pattern
+        self.assertTrue(0.3 < float(n1.mean()) < 0.7)
+        self.assertTrue(0.1 < float((n1 < 0.25).mean()) < 0.4)                   # spread toward uniform
+
+    def test_warp_bends_sharp_borders(self):
+        """A sharp Skyrim border (one vertex step) read at the warped positions wanders by up to WARP_M, the same for
+        every texture (weights still sum to 1) and the same at the same world position."""
+        from fo4sf import terrain_grid as tg
+        U, sp = tg.UNITS_PER_METRE, 128.0
+        g = np.zeros((40, 60))
+        g[:, 30:] = 1.0
+        xs, ys = np.arange(128) * 0.78125 + 10.0, np.arange(128) * 0.78125 + 5.0
+        plain = tg.resample_bilinear(g, 0, 0, sp, xs * U, ys * U)
+        dx, dy = landtex.warp_offsets(xs, ys)
+        self.assertLessEqual(float(np.abs(dx).max()), landtex.WARP_M)
+        warped = landtex.sample_warped(g, 0, 0, sp, xs * U, ys * U, dx * U, dy * U)
+        inv = landtex.sample_warped(1.0 - g, 0, 0, sp, xs * U, ys * U, dx * U, dy * U)
+        np.testing.assert_allclose(warped + inv, 1.0, atol=1e-9)
+        straight = {int(np.argmax(r >= 0.5)) for r in plain}
+        bent = [int(np.argmax(r >= 0.5)) for r in warped]
+        self.assertEqual(len(straight), 1)
+        self.assertGreater(max(bent) - min(bent), 3)                         # metres of wander, not a straight line
+        self.assertLessEqual(max(bent) - min(bent), 2 * landtex.WARP_M / 0.78125 + 4)
+        dx2, _ = landtex.warp_offsets(xs[64:], ys)
+        np.testing.assert_array_equal(dx2, dx[:, 64:])                     # a function of the world position
+        np.testing.assert_allclose(landtex.sample_warped(g, 0, 0, sp, xs * U, ys * U, 0 * dx, 0 * dy), plain)
+
     def test_single_texture_quadrant_matches_vanilla_form(self):
         w = np.zeros((1, 64, 64), np.float32)
         w[0] = 1.0

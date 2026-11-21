@@ -310,10 +310,77 @@ def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill):
     return g
 
 
-BLEND_MODES = ("solid", "dither")
+BLEND_MODES = ("solid", "dither", "noise")
+# "noise" (2026-11-21, owner: "spots in the terrain that are supposed to fade ... just got off like squares into each
+# other"): "solid" cut each layer at alpha one half, and Skyrim's weights, bilinear between its vertices 1.83 m apart,
+# cross one half along straight lines: every smooth Skyrim fade became a dead-straight border. "noise" cuts each layer
+# against one coherent noise threshold instead: still only alpha 0 or 7 per sample (what rendered clean), but the border
+# wanders through the whole fade, each texture covering about its weight's share of it in irregular patches. The
+# textures are taken in a fixed order (by form id) and the threshold depends on the world position only, so the
+# pattern continues across quadrants (whose stacks differ) and tiles.
+NOISE_SCALES_M = ((6.0, 0.65), (2.0, 0.35))      # (lattice size m, weight): patches, then ragged edges (samples 0.78 m)
+NOISE_STRETCH = 1.9                              # spreads the summed noise (std ~0.15) toward a uniform 0..1 threshold
+# Skyrim's fades are mostly 1 - 2 vertex steps wide (1.8 - 3.7 m), too narrow for the threshold alone to bend a border
+# by much. With "noise" the weights are also read at a position shifted by up to WARP_M (smooth in x and y, the same
+# shift for every texture): any border, sharp or soft, wanders by that much in long, natural curves.
+WARP_M = 3.5
+WARP_SCALES_M = ((12.0, 0.6), (4.0, 0.4))
 INDEX_RULES = ("head", "tail")
 MAX_OVERLAYS = 4                               # + the base = five textures in bytes 0..4 (Starfield ignores 5..7)
 INDEX_RULE = "head"
+
+
+def _lattice(ix, iy, key):
+    """Deterministic pseudo-random 0..1 per integer lattice point and key (a 32-bit integer hash)."""
+    h = (ix.astype(np.int64) * 374761393 + iy.astype(np.int64) * 668265263 + int(key) * 2246822519) & 0xFFFFFFFF
+    h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+    h ^= h >> 16
+    return (h & 0xFFFFFF).astype(np.float64) / float(0x1000000)
+
+
+def blend_noise(xs_m, ys_m, key: int, scales=None) -> np.ndarray:
+    """Coherent noise threshold [len(ys), len(xs)] in 0..1 at world positions (metres) for one texture (key): value
+    noise of NOISE_SCALES_M, smoothstep-interpolated, stretched toward uniform. Same position and key, same value."""
+    xs = np.asarray(xs_m, np.float64)[None, :]
+    ys = np.asarray(ys_m, np.float64)[:, None]
+    total = np.zeros((ys.shape[0], xs.shape[1]))
+    for octave, (size, weight) in enumerate(scales or NOISE_SCALES_M):
+        gx, gy = xs / size, ys / size
+        ix, iy = np.floor(gx), np.floor(gy)
+        fx, fy = gx - ix, gy - iy
+        fx, fy = fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy)
+        ix, iy = np.broadcast_to(ix, total.shape), np.broadcast_to(iy, total.shape)
+        k = (int(key) * 31 + octave) & 0xFFFFFFFF
+        v00, v10 = _lattice(ix, iy, k), _lattice(ix + 1, iy, k)
+        v01, v11 = _lattice(ix, iy + 1, k), _lattice(ix + 1, iy + 1, k)
+        top = v00 + (v10 - v00) * fx
+        bot = v01 + (v11 - v01) * fx
+        total += weight * (top + (bot - top) * fy)
+    return np.clip(0.5 + (total - 0.5) * NOISE_STRETCH, 0.0, 0.9999).astype(np.float32)
+
+
+def warp_offsets(xs_m, ys_m, amount_m: float = WARP_M):
+    """(dx, dy) metres [len(ys), len(xs)]: the smooth shift at each sample's world position, within +-amount_m."""
+    dx = (blend_noise(xs_m, ys_m, 0x5741, WARP_SCALES_M) - 0.5) * 2.0 * amount_m
+    dy = (blend_noise(xs_m, ys_m, 0x5742, WARP_SCALES_M) - 0.5) * 2.0 * amount_m
+    return dx, dy
+
+
+def sample_warped(grid, origin_x, origin_y, spacing, xs, ys, dx, dy) -> np.ndarray:
+    """Bilinear `grid` ([row, col], row 0 = south, as terrain_grid.resample_bilinear) at (xs[j] + dx[i, j],
+    ys[i] + dy[i, j]) (all in the grid's units); points outside take the nearest edge value."""
+    g = np.asarray(grid, np.float64)
+    rows, cols = g.shape
+    x = (np.asarray(xs, np.float64)[None, :] + dx - origin_x) / spacing
+    y = (np.asarray(ys, np.float64)[:, None] + dy - origin_y) / spacing
+    x = np.clip(x, 0.0, cols - 1.0)
+    y = np.clip(y, 0.0, rows - 1.0)
+    c0, r0 = np.minimum(np.floor(x).astype(np.int64), cols - 1), np.minimum(np.floor(y).astype(np.int64), rows - 1)
+    c1, r1 = np.minimum(c0 + 1, cols - 1), np.minimum(r0 + 1, rows - 1)
+    fx, fy = x - c0, y - r0
+    top = g[r0, c0] * (1 - fx) + g[r0, c1] * fx
+    bot = g[r1, c0] * (1 - fx) + g[r1, c1] * fx
+    return top * (1 - fy) + bot * fy
 
 
 def byte_for(index: int, n: int, rule: str = INDEX_RULE) -> int:
@@ -331,18 +398,23 @@ def entry_for(b: int, n: int, rule: str = INDEX_RULE) -> int:
 
 
 def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blend: str = "dither",
-                     index_rule: str = INDEX_RULE):
+                     index_rule: str = INDEX_RULE, coords=None):
     """weights [k, rows, cols] (rows, cols multiples of 64; one plane per id in `ids`) -> (quad map [rows/64, cols/64, 8]
     uint8, sample weights [rows, cols] uint16, stats). Per 64 x 64 quadrant: base = most weight, up to four more as
     overlays, least weight on top (byte 0), alphas solved top-down from the effective weights.
     blend "dither": each alpha quantised to 0..7 (the renderer shows layer i with probability alpha / 7, so a faint
     Skyrim layer becomes scattered hard-edged specks: owner's Jemison close-ups). "solid": each alpha snapped to 0 or 7
     at one half, so a sample shows the layer that covers most of what is left there and faint layers give way to
-    the ones below: clean patches where Skyrim clearly paints a texture."""
+    the ones below: clean patches where Skyrim clearly paints a texture. "noise": as "solid" but each layer is cut
+    against blend_noise at the samples' world positions, coords = (xs_m [cols], ys_m [rows]); without coords, sample
+    indices stand in (metres = index x 0.78125)."""
     if blend not in BLEND_MODES:
         raise ValueError(f"blend {blend!r} not in {BLEND_MODES}")
     k, rows, cols = weights.shape
     n = len(table)
+    if blend == "noise":
+        xs_m, ys_m = coords if coords is not None else (np.arange(cols) * 0.78125, np.arange(rows) * 0.78125)
+        u_all = blend_noise(xs_m, ys_m, 0)
     index = {fid: table.index(fid) for fid in ids}
     qmap = np.zeros((rows // 64, cols // 64, 8), np.uint8)
     out = np.zeros((rows, cols), np.uint16)
@@ -359,6 +431,30 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blen
             dropped += float(sum(sums[i] for i in order[MAX_OVERLAYS + 1:]))
             qmap[qr, qc, len(over)] = byte_for(index[ids[base]], n, index_rule)   # base right after the overlays
             stack = list(reversed(over))                        # least weight first = byte 0 = top
+            if blend == "noise":
+                # one texture per sample, independent of the stack order (which changes from quadrant to quadrant):
+                # the kept textures in a fixed order (by form id), their weights summed until they pass one shared
+                # noise threshold; the chosen texture's byte gets 7, the others 0 (the base: all overlays 0)
+                kept = [base] + over
+                wk = w[kept]
+                tot = wk.sum(axis=0)
+                u = u_all[qr * 64:(qr + 1) * 64, qc * 64:(qc + 1) * 64]
+                chosen = np.full((64, 64), -1, np.int64)
+                cum = np.zeros((64, 64), np.float32)
+                fixed = sorted(kept, key=lambda j: ids[j])
+                for i in fixed:
+                    cum = cum + np.where(tot > 0, w[i] / np.where(tot > 0, tot, 1.0), 1.0 if i == base else 0.0)
+                    chosen = np.where((chosen < 0) & (u < cum), i, chosen)
+                # u at the top of its range (clipped to 1) passes no sum below 1: the last texture in the fixed order,
+                # as everywhere else (the base here drew rings round the noise's peaks where the stack flips)
+                last = next((i for i in reversed(fixed) if float(w[i].max()) > 0), base)
+                chosen = np.where(chosen < 0, last, chosen)
+                word = np.zeros((64, 64), np.uint16)
+                for byte, i in enumerate(stack):
+                    qmap[qr, qc, byte] = byte_for(index[ids[i]], n, index_rule)
+                    word |= np.where(chosen == i, 7, 0).astype(np.uint16) << (3 * byte)
+                out[qr * 64:(qr + 1) * 64, qc * 64:(qc + 1) * 64] = word
+                continue
             s = w.sum(axis=0)
             s[s <= 0] = 1.0
             remaining = np.ones((64, 64), np.float32)

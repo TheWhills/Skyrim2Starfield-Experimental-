@@ -2659,3 +2659,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 ## 2026-11-21: no screen-wide colour filter inside
 - Owner: copying Skyrim's grade filters everything inside, characters included. Off by default (--skyrim-grading opts
   in). Rule: interiors use the exterior's colour pipeline, only exposure differs; colour comes from the lights.
+
+## 2026-11-21: ground texture borders by coherent noise ("noise" blend), spliced into the installed terrain
+- Owner: textures meeting "like squares". Solid's one-half cut drew Skyrim's bilinear fades as straight lines.
+  Decision: --ltex-blend noise default (warped weights + one shared noise threshold, fixed texture order, alphas 0 / 7
+  only). Alternatives: dither (partial alphas: drew specks in October, though that test was confounded by the texture
+  bugs found after it; still a fallback), blurring the weights (needs cross-band margins, borders stay smooth lines).
+  Installed by splicing texture layers into the staged BTDs (heights kept), not by re-staging the exterior.
