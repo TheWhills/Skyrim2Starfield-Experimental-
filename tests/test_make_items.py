@@ -201,6 +201,25 @@ class StackTests(unittest.TestCase):
         self.assertEqual(refs[2]["pos"][2], 1.0 * M.U)
         self.assertEqual(got["kept_static"], [])
 
+    def test_salmon_set_under_the_plate_bottom_goes_onto_it(self):
+        # owner's items.json (2026-11-21): steak bottom 1.115 m, plate bottom 1.119 m; the plate was lifted onto the steak
+        bases = {"plate": {"holder": True, "hull_m": [[-0.24, -0.17, 0.0], [0.24, 0.17, 0.023]]},
+                 "steak": {"hull_m": [[-0.1, -0.13, -0.016], [0.1, 0.13, 0.017]]}}
+        refs = [self.ref("p", "plate", (1.0, 1.0, 1.119)), self.ref("s", "steak", (1.0, 1.0, 1.131))]
+        got = M.settle_stacks(refs, bases)
+        self.assertEqual([(x["formkey"], x["on"]) for x in got["lifted"]], [("s", "p")])
+        self.assertEqual(refs[0]["pos"][2], 1.119 * M.U)                          # the plate stays put
+        self.assertAlmostEqual(refs[1]["pos"][2] / M.U - 0.016, 1.119 + 0.023 + M.STACK_GAP_M, places=4)
+
+    def test_plate_on_a_plate_then_food(self):
+        bases = {"plate": {"holder": True, "hull_m": [[-0.24, -0.17, 0.0], [0.24, 0.17, 0.02]]},
+                 "bread": {"hull_m": [[-0.1, -0.1, 0.0], [0.1, 0.1, 0.07]]}}
+        refs = [self.ref("p1", "plate", (1.0, 1.0, 1.0)), self.ref("p2", "plate", (1.0, 1.0, 1.01)),
+                self.ref("b", "bread", (1.0, 1.0, 1.015))]
+        got = M.settle_stacks(refs, bases)
+        self.assertEqual([(x["formkey"], x["on"]) for x in got["lifted"]], [("p2", "p1"), ("b", "p2")])
+        self.assertAlmostEqual(refs[2]["pos"][2] / M.U, 1.0 + 0.02 + M.STACK_GAP_M + 0.02 + M.STACK_GAP_M, places=4)
+
     def test_basket_of_potatoes_stays_static(self):
         bases = {"basket": {"hull_m": [[-0.25, -0.25, 0.0], [0.25, 0.25, 0.5]]},
                  "potato": {"hull_m": [[-0.08, -0.08, 0.0], [0.08, 0.08, 0.17]]}}

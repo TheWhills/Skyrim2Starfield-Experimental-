@@ -75,6 +75,10 @@ KINDS = ("drink", "food", "potion", "misc")
 HOLDER_RX = r"plate|platter|tray"
 HOLDER_HEIGHT_M = 0.015
 STACK_GAP_M = 0.003                 # left between a lifted item and the body under it
+# owner's items.json (2026-11-21 09:45): Skyrim sets salmon steaks with their bottom ~4 mm under the plate's (sunk into
+# the table), so "the lower item holds the upper" lifted the PLATES 3.2 cm onto the steaks. A holder (plate, platter,
+# tray) holds whatever starts within this far under its bottom, and is only ever lifted onto another holder
+HOLDER_REACH_DOWN_M = 0.05
 # more than this and the holder stays a static instead (2026-11-21, owner's run: the largest lift at 0.15 was 13.1 cm,
 # a visible float on a deep holder whose borrowed body is taller than its model)
 STACK_MAX_LIFT_M = 0.06
@@ -346,14 +350,20 @@ def world_box(ref, hull):
     return (px + min(xs), py + min(ys), pz + sc * hull[0][2], px + max(xs), py + max(ys), pz + sc * hull[1][2])
 
 
-def _supporter(items, i):
+def _supporter(items, i, holder=lambda r: False):
     """The item whose body item i starts inside (its centre over it, its bottom within its height and above the other's
-    bottom: the lower one holds the upper, never the other way), the highest."""
-    b = items[i][1]
+    bottom: the lower one holds the upper), the highest. A holder (plate, platter, tray) holds a non-holder that starts
+    up to HOLDER_REACH_DOWN_M under its bottom too, and is held only by another holder."""
+    r, b = items[i]
     cx, cy = (b[0] + b[3]) / 2, (b[1] + b[4]) / 2
     best = None
     for j, (o, ob) in enumerate(items):
-        if j != i and ob[0] <= cx <= ob[3] and ob[1] <= cy <= ob[4] and ob[2] < b[2] < ob[5]:
+        if j == i or not (ob[0] <= cx <= ob[3] and ob[1] <= cy <= ob[4]):
+            continue
+        if holder(r) and not holder(o):
+            continue
+        inside = (ob[2] - HOLDER_REACH_DOWN_M <= b[2] < ob[5]) if holder(o) and not holder(r) else (ob[2] < b[2] < ob[5])
+        if inside:
             if best is None or ob[5] > items[best][1][5]:
                 best = j
     return best
@@ -366,6 +376,9 @@ def settle_stacks(refs, bases):
          mesh) holds the contents as in Skyrim;
       2. lowest first, every other item that starts inside one goes up to that body's top + STACK_GAP_M.
     refs is changed in place (z raised, "lifted_m"; holders removed). Returns {"lifted": [...], "kept_static": [...]}."""
+    def holder(r):
+        return bool(bases[r["base"]].get("holder"))
+
     def boxes(rs):
         by_cell = {}
         for r in rs:
@@ -373,13 +386,13 @@ def settle_stacks(refs, bases):
             box = world_box(r, hull) if hull else None
             if box:
                 by_cell.setdefault(r["cell"], []).append([r, box])
-        for items in by_cell.values():
-            items.sort(key=lambda it: it[1][2])
+        for items in by_cell.values():          # holders first (a plate on a plate), then the rest, lowest first
+            items.sort(key=lambda it: (not holder(it[0]), it[1][2]))
         return by_cell
     holders = {}
     for items in boxes(refs).values():
         for i, (r, b) in enumerate(items):
-            j = _supporter(items, i)
+            j = _supporter(items, i, holder)
             if j is not None and items[j][1][5] + STACK_GAP_M - b[2] > STACK_MAX_LIFT_M:
                 holders[items[j][0]["formkey"]] = r["formkey"]
     kept = [{"formkey": f, "holds": h} for f, h in sorted(holders.items())]
@@ -387,7 +400,7 @@ def settle_stacks(refs, bases):
     lifted = []
     for items in boxes(refs).values():
         for i, (r, b) in enumerate(items):
-            j = _supporter(items, i)
+            j = _supporter(items, i, holder)
             if j is None:
                 continue
             lift = items[j][1][5] + STACK_GAP_M - b[2]
@@ -420,7 +433,8 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     donor = phys = None
     tried = []
     target = ours
-    if kind == "misc" and re.search(HOLDER_RX, info["edid"], re.I):
+    is_holder = kind == "misc" and bool(re.search(HOLDER_RX, info["edid"], re.I))
+    if is_holder:
         target = holder_target(ours)
     for dn in rank_donors(target, kind, donors, family)[:MAX_TRIES]:
         if dn["fid"] not in bodies:
@@ -441,7 +455,7 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     nifs[model] = nif
     bounds = [[ours[0][i] + d[i] for i in range(3)], [ours[1][i] + d[i] for i in range(3)]]
     name = (names.get(info["name"]) if isinstance(info["name"], int) else info["name"]) or pretty_name(info["edid"])
-    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "family": family,
+    out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "family": family, "holder": is_holder,
            "record": donor.get("sig", "ALCH"), "donor": f"{donor['fid']:08X}",
            "donor_edid": donor["edid"], "donor_model": donor["model"], "model": model,
            "bounds": [[round(v, 4) for v in b] for b in bounds], "origin_offset_m": [-v for v in d],

@@ -181,4 +181,11 @@ Items tipped more than 0.35 rad about x / y are left out of the stacking. Unveri
 First run of it (owner, 09:41): 15 lifted, 4 holders kept static, plates now copy FoodDrink_Set_Container01_Empty_Lid
 (2.3 cm). The largest lift was 13.1 cm (a visible float): the limit is now 6 cm (more, and the holder stays a static),
 and 2e names the five largest lifts.
+Owner in game again (09:43, two screenshots): salmon steaks still under the plates (inn tables, the bar). items.json
+(09:45) showed why (verified from it): Skyrim sets the steaks with their bottom ~4 mm under the plate's (1.115 vs 1.119 m
+in the inn), so "the lower item holds the upper" lifted the PLATES 3.2 cm onto the steaks (03327A, 0600FB, 0600F4 in
+the inn; Faendal's, Gerdur's the same). Now a holder (plate, platter, tray; "holder" in items.json) holds a non-holder
+starting up to 5 cm under its bottom, is lifted only onto another holder, and holders are stacked first. Replayed on
+that items.json: 12 lifts, all food onto plates (salmon steak 3.0 cm, raw salmon / bread 1.2 cm, slaughterfish 2.5 to
+2.8 cm), no plate lifted; the 13.1 / 9.7 cm cases keep their holder static (6 cm limit).
 
