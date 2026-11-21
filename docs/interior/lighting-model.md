@@ -281,3 +281,17 @@ global constant tuned once against the owner's same-spot screenshot pairs.
   -1 .. +1.3, dark ends 5 - 6 stops under. At the darker exposure ACES's toe crushes the shadows further (supported;
   Skyrim's Reinhard at white 1 has no toe) and the red share rises (hall 0.57 vs 0.47).
 - Next: the fill (environment cube) x4: ENV_AMBIENT_SCALE / -AmbientScale 38 -> 150, ExposureMin kept at 4.
+
+## Owner's screens with the fill x4 (AmbientScale 150, ExposureMin 4; 14:06; vs Skyrim)
+| scene | overall | dark end | bright end | contrast Skyrim / ours | red share Skyrim / ours |
+|---|---|---|---|---|---|
+| inn hall | -0.6 | -1.0 | -0.2 | 1.5 / 1.8 | 0.47 / 0.50 |
+| inn bedroom (two angles) | +1.4 .. +1.9 | +0.7 .. +1.2 | +1.8 | 1.8 - 2.2 / 2.2 | 0.45 / 0.47 |
+| inn stairs | +0.7 | 0.0 | +1.8 | 1.2 / 1.6 | 0.35 / 0.36 |
+| inn basement | +0.8 | +0.3 | +1.6 | 1.4 / 2.0 | 0.45 / 0.43 |
+| inn side room (framing differs) | +1.8 | +1.3 | +2.3 | 1.7 / 1.9 | 0.37 / 0.44 |
+- Verified: the fill closed the dark-end gap (5 - 6 stops -> within about 1) and contrast is within 0.1 - 0.6 of
+  Skyrim's; colour within 0.03 red share except the side room.
+- Left: small candle-lit rooms 1.5 - 2 stops over at their bright end while the big hall is at -0.2: light near a
+  source too strong against far light (the falloff shape: H1 inverse square vs Skyrim's flat (1 - (d/r)^2)), the
+  calibration cell's job. Defaults stand: AmbientScale 150, ExposureMin 4.
