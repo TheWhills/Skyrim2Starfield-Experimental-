@@ -252,3 +252,20 @@ global constant tuned once against the owner's same-spot screenshot pairs.
 - The views now moved by different amounts: the dark ones +2.5 - 2.8, the bright ones +0.3 - 0.8; the spread across
   views fell from 3.0 stops to 1.3 (Skyrim's per-view adaptation evens views the same way). Level: 2.9 stops over.
 - Next: compensation 0, range 1 .. 8 (expected about 2.9 stops darker if the offset is linear: near Skyrim).
+
+## Owner's screens with compensation 0, range 1 .. 8 (13:47; vs Skyrim)
+| scene | comp -3 | comp 0 | dark end | bright end | contrast Skyrim / ours |
+|---|---|---|---|---|---|
+| inn hall | +2.2 | +2.1 | +0.9 | +2.8 | 1.5 / 2.1 |
+| inn side room | - | +3.7 | +2.4 | +3.8 | 1.7 / 2.2 |
+| inn bedroom | +3.2 | +2.8 | +1.6 | +3.4 | 1.8 / 2.8 |
+| inn stairs | +2.8 | +2.4 | +1.4 | +3.7 | 1.2 / 1.7 |
+| inn basement | +3.5 | +3.1 | +2.0 | +3.9 | 1.4 / 2.2 |
+- Correction to the 13:39 reading: compensation -3 vs 0 differ by 0.3 stops at most - the curve's DefaultValue has no
+  real effect (it has no controls; supported). What brightened the 13:39 build was the range: ExposureMin 3 -> 1.
+- Supported hypothesis: Starfield's auto-exposure key is brighter than these rooms, so dark views sit at ExposureMin;
+  brighter views partly adapt (hall-to-bedroom gap 0.7 stops now against 2.9 with the fixed exposure and per-room
+  bake). ExposureMin is the level: next 4 (3 stops darker for views at the limit).
+- Colour now close to Skyrim in the hall, bedroom, basement (red shares within 0.03); contrast still higher than
+  Skyrim's everywhere (the falloff / hot spots near lights, next).
+- One light base per Skyrim light kind now (4, was 14): with light_scale 1 the cells share bases.

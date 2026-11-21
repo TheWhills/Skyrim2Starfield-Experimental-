@@ -65,9 +65,10 @@ param(
     # 2026-11-21: exposure like Skyrim's, adapting to what you look at (auto, a copy of LGT_NoLut with Starfield's auto
     # exposure between EV100 ExposureMin and ExposureMax), or fixed (EV 5, each room's lights scaled instead). Step 1
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
-    [double]$ExposureMin = 1,
+    # dark views sit at ExposureMin (2026-11-21: at 1 every inn view 2 - 3.7 stops over Skyrim; higher = darker)
+    [double]$ExposureMin = 4,
     [double]$ExposureMax = 8,
-    # the auto exposure's offset, EV100 (2026-11-21: -3 made every view 2 - 3 stops brighter: negative = brighter)
+    # the compensation curve's default (2026-11-21: -3 and 0 looked the same; ExposureMin is the knob)
     [double]$ExposureCompensation = 0,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
