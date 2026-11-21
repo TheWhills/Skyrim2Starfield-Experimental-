@@ -179,7 +179,7 @@ class BuildTests(unittest.TestCase):
                  "pos": [0, 0, 0], "rot": [0, 0, 0], "scale": 1.0}]}
             manifest = {"meshes\\clutter\\winebottle01.nif": "s2s\\wine.nif"}
             donors = M.starfield_donors([
-                sf_alch(0x30, "Drink_NoBody", "nobody.nif", M.FOOD, [[-0.04, -0.04, 0], [0.04, 0.04, 0.3]]),
+                sf_alch(0x30, "Drink_Alc_NoBody", "nobody.nif", M.FOOD, [[-0.04, -0.04, 0], [0.04, 0.04, 0.3]]),
                 sf_alch(0x31, "Drink_Alc_Bottle_Generic_SpaceWine", "wine.nif", M.FOOD,
                         [[-0.05, -0.05, 0], [0.05, 0.05, 0.35]])])
             phys = {"wine.nif": (b"DYNAMICBODY", 0x41, 7, 11)}
@@ -190,7 +190,7 @@ class BuildTests(unittest.TestCase):
         b = out["bases"]["000010:Skyrim.esm"]
         self.assertEqual((b["name"], b["kind"], b["donor"], b["donor_edid"], b["model"]),
                          ("Alto Wine", "drink", "00000031", "Drink_Alc_Bottle_Generic_SpaceWine", "s2s\\wine_item.nif"))
-        self.assertEqual(b["donors_without_body"], ["Drink_NoBody"])        # better fit but no body: passed over
+        self.assertEqual(b["donors_without_body"], ["Drink_Alc_NoBody"])    # better fit but no body: passed over
         self.assertEqual(b["origin_offset_m"], [-0.0, -0.0, -0.15])          # our centre origin onto the donor's base
         self.assertEqual(b["bounds"], [[-0.04, -0.04, 0.0], [0.04, 0.04, 0.3]])
         self.assertEqual((b["skyrim_value"], b["skyrim_weight"]), (7, 0.5))
