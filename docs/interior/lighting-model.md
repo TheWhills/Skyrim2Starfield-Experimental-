@@ -141,7 +141,27 @@ at EV 3.5 (1.5 stops brighter than ours) with a Hable curve and a LUT.
   relative to Skyrim: this explains 1.3 of them (supported hypothesis: full adaptation). The rest waits on the falloff
   measurement. The audit prints "before" (cap 16, no adaptation) and "now" per room against Skyrim's adapted screen.
 - Owner's build (12:52, verified from its log): Alvor x1.086, Faendal x0.966, Gerdur x1.044, Trader x0.888, inn x2.498,
-  Sven x0.552; 14 Starfield light bases. In game: screenshots pending.
+  Sven x0.552; 14 Starfield light bases.
+- Owner's screens after it (12:58; same measure as the 12:03 table, framing close):
+
+| scene | before | after | dark end (p10) | bright end (p90) |
+|---|---|---|---|---|
+| inn hall | -4.7 st | -2.6 st | -5.8 st | -1.1 st |
+| bedroom (the house with the 65.7 m light: Sven's, supported) | -0.9 st | +1.1 st | -1.0 st | +2.1 st |
+| inn stairs | -4.6 st | -4.5 st | -4.7 st | -1.6 st |
+| basement | -2.0 st | -1.9 st | -5.1 st | +0.7 st |
+
+  Read: the inn came up 2.1 stops (1.3 expected); the bedroom moved +2.0 (the model: +2.2 from the uncapped big light x
+  the 0.55 adaptation) and now overshoots by a stop at its bright end. What stays: **places our lights do not reach at
+  all** - the stairs, the dark end of every room (5 - 6 stops under Skyrim), while bright ends are within 1 - 2 stops.
+- Why (verified for Skyrim, Lighting.hlsl's vanilla loop): `if (lightIndex < numShadowLights) lightShadow *=
+  shadowColor[...]` - only the few shadow-casting lights are blocked by geometry; every other Skyrim light shines through
+  walls, floors and pillars to its radius. Skyrim's stairwell is lit by the hall's lights through its walls. Whether our
+  Starfield lights cast shadows (and so stop at walls) is unresolved: SfInspect lightstats shows how Starfield's lights
+  are set (type Omnidirectional / ShadowSpotlight / NonShadowSpotlight, flags incl. DisableDistanceAttenuation,
+  UseAdaptiveLighting with its EV100 range, RadiusFalloutExponent).
+- A Skyrim light whose radius dwarfs its room (Sven's 65.7 m) acts as an even fill there; as a Starfield point light it
+  floods the area near its position. Candidate: such lights become ambient / fill instead (after the shadow question).
 
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside

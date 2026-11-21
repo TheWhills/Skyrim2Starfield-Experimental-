@@ -8,6 +8,8 @@
 //   form <hex>... | form type:<TypePrefix> <EditorID substr>   one-level dump of any record      landcount
 //   layers <WRLD> [layer substr]   refs per layer; refs (and their bases) of matching layers
 //   list <TypePrefix> [EditorID substr]   FormKey + EditorID of every matching record (e.g. list Water)
+//   lightstats [EditorID substr]   Starfield's lights grouped by type / flags / adaptive, with lumen / radius / falloff
+//                                  spreads, and the three bases the interiors have used
 //   imgsdump <out dir> [hex | EditorID substr]...   image spaces' REFL / RDIF blobs to files + their strings (default:
 //                                                   the 15 most used by cells and the ones the interiors have tried)
 // Note: opening a plugin other than Starfield.esm needs a master flag lookup (not implemented).
@@ -94,6 +96,35 @@ switch (args[1])
             var useCount = cells.Where(c => !c.ImageSpace.IsNull).GroupBy(c => c.ImageSpace.FormKey).ToDictionary(g => g.Key, g => g.Count());
             foreach (var i in mod.ImageSpaces.OrderByDescending(i => useCount.GetValueOrDefault(i.FormKey)).Take(30))
                 Console.WriteLine($"{useCount.GetValueOrDefault(i.FormKey),5}  {i.FormKey}  {i.EditorID}");
+        }
+        break;
+    case "lightstats":   // lightstats [EditorID substr]: how Starfield's own lights are set (2026-11-21, lighting-model.md)
+        {
+            var sub = args.Length > 2 ? args[2] : "";
+            var ls = mod.Lights.Where(l => (l.EditorID ?? "").Contains(sub, StringComparison.OrdinalIgnoreCase)).ToList();
+            Console.WriteLine($"# {ls.Count} LIGH");
+            foreach (var g in ls.GroupBy(l => $"type={l.Type} flags=[{l.Flags}] adaptive={l.UseAdaptiveLighting} majorAdaptive={(l.MajorFlags & Light.MajorFlag.AdaptiveLighting) != 0}")
+                         .OrderByDescending(g => g.Count()))
+            {
+                static string Q(IEnumerable<double> xs)
+                {
+                    var v = xs.OrderBy(x => x).ToList();
+                    if (v.Count == 0) return "-";
+                    double P(double q) => v[(int)Math.Round((v.Count - 1) * q)];
+                    return $"{P(0.1):0.##} / {P(0.5):0.##} / {P(0.9):0.##}";
+                }
+                Console.WriteLine($"{g.Count(),6}  {g.Key}");
+                Console.WriteLine($"        lumens p10/50/90 {Q(g.Select(l => (double)l.PbrLuminousPowerLm))}  radius {Q(g.Select(l => (double)l.Radius))}" +
+                                  $"  falloff exp {Q(g.Select(l => (double)l.FalloffExponent))}  radius falloff exp {Q(g.Select(l => (double)l.RadiusFalloutExponent))}" +
+                                  $"  adaptive Ec {Q(g.Select(l => (double)l.AdaptiveLightEc))} EV100 {Q(g.Select(l => (double)l.AdaptiveLightEv100Min))}..{Q(g.Select(l => (double)l.AdaptiveLightEv100Max))}");
+                foreach (var l in g.Take(3))
+                    Console.WriteLine($"        e.g. {l.FormKey.ID:X6} {l.EditorID}  {l.PbrLuminousPowerLm} lm  {l.Radius:0.##} m  falloff {l.FalloffExponent:0.##}/{l.RadiusFalloutExponent:0.##}  shadowOffset {l.ShadowOffset:0.##}  layer {l.Layer}");
+            }
+            foreach (var id in new uint[] { 0x3197A6, 0x3197A4, 0x03D38C })
+                foreach (var l in mod.Lights.Where(l => l.FormKey.ID == id))
+                    Console.WriteLine($"## {id:X6} {l.EditorID}: type {l.Type} flags [{l.Flags}] major [{l.MajorFlags}] {l.PbrLuminousPowerLm} lm {l.Radius:0.##} m " +
+                                      $"falloff {l.FalloffExponent}/{l.RadiusFalloutExponent} adaptive {l.UseAdaptiveLighting} Ec {l.AdaptiveLightEc} EV100 {l.AdaptiveLightEv100Min}..{l.AdaptiveLightEv100Max} " +
+                                      $"near clip {l.NearClip} shadowOffset {l.ShadowOffset} layer {l.Layer} volumetric {l.VolumetricLightIntensityScale}");
         }
         break;
     case "imgsdump":   // imgsdump <out dir> [hex form id | EditorID substr]...: IMGS REFL / RDIF blobs + their strings

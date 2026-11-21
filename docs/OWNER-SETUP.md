@@ -301,6 +301,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7y. (2026-11-21) Starfield's own lights (read-only), for the lighting work: send the printed output.
+   dotnet run --project dotnet\SfInspect -- "$sf\Data\Starfield.esm" lightstats
 7x. (2026-11-21) Lighting: each room's lights now carry Skyrim's eye adaptation (the inn brighter, Sven's dimmer;
    docs/interior/lighting-model.md). A plugin change: the full build. Then retake the same screenshots as the 12:03
    set (inn hall, candle table, stairs, bedroom, basement, hearth house), Skyrim's too if the framing differs.
