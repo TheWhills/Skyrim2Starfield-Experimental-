@@ -109,6 +109,18 @@ Read (verified from the output unless marked):
 - Starfield's image spaces are reflection blobs (Mutagen: IMGS = REFL / RFDP / RDIF), so their exposure settings are
   unresolved: SfInspect imgsdump writes them out for reading.
 
+## Starfield's image space settings (owner's imgsdump, 12:30; names verified from the blobs' string tables)
+TESImageSpace -> ImageSpaceSettings: OverallBlendAmount, UseOutdoorExposure; ExposureSettings: CameraExposureMode
+(the strings AutoExposure, FixedValue, CameraExposure appear: three modes), AutoExposureSettings (EnableCompensationCurve,
+ExposureCompensationCurve as a BSFloatCurve, ExposureMin, ExposureMax, AdaptSpeedDown, AdaptSpeedUp,
+LuminanceHistogramSettings: IgnoredDarksPercentile, IgnoredBrightsPercentile), FixedValue (Exposure),
+CameraExposureSettings (Aperture, Time, ...); SunAndSkySettings (IndirectLightingSkyTargetEv100, SkyLightingMultiplier,
+...); BloomSettings; CinematicSettings (Saturation, Brightness, Contrast, TintColorValue, FadeColorValue, UseOutdoorLUT,
+ColorGradingTexture, ColorGradingAmount); DepthOfFieldSettings. 10489 cells use DefaultImagespacePackin (06AD68, an
+RDIF diff on DefaultImageSpace 000167); LGT_NoLut (ours) is a full REFL, used by 25 vanilla cells.
+So Starfield can hold a room's exposure fixed (FixedValue) or clamp the auto-exposure (ExposureMin / Max): the values
+in each blob are next (the binary reflection format, as the .mat JSON's objects, unresolved byte layout).
+
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside
 its radius, a "ladder": the same tile under small lights at 0.5 m with lumens stepping by half stops around what H1
