@@ -276,6 +276,58 @@ class OverlayTextureTests(unittest.TestCase):
         # LOD4 weights are every 16th sample of LOD0 (written by btd.write)
         self.assertEqual(t.weights.dtype, np.uint16)
 
+    def test_recompute_installed_terrain_textures(self):
+        """2026-11-21 (owner's skyrim_all has no build_command.txt): refresh_btd.py recompute re-encodes the staged BTDs'
+        textures from Skyrim.esm with the staging's own mapping, after a spot check that the old way reproduces them;
+        heights stay byte for byte. With other inputs (a changed mapping) the check fails and nothing is written."""
+        import make_cw_overlays as cw
+        import make_skyrim_overlay as sk
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "terrain"))
+        import refresh_btd as R
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = skyrim_esm(os.path.join(tmp, "Skyrim.esm"))
+            sfd = os.path.join(tmp, "SF")
+            os.makedirs(sfd)
+            starfield_esm(os.path.join(sfd, "Starfield.esm"))
+            out = os.path.join(tmp, "out")
+            with mock.patch.object(cw, "ltex_source", return_value=([0x001235C2], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
+                         "--arrival", "", "--land-textures", "--ltex-blend", "solid"])
+            path = os.path.join(out, "Data", "Terrain", "SKY_Tamriel.btd")
+            with open(path, "rb") as f:
+                before = btd.read(f.read())
+            args = SimpleNamespace(staging=out, skyrim=esm, sf_data=sfd, world="Tamriel", min_match=0.98,
+                                   check_bands=24, check_blend="solid", blend="noise", warp=3.5,
+                                   dry_run=False)
+            mp = os.path.join(out, "ltex_mapping.json")
+            with open(mp, encoding="utf-8") as f:
+                good = f.read()
+            bad = json.loads(good)
+            for v in bad["skyrim"].values():                                      # not what the build used
+                v["starfield"] = "LGrassMeadow01"
+            with open(mp, "w", encoding="utf-8") as f:
+                json.dump(bad, f)
+            with contextlib.redirect_stdout(io.StringIO()) as o1:
+                self.assertEqual(R.cmd_recompute(args), 1)
+            self.assertIn("nothing written", o1.getvalue())
+            with open(path, "rb") as f:
+                self.assertEqual(btd.read(f.read()).weights.tobytes(), before.weights.tobytes())
+            with open(mp, "w", encoding="utf-8") as f:
+                f.write(good)
+            with contextlib.redirect_stdout(io.StringIO()) as o2:
+                self.assertEqual(R.cmd_recompute(args), 0)
+            self.assertIn("100.0% of samples draw the same texture", o2.getvalue())
+            with open(os.path.join(out, R.BACKUP, "Data", "Terrain", "SKY_Tamriel.btd"), "rb") as f:
+                self.assertEqual(btd.read(f.read()).weights.tobytes(), before.weights.tobytes())   # the build's kept
+            with open(path, "rb") as f:
+                after = btd.read(f.read())
+        np.testing.assert_array_equal(after.heights_raw, before.heights_raw)
+        self.assertEqual((after.hmin, after.hmax, after.ltex), (before.hmin, before.hmax, before.ltex))
+        self.assertFalse(np.array_equal(after.weights, before.weights))                # the noise blend went in
+        self.assertTrue(set(np.unique(after.weights & 7).tolist()) <= {0, 7})
+
     def test_without_option_btd_keeps_plain_ground(self):
         import make_cw_overlays as cw
         import make_skyrim_overlay as sk

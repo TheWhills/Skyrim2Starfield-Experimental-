@@ -1,8 +1,13 @@
 """New ground-texture layers in an already staged exterior, its heights untouched (2026-11-21, owner: "spots in the
 terrain that are supposed to fade or have a snow texture or blend ... got off like squares into each other").
 
-    python -I scripts\\terrain\\refresh_btd.py rebuild --staging C:\\Modding\\staging\\skyrim_all --fresh C:\\Modding\\staging\\skyrim_all_blend
-    python -I scripts\\terrain\\refresh_btd.py splice  --staging C:\\Modding\\staging\\skyrim_all --fresh C:\\Modding\\staging\\skyrim_all_blend
+    python -I scripts\\terrain\\refresh_btd.py recompute --staging C:\\Modding\\staging\\skyrim_all --skyrim "$sky\\Skyrim.esm" --sf-data "$sf\\Data"
+
+recompute (2026-11-21; the installed exterior was built before builds kept their command): the texture part of every
+staged BTD again from Skyrim.esm, with the staging's own choices (ltex_mapping.json, the ltex_overrides in
+overlays_params.json, each BTD's LTEX table, the tiles in overlays_params.json), heights untouched. First a spot check:
+a sample of bands encoded "solid" (what the staging was built with) must match the staged BTD (--min-match, default
+0.98 of samples drawing the same texture), else nothing is written: the inputs are not the build's.
 
 rebuild: runs the staging's own build (its build_command.txt) again into --fresh, with --ltex-blend / --ltex-warp
 (default noise / 3.5: landtex "noise") added last so they win. Nothing in --staging is written.
@@ -13,6 +18,7 @@ the staging (deploy_skyrim_exterior.py uninstall, install; tools\\owner\\terrain
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 
@@ -24,6 +30,9 @@ sys.path.insert(0, HERE)
 import numpy as np  # noqa: E402
 
 from fo4sf import btd  # noqa: E402
+
+
+BACKUP = "btd_before_blend"     # recompute: the staged BTDs as built, copied here the first time they are rewritten
 
 
 def build_args(staging, fresh, blend="noise", warp=3.5):
@@ -109,15 +118,124 @@ def cmd_rebuild(a):
     return subprocess.call(cmd)
 
 
+def staged_textures(staging, skyrim_esm, sf_data, world="Tamriel"):
+    """(planes {form id: uint8 vertex grid}, ox, oy, sp, Starfield LTEX names {form id: name}) from Skyrim.esm and the
+    staging's own mapping (ltex_mapping.json) and converted-ground slots (overlays_params.json ltex_overrides)."""
+    import json
+    from fo4sf import landtex, skyrimland
+    from fo4sf import terrain_grid as tg
+    with open(os.path.join(staging, "ltex_mapping.json"), encoding="utf-8") as fh:
+        saved = json.load(fh)
+    with open(os.path.join(staging, "overlays_params.json"), encoding="utf-8") as fh:
+        prm = json.load(fh)
+    sf = landtex.starfield_ltex(os.path.join(sf_data, "Starfield.esm"))
+    overrides = prm.get("ltex_overrides")
+    if overrides is None and os.path.exists(os.path.join(staging, "skyrim_source.json")):
+        with open(os.path.join(staging, "skyrim_source.json"), encoding="utf-8") as fh:
+            overrides = (json.load(fh).get("land_textures") or {}).get("ltex_overrides")
+    for o in overrides or []:
+        fid = o["form_id"]
+        sf["SKYG_" + o["skyrim"]] = int(fid, 16) if isinstance(fid, str) else int(fid)
+    mapping = {"skyrim": {int(k): v for k, v in saved["skyrim"].items()}}
+    missing = sorted({v["starfield"] for v in mapping["skyrim"].values() if v["starfield"] not in sf})
+    if missing:
+        sys.exit(f"ltex_mapping.json names Starfield LTEX not found: {missing[:8]}")
+    land = skyrimland.SkyrimLand(skyrim_esm, world)
+    cells, _ltex = landtex.read_world_textures(skyrim_esm, land.land_source, {})
+    cells_t, used = landtex.target_cells(cells, mapping, sf)
+    default_sf = sf[mapping["skyrim"][landtex.DEFAULT_LTEX]["starfield"]]
+    used = sorted(set(used) | {default_sf})
+    x0, x1, y0, y1 = land.grid_bounds
+    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0),
+                                   0, 1) * 255).astype(np.uint8) for fid in used}
+    return planes, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS, tg.FO4_VERTEX_UNITS, {v: k for k, v in sf.items()}
+
+
+def dominant(words, qmap, table):
+    """The texture drawn at each sample (form id) of a BTD texture part, for comparing two encodings."""
+    from fo4sf import landtex
+    dec = landtex.decode_quadrants(qmap, words, table)
+    ids = sorted(dec)
+    return np.asarray(ids)[np.argmax(np.stack([dec[i] for i in ids]), axis=0)]
+
+
+def cmd_recompute(a):
+    import json
+    from fo4sf import overlay_grid as og
+    from make_skyrim_overlay import tile_layers
+    with open(os.path.join(a.staging, "overlays_params.json"), encoding="utf-8") as fh:
+        prm = json.load(fh)
+    print("reading Skyrim's ground layers and the staging's texture mapping ...")
+    planes, ox, oy, sp, names = staged_textures(a.staging, a.skyrim, a.sf_data, a.world)
+    done = 0
+    for o in prm["overlays"]:
+        t = og.Tile(o["ix"], o["iy"], o["cells_cw"]["x"][0], o["cells_cw"]["y"][0], o["n"])
+        paths = [os.path.join(a.staging, *o["btd_file"].split("/"))]
+        paths += [os.path.join(a.staging, *c.split("/")) for c in o.get("btd_copies") or []]
+        with open(paths[0], "rb") as fh:
+            old = btd.read(fh.read())
+        table = list(old.ltex)
+        lack = [x for x in table if x not in planes]
+        if lack:            # in the table but painted nowhere by this mapping: an empty plane (the spot check decides)
+            print(f"  {o['world']}: its LTEX table has {[f'{x:08X}' for x in lack[:6]]} that the mapping does not paint")
+            shape = next(iter(planes.values())).shape
+            for x in lack:
+                planes[x] = np.zeros(shape, np.uint8)
+        size = old.weights.shape[0]
+        rows = list(range(0, size, 64))[::max(1, len(range(0, size, 64)) // a.check_bands)]
+        sw, sq, _ = tile_layers(planes, table, ox, oy, sp, t, a.check_blend, "head", 0.0, rows=rows)
+        sel = np.concatenate([np.arange(r, r + 64) for r in rows])
+        qsel = sorted({r // 64 for r in rows})
+        mine = dominant(sw[sel], sq[qsel], table)
+        theirs = dominant(old.weights[sel], old.quad_map[qsel], table)
+        match = float((mine == theirs).mean())
+        print(f"  {o['world']}: spot check of {len(rows)} bands, encoded the old way: {match:.1%} of samples draw the "
+              f"same texture as the installed terrain")
+        if match < a.min_match:
+            print(f"  {o['world']}: below {a.min_match:.0%}: these inputs are not the build's; nothing written")
+            continue
+        words, qmap, beyond = tile_layers(planes, table, ox, oy, sp, t, a.blend, "head", a.warp)
+        data = btd.write(btd.Btd(old.version, old.hmin, old.hmax, table, old.heights_raw, words, qmap))
+        assert np.array_equal(btd.read(data).heights_raw, old.heights_raw)      # heights exactly as installed
+        if not a.dry_run:
+            backup = os.path.join(a.staging, BACKUP)
+            for p in paths:
+                if not os.path.exists(p):
+                    continue
+                keep = os.path.join(backup, os.path.relpath(p, a.staging))
+                if not os.path.exists(keep):                    # the first time only: the build's own terrain
+                    os.makedirs(os.path.dirname(keep), exist_ok=True)
+                    shutil.copy2(p, keep)
+                with open(p, "wb") as fh:
+                    fh.write(data)
+        done += 1
+        print(f"  {o['world']}: {'would write' if a.dry_run else 'wrote'} {a.blend} blend (warp {a.warp:g} m) into "
+              f"{len(paths)} file(s); heights kept; weight past the five layers per quadrant at most {max(beyond):.1%}")
+    return 0 if done else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=("rebuild", "splice"))
+    ap.add_argument("cmd", choices=("recompute", "rebuild", "splice"))
     ap.add_argument("--staging", required=True, help="the installed exterior's staging (C:\\Modding\\staging\\skyrim_all)")
-    ap.add_argument("--fresh", required=True, help="where the fresh build goes / is (another folder)")
+    ap.add_argument("--fresh", help="rebuild / splice: where the fresh build goes / is (another folder)")
+    ap.add_argument("--skyrim", help="recompute: Skyrim.esm")
+    ap.add_argument("--sf-data", help="recompute: Starfield's Data folder (Starfield.esm's LTEX names)")
+    ap.add_argument("--world", default="Tamriel", help="recompute: the Skyrim worldspace (default Tamriel)")
+    ap.add_argument("--min-match", type=float, default=0.98, help="recompute: spot-check agreement needed to write")
+    ap.add_argument("--check-bands", type=int, default=24, help="recompute: 64-row bands in the spot check")
+    ap.add_argument("--check-blend", choices=("solid", "dither"), default="solid",
+                    help="recompute: the blend the staging was built with (the spot check encodes this way)")
     ap.add_argument("--blend", choices=("solid", "dither", "noise"), default="noise", help="rebuild: --ltex-blend")
     ap.add_argument("--warp", type=float, default=3.5, help="rebuild: --ltex-warp (m)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "recompute":
+        if not (a.skyrim and a.sf_data):
+            ap.error("recompute needs --skyrim and --sf-data")
+        return cmd_recompute(a)
+    if not a.fresh:
+        ap.error(f"{a.cmd} needs --fresh")
     return cmd_rebuild(a) if a.cmd == "rebuild" else cmd_splice(a)
 
 

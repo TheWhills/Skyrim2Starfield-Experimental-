@@ -402,9 +402,12 @@ Without --apply it only prints. Unverified on the owner's data.
   curves and wide fades become irregular patches covering about each texture's weight. Both fields depend on the world
   position only, so they continue across quadrants (whose stacks differ) and tiles. Synthetic checks: tests/test_landtex.py
   (a sharp border bends by metres, a 100 m fade covers its weight, two halves encoded apart match the whole).
-- Installed without a full re-stage: `tools\owner\terrain_blend.ps1` reruns the staging's own build into
-  `skyrim_all_blend`, then `scripts\terrain\refresh_btd.py splice` gives the installed BTDs the fresh texture layers
-  with their own heights kept byte for byte, and reinstalls.
+- Installed without a full re-stage: `tools\owner\terrain_blend.ps1` runs `scripts\terrain\refresh_btd.py recompute`:
+  the installed exterior (skyrim_all, 2026-10-16) predates build_command.txt, so the texture layers are recomputed from
+  Skyrim.esm with the staging's own ltex_mapping.json, ltex_overrides (overlays_params.json), LTEX tables and tiles.
+  A spot check first encodes 24 bands the old way (solid; --check-blend) and needs 98 % of samples to draw what the
+  installed BTD draws, else nothing is written. Heights kept byte for byte; the BTDs as built are copied to
+  <staging>\btd_before_blend. (`rebuild` / `splice` remain for stagings that have build_command.txt.)
 - Unresolved: the flat grey-blue "snow" patches the owner saw where Skyrim paints grey gravel and rock near Riverwood
   (owner 18:31): a texture mapping or conversion problem, not the blend; `ground_at.py` at such a spot says which
   Skyrim LTEX it is and what the BTD draws.

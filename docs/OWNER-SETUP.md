@@ -301,10 +301,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
-8g. (2026-11-21) Ground textures fading instead of meeting in straight lines (Starfield closed; slow: all of Tamriel):
+8g. (2026-11-21) Ground textures fading instead of meeting in straight lines (Starfield closed):
    powershell -ExecutionPolicy Bypass -File tools\owner\terrain_blend.ps1
-   (-Blend solid restores the old look; -Warp <m> how far borders wander, default 3.5; -SkipRebuild reuses
-   C:\Modding\staging\skyrim_all_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
+   (fast: only the ground texture layers are recomputed, heights kept; -Blend solid restores the old look; -Warp <m>
+   how far borders wander, default 3.5; the terrain as built is kept in skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
 8f. (2026-11-21) Outdoor items: with -Items, Riverwood's outdoor food, drink, potions and clutter become real items

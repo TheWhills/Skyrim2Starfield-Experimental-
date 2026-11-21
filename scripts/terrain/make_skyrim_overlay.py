@@ -220,6 +220,43 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
             "free_slots": len(slots), "borrowed": borrowed}
 
 
+def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.0, rows=None):
+    """One tile's BTD texture part: (sample words [size, size] uint16, quad map [2n, 2n, 8] uint8, [weight beyond the
+    five layers per band]). planes: {Starfield LTEX form id: merged Skyrim vertex grid of its weight (uint8 0..255)},
+    origin (ox, oy) and spacing sp in Skyrim units; used: the BTD's LTEX table; t: the overlay tile (sample_coords);
+    warp_m: landtex.warp_offsets for blend "noise". rows: only these 64-row bands (a spot check; the rest left 0)."""
+    import numpy as np
+    from fo4sf import landtex
+    xs, ys = t.sample_coords()
+    xu, size = xs * tg.UNITS_PER_METRE, len(xs)
+    qmap = np.zeros((2 * t.n, 2 * t.n, 8), np.uint8)
+    words = np.zeros((size, size), np.uint16)
+    beyond = []
+    last = next(iter(planes.values())).shape[0] - 1
+    warp = blend == "noise" and warp_m > 0
+    margin = int(np.ceil(warp_m * tg.UNITS_PER_METRE / sp)) + 1 if warp else 0
+    for r0 in (range(0, size, 64) if rows is None else rows):
+        yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
+        lo = int(min(max(np.floor((yu[0] - oy) / sp) - margin, 0), last))
+        hi = int(min(max(np.floor((yu[-1] - oy) / sp) + 1 + margin, 0), last))
+        if hi <= lo:
+            lo, hi = max(min(lo, last - 1), 0), min(max(lo, 0) + 1, last)
+        if warp:          # 2026-11-21: the weights read at a smoothly shifted spot, so borders wander (landtex.WARP_M)
+            dx, dy = landtex.warp_offsets(xs, ys[r0:r0 + 64], warp_m)
+            band = np.stack([landtex.sample_warped(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp,
+                                                   sp, xu, yu, dx * tg.UNITS_PER_METRE, dy * tg.UNITS_PER_METRE)
+                             for f in used])
+        else:
+            band = np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp,
+                                                  sp, xu, yu) for f in used])
+        q, w, st = landtex.encode_quadrants(band, used, used, blend=blend, index_rule=index_rule,
+                                            coords=(xs, ys[r0:r0 + 64]))
+        qmap[r0 // 64] = q[0]
+        words[r0:r0 + 64] = w
+        beyond.append(st["weight_beyond_six_layers"])
+    return words, qmap, beyond
+
+
 def land_textures(a, land, out):
     """Skyrim's ground texture layers for the BTD (src/fo4sf/landtex.py): returns tile -> (LTEX table, sample weights,
     quad map) for make_cw_overlays.build, and writes <out>/ltex_mapping.json (editable; pass back with --ltex-mapping)."""
@@ -287,34 +324,8 @@ def land_textures(a, land, out):
         stats["ltex_overrides"] = ground["overrides"]
 
     def per_tile(t):
-        xs, ys = t.sample_coords()
-        xu, size = xs * tg.UNITS_PER_METRE, len(xs)
-        qmap = np.zeros((2 * t.n, 2 * t.n, 8), np.uint8)
-        words = np.zeros((size, size), np.uint16)
-        beyond = []
-        last = next(iter(planes.values())).shape[0] - 1
-        warp_m = getattr(a, "ltex_warp", landtex.WARP_M) if a.ltex_blend == "noise" else 0.0
-        warp = warp_m > 0
-        margin = int(np.ceil(warp_m * tg.UNITS_PER_METRE / sp)) + 1 if warp else 0
-        for r0 in range(0, size, 64):
-            yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
-            lo = int(min(max(np.floor((yu[0] - oy) / sp) - margin, 0), last))
-            hi = int(min(max(np.floor((yu[-1] - oy) / sp) + 1 + margin, 0), last))
-            if hi <= lo:
-                lo, hi = max(min(lo, last - 1), 0), min(max(lo, 0) + 1, last)
-            if warp:      # 2026-11-21: the weights read at a smoothly shifted spot, so borders wander (landtex.WARP_M)
-                dx, dy = landtex.warp_offsets(xs, ys[r0:r0 + 64], warp_m)
-                band = np.stack([landtex.sample_warped(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox,
-                                                       oy + lo * sp, sp, xu, yu, dx * tg.UNITS_PER_METRE,
-                                                       dy * tg.UNITS_PER_METRE) for f in used])
-            else:
-                band = np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox,
-                                                      oy + lo * sp, sp, xu, yu) for f in used])
-            q, w, st = landtex.encode_quadrants(band, used, used, blend=a.ltex_blend, index_rule=a.ltex_index,
-                                                coords=(xs, ys[r0:r0 + 64]))
-            qmap[r0 // 64] = q[0]
-            words[r0:r0 + 64] = w
-            beyond.append(st["weight_beyond_six_layers"])
+        warp_m = getattr(a, "ltex_warp", 3.5) if a.ltex_blend == "noise" else 0.0
+        words, qmap, beyond = tile_layers(planes, used, ox, oy, sp, t, a.ltex_blend, a.ltex_index, warp_m)
         stats["weight_beyond_six_layers_max"] = round(max(beyond), 5) if beyond else 0.0
         return used, words, qmap
 

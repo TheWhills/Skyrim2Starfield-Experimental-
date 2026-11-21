@@ -1,17 +1,17 @@
 # Ground textures that fade into each other instead of meeting in straight lines (2026-11-21, owner: "spots in the
 # terrain that are supposed to fade or have a snow texture or blend kind of just got off like squares into each other").
-# Rebuilds the installed exterior's terrain into a separate folder with the new blend (landtex "noise"), copies only the
-# texture layers into the installed exterior's terrain files (heights, plugins, objects, grass, LOD, water, planet
-# unchanged) and reinstalls it. Starfield must be closed. The rebuild covers all of Tamriel, so it takes a while.
+# Recomputes the texture layers of the installed exterior's terrain files from Skyrim.esm with the new blend (landtex
+# "noise"), using the staging's own texture choices, after a spot check that the old way reproduces what is installed.
+# Heights, plugins, objects, grass, LOD, water and the planet stay as they are. Then reinstalls. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_blend.ps1
 #   -Blend solid gives the old straight borders back; -Warp <m> sets how far borders may wander (default 3.5)
+#   The terrain files as first built are kept in <Staging>\btd_before_blend.
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
-    [string]$Fresh = "C:\Modding\staging\skyrim_all_blend",
+    [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [ValidateSet("noise", "solid", "dither")][string]$Blend = "noise",
     [double]$Warp = 3.5,
-    [switch]$SkipRebuild,       # the fresh build is already there (e.g. after a failed install): splice and install only
     [switch]$NoInstall
 )
 $ErrorActionPreference = "Stop"
@@ -20,17 +20,14 @@ Set-Location $Repo
 function Step($t) { Write-Host "`n== $t" -ForegroundColor Cyan }
 function Fail($t) { Write-Host "FAILED: $t" -ForegroundColor Red; try { notify "terrain_blend: FAILED - $t" } catch {}; exit 1 }
 $t0 = Get-Date
-if (-not (Test-Path "$Staging\build_command.txt")) { Fail "missing $Staging\build_command.txt" }
-if (-not $SkipRebuild) {
-    Step "1. the terrain again with the new blend, into $Fresh (all of Tamriel: slow)"
-    python -I scripts\terrain\refresh_btd.py rebuild --staging $Staging --fresh $Fresh --blend $Blend --warp $Warp.ToString([cultureinfo]::InvariantCulture)
-    if ($LASTEXITCODE -ne 0) { Fail "rebuild" }
+foreach ($p in @("$Staging\overlays_params.json", "$Staging\ltex_mapping.json", "$SKY\Skyrim.esm", "$SF\Data\Starfield.esm")) {
+    if (-not (Test-Path $p)) { Fail "missing $p" }
 }
-Step "2. its texture layers into the installed exterior's terrain (heights kept)"
-python -I scripts\terrain\refresh_btd.py splice --staging $Staging --fresh $Fresh
-if ($LASTEXITCODE -ne 0) { Fail "splice" }
+Step "1. the terrain's texture layers again with the $Blend blend (heights kept)"
+python -I scripts\terrain\refresh_btd.py recompute --staging $Staging --skyrim "$SKY\Skyrim.esm" --sf-data "$SF\Data" --blend $Blend --warp $Warp.ToString([cultureinfo]::InvariantCulture)
+if ($LASTEXITCODE -ne 0) { Fail "recompute (nothing installed; see the spot check above)" }
 if ($NoInstall) { Write-Host "staged in $Staging (not installed: -NoInstall)"; exit 0 }
-Step "3. reinstall the exterior"
+Step "2. reinstall the exterior"
 if (Test-Path "$SF\Data\SkyrimExterior.deploy.json") {
     python -I scripts\deploy_skyrim_exterior.py uninstall --starfield $SF --staging $Staging
     if ($LASTEXITCODE -ne 0) { Fail "uninstall (a file changed since install? see above)" }
