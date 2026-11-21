@@ -75,7 +75,9 @@ KINDS = ("drink", "food", "potion", "misc")
 HOLDER_RX = r"plate|platter|tray"
 HOLDER_HEIGHT_M = 0.015
 STACK_GAP_M = 0.003                 # left between a lifted item and the body under it
-STACK_MAX_LIFT_M = 0.15             # more than this is not a stack (left where Skyrim put it)
+# more than this and the holder stays a static instead (2026-11-21, owner's run: the largest lift at 0.15 was 13.1 cm,
+# a visible float on a deep holder whose borrowed body is taller than its model)
+STACK_MAX_LIFT_M = 0.06
 TILTED_RAD = 0.35                   # items tipped more than this about x / y are left out of stacking
 MAX_TRIES = 12                                  # donors whose NIF is read for a body, best fit first
 
@@ -539,6 +541,10 @@ def main(argv=None):
     print(f"items started inside another item's body, lifted onto it: {len(out['lifted'])}"
           + (f" (largest {max(x['lift_m'] for x in out['lifted']) * 100:.1f} cm)" if out["lifted"] else "")
           + f"; holders with things in them kept static: {len(out['kept_static'])}")
+    edid_of = {r["formkey"]: out["bases"][r["base"]]["edid"] for r in out["refs"]}
+    for x in sorted(out["lifted"], key=lambda x: -x["lift_m"])[:5]:
+        print(f"  lifted {edid_of.get(x['formkey'], x['formkey'])} {x['formkey']} by {x['lift_m'] * 100:.1f} cm onto "
+              f"{edid_of.get(x['on'], x['on'])} {x['on']}")
     print(f"{len(out['refs'])} placed items from {len(out['bases'])} Skyrim bases in {len(cells)} cells "
           f"({sum(r['owner'] is not None for r in out['refs'])} owned in Skyrim: not yet owned here)")
     for k, b in sorted(out["bases"].items(), key=lambda kv: (kv[1]["kind"], kv[1]["edid"])):

@@ -178,4 +178,7 @@ the dish, so the food's body started inside the plate's and the physics pushed t
   converted Skyrim collision is a hollow mesh (convert: "native Starfield meshes from Skyrim's own collision"), which
   holds the potatoes as in Skyrim, where any convex body (ours or a donor's) would fill the basket.
 Items tipped more than 0.35 rad about x / y are left out of the stacking. Unverified in game.
+First run of it (owner, 09:41): 15 lifted, 4 holders kept static, plates now copy FoodDrink_Set_Container01_Empty_Lid
+(2.3 cm). The largest lift was 13.1 cm (a visible float): the limit is now 6 cm (more, and the holder stays a static),
+and 2e names the five largest lifts.
 
