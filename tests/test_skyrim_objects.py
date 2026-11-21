@@ -621,6 +621,37 @@ class ConverterModulesTests(unittest.TestCase):
         for name in ("def particle_flame_cards", "def soft_candle_material", "def flame_material"):
             self.assertNotIn(name, conv)
 
+    def test_script_signature_covers_only_the_convert_path(self):
+        """2026-11-21 (owner, -AssetsOnly after a new --candle-exposure option: every model reconverted, 74 s): only
+        cmd_convert, what it calls and the constants it reads count, not main's options or the other commands."""
+        import make_skyrim_objects as MSO
+        src = (
+            "import os\nUSED = 1\nUNUSED = 2\n"
+            "def helper():\n    return USED\n"
+            "def cmd_convert(a):\n    return helper()\n"
+            "def cmd_lod(a):\n    return UNUSED\n"
+            "def main():\n    ap.add_argument('--x')\n"
+            "if __name__ == '__main__':\n    main()\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "s.py")
+
+            def sig(text):
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+                return MSO.convert_source(p)
+            base = sig(src)
+            self.assertEqual(sig(src.replace("'--x'", "'--x', '--y'")), base)              # a new option
+            self.assertEqual(sig(src.replace("return UNUSED", "return UNUSED + 1")), base)  # another command
+            self.assertEqual(sig(src.replace("UNUSED = 2", "UNUSED = 3")), base)            # its constant
+            self.assertEqual(sig("# a comment\n\n" + src), base)                           # comments, lines
+            self.assertNotEqual(sig(src.replace("return USED", "return USED + 1")), base)   # a called helper
+            self.assertNotEqual(sig(src.replace("USED = 1", "USED = 5")), base)             # a constant it reads
+            self.assertNotEqual(sig(src.replace("return helper()", "return helper() + 1")), base)
+        real = MSO.convert_source()
+        self.assertIn("cmd_convert", real)
+        self.assertNotIn("name='cmd_lod'", real)
+        self.assertNotIn("name='main'", real)
+
     def test_particle_fire_spec(self):
         import make_skyrim_objects as MSO
         self.assertEqual(MSO.parse_particle_fire(""), [("1CEDAB", 0.8)])

@@ -553,6 +553,8 @@ texels with more blue than green: the blue is gone (test: no such texel); (2) bl
 emittance) is far over the scene; supported hypothesis that it is in stops, the soft candle now takes
 SOFT_EXPOSURE_OFFSET 5 (8x dimmer if so), with `-CandleExposure` / `--candle-exposure` to try others in a flame-only
 build. With the inside no longer clipped, the flame's soft edge (a few pixels at this size) should show.
+Owner at 5 (2026-11-21 11:52): "looks better, but its awfully white" - measured on the crop: 217 of 447 flame pixels at
+240+ in all channels (mean 247 / 238 / 204). Soft v4: SOFT_EXPOSURE_OFFSET 3, core 1.0 / 0.80 / 0.45.
 
 ## Electrical buzz (2026-11-21, owner: "an ambient electrical buzz i hear, cant trace it")
 Supported hypothesis: a looping sound carried by a copied Starfield record. Furniture copies keep the template's

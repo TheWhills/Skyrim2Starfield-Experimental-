@@ -626,13 +626,14 @@ SOFT_FALLOFF_DEPTH_M = 0.01
 # owner 2026-11-21: "could stand to be a little warmer" (the core read white): colours from the rim to the core
 # (owner 2026-11-21 11:40, "i can see pixels": pink pixels on the flame's edge; the blue foot mixed with the orange rim
 # made magenta, the only colour in the texture with more blue than green - the blue foot is gone, the foot is only fainter)
-SOFT_COLOURS = {"rim": (0.95, 0.36, 0.07), "mid": (1.0, 0.58, 0.17), "core": (1.0, 0.85, 0.55),
+SOFT_COLOURS = {"rim": (0.95, 0.36, 0.07), "mid": (1.0, 0.58, 0.17), "core": (1.0, 0.80, 0.45),
                 "halo": (1.0, 0.45, 0.12)}
 # Same crop, at pixel scale: the whole flame one flat clipped white with a one-pixel step to the dark (a small, blown-out
 # shape reads as pixels). EMITTANCE["candle"]'s ExposureOffset 8 is 8 stops over the scene's exposure (supported
 # hypothesis: AdaptiveEmittance's offset is in stops), and a dark inn raises the exposure further. The soft candle
 # takes SOFT_EXPOSURE_OFFSET instead; --candle-exposure / -CandleExposure try others (a flame-only rebuild)
-SOFT_EXPOSURE_OFFSET = 5.0
+# owner 2026-11-21 11:52 at 5: "awfully white" - half the flame's pixels still 240+ in all three channels: 3
+SOFT_EXPOSURE_OFFSET = 3.0
 
 
 def _smooth(e0, e1, x):

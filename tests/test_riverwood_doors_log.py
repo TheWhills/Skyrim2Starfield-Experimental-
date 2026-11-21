@@ -91,7 +91,9 @@ class ScriptTest(unittest.TestCase):
         self.assertIn('PYTHONUNBUFFERED = "1"', self.ps)
 
     def test_both_convert_calls_pass_the_candle_exposure(self):
-        self.assertIn("[double]$CandleExposure = 5", self.ps)
+        with open(os.path.join(ROOT, "src", "fo4sf", "skyrimfire.py"), encoding="utf-8") as fh:   # the converter's default
+            default = float(re.search(r"^SOFT_EXPOSURE_OFFSET = ([\d.]+)", fh.read(), re.M).group(1))
+        self.assertIn(f"[double]$CandleExposure = {default:g}", self.ps)
         self.assertEqual(self.ps.count("--candle-exposure"), 2)
 
     def test_assets_only_skips_the_navmesh_defaults_search(self):

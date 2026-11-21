@@ -118,4 +118,10 @@ Owner's first run after it (2026-11-21 11:20, -AssetsOnly with the soft candle v
 70 s (every model, the expected one-time reconvert), install 5 s, total 87 s. The 12 s outside the steps: the
 navmesh_defaults.json search of all of C:\Modding ran before the -AssetsOnly branch; moved into step 1 (the full build
 only). After for the flame-only case: still the next flame change.
+Owner's run 2026-11-21 11:49 (-AssetsOnly, soft v3): convert **74 s**, every model again. Cause: the soft v3 commit
+added --candle-exposure to make_skyrim_objects.py, and the whole script file was in the checkpoint signature. Now only
+the convert path counts (convert_source: cmd_convert, the functions it reaches, the constants they read, compared as an
+ast without comments or line numbers): new options in main and the lod / stage / check commands no longer reconvert.
+The signature's shape changed with it, so the next build reconverts once more. After (-CandleExposure N, flame_key only):
+pending.
 

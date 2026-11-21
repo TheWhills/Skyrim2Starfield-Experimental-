@@ -285,14 +285,45 @@ def converter_modules(root_dir, roots=CONVERT_ROOTS, exclude=FLAME_MODULES):
     return sorted(root_dir / f"{m}.py" for m in seen)
 
 
+def convert_source(path=__file__, root="cmd_convert") -> str:
+    """The parts of this script model conversion runs: `root` and the top-level functions it reaches by name, plus the
+    imports and the top-level constants those functions read (no comments or line numbers: ast). 2026-11-21 (owner, -AssetsOnly 80 s with every
+    model reconverted): the whole script was in the signature, so a new command-line option (main) or a change to the
+    lod / stage / check commands threw away all ~265 model checkpoints."""
+    import ast
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    funcs = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    keep, todo = set(), [root]
+    while todo:
+        f = todo.pop()
+        if f in keep or f not in funcs:
+            continue
+        keep.add(f)
+        todo += [n.id for n in ast.walk(funcs[f]) if isinstance(n, ast.Name)]
+        todo += [n.attr for n in ast.walk(funcs[f]) if isinstance(n, ast.Attribute)]   # e.g. getattr-free calls
+    used = {n.id for f in keep for n in ast.walk(funcs[f]) if isinstance(n, ast.Name)}
+
+    def needed(n):                                   # imports, and the constants the kept functions read
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            return True
+        if isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = n.targets if isinstance(n, ast.Assign) else [n.target]
+            return any(isinstance(t, ast.Name) and t.id in used for tt in targets for t in ast.walk(tt))
+        return False
+    parts = [ast.dump(n) for n in tree.body if needed(n)]
+    parts += [ast.dump(funcs[f]) for f in sorted(keep)]
+    return "\n".join(parts)
+
+
 def checkpoint_signature(a):
     from fo4sf import checkpoints
     from pathlib import Path
-    code = converter_modules(Path(REPO, "src", "fo4sf")) + [Path(__file__)]
+    code = converter_modules(Path(REPO, "src", "fo4sf"))
     archives = sorted(p for p in Path(a.skyrim_data).iterdir() if p.suffix.lower() == ".bsa")
     return {"version": 1, "kind": "skyrim", "archives": [checkpoints.archive_identity(p) for p in archives],
             "content": {str(p.resolve()): checkpoints.digest(p) for p in
-                        [*code, Path(a.texconv), Path(a.content_resources)]},
+                        [*code, Path(a.texconv), Path(a.content_resources)]}
+            | {"make_skyrim_objects convert": hashlib.sha256(convert_source().encode()).hexdigest()},
             "box_template": hashlib.sha256(box_template_nif(a)).hexdigest(),
             "collision": "boxes" if (getattr(a, "box_collision", False) or not getattr(a, "starfield_data", None))
             else "native",

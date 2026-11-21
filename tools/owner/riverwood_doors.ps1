@@ -56,8 +56,9 @@ param(
     # -AssetsOnly is enough to switch)
     # 2026-11-21 (owner: "the candles just look very low quality"): "soft" = our own smooth flame flipbook with a halo
     [ValidateSet("skyrim", "starfield", "soft")][string]$CandleStyle = "soft",
-    # soft candles' brightness, stops over the scene's exposure (2026-11-21: 5; lower = dimmer). Flame-only: -AssetsOnly
-    [double]$CandleExposure = 5,
+    # soft candles' brightness, stops over the scene's exposure (2026-11-21: 5 "awfully white", now 3; lower = dimmer).
+    # Flame-only: -AssetsOnly
+    [double]$CandleExposure = 3,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
