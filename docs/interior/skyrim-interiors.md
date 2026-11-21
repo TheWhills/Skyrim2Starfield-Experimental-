@@ -543,4 +543,6 @@ for alchemy, NPCWelder for the forge, NPCRepairImpactWrench for the grindstone),
 (LLSH). Skyrim's furniture and lights make no sound of their own, so PluginSpike now clears both on every copy and the
 build log names the templates it took sounds off ("looping sounds removed from copies of: ..."). A plugin change: a
 full build. Unverified: that it was one of these.
+Owner's build (2026-11-21 10:59): "looping sounds removed from copies of: furniture WorkbenchChem, furniture
+WorkbenchIndustrial" (the alchemy tables' and the enchanting table's templates; no light carried one). In game: open.
 
