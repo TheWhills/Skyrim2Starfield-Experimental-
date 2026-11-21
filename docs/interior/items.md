@@ -156,4 +156,12 @@ digipicks, ammo, contraband, quest-prefixed EditorIDs (MQ / SQ / UC / FC / ...),
 contraband / resource / unique / collectible / quest keyword. The donor's value, weight and scrap components (CVPA) are
 kept (Skyrim's in items.json). Skyrim's gold (Gold001...) stays a static: Starfield's credits are a step of their own.
 Unverified: which Starfield MISC the size picks (the owner's 2e lines will show; filters to tune like the drinks).
+**First clutter run** (owner, 09:31): 585 placed items from 75 Skyrim bases (clutter added 288: tankards 77, plates 29,
+buckets 22, ...); 796 Starfield MISC donors, 795 with a body; sizes close (most fits under 0.5). Picks by size alone
+were odd for value / scrap parts (tankard -> RobotMachinePart01, plate -> GeneticSampler01, basket -> potted plant)
+and two were mission / quest items (MissionCargoType15, FFParadisoZ01_Parts); fork / knife have no FULL in Skyrim
+("BasicFork01"). Now: mission / cargo / FF... donors left out, dishes (plate, bowl, tankard, cup, fork, knife, spoon,
+ladle, pots, kettle, jug) prefer Starfield Kitchen_ / Bar_ / FoodDrink_ / dish items, tools Tool_ ones, and a
+missing name comes from the EditorID ("Fork", "Wooden Bowl"). Quest clutter (Golden Claw, Map of Dragon Burials) are
+copies like the rest, kept initially disabled as in Skyrim.
 

@@ -53,10 +53,17 @@ SKIP_DONOR_RX = r"test|notplayable|dummy|template|deprecated|^zz|^cut|_cut\b|deb
 ALCOHOL_RX = r"wine|mead|\bale\b|ale$|beer|brandy|spirit|honningbrew|blackbriar|\brum\b|whisk"
 PRODUCE_RX = (r"cabbage|potato|leek|apple|garlic|carrot|tomato|gourd|lettuce|pear|berr|egg|root|radish|onion|melon|"
               r"corn|wheat")
-PREFER = {"alcohol": r"^drink_alc_", "produce": r"^food_produce_"}
+# clutter families (same run: tankards copied RobotMachinePart01, plates GeneticSampler01, so their value / scrap parts
+# were a robot part's and a lab tool's): Skyrim's dishes prefer Starfield's kitchen / bar / dish items, its tools Tool_
+KITCHEN_RX = r"plate|bowl|tankard|cup|mug|goblet|fork|knife|spoon|ladle|pot\b|pot\d|potmedium|potsmall|kettle|pitcher|jug|flagon|cauldron|platter"
+TOOL_RX = r"hammer|tongs|saw\b|saw\d|pickaxe|shovel|broom|hoe\b|pitchfork|chisel|axe\b|woodaxe|lockpick|shears"
+PREFER = {"alcohol": r"^drink_alc_", "produce": r"^food_produce_",
+          "kitchen": r"^(kitchen_|bar_|fooddrink_|dish|plate|mug|cup|tray|bowl)", "tool": r"^tool_"}
 # MISC donors (2026-11-21, owner: "lets do clutter next"): Starfield's loose misc items, not its resources (a plate must not
 # count as iron for crafting), credits / digipicks, contraband, quest or featured items, or scripted ones
-MISC_SKIP_RX = (r"^(inorg|org|mfg|res_|resource|credits|digipick|ammo)|contraband|quest|"
+# owner's first clutter run (2026-11-21): MissionCargoType15 (troll skull) and FFParadisoZ01_Parts (kettle) slipped
+# through: mission cargo and FF... (Freestar / faction quest) items are left out too
+MISC_SKIP_RX = (r"^(inorg|org|mfg|res_|resource|credits|digipick|ammo|ff)|contraband|quest|mission|cargo|"
                 r"^(mq|sq|uc|fc|ri|cf|bq|lc|se|oe|city|com|dlc|sfbgs|ecs|rad|mb|tm|crs)\d*_")
 MISC_SKIP_KEYWORD_RX = r"contraband|resource|unique|collectible|quest"
 SKYRIM_MISC_SKIP_RX = r"^gold0"                 # Skyrim's gold: Starfield's credits, a step of its own (left static)
@@ -85,7 +92,18 @@ def skyrim_family(kind: str, edid: str) -> str:
         return "alcohol"
     if kind == "food" and re.search(PRODUCE_RX, edid, re.I) and not re.search(r"baked|grilled|cooked|soup|stew", edid, re.I):
         return "produce"
+    if kind == "misc" and re.search(KITCHEN_RX, edid, re.I):
+        return "kitchen"
+    if kind == "misc" and re.search(TOOL_RX, edid, re.I):
+        return "tool"
     return ""
+
+
+def pretty_name(edid: str) -> str:
+    """A name from an EditorID, for Skyrim records without FULL (owner's clutter run: "BasicFork01", "BasicKnife01"):
+    the Basic / Common prefix and trailing digits dropped, words split ("BasicWoodenBowl01" -> "Wooden Bowl")."""
+    e = re.sub(r"\d+[A-Za-z]?$", "", re.sub(r"^(Basic|Common|Clutter)", "", edid)) or edid
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", e).strip() or edid
 
 
 def starfield_kinds(edid: str, model: str = "", flags: int = 0) -> set:
@@ -330,7 +348,7 @@ def make_base(key, base, ix, manifest, donors, names, convert_dir, read_physics,
     model = item_model_name(ours_model)
     nifs[model] = nif
     bounds = [[ours[0][i] + d[i] for i in range(3)], [ours[1][i] + d[i] for i in range(3)]]
-    name = names.get(info["name"], info["edid"]) if isinstance(info["name"], int) else (info["name"] or info["edid"])
+    name = (names.get(info["name"]) if isinstance(info["name"], int) else info["name"]) or pretty_name(info["edid"])
     out = {"edid": info["edid"], "name": name, "skyrim_type": sig, "kind": kind, "family": family,
            "record": donor.get("sig", "ALCH"), "donor": f"{donor['fid']:08X}",
            "donor_edid": donor["edid"], "donor_model": donor["model"], "model": model,

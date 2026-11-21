@@ -98,6 +98,22 @@ class ClutterTests(unittest.TestCase):
         self.assertEqual(got, {"Clutter_Plate01": ("MISC", {"misc"}), "Clutter_Mug": ("MISC", {"misc"}),
                                "Drink_Alc_Wine": ("ALCH", {"drink"})})
 
+    def test_first_clutter_run_fixes(self):
+        # owner's run 2026-11-21: mission cargo / FF quest donors out, dishes and tools to their Starfield families
+        recs = [self.misc(1, "MissionCargoType15"), self.misc(2, "FFParadisoZ01_Parts"), self.misc(3, "RobotMachinePart01"),
+                self.misc(4, "Kitchen_Mug01"), self.misc(5, "Tool_Hammer01")]
+        donors = M.starfield_donors(recs)
+        self.assertEqual([d["edid"] for d in donors], ["RobotMachinePart01", "Kitchen_Mug01", "Tool_Hammer01"])
+        self.assertEqual(M.skyrim_family("misc", "BasicTankard01"), "kitchen")
+        self.assertEqual(M.skyrim_family("misc", "CastIronPotSmall01"), "kitchen")
+        self.assertEqual(M.skyrim_family("misc", "Hammer01"), "tool")
+        self.assertEqual(M.skyrim_family("misc", "Basket01"), "")
+        tankard = [[-0.08, -0.08, 0], [0.08, 0.08, 0.17]]
+        self.assertEqual(M.rank_donors(tankard, "misc", donors, "kitchen")[0]["edid"], "Kitchen_Mug01")
+        self.assertEqual(M.pretty_name("BasicFork01"), "Fork")
+        self.assertEqual(M.pretty_name("BasicWoodenBowl01"), "Wooden Bowl")
+        self.assertEqual(M.pretty_name("Quill01"), "Quill")
+
     def test_skyrim_misc_kind_and_data(self):
         self.assertEqual(M.skyrim_kind("MISC", "BasicPlate01", "clutter\\plate.nif", 0), "misc")
         info = M.skyrim_base([(b"EDID", z("BasicTankard01")), (b"MODL", z("Clutter\\Tankard.nif")),
@@ -128,7 +144,7 @@ class ClutterTests(unittest.TestCase):
                                  lambda m: [[-0.1, -0.1, 0], [0.1, 0.1, 0.02]])
         b = out["bases"]["000020:Skyrim.esm"]
         self.assertEqual((b["kind"], b["record"], b["donor_edid"], b["name"]),
-                         ("misc", "MISC", "Clutter_Mug", "BasicTankard01"))          # a MISC donor, never the drink
+                         ("misc", "MISC", "Clutter_Mug", "Tankard"))          # no FULL: a name from the EditorID          # a MISC donor, never the drink
         self.assertEqual([r["formkey"] for r in out["refs"]], ["000200:Skyrim.esm"])
         self.assertIn("credits", out["skipped"][0]["why"])                           # gold left static for now
 
