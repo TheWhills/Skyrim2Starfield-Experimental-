@@ -149,6 +149,17 @@ class SkyrimGradingTest(unittest.TestCase):
         self.assertFalse(MSI.parser().parse_args(["batch"]).skyrim_grading)
         self.assertTrue(MSI.parser().parse_args(["batch", "--skyrim-grading"]).skyrim_grading)
 
+    def test_darker_defaults(self):
+        # owner 2026-11-21 17:18 "darken it a bit", the earlier build "felt more real": metering 90 .. 97 %, ambient 35
+        import make_skyrim_interior as MSI
+        from fo4sf import lightmodel
+        a = MSI.parser().parse_args(["batch"])
+        self.assertEqual((a.meter_darks, a.meter_brights), (90.0, 3.0))
+        self.assertEqual(lightmodel.ENV_AMBIENT_SCALE, 35.0)
+        ps = open(os.path.join(ROOT, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8").read()
+        for line in ("[double]$AmbientScale = 35,", "[double]$MeterDarks = 90,", "[double]$MeterBrights = 3,"):
+            self.assertIn(line, ps)
+
 
 class AdaptImageSpaceTest(unittest.TestCase):
     """2026-11-21: Skyrim adapts per view; --exposure auto writes LGT_NoLut with Starfield's auto exposure."""

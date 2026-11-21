@@ -439,10 +439,10 @@ def parser():
     ap.add_argument("--skyrim-grading", action="store_true",
                     help="batch --exposure auto: add Skyrim's saturation / contrast / tint (off by default: a screen "
                          "filter changes everything inside, characters included; owner 2026-11-21)")
-    ap.add_argument("--meter-darks", type=float, default=85.0,
+    ap.add_argument("--meter-darks", type=float, default=90.0,
                     help="batch --exposure auto: %% of the darkest pixels the auto exposure ignores (vanilla 20; higher = "
                          "it meters brighter parts = a darker image)")
-    ap.add_argument("--meter-brights", type=float, default=5.0,
+    ap.add_argument("--meter-brights", type=float, default=3.0,
                     help="batch --exposure auto: %% of the brightest pixels it ignores (vanilla 20)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")

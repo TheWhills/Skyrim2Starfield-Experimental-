@@ -412,3 +412,9 @@ exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hy
   the light, the converter sizes each light from Skyrim's data by rule; if not (unresolved), the alternatives are a
   near-field cap by splitting a light, or moving its origin.
 - Exposure is unchanged by owner's choice ("leave it like this for now", 16:53).
+
+## Darker defaults (owner 17:18: "darken it a bit"; the earlier build "felt more real")
+- Measured from the owner's hall shots (display luminance, percentiles 1 / 50): the earlier build 0.006 / 0.112, the
+  current 0.062 / 0.224: shadows lifted about 10x (the ambient cube), mid-tones about one display step brighter.
+- Defaults now: environment ambient 35 (was 75; lightmodel.ENV_AMBIENT_SCALE and -AmbientScale), metering 90 .. 97 %
+  (was 85 .. 95; about 0.4 stops darker on the owner's shots). Rollback: -AmbientScale 75 -MeterDarks 85 -MeterBrights 5.

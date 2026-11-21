@@ -61,7 +61,7 @@ param(
     [double]$CandleExposure = 3,
     # Skyrim's ambient as each room's environment light: radiance per linear unit (2026-11-21: 38, then 150;
     # higher = brighter shadows / corners). Written by step 1: a full build
-    [double]$AmbientScale = 75,
+    [double]$AmbientScale = 35,
     # 2026-11-21: exposure like Skyrim's, adapting to what you look at (auto, a copy of LGT_NoLut with Starfield's auto
     # exposure between EV100 ExposureMin and ExposureMax), or fixed (EV 5, each room's lights scaled instead). Step 1
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
@@ -79,8 +79,8 @@ param(
     [double]$ExposureBrightness = 1,
     # what the auto exposure measures (2026-11-21: brightness 0.25 capped whites; the level comes from metering instead):
     # it ignores the darkest MeterDarks % and the brightest MeterBrights % (vanilla 20 / 20). Higher MeterDarks = darker
-    [double]$MeterDarks = 85,
-    [double]$MeterBrights = 5,
+    [double]$MeterDarks = 90,
+    [double]$MeterBrights = 3,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
