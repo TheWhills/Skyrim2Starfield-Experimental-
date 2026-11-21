@@ -62,6 +62,11 @@ param(
     # Skyrim's ambient as each room's environment light: radiance per linear unit (2026-11-21: 38, a first guess;
     # higher = brighter shadows / corners). Written by step 1: a full build
     [double]$AmbientScale = 38,
+    # 2026-11-21: exposure like Skyrim's, adapting to what you look at (auto, a copy of LGT_NoLut with Starfield's auto
+    # exposure between EV100 ExposureMin and ExposureMax), or fixed (EV 5, each room's lights scaled instead). Step 1
+    [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
+    [double]$ExposureMin = 3,
+    [double]$ExposureMax = 6.5,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -176,6 +181,9 @@ $args1 = @("batch", "--skyrim", "$SKY\Skyrim.esm", "--work", $Work, "--exterior"
 if ($Find) { $args1 += @("--find", $Find) } else { $args1 += @("--cells", $Cells) }
 if ($nav) { $args1 += @("--navmesh-defaults", $nav.FullName) }
 $args1 += @("--ambient-scale", $AmbientScale.ToString([cultureinfo]::InvariantCulture))
+$args1 += @("--exposure", $Exposure, "--starfield-esm", "$SF\Data\Starfield.esm",
+            "--exposure-min", $ExposureMin.ToString([cultureinfo]::InvariantCulture),
+            "--exposure-max", $ExposureMax.ToString([cultureinfo]::InvariantCulture))
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }

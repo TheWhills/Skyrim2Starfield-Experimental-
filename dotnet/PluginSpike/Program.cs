@@ -1010,6 +1010,26 @@ var itemNotes = new SortedSet<string>();
     return itemBases[key] = (made, new P3Float(o[0].GetSingle(), o[1].GetSingle(), o[2].GetSingle()));
 }
 
+// 2026-11-21 (docs/interior/lighting-model.md): Skyrim adapts its exposure to what the camera sees; a fixed exposure
+// with a per-room light scale cannot (the inn's bedroom 1 stop over Skyrim while its hall is 2 under). With
+// <out>/imagespace_skyrim_adapt.bin (make_skyrim_interior batch --exposure auto: LGT_NoLut's settings with Starfield's
+// auto exposure between --exposure-min and --exposure-max) every cell gets a copy of LGT_NoLut carrying that blob
+FormKey? adaptIs = null;
+var adaptPath = Path.Combine(outDir, "imagespace_skyrim_adapt.bin");
+if (File.Exists(adaptPath))
+{
+    var isTpl = new FormKey(sfEsm, 0x1C6C37);
+    if (SfCache().TryResolve<IImageSpaceGetter>(isTpl, out var isGetter))
+    {
+        var nis = (ImageSpace)isGetter.Duplicate(Id("IMGS:skyrim_adapt"));
+        nis.EditorID = "FO4Port_IS_SkyrimAdapt";
+        nis.Reflection = new Noggog.MemorySlice<byte>(File.ReadAllBytes(adaptPath));
+        mod.ImageSpaces.Add(nis);
+        adaptIs = nis.FormKey;
+        Console.WriteLine($"image space {nis.EditorID} {nis.FormKey}: LGT_NoLut with auto exposure ({adaptPath})");
+    }
+    else Console.WriteLine($"WARNING: LGT_NoLut {isTpl} not found: cells keep their image space");
+}
 var cellPaths = args.Skip(2).SelectMany(a => a.StartsWith('@')
     ? File.ReadAllLines(a[1..]).Select(l => l.Trim()).Where(l => l.Length > 0)
     : new[] { a }).ToList();
@@ -1030,6 +1050,7 @@ foreach (var cellPath in cellPaths)
     // exposure + reflections like the vanilla underground interior DR017UndergroundInterior (25CAA7): without these the cell
     // reflects a bright default sky and auto-exposure washes everything out
     cell.ImageSpace.SetTo(new FormKey(sfEsm, Convert.ToUInt32(Setting(src4, "IMAGE_SPACE", "122393"), 16)));
+    if (adaptIs is FormKey aIs) cell.ImageSpace.SetTo(aIs);
     cell.EnvironmentMap = Environment.GetEnvironmentVariable("ENV_MAP") ?? "Data\\Textures\\cubemaps\\blackcube.dds";
     // 2026-11-21: Skyrim's ambient as the cell's environment light (make_skyrim_interior.write_ambient_cube; ENV_AMBIENT
     // 0 in lighting.json keeps the black cube)

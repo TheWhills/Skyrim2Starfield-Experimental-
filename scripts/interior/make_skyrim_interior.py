@@ -126,6 +126,34 @@ def write_lighting(work, cell, a):
     return entry
 
 
+ADAPT_IMAGESPACE = "imagespace_skyrim_adapt.bin"
+ADAPT_TEMPLATE = 0x1C6C37                      # LGT_NoLut, the interiors' image space
+
+
+def write_adapt_imagespace(work, a):
+    """--exposure auto: <work>/convert/imagespace_skyrim_adapt.bin = LGT_NoLut's settings (read from Starfield.esm) with
+    Starfield's auto exposure between --exposure-min and --exposure-max (EV100), which PluginSpike copies into every
+    cell's image space (docs/interior/lighting-model.md: Skyrim adapts per view). --exposure fixed removes the file
+    (the per-room light scale instead). Returns the blob or None."""
+    path = os.path.join(work, "convert", ADAPT_IMAGESPACE)
+    if getattr(a, "exposure", "fixed") != "auto" or not getattr(a, "starfield_esm", None):
+        if os.path.exists(path):
+            os.remove(path)
+        return None
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import sf_imagespace
+    blob = sf_imagespace.patch(sf_imagespace.read_imgs(a.starfield_esm, ADAPT_TEMPLATE), {
+        "Settings.Exposure.CameraExposureMode": "EXPOSURE_MODE_AUTO",
+        "Settings.Exposure.AutoExposure.ExposureMin.Value": float(a.exposure_min),
+        "Settings.Exposure.AutoExposure.ExposureMax.Value": float(a.exposure_max)})
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(blob)
+    print(f"image space: LGT_NoLut with auto exposure EV100 {a.exposure_min} .. {a.exposure_max} -> {path}")
+    return blob
+
+
 AMBIENT_CUBE_DIR = "textures/skyrim/interiorambient"
 
 
@@ -209,6 +237,7 @@ def cmd_batch(a):
         ext_doors = skyriminterior.exterior_doors(src, exports) if a.exterior else []
     doors = skyriminterior.link_load_doors(exports, exterior=a.exterior)
     batch_nav = {n["formkey"] for e in exports for n in e["navmeshes"]}
+    adapt_blob = write_adapt_imagespace(work, a)
     by_model, rows, cell_files = {}, [], []
     for e in exports:
         sub, skipped = exterior.select(e, skyrimrefs.CONVERT_TYPES)
@@ -216,6 +245,8 @@ def cmd_batch(a):
             by_model.setdefault(exterior.source_key(r["model"]), {"model": r["model"], "type": r["type"],
                                                                   "formkey": r["formkey"]})
         cell = skyriminterior.plugin_cell(e, sub["refs"], batch_nav)
+        if adapt_blob is not None:          # Starfield adapts per view now: no per-room bake (skyrim_mean_light kept)
+            cell["light_scale"] = 1.0
         write_ambient_cube(work, cell, a.ambient_scale)
         save(os.path.join(work, "exports", e["cell"] + ".json"), e)
         path = os.path.join(work, "cells", e["cell"] + ".json")
@@ -326,6 +357,12 @@ def parser():
     ap.add_argument("--ambient-scale", type=float, default=None,
                     help="batch: the environment cube's radiance per linear unit of Skyrim's ambient (default "
                          "fo4sf.lightmodel.ENV_AMBIENT_SCALE; docs/interior/lighting-model.md)")
+    ap.add_argument("--exposure", choices=("auto", "fixed"), default="fixed",
+                    help="batch: auto = Starfield's auto exposure in a copy of LGT_NoLut (needs --starfield-esm; no "
+                         "per-room light scale), fixed = LGT_NoLut's EV 5 with the per-room scale")
+    ap.add_argument("--starfield-esm", default="", help="batch --exposure auto: Starfield.esm (read-only)")
+    ap.add_argument("--exposure-min", type=float, default=3.0, help="batch --exposure auto: lowest EV100 (brightest)")
+    ap.add_argument("--exposure-max", type=float, default=6.5, help="batch --exposure auto: highest EV100 (darkest)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

@@ -64,6 +64,7 @@ def schema(cs: list):
 class _Reader:
     def __init__(self, data, classes):
         self.d, self.p, self.c = data, 0, classes
+        self.spans, self.path = {}, []                    # field path -> (type, start, end) of every leaf value
 
     def num(self, fmt):
         v = struct.unpack_from("<" + fmt, self.d, self.p)[0]
@@ -71,13 +72,16 @@ class _Reader:
         return v
 
     def value(self, t):
+        start, key = self.p, ".".join(self.path)
         if t in NUM:
             v = self.num(NUM[t])
+            self.spans[key] = (t, start, self.p)
             return bool(v) if t == "Bool" else v
         if t in ("String", "Enum"):
             n = self.num("H")
             s = self.d[self.p:self.p + n]
             self.p += n
+            self.spans[key] = (t, start, self.p)
             return s.rstrip(b"\0").decode("latin1")
         if t == "FormRef":
             return (self.num("I"), self.num("I"))
@@ -88,7 +92,12 @@ class _Reader:
             raise ValueError(f"unknown type {t} at byte {self.p}")
         if cls["flags"] & USER_FLAG:
             return None                                    # serialised in the USER chunk
-        return {n: self.value(ft) for n, ft in cls["fields"]}
+        out = {}
+        for n, ft in cls["fields"]:
+            self.path.append(n)
+            out[n] = self.value(ft)
+            self.path.pop()
+        return out
 
 
 def decode(data: bytes) -> tuple:
@@ -101,6 +110,51 @@ def decode(data: bytes) -> tuple:
     r = _Reader(objt, classes)
     root = name(r.num("I"))
     return root, r.value(root), r.p, len(objt)
+
+
+def _encode(t, v) -> bytes:
+    if t in NUM:
+        return struct.pack("<" + NUM[t], int(v) if t != "Float" and t != "Double" else v)
+    raw = str(v).encode("latin1") + b"\0"
+    return struct.pack("<H", len(raw)) + raw
+
+
+def patch(data: bytes, changes: dict) -> bytes:
+    """The blob with leaf fields replaced: {"Settings.Exposure.CameraExposureMode": "EXPOSURE_MODE_AUTO",
+    "Settings.Exposure.AutoExposure.ExposureMin.Value": 3.0, ...} (paths as flat() gives them, without the root).
+    Enum / string values may change length: the OBJT chunk's size follows. Unknown paths raise KeyError."""
+    cs = chunks(data)
+    name, classes = schema(cs)
+    idx = next(i for i, (t, _c) in enumerate(cs) if t == "OBJT")
+    objt = cs[idx][1]
+    r = _Reader(objt, classes)
+    root = name(r.num("I"))
+    r.value(root)
+    edits = []
+    for path, v in changes.items():
+        if path not in r.spans:
+            raise KeyError(path)
+        t, a, b = r.spans[path]
+        edits.append((a, b, _encode(t, v)))
+    for a, b, new in sorted(edits, reverse=True):
+        objt = objt[:a] + new + objt[b:]
+    cs[idx] = ("OBJT", objt)
+    out = data[:16]
+    for t, c in cs:
+        out += t.encode("latin1") + struct.pack("<I", len(c)) + c
+    return out
+
+
+def read_imgs(esm: str, form_id: int) -> bytes:
+    """The REFL blob of one IMGS record of a Starfield plugin."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "src"))
+    from fo4sf import sfplugin
+    for _t, _h, subs, fid in sfplugin.records(esm, [b"IMGS"]):
+        if fid & 0xFFFFFF == form_id & 0xFFFFFF:
+            for sig, d in subs:
+                if sig == b"REFL":
+                    return d
+    raise KeyError(f"IMGS {form_id:06X} with a REFL not found in {esm}")
 
 
 def flat(v, pre=""):

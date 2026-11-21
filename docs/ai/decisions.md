@@ -2633,3 +2633,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   per cell from Skyrim's ambient (x the room's adaptation x ENV_AMBIENT_SCALE 38) and use it as the environment map.
   Alternatives: fill lights in dark areas (needs geometry analysis; kept as the fallback), the cell AmbientColor alone
   (already Skyrim's, with no visible effect in the dark areas).
+
+## 2026-11-21: per-view auto exposure instead of a per-room light scale (default; -Exposure fixed keeps the old way)
+- The owner's inn screens: its small rooms 1 - 2 stops over Skyrim, its hall and stairs under, within one cell. Skyrim
+  adapts per view (ISHDR), so a per-cell factor cannot match it. Decision: a copy of LGT_NoLut (its settings read from
+  Starfield.esm at build time, not stored) with Starfield's auto exposure EV100 3 .. 6.5; per-room scale off.
+  Alternatives: per-room bake (kept as -Exposure fixed), splitting cells into zones (no data on zones).

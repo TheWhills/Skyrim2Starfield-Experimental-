@@ -61,3 +61,57 @@ class DecodeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PatchTest(unittest.TestCase):
+    def test_enum_length_and_float(self):
+        out = SI.patch(blob(), {"Settings.Exposure.CameraExposureMode": "EXPOSURE_MODE_AUTO",
+                                "Settings.Exposure.FixedValue.Value": 3.5})
+        root, val, used, size = SI.decode(out)
+        self.assertEqual(used, size)
+        f = dict(SI.flat(val))
+        self.assertEqual(f["Settings.Exposure.CameraExposureMode"], "EXPOSURE_MODE_AUTO")
+        self.assertEqual(f["Settings.Exposure.FixedValue.Value"], 3.5)
+        self.assertEqual(f["Settings.Lut"], "Effects\\LUTs\\ColorLUT.dds")         # the rest untouched
+        self.assertEqual(len(out), len(blob()) - 1)                                 # FIXED -> AUTO: one byte shorter
+        with self.assertRaises(KeyError):
+            SI.patch(blob(), {"Settings.Nope": 1.0})
+
+
+class AdaptImageSpaceTest(unittest.TestCase):
+    """2026-11-21: Skyrim adapts per view; --exposure auto writes LGT_NoLut with Starfield's auto exposure."""
+
+    def test_written_and_removed(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest import mock
+        import make_skyrim_interior as MSI
+        seen = {}
+        with tempfile.TemporaryDirectory() as work, \
+                mock.patch.object(SI, "read_imgs", lambda esm, fid: seen.setdefault("fid", fid) and blob()), \
+                mock.patch.object(SI, "patch", lambda data, ch: seen.setdefault("changes", ch) and b"BLOB"):
+            a = SimpleNamespace(exposure="auto", starfield_esm="Starfield.esm", exposure_min=3.0, exposure_max=6.5)
+            import contextlib
+            import io
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(MSI.write_adapt_imagespace(work, a), b"BLOB")
+            path = os.path.join(work, "convert", MSI.ADAPT_IMAGESPACE)
+            self.assertTrue(os.path.exists(path))
+            self.assertEqual(seen["fid"], 0x1C6C37)
+            self.assertEqual(seen["changes"]["Settings.Exposure.CameraExposureMode"], "EXPOSURE_MODE_AUTO")
+            self.assertEqual(seen["changes"]["Settings.Exposure.AutoExposure.ExposureMin.Value"], 3.0)
+            self.assertIsNone(MSI.write_adapt_imagespace(work, SimpleNamespace(exposure="fixed", starfield_esm="x")))
+            self.assertFalse(os.path.exists(path))
+
+    def test_pluginspike_and_script(self):
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('Path.Combine(outDir, "imagespace_skyrim_adapt.bin")', cs)
+        self.assertIn("if (adaptIs is FormKey aIs) cell.ImageSpace.SetTo(aIs);", cs)
+        with open(os.path.join(ROOT, "tools", "owner", "riverwood_doors.ps1"), encoding="utf-8") as fh:
+            ps = fh.read()
+        self.assertIn('[ValidateSet("auto", "fixed")][string]$Exposure = "auto"', ps)
+        self.assertIn('"--starfield-esm"', ps)
+        with open(os.path.join(ROOT, "scripts", "interior", "make_skyrim_interior.py"), encoding="utf-8") as fh:
+            py = fh.read()
+        self.assertIn('cell["light_scale"] = 1.0', py)

@@ -194,3 +194,29 @@ brightness gives the true falloff at that distance within half a stop, whatever 
 brightness needs no inverse tonemap). Repeated with falloff exponent 1 and 2. Then the converter's rule: per room,
 solve each light's lumens (and an ambient fill) so ours matches Skyrim's linearised light at sample points, with one
 global constant tuned once against the owner's same-spot screenshot pairs.
+
+## Owner's screens with the ambient cube (13:17, all in the inn; same measure, vs Skyrim)
+| scene | after the bake | with the cube | dark end | bright end |
+|---|---|---|---|---|
+| inn hall | -2.6 st | -1.7 st | -4.2 | -0.7 |
+| inn side room | - | +0.4 st | -1.0 | +2.2 |
+| inn bedroom | +1.1 st | +1.2 st | -0.1 | +2.1 |
+| inn stairs | -4.5 st | -1.7 st | -4.8 | -0.2 |
+| inn basement | -1.9 st | -0.6 st | -5.2 | +1.7 |
+- Verified: the environment cube lights diffuse surfaces (the stairs +2.8 stops, the hall +0.9, the basement +1.3).
+- The owner: the "bedroom" is the inn's, not Sven's (correcting the 12:58 reading). So inside one cell the small rooms
+  are 1 - 2 stops over Skyrim and the hall / stairs under: no per-cell factor can fix that. Skyrim adapts to what the
+  camera sees (ISHDR: the frame's own average), so its inn bedroom is darkened and its hall brightened per view.
+- Vanilla image spaces all use AmbientOcclusion 7 and indirect diffuse 1 (not ours to change yet).
+
+## Per-view exposure (2026-11-21): Starfield's auto exposure in a copy of LGT_NoLut
+- sf_imagespace.patch rewrites leaf fields of a reflection blob (enum strings may change length; OBJT size follows;
+  tested on a synthetic blob, checked on the owner's LGT_NoLut: only the three fields change). make_skyrim_interior
+  batch --exposure auto reads LGT_NoLut's REFL from Starfield.esm, sets EXPOSURE_MODE_AUTO and ExposureMin / Max (EV100,
+  default 3 .. 6.5: up to 2 stops brighter or 1.5 darker than the fixed 5), writes <work>/convert/
+  imagespace_skyrim_adapt.bin; PluginSpike adds it as FO4Port_IS_SkyrimAdapt and every cell uses it. The per-room
+  light scale is then 1 (skyrim_mean_light still recorded). riverwood_doors -Exposure auto (default) / fixed.
+- Unresolved: Starfield's auto-exposure key (where it puts a room's average) and what its compensation curve does; the
+  range limits bound it either way. Expected: inn hall / stairs up, inn bedroom / side room down, houses near today.
+- Still open: the bright ends right under lights (+1.7 - 2.2 stops: inverse square near a light against Skyrim's flat
+  (1 - (d/r)^2)), the falloff measurement.
