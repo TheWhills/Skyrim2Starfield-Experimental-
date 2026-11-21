@@ -102,3 +102,16 @@ After (owner, 2026-11-16 10:19, -AssetsOnly, skyrimfire.py-only change): reused 
 **21.5 s** (before: 64.6 s with everything reconverted; 68.1 s inside the 117 s full build). Convert is now 3x faster for
 a flame round. The total "assets-only build: N s" line was cut off in the paste; the rest of the run is install only.
 
+## Riverwood build: flame methods out of the global signature, quieter window, step times (2026-11-21)
+Owner: "does it need to do all of this every time we test". Measured before (owner's build 10:59, after the soft-candle
+commit put flame code in skyrimconvert.py): full build **145 s**, convert 76.5 s with "reused": 0 (all 250 models
+reconverted); the build before it (10:21, nothing in the converter changed): **62 s**, convert 7.3 s, reused 249. The
+window: 823 lines.
+Changes: (1) the converter's flame methods moved to src/fo4sf/skyrimflames.py (FlameMixin), which is in
+make_skyrim_objects.FLAME_MODULES: a flame change now redoes the flame models only (as skyrimfire changes did,
+2026-11-16: convert 64.6 s -> 21.5 s); (2) riverwood_doors.ps1 runs every python / dotnet step through Run: full output
+to <Work>\logs\riverwood_doors_last.log, the window filtered by tools/owner/log_noise.txt (the 10:59 log: 823 -> about
+105 lines, every FAIL / error / WARNING kept), -FullLog prints everything; (3) each step's time and a table at the end.
+This commit changes skyrimconvert.py once more (the methods left it), so the next build reconverts everything one last
+time. After: the first build after a flame-only change (its step table: "2. convert" time and reused count) - pending.
+

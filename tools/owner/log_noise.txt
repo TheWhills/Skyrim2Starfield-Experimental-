@@ -1,0 +1,34 @@
+# Lines riverwood_doors.ps1 keeps out of the window (they still go to <Work>\logs\riverwood_doors_last.log).
+# One PowerShell regex (-match, case-insensitive) per line; lines starting with # are comments.
+# 2026-11-21 (owner: "does it need to do all of this every time we test"): per-NPC, per-package, per-record detail.
+# Errors are never matched here: anything with FAIL / Error / Traceback / WARNING always shows.
+#
+# 2. convert: the long stats line (its counts are in the log), check's how-to-run block
+^\{"converted":
+^next(:| \()
+^  \$env:
+^  dotnet run
+^  python -I scripts
+^in game, console: coc FO4Port_
+^afterwards: python
+# 2c. NPCs: one line per NPC and per package, notes
+^[A-Za-z]+ in Riverwood\w* at \[
+^  S2S_
+^  note:
+# 2d / 2e: one line per furniture kind / item base, skipped bases, lifted items
+^  [a-z_]+ -> [A-Za-z]
+^  skipped: .*no Starfield furniture
+^  (alcohol|produce|food|drink|potion|misc|kitchen|tool) +\w
+^  lifted \w
+# 3. PluginSpike: package templates, actors, lights, per-record lines
+^package template
+^actor \w
+^  flags
+^  A/B:
+^  cell lighting
+^   \d+,?$
+^  \] x1
+^  light FO4Port_
+^  fire \w
+^furniture: S2S_Furn_
+^items: S2S_Item_

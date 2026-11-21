@@ -222,7 +222,7 @@ CONVERT_ROOTS = ("skyrimconvert", "convert_static", "bsa", "checkpoints")
 # modules only flame models depend on (2026-11-15, owner: "are we running more steps than needed for the test again"):
 # kept out of the global signature; their digest + the flame style are checked per model (flame_key) instead, so a
 # flame change reconverts the candles and hearths, not all ~265 models
-FLAME_MODULES = ("skyrimfire",)
+FLAME_MODULES = ("skyrimfire", "skyrimflames")   # skyrimflames: the converter's flame methods (2026-11-21)
 
 
 def flame_key(a, extra: str = "") -> str:

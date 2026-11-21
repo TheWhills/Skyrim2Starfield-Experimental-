@@ -604,6 +604,20 @@ class ConverterModulesTests(unittest.TestCase):
         self.assertNotEqual(MSO.flame_key(SimpleNamespace(flame_style="particles", particle_fire="")),
                             MSO.flame_key(SimpleNamespace(flame_style="particles", particle_fire="00C78D:0.6")))
 
+    def test_converter_flame_methods_are_checked_per_flame_model(self):
+        """2026-11-21 (owner: "does it need to do all of this every time we test"): the candle code in skyrimconvert.py
+        reconverted all 250 models ("reused": 0); the flame methods live in skyrimflames, a flame module."""
+        from pathlib import Path
+        import make_skyrim_objects as MSO
+        real = [p.stem for p in MSO.converter_modules(Path(ROOT, "src", "fo4sf"))]
+        self.assertIn("skyrimconvert", real)
+        self.assertNotIn("skyrimflames", real)
+        self.assertNotIn("skyrimfire", real)
+        self.assertIn("skyrimflames", MSO.FLAME_MODULES)
+        conv = Path(ROOT, "src", "fo4sf", "skyrimconvert.py").read_text(encoding="utf-8")
+        for name in ("def particle_flame_cards", "def soft_candle_material", "def flame_material"):
+            self.assertNotIn(name, conv)
+
     def test_particle_fire_spec(self):
         import make_skyrim_objects as MSO
         self.assertEqual(MSO.parse_particle_fire(""), [("1CEDAB", 0.8)])

@@ -301,6 +301,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7s. (2026-11-21) riverwood_doors.ps1 now prints a short summary per step, each step's time, and a time table at the
+   end; the full output is in `C:\Modding\work\s2s\riverwood_doors\logs\riverwood_doors_last.log` (send that file
+   when asked for the build output). `-FullLog` prints everything as before.
 7r. B + C (2026-11-21): soft candle flames (our own smooth flame flipbook with a halo, the default -CandleStyle now)
    and the buzz (looping sounds taken off copied lights / furniture). A full build (the sound change is in the plugin):
    ```powershell

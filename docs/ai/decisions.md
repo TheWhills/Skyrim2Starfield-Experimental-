@@ -2595,3 +2595,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - 2026-11-21 Verified in game: placed Skyrim food / drink as ALCH copies with a donor's dynamic body (make_items + PluginSpike ITEMS) sit where Skyrim put them and can be picked up (owner, Sleeping Giant Inn). Donor choice settled: kind by Starfield EditorID prefix, family preference (alcohol, raw produce), then size from the donor's geometry.
 - 2026-11-21 Items on items verified in game: plates / platters / trays take a thin donor (their body is the dish floor) and hold food set up to 5 cm under them; food is lifted onto them at build time (gap 3 mm); a holder whose contents would need more than 6 cm of lift stays a static (Skyrim's hollow collision). Alternative rejected: Don't Havok Settle on everything (unconfirmed in Starfield; overlaps would burst when touched).
 
+
+## 2026-11-21: flame methods in src/fo4sf/skyrimflames.py; build window filtered, full log on disk
+- The converter's flame methods live in skyrimflames.py (FlameMixin), checked per flame model (FLAME_MODULES), so a
+  flame round no longer reconverts every model. supported: same mechanism as skyrimfire.py (2026-11-16, 64.6 s -> 21.5 s).
+- riverwood_doors.ps1 writes all output to <Work>\logs\riverwood_doors_last.log and filters the window with
+  tools/owner/log_noise.txt; the list only hides per-record detail, never FAIL / error / WARNING lines (tested).
+  -FullLog restores the old window. Each step is timed.

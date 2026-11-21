@@ -64,13 +64,74 @@ param(
     # turning parts (2026-11-18, the mill water wheel): copies of a vanilla turning static at the exterior's wheels, from
     # the exterior's own converted models (scripts\terrain\spin_parts.py; reconvert first: exterior_collision.ps1)
     [string]$ExteriorWork = "C:\Modding\work\sky_all",
-    [switch]$NoSpin
+    [switch]$NoSpin,
+    # 2026-11-21 (owner: "does it need to do all of this every time we test"): the window shows each step's summary; the
+    # full output always goes to <Work>\logs\riverwood_doors_last.log (send that file when asked). -FullLog prints it all
+    [switch]$FullLog
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $Repo
-function Step($t) { Write-Host "`n== $t" -ForegroundColor Cyan }
-function Fail($t) { Write-Host "FAILED: $t" -ForegroundColor Red; try { notify "riverwood_doors: FAILED - $t" } catch {}; exit 1 }
+# output: every line into the log file; the window gets the lines tools\owner\log_noise.txt does not match (per-NPC
+# package lines, per-item / per-furniture records, notes ...), long lines cut; each step's time, and a table at the end
+$env:PYTHONUNBUFFERED = "1"          # lines as they come, not in chunks at the end (stdout is a pipe now)
+$env:PYTHONIOENCODING = "utf-8"
+$LogDir = Join-Path $Work "logs"
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+$Log = Join-Path $LogDir "riverwood_doors_last.log"
+Set-Content -LiteralPath $Log -Encoding UTF8 -Value ("riverwood_doors " + (Get-Date -Format s) + ": " + $MyInvocation.Line)
+$Noise = @(Get-Content (Join-Path $PSScriptRoot "log_noise.txt") | Where-Object { $_ -and -not $_.StartsWith("#") })
+$script:StepName = $null
+$script:StepClock = $null
+$script:StepTimes = @()
+function Log($line) { Add-Content -LiteralPath $Log -Encoding UTF8 -Value $line }
+function Quiet($line) { foreach ($rx in $Noise) { if ($line -match $rx) { return $true } }; return $false }
+function Run {
+    # a native command (python / dotnet), its output (stderr too) logged and filtered; $LASTEXITCODE as it left it
+    $exe, $rest = $args
+    $ErrorActionPreference = "Continue"           # stderr lines are not errors here (PowerShell 5 would stop on them)
+    & $exe @rest 2>&1 | ForEach-Object {
+        $line = "$_"
+        Log $line
+        if ($FullLog -or -not (Quiet $line)) {
+            if ($line.Length -gt 240) { $line = $line.Substring(0, 240) + " ... (whole line in the log)" }
+            Write-Host $line
+        }
+    }
+}
+function EndStep {
+    if ($script:StepName) {
+        $sec = $script:StepClock.Elapsed.TotalSeconds
+        $script:StepTimes += , @($script:StepName, $sec)
+        Write-Host ("   ({0:N0} s)" -f $sec) -ForegroundColor DarkGray
+        Log ("   ({0:N0} s)" -f $sec)
+    }
+    $script:StepName = $null
+}
+function Step($t) {
+    EndStep
+    $script:StepName = $t
+    $script:StepClock = [Diagnostics.Stopwatch]::StartNew()
+    Write-Host "`n== $t" -ForegroundColor Cyan
+    Log "`n== $t"
+}
+function Timings {
+    EndStep
+    Write-Host "`nstep times:" -ForegroundColor DarkGray
+    foreach ($st in $script:StepTimes) {
+        $row = "  {0,6:N0} s  {1}" -f $st[1], $st[0]
+        Write-Host $row -ForegroundColor DarkGray
+        Log $row
+    }
+    Write-Host "full output: $Log" -ForegroundColor DarkGray
+}
+function Fail($t) {
+    Write-Host "FAILED: $t" -ForegroundColor Red
+    Log "FAILED: $t"
+    Timings
+    try { notify "riverwood_doors: FAILED - $t" } catch {}
+    exit 1
+}
 foreach ($p in @("$Exterior\formids.json", "$Exterior\overlays_params.json", "$SKY\Skyrim.esm", "$SF\Data\Starfield.esm", "$SF\Tools\ContentResources.zip")) {
     if (-not (Test-Path $p)) { Fail "missing $p" }
 }
@@ -90,13 +151,14 @@ if ($AssetsOnly) {
         Fail "-AssetsOnly needs one full build first (no FO4Port.esm / convert_input.json in $Work)"
     }
     Step "2. convert the models (resumable; only changed ones are redone)"
-    python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle --candle-style $CandleStyle
+    Run python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle --candle-style $CandleStyle
     if ($LASTEXITCODE -ne 0) { Fail "convert" }
-    if ($NoInstall) { Write-Host "converted in $staging (not installed: -NoInstall)"; exit 0 }
+    if ($NoInstall) { Timings; Write-Host "converted in $staging (not installed: -NoInstall)"; exit 0 }
     Step "4. install (archives repacked, plugin unchanged)"
-    if (Test-Path "$SF\Data\FO4Port.deploy.json") { python -I scripts\deploy_starfield.py uninstall --starfield $SF }
-    python -I scripts\deploy_starfield.py install --staging $staging --starfield $SF
+    if (Test-Path "$SF\Data\FO4Port.deploy.json") { Run python -I scripts\deploy_starfield.py uninstall --starfield $SF }
+    Run python -I scripts\deploy_starfield.py install --staging $staging --starfield $SF
     if ($LASTEXITCODE -ne 0) { Fail "install" }
+    Timings
     Write-Host ("`nassets-only build: {0:N0} s" -f $clock.Elapsed.TotalSeconds) -ForegroundColor Green
     try { notify "riverwood_doors: assets rebuilt and installed" } catch {}
     exit 0
@@ -109,15 +171,15 @@ if ($nav) { $args1 += @("--navmesh-defaults", $nav.FullName) }
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }
-python -I scripts\interior\make_skyrim_interior.py @args1
+Run python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }
 
 Step "2. convert the inn's models (resumable)"
 $conv = @("convert", "--work", $Work, "--skyrim-data", $SKY, "--content-resources", "$SF\Tools\ContentResources.zip", "--texconv", $Texconv, "--starfield-data", "$SF\Data", "--resume", "--flame-style", $FlameStyle, "--candle-style", $CandleStyle)
 if ($ParticleFire) { $conv += @("--particle-fire", $ParticleFire) }   # an empty argument would be dropped by PowerShell 5
-python -I scripts\terrain\make_skyrim_objects.py @conv
+Run python -I scripts\terrain\make_skyrim_objects.py @conv
 if ($LASTEXITCODE -ne 0) { Fail "convert" }
-python -I scripts\interior\make_skyrim_interior.py check --work $Work
+Run python -I scripts\interior\make_skyrim_interior.py check --work $Work
 
 $navWork = Join-Path $Work "navmesh"
 if ($Navmesh) {
@@ -126,10 +188,10 @@ if ($Navmesh) {
     if ($Resurvey -or -not (Test-Path $navDef)) {
         $sv = @("--esm", "$SF\Data\Starfield.esm", "--out", (Join-Path $navWork "survey"), "--exterior", "--max", "400")
         if (Test-Path "$SF\Data\ShatteredSpace.esm") { $sv += @("--navi-esm", "$SF\Data\ShatteredSpace.esm") }
-        python -I scripts\interior\navmesh_survey.py @sv
+        Run python -I scripts\interior\navmesh_survey.py @sv
         if ($LASTEXITCODE -ne 0) { Fail "navmesh survey" }
     }
-    python -I scripts\terrain\make_skyrim_navmesh.py export --skyrim "$SKY\Skyrim.esm" --exterior $Exterior --out $navWork --around $NavAround --radius $NavRadius --navmesh-defaults $navDef
+    Run python -I scripts\terrain\make_skyrim_navmesh.py export --skyrim "$SKY\Skyrim.esm" --exterior $Exterior --out $navWork --around $NavAround --radius $NavRadius --navmesh-defaults $navDef
     if ($LASTEXITCODE -ne 0) { Fail "navmesh export" }
 }
 
@@ -147,7 +209,7 @@ if ($Actors.Count -gt 0) {
     $sa += @("--exterior", $Exterior)
     if (Test-Path $Faces) { $sa += @("--faces", $Faces) } else { Write-Host "no faces.json at $Faces" -ForegroundColor Yellow }
     foreach ($st in $SitAt) { if ($st.Trim()) { $sa += @("--sit-at", $st.Trim()) } }
-    python -I scripts\npc\make_schedule.py @sa
+    Run python -I scripts\npc\make_schedule.py @sa
     if ($LASTEXITCODE -ne 0) { Fail "make_schedule" }
 }
 
@@ -162,13 +224,13 @@ if ($Furniture) {
     if ($PlainStations) { $fa += @("--plain-stations") }
     foreach ($kw in $StationKeyword) { if ($kw.Trim()) { $fa += @("--station-keyword", $kw.Trim()) } }
     if ($AnimPlugin -and (Test-Path $AnimPlugin)) { $fa += @("--anim-plugin", $AnimPlugin) }
-    python -I scripts\interior\make_furniture.py @fa
+    Run python -I scripts\interior\make_furniture.py @fa
     if ($LASTEXITCODE -ne 0) { Fail "make_furniture" }
 }
 
 if ($Items) {
     Step "2e. food, drink, potions and clutter as items"
-    python -I scripts\interior\make_items.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF --work $Work
+    Run python -I scripts\interior\make_items.py --skyrim "$SKY\Skyrim.esm" --skyrim-data $SKY --starfield $SF --work $Work
     if ($LASTEXITCODE -ne 0) { Fail "make_items" }
 }
 
@@ -176,7 +238,7 @@ Step "3. FO4Port.esm with the doors linked both ways"
 $staging = Join-Path $Work "convert"
 Remove-Item Env:SPIN_PARTS -ErrorAction SilentlyContinue
 if (-not $NoSpin -and (Test-Path "$ExteriorWork\convert\manifest.json") -and (Test-Path "$Exterior\objects.json")) {
-    python -I scripts\terrain\spin_parts.py --exterior $Exterior --work $ExteriorWork --out $staging
+    Run python -I scripts\terrain\spin_parts.py --exterior $Exterior --work $ExteriorWork --out $staging
     if ($LASTEXITCODE -ne 0) { Fail "spin_parts" }
     $env:SPIN_PARTS = Join-Path $staging "spin_parts.json"
 }
@@ -187,29 +249,30 @@ if ($Navmesh) { $env:EXTERIOR_NAVMESH = Join-Path $navWork "exterior_navmesh.jso
 if ($Actors.Count -gt 0) { $env:ACTORS = Join-Path $Work "actors.json" }
 if ($Furniture) { $env:FURNITURE = Join-Path $Work "furniture.json" }
 if ($Items) { $env:ITEMS = Join-Path $Work "items.json" }
-dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
+Run dotnet run --project dotnet\PluginSpike -- $staging (Join-Path $staging "manifest.json") ("@" + (Join-Path $Work "cells.txt"))
 $rc = $LASTEXITCODE
 Remove-Item Env:EXTERIOR_DIR, Env:EXTERIOR_DOORS, Env:EXTERIOR_NAVMESH, Env:ACTORS, Env:FURNITURE, Env:ITEMS, Env:SPIN_PARTS -ErrorAction SilentlyContinue
 if ($rc -ne 0) { Fail "PluginSpike (paste its output: compile errors name the Mutagen property)" }
 
 if ($Navmesh) {
     Step "3b. compare the navmesh in FO4Port.esm with Skyrim's"
-    python -I scripts\terrain\make_skyrim_navmesh.py compare --skyrim "$SKY\Skyrim.esm" --work $navWork --plugin (Join-Path $staging "FO4Port.esm")
+    Run python -I scripts\terrain\make_skyrim_navmesh.py compare --skyrim "$SKY\Skyrim.esm" --work $navWork --plugin (Join-Path $staging "FO4Port.esm")
     if ($LASTEXITCODE -ne 0) { Fail "navmesh compare" }
     Write-Host "open $navWork\compare.html in a browser" -ForegroundColor Green
 }
-if ($NoInstall) { Write-Host "built in $staging (not installed: -NoInstall)"; exit 0 }
+if ($NoInstall) { Timings; Write-Host "built in $staging (not installed: -NoInstall)"; exit 0 }
 Step "4. install (replaces the Oct 23 FO4Port test)"
-if (Test-Path "$SF\Data\FO4Port.deploy.json") { python -I scripts\deploy_starfield.py uninstall --starfield $SF }
-python -I scripts\deploy_starfield.py install --staging $staging --starfield $SF
+if (Test-Path "$SF\Data\FO4Port.deploy.json") { Run python -I scripts\deploy_starfield.py uninstall --starfield $SF }
+Run python -I scripts\deploy_starfield.py install --staging $staging --starfield $SF
 if ($LASTEXITCODE -ne 0) { Fail "install" }
 # 2026-11-14: the game ignores FO4Port.esm's overrides of the exterior's statics (in game, fresh coc: still there), so
 # the hidden ones are written into the exterior plugin itself, in place (docs/npc/furniture.md)
 Step "5. hide the replaced exterior statics in the exterior plugin"
 $extPlugin = (Get-Content "$Exterior\formids.json" -Raw | ConvertFrom-Json).plugin
 # only the installed copy: the build reads the staged one for the statics' places (load doors go where the static stood)
-python -I scripts\terrain\apply_ref_overrides.py --from "$SF\Data\FO4Port.esm" --into "$SF\Data\$extPlugin"
+Run python -I scripts\terrain\apply_ref_overrides.py --from "$SF\Data\FO4Port.esm" --into "$SF\Data\$extPlugin"
 if ($LASTEXITCODE -ne 0) { Fail "apply_ref_overrides" }
+Timings
 Write-Host ("`nfull build: {0:N0} s" -f $clock.Elapsed.TotalSeconds) -ForegroundColor Green
 Write-Host "`nIn game: coc SKY_TamrielRiverwoodSpawn, walk to the Sleeping Giant Inn's door and use it; inside, use the front door back out." -ForegroundColor Green
 try { notify "riverwood_doors: built and installed" } catch {}
