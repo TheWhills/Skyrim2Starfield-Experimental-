@@ -12,8 +12,8 @@ Per Skyrim ALCH / INGR base placed in the batch's cells (<work>\\cells.txt; the 
 as statics):
   - its kind: drink (food flag and a bottle / jug / wine / mead / ale word), food (other food, every ingredient), potion
     (not food: potions and poisons);
-  - a DONOR: the vanilla Starfield ALCH of the same kind (Starfield's food flag, medicine flag and words) whose size
-    (its OBND) is closest to our converted model's (height against height, the two flat sides against each other, on a
+  - a DONOR: the vanilla Starfield ALCH of the same kind (its EditorID's prefix: Drink_, Food_, Aid_ / Med_ / Chem_)
+    whose size (its own geometry's bounds; its OBND when the NIF has none) is closest to our converted model's (height against height, the two flat sides against each other, on a
     log scale), among those whose world model has a physics body. The item is a copy of the donor's record (its
     effects, sounds, keywords, value, weight: Starfield's own, items.md step 5), with the Skyrim name and our model;
   - our model with the donor's dynamic body (item_test.with_physics, verified on the wine bottle 2026-11-21), written
@@ -45,8 +45,6 @@ ITEM_TYPES = ("Ingestible", "Ingredient")       # cell.json types made items (MI
 FOOD, MEDICINE, POISON = 0x2, 0x10000, 0x20000  # ALCH ENIT flags (Skyrim and Starfield; Mutagen's Ingestible.Flag)
 NO_SETTLE, DISABLED = 0x20000000, 0x800         # REFR record flags: Don't Havok Settle, Initially Disabled
 DRINK_RX = r"wine|mead|\bale\b|ale$|beer|bottle|jug|flask|brandy|milk|skooma|spirit|tankard|honningbrew|blackbriar"
-SF_DRINK_RX = r"drink|wine|beer|whisk|liquor|spirit|bottle|alc|brew|soda|juice|coffee|tea\b"
-SF_MED_RX = r"med|aid|chem|heal|stim|cure|pack|inject"
 SKIP_DONOR_RX = r"test|notplayable|dummy|template|deprecated|^zz|^cut|_cut\b|debug"
 MAX_TRIES = 12                                  # donors whose NIF is read for a body, best fit first
 
@@ -64,20 +62,49 @@ def skyrim_kind(sig: str, edid: str, model: str, flags: int) -> str:
     return "drink" if re.search(DRINK_RX, f"{edid} {model}", re.I) else "food"
 
 
-def starfield_kinds(edid: str, model: str, flags: int) -> set:
-    """The kinds a vanilla Starfield ALCH can stand in for (empty: none)."""
-    words = f"{edid} {model}"
+def starfield_kinds(edid: str, model: str = "", flags: int = 0) -> set:
+    """The kinds a vanilla Starfield ALCH can stand in for (empty: none), by its EditorID's prefix: Drink_ / Food_ /
+    Aid_ Med_ Chem_. 2026-11-21 (owner's first -Items run): words matched on model paths too put 269 of 343 ALCH in
+    "drink" (Skyrim's wine copied a seaweed pack and a cereal box) and flags / words made ShipRepairKit and
+    LegendaryCatalyst "potions"; Starfield's EditorIDs name the kind."""
     if re.search(SKIP_DONOR_RX, edid, re.I):
         return set()
-    if flags & FOOD:
-        return {"drink"} if re.search(SF_DRINK_RX, words, re.I) else {"food"}
-    if flags & (MEDICINE | POISON) or re.search(SF_MED_RX, words, re.I):
-        return {"potion"}
-    if re.search(r"^drink", edid, re.I):
+    if re.match(r"drink_", edid, re.I):
         return {"drink"}
-    if re.search(r"^food", edid, re.I):
+    if re.match(r"food_", edid, re.I):
         return {"food"}
+    if re.match(r"(aid|med|chem)_", edid, re.I):
+        return {"potion"}
     return set()
+
+
+def geometry_bounds(nif_bytes: bytes):
+    """[[min], [max]] metres (the NIF's own frame) of a Starfield NIF's BSGeometry boxes (centre + half extents, as
+    sfnif.bounds_from_points writes them), each through its node's world transform; None when it has none. Used for a
+    donor's size instead of its OBND, whose units are unconfirmed (2026-11-21: OBND read as metres gave a 0.39 m
+    seaweed pack)."""
+    from fo4sf import sfnif
+    n = nifmod.parse(nif_bytes)
+    world = nifmod.world_transforms(n)
+    lo, hi = [math.inf] * 3, [-math.inf] * 3
+    for i in range(len(n.blocks)):
+        if n.type_of(i) != "BSGeometry":
+            continue
+        try:
+            box = sfnif.parse_bsgeometry(n.blocks[i]).box
+        except (nifmod.NifError, struct.error):
+            continue
+        if not all(math.isfinite(v) and abs(v) < 1e4 for v in box) or min(box[3:]) < 0:
+            continue
+        t, r, sc = world(i)
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                for sz in (-1, 1):
+                    v = (box[0] + sx * box[3], box[1] + sy * box[4], box[2] + sz * box[5])
+                    w = [sc * sum(r[3 * a + k] * v[k] for k in range(3)) + t[a] for a in range(3)]
+                    lo = [min(lo[a], w[a]) for a in range(3)]
+                    hi = [max(hi[a], w[a]) for a in range(3)]
+    return [lo, hi] if lo[0] <= hi[0] else None
 
 
 def obnd(d: bytes):
@@ -311,12 +338,23 @@ def main(argv=None):
     print(f"Starfield donors: {len(donors)} ALCH with a model "
           + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}" for k in ("drink", "food", "potion")))
     arcs = P.Archives(sf_data)
+    physics = {}
+    for dn in donors:                     # each donor's NIF once: its body, and its size from its own geometry
+        try:
+            data = arcs.read("meshes\\" + dn["model"])
+            physics[dn["fid"]] = item_test.donor_physics(data)
+            geo = geometry_bounds(data)
+        except Exception:                                      # noqa: BLE001 (missing / unreadable donor NIF)
+            physics[dn["fid"]], geo = None, None
+        dn["size_from"] = "geometry" if geo else ("obnd" if dn["bounds"] else None)
+        dn["bounds"] = geo or dn["bounds"]
+    donors = [dn for dn in donors if physics[dn["fid"]] is not None]
+    print(f"  with a physics body: " + ", ".join(f"{k} {sum(k in d['kinds'] for d in donors)}"
+                                                 for k in ("drink", "food", "potion"))
+          + f"; sized from their geometry {sum(d['size_from'] == 'geometry' for d in donors)}")
 
     def read_physics(dn):
-        try:
-            return item_test.donor_physics(arcs.read("meshes\\" + dn["model"]))
-        except Exception:                                      # noqa: BLE001 (missing / unreadable donor NIF)
-            return None
+        return physics.get(dn["fid"])
 
     def bounds_of(model):
         try:

@@ -67,6 +67,12 @@ class KindTests(unittest.TestCase):
         self.assertEqual(M.starfield_kinds("Aid_MedPack", "medpack.nif", M.MEDICINE), {"potion"})
         self.assertEqual(M.starfield_kinds("Food_Test_Pear", "pear.nif", M.FOOD), set())       # test records out
         self.assertEqual(M.starfield_kinds("Credits", "credits.nif", 0), set())
+        # owner's first run (2026-11-21): model paths and flags misfiled these; the EditorID prefix decides now
+        self.assertEqual(M.starfield_kinds("Food_Pack_Oishii_Seaweed_Combo", "SetDressing\\Drinks\\pack.nif", M.FOOD),
+                         {"food"})
+        self.assertEqual(M.starfield_kinds("ShipRepairKit", "repairkit.nif", M.MEDICINE), set())
+        self.assertEqual(M.starfield_kinds("LegendaryCatalyst", "catalyst.nif", M.MEDICINE), set())
+        self.assertEqual(M.starfield_kinds("Med_MedPack", "medpack.nif", 0), {"potion"})
 
 
 class FitTests(unittest.TestCase):
@@ -109,6 +115,19 @@ class NifTests(unittest.TestCase):
         for c in geo:
             self.assertAlmostEqual(nifmod._av_transform(out.blocks[c])[0][2], 0.05, places=6)
         self.assertEqual(M.shift_children(n, (0, 0, 0)), n)
+
+    def test_geometry_bounds(self):
+        a = sfnif.StaticShape(name=b"A", mesh_path=b"aa\\bb", indices_size=3, num_verts=3,
+                              material_path="Materials\\x.mat", sphere=(0, 0, 0.15, 0.2), box=(0, 0, 0.15, 0.04, 0.05, 0.15))
+        b = sfnif.StaticShape(name=b"B", mesh_path=b"aa\\cc", indices_size=3, num_verts=3,
+                              material_path="Materials\\x.mat", sphere=(0, 0, 0, 1), box=(0.1, 0, 0.02, 0.02, 0.02, 0.02))
+        got = M.geometry_bounds(nifmod.serialize(sfnif.build_static_nif(b"Bottle", [a, b])))
+        want = [[-0.04, -0.05, 0.0], [0.12, 0.05, 0.3]]
+        for g, w in zip(got[0] + got[1], want[0] + want[1]):
+            self.assertAlmostEqual(g, w, places=5)
+        skinned = sfnif.StaticShape(name=b"S", mesh_path=b"aa\\bb", indices_size=3, num_verts=3,
+                                    material_path="Materials\\x.mat", sphere=(0, 0, 0, 1), box=(sfnif.FLT_MAX,) * 6)
+        self.assertIsNone(M.geometry_bounds(nifmod.serialize(sfnif.build_static_nif(b"S", [skinned]))))
 
     def test_item_model_name(self):
         self.assertEqual(M.item_model_name("s2s\\clutter\\wine.nif"), "s2s\\clutter\\wine_item.nif")

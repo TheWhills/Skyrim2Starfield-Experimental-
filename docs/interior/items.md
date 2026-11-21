@@ -124,6 +124,15 @@ cells. MiscItem clutter (plates, tankards, baskets) stays static for now.
 - **References:** Skyrim's position / rotation / scale, Initially Disabled, and Don't Havok Settle (REFR flag
   0x20000000 in Skyrim; written as the same bit, unresolved whether Starfield's REFR reads it the same). XOWN is
   recorded, not written (no ownership yet: taking is not stealing).
+**First run** (owner, 2026-11-21 09:11, riverwood_doors.ps1 -Items): the C# compiled (verified); 297 placed items from
+53 Skyrim bases in the six Riverwood interiors became ALCH copies (inn 29, Riverwood Trader 113, ...); FoodRabbit /
+FoodPheasant skipped (models not converted). The Skyrim kinds came out right, the Starfield ones did not: 343 ALCH with a
+model split drink 269 / food 8 / potion 66 (drink words matched model paths; flags / words made ShipRepairKit and
+LegendaryCatalyst "potions"), so the wine copied Food_Pack_Oishii_Seaweed_Combo and a cereal box, every cabbage /
+cheese wheel / leek Food_Generic_CerealBox. Fixed: the donor's kind is its EditorID prefix (Drink_, Food_, Aid_ / Med_
+/ Chem_), and its size is the union of its BSGeometry boxes (centre + half extents, node transforms applied) instead
+of OBND, whose units are unconfirmed (read as metres the seaweed pack was 0.39 m tall); OBND only when the NIF has no
+box. Donors without a physics body are dropped before ranking.
 Unverified: everything in game; the C# (written without a compiler: NuGet is blocked here; API names checked against
 Mutagen's Starfield Ingestible.xml: Name, Description, Model, ObjectBounds, mod.Ingestibles). Next: own hulls (the
 donor's shape is wrong for odd sizes: `fit` in items.json shows how far), ownership, Skyrim's effects / value / weight.
