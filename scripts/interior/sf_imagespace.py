@@ -126,7 +126,34 @@ def patch(data: bytes, changes: dict) -> bytes:
     cs = chunks(data)
     name, classes = schema(cs)
     user = {k[5:]: v for k, v in changes.items() if k.startswith("USER:")}
-    changes = {k: v for k, v in changes.items() if not k.startswith("USER:")}
+    lists = {k[5:]: v for k, v in changes.items() if k.startswith("LIST:")}
+    changes = {k: v for k, v in changes.items() if not k.startswith(("USER:", "LIST:"))}
+    for path, v in lists.items():
+        # "LIST:BSFloatCurve::Control.Value": that field in every entry of every LIST chunk of that element type
+        # (LIST = u32 element type, u32 count, then the entries' fields in order; verified on DefaultImageSpace's
+        # compensation curve: BSFloatCurve::Control, 2 entries of Input, Value)
+        cls, field = path.rsplit(".", 1)
+        hit = False
+        for i, (t, c) in enumerate(cs):
+            if t != "LIST" or name(struct.unpack_from("<I", c, 0)[0]) != cls:
+                continue
+            count = struct.unpack_from("<I", c, 4)[0]
+            lr = _Reader(c, classes)
+            lr.p = 8
+            spans = []
+            for _k in range(count):
+                for n, ft in classes[cls]["fields"]:
+                    lr.path = [n]
+                    lr.value(ft)
+                    if n == field:
+                        spans.append(lr.spans[field])
+            body = c
+            for t2, a, b in sorted(spans, key=lambda x: -x[1]):
+                body = body[:a] + _encode(t2, v) + body[b:]
+            cs[i] = ("LIST", body)
+            hit = hit or bool(spans)
+        if not hit:
+            raise KeyError("LIST:" + path)
     if user:
         # "USER:BSFloatCurve.DefaultValue": a user-serialised object (its own chunk: u32 type, u32 type, then its
         # fields in order, maps elsewhere); the first USER chunk of that class

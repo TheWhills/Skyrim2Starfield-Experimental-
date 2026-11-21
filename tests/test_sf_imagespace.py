@@ -98,6 +98,33 @@ class UserPatchTest(unittest.TestCase):
             SI.patch(out, {"USER:Nope.Value": 1.0})
 
 
+class ListPatchTest(unittest.TestCase):
+    def test_every_entry_of_a_list(self):
+        b = blob()
+        cs = SI.chunks(b)
+        strt = next(c for t, c in cs if t == "STRT")
+        # add a class BSFloatCurve::Control (Input, Value) and a LIST of two controls
+        extra = b"BSFloatCurve::Control\0Input\0"
+        base = len(strt)
+        strt2 = strt + extra
+        ctrl, inp = base, base + len("BSFloatCurve::Control") + 1
+        val = strt.index(b"Value\0")
+        clas = struct.pack("<IIHH", ctrl, 0, 0, 2) + struct.pack("<IIHH", inp, 0xFFFFFF11, 0, 4) + \
+            struct.pack("<IIHH", val, 0xFFFFFF11, 4, 4)
+        lst = struct.pack("<II", ctrl, 2) + struct.pack("<4f", -3.0, 0.5, 11.0, 0.5)
+        out_chunks = [("STRT" if t == "STRT" else t, strt2 if t == "STRT" else c) for t, c in cs]
+        out_chunks.insert(2, ("CLAS", clas))
+        out_chunks.append(("LIST", lst))
+        data = b[:12] + struct.pack("<I", len(out_chunks))
+        for t, c in out_chunks:
+            data += t.encode() + struct.pack("<I", len(c)) + c
+        new = SI.patch(data, {"LIST:BSFloatCurve::Control.Value": -2.0})
+        L = [c for t, c in SI.chunks(new) if t == "LIST"][0]
+        self.assertEqual(struct.unpack_from("<4f", L, 8), (-3.0, -2.0, 11.0, -2.0))
+        with self.assertRaises(KeyError):
+            SI.patch(data, {"LIST:Nope.Value": 1.0})
+
+
 class AdaptImageSpaceTest(unittest.TestCase):
     """2026-11-21: Skyrim adapts per view; --exposure auto writes LGT_NoLut with Starfield's auto exposure."""
 
@@ -118,10 +145,12 @@ class AdaptImageSpaceTest(unittest.TestCase):
                 self.assertEqual(MSI.write_adapt_imagespace(work, a), b"BLOB")
             path = os.path.join(work, "convert", MSI.ADAPT_IMAGESPACE)
             self.assertTrue(os.path.exists(path))
-            self.assertEqual(seen["fid"], 0x1C6C37)
+            self.assertEqual(seen["fid"], 0x000167)
             self.assertEqual(seen["changes"]["Settings.Exposure.CameraExposureMode"], "EXPOSURE_MODE_AUTO")
             self.assertEqual(seen["changes"]["Settings.Exposure.AutoExposure.ExposureMin.Value"], 3.0)
             self.assertEqual(seen["changes"]["USER:BSFloatCurve.DefaultValue"], -3.0)
+            self.assertEqual(seen["changes"]["LIST:BSFloatCurve::Control.Value"], -3.0)
+            self.assertIs(seen["changes"]["Settings.OverrideToneMapping"], False)
             self.assertIsNone(MSI.write_adapt_imagespace(work, SimpleNamespace(exposure="fixed", starfield_esm="x")))
             self.assertFalse(os.path.exists(path))
 

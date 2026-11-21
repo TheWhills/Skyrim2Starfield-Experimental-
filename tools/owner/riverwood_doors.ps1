@@ -67,11 +67,13 @@ param(
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
     # 2026-11-21: add the light falloff calibration cell FO4Port_S2SLightCalib (scripts/interior/light_calib.py)
     [switch]$LightCalib,
-    # dark views sit at ExposureMin (2026-11-21: at 1 every inn view 2 - 3.7 stops over Skyrim; higher = darker)
-    [double]$ExposureMin = 4,
-    [double]$ExposureMax = 8,
-    # the compensation curve's default (2026-11-21: -3 and 0 looked the same; ExposureMin is the knob)
-    [double]$ExposureCompensation = 0,
+    # the auto exposure's EV100 range (2026-11-21: wide, 0 .. 10, so it can adapt per view; the level is set by
+    # ExposureCompensation now)
+    [double]$ExposureMin = 0,
+    [double]$ExposureMax = 10,
+    # the auto exposure's compensation (2026-11-21: now on DefaultImageSpace's curve, which has controls; -2 first try,
+    # if it gets brighter the sign is the other way: +2)
+    [double]$ExposureCompensation = -2,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is

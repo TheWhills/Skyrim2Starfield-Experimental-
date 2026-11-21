@@ -333,3 +333,17 @@ light_calib analyze on each (it finds the arrival tile and turns a view looking 
   1.5 m away gets x0.41 (-1.3 stops); a hall light at 4 m x1. Clamped 0.25 .. 2; LIGHT_DISTANCE_FIT 0 in lighting.json
   turns it off; plugin_cell writes fit_scale / fit_distance_m per light. Expected: small rooms -1 .. -1.3 stops, the
   hall about unchanged. In game: pending.
+
+## Distance fit in game (owner 2026-11-21 14:42, Faendal's house, same spot before / after)
+- Before +1.8 stops vs Skyrim, after +1.5 (dark end +1.4 -> +1.2, bright end +2.1 -> +1.8). The fit lowered Faendal's
+  lights by about 0.8 (median distances near 3 m: g(3) / g(4) = 0.83 for a 7.3 m light), and the view moved by about
+  that: the exposure did not compensate, i.e. this view too sits at ExposureMin 4 (supported).
+- Read across all runs: from ExposureMin 3 to 1 (13:28 -> 13:39) the bright views (Faendal, the inn bedroom) moved only
+  0.3 - 0.8 stops while dark ones moved 2.5 - 2.8: the bright views were adapting, at about EV 2 - 2.6, and there sat
+  about 2.5 stops over Skyrim. Starfield's auto exposure aims about 2.5 stops brighter than Skyrim's look, so with a
+  minimum high enough to hold that down, every view is pinned and nothing adapts.
+- The lever is the compensation curve. LGT_NoLut's curve has no controls (its DefaultValue changed nothing, verified);
+  DefaultImageSpace 000167's has two (+0.5, verified). Now: our image space is a copy of DefaultImageSpace (AUTO), made to
+  look like LGT_NoLut (no tone-map override, ColorLUT, bloom 4 / 4, grey tint), every curve control and the default set to
+  ExposureCompensation (-2 first try; sign unresolved), range EV100 0 .. 10 so views adapt. sf_imagespace.patch edits
+  LIST chunk entries ("LIST:BSFloatCurve::Control.Value").

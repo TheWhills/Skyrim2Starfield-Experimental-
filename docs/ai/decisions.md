@@ -2645,3 +2645,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   Starfield light cannot follow Skyrim's flat (1 - (d/r)^2) curve, so each light is matched to Skyrim at its own typical
   distance (median distance to the room's objects), relative to 4 m. Alternatives: splitting each Skyrim light into
   several Starfield lights (more lights, shadows / cost unknown), a global power cut (darkens the hall too).
+
+## 2026-11-21: the adapting image space is a copy of DefaultImageSpace (compensation curve with controls)
+- LGT_NoLut's compensation curve has no controls and ignored its default; Starfield's auto exposure aims about 2.5
+  stops brighter than Skyrim, so views pinned at the minimum and did not adapt. DefaultImageSpace has a curve with
+  controls; the copy is set to LGT_NoLut's look and the controls to ExposureCompensation, range EV 0 .. 10.

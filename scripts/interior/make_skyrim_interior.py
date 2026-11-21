@@ -127,7 +127,14 @@ def write_lighting(work, cell, a):
 
 
 ADAPT_IMAGESPACE = "imagespace_skyrim_adapt.bin"
-ADAPT_TEMPLATE = 0x1C6C37                      # LGT_NoLut, the interiors' image space
+# 2026-11-21: DefaultImageSpace (000167), not LGT_NoLut: the only one of the owner's 15 whose exposure compensation curve
+# has controls (2, +0.5); LGT_NoLut's has none and its DefaultValue did nothing (-3 and 0 the same). It is made to look
+# like LGT_NoLut otherwise (ADAPT_LOOK: no tone-map override (ACES), ColorLUT, bloom 4 / 4, grey tint)
+ADAPT_TEMPLATE = 0x000167
+ADAPT_LOOK = {"Settings.OverrideToneMapping": False, "Settings.Cinematic.ColorGradingTexture": "Effects\\LUTs\\ColorLUT.dds",
+              "Settings.Bloom.BloomThresholdOffset.Value": 4.0, "Settings.Bloom.BloomRangeScale.Value": 4.0,
+              "Settings.Cinematic.TintColorValue.Value.x": 0.50196, "Settings.Cinematic.TintColorValue.Value.y": 0.50196,
+              "Settings.Cinematic.TintColorValue.Value.z": 0.50196}
 
 
 def write_adapt_imagespace(work, a):
@@ -143,13 +150,16 @@ def write_adapt_imagespace(work, a):
     if HERE not in sys.path:
         sys.path.insert(0, HERE)
     import sf_imagespace
+    comp = float(getattr(a, "exposure_compensation", 0.0))
     blob = sf_imagespace.patch(sf_imagespace.read_imgs(a.starfield_esm, ADAPT_TEMPLATE), {
+        **ADAPT_LOOK,
         "Settings.Exposure.CameraExposureMode": "EXPOSURE_MODE_AUTO",
+        "Settings.Exposure.AutoExposure.EnableCompensationCurve": True,
         "Settings.Exposure.AutoExposure.ExposureMin.Value": float(a.exposure_min),
         "Settings.Exposure.AutoExposure.ExposureMax.Value": float(a.exposure_max),
-        # the compensation curve (no controls in LGT_NoLut: its DefaultValue everywhere; DefaultImageSpace's two
-        # controls hold +0.5): EV offset on the auto exposure, supported hypothesis
-        "USER:BSFloatCurve.DefaultValue": float(getattr(a, "exposure_compensation", 0.0))})
+        # the compensation curve: every control and the default the same value (a flat offset; supported hypothesis:
+        # EV, positive = brighter as a camera's exposure compensation)
+        "USER:BSFloatCurve.DefaultValue": comp, "LIST:BSFloatCurve::Control.Value": comp})
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(blob)
@@ -365,12 +375,12 @@ def parser():
                     help="batch: auto = Starfield's auto exposure in a copy of LGT_NoLut (needs --starfield-esm; no "
                          "per-room light scale), fixed = LGT_NoLut's EV 5 with the per-room scale")
     ap.add_argument("--starfield-esm", default="", help="batch --exposure auto: Starfield.esm (read-only)")
-    ap.add_argument("--exposure-min", type=float, default=4.0,
+    ap.add_argument("--exposure-min", type=float, default=0.0,
                     help="batch --exposure auto: lowest EV100 (brightest); dark views sit at it (owner 2026-11-21)")
-    ap.add_argument("--exposure-max", type=float, default=8.0, help="batch --exposure auto: highest EV100 (darkest)")
-    ap.add_argument("--exposure-compensation", type=float, default=0.0,
-                    help="batch --exposure auto: the compensation curve's default value (owner 2026-11-21: -3 and 0 within "
-                         "0.3 stops of each other: no visible effect with the curve's empty controls)")
+    ap.add_argument("--exposure-max", type=float, default=10.0, help="batch --exposure auto: highest EV100 (darkest)")
+    ap.add_argument("--exposure-compensation", type=float, default=-2.0,
+                    help="batch --exposure auto: the compensation curve's value (DefaultImageSpace's curve, which has controls; "
+                         "-2 first try: the adapting views sat 2.5 stops over Skyrim)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

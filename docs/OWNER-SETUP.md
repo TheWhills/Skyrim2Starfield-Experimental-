@@ -301,6 +301,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+8d. (2026-11-21) Lighting: an auto exposure that can adapt per view (range 0 .. 10) with a working compensation
+   (-ExposureCompensation, default -2; if everything gets brighter, use +2). Full build, then the inn shots + Faendal's.
 8c. (2026-11-21) Lighting: each light fitted to the distance its light lands (from the calibration). Full build
    without -LightCalib, then the usual inn shots + Faendal's house. Off for comparison: LIGHT_DISTANCE_FIT 0 under "*"
    in C:\Modding\work\s2s\riverwood_doors\convert\lighting.json.
