@@ -162,12 +162,20 @@ def write_adapt_imagespace(work, a):
         "USER:BSFloatCurve.DefaultValue": comp, "LIST:BSFloatCurve::Control.Value": comp,
         # owner 2026-11-21: the curve does nothing either (-2 and +0.5 within 0.1 stop), the views adapt but 2.1 - 2.5
         # stops over Skyrim: the cinematic brightness (vanilla LGT_LUT_Int_StarbornTemple uses 0.8) scales the result
-        "Settings.Cinematic.Brightness.Value": float(getattr(a, "exposure_brightness", 1.0))})
+        "Settings.Cinematic.Brightness.Value": float(getattr(a, "exposure_brightness", 1.0)),
+        # owner 2026-11-21 16:14 ("devoid of color and contrast"): Brightness 0.25 is applied after the tone map - the
+        # brightest pixels capped at 0.48 (Skyrim's reach 0.99), the most saturated parts duller. The level is set before
+        # the tone map instead, by what the auto exposure meters: ignoring the darkest IgnoredDarks % (default 20) and the
+        # brightest IgnoredBrights % (20) of the histogram. Metering the 85 - 95 % band of these scenes (log2 spread about
+        # 1.4) reads about 2 stops brighter than the middle band, so it exposes about 2 stops darker (supported hypothesis)
+        "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredDarksPercentile.Value": float(getattr(a, "meter_darks", 20.0)),
+        "Settings.Exposure.AutoExposure.LuminanceHistogram.IgnoredBrightsPercentile.Value": float(getattr(a, "meter_brights", 20.0))})
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(blob)
     print(f"image space: auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
-          f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)} -> {path}")
+          f"{getattr(a, 'exposure_compensation', 0.0)}, brightness {getattr(a, 'exposure_brightness', 1.0)}, metering "
+          f"{getattr(a, 'meter_darks', 20.0)} .. {100 - getattr(a, 'meter_brights', 20.0)} % -> {path}")
     return blob
 
 
@@ -385,9 +393,14 @@ def parser():
                     help="batch --exposure auto: the compensation curve's value (DefaultImageSpace's curve, which has controls; "
                          "-2 made every view 2.2 - 2.9 stops over Skyrim; 0.5 = 2.5 stops darker if a unit is a stop with "
                          "positive = darker)")
-    ap.add_argument("--exposure-brightness", type=float, default=0.25,
-                    help="batch --exposure auto: the image space's cinematic brightness (2026-11-21: views adapted "
-                         "2.1 - 2.5 stops over Skyrim at 1.0)")
+    ap.add_argument("--exposure-brightness", type=float, default=1.0,
+                    help="batch --exposure auto: the image space's cinematic brightness, applied after the tone map "
+                         "(0.25 matched Skyrim's level but capped whites at 0.48: 1.0, the level from --meter-*)")
+    ap.add_argument("--meter-darks", type=float, default=85.0,
+                    help="batch --exposure auto: % of the darkest pixels the auto exposure ignores (vanilla 20; higher = "
+                         "it meters brighter parts = a darker image)")
+    ap.add_argument("--meter-brights", type=float, default=5.0,
+                    help="batch --exposure auto: % of the brightest pixels it ignores (vanilla 20)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

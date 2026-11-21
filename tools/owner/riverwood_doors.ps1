@@ -76,7 +76,11 @@ param(
     [double]$ExposureCompensation = 0.5,
     # the image's brightness after the exposure (2026-11-21: the compensation curve does nothing; at 1.0 every view
     # adapted 2.1 - 2.5 stops over Skyrim). Lower = darker
-    [double]$ExposureBrightness = 0.25,
+    [double]$ExposureBrightness = 1,
+    # what the auto exposure measures (2026-11-21: brightness 0.25 capped whites; the level comes from metering instead):
+    # it ignores the darkest MeterDarks % and the brightest MeterBrights % (vanilla 20 / 20). Higher MeterDarks = darker
+    [double]$MeterDarks = 85,
+    [double]$MeterBrights = 5,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -195,7 +199,9 @@ $args1 += @("--exposure", $Exposure, "--starfield-esm", "$SF\Data\Starfield.esm"
             "--exposure-min", $ExposureMin.ToString([cultureinfo]::InvariantCulture),
             "--exposure-max", $ExposureMax.ToString([cultureinfo]::InvariantCulture),
             "--exposure-compensation", $ExposureCompensation.ToString([cultureinfo]::InvariantCulture),
-            "--exposure-brightness", $ExposureBrightness.ToString([cultureinfo]::InvariantCulture))
+            "--exposure-brightness", $ExposureBrightness.ToString([cultureinfo]::InvariantCulture),
+            "--meter-darks", $MeterDarks.ToString([cultureinfo]::InvariantCulture),
+            "--meter-brights", $MeterBrights.ToString([cultureinfo]::InvariantCulture))
 # outdoor furniture (2026-11-13): benches, chairs, the forge, smelter, tanning rack around -NavAround become usable
 # furniture in the exterior (their models converted with the interiors)
 if ($Furniture -and -not $NoOutdoorFurniture) { $args1 += @("--exterior-furniture", $NavAround, "--exterior-radius", $NavRadius) }

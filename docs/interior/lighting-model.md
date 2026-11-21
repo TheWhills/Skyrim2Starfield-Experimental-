@@ -379,3 +379,11 @@ light_calib analyze on each (it finds the arrival tile and turns a view looking 
   Skyrim's level. These are the defaults (ExposureBrightness 0.25, AmbientScale 75, auto EV 0 .. 10).
 - Left: contrast 0.2 - 0.25 under Skyrim's, the hall a little less warm, and the hot spots next to lights near walls
   (the near-field: next, the area-light test in the calibration cell).
+
+## "Devoid of color and contrast" (owner 16:14): Brightness acts after the tone map
+Measured (display values, middle of the frame): our brightest pixels stop at 0.48 (99.9th percentile; Skyrim 0.99), the
+darkest sit higher (1st percentile 0.03 - 0.04 vs 0.016 - 0.027), the most saturated parts duller (90th percentile
+saturation 0.39 - 0.47 vs 0.56 - 0.61). Verified reading: Cinematic Brightness scales the tone-mapped image, so 0.25
+turns white into grey. Next: Brightness 1.0, the level from the auto exposure's metering instead (IgnoredDarksPercentile
+85, IgnoredBrightsPercentile 5: it meters the 85 - 95 % band, about 2 stops above the middle in these scenes, so it
+exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hypothesis until the owner's screens.
