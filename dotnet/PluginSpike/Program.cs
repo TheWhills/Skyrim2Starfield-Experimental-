@@ -1037,7 +1037,7 @@ foreach (var cellPath in cellPaths)
         && root.TryGetProperty("env_map", out var envMap) && envMap.ValueKind == JsonValueKind.String)
     {
         cell.EnvironmentMap = envMap.GetString();
-        Console.WriteLine($"cell {cellName}: environment light {cell.EnvironmentMap} (Skyrim's ambient {(root.TryGetProperty("env_ambient", out var ea) ? ea.ToString() : "?")})");
+        Console.WriteLine($"cell {cellName}: environment light {cell.EnvironmentMap} (Skyrim's ambient {(root.TryGetProperty("env_ambient", out var ea) ? string.Join(", ", ea.EnumerateArray().Select(x => x.GetDouble().ToString("0.###", CultureInfo.InvariantCulture))) : "?")})");
     }
     var cocMarker = new FormKey(sfEsm, 0x000032);                                        // COCMarkerHeading
     var omni = new FormKey(sfEsm, Convert.ToUInt32(Setting(src4, "OMNI_LIGHT", "03D38C"), 16)); // LGT_ShipInterior_Omni_NS_Neutral_2k

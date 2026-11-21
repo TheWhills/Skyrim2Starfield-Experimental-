@@ -127,4 +127,8 @@ pending.
 After (owner, 2026-11-21 12:52, full build with the lighting change: skyriminterior / lightmodel / PluginSpike, no
 converter change): convert step **15 s** (200 / 265 models at 11 s: checkpoints reused) against 70 - 77 s in the three
 runs that reconverted everything; full build **80 s** (before: 145 s). The window: about 130 lines with step times.
+Regression (owner, 2026-11-21 13:12): convert **73 s**, every model again: the ambient-cube commit added a DDS writer to
+src/fo4sf/textures.py, which skyrimconvert imports (in the checkpoint signature). Rule from it: code the converter does
+not run goes in a module it does not import (the cube writer is used only by make_skyrim_interior). Not moved back:
+moving it would change textures.py again and cost one more full reconvert.
 
