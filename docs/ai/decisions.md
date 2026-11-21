@@ -2608,3 +2608,5 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   (verified values, owner's flame_probe3; Starfield's FireCandleFlame.mat has no soft effect). Soft candles take 0.01 m;
   hearths keep the template's value (big flames, the fade hides where they meet the logs).
 - Colours warmer (core no longer near-white), foot see-through. In game: open.
+- (11:40, soft v3) no blue foot (made pink texels), soft candle ExposureOffset 5 instead of 8, -CandleExposure to tune
+  (part of flame_key, so a flame-only rebuild).

@@ -609,7 +609,7 @@ CANDLE_STYLES = ("skyrim", "starfield", "soft")
 # small hard-edged pixelated sliver, no glow): Skyrim's CandleFlame01 is 128 x 128 with 2 x 2 frames (64 px a flame)
 # stepped at 12 fps; Starfield's candle flipbook draws a thin streak ("a line of fire", 2026-11-16). So our own flame,
 # drawn at build time (procedural_flame_atlas, no game asset): SOFT_GRID frames of SOFT_FRAME px, a smooth teardrop
-# (white-yellow core, orange rim, faint blue foot) swaying and stretching through one loop, a soft halo around it,
+# (yellow core, orange rim, a fainter foot) swaying and stretching through one loop, a soft halo around it,
 # played as a flipbook at SOFT_FPS on Skyrim's cards made SOFT_CARD x larger (the flame drawn in the middle 1 / SOFT_CARD
 # of the frame, so it keeps Skyrim's size and place; SOFT_FLAME_SCALE grows it)
 SOFT_GRID = (4, 4)
@@ -624,8 +624,15 @@ SOFT_HALO = 0.35                    # halo opacity at the flame
 # Our candles keep a 1 cm soft edge only (the card's foot meeting the wax)
 SOFT_FALLOFF_DEPTH_M = 0.01
 # owner 2026-11-21: "could stand to be a little warmer" (the core read white): colours from the rim to the core
+# (owner 2026-11-21 11:40, "i can see pixels": pink pixels on the flame's edge; the blue foot mixed with the orange rim
+# made magenta, the only colour in the texture with more blue than green - the blue foot is gone, the foot is only fainter)
 SOFT_COLOURS = {"rim": (0.95, 0.36, 0.07), "mid": (1.0, 0.58, 0.17), "core": (1.0, 0.85, 0.55),
-                "blue": (0.30, 0.42, 1.0), "halo": (1.0, 0.45, 0.12)}
+                "halo": (1.0, 0.45, 0.12)}
+# Same crop, at pixel scale: the whole flame one flat clipped white with a one-pixel step to the dark (a small, blown-out
+# shape reads as pixels). EMITTANCE["candle"]'s ExposureOffset 8 is 8 stops over the scene's exposure (supported
+# hypothesis: AdaptiveEmittance's offset is in stops), and a dark inn raises the exposure further. The soft candle
+# takes SOFT_EXPOSURE_OFFSET instead; --candle-exposure / -CandleExposure try others (a flame-only rebuild)
+SOFT_EXPOSURE_OFFSET = 5.0
 
 
 def _smooth(e0, e1, x):
@@ -639,7 +646,7 @@ def procedural_flame_frame(phase: float, size=SOFT_FRAME, card=SOFT_CARD, flame_
     """One candle flame (RGBA uint8, straight alpha, `size` = (w, h) px, v = 0 at the top) at `phase` (0 .. 1 of its
     loop): a teardrop whose half width along its height y (0 = foot, 1 = tip) is sqrt(y) (1 - y)^0.9 (widest about a
     third up), the tip swaying and the height breathing with the phase; colour by depth into the flame and height
-    (white-yellow core, orange rim, a faint blue foot); a soft orange halo around it. The flame fills the middle
+    (yellow core, orange rim, a fainter foot); a soft orange halo around it. The flame fills the middle
     flame_scale / card of the frame (Skyrim's card inside our larger one)."""
     import numpy as np
     w, h = size
@@ -661,11 +668,9 @@ def procedural_flame_frame(phase: float, size=SOFT_FRAME, card=SOFT_CARD, flame_
     # a real flame's foot is thin and see-through (blue, around the wick); its light is in the upper two thirds
     base = 0.55 + 0.45 * _smooth(0.05, 0.3, fy)
     core = np.where(inside, _smooth(0.45, 0.05, d), 0.0) * _smooth(0.12, 0.3, fy) * _smooth(0.62, 0.32, fy)
-    foot = np.where(inside, _smooth(0.9, 0.3, d), 0.0) * _smooth(0.22, 0.02, fy) * _smooth(-0.02, 0.04, fy)
     C = {k: np.array(v) for k, v in SOFT_COLOURS.items()}
     col = C["rim"][None, None] * (1 - body[..., None]) + C["mid"][None, None] * body[..., None]
     col = col * (1 - core[..., None]) + C["core"][None, None] * core[..., None]
-    col = col * (1 - 0.6 * foot[..., None]) + C["blue"][None, None] * 0.6 * foot[..., None]
     # halo: a soft round glow around the flame's lower middle (Skyrim's CandleGlow01 particles, left out of the cards so
     # far), in card coordinates so it is gone well inside the card's edges (a visible box otherwise)
     hy = -1.0 / ch + 0.7 / ch                              # card y of the flame's widest part
@@ -766,7 +771,8 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
                     scroll: Optional[Tuple[str, float, float]] = None, flicker: Optional[float] = None,
                     vertex_color: bool = False, flipbook: Optional[Tuple[int, int, float]] = None,
                     multiple: float = 1.0, crossfade: Optional[Tuple[float, int]] = None,
-                    keep_emittance: bool = False, soft_depth: Optional[float] = None) -> dict:
+                    keep_emittance: bool = False, soft_depth: Optional[float] = None,
+                    exposure: Optional[float] = None) -> dict:
     """An emissive effect material cloned from the vanilla fire template (convert_material.build_from_template):
     files {"Albedo", "Emissive", "Opacity": game paths}; EMITTANCE[kind]; controllers for a UV scroll (axis, delta,
     seconds) and / or a flicker (loop seconds). flipbook (columns, rows, fps): the atlas plays as a looping flipbook
@@ -774,7 +780,8 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
     is removed (a single-frame texture). Emittance = EMITTANCE[kind] x multiple x EMITTANCE_SCALE[kind];
     crossfade (period, phase): an OverallOpacity curve (crossfade_controller); keep_emittance: the template's own
     emissivity stays (a vanilla material used as it is); soft_depth (m): the EffectSettings SoftFalloffDepth (the
-    template's 0.35 fades a small flame wherever anything is within 35 cm behind it), 0 = no soft edge."""
+    template's 0.35 fades a small flame wherever anything is within 35 cm behind it), 0 = no soft edge; exposure: the
+    ExposureOffset instead of EMITTANCE[kind]'s."""
     from . import convert_material as cm
     mat = cm.build_from_template(template, name, files)
     for o in mat["Objects"]:
@@ -791,6 +798,8 @@ def effect_material(template: dict, name: str, files: dict, kind: str = "hearth"
     root = mat["Objects"][0]["Components"]
     em = dict(EMITTANCE[kind])
     em["LuminousEmittance"] = f"{float(em['LuminousEmittance']) * multiple * EMITTANCE_SCALE[kind]:g}"
+    if exposure is not None:
+        em["ExposureOffset"] = f"{exposure:g}"
     for c in root:
         if c.get("Type") == "BSMaterial::LayeredEmissivityComponent" and not keep_emittance:
             c["Data"] = {k: v for k, v in c["Data"].items() if k not in ("LuminousEmittance", "AdaptiveEmittance",

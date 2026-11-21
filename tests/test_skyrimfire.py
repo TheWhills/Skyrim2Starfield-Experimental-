@@ -798,6 +798,8 @@ class SoftCandleTest(unittest.TestCase):
         paths = sorted(m["Data"]["Address"]["Data"]["Path"]["Data"][0]
                        for m in ctrl["Data"]["upControllers"]["Data"]["Data"]["MappingsA"]["Data"])
         self.assertEqual(paths, ["EmissiveIntensity", "FlipbookAuto"])
+        em = next(x for x in comps if x["Type"] == "BSMaterial::LayeredEmissivityComponent")["Data"]
+        self.assertEqual(em["ExposureOffset"], f"{skyrimfire.SOFT_EXPOSURE_OFFSET:g}")
         # owner 2026-11-21 "sometimes transparent": the template's 35 cm soft fade cut to SOFT_FALLOFF_DEPTH_M
         fx = next(x for x in comps if x["Type"] == "BSMaterial::EffectSettingsComponent")["Data"]
         self.assertEqual(fx.get("SoftFalloffDepth"), f"{skyrimfire.SOFT_FALLOFF_DEPTH_M:g}")
@@ -832,3 +834,21 @@ class SoftCandleTest(unittest.TestCase):
         upper = f[top + (bottom - top) // 2, mid_col, 3]
         foot = f[bottom - (bottom - top) // 12, mid_col, 3]
         self.assertLess(foot, upper - 40)
+
+    def test_no_pink_texels(self):
+        # owner 2026-11-21 11:40 "i can see pixels": pink edge pixels; the blue foot mixed with the orange rim
+        a = skyrimfire.procedural_flame_atlas().astype(int)
+        seen = a[a[:, :, 3] > 10]
+        self.assertEqual(int((seen[:, 2] > seen[:, 1]).sum()), 0)
+
+    def test_soft_candle_exposure(self):
+        t = fire_template()
+        files = {"Albedo": "a.dds", "Emissive": "a.dds", "Opacity": "o.dds"}
+        m = skyrimfire.effect_material(t, "X", files, kind="candle", exposure=4.5)
+        em = next(c_ for o in m["Objects"] for c_ in o["Components"]
+                  if c_["Type"] == "BSMaterial::LayeredEmissivityComponent")["Data"]
+        self.assertEqual(em["ExposureOffset"], "4.5")
+        m = skyrimfire.effect_material(t, "X", files, kind="candle")
+        em = next(c_ for o in m["Objects"] for c_ in o["Components"]
+                  if c_["Type"] == "BSMaterial::LayeredEmissivityComponent")["Data"]
+        self.assertEqual(em["ExposureOffset"], skyrimfire.EMITTANCE["candle"]["ExposureOffset"])

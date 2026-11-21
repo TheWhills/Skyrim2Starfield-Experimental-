@@ -90,6 +90,10 @@ class ScriptTest(unittest.TestCase):
         self.assertGreaterEqual(self.ps.count("Timings"), 6)
         self.assertIn('PYTHONUNBUFFERED = "1"', self.ps)
 
+    def test_both_convert_calls_pass_the_candle_exposure(self):
+        self.assertIn("[double]$CandleExposure = 5", self.ps)
+        self.assertEqual(self.ps.count("--candle-exposure"), 2)
+
     def test_assets_only_skips_the_navmesh_defaults_search(self):
         # owner 2026-11-21 -AssetsOnly: 87 s total, 75 s in steps - the C:\Modding search ran before the branch
         search = self.ps.index("-Filter navmesh_defaults.json")

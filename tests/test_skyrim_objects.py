@@ -603,6 +603,9 @@ class ConverterModulesTests(unittest.TestCase):
         self.assertFalse(MSO.flame_relevant({"flame_shapes": 0, "flame_cards": 0, "addon_nodes": 0}))
         self.assertNotEqual(MSO.flame_key(SimpleNamespace(flame_style="particles", particle_fire="")),
                             MSO.flame_key(SimpleNamespace(flame_style="particles", particle_fire="00C78D:0.6")))
+        # 2026-11-21: -CandleExposure redoes the candles
+        self.assertNotEqual(MSO.flame_key(SimpleNamespace(candle_style="soft", candle_exposure=5.0)),
+                            MSO.flame_key(SimpleNamespace(candle_style="soft", candle_exposure=4.0)))
 
     def test_converter_flame_methods_are_checked_per_flame_model(self):
         """2026-11-21 (owner: "does it need to do all of this every time we test"): the candle code in skyrimconvert.py

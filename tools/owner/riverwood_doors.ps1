@@ -56,6 +56,8 @@ param(
     # -AssetsOnly is enough to switch)
     # 2026-11-21 (owner: "the candles just look very low quality"): "soft" = our own smooth flame flipbook with a halo
     [ValidateSet("skyrim", "starfield", "soft")][string]$CandleStyle = "soft",
+    # soft candles' brightness, stops over the scene's exposure (2026-11-21: 5; lower = dimmer). Flame-only: -AssetsOnly
+    [double]$CandleExposure = 5,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is
@@ -150,7 +152,7 @@ if ($AssetsOnly) {
         Fail "-AssetsOnly needs one full build first (no FO4Port.esm / convert_input.json in $Work)"
     }
     Step "2. convert the models (resumable; only changed ones are redone)"
-    Run python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle --candle-style $CandleStyle
+    Run python -I scripts\terrain\make_skyrim_objects.py convert --work $Work --skyrim-data $SKY --content-resources "$SF\Tools\ContentResources.zip" --texconv $Texconv --starfield-data "$SF\Data" --resume --flame-style $FlameStyle --candle-style $CandleStyle --candle-exposure $CandleExposure.ToString([cultureinfo]::InvariantCulture)
     if ($LASTEXITCODE -ne 0) { Fail "convert" }
     if ($NoInstall) { Timings; Write-Host "converted in $staging (not installed: -NoInstall)"; exit 0 }
     Step "4. install (archives repacked, plugin unchanged)"
@@ -176,7 +178,7 @@ Run python -I scripts\interior\make_skyrim_interior.py @args1
 if ($LASTEXITCODE -ne 0) { Fail "batch" }
 
 Step "2. convert the inn's models (resumable)"
-$conv = @("convert", "--work", $Work, "--skyrim-data", $SKY, "--content-resources", "$SF\Tools\ContentResources.zip", "--texconv", $Texconv, "--starfield-data", "$SF\Data", "--resume", "--flame-style", $FlameStyle, "--candle-style", $CandleStyle)
+$conv = @("convert", "--work", $Work, "--skyrim-data", $SKY, "--content-resources", "$SF\Tools\ContentResources.zip", "--texconv", $Texconv, "--starfield-data", "$SF\Data", "--resume", "--flame-style", $FlameStyle, "--candle-style", $CandleStyle, "--candle-exposure", $CandleExposure.ToString([cultureinfo]::InvariantCulture))
 if ($ParticleFire) { $conv += @("--particle-fire", $ParticleFire) }   # an empty argument would be dropped by PowerShell 5
 Run python -I scripts\terrain\make_skyrim_objects.py @conv
 if ($LASTEXITCODE -ne 0) { Fail "convert" }

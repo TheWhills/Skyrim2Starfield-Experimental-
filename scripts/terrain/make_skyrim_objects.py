@@ -235,6 +235,7 @@ def flame_key(a, extra: str = "") -> str:
     h.update(getattr(a, "flame_style", "particles").encode())
     h.update(str(parse_particle_fire(getattr(a, "particle_fire", ""))).encode())
     h.update(getattr(a, "candle_style", "soft").encode())
+    h.update(f"{getattr(a, 'candle_exposure', None)}".encode())
     h.update(extra.encode())
     return h.hexdigest()[:16]
 
@@ -339,6 +340,8 @@ def cmd_convert(a):
                 conv.flame_style = getattr(a, "flame_style", "particles")
                 conv.particle_fire = parse_particle_fire(getattr(a, "particle_fire", ""))
                 conv.candle_style = getattr(a, "candle_style", "skyrim")
+                if getattr(a, "candle_exposure", None) is not None:
+                    conv.candle_exposure = a.candle_exposure
                 conv.sf_candle_mesh = candle_mesh
                 conv.split_spin = True                 # turning parts placed by stage / spin_parts.py
             r = conv.convert_nif(name)
@@ -1116,6 +1119,9 @@ def main(argv=None):
                          "halo, skyrimfire.procedural_flame_atlas; default since 2026-11-21), Skyrim's textures (two "
                          "cross-fading layers) or Starfield's own candle flame (its mesh, read with --starfield-data, "
                          "and material) fitted to Skyrim's teardrop (skyrimfire.SF_CANDLE_WIDTH)")
+    ap.add_argument("--candle-exposure", type=float, default=None,
+                    help="convert, --candle-style soft: the flame's ExposureOffset (stops over the scene's exposure; "
+                         "default skyrimfire.SOFT_EXPOSURE_OFFSET; lower = dimmer, less blown out)")
     ap.add_argument("--particle-fire", default="",
                     help="convert, --flame-style particles: the Starfield fire to place, BASE[:SCALE], or several "
                          "comma-separated to compare side by side (default 00C78D = FireMed01 at scale 1; "

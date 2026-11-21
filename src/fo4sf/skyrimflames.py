@@ -202,7 +202,8 @@ class FlameMixin:
     def soft_candle_material(self, flicker_period: float) -> Optional[str]:
         """candle_style "soft": our own flame flipbook (skyrimfire.procedural_flame_atlas, drawn here, colour BC7 sRGB +
         opacity BC4) on the effect template, played at SOFT_FPS with a flicker; written once per flicker period."""
-        key = f"softcandle:{flicker_period:.3f}"
+        exposure = float(getattr(self, "candle_exposure", skyrimfire.SOFT_EXPOSURE_OFFSET))
+        key = f"softcandle:{flicker_period:.3f}:{exposure:g}"
         if key in self._materials:
             return self._materials[key]
         try:
@@ -232,13 +233,13 @@ class FlameMixin:
             if self._effect_template is None:
                 self._effect_template = cm.read_template_path(self.content_resources, skyrimfire.EFFECT_TEMPLATE_MAT)
             cols, rows = skyrimfire.SOFT_GRID
-            name = f"{stem}_{int(round(flicker_period * 1000))}"
+            name = f"{stem}_{int(round(flicker_period * 1000))}_e{exposure:g}".replace(".", "p")
             mat = skyrimfire.effect_material(self._effect_template, "S2S_Flame_" + name,
                                              {"Albedo": files["color"], "Emissive": files["color"],
                                               "Opacity": files["opacity"]},
                                              kind="candle", flicker=flicker_period,
                                              flipbook=(cols, rows, skyrimfire.SOFT_FPS),
-                                             soft_depth=skyrimfire.SOFT_FALLOFF_DEPTH_M)
+                                             soft_depth=skyrimfire.SOFT_FALLOFF_DEPTH_M, exposure=exposure)
             mat_rel = f"materials/{self.prefix}/effects/{name}.mat"
             p = os.path.join(self.staging, *mat_rel.split("/"))
             os.makedirs(os.path.dirname(p), exist_ok=True)

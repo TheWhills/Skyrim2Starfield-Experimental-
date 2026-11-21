@@ -546,6 +546,13 @@ SOFT_FALLOFF_DEPTH_M) for the soft candle only; warmer colours (SOFT_COLOURS: co
 near-white, orange rim), a softer edge, a see-through foot (the lower quarter at about 55 % opacity), halo 0.35. The
 look ("low quality") is a supported hypothesis: the white core and the faded body read as a flat sticker; to check in
 game. Still crossed vertical cards: from straight above the flame is thin (Starfield's own candle is a 3-D mesh).
+Owner in game, soft v2 (2026-11-21 11:40): "the color is better, but idk its like i can see pixels". At pixel scale
+(verified from the screenshot): each flame about 12 px wide, all one flat clipped white with a one-pixel step to the
+dark and pink pixels on the rim. Soft v3: (1) pink - the blue foot mixed with the orange rim gave magenta, the only
+texels with more blue than green: the blue is gone (test: no such texel); (2) blown out - ExposureOffset 8 (the candle
+emittance) is far over the scene; supported hypothesis that it is in stops, the soft candle now takes
+SOFT_EXPOSURE_OFFSET 5 (8x dimmer if so), with `-CandleExposure` / `--candle-exposure` to try others in a flame-only
+build. With the inside no longer clipped, the flame's soft edge (a few pixels at this size) should show.
 
 ## Electrical buzz (2026-11-21, owner: "an ambient electrical buzz i hear, cant trace it")
 Supported hypothesis: a looping sound carried by a copied Starfield record. Furniture copies keep the template's
