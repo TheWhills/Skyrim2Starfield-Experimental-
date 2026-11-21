@@ -67,8 +67,8 @@ param(
     [ValidateSet("auto", "fixed")][string]$Exposure = "auto",
     [double]$ExposureMin = 1,
     [double]$ExposureMax = 8,
-    # the auto exposure's offset (EV; 2026-11-21 at 0: every view at the brightest limit, 2 - 3 stops over Skyrim)
-    [double]$ExposureCompensation = -3,
+    # the auto exposure's offset, EV100 (2026-11-21: -3 made every view 2 - 3 stops brighter: negative = brighter)
+    [double]$ExposureCompensation = 0,
     # 2026-11-15 (owner: "are we running more steps than needed for the test again"): models / materials / textures
     # only. Re-converts what changed (flame changes: the candles and hearths) and repacks the archives; skips the
     # interior export, navmesh, NPCs, furniture and the plugin build. Needs one full build before it (the plugin is

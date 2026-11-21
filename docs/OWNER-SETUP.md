@@ -303,8 +303,8 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
 8a. (2026-11-21) Lighting: exposure that adapts to what you look at, like Skyrim's (default; -Exposure fixed for
    the previous behaviour). Full build, then the same inn screenshots (hall, side room, bedroom, stairs, basement) and
-   one house. Range: -ExposureMin 1 -ExposureMax 8 (lower = brighter); -ExposureCompensation -3 (2026-11-21: at 0 every
-   view sat at the brightest limit; if -3 makes it brighter instead, the sign is the other way: try +3).
+   one house. Range: -ExposureMin 1 -ExposureMax 8 (lower = brighter); -ExposureCompensation 0 (an EV100 offset: higher =
+   darker; 2026-11-21: -3 was 2 - 3 stops too bright).
    powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture -Items
 7z. (2026-11-21) Lighting: Skyrim's ambient as each room's environment light (docs/interior/lighting-model.md). A full
    build (step 1 writes it); then the same screenshots, the stairs and a dark corner most of all.

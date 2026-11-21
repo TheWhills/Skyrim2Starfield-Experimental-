@@ -367,9 +367,9 @@ def parser():
     ap.add_argument("--starfield-esm", default="", help="batch --exposure auto: Starfield.esm (read-only)")
     ap.add_argument("--exposure-min", type=float, default=1.0, help="batch --exposure auto: lowest EV100 (brightest)")
     ap.add_argument("--exposure-max", type=float, default=8.0, help="batch --exposure auto: highest EV100 (darkest)")
-    ap.add_argument("--exposure-compensation", type=float, default=-3.0,
-                    help="batch --exposure auto: the compensation curve's value (EV; owner 2026-11-21: at 0 every view "
-                         "sat at the brightest limit, 2 - 3 stops over Skyrim)")
+    ap.add_argument("--exposure-compensation", type=float, default=0.0,
+                    help="batch --exposure auto: the compensation curve's value, an EV100 offset (owner 2026-11-21: -3 "
+                         "made every view brighter, so negative = brighter; 0 with the range 1 .. 8 is the next try)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

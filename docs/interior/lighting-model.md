@@ -239,3 +239,16 @@ global constant tuned once against the owner's same-spot screenshot pairs.
 - Contrast: ours 2.0 - 3.0 against Skyrim's 1.2 - 1.8 in every view: hot spots under lights, darker corners (inverse
   square near a light; Starfield's AO 7). Colour: ours redder in the inn (r share 0.47 - 0.53 vs 0.35 - 0.47): the 95
   mired warm shift on lights already warm. Both next after the exposure.
+
+## Owner's screens with compensation -3, range EV100 1 .. 8 (13:39)
+| scene | comp 0, range 3 .. 6.5 | comp -3, range 1 .. 8 | change |
+|---|---|---|---|
+| inn hall | -0.5 | +2.2 | +2.7 |
+| inn bedroom | +2.4 | +3.2 | +0.8 |
+| inn stairs | +0.3 | +2.8 | +2.5 |
+| inn basement | +0.7 | +3.5 | +2.8 |
+| Faendal's house | +2.5 | +2.8 | +0.3 |
+- Verified: compensation -3 brightened, so it is an EV100 offset (negative = lower EV = brighter), as EV100 itself.
+- The views now moved by different amounts: the dark ones +2.5 - 2.8, the bright ones +0.3 - 0.8; the spread across
+  views fell from 3.0 stops to 1.3 (Skyrim's per-view adaptation evens views the same way). Level: 2.9 stops over.
+- Next: compensation 0, range 1 .. 8 (expected about 2.9 stops darker if the offset is linear: near Skyrim).
