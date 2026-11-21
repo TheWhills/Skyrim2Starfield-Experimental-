@@ -301,6 +301,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable **S2S Item Test**. In game `help S2S_ 4` lists the item; `player.placeatme <id>`: does it fall and settle,
    tip over when pushed, pick up (its Skyrim name), drop, drink? Send item_test.json from the mod folder.
+7x. (2026-11-21) Lighting: each room's lights now carry Skyrim's eye adaptation (the inn brighter, Sven's dimmer;
+   docs/interior/lighting-model.md). A plugin change: the full build. Then retake the same screenshots as the 12:03
+   set (inn hall, candle table, stairs, bedroom, basement, hearth house), Skyrim's too if the framing differs.
+   powershell -ExecutionPolicy Bypass -File tools\owner\riverwood_doors.ps1 -Find "^Riverwood" -Navmesh -Furniture -Items
+   To compare with the rule before: add LIGHT_ADAPT 0 under "*" in C:\Modding\work\s2s\riverwood_doors\convert\lighting.json.
 7w. (2026-11-21) Starfield image spaces (read-only): their exposure settings, for the lighting work. Send the printed
    output and zip the folder:
    dotnet run --project dotnet\SfInspect -- "$sf\Data\Starfield.esm" imgsdump C:\Modding\work\imgs

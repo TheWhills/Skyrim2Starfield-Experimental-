@@ -122,3 +122,43 @@ def starfield_point(lumens: float, radius_m: float, light_pos_units, p_units, n=
     win = max(0.0, 1.0 - (d / radius_m) ** 4) ** 2
     ndl = max(0.0, _dot(n, _norm(v)))
     return lumens / (4 * math.pi * d * d) * win * ndl
+
+
+# --- Skyrim's eye adaptation, baked into each room's lights (2026-11-21) ---------------------------------------------
+# Starfield's image space for our interiors (LGT_NoLut 1C6C37) holds a FIXED exposure (EXPOSURE_MODE_FIXED, EV 5;
+# verified, the owner's imgsdump decoded), so Starfield never brightens a dark room. Skyrim's HDR pass scales every frame
+# by its adapted average (ISHDR.hlsl, verified) with eye adaptation on in every Riverwood room (FarmInteriorIS, strength
+# 1.5): a dark room comes up, a bright one down (the owner's screens: Skyrim's inn as bright as the houses with half their
+# light). So the converter scales each room's lights by ADAPT_REF / the room's mean Skyrim light (linear), to the
+# ADAPT_STRENGTH power (1 = Skyrim fully evens rooms out: supported hypothesis, how strength 1.5 maps is unresolved).
+# ADAPT_REF: the Riverwood houses' mean (0.51 - 0.62; the owner's houses sit within a stop of Skyrim's screens as they are)
+ADAPT_REF = 0.55
+ADAPT_STRENGTH = 1.0
+ADAPT_LIMITS = (0.125, 8.0)
+SAMPLE_LIFT = 10.0               # units above an object's origin, facing up
+SKIP_SAMPLE_BASES = {"COCMarkerHeading"}
+
+
+def sample_points(refs) -> list:
+    """Where a room's light is measured: just above every enabled, modelled, non-light reference (facing up)."""
+    return [(r["pos"][0], r["pos"][1], r["pos"][2] + SAMPLE_LIFT) for r in refs
+            if r.get("type") != "Light" and r.get("model") and r.get("base_editor_id") not in SKIP_SAMPLE_BASES
+            and not r.get("disabled")]
+
+
+def room_mean_linear(lighting: dict, refs) -> float:
+    """The room's mean Skyrim light (luma, linearised, clipped at 1) over sample_points; None without points."""
+    lights = [(r["light"], r["pos"]) for r in refs if r.get("type") == "Light" and r.get("light") and not r.get("disabled")]
+    pts = sample_points(refs)
+    if not pts:
+        return None
+    vals = [srgb_to_linear(min(1.0, luma(skyrim_light_at(lighting or {}, lights, p)["total"]))) for p in pts]
+    return sum(vals) / len(vals)
+
+
+def adaptation_scale(mean_linear, ref=ADAPT_REF, strength=ADAPT_STRENGTH, limits=ADAPT_LIMITS) -> float:
+    """What the room's lights are multiplied by so it lands where Skyrim's eye adaptation puts it: (ref / mean)^strength,
+    within limits; 1 when the room has no measurable light."""
+    if not mean_linear or mean_linear <= 0:
+        return 1.0
+    return max(limits[0], min(limits[1], (ref / mean_linear) ** strength))

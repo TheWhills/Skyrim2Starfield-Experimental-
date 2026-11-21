@@ -602,4 +602,11 @@ def plugin_cell(export: dict, selected_refs: list, batch_navmeshes=None) -> dict
             out["navmeshes"].append({"formkey": n["formkey"], "geometry": geo})
     if export.get("lighting"):
         out["skyrim_lighting"] = export["lighting"]
+    # Skyrim's eye adaptation for this room (fo4sf.lightmodel; PluginSpike multiplies the room's lumens by it unless
+    # LIGHT_ADAPT is 0): measured over every reference of the cell, selected or not
+    from . import lightmodel
+    mean = lightmodel.room_mean_linear(export.get("lighting") or {}, export["refs"])
+    if mean is not None:
+        out["skyrim_mean_light"] = round(mean, 4)
+        out["light_scale"] = round(lightmodel.adaptation_scale(mean), 4)
     return out

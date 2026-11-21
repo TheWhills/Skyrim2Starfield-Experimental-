@@ -118,8 +118,28 @@ CameraExposureSettings (Aperture, Time, ...); SunAndSkySettings (IndirectLightin
 ...); BloomSettings; CinematicSettings (Saturation, Brightness, Contrast, TintColorValue, FadeColorValue, UseOutdoorLUT,
 ColorGradingTexture, ColorGradingAmount); DepthOfFieldSettings. 10489 cells use DefaultImagespacePackin (06AD68, an
 RDIF diff on DefaultImageSpace 000167); LGT_NoLut (ours) is a full REFL, used by 25 vanilla cells.
-So Starfield can hold a room's exposure fixed (FixedValue) or clamp the auto-exposure (ExposureMin / Max): the values
-in each blob are next (the binary reflection format, as the .mat JSON's objects, unresolved byte layout).
+Values (verified, the owner's 15 blobs decoded by scripts/interior/sf_imagespace.py, every OBJT read to its last byte):
+| image space | exposure mode | fixed EV | auto min / max | tone map | LUT |
+|---|---|---|---|---|---|
+| LGT_NoLut 1C6C37 (ours) | FIXED | 5.0 | 4 / 6 | ACESReference | ColorLUT |
+| LGT_LUT_Int_Gen_v01..v05_curve (vanilla interiors) | FIXED | 3.5 | 4 / 6 | Hable (override) | LGT_LUT_Int_Generic_0x_curve |
+| LGT_LUT_Int_AkilaCity_curve | FIXED | 3.5 | 5 / 7 | Hable | its own |
+| DefaultImageSpace 000167 | AUTO | (5.0) | 4 / 6 | Hable | - |
+| DefaultImageSpaceGenLUT 24A02A | AUTO | (15) | 13 / 15 | ACESReference | NaturalColorLUT |
+**Our rooms' exposure is fixed: Starfield never brightens the dark inn** (verified). Vanilla interiors are fixed too,
+at EV 3.5 (1.5 stops brighter than ours) with a Hable curve and a LUT.
+
+## The rule now (2026-11-21): Skyrim's eye adaptation baked into each room's lights
+- fo4sf.lightmodel.room_mean_linear: the room's mean Skyrim light (ambient + directional + point lights, luma, clipped
+  at 1, linearised) at every placed object; adaptation_scale = (ADAPT_REF 0.55 / mean)^ADAPT_STRENGTH 1, within 1/8 - 8.
+  ADAPT_REF: the Riverwood houses' mean (0.51 - 0.62), which sit within a stop of Skyrim's screens as built.
+- skyriminterior.plugin_cell writes it to the cell JSON ("light_scale", "skyrim_mean_light"); PluginSpike multiplies
+  the room's lumens by it (LIGHT_ADAPT 0 in lighting.json turns it off), one light base per room scale.
+- The lumen cap goes from 16x to LIGHT_MAX_SCALE 256x (Sven's 65.7 m light: 135x by the rule).
+- Expected (the audit's model): the inn's lights x2.5 (+1.3 stops), Sven's house x0.55 with its big light uncapped,
+  the other houses within 0.2 stops of today. On the owner's screens the inn is about 3.9 stops darker than the houses
+  relative to Skyrim: this explains 1.3 of them (supported hypothesis: full adaptation). The rest waits on the falloff
+  measurement. The audit prints "before" (cap 16, no adaptation) and "now" per room against Skyrim's adapted screen.
 
 ## Next: measure Starfield's falloff (calibration cell, designed, not built yet)
 A test cell with one light of known lumens and radius over a row of identical floor tiles at 0.5 - 8 m, and, outside

@@ -177,9 +177,46 @@ class SkyrimFieldsTest(unittest.TestCase):
         self.assertEqual((ims["hdr"]["white"], ims["hdr"]["eye_adapt_strength"]), (6.0, 0.75))
         self.assertEqual(ims["cinematic"], {"saturation": 0.9, "brightness": 1.2, "contrast": 1.1})
         self.assertIsNone(data["cells"][1]["skyrim"]["image_space_data"])
-        self.assertEqual(own["per_light"][0]["ours_lm"], 8000)
+        self.assertEqual(own["per_light"][0]["ours_lm"], round(8000 * own["adaptation"]["light_scale"]))
         self.assertAlmostEqual(own["per_light"][0]["skyrim_brightness"], 1.4 * (0.2126 + 0.7152 * 160 / 255
                                                                                 + 0.0722 * 80 / 255), places=2)
+
+
+class AdaptationTest(unittest.TestCase):
+    """2026-11-21: our image space's exposure is fixed (LGT_NoLut, EXPOSURE_MODE_FIXED), Skyrim adapts per room: each
+    room's lights carry Skyrim's adaptation, (ADAPT_REF / its mean light)^strength."""
+
+    def test_scale(self):
+        self.assertAlmostEqual(LM.adaptation_scale(LM.ADAPT_REF), 1.0)
+        self.assertAlmostEqual(LM.adaptation_scale(0.22), LM.ADAPT_REF / 0.22)          # the inn: up 1.3 stops
+        self.assertAlmostEqual(LM.adaptation_scale(1.0), LM.ADAPT_REF)                   # Sven's: down
+        self.assertEqual(LM.adaptation_scale(1e-6), LM.ADAPT_LIMITS[1])
+        self.assertEqual(LM.adaptation_scale(None), 1.0)
+
+    def test_room_mean_and_plugin_cell(self):
+        refs = [{"type": "Light", "pos": [0, 0, 300], "light": light(radius=700.0), "formkey": "L",
+                 "base_editor_id": "L", "model": ""},
+                {"type": "Static", "pos": [0, 0, 0], "model": "a.nif", "formkey": "A", "base_editor_id": "A"},
+                {"type": "Static", "pos": [0, 0, 0], "model": "a.nif", "formkey": "B", "base_editor_id": "B",
+                 "disabled": 1},
+                {"type": "Static", "pos": [0, 0, 0], "model": "", "formkey": "M", "base_editor_id": "COCMarkerHeading"}]
+        self.assertEqual(len(LM.sample_points(refs)), 1)
+        lt = {"ambient": [0, 0, 0]}
+        want = LM.srgb_to_linear(1 - (290 / 700) ** 2)
+        self.assertAlmostEqual(LM.room_mean_linear(lt, refs), want, places=6)
+        export = {"cell": "Room", "refs": refs, "lighting": lt}
+        cell = skyriminterior.plugin_cell(export, [])
+        self.assertAlmostEqual(cell["skyrim_mean_light"], round(want, 4))
+        self.assertAlmostEqual(cell["light_scale"], round(LM.adaptation_scale(want), 4))
+
+    def test_pluginspike_applies_the_scale(self):
+        with open(os.path.join(ROOT, "dotnet", "PluginSpike", "Program.cs"), encoding="utf-8") as fh:
+            cs = fh.read()
+        self.assertIn('root.TryGetProperty("light_scale", out var lsc)', cs)
+        self.assertIn('Setting(src4, "LIGHT_ADAPT", "1") != "0"', cs)
+        self.assertIn("Math.Clamp(power * Math.Max(fade, 1f) * area, 1.0, maxScale) * cellLightScale", cs)
+        self.assertIn(":{cellLightScale:0.###}:{maxScale:0.#}", cs)      # a base per room scale: no sharing across
+        self.assertIn('Setting(cell, "LIGHT_MAX_SCALE", "256")', cs)
 
 
 class PlacedLightsTest(unittest.TestCase):
@@ -196,8 +233,12 @@ class PlacedLightsTest(unittest.TestCase):
         self.assertEqual([(m["formkey"], i["formkey"]) for m, i in merged], [("B", "A")])
         lm = {r["formkey"]: (rad, lumens) for r, rad, lumens in placed}
         self.assertEqual(lm["A"], (512 / 70, 8000.0))                   # power 2 x template 4000
-        self.assertEqual(lm["C"], (32.0, 64000.0))                      # (32 / 8)^2 x 2 = 32 -> capped at 16x
+        self.assertEqual(lm["C"], (32.0, 128000.0))                     # (32 / 8)^2 x 2 = 32, under the cap 256
         self.assertEqual(lm["D"][1], 8000.0)                            # a 2 m candle light: never below 2x
+        old, _m = light_audit.placed_lights(refs, dict(s, **light_audit.BEFORE), room_scale=3.0)
+        self.assertEqual({r["formkey"]: l for r, _r, l in old}["C"], 64000.0)   # the old cap 16, no room scale
+        scaled, _m = light_audit.placed_lights(refs, s, room_scale=2.5)
+        self.assertEqual({r["formkey"]: l for r, _r, l in scaled}["A"], 20000.0)
 
     def test_room_far_from_lights_reads_darker_than_skyrim(self):
         # one big Skyrim light (radius 20 m), an object under it (4 m) and one 15 m away. Ours falls off faster, but

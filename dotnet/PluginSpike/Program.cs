@@ -218,6 +218,10 @@ static uint ColourTemperature(int r8, int g8, int b8)
 static uint WarmerTemperature(uint kelvin, float mired) =>
     (uint)Math.Clamp(Math.Round(1e6 / (1e6 / Math.Max(kelvin, 1u) + mired)), 1000, 10000);
 var soundsCleared = new SortedSet<string>();         // looping sounds taken off copied Starfield lights / furniture
+// 2026-11-21 (docs/interior/lighting-model.md): the cell JSON's "light_scale" = Skyrim's eye adaptation for that room
+// (fo4sf.lightmodel.adaptation_scale): our image space holds a fixed exposure, so the room's lights carry it instead.
+// Set per cell before its lights are made; LIGHT_ADAPT 0 ignores it
+float cellLightScale = 1f;
 FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
 {
     float F(string k, float d) => L.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetSingle() : d;
@@ -245,8 +249,11 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     var falloffMode = Setting(cell, "LIGHT_FALLOFF", "keep");
     float radius = Math.Max(F("radius", 300f) / UnitsPerMetre, 1f) * rscale, fade = Math.Max(F("fade", 1f), 0.05f);
     bool flicker = L.TryGetProperty("flicker", out var fl) && fl.ValueKind == JsonValueKind.True;
+    // the cap on (power x fade x area): 16 before 2026-11-21 held Sven's 65.7 m light to 64000 lm where the rule gives
+    // 135x (the audit: his house 1.8 stops under the rest); LIGHT_MAX_SCALE, default 256
+    double maxScale = double.Parse(Setting(cell, "LIGHT_MAX_SCALE", "256"), CultureInfo.InvariantCulture);
     var key = string.Create(CultureInfo.InvariantCulture,
-        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}");
+        $"LIGH:{template.ID:X6}:{radius:0.00}:{cr},{cg},{cb}:{fade:0.###}:{power:0.###}:{temperature}:{miredShift:0.#}:{(flicker ? 1 : 0)}:{flickerMode}:{flickerIntensity:0.###}:{flickerPeriod:0.###}:{falloffMode}:{F("falloff_exponent", 1f):0.###}:{cellLightScale:0.###}:{maxScale:0.#}");
     if (lightBases.TryGetValue(key, out var have)) return have;
     if (!SfCache().TryResolve<ILightGetter>(template, out var tpl))
         throw new InvalidOperationException($"OMNI_LIGHT {template} is not a LIGH in Starfield.esm");
@@ -265,7 +272,7 @@ FormKey SkyrimLight(string cell, JsonElement L, FormKey template)
     {
         // bigger than the template: more lumens to reach as far; smaller: the template's (scaling down made the inn darker)
         var area = tplRadius > 0 ? Math.Max(1.0, Math.Pow(radius / tplRadius, 2)) : 1.0;
-        var lm = tplLm * Math.Clamp(power * Math.Max(fade, 1f) * area, 1.0, 16.0);
+        var lm = tplLm * Math.Clamp(power * Math.Max(fade, 1f) * area, 1.0, maxScale) * cellLightScale;
         SetProp(nl, "PbrLuminousPowerLm", (uint)Math.Round(lm));
     }
     else lightNotes.Add($"template {template} has no PbrLuminousPowerLm: power not scaled");
@@ -1012,6 +1019,11 @@ foreach (var cellPath in cellPaths)
     var root = cdoc.RootElement;
     var src4 = root.GetProperty("cell").GetString()!;
     var cellName = "FO4Port_" + src4;
+    cellLightScale = Setting(src4, "LIGHT_ADAPT", "1") != "0" && root.TryGetProperty("light_scale", out var lsc)
+                     && lsc.ValueKind == JsonValueKind.Number ? lsc.GetSingle() : 1f;
+    if (cellLightScale != 1f)
+        Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+            $"cell {cellName}: lights x{cellLightScale:0.###} (Skyrim's eye adaptation; room mean light {(root.TryGetProperty("skyrim_mean_light", out var sml) ? sml.GetSingle() : 0f):0.###})"));
     var cell = new Cell(Id("CELL:" + cellName), release) { EditorID = cellName, Flags = Cell.Flag.IsInteriorCell };
     var ltHex = Setting(src4, "LIGHTING_TEMPLATE", "06BCF8");   // KreetBase01LGTtemplate (underground); ShipInteriorLT 006658 is brighter
     cell.LightingTemplate.SetTo(new FormKey(sfEsm, Convert.ToUInt32(ltHex, 16)));

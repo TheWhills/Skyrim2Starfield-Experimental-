@@ -28,7 +28,10 @@ sys.path.insert(0, HERE)
 from fo4sf import fo4land, lightmodel, skyriminterior  # noqa: E402
 
 # PluginSpike's own defaults and make_skyrim_interior.INTERIOR_LIGHTING (the build's); lighting.json wins when present
-DEFAULTS = {"LIGHT_MERGE_M": "1", "LIGHT_POWER": "2", "LIGHT_RADIUS_SCALE": "1", "SKYRIM_LIGHTS": "1"}
+DEFAULTS = {"LIGHT_MERGE_M": "1", "LIGHT_POWER": "2", "LIGHT_RADIUS_SCALE": "1", "SKYRIM_LIGHTS": "1",
+            "LIGHT_MAX_SCALE": "256", "LIGHT_ADAPT": "1"}
+# the rule before 2026-11-21's eye adaptation bake: cap 16, no per-room scale (the "before" columns)
+BEFORE = {"LIGHT_MAX_SCALE": "16", "LIGHT_ADAPT": "0"}
 # the base the build copies (OMNI_LIGHT 3197A6 LGT_Fire_Cauldron): verified values, the owner's SfInspect 2026-11-16
 TEMPLATE_LM, TEMPLATE_RADIUS_M = 4000.0, 8.0
 SKIP_BASES = {"COCMarkerHeading"}
@@ -45,13 +48,16 @@ def settings(work, cell):
     return out
 
 
-def placed_lights(refs, s):
+def placed_lights(refs, s, room_scale=1.0):
     """PluginSpike's rule (Program.cs, the cell loop + SkyrimLight): lights in export order, one dropped when a placed
     one is within LIGHT_MERGE_M on every axis; radius max(units / 70, 1) x LIGHT_RADIUS_SCALE m; lumens = template x
-    clamp(power x max(fade, 1) x max(1, (radius / template radius)^2), 1, 16). Returns (placed, merged): placed =
+    clamp(power x max(fade, 1) x max(1, (radius / template radius)^2), 1, LIGHT_MAX_SCALE) x the room's light_scale
+    (when LIGHT_ADAPT is not 0). Returns (placed, merged): placed =
     [(ref, radius m, lumens)], merged = [(ref, the ref it merged into)]."""
     merge = float(s["LIGHT_MERGE_M"])
     power, rscale = float(s["LIGHT_POWER"]), float(s["LIGHT_RADIUS_SCALE"])
+    cap = float(s.get("LIGHT_MAX_SCALE", "256"))
+    scale = room_scale if s.get("LIGHT_ADAPT", "1") != "0" else 1.0
     placed, merged = [], []
     for r in refs:
         if r.get("type") != "Light":
@@ -66,7 +72,7 @@ def placed_lights(refs, s):
         radius = max(float(L.get("radius", 300.0)) / lightmodel.UNITS_PER_M, 1.0) * rscale
         fade = max(float(L.get("fade", 1.0)), 0.05)
         area = max(1.0, (radius / TEMPLATE_RADIUS_M) ** 2)
-        lm = TEMPLATE_LM * min(16.0, max(1.0, power * max(fade, 1.0) * area))
+        lm = TEMPLATE_LM * min(cap, max(1.0, power * max(fade, 1.0) * area)) * scale
         placed.append((r, radius, lm))
     return placed, merged
 
@@ -85,20 +91,23 @@ def audit_cell(export, s, image_spaces=None):
     lighting = export.get("lighting") or {}
     lights = [r for r in refs if r.get("type") == "Light" and r.get("light")]
     sky_lights = [(r["light"], r["pos"]) for r in lights if not r.get("disabled")]
-    placed, merged = placed_lights(refs, s)
-    points = [r for r in refs if r.get("type") != "Light" and r.get("model") and r.get("base_editor_id") not in SKIP_BASES
-              and not r.get("disabled")]
+    mean = lightmodel.room_mean_linear(lighting, refs)
+    room_scale = lightmodel.adaptation_scale(mean)
+    placed, merged = placed_lights(refs, s, room_scale)
+    before, _m = placed_lights(refs, dict(s, **BEFORE))
     rows = []
-    for r in points:
-        p = (r["pos"][0], r["pos"][1], r["pos"][2] + 10.0)          # just above the object's origin, facing up
+    for p in lightmodel.sample_points(refs):
         sky = lightmodel.skyrim_light_at(lighting, sky_lights, p)
-        sf = sum(lightmodel.starfield_point(lm, rad, q["pos"], p) for q, rad, lm in placed
-                 if not q.get("disabled"))
+        sf = sum(lightmodel.starfield_point(lm, rad, q["pos"], p) for q, rad, lm in placed if not q.get("disabled"))
+        sf0 = sum(lightmodel.starfield_point(lm, rad, q["pos"], p) for q, rad, lm in before if not q.get("disabled"))
+        # what Skyrim shows: its light x its eye adaptation (the room's scale), linearised
         rows.append({"sky": lightmodel.luma(sky["total"]), "amb": lightmodel.luma(sky["ambient"]),
                      "dir": lightmodel.luma(sky["directional"]), "pts": lightmodel.luma(sky["points"]),
-                     "sky_pts_linear": lightmodel.srgb_to_linear(lightmodel.luma(sky["points"])), "sf": sf})
+                     "sky_pts_linear": lightmodel.srgb_to_linear(lightmodel.luma(sky["points"])), "sf": sf, "sf0": sf0})
     lit = [x for x in rows if x["sky_pts_linear"] > 1e-4]
-    ratios = [x["sf"] / x["sky_pts_linear"] for x in lit if x["sf"] > 0]
+    # ours against what Skyrim's screen shows (its light x the adaptation, the same for every point of the room)
+    ratios = [x["sf"] / (x["sky_pts_linear"] * room_scale) for x in lit if x["sf"] > 0]
+    ratios0 = [x["sf0"] / (x["sky_pts_linear"] * room_scale) for x in lit if x["sf0"] > 0]
     dark = sum(1 for x in lit if x["sf"] <= 0)
     sky_tot = [x["sky"] for x in rows]
     sky_lin = [lightmodel.srgb_to_linear(min(1.0, v)) for v in sky_tot]
@@ -133,6 +142,7 @@ def audit_cell(export, s, image_spaces=None):
                  "radius_m": [round(min(r for _q, r, _l in placed), 1), round(max(r for _q, r, _l in placed), 1)]
                  if placed else []},
         "points": len(rows),
+        "adaptation": {"room_mean_linear": round(mean, 4) if mean else None, "light_scale": round(room_scale, 3)},
         "skyrim_light": {"median": round(statistics.median(sky_tot), 3) if sky_tot else 0,
                          "p10": round(pct(sky_tot, 0.1), 3), "p90": round(pct(sky_tot, 0.9), 3),
                          "mean_linear": round(statistics.fmean(sky_lin), 4) if sky_lin else 0,
@@ -140,6 +150,7 @@ def audit_cell(export, s, image_spaces=None):
                          "share_directional": round(sum(x["dir"] for x in rows) / max(1e-9, sum(sky_tot)), 2),
                          "share_points": round(sum(x["pts"] for x in rows) / max(1e-9, sum(sky_tot)), 2)},
         "ours_vs_skyrim": {"median": round(statistics.median(ratios), 2) if ratios else None,
+                           "median_before": round(statistics.median(ratios0), 2) if ratios0 else None,
                            "spread_stops": round(math.log2(pct(ratios, 0.9) / pct(ratios, 0.1)), 2)
                            if len(ratios) > 1 and pct(ratios, 0.1) > 0 else None,
                            "lit_in_skyrim_dark_here": dark},
@@ -147,11 +158,14 @@ def audit_cell(export, s, image_spaces=None):
 
 
 def summarise(cells):
-    meds = [c["ours_vs_skyrim"]["median"] for c in cells if c["ours_vs_skyrim"]["median"]]
-    ref = statistics.median(meds) if meds else None
+    """Each cell's median ours / Skyrim's screen against the batch's, in stops, for the current rule and the one before
+    (the same reference: the before rule's batch median, so the columns compare)."""
+    meds0 = [c["ours_vs_skyrim"]["median_before"] for c in cells if c["ours_vs_skyrim"]["median_before"]]
+    ref = statistics.median(meds0) if meds0 else None
     for c in cells:
-        m = c["ours_vs_skyrim"]["median"]
-        c["ours_vs_skyrim"]["vs_batch_stops"] = round(math.log2(m / ref), 2) if m and ref else None
+        o = c["ours_vs_skyrim"]
+        for k, out in (("median", "vs_batch_stops"), ("median_before", "vs_batch_stops_before")):
+            o[out] = round(math.log2(o[k] / ref), 2) if o[k] and ref else None
     return ref
 
 
@@ -185,17 +199,20 @@ def main(argv=None):
             exp = src.export(n)
             cells.append(audit_cell(exp, settings(a.work, exp["cell"]), src.image_spaces()))
     ref = summarise(cells)
-    print(f"falloff model for ours: {lightmodel.STARFIELD_FALLOFF}; batch median ours / Skyrim = {ref}")
+    print(f"falloff model for ours: {lightmodel.STARFIELD_FALLOFF}; Skyrim's screen = its light x its eye adaptation "
+          f"(ADAPT_REF {lightmodel.ADAPT_REF}, strength {lightmodel.ADAPT_STRENGTH}); before = cap 16, no adaptation; "
+          f"now = the build's rule. Stops against the before rule's batch median ({ref})")
     print(f"{'cell':34} {'sky lights':>10} {'placed':>6} {'merged':>6} {'Skyrim light p10/med/p90':>25} "
-          f"{'amb/dir/pts':>14} {'ours vs batch':>13} {'spread':>7} {'dark':>5}")
+          f"{'amb/dir/pts':>14} {'adapt x':>8} {'before':>9} {'now':>9} {'spread':>7} {'dark':>5}")
     for c in cells:
         sk, sl, ov = c["skyrim"], c["skyrim_light"], c["ours_vs_skyrim"]
         vs = "" if ov["vs_batch_stops"] is None else f"{ov['vs_batch_stops']:+.2f} st"
+        vs0 = "" if ov["vs_batch_stops_before"] is None else f"{ov['vs_batch_stops_before']:+.2f} st"
         spread = "" if ov["spread_stops"] is None else f"{ov['spread_stops']:.1f}"
         print(f"{c['cell'][:34]:34} {sk['lights']:>10} {c['ours']['placed']:>6} {len(c['ours']['merged']):>6} "
               f"{sl['p10']:>8.2f}/{sl['median']:.2f}/{sl['p90']:.2f}      "
               f"{sl['share_ambient']:.2f}/{sl['share_directional']:.2f}/{sl['share_points']:.2f} "
-              f"{vs:>13} {spread:>7} {ov['lit_in_skyrim_dark_here']:>5}")
+              f"{c['adaptation']['light_scale']:>8.2f} {vs0:>9} {vs:>9} {spread:>7} {ov['lit_in_skyrim_dark_here']:>5}")
         print(f"    ambient {sk['ambient']}  directional {sk['directional']} x{sk['directional_fade']} "
               f"rot {sk['directional_rotation']}  from template {sk['from_template'] or '-'}")
         ims = sk["image_space_data"]

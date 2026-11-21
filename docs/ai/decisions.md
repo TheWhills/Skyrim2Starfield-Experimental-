@@ -2619,3 +2619,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   six directional ambient colours, the directional rotation / fade (XCLL, LGTM DALC) and the XLIG fade offset (not yet
   used by the build). Alternatives: per-room hand tuning (does not reach rooms nobody has looked at), raising
   LIGHT_POWER (moves every room together, the owner's point).
+
+## 2026-11-21: Skyrim's eye adaptation baked into each converted room's lights
+- Verified: our interiors' image space (LGT_NoLut) uses a fixed exposure (EV 5), so Starfield never adapts; Skyrim's
+  HDR pass does (ISHDR.hlsl), with eye adaptation on in every Riverwood room. Decision: each room's lumens x
+  (0.55 / the room's mean Skyrim light), from the export (fo4sf.lightmodel), applied by PluginSpike; the lumen cap 16x ->
+  256x. Alternatives: an auto-exposure image space (Starfield's own adaptation differs from Skyrim's and would act on our
+  inverse-square light, not Skyrim's); per-room hand tuning (does not reach unseen rooms).
