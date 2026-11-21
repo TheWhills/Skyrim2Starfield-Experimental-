@@ -433,7 +433,7 @@ def parser():
                     help="batch --exposure auto: the compensation curve's value (DefaultImageSpace's curve, which has controls; "
                          "-2 made every view 2.2 - 2.9 stops over Skyrim; 0.5 = 2.5 stops darker if a unit is a stop with "
                          "positive = darker)")
-    ap.add_argument("--exposure-brightness", type=float, default=1.0,
+    ap.add_argument("--exposure-brightness", type=float, default=0.75,
                     help="batch --exposure auto: the image space's cinematic brightness, applied after the tone map "
                          "(0.25 matched Skyrim's level but capped whites at 0.48: 1.0, the level from --meter-*)")
     ap.add_argument("--skyrim-grading", action="store_true",

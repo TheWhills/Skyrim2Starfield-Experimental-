@@ -76,7 +76,7 @@ param(
     [double]$ExposureCompensation = 0.5,
     # the image's brightness after the exposure (2026-11-21: the compensation curve does nothing; at 1.0 every view
     # adapted 2.1 - 2.5 stops over Skyrim). Lower = darker
-    [double]$ExposureBrightness = 1,
+    [double]$ExposureBrightness = 0.75,
     # what the auto exposure measures (2026-11-21: brightness 0.25 capped whites; the level comes from metering instead):
     # it ignores the darkest MeterDarks % and the brightest MeterBrights % (vanilla 20 / 20). Higher MeterDarks = darker
     [double]$MeterDarks = 90,

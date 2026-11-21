@@ -418,3 +418,10 @@ exposes about 2 stops darker before the tone map; vanilla 20 / 20). Supported hy
   current 0.062 / 0.224: shadows lifted about 10x (the ambient cube), mid-tones about one display step brighter.
 - Defaults now: environment ambient 35 (was 75; lightmodel.ENV_AMBIENT_SCALE and -AmbientScale), metering 90 .. 97 %
   (was 85 .. 95; about 0.4 stops darker on the owner's shots). Rollback: -AmbientScale 75 -MeterDarks 85 -MeterBrights 5.
+
+## "Darken the lights in general" (owner 17:25)
+- Measured (display luminance, percentiles 1 / 50): hall 0.039 / 0.193 with the 17:18 defaults (was 0.062 / 0.224);
+  the small rooms 0.022 / 0.225 and 0.003 / 0.212: still brighter than the build the owner found real (0.006 / 0.112).
+- Dimming the lights does not darken a view the auto exposure adapts (it brightens back), so the lever is the picture:
+  Cinematic Brightness (after the tone map, verified) default 0.75 (about -0.4 stops, whites at about 0.88; 0.25 was too
+  much: whites at 0.48, "devoid of color and contrast"). -ExposureBrightness 1 restores.
