@@ -220,3 +220,22 @@ global constant tuned once against the owner's same-spot screenshot pairs.
   range limits bound it either way. Expected: inn hall / stairs up, inn bedroom / side room down, houses near today.
 - Still open: the bright ends right under lights (+1.7 - 2.2 stops: inverse square near a light against Skyrim's flat
   (1 - (d/r)^2)), the falloff measurement.
+
+## Owner's screens with auto exposure EV100 3 .. 6.5, compensation 0 (13:28; vs Skyrim; "fish on the wall" = Faendal's)
+| scene | fixed + bake | auto | dark end | bright end | contrast (sd of log2 luminance) Skyrim / ours |
+|---|---|---|---|---|---|
+| inn hall | -1.7 | -0.5 | -2.0 | +0.6 | 1.5 / 2.6 |
+| inn bedroom | +1.2 | +2.4 | +1.0 | +3.2 | 1.8 / 3.0 |
+| inn stairs | -1.7 | +0.3 | -1.2 | +3.2 | 1.2 / 2.5 |
+| inn basement | -0.6 | +0.7 | -1.2 | +2.7 | 1.4 / 2.9 |
+| inn side room | +0.4 | +0.4 | -1.0 | +2.2 | 1.7 / 2.8 |
+| Faendal's house | - | +2.5 | +1.9 | +2.8 | 1.6 / 2.0 |
+- Read: every inn view moved by about the same amount (+1.2 .. +1.3 after the bake's -1.3 is taken out: +2.5 stops of
+  exposure), the hall-to-bedroom gap unchanged (2.9 stops): **the auto exposure sat at its brightest limit (EV 3) in
+  every view**, so no per-view adaptation happened; its key is brighter than Skyrim's.
+- The compensation curve (USER chunk, a BSFloatCurve: input -3 .. 11, value -3 .. 3; LGT_NoLut has no controls, so its
+  DefaultValue 0 applies; DefaultImageSpace has two controls at +0.5): sf_imagespace.patch now edits USER fields.
+  Next build: compensation -3 (supported hypothesis: EV offset, negative = darker), range EV100 1 .. 8.
+- Contrast: ours 2.0 - 3.0 against Skyrim's 1.2 - 1.8 in every view: hot spots under lights, darker corners (inverse
+  square near a light; Starfield's AO 7). Colour: ours redder in the inn (r share 0.47 - 0.53 vs 0.35 - 0.47): the 95
+  mired warm shift on lights already warm. Both next after the exposure.

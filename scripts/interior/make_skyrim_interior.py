@@ -146,11 +146,15 @@ def write_adapt_imagespace(work, a):
     blob = sf_imagespace.patch(sf_imagespace.read_imgs(a.starfield_esm, ADAPT_TEMPLATE), {
         "Settings.Exposure.CameraExposureMode": "EXPOSURE_MODE_AUTO",
         "Settings.Exposure.AutoExposure.ExposureMin.Value": float(a.exposure_min),
-        "Settings.Exposure.AutoExposure.ExposureMax.Value": float(a.exposure_max)})
+        "Settings.Exposure.AutoExposure.ExposureMax.Value": float(a.exposure_max),
+        # the compensation curve (no controls in LGT_NoLut: its DefaultValue everywhere; DefaultImageSpace's two
+        # controls hold +0.5): EV offset on the auto exposure, supported hypothesis
+        "USER:BSFloatCurve.DefaultValue": float(getattr(a, "exposure_compensation", 0.0))})
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:
         fh.write(blob)
-    print(f"image space: LGT_NoLut with auto exposure EV100 {a.exposure_min} .. {a.exposure_max} -> {path}")
+    print(f"image space: LGT_NoLut with auto exposure EV100 {a.exposure_min} .. {a.exposure_max}, compensation "
+          f"{getattr(a, 'exposure_compensation', 0.0)} -> {path}")
     return blob
 
 
@@ -361,8 +365,11 @@ def parser():
                     help="batch: auto = Starfield's auto exposure in a copy of LGT_NoLut (needs --starfield-esm; no "
                          "per-room light scale), fixed = LGT_NoLut's EV 5 with the per-room scale")
     ap.add_argument("--starfield-esm", default="", help="batch --exposure auto: Starfield.esm (read-only)")
-    ap.add_argument("--exposure-min", type=float, default=3.0, help="batch --exposure auto: lowest EV100 (brightest)")
-    ap.add_argument("--exposure-max", type=float, default=6.5, help="batch --exposure auto: highest EV100 (darkest)")
+    ap.add_argument("--exposure-min", type=float, default=1.0, help="batch --exposure auto: lowest EV100 (brightest)")
+    ap.add_argument("--exposure-max", type=float, default=8.0, help="batch --exposure auto: highest EV100 (darkest)")
+    ap.add_argument("--exposure-compensation", type=float, default=-3.0,
+                    help="batch --exposure auto: the compensation curve's value (EV; owner 2026-11-21: at 0 every view "
+                         "sat at the brightest limit, 2 - 3 stops over Skyrim)")
     ap.add_argument("--find", default="", help="list / batch: regex on the EditorID")
     ap.add_argument("--cells", default="", help="batch: interior EditorIDs, comma-separated")
     ap.add_argument("--connected-from", default="", help="batch: this cell and the interiors behind its load doors")

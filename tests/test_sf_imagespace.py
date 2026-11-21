@@ -78,6 +78,26 @@ class PatchTest(unittest.TestCase):
             SI.patch(blob(), {"Settings.Nope": 1.0})
 
 
+class UserPatchTest(unittest.TestCase):
+    def test_user_object_field(self):
+        b = blob()
+        cs = SI.chunks(b)
+        name, _classes = SI.schema(cs)
+        strt = next(c for t, c in cs if t == "STRT")
+        curve = strt.index(b"BSFloatCurve\0")
+        user = struct.pack("<II", curve, curve) + struct.pack("<f", 2.0)
+        cs.append(("USER", user))
+        out = b[:12] + struct.pack("<I", len(cs))
+        for t, c in cs:
+            out += t.encode() + struct.pack("<I", len(c)) + c
+        new = SI.patch(out, {"USER:BSFloatCurve.Value": -3.0})
+        u = [c for t, c in SI.chunks(new) if t == "USER"][0]
+        self.assertEqual(struct.unpack_from("<f", u, 8)[0], -3.0)
+        self.assertEqual(SI.decode(new)[1], SI.decode(out)[1])          # the object itself untouched
+        with self.assertRaises(KeyError):
+            SI.patch(out, {"USER:Nope.Value": 1.0})
+
+
 class AdaptImageSpaceTest(unittest.TestCase):
     """2026-11-21: Skyrim adapts per view; --exposure auto writes LGT_NoLut with Starfield's auto exposure."""
 
@@ -90,7 +110,8 @@ class AdaptImageSpaceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work, \
                 mock.patch.object(SI, "read_imgs", lambda esm, fid: seen.setdefault("fid", fid) and blob()), \
                 mock.patch.object(SI, "patch", lambda data, ch: seen.setdefault("changes", ch) and b"BLOB"):
-            a = SimpleNamespace(exposure="auto", starfield_esm="Starfield.esm", exposure_min=3.0, exposure_max=6.5)
+            a = SimpleNamespace(exposure="auto", starfield_esm="Starfield.esm", exposure_min=3.0, exposure_max=6.5,
+                                exposure_compensation=-3.0)
             import contextlib
             import io
             with contextlib.redirect_stdout(io.StringIO()):
@@ -100,6 +121,7 @@ class AdaptImageSpaceTest(unittest.TestCase):
             self.assertEqual(seen["fid"], 0x1C6C37)
             self.assertEqual(seen["changes"]["Settings.Exposure.CameraExposureMode"], "EXPOSURE_MODE_AUTO")
             self.assertEqual(seen["changes"]["Settings.Exposure.AutoExposure.ExposureMin.Value"], 3.0)
+            self.assertEqual(seen["changes"]["USER:BSFloatCurve.DefaultValue"], -3.0)
             self.assertIsNone(MSI.write_adapt_imagespace(work, SimpleNamespace(exposure="fixed", starfield_esm="x")))
             self.assertFalse(os.path.exists(path))
 
@@ -112,6 +134,7 @@ class AdaptImageSpaceTest(unittest.TestCase):
             ps = fh.read()
         self.assertIn('[ValidateSet("auto", "fixed")][string]$Exposure = "auto"', ps)
         self.assertIn('"--starfield-esm"', ps)
+        self.assertIn('"--exposure-compensation"', ps)
         with open(os.path.join(ROOT, "scripts", "interior", "make_skyrim_interior.py"), encoding="utf-8") as fh:
             py = fh.read()
         self.assertIn('cell["light_scale"] = 1.0', py)

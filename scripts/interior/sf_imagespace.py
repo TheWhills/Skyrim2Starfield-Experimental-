@@ -125,6 +125,33 @@ def patch(data: bytes, changes: dict) -> bytes:
     Enum / string values may change length: the OBJT chunk's size follows. Unknown paths raise KeyError."""
     cs = chunks(data)
     name, classes = schema(cs)
+    user = {k[5:]: v for k, v in changes.items() if k.startswith("USER:")}
+    changes = {k: v for k, v in changes.items() if not k.startswith("USER:")}
+    if user:
+        # "USER:BSFloatCurve.DefaultValue": a user-serialised object (its own chunk: u32 type, u32 type, then its
+        # fields in order, maps elsewhere); the first USER chunk of that class
+        for i, (t, c) in enumerate(cs):
+            if t != "USER":
+                continue
+            cls = name(struct.unpack_from("<I", c, 0)[0])
+            mine = {k.split(".", 1)[1]: v for k, v in user.items() if k.split(".", 1)[0] == cls}
+            if not mine:
+                continue
+            ur = _Reader(c, classes)
+            ur.p = 8
+            for n, ft in classes[cls]["fields"]:
+                ur.path = [n]
+                ur.value(ft)
+            body = c
+            for path, v in sorted(mine.items(), key=lambda kv: -ur.spans[kv[0]][1]):
+                if path not in ur.spans:
+                    raise KeyError("USER:" + cls + "." + path)
+                t2, a, b = ur.spans[path]
+                body = body[:a] + _encode(t2, v) + body[b:]
+            cs[i] = ("USER", body)
+            user = {k: v for k, v in user.items() if k.split(".", 1)[0] != cls}
+        if user:
+            raise KeyError(next(iter(user)))
     idx = next(i for i, (t, _c) in enumerate(cs) if t == "OBJT")
     objt = cs[idx][1]
     r = _Reader(objt, classes)
