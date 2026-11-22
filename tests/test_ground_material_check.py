@@ -23,13 +23,15 @@ class CheckTest(unittest.TestCase):
         ov = [{"skyrim": "LA", "form_id": "1", "material": "materials\\skyrim\\ground\\a.mat"},
               {"skyrim": "LB", "form_id": "2", "material": "skyrim\\ground\\b.mat"},
               {"skyrim": "LC", "form_id": "3", "material": "materials\\skyrim\\ground\\c.mat"}]
-        out = "\n".join(G.check(files.get, ov))
+        out = "\n".join(G.check(files.get, ov, lambda n: n == "textures\\skyrim\\ground\\a_color.dds"))
         self.assertIn("OK       LA", out)
         self.assertIn("TEXTURE? LB", out)
         self.assertIn("gone.dds", out)
         self.assertIn("MISSING  LC", out)
         self.assertIn("resource IDs defined by more than one ground material: 1", out)
         self.assertIn("res:9:9:9: LA, LB", out)
+        self.assertIn("LOOSE files in Data that win over the archive's copy: 1", out)
+        self.assertIn("  textures\\skyrim\\ground\\a_color.dds", out)
 
 
 if __name__ == "__main__":

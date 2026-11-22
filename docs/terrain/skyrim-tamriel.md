@@ -474,3 +474,7 @@ Without --apply it only prints. Unverified on the owner's data.
   Starfield.esm and SkyrimTerrainTamriel.esm define them; no DLC or other plugin touches them). So the load order is not
   why five painted textures never showed. Next: `ground_material_check.py` reads each material from the installed
   archive, checks its textures are there, and lists resource IDs shared between our ground materials.
+- ground_material_check.py on the owner's install (2026-11-22, verified): all 55 materials in the archive, every
+  texture they name present, no resource ID shared. Next suspect (supported hypothesis): loose files in Data
+  (textures\skyrim\ground, materials\skyrim\ground) left by earlier ground tests, which win over the archive and so
+  ignore both the paint and later conversions; the checker now lists them.

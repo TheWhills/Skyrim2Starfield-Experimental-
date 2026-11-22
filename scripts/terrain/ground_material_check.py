@@ -7,7 +7,8 @@ colour test only some painted textures showed (LRocks01NoRocks, LRocks01, LDirt0
 LReachGrass01NoGrass, LReachDirt01, LDirt01, LReachMossyRocks01). For each override this reads the material from the
 installed archive ("<plugin> - Main.ba2", else loose), lists the textures it names and whether each is in the archive,
 and lists every resource ID ("res:...") that more than one of our ground materials defines: the game keeps one object
-per ID, so a shared ID would make two materials draw the same (or a vanilla) layer. Read-only.
+per ID, so a shared ID would make two materials draw the same (or a vanilla) layer. Also lists loose files in Data
+with the same names (loose files win over archives: an old copy from an earlier test would hide ours). Read-only.
 """
 import argparse
 import json
@@ -48,9 +49,12 @@ def texture_files(mat):
     return out
 
 
-def check(read, overrides):
-    """read(name) -> bytes or None. Returns the report lines."""
+def check(read, overrides, loose=None):
+    """read(name) -> bytes or None; loose(name) -> True when a loose file of that name is in Data (loose files win over
+    archives, so an old loose copy hides what the archive holds). Returns the report lines."""
     lines, owners = [], defaultdict(list)
+    loose = loose or (lambda _n: False)
+    hidden = []
     for o in overrides:
         name = mat_name(o.get("material") or "")
         data = read(name)
@@ -65,10 +69,17 @@ def check(read, overrides):
             continue
         for i in defined_ids(mat):
             owners[i].append(o.get("skyrim", name))
+        if loose(name):
+            hidden.append(name)
+        hidden += [archive_name(f) for _i, f in texture_files(mat) if f and loose(archive_name(f))]
         miss = [f for _i, f in texture_files(mat) if f and read(archive_name(f)) is None]
         colour = next((f for i, f in texture_files(mat) if i == 0), "")
         lines.append(f"{'OK      ' if not miss else 'TEXTURE?'} {tag}: colour {archive_name(colour) or '(none)'}"
                      + (f"; not found: {miss}" if miss else ""))
+    hidden = sorted(set(hidden))
+    lines.append(f"LOOSE files in Data that win over the archive's copy: {len(hidden)}")
+    for h in hidden:
+        lines.append(f"  {h}")
     shared = {i: v for i, v in owners.items() if len(v) > 1}
     lines.append(f"resource IDs defined by more than one ground material: {len(shared)}")
     for i, v in sorted(shared.items(), key=lambda kv: -len(kv[1]))[:20]:
@@ -93,6 +104,9 @@ def main(argv=None):
     arc = ba2.Ba2(arc_path) if os.path.exists(arc_path) else None
     print(f"archive: {arc_path if arc else '(none: loose files only)'}")
 
+    def loose(name):
+        return os.path.exists(os.path.join(a.sf_data, *name.split("\\")))
+
     def read(name):
         if arc is not None and arc.find(name) is not None:
             return arc.read(name)
@@ -101,7 +115,7 @@ def main(argv=None):
             with open(p, "rb") as fh:
                 return fh.read()
         return None
-    for ln in check(read, overrides or []):
+    for ln in check(read, overrides or [], loose):
         print(ln)
     return 0
 
