@@ -478,3 +478,8 @@ Without --apply it only prints. Unverified on the owner's data.
   texture they name present, no resource ID shared. Next suspect (supported hypothesis): loose files in Data
   (textures\skyrim\ground, materials\skyrim\ground) left by earlier ground tests, which win over the archive and so
   ignore both the paint and later conversions; the checker now lists them.
+- Loose files: none (owner's run, 2026-11-22). So the archive holds what we expect and nothing overrides it, yet five
+  painted textures never appear: supported hypothesis, the terrain draws other textures than ground_at's reading of the
+  BTD predicts at those places (e.g. our LPineForest forest floor where Skyrim paints Reach dirt / grass; the band one
+  more texture). Test: `ground_colour_test.py label` (terrain_colour_test.ps1 -Label) gives every converted ground
+  texture its own name in black letters, so each patch in game names the texture drawn.

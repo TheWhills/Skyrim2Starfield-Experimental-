@@ -7,7 +7,8 @@ param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [string]$Colours = "LRocks01NoRocks=magenta,LRocks01=cyan,LReachMossyRocks01=yellow",
-    [switch]$Restore
+    [switch]$Restore,
+    [switch]$Label          # every converted ground texture shows its own name instead of a colour
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -17,6 +18,9 @@ function Fail($t) { Write-Host "FAILED: $t" -ForegroundColor Red; exit 1 }
 if ($Restore) {
     Step "1. the real ground textures back"
     python -I scripts\terrain\ground_colour_test.py restore --staging $Staging
+} elseif ($Label) {
+    Step "1. every ground texture labelled with its name"
+    python -I scripts\terrain\ground_colour_test.py label --staging $Staging
 } else {
     Step "1. paint $Colours"
     python -I scripts\terrain\ground_colour_test.py paint --staging $Staging --colours $Colours

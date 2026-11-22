@@ -33,5 +33,26 @@ class PaintRestoreTest(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(st, G.BACKUP)))
 
 
+class LabelTest(unittest.TestCase):
+    def test_label_and_restore(self):
+        px = G.label_pixels("lreachgrass01")
+        self.assertEqual(px.shape, (256, 256, 4))
+        dark = (px[..., :3].sum(-1) == 0)
+        self.assertGreater(int(dark.sum()), 200)                            # letters drawn
+        self.assertFalse(dark[:40].any())                                    # only on the two text rows
+        with tempfile.TemporaryDirectory() as st:
+            g = os.path.join(st, *G.GROUND)
+            os.makedirs(g)
+            for n in ("a_color.dds", "b_color.dds", "a_normal.dds"):
+                with open(os.path.join(g, n), "wb") as fh:
+                    fh.write(n.encode())
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(G.main(["label", "--staging", st]), 0)
+                G.main(["restore", "--staging", st])
+            self.assertIn("labelled 2 ground texture(s)", out.getvalue())
+            with open(os.path.join(g, "a_color.dds"), "rb") as fh:
+                self.assertEqual(fh.read(), b"a_color.dds")
+
+
 if __name__ == "__main__":
     unittest.main()
