@@ -296,15 +296,24 @@ def target_cells(cells, mapping, sf: Dict[str, int]):
 
 
 # ------------------------------------------------------------------------------------------------- BTD encoding
-def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill):
-    """One Starfield texture's weight over the inclusive Skyrim cell rectangle as a merged vertex grid (float32)."""
+def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill, consistent_edges=True):
+    """One Starfield texture's weight over the inclusive Skyrim cell rectangle as a merged vertex grid (float32).
+    Neighbouring cells share their edge row / column of vertices; the cell written last owns it, for every texture
+    alike (consistent_edges). Before 2026-11-21 a cell without the texture wrote nothing, so the shared edge kept the
+    previous cell's value for that texture while the cell's own textures were written over it: on the edge line two
+    textures could both be at 100 % (owner's grey-blue strips: Skyrim paints 1 % rock at the spot, the build drew rock,
+    a vertex-wide straight strip along a 58.5 m cell edge). consistent_edges=False keeps the old result (refresh_btd's
+    spot check against terrain built that way)."""
     g = np.zeros(((y1 - y0 + 1) * 32 + 1, (x1 - x0 + 1) * 32 + 1), np.float32)
     for cy in range(y0, y1 + 1):
         for cx in range(x0, x1 + 1):
             d = cells_t.get((cx, cy))
             w = d.get(form_id) if d is not None else None
             if w is None:
-                w = np.full((33, 33), fill, np.float32) if d is None else None
+                if d is None:
+                    w = np.full((33, 33), fill, np.float32)
+                elif consistent_edges:
+                    w = np.zeros((33, 33), np.float32)
             if w is not None:
                 g[(cy - y0) * 32:(cy - y0) * 32 + 33, (cx - x0) * 32:(cx - x0) * 32 + 33] = w
     return g

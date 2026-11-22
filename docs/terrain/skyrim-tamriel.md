@@ -421,3 +421,16 @@ Without --apply it only prints. Unverified on the owner's data.
   written into the BTD and its meshes copy, heights kept; at most 4.8 % of a quadrant's weight is past its five layers
   (where a quadrant has more than five textures the extra ones give way: a possible straight 50 m quadrant edge, open).
   Reinstall and the 53 hidden statics re-patched; 8.4 min in all. In game: pending.
+
+### Grey strips along Skyrim cell edges (2026-11-21 19:38, verified offline)
+- Owner's spot (game -1967.16, 747.84): which_ref.py: no object within 6 m (not a mesh); ground_at.py: Skyrim paints
+  0.54 LReachGrass01NoGrass, 0.42 LReachDirt01, 0.04 LDirt01, 0.01 LRocks01NoRocks at the nearest vertex (row 31 of 33,
+  next to the cell's north edge), the build draws LRocks01NoRocks at alpha 7 (the grey-blue "snow" is that rock texture).
+- Cause (verified on a synthetic two-cell case): landtex.merged_grid wrote each cell's 33 x 33 weights into the merged
+  grid, but a cell without a texture wrote nothing for it, so on the vertex row / column two cells share, that texture
+  kept the earlier cell's value while the later cell's own textures were written over it: two textures both at 100 % on
+  the edge line, a vertex-wide (1.8 m) straight strip along a 58.5 m cell edge. Fixed: a cell with data writes zeros for
+  textures it lacks (consistent_edges), so the cell written last owns the shared edge for every texture.
+- Every build since October had it (the spot check passed because the check used the same stitching). refresh_btd.py
+  recompute now writes the fixed stitching and spot-checks against the terrain as built (the btd_before_blend copy
+  once a recompute replaced it) with the old stitching (consistent_edges=False).

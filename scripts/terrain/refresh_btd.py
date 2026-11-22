@@ -119,7 +119,7 @@ def cmd_rebuild(a):
     return subprocess.call(cmd)
 
 
-def staged_textures(staging, skyrim_esm, sf_data, world="Tamriel"):
+def staged_textures(staging, skyrim_esm, sf_data, world="Tamriel", consistent_edges=True):
     """(planes {form id: uint8 vertex grid}, ox, oy, sp, Starfield LTEX names {form id: name}) from Skyrim.esm and the
     staging's own mapping (ltex_mapping.json) and converted-ground slots (overlays_params.json ltex_overrides)."""
     import json
@@ -147,8 +147,8 @@ def staged_textures(staging, skyrim_esm, sf_data, world="Tamriel"):
     default_sf = sf[mapping["skyrim"][landtex.DEFAULT_LTEX]["starfield"]]
     used = sorted(set(used) | {default_sf})
     x0, x1, y0, y1 = land.grid_bounds
-    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0),
-                                   0, 1) * 255).astype(np.uint8) for fid in used}
+    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0,
+                                                       consistent_edges), 0, 1) * 255).astype(np.uint8) for fid in used}
     return planes, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS, tg.FO4_VERTEX_UNITS, {v: k for k, v in sf.items()}
 
 
@@ -198,7 +198,7 @@ def infer_mapping(cells, overlays, staging, bands=48):
     strong, weak, outside = Counter(), Counter(), Counter()
     for o in overlays:
         t = og.Tile(o["ix"], o["iy"], o["cells_cw"]["x"][0], o["cells_cw"]["y"][0], o["n"])
-        with open(os.path.join(staging, *o["btd_file"].split("/")), "rb") as fh:
+        with open(as_built(staging, o["btd_file"]), "rb") as fh:
             old = btd.read(fh.read())
         xs, ys = t.sample_coords()
         for r0 in sample_rows(len(xs), bands):
@@ -227,7 +227,7 @@ def infer_mapping(cells, overlays, staging, bands=48):
     return mapping, support, (outside.most_common(1)[0][0] if outside else None)
 
 
-def planes_from(cells, mapping, default_sf, table, land):
+def planes_from(cells, mapping, default_sf, table, land, consistent_edges=True):
     """{Starfield form id: uint8 merged vertex grid} for the table, Skyrim's weights summed per mapped texture."""
     from fo4sf import landtex
     from fo4sf import terrain_grid as tg
@@ -239,8 +239,8 @@ def planes_from(cells, mapping, default_sf, table, land):
             d[t] = d.get(t, 0) + w.astype(np.float32)
         cells_t[xy] = d
     x0, x1, y0, y1 = land.grid_bounds
-    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0),
-                                   0, 1) * 255).astype(np.uint8) for fid in table}
+    planes = {fid: np.rint(np.clip(landtex.merged_grid(cells_t, fid, x0, x1, y0, y1, 1.0 if fid == default_sf else 0.0,
+                                                       consistent_edges), 0, 1) * 255).astype(np.uint8) for fid in table}
     return planes, x0 * tg.FO4_CELL_UNITS, y0 * tg.FO4_CELL_UNITS, tg.FO4_VERTEX_UNITS
 
 
@@ -252,8 +252,14 @@ def dominant(words, qmap, table):
     return np.asarray(ids)[np.argmax(np.stack([dec[i] for i in ids]), axis=0)]
 
 
+def as_built(staging, rel):
+    """The BTD as the build wrote it: its copy in BACKUP if an earlier recompute replaced it, else the staged file."""
+    keep = os.path.join(staging, BACKUP, *rel.split("/"))
+    return keep if os.path.exists(keep) else os.path.join(staging, *rel.split("/"))
+
+
 def read_table(staging, o):
-    with open(os.path.join(staging, *o["btd_file"].split("/")), "rb") as fh:
+    with open(as_built(staging, o["btd_file"]), "rb") as fh:
         return btd.read(fh.read()).ltex
 
 
@@ -266,6 +272,7 @@ def cmd_recompute(a):
     if os.path.exists(os.path.join(a.staging, "ltex_mapping.json")):
         print("reading Skyrim's ground layers and the staging's texture mapping ...")
         planes, ox, oy, sp, names = staged_textures(a.staging, a.skyrim, a.sf_data, a.world)
+        check_planes = staged_textures(a.staging, a.skyrim, a.sf_data, a.world, consistent_edges=False)[0]
     else:
         from fo4sf import landtex, skyrimland
         print("no ltex_mapping.json in the staging: reading which texture the installed terrain draws for each Skyrim "
@@ -282,12 +289,14 @@ def cmd_recompute(a):
         for f in sorted(mapping, key=lambda f: -support[f])[:12]:
             print(f"    {ltex.get(f, {}).get('edid', f'{f:08X}'):28} -> {mapping[f]:08X} ({support[f]} samples)")
         planes, ox, oy, sp = planes_from(cells, mapping, default_sf, table, land)
+        # the build stitched cell edges the old way (landtex.merged_grid consistent_edges): the spot check does too
+        check_planes = planes_from(cells, mapping, default_sf, table, land, consistent_edges=False)[0]
     done = 0
     for o in prm["overlays"]:
         t = og.Tile(o["ix"], o["iy"], o["cells_cw"]["x"][0], o["cells_cw"]["y"][0], o["n"])
         paths = [os.path.join(a.staging, *o["btd_file"].split("/"))]
         paths += [os.path.join(a.staging, *c.split("/")) for c in o.get("btd_copies") or []]
-        with open(paths[0], "rb") as fh:
+        with open(as_built(a.staging, o["btd_file"]), "rb") as fh:      # what the build drew (the backup once replaced)
             old = btd.read(fh.read())
         table = list(old.ltex)
         lack = [x for x in table if x not in planes]
@@ -296,18 +305,19 @@ def cmd_recompute(a):
             shape = next(iter(planes.values())).shape
             for x in lack:
                 planes[x] = np.zeros(shape, np.uint8)
+                check_planes[x] = np.zeros(shape, np.uint8)
         size = old.weights.shape[0]
         # the spot check uses other bands than the mapping was learnt from (offset by half a step)
         rows = [r for r in (x + 64 * max(1, len(range(0, size, 64)) // (2 * a.check_bands))
                             for x in sample_rows(size, a.check_bands)) if r < size]
-        sw, sq, _ = tile_layers(planes, table, ox, oy, sp, t, a.check_blend, "head", 0.0, rows=rows)
+        sw, sq, _ = tile_layers(check_planes, table, ox, oy, sp, t, a.check_blend, "head", 0.0, rows=rows)
         sel = np.concatenate([np.arange(r, r + 64) for r in rows])
         qsel = sorted({r // 64 for r in rows})
         mine = dominant(sw[sel], sq[qsel], table)
         theirs = dominant(old.weights[sel], old.quad_map[qsel], table)
         match = float((mine == theirs).mean())
         print(f"  {o['world']}: spot check of {len(rows)} bands, encoded the old way: {match:.1%} of samples draw the "
-              f"same texture as the installed terrain")
+              f"same texture as the terrain as built")
         if match < a.min_match:
             print(f"  {o['world']}: below {a.min_match:.0%}: these inputs are not the build's; nothing written")
             continue

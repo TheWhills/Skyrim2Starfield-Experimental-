@@ -175,6 +175,22 @@ class LayerTests(unittest.TestCase):
         self.assertTrue(0.3 < float(n1.mean()) < 0.7)
         self.assertTrue(0.1 < float((n1 < 0.25).mean()) < 0.4)                   # spread toward uniform
 
+    def test_cell_edges_stitched_consistently(self):
+        """2026-11-21 (owner's grey-blue strips; ground_at: Skyrim 1 % rock, the build drew rock): two cells share their
+        edge column; a texture the second cell does not have must not keep the first cell's value there, or two
+        textures are both full on the edge line (a vertex-wide straight strip along the cell edge)."""
+        rock, grass = np.ones((33, 33), np.float32), np.ones((33, 33), np.float32)
+        cells = {(0, 0): {1: rock}, (1, 0): {2: grass}}
+        r = landtex.merged_grid(cells, 1, 0, 1, 0, 0, 0.0)
+        g = landtex.merged_grid(cells, 2, 0, 1, 0, 0, 0.0)
+        np.testing.assert_allclose(r + g, 1.0)                                # every vertex sums to one
+        self.assertEqual((float(r[5, 32]), float(g[5, 32])), (0.0, 1.0))      # the edge belongs to the cell written last
+        self.assertEqual(float(r[5, 31]), 1.0)                                 # the first cell's interior untouched
+        old_r = landtex.merged_grid(cells, 1, 0, 1, 0, 0, 0.0, consistent_edges=False)
+        self.assertEqual(float(old_r[5, 32] + g[5, 32]), 2.0)                  # the old stitching: both full
+        empty = landtex.merged_grid({(0, 0): {1: rock}}, 1, 0, 1, 0, 0, 0.0)   # a cell with no data: the fill
+        self.assertEqual(float(empty[5, 40]), 0.0)
+
     def test_warp_bends_sharp_borders(self):
         """A sharp Skyrim border (one vertex step) read at the warped positions wanders by up to WARP_M, the same for
         every texture (weights still sum to 1) and the same at the same world position."""
@@ -318,7 +334,7 @@ class OverlayTextureTests(unittest.TestCase):
                 f.write(good)
             with contextlib.redirect_stdout(io.StringIO()) as o2:
                 self.assertEqual(R.cmd_recompute(args), 0)
-            self.assertIn("100.0% of samples draw the same texture", o2.getvalue())
+            self.assertRegex(o2.getvalue(), r"(99\.\d|100\.0)% of samples draw the same texture as the terrain as built")
             with open(os.path.join(out, R.BACKUP, "Data", "Terrain", "SKY_Tamriel.btd"), "rb") as f:
                 self.assertEqual(btd.read(f.read()).weights.tobytes(), before.weights.tobytes())   # the build's kept
             with open(path, "rb") as f:
@@ -333,10 +349,16 @@ class OverlayTextureTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()) as o3:
                 self.assertEqual(R.cmd_recompute(args), 0)
             self.assertIn("read off the terrain", o3.getvalue())
-            self.assertIn("100.0% of samples draw the same texture", o3.getvalue())
+            self.assertRegex(o3.getvalue(), r"(99\.\d|100\.0)% of samples draw the same texture as the terrain as built")
             with open(path, "rb") as f:
                 inferred = btd.read(f.read())
             np.testing.assert_array_equal(inferred.weights, after.weights)             # the same as with the mapping
+            # run again on terrain that is already blended: the check and the learning read the backup (as built)
+            with contextlib.redirect_stdout(io.StringIO()) as o4:
+                self.assertEqual(R.cmd_recompute(args), 0)
+            self.assertRegex(o4.getvalue(), r"(99\.\d|100\.0)% of samples draw the same texture as the terrain as built")
+            with open(path, "rb") as f:
+                np.testing.assert_array_equal(btd.read(f.read()).weights, after.weights)
         np.testing.assert_array_equal(after.heights_raw, before.heights_raw)
         self.assertEqual((after.hmin, after.hmax, after.ltex), (before.hmin, before.hmax, before.ltex))
         self.assertFalse(np.array_equal(after.weights, before.weights))                # the noise blend went in
