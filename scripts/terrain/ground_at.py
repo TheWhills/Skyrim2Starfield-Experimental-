@@ -19,6 +19,8 @@ import sys
 import tempfile
 import zipfile
 
+import numpy as np
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(REPO, "src"))
@@ -89,6 +91,102 @@ def hypotheses(q, word, table):
     return out
 
 
+LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+
+def skyrim_weight_at(cells, xu, yu):
+    """{Skyrim LTEX: weight} at Skyrim position (xu, yu) units, bilinear inside the cell holding it."""
+    cx, cy = int(xu // CELL), int(yu // CELL)
+    ws = cells.get((cx, cy))
+    if not ws:
+        return {}
+    fx, fy = (xu - cx * CELL) / STEP, (yu - cy * CELL) / STEP
+    c0, r0 = min(int(fx), 31), min(int(fy), 31)
+    tx, ty = fx - c0, fy - r0
+    out = {}
+    for fid, w in ws.items():
+        v = ((w[r0, c0] * (1 - tx) + w[r0, c0 + 1] * tx) * (1 - ty) + (w[r0 + 1, c0] * (1 - tx) + w[r0 + 1, c0 + 1] * tx) * ty)
+        if v > 0.001:
+            out[fid] = float(v)
+    return out
+
+
+def ground_map(esm, path, pos, origin, radius_m, over_edid, step_m=1.0):
+    """Two character maps around pos (overlay metres), north up: what Skyrim paints most (bilinear inside its cell)
+    and what the BTD draws, one letter per texture (the same letter for a Skyrim texture and the converted slot that
+    stands for it), '+' / '|' / '-' on the BTD's 50 m quadrant edges and ':' on Skyrim's 58.5 m cell edges. Returns
+    the lines to print."""
+    cells, ltex = landtex.read_world_textures(esm)
+    with open(path, "rb") as f:
+        t = btd.read(f.read())
+    o = tg.grid_origin(t.ncx)
+    dec_cache = {}
+    letters = {}
+
+    def letter(key, label):
+        if key not in letters:
+            letters[key] = (LETTERS[len(letters) % len(LETTERS)], label)
+        return letters[key][0]
+
+    def drawn(r, c):
+        qr, qc = r // 64, c // 64
+        if (qr, qc) not in dec_cache:
+            dec = landtex.decode_quadrants(t.quad_map[qr:qr + 1, qc:qc + 1], t.weights[qr * 64:(qr + 1) * 64,
+                                                                                       qc * 64:(qc + 1) * 64], t.ltex)
+            ids = sorted(dec)
+            dec_cache[(qr, qc)] = (np.asarray(ids), np.argmax(np.stack([dec[i] for i in ids]), axis=0))
+        ids, arg = dec_cache[(qr, qc)]
+        return int(ids[arg[r - qr * 64, c - qc * 64]])
+    n = int(round(radius_m / step_m))
+    sky_rows, btd_rows = [], []
+    for j in range(n, -n - 1, -1):
+        srow, brow = [], []
+        for i in range(-n, n + 1):
+            x, y = pos[0] + i * step_m, pos[1] + j * step_m
+            xu, yu = (x + origin[0]) * 70.0, (y + origin[1]) * 70.0
+            ws = skyrim_weight_at(cells, xu, yu)
+            half = 70.0 * step_m / 2
+            edge_c = min(xu % CELL, CELL - xu % CELL) < half or min(yu % CELL, CELL - yu % CELL) < half
+            if ws:
+                f = max(ws, key=ws.get)
+                e = ltex.get(f, {}).get("edid", "(engine default)" if f == 0 else f"{f:08X}")
+                srow.append(":" if edge_c else letter(e, e))
+            else:
+                srow.append("?")
+            c = int((x - o) / tg.SF_STEP_M)
+            r = int((y - o) / tg.SF_STEP_M)
+            if not (0 <= r < t.weights.shape[0] and 0 <= c < t.weights.shape[1]):
+                brow.append(" ")
+                continue
+            on_c = c % 64 < step_m / tg.SF_STEP_M
+            on_r = r % 64 < step_m / tg.SF_STEP_M
+            if on_c or on_r:
+                brow.append("+" if on_c and on_r else ("|" if on_c else "-"))
+                continue
+            sf = drawn(r, c)
+            e = over_edid.get(sf, f"{sf:08X} (Starfield)")
+            brow.append(letter(e, e))
+        sky_rows.append("".join(srow))
+        btd_rows.append("".join(brow))
+    out = [f"maps {2 * n + 1} x {2 * n + 1} m around the spot (north up, 1 character = {step_m:g} m, the spot in the "
+           f"middle); left: what Skyrim paints most, right: what the build draws"]
+    for k, (a_, b_) in enumerate(zip(sky_rows, btd_rows)):
+        mark = " <" if k == n else ""
+        out.append(f"  {a_}   {b_}{mark}")
+    out.append("  legend: " + ", ".join(f"{l} {lab}" for _k, (l, lab) in letters.items())
+               + "; ':' Skyrim cell edge, '|' '-' '+' the BTD's 50 m quadrant edges")
+    qr, qc = int((pos[1] - o) / tg.SF_STEP_M) // 64, int((pos[0] - o) / tg.SF_STEP_M) // 64
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            rr, cc = qr + dr, qc + dc
+            if 0 <= rr < t.quad_map.shape[0] and 0 <= cc < t.quad_map.shape[1]:
+                q = [int(b) for b in t.quad_map[rr, cc]]
+                ids = [t.ltex[landtex.entry_for(b, len(t.ltex))] for b in q[:5] if 0 < b <= len(t.ltex)]
+                names = [over_edid.get(f, f"{f:08X}") for f in ids]
+                out.append(f"  quadrant ({dr:+d}, {dc:+d}) from the spot's: its five {names}")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
@@ -103,6 +201,8 @@ def main(argv=None):
                     help="the build's --skyrim-ground-colours string, to print the colour each reading predicts")
     ap.add_argument("--texconv", default="", help="with --zip: texconv.exe for the PNG previews")
     ap.add_argument("--zip", default="", help="write the Skyrim textures found here as PNG previews (outside the repo)")
+    ap.add_argument("--map", type=float, default=0.0, metavar="M",
+                    help="also print maps of what Skyrim paints and what the build draws within M metres (e.g. 15)")
     a = ap.parse_args(argv)
     with open(os.path.join(a.terrain, "overlays_params.json"), encoding="utf-8") as f:
         prm = json.load(f)
@@ -153,6 +253,11 @@ def main(argv=None):
         sk = sky_of.get(fid, "")
         print(f"  {label:34} {sk or f'{fid:08X} (not a Skyrim texture)':30} "
               f"{cols.get(sk.lower(), cols.get(sk, '')) if sk else ''}")
+    if a.map > 0:
+        over_edid = {int(o_["form_id"]): o_["skyrim"] for o_ in prm.get("ltex_overrides", [])}
+        for line in ground_map(a.skyrim, os.path.join(a.terrain, "Data", "Terrain", f"{ov['world']}.btd"), a.pos,
+                               (ox, oy), a.map, over_edid):
+            print(line)
     if a.zip:
         if not a.texconv:
             sys.exit("--zip needs --texconv for the PNG previews")

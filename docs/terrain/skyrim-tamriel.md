@@ -434,3 +434,10 @@ Without --apply it only prints. Unverified on the owner's data.
 - Every build since October had it (the spot check passed because the check used the same stitching). refresh_btd.py
   recompute now writes the fixed stitching and spot-checks against the terrain as built (the btd_before_blend copy
   once a recompute replaced it) with the old stitching (consistent_edges=False).
+- Owner in game after the fixed stitching (20:48): the grey-blue strip and long straight borders are still there, with
+  the noise blend visible on parts of the same edges (so the new BTD is in use). The cell-edge fix was real but not the
+  cause of these; still open: a dropped texture at a 50 m quadrant edge (five textures per quadrant), a real Skyrim rock
+  area whose converted texture looks pale and sky-tinted (as LDirt02 did in October), or something else.
+  `ground_at.py --map 15` now prints side-by-side character maps (Skyrim's strongest texture / what the BTD draws, the
+  same letter for a Skyrim texture and its converted slot, quadrant and Skyrim cell edges marked, each nearby
+  quadrant's five textures) to tell these apart.

@@ -364,6 +364,36 @@ class OverlayTextureTests(unittest.TestCase):
         self.assertFalse(np.array_equal(after.weights, before.weights))                # the noise blend went in
         self.assertTrue(set(np.unique(after.weights & 7).tolist()) <= {0, 7})
 
+    def test_ground_at_map(self):
+        """2026-11-21: ground_at.py --map prints what Skyrim paints and what the BTD draws around a spot, with the
+        quadrant edges and each nearby quadrant's five textures (to tell a dropped texture from a wrong one)."""
+        import make_cw_overlays as cw
+        import make_skyrim_overlay as sk
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "terrain"))
+        import ground_at
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = skyrim_esm(os.path.join(tmp, "Skyrim.esm"))
+            sfd = os.path.join(tmp, "SF")
+            os.makedirs(sfd)
+            starfield_esm(os.path.join(sfd, "Starfield.esm"))
+            out = os.path.join(tmp, "out")
+            with mock.patch.object(cw, "ltex_source", return_value=([0x001235C2], bytes([1, 0, 0, 0, 0, 0, 0, 0]))), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                sk.main(["build", "--skyrim", esm, "--sf-data", sfd, "--out", out, "--mask-writer", "builtin",
+                         "--arrival", "", "--land-textures"])
+            with contextlib.redirect_stdout(io.StringIO()) as o:
+                ground_at.main(["--skyrim", esm, "--terrain", out, "--pos", "-14.3", "-14.3", "--map", "8"])
+        text = o.getvalue()
+        self.assertIn("left: what Skyrim paints most, right: what the build draws", text)
+        lines = text.splitlines()
+        k = next(i for i, ln in enumerate(lines) if ln.startswith("maps "))
+        rows = lines[k + 1:k + 18]
+        self.assertTrue(all(len(r.split()) in (2, 3) for r in rows))          # two maps side by side per row
+        self.assertIn("legend:", lines[k + 18])
+        self.assertIn(" <", rows[8])                                         # the spot's row is marked
+        self.assertIn("legend:", text)
+        self.assertIn("quadrant (+0, +0) from the spot's: its five", text)
+
     def test_without_option_btd_keeps_plain_ground(self):
         import make_cw_overlays as cw
         import make_skyrim_overlay as sk
