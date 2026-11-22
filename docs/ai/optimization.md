@@ -135,4 +135,4 @@ moving it would change textures.py again and cost one more full reconvert.
 
 ## 2026-11-22: terrain_blend with aligned texture positions
 - Owner's terrain_blend.ps1: 8.2 min (one pass) -> 14.7 min (two passes, raster slot plan). The map-wide slot plan
-  adds about 32 s per 144 x 144-quadrant tile (synthetic, measured here); not yet measured on the owner's machine.
+  adds about 32 s per 144 x 144-quadrant tile (synthetic, measured here); owner's run: 15.5 min (from 14.7).

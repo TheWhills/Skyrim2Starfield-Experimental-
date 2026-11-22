@@ -508,3 +508,5 @@ Without --apply it only prints. Unverified on the owner's data.
   neighbouring quadrants, more than five positions can separate, so minor ones may still differ; the dominant one
   lines up (test with the owner's quadrants). The build prints how many edge samples still drew another texture.
   144 x 144 quadrants: 32 s.
+- Owner's run with the map-wide positions (2026-11-22 12:58, verified): 0.63 % of samples near quadrant edges drew
+  another texture than Skyrim's to avoid an edge blend; spot check 100 %; 15.5 min in all. In game: pending.
