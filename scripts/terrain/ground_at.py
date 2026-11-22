@@ -237,6 +237,8 @@ def main(argv=None):
             return "-"
         fid = table[landtex.entry_for(b, n, a.ltex_index)]
         return f"{fid:08X}" + (f" (Skyrim {over[fid]})" if fid in over else "")
+    print(f"raw quadrant bytes {q}, alphas of bytes 0..4 {alphas}; LTEX table of {n} entries"
+          f" (first {', '.join(f'{x:08X}' for x in table[:3])}, last {table[-1]:08X})")
     print(f"the build draws (BTD sample row {r} col {c}; overlay bytes 0..4 top first, then the base):")
     for i in range(5):
         if q[i] and i != max(j for j in range(8) if q[j]):
@@ -253,6 +255,22 @@ def main(argv=None):
         sk = sky_of.get(fid, "")
         print(f"  {label:34} {sk or f'{fid:08X} (not a Skyrim texture)':30} "
               f"{cols.get(sk.lower(), cols.get(sk, '')) if sk else ''}")
+    # 2026-11-22 (label test: the game drew LGrassSnow01NoGrass / LPineForest / LFallForestLeaves where this tool
+    # predicted Reach textures): every table entry a byte could name under other readings, with the Skyrim name, so a
+    # label read in game at this spot tells which reading the game uses
+    sky = {int(o_["form_id"]): o_["skyrim"] for o_ in prm.get("ltex_overrides", [])}
+    order = [int(o_["form_id"]) for o_ in prm.get("ltex_overrides", [])]
+
+    def nm(fid):
+        return sky.get(fid, f"{fid:08X}")
+    print("each byte under other readings (head b-1 | tail n-b | b | overrides-list order b-1):")
+    for i in range(5):
+        b = q[i]
+        if not b:
+            continue
+        cand = [nm(table[b - 1]) if 0 < b <= n else "-", nm(table[n - b]) if 0 < b <= n else "-",
+                nm(table[b]) if b < n else "-", nm(order[b - 1]) if 0 < b <= len(order) else "-"]
+        print(f"  byte {i} = {b:3d} alpha {alphas[i]}: " + " | ".join(cand))
     if a.map > 0:
         over_edid = {int(o_["form_id"]): o_["skyrim"] for o_ in prm.get("ltex_overrides", [])}
         for line in ground_map(a.skyrim, os.path.join(a.terrain, "Data", "Terrain", f"{ov['world']}.btd"), a.pos,
