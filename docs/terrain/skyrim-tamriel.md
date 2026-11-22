@@ -510,3 +510,10 @@ Without --apply it only prints. Unverified on the owner's data.
   144 x 144 quadrants: 32 s.
 - Owner's run with the map-wide positions (2026-11-22 12:58, verified): 0.63 % of samples near quadrant edges drew
   another texture than Skyrim's to avoid an edge blend; spot check 100 %; 15.5 min in all. In game: pending.
+
+### How vanilla Starfield terrain lays out its texture bytes (2026-11-22, open)
+- The edge rule our fixes follow (neighbouring quadrants' bytes blended near their shared edge) is inferred from the
+  owner's in-game readings. `scripts/terrain/vanilla_btd_survey.py` reads a sample of Bethesda's own BTDs and
+  reports whether neighbouring quadrants keep shared textures at the same byte, whether a texture keeps one position
+  per file, which alphas they use, and by distance to an edge how often a byte that differs from the neighbour's is
+  drawn: if vanilla avoids those near edges, that is the rule and its width.
