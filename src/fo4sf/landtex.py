@@ -319,7 +319,7 @@ def merged_grid(cells_t, form_id, x0, x1, y0, y1, fill, consistent_edges=True):
     return g
 
 
-BLEND_MODES = ("solid", "dither", "noise")
+BLEND_MODES = ("solid", "dither", "noise", "smooth")
 # "noise" (2026-11-21, owner: "spots in the terrain that are supposed to fade ... just got off like squares into each
 # other"): "solid" cut each layer at alpha one half, and Skyrim's weights, bilinear between its vertices 1.83 m apart,
 # cross one half along straight lines: every smooth Skyrim fade became a dead-straight border. "noise" cuts each layer
@@ -649,7 +649,7 @@ def plan_slots(kept, weights=None, rounds=3):
 
 
 def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_rule=INDEX_RULE, edge=EDGE_SAMPLES,
-                        stats=None):
+                        stats=None, partial=False):
     """One 64-row band with planned slots. weights [k, 64, cols] (plane j = table entry j, form id ids[j]); slot_rows
     [nq][5] table indices
     for this band's quadrants; neighbours(qc, side) -> the neighbour's 5 table indices or None (side: 'w', 'e', 's',
@@ -686,6 +686,39 @@ def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_ru
         wts = np.stack([w[t] for t in texs])
         # a texture is usable at a sample if any of its positions is allowed there
         ok = np.stack([np.any([allowed[b] for b in range(SLOTS) if slots[b] == t], axis=0) for t in texs])
+        if partial:
+            # 2026-11-22 ("smooth": vanilla hand-made worlds use partial alphas 1..6 on most samples, verified by
+            # vanilla_btd_survey.py): Skyrim's own mix, each texture at its planned position, alphas solved top-down
+            # (byte 0 on top, byte 4 the base: shows what the overlays leave). Near an edge, textures whose position
+            # differs from the neighbour's give their share to the others where any allowed one has weight.
+            pos = {}
+            for b in range(SLOTS):
+                pos.setdefault(slots[b], b)
+            wts = np.stack([w[t] for t in texs])
+            wr = np.where(ok, wts, 0.0)
+            use = wr.sum(axis=0) > 0
+            wf = np.where(use[None], wr, wts)
+            tot = wf.sum(axis=0)
+            frac = np.where(tot > 0, wf / np.where(tot > 0, tot, 1.0), 0.0)
+            share = {t: frac[i] for i, t in enumerate(texs)}
+            base_t = slots[SLOTS - 1]
+            if stats is not None:
+                moved = np.abs(np.where(tot > 0, wf / np.where(tot > 0, tot, 1.0), 0.0)
+                               - wts / np.maximum(wts.sum(axis=0), 1e-9)).sum(axis=0) / 2
+                stats["edge_changed"] = stats.get("edge_changed", 0) + float(moved.sum())
+                stats["samples"] = stats.get("samples", 0) + 64 * 64
+            rem = np.ones((64, 64))
+            word = np.zeros((64, 64), np.uint16)
+            for b in range(SLOTS - 1):
+                t = slots[b]
+                if t == base_t or pos.get(t) != b:              # the base (and duplicates) take no alpha
+                    continue
+                a = np.clip(share[t] / np.maximum(rem, 1e-6), 0.0, 1.0)
+                q = np.rint(a * 7.0).astype(np.uint16)
+                word |= q << (3 * b)
+                rem = rem * (1.0 - q / 7.0)
+            out[:, qc * 64:(qc + 1) * 64] = word
+            continue
         free_pick = None
         pick = np.full((64, 64), -1, np.int64)
         for mask in (np.ones_like(ok), ok, np.ones_like(ok)):  # unrestricted (for the stats), allowed first, then any

@@ -259,6 +259,37 @@ class LayerTests(unittest.TestCase):
         for q, ts in kept.items():
             self.assertTrue(set(ts) <= set(plan[q]))
 
+    def test_smooth_keeps_skyrims_mix(self):
+        """2026-11-22 (vanilla hand-made worlds use partial alphas): "smooth" writes Skyrim's mix as alphas at the planned
+        positions; decoding gives the mix back within one alpha step, on both sides of an edge."""
+        n = 6
+        ids = [0x100 + i for i in range(n)]
+        kept = {(0, 0): [1, 2, 3], (0, 1): [1, 2, 4]}
+        plan = landtex.plan_slots(kept)
+        w = np.zeros((n, 64, 128), np.float32)
+        frac = np.linspace(0.0, 1.0, 128, dtype=np.float32)
+        w[1] = 0.6 * frac[None, :]
+        w[2] = 0.6 * (1 - frac[None, :])
+        w[3][:, :64] = 0.4
+        w[4][:, 64:] = 0.4
+        xs, ys = np.arange(128) * 0.78125, np.arange(64) * 0.78125
+        side = {"w": (0, -1), "e": (0, 1), "s": (-1, 0), "n": (1, 0)}
+        q, words = landtex.encode_band_aligned(w, ids, [plan[(0, 0)], plan[(0, 1)]],
+                                               lambda qc, sd: plan.get((side[sd][0], qc + side[sd][1])), (xs, ys), n,
+                                               partial=True)
+        qm = np.zeros((1, 2, 8), np.uint8)
+        qm[0] = q
+        dec = landtex.decode_quadrants(qm, words, ids)
+        alphas = set()
+        for g in range(5):
+            alphas |= set(np.unique((words >> (3 * g)) & 7).tolist())
+        self.assertTrue(alphas - {0, 7})                                       # partial alphas written
+        for t in (1, 2):
+            got = dec[ids[t]][:, 8:56].mean(axis=0)                            # away from the edge band
+            want = w[t][:, 8:56].mean(axis=0)
+            self.assertLess(float(np.abs(got - want).max()), 1.0 / 7 + 0.02)
+        self.assertLess(abs(float(dec[ids[3]][:, 8:56].mean()) - 0.4), 0.08)
+
     def test_warp_bends_sharp_borders(self):
         """A sharp Skyrim border (one vertex step) read at the warped positions wanders by up to WARP_M, the same for
         every texture (weights still sum to 1) and the same at the same world position."""

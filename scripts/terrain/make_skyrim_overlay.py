@@ -250,7 +250,7 @@ def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.
                              for f in used])
         return np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp,
                                               sp, xu, yu) for f in used])
-    if blend == "noise" and slots == "aligned" and rows is None:
+    if blend in ("noise", "smooth") and slots == "aligned" and rows is None:
         nq = size // 64
         kept, kw = {}, {}
         for r0 in range(0, size, 64):                        # pass 1: each quadrant's textures, most weight first
@@ -269,11 +269,12 @@ def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.
             q, w = landtex.encode_band_aligned(
                 band_weights(r0), used, [plan[(qr, qc)] for qc in range(nq)],
                 lambda qc, sd: plan.get((qr + side[sd][0], qc + side[sd][1])), (xs, ys[r0:r0 + 64]), len(used),
-                index_rule, stats=est)
+                index_rule, stats=est, partial=blend == "smooth")
             qmap[qr, :, :] = q
             words[r0:r0 + 64] = w
         print(f"    aligned texture positions: {est.get('edge_changed', 0) / max(est.get('samples', 1), 1):.2%} of "
-              f"samples near quadrant edges drew another texture than Skyrim's to avoid an edge blend")
+              f"samples drew another texture than Skyrim's (or, smooth: of Skyrim's mix moved to other textures) "
+              f"to avoid an edge blend")
         return words, qmap, [max(beyond) if beyond else 0.0]
     for r0 in (range(0, size, 64) if rows is None else rows):
         yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
@@ -723,10 +724,11 @@ def main(argv=None):
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="which LTEX table entry a BTD quadrant byte b names: head = b - 1 (Starfield, default), "
                          "tail = n - b (Fallout 76, the old rule; only for comparison)")
-    ap.add_argument("--ltex-blend", choices=("solid", "dither", "noise"), default="noise",
+    ap.add_argument("--ltex-blend", choices=("solid", "dither", "noise", "smooth"), default="noise",
                     help="build --land-textures: 'noise' (default, 2026-11-21) cuts each layer against a coherent noise "
                          "threshold, so Skyrim's fades become irregular patches; 'solid' gives each ground sample the "
-                         "layer covering most of it (straight borders where Skyrim fades); 'dither' keeps partial weights")
+                         "layer covering most of it (straight borders where Skyrim fades); 'dither' keeps partial weights; "
+                         "'smooth' (2026-11-22) Skyrim's own mix as partial alphas at aligned positions")
     ap.add_argument("--ltex-warp", type=float, default=1.5,
                     help="build --ltex-blend noise: how far (m) Skyrim's texture borders may wander (0 = not at all)")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")

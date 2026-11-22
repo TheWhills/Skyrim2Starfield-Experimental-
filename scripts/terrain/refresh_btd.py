@@ -355,7 +355,7 @@ def main(argv=None):
                     help="recompute without ltex_mapping.json: 64-row bands read to learn the mapping")
     ap.add_argument("--check-blend", choices=("solid", "dither"), default="solid",
                     help="recompute: the blend the staging was built with (the spot check encodes this way)")
-    ap.add_argument("--blend", choices=("solid", "dither", "noise"), default="noise", help="rebuild: --ltex-blend")
+    ap.add_argument("--blend", choices=("solid", "dither", "noise", "smooth"), default="noise", help="--ltex-blend")
     ap.add_argument("--warp", type=float, default=1.5, help="--ltex-warp (m)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)

@@ -2672,3 +2672,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   quadrants' texture bytes. Decision: plan byte positions across neighbours and keep edge samples on positions whose
   bytes match (noise blend default). Alternatives: one texture set per larger region (too few slots), a palindromic
   LTEX table (does not address blending).
+
+## 2026-11-22: vanilla terrain conventions as the reference for ground textures
+- vanilla_btd_survey.py on 12 hand-made worlds: one list order across a world, partial alphas common, no edge
+  avoidance. Decision: keep map-wide aligned positions; test "smooth" (Skyrim's mix as partial alphas) against "noise".

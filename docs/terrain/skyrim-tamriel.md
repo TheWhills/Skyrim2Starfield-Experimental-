@@ -523,3 +523,12 @@ Without --apply it only prints. Unverified on the owner's data.
   hand-made worlds with LTEX tables. Worth noting (verified, those tiles): partial alphas 1..6 are common (bytes 1 - 3:
   about 35 % of samples), i.e. vanilla terrain does use in-between blends. The survey now skips tiles without an LTEX
   table and reads the largest hand-made worlds, with a per-file near / far edge line.
+- Survey of the 12 largest hand-made vanilla worlds (owner, 2026-11-22 13:17, verified): neighbouring quadrants'
+  maps identical 95 %, shared textures at the same byte 97.7 %, each texture at one position 96 % (Bethesda keeps one
+  list order across a world). Differing positions are drawn as often near edges as far from them (19.5 % / 19.4 %): no
+  edge avoidance in vanilla (mismatches are rare there, so this neither proves nor rules out the blending). Partial
+  alphas 1..6 on most samples (byte 1: 20 % zero, 21 % full, the rest between). Bytes 5..7 are filled in 96.6 % of
+  quadrants (their use unresolved; in October a base at byte 5 did not show).
+- So: aligned positions are what vanilla does (kept), and in-between blends are normal. `--ltex-blend smooth` writes
+  Skyrim's own mix as alphas at the aligned positions (no noise, no warp); October's "specks" from partial alphas were
+  seen while the index bug drew wrong textures, so they are retested this way (terrain_blend.ps1 -Blend smooth).
