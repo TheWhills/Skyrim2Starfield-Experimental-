@@ -517,3 +517,9 @@ Without --apply it only prints. Unverified on the owner's data.
   reports whether neighbouring quadrants keep shared textures at the same byte, whether a texture keeps one position
   per file, which alphas they use, and by distance to an edge how often a byte that differs from the neighbour's is
   drawn: if vanilla avoids those near edges, that is the rule and its width.
+- First survey run (owner, 2026-11-22 13:15): 2004 vanilla BTDs; the 12 read were mostly procedural source tiles
+  with no LTEX table (canyons / fields / hills / mountains ...: 92.6 % of quadrants use one byte, neighbours 97.5 %
+  identical), so the edge table (differing positions drawn 20.2 % at every distance, no dip) does not speak for
+  hand-made worlds with LTEX tables. Worth noting (verified, those tiles): partial alphas 1..6 are common (bytes 1 - 3:
+  about 35 % of samples), i.e. vanilla terrain does use in-between blends. The survey now skips tiles without an LTEX
+  table and reads the largest hand-made worlds, with a per-file near / far edge line.

@@ -38,6 +38,17 @@ TERRAIN_ARCHIVES = ("Starfield - Terrain01.ba2", "Starfield - Terrain02.ba2", "S
 MAX_D = 32
 
 
+def ltex_count(ar, e):
+    """The LTEX table length of an archived BTD, read from its header only (vanilla terrain BTDs are stored)."""
+    if e.packed == 0:
+        with open(ar.path, "rb") as fh:
+            fh.seek(e.offset)
+            head = fh.read(44)
+        return struct.unpack_from("<I", head, 40)[0] if head[:4] == b"BTDB" else -1
+    head = ar.read(ar.entries.index(e))[:44]
+    return struct.unpack_from("<I", head, 40)[0] if head[:4] == b"BTDB" else -1
+
+
 def parse(b: bytes):
     """(ltex table, quad map [2ny, 2nx, 8], (ncy, ncx), read_cell(cy, cx) -> weights [128, 128] uint16)."""
     if b[:4] != b"BTDB":
@@ -183,28 +194,37 @@ class Survey:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sf-data", required=True, help="Starfield's Data folder")
-    ap.add_argument("--max-btds", type=int, default=12, help="vanilla BTDs to read (spread over the archives)")
+    ap.add_argument("--max-btds", type=int, default=12, help="vanilla BTDs to read (the largest with an LTEX table)")
     ap.add_argument("--cells", type=int, default=120, help="100 m cells per BTD whose samples are decompressed")
     ap.add_argument("--max-mb", type=float, default=400.0, help="skip BTDs larger than this (MB)")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--all", action="store_true", help="also the procedural source tiles (no LTEX table)")
     ap.add_argument("--json", default="", help="also write the counts here")
     a = ap.parse_args(argv)
     rng = random.Random(a.seed)
-    files = []
+    files, no_table = [], 0
     for arc in TERRAIN_ARCHIVES:
         p = os.path.join(a.sf_data, arc)
         if not os.path.exists(p):
             continue
         ar = ba2.Ba2(p)
         for i, e in enumerate(ar.entries):
-            if e.name.lower().endswith(".btd") and e.kind == "GNRL" and e.unpacked <= a.max_mb * 1e6:
-                files.append((ar, i, e.name, e.unpacked))
+            if not (e.name.lower().endswith(".btd") and e.kind == "GNRL" and e.unpacked <= a.max_mb * 1e6):
+                continue
+            nlt = ltex_count(ar, e)
+            if nlt == 0 and not a.all:
+                no_table += 1                                # procedural source tiles: no LTEX table, other rules
+                continue
+            files.append((ar, i, e.name, e.unpacked, nlt))
     if not files:
-        sys.exit(f"no vanilla .btd in the terrain archives of {a.sf_data}")
-    pick = files[::max(1, len(files) // a.max_btds)][:a.max_btds]
-    print(f"{len(files)} vanilla BTDs in the archives; reading {len(pick)}")
+        sys.exit(f"no vanilla .btd with an LTEX table in the terrain archives of {a.sf_data}")
+    files.sort(key=lambda f: -f[3])                          # the largest hand-made worlds first
+    pick = files[:a.max_btds]
+    print(f"{len(files)} vanilla BTDs with an LTEX table ({no_table} procedural tiles without one skipped); "
+          f"reading the {len(pick)} largest")
     sv = Survey()
-    for ar, i, name, size in pick:
+    for ar, i, name, size, _nlt in pick:
+        before = {k: v.copy() for k, v in sv.edge.items()}
         try:
             ltex, quad, (ncy, ncx), read_cell = parse(ar.read(i))
         except Exception as e:                               # noqa: BLE001 - report and go on
@@ -222,7 +242,13 @@ def main(argv=None):
                 continue
             sv.cell(quad, cy, cx, read_cell(cy, cx))
             done += 1
-        print(f"  {name}: {ncx} x {ncy} cells, LTEX table {len(ltex)}, {done} cells sampled ({size / 1e6:.0f} MB)")
+        dd = sv.edge["diff"] - before["diff"]
+        ds = sv.edge["same"] - before["same"]
+        near = lambda e: e[:4, 0].sum() / max(e[:4, 1].sum(), 1)                     # noqa: E731
+        far = lambda e: e[16:, 0].sum() / max(e[16:, 1].sum(), 1)                    # noqa: E731
+        print(f"  {name}: {ncx} x {ncy} cells, LTEX table {len(ltex)}, {done} cells sampled ({size / 1e6:.0f} MB); "
+              f"differing positions drawn near / far from edges {near(dd):.1%} / {far(dd):.1%} "
+              f"(same: {near(ds):.1%} / {far(ds):.1%})")
     for line in sv.report():
         print(line)
     if a.json:
