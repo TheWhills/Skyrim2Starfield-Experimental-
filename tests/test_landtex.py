@@ -232,6 +232,33 @@ class LayerTests(unittest.TestCase):
         mid = [rowplan[0][active(words[r, cc], rowplan[0])] for r in range(10, 54) for cc in range(10, 54)]
         self.assertTrue(set(mid) <= set(kept[(0, 0)]) | set(rowplan[0]))
 
+    def test_slots_shared_across_owner_quadrants(self):
+        """2026-11-22 (owner's grey patch at -1846.08, 849.67): quadrant (88, 35) held ReachDirt at byte 0, the one south
+        of it at byte 4, so only MossyRocks (byte 3 in both) was allowed in the 3 m edge strip and covered it. With one
+        position per texture, every texture on both sides of an edge has the same byte."""
+        dirt, rnr, rocks, mossy, mud, grass, rb, dirt02, moss = 27, 14, 30, 38, 40, 44, 50, 49, 34
+        kept = {(1, 0): [dirt, mud, grass, rocks, moss], (1, 1): [dirt, rnr, rocks, mossy, mud],
+                (1, 2): [dirt, rnr, rocks, mossy, moss], (0, 0): [grass, moss, rocks, mossy, dirt],
+                (0, 1): [grass, rb, dirt02, mossy, dirt], (0, 2): [grass, moss, rocks, mossy, dirt],
+                (2, 1): [dirt, rnr, rocks, moss, 46]}
+        # weights as the owner's quadrants: ReachDirt dominant where Skyrim paints it, MossyRocks a few per cent
+        w = {q: {t: (60.0 if t == dirt else 20.0 if t == grass else 8.0) for t in ts} for q, ts in kept.items()}
+        plan = landtex.plan_slots(kept, w)
+        shared_ok = total = 0
+        for (q1, q2) in [((1, 1), (0, 1)), ((1, 1), (1, 0)), ((1, 1), (1, 2)), ((1, 1), (2, 1)), ((0, 0), (0, 1))]:
+            shared = set(kept[q1]) & set(kept[q2])
+            for t in shared:
+                total += 1
+                shared_ok += plan[q1].index(t) == plan[q2].index(t)
+            heavy = max(shared, key=lambda t: min(w[q1][t], w[q2][t]))
+            self.assertEqual(plan[q1].index(heavy), plan[q2].index(heavy), f"{q1} {q2}: {heavy}")
+        # ten textures meet in these seven quadrants: more than five positions can keep apart, so not every
+        # minor texture lines up, but most do and the one that mattered at the owner's strip (ReachDirt) does
+        self.assertGreaterEqual(shared_ok / total, 0.8)
+        self.assertEqual(plan[(1, 1)].index(dirt), plan[(0, 1)].index(dirt))
+        for q, ts in kept.items():
+            self.assertTrue(set(ts) <= set(plan[q]))
+
     def test_warp_bends_sharp_borders(self):
         """A sharp Skyrim border (one vertex step) read at the warped positions wanders by up to WARP_M, the same for
         every texture (weights still sum to 1) and the same at the same world position."""

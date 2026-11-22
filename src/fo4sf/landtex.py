@@ -499,38 +499,157 @@ EDGE_SAMPLES = 4
 SLOTS = 5                                    # bytes 0..4; byte 4 is the base (every alpha 0)
 
 
-def plan_slots(kept, order_key=None):
+def plan_slots(kept, weights=None, rounds=3):
     """kept: {(qr, qc): [table index, ...] (the quadrant's textures, most weight first, at most SLOTS)} ->
-    {(qr, qc): [table index per byte 0..4]}. Raster order (south row first, west to east); each quadrant follows its
-    west and south neighbours: a texture they hold at a position keeps it, the rest take free positions, and unused
-    positions copy the west (else south) neighbour's index (alpha 0 there, so only the edge blend sees them)."""
-    out = {}
-    for (qr, qc) in sorted(kept):
-        want = list(kept[(qr, qc)])[:SLOTS]
-        nbrs = [out.get((qr, qc - 1)), out.get((qr - 1, qc))]
-        slots = [None] * SLOTS
-        for t in want:                                       # positions a neighbour already gave this texture
-            for nb in nbrs:
-                if nb is None:
-                    continue
-                for s in range(SLOTS):
-                    if nb[s] == t and slots[s] is None and t not in slots:
-                        slots[s] = t
-        for t in want:                                       # the rest: a free position, first where no neighbour
-            if t in slots:                                   # holds something else we would rather match
+    {(qr, qc): [table index per byte 0..4]}.
+    2026-11-22 (owner's grey edge strips): each texture gets ONE position for the whole tile where it can (a greedy
+    colouring of the textures with SLOTS colours: two textures conflict as much as they meet in one quadrant (must
+    differ) or across a quadrant edge, 8 neighbours), so a texture on both sides of an edge has the same byte there.
+    A quadrant whose textures still collide moves the lighter one to the free position its neighbours agree with
+    most; unused positions take the byte most neighbours hold there (blending equal bytes changes nothing).
+    weights: {(qr, qc): {table index: weight}} (default: 5, 4, 3, 2, 1 by rank)."""
+    if weights is None:
+        weights = {q: {t: float(SLOTS - i) for i, t in enumerate(ts)} for q, ts in kept.items()}
+    nbr8 = [(dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if (dr, dc) != (0, 0)]
+    conflict = {}
+    total = {}
+
+    def add(a, b, w):
+        if a != b:
+            key = (a, b) if a < b else (b, a)
+            conflict[key] = conflict.get(key, 0.0) + w
+    for q, ts in kept.items():
+        wq = weights[q]
+        for t in ts:
+            total[t] = total.get(t, 0.0) + wq.get(t, 0.0)
+        for i, a in enumerate(ts):                              # same quadrant: must differ
+            for b in ts[i + 1:]:
+                add(a, b, 1e6)
+        for dr, dc in nbr8:                                     # across an edge or corner
+            o = (q[0] + dr, q[1] + dc)
+            if o not in kept or o < q:
                 continue
-            free = [s for s in range(SLOTS) if slots[s] is None]
-            free.sort(key=lambda s: sum(1 for nb in nbrs if nb is not None and nb[s] in want and nb[s] != t))
-            slots[free[0]] = t
-        for s in range(SLOTS):                               # unused positions: the neighbours' bytes
-            if slots[s] is None:
-                fill = next((nb[s] for nb in nbrs if nb is not None), want[0])
-                slots[s] = fill
-        out[(qr, qc)] = slots
+            wo = weights[o]
+            for a in ts:
+                for b in kept[o]:
+                    if a != b and b not in ts and a not in kept[o]:
+                        add(a, b, min(wq.get(a, 0.0), wo.get(b, 0.0)))
+    colour = {}
+    for t in sorted(total, key=lambda t: -total[t]):            # heaviest first
+        cost = [0.0] * SLOTS
+        for u, cu in colour.items():
+            key = (t, u) if t < u else (u, t)
+            cost[cu] += conflict.get(key, 0.0)
+        colour[t] = min(range(SLOTS), key=lambda c: (cost[c], c))
+    for _ in range(rounds):                                     # a few passes of local improvement
+        changed = False
+        for t in sorted(total, key=lambda t: -total[t]):
+            cost = [0.0] * SLOTS
+            for u, cu in colour.items():
+                if u != t:
+                    key = (t, u) if t < u else (u, t)
+                    cost[cu] += conflict.get(key, 0.0)
+            best = min(range(SLOTS), key=lambda c: (cost[c], c != colour[t], c))
+            if best != colour[t]:
+                colour[t], changed = best, True
+        if not changed:
+            break
+    out = {}
+    for q in sorted(kept):
+        ts = sorted(kept[q][:SLOTS], key=lambda t: -weights[q].get(t, 0.0))
+        slots = [None] * SLOTS
+        homeless = []
+        for t in ts:
+            c = colour[t]
+            if slots[c] is None:
+                slots[c] = t
+            else:
+                homeless.append(t)
+        for t in homeless:                                      # a free position, the one neighbours agree with most
+            free = [c for c in range(SLOTS) if slots[c] is None]
+            score = {c: sum(1 for dr, dc in nbr8 if (q[0] + dr, q[1] + dc) in kept
+                            and t in kept[(q[0] + dr, q[1] + dc)]
+                            and colour.get(t) == c) for c in free}
+            slots[max(free, key=lambda c: (score[c], -c))] = t
+        out[q] = slots
+    # local clean-up: around Riverwood about ten textures meet in neighbouring quadrants, more than SLOTS colours can
+    # keep apart, so within each quadrant swap two positions (a texture or an empty one) whenever more textures it
+    # shares with its neighbours then sit at the neighbour's position (edges count 2, corners 1)
+    real = {q: set(ts) for q, ts in kept.items()}
+    near = [((dr, dc), 2 if dr == 0 or dc == 0 else 1) for dr, dc in nbr8]
+    share = {}                                                  # each texture's share of its quadrant's weight
+    for q, wq in weights.items():
+        tot = sum(wq.get(t, 0.0) for t in kept[q]) or 1.0
+        share[q] = {t: wq.get(t, 0.0) / tot for t in kept[q]}
+
+    def matches(q, slots, c):
+        """How much lines up at position c: per neighbour holding the same texture there, the smaller of its two
+        shares (the texture that covers more of both quadrants matters more), edges twice corners."""
+        t = slots[c]
+        if t is None or t not in real[q]:
+            return 0.0
+        n_ = 0.0
+        for (dr, dc), w in near:
+            o = (q[0] + dr, q[1] + dc)
+            if o in out and t in real[o] and out[o][c] == t:
+                n_ += w * min(share[q][t], share[o][t])
+        return n_
+    import random
+    rng = random.Random(1)
+
+    def total_matches():
+        return sum(matches(q, out[q], c) for q in out for c in range(SLOTS))
+
+    def sweep(plateau):
+        improved = False
+        for q in sorted(out):
+            slots = out[q]
+            for c1 in range(SLOTS):
+                for c2 in range(c1 + 1, SLOTS):
+                    if slots[c1] is None and slots[c2] is None:
+                        continue
+                    before = matches(q, slots, c1) + matches(q, slots, c2)
+                    slots[c1], slots[c2] = slots[c2], slots[c1]
+                    after = matches(q, slots, c1) + matches(q, slots, c2)
+                    if after > before + 1e-9:
+                        improved = True
+                    elif abs(after - before) <= 1e-9 and plateau and rng.random() < 0.5:
+                        pass                                    # a sideways step, to get past local optima
+                    else:
+                        slots[c1], slots[c2] = slots[c2], slots[c1]
+        return improved
+    for _ in range(6):
+        if not sweep(False):
+            break
+    best, best_out = total_matches(), {q: list(v) for q, v in out.items()}
+    for _ in range(4):                                          # a few sideways walks, each polished; keep the best
+        sweep(True)
+        for _ in range(6):
+            if not sweep(False):
+                break
+        sc = total_matches()
+        if sc > best + 1e-9:
+            best, best_out = sc, {q: list(v) for q, v in out.items()}
+    out = best_out
+    for _ in range(2):                                          # unused positions: the neighbours' byte there
+        for q in sorted(out):
+            for c in range(SLOTS):
+                if out[q][c] is not None and out[q][c] in kept[q]:
+                    continue
+                votes = {}
+                for dr, dc in nbr8:
+                    o = out.get((q[0] + dr, q[1] + dc))
+                    if o is not None and o[c] is not None:
+                        votes[o[c]] = votes.get(o[c], 0) + (2 if dr == 0 or dc == 0 else 1)
+                if votes:
+                    out[q][c] = max(votes, key=lambda t: (votes[t], -t))
+    for q in out:
+        out[q] = [t if t is not None else kept[q][0] for t in out[q]]
     return out
 
 
-def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_rule=INDEX_RULE, edge=EDGE_SAMPLES):
+def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_rule=INDEX_RULE, edge=EDGE_SAMPLES,
+                        stats=None):
     """One 64-row band with planned slots. weights [k, 64, cols] (plane j = table entry j, form id ids[j]); slot_rows
     [nq][5] table indices
     for this band's quadrants; neighbours(qc, side) -> the neighbour's 5 table indices or None (side: 'w', 'e', 's',
@@ -567,8 +686,16 @@ def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_ru
         wts = np.stack([w[t] for t in texs])
         # a texture is usable at a sample if any of its positions is allowed there
         ok = np.stack([np.any([allowed[b] for b in range(SLOTS) if slots[b] == t], axis=0) for t in texs])
+        free_pick = None
         pick = np.full((64, 64), -1, np.int64)
-        for mask in (ok, np.ones_like(ok)):                   # allowed textures first; none with weight: any
+        for mask in (np.ones_like(ok), ok, np.ones_like(ok)):  # unrestricted (for the stats), allowed first, then any
+            if free_pick is None:
+                wm = wts
+                tot = wm.sum(axis=0)
+                cum = np.cumsum(wm, axis=0) / np.where(tot > 0, tot, 1.0)
+                free_pick = np.where((u[None] < cum).any(axis=0), np.argmax(u[None] < cum, axis=0),
+                                     np.argmax(wm, axis=0))
+                continue
             wm = np.where(mask, wts, 0.0)
             tot = wm.sum(axis=0)
             cum = np.cumsum(wm, axis=0) / np.where(tot > 0, tot, 1.0)
@@ -576,6 +703,9 @@ def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_ru
             first = np.where((u[None] < cum).any(axis=0), first, np.argmax(wm, axis=0))
             pick = np.where((pick < 0) & (tot > 0), first, pick)
         pick = np.where(pick < 0, int(np.argmax(wts.reshape(len(texs), -1).sum(axis=1))), pick)
+        if stats is not None:
+            stats["edge_changed"] = stats.get("edge_changed", 0) + int((pick != free_pick).sum())
+            stats["samples"] = stats.get("samples", 0) + 64 * 64
         chosen = np.full((64, 64), -1, np.int64)
         for b in range(SLOTS):                                # the texture's allowed position, else its first one
             hit = (pick >= 0) & (np.asarray(texs)[pick] == slots[b])

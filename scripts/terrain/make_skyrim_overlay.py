@@ -252,24 +252,28 @@ def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.
                                               sp, xu, yu) for f in used])
     if blend == "noise" and slots == "aligned" and rows is None:
         nq = size // 64
-        kept = {}
+        kept, kw = {}, {}
         for r0 in range(0, size, 64):                        # pass 1: each quadrant's textures, most weight first
             sums = band_weights(r0).reshape(len(used), 64, nq, 64).sum(axis=(1, 3))     # [k, nq]
             for qc in range(nq):
                 order = [j for j in np.argsort(-sums[:, qc]) if sums[j, qc] > 0][:landtex.SLOTS] or [0]
                 kept[(r0 // 64, qc)] = order
+                kw[(r0 // 64, qc)] = {int(j): float(sums[j, qc]) for j in order}
                 tot = float(sums[:, qc].sum()) or 1.0
                 beyond.append(float(sum(sums[j, qc] for j in np.argsort(-sums[:, qc])[landtex.SLOTS:])) / tot)
-        plan = landtex.plan_slots(kept)
+        plan = landtex.plan_slots(kept, kw)
+        est = {}
         for r0 in range(0, size, 64):                        # pass 2: the samples, edge-aware
             qr = r0 // 64
             side = {"w": (0, -1), "e": (0, 1), "s": (-1, 0), "n": (1, 0)}
             q, w = landtex.encode_band_aligned(
                 band_weights(r0), used, [plan[(qr, qc)] for qc in range(nq)],
                 lambda qc, sd: plan.get((qr + side[sd][0], qc + side[sd][1])), (xs, ys[r0:r0 + 64]), len(used),
-                index_rule)
+                index_rule, stats=est)
             qmap[qr, :, :] = q
             words[r0:r0 + 64] = w
+        print(f"    aligned texture positions: {est.get('edge_changed', 0) / max(est.get('samples', 1), 1):.2%} of "
+              f"samples near quadrant edges drew another texture than Skyrim's to avoid an edge blend")
         return words, qmap, [max(beyond) if beyond else 0.0]
     for r0 in (range(0, size, 64) if rows is None else rows):
         yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE

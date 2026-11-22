@@ -496,3 +496,15 @@ Without --apply it only prints. Unverified on the owner's data.
   base) and encodes edge-aware (encode_band_aligned: within EDGE_SAMPLES 4 of an edge a sample uses only positions whose
   byte equals the neighbour's). Two passes per tile (quadrant texture sets, then samples). Test: a synthetic two-quadrant
   band where every sample within 4 of the edge uses a byte equal across it.
+- Owner's next look (2026-11-22 12:26 - 12:33, verified in game): the snow band is gone and the ground layout follows
+  Skyrim's, but straight-edged patches of one texture remain along quadrant edges (grey at -1846.08, 849.67; the
+  riverbank grass ending in a straight line at -1848.57, 913.23). ground_at at the grey patch: 3 rows into quadrant
+  (88, 35) [28, 15, 31, 39, 41], south neighbour [45, 51, 50, 39, 28]: only byte 3 (MossyRocks, 7 % there) equal, so the
+  edge rule forced the whole 3 m strip to it (verified from the map). Cause: positions planned quadrant by quadrant
+  drift (ReachDirt byte 0 here, byte 4 south).
+- Now: landtex.plan_slots gives each texture one position for the tile where it can (greedy colouring of textures
+  by how much they meet, same quadrant must differ), then swaps positions within quadrants (with sideways steps) to
+  line up shared textures weighted by their share of both quadrants. Around Riverwood about ten textures meet in
+  neighbouring quadrants, more than five positions can separate, so minor ones may still differ; the dominant one
+  lines up (test with the owner's quadrants). The build prints how many edge samples still drew another texture.
+  144 x 144 quadrants: 32 s.
