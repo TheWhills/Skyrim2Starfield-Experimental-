@@ -448,3 +448,16 @@ Without --apply it only prints. Unverified on the owner's data.
   synthetic edge the border stays within 4 samples (3 m) of Skyrim's, average offset under 1.5 samples (test).
 - Still to compare with Skyrim: how LRocks01NoRocks looks (pale, smooth, sky-tinted grey-blue here; Skyrim's is grey
   gravel, mostly under grass objects, which are not converted yet).
+
+### Pale grey band and missing pale ground (2026-11-22)
+- Owner's ground_at at the band (game -1955.40, 749.15): Skyrim paints LRocks01NoRocks at 100 % (the area: it and
+  LRocks01, on spare slots 00030138 LRockSedCracked01 and 000557E2 LRockWorn01). Our converted
+  textures\skyrim\ground\lrocks01norocks_color.dds (owner's zip, verified): dark detailed gravel, sRGB mean (39, 40, 41),
+  linear luminance 0.027; in game the band is pale, smooth, blue-grey with crack lines. Supported hypothesis: the game
+  does not draw our material for these slots (their vanilla records' look), not a blend or texture-content problem.
+- Owner's "snowy in Skyrim, not here" spot (game -1843.91, 847.80): Skyrim 0.52 LReachDirt01, 0.34 LReachMossyRocks01,
+  0.15 LRiverMud01; the build's map matches Skyrim's layout; in game the ground there is dark. Our rock-type textures are
+  all dark (NoRocks variants: linear luminance 0.024 - 0.044); possibly the per-texture mean vertex tint
+  (--skyrim-ground-tint vertex) darkening pale Skyrim textures. Unresolved without Skyrim's own textures to compare.
+- Test: scripts\terrain\ground_colour_test.py / tools\owner\terrain_colour_test.ps1 paint the staged colour textures of
+  LRocks01NoRocks magenta, LRocks01 cyan, LReachMossyRocks01 yellow and reinstall; -Restore undoes it.
