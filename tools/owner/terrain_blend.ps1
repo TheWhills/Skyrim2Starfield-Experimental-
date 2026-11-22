@@ -1,17 +1,17 @@
 # Ground textures that fade into each other instead of meeting in straight lines (2026-11-21, owner: "spots in the
 # terrain that are supposed to fade or have a snow texture or blend kind of just got off like squares into each other").
 # Recomputes the texture layers of the installed exterior's terrain files from Skyrim.esm with the new blend (landtex
-# "noise"), using the staging's own texture choices, after a spot check that the old way reproduces what is installed.
+# "smooth" by default since 2026-11-22, verified in game), using the staging's own texture choices, after a spot check that the old way reproduces what is installed.
 # Heights, plugins, objects, grass, LOD, water and the planet stay as they are. Then reinstalls. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_blend.ps1
-#   -Blend smooth: Skyrim's own soft mix (partial blends, as vanilla worlds use); -Blend solid: the old straight
-#   borders; -Warp <m> how far noise borders may wander (default 1.5)
+#   -Blend smooth (default): Skyrim's own soft mix (partial blends, as vanilla worlds use); -Blend noise: irregular
+#   patches; -Blend solid: the old straight borders; -Warp <m> how far noise borders may wander (default 1.5)
 #   The terrain files as first built are kept in <Staging>\btd_before_blend.
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
-    [ValidateSet("noise", "smooth", "solid", "dither")][string]$Blend = "noise",
+    [ValidateSet("smooth", "noise", "solid", "dither")][string]$Blend = "smooth",
     [double]$Warp = 1.5,
     [switch]$NoInstall
 )

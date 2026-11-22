@@ -724,11 +724,11 @@ def main(argv=None):
     ap.add_argument("--ltex-index", choices=["head", "tail"], default="head",
                     help="which LTEX table entry a BTD quadrant byte b names: head = b - 1 (Starfield, default), "
                          "tail = n - b (Fallout 76, the old rule; only for comparison)")
-    ap.add_argument("--ltex-blend", choices=("solid", "dither", "noise", "smooth"), default="noise",
-                    help="build --land-textures: 'noise' (default, 2026-11-21) cuts each layer against a coherent noise "
+    ap.add_argument("--ltex-blend", choices=("solid", "dither", "noise", "smooth"), default="smooth",
+                    help="build --land-textures: 'smooth' (default since 2026-11-22, verified in game: soft fades, no straight edges "
+                         "or specks) writes Skyrim's own mix as partial alphas at aligned positions; 'noise' (2026-11-21) cuts each layer against a coherent noise "
                          "threshold, so Skyrim's fades become irregular patches; 'solid' gives each ground sample the "
-                         "layer covering most of it (straight borders where Skyrim fades); 'dither' keeps partial weights; "
-                         "'smooth' (2026-11-22) Skyrim's own mix as partial alphas at aligned positions")
+                         "layer covering most of it (straight borders where Skyrim fades); 'dither' keeps partial weights")
     ap.add_argument("--ltex-warp", type=float, default=1.5,
                     help="build --ltex-blend noise: how far (m) Skyrim's texture borders may wander (0 = not at all)")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")

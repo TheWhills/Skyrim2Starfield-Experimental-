@@ -533,5 +533,23 @@ Without --apply it only prints. Unverified on the owner's data.
   Skyrim's own mix as alphas at the aligned positions (no noise, no warp); October's "specks" from partial alphas were
   seen while the index bug drew wrong textures, so they are retested this way (terrain_blend.ps1 -Blend smooth).
 - Owner's smooth run (2026-11-22 13:37, verified): 0.50 % of Skyrim's mix near edges moved to other textures; 4.7 min
-  in all (noise: 15.5 min; no noise / warp fields); archive 4,241 MB (from 4,203: partial alphas compress less). In
-  game: pending.
+  in all (noise: 15.5 min; no noise / warp fields); archive 4,241 MB (from 4,203: partial alphas compress less).
+- In game (owner's side-by-sides with Skyrim, 2026-11-22 18:48, verified): riverbank by the bridge, the clearing by the
+  stairs, the fallen log, the village by the big tree and the cliff slope show soft fades, no 50 m straight edges or
+  square patches and no specks (October's specks were the index bug, not partial alphas). `smooth` is now the default
+  (make_skyrim_overlay.py --ltex-blend, refresh_btd.py --blend, terrain_blend.ps1 -Blend); noise / solid stay as options.
+
+### Ground colour against Skyrim (2026-11-22, open)
+- Same screenshots: where Skyrim's Riverwood ground is green and fairly bright (grass, moss, clover forest floor),
+  ours is dark grey-brown: dirt, a near-black cracked rock texture with black splotches (riverbank, log, village
+  corner, cliff), and pale blue-white sky-reflecting patches under the trees by the log (as LRocks01NoRocks drew at the
+  band: a near-black albedo dominated by the sky's reflection). The layout matches Skyrim (label tests), so what
+  differs is each texture's colour / brightness, not where it is.
+- Candidates (unresolved): (a) Skyrim multiplies each texture by the local vertex colour (VCLR), greener around
+  Riverwood; we bake one Tamriel-wide mean per texture, which can be darker and browner here; (b) Skyrim's diffuse
+  textures are darker than Starfield's PBR albedos (vanilla dirt luminance about 0.17, our NoRocks textures
+  0.024 - 0.044) and Skyrim's lighting brightens them; (c) a conversion problem in some textures (the black splotches).
+- `scripts/terrain/ground_tone.py --pos X Y --radius 20` (read-only) prints per Skyrim texture around a spot its
+  diffuse colour, the local vertex colour, the baked tint, Skyrim's look there against our staged texture, and the
+  area's mix both ways: (a) shows as here differing from baked, (b) as a dark diffuse with ours close to it, (c) as
+  ours far from diffuse x baked.

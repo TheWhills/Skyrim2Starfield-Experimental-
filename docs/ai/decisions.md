@@ -2676,3 +2676,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 ## 2026-11-22: vanilla terrain conventions as the reference for ground textures
 - vanilla_btd_survey.py on 12 hand-made worlds: one list order across a world, partial alphas common, no edge
   avoidance. Decision: keep map-wide aligned positions; test "smooth" (Skyrim's mix as partial alphas) against "noise".
+- 2026-11-22 Terrain blend default is now `smooth` (Skyrim's own mix as partial 3-bit alphas at map-wide aligned byte
+  positions). Why: owner's in-game side-by-sides at five Riverwood spots show soft fades with no straight quadrant edges
+  or specks, and the vanilla survey found partial alphas at aligned positions are what Bethesda's worlds use; it is
+  also 3x faster than noise (4.7 vs 15.5 min). Alternatives kept as options: noise (irregular patches), solid, dither.
