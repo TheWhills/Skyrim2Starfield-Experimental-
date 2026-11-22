@@ -263,6 +263,20 @@ def main(argv=None):
 
     def nm(fid):
         return sky.get(fid, f"{fid:08X}")
+    # 2026-11-22: the band sits on the first rows of a 50 m quadrant; the neighbours' raw bytes, to test whether the
+    # game mixes (interpolates) the quadrant map across the edge
+    with open(os.path.join(a.terrain, "Data", "Terrain", f"{ov['world']}.btd"), "rb") as fbt:
+        tb = btd.read(fbt.read())
+    qr0, qc0 = r // 64, c // 64
+    print(f"sample {r - qr0 * 64} rows / {c - qc0 * 64} cols into quadrant ({qr0}, {qc0}); raw bytes of the 3 x 3 "
+          f"quadrants around it (row +1 = north):")
+    for dr in (1, 0, -1):
+        cells = []
+        for dc in (-1, 0, 1):
+            rr, cc = qr0 + dr, qc0 + dc
+            ok = 0 <= rr < tb.quad_map.shape[0] and 0 <= cc < tb.quad_map.shape[1]
+            cells.append(str([int(x) for x in tb.quad_map[rr, cc][:5]]) if ok else "-")
+        print(f"  {dr:+d}: " + "   ".join(f"{x:22}" for x in cells))
     print("each byte under other readings (head b-1 | tail n-b | b | overrides-list order b-1):")
     for i in range(5):
         b = q[i]
