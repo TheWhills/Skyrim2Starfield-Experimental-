@@ -336,7 +336,7 @@ def cmd_recompute(a):
                 with open(p, "wb") as fh:
                     fh.write(data)
         done += 1
-        print(f"  {o['world']}: {'would write' if a.dry_run else 'wrote'} {a.blend} blend (warp {a.warp:g} m) into "
+        print(f"  {o['world']}: {'would write' if a.dry_run else 'wrote'} {a.blend} blend{f' (warp {a.warp:g} m)' if a.blend == 'noise' else ''} into "
               f"{len(paths)} file(s); heights kept; weight past the five layers per quadrant at most {max(beyond):.1%}")
     return 0 if done else 1
 

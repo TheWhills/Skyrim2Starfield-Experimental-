@@ -532,3 +532,6 @@ Without --apply it only prints. Unverified on the owner's data.
 - So: aligned positions are what vanilla does (kept), and in-between blends are normal. `--ltex-blend smooth` writes
   Skyrim's own mix as alphas at the aligned positions (no noise, no warp); October's "specks" from partial alphas were
   seen while the index bug drew wrong textures, so they are retested this way (terrain_blend.ps1 -Blend smooth).
+- Owner's smooth run (2026-11-22 13:37, verified): 0.50 % of Skyrim's mix near edges moved to other textures; 4.7 min
+  in all (noise: 15.5 min; no noise / warp fields); archive 4,241 MB (from 4,203: partial alphas compress less). In
+  game: pending.
