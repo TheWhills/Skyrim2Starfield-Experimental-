@@ -470,3 +470,7 @@ Without --apply it only prints. Unverified on the owner's data.
   (the band: the vanilla look of one slot, e.g. 0019E83A LSandRipple01_Pale for LReachGrass01; the forest floor:
   possibly 00048350 LGrassClover01_Red's own clover). `scripts/terrain/ltex_winner.py` lists, per overridden slot,
   every plugin in the load order with that LTEX and its BNAM, to see whether another plugin wins.
+- ltex_winner.py on the owner's install (2026-11-22, verified): 55 of 55 overridden LTEX win with our BNAM (only
+  Starfield.esm and SkyrimTerrainTamriel.esm define them; no DLC or other plugin touches them). So the load order is not
+  why five painted textures never showed. Next: `ground_material_check.py` reads each material from the installed
+  archive, checks its textures are there, and lists resource IDs shared between our ground materials.
