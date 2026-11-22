@@ -415,3 +415,9 @@ Without --apply it only prints. Unverified on the owner's data.
 - Unresolved: the flat grey-blue "snow" patches the owner saw where Skyrim paints grey gravel and rock near Riverwood
   (owner 18:31): a texture mapping or conversion problem, not the blend; `ground_at.py` at such a spot says which
   Skyrim LTEX it is and what the BTD draws.
+- Owner's run (2026-11-21 19:13, verified): no ltex_mapping.json, so the mapping was learnt off the installed terrain:
+  66 of 66 Skyrim textures (LSnow01 3.4 M samples, the engine default 1.4 M, LSnowRocks01 0.8 M, ...); spot check of 24
+  other bands encoded the old way: 100.0 % of samples draw what the installed terrain draws; noise blend (warp 3.5 m)
+  written into the BTD and its meshes copy, heights kept; at most 4.8 % of a quadrant's weight is past its five layers
+  (where a quadrant has more than five textures the extra ones give way: a possible straight 50 m quadrant edge, open).
+  Reinstall and the 53 hidden statics re-patched; 8.4 min in all. In game: pending.
