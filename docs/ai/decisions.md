@@ -2666,3 +2666,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   only). Alternatives: dither (partial alphas: drew specks in October, though that test was confounded by the texture
   bugs found after it; still a fallback), blurring the weights (needs cross-band margins, borders stay smooth lines).
   Installed by splicing texture layers into the staged BTDs (heights kept), not by re-staging the exterior.
+
+## 2026-11-22: quadrant byte positions aligned with neighbours (ground textures)
+- The label test showed wrong textures in strips on quadrant edges consistent with the engine blending neighbouring
+  quadrants' texture bytes. Decision: plan byte positions across neighbours and keep edge samples on positions whose
+  bytes match (noise blend default). Alternatives: one texture set per larger region (too few slots), a palindromic
+  LTEX table (does not address blending).

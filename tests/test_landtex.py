@@ -191,6 +191,47 @@ class LayerTests(unittest.TestCase):
         empty = landtex.merged_grid({(0, 0): {1: rock}}, 1, 0, 1, 0, 0, 0.0)   # a cell with no data: the fill
         self.assertEqual(float(empty[5, 40]), 0.0)
 
+    def test_aligned_slots_keep_edges_consistent(self):
+        """2026-11-22 (the snow band on a quadrant's first rows): neighbouring quadrants keep shared textures at the same
+        byte, fill unused bytes with the neighbour's, and near an edge a sample only uses a byte equal to the
+        neighbour's there, so blending the two quadrants' bytes there (as the engine appears to) changes nothing."""
+        n = 10
+        kept = {(0, 0): [3, 7, 1], (0, 1): [7, 5, 3, 2, 9], (1, 0): [1, 3], (1, 1): [5, 7, 4]}
+        plan = landtex.plan_slots(kept)
+        for q, ts in kept.items():
+            self.assertEqual(len(plan[q]), landtex.SLOTS)
+            self.assertTrue(set(ts) <= set(plan[q]))                       # every texture has a position
+        a, b, c = plan[(0, 0)], plan[(0, 1)], plan[(1, 0)]
+        self.assertEqual(b.index(7), a.index(7))                           # shared with the west neighbour
+        self.assertEqual(b.index(3), a.index(3))
+        self.assertEqual(c.index(1), a.index(1))                           # shared with the south neighbour
+        self.assertEqual(c.index(3), a.index(3))
+        # two quadrants side by side (west: textures 3 / 7 / 1, east: 7 / 5 / 3 / 2 / 9), every texture everywhere
+        ids = [0x100 + i for i in range(n)]
+        rng = np.random.default_rng(3)
+        w = rng.random((n, 64, 128)).astype(np.float32)
+        xs, ys = np.arange(128) * 0.78125, np.arange(64) * 0.78125
+        rowplan = [plan[(0, 0)], plan[(0, 1)]]
+        side = {"w": (0, -1), "e": (0, 1), "s": (-1, 0), "n": (1, 0)}
+        q, words = landtex.encode_band_aligned(w, ids, rowplan, lambda qc, sd: plan.get((0 + side[sd][0], qc + side[sd][1])),
+                                               (xs, ys), n)
+        self.assertEqual([landtex.entry_for(int(x), n) for x in q[0][:5]], rowplan[0])
+        self.assertTrue(set(np.unique(words & 0x7FFF).tolist()) <= {0, 7, 7 << 3, 7 << 6, 7 << 9})   # one layer each
+
+        def active(word, slots):
+            g = [k for k in range(4) if (int(word) >> (3 * k)) & 7]
+            return g[0] if g else 4
+        # the engine's apparent edge blend: within the edge band, the active byte mixes with the neighbour's
+        for r in range(64):
+            for cc in (60, 61, 62, 63, 64, 65, 66, 67):
+                me, nb = (0, 1) if cc < 64 else (1, 0)
+                k = active(words[r, cc], rowplan[me])
+                self.assertEqual(rowplan[me][k], rowplan[nb][k],
+                                 f"row {r} col {cc}: byte {k} differs across the edge")
+        # away from the edges each quadrant draws its own most weighted textures as before
+        mid = [rowplan[0][active(words[r, cc], rowplan[0])] for r in range(10, 54) for cc in range(10, 54)]
+        self.assertTrue(set(mid) <= set(kept[(0, 0)]) | set(rowplan[0]))
+
     def test_warp_bends_sharp_borders(self):
         """A sharp Skyrim border (one vertex step) read at the warped positions wanders by up to WARP_M, the same for
         every texture (weights still sum to 1) and the same at the same world position."""

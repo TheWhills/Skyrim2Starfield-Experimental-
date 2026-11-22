@@ -483,3 +483,16 @@ Without --apply it only prints. Unverified on the owner's data.
   BTD predicts at those places (e.g. our LPineForest forest floor where Skyrim paints Reach dirt / grass; the band one
   more texture). Test: `ground_colour_test.py label` (terrain_colour_test.ps1 -Label) gives every converted ground
   texture its own name in black letters, so each patch in game names the texture drawn.
+
+### The grey-blue "snow" band: quadrant byte blending at 50 m edges (2026-11-22)
+- Label test (every converted ground texture shows its name, verified in game): the band reads LGRASSSNOW01NOGRASS,
+  the forest floor around it LPINEFOREST..., neither painted by Skyrim there. ground_at at band spots: rows 5505 - 5507,
+  i.e. the first 2 - 3 sample rows of quadrant row 86; inside quadrants (row 5534) the label matches the file's head
+  reading. Band spot: active byte 1 = 47 here, 7 in the quadrant to the south; LGrassSnow01NoGrass (entry 24) and
+  LPineForest03 (entry 23) lie between, as an engine blending the two quadrants' bytes near their shared edge would draw
+  (supported hypothesis; unverified how wide or how it weighs).
+- Fix: --ltex-blend noise now plans byte positions per quadrant with its neighbours (landtex.plan_slots: shared
+  textures keep the neighbour's position, unused positions copy the neighbour's byte, all five bytes filled, byte 4 the
+  base) and encodes edge-aware (encode_band_aligned: within EDGE_SAMPLES 4 of an edge a sample uses only positions whose
+  byte equals the neighbour's). Two passes per tile (quadrant texture sets, then samples). Test: a synthetic two-quadrant
+  band where every sample within 4 of the edge uses a byte equal across it.

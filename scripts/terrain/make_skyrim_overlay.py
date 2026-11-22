@@ -220,11 +220,13 @@ def skyrim_ground(a, ltex, cells, usage, out, colours=None):
             "free_slots": len(slots), "borrowed": borrowed}
 
 
-def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.0, rows=None):
+def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.0, rows=None, slots="aligned"):
     """One tile's BTD texture part: (sample words [size, size] uint16, quad map [2n, 2n, 8] uint8, [weight beyond the
     five layers per band]). planes: {Starfield LTEX form id: merged Skyrim vertex grid of its weight (uint8 0..255)},
     origin (ox, oy) and spacing sp in Skyrim units; used: the BTD's LTEX table; t: the overlay tile (sample_coords);
-    warp_m: landtex.warp_offsets for blend "noise". rows: only these 64-row bands (a spot check; the rest left 0)."""
+    warp_m: landtex.warp_offsets for blend "noise". rows: only these 64-row bands (a spot check; the rest left 0).
+    slots "aligned" (blend "noise", 2026-11-22): two passes, first each quadrant's five textures, then byte positions
+    planned with the neighbours (landtex.plan_slots) and the samples encoded edge-aware (encode_band_aligned)."""
     import numpy as np
     from fo4sf import landtex
     xs, ys = t.sample_coords()
@@ -235,6 +237,40 @@ def tile_layers(planes, used, ox, oy, sp, t, blend, index_rule="head", warp_m=0.
     last = next(iter(planes.values())).shape[0] - 1
     warp = blend == "noise" and warp_m > 0
     margin = int(np.ceil(warp_m * tg.UNITS_PER_METRE / sp)) + 1 if warp else 0
+    def band_weights(r0):
+        yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
+        lo = int(min(max(np.floor((yu[0] - oy) / sp) - margin, 0), last))
+        hi = int(min(max(np.floor((yu[-1] - oy) / sp) + 1 + margin, 0), last))
+        if hi <= lo:
+            lo, hi = max(min(lo, last - 1), 0), min(max(lo, 0) + 1, last)
+        if warp:
+            dx, dy = landtex.warp_offsets(xs, ys[r0:r0 + 64], warp_m)
+            return np.stack([landtex.sample_warped(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp,
+                                                   sp, xu, yu, dx * tg.UNITS_PER_METRE, dy * tg.UNITS_PER_METRE)
+                             for f in used])
+        return np.stack([tg.resample_bilinear(planes[f][lo:hi + 1].astype(np.float32) / 255.0, ox, oy + lo * sp,
+                                              sp, xu, yu) for f in used])
+    if blend == "noise" and slots == "aligned" and rows is None:
+        nq = size // 64
+        kept = {}
+        for r0 in range(0, size, 64):                        # pass 1: each quadrant's textures, most weight first
+            sums = band_weights(r0).reshape(len(used), 64, nq, 64).sum(axis=(1, 3))     # [k, nq]
+            for qc in range(nq):
+                order = [j for j in np.argsort(-sums[:, qc]) if sums[j, qc] > 0][:landtex.SLOTS] or [0]
+                kept[(r0 // 64, qc)] = order
+                tot = float(sums[:, qc].sum()) or 1.0
+                beyond.append(float(sum(sums[j, qc] for j in np.argsort(-sums[:, qc])[landtex.SLOTS:])) / tot)
+        plan = landtex.plan_slots(kept)
+        for r0 in range(0, size, 64):                        # pass 2: the samples, edge-aware
+            qr = r0 // 64
+            side = {"w": (0, -1), "e": (0, 1), "s": (-1, 0), "n": (1, 0)}
+            q, w = landtex.encode_band_aligned(
+                band_weights(r0), used, [plan[(qr, qc)] for qc in range(nq)],
+                lambda qc, sd: plan.get((qr + side[sd][0], qc + side[sd][1])), (xs, ys[r0:r0 + 64]), len(used),
+                index_rule)
+            qmap[qr, :, :] = q
+            words[r0:r0 + 64] = w
+        return words, qmap, [max(beyond) if beyond else 0.0]
     for r0 in (range(0, size, 64) if rows is None else rows):
         yu = ys[r0:r0 + 64] * tg.UNITS_PER_METRE
         lo = int(min(max(np.floor((yu[0] - oy) / sp) - margin, 0), last))

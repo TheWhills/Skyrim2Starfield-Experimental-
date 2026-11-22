@@ -489,6 +489,107 @@ def encode_quadrants(weights: np.ndarray, table: List[int], ids: List[int], blen
     return qmap, out, {"weight_beyond_six_layers": round(dropped / total, 5)}
 
 
+# 2026-11-22 (owner's grey-blue "snow" band; label test + ground_at): the band lies on the first 2 - 3 sample rows of
+# a 50 m quadrant, drawing LGrassSnow01NoGrass / LPineForest03 (table entries 24 / 23) where the active layer's byte
+# is 47 here and 7 in the quadrant to the south: entries between them, as if the engine blends the two quadrants'
+# bytes near their shared edge (supported hypothesis). So "aligned" slots: a texture keeps the byte position its
+# neighbours gave it, unused positions copy a neighbour's byte, and within EDGE_SAMPLES of a quadrant edge a sample
+# only uses a position whose byte equals the neighbour's there (blending equal bytes changes nothing).
+EDGE_SAMPLES = 4
+SLOTS = 5                                    # bytes 0..4; byte 4 is the base (every alpha 0)
+
+
+def plan_slots(kept, order_key=None):
+    """kept: {(qr, qc): [table index, ...] (the quadrant's textures, most weight first, at most SLOTS)} ->
+    {(qr, qc): [table index per byte 0..4]}. Raster order (south row first, west to east); each quadrant follows its
+    west and south neighbours: a texture they hold at a position keeps it, the rest take free positions, and unused
+    positions copy the west (else south) neighbour's index (alpha 0 there, so only the edge blend sees them)."""
+    out = {}
+    for (qr, qc) in sorted(kept):
+        want = list(kept[(qr, qc)])[:SLOTS]
+        nbrs = [out.get((qr, qc - 1)), out.get((qr - 1, qc))]
+        slots = [None] * SLOTS
+        for t in want:                                       # positions a neighbour already gave this texture
+            for nb in nbrs:
+                if nb is None:
+                    continue
+                for s in range(SLOTS):
+                    if nb[s] == t and slots[s] is None and t not in slots:
+                        slots[s] = t
+        for t in want:                                       # the rest: a free position, first where no neighbour
+            if t in slots:                                   # holds something else we would rather match
+                continue
+            free = [s for s in range(SLOTS) if slots[s] is None]
+            free.sort(key=lambda s: sum(1 for nb in nbrs if nb is not None and nb[s] in want and nb[s] != t))
+            slots[free[0]] = t
+        for s in range(SLOTS):                               # unused positions: the neighbours' bytes
+            if slots[s] is None:
+                fill = next((nb[s] for nb in nbrs if nb is not None), want[0])
+                slots[s] = fill
+        out[(qr, qc)] = slots
+    return out
+
+
+def encode_band_aligned(weights, ids, slot_rows, neighbours, coords, n, index_rule=INDEX_RULE, edge=EDGE_SAMPLES):
+    """One 64-row band with planned slots. weights [k, 64, cols] (plane j = table entry j, form id ids[j]); slot_rows
+    [nq][5] table indices
+    for this band's quadrants; neighbours(qc, side) -> the neighbour's 5 table indices or None (side: 'w', 'e', 's',
+    'n'); n: table length. Each sample takes one of its quadrant's textures by the shared noise threshold (as "noise");
+    within `edge` samples of a side whose neighbour holds a different index at that position, positions that differ
+    are not used. Returns (quad map row [nq, 8] uint8, words [64, cols] uint16)."""
+    k, rows, cols = weights.shape
+    nq = cols // 64
+    xs_m, ys_m = coords
+    u_all = blend_noise(xs_m, ys_m, 0)
+    qrow = np.zeros((nq, 8), np.uint8)
+    out = np.zeros((rows, cols), np.uint16)
+    rr, cc = np.mgrid[0:64, 0:64]
+    near = {"w": cc < edge, "e": cc >= 64 - edge, "s": rr < edge, "n": rr >= 64 - edge}
+    for qc in range(nq):
+        slots = slot_rows[qc]
+        for b in range(SLOTS):
+            qrow[qc, b] = byte_for(slots[b], n, index_rule)
+        w = weights[:, :, qc * 64:(qc + 1) * 64]
+        u = u_all[:, qc * 64:(qc + 1) * 64]
+        allowed = np.ones((SLOTS, 64, 64), bool)
+        for side, mask in near.items():
+            nb = neighbours(qc, side)
+            if nb is None:
+                continue
+            for b in range(SLOTS):
+                if nb[b] != slots[b]:
+                    allowed[b] &= ~mask
+        texs = []                                             # distinct textures, fixed order (by form id)
+        for b in range(SLOTS):
+            if slots[b] not in texs:
+                texs.append(slots[b])
+        texs.sort(key=lambda t: ids[t])
+        wts = np.stack([w[t] for t in texs])
+        # a texture is usable at a sample if any of its positions is allowed there
+        ok = np.stack([np.any([allowed[b] for b in range(SLOTS) if slots[b] == t], axis=0) for t in texs])
+        pick = np.full((64, 64), -1, np.int64)
+        for mask in (ok, np.ones_like(ok)):                   # allowed textures first; none with weight: any
+            wm = np.where(mask, wts, 0.0)
+            tot = wm.sum(axis=0)
+            cum = np.cumsum(wm, axis=0) / np.where(tot > 0, tot, 1.0)
+            first = np.argmax(u[None] < cum, axis=0)
+            first = np.where((u[None] < cum).any(axis=0), first, np.argmax(wm, axis=0))
+            pick = np.where((pick < 0) & (tot > 0), first, pick)
+        pick = np.where(pick < 0, int(np.argmax(wts.reshape(len(texs), -1).sum(axis=1))), pick)
+        chosen = np.full((64, 64), -1, np.int64)
+        for b in range(SLOTS):                                # the texture's allowed position, else its first one
+            hit = (pick >= 0) & (np.asarray(texs)[pick] == slots[b])
+            chosen = np.where((chosen < 0) & hit & allowed[b], b, chosen)
+        for b in range(SLOTS):
+            hit = (np.asarray(texs)[pick] == slots[b])
+            chosen = np.where((chosen < 0) & hit, b, chosen)
+        word = np.zeros((64, 64), np.uint16)
+        for b in range(SLOTS - 1):                            # byte 4 is the base: every alpha 0 shows it
+            word |= np.where(chosen == b, 7, 0).astype(np.uint16) << (3 * b)
+        out[:, qc * 64:(qc + 1) * 64] = word
+    return qrow, out
+
+
 def decode_quadrants(qmap, word, table, index_rule: str = INDEX_RULE):
     """Effective weights {form id: [rows, cols]} implied by a quad map + sample words (the rendering rule above)."""
     rows, cols = word.shape
