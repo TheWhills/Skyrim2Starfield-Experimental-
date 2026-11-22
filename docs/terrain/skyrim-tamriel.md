@@ -441,3 +441,10 @@ Without --apply it only prints. Unverified on the owner's data.
   `ground_at.py --map 15` now prints side-by-side character maps (Skyrim's strongest texture / what the BTD draws, the
   same letter for a Skyrim texture and its converted slot, quadrant and Skyrim cell edges marked, each nearby
   quadrant's five textures) to tell these apart.
+- Owner's ground_at --map at the strip (20:58, verified): Skyrim itself paints LRocks01NoRocks over much of this area
+  (both maps agree on where), every nearby quadrant holds it (not the five-texture limit), and the strip is a 2 - 3 m
+  band of rock on the north side of a Skyrim cell edge where Skyrim's rock stops sharply at the edge. The warp (3.5 m on
+  12 m waves) slid that straight edge sideways instead of bending it. Now WARP_M 1.5 m on 5 m / 1.8 m waves: on a sharp
+  synthetic edge the border stays within 4 samples (3 m) of Skyrim's, average offset under 1.5 samples (test).
+- Still to compare with Skyrim: how LRocks01NoRocks looks (pale, smooth, sky-tinted grey-blue here; Skyrim's is grey
+  gravel, mostly under grass objects, which are not converted yet).

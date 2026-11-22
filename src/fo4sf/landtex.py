@@ -332,8 +332,11 @@ NOISE_STRETCH = 1.9                              # spreads the summed noise (std
 # Skyrim's fades are mostly 1 - 2 vertex steps wide (1.8 - 3.7 m), too narrow for the threshold alone to bend a border
 # by much. With "noise" the weights are also read at a position shifted by up to WARP_M (smooth in x and y, the same
 # shift for every texture): any border, sharp or soft, wanders by that much in long, natural curves.
-WARP_M = 3.5
-WARP_SCALES_M = ((12.0, 0.6), (4.0, 0.4))
+# 2026-11-21 20:58 (owner's ground_at --map at the grey strip): 3.5 m on 12 m waves did not bend Skyrim's sharp edges, it
+# slid them sideways (a cell edge with rock on one side became a 2 - 3 m band of rock on the other: the strip). Now a
+# small, quick wobble: edges ragged in place, never moved far.
+WARP_M = 1.5
+WARP_SCALES_M = ((5.0, 0.6), (1.8, 0.4))
 INDEX_RULES = ("head", "tail")
 MAX_OVERLAYS = 4                               # + the base = five textures in bytes 0..4 (Starfield ignores 5..7)
 INDEX_RULE = "head"

@@ -324,7 +324,7 @@ def land_textures(a, land, out):
         stats["ltex_overrides"] = ground["overrides"]
 
     def per_tile(t):
-        warp_m = getattr(a, "ltex_warp", 3.5) if a.ltex_blend == "noise" else 0.0
+        warp_m = getattr(a, "ltex_warp", landtex.WARP_M) if a.ltex_blend == "noise" else 0.0
         words, qmap, beyond = tile_layers(planes, used, ox, oy, sp, t, a.ltex_blend, a.ltex_index, warp_m)
         stats["weight_beyond_six_layers_max"] = round(max(beyond), 5) if beyond else 0.0
         return used, words, qmap
@@ -687,7 +687,7 @@ def main(argv=None):
                     help="build --land-textures: 'noise' (default, 2026-11-21) cuts each layer against a coherent noise "
                          "threshold, so Skyrim's fades become irregular patches; 'solid' gives each ground sample the "
                          "layer covering most of it (straight borders where Skyrim fades); 'dither' keeps partial weights")
-    ap.add_argument("--ltex-warp", type=float, default=3.5,
+    ap.add_argument("--ltex-warp", type=float, default=1.5,
                     help="build --ltex-blend noise: how far (m) Skyrim's texture borders may wander (0 = not at all)")
     ap.add_argument("--planet", default="", help="build: register on this PNDT EditorID instead of MarsPlanetData")
     ap.add_argument("--latlon", type=float, nargs=2, metavar=("LAT", "LON"), help="build --planet: radians")

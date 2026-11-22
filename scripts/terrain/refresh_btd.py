@@ -36,7 +36,7 @@ from fo4sf import btd  # noqa: E402
 BACKUP = "btd_before_blend"     # recompute: the staged BTDs as built, copied here the first time they are rewritten
 
 
-def build_args(staging, fresh, blend="noise", warp=3.5):
+def build_args(staging, fresh, blend="noise", warp=1.5):
     """The staging's make_skyrim_overlay.py build arguments (from "build" on), with --out fresh and the blend options
     appended (argparse: the last one wins)."""
     from make_skyrim_overlay import split_cmdline
@@ -356,7 +356,7 @@ def main(argv=None):
     ap.add_argument("--check-blend", choices=("solid", "dither"), default="solid",
                     help="recompute: the blend the staging was built with (the spot check encodes this way)")
     ap.add_argument("--blend", choices=("solid", "dither", "noise"), default="noise", help="rebuild: --ltex-blend")
-    ap.add_argument("--warp", type=float, default=3.5, help="rebuild: --ltex-warp (m)")
+    ap.add_argument("--warp", type=float, default=1.5, help="--ltex-warp (m)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "recompute":

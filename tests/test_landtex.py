@@ -210,6 +210,8 @@ class LayerTests(unittest.TestCase):
         self.assertEqual(len(straight), 1)
         self.assertGreater(max(bent) - min(bent), 3)                         # metres of wander, not a straight line
         self.assertLessEqual(max(bent) - min(bent), 2 * landtex.WARP_M / 0.78125 + 4)
+        # 20:58 (the grey strip): ragged in place, not slid sideways: on average the border stays where Skyrim's is
+        self.assertLess(abs(float(np.mean(bent)) - next(iter(straight))), 1.5)
         dx2, _ = landtex.warp_offsets(xs[64:], ys)
         np.testing.assert_array_equal(dx2, dx[:, 64:])                     # a function of the world position
         np.testing.assert_allclose(landtex.sample_warped(g, 0, 0, sp, xs * U, ys * U, 0 * dx, 0 * dy), plain)

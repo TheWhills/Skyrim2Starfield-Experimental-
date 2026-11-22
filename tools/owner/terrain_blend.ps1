@@ -4,14 +4,14 @@
 # "noise"), using the staging's own texture choices, after a spot check that the old way reproduces what is installed.
 # Heights, plugins, objects, grass, LOD, water and the planet stay as they are. Then reinstalls. Starfield must be closed.
 #   powershell -ExecutionPolicy Bypass -File tools\owner\terrain_blend.ps1
-#   -Blend solid gives the old straight borders back; -Warp <m> sets how far borders may wander (default 3.5)
+#   -Blend solid gives the old straight borders back; -Warp <m> sets how far borders may wander (default 1.5)
 #   The terrain files as first built are kept in <Staging>\btd_before_blend.
 param(
     [string]$Staging = "C:\Modding\staging\skyrim_all",
     [string]$SKY = "C:\Games\Steam\steamapps\common\Skyrim Special Edition\Data",
     [string]$SF = "D:\SteamLibrary\steamapps\common\Starfield",
     [ValidateSet("noise", "solid", "dither")][string]$Blend = "noise",
-    [double]$Warp = 3.5,
+    [double]$Warp = 1.5,
     [switch]$NoInstall
 )
 $ErrorActionPreference = "Stop"
