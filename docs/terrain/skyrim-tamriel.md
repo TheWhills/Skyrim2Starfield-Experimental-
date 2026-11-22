@@ -461,3 +461,12 @@ Without --apply it only prints. Unverified on the owner's data.
   (--skyrim-ground-tint vertex) darkening pale Skyrim textures. Unresolved without Skyrim's own textures to compare.
 - Test: scripts\terrain\ground_colour_test.py / tools\owner\terrain_colour_test.ps1 paint the staged colour textures of
   LRocks01NoRocks magenta, LRocks01 cyan, LReachMossyRocks01 yellow and reinstall; -Restore undoes it.
+- Owner's colour tests (2026-11-22, verified in game): magenta (LRocks01NoRocks, slot 00030138) and cyan (LRocks01,
+  000557E2) show where Skyrim paints them (the pale "snowy" mound by the cliff in Skyrim is our magenta, so that
+  texture is far too dark: dark gravel, linear luminance 0.027, against Skyrim's pale ground: tint / brightness, open).
+  Red / green / orange / blue / yellow (LReachGrass01, LReachGrass01NoGrass, LReachDirt01, LDirt01,
+  LReachMossyRocks01) were painted the same way but appear nowhere, and the grey band at -1955.40, 749.15 stayed grey
+  with all eight painted. Not water (owner). Supported hypothesis: for those slots the game does not use our material
+  (the band: the vanilla look of one slot, e.g. 0019E83A LSandRipple01_Pale for LReachGrass01; the forest floor:
+  possibly 00048350 LGrassClover01_Red's own clover). `scripts/terrain/ltex_winner.py` lists, per overridden slot,
+  every plugin in the load order with that LTEX and its BNAM, to see whether another plugin wins.
