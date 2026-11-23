@@ -242,7 +242,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   converted texture instead: vanilla grass there but none with Skyrim's points at our grass records / models, none
   either way at the route. Without ltex_mapping.json the texture mapping is read off the installed terrain
   (refresh_btd.infer_mapping) and kept as ltex_mapping_inferred.json. Synthetic tests: tests/test_sfgrass.py
-  (PlanetBiomeTests). In game: pending.
+  (PlanetBiomeTests).
+  Owner's build (2026-11-22 19:21, verified offline): mapping read off the installed terrain (66 Skyrim textures),
+  27 grasses, 19 ground covers, NirnOceanNoCoating (02000801) overridden with 133 entries (19 x 7 masks), no model
+  failures, no grassy Skyrim texture skipped. In game: pending.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
