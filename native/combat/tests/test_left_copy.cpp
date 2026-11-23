@@ -2,6 +2,7 @@
 #include "s2s/left_copy.h"
 
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 
 using namespace s2s::combat;
@@ -91,6 +92,39 @@ static void names_and_model_pick() {
     CHECK(pick_model({"R_HandIk", "L_HandIk"}, "", skip) == -1);
 }
 
+static bool near(float a, float b) { return std::fabs(a - b) < 1e-4f; }
+
+static void turns_and_angles() {
+    // 24 distinct proper rotations (orthonormal, determinant +1), 0 = identity, index wraps
+    for (int i = 0; i < 24; ++i) {
+        const auto r = turn(i).r;
+        const float det = r[0][0] * (r[1][1] * r[2][2] - r[1][2] * r[2][1]) -
+                          r[0][1] * (r[1][0] * r[2][2] - r[1][2] * r[2][0]) +
+                          r[0][2] * (r[1][0] * r[2][1] - r[1][1] * r[2][0]);
+        CHECK(near(det, 1.0f));
+        for (int j = 0; j < i; ++j) CHECK(turn(j).r != r);
+    }
+    CHECK(turn(0).r == Xform{}.r);
+    CHECK(turn(24).r == turn(0).r && turn(-1).r == turn(23).r);
+    // 90 degrees about z takes x to y
+    const auto z90 = euler_degrees(0, 0, 90).r;
+    CHECK(near(z90[1][0], 1.0f) && near(z90[0][0], 0.0f));
+    float d[3] = {9, 9, 9};
+    CHECK(parse_degrees(" 0, 90 -45.5 ", d) && d[0] == 0 && d[1] == 90 && near(d[2], -45.5f));
+    CHECK(!parse_degrees("0 90", d) && !parse_degrees("a b c", d) && !parse_degrees("1 2 3 4", d));
+    CHECK(d[2] == -45.5f);                                       // untouched on failure
+    // oriented keeps translation and scale, turns only the rotation
+    Xform o;
+    o.t = {1, 2, 3};
+    o.s = 2;
+    const float none[3] = {0, 0, 0};
+    const auto same = oriented(o, 0, none);
+    CHECK(same.t == o.t && same.s == 2 && same.r == o.r);
+    const float y180[3] = {0, 180, 0};
+    const auto flipped = oriented(o, 0, y180);
+    CHECK(near(flipped.r[0][0], -1) && near(flipped.r[2][2], -1) && flipped.t == o.t);
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -102,6 +136,7 @@ int main() {
     key_toggles();
     sheathe_unequip_and_load_drop();
     names_and_model_pick();
+    turns_and_angles();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

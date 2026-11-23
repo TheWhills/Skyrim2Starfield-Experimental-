@@ -104,6 +104,13 @@ void Plugin::LoadSettings(const std::string& ini_path) {
         settings_.left_copy_nodes = it->second;
     if (auto it = plugin.find("sleftcopymodel"); it != plugin.end()) settings_.left_copy_model = it->second;
     if (auto it = plugin.find("sleftcopyskip"); it != plugin.end()) settings_.left_copy_skip = it->second;
+    settings_.left_copy_dual = to_int(plugin, "bleftcopydual", 1) != 0;
+    settings_.left_copy_turn = ((to_int(plugin, "ileftcopyturn", 0) % 24) + 24) % 24;
+    left_copy_turn_now_ = settings_.left_copy_turn;
+    settings_.left_copy_turn_key = static_cast<std::uint32_t>(to_int(plugin, "ileftcopyturnkey", 0));
+    if (auto it = plugin.find("sleftcopyrotation"); it != plugin.end() && !it->second.empty() &&
+        !combat::parse_degrees(it->second, settings_.left_copy_rotation))
+        REX::WARN("[Plugin] sLeftCopyRotation = {}: not three numbers (x y z degrees)", it->second);
     left_copy_ = combat::LeftCopy(settings_.left_copy_key != 0);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
@@ -221,6 +228,17 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         DoLeftCopy(a);
         return true;                                   // the test key does nothing else
     }
+    if (down && key == settings_.left_copy_turn_key) {
+        left_copy_turn_now_ = (left_copy_turn_now_ + 1) % 24;
+        float deg[3] = {settings_.left_copy_rotation[0], settings_.left_copy_rotation[1], settings_.left_copy_rotation[2]};
+        SFSE::GetTaskInterface()->AddTask([t = left_copy_turn_now_, d0 = deg[0], d1 = deg[1], d2 = deg[2]]() {
+            const float d[3] = {d0, d1, d2};
+            const auto r = game::TurnLeftCopy(t, d);
+            REX::INFO("left copy: {}", r.text);
+            if (r.ok) game::Notify(std::format("Left copy turn {}", t));
+        });
+        return true;
+    }
     // the weapon clash add-on takes the keys while a clash runs (the attack key pushes its meter)
     if (auto* c = clash_.load(); c && c->on_button(key, down, std::string(user_event).c_str())) return true;
     auto state = State();
@@ -258,6 +276,7 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
         left_blade_.reset();
+        dual_polled_ = -1;
         restore_ = 1;
         dual_worn_ = -1;
         ++poll_gen_;
@@ -366,9 +385,15 @@ void Plugin::DoLeftCopy(combat::LeftCopy::Action a) {
     using A = combat::LeftCopy::Action;
     if (a == A::None) return;
     REX::INFO("left copy: {} asked", a == A::Make ? "make" : "drop");
-    SFSE::GetTaskInterface()->AddTask([this, a, right = settings_.left_copy_weapon_node, left = settings_.left_copy_nodes,
-                                       model = settings_.left_copy_model, skip = settings_.left_copy_skip]() {
-        const auto r = a == A::Make ? game::MakeLeftCopy(right, left, model, skip) : game::DropLeftCopy();
+    game::LeftCopyOptions o;
+    o.right_node = settings_.left_copy_weapon_node;
+    o.left_nodes = settings_.left_copy_nodes;
+    o.model = settings_.left_copy_model;
+    o.skip = settings_.left_copy_skip;
+    o.turn = left_copy_turn_now_;
+    for (int i = 0; i < 3; ++i) o.degrees[i] = settings_.left_copy_rotation[i];
+    SFSE::GetTaskInterface()->AddTask([this, a, o]() {
+        const auto r = a == A::Make ? game::MakeLeftCopy(o) : game::DropLeftCopy();
         REX::INFO("left copy: {} {}: {}", a == A::Make ? "make" : "drop", r.ok ? "ok" : "FAILED", r.text);
         if (a == A::Make) game::Notify(r.ok ? "Left copy on" : "Left copy failed (see S2SCombat.log)");
         std::scoped_lock l(lock_);
@@ -472,11 +497,23 @@ void Plugin::Tick() {
     }
     // the poll's fresh answer -> worn (or put away by us) -> the stance group
     if (const int g = worn_gen_.exchange(0); g > 0 && restore_ == 0) {
-        bool effective = false;
-        {
-            std::scoped_lock l(lock_);
-            effective = left_blade_.on_worn(dual_worn_.load() == 1);
-        }
+        std::scoped_lock l(lock_);
+        dual_polled_ = left_blade_.on_worn(dual_worn_.load() == 1) ? 1 : 0;
+    }
+    // ... or a left-hand copy on (bLeftCopyDual): it needs the dual moveset's left grip, and works without
+    // S2SWeapons.esm (owner's run 2026-11-23: keyword S2S_LeftBlade not found, the poll never answers)
+    bool copy_on = false;
+    if (settings_.left_copy_dual) {
+        std::scoped_lock l(lock_);
+        copy_on = left_copy_.attached();
+    }
+    // the poll counts once the after-load restore is done (as before); the copy counts at once, and its going off is
+    // applied too (without S2SWeapons.esm the restore never finishes)
+    const bool poll_ready = restore_ == 0 && dual_polled_ >= 0;
+    const bool copy_changed = copy_on != copy_dual_prev_;
+    copy_dual_prev_ = copy_on;
+    if (poll_ready || copy_on || copy_changed) {
+        const bool effective = (poll_ready && dual_polled_ == 1) || copy_on;
         if (const int worn = effective ? 1 : 0; worn != dual_applied_) {
             dual_applied_ = worn;
             std::vector<combat::Command> more;
@@ -485,7 +522,8 @@ void Plugin::Tick() {
                 more = controller_.on_dual_worn(worn == 1, now);
             }
             if (!more.empty()) REX::INFO("dual wield: left blade {}{} -> stance {}", worn ? "worn" : "off",
-                                         weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
+                                         copy_on ? " (left-hand copy)"
+                                                 : weapon_dual_.load() == 1 ? " (the weapon's keyword)" : "",
                                          worn ? controller_.config().dual_stance_keyword : "before");
             if (worn && settings_.dual_debug && dumps_ < 3) {   // the player's 3D (a ~1 s hitch: debug only)
                 ++dumps_;

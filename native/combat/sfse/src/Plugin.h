@@ -43,6 +43,10 @@ struct Settings {
     std::string left_copy_nodes = "WeaponLeft, L_Wrist";
     std::string left_copy_model;                                  // "" = first child not in left_copy_skip
     std::string left_copy_skip = "R_HandIk, L_HandIk";
+    bool left_copy_dual = true;                    // the dual moveset while a copy is on
+    int left_copy_turn = 0;                        // 0..23: s2s/left_copy.h turn()
+    float left_copy_rotation[3] = {0, 0, 0};       // degrees about x, y, z, after the turn
+    std::uint32_t left_copy_turn_key = 0;          // steps through the 24 turns while a copy is on (0 = off)
 };
 
 class Plugin {
@@ -114,6 +118,9 @@ private:
     // unequip of the blade happened since it was asked (poll_gen_): an older one says what was worn before.
     combat::LeftBlade left_blade_;
     combat::LeftCopy left_copy_;                  // the left-hand copy test (under lock_)
+    int left_copy_turn_now_ = 0;                  // the turn in use (the turn key changes it; main thread)
+    int dual_polled_ = -1;                        // the worn-keyword poll's last answer (-1 none yet)
+    bool copy_dual_prev_ = false;                 // a left-hand copy was on at the last Tick (bLeftCopyDual)
     std::atomic_int poll_gen_{0}, worn_gen_{0};
     std::atomic_int left_action_{0};              // a LeftBlade::Action from the animation events, done in Tick
     std::atomic_int drawn_answer_{-1};            // Papyrus IsWeaponDrawn, asked once when the blade is first worn

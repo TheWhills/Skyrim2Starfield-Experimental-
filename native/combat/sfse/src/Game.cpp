@@ -449,7 +449,23 @@ constexpr int kSlotCreateClone = 41, kSlotProcessClone = 47, kSlotAttachChild = 
 struct LeftCopyState {
     RE::NiAVObject* copy = nullptr;       // one reference of ours (IncRefCount at the clone)
     RE::NiAVObject* parent = nullptr;     // the node it hangs under
+    combat::Xform original;               // the copy's local transform as cloned (the right weapon's)
 } g_left_copy;
+
+// The weapon node and the left node, found once per player 3D (owner's run 2026-11-23: the walk cost 550-590 ms per
+// press, a memory check per node). Checked before use: same root, still readable, same name.
+struct LeftCopyLookup {
+    RE::NiAVObject* root = nullptr;
+    RE::NiAVObject* weapon = nullptr;
+    RE::NiAVObject* left = nullptr;
+    std::string weapon_name, left_name;
+} g_left_lookup;
+
+bool StillNamed(RE::NiAVObject* o, std::string_view name) {
+    if (!o || !Readable(o, 0x150)) return false;
+    const char* n = o->name.c_str();
+    return n && name == n;
+}
 
 std::uintptr_t VSlot(const void* obj, int slot) {
     std::uintptr_t vtbl = 0;
@@ -491,8 +507,8 @@ void FreeCloningProcess(std::uint8_t* cp) {
 }
 }  // namespace
 
-LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes, std::string_view model_name,
-                            std::string_view skip_names) {
+LeftCopyResult MakeLeftCopy(const LeftCopyOptions& opt) {
+    const std::string_view right_node = opt.right_node, model_name = opt.model, skip_names = opt.skip;
     if (g_left_copy.copy) return {true, "a copy is already on"};
     auto* root = Player3D();
     if (!root) return {false, "no player 3D"};
@@ -500,11 +516,17 @@ LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_n
         if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return {false, "no child list found"};
     }
     const double t0 = Now();
-    // one walk for every name (owner's run 2026-11-23: a walk per name cost ~250 ms)
-    const auto left_names = combat::split_names(left_nodes);
-    RE::NiAVObject* weapon_node = nullptr;
-    std::vector<RE::NiAVObject*> left_hits(left_names.size(), nullptr);
-    {
+    const auto left_names = combat::split_names(opt.left_nodes);
+    auto& lk = g_left_lookup;
+    bool cached = lk.root == root && lk.weapon_name == right_node && StillNamed(lk.weapon, right_node) &&
+                  StillNamed(lk.left, lk.left_name) &&
+                  std::find(left_names.begin(), left_names.end(), std::string_view(lk.left_name)) != left_names.end();
+    RE::NiAVObject* weapon_node = cached ? lk.weapon : nullptr;
+    RE::NiAVObject* left = cached ? lk.left : nullptr;
+    std::string tried;
+    if (!cached) {
+        // one walk for every name (owner's run 2026-11-23: a walk per name cost ~250 ms)
+        std::vector<RE::NiAVObject*> left_hits(left_names.size(), nullptr);
         int budget = 4000;
         Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
             const char* n = o->name.c_str();
@@ -513,6 +535,16 @@ LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_n
             for (std::size_t i = 0; i < left_names.size(); ++i)
                 if (!left_hits[i] && left_names[i] == n) left_hits[i] = o;
         });
+        for (std::size_t i = 0; i < left_names.size() && !left; ++i) {
+            tried += std::format(" '{}'", left_names[i]);
+            if ((left = left_hits[i])) lk.left_name = std::string(left_names[i]);
+        }
+        if (weapon_node && left) {
+            lk.root = root;
+            lk.weapon = weapon_node;
+            lk.left = left;
+            lk.weapon_name = std::string(right_node);
+        }
     }
     if (!weapon_node) return {false, std::format("no node '{}' in the player's 3D (weapon drawn?)", right_node)};
     // the weapon node's subtree (names, depth), for the log: shows where the drawn model hangs
@@ -543,12 +575,6 @@ LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_n
         return {false, std::format("no model child under '{}' (model '{}', skipped '{}'); subtree:{}", right_node,
                                    model_name, skip_names, subtree)};
     auto* model = kids[static_cast<std::size_t>(pick)];
-    RE::NiAVObject* left = nullptr;
-    std::string tried;
-    for (std::size_t i = 0; i < left_names.size() && !left; ++i) {
-        tried += std::format(" '{}'", left_names[i]);
-        left = left_hits[i];
-    }
     if (!left) return {false, std::format("none of the left nodes found:{}", tried)};
     const double t_find = Now() - t0;
     // AttachChild / DetachChild must be NiNode's own (verified slots); a class that overrides them is not tried
@@ -578,18 +604,24 @@ LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_n
     reinterpret_cast<void (*)(void*, void*, bool)>(attach)(left, copy, true);
     if (ReadChildren(left, g_children, data, size)) left_after = size;
     const bool hung = ParentOf(copy) == left;
-    g_left_copy = {copy, left};
+    const auto original = ReadXform(copy, 0x40);
+    WriteXform(copy, 0x40, combat::oriented(original, opt.turn, opt.degrees));
+    g_left_copy = {copy, left, original};
     const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
     return {hung, std::format("weapon node '{}' subtree:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
-                              "{} attached under {} (children {} -> {}, parent {}); lookup {:.1f} ms, copy {:.1f} ms",
+                              "{} attached under {} (children {} -> {}, parent {}); turn {}, rotation {} {} {}; local t ({:.2f} {:.2f} {:.2f}) "
+                              "scale {:.2f}; lookup {:.1f} ms{}, copy {:.1f} ms",
                               right_node, subtree, Describe(model), copy == model ? "SAME OBJECT" : "new object",
                               reinterpret_cast<std::uintptr_t>(copy), create - base, Describe(copy), Describe(left),
-                              left_before, left_after, hung ? "set" : "NOT SET", t_find * 1000.0,
+                              left_before, left_after, hung ? "set" : "NOT SET", opt.turn, opt.degrees[0],
+                              opt.degrees[1], opt.degrees[2], original.t[0], original.t[1], original.t[2], original.s,
+                              t_find * 1000.0, cached ? " (cached)" : "",
                               (Now() - t0 - t_find) * 1000.0)};
 }
 
 LeftCopyResult DropLeftCopy() {
-    auto [copy, parent] = g_left_copy;
+    auto* copy = g_left_copy.copy;
+    auto* parent = g_left_copy.parent;
     if (!copy) return {true, "no copy on"};
     g_left_copy = {};
     std::string how;
@@ -606,6 +638,14 @@ LeftCopyResult DropLeftCopy() {
     }
     copy->DecRefCount();                                       // our reference: the copy goes when the last one does
     return {true, how};
+}
+
+LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]) {
+    auto& c = g_left_copy;
+    if (!c.copy || !Readable(c.copy, 0x150) || ParentOf(c.copy) != c.parent) return {false, "no copy on"};
+    WriteXform(c.copy, 0x40, combat::oriented(c.original, turn, degrees));
+    return {true, std::format("turn {} (iLeftCopyTurn = {}), rotation {} {} {}", turn, turn, degrees[0], degrees[1],
+                              degrees[2])};
 }
 
 int FollowBone(std::string_view node_name, std::string_view bone_name) {

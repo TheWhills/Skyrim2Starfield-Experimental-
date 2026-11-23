@@ -48,10 +48,17 @@ std::string BoneFollowReport();                  // read-backs and time since th
 // detaches it and lets it go. Main thread. ok = whether a copy is now on (Make) / was taken off (Drop); the text is
 // for the log.
 struct LeftCopyResult { bool ok = false; std::string text; };
-// model_name: the weapon node's child to copy ("" = the first child not in skip_names, comma separated).
-LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes, std::string_view model_name,
-                            std::string_view skip_names);
+// model: the weapon node's child to copy ("" = the first child not in skip, comma separated). turn / degrees: the
+// copy's orientation under the left node (s2s/left_copy.h oriented()).
+struct LeftCopyOptions {
+    std::string right_node, left_nodes, model, skip;
+    int turn = 0;
+    float degrees[3] = {0, 0, 0};
+};
+LeftCopyResult MakeLeftCopy(const LeftCopyOptions& o);
 LeftCopyResult DropLeftCopy();
+// Turns the copy that is on (its local rotation from the one it was cloned with). Main thread.
+LeftCopyResult TurnLeftCopy(int turn, const float degrees[3]);
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
 // ObjectReference.GetItemCount on the player, result on the VM thread. EquipForm: the native equip / unequip of a base

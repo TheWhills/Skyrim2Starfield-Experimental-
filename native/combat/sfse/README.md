@@ -131,3 +131,10 @@ weapon's local transform under WeaponLeft, and the one-handed clips do not pose 
 weapon); the left hand does not grip (no dual moveset: S2SWeapons.esm not loaded); the lookup costs 550-590 ms (a
 memory check per node in the walk).
 
+Third build (2026-11-23): while a copy is on the dual moveset switches on (`bLeftCopyDual`, the same S2S_StanceDual
+keyword as the worn left blade; no S2SWeapons.esm needed) and back off when it goes. The copy's orientation:
+`iLeftCopyTurn` (one of the 24 right-angle orientations, s2s/left_copy.h turn()) then `sLeftCopyRotation` (x y z
+degrees), written into the copy's local transform after the attach; `iLeftCopyTurnKey` (39 = ;) steps through the 24
+live and logs the number. The weapon node and the left node are remembered per player 3D (checked before use), so
+only the first press walks the 3D.
+

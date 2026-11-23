@@ -10,6 +10,8 @@
 #include <string_view>
 #include <vector>
 
+#include "s2s/xform.h"
+
 namespace s2s::combat {
 
 // NiCloningProcess as Starfield 1.16.244 builds it before CreateClone (NiObject vtable slot 41) and ProcessClone
@@ -38,6 +40,18 @@ std::vector<std::string_view> split_names(std::string_view list);
 // is not in skip (case-insensitive). -1 = none.
 int pick_model(const std::vector<std::string_view>& children, std::string_view override_name,
                const std::vector<std::string_view>& skip);
+
+// Orientation of the copy under the left node (owner's run 2026-11-23: it kept the right weapon's local transform and
+// pointed outward). The copy's local rotation = original * turn(turn_index) * euler(degrees).
+// turn: the 24 rotations by multiples of 90 degrees (index taken mod 24; 0 = none), so a key can step through every
+// axis-aligned orientation in game.
+Xform turn(int index);
+// Rotation from x, y, z degrees (about x, then y, then z: R = Rz * Ry * Rx).
+Xform euler_degrees(float x, float y, float z);
+// "x y z" (spaces or commas); false (out untouched) unless three numbers.
+bool parse_degrees(std::string_view text, float out[3]);
+// The copy's local transform: `original` with its rotation turned (translation and scale kept).
+Xform oriented(const Xform& original, int turn_index, const float degrees[3]);
 
 // When the copy is made and dropped. The game side reports back whether it worked (on_result); until then nothing
 // else is asked for.

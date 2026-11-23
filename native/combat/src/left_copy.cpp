@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
+#include <string>
 
 namespace s2s::combat {
 
@@ -49,6 +51,78 @@ int pick_model(const std::vector<std::string_view>& children, std::string_view o
             return static_cast<int>(i);
     }
     return -1;
+}
+
+namespace {
+using M = std::array<std::array<float, 3>, 3>;
+M mul(const M& a, const M& b) {
+    M r{};
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            for (int k = 0; k < 3; ++k) r[i][j] += a[i][k] * b[k][j];
+    return r;
+}
+M axis_rot(int axis, float rad) {
+    const float c = std::cos(rad), s = std::sin(rad);
+    if (axis == 0) return {{{1, 0, 0}, {0, c, -s}, {0, s, c}}};
+    if (axis == 1) return {{{c, 0, s}, {0, 1, 0}, {-s, 0, c}}};
+    return {{{c, -s, 0}, {s, c, 0}, {0, 0, 1}}};
+}
+M snap(M m) {
+    for (auto& row : m)
+        for (auto& v : row) v = std::round(v);
+    return m;
+}
+}  // namespace
+
+Xform turn(int index) {
+    // the 24 = 6 directions for the x axis (+x, -x, +y, -y, +z, -z: identity, z180, z90, z-90, y-90, y90) x 4 turns
+    // about the new x axis
+    static const float q = 1.5707963267948966f;
+    static const M face[6] = {snap(axis_rot(2, 0)),      snap(axis_rot(2, 2 * q)), snap(axis_rot(2, q)),
+                              snap(axis_rot(2, -q)),     snap(axis_rot(1, -q)),    snap(axis_rot(1, q))};
+    const int i = ((index % 24) + 24) % 24;
+    Xform x;
+    x.r = snap(mul(face[i / 4], axis_rot(0, q * static_cast<float>(i % 4))));
+    return x;
+}
+
+Xform euler_degrees(float x, float y, float z) {
+    const float k = 3.14159265358979f / 180.0f;
+    Xform r;
+    r.r = mul(axis_rot(2, z * k), mul(axis_rot(1, y * k), axis_rot(0, x * k)));
+    return r;
+}
+
+bool parse_degrees(std::string_view text, float out[3]) {
+    std::string s(text);
+    for (auto& c : s)
+        if (c == ',') c = ' ';
+    float v[3];
+    int n = 0;
+    std::size_t pos = 0;
+    while (n < 3) {
+        while (pos < s.size() && s[pos] == ' ') ++pos;
+        if (pos >= s.size()) break;
+        std::size_t used = 0;
+        try {
+            v[n] = std::stof(s.substr(pos), &used);
+        } catch (...) {
+            return false;
+        }
+        pos += used;
+        ++n;
+    }
+    while (pos < s.size() && s[pos] == ' ') ++pos;
+    if (n != 3 || pos != s.size()) return false;
+    for (int i = 0; i < 3; ++i) out[i] = v[i];
+    return true;
+}
+
+Xform oriented(const Xform& original, int turn_index, const float degrees[3]) {
+    Xform out = original;
+    out.r = mul(original.r, mul(turn(turn_index).r, euler_degrees(degrees[0], degrees[1], degrees[2]).r));
+    return out;
 }
 
 LeftCopy::Action LeftCopy::on_key() {
