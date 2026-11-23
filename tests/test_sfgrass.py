@@ -261,6 +261,16 @@ class PlanetBiomeTests(unittest.TestCase):
             recs = sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS", b"GCVR", b"BIOM"])
         return raw, {sfplugin.edid(r[2]): r for r in recs}, log.getvalue()
 
+    def test_only_ltex(self):
+        _raw, by, log = self._run(["--only-ltex", "LFernGround"])
+        self.assertIn("--only-ltex: ground cover on 1 slot(s): 00000031 (lfernground)", log)
+        self.assertIn("S2S_Cover_00000031", by)
+        import skyrim_grass_native as N
+        with self.assertRaises(SystemExit):                       # nothing left: the build stops
+            with contextlib.redirect_stdout(io.StringIO()):
+                self._run(["--only-ltex", "LOther"])
+        del N
+
     def test_planet_biome_default(self):
         raw, by, log = self._run([])
         self.assertIn(b"MAST\x0e\x00Starfield.esm\x00", raw)

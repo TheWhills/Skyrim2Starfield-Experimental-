@@ -565,6 +565,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   re-skin dirt / grass records, and the straw seen is most likely tundra grass. Supported hypothesis: ground cover
   follows the re-skinned record's kind (MNAM and / or QNAM). Test: `--ltex-kind-from LDirtCracked02` overrides each
   covered slot in S2SGrass.esm with the terrain plugin's re-skin (look kept) and the dirt record's MNAM / QNAM.
+  Owner's run (17:09 build: 17 slots changed; FieldGrass01 / FernGrass01 models 1 shape, 6 tris, 64 units tall;
+  in game 17:12): **forest floor still bare**, straw on the mill bank. Ground kind refuted as the (only) cause.
+  Next, one variable: `--only-ltex LFieldGrass02 --keep-template-model` puts ground cover on that slot alone with
+  the vanilla hellebore model (verified to render, 08:46): flowers on the forest floor = the slot's cover grows and
+  our field-grass model is the problem; nothing = that slot's cover does not grow.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

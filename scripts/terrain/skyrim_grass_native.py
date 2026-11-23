@@ -485,6 +485,9 @@ def main(argv=None):
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
+    ap.add_argument("--only-ltex", default="", metavar="EDIDS",
+                    help="test (2026-11-23): ground cover only on the slots of these Skyrim textures "
+                         "(comma-separated, e.g. LFieldGrass02)")
     ap.add_argument("--ltex-kind-from", default="", metavar="EDITORID",
                     help="test (2026-11-23): give every covered slot's LTEX the material type (MNAM) and QNAM of this "
                          "vanilla LTEX (e.g. LDirtCracked02), overriding the terrain's re-skin in S2SGrass.esm; the "
@@ -541,6 +544,12 @@ def main(argv=None):
     from fo4sf import landtex as _lt
     sky_ltex = {fid: v.get("edid", "") for fid, v in _lt.read_ltex_loaded(a.skyrim).items()}   # Skyrim + Update + DLC
     plan = sfgrass.cover_plan(mapping.get("skyrim", {}), overrides, ltex_grass, sky_ltex)
+    if a.only_ltex:                                  # test: ground cover on these Skyrim textures' slots only
+        keep = {e.strip().lower() for e in a.only_ltex.split(",") if e.strip()}
+        sky_of = {int(o["form_id"]): o["skyrim"].lower() for o in overrides}
+        plan["slots"] = {k: v for k, v in plan["slots"].items() if sky_of.get(k) in keep}
+        print(f"--only-ltex: ground cover on {len(plan['slots'])} slot(s): "
+              + ", ".join(f"{k:08X} ({sky_of[k]})" for k in sorted(plan["slots"])))
     report = {"slots": {f"{k:08X}": [gras_sky[g]["edid"] for g in v if g in gras_sky] for k, v in plan["slots"].items()},
               "skipped_textures": plan["skipped"], "grasses": {}, "failed": {}}
     if not plan["slots"] and not a.control:
