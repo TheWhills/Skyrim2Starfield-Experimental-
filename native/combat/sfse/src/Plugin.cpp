@@ -97,6 +97,12 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     if (auto it = plugin.find("slefthandnode"); it != plugin.end()) settings_.left_hand_node = it->second;
     if (auto it = plugin.find("slefthandbone"); it != plugin.end()) settings_.left_hand_bone = it->second;
     settings_.dual_debug = to_int(plugin, "bdualdebug", 0) != 0;
+    settings_.left_copy_key = static_cast<std::uint32_t>(to_int(plugin, "ileftcopykey", 0));
+    if (auto it = plugin.find("sleftcopyweaponnode"); it != plugin.end() && !it->second.empty())
+        settings_.left_copy_weapon_node = it->second;
+    if (auto it = plugin.find("sleftcopynodes"); it != plugin.end() && !it->second.empty())
+        settings_.left_copy_nodes = it->second;
+    left_copy_ = combat::LeftCopy(settings_.left_copy_key != 0);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
 
@@ -204,6 +210,15 @@ bool Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event,
         }
         return true;                                   // the preview keys do nothing else
     }
+    if (down && key == settings_.left_copy_key) {
+        combat::LeftCopy::Action a;
+        {
+            std::scoped_lock l(lock_);
+            a = left_copy_.on_key();
+        }
+        DoLeftCopy(a);
+        return true;                                   // the test key does nothing else
+    }
     // the weapon clash add-on takes the keys while a clash runs (the attack key pushes its meter)
     if (auto* c = clash_.load(); c && c->on_button(key, down, std::string(user_event).c_str())) return true;
     auto state = State();
@@ -229,6 +244,14 @@ void Plugin::OnMenu(std::string_view name, bool opening) {
         REX::INFO("menu: '{}' {}", name, opening ? "opened" : "closed");
     }
     menus_.on_menu(name, opening);
+    {
+        combat::LeftCopy::Action a;
+        {
+            std::scoped_lock l(lock_);
+            a = left_copy_.on_menu(name, opening);
+        }
+        DoLeftCopy(a);
+    }
     follow_invalid_ = true;                            // equips happen in menus; loads rebuild the 3D
     if (name == "LoadingMenu" && !opening) {          // a save loaded: ask again whether the blade was put away
         std::scoped_lock l(lock_);
@@ -315,6 +338,7 @@ void Plugin::DisableAnimEvents(std::string_view why) {
 void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
     if (!settings_.enabled || !anim_events_) return;
     std::vector<combat::Command> cmds;
+    auto left_copy_action = combat::LeftCopy::Action::None;
     {
         std::scoped_lock l(lock_);
         if (logged_events_ < settings_.log_events) {
@@ -327,11 +351,26 @@ void Plugin::OnAnimEvent(std::string_view tag, std::string_view payload) {
         cmds = controller_.on_anim_event(tag, payload, game::Now());
         if (tag == "weaponDraw" || tag == "weaponSheathe" || tag == "UnequipComplete" || tag == "BeginWeaponDraw")
             follow_invalid_ = true;                   // the weapon's 3D may be rebuilt
+        left_copy_action = left_copy_.on_event(tag);
         if (armor_blade_on_.load() || left_blade_.parked())          // a worn blade (not the pair weapon)
             if (const auto a = left_blade_.on_event(tag); a != combat::LeftBlade::Action::None)
                 left_action_ = static_cast<int>(a);   // done in Tick (main thread)
     }
+    DoLeftCopy(left_copy_action);
     Run(std::move(cmds));
+}
+
+void Plugin::DoLeftCopy(combat::LeftCopy::Action a) {
+    using A = combat::LeftCopy::Action;
+    if (a == A::None) return;
+    REX::INFO("left copy: {} asked", a == A::Make ? "make" : "drop");
+    SFSE::GetTaskInterface()->AddTask([this, a, right = settings_.left_copy_weapon_node, left = settings_.left_copy_nodes]() {
+        const auto r = a == A::Make ? game::MakeLeftCopy(right, left) : game::DropLeftCopy();
+        REX::INFO("left copy: {} {}: {}", a == A::Make ? "make" : "drop", r.ok ? "ok" : "FAILED", r.text);
+        if (a == A::Make) game::Notify(r.ok ? "Left copy on" : "Left copy failed (see S2SCombat.log)");
+        std::scoped_lock l(lock_);
+        left_copy_.on_result(a, r.ok);
+    });
 }
 
 void Plugin::Tick() {

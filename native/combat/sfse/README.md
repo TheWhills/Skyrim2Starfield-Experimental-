@@ -99,3 +99,22 @@ It switches itself off when S2SCombat.dll is loaded (both would send the dodge e
   then leaves the hotkey out and S2SDodge falls back to the INI key). The service
   is declared in `dodge/OsfSettings.h` (ABI 1.0 slot order) instead of including the GPL SDK header.
 
+
+## Left-hand copy test (2026-11-23)
+First test of the runtime left-hand copy (docs/ai/decisions.md 2026-11-23; addresses, slots and Address Library IDs in
+docs/re/findings.md on branch `claude/re-findings-ni-attach`). Code: `s2s/left_copy.h` (when to make / drop, the
+NiCloningProcess bytes; tested in tests/test_left_copy.cpp) and `game::MakeLeftCopy` / `DropLeftCopy` in Game.cpp.
+
+What a press of `iLeftCopyKey` (default 43, the `\` key) does with a weapon drawn, on the main thread:
+1. finds `sLeftCopyWeaponNode` ("Weapon") in the player's 3D and takes its first child (the drawn weapon's model);
+2. finds the first of `sLeftCopyNodes` ("WeaponLeft", then "L_Wrist");
+3. checks that the left node's vtable slots 84 / 87 are NiNode's AttachChild / DetachChild (Address Library 147173 /
+   147177); if not, it stops there and logs both addresses;
+4. clones the model as the engine does (a 0x38-byte NiCloningProcess, CreateClone slot 41, ProcessClone slot 47),
+   frees the cloning process the engine's way, and attaches the copy with AttachChild(copy, true).
+The same key, a sheathe, an unequip, or the loading screen opening takes the copy off again (DetachChild, slot 87).
+Every step logs a `left copy:` line (node names, flags, child counts, timings).
+
+What to look for: does a second weapon show at the left hand; does it follow the hand while moving and attacking;
+does it vanish on the second press / sheathe; any crash (the last `left copy:` line tells where). Skinned weapon parts
+may stay at the right hand (their bones were bound to the right-hand weapon; findings.md section 3, step 7).

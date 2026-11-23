@@ -4,6 +4,7 @@
 #include "ClashApi.h"
 #include "s2s/controller.h"
 #include "s2s/left_blade.h"
+#include "s2s/left_copy.h"
 
 namespace s2s::sfse {
 
@@ -36,6 +37,10 @@ struct Settings {
     std::string left_hand_node;                     // off by default: the game draws the weapon from its own copy
     bool dual_debug = false;                        // the 3D listing / bone search when dual turns on (slow: ~1 s)
     std::string left_hand_bone = "L_Wrist";
+    // Left-hand copy test (s2s/left_copy.h): the key (0 = off), the right weapon node, the left nodes to try.
+    std::uint32_t left_copy_key = 0;
+    std::string left_copy_weapon_node = "Weapon";
+    std::string left_copy_nodes = "WeaponLeft, L_Wrist";
 };
 
 class Plugin {
@@ -76,6 +81,7 @@ public:
 
 private:
     void Run(std::vector<combat::Command> commands);     // carried out on the main thread
+    void DoLeftCopy(combat::LeftCopy::Action a);          // queued on the main thread; reports back to left_copy_
     combat::PlayerState State();
 
     std::mutex lock_;
@@ -105,6 +111,7 @@ private:
     // the left blade put away while sheathed (left_blade_ under lock_). A poll answer counts only if no equip /
     // unequip of the blade happened since it was asked (poll_gen_): an older one says what was worn before.
     combat::LeftBlade left_blade_;
+    combat::LeftCopy left_copy_;                  // the left-hand copy test (under lock_)
     std::atomic_int poll_gen_{0}, worn_gen_{0};
     std::atomic_int left_action_{0};              // a LeftBlade::Action from the animation events, done in Tick
     std::atomic_int drawn_answer_{-1};            // Papyrus IsWeaponDrawn, asked once when the blade is first worn

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <set>
 #include "s2s/controller.h"
+#include "s2s/left_copy.h"
 #include "s2s/xform.h"
 
 namespace s2s::sfse::game {
@@ -433,6 +434,167 @@ std::string BoneFollowReport() {
     f.frames = f.local_kept = f.world_ours = 0;
     f.us_total = f.us_max = 0.0;
     return out;
+}
+
+// ---- Left-hand copy test (s2s/left_copy.h; addresses and slots: docs/re/findings.md, Starfield 1.16.244) ----
+namespace {
+// Address Library IDs (v22 table, 1.16.244.0)
+constexpr std::uint64_t kIdAttachChild = 147173;      // NiNode vtable slot 84 AttachChild(child, bool firstAvailable)
+constexpr std::uint64_t kIdDetachChild = 147177;      // NiNode vtable slot 87 DetachChild(child)
+constexpr std::uint64_t kIdCopyType = 884304;         // u32 default NiCloningProcess copy type
+constexpr std::uint64_t kIdCloneMapFreeNode = 38088;  // (map, node): frees a clone-map subtree
+constexpr std::uint64_t kIdFreeSized = 35771;         // (ptr, size): the engine's sized free
+constexpr int kSlotCreateClone = 41, kSlotProcessClone = 47, kSlotAttachChild = 84, kSlotDetachChild = 87;
+
+struct LeftCopyState {
+    RE::NiAVObject* copy = nullptr;       // one reference of ours (IncRefCount at the clone)
+    RE::NiAVObject* parent = nullptr;     // the node it hangs under
+} g_left_copy;
+
+std::uintptr_t VSlot(const void* obj, int slot) {
+    std::uintptr_t vtbl = 0;
+    std::memcpy(&vtbl, obj, 8);
+    if (!Readable(reinterpret_cast<const void*>(vtbl + 8 * slot), 8)) return 0;
+    return reinterpret_cast<const std::uintptr_t*>(vtbl)[slot];
+}
+
+RE::NiAVObject* FindNamed(RE::NiAVObject* root, std::string_view name) {
+    RE::NiAVObject* hit = nullptr;
+    int budget = 4000;
+    Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+        const char* n = o->name.c_str();
+        if (!hit && n && name == n) hit = o;
+    });
+    return hit;
+}
+
+RE::NiAVObject* ParentOf(const RE::NiAVObject* o) {
+    RE::NiAVObject* p = nullptr;
+    std::memcpy(&p, reinterpret_cast<const std::byte*>(o) + 0x38, 8);
+    return p;
+}
+
+std::string Describe(const RE::NiAVObject* o) {
+    const char* n = o->name.c_str();
+    std::uintptr_t vtbl = 0;
+    std::memcpy(&vtbl, o, 8);
+    const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
+    return std::format("'{}' (vtable +0x{:X}, flags 0x{:X}: hidden {} selective {} transforms {} controllers {})",
+                       n ? n : "", vtbl - base, o->flags, o->flags & 1, (o->flags >> 1) & 1, (o->flags >> 2) & 1,
+                       (o->flags >> 3) & 1);
+}
+
+// The engine's cleanup after a clone (findings.md section 2, "Cleanup").
+void FreeCloningProcess(std::uint8_t* cp) {
+    using L = combat::CloningProcessLayout;
+    std::uint64_t count = 0;
+    void* root = nullptr;
+    void* spare = nullptr;
+    std::memcpy(&count, cp + L::kMapCount, 8);
+    std::memcpy(&root, cp + L::kMapRoot, 8);
+    if (count != 0 && root) {
+        reinterpret_cast<void (*)(void*, void*)>(REL::ID(kIdCloneMapFreeNode).address())(cp, root);
+        std::memset(cp, 0, 0x18);
+    }
+    std::memcpy(&spare, cp + L::kMapSpare, 8);
+    if (spare) reinterpret_cast<void (*)(void*, std::size_t)>(REL::ID(kIdFreeSized).address())(spare, L::kNodeSize);
+}
+}  // namespace
+
+LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes) {
+    if (g_left_copy.copy) return {true, "a copy is already on"};
+    auto* root = Player3D();
+    if (!root) return {false, "no player 3D"};
+    if (g_children.offset < 0) {
+        if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return {false, "no child list found"};
+    }
+    const double t0 = Now();
+    auto* weapon_node = FindNamed(root, right_node);
+    if (!weapon_node) return {false, std::format("no node '{}' in the player's 3D (weapon drawn?)", right_node)};
+    // the drawn weapon's model: the first child of the weapon node whose parent is that node
+    RE::NiAVObject** data = nullptr;
+    std::uint32_t size = 0;
+    RE::NiAVObject* model = nullptr;
+    std::string children;
+    if (ReadChildren(weapon_node, g_children, data, size)) {
+        for (std::uint32_t i = 0; i < size; ++i) {
+            auto* c = data[i];
+            if (!c || !Readable(c, 0x150) || ParentOf(c) != weapon_node) continue;
+            const char* n = c->name.c_str();
+            children += std::format(" '{}'", n ? n : "");
+            if (!model) model = c;
+        }
+    }
+    if (!model) return {false, std::format("'{}' has no child (no weapon drawn?)", right_node)};
+    RE::NiAVObject* left = nullptr;
+    std::string tried;
+    for (std::string_view rest = left_nodes; !rest.empty();) {
+        const auto comma = rest.find(',');
+        auto name = rest.substr(0, comma);
+        rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
+        while (!name.empty() && name.front() == ' ') name.remove_prefix(1);
+        while (!name.empty() && name.back() == ' ') name.remove_suffix(1);
+        if (name.empty()) continue;
+        tried += std::format(" '{}'", name);
+        if ((left = FindNamed(root, name))) break;
+    }
+    if (!left) return {false, std::format("none of the left nodes found:{}", tried)};
+    const double t_find = Now() - t0;
+    // AttachChild / DetachChild must be NiNode's own (verified slots); a class that overrides them is not tried
+    const auto attach = VSlot(left, kSlotAttachChild), detach = VSlot(left, kSlotDetachChild);
+    const auto want_attach = REL::ID(kIdAttachChild).address(), want_detach = REL::ID(kIdDetachChild).address();
+    if (attach != want_attach || detach != want_detach)
+        return {false, std::format("left node {} slots 84 / 87 are not NiNode's (0x{:X} / 0x{:X}, expected 0x{:X} / "
+                                   "0x{:X}): not attached",
+                                   Describe(left), attach, detach, want_attach, want_detach)};
+    const auto create = VSlot(model, kSlotCreateClone), process = VSlot(model, kSlotProcessClone);
+    if (!create || !process) return {false, "model's vtable not readable"};
+
+    // clone as the engine does: CreateClone, then ProcessClone, then free the cloning process
+    std::uint32_t copy_type = 0;
+    std::memcpy(&copy_type, reinterpret_cast<const void*>(REL::ID(kIdCopyType).address()), 4);
+    alignas(16) auto cp = combat::cloning_process_bytes(copy_type);
+    auto* copy = reinterpret_cast<RE::NiAVObject* (*)(void*, void*)>(create)(model, cp.data());
+    if (copy) {
+        copy->IncRefCount();                                  // ours, until DropLeftCopy
+        reinterpret_cast<void (*)(void*, void*)>(process)(model, cp.data());
+    }
+    FreeCloningProcess(cp.data());
+    if (!copy) return {false, std::format("CreateClone returned nothing for {}", Describe(model))};
+
+    std::uint32_t left_before = 0, left_after = 0;
+    if (ReadChildren(left, g_children, data, size)) left_before = size;
+    reinterpret_cast<void (*)(void*, void*, bool)>(attach)(left, copy, true);
+    if (ReadChildren(left, g_children, data, size)) left_after = size;
+    const bool hung = ParentOf(copy) == left;
+    g_left_copy = {copy, left};
+    const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
+    return {hung, std::format("weapon node '{}' children:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
+                              "{} attached under {} (children {} -> {}, parent {}); lookup {:.1f} ms, copy {:.1f} ms",
+                              right_node, children, Describe(model), copy == model ? "SAME OBJECT" : "new object",
+                              reinterpret_cast<std::uintptr_t>(copy), create - base, Describe(copy), Describe(left),
+                              left_before, left_after, hung ? "set" : "NOT SET", t_find * 1000.0,
+                              (Now() - t0 - t_find) * 1000.0)};
+}
+
+LeftCopyResult DropLeftCopy() {
+    auto [copy, parent] = g_left_copy;
+    if (!copy) return {true, "no copy on"};
+    g_left_copy = {};
+    std::string how;
+    if (parent && Readable(parent, 0x150) && Readable(copy, 0x150) && ParentOf(copy) == parent) {
+        const auto detach = VSlot(parent, kSlotDetachChild);
+        if (detach == REL::ID(kIdDetachChild).address()) {
+            reinterpret_cast<void (*)(void*, void*)>(detach)(parent, copy);
+            how = ParentOf(copy) ? "detached, but its parent is still set" : "detached";
+        } else {
+            how = "NOT detached (left node's slot 87 changed)";
+        }
+    } else {
+        how = "not under the left node any more (nothing detached)";
+    }
+    copy->DecRefCount();                                       // our reference: the copy goes when the last one does
+    return {true, how};
 }
 
 int FollowBone(std::string_view node_name, std::string_view bone_name) {
