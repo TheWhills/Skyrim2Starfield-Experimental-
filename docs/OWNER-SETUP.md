@@ -321,7 +321,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    (any material from grass_model_compare.py --list-materials, path under Materials\Landscape\Grass).
    Which grass should grow at a spot (read-only): in game `player.getpos x` / `y`, then
    python -I scripts\terrain\grass_at.py --skyrim "$sky\Skyrim.esm" --terrain C:\Modding\staging\skyrim_all
-   --grass "$mods\S2S Grass Native" --pos X Y
+   --grass "$mods\S2S Grass Native" --skyrim-pos X Y   (Skyrim's own getpos at the spot)
+   2026-11-23: ground textures and grass now read Skyrim as loaded (Update.esm + DLC over Skyrim.esm). To bring the
+   installed terrain up to it: terrain_blend.ps1, then terrain_byte6.ps1 -Mask FlatOut, then the grass build again.
 8h. (2026-11-22) Ground colour against Skyrim at a spot (read-only): in game `player.getpos x` / `y`, then
    python -I scripts\terrain\ground_tone.py --skyrim "$sky\Skyrim.esm" --terrain C:\Modding\staging\skyrim_all
    --pos X Y --spawn-at 225.70 -627.74 --radius 20
