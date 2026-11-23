@@ -266,6 +266,23 @@ Max Density; what a vanilla grass model needs. Two tools:
   in-game setups. Not yet: the engine itself, and where vanilla grass actually grows in game (procedural surface only,
   or also on hand-made terrain). `scripts/re/exe_strings.py` lists Starfield.exe's grass-related INI settings,
   console commands and RTTI class names (read-only), the cheap first look before Ghidra (docs/re/ghidra-ai-setup.md).
+  **exe_strings.py on the owner's Starfield.exe (2026-11-22 20:01, verified: the strings exist; what they do is
+  supported hypothesis):**
+  - Two grass systems. (1) The planet generator (BSProcGen, BGSPlanet::ProcGen, DensityMapDB, GroundCover,
+    BGSGroundCover, BGSBiome) with `bAllowProcGenOnOverlays:ProcGen`, `bDisableProcGen:ProcGen`,
+    `fBiomePlacementPositionsMinDistanceFromOverlays:PlanetContent`: procgen is kept off overlays unless allowed.
+    (2) A Skyrim-style cell grass manager: BGSGrassManager, AddCellGrassTask, CellGrass, "AddCellGrass [%i, %i]",
+    folders `meshes\landscape\cellgrass\` and `landscape\grass\`, `sCellGrassSubdirectories:Grass`, GRASS\ among
+    the archive root folders, `bAllowCreateGrass:Grass`, `iGrassCellRadius`, `fMin/MaxGrassDistance`,
+    `fGrassStartFadeDistance`, `fGrassFadeDistance`, `bUseTerrainTintOnGrass`, `iMaxGrassTypesPerTexure`, and the
+    GRAS flags (GRASS_FIT_SLOPE, GRASS_UNIFORM_SCALE, GRASS_VERTEX_LIGHTING, GRASS_BILLBOARD).
+  - Console: ToggleGrass, **CreateGrassAt** ("Create a single piece of grass at specified worldspace coordinates"),
+    **AddWorldSpaceToPlanetBiome** ("Adds a world space to a planet's biome"; a message reads "Use
+    AddWorldspaceToPlanetBiome command instead of COC"), LandOnPlanetBiome, TestBiomePlanet, GetBiomeMaskValue.
+  - So: the Allow ProcGen crash on coc fits "use AddWorldspaceToPlanetBiome instead of COC"; and grass may come per
+    cell from prebuilt files (cell grass) rather than from the biome. Next: `cellgrass_survey.py` (which grass files
+    the archives hold, per world), the console checks (bAllowCreateGrass, bAllowProcGenOnOverlays, CreateGrassAt's
+    usage), and the control cover reached by landing on Nirn by ship instead of coc.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
