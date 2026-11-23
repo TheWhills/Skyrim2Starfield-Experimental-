@@ -94,7 +94,7 @@ It switches itself off when S2SCombat.dll is loaded (both would send the dodge e
 * OSF Settings (optional, Nexus 18326, github.com/ozooma10/osf-settings, GPL-3.0): with it installed the dodge key is
   rebindable in Pause > Mod Settings > Keybindings. Schema `s2sdodge.osf.json` -> `SFSE\Plugins\OSF\Settings\schemas\
   s2sdodge.json` (sam_dodge_pack --dll copies it); at kPostLoad S2SDodge registers hotkey `s2sdodge/dodge` and the
-  controller's dodge key becomes a sentinel fed by the hotkey callback. Without OSF Settings (or bUseOSFSettings = 0,
-  or a failed registration) uDodgeKey from the INI is used; an INI gamepad key keeps working next to it. The service
+  controller's dodge key becomes a sentinel fed by the hotkey callback; the hotkey ships unbound (no default: "LAlt" is not a
+  name in Starfield's table) and uDodgeKey from the INI keeps dodging next to it (0 = the Mod Settings binding only). The service
   is declared in `dodge/OsfSettings.h` (ABI 1.0 slot order) instead of including the GPL SDK header.
 

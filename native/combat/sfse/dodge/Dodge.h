@@ -22,9 +22,7 @@ struct Settings {
 
 // The controller's dodge key while OSF Settings delivers the press (never a real SFSE key code).
 inline constexpr std::uint32_t kOsfDodgeKey = 0xFFFF0001u;
-// SFSE key codes from here on are gamepad buttons (InputMap::kMacro_GamepadOffset): an INI gamepad dodge key keeps
-// working next to the OSF Settings keyboard binding.
-inline constexpr std::uint32_t kGamepadKeys = 266;
+
 
 class Plugin {
 public:

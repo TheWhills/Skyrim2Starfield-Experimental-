@@ -2819,4 +2819,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   declared ourselves (OsfSettings.h, slot order of ABI 1.0) rather than including its GPL-3.0 header.
 - Unresolved: the schema default "LAlt" is a guess at Starfield's key-name table; a wrong name fails the schema
   (Mod Issues shows it) and S2SDodge falls back to the INI key.
+- Owner's log (verified): OSF Settings "unknown default key 'LAlt' for s2sdodge/dodge" -> the hotkey is left out of the
+  native Controls list and RegisterHotkey returns InvalidValue (6). Starfield's key-name table is not plain text in
+  Starfield.exe (key_names.py found none). Change: the hotkey ships unbound (no default) and the INI key keeps dodging
+  next to the OSF binding (uDodgeKey = 0 for the Mod Settings binding alone).
 

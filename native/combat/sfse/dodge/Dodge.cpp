@@ -92,8 +92,8 @@ void Plugin::ConnectOsfSettings() {
         controller_ = combat::Controller(cfg);
     }
     osf_dodge_ = true;
-    REX::INFO("OSF Settings: dodge key set in Mod Settings > Keybindings{}", ini_dodge_key_ >= kGamepadKeys
-              ? std::format(" (gamepad key {} from S2SDodge.ini still dodges)", ini_dodge_key_) : std::string());
+    REX::INFO("OSF Settings: dodge hotkey registered (bind it in Mod Settings > Keybindings){}", ini_dodge_key_
+              ? std::format("; key {} from S2SDodge.ini also dodges", ini_dodge_key_) : std::string());
 }
 
 void Plugin::OnOsfDodge() {
@@ -115,8 +115,9 @@ combat::PlayerState Plugin::State() const {
 
 void Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event) {
     if (!settings_.enabled || key == 0) return;
-    // OSF Settings delivers the keyboard press; a gamepad dodge button from the INI still dodges
-    if (osf_dodge_ && key == ini_dodge_key_ && key >= kGamepadKeys) key = kOsfDodgeKey;
+    // The INI key keeps dodging next to the OSF Settings binding (the hotkey ships unbound: Starfield's key-name table
+    // has no "LAlt", owner's log 2026-11-23); uDodgeKey = 0 leaves only the Mod Settings binding.
+    if (osf_dodge_ && key == ini_dodge_key_) key = kOsfDodgeKey;
     if (logged_input_ < settings_.log_input) {
         ++logged_input_;
         REX::INFO("key: code {} {} user event '{}'", key, down ? "down" : "up", user_event);
