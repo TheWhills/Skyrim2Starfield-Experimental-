@@ -394,7 +394,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable "S2S Skyrim Cities" in MO2 (SkyrimWorlds_Register.esm last), then in game `coc` the printed marker. Does
    Whiterun stand on its ground, and does Tamriel still load as before? Then all five (no -Cities). Gates later.
-8. B + C: SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
+8. Done 2026-11-23 (verified: the new tag played): SAM one-tag test (docs/armor/animation-port.md, "SAM"). Needs SAM (Nexus 18674) and Address Library for
    SFSE Plugins enabled in MO2, the game started with sfse_loader.exe:
    ```powershell
    python -I scripts\armor\sam_test_pack.py --starfield-data "$sf\Data" --out "$mods\S2S SAM Test"

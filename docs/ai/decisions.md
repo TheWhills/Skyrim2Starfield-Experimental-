@@ -2692,3 +2692,13 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   goes this way (wind, fade, density from the engine) instead of baked static patches; byte 6 becomes part of the
   terrain build next. Found by surveying vanilla BTDs (byte 6 the only extra byte vanilla fills) after four record-
   level attempts failed.
+
+## 2026-11-23 — SAM one-tag test passed: new animation tags are possible
+- Owner's run: with SAM (Nexus 18674) installed and the game started through SFSE, MeleeAttacks.agx's MeleeAttack_A
+  retagged to S2S_SamTest plays the copied vanilla power attack (verified). Without SAM the same state played nothing.
+- So the borrowed-tag and zero-g-file-name workarounds (dodges v14/v15, stance hosts) are no longer forced: a SAM
+  fragment (animations.txt + tables\anim_actions.xtbl) adds our own tags and file names without the CK run.
+- Not decided yet (owner): move the dodges / stance packs to SAM fragments (adds SAM + Address Library as
+  requirements), or declare tags from S2SCombat ourselves (same approach, own code; clip index still needs SAM or the
+  CK). Open: root motion / hit events from fragment offsets and event info; new graph event names (not in SAM's
+  2026-11-01 source).

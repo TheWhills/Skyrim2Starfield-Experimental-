@@ -1372,6 +1372,12 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   fragment Fragments\S2SSamTest\ (animations.txt with the two files, tables\anim_actions.xtbl with the tag). No
   offsets / event info yet. Success in game = the first attack plays the overhead power swing; the 2026-10-23 dodge
   (same idea without SAM) snapped back.
+* **Owner's run (2026-11-23): verified.** Combat packs, S2S AnimInfo and S2S Creature AnimInfo disabled, S2S SAM Test
+  last. First run without SAM installed (no SfAnimIndexLoader.log anywhere): the first attack played nothing (the
+  silent state of an undeclared tag). With SAM installed and the game started through SFSE, the first attack plays
+  the overhead power swing (owner's screenshot): a NEW tag (S2S_SamTest) and a new clip file name in a vanilla folder
+  play through a SAM fragment, with no Creation Kit run and no borrowed host tag. Not checked yet: root motion and
+  hit events of the copied clip (no animationoffsets / animeventinfo in the fragment).
 
 ## 2026-11-23: SAM's source (owner upload: Nexus 18674 "Source Code", 2026-11-01; read only, nothing built or run)
 * **What it is (verified, source):** C++ (CMake, MSVC), the native port of a C# engine that stays the reference (the C#
