@@ -605,6 +605,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   a height / water clamp: the cell's water plane (381.43 m for the Riverwood cells, one flat level per cell) lies
   close to or above the flats in the engine's view, and the GRAS water clamps (kept from the vanilla template)
   forbid grass there. Check: `player.getpos z` on a bare flat and at a flower spot against 381.43.
+  **Refuted (owner, 17:58):** flowers by the mill log at z 183.68, the bare flat forest floor at z 186.76: the bare
+  ground is 3 m HIGHER. Not a height / water clamp. The flowers there stand on dark dirt-looking ground, the bare flat
+  shows LFieldGrass02 (the only covered slot): supported hypothesis that ground cover reads the BTD texture layers
+  with another rule than rendering (index head/tail, alpha bit order), so its "LFieldGrass02" lies elsewhere.
+  ground_at.py already prints the texture each reading gives at a spot; at the flat (Skyrim 17448, -48815): head/3i
+  LFieldGrass02 (rendered), head/3(4-i) LRiverBottom01NoGrass, tail/3i LPineForest01, tail/3(4-i) LRocks01NoRocks.
+  Next: the same at a flower spot (getpos x / y there and right after coc).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
