@@ -320,6 +320,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   that is not drawn (e.g. the one ground cover or biome material comes from), or a small code. The survey now names the
   LTEX it would point at (from Starfield.esm), whether a biome gives that LTEX ground cover, and whether the file paints
   it anywhere with bytes 0..4.
+  **Second survey run (owner, 20:23, verified):** vanilla LTEX tables start with Starfield's per-mask placeholder
+  textures (LDefault006Base, LDefault005Flow, LDefault004FlatOut, ...), and byte 6 names one of the head entries:
+  in the trait overlays always LDefault006Base (or 0); in the hand-made worlds LDefault006Base 55.7 %, LDefault005Flow
+  14.7 %, or in the one world whose table starts with sand textures LSandSmooth01 29.4 %. Those textures are painted
+  with bytes 0..4 elsewhere in the same files, never in the quadrant whose byte 6 names them. Supported hypothesis:
+  byte 6 is the quadrant's mask / mask material (LDefault00N<Mask>), which ground cover is chosen by; ours (0) has
+  none. Test: `scripts/terrain/btd_byte6.py set --mask FlatOut` (tools\owner\terrain_byte6.ps1) appends
+  LDefault004FlatOut to our table (existing indices unchanged) and writes it into byte 6 of every quadrant, with the
+  control cover (masks 2-5) on. `restore` puts the originals back.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
