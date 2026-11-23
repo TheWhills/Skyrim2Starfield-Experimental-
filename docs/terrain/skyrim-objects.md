@@ -250,6 +250,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   Owner's check (19:24): MO2 shows S2SGrass.esm active at index 0F, after SkyrimTerrainTamriel_Mars.esm (09);
   `help S2S_Cover 4` listed nothing. Unresolved whether that means the records are absent or only that the game keeps
   no EditorIDs for GCVR at run time (Starfield drops most EditorIDs); the load order is right. Control test next.
+  **Control (owner, 19:26 / 19:31, verified in game): vanilla GC_MossMoundsGrass01 on all 55 converted textures,
+  385 entries in NirnOceanNoCoating: no grass either.** So the biome route does not grow cover on this world at all,
+  whatever the grass (three routes now: cover texture list, world biome, planet biome). Supported hypothesis: Starfield
+  grows ground cover only where it generates the planet surface; a planet's master worldspace (ours, like New
+  Atlantis) is hand-made cells, and no vanilla hand-made world gets run-time grass. Last cheap test:
+  `--allow-procgen` also sets the world's Allow ProcGen flag (WRLD FNAM bit 3), which no vanilla world sets. If that
+  grows nothing, grass stays placed objects and the work moves to making those behave like grass (wind, fade).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

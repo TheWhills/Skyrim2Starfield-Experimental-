@@ -230,8 +230,12 @@ class PlanetBiomeTests(unittest.TestCase):
                                                      (b"LNAM", struct.pack("<3I", 0, 0x30, 0))], 0x02000801)],
                                     {"hedr_version": 0.96, "form_version": 555},
                                     masters=("Starfield.esm", "Terr.esm")))
+        wh = struct.pack("<4sIII", b"WRLD", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+        with open(os.path.join(terrain, "Terr.esm"), "wb") as fh:
+            fh.write(sfplugin.build([(b"WRLD", wh, [(b"EDID", b"SKY_Tamriel\0"), (b"DATA", b"\x01")], 0x01000800)],
+                                    {"hedr_version": 0.96, "form_version": 555}, masters=("Starfield.esm",)))
         with open(os.path.join(terrain, "overlays_params.json"), "w") as fh:
-            json.dump({"plugin": "Terr.esm", "mars": {"plugin": "Terr_Mars.esm"},
+            json.dump({"plugin": "Terr.esm", "mars": {"plugin": "Terr_Mars.esm"}, "overlays": [{"world": "SKY_Tamriel"}],
                        "ltex_overrides": [{"form_id": 0x31, "skyrim": "LFernGround"}],
                        "world_overrides": {"biome": "00000040"}}, fh)
         with open(os.path.join(terrain, "ltex_mapping.json"), "w") as fh:
@@ -270,6 +274,18 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual([(e["mask"], e["gcvr"]) for e in terr if e["ltex"] == 0x31], [(0, cover[3]), (4, cover[3])])
         self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x30, "gcvr": 0})   # its own entry kept
         self.assertIn("load S2SGrass.esm after them", log)
+
+    def test_control_with_procgen(self):
+        raw, _by, log = self._run(["--control", "--allow-procgen"])
+        import skyrim_grass_native as N
+        self.assertIn("SKY_Tamriel (01000800): Allow ProcGen set", log)
+        self.assertIn(b"FNAM\x01\x00\x08", raw)
+
+    def test_with_procgen(self):
+        import skyrim_grass_native as N
+        self.assertEqual(dict(N.with_procgen([(b"EDID", b"W\0"), (b"FNAM", b"\x01\x02")]))[b"FNAM"], b"\x09\x02")
+        added = N.with_procgen([(b"EDID", b"W\0"), (b"DATA", b"\x01"), (b"BNAM", bytes(4))])
+        self.assertEqual([sg for sg, _d in added], [b"EDID", b"DATA", b"FNAM", b"BNAM"])
 
     def test_control(self):
         raw, by, log = self._run(["--control"])

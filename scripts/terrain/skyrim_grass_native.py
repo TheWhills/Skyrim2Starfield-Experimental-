@@ -71,6 +71,24 @@ def location_biome(planet_recs, n_masters=2):
     return own[0] if len(own) == 1 else None
 
 
+ALLOW_PROCGEN = 0x08         # WRLD FNAM bit 3 (xEdit wbDefinitionsSF1); no vanilla world sets it (grass survey)
+
+
+def with_procgen(subs):
+    """A WRLD's subrecords with FNAM bit 3 (Allow ProcGen) set; FNAM added after DATA if the world has none."""
+    out, done = [], False
+    for sig, d in subs:
+        d = bytes(d)
+        if sig == b"FNAM" and d:
+            d = bytes([d[0] | ALLOW_PROCGEN]) + d[1:]
+            done = True
+        out.append((sig, d))
+    if not done:
+        at = next((i + 1 for i, (sig, _d) in enumerate(out) if sig == b"DATA"), len(out))
+        out.insert(at, (b"FNAM", bytes([ALLOW_PROCGEN])))
+    return out
+
+
 def control_cover(biome_subs):
     """The ground cover a vanilla biome pairs with its textures most often (FormID, 0 if none)."""
     from collections import Counter
@@ -147,6 +165,10 @@ def main(argv=None):
     ap.add_argument("--biome-masks", default="all",
                     help="terrain masks of the added biome entries: 'all' (0-6: Base, Solid, FlatOuter, FlatInner, "
                          "Talus, Flow, Path) or a comma list, e.g. 0")
+    ap.add_argument("--allow-procgen", action="store_true",
+                    help="test (2026-11-22, after the planet biome and the vanilla control grew nothing): also set the "
+                         "Skyrim world's Allow ProcGen flag (WRLD FNAM bit 3), which no vanilla world sets; the engine "
+                         "may then run planet generation (grass, maybe rocks / plants) in the world")
     ap.add_argument("--gras-template", help="EditorID regex of the vanilla GRAS to copy (default: the first usable)")
     ap.add_argument("--gcvr-template", help="EditorID regex of the vanilla GCVR to copy (default: the first with LTEX)")
     a = ap.parse_args(argv)
@@ -278,6 +300,17 @@ def main(argv=None):
         recs.append((b"BIOM", target[1], sfgrass.biome_with_cover(target[2], covers, masks=masks), target[3]))
         report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
                            "entries_added": len(covers) * len(masks)}
+    if a.allow_procgen:
+        world = prm["overlays"][0]["world"] if prm.get("overlays") else None
+        terr = os.path.join(a.terrain, prm.get("plugin", ""))
+        w = next((r for r in sfplugin.records(terr, [b"WRLD"]) if sfplugin.edid(r[2]) == world), None) \
+            if world and os.path.isfile(terr) else None
+        if w is None:
+            sys.exit(f"--allow-procgen: world {world} not found in {terr}")
+        if prm.get("plugin") not in masters:
+            sys.exit("--allow-procgen needs --biome planet (the terrain plugin as a master)")
+        recs.append((b"WRLD", w[1], with_procgen(w[2]), w[3]))
+        report["allow_procgen"] = {"world": world, "form_id": f"{w[3]:08X}"}
     report["masters"] = masters
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, sfplugin.header_info(sf_esm), author="Skyrim2Starfield grass", masters=masters))
@@ -299,7 +332,9 @@ def main(argv=None):
              f"({report['biome']['entries_added']} entries)" if target is not None else ", no biome override")
           + f"; {len(plan['skipped'])} grassy Skyrim textures skipped (vanilla Starfield ground), "
             f"{len(report['failed'])} models failed")
-    if nm > 1:
+    if a.allow_procgen:
+        print(f"world {report['allow_procgen']['world']} ({report['allow_procgen']['form_id']}): Allow ProcGen set")
+    if len(masters) > 1:
         print(f"masters: {', '.join(masters)}: load {PLUGIN} after them")
     print(f"report: {os.path.join(out, 'grass_native.json')}")
     return 0
