@@ -351,6 +351,69 @@ class LayerTests(unittest.TestCase):
         self.assertAlmostEqual(cells[(0, 0)][GRASS][5, 5], 0.5)
 
 
+def update_esm(path):
+    """An Update.esm over skyrim_esm: cell (0, 0)'s LAND repainted with a new LTEX of its own (0x01000800,
+    'LUpdGrass') over the whole of quadrant 0, and LTundra01 given grass (GRAS 0x01000900)."""
+    tes4 = rec(b"TES4", 0, [(b"HEDR", struct.pack("<fII", 1.71, 0, 0x800)), (b"MAST", b"Skyrim.esm\0"),
+                            (b"DATA", bytes(8))])
+    ltex = grup(b"LTEX", 0, [rec(b"LTEX", 0x01000800, [(b"EDID", b"LUpdGrass\0"), (b"TNAM", struct.pack("<I", 0x0B01)),
+                                                       (b"GNAM", struct.pack("<I", 0x01000900))]),
+                             rec(b"LTEX", GRASS, [(b"EDID", b"LTundra01\0"), (b"TNAM", struct.pack("<I", 0x0B01)),
+                                                  (b"GNAM", struct.pack("<I", 0x01000900))])])
+    gras = grup(b"GRAS", 0, [rec(b"GRAS", 0x01000900, [(b"EDID", b"UpdGrass01\0"), (b"MODL", b"g\\upd.nif\0"),
+                                                       (b"DATA", bytes([40, 0, 30, 0]) + bytes(28))])])
+    cid = None
+    x0, x1, y0, y1 = EXTENT
+    fid = 0x1000
+    for x in range(x0, x1 + 1):
+        for y in range(y0, y1 + 1):
+            if (x, y) == (0, 0):
+                cid = fid
+            fid += 2
+    lay = [btxt(DIRT, 0)] + atxt(0x01000800, 0, 0, {(r, c): 1.0 for r in range(17) for c in range(17)})
+    cell = rec(b"CELL", cid, [(b"XCLC", struct.pack("<iiI", 0, 0, 0))])
+    land = rec(b"LAND", 0x01000A00, [(b"DATA", b"\0" * 4)] + lay)
+    items = [grup(b"\0\0\0\0", 4, [grup(b"\0\0\0\0", 5, [cell, grup(cid, 6, [grup(cid, 9, [land])])])])]
+    wrld = rec(b"WRLD", 0x3C, [(b"EDID", b"Tamriel\0")])
+    with open(path, "wb") as f:
+        f.write(tes4 + ltex + gras + grup(b"WRLD", 0, [wrld, grup(0x3C, 1, items)]))
+    return path
+
+
+class LoadOrderTests(unittest.TestCase):
+    def test_update_esm_overrides_land_ltex_and_grass(self):
+        from fo4sf import skyrimgrass
+        with tempfile.TemporaryDirectory() as tmp:
+            esm = skyrim_esm(os.path.join(tmp, "Skyrim.esm"))
+            only, _l = landtex.read_world_textures(esm, official=False)
+            update_esm(os.path.join(tmp, "Update.esm"))
+            self.assertEqual([os.path.basename(p) for p in landtex.official_plugins(esm)], ["Skyrim.esm", "Update.esm"])
+            cells, ltex = landtex.read_world_textures(esm)
+            lg, gras = skyrimgrass.read_grass(esm)
+            lg0, _g0 = skyrimgrass.read_grass(esm, official=False)
+        self.assertIn(GRASS, only[(0, 0)])
+        self.assertAlmostEqual(cells[(0, 0)][0x01000800][5, 5], 1.0)            # Update's own LTEX, load index 1
+        self.assertNotIn(GRASS, cells[(0, 0)])                                  # the whole LAND is replaced
+        for k in only[(1, 1)]:                                                  # other cells: Skyrim.esm's
+            np.testing.assert_allclose(cells[(1, 1)][k], only[(1, 1)][k])
+        self.assertEqual(ltex[0x01000800]["edid"], "LUpdGrass")
+        self.assertEqual(lg[GRASS], [0x01000900])                               # override gives LTundra01 grass
+        self.assertNotIn(GRASS, lg0)
+        self.assertEqual(gras[0x01000900]["edid"], "UpdGrass01")
+        self.assertEqual(gras[0x01000900]["density"], 40)
+
+    def test_fid_remapper(self):
+        paths = ["Skyrim.esm", "Update.esm", "HearthFires.esm"]
+        r = landtex.fid_remapper(paths, 2, ["Skyrim.esm", "Update.esm"])     # HearthFires: own index 2 -> 2
+        self.assertEqual(r(0x00012345), 0x00012345)
+        self.assertEqual(r(0x02000801), 0x02000801)
+        r = landtex.fid_remapper(["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm"], 3,
+                                 ["Skyrim.esm", "Update.esm"])
+        self.assertEqual(r(0x02000801), 0x03000801)                             # own records -> load index 3
+        self.assertEqual(r(0x01000005), 0x01000005)
+        self.assertEqual(r(0), 0)
+
+
 class OverlayTextureTests(unittest.TestCase):
     def test_overlay_build_with_land_textures(self):
         import make_cw_overlays as cw
@@ -460,6 +523,17 @@ class OverlayTextureTests(unittest.TestCase):
             self.assertRegex(o4.getvalue(), r"(99\.\d|100\.0)% of samples draw the same texture as the terrain as built")
             with open(path, "rb") as f:
                 np.testing.assert_array_equal(btd.read(f.read()).weights, after.weights)
+            # 2026-11-23: Update.esm repaints cell (0, 0): learnt and checked against Skyrim.esm (the build's input),
+            # painted as the game loads it
+            update_esm(os.path.join(tmp, "Update.esm"))
+            with contextlib.redirect_stdout(io.StringIO()) as o5:
+                self.assertEqual(R.cmd_recompute(args), 0)
+            self.assertIn("Update.esm / DLC repaint 1 cells", o5.getvalue())
+            self.assertRegex(o5.getvalue(), r"(99\.\d|100\.0)% of samples draw the same texture as the terrain as built")
+            with open(path, "rb") as f:
+                upd = btd.read(f.read())
+            self.assertFalse(np.array_equal(upd.weights, after.weights))
+            np.testing.assert_array_equal(upd.heights_raw, before.heights_raw)
         np.testing.assert_array_equal(after.heights_raw, before.heights_raw)
         self.assertEqual((after.hmin, after.hmax, after.ltex), (before.hmin, before.hmax, before.ltex))
         self.assertFalse(np.array_equal(after.weights, before.weights))                # the noise blend went in

@@ -72,6 +72,19 @@ class Byte6Test(unittest.TestCase):
             with open(p, "rb") as fh:
                 self.assertEqual(fh.read(), raw)
             self.assertFalse(os.path.exists(os.path.join(st, B.BACKUP)))
+            # 2026-11-23: set after a terrain refresh rewrote the file keeps the refresh (not the first backup)
+            with contextlib.redirect_stdout(io.StringIO()):
+                B.main(["set", "--staging", st, "--sf-esm", e, "--mask", "flatout"])
+            t0 = terrain()
+            refreshed = btd.Btd(t0.version, t0.hmin, t0.hmax, t0.ltex, t0.heights_raw, t0.weights ^ 7, t0.quad_map)
+            with open(p, "wb") as fh:
+                fh.write(btd.write(refreshed))
+            with contextlib.redirect_stdout(io.StringIO()):
+                B.main(["set", "--staging", st, "--sf-esm", e, "--mask", "flatout"])
+            with open(p, "rb") as fh:
+                t = btd.read(fh.read())
+            self.assertTrue(np.array_equal(t.weights, refreshed.weights))
+            self.assertEqual(int(t.quad_map[0, 0, 6]), 3)
 
 
 if __name__ == "__main__":

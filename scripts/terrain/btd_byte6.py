@@ -63,6 +63,17 @@ def with_byte6(t: btd.Btd, fid: int) -> btd.Btd:
     return btd.Btd(t.version, t.hmin, t.hmax, table, t.heights_raw, t.weights, q)
 
 
+def without_byte6(t: btd.Btd) -> btd.Btd:
+    """t with byte 6 of every quadrant 0 and the LTEX table's trailing entries that no quadrant byte names any more
+    removed (what with_byte6 appended), so set / restore work on the current terrain files (2026-11-23: a terrain
+    refresh rewrites them; rebuilding from the first backup would put the old terrain back)."""
+    q = t.quad_map.copy()
+    q[:, :, 6] = 0
+    used = int(q.max()) if q.size else 0
+    table = list(t.ltex)[:max(used, 0)] if used < len(t.ltex) else list(t.ltex)
+    return btd.Btd(t.version, t.hmin, t.hmax, table, t.heights_raw, t.weights, q)
+
+
 def staged_btds(staging):
     import json
     with open(os.path.join(staging, "overlays_params.json"), encoding="utf-8") as fh:
@@ -93,18 +104,16 @@ def main(argv=None):
         sys.exit("--staging is needed")
     backup = os.path.join(a.staging, BACKUP)
     if a.cmd == "restore":
-        if not os.path.isdir(backup):
-            print("nothing to restore")
-            return 0
         n = 0
-        for root, _d, files in os.walk(backup):
-            for f in files:
-                src = os.path.join(root, f)
-                dst = os.path.join(a.staging, os.path.relpath(src, backup))
-                shutil.copy2(src, dst)
-                n += 1
-        shutil.rmtree(backup)
-        print(f"restored {n} terrain file(s); byte 6 is 0 again")
+        for p in staged_btds(a.staging):
+            with open(p, "rb") as fh:
+                t = btd.read(fh.read())
+            with open(p, "wb") as fh:
+                fh.write(btd.write(without_byte6(t)))
+            n += 1
+        if os.path.isdir(backup):
+            shutil.rmtree(backup)
+        print(f"{n} terrain file(s): byte 6 is 0 again")
         return 0
     edid, fid = pick(defaults(a.sf_esm), a.mask)
     paths = staged_btds(a.staging)
@@ -115,8 +124,8 @@ def main(argv=None):
         if not os.path.exists(keep):
             os.makedirs(os.path.dirname(keep), exist_ok=True)
             shutil.copy2(p, keep)
-        with open(keep, "rb") as fh:                    # always from the original: set twice = set once
-            t = btd.read(fh.read())
+        with open(p, "rb") as fh:                       # the current file: a terrain refresh may have rewritten it
+            t = without_byte6(btd.read(fh.read()))      # an earlier set undone first: set twice = set once
         new = with_byte6(t, fid)
         data = btd.write(new)
         check = btd.read(data)

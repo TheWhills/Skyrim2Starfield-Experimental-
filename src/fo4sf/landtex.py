@@ -27,9 +27,10 @@ at most four overlays in bytes 0..k-1 (least common on top) and the base in byte
 texture "1 0 0 0 0 0 0 0" is the k = 0 case).
 """
 import json
+import os
 import re
 import struct
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -69,6 +70,46 @@ def category(edid: str, diffuse: str) -> str:
 
 
 # ------------------------------------------------------------------------------------------------- Skyrim side
+# 2026-11-23 (owner's skyrim_ltex_scan.py run): Update.esm carries its own LAND for Riverwood's cell (4, -12), 27 GRAS
+# and 15 LTEX overrides, and the game loads it (and the DLC) over Skyrim.esm. The readers here take Skyrim as the game
+# loads it: Skyrim.esm, then the official masters found next to it, later records winning (a LAND per cell, an LTEX /
+# GRAS per FormID). FormIDs are put in that load order (Skyrim.esm's keep their values).
+OFFICIAL = ("Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm")
+
+
+def official_plugins(esm: str, official: bool = True) -> List[str]:
+    """[Skyrim.esm, then Update.esm / Dawnguard.esm / HearthFires.esm / Dragonborn.esm found in its folder]; just
+    [esm] with official=False or when esm is not named Skyrim.esm."""
+    if not official or os.path.basename(esm).lower() != "skyrim.esm":
+        return [esm]
+    d = os.path.dirname(os.path.abspath(esm))
+    try:
+        names = {n.lower(): n for n in os.listdir(d)}
+    except OSError:
+        return [esm]
+    return [esm] + [os.path.join(d, names[n.lower()]) for n in OFFICIAL[1:] if n.lower() in names]
+
+
+def plugin_masters(p: fo4land.Plugin) -> List[str]:
+    return [fo4land.zstring(bytes(d)) for s, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, 0))
+            if s == b"MAST"]
+
+
+def fid_remapper(paths: List[str], i: int, masters: List[str]) -> Callable[[int], int]:
+    """FormID of plugin paths[i] (with these masters) -> the load order of paths (top byte = load index; a master
+    not loaded keeps its own byte past the loaded ones, so its ids stay distinct). FormID 0 stays 0."""
+    index = {os.path.basename(q).lower(): k for k, q in enumerate(paths)}
+    table = [index.get(m.lower(), 0xF0 + k) for k, m in enumerate(masters)]
+
+    def remap(fid: int) -> int:
+        if fid == 0:
+            return 0
+        hi = fid >> 24
+        top = table[hi] if hi < len(table) else i
+        return (top << 24) | (fid & 0xFFFFFF)
+    return remap
+
+
 def read_ltex(p: fo4land.Plugin) -> Dict[int, dict]:
     """{LTEX form id: {"edid", "diffuse"}} with the diffuse path from the LTEX's texture set (TXST TX00)."""
     txst, ltex = {}, {}
@@ -87,6 +128,18 @@ def read_ltex(p: fo4land.Plugin) -> Dict[int, dict]:
     for v in ltex.values():
         v["diffuse"], v["normal"] = txst.get(v.pop("txst"), ("", ""))
     return ltex
+
+
+def read_ltex_loaded(esm: str, official: bool = True) -> Dict[int, dict]:
+    """read_ltex over Skyrim as the game loads it (official_plugins; FormIDs in load order, later records win)."""
+    out = {}
+    paths = official_plugins(esm, official)
+    for i, path in enumerate(paths):
+        with fo4land.Plugin(path) as p:
+            remap = fid_remapper(paths, i, plugin_masters(p))
+            for fid, v in read_ltex(p).items():
+                out[remap(fid)] = v
+    return out
 
 
 def land_layers(data: bytes):
@@ -174,46 +227,61 @@ def land_colours(data: bytes) -> Optional[np.ndarray]:
 
 
 def read_world_textures(esm: str, world: str = "Tamriel", colours: Optional[dict] = None,
-                        presence: Optional[dict] = None):
+                        presence: Optional[dict] = None, official: bool = True):
     """({(cx, cy): {ltex: (33, 33) weight}}, {ltex: {"edid", "diffuse"}}) for every cell with LAND texture data.
     colours: a dict to fill with {(cx, cy): (33, 33, 3) VCLR} for those cells (Skyrim multiplies the ground textures
-    by these per-vertex colours). presence: a dict to fill with {(cx, cy): cell_layer_presence(...)}."""
-    cells = {}
-    with fo4land.Plugin(esm) as p:
-        ltex = read_ltex(p)
-        _wfid, start, end, _f = p.find_world(world)
-
-        def walk(s, e, cell):
-            for item in fo4land.iter_items(p.buf, s, e):
-                if item[0] == "GRUP":
-                    _g, off, gend, label, gtype = item
-                    if gtype in (4, 5):
-                        walk(off + 24, gend, None)
-                    elif gtype == 6 and cell is not None and struct.unpack("<I", label)[0] == cell[0]:
-                        walk(off + 24, gend, cell)
-                    elif gtype in (8, 9) and cell is not None and cell[1] is not None:
-                        for it in fo4land.iter_items(p.buf, off + 24, gend):
-                            if it[0] != "GRUP" and it[0] == b"LAND":
-                                data = fo4land.record_data(p.buf, it[1])
-                                lay = land_layers(data)
-                                if lay:
-                                    cells[cell[1]] = cell_weights(lay)
-                                    if presence is not None:
-                                        presence[cell[1]] = cell_layer_presence(lay)
-                                    if colours is not None:
-                                        vc = land_colours(data)
-                                        if vc is not None:
-                                            colours[cell[1]] = vc
-                    continue
-                typ, off, _fl, fid = item
-                if typ == b"CELL":
-                    xy = None
-                    for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)):
-                        if sig == b"XCLC" and len(d) >= 8:
-                            xy = struct.unpack_from("<ii", d)
-                    cell = (fid, xy)
-        walk(start, end, None)
+    by these per-vertex colours). presence: a dict to fill with {(cx, cy): cell_layer_presence(...)}.
+    official: also read Update.esm and the DLC next to Skyrim.esm, as the game loads them (later LAND wins per cell;
+    LTEX FormIDs in load order)."""
+    cells, ltex = {}, {}
+    paths = official_plugins(esm, official)
+    for i, path in enumerate(paths):
+        with fo4land.Plugin(path) as p:
+            remap = fid_remapper(paths, i, plugin_masters(p))
+            for fid, v in read_ltex(p).items():
+                ltex[remap(fid)] = v
+            try:
+                _read_world_land(p, world, remap, cells, colours, presence)
+            except (KeyError, TypeError):
+                if i == 0:
+                    raise
     return cells, ltex
+
+
+def _read_world_land(p, world, remap, cells, colours, presence):
+    """Fill cells / colours / presence from one plugin's LAND in world (FormIDs through remap)."""
+    _wfid, start, end, _f = p.find_world(world)
+
+    def walk(s, e, cell):
+        for item in fo4land.iter_items(p.buf, s, e):
+            if item[0] == "GRUP":
+                _g, off, gend, label, gtype = item
+                if gtype in (4, 5):
+                    walk(off + 24, gend, None)
+                elif gtype == 6 and cell is not None and struct.unpack("<I", label)[0] == cell[0]:
+                    walk(off + 24, gend, cell)
+                elif gtype in (8, 9) and cell is not None and cell[1] is not None:
+                    for it in fo4land.iter_items(p.buf, off + 24, gend):
+                        if it[0] != "GRUP" and it[0] == b"LAND":
+                            data = fo4land.record_data(p.buf, it[1])
+                            lay = [(q, remap(f), layer, ops) for q, f, layer, ops in land_layers(data)]
+                            if lay:
+                                cells[cell[1]] = cell_weights(lay)
+                                if presence is not None:
+                                    presence[cell[1]] = cell_layer_presence(lay)
+                                if colours is not None:
+                                    vc = land_colours(data)
+                                    if vc is not None:
+                                        colours[cell[1]] = vc
+                continue
+            typ, off, _fl, fid = item
+            if typ == b"CELL":
+                xy = None
+                for sig, d in fo4land.iter_subrecords(fo4land.record_data(p.buf, off)):
+                    if sig == b"XCLC" and len(d) >= 8:
+                        xy = struct.unpack_from("<ii", d)
+                cell = (fid, xy)
+    walk(start, end, None)
 
 
 # ------------------------------------------------------------------------------------------------- mapping

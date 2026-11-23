@@ -37,29 +37,37 @@ def parse_gras_data(d: bytes) -> dict:
             "colour_range": colour_range, "wave_period": wave, "flags": flags}
 
 
-def read_grass(esm: str) -> Tuple[Dict[int, List[int]], Dict[int, dict]]:
-    """({LTEX fid: [GRAS fid, ...]}, {GRAS fid: {"edid", "model", DATA fields}}) of one plugin."""
+def read_grass(esm: str, official: bool = True) -> Tuple[Dict[int, List[int]], Dict[int, dict]]:
+    """({LTEX fid: [GRAS fid, ...]}, {GRAS fid: {"edid", "model", DATA fields}}) of Skyrim as the game loads it:
+    Skyrim.esm, then Update.esm and the DLC next to it (official=True; later records win per FormID; FormIDs in that
+    load order, landtex.official_plugins), else of the one plugin."""
+    from fo4sf import landtex
     ltex_grass, gras = {}, {}
-    with fo4land.Plugin(esm) as p:
-        for sig in (b"LTEX", b"GRAS"):
-            rng = p.top_group(sig)
-            if rng is None:
-                continue
-            for typ, off, _fl, fid in fo4land.iter_items(p.buf, *rng):
-                if typ == "GRUP":
+    paths = landtex.official_plugins(esm, official)
+    for i, path in enumerate(paths):
+        with fo4land.Plugin(path) as p:
+            remap = landtex.fid_remapper(paths, i, landtex.plugin_masters(p))
+            for sig in (b"LTEX", b"GRAS"):
+                rng = p.top_group(sig)
+                if rng is None:
                     continue
-                subs = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
-                if sig == b"LTEX":
-                    g = [struct.unpack_from("<I", d)[0] for s, d in subs if s == b"GNAM" and len(d) >= 4]
-                    if g:
-                        ltex_grass[fid] = g
-                else:
-                    f = dict(subs)
-                    if b"MODL" not in f or b"DATA" not in f:
+                for typ, off, _fl, fid in fo4land.iter_items(p.buf, *rng):
+                    if typ == "GRUP":
                         continue
-                    rec = parse_gras_data(f[b"DATA"])
-                    rec.update(edid=fo4land.zstring(f.get(b"EDID", b"")), model=fo4land.zstring(f[b"MODL"]))
-                    gras[fid] = rec
+                    subs = list(fo4land.iter_subrecords(fo4land.record_data(p.buf, off)))
+                    if sig == b"LTEX":
+                        g = [remap(struct.unpack_from("<I", d)[0]) for s, d in subs if s == b"GNAM" and len(d) >= 4]
+                        if g:
+                            ltex_grass[remap(fid)] = g
+                        else:
+                            ltex_grass.pop(remap(fid), None)         # an override that removes the grass
+                    else:
+                        f = dict(subs)
+                        if b"MODL" not in f or b"DATA" not in f:
+                            continue
+                        rec = parse_gras_data(f[b"DATA"])
+                        rec.update(edid=fo4land.zstring(f.get(b"EDID", b"")), model=fo4land.zstring(f[b"MODL"]))
+                        gras[remap(fid)] = rec
     return ltex_grass, gras
 
 

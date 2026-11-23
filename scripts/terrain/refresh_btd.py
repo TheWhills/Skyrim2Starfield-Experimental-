@@ -227,6 +227,16 @@ def infer_mapping(cells, overlays, staging, bands=48):
     return mapping, support, (outside.most_common(1)[0][0] if outside else None)
 
 
+def changed_cells(before, after):
+    """Cells whose texture weights differ between two read_world_textures results (or exist in one only)."""
+    out = []
+    for k in set(before) | set(after):
+        a, b = before.get(k, {}), after.get(k, {})
+        if set(a) != set(b) or any(not np.allclose(a[f], b[f]) for f in a):
+            out.append(k)
+    return sorted(out)
+
+
 def planes_from(cells, mapping, default_sf, table, land, consistent_edges=True):
     """{Starfield form id: uint8 merged vertex grid} for the table, Skyrim's weights summed per mapped texture."""
     from fo4sf import landtex
@@ -278,19 +288,32 @@ def cmd_recompute(a):
         print("no ltex_mapping.json in the staging: reading which texture the installed terrain draws for each Skyrim "
               "texture ...")
         land = skyrimland.SkyrimLand(a.skyrim, a.world)
-        cells, ltex = landtex.read_world_textures(a.skyrim, land.land_source, {})
-        mapping, support, outside = infer_mapping(cells, prm["overlays"], a.staging, a.infer_bands)
+        # the installed terrain was built from Skyrim.esm alone: learn the mapping and spot-check against that, then
+        # paint from Skyrim as the game loads it (Update.esm and the DLC over it, 2026-11-23) unless --skyrim-esm-only
+        built, ltex = landtex.read_world_textures(a.skyrim, land.land_source, {}, official=False)
+        cells, ltex_now = landtex.read_world_textures(a.skyrim, land.land_source, {}, official=not getattr(a, "skyrim_esm_only", False))
+        ltex = {**ltex, **ltex_now}
+        changed = changed_cells(built, cells)
+        if changed:
+            print(f"  Update.esm / DLC repaint {len(changed)} cells of {a.world} over Skyrim.esm (painted as loaded)")
+        mapping, support, outside = infer_mapping(built, prm["overlays"], a.staging, a.infer_bands)
         table = sorted({x for o in prm["overlays"] for x in read_table(a.staging, o)})
         default_sf = mapping.get(landtex.DEFAULT_LTEX) or outside or table[0]
         used = {f for ws in cells.values() for f in ws}
+        for f in sorted(used - set(mapping)):            # a texture only Update / DLC paint: by EditorID if known
+            e = ltex.get(f, {}).get("edid")
+            twin = next((g for g in mapping if ltex.get(g, {}).get("edid") == e and g != f), None)
+            if twin is not None:
+                mapping[f] = mapping[twin]
         unseen = sorted(used - set(mapping))
         print(f"  {len(mapping)} of {len(used)} Skyrim textures read off the terrain; {len(unseen)} not seen in the "
               f"sampled bands (drawn as the default {default_sf:08X})")
         for f in sorted(mapping, key=lambda f: -support[f])[:12]:
             print(f"    {ltex.get(f, {}).get('edid', f'{f:08X}'):28} -> {mapping[f]:08X} ({support[f]} samples)")
         planes, ox, oy, sp = planes_from(cells, mapping, default_sf, table, land)
-        # the build stitched cell edges the old way (landtex.merged_grid consistent_edges): the spot check does too
-        check_planes = planes_from(cells, mapping, default_sf, table, land, consistent_edges=False)[0]
+        # the build stitched cell edges the old way (landtex.merged_grid consistent_edges): the spot check does too,
+        # from the inputs the build had (Skyrim.esm alone)
+        check_planes = planes_from(built, mapping, default_sf, table, land, consistent_edges=False)[0]
     done = 0
     for o in prm["overlays"]:
         t = og.Tile(o["ix"], o["iy"], o["cells_cw"]["x"][0], o["cells_cw"]["y"][0], o["n"])
@@ -358,6 +381,9 @@ def main(argv=None):
     ap.add_argument("--blend", choices=("solid", "dither", "noise", "smooth"), default="smooth", help="--ltex-blend")
     ap.add_argument("--warp", type=float, default=1.5, help="--ltex-warp (m)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--skyrim-esm-only", action="store_true",
+                    help="recompute: paint from Skyrim.esm alone, without Update.esm and the DLC over it (before "
+                         "2026-11-23)")
     a = ap.parse_args(argv)
     if a.cmd == "recompute":
         if not (a.skyrim and a.sf_data):

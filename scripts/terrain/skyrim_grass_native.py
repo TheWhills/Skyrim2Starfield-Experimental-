@@ -472,7 +472,8 @@ def main(argv=None):
             tints = {k: tuple(v) for k, v in json.load(fh).get("tints", {}).items()}
 
     ltex_grass, gras_sky = skyrimgrass.read_grass(a.skyrim)
-    sky_ltex = {fid: sfplugin.edid(s) for _t, _h, s, fid in sfplugin.records(a.skyrim, [b"LTEX"])}
+    from fo4sf import landtex as _lt
+    sky_ltex = {fid: v.get("edid", "") for fid, v in _lt.read_ltex_loaded(a.skyrim).items()}   # Skyrim + Update + DLC
     plan = sfgrass.cover_plan(mapping.get("skyrim", {}), overrides, ltex_grass, sky_ltex)
     report = {"slots": {f"{k:08X}": [gras_sky[g]["edid"] for g in v if g in gras_sky] for k, v in plan["slots"].items()},
               "skipped_textures": plan["skipped"], "grasses": {}, "failed": {}}

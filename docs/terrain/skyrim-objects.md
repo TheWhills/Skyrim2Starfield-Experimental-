@@ -525,6 +525,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   plugin) gives those textures grass or repaints the cell. skyrim_ltex_scan.py lists, per plugin in Skyrim's Data,
   its LTEX / GRAS counts, the Riverwood textures it defines or overrides with their grass lists, and LAND overrides
   for given Tamriel cells.
+  **Owner's scan (14:54, verified): Update.esm has its own LAND for Riverwood's cell (4, -12)**, plus 27 GRAS and
+  15 LTEX overrides (Dawnguard 12 LTEX / 1 GRAS, Dragonborn 11 / 3); the Riverwood textures' grass lists are
+  Skyrim.esm's own (no plugin overrides them). The game loads Update.esm over Skyrim.esm; every reader here read
+  Skyrim.esm alone, so our terrain and grass follow the pre-Update Riverwood ground. Now landtex.read_world_textures,
+  read_ltex_loaded and skyrimgrass.read_grass read Skyrim as loaded (Skyrim.esm, then Update.esm and the DLC found
+  next to it; later LAND wins per cell, LTEX / GRAS per FormID; FormIDs in that load order; official=False for the
+  old way). refresh_btd recompute learns the mapping and spot-checks against Skyrim.esm alone (the installed
+  build's input) and paints from Skyrim as loaded (`--skyrim-esm-only` for the old way); it prints how many cells
+  Update / DLC repaint. btd_byte6 set / restore now work on the current terrain files (rebuilding from its first
+  backup would have undone a refresh). Open: heights (skyrimland) and placed objects still come from Skyrim.esm.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

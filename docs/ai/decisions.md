@@ -2827,3 +2827,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   but Alt from the INI kept dodging. Change: with OSF Settings only its binding dodges (INI gamepad button excepted),
   default "L Alt" (the name the menu showed; unverified as a schema name: a wrong one falls back to the INI key).
 
+
+- 2026-11-23 Skyrim as the game loads it for ground textures and grass: Skyrim.esm, then Update.esm, Dawnguard.esm,
+  HearthFires.esm, Dragonborn.esm when found next to it (landtex.official_plugins; later LAND wins per cell, LTEX / GRAS
+  per FormID, FormIDs in that load order). Why: the owner's scan found Update.esm's own LAND for Riverwood's cell, and
+  Skyrim in game shows grass where Skyrim.esm's ground grows none. Alternatives: Skyrim.esm only (the pre-Update ground,
+  kept as official=False / --skyrim-esm-only); the full mod load order (skyrimload.LoadOrder; not needed for vanilla).
+  Heights and placed objects still read Skyrim.esm alone (open).
