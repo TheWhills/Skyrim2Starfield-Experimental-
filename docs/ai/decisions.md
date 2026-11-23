@@ -2726,3 +2726,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - S2SDodge switches itself off when S2SCombat.dll is loaded (two dodge events per press otherwise).
 - Status: core verified by tests; the DLL is uncompiled here (no MSVC / CommonLibSF in the cloud session): owner's build.
 
+## 2026-11-23 — Dodges with the shoulder calibration
+- Owner's A/B in game: the dodges converted with --shoulder-calibration (shoulders.json, the furniture packs' file;
+  both clavicles turned ~27 deg) look better than without (verified by eye). Decision: every dodge build uses it
+  (OWNER-SETUP 8b / 8c). Expected to apply to the other converted combat clips too (stance packs): to be checked by the
+  same A/B when they move to SAM.
+

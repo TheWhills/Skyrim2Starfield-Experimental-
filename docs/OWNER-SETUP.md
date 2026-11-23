@@ -407,7 +407,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    and the S2SCombat plugin (dodge key Left Alt, sDodgeEvents left at its default); stance / combo / dodge packs, "S2S
    SAM Test" and "S2S AnimInfo" disabled. $tk = the TK Dodge folder (StepDodge*.hkx + animationdatasinglefile.txt):
    ```powershell
-   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S SAM Dodge" --calumi "$calumi" --skyrim-data "$sky"
+   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S SAM Dodge" --calumi "$calumi" --skyrim-data "$sky" --shoulder-calibration C:\Modding\work\shoulders.json
    ```
    Enable "S2S SAM Dodge" last, start with sfse_loader.exe, draw a one-handed melee weapon: Alt + W / S / A / D and
    Alt standing (back). Send what each did and SfAnimIndexLoader.log.
@@ -416,7 +416,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    cd "$HOME\Skyrim2Starfield-Experimental-\native\combat\sfse"; xmake build S2SDodge; cd "$HOME\Skyrim2Starfield-Experimental-"
    $dll = Get-ChildItem native\combat\sfse\build -Recurse -Filter S2SDodge.dll | Sort-Object LastWriteTime | Select-Object -Last 1
-   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S Dodge" --calumi "$calumi" --skyrim-data "$sky" --dll $dll.FullName
+   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S Dodge" --calumi "$calumi" --skyrim-data "$sky" --dll $dll.FullName --shoulder-calibration C:\Modding\work\shoulders.json
    ```
    MO2: "S2S Dodge" on (bottom), S2S Combat and the other dodge mods off, SAM + Address Library on. In game: Alt +
    W / S / A / D, Alt standing. Log: SFSE\Plugins\S2SDodge.log (MO2: the mod folder or Overwrite).
