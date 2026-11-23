@@ -535,6 +535,16 @@ Max Density; what a vanilla grass model needs. Two tools:
   build's input) and paints from Skyrim as loaded (`--skyrim-esm-only` for the old way); it prints how many cells
   Update / DLC repaint. btd_byte6 set / restore now work on the current terrain files (rebuilding from its first
   backup would have undone a refresh). Open: heights (skyrimland) and placed objects still come from Skyrim.esm.
+  Owner's refresh (15:06 - 15:14, verified): grass_at at the forest spot with Update.esm: LFieldGrass02 35 % (was
+  11 %), FieldGrass01 density 64 (was 32), FieldGrass02 20 (was 3). terrain_blend: Update / DLC repaint 1821 Tamriel
+  cells, spot check 100 %; byte 6 set; grass rebuilt (density x 1.5). In game (15:32, screenshots next to Skyrim):
+  straw clumps along rock and cliff edges and the mill's dirt edges, none on the open forest floor or the mill meadow
+  where Skyrim grows green field grass. Skyrim's brown rock-ground tufts roughly match our straw. Supported hypothesis:
+  the field / forest / fern grasses (GrassCityShort01, earlier GrassFieldLive01) never show, in any build so far (the
+  13:51 green tufts may have been tundra grass, which LFieldGrass01 grows); the rock / tundra ones do. Test:
+  `--model-from fieldgrass,forestgrass,ferngrass=SnowGrass01Forest` puts those families on a model that shows (snowy
+  white): white grass on the meadow = their own converted models are the problem, nothing = their ground cover does
+  not grow. The build now prints each converted model's shapes, triangles and height.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

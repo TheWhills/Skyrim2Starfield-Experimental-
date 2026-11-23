@@ -316,15 +316,42 @@ def with_geometry(nif_bytes: bytes, geometry) -> bytes:
     return nifmod.serialize(n)
 
 
-def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None) -> str:
+def model_info(all_shapes, kept) -> dict:
+    """Shape / triangle counts and the height (game units) of a converted grass model: kept shapes against all."""
+    zs = [p[2] * sh.scale + sh.translation[2] for sh in kept for p in sh.positions]
+    return {"shapes": len(kept), "dropped": len(all_shapes) - len(kept),
+            "tris": sum(len(sh.triangles) for sh in kept), "verts": sum(len(sh.positions) for sh in kept),
+            "height": (max(zs) - min(zs)) if zs else 0.0}
+
+
+def info_text(i: dict) -> str:
+    return (f"{i['shapes']} shape(s)" + (f" (+{i['dropped']} dropped)" if i.get("dropped") else "")
+            + f", {i['tris']} tris, {i['height']:.0f} units tall")
+
+
+def parse_model_from(items):
+    """--model-from FAMILY[,FAMILY]=EditorID -> {family: EditorID whose converted model those families use}."""
+    out = {}
+    for it in items or ():
+        if "=" not in it:
+            raise ValueError(f"--model-from wants FAMILY=EditorID, got {it!r}")
+        fams, edid = it.split("=", 1)
+        for f in fams.split(","):
+            if f.strip():
+                out[f.strip().lower()] = edid.strip()
+    return out
+
+
+def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
-    sided); returns its path under meshes\\."""
+    sided); returns its path under meshes\\. info: a dict to fill with model_info."""
     raw = conv.src.mesh(name)
     if raw is None:
         raise FileNotFoundError("not in the Skyrim archives")
     src = nifmod.parse(raw)
     shapes, mats = [], []
-    for sh in skyrimnif.trishapes(src):
+    every = skyrimnif.trishapes(src)
+    for sh in every:
         m = conv._shape_material(src, sh, flat_normal_ok=True, albedo_tint=tint)
         if m is None:
             continue
@@ -332,6 +359,8 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "", geome
             sh = skyrimconvert.with_back_faces(sh) or sh
         shapes.append(sh)
         mats.append(m)
+    if info is not None:
+        info.update(model_info(every, shapes))
     if not shapes:
         raise ValueError("no drawable shape")
     stem = re.sub(r"[^a-z0-9_]+", "_", os.path.splitext(name.lower().replace("\\", "/").split("meshes/", 1)[-1])[0])
@@ -428,6 +457,10 @@ def main(argv=None):
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
+    ap.add_argument("--model-from", action="append", default=[], metavar="FAMILY=EDITORID",
+                    help="test (2026-11-23): the grasses of these families use the converted model of that grass "
+                         "(e.g. fieldgrass,forestgrass,ferngrass=SnowGrass01Forest), to tell a model that does not "
+                         "show from ground cover that does not grow; repeatable")
     ap.add_argument("--family-material", action="append", default=[], metavar="FAMILY=MATERIAL",
                     help="with --vanilla-material auto: the game grass material for a Skyrim grass family, under "
                          "Materials\\Landscape\\Grass (e.g. forestgrass,fieldgrass=Bladed\\GrassCityShort01); "
@@ -435,6 +468,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     try:
         fam_mats = parse_family_materials(a.family_material)
+        model_from = parse_model_from(a.model_from)
     except ValueError as e:
         sys.exit(str(e))
     out = os.path.abspath(a.out)
@@ -577,6 +611,8 @@ def main(argv=None):
             order = lambda g: (-cov.get(g, 0.0), gras_sky.get(g, {}).get("edid", ""))   # noqa: E731
             report["grass_coverage"] = {gras_sky[g]["edid"]: round(cov.get(g, 0.0), 1) for g in gras_sky
                                         if cov.get(g, 0.0) > 0}
+        base_order = order                           # --model-from: borrowers after every donor
+        order = lambda g: (family(gras_sky.get(g, {}).get("edid", "")) in model_from, base_order(g))  # noqa: E731
         for gi, g in enumerate(sorted({g for v in plan["slots"].values() for g in v}, key=order)):
             r = gras_sky.get(g)
             if r is None:
@@ -611,6 +647,11 @@ def main(argv=None):
                     model = rel.split("/", 1)[1].replace("/", "\\")
                 elif a.keep_template_model:
                     model = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
+                elif model_from.get(family(r["edid"])) in dict(placed):
+                    donor = model_from[family(r["edid"])]
+                    model = dict(placed)[donor]
+                    report.setdefault("shared_models", {})[r["edid"]] = model
+                    print(f"  {r['edid']} uses {donor}'s model {model} (--model-from)")
                 elif free is not None and (not free or any(family(e) == family(r["edid"]) for e, _m in placed)):
                     # --vanilla-paths: one free path per grass family (the family's commonest grass); the rest of
                     # the family, and families without a path, share a converted model
@@ -622,7 +663,9 @@ def main(argv=None):
                 else:
                     mat = (family_material(r["edid"], fam_mats) if a.vanilla_material == "auto"
                            else a.vanilla_material)
-                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry)
+                    minfo = {}
+                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry, minfo)
+                    report.setdefault("model_info", {})[r["edid"]] = minfo
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat
                     if free is not None:             # --vanilla-paths: move it over an unused vanilla grass path
@@ -632,7 +675,8 @@ def main(argv=None):
                         os.makedirs(os.path.dirname(dst_p), exist_ok=True)
                         shutil.move(src_p, dst_p)
                         report.setdefault("vanilla_paths", {})[r["edid"]] = vpath
-                        print(f"  {r['edid']} -> {vpath}" + (f"  [{mat.rsplit(chr(92), 1)[-1]}]" if mat else ""))
+                        print(f"  {r['edid']} -> {vpath}" + (f"  [{mat.rsplit(chr(92), 1)[-1]}]" if mat else "")
+                              + f"  {info_text(minfo)}")
                         model = vpath.split("\\", 1)[1]
                         placed.append((r["edid"], model))
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)

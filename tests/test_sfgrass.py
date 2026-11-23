@@ -503,6 +503,46 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(list(rep["vanilla_paths"]), ["TundraGrass01"])
         self.assertTrue(rep["materials"]["TundraGrass01"].endswith("GrassFieldDried01.mat"))
         self.assertIn("[GrassFieldDried01.mat]", log.getvalue())           # the build names each family's material
+        self.assertRegex(log.getvalue(), r"TundraGrass01 -> .*\d+ shape\(s\), \d+ tris, \d+ units tall")
+        self.assertGreater(rep["model_info"]["TundraGrass01"]["tris"], 0)
+
+    def test_model_from(self):
+        import numpy as np
+        import skyrim_grass_native as N
+        self.assertEqual(N.parse_model_from(["fieldgrass,ForestGrass=SnowGrass01Forest"]),
+                         {"fieldgrass": "SnowGrass01Forest", "forestgrass": "SnowGrass01Forest"})
+        with self.assertRaises(ValueError):
+            N.parse_model_from(["fieldgrass"])
+        data = struct.pack("<BBBBHHIffffB3x", 30, 0, 40, 0, 0, 0, 0, 0.0, 0.3, 0.2, 0.0, 4)
+        lg = {0x77: [0x88, 0x89]}
+        gr = {0x88: dict(skyrimgrass.parse_gras_data(data), edid="SnowGrass01", model="landscape\\plants\\fern01.nif"),
+              0x89: dict(skyrimgrass.parse_gras_data(data), edid="FieldGrass01", model="landscape\\plants\\fern01.nif")}
+        pool = (["meshes\\landscape\\grass\\spare01.nif", "meshes\\landscape\\grass\\spare02.nif"], 5, 3)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                mock.patch.object(skyrimgrass, "read_grass", return_value=(lg, gr)), \
+                mock.patch.object(N, "unused_grass_paths", return_value=pool), \
+                mock.patch.object(N, "world_cells", return_value={(0, 0): {0x77: np.ones((33, 33))}}), \
+                contextlib.redirect_stdout(io.StringIO()) as log:
+            sf, data_dir, sky_esm, terrain = self._setup(tmp)
+            out = os.path.join(tmp, "mod")
+            N.main(["--skyrim", sky_esm, "--skyrim-data", data_dir, "--starfield", sf, "--terrain", terrain,
+                    "--texconv", "texconv.exe", "--out", out, "--vanilla-paths", "--loose", "--vanilla-material", "auto",
+                    "--model-from", "fieldgrass=SnowGrass01"])
+            with open(os.path.join(out, "grass_native.json"), encoding="utf-8") as fh:
+                rep = json.load(fh)
+        self.assertIn("FieldGrass01 uses SnowGrass01's model", log.getvalue())
+        self.assertEqual(list(rep["vanilla_paths"]), ["SnowGrass01"])          # FieldGrass01 took no free path
+        self.assertEqual(rep["grasses"]["FieldGrass01"]["model"], rep["grasses"]["SnowGrass01"]["model"])
+
+    def test_model_info(self):
+        import skyrim_grass_native as N
+        from types import SimpleNamespace as NS
+        a = NS(positions=[(0, 0, 0), (0, 0, 10)], triangles=[(0, 1, 1)], scale=2.0, translation=(0, 0, 5))
+        b = NS(positions=[(0, 0, 3)], triangles=[], scale=1.0, translation=(0, 0, 0))
+        i = N.model_info([a, b, b], [a, b])
+        self.assertEqual((i["shapes"], i["dropped"], i["tris"], i["verts"]), (2, 1, 1, 3))
+        self.assertAlmostEqual(i["height"], 25.0 - 3.0)
+        self.assertEqual(N.info_text(i), "2 shape(s) (+1 dropped), 1 tris, 22 units tall")
 
     def test_grass_coverage(self):
         import numpy as np
