@@ -342,6 +342,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   threshold against Skyrim's blended alphas, slopes); one mask everywhere (FlatOut) instead of per-quadrant masks;
   byte 6 has to become part of the terrain build (now a patch over the installed BTD). Next: Skyrim's own grass
   (skyrim_grass_native.py without --control), then grass materials (VegetationTranslucent1Layer, wind, terrain tint).
+  Skyrim's grass build (owner, 21:07: 27 grasses, 19 covers, 76 entries = 19 x masks 2-5): **no grass**, while the
+  control grows. So the route works and our records or models do not. Candidates: the templates (the first GRAS by
+  EditorID and the one GCVR with a texture list: their water clamps, coverage, threshold carried over, e.g. an
+  aquatic grass that only grows under water), the converted models (ordinary static material, not
+  VegetationTranslucent1Layer), Skyrim's densities (3-37). Now the templates are the control cover itself and its
+  first grass (they grow), and `--keep-template-model` builds our records with that grass's vanilla model to
+  separate a model problem from a record problem.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

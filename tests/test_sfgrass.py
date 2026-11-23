@@ -287,6 +287,15 @@ class PlanetBiomeTests(unittest.TestCase):
         added = N.with_procgen([(b"EDID", b"W\0"), (b"DATA", b"\x01"), (b"BNAM", bytes(4))])
         self.assertEqual([sg for sg, _d in added], [b"EDID", b"DATA", b"FNAM", b"BNAM"])
 
+    def test_known_cover_templates_and_vanilla_model(self):
+        """2026-11-22: templates come from the cover that grew (the world biome's most used), and
+        --keep-template-model keeps its grass's vanilla model."""
+        raw, by, log = self._run(["--keep-template-model"])
+        self.assertIn("templates: grass GrassA, cover CoverA (vanilla model kept)", log)
+        self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Plants\\a.nif\0")
+        cover = sfgrass.parse_gcvr(by["S2S_Cover_00000031"][2])
+        self.assertEqual(cover["threshold"], 28.0)                         # the template cover's own threshold
+
     def test_control(self):
         raw, by, log = self._run(["--control"])
         self.assertNotIn("S2S_Fern", by)                                      # no Skyrim grass converted

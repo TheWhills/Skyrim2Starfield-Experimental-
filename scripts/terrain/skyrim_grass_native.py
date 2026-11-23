@@ -170,8 +170,13 @@ def main(argv=None):
                     help="test (2026-11-22, after the planet biome and the vanilla control grew nothing): also set the "
                          "Skyrim world's Allow ProcGen flag (WRLD FNAM bit 3), which no vanilla world sets; the engine "
                          "may then run planet generation (grass, maybe rocks / plants) in the world")
-    ap.add_argument("--gras-template", help="EditorID regex of the vanilla GRAS to copy (default: the first usable)")
-    ap.add_argument("--gcvr-template", help="EditorID regex of the vanilla GCVR to copy (default: the first with LTEX)")
+    ap.add_argument("--gras-template", help="EditorID regex of the vanilla GRAS to copy (default: the first grass of the "
+                                            "control cover, which grew in game)")
+    ap.add_argument("--gcvr-template", help="EditorID regex of the vanilla GCVR to copy (default: the control cover, "
+                                            "the one the world's land biome uses most)")
+    ap.add_argument("--keep-template-model", action="store_true",
+                    help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
+                         "converted Skyrim one, to tell a model problem from a record problem")
     a = ap.parse_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
@@ -258,8 +263,26 @@ def main(argv=None):
         names = {r[3]: sfplugin.edid(r[2]) for r in sf if r[0] == b"GCVR"}
         report["control"] = {"gcvr": f"{gc:08X}", "edid": names.get(gc, "?"), "textures": len(covers)}
     else:
-        gt = pick(sf, b"GRAS", a.gras_template, gras_ok)
-        ct = pick(sf, b"GCVR", a.gcvr_template, lambda s: any(x == b"LNAM" for x, _d in s))
+        # 2026-11-22: the control (vanilla GC_MossMoundsGrass01) grew, ours (templates: the first GRAS by EditorID and
+        # the one GCVR with a texture list) did not: the templates' Starfield-only fields (water clamps, coverage,
+        # threshold) now come from the cover that is known to grow
+        known = None
+        if not a.gras_template or not a.gcvr_template:
+            wb = (prm.get("world_overrides") or {}).get("biome") or f"{VANILLA_LAND:08X}"
+            src = next((r for r in sf if r[0] == b"BIOM" and (f"{r[3]:08x}" == wb.lower().zfill(8)
+                                                              or sfplugin.edid(r[2]).lower() == wb.lower())), None)
+            kc = control_cover(src[2]) if src else 0
+            known = next((r for r in sf if r[0] == b"GCVR" and r[3] == kc), None)
+        if a.gcvr_template or known is None:
+            ct = pick(sf, b"GCVR", a.gcvr_template, lambda s: any(x == b"LNAM" for x, _d in s))
+        else:
+            ct = known
+        if a.gras_template or known is None:
+            gt = pick(sf, b"GRAS", a.gras_template, gras_ok)
+        else:
+            first = next((g for g, _d in sfgrass.parse_gcvr(known[2])["grasses"]), None)
+            gt = next((r for r in sf if r[0] == b"GRAS" and r[3] == first and gras_ok(r[2])), None) \
+                or pick(sf, b"GRAS", None, gras_ok)
         if gt is None or ct is None:
             sys.exit("no vanilla GRAS / GCVR template found")
         report["templates"] = {"gras": sfplugin.edid(gt[2]), "gcvr": sfplugin.edid(ct[2]),
@@ -275,7 +298,8 @@ def main(argv=None):
                 continue
             name = "meshes\\" + r["model"].replace("/", "\\").lstrip("\\")
             try:
-                model = convert_model(conv, name, tints.get(r["model"]), staging)
+                model = (dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
+                         if a.keep_template_model else convert_model(conv, name, tints.get(r["model"]), staging))
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue
@@ -327,6 +351,9 @@ def main(argv=None):
             json.dump(mapping, fh, indent=1)
     with open(os.path.join(out, "grass_native.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=1, default=str)
+    if "templates" in report:
+        print(f"templates: grass {report['templates']['gras']}, cover {report['templates']['gcvr']}"
+              + (" (vanilla model kept)" if a.keep_template_model else ""))
     print((f"control: vanilla ground cover {report['control']['edid']} on {len(covers)} converted textures"
            if a.control else f"{len(gras_fid)} grasses, {len(covers)} ground covers")
           + (f", biome {report['biome']['edid']} ({report['biome']['form_id']}) overridden "
