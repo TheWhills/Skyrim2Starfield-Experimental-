@@ -2749,4 +2749,11 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   and from Alt (verified, screenshots). So the plugin route is not the cause: the combat stance changes the left arm
   of every full-body clip. Next: scripts/armor/stance_layer_probe.py (read-only) lists the IK / constraint / additive
   / bone-weight nodes and stance switches of Player_Melee and its referenced graphs.
+- stance_layer_probe on the owner's install (24 graphs, verified from the files): Player_Melee has a Dual Direct At
+  node (Source Bone DirectAt, Chest / Head inputs = Graph Refs LookAt_Chest / LookAt_Head: parametric blends of 8
+  aim poses by DirectAtHeadingVar / DirectAtPitchVar, which the node outputs), with No Aim Variable = bNoAim, No Head
+  Track Variable = bNoHeadTrack, Is Aim Active Variable = bAimActive. Also two Bone Constraints (WeaponLeft ->
+  R_AnimObject1 / L_AnimObject1), the RelaxReadySneakSwitch (iSyncRelaxReadySneak, prefix) and Copy Bone Weights
+  (BoneWeightsAction); no IK node. Supported hypothesis: in the ready stance the aim is active and the LookAt_Chest
+  poses (made for the ready stance's aim) move the left arm over every full-body clip. Test: --variable bNoAim.
 
