@@ -24,6 +24,8 @@ class KeyNamesTests(unittest.TestCase):
                     self.assertEqual(K.main(["--exe", p]), 0)
                 self.assertIn("'Left Alt'\t0xA4", out.getvalue())
         self.assertEqual(K.tables("nothing here"), [])
+        rows = K.tables("Esc\t0x1B\r\n" + "".join(f"K{i}\t0x{i:X}\r\n" for i in range(30)) + "Left Alt\t0xA4\r\n")
+        self.assertIn(("Left Alt", 0xA4), rows[0])                  # 0x prefixes, CRLF
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import argparse
 import re
 import sys
 
-ROW = re.compile(r"([^\t\n\x00]{1,32})\t([0-9A-Fa-f]{1,4})\n")
+ROW = re.compile(r"([^\t\r\n\x00]{1,32})\t(?:0[xX])?([0-9A-Fa-f]{1,4})\r?\n")
 
 
 def tables(text: str):
@@ -43,6 +43,7 @@ def main(argv=None):
     for start in (0, 1):                                  # UTF-16 text at either byte alignment
         text = data[start:len(data) - ((len(data) - start) % 2)].decode("utf-16-le", errors="replace")
         found += tables(text)
+    found += tables(data.decode("latin-1"))               # or 8-bit text
     if not found:
         print("no key-name table found")
         return 1
