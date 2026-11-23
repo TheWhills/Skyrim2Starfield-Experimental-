@@ -303,7 +303,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   prebuilt data: it presumably builds each cell's grass at run time from ground cover, as Skyrim's did from LTEX
   grass; no second route through files. 135 loose files are Creation Kit material sources under
   Data\Scripts\Source\Materials (e.g. Landscape\Grass\GrassJuniper.mat, GrassSagebrush01.mat): vanilla grass
-  material templates (VegetationTranslucent1Layer) for our grass later. In game by ship landing: pending.
+  material templates (VegetationTranslucent1Layer) for our grass later.
+  **Ship landing (owner, 2026-11-22 20:16, verified in game): new game, landed on Nirn at the Skyrim marker, control
+  cover (masks 2-5) on: no grass.** So coc was not the cause either. Remaining lead (supported hypothesis): ground cover
+  is picked per biome MASK, and our terrain carries none. Starfield's procedural surface computes masks; a painted
+  overlay must store them somewhere we write nothing: quadrant bytes 5..7 (filled in 96.6 % of vanilla quadrants,
+  0 in ours) or bit 15 of each sample word. vanilla_btd_survey.py now reports both (value histograms, valid entry /
+  repeat of bytes 0..4, bit 15 share; --match overlaytrait for planet overlays); in game,
+  `player.GetBiomeMaskValue <mask>` ("the ref's biome mask on the terrain at its position") on our ground would show
+  whether the engine sees any mask there.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

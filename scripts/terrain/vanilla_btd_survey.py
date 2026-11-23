@@ -16,11 +16,19 @@ are made for the engine's real rule, so this reads a sample of vanilla BTDs from
      first column drops close to the edge: that is the edge rule and its width.
 
 Only headers, quad maps and the sampled cells are decompressed (planet files are large).
+
+2026-11-22 (native grass grew nothing on our world, even Starfield's own cover after a ship landing): ground cover is
+chosen per biome MASK (Base, Solid, FlatOuter, FlatInner, Talus, Flow, Path), and our BTD carries no mask anywhere we
+know of. Two unexplained places could: quadrant bytes 5..7 (filled in 96.6 % of vanilla quadrants, written 0 by us)
+and bit 15 of each sample's 16-bit texture word (above the five 3-bit alphas). The survey now reports both: bytes
+5..7 value histograms, whether they name a valid table entry or repeat one of bytes 0..4, and how often bit 15 is set.
+--match REGEX reads only matching files (e.g. overlaytrait: planet overlays painted with biome-covered textures).
 """
 import argparse
 import json
 import os
 import random
+import re
 import struct
 import sys
 import zlib
@@ -83,9 +91,19 @@ class Survey:
         self.alpha = np.zeros((5, 8), np.int64)
         self.edge = {k: np.zeros((MAX_D, 2), np.int64) for k in ("diff", "same")}   # [d] (active, total)
 
-    def quads(self, name, quad):
+    def quads(self, name, quad, nlt=0):
         ny, nx, _ = quad.shape
         used = (quad > 0)
+        for p in (5, 6, 7):                                  # 2026-11-22: what bytes 5..7 hold
+            v = quad[:, :, p]
+            vals, cnt = np.unique(v, return_counts=True)
+            for x, k in zip(vals.tolist(), cnt.tolist()):
+                self.c[f"b{p}_value_{x}"] += k
+            nz = v > 0
+            self.c[f"b{p}_nonzero"] += int(nz.sum())
+            if nlt:
+                self.c[f"b{p}_valid_entry"] += int((nz & (v <= nlt)).sum())
+            self.c[f"b{p}_repeats_0_4"] += int((nz & np.any(quad[:, :, :5] == v[:, :, None], axis=2)).sum())
         self.c["quadrants"] += ny * nx
         self.c["uses_bytes_5_7"] += int(used[:, :, 5:].any(axis=2).sum())
         nused = used[:, :, :5].sum(axis=2)
@@ -127,6 +145,8 @@ class Survey:
     def cell(self, quad, cy, cx, w):
         ny, nx, _ = quad.shape
         alphas = np.stack([(w.astype(np.int64) >> (3 * i)) & 7 for i in range(5)])    # [5, 128, 128]
+        self.c["words"] += int(w.size)
+        self.c["words_bit15"] += int(((w.astype(np.int64) >> 15) & 1).sum())
         for i in range(5):
             self.alpha[i] += np.bincount(alphas[i].ravel(), minlength=8)[:8]
         rr, cc = np.mgrid[0:64, 0:64]
@@ -176,6 +196,15 @@ class Survey:
         if cons:
             out.append(f"  each texture's most common position holds it in {np.mean(cons):.1%} of its quadrants "
                        f"(mean over {len(cons)} textures; 100 % = one position per texture)")
+        for p in (5, 6, 7):
+            nz = c[f"b{p}_nonzero"]
+            top = sorted(((k, v) for k, v in c.items() if k.startswith(f"b{p}_value_")), key=lambda kv: -kv[1])[:12]
+            out.append(f"  byte {p}: non-zero in {nz / q:.1%} of quadrants; of those a valid table entry "
+                       f"{c[f'b{p}_valid_entry'] / max(nz, 1):.1%}, repeating one of bytes 0..4 "
+                       f"{c[f'b{p}_repeats_0_4'] / max(nz, 1):.1%}; most common values "
+                       + ", ".join(f"{k.rsplit('_', 1)[1]} ({v / q:.1%})" for k, v in top))
+        if c["words"]:
+            out.append(f"  sample words with bit 15 set: {c['words_bit15'] / c['words']:.2%} of {c['words']:,}")
         tot = self.alpha.sum(axis=1, keepdims=True)
         if tot.sum():
             out.append("alphas (share of samples per value 0..7), byte 0..4:")
@@ -200,6 +229,8 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--all", action="store_true", help="also the procedural source tiles (no LTEX table)")
     ap.add_argument("--json", default="", help="also write the counts here")
+    ap.add_argument("--match", default="", help="only BTDs whose path matches this regular expression (e.g. "
+                                                 "overlaytrait)")
     a = ap.parse_args(argv)
     rng = random.Random(a.seed)
     files, no_table = [], 0
@@ -210,6 +241,8 @@ def main(argv=None):
         ar = ba2.Ba2(p)
         for i, e in enumerate(ar.entries):
             if not (e.name.lower().endswith(".btd") and e.kind == "GNRL" and e.unpacked <= a.max_mb * 1e6):
+                continue
+            if a.match and not re.search(a.match, e.name, re.I):
                 continue
             nlt = ltex_count(ar, e)
             if nlt == 0 and not a.all:
@@ -230,7 +263,7 @@ def main(argv=None):
         except Exception as e:                               # noqa: BLE001 - report and go on
             print(f"  {name}: not read ({e})")
             continue
-        sv.quads(name, quad)
+        sv.quads(name, quad, len(ltex))
         cells = [(cy, cx) for cy in range(ncy) for cx in range(ncx)]
         rng.shuffle(cells)
         done = 0

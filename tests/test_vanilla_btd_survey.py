@@ -56,5 +56,30 @@ class SurveyTest(unittest.TestCase):
         self.assertGreater(int(sv2.edge["diff"][0:4, 0].sum()), 0)       # without the rule: drawn there too
 
 
+    def test_bytes_5_7_and_bit15(self):
+        """2026-11-22: what bytes 5..7 hold and how often a sample word has bit 15 set."""
+        q = np.zeros((2, 4, 8), np.uint8)
+        q[:, :, 0], q[:, :, 1] = 1, 2
+        q[:, :2, 5] = 2                    # repeats byte 1, a valid entry
+        q[:, 2:, 5] = 9                    # past the 3-entry table
+        q[:, :, 6] = 4                     # valid, not repeated
+        w = np.zeros((128, 256), np.uint16)
+        w[:, :64] = 0x8000                 # bit 15 on a quarter of the samples
+        t = btd.Btd(6, 0.0, 10.0, [0x100, 0x200, 0x300, 0x400], np.zeros((128, 256), np.uint16), w, q)
+        sv = V.Survey()
+        ltex, quad, (ncy, ncx), read_cell = V.parse(btd.write(t))
+        sv.quads("x", quad, len(ltex))
+        for cx in range(ncx):
+            sv.cell(quad, 0, cx, read_cell(0, cx))
+        c = sv.c
+        self.assertEqual((c["b5_nonzero"], c["b5_valid_entry"], c["b5_repeats_0_4"]), (8, 4, 4))
+        self.assertEqual((c["b6_nonzero"], c["b6_valid_entry"], c["b6_repeats_0_4"]), (8, 8, 0))
+        self.assertEqual(c["b7_nonzero"], 0)
+        self.assertEqual((c["words"], c["words_bit15"]), (32768, 8192))
+        rep = "\n".join(sv.report())
+        self.assertIn("byte 5: non-zero in 100.0% of quadrants; of those a valid table entry 50.0%", rep)
+        self.assertIn("bit 15 set: 25.00%", rep)
+
+
 if __name__ == "__main__":
     unittest.main()
