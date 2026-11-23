@@ -247,6 +247,9 @@ Max Density; what a vanilla grass model needs. Two tools:
   27 grasses, 19 ground covers, NirnOceanNoCoating (02000801) overridden with 133 entries (19 x 7 masks), no model
   failures, no grassy Skyrim texture skipped. In game (owner, 19:22): no grass at Riverwood. Next: confirm the
   plugin loads (`help S2S_Cover 4`), then `--control` (vanilla cover) to separate the route from our grass.
+  Owner's check (19:24): MO2 shows S2SGrass.esm active at index 0F, after SkyrimTerrainTamriel_Mars.esm (09);
+  `help S2S_Cover 4` listed nothing. Unresolved whether that means the records are absent or only that the game keeps
+  no EditorIDs for GCVR at run time (Starfield drops most EditorIDs); the load order is right. Control test next.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
