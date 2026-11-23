@@ -2738,4 +2738,11 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   during the dodge (owner's screenshots, back dodge). Supported hypothesis: vanilla melee attack descriptors carry a
   bNoLeftHandIK window and our dodge descriptors carry none, so the ready stance's left-hand IK keeps pulling the
   hand. Test: sam_dodge_pack --variable bNoLeftHandIK (the window over the whole clip). Unresolved until the run.
+- Owner's run (bNoLeftHandIK window on every dodge clip): no change, the left arm still goes out from the combat
+  stance. Hypothesis dropped. The clips key the whole left arm and L_HandIk (skeletonmap MAP / WORLD), so no unkeyed
+  bone keeps the stance's pose. Next hypothesis (supported by the Player_Melee layout, animation-port.md 2026-10-19):
+  the MeleeActions / stance layer stays blended over the full-body attack switch through Copy Bone Weights, whose mask
+  the game chooses (BoneWeightsAction) for its own attacks but not for plugin-sent events. Diagnostic:
+  sam_dodge_pack --state-tag Back=MeleeAttackPower_A (Alt standing plays the vanilla power attack through the dodge
+  route); compare its left arm with the same attack from the power attack key, both from the combat stance.
 

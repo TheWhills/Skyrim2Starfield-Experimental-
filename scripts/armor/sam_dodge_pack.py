@@ -260,6 +260,9 @@ def main(argv=None):
     ap.add_argument("--tk", required=True, help="TK Dodge folder (StepDodge*.hkx and animationdatasinglefile.txt)")
     ap.add_argument("--starfield-data", required=True, help="Starfield's Data folder (vanilla graphs and template)")
     ap.add_argument("--out", required=True, help="the mod's folder (e.g. $mods\\S2S SAM Dodge)")
+    ap.add_argument("--state-tag", action="append", default=[], metavar="DIRECTION=TAG",
+                    help="diagnostic: that direction's dodge state plays TAG (e.g. Back=MeleeAttackPower_A, the vanilla "
+                         "standing power attack) instead of its converted clip; the clips are still written")
     ap.add_argument("--variable", action="append", default=[], metavar="NAME",
                     help="a graph variable window over the whole of every dodge clip, e.g. bNoLeftHandIK (repeatable)")
     ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")
@@ -271,9 +274,15 @@ def main(argv=None):
         sys.exit(f"--dll: {a.dll} not found (build it: cd native\\combat\\sfse; xmake build S2SDodge)")
     import hkx_to_af
     tag_map = tags()
+    state_tags = dict(tag_map)
+    for spec in a.state_tag:
+        d, _, t = spec.partition("=")
+        if d not in tag_map or not t:
+            sys.exit(f"--state-tag wants DIRECTION=TAG with DIRECTION one of {', '.join(tag_map)}; got {spec}")
+        state_tags[d] = t
     attacks_raw, _ = hkx_to_af.vanilla_file(ATTACKS_REL, a.starfield_data)
     player_raw, _ = hkx_to_af.vanilla_file(PLAYER_REL, a.starfield_data)
-    graph_files, report = graphs(attacks_raw, player_raw, tag_map)      # before converting: fails fast
+    graph_files, report = graphs(attacks_raw, player_raw, state_tags)   # before converting: fails fast
     rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest, a.variable)
     files = {**clip_files, **graph_files, **fragment_files(tag_map)}
     write(out, files)

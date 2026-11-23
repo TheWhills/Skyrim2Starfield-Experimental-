@@ -126,6 +126,15 @@ class SamDodgePackTests(unittest.TestCase):
                     rep = json.load(fh)
                 self.assertEqual(rep["states"]["Back"]["tag"], "S2S_DodgeBack")
                 self.assertEqual(rep["conversion"], {"clips": 4})
+                with contextlib.redirect_stdout(io.StringIO()):            # diagnostic: Back plays a vanilla tag
+                    self.assertEqual(S.main(["--tk", d, "--starfield-data", d, "--out", d,
+                                             "--state-tag", "Back=MeleeAttackPower_A"]), 0)
+                with open(os.path.join(d, "sam_dodge.json")) as fh:
+                    st = json.load(fh)["states"]
+                self.assertEqual(st["Back"]["tag"], "MeleeAttackPower_A")
+                self.assertEqual(st["Forward"]["tag"], "S2S_DodgeForward")
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                    S.main(["--tk", d, "--starfield-data", d, "--out", d, "--state-tag", "Up=X"])
                 with self.assertRaises(SystemExit):
                     S.main(["--tk", d, "--starfield-data", d, "--out", ROOT])
                 with self.assertRaises(SystemExit):
