@@ -519,6 +519,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   (raw layer opacity, base = 1 over its quadrant) and grass_at's "Skyrim's grass rule" section measure it at a spot.
   If confirmed, the fix is per-location: grassy duplicates of the slots (same textures, Skyrim's grasses as ground
   cover) painted where Skyrim has a grassy layer underneath.
+  **Refuted (owner, 14:51):** a grassy texture is painted under only 13 % of the ground there (visible 11 %). So by
+  Skyrim.esm's own records that spot grows little grass, yet the owner's Skyrim shows a carpet. Next suspect
+  (unresolved): a plugin loaded after Skyrim.esm (Update.esm, DLC, Unofficial Patch, a landscape / texture mod with a
+  plugin) gives those textures grass or repaints the cell. skyrim_ltex_scan.py lists, per plugin in Skyrim's Data,
+  its LTEX / GRAS counts, the Riverwood textures it defines or overrides with their grass lists, and LAND overrides
+  for given Tamriel cells.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
