@@ -34,7 +34,42 @@ def player_graph() -> bytes:
     return agx_edit.dump(root, base)
 
 
+def project(clips, motions):
+    """One project block and its motion section of an animationdatasinglefile (animdata's layout)."""
+    block = ["1", "1", "Behaviors\\x.hkx", "1"]
+    for name, ident in clips:
+        block += [name, ident, "1", "0", "0", "0", ""]
+    motion = []
+    for ident, dist in motions:
+        motion += [ident, "0.866667", "2", "0 0 0 0", f"0.866667 0 {dist} 0", "1", "0.866667 0 0 0 1", ""]
+    return [str(len(block))] + block + [str(len(motion))] + motion
+
+
+def singlefile() -> str:
+    """Another project first, reusing id 3 with another motion; DefaultMale's dodges on ids 3-6."""
+    lines = ["2", "Other.txt", "DefaultMale.txt"]
+    lines += project([("SomethingElse", "3")], [("3", 999.0)])
+    lines += project([("TKDodgeForward", "3"), ("TKDodgeBack", "4"), ("TKDodgeLeft", "5"), ("TKDodgeRight", "6"),
+                      ("Unrelated", "7")], [("3", 409.0), ("4", -300.0), ("5", 252.0), ("6", 252.5), ("7", 1.0)])
+    return "\r\n".join(lines) + "\r\n"
+
+
 class SamDodgePackTests(unittest.TestCase):
+    def test_motion_by_clip_name(self):
+        from fo4sf import rootmotion
+        blocks = S.motion_blocks(singlefile())
+        self.assertEqual({d: i for d, (i, _b) in blocks.items()},
+                         {"Forward": "3", "Back": "4", "Left": "5", "Right": "6"})
+        lone = rootmotion.parse_motion_data(S.motion_text(blocks))
+        self.assertEqual(lone["3"]["translations"][-1][2], 409.0)      # DefaultMale's id 3, not Other's
+        self.assertEqual(lone["6"]["translations"][-1][2], 252.5)
+        self.assertAlmostEqual(lone["4"]["duration"], 0.866667)
+        self.assertEqual(rootmotion.parse_motion_data(singlefile())["3"]["translations"][-1][2], 999.0)  # why lone
+        with self.assertRaises(SystemExit):
+            S.motion_blocks(singlefile().replace("TKDodgeLeft", "TKDodgeSideways"))
+        with self.assertRaises(SystemExit):
+            S.motion_blocks(singlefile(), project="FirstPerson")
+
     def test_fragment(self):
         t = S.tags()
         self.assertEqual(t, {"Forward": "S2S_DodgeForward", "Back": "S2S_DodgeBack", "Left": "S2S_DodgeLeft",

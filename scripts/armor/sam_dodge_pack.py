@@ -9,7 +9,7 @@ only from its own archive and the Creation Kit lists only file names it already 
 fragment's new tags in memory and adds its clips to the animation index (owner's one-tag test, 2026-11-23: verified).
 This pack, needing only SAM and the S2SCombat plugin:
   * clips: StepDodgeForward / Back / Left / Right.hkx converted with their root motion from TK Dodge's
-    animationdatasinglefile (dodge_pack.MOTION_IDS) as S2S_Dodge<Direction>.af / .afx in melee\\onehanded\\player
+    animationdatasinglefile (motion ids looked up by clip generator name, TKDodge<Direction>, in DefaultMale) as S2S_Dodge<Direction>.af / .afx in melee\\onehanded\\player
     (a vanilla folder, so SAM's animations.txt adds them to every list that already uses it), tag = file stem, with
     dodge_pack's dodge descriptor (Allow Rotation, no slide events);
   * graphs: the game's MeleeAttacks.agx with one full-body dodge state per direction (dodge_graph.build_attacks) and
@@ -73,20 +73,61 @@ def write(out: str, files: dict):
             fh.write(data)
 
 
+def motion_blocks(text: str, directions=DIRECTIONS, project: str = "DefaultMale") -> dict:
+    """{direction: (motion block id, block)} looked up by clip generator name (TKDodge<Direction>) in an
+    animationdatasinglefile's third-person project. The ids differ between copies: TK Dodge RE's full copy has 1656
+    for TKDodgeForward, TK Dodge SE's file does not (owner's run 2026-11-23: "no motion block 1656")."""
+    from fo4sf import animdata
+    projects = animdata.parse(text)
+    proj = next((p for k, p in projects.items() if k.lower() == project.lower()), None)
+    if proj is None:
+        raise SystemExit(f"no {project} project in the animationdatasinglefile")
+    by_name = {c["name"].lower(): c["id"] for c in proj["clips"]}
+    out, missing = {}, []
+    for d in directions:
+        ident = by_name.get(f"tkdodge{d}".lower())
+        if ident is None or ident not in proj["motion"]:
+            missing.append(d)
+        else:
+            out[d] = (ident, proj["motion"][ident])
+    if missing:
+        near = sorted(c["name"] for c in proj["clips"] if "dodge" in c["name"].lower())[:20]
+        raise SystemExit(f"no motion for TKDodge{', TKDodge'.join(missing)} in {project}; dodge clip generators there: "
+                         f"{', '.join(near) or 'none'}")
+    return out
+
+
+def motion_text(blocks: dict) -> str:
+    """The chosen blocks alone, as an animationdatasinglefile motion section (ids are per project, and hkx_to_af
+    --motion keeps the first block of an id anywhere in the file: a lone file cannot pick another project's)."""
+    out = []
+    for ident, b in blocks.values():
+        out += [ident, f"{b['duration']:.6f}", str(len(b["translations"]))]
+        out += [" ".join(repr(v) for v in t) for t in b["translations"]]
+        out += [str(len(b["rotations"]))] + [" ".join(repr(v) for v in r) for r in b["rotations"]] + [""]
+    return "\r\n".join(out) + "\r\n"
+
+
 def convert(tk: str, tag_map: dict, starfield_data: str, rest: list):
     """(rc, {Data-relative path: bytes}, hkx_to_af report or None): the dodge clips converted beside the slide."""
     import dodge_pack                                     # hkx_to_af needs numpy and CALUMI: imported only here
     import hkx_to_af
-    motion = dodge_pack.find_motion(tk)
-    specs = []
-    for d, tag in tag_map.items():
-        clip = dodge_pack.CLIPS[d]
-        specs += ["--replace", f"{dodge_pack.find_clip(tk, clip)}::{TEMPLATE}::{tag}",
-                  "--motion", f"{os.path.splitext(clip)[0]}={motion}:{dodge_pack.MOTION_IDS[d]}"]
+    with open(dodge_pack.find_motion(tk), encoding="latin-1") as fh:
+        blocks = motion_blocks(fh.read(), tuple(tag_map))
+    print("motion: " + ", ".join(f"{d} id {i} ({b['duration']:.3f} s)" for d, (i, b) in blocks.items()))
     files, report = {}, None
     with tempfile.TemporaryDirectory() as tmp:
-        rc = hkx_to_af.main(rest + ["--out", tmp, "--starfield-data", starfield_data, "--weapon-in-hand"] + specs)
-        src = os.path.join(tmp, *ANIMS.split("/"), *FOLDER.split("/"))
+        motion = os.path.join(tmp, "dodge_motion.txt")
+        with open(motion, "w", encoding="latin-1", newline="") as fh:
+            fh.write(motion_text(blocks))
+        specs = []
+        for d, tag in tag_map.items():
+            clip = dodge_pack.CLIPS[d]
+            specs += ["--replace", f"{dodge_pack.find_clip(tk, clip)}::{TEMPLATE}::{tag}",
+                      "--motion", f"{os.path.splitext(clip)[0]}={motion}:{blocks[d][0]}"]
+        out_dir = os.path.join(tmp, "out")
+        rc = hkx_to_af.main(rest + ["--out", out_dir, "--starfield-data", starfield_data, "--weapon-in-hand"] + specs)
+        src = os.path.join(out_dir, *ANIMS.split("/"), *FOLDER.split("/"))
         for tag in tag_map.values():
             for ext in (".af", ".afx"):
                 path = os.path.join(src, tag + ext)
@@ -99,7 +140,7 @@ def convert(tk: str, tag_map: dict, starfield_data: str, rest: list):
                 if ext == ".afx":
                     data = dodge_pack.dodge_descriptor(data, tag + ".af")
                 files[f"{ANIMS}{FOLDER}/{tag}{ext}"] = data
-        rep = os.path.join(tmp, "report.json")
+        rep = os.path.join(out_dir, "report.json")
         if os.path.isfile(rep):
             with open(rep, encoding="utf-8") as fh:
                 report = json.load(fh)
