@@ -3,6 +3,20 @@
 New findings go here (newest first). Each entry: question, method, evidence, **status**: verified /
 supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and docs/spikes/; link, don't copy.
 
+## 2026-11-23 Claude: Starfield 1.16.244 clone and weapon attach (Ghidra + ReVa, first session)
+- Question: which NiObject / NiNode virtuals copy a model and attach a child, and what does the game call to draw a
+  weapon? (left-hand runtime copy, docs/ai/decisions.md 2026-11-23). Write-up: [docs/re/findings.md](../re/findings.md).
+- Method: ReVa decompile / cross-reference / vtable tools on the owner's analysed Starfield.exe (MD5
+  0a73ecdc1d54b14a91818cddeb03aa9e). RTTI string -> type descriptor -> complete object locator -> vtable.
+- Evidence (**verified**, addresses in findings.md): NiNode vtable 0x144eefb60. Slot 41 CreateClone (recurses
+  into children), slot 47 ProcessClone, slot 84 AttachChild(child, bool), slot 85 InsertChildAt, slots 86 / 87
+  DetachChild. CommonLibSF's NiNode.h declares the wrong virtuals for slots 85-88. The engine clones with a stack
+  NiCloningProcess ('$' append char, scale 1) followed by slots 41 and 47. Draw: WeaponAttachHandler -> Actor vfunc
+  0xE8 -> an attach request. The request is carried out later; that step rebinds skinned bones by name and attaches
+  with slot 84 under the model's "Prn" node.
+- Status: slots and call chain **verified**. Meaning of the post-attach step 0x140354910 and of dirty bit 29
+  **supported hypothesis / unresolved**. Not tested in game.
+
 ## 2026-10-12 Claude: correction, which teleports raise "Boundary Reached" in a merged overlay
 - Question: core64c's first plan (PR #76) and PR #74's commonwealth-scale.md said a single teleport more than about
   4 cells from where the player stood raised "Boundary Reached", and that core64b's 300 m hops were verified safe.
