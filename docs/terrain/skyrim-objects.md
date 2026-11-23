@@ -422,6 +422,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   Landscape\Grass\GrassMossMounds02.nif`, a vanilla model in the game's own archives but not the template's. Moss
   mounds grow = any model in the game's archives works and ours are not seen by the grass loader (e.g. it reads only
   the startup archives); nothing = only the template GRAS's own model works (something ties a GRAS to its model).
+  **`--model-path Landscape\Grass\GrassMossMounds02.nif` (owner, 12:30, verified in game): moss mounds grow** on
+  the Skyrim terrain (slopes and flats near Riverwood, sparse). So any model inside the game's own archives works,
+  and no model of ours is seen by the grass loader (plugin archive, loose, MO2). Supported hypothesis: the grass
+  loader reads only the archives listed in Starfield.ini [Archive]. Test: `scripts/tools/archive_ini.py` prints the
+  game's list with "S2SGrass - Main.ba2" appended, for StarfieldCustom.ini, with the --copy-template-nif build.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
