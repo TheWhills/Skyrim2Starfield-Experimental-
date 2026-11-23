@@ -5,7 +5,8 @@
   "groups": {},
   "hotkeys": {
     "dodge": {
-      "label": "Dodge"
+      "label": "Dodge",
+      "default": "L Alt"
     }
   }
 }

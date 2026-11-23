@@ -2823,4 +2823,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   native Controls list and RegisterHotkey returns InvalidValue (6). Starfield's key-name table is not plain text in
   Starfield.exe (key_names.py found none). Change: the hotkey ships unbound (no default) and the INI key keeps dodging
   next to the OSF binding (uDodgeKey = 0 for the Mod Settings binding alone).
+- Owner's run (unbound hotkey): the action appears, binds (the menu shows "L ALT"), and a rebound key dodges (verified);
+  but Alt from the INI kept dodging. Change: with OSF Settings only its binding dodges (INI gamepad button excepted),
+  default "L Alt" (the name the menu showed; unverified as a schema name: a wrong one falls back to the INI key).
 
