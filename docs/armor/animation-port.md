@@ -1329,8 +1329,9 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   overrides, so the two cannot be installed together without a graph merge.
 
 ## 2026-11-09: Starfield Animation Merger (SAM, Nexus 18674), Far Away Movesets 1.4, SFBM blocking fix (owner uploads; read for the format only, nothing run)
-* **SAM = `SFSE\Plugins\SfAnimIndexLoader.dll`** (closed source, French messages; from its strings, so supported, not
-  verified): an SFSE preload plugin (Address Library, MinHook) that reads the vanilla animation index from
+* **SAM = `SFSE\Plugins\SfAnimIndexLoader.dll`** (French messages; from its strings, so supported, not verified.
+  **Correction 2026-11-23:** not closed source, the author's source is on the Nexus page; read in "SAM's source"
+  below): an SFSE preload plugin (Address Library, MinHook) that reads the vanilla animation index from
   `Starfield - Animations.ba2` (meshes/animtextdata/animationfiledata: global list + per-graph `animations_<num>.txt`
   lists), merges every mod's **fragments** (`Meshes\AnimTextData\Fragments\<Mod>\`: animations.txt /
   animations_<num>.txt clip lists, animationoffsets (CK cache V5), animeventinfo (V2), tables\anim_actions.xtbl (new
@@ -1371,6 +1372,35 @@ robocopy "$src\AnimationOffsets" "$dst\AnimationOffsets" /MIR /XF PersistantSubg
   fragment Fragments\S2SSamTest\ (animations.txt with the two files, tables\anim_actions.xtbl with the tag). No
   offsets / event info yet. Success in game = the first attack plays the overhead power swing; the 2026-10-23 dodge
   (same idea without SAM) snapped back.
+
+## 2026-11-23: SAM's source (owner upload: Nexus 18674 "Source Code", 2026-11-01; read only, nothing built or run)
+* **What it is (verified, source):** C++ (CMake, MSVC), the native port of a C# engine that stays the reference (the C#
+  is not in the archive), tool version 5 (`kToolVersion`, src/Runner.h), README dated 2026-11-01. **No license file**
+  in the archive: read for the approach and the addresses only, no code copied into S2SCombat.
+* **Older than the Nexus page (verified):** this source reads only `tables\anim_actions.xtbl` and `anim_states.xtbl`
+  (`kTagTables`, src/Runner.cpp). The page (updated 2026-11-07) also lists `anim_events.xtbl` / `anim_syncs.xtbl`
+  fragments: event support is in a later release, not in this source (**unresolved:** how it adds events, and
+  whether the player's graph then takes a new event name such as TKDodgeForward).
+* **Why a new tag is silent (supported, author's RE notes quoted in the README, not reproduced here):** a graph
+  Animation node's TagName is only looked up in the tag registry, which the game fills from the BA2's anim_actions /
+  anim_states.xtbl just before the graphs load; loose .xtbl are never opened and .afx are read too late. An undeclared
+  tag gives a state that is entered, plays nothing and is left after the blend: matches our v13 dodge
+  (S2S_DodgeRight snapped back, decisions.md 2026-10-23).
+* **How it declares them (verified, src/TagRegistrar.cpp):** at SFSE Load it swaps vtable entry [2] of
+  BSAnimationGraphDBData (the .agx Load) through VirtualProtect (no inline hook); on the first .agx load it calls, per
+  fragment tag name, `BSStringPool::GetEntry(&entry, name, false)` then `GetOrCreateTag(registry, &entry, create = true,
+  is_state = 1)` (as the game's table loader does), then the original Load. Address Library IDs: GetOrCreateTag
+  122148, BSStringPool::GetEntry 1186742, tag registry 937837, BSAnimationGraphDBData vtable 467851, its Load 122123;
+  static RVAs of 1.16.244.0 as fallback (0x022171C0, 0x028CBA80, 0x061DD750, 0x04D4DF60, 0x02210750). It checks the
+  called functions' first bytes and the vtable entry; on any mismatch it patches nothing (new tags stay silent, the
+  index merge still runs).
+* **Index merge (supported, the source's README; code not traced line by line):** base = the BA2's meshes/animtextdata (or another mod's
+  loose full index, backed up in Fragments\.sfanim_base), fragments applied alphabetically, entries only added, output
+  written only when the fingerprint changed, mutex `Global\SfAnimMerge`.
+* **For us:** (1) the one-tag test (sam_test_pack.py) uses exactly the fragment layout this source reads, still queued
+  for the owner's run. (2) S2SCombat is already an SFSE plugin and could declare our own tags the same way (same
+  Address Library IDs, our own code), dropping the SAM dependency for tags; the clip index would still need SAM or the
+  CK run. (3) Dodge events stay on the borrowed NPC events (MeleeAttack01-04) until event registration is understood.
 
 ## 2026-11-09: weapon types play their own movesets (built, untested in game)
 Owner: converted weapons all use the one-handed sword moves; can a greatsword use the greatsword animations, axes
