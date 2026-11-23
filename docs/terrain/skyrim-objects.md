@@ -451,6 +451,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   Owner's question (12:49): these are not placed objects; every plant seen in these tests was grown by Starfield's
   ground cover from our GRAS / GCVR records (the hellebore and moss-mound grasses are flower / moss clumps, sparse at
   Skyrim's densities). Placed (baked) grass is off in these builds.
+  `--vanilla-paths` (owner, 12:57): 196 grass NIFs shipped, 184 named by the game's records, **12 free**; so only 12
+  of 27 Skyrim grasses got a path (15 "failed"), taken in EditorID order, i.e. probably not Riverwood's: nothing grew,
+  inconclusive. Now the free paths go to the grasses covering the most Skyrim ground (grass_coverage: summed LAND
+  weight of the textures that grow each grass, Tamriel-wide), and the build prints which grass got which path.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

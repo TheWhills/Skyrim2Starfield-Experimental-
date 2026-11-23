@@ -139,6 +139,27 @@ def with_material(nif_bytes: bytes, material_path: str) -> bytes:
 MODEL_TYPES = (b"GRAS", b"STAT", b"MSTT", b"FLOR", b"TREE", b"ACTI", b"MISC", b"SCOL", b"PKIN", b"MOVS", b"BNDS")
 
 
+def world_cells(skyrim_esm):
+    """Skyrim's Tamriel LAND texture weights per cell (landtex.read_world_textures)."""
+    from fo4sf import landtex, skyrimland
+    cells, _t = landtex.read_world_textures(skyrim_esm, skyrimland.SkyrimLand(skyrim_esm, "Tamriel").land_source, {})
+    return cells
+
+
+def grass_coverage(cells, ltex_grass):
+    """{Skyrim GRAS FormID: summed LAND texture weight of the Skyrim textures that grow it} over the given cells: which
+    grasses cover the most ground (2026-11-23: only 12 unused vanilla grass paths, so the commonest grasses get them)."""
+    per_ltex = {}
+    for ws in cells.values():
+        for fid, w in ws.items():
+            per_ltex[fid] = per_ltex.get(fid, 0.0) + float(w.sum())
+    out = {}
+    for lt, gs in ltex_grass.items():
+        for g in gs:
+            out[g] = out.get(g, 0.0) + per_ltex.get(lt, 0.0)
+    return out
+
+
 def norm_model(p: str) -> str:
     """A model path as the archives list it: lower case, backslashes, under meshes\\."""
     p = p.replace("/", "\\").lower().lstrip("\\")
@@ -346,6 +367,7 @@ def main(argv=None):
     if not overrides:
         sys.exit("the terrain build overrides no LTEX (build it with --skyrim-ground): nothing safe to grow grass on")
     mapping_path = os.path.join(a.terrain, "ltex_mapping.json")
+    cells = None
     if os.path.isfile(mapping_path):
         with open(mapping_path, encoding="utf-8") as fh:
             mapping = json.load(fh)
@@ -457,8 +479,15 @@ def main(argv=None):
         tdnam = dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"]
         variants = [template_nif(os.path.join(a.starfield, "Data"), v[1]) for v in PATH_VARIANTS] \
             if a.path_variants else None
-        for gi, g in enumerate(sorted({g for v in plan["slots"].values() for g in v},
-                                      key=lambda g: gras_sky.get(g, {}).get("edid", ""))):
+        order = lambda g: gras_sky.get(g, {}).get("edid", "")              # noqa: E731
+        if free is not None:                         # the commonest grasses first: they get the few free paths
+            if cells is None:
+                cells = world_cells(a.skyrim)
+            cov = grass_coverage(cells, ltex_grass)
+            order = lambda g: (-cov.get(g, 0.0), gras_sky.get(g, {}).get("edid", ""))   # noqa: E731
+            report["grass_coverage"] = {gras_sky[g]["edid"]: round(cov.get(g, 0.0), 1) for g in gras_sky
+                                        if cov.get(g, 0.0) > 0}
+        for gi, g in enumerate(sorted({g for v in plan["slots"].values() for g in v}, key=order)):
             r = gras_sky.get(g)
             if r is None:
                 continue
@@ -503,6 +532,7 @@ def main(argv=None):
                         os.makedirs(os.path.dirname(dst_p), exist_ok=True)
                         shutil.move(src_p, dst_p)
                         report.setdefault("vanilla_paths", {})[r["edid"]] = vpath
+                        print(f"  {r['edid']} -> {vpath}")
                         model = vpath.split("\\", 1)[1]
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"

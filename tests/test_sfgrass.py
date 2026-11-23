@@ -394,11 +394,23 @@ class PlanetBiomeTests(unittest.TestCase):
 
     def test_vanilla_paths_build(self):
         import skyrim_grass_native as N
+        import numpy as np
         pool = (["meshes\\landscape\\grass\\spare01.nif"], 5, 4)
-        with mock.patch.object(N, "unused_grass_paths", return_value=pool):
+        cells = {(0, 0): {0x77: np.ones((33, 33))}}
+        with mock.patch.object(N, "unused_grass_paths", return_value=pool), \
+                mock.patch.object(N, "world_cells", return_value=cells):
             _raw, by, log = self._run(["--vanilla-paths", "--loose"])
+        self.assertIn("Fern -> meshes\\landscape\\grass\\spare01.nif", log)
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"landscape\\grass\\spare01.nif\0")
         self.assertIn("5 shipped, 4 named by the game's records, 1 free", log)
+
+    def test_grass_coverage(self):
+        import numpy as np
+        import skyrim_grass_native as N
+        cells = {(0, 0): {1: np.full((33, 33), 0.5), 2: np.ones((33, 33))}, (1, 0): {2: np.ones((33, 33))}}
+        cov = N.grass_coverage(cells, {1: [0xA, 0xB], 2: [0xB]})
+        self.assertAlmostEqual(cov[0xA], 0.5 * 33 * 33)
+        self.assertAlmostEqual(cov[0xB], 0.5 * 33 * 33 + 2 * 33 * 33)
 
     def test_loose_build(self):
         _raw, by, log = self._run(["--loose"])
