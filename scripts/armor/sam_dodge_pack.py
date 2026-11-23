@@ -315,9 +315,10 @@ def main(argv=None):
     ap.add_argument("--head-track-variable", default="",
                     help="the graph bool that switches head tracking off in the shipped Player_Melee (default: the "
                          "game's bNoHeadTrack; bNoAim = off whenever S2SDodge holds bNoAim)")
-    ap.add_argument("--head-track-limit", type=float, default=180.0, metavar="DEG",
-                    help="head tracking gives up past this heading (vanilla 90; default 180: on through the forward "
-                         "dodge, whose clip turns the head ~145 deg away; 0 = leave vanilla)")
+    ap.add_argument("--head-track-limit", type=float, default=0.0, metavar="DEG",
+                    help="head tracking gives up past this heading (vanilla 90; 0 = leave vanilla). Owner's run "
+                         "2026-11-23: with head tracking on through the dodge the left arm went out again, so the "
+                         "dodges keep it off (S2SDodge: bNoHeadTrack) and carry the look in the clip (--look-ahead)")
     ap.add_argument("--variable", action="append", default=[], metavar="NAME",
                     help="a graph variable window over the whole of every dodge clip, e.g. bNoLeftHandIK (repeatable)")
     ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")

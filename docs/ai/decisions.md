@@ -2797,3 +2797,12 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   ships (our file over GrassMossMounds04.nif grew; the identical file at any new path, in our archive, loose, via
   MO2 or with our archive in sResourceArchiveList, never did). Alternatives: replacing used vanilla grass (changes
   other planets), finding the check in Starfield.exe (Ghidra; open).
+- Owner's run (head tracking on, range 180, S2SDodge setting only bNoAim): the head no longer turns away, but the left
+  arm goes out again (verified). So head tracking also drives what holds the arm (the chest's look poses), and
+  bNoHeadTrack does switch it off (the 2.4 rad LookAtHeadingVar was only computed). Decision: head tracking off during
+  dodges again (bNoAim + bNoHeadTrack, range back to vanilla) and the look baked into the clip:
+  retarget.look_ahead / hkx_to_af --look-ahead DEG turns neck (40 %) and head so the head faces the character's
+  forward, at most DEG off the chest's facing (what Skyrim's player head tracking does at runtime). Why: keeps the
+  arm fix, needs no runtime system. Alternatives: editing Dual Direct At's chest input (changes every melee look);
+  a runtime head turn from the plugin (no bone access yet).
+

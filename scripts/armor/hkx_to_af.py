@@ -324,6 +324,9 @@ def main(argv=None):
                     help="seated clips: lift a hand resting on its thigh to at least UP metres above the hip-knee line "
                          "(and OUT to the outside of it) by arm IK; Starfield's thighs are thicker than Skyrim's "
                          "(Starfield's chair Idle: about 0.13,0.03)")
+    ap.add_argument("--look-ahead", type=float, default=0.0, metavar="DEG",
+                    help="turn neck and head so the head faces the character's forward, at most DEG from the chest's "
+                         "facing (what Skyrim's player head tracking does in game; retarget.look_ahead). 0 = off")
     ap.add_argument("--align-com", action="store_true",
                     help="with --replace: shift the clip so its mean COM sits where the vanilla clip's does, "
                          "horizontally (seat / furniture position; reads the vanilla .af beside the .afx)")
@@ -498,7 +501,7 @@ def main(argv=None):
             events = [e for e in clip["annotations"] if not rootmotion.is_motion_annotation(e.get("text", ""))]
             res = retarget.retarget(clip, sk, sf, weapon_in_hand=a.weapon_in_hand, left_weapon=a.left_weapon,
                                     two_hand_grip=a.two_hand_grip, body_profiles=profiles,
-                                    shoulder_offsets=shoulders, props=props or None)
+                                    shoulder_offsets=shoulders, props=props or None, look_ahead_deg=a.look_ahead)
             if res.get("props"):
                 row["props"] = res["props"]
             if res.get("two_hand_grip"):
@@ -507,6 +510,8 @@ def main(argv=None):
                 row["contacts"] = res["contacts"]
             if res.get("shoulders"):
                 row["shoulders_turned_deg"] = res["shoulders"]
+            if res.get("look_ahead"):
+                row["look_ahead"] = res["look_ahead"]
             if not a.no_foot_plant:
                 res = retarget.plant_feet(clip, sk, sf, res)
             chk = retarget.check(clip, sk, sf, res)

@@ -199,6 +199,31 @@ class RetargetTests(unittest.TestCase):
         self.assertGreater(moved, 0.05)
         self.assertEqual(R.reattach(sf, lt, lq2, before, {})[2], 0.0)
 
+    def test_look_ahead_turns_the_head_to_the_front_within_the_limit(self):
+        sf = R.Rig(["Root", "C_Chest", "C_Neck", "C_Neck1", "C_Head", "C_Eye"], [-1, 0, 1, 2, 3, 4],
+                   [(0, 0, 0), (0, 0, 1.4), (0, 0, 0.1), (0, 0, 0.05), (0, 0, 0.05), (0, 0.1, 0.05)], [I] * 6)
+        F = 3
+        lt = np.repeat(sf.t[None], F, axis=0)
+        lq = np.repeat(sf.q[None], F, axis=0)
+        head = sf.index["C_Head"]
+        lq[0, head] = R.qmul(qaxis((0, 0, 1), -145), qaxis((1, 0, 0), -80))   # the dodge's head: right and down
+        lq[1, sf.index["C_Chest"]] = qaxis((0, 0, 1), -100)                     # chest turned far right
+        lt2, lq2, rep = R.look_ahead(sf, lt, lq, 75.0)
+        _wt, wq = sf.fk(lt2, lq2)
+        _rt, rq = sf.rest_world()
+        def face(i, f):
+            return R.qrot(R.qmul(wq[f, i], R.qinv(rq[i])), np.array([0.0, 1.0, 0.0]))
+        self.assertTrue(np.allclose(face(head, 0), [0, 1, 0], atol=1e-6))          # chest forward: fully ahead
+        chest_f = face(sf.index["C_Chest"], 1)
+        ang = math.degrees(math.acos(np.clip(np.dot(face(head, 1), chest_f), -1, 1)))
+        self.assertAlmostEqual(ang, 75.0, places=4)                                # held to the limit off the chest
+        self.assertGreater(float(np.dot(face(head, 1), [0, 1, 0])), float(np.dot(chest_f, [0, 1, 0])))
+        self.assertTrue(np.allclose(face(head, 2), [0, 1, 0], atol=1e-6))          # already ahead: unchanged
+        self.assertTrue(np.allclose(lq2[2], lq[2], atol=1e-9))
+        self.assertTrue(np.allclose(lq2[:, sf.index["C_Eye"]], lq[:, sf.index["C_Eye"]]))   # children follow
+        self.assertGreater(rep["largest_turn_deg"], 90)
+        self.assertEqual(rep["frames_turned"], 2)
+
     def test_mirror_grip_is_the_mirror_image(self):
         rng = np.random.default_rng(3)
         def rq():

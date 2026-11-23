@@ -405,6 +405,90 @@ def shoulder_calibration(ours: Dict[str, np.ndarray], reference: Dict[str, np.nd
     return out
 
 
+def _arc(a, b):
+    """(F, 4) shortest rotation taking unit vectors a onto b (F, 3)."""
+    a = a / np.linalg.norm(a, axis=-1, keepdims=True)
+    b = b / np.linalg.norm(b, axis=-1, keepdims=True)
+    c = np.cross(a, b)
+    w = 1.0 + np.sum(a * b, axis=-1, keepdims=True)
+    q = np.concatenate([c, w], axis=-1)
+    bad = w[..., 0] < 1e-8                                  # opposite: any perpendicular axis
+    if np.any(bad):
+        perp = np.cross(a[bad], np.array([0.0, 0.0, 1.0]))
+        perp[np.linalg.norm(perp, axis=-1) < 1e-8] = [1.0, 0.0, 0.0]
+        q[bad] = np.concatenate([perp, np.zeros((perp.shape[0], 1))], axis=-1)
+    return q / np.linalg.norm(q, axis=-1, keepdims=True)
+
+
+def look_ahead(rig: "Rig", lt, lq, max_deg: float, head: str = "C_Head", necks=("C_Neck", "C_Neck1"),
+               chest: str = "C_Chest", root: str = "Root", neck_share: float = 0.4):
+    """Locals with the neck and head turned, each frame, so the head faces the character's forward (Root's +Y), at most
+    `max_deg` away from where the chest faces; the turn is shared (neck_share to the neck bones, the rest to the head).
+    Returns (lt, lq, {"largest_turn_deg", "frames_turned"}).
+
+    Why (2026-11-23, head_turn_probe): TK Dodge's forward dodge turns the head ~145 deg right and ~85 deg down
+    mid-dodge in the clip itself; Skyrim's player head tracking turns it back in game. Starfield's head tracking does
+    so too, but it also drives the chest's look poses, which hold the left arm out in the combat stance; with it off,
+    the clip carries the look instead. "Facing" is the bone's turn from its rest pose applied to +Y (both rigs face +Y
+    at rest)."""
+    names = [head, chest, root]
+    if any(n not in rig.index for n in names):
+        return lt, lq, None
+    lt, lq = np.asarray(lt, float), np.asarray(lq, float).copy()
+    _rt, rq = rig.rest_world()
+    h, c, r = (rig.index[n] for n in names)
+    neck_ids = [rig.index[n] for n in necks if n in rig.index]
+    fwd = np.array([0.0, 1.0, 0.0])
+
+    def facing(wq, i):
+        d = qmul(wq[:, i], qinv(rq[i])[None])
+        return qrot(d, np.broadcast_to(fwd, d.shape[:-1] + (3,)))
+
+    def turn_bone(i, rot, wq):
+        """world rotation of bone i pre-multiplied by rot; its children keep their locals (they follow)."""
+        p = rig.parents[i]
+        new_w = qmul(rot, wq[:, i])
+        lq[:, i] = qmul(qinv(wq[:, p]), new_w) if p >= 0 else new_w
+
+    _wt, wq = rig.fk(lt, lq)
+    target = facing(wq, r)
+    chest_f = facing(wq, c)
+    # keep the target within max_deg of the chest's facing
+    cosang = np.clip(np.sum(target * chest_f, axis=-1) / (np.linalg.norm(target, axis=-1) *
+                                                         np.linalg.norm(chest_f, axis=-1)), -1.0, 1.0)
+    ang = np.arccos(cosang)
+    lim = math.radians(max_deg)
+    over = ang > lim
+    if np.any(over):
+        frac = np.where(over, lim / np.maximum(ang, 1e-9), 1.0)
+        limited = np.stack([qrot(_slerp_q(np.array([0.0, 0.0, 0.0, 1.0]), _arc(chest_f[k:k + 1], target[k:k + 1])[0],
+                                         float(frac[k])), chest_f[k]) for k in range(len(frac))])
+        target = np.where(over[:, None], limited, target)
+    full = _arc(facing(wq, h), target)
+    largest = float(np.degrees(np.max(2 * np.arccos(np.clip(np.abs(full[:, 3]), 0, 1)))))
+    if neck_ids and neck_share > 0:
+        part = np.stack([_slerp_q(np.array([0.0, 0.0, 0.0, 1.0]), q, neck_share / len(neck_ids)) for q in full])
+        for i in neck_ids:
+            _wt, wq = rig.fk(lt, lq)
+            turn_bone(i, part, wq)
+    _wt, wq = rig.fk(lt, lq)
+    turn_bone(h, _arc(facing(wq, h), target), wq)
+    turned = int(np.sum(2 * np.arccos(np.clip(np.abs(full[:, 3]), 0, 1)) > math.radians(1.0)))
+    return lt, lq, {"largest_turn_deg": round(largest, 1), "frames_turned": turned}
+
+
+def _slerp_q(a, b, t: float):
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    d = float(np.dot(a, b))
+    if d < 0:
+        b, d = -b, -d
+    if d > 0.9995:
+        q = a + t * (b - a)
+        return q / np.linalg.norm(q)
+    th = math.acos(d)
+    return (math.sin((1 - t) * th) * a + math.sin(t * th) * b) / math.sin(th)
+
+
 def reattach(rig: "Rig", lt, lq, before, pairs: Dict[int, int]):
     """Locals with each bone of `pairs` ({bone: hand}) put back where it was RELATIVE TO ITS HAND in `before` (world
     (t, q) of the same frames before a change that moved the hands), wherever it hangs in the skeleton. Returns (lt,
@@ -672,7 +756,8 @@ def skyrim_locals(clip: dict, sk: Rig):
 
 def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weapon_in_hand: bool = False,
              left_weapon: bool = False, two_hand_grip: bool = False, body_profiles: Optional[Dict] = None,
-             shoulder_offsets: Optional[Dict] = None, props: Optional[Dict[str, str]] = None) -> Dict:
+             shoulder_offsets: Optional[Dict] = None, props: Optional[Dict[str, str]] = None,
+             look_ahead_deg: float = 0.0) -> Dict:
     """{"bones", "parents", "fps", "frames", "t" (F, B, 3) metres, "q" (F, B, 4), "world_t" (F, B, 3)} on sf.
 
     The weapon always sits in the fist at the vanilla grip (skeletonmap.GRIP). weapon_in_hand: also turn the gripping
@@ -866,13 +951,20 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
         out_t, out_q, contact_report = keep_contacts(sk, sf, out_t, out_q, wt_sk, wq_sk, body_profiles, unit, scale,
                                                      sides)
         wt = sf.fk(out_t, out_q)[0]
+    look_report = None
+    if look_ahead_deg:
+        before = sf.fk(out_t, out_q)
+        out_t, out_q, look_report = look_ahead(sf, out_t, out_q, look_ahead_deg)
+        held = {i: g[0] for i, g in grips.items() if g[0] < i}      # nothing hand-held hangs off the head, but keep it
+        out_t, out_q, _m = reattach(sf, out_t, out_q, before, held)
+        wt = sf.fk(out_t, out_q)[0]
     prop_report = None
     if props:
         out_t, out_q, prop_report = place_props(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, props)
         wt = sf.fk(out_t, out_q)[0]
     return {"bones": sf.names, "parents": sf.parents, "fps": clip.get("fps"), "frames": F, "t": out_t, "q": out_q,
             "world_t": wt, "height_scale": scale, "two_hand_grip": grip_report, "contacts": contact_report,
-            "shoulders": shoulder_report, "props": prop_report}
+            "shoulders": shoulder_report, "props": prop_report, "look_ahead": look_report}
 
 
 def place_props(sk, sf, out_t, out_q, wt_sk, wq_sk, unit, props):
