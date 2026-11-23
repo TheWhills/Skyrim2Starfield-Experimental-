@@ -584,6 +584,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   get density maps of their own terrain (their per-quadrant byte 6 names LDefault006Base / 005Flow / 004FlatOut).
   Next: `--mask-test` grows one told-apart vanilla grass per biome mask (hellebore flowers, wheat, moss mounds,
   primrose, sage, salt, city grass; the build prints which mask got which) on the --only-ltex slot.
+  **Mask test (owner, 17:35-17:44, verified in game):** byte 6 = LDefault004FlatOut -> only mask 2's grass
+  (GrassMossMounds01) grew; byte 6 = LDefault006Base -> only mask 0's (GrassHellebore01). So **quadrant byte 6
+  selects the biome mask per 50 m quadrant; mask 0 = Base, mask 2 = FlatOuter.** With either mask the grass grew only
+  in small spots near banks and edges, never across the flats (the forest floor at alpha 7/7 stays bare), like the
+  control with cover on every texture (2026-11-22). So the limit is a per-spot density independent of texture, slot
+  and mask. Supported hypothesis: the density maps our BTD lacks (vanilla source blocks ship
+  textures\terrain\<folder>\<block>_<mask>.dds). Test: `tools\owner\terrain_density.ps1` writes uniform 255 maps at
+  textures\terrain\sky_tamriel_<mask>.dds and textures\terrain\sky_tamriel\sky_tamriel_<mask>.dds (73 x 73 cells,
+  7300 px, 26.6 MB each) into the staging and reinstalls; `-Remove` takes them out.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
