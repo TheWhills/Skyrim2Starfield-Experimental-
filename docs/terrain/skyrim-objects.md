@@ -570,6 +570,20 @@ Max Density; what a vanilla grass model needs. Two tools:
   Next, one variable: `--only-ltex LFieldGrass02 --keep-template-model` puts ground cover on that slot alone with
   the vanilla hellebore model (verified to render, 08:46): flowers on the forest floor = the slot's cover grows and
   our field-grass model is the problem; nothing = that slot's cover does not grow.
+  Owner's run (17:26, verified in game; whether the build was the --only-ltex one is unconfirmed, a git merge was
+  half done): **pink flowers grow, on slopes, ridges and banks only** (mill bank, hill crest, far slopes, where the
+  straw grew); the flat forest floor at (17448, -48815), LFieldGrass02 at alpha 7/7, stays bare. Same pattern as the
+  vanilla moss control (2026-11-22). Supported hypothesis: the engine gives the flats a mask our covers do not grow on.
+  **Density maps (owner's ba2_find + 12 samples, 17:30, verified):** `Starfield - DensityMaps.ba2` holds, per SOURCE
+  block, `textures\terrain\<folder>\<block>_{base,flatinner,flatouter,flow,solid,talus}.dds` (newatlantis\
+  newatlantis01 / nanorthlake01; overlaysource\<theme>\<block>; 90 files per theme). 100 px per cell (1400 px for
+  14 x 14 cells), legacy BC4, one mip. Decoded: six independent soft 0-255 masks, not a partition (per-pixel sum
+  20..975, 2-3 masks above 8 per pixel), mostly near-binary with noisy edges: base = the lake bed, flatinner /
+  flatouter = open ground, flow = drainage lines, solid sparse, talus = slopes. The world overlays themselves
+  (NewAtlantis.btd, lc172world, akilacity) have no mask set, only `overlaymasks\<world>.dds`: hand-made worlds do not
+  get density maps of their own terrain (their per-quadrant byte 6 names LDefault006Base / 005Flow / 004FlatOut).
+  Next: `--mask-test` grows one told-apart vanilla grass per biome mask (hellebore flowers, wheat, moss mounds,
+  primrose, sage, salt, city grass; the build prints which mask got which) on the --only-ltex slot.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

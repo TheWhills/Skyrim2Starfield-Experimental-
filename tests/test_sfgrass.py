@@ -261,6 +261,28 @@ class PlanetBiomeTests(unittest.TestCase):
             recs = sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS", b"GCVR", b"BIOM"])
         return raw, {sfplugin.edid(r[2]): r for r in recs}, log.getvalue()
 
+    def test_mask_test(self):
+        import skyrim_grass_native as N
+        recs = [(0x10, [(b"EDID", b"GrassWheat01\0"), (b"MODL", b"w.nif\0")]),
+                (0x11, [(b"EDID", b"GrassFlowersHellebore01\0"), (b"MODL", b"h.nif\0")]),
+                (0x12, [(b"EDID", b"GrassHelleboreNoModel\0")]),
+                (0x13, [(b"EDID", b"GrassSalt04\0"), (b"MODL", b"s.nif\0")])]
+        got = N.mask_test_grasses(recs, [0, 1, 2, 3])
+        self.assertEqual(got, [(0, 0x11, "GrassFlowersHellebore01"), (1, 0x10, "GrassWheat01"),
+                               (2, 0x13, "GrassSalt04")])                  # MossMounds..Sage missing: Salt next
+        subs = [(b"EDID", b"B\0"), (b"TNAM", b"x"), (b"LNAM", struct.pack("<3I", 0, 0x30, 5))]
+        out = sfgrass.biome_with_entries(subs, [(0, 0x30, 9), (1, 0x30, 7), (2, 0x31, 8)])
+        self.assertEqual([(e["mask"], e["ltex"], e["gcvr"]) for e in sfgrass.biome_terrain(out)],
+                         [(0, 0x30, 9), (1, 0x30, 7), (2, 0x31, 8)])     # same mask + LTEX replaced, rest added
+        with mock.patch.object(N, "MASK_TEST_GRASSES", ("GrassA",)):
+            _raw, by, log = self._run(["--mask-test"])
+        self.assertIn("mask test", log)
+        self.assertIn("  mask 0: GrassA", log)
+        terr = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])
+        mt = by["S2S_MaskTest0"]
+        self.assertIn((0, 0x31, mt[3]), [(e["mask"], e["ltex"], e["gcvr"]) for e in terr])
+        self.assertNotIn("S2S_MaskTest4", by)                              # one keyword: one mask
+
     def test_only_ltex(self):
         _raw, by, log = self._run(["--only-ltex", "LFernGround"])
         self.assertIn("--only-ltex: ground cover on 1 slot(s): 00000031 (lfernground)", log)

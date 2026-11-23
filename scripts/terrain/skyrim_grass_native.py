@@ -344,6 +344,26 @@ def parse_model_from(items):
 
 KIND_FIELDS = (b"MNAM", b"QNAM")
 
+# --mask-test (2026-11-23): one easily told apart vanilla grass per biome mask, so one look in game shows which mask
+# the engine gives which ground (grass grew on slopes and banks only, never on the flats, in every test so far)
+MASK_TEST_GRASSES = ("Hellebore", "Wheat", "MossMounds", "PrimRose", "Sage", "Salt", "CityShort")
+
+
+def mask_test_grasses(gras_recs, masks):
+    """[(mask, GRAS fid, EditorID)]: per mask, the first vanilla GRAS (with a model) whose EditorID contains the next
+    MASK_TEST_GRASSES keyword, each keyword used once; masks left over get none. gras_recs: [(fid, subs)]."""
+    pool = sorted(((sfplugin.edid(subs), fid) for fid, subs in gras_recs
+                   if any(x == b"MODL" for x, _d in subs)), key=lambda t: t[0].lower())
+    out, kws = [], list(MASK_TEST_GRASSES)
+    for m in masks:
+        while kws:
+            kw = kws.pop(0).lower()
+            hit = next(((e, f) for e, f in pool if kw in e.lower()), None)
+            if hit:
+                out.append((m, hit[1], hit[0]))
+                break
+    return out
+
 
 def ltex_kind_overrides(terrain_ltex, sf_ltex, slots, donor_edid):
     """Overrides of the covered slots' LTEX (as the terrain plugin writes them: its re-skin kept) with the donor
@@ -485,6 +505,10 @@ def main(argv=None):
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
+    ap.add_argument("--mask-test", action="store_true",
+                    help="test (2026-11-23): each biome mask (--biome-masks) grows its own vanilla grass on the "
+                         "covered slots (MASK_TEST_GRASSES: flowers, wheat, moss, ...), the build prints which; "
+                         "use with --only-ltex")
     ap.add_argument("--only-ltex", default="", metavar="EDIDS",
                     help="test (2026-11-23): ground cover only on the slots of these Skyrim textures "
                          "(comma-separated, e.g. LFieldGrass02)")
@@ -766,7 +790,21 @@ def main(argv=None):
               f"their re-skin copied from {os.path.basename(terr_p)}")
         if not changed:
             print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")
-    if target is not None:
+    if a.mask_test and target is not None:
+        picks = mask_test_grasses([(r[3], r[2]) for r in sf if r[0] == b"GRAS"], masks)
+        entries = []
+        print("mask test (biome mask -> vanilla grass grown there on the covered slots):")
+        for m, gfid, gname in picks:
+            fid = sfplugin.new_form_id(len(recs), nm)
+            recs.append((b"GCVR", ct[1], sfgrass.build_gcvr(ct[2], sfplugin.zs(f"S2S_MaskTest{m}"), [(gfid, -1)],
+                                                             [], a.threshold), fid))
+            entries += [(m, slot, fid) for slot, _c in covers]
+            print(f"  mask {m}: {gname} ({gfid:08X})")
+        recs.append((b"BIOM", target[1], sfgrass.biome_with_entries(target[2], entries), target[3]))
+        report["mask_test"] = {str(m): name for m, _g, name in picks}
+        report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
+                           "entries_added": len(entries)}
+    elif target is not None:
         recs.append((b"BIOM", target[1], sfgrass.biome_with_cover(target[2], covers, masks=masks), target[3]))
         report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
                            "entries_added": len(covers) * len(masks)}

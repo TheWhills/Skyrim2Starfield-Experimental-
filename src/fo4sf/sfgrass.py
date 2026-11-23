@@ -86,6 +86,27 @@ def build_gcvr(template_subs, edid: bytes, grasses: Iterable[Tuple[int, int]], l
     return head + body + tail
 
 
+def biome_with_entries(subs, entries: Iterable[Tuple[int, int, int]]):
+    """A BIOM's subrecords with LNAM {mask, LTEX, GCVR} entries added as given (after its last LNAM, else after TNAM);
+    an existing entry with the same mask and LTEX takes the new GCVR."""
+    subs = [(s, bytes(d)) for s, d in subs]
+    want = {(m, lt): gc for m, lt, gc in entries}
+    out, last = [], None
+    for s, d in subs:
+        if s == b"LNAM" and len(d) >= 12:
+            m, lt, gc = struct.unpack_from("<3I", d)
+            if (m, lt) in want:
+                d = struct.pack("<3I", m, lt, want.pop((m, lt))) + d[12:]
+            out.append((s, d))
+            last = len(out)
+            continue
+        out.append((s, d))
+    add = [(b"LNAM", struct.pack("<3I", m, lt, gc)) for (m, lt), gc in want.items()]
+    at = last if last is not None else next((i + 1 for i, (s, _d) in enumerate(out) if s == b"TNAM"), len(out))
+    out[at:at] = add
+    return out
+
+
 def biome_terrain(subs) -> List[Dict]:
     """The LNAM / ANAM entries of a BIOM: [{"kind", "mask", "ltex", "gcvr"}]."""
     out = []
