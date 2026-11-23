@@ -76,3 +76,19 @@ Log: `Documents\My Games\Starfield\SFSE\Logs\S2SCombat.log`.
   AttackEnd (payload a time, "0.193").
 - The MCO-style buffer works: a click during an attack logs `attack buffered`, then the next attack starts at
   AttackStateNextAttack (MeleeAttackStart, AttackStart). Holding the attack logs the charged-hold message.
+
+## S2SDodge (standalone dodge, 2026-11-23)
+
+`sfse/dodge` + `s2s/dodge_only.h`: the dodge alone, for a mod without the rest of S2SCombat. It runs the same
+`combat::Controller` with every other system switched off (`dodge_only`: no attack buffer, power key, queued-power
+cancel, stances, dual wield, timed block / parry) and carries out only the dodge's commands (`dodge_only_command`:
+graph event, stamina cost, log), so the dodge behaves exactly as in S2SCombat. Hooks: UI input (watch only), the
+player's animation events (Starfield 1.16 layout, no probe), menus; no player-controls hook, hit sink or lock-on.
+It switches itself off when S2SCombat.dll is loaded (both would send the dodge event).
+
+* Build: `xmake build S2SDodge` (not built by a plain `xmake`). INI: `S2SDodge.ini` (`[Plugin]` bEnabled,
+  bGhostDuringIframes, sStaminaActorValue, log counts; `[Combat]` the dodge keys only).
+* Animations: `scripts/armor/sam_dodge_pack.py --dll <S2SDodge.dll>` writes the whole mod (clips, graphs, SAM fragment,
+  DLL + INI). Needs SFSE, Address Library and SAM.
+* Status: core tested (tests/test_dodge_only.cpp); the DLL not yet compiled or run (owner's build).
+

@@ -43,3 +43,19 @@ target("S2SClash")
     add_headerfiles("clash/**.h", "src/Game.h", "src/ClashApi.h", "../include/s2s/*.h")
     add_includedirs("clash", "src", "../include")
     set_pcxxheader("src/pch.h")
+
+-- S2SDodge: the dodge alone, standalone (sfse/dodge, s2s/dodge_only.h): the same controller as S2SCombat with every
+-- other system off. Not built by a plain `xmake`: `xmake build S2SDodge`. Its INI: S2SDodge.ini. Switches itself off
+-- when S2SCombat.dll is loaded (both would dodge).
+target("S2SDodge")
+    set_default(false)
+    add_rules("commonlibsf.plugin", {
+        name = "S2SDodge",
+        author = "Skyrim2Starfield",
+        description = "TK Dodge style dodging for Starfield (standalone; dodge animations through SAM)"
+    })
+
+    add_files("dodge/**.cpp", "src/Game.cpp", "../src/*.cpp")
+    add_headerfiles("dodge/**.h", "src/Game.h", "../include/s2s/*.h")
+    add_includedirs("dodge", "src", "../include")
+    set_pcxxheader("src/pch.h")

@@ -2715,3 +2715,14 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   existing lists). For this test the .esm and S2SWeapons.esm were unticked; the S2SCombat DLL needs neither to dodge.
 - Open: moving the stance packs and weapon types to SAM fragments (their own lists, animations_<number>.txt, instead of
   the CK output), so stances and SAM dodges work together.
+
+## 2026-11-23 — S2SDodge: a standalone dodge plugin
+- Owner: a dodge-only DLL and the SAM dodge animations in one mod. Decision: a second xmake target (S2SDodge, like
+  S2SClash, not built by default) that runs the same combat::Controller with every other system off
+  (s2s/dodge_only.h: dodge_only config, dodge_only_command filter) and reduced hooks (input watch, player animation
+  events, menus). Why: one dodge implementation for both plugins, the core stays tested (tests/test_dodge_only.cpp);
+  a copy would drift. Alternatives: S2SCombat.dll with a dodge-only INI (not every system has an off switch); a
+  compile-time flag inside S2SCombat (one target, two meanings of its sources).
+- S2SDodge switches itself off when S2SCombat.dll is loaded (two dodge events per press otherwise).
+- Status: core verified by tests; the DLL is uncompiled here (no MSVC / CommonLibSF in the cloud session): owner's build.
+

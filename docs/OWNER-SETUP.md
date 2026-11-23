@@ -411,6 +411,15 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable "S2S SAM Dodge" last, start with sfse_loader.exe, draw a one-handed melee weapon: Alt + W / S / A / D and
    Alt standing (back). Send what each did and SfAnimIndexLoader.log.
+8c. B + C: standalone dodge mod (S2SDodge.dll + the SAM dodge animations, native/combat/sfse/README.md "S2SDodge").
+   Build the DLL (Visual Studio Build Tools + xmake, as for S2SCombat), then the mod:
+   ```powershell
+   cd "$HOME\Skyrim2Starfield-Experimental-\native\combat\sfse"; xmake build S2SDodge; cd "$HOME\Skyrim2Starfield-Experimental-"
+   $dll = Get-ChildItem native\combat\sfse\build -Recurse -Filter S2SDodge.dll | Sort-Object LastWriteTime | Select-Object -Last 1
+   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S Dodge" --calumi "$calumi" --skyrim-data "$sky" --dll $dll.FullName
+   ```
+   MO2: "S2S Dodge" on (bottom), S2S Combat and the other dodge mods off, SAM + Address Library on. In game: Alt +
+   W / S / A / D, Alt standing. Log: SFSE\Plugins\S2SDodge.log (MO2: the mod folder or Overwrite).
 9. Done 2026-11-09: clothing as items. Ysolda's FarmClothesOutfit04 (dress, boots) in S2S Clothes, male and female
    versions; both test NPCs wear it, and the player's dress follows the body sliders in character creation.
 9b. Done 2026-11-09: Delphine (and Ysolda) wear the shared S2S_FarmClothesOutfit04 in the Riverwood build (in game:

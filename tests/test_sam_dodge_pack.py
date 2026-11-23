@@ -120,6 +120,28 @@ class SamDodgePackTests(unittest.TestCase):
                 self.assertEqual(rep["conversion"], {"clips": 4})
                 with self.assertRaises(SystemExit):
                     S.main(["--tk", d, "--starfield-data", d, "--out", ROOT])
+                with self.assertRaises(SystemExit):
+                    S.main(["--tk", d, "--starfield-data", d, "--out", d, "--dll", os.path.join(d, "missing.dll")])
+            with tempfile.TemporaryDirectory() as d:                      # the standalone mod: DLL + INI
+                dll = os.path.join(d, "built.dll")
+                with open(dll, "wb") as fh:
+                    fh.write(b"MZ")
+                out = os.path.join(d, "mod")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(S.main(["--tk", d, "--starfield-data", d, "--out", out, "--dll", dll]), 0)
+                plugins = os.path.join(out, "SFSE", "Plugins")
+                with open(os.path.join(plugins, "S2SDodge.dll"), "rb") as fh:
+                    self.assertEqual(fh.read(), b"MZ")
+                with open(os.path.join(plugins, "S2SDodge.ini"), encoding="utf-8") as fh:
+                    self.assertIn("uDodgeKey = 56", fh.read())
+                with open(os.path.join(plugins, "S2SDodge.ini"), "w", encoding="utf-8") as fh:
+                    fh.write("mine")                                       # the player's settings are kept
+                with contextlib.redirect_stdout(io.StringIO()):
+                    S.main(["--tk", d, "--starfield-data", d, "--out", out, "--dll", dll])
+                with open(os.path.join(plugins, "S2SDodge.ini"), encoding="utf-8") as fh:
+                    self.assertEqual(fh.read(), "mine")
+                with open(os.path.join(out, "sam_dodge.json")) as fh:
+                    self.assertIn("SFSE/Plugins/S2SDodge.dll", json.load(fh)["files"])
         finally:
             S.convert = saved_conv
             if saved_mod is None:

@@ -16,6 +16,8 @@ This pack, needing only SAM and the S2SCombat plugin:
     its Player_Melee.agx whose attack switch learns the dodge events;
   * fragment: Meshes\\AnimTextData\\Fragments\\S2SDodge\\animations.txt (the eight files) and tables\\anim_actions.xtbl
     (the four tags). No animationoffsets / animeventinfo (the one-tag test played without them).
+--dll <S2SDodge.dll> (native/combat/sfse: xmake build S2SDodge) makes it the standalone dodge mod: the DLL and
+native/combat/sfse/S2SDodge.ini go to SFSE\\Plugins (the INI is not overwritten if the mod already has one).
 Events stay the NPC melee attack events (dodge_graph.KNOWN_EVENTS, the plugin's default sDodgeEvents): SAM's source
 (2026-11-01) declares tags, not events. Conflicts with any other mod shipping MeleeAttacks.agx / Player_Melee.agx
 (our stance and combo packs): test with those disabled.
@@ -23,6 +25,7 @@ Events stay the NPC melee attack events (dodge_graph.KNOWN_EVENTS, the plugin's 
 import argparse
 import json
 import os
+import shutil
 import sys
 import tempfile
 
@@ -163,6 +166,24 @@ def motion_text(blocks: dict) -> str:
     return "\r\n".join(out) + "\r\n"
 
 
+DODGE_INI = os.path.join(REPO, "native", "combat", "sfse", "S2SDodge.ini")
+
+
+def install_plugin(out: str, dll: str, ini: str = DODGE_INI) -> list:
+    """The standalone plugin into the mod: SFSE\\Plugins\\S2SDodge.dll, and S2SDodge.ini unless one is there (the
+    player's settings are kept). Returns the Data-relative paths written."""
+    if not os.path.isfile(dll):
+        raise SystemExit(f"--dll: {dll} not found (build it: cd native\\combat\\sfse; xmake build S2SDodge)")
+    plugins = os.path.join(out, "SFSE", "Plugins")
+    os.makedirs(plugins, exist_ok=True)
+    shutil.copyfile(dll, os.path.join(plugins, "S2SDodge.dll"))
+    written = ["SFSE/Plugins/S2SDodge.dll"]
+    if not os.path.isfile(os.path.join(plugins, "S2SDodge.ini")):
+        shutil.copyfile(ini, os.path.join(plugins, "S2SDodge.ini"))
+        written.append("SFSE/Plugins/S2SDodge.ini")
+    return written
+
+
 def convert(tk: str, tag_map: dict, starfield_data: str, rest: list):
     """(rc, {Data-relative path: bytes}, hkx_to_af report or None): the dodge clips converted beside the slide."""
     import dodge_pack                                     # hkx_to_af needs numpy and CALUMI: imported only here
@@ -207,10 +228,13 @@ def main(argv=None):
     ap.add_argument("--tk", required=True, help="TK Dodge folder (StepDodge*.hkx and animationdatasinglefile.txt)")
     ap.add_argument("--starfield-data", required=True, help="Starfield's Data folder (vanilla graphs and template)")
     ap.add_argument("--out", required=True, help="the mod's folder (e.g. $mods\\S2S SAM Dodge)")
+    ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")
     a, rest = ap.parse_known_args(argv)
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
+    if a.dll and not os.path.isfile(a.dll):
+        sys.exit(f"--dll: {a.dll} not found (build it: cd native\\combat\\sfse; xmake build S2SDodge)")
     import hkx_to_af
     tag_map = tags()
     attacks_raw, _ = hkx_to_af.vanilla_file(ATTACKS_REL, a.starfield_data)
@@ -219,12 +243,14 @@ def main(argv=None):
     rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest)
     files = {**clip_files, **graph_files, **fragment_files(tag_map)}
     write(out, files)
+    plugin = install_plugin(out, a.dll) if a.dll else []
     with open(os.path.join(out, "sam_dodge.json"), "w", encoding="utf-8") as fh:
         json.dump({"states": report["states"], "player_switch_lists": report["player_switch_lists"],
-                   "files": sorted(files), "conversion": conv}, fh, indent=1)
+                   "files": sorted(files) + plugin, "conversion": conv}, fh, indent=1)
     for d, st in report["states"].items():
         print(f"{d}: event {st['event']} -> state playing {st['tag']}")
-    print(f"{len(clip_files)} clip files, 2 graphs, fragment {FRAGMENT} -> {out}" + ("" if rc == 0 else " (ERRORS above)"))
+    print(f"{len(clip_files)} clip files, 2 graphs, fragment {FRAGMENT}" + (", plugin " + " + ".join(
+        os.path.basename(p) for p in plugin) if plugin else "") + f" -> {out}" + ("" if rc == 0 else " (ERRORS above)"))
     return rc
 
 
