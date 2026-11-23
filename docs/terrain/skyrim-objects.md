@@ -376,6 +376,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   So the NIF layout is not the difference. Left: the path (vanilla models all under meshes\Landscape\Grass; ours were
   meshes\s2s\grassnative: now landscape\grass\s2s\), the material, the .mesh contents, the shape count. Our
   models were not in the folder for that run (the --keep-template-model build): rebuild, compare again.
+  **Second comparison (owner, 2026-11-23 09:58; models under landscape\grass\s2s: still no grass in game):** our
+  BeachGrassObj01 / 02 NIFs match vanilla block for block. Differences left: (1) material: ours is a .mat of our own
+  (parent PlasticPlainSmooth01, alpha test 0.353, path materials\s2s\landscape\grass\...), vanilla grass uses
+  materials in the game's compiled database (VegetationTranslucent1Layer with Alpha / Translucency / Vegetation (wind) /
+  TerrainTint components; the moss mounds use plain BaseMaterial, so the shader model alone is not required);
+  (2) the .mesh: ours carry vertex colours (64 / 56), none of the three vanilla grass meshes do (uv2 in two of them).
+  Supported hypothesis: the grass system takes its material from the compiled database only (by MaterialID), so a
+  material that exists only as our .mat file draws nothing. Test: `--vanilla-material
+  Materials\Landscape\Grass\Flowers\GrassFlowersHellebore01.mat` puts a vanilla grass material on our geometry.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

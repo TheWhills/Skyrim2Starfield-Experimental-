@@ -281,6 +281,19 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertIn("SKY_Tamriel (01000800): Allow ProcGen set", log)
         self.assertIn(b"FNAM\x01\x00\x08", raw)
 
+    def test_with_material(self):
+        """2026-11-23: a vanilla grass material on our converted geometry (name + MaterialID CRC)."""
+        import skyrim_grass_native as N
+        from fo4sf import nif as nifmod, sfnif
+        sh = sfnif.StaticShape(b"Blade", b"aa\\bb", 30, 12, "materials\\s2s\\x.mat", (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))
+        data = nifmod.serialize(sfnif.build_static_nif(b"Grass", [sh]))
+        mat = "Materials\\Landscape\\Grass\\Flowers\\GrassFlowersHellebore01.mat"
+        n = nifmod.parse(N.with_material(data, mat))
+        prop = n.blocks[4]
+        self.assertEqual(n.strings[struct.unpack_from("<i", prop, 0)[0]], mat.encode())
+        self.assertEqual(struct.unpack_from("<I", n.blocks[3], 4)[0], sfnif.material_id(mat))
+        self.assertEqual(n.blocks[2], nifmod.parse(data).blocks[2])          # geometry untouched
+
     def test_with_procgen(self):
         import skyrim_grass_native as N
         self.assertEqual(dict(N.with_procgen([(b"EDID", b"W\0"), (b"FNAM", b"\x01\x02")]))[b"FNAM"], b"\x09\x02")
@@ -298,6 +311,11 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(cover["ltex"], [])
         _raw, by2, _log = self._run(["--cover-textures"])
         self.assertEqual(sfgrass.parse_gcvr(by2["S2S_Cover_00000031"][2])["ltex"], [0x31])
+
+    def test_vanilla_material_build(self):
+        raw, by, log = self._run(["--vanilla-material", "Materials\\Landscape\\Grass\\V.mat"])
+        self.assertIn("vanilla material Materials\\Landscape\\Grass\\V.mat", log)
+        self.assertIn("S2S_Fern", by)
 
     def test_control(self):
         raw, by, log = self._run(["--control"])

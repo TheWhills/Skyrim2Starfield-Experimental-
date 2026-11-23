@@ -112,7 +112,24 @@ def gras_ok(subs):
     return b"MODL" in d and len(d.get(b"DNAM", b"")) >= sfgrass.DNAM_SIZE
 
 
-def convert_model(conv, name: str, tint, staging: str) -> str:
+def with_material(nif_bytes: bytes, material_path: str) -> bytes:
+    """The NIF with every BSLightingShaderProperty naming material_path and every MaterialID extra data set to its
+    CRC (2026-11-23 test: a vanilla grass material, which is in the game's compiled material database, on our
+    converted geometry)."""
+    from fo4sf import sfnif
+    n = nifmod.parse(nif_bytes)
+    si = n.string_index(material_path.encode("latin-1"))
+    mid = n.string_index(b"MaterialID")
+    for i, b in enumerate(n.blocks):
+        t = n.type_of(i)
+        if t == "BSLightingShaderProperty":
+            n.blocks[i] = struct.pack("<i", si) + b[4:]
+        elif t == "NiIntegerExtraData" and struct.unpack_from("<i", b, 0)[0] == mid:
+            n.blocks[i] = b[:4] + struct.pack("<I", sfnif.material_id(material_path))
+    return nifmod.serialize(n)
+
+
+def convert_model(conv, name: str, tint, staging: str, material: str = "") -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided); returns its path under meshes\\."""
     raw = conv.src.mesh(name)
@@ -134,6 +151,9 @@ def convert_model(conv, name: str, tint, staging: str) -> str:
     # 2026-11-23: under Landscape/Grass like every vanilla grass model (Starfield.exe names meshes/landscape/grass/)
     out_name = f"landscape/grass/{PREFIX}/{stem}"
     files = skyrimconvert.convert_static_sse(src, shapes, out_name, mats, None, {})
+    if material:
+        files = {rel: (with_material(d, material) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
+                 if not rel.lower().endswith(".mat")}
     for rel, data in files.items():
         p = os.path.join(staging, *rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -179,6 +199,11 @@ def main(argv=None):
                     help="also list the texture in each ground cover's own texture list (LNAM). Off by default since "
                          "2026-11-22: the cover that grows (GC_MossMoundsGrass01) has none, like 95 of 96 vanilla "
                          "covers; the biome entry pairs texture and cover")
+    ap.add_argument("--vanilla-material", default="",
+                    help="test (2026-11-23): our converted geometry with this vanilla material path instead of our "
+                         "own .mat, e.g. Materials\\Landscape\\Grass\\Flowers\\GrassFlowersHellebore01.mat "
+                         "(in the compiled material database). Grass then = the grass system needs a database "
+                         "material")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -304,7 +329,8 @@ def main(argv=None):
             name = "meshes\\" + r["model"].replace("/", "\\").lstrip("\\")
             try:
                 model = (dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
-                         if a.keep_template_model else convert_model(conv, name, tints.get(r["model"]), staging))
+                         if a.keep_template_model else convert_model(conv, name, tints.get(r["model"]), staging,
+                                                                     a.vanilla_material))
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue
@@ -359,7 +385,8 @@ def main(argv=None):
         json.dump(report, fh, indent=1, default=str)
     if "templates" in report:
         print(f"templates: grass {report['templates']['gras']}, cover {report['templates']['gcvr']}"
-              + (" (vanilla model kept)" if a.keep_template_model else ""))
+              + (" (vanilla model kept)" if a.keep_template_model else "")
+              + (f" (our geometry, vanilla material {a.vanilla_material})" if a.vanilla_material else ""))
     print((f"control: vanilla ground cover {report['control']['edid']} on {len(covers)} converted textures"
            if a.control else f"{len(gras_fid)} grasses, {len(covers)} ground covers")
           + (f", biome {report['biome']['edid']} ({report['biome']['form_id']}) overridden "
