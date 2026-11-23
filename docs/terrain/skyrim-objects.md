@@ -597,6 +597,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   uninstalled by then; `terrain_density.ps1 -Remove` restores it). The maps now go into the grass mod instead:
   `skyrim_grass_native.py --density-maps 255` writes them into S2SGrass - Main.ba2 (General, like vanilla
   DensityMaps.ba2; hair_pack.pack general_textures), compressed (uniform maps shrink to almost nothing).
+  **Uniform density maps (owner, 17:51 / 17:53, verified in game): no change.** The flat forest floor stays bare;
+  the flowers (mask 0) grow only at the river bank and by the mill logs. So maps at textures\terrain\sky_tamriel_*
+  (flat or in a sky_tamriel folder) are not read for our world, or are not the limit (refuted as the fix).
+  Pattern over every test (control, Skyrim grass, flowers, mask test, density maps): ground cover grows on raised
+  ground (banks, ridges, hill crests, rock edges) and never on the low flats beside the river. Supported hypothesis:
+  a height / water clamp: the cell's water plane (381.43 m for the Riverwood cells, one flat level per cell) lies
+  close to or above the flats in the engine's view, and the GRAS water clamps (kept from the vanilla template)
+  forbid grass there. Check: `player.getpos z` on a bare flat and at a flower spot against 381.43.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
