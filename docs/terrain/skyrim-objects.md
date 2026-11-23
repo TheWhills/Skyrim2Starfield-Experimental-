@@ -329,6 +329,9 @@ Max Density; what a vanilla grass model needs. Two tools:
   none. Test: `scripts/terrain/btd_byte6.py set --mask FlatOut` (tools\owner\terrain_byte6.ps1) appends
   LDefault004FlatOut to our table (existing indices unchanged) and writes it into byte 6 of every quadrant, with the
   control cover (masks 2-5) on. `restore` puts the originals back.
+  Owner's run (20:28, verified offline): LDefault004FlatOut (0001085F) appended as entry 56 of 56 (vanilla tables
+  hold the LDefault textures at the head; ours at the end, unknown whether order matters), byte 6 = 56 in all 21,316
+  quadrants of the BTD and its meshes copy, heights / alphas unchanged; exterior reinstalled. In game: pending.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
