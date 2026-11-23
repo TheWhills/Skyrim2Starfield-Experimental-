@@ -464,6 +464,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   material. So our NIF at a shipped path is accepted, and what it names (our .mesh at geometries\<new hash>, our
   .mat) is refused. Next split: `--vanilla-paths --vanilla-material` alone (our .mesh, vanilla material): Skyrim
   shapes with flower textures = the .mesh is fine and the material is refused; nothing = the .mesh is refused.
+  `--vanilla-paths --vanilla-material` (owner, 13:18 / 13:24): a sparse pink-flowered plant grows on the forest
+  floor (screenshot, dusk), thinner than the hellebore bushes: supported hypothesis that it is our Skyrim mesh with
+  the flower material, i.e. **our .mesh files load and our own .mat is what the grass system refuses**. Next, to
+  confirm and as the likely route: a Starfield bladed-grass material on the Skyrim meshes
+  (Materials\Landscape\Grass\Bladed\GrassCityShort01.mat, the Creation Kit wiki's example; VegetationTranslucent
+  with wind and terrain tint).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
