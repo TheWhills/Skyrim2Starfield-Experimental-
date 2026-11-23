@@ -425,6 +425,41 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertIn("Fern -> meshes", log.getvalue())
         self.assertNotIn("WaterKelpGrass01 -> meshes", log.getvalue())
 
+    def test_family_shared_coverage(self):
+        import skyrim_grass_native as N
+        self.assertEqual(N.family("TundraGrass04"), "tundragrass")
+        self.assertEqual(N.family("SnowGrass01Forest"), "snowgrass")
+        placed = [("ForestGrass01", "a.nif"), ("TundraGrass01", "b.nif")]
+        self.assertEqual(N.shared_model("TundraGrass02", placed), "b.nif")
+        self.assertEqual(N.shared_model("FieldGrass01", placed), "a.nif")          # commonest otherwise
+        self.assertIsNone(N.shared_model("X", []))
+        d = bytes(38)
+        self.assertEqual(sfgrass.parse_gras_dnam(N.with_coverage(d, 100))["coverage"], 100.0)
+        self.assertEqual(N.with_coverage(d, None), d)
+
+    def test_vanilla_paths_share_when_full(self):
+        """2026-11-23: past the free paths, a grass shares a converted model instead of failing."""
+        import numpy as np
+        import skyrim_grass_native as N
+        data = struct.pack("<BBBBHHIffffB3x", 30, 0, 40, 0, 0, 0, 0, 0.0, 0.3, 0.2, 0.0, 4)
+        lg = {0x77: [0x88, 0x89]}
+        gr = {0x88: dict(skyrimgrass.parse_gras_data(data), edid="Fern01", model="landscape\\plants\\fern01.nif"),
+              0x89: dict(skyrimgrass.parse_gras_data(data), edid="Fern02", model="landscape\\plants\\fern01.nif")}
+        pool = (["meshes\\landscape\\grass\\spare01.nif"], 5, 4)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                mock.patch.object(skyrimgrass, "read_grass", return_value=(lg, gr)), \
+                mock.patch.object(N, "unused_grass_paths", return_value=pool), \
+                mock.patch.object(N, "world_cells", return_value={(0, 0): {0x77: np.ones((33, 33))}}), \
+                contextlib.redirect_stdout(io.StringIO()) as log:
+            sf, data_dir, sky_esm, terrain = self._setup(tmp)
+            out = os.path.join(tmp, "mod")
+            N.main(["--skyrim", sky_esm, "--skyrim-data", data_dir, "--starfield", sf, "--terrain", terrain,
+                    "--texconv", "texconv.exe", "--out", out, "--vanilla-paths", "--loose", "--coverage", "100"])
+            recs = {sfplugin.edid(r[2]): r for r in sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS"])}
+        self.assertIn("Fern02 shares landscape\\grass\\spare01.nif", log.getvalue())
+        self.assertEqual(dict(recs["S2S_Fern02"][2])[b"MODL"], dict(recs["S2S_Fern01"][2])[b"MODL"])
+        self.assertEqual(sfgrass.parse_gras_dnam(dict(recs["S2S_Fern01"][2])[b"DNAM"])["coverage"], 100.0)
+
     def test_grass_coverage(self):
         import numpy as np
         import skyrim_grass_native as N

@@ -477,6 +477,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   Mutagen; overriding the textures of a used vanilla grass material would recolour vanilla grass), more than 12
   grass types (shared models), density (Skyrim's 3-37 against vanilla 40+ plus coverage), and why the game refuses
   new paths (Starfield.exe; Ghidra).
+  Owner's choice (2026-11-23): a working version now, then dig. For it: grasses past the 12 free paths share the
+  converted model of a grass of the same family (TundraGrass02 -> TundraGrass01's), else of the commonest one, so all
+  Skyrim grass records grow; `--coverage 100` (GRAS 'Distribution': the templates' 20 % made the grass sparse; Skyrim
+  fills every spot its density allows); `grass_model_compare.py --list-materials` lists the materials of every vanilla
+  grass model, to pick the closest Starfield material per Skyrim grass family.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

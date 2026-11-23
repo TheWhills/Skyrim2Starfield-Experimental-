@@ -133,17 +133,49 @@ def vanilla_grass_models(sf_esm, names):
             for r in pick}
 
 
+def grass_materials(arcs_paths):
+    """{material path: [grass NIF paths]} over every NIF under meshes\\landscape\\grass\\ in the given archives
+    (2026-11-23: our grass must use one of the game's own materials; this is the menu)."""
+    out = {}
+    for p in arcs_paths:
+        try:
+            arc = ba2.Ba2(p)
+        except Exception:                                # noqa: BLE001
+            continue
+        for n in arc.names:
+            k = n.replace("/", "\\").lower()
+            if not (k.startswith("meshes\\landscape\\grass\\") and k.endswith(".nif")):
+                continue
+            try:
+                d = describe(arc.read(n))
+            except Exception:                            # noqa: BLE001 (unreadable NIF: skipped)
+                continue
+            for m in dict.fromkeys(d["materials"]):
+                out.setdefault(m, []).append(n)
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sf-data", required=True)
-    ap.add_argument("--ours", required=True, help="the S2S Grass Native mod folder (its BA2s and grass_native.json)")
+    ap.add_argument("--ours", default="", help="the S2S Grass Native mod folder (its BA2s and grass_native.json)")
     ap.add_argument("--vanilla", action="append", default=[], help="vanilla GRAS EditorID (repeatable; default: the "
                                                                    "first grasses of GC_MossMoundsGrass01)")
     ap.add_argument("--count", type=int, default=2, help="how many of our grasses (default 2)")
     ap.add_argument("--zip", default="")
+    ap.add_argument("--list-materials", action="store_true",
+                    help="only list the materials every vanilla grass model uses (and how many models use each)")
     a = ap.parse_args(argv)
+    if a.list_materials:
+        mats = grass_materials(sorted(glob.glob(os.path.join(a.sf_data, "Starfield - Meshes*.ba2"))))
+        for m, nifs in sorted(mats.items(), key=lambda kv: kv[0].lower()):
+            print(f"  {len(nifs):3}  {m}   e.g. {os.path.basename(nifs[0])}")
+        print(f"{len(mats)} materials")
+        return 0
     if a.zip and os.path.abspath(a.zip).lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--zip must be outside the repository")
+    if not a.ours:
+        sys.exit("--ours is needed (or --list-materials)")
     van = Archives(sorted(glob.glob(os.path.join(a.sf_data, "Starfield - *.ba2"))))
     ours = Archives(sorted(glob.glob(os.path.join(a.ours, "*.ba2"))), loose=a.ours)
     with open(os.path.join(a.ours, "grass_native.json"), encoding="utf-8") as fh:

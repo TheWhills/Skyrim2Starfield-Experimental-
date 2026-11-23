@@ -142,6 +142,32 @@ MODEL_TYPES = (b"GRAS", b"STAT", b"MSTT", b"FLOR", b"TREE", b"ACTI", b"MISC", b"
 UNDERWATER_RULES = (2, 3)       # Skyrim GRAS DATA water rule: Below - At Least, Below - At Most (UESP)
 
 
+def family(edid: str) -> str:
+    """A grass's family: its EditorID without the trailing number / variant (TundraGrass04 -> tundragrass,
+    SnowGrass01Forest -> snowgrass)."""
+    return re.sub(r"\d+[a-z]*$", "", edid.lower())
+
+
+def shared_model(edid: str, placed):
+    """For a grass left without a free path (only 12, 2026-11-23): the model of a converted grass of the same family,
+    else of the commonest converted grass (placed is in coverage order); None if nothing was converted."""
+    fam = family(edid)
+    for e, m in placed:
+        if family(e) == fam:
+            return m
+    return placed[0][1] if placed else None
+
+
+def with_coverage(dnam: bytes, coverage):
+    """GRAS DNAM with its coverage (offset 32, f32: the share of the ground the grass covers; the templates have 20)
+    set; unchanged when coverage is None. Skyrim has no such field: its grass fills every spot its density allows."""
+    if coverage is None:
+        return dnam
+    b = bytearray(dnam)
+    struct.pack_into("<f", b, 32, float(coverage))
+    return bytes(b)
+
+
 def world_cells(skyrim_esm):
     """Skyrim's Tamriel LAND texture weights per cell (landtex.read_world_textures)."""
     from fo4sf import landtex, skyrimland
@@ -351,6 +377,10 @@ def main(argv=None):
                     help="put each converted Skyrim grass model over a grass model path the game ships but none of "
                          "its records names (2026-11-23: the grass system only loads models at paths the game "
                          "already ships)")
+    ap.add_argument("--coverage", type=float, default=None,
+                    help="GRAS coverage (Creation Kit 'Distribution': share of the area covered, 0-100) for every "
+                         "grass; default: the template's (GrassHelleboreField02: 20). 2026-11-23: Skyrim's grass "
+                         "fills every spot its density allows, so 100 is the Skyrim-like value")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -483,6 +513,7 @@ def main(argv=None):
         variants = [template_nif(os.path.join(a.starfield, "Data"), v[1]) for v in PATH_VARIANTS] \
             if a.path_variants else None
         order = lambda g: gras_sky.get(g, {}).get("edid", "")              # noqa: E731
+        placed = []                                  # [(Skyrim EditorID, model)] converted at a free path
         if free is not None:                         # the commonest grasses first: they get the few free paths
             if cells is None:
                 cells = world_cells(a.skyrim)
@@ -527,11 +558,15 @@ def main(argv=None):
                     model = rel.split("/", 1)[1].replace("/", "\\")
                 elif a.keep_template_model:
                     model = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
+                elif free is not None and not free:  # --vanilla-paths, none left: share a converted model
+                    model = shared_model(r["edid"], placed)
+                    if model is None:
+                        raise RuntimeError("no unused vanilla grass path left")
+                    report.setdefault("shared_models", {})[r["edid"]] = model
+                    print(f"  {r['edid']} shares {model}")
                 else:
                     model = convert_model(conv, name, tints.get(r["model"]), staging, a.vanilla_material, geometry)
                     if free is not None:             # --vanilla-paths: move it over an unused vanilla grass path
-                        if not free:
-                            raise RuntimeError("no unused vanilla grass path left")
                         vpath = free.pop(0)
                         src_p = os.path.join(staging, "meshes", *model.split("\\"))
                         dst_p = os.path.join(staging, *vpath.split("\\"))
@@ -540,6 +575,7 @@ def main(argv=None):
                         report.setdefault("vanilla_paths", {})[r["edid"]] = vpath
                         print(f"  {r['edid']} -> {vpath}")
                         model = vpath.split("\\", 1)[1]
+                        placed.append((r["edid"], model))
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue
@@ -547,7 +583,8 @@ def main(argv=None):
             # MODT: Mutagen's "TextureFileHashes"; the template's describes the template's model, not ours (2026-11-23:
             # the vanilla NIF at our path grew nothing, at its own path with the same MODT it grows)
             subs = sfplugin.edit(gt[2], {b"EDID": sfplugin.zs("S2S_" + r["edid"]), b"MODL": sfplugin.zs(model),
-                                         b"DNAM": sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale)},
+                                         b"DNAM": with_coverage(sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale),
+                                                                a.coverage)},
                                  drop=[b"MODT"] if (a.drop_modt and not a.keep_template_model) else [])
             recs.append((b"GRAS", gt[1], subs, fid))
             gras_fid[g] = fid
