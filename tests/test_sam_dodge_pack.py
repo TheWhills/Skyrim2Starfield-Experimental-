@@ -74,6 +74,14 @@ class SamDodgePackTests(unittest.TestCase):
         bad = singlefile().replace("0.866667 0 1.0 0", "0.066667 animmotion 0.0 0.0 0.0")     # unwanted block
         self.assertEqual(S.motion_blocks(bad)["Right"][1]["translations"][-1][2], 252.5)
 
+    def test_variables(self):
+        afx = b"<root><is_state>0</is_state><tag>S2S_DodgeBack</tag><filename>S2S_DodgeBack.af</filename></root>"
+        out = S.with_variables(afx, ["bNoLeftHandIK"], 20).decode()
+        self.assertIn("<variable><name>bNoLeftHandIK</name><start>0</start><end>20</end></variable>", out)
+        self.assertEqual(S.with_variables(afx, [], 20), afx)
+        twice = S.with_variables(out.encode(), ["bNoLeftHandIK"], 20).decode()
+        self.assertEqual(twice.count("bNoLeftHandIK"), 1)
+
     def test_fragment(self):
         t = S.tags()
         self.assertEqual(t, {"Forward": "S2S_DodgeForward", "Back": "S2S_DodgeBack", "Left": "S2S_DodgeLeft",
@@ -106,7 +114,7 @@ class SamDodgePackTests(unittest.TestCase):
         clips = {f"{S.ANIMS}{S.FOLDER}/{t}{e}": b"X" for t in S.tags().values() for e in (".af", ".afx")}
         saved_mod, saved_conv = sys.modules.get("hkx_to_af"), S.convert
         sys.modules["hkx_to_af"] = fake
-        S.convert = lambda tk, tm, sd, rest: (0, clips, {"clips": 4})
+        S.convert = lambda tk, tm, sd, rest, variables=(): (0, clips, {"clips": 4})
         try:
             with tempfile.TemporaryDirectory() as d:
                 with contextlib.redirect_stdout(io.StringIO()):

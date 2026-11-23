@@ -2732,3 +2732,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   (OWNER-SETUP 8b / 8c). Expected to apply to the other converted combat clips too (stance packs): to be checked by the
   same A/B when they move to SAM.
 
+## 2026-11-23 — S2SDodge works in game; left hand out in the combat stance
+- Owner's run: the standalone mod (S2SDodge.dll built with xmake, S2S Combat off) dodges in game (verified).
+- Seen: from the relaxed idle the dodges look right; from the combat (ready) stance the left hand swings outward
+  during the dodge (owner's screenshots, back dodge). Supported hypothesis: vanilla melee attack descriptors carry a
+  bNoLeftHandIK window and our dodge descriptors carry none, so the ready stance's left-hand IK keeps pulling the
+  hand. Test: sam_dodge_pack --variable bNoLeftHandIK (the window over the whole clip). Unresolved until the run.
+

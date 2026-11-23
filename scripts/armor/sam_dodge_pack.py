@@ -184,7 +184,30 @@ def install_plugin(out: str, dll: str, ini: str = DODGE_INI) -> list:
     return written
 
 
-def convert(tk: str, tag_map: dict, starfield_data: str, rest: list):
+def with_variables(afx: bytes, names, last_frame: int) -> bytes:
+    """The descriptor with each named variable window over the whole clip (0..last_frame), appended after the others
+    (af_writer.descriptor's order). bNoLeftHandIK: vanilla melee attack descriptors switch the left-hand IK off with it
+    (docs/armor/animation-port.md, descriptor variables); without it, in the ready stance the IK held the left hand out
+    during a dodge (owner's run 2026-11-23: fine from the relaxed idle, hand out from the combat stance)."""
+    import xml.etree.ElementTree as ET
+    if not names:
+        return afx
+    root = ET.fromstring(afx.decode("utf-8-sig"))
+    vs = root.find("variables")
+    if vs is None:
+        vs = ET.SubElement(root, "variables")
+    have = {v.findtext("name") for v in vs.findall("variable")}
+    for name in names:
+        if name in have:
+            continue
+        v = ET.SubElement(vs, "variable")
+        ET.SubElement(v, "name").text = name
+        ET.SubElement(v, "start").text = "0"
+        ET.SubElement(v, "end").text = str(int(last_frame))
+    return ET.tostring(root, encoding="utf-8", short_empty_elements=False)
+
+
+def convert(tk: str, tag_map: dict, starfield_data: str, rest: list, variables=()):
     """(rc, {Data-relative path: bytes}, hkx_to_af report or None): the dodge clips converted beside the slide."""
     import dodge_pack                                     # hkx_to_af needs numpy and CALUMI: imported only here
     import hkx_to_af
@@ -203,6 +226,13 @@ def convert(tk: str, tag_map: dict, starfield_data: str, rest: list):
                       "--motion", f"{os.path.splitext(clip)[0]}={motion}:{blocks[d][0]}"]
         out_dir = os.path.join(tmp, "out")
         rc = hkx_to_af.main(rest + ["--out", out_dir, "--starfield-data", starfield_data, "--weapon-in-hand"] + specs)
+        rep = os.path.join(out_dir, "report.json")
+        if os.path.isfile(rep):
+            with open(rep, encoding="utf-8") as fh:
+                report = json.load(fh)
+        rows = report if isinstance(report, list) else (report or {}).get("clips", [])
+        frames = {os.path.splitext(os.path.basename(r.get("replaces", "")))[0].lower(): r.get("frames")
+                  for r in rows if isinstance(r, dict)}
         src = os.path.join(out_dir, *ANIMS.split("/"), *FOLDER.split("/"))
         for tag in tag_map.values():
             for ext in (".af", ".afx"):
@@ -215,11 +245,13 @@ def convert(tk: str, tag_map: dict, starfield_data: str, rest: list):
                     data = fh.read()
                 if ext == ".afx":
                     data = dodge_pack.dodge_descriptor(data, tag + ".af")
+                    n = frames.get(tag.lower())
+                    if variables and not n:
+                        print(f"{tag}: frame count not in the report, {', '.join(variables)} not written")
+                        rc |= 1
+                    elif variables:
+                        data = with_variables(data, variables, n - 1)
                 files[f"{ANIMS}{FOLDER}/{tag}{ext}"] = data
-        rep = os.path.join(out_dir, "report.json")
-        if os.path.isfile(rep):
-            with open(rep, encoding="utf-8") as fh:
-                report = json.load(fh)
     return rc, files, report
 
 
@@ -228,6 +260,8 @@ def main(argv=None):
     ap.add_argument("--tk", required=True, help="TK Dodge folder (StepDodge*.hkx and animationdatasinglefile.txt)")
     ap.add_argument("--starfield-data", required=True, help="Starfield's Data folder (vanilla graphs and template)")
     ap.add_argument("--out", required=True, help="the mod's folder (e.g. $mods\\S2S SAM Dodge)")
+    ap.add_argument("--variable", action="append", default=[], metavar="NAME",
+                    help="a graph variable window over the whole of every dodge clip, e.g. bNoLeftHandIK (repeatable)")
     ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")
     a, rest = ap.parse_known_args(argv)
     out = os.path.abspath(a.out)
@@ -240,7 +274,7 @@ def main(argv=None):
     attacks_raw, _ = hkx_to_af.vanilla_file(ATTACKS_REL, a.starfield_data)
     player_raw, _ = hkx_to_af.vanilla_file(PLAYER_REL, a.starfield_data)
     graph_files, report = graphs(attacks_raw, player_raw, tag_map)      # before converting: fails fast
-    rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest)
+    rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest, a.variable)
     files = {**clip_files, **graph_files, **fragment_files(tag_map)}
     write(out, files)
     plugin = install_plugin(out, a.dll) if a.dll else []
