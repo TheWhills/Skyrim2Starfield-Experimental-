@@ -355,6 +355,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   96 vanilla covers: the threshold may then apply on a scale our alphas never reach), our GRAS DNAM (Skyrim density
   3-37, slopes), our models, and only 19 Skyrim grass textures. One at a time: covers without LNAM now (default;
   `--cover-textures` for the old way), then `--keep-template-model`.
+  Covers without LNAM (owner, 2026-11-23 08:36): **no grass**. Re-reading the control screenshots (20:34): the moss
+  grass grew on the slopes and banks only, never on the flat ground (the green clover / grass-textured flats were
+  bare). Supported hypothesis: the engine still classifies each sample by mask from the terrain's shape, flats as Base
+  (mask 0), and our entries cover masks 2-5 only (the wiki's advice); Skyrim's grassy textures lie mostly on flats, so
+  they get nothing. Test: `--biome-masks all` (or 0,2,3,4,5).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
