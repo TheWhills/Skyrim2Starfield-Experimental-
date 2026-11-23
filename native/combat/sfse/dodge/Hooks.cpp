@@ -7,6 +7,7 @@
 #include "s2s/controller.h"
 
 namespace s2s::dodge {
+namespace game = sfse::game;    // the shared game helpers (src/Game.h), as S2SClash uses them
 namespace {
 
 using PerformInputProcessing_t = void(RE::BSInputEventReceiver*, const RE::InputEvent*);

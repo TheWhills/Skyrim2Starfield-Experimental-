@@ -416,7 +416,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```powershell
    cd "$HOME\Skyrim2Starfield-Experimental-\native\combat\sfse"; xmake build S2SDodge; cd "$HOME\Skyrim2Starfield-Experimental-"
    $dll = Get-ChildItem native\combat\sfse\build -Recurse -Filter S2SDodge.dll | Sort-Object LastWriteTime | Select-Object -Last 1
-   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S Dodge" --calumi "$calumi" --skyrim-data "$sky" --dll $dll.FullName --shoulder-calibration C:\Modding\work\shoulders.json
+   if ($dll) { python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S Dodge" --calumi "$calumi" --skyrim-data "$sky" --dll $dll.FullName --shoulder-calibration C:\Modding\work\shoulders.json } else { "S2SDodge.dll was not built: see the xmake errors above" }
    ```
    MO2: "S2S Dodge" on (bottom), S2S Combat and the other dodge mods off, SAM + Address Library on. In game: Alt +
    W / S / A / D, Alt standing. Log: SFSE\Plugins\S2SDodge.log (MO2: the mod folder or Overwrite).

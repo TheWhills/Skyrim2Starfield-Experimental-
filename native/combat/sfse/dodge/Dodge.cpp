@@ -4,6 +4,7 @@
 #include "s2s/dodge_only.h"
 
 namespace s2s::dodge {
+namespace game = sfse::game;    // the shared game helpers (src/Game.h), as S2SClash uses them
 namespace {
 
 int to_int(const std::map<std::string, std::string>& m, const char* key, int fallback) {
