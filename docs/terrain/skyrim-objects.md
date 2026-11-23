@@ -460,6 +460,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   shipped paths, but they still name our .mesh files and .mat at new paths. Next split: `--vanilla-paths
   --vanilla-geometry --vanilla-material ...GrassFlowersHellebore01.mat` (our NIFs at shipped paths drawing the vanilla
   mesh and material). Flowers = the .mesh / .mat paths are refused the same way.
+  **Owner (13:12, verified in game): flowers grow** with our NIFs at shipped paths drawing the vanilla mesh and
+  material. So our NIF at a shipped path is accepted, and what it names (our .mesh at geometries\<new hash>, our
+  .mat) is refused. Next split: `--vanilla-paths --vanilla-material` alone (our .mesh, vanilla material): Skyrim
+  shapes with flower textures = the .mesh is fine and the material is refused; nothing = the .mesh is refused.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
