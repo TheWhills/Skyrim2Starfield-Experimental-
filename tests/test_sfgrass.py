@@ -347,6 +347,10 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertIn("(the template's NIF copied to our paths)", log)
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"landscape\\grass\\s2s\\landscape_plants_fern01.nif\0")
 
+    def test_loose_build(self):
+        _raw, by, log = self._run(["--loose"])
+        self.assertIn("files: loose (meshes", log)
+
     def test_control(self):
         raw, by, log = self._run(["--control"])
         self.assertNotIn("S2S_Fern", by)                                      # no Skyrim grass converted

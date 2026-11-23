@@ -262,6 +262,9 @@ def main(argv=None):
     ap.add_argument("--copy-template-nif", action="store_true",
                     help="test (2026-11-23): the template grass's vanilla NIF copied byte for byte to our model paths "
                          "in our archive. Grass then = our NIF bytes differ (header); none = our path / archive")
+    ap.add_argument("--loose", action="store_true",
+                    help="test (2026-11-23): leave the models, meshes, materials and textures loose in the mod folder "
+                         "instead of in S2SGrass - *.ba2")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -448,8 +451,17 @@ def main(argv=None):
     if conv is not None:
         import hair_pack
         base = os.path.splitext(PLUGIN)[0]
-        report["packing"] = hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2",
-                                           f"{base} - Textures.ba2")
+        for old_dir in ("meshes", "geometries", "materials", "textures"):       # no stale loose files from a
+            shutil.rmtree(os.path.join(out, old_dir), ignore_errors=True)       # --loose build win over archives
+        if a.loose:                          # 2026-11-23 test: loose files, no archives (MO2 serves them)
+            for old_ba2 in (f"{base} - Main.ba2", f"{base} - Textures.ba2"):
+                if os.path.exists(os.path.join(out, old_ba2)):
+                    os.remove(os.path.join(out, old_ba2))
+            report["packing"] = hair_pack.pack(staging, out, a.starfield, "<none>", f"{base} - Main.ba2",
+                                               f"{base} - Textures.ba2")
+        else:
+            report["packing"] = hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2",
+                                               f"{base} - Textures.ba2")
         report["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
         shutil.rmtree(staging, ignore_errors=True)
     if not os.path.isfile(mapping_path):
@@ -471,6 +483,9 @@ def main(argv=None):
             f"{len(report['failed'])} models failed")
     if a.allow_procgen:
         print(f"world {report['allow_procgen']['world']} ({report['allow_procgen']['form_id']}): Allow ProcGen set")
+    if report.get("packing"):
+        print("files: " + (f"loose ({', '.join(report['packing']['loose'])})" if "loose" in report["packing"]
+                           else ", ".join(report["packing"].get("archives", []))))
     if len(masters) > 1:
         print(f"masters: {', '.join(masters)}: load {PLUGIN} after them")
     print(f"report: {os.path.join(out, 'grass_native.json')}")

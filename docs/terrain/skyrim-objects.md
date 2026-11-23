@@ -394,6 +394,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   0 vs vanilla 3, sf_data 7a00 vs a 7-byte value such as 8302290b670200; string order) or where it is loaded from (our
   path landscape\grass\s2s\, our S2SGrass - Main.ba2). Next: `--copy-template-nif` writes the vanilla NIF byte for
   byte at our paths in our archive. Grass = our NIF bytes (header); none = path / archive.
+  `--copy-template-nif` (owner, 11:10 / 11:19): **no grass**. The vanilla NIF, unchanged, at our path in our archive
+  grows nothing; at its own path (in the game's archive) it grows. So the NIF bytes are fine and the file's location
+  is the block: our archive (S2SGrass - Main.ba2, packed like our other working mods) or the path
+  (landscape\grass\s2s\...). Next: `--loose` (no archive; MO2 serves the files) with the same copy.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
