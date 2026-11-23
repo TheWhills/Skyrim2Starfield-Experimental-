@@ -80,14 +80,40 @@ def head_track_variable(raw: bytes, variable: str) -> (bytes, int):
     return (agx_edit.dump(root, raw), n) if n else (raw, 0)
 
 
-def graphs(attacks_raw: bytes, player_raw: bytes, tag_map: dict, head_track: str = "bNoAim"):
+def head_track_limit(raw: bytes, degrees: float) -> (bytes, int):
+    """Player_Melee with every Dual Direct At node's Disable Heading Min / Max set to -degrees / +degrees; (bytes,
+    nodes changed).
+
+    Why (owner's run + head_turn_probe, 2026-11-23): the forward dodge's head is 100-150 deg right of the look direction
+    and pitched 80-88 deg down mid-dodge in TK Dodge's own clip (the conversion matches Skyrim to 0.0 deg); Skyrim's
+    player head tracking turns it back. Starfield's head tracking gives up past +-90 deg (vanilla Disable Heading
+    Min / Max), so the raw clip showed. A wider range keeps the tracking on; the LookAt_Head poses limit how far the
+    head actually turns."""
+    from fo4sf import agx_edit
+    root = agx_edit.load(raw)
+    n = 0
+    for node in root.iter("node"):
+        if node.findtext("node_type") != "NT_DUAL_DIRECT_AT":
+            continue
+        rows = agx_edit._rows(node)
+        if "Disable Heading Min" in rows and "Disable Heading Max" in rows:
+            agx_edit.set_row(node, "Disable Heading Min", f"{-abs(degrees):g}")
+            agx_edit.set_row(node, "Disable Heading Max", f"{abs(degrees):g}")
+            n += 1
+    return (agx_edit.dump(root, raw), n) if n else (raw, 0)
+
+
+def graphs(attacks_raw: bytes, player_raw: bytes, tag_map: dict, head_track: str = "", head_limit: float = 0.0):
     """({Data-relative path: bytes}, report) of the two graphs: dodge states in MeleeAttacks, events in Player_Melee
-    (and its head tracking switched off by `head_track`, "" = left as it is)."""
+    (its head tracking switched off by `head_track`, "" = left as it is; its give-up angle widened to `head_limit`
+    degrees, 0 = vanilla)."""
     attacks, report = dodge_graph.build_attacks(attacks_raw, tuple(tag_map), None, tag_map)
     player, n = dodge_graph.add_switch_events(player_raw, [st["event"] for st in report["states"].values()])
     report["player_switch_lists"] = n
     if head_track:
         player, report["head_track_nodes"] = head_track_variable(player, head_track)
+    if head_limit:
+        player, report["head_limit_nodes"] = head_track_limit(player, head_limit)
     return {ATTACKS_REL: attacks, PLAYER_REL: player}, report
 
 
@@ -286,9 +312,12 @@ def main(argv=None):
     ap.add_argument("--state-tag", action="append", default=[], metavar="DIRECTION=TAG",
                     help="diagnostic: that direction's dodge state plays TAG (e.g. Back=MeleeAttackPower_A, the vanilla "
                          "standing power attack) instead of its converted clip; the clips are still written")
-    ap.add_argument("--head-track-variable", default="bNoAim",
-                    help="the graph bool that switches head tracking off in the shipped Player_Melee (default bNoAim, "
-                         "which S2SDodge holds during a dodge; \"\" = the game's bNoHeadTrack)")
+    ap.add_argument("--head-track-variable", default="",
+                    help="the graph bool that switches head tracking off in the shipped Player_Melee (default: the "
+                         "game's bNoHeadTrack; bNoAim = off whenever S2SDodge holds bNoAim)")
+    ap.add_argument("--head-track-limit", type=float, default=180.0, metavar="DEG",
+                    help="head tracking gives up past this heading (vanilla 90; default 180: on through the forward "
+                         "dodge, whose clip turns the head ~145 deg away; 0 = leave vanilla)")
     ap.add_argument("--variable", action="append", default=[], metavar="NAME",
                     help="a graph variable window over the whole of every dodge clip, e.g. bNoLeftHandIK (repeatable)")
     ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")
@@ -308,7 +337,8 @@ def main(argv=None):
         state_tags[d] = t
     attacks_raw, _ = hkx_to_af.vanilla_file(ATTACKS_REL, a.starfield_data)
     player_raw, _ = hkx_to_af.vanilla_file(PLAYER_REL, a.starfield_data)
-    graph_files, report = graphs(attacks_raw, player_raw, state_tags, a.head_track_variable)   # before converting: fails fast
+    graph_files, report = graphs(attacks_raw, player_raw, state_tags, a.head_track_variable,
+                                 a.head_track_limit)   # before converting: fails fast
     rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest, a.variable)
     files = {**clip_files, **graph_files, **fragment_files(tag_map)}
     write(out, files)
@@ -316,11 +346,15 @@ def main(argv=None):
     with open(os.path.join(out, "sam_dodge.json"), "w", encoding="utf-8") as fh:
         json.dump({"states": report["states"], "player_switch_lists": report["player_switch_lists"],
                    "head_track_nodes": report.get("head_track_nodes", 0),
+                   "head_limit_nodes": report.get("head_limit_nodes", 0),
                    "files": sorted(files) + plugin, "conversion": conv}, fh, indent=1)
     for d, st in report["states"].items():
         print(f"{d}: event {st['event']} -> state playing {st['tag']}")
     if a.head_track_variable:
         print(f"head tracking off with {a.head_track_variable}: {report.get('head_track_nodes', 0)} Dual Direct At node(s)")
+    if a.head_track_limit:
+        print(f"head tracking kept up to {a.head_track_limit:g} deg: {report.get('head_limit_nodes', 0)} Dual Direct At "
+              "node(s)")
     print(f"{len(clip_files)} clip files, 2 graphs, fragment {FRAGMENT}" + (", plugin " + " + ".join(
         os.path.basename(p) for p in plugin) if plugin else "") + f" -> {out}" + ("" if rc == 0 else " (ERRORS above)"))
     return rc

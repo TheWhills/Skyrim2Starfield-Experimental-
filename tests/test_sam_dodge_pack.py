@@ -92,8 +92,17 @@ class SamDodgePackTests(unittest.TestCase):
         self.assertIn(b"<value>No Head Track Variable</value></prop><prop><value>bNoAim</value>", out)
         self.assertNotIn(b"bNoHeadTrack", out)
         self.assertEqual(S.head_track_variable(player_graph(), "bNoAim"), (player_graph(), 0))   # no such node
-        files, rep = S.graphs(attacks_graph(), player_graph(), S.tags())
+        files, rep = S.graphs(attacks_graph(), player_graph(), S.tags(), "bNoAim")
         self.assertEqual(rep["head_track_nodes"], 0)
+        raw2 = raw.replace(b"</property_sheet>", b"<row><prop><value>Disable Heading Min</value></prop><prop><value>-90"
+                           b"</value></prop></row><row><prop><value>Disable Heading Max</value></prop><prop><value>90"
+                           b"</value></prop></row></property_sheet>")
+        out, n = S.head_track_limit(raw2, 180)
+        self.assertEqual(n, 1)
+        self.assertIn(b"<value>Disable Heading Min</value></prop><prop><value>-180</value>", out)
+        self.assertIn(b"<value>Disable Heading Max</value></prop><prop><value>180</value>", out)
+        self.assertIn(b"bNoHeadTrack", out)                                  # head tracking itself left on
+        self.assertEqual(S.head_track_limit(player_graph(), 180), (player_graph(), 0))
 
     def test_fragment(self):
         t = S.tags()

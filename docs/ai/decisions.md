@@ -2784,4 +2784,11 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   turned in every forward dodge; back dodges stay at ~0.4. The head-track switch is not what moves it, or the value is
   only computed. Next: scripts/armor/head_turn_probe.py compares the head's facing relative to the chest per frame in
   Skyrim's clip and in the retarget, to tell whether the conversion turns the head.
+- head_turn_probe on the owner's install (verified): the converted forward dodge's head relative to the chest equals
+  Skyrim's to 0.0 deg on all 27 frames; mid-dodge (frames 6-11) TK Dodge's own clip has the head 100-150 deg right of
+  forward and 80-88 deg down (the LookAtHeadingVar ~2.5 / LookAtPitchVar ~1.4 the game reported). So the turn is the
+  source animation; in Skyrim the player's head tracking (TDM's, supported hypothesis) turns it back. Starfield's
+  Dual Direct At gives up past Disable Heading Min / Max = -90 / 90. Change: head tracking left on (the bNoAim redirect
+  dropped, S2SDodge sets only bNoAim) and the shipped Player_Melee's give-up range widened (--head-track-limit,
+  default 180). Unresolved until the owner's run.
 
