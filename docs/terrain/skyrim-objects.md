@@ -545,6 +545,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   `--model-from fieldgrass,forestgrass,ferngrass=SnowGrass01Forest` puts those families on a model that shows (snowy
   white): white grass on the meadow = their own converted models are the problem, nothing = their ground cover does
   not grow. The build now prints each converted model's shapes, triangles and height.
+  Owner (16:54, one screenshot of the forest spot, build log not sent): the open forest floor still bare, straw on
+  the edges only, no white grass. If that build ran, the field / forest ground cover does not grow there, while the
+  rock-edge covers do. Supported hypotheses: the painted-material threshold (the template cover's, applied to our
+  3-bit alphas: Skyrim blends LFieldGrass02 with its look-alike NoGrass twin and dirt, so its alpha rarely passes it),
+  or ground cover not growing on a quadrant's base layer (the open floor is the base; rock edges are overlays).
+  ground_at.py now takes `--skyrim-pos` too, to read the quadrant bytes and alphas at the spot.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

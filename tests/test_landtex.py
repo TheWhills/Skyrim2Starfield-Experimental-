@@ -558,6 +558,14 @@ class OverlayTextureTests(unittest.TestCase):
                          "--arrival", "", "--land-textures"])
             with contextlib.redirect_stdout(io.StringIO()) as o:
                 ground_at.main(["--skyrim", esm, "--terrain", out, "--pos", "-14.3", "-14.3", "--map", "8"])
+            with open(os.path.join(out, "overlays_params.json"), encoding="utf-8") as fh:
+                ox, oy = (float(v) for v in json.load(fh)["overlays"][0].get("origin_cw_m", [0, 0]))
+            with contextlib.redirect_stdout(io.StringIO()) as o2:       # 2026-11-23: Skyrim's own getpos instead
+                ground_at.main(["--skyrim", esm, "--terrain", out, "--skyrim-pos", str((-14.3 + ox) * 70.0),
+                                str((-14.3 + oy) * 70.0), "--map", "8"])
+        same = [ln for ln in o.getvalue().splitlines() if "draws" in ln or ln.startswith("raw quadrant")]
+        self.assertTrue(same)
+        self.assertEqual(same, [ln for ln in o2.getvalue().splitlines() if "draws" in ln or ln.startswith("raw quadrant")])
         text = o.getvalue()
         self.assertIn("left: what Skyrim paints most, right: what the build draws", text)
         lines = text.splitlines()

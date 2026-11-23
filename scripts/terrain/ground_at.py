@@ -191,7 +191,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
     ap.add_argument("--terrain", required=True, help="the staged overlay build (make_skyrim_overlay.py build --out)")
-    ap.add_argument("--pos", type=float, nargs=2, required=True, metavar=("X", "Y"), help="player.getpos x / y")
+    where = ap.add_mutually_exclusive_group(required=True)
+    where.add_argument("--pos", type=float, nargs=2, metavar=("X", "Y"), help="player.getpos x / y")
+    where.add_argument("--skyrim-pos", type=float, nargs=2, metavar=("X", "Y"),
+                       help="Skyrim's player.getpos x / y (units) at the same spot instead (no merge shift involved)")
     ap.add_argument("--spawn-at", type=float, nargs=2, metavar=("X", "Y"),
                     help="player.getpos x / y right after coc, before moving: Starfield reports positions in the "
                          "planet's merged grid, so this gives the shift to the overlay's own frame")
@@ -207,12 +210,14 @@ def main(argv=None):
     with open(os.path.join(a.terrain, "overlays_params.json"), encoding="utf-8") as f:
         prm = json.load(f)
     ov = prm["overlays"][0]
-    if a.spawn_at:                                    # planet frame -> overlay frame through the COC marker
+    if a.spawn_at and a.pos:                          # planet frame -> overlay frame through the COC marker
         sx, sy = ov["spawn"][:2]
         a.pos = [a.pos[0] - a.spawn_at[0] + sx, a.pos[1] - a.spawn_at[1] + sy]
         print(f"merge shift ({a.spawn_at[0] - sx:.2f}, {a.spawn_at[1] - sy:.2f}) m: overlay position "
               f"({a.pos[0]:.2f}, {a.pos[1]:.2f})")
     ox, oy = (float(v) for v in ov.get("origin_cw_m", [0, 0]))
+    if a.skyrim_pos:                                  # 2026-11-23: Skyrim's own getpos -> overlay frame
+        a.pos = [a.skyrim_pos[0] / 70.0 - ox, a.skyrim_pos[1] / 70.0 - oy]
     xu, yu = (a.pos[0] + ox) * 70.0, (a.pos[1] + oy) * 70.0
     (cx, cy, row, col), layers = skyrim_layers(a.skyrim, xu, yu)
     from fo4sf import terrain_grid as tgrid
