@@ -389,6 +389,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   `--vanilla-geometry` keeps our NIFs, paths, archive and records but points their BSGeometry at the template grass's
   vanilla .mesh (and its bounds). Grass = our .mesh data (vertex colours, no uv2, one meshlet, scale) is rejected;
   none = something outside the mesh (our NIF / archive / path).
+  `--vanilla-geometry` + `--vanilla-material` (owner, 10:37 / 10:39): **no grass**. So our NIF drawing the vanilla
+  mesh and material grows nothing, while the vanilla NIF does. What differs: the NIF file itself (header: unknown int
+  0 vs vanilla 3, sf_data 7a00 vs a 7-byte value such as 8302290b670200; string order) or where it is loaded from (our
+  path landscape\grass\s2s\, our S2SGrass - Main.ba2). Next: `--copy-template-nif` writes the vanilla NIF byte for
+  byte at our paths in our archive. Grass = our NIF bytes (header); none = path / archive.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

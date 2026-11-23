@@ -129,6 +129,21 @@ def with_material(nif_bytes: bytes, material_path: str) -> bytes:
     return nifmod.serialize(n)
 
 
+def template_nif(sf_data: str, model: str) -> bytes:
+    """A vanilla model's NIF bytes from the game's archives."""
+    import glob
+    from fo4sf import ba2
+    name = "meshes\\" + model.replace("/", "\\").lstrip("\\")
+    for p in sorted(glob.glob(os.path.join(sf_data, "Starfield - *.ba2")), reverse=True):
+        try:
+            arc = ba2.Ba2(p)
+        except Exception:                                # noqa: BLE001 (texture archives etc.)
+            continue
+        if arc.find(name) is not None:
+            return arc.read(name)
+    raise FileNotFoundError(f"{name} not in the game's archives")
+
+
 def template_geometry(sf_data: str, model: str):
     """(MeshRef, sphere, box) of a vanilla model's first BSGeometry, read from the game's archives."""
     import glob
@@ -244,6 +259,9 @@ def main(argv=None):
     ap.add_argument("--vanilla-geometry", action="store_true",
                     help="test (2026-11-23): our NIFs (path, archive, records) drawing the template grass's vanilla "
                          ".mesh instead of ours. Grass then = our .mesh data is what the grass system rejects")
+    ap.add_argument("--copy-template-nif", action="store_true",
+                    help="test (2026-11-23): the template grass's vanilla NIF copied byte for byte to our model paths "
+                         "in our archive. Grass then = our NIF bytes differ (header); none = our path / archive")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -357,7 +375,10 @@ def main(argv=None):
             sys.exit("no vanilla GRAS / GCVR template found")
         report["templates"] = {"gras": sfplugin.edid(gt[2]), "gcvr": sfplugin.edid(ct[2]),
                                "gras_dnam": sfgrass.parse_gras_dnam(dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"])}
-        geometry = None
+        geometry = copied = None
+        if a.copy_template_nif:
+            tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
+            copied = template_nif(os.path.join(a.starfield, "Data"), tmodel)
         if a.vanilla_geometry:
             tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
             geometry = template_geometry(os.path.join(a.starfield, "Data"), tmodel)
@@ -372,9 +393,18 @@ def main(argv=None):
                 continue
             name = "meshes\\" + r["model"].replace("/", "\\").lstrip("\\")
             try:
-                model = (dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
-                         if a.keep_template_model else convert_model(conv, name, tints.get(r["model"]), staging,
-                                                                     a.vanilla_material, geometry))
+                if copied is not None:               # --copy-template-nif: vanilla bytes at our path, in our archive
+                    stem = re.sub(r"[^a-z0-9_]+", "_", os.path.splitext(r["model"].lower().replace("\\", "/"))[0])
+                    rel = f"meshes/landscape/grass/{PREFIX}/{stem}.nif"
+                    pth = os.path.join(staging, *rel.split("/"))
+                    os.makedirs(os.path.dirname(pth), exist_ok=True)
+                    with open(pth, "wb") as fh:
+                        fh.write(copied)
+                    model = rel.split("/", 1)[1].replace("/", "\\")
+                elif a.keep_template_model:
+                    model = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
+                else:
+                    model = convert_model(conv, name, tints.get(r["model"]), staging, a.vanilla_material, geometry)
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue
@@ -431,7 +461,8 @@ def main(argv=None):
         print(f"templates: grass {report['templates']['gras']}, cover {report['templates']['gcvr']}"
               + (" (vanilla model kept)" if a.keep_template_model else "")
               + (f" (our geometry, vanilla material {a.vanilla_material})" if a.vanilla_material else "")
-              + (" (our NIFs, the template's vanilla .mesh)" if a.vanilla_geometry else ""))
+              + (" (our NIFs, the template's vanilla .mesh)" if a.vanilla_geometry else "")
+              + (" (the template's NIF copied to our paths)" if a.copy_template_nif else ""))
     print((f"control: vanilla ground cover {report['control']['edid']} on {len(covers)} converted textures"
            if a.control else f"{len(gras_fid)} grasses, {len(covers)} ground covers")
           + (f", biome {report['biome']['edid']} ({report['biome']['form_id']}) overridden "

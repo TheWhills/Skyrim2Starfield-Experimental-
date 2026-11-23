@@ -339,6 +339,14 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertIn("(our NIFs, the template's vanilla .mesh)", log)
         self.assertIn("S2S_Fern", by)
 
+    def test_copy_template_nif_build(self):
+        import skyrim_grass_native as N
+        with mock.patch.object(N, "template_nif", return_value=b"NIFBYTES") as tn:
+            _raw, by, log = self._run(["--copy-template-nif"])
+        tn.assert_called_once()
+        self.assertIn("(the template's NIF copied to our paths)", log)
+        self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"landscape\\grass\\s2s\\landscape_plants_fern01.nif\0")
+
     def test_control(self):
         raw, by, log = self._run(["--control"])
         self.assertNotIn("S2S_Fern", by)                                      # no Skyrim grass converted
