@@ -361,6 +361,11 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Landscape\\Grass\\S2S_fern01.nif\0")   # first grass: variant 0
         self.assertIn("flowers (hellebore): 1 grasses at paths like Landscape\\Grass\\S2S_fern01.nif", log)
 
+    def test_model_path(self):
+        _raw, by, log = self._run(["--model-path", "Landscape\\Grass\\GrassMossMounds02.nif"])
+        self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Landscape\\Grass\\GrassMossMounds02.nif\0")
+        self.assertIn("every grass names Landscape\\Grass\\GrassMossMounds02.nif", log)
+
     def test_loose_build(self):
         _raw, by, log = self._run(["--loose"])
         self.assertIn("files: loose (meshes", log)

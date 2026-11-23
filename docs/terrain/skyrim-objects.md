@@ -417,6 +417,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   Landscape\Grass\S2S_<name>.nif (flat, vanilla case), moss mounds at Landscape\Grass\S2S\<name>.nif (vanilla
   case, subfolder), dried primrose at Landscape\Grass\S2S\GrassPrimRoseDried01.nif (a vanilla file name in our
   subfolder). If none grows, any path outside the vanilla set fails (a precomputed list of grass models?).
+  `--path-variants` (owner, 12:09 / 12:20): **none of the three grows**. (The real-Data test at 11:49 did not run:
+  the copies were not in Data at 12:09.) So no path of ours works, archive, loose or MO2. Next split: `--model-path
+  Landscape\Grass\GrassMossMounds02.nif`, a vanilla model in the game's own archives but not the template's. Moss
+  mounds grow = any model in the game's archives works and ours are not seen by the grass loader (e.g. it reads only
+  the startup archives); nothing = only the template GRAS's own model works (something ties a GRAS to its model).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
