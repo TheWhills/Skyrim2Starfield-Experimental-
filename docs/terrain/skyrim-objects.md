@@ -455,6 +455,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   of 27 Skyrim grasses got a path (15 "failed"), taken in EditorID order, i.e. probably not Riverwood's: nothing grew,
   inconclusive. Now the free paths go to the grasses covering the most Skyrim ground (grass_coverage: summed LAND
   weight of the textures that grow each grass, Tamriel-wide), and the build prints which grass got which path.
+  Owner's run (13:03 / 13:07): ForestGrass01/02, FallForestGrass01, TundraGrass01/03/04, SnowGrass01Forest,
+  RockGrass01 (and 4 underwater grasses, now sent last) over the 12 free paths: **nothing grew**. Our NIFs now sit at
+  shipped paths, but they still name our .mesh files and .mat at new paths. Next split: `--vanilla-paths
+  --vanilla-geometry --vanilla-material ...GrassFlowersHellebore01.mat` (our NIFs at shipped paths drawing the vanilla
+  mesh and material). Flowers = the .mesh / .mat paths are refused the same way.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

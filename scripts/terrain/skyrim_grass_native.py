@@ -139,6 +139,9 @@ def with_material(nif_bytes: bytes, material_path: str) -> bytes:
 MODEL_TYPES = (b"GRAS", b"STAT", b"MSTT", b"FLOR", b"TREE", b"ACTI", b"MISC", b"SCOL", b"PKIN", b"MOVS", b"BNDS")
 
 
+UNDERWATER_RULES = (2, 3)       # Skyrim GRAS DATA water rule: Below - At Least, Below - At Most (UESP)
+
+
 def world_cells(skyrim_esm):
     """Skyrim's Tamriel LAND texture weights per cell (landtex.read_world_textures)."""
     from fo4sf import landtex, skyrimland
@@ -484,6 +487,9 @@ def main(argv=None):
             if cells is None:
                 cells = world_cells(a.skyrim)
             cov = grass_coverage(cells, ltex_grass)
+            for gg, rr in gras_sky.items():          # underwater grasses (Skyrim water rule "below", or named so)
+                if rr.get("water_rule") in UNDERWATER_RULES or "water" in rr.get("edid", "").lower():
+                    cov[gg] = -1.0                   # last: they waste the few free paths on lake beds
             order = lambda g: (-cov.get(g, 0.0), gras_sky.get(g, {}).get("edid", ""))   # noqa: E731
             report["grass_coverage"] = {gras_sky[g]["edid"]: round(cov.get(g, 0.0), 1) for g in gras_sky
                                         if cov.get(g, 0.0) > 0}

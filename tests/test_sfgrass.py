@@ -404,6 +404,27 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"landscape\\grass\\spare01.nif\0")
         self.assertIn("5 shipped, 4 named by the game's records, 1 free", log)
 
+    def test_vanilla_paths_skip_water_grass(self):
+        """2026-11-23: underwater grasses go last for the few free paths."""
+        import numpy as np
+        import skyrim_grass_native as N
+        data = struct.pack("<BBBBHHIffffB3x", 30, 0, 40, 0, 0, 0, 0, 0.0, 0.3, 0.2, 0.0, 4)
+        lg = {0x77: [0x88, 0x89]}
+        gr = {0x88: dict(skyrimgrass.parse_gras_data(data), edid="Fern", model="landscape\\plants\\fern01.nif"),
+              0x89: dict(skyrimgrass.parse_gras_data(data), edid="WaterKelpGrass01",
+                         model="landscape\\plants\\fern01.nif")}
+        pool = (["meshes\\landscape\\grass\\spare01.nif"], 5, 4)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                mock.patch.object(skyrimgrass, "read_grass", return_value=(lg, gr)), \
+                mock.patch.object(N, "unused_grass_paths", return_value=pool), \
+                mock.patch.object(N, "world_cells", return_value={(0, 0): {0x77: np.ones((33, 33))}}), \
+                contextlib.redirect_stdout(io.StringIO()) as log:
+            sf, data_dir, sky_esm, terrain = self._setup(tmp)
+            N.main(["--skyrim", sky_esm, "--skyrim-data", data_dir, "--starfield", sf, "--terrain", terrain,
+                    "--texconv", "texconv.exe", "--out", os.path.join(tmp, "mod"), "--vanilla-paths", "--loose"])
+        self.assertIn("Fern -> meshes", log.getvalue())
+        self.assertNotIn("WaterKelpGrass01 -> meshes", log.getvalue())
+
     def test_grass_coverage(self):
         import numpy as np
         import skyrim_grass_native as N
