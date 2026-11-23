@@ -294,6 +294,18 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<I", n.blocks[3], 4)[0], sfnif.material_id(mat))
         self.assertEqual(n.blocks[2], nifmod.parse(data).blocks[2])          # geometry untouched
 
+    def test_with_geometry(self):
+        """2026-11-23: our NIF drawing a vanilla .mesh."""
+        import skyrim_grass_native as N
+        from fo4sf import nif as nifmod, sfnif
+        sh = sfnif.StaticShape(b"Blade", b"aa\\bb", 30, 12, "materials\\s2s\\x.mat", (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))
+        data = nifmod.serialize(sfnif.build_static_nif(b"Grass", [sh]))
+        ref = sfnif.MeshRef(114, 68, 0x40, b"5787\\7c36")
+        n = nifmod.parse(N.with_geometry(data, (ref, (0, 0, 1, 2), (0, 0, 1, 1, 1, 1))))
+        g = sfnif.parse_bsgeometry(n.blocks[2])
+        self.assertEqual((g.meshes[0].path, g.meshes[0].num_verts, g.sphere[3]), (b"5787\\7c36", 68, 2))
+        self.assertEqual(n.blocks[4], nifmod.parse(data).blocks[4])          # material untouched
+
     def test_with_procgen(self):
         import skyrim_grass_native as N
         self.assertEqual(dict(N.with_procgen([(b"EDID", b"W\0"), (b"FNAM", b"\x01\x02")]))[b"FNAM"], b"\x09\x02")
@@ -315,6 +327,16 @@ class PlanetBiomeTests(unittest.TestCase):
     def test_vanilla_material_build(self):
         raw, by, log = self._run(["--vanilla-material", "Materials\\Landscape\\Grass\\V.mat"])
         self.assertIn("vanilla material Materials\\Landscape\\Grass\\V.mat", log)
+        self.assertIn("S2S_Fern", by)
+
+    def test_vanilla_geometry_build(self):
+        import skyrim_grass_native as N
+        from fo4sf import sfnif
+        geo = (sfnif.MeshRef(6, 4, 0x40, b"aa\\bb"), (0, 0, 0, 1), (0, 0, 0, 1, 1, 1))
+        with mock.patch.object(N, "template_geometry", return_value=geo) as tg:
+            _raw, by, log = self._run(["--vanilla-geometry"])
+        tg.assert_called_once()
+        self.assertIn("(our NIFs, the template's vanilla .mesh)", log)
         self.assertIn("S2S_Fern", by)
 
     def test_control(self):

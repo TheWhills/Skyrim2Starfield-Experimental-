@@ -129,7 +129,41 @@ def with_material(nif_bytes: bytes, material_path: str) -> bytes:
     return nifmod.serialize(n)
 
 
-def convert_model(conv, name: str, tint, staging: str, material: str = "") -> str:
+def template_geometry(sf_data: str, model: str):
+    """(MeshRef, sphere, box) of a vanilla model's first BSGeometry, read from the game's archives."""
+    import glob
+    from fo4sf import ba2, sfnif
+    name = "meshes\\" + model.replace("/", "\\").lstrip("\\")
+    for p in sorted(glob.glob(os.path.join(sf_data, "Starfield - *.ba2")), reverse=True):
+        try:
+            arc = ba2.Ba2(p)
+        except Exception:                                # noqa: BLE001 (texture archives etc.)
+            continue
+        if arc.find(name) is None:
+            continue
+        n = nifmod.parse(arc.read(name))
+        for i, b in enumerate(n.blocks):
+            if n.type_of(i) == "BSGeometry":
+                g = sfnif.parse_bsgeometry(b)
+                return g.meshes[0], g.sphere, g.box
+    raise FileNotFoundError(f"{name} not in the game's archives")
+
+
+def with_geometry(nif_bytes: bytes, geometry) -> bytes:
+    """The NIF with every BSGeometry drawing the given vanilla mesh (2026-11-23 test: our NIF, archive, path and
+    records with a vanilla .mesh, to tell our mesh data apart from everything else)."""
+    from fo4sf import sfnif
+    ref, sphere, box = geometry
+    n = nifmod.parse(nif_bytes)
+    for i, b in enumerate(n.blocks):
+        if n.type_of(i) == "BSGeometry":
+            g = sfnif.parse_bsgeometry(b)
+            g.meshes, g.sphere, g.box = [ref, None, None, None], sphere, box
+            n.blocks[i] = sfnif.build_bsgeometry(g)
+    return nifmod.serialize(n)
+
+
+def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided); returns its path under meshes\\."""
     raw = conv.src.mesh(name)
@@ -154,6 +188,9 @@ def convert_model(conv, name: str, tint, staging: str, material: str = "") -> st
     if material:
         files = {rel: (with_material(d, material) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
                  if not rel.lower().endswith(".mat")}
+    if geometry is not None:
+        files = {rel: (with_geometry(d, geometry) if rel.lower().endswith(".nif") else d) for rel, d in files.items()
+                 if not rel.lower().endswith(".mesh")}
     for rel, data in files.items():
         p = os.path.join(staging, *rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -204,6 +241,9 @@ def main(argv=None):
                          "own .mat, e.g. Materials\\Landscape\\Grass\\Flowers\\GrassFlowersHellebore01.mat "
                          "(in the compiled material database). Grass then = the grass system needs a database "
                          "material")
+    ap.add_argument("--vanilla-geometry", action="store_true",
+                    help="test (2026-11-23): our NIFs (path, archive, records) drawing the template grass's vanilla "
+                         ".mesh instead of ours. Grass then = our .mesh data is what the grass system rejects")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -317,6 +357,10 @@ def main(argv=None):
             sys.exit("no vanilla GRAS / GCVR template found")
         report["templates"] = {"gras": sfplugin.edid(gt[2]), "gcvr": sfplugin.edid(ct[2]),
                                "gras_dnam": sfgrass.parse_gras_dnam(dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"])}
+        geometry = None
+        if a.vanilla_geometry:
+            tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
+            geometry = template_geometry(os.path.join(a.starfield, "Data"), tmodel)
         shutil.rmtree(staging, ignore_errors=True)
         conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), staging, a.texconv, cr, None,
                                              prefix=PREFIX)
@@ -330,7 +374,7 @@ def main(argv=None):
             try:
                 model = (dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
                          if a.keep_template_model else convert_model(conv, name, tints.get(r["model"]), staging,
-                                                                     a.vanilla_material))
+                                                                     a.vanilla_material, geometry))
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue
@@ -386,7 +430,8 @@ def main(argv=None):
     if "templates" in report:
         print(f"templates: grass {report['templates']['gras']}, cover {report['templates']['gcvr']}"
               + (" (vanilla model kept)" if a.keep_template_model else "")
-              + (f" (our geometry, vanilla material {a.vanilla_material})" if a.vanilla_material else ""))
+              + (f" (our geometry, vanilla material {a.vanilla_material})" if a.vanilla_material else "")
+              + (" (our NIFs, the template's vanilla .mesh)" if a.vanilla_geometry else ""))
     print((f"control: vanilla ground cover {report['control']['edid']} on {len(covers)} converted textures"
            if a.control else f"{len(gras_fid)} grasses, {len(covers)} ground covers")
           + (f", biome {report['biome']['edid']} ({report['biome']['form_id']}) overridden "

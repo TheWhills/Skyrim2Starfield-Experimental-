@@ -385,6 +385,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   Supported hypothesis: the grass system takes its material from the compiled database only (by MaterialID), so a
   material that exists only as our .mat file draws nothing. Test: `--vanilla-material
   Materials\Landscape\Grass\Flowers\GrassFlowersHellebore01.mat` puts a vanilla grass material on our geometry.
+  `--vanilla-material` (owner, 10:30 / 10:33): **no grass**. The material alone is not the block. Bisection next:
+  `--vanilla-geometry` keeps our NIFs, paths, archive and records but points their BSGeometry at the template grass's
+  vanilla .mesh (and its bounds). Grass = our .mesh data (vertex colours, no uv2, one meshlet, scale) is rejected;
+  none = something outside the mesh (our NIF / archive / path).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
