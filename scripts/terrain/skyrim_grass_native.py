@@ -282,6 +282,11 @@ def main(argv=None):
                     help="test (2026-11-23): every grass record names this model path (under meshes\\) and no model "
                          "files are written, e.g. Landscape\\Grass\\GrassMossMounds02.nif: a vanilla model other than "
                          "the template's, from the game's own archives")
+    ap.add_argument("--replace-vanilla", default="",
+                    help="test (2026-11-23): the template grass's NIF (hellebore flowers) written in our archive OVER "
+                         "another vanilla grass model's path, e.g. Landscape\\Grass\\GrassMossMounds04.nif, and named "
+                         "by every grass. Flowers = the grass loader reads mod files at known paths; moss mounds = it "
+                         "reads only the game's archives")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -396,7 +401,7 @@ def main(argv=None):
         report["templates"] = {"gras": sfplugin.edid(gt[2]), "gcvr": sfplugin.edid(ct[2]),
                                "gras_dnam": sfgrass.parse_gras_dnam(dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"])}
         geometry = copied = None
-        if a.copy_template_nif:
+        if a.copy_template_nif or a.replace_vanilla:
             tmodel = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
             copied = template_nif(os.path.join(a.starfield, "Data"), tmodel)
         if a.vanilla_geometry:
@@ -417,6 +422,12 @@ def main(argv=None):
             try:
                 if a.model_path:                     # --model-path: every grass names this (game) model, no files
                     model = a.model_path
+                elif a.replace_vanilla:              # --replace-vanilla: the template's NIF over a vanilla path
+                    model = a.replace_vanilla
+                    pth = os.path.join(staging, "meshes", *model.split("\\"))
+                    os.makedirs(os.path.dirname(pth), exist_ok=True)
+                    with open(pth, "wb") as fh:
+                        fh.write(copied)
                 elif variants is not None:
                     k = gi % len(PATH_VARIANTS)
                     stem = re.sub(r"[^A-Za-z0-9_]+", "_", os.path.splitext(os.path.basename(
@@ -519,6 +530,8 @@ def main(argv=None):
         print(f"world {report['allow_procgen']['world']} ({report['allow_procgen']['form_id']}): Allow ProcGen set")
     if a.model_path:
         print(f"  every grass names {a.model_path}")
+    if a.replace_vanilla:
+        print(f"  every grass names {a.replace_vanilla}, which our archive replaces with the template's NIF")
     for label, paths in (report.get("path_variants") or {}).items():
         print(f"  {label}: {len(paths)} grasses at paths like {paths[0]}")
     if report.get("packing"):

@@ -366,6 +366,14 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Landscape\\Grass\\GrassMossMounds02.nif\0")
         self.assertIn("every grass names Landscape\\Grass\\GrassMossMounds02.nif", log)
 
+    def test_replace_vanilla(self):
+        import skyrim_grass_native as N
+        with mock.patch.object(N, "template_nif", return_value=b"HELLEBORE"):
+            _raw, by, log = self._run(["--replace-vanilla", "Landscape\\Grass\\GrassMossMounds04.nif", "--loose"])
+        self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Landscape\\Grass\\GrassMossMounds04.nif\0")
+        self.assertIn("which our archive replaces with the template's NIF", log)
+        self.assertIn("files: loose (meshes", log)
+
     def test_loose_build(self):
         _raw, by, log = self._run(["--loose"])
         self.assertIn("files: loose (meshes", log)

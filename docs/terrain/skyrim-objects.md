@@ -433,6 +433,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   model's path. Starfield.exe names a BSProcGen DensityMapDB and the game has Starfield - DensityMaps.ba2.
   `scripts/tools/ba2_find.py --grep "hellebore|mossmounds"` lists every archived file naming the two grasses that
   grew, to see what else exists per grass model.
+  ba2_find (owner, 12:41, verified): the two grasses that grew have only their NIFs (Meshes01) and textures
+  (Textures06): **nothing else per grass model**. Starfield - DensityMaps.ba2 (7,761 files) holds terrain mask
+  textures per procedural terrain block, one per mask (`<block>_base / _flatinner / _flatouter / _flow / _solid /
+  _talus.dds`, textures\terrain\canyons*, overlaysource\*, overlaymasks): the biome masks of generated terrain
+  are painted per block, consistent with ground cover being chosen per mask; not related to grass models.
+  Next: `--replace-vanilla Landscape\Grass\GrassMossMounds04.nif` writes the hellebore NIF in our archive over
+  that vanilla path and names it from every grass. Flowers = the grass loader reads mod files, but only at paths it
+  already knows; moss mounds = it reads only the game's own archives.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
