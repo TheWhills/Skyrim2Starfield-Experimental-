@@ -296,6 +296,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   - Field meanings: Distribution, Contrast, Max Density; Min / Max Slope, Fit to Slope, Above / Below Water Clamp
     (fDistanceFromWaterLevelAbove), Apply Between; Height Range, Color Range (random darkening), Uniform Scaling,
     Vertex Lighting, Wind Frequency (cycles per game minute); GCVR Override Density.
+  **Owner's runs (2026-11-22 20:15, verified):** control rebuilt with masks 2-5: GC_MossMoundsGrass01 on 55 textures,
+  220 entries in NirnOceanNoCoating. cellgrass_survey.py: 694 grass files in 4 archives (190 vanilla grass NIFs under
+  meshes\landscape\grass, textures; 25 in SkyrimTerrainTamriel - Main.ba2 = our baked grass's textures / materials),
+  **no cell grass files and no top-level grass\ folder anywhere**. So the cell grass manager (AddCellGrass) has no
+  prebuilt data: it presumably builds each cell's grass at run time from ground cover, as Skyrim's did from LTEX
+  grass; no second route through files. 135 loose files are Creation Kit material sources under
+  Data\Scripts\Source\Materials (e.g. Landscape\Grass\GrassJuniper.mat, GrassSagebrush01.mat): vanilla grass
+  material templates (VegetationTranslucent1Layer) for our grass later. In game by ship landing: pending.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
