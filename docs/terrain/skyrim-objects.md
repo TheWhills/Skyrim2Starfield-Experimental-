@@ -257,6 +257,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   Atlantis) is hand-made cells, and no vanilla hand-made world gets run-time grass. Last cheap test:
   `--allow-procgen` also sets the world's Allow ProcGen flag (WRLD FNAM bit 3), which no vanilla world sets. If that
   grows nothing, grass stays placed objects and the work moves to making those behave like grass (wind, fade).
+  **Allow ProcGen (owner, 20:00, verified in game): the game crashes on `coc` into the world** with the flag set
+  (control cover on). So the flag does switch the engine onto another path for this world (planet generation), which
+  then fails, probably for want of generation data a hand-made world does not have. Not usable as is; S2S Grass Native
+  is left off. Supported hypothesis strengthened: ground cover belongs to the generated planet surface.
   What has and has not been probed (owner asked, 19:44): records (grass_survey: GRAS / GCVR / BIOM, world flags),
   vanilla BTDs (no ground cover data in Starfield's BTD layout; bytes 5..7 of each quadrant unresolved) and four
   in-game setups. Not yet: the engine itself, and where vanilla grass actually grows in game (procedural surface only,
