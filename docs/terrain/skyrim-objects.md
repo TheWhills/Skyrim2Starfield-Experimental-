@@ -331,7 +331,17 @@ Max Density; what a vanilla grass model needs. Two tools:
   control cover (masks 2-5) on. `restore` puts the originals back.
   Owner's run (20:28, verified offline): LDefault004FlatOut (0001085F) appended as entry 56 of 56 (vanilla tables
   hold the LDefault textures at the head; ours at the end, unknown whether order matters), byte 6 = 56 in all 21,316
-  quadrants of the BTD and its meshes copy, heights / alphas unchanged; exterior reinstalled. In game: pending.
+  quadrants of the BTD and its meshes copy, heights / alphas unchanged; exterior reinstalled.
+  **VERIFIED IN GAME (owner, 2026-11-22 20:34): run-time grass grows on the Skyrim terrain.** Starfield's own ground
+  cover (the control, GC_MossMoundsGrass01 through NirnOceanNoCoating, masks 2-5) shows near Riverwood: tall bladed
+  grass and pink flowers on the slopes and clearings, in patches, ground textures unchanged. So the missing piece was
+  quadrant byte 6 (0 in our BTDs): the quadrant's mask material, LDefault004FlatOut here. Together the route is:
+  GRAS -> GCVR -> {mask, painted LTEX, GCVR} entries in the biome under the overlay (the planet's own biome, Nirn's
+  ocean copy) + byte 6 naming an LDefault mask texture that is in the BTD's table. coc works (no ship landing needed).
+  Open: why patches rather than everywhere (the cover's own distribution / density, the 0.44 painted-material
+  threshold against Skyrim's blended alphas, slopes); one mask everywhere (FlatOut) instead of per-quadrant masks;
+  byte 6 has to become part of the terrain build (now a patch over the installed BTD). Next: Skyrim's own grass
+  (skyrim_grass_native.py without --control), then grass materials (VegetationTranslucent1Layer, wind, terrain tint).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

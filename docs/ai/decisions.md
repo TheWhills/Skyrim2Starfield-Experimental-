@@ -2686,3 +2686,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   changes), and the ocean biome's coat on Riverwood objects showed the engine uses that biome there. Alternatives:
   a land disc under the overlay in the biome map (changes the surrounding sea); the baked static patches (no wind or
   fade). `--control` (a vanilla cover) separates a route failure from a model failure.
+- 2026-11-22 Native grass works (verified in game): Starfield grows ground cover on the Skyrim overlay once each BTD
+  quadrant's byte 6 names an LDefault mask texture (LDefault004FlatOut, appended to the LTEX table) and the planet's
+  biome under the overlay (Nirn's ocean copy) pairs our converted LTEX with ground cover on masks 2-5. Decision: grass
+  goes this way (wind, fade, density from the engine) instead of baked static patches; byte 6 becomes part of the
+  terrain build next. Found by surveying vanilla BTDs (byte 6 the only extra byte vanilla fills) after four record-
+  level attempts failed.
