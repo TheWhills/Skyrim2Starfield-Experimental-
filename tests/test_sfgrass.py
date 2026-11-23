@@ -261,6 +261,37 @@ class PlanetBiomeTests(unittest.TestCase):
             recs = sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS", b"GCVR", b"BIOM"])
         return raw, {sfplugin.edid(r[2]): r for r in recs}, log.getvalue()
 
+    def test_density_maps_in_grass_archive(self):
+        import density_maps
+        import skyrim_grass_native as N
+        lg = {0x77: [0x88]}
+        gr = {0x88: dict(skyrimgrass.parse_gras_data(struct.pack("<BBBBHHIffffB3x", 30, 0, 40, 0, 0, 0, 0, 0.0,
+                                                                  0.3, 0.2, 0.0, 4)),
+                         edid="Fern", model="landscape\\plants\\fern01.nif")}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                mock.patch.object(skyrimgrass, "read_grass", return_value=(lg, gr)), \
+                mock.patch.object(density_maps, "btd_cells", return_value=(1, 2)), \
+                contextlib.redirect_stdout(io.StringIO()) as log:
+            sf, data, sky_esm, terrain = self._setup(tmp)
+            with open(os.path.join(terrain, "overlays_params.json")) as fh:
+                prm = json.load(fh)
+            prm["overlays"][0]["btd_file"] = "Data/Terrain/SKY_Tamriel.btd"
+            with open(os.path.join(terrain, "overlays_params.json"), "w") as fh:
+                json.dump(prm, fh)
+            out = os.path.join(tmp, "mod")
+            N.main(["--skyrim", sky_esm, "--skyrim-data", data, "--starfield", sf, "--terrain", terrain,
+                    "--texconv", "texconv.exe", "--out", out, "--density-maps", "255"])
+            dm = os.path.join(out, "textures", "terrain", "sky_tamriel_base.dds")       # loose (no Archive2 here)
+            self.assertTrue(os.path.isfile(dm))
+            with open(dm, "rb") as fh:
+                from fo4sf import overlay
+                img = overlay.bc4_decode(fh.read())
+            self.assertEqual(img.shape, (200, 100))
+            self.assertTrue((img == 255).all())
+            self.assertTrue(os.path.isfile(os.path.join(out, "textures", "terrain", "sky_tamriel",
+                                                        "sky_tamriel_talus.dds")))
+        self.assertIn("density maps: 12 uniform 255 maps for sky_tamriel (1 x 2 cells)", log.getvalue())
+
     def test_mask_test(self):
         import skyrim_grass_native as N
         recs = [(0x10, [(b"EDID", b"GrassWheat01\0"), (b"MODL", b"w.nif\0")]),

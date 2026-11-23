@@ -45,5 +45,26 @@ class DensityMapTest(unittest.TestCase):
             self.assertFalse(os.path.exists(flat) or os.path.exists(nested))
 
 
+class PackTest(unittest.TestCase):
+    def test_density_maps_go_to_the_general_archive(self):
+        from unittest import mock
+        sys.path.insert(0, os.path.join(ROOT, "scripts", "armor"))
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        import deploy_starfield
+        import hair_pack
+        calls = []
+        with tempfile.TemporaryDirectory() as st, tempfile.TemporaryDirectory() as out:
+            for d in ("meshes", os.path.join("textures", "terrain"), os.path.join("textures", "s2s")):
+                os.makedirs(os.path.join(st, d))
+            tool = os.path.join(out, "Tools", "Archive2", "Archive2.exe")
+            os.makedirs(os.path.dirname(tool))
+            open(tool, "wb").close()
+            with mock.patch.object(deploy_starfield, "build_archive",
+                                   lambda a, path, folders, fmt: calls.append((os.path.basename(path), folders, fmt))):
+                hair_pack.pack(st, out, out, tool, "G - Main.ba2", "G - Textures.ba2", general_textures=("terrain",))
+        self.assertEqual(calls, [("G - Main.ba2", ["meshes", os.path.join("textures", "terrain")], "General"),
+                                 ("G - Textures.ba2", [os.path.join("textures", "s2s")], "DDS")])
+
+
 if __name__ == "__main__":
     unittest.main()

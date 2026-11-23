@@ -505,6 +505,10 @@ def main(argv=None):
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
+    ap.add_argument("--density-maps", type=int, default=None, metavar="VALUE",
+                    help="test (2026-11-23): uniform biome-mask density maps (every pixel VALUE) for the terrain's "
+                         "BTD in S2SGrass - Main.ba2 (density_maps.py naming; the terrain archive is at its 4 GiB "
+                         "limit)")
     ap.add_argument("--mask-test", action="store_true",
                     help="test (2026-11-23): each biome mask (--biome-masks) grows its own vanilla grass on the "
                          "covered slots (MASK_TEST_GRASSES: flowers, wheat, moss, ...), the build prints which; "
@@ -822,6 +826,20 @@ def main(argv=None):
     report["masters"] = masters
     with open(os.path.join(out, PLUGIN), "wb") as fh:
         fh.write(sfplugin.build(recs, sfplugin.header_info(sf_esm), author="Skyrim2Starfield grass", masters=masters))
+    if a.density_maps is not None and conv is not None:
+        import density_maps
+        for stem, btd_path, rels in density_maps.targets(a.terrain):
+            cx, cy = density_maps.btd_cells(btd_path)
+            data = density_maps.uniform_bc4_dds(cx * density_maps.PX_PER_CELL, cy * density_maps.PX_PER_CELL,
+                                                a.density_maps)
+            for rel in rels:
+                pth = os.path.join(staging, *rel.split("/")[1:])            # drop "Data/"
+                os.makedirs(os.path.dirname(pth), exist_ok=True)
+                with open(pth, "wb") as fh:
+                    fh.write(data)
+            report["density_maps"] = {"value": a.density_maps, "cells": [cx, cy], "files": [r[5:] for r in rels]}
+            print(f"density maps: {len(rels)} uniform {a.density_maps} maps for {stem} ({cx} x {cy} cells) "
+                  f"in {os.path.splitext(PLUGIN)[0]} - Main.ba2")
     if conv is not None:
         import hair_pack
         base = os.path.splitext(PLUGIN)[0]
@@ -835,7 +853,7 @@ def main(argv=None):
                                                f"{base} - Textures.ba2")
         else:
             report["packing"] = hair_pack.pack(staging, out, a.starfield, a.archive2, f"{base} - Main.ba2",
-                                               f"{base} - Textures.ba2")
+                                               f"{base} - Textures.ba2", general_textures=("terrain",))
         report["converter"] = {"stats": conv.stats, "material_errors": conv.material_errors}
         shutil.rmtree(staging, ignore_errors=True)
     if not os.path.isfile(mapping_path):

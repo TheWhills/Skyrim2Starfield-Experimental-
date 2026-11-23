@@ -593,6 +593,10 @@ Max Density; what a vanilla grass model needs. Two tools:
   textures\terrain\<folder>\<block>_<mask>.dds). Test: `tools\owner\terrain_density.ps1` writes uniform 255 maps at
   textures\terrain\sky_tamriel_<mask>.dds and textures\terrain\sky_tamriel\sky_tamriel_<mask>.dds (73 x 73 cells,
   7300 px, 26.6 MB each) into the staging and reinstalls; `-Remove` takes them out.
+  Owner's run (17:47): the install refused: staged Data 4.25 GiB, over one archive's 4 GiB (the exterior was
+  uninstalled by then; `terrain_density.ps1 -Remove` restores it). The maps now go into the grass mod instead:
+  `skyrim_grass_native.py --density-maps 255` writes them into S2SGrass - Main.ba2 (General, like vanilla
+  DensityMaps.ba2; hair_pack.pack general_textures), compressed (uniform maps shrink to almost nothing).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

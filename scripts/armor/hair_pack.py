@@ -653,11 +653,18 @@ def control_files(row: dict, conv, hat_raw, hat_model: str, fb=None, sf_world=No
 
 
 def pack(staging: str, out: str, starfield: str, archive2: str = None, main_ba2: str = MAIN_BA2,
-         tex_ba2: str = TEX_BA2) -> dict:
-    """BA2 archives named after the plugin (Starfield loads "<plugin> - *.ba2"), or the files loose."""
+         tex_ba2: str = TEX_BA2, general_textures=()) -> dict:
+    """BA2 archives named after the plugin (Starfield loads "<plugin> - *.ba2"), or the files loose.
+    general_textures: sub-folders of textures packed into the General (Main) archive instead of the DDS one, like
+    vanilla's density maps (Starfield - DensityMaps.ba2 is a General archive)."""
     tool = archive2 or os.path.join(starfield, "Tools", "Archive2", "Archive2.exe")
     main = [d for d in ("meshes", "geometries", "materials") if os.path.isdir(os.path.join(staging, d))]
     tex = [d for d in ("textures",) if os.path.isdir(os.path.join(staging, d))]
+    gen = [g for g in general_textures if os.path.isdir(os.path.join(staging, "textures", g))]
+    if gen:
+        main += [os.path.join("textures", g) for g in gen]
+        rest = [d for d in sorted(os.listdir(os.path.join(staging, "textures"))) if d not in gen]
+        tex = [os.path.join("textures", d) for d in rest]
     if os.path.isfile(tool):
         import deploy_starfield
         a = types.SimpleNamespace(starfield=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(tool)))),
