@@ -2702,3 +2702,16 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   requirements), or declare tags from S2SCombat ourselves (same approach, own code; clip index still needs SAM or the
   CK). Open: root motion / hit events from fragment offsets and event info; new graph event names (not in SAM's
   2026-11-01 source).
+
+## 2026-11-23 — Dodges on SAM with our own tags: verified
+- Owner's run: sam_dodge_pack.py (TK Dodge SE's four step dodges as S2S_DodgeForward / Back / Left / Right in
+  melee\onehanded\player, fragment Fragments\S2SDodge, the game's MeleeAttacks / Player_Melee with the dodge
+  states) with SAM, Address Library and the S2SCombat DLL, on a vanilla one-handed melee weapon: dodging works in game
+  (verified). Our own clip tags and file names, no borrowed vanilla tags, no zero-g file names, no CK run.
+- Motion ids differ per animationdatasinglefile copy (TK Dodge SE: 2176 / 2050 / 2173 / 2174, not RE's 1656-1659);
+  they are looked up by clip generator name in DefaultMale. Root motion 5.39 / 3.86 / 3.29 / 3.31 m.
+- Found on the way (supported): S2SStances.esm enabled without S2S AnimInfo leaves a drawn one-handed weapon in the
+  relaxed pose (its subgraph entries come first, and their clip lists exist only in the CK output; SAM only adds to
+  existing lists). For this test the .esm and S2SWeapons.esm were unticked; the S2SCombat DLL needs neither to dodge.
+- Open: moving the stance packs and weapon types to SAM fragments (their own lists, animations_<number>.txt, instead of
+  the CK output), so stances and SAM dodges work together.

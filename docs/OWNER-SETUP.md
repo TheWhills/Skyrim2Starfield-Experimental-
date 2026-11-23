@@ -403,7 +403,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    below them), draw a one-handed melee weapon, attack once. The overhead power swing = SAM made our new tag play;
    a snap or nothing = it did not. Send a short clip or what you saw, and SFSE\Plugins\SfAnimIndexLoader.log (MO2:
    in the SAM mod folder or Overwrite).
-8b. B + C: dodges on SAM, own tags (scripts/armor/sam_dodge_pack.py; no Creation Kit run). Needs SAM, Address Library
+8b. Done 2026-11-23 (verified: dodging works; with S2SStances.esm / S2SWeapons.esm unticked, vanilla weapon): dodges on SAM, own tags (scripts/armor/sam_dodge_pack.py; no Creation Kit run). Needs SAM, Address Library
    and the S2SCombat plugin (dodge key Left Alt, sDodgeEvents left at its default); stance / combo / dodge packs, "S2S
    SAM Test" and "S2S AnimInfo" disabled. $tk = the TK Dodge folder (StepDodge*.hkx + animationdatasinglefile.txt):
    ```powershell
