@@ -178,7 +178,7 @@ class NativeBuildTests(unittest.TestCase):
         self.assertEqual(dict(g[2])[b"MODL"], b"s2s\\grassnative\\landscape_plants_fern01.nif\0")
         cover = sfgrass.parse_gcvr(by["S2S_Cover_00000031"][2])
         self.assertEqual(cover["grasses"], [(g[3], -1)])
-        self.assertEqual(cover["ltex"], [0x31])
+        self.assertEqual(cover["ltex"], [])                                  # no texture list (vanilla covers have none)
         biome = by["BiomeA"]
         self.assertEqual(biome[3], 0x40)                                      # an override of the vanilla record
         added = [e["mask"] for e in sfgrass.biome_terrain(biome[2])
@@ -295,6 +295,9 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Plants\\a.nif\0")
         cover = sfgrass.parse_gcvr(by["S2S_Cover_00000031"][2])
         self.assertEqual(cover["threshold"], 28.0)                         # the template cover's own threshold
+        self.assertEqual(cover["ltex"], [])
+        _raw, by2, _log = self._run(["--cover-textures"])
+        self.assertEqual(sfgrass.parse_gcvr(by2["S2S_Cover_00000031"][2])["ltex"], [0x31])
 
     def test_control(self):
         raw, by, log = self._run(["--control"])

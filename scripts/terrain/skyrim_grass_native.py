@@ -174,6 +174,10 @@ def main(argv=None):
                                             "control cover, which grew in game)")
     ap.add_argument("--gcvr-template", help="EditorID regex of the vanilla GCVR to copy (default: the control cover, "
                                             "the one the world's land biome uses most)")
+    ap.add_argument("--cover-textures", action="store_true",
+                    help="also list the texture in each ground cover's own texture list (LNAM). Off by default since "
+                         "2026-11-22: the cover that grows (GC_MossMoundsGrass01) has none, like 95 of 96 vanilla "
+                         "covers; the biome entry pairs texture and cover")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -316,7 +320,8 @@ def main(argv=None):
             if not lst:
                 continue
             fid = sfplugin.new_form_id(len(recs), nm)
-            subs = sfgrass.build_gcvr(ct[2], sfplugin.zs(f"S2S_Cover_{slot:08X}"), lst, [slot], a.threshold)
+            subs = sfgrass.build_gcvr(ct[2], sfplugin.zs(f"S2S_Cover_{slot:08X}"), lst,
+                                      [slot] if a.cover_textures else [], a.threshold)
             recs.append((b"GCVR", ct[1], subs, fid))
             covers.append((slot, fid))
     report["covers"] = [{"ltex": f"{s:08X}", "gcvr": f"{c:08X}"} for s, c in covers]

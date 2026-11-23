@@ -350,7 +350,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   first grass (they grow), and `--keep-template-model` builds our records with that grass's vanilla model to
   separate a model problem from a record problem.
   Rebuilt (owner, 21:26): templates grass GrassHelleboreField02 (the hellebore flowers seen in the control), cover
-  GC_MossMoundsGrass01; 27 grasses, 19 covers, 76 entries. In game: pending.
+  GC_MossMoundsGrass01; 27 grasses, 19 covers, 76 entries. In game (21:32): **no grass** either. Remaining
+  differences from the control: our covers list their texture (LNAM; the growing vanilla cover has none, like 95 of
+  96 vanilla covers: the threshold may then apply on a scale our alphas never reach), our GRAS DNAM (Skyrim density
+  3-37, slopes), our models, and only 19 Skyrim grass textures. One at a time: covers without LNAM now (default;
+  `--cover-textures` for the old way), then `--keep-template-model`.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
