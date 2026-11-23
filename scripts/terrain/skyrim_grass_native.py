@@ -265,6 +265,9 @@ def main(argv=None):
     ap.add_argument("--loose", action="store_true",
                     help="test (2026-11-23): leave the models, meshes, materials and textures loose in the mod folder "
                          "instead of in S2SGrass - *.ba2")
+    ap.add_argument("--drop-modt", action="store_true",
+                    help="test (2026-11-23): leave out the template GRAS's MODT (model hashes of the vanilla model) "
+                         "from our grass records")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -412,8 +415,11 @@ def main(argv=None):
                 report["failed"][r["edid"]] = f"{type(e).__name__}: {e}"
                 continue
             fid = sfplugin.new_form_id(len(recs), nm)
+            # MODT: Mutagen's "TextureFileHashes"; the template's describes the template's model, not ours (2026-11-23:
+            # the vanilla NIF at our path grew nothing, at its own path with the same MODT it grows)
             subs = sfplugin.edit(gt[2], {b"EDID": sfplugin.zs("S2S_" + r["edid"]), b"MODL": sfplugin.zs(model),
-                                         b"DNAM": sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale)})
+                                         b"DNAM": sfgrass.gras_dnam_from_skyrim(tdnam, r, a.density_scale)},
+                                 drop=[b"MODT"] if (a.drop_modt and not a.keep_template_model) else [])
             recs.append((b"GRAS", gt[1], subs, fid))
             gras_fid[g] = fid
             report["grasses"][r["edid"]] = {"form_id": f"{fid:08X}", "model": model,

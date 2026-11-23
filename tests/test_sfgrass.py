@@ -23,7 +23,7 @@ def dnam(density=10, lo=0, hi=60, flags=0x8, height=0.2, colour=0.1):
 
 def sf_esm(path):
     h = lambda t: struct.pack("<4sIII", t, 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)   # noqa: E731
-    recs = [(b"GRAS", h(b"GRAS"), [(b"EDID", b"GrassA\0"), (b"OBND", bytes(12)), (b"MODL", b"Plants\\a.nif\0"),
+    recs = [(b"GRAS", h(b"GRAS"), [(b"EDID", b"GrassA\0"), (b"OBND", bytes(12)), (b"MODL", b"Plants\\a.nif\0"), (b"MODT", b"\x01\x02\x03\x04"),
                                    (b"DNAM", dnam())], 0x10),
             (b"GCVR", h(b"GCVR"), [(b"EDID", b"CoverA\0"), (b"GNAM", struct.pack("<I", 0x10)),
                                    (b"DNAM", struct.pack("<h", -1)), (b"LNAM", struct.pack("<I", 0x30)),
@@ -346,6 +346,12 @@ class PlanetBiomeTests(unittest.TestCase):
         tn.assert_called_once()
         self.assertIn("(the template's NIF copied to our paths)", log)
         self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"landscape\\grass\\s2s\\landscape_plants_fern01.nif\0")
+
+    def test_drop_modt(self):
+        _raw, by, _log = self._run(["--drop-modt"])
+        self.assertNotIn(b"MODT", dict(by["S2S_Fern"][2]))
+        _raw, by, _log = self._run([])
+        self.assertIn(b"MODT", dict(by["S2S_Fern"][2]))                     # kept by default
 
     def test_loose_build(self):
         _raw, by, log = self._run(["--loose"])

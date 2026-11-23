@@ -398,6 +398,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   grows nothing; at its own path (in the game's archive) it grows. So the NIF bytes are fine and the file's location
   is the block: our archive (S2SGrass - Main.ba2, packed like our other working mods) or the path
   (landscape\grass\s2s\...). Next: `--loose` (no archive; MO2 serves the files) with the same copy.
+  `--copy-template-nif --loose` (owner, 11:28): **no grass**. So neither the archive nor the NIF bytes; what differs
+  from the growing build is only the MODL path in our GRAS. Mutagen's Starfield Model (Model.xml): MODL, MODT
+  ("TextureFileHashes"), MOLM (material swaps), FLLD, XFLG, MODC, MODF. Our GRAS copies the template's MODT, which
+  describes the template's model at its own path. Supported hypothesis: the grass system resolves the model through
+  MODT (resource hashes) and a MODT that does not match MODL draws nothing. Test: `--drop-modt` (with
+  `--copy-template-nif`); and a dump of the vanilla GRAS (dump_records.py) to decode MODT.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
