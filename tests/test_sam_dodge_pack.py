@@ -82,6 +82,19 @@ class SamDodgePackTests(unittest.TestCase):
         twice = S.with_variables(out.encode(), ["bNoLeftHandIK"], 20).decode()
         self.assertEqual(twice.count("bNoLeftHandIK"), 1)
 
+    def test_head_track_variable(self):
+        raw = (b"<root><Name>Player_Melee.agx</Name><node><node_type>NT_DUAL_DIRECT_AT</node_type><name>Dual Direct At"
+               b"</name><property_sheet><row><prop><value>No Head Track Variable</value></prop><prop><value>"
+               b"bNoHeadTrack</value></prop></row><row><prop><value>No Aim Variable</value></prop><prop><value>bNoAim"
+               b"</value></prop></row></property_sheet></node></root>")
+        out, n = S.head_track_variable(raw, "bNoAim")
+        self.assertEqual(n, 1)
+        self.assertIn(b"<value>No Head Track Variable</value></prop><prop><value>bNoAim</value>", out)
+        self.assertNotIn(b"bNoHeadTrack", out)
+        self.assertEqual(S.head_track_variable(player_graph(), "bNoAim"), (player_graph(), 0))   # no such node
+        files, rep = S.graphs(attacks_graph(), player_graph(), S.tags())
+        self.assertEqual(rep["head_track_nodes"], 0)
+
     def test_fragment(self):
         t = S.tags()
         self.assertEqual(t, {"Forward": "S2S_DodgeForward", "Back": "S2S_DodgeBack", "Left": "S2S_DodgeLeft",

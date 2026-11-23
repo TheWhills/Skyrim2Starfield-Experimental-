@@ -60,11 +60,34 @@ def fragment_files(tag_map: dict, folder: str = FOLDER, name: str = FRAGMENT) ->
     return {root + "animations.txt": clips.encode("ascii"), root + "tables/anim_actions.xtbl": xtbl.encode("ascii")}
 
 
-def graphs(attacks_raw: bytes, player_raw: bytes, tag_map: dict):
-    """({Data-relative path: bytes}, report) of the two graphs: dodge states in MeleeAttacks, events in Player_Melee."""
+HEAD_TRACK_ROW = "No Head Track Variable"
+
+
+def head_track_variable(raw: bytes, variable: str) -> (bytes, int):
+    """Player_Melee with every Dual Direct At node's No Head Track Variable set to `variable`; (bytes, nodes changed).
+
+    Why (owner's log 2026-11-23): bNoHeadTrack set by Papyrus reads back as 1, yet head tracking stays active and its
+    heading (LookAtHeadingVar) swings to 2.4-2.7 rad in every forward dodge, turning the head right; bNoAim set the
+    same way does switch the aim off. Pointing the head-track switch at bNoAim switches both off while S2SDodge holds
+    bNoAim during a dodge."""
+    from fo4sf import agx_edit
+    root = agx_edit.load(raw)
+    n = 0
+    for node in root.iter("node"):
+        if node.findtext("node_type") == "NT_DUAL_DIRECT_AT" and HEAD_TRACK_ROW in agx_edit._rows(node):
+            agx_edit.set_row(node, HEAD_TRACK_ROW, variable)
+            n += 1
+    return (agx_edit.dump(root, raw), n) if n else (raw, 0)
+
+
+def graphs(attacks_raw: bytes, player_raw: bytes, tag_map: dict, head_track: str = "bNoAim"):
+    """({Data-relative path: bytes}, report) of the two graphs: dodge states in MeleeAttacks, events in Player_Melee
+    (and its head tracking switched off by `head_track`, "" = left as it is)."""
     attacks, report = dodge_graph.build_attacks(attacks_raw, tuple(tag_map), None, tag_map)
     player, n = dodge_graph.add_switch_events(player_raw, [st["event"] for st in report["states"].values()])
     report["player_switch_lists"] = n
+    if head_track:
+        player, report["head_track_nodes"] = head_track_variable(player, head_track)
     return {ATTACKS_REL: attacks, PLAYER_REL: player}, report
 
 
@@ -263,6 +286,9 @@ def main(argv=None):
     ap.add_argument("--state-tag", action="append", default=[], metavar="DIRECTION=TAG",
                     help="diagnostic: that direction's dodge state plays TAG (e.g. Back=MeleeAttackPower_A, the vanilla "
                          "standing power attack) instead of its converted clip; the clips are still written")
+    ap.add_argument("--head-track-variable", default="bNoAim",
+                    help="the graph bool that switches head tracking off in the shipped Player_Melee (default bNoAim, "
+                         "which S2SDodge holds during a dodge; \"\" = the game's bNoHeadTrack)")
     ap.add_argument("--variable", action="append", default=[], metavar="NAME",
                     help="a graph variable window over the whole of every dodge clip, e.g. bNoLeftHandIK (repeatable)")
     ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")
@@ -282,16 +308,19 @@ def main(argv=None):
         state_tags[d] = t
     attacks_raw, _ = hkx_to_af.vanilla_file(ATTACKS_REL, a.starfield_data)
     player_raw, _ = hkx_to_af.vanilla_file(PLAYER_REL, a.starfield_data)
-    graph_files, report = graphs(attacks_raw, player_raw, state_tags)   # before converting: fails fast
+    graph_files, report = graphs(attacks_raw, player_raw, state_tags, a.head_track_variable)   # before converting: fails fast
     rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest, a.variable)
     files = {**clip_files, **graph_files, **fragment_files(tag_map)}
     write(out, files)
     plugin = install_plugin(out, a.dll) if a.dll else []
     with open(os.path.join(out, "sam_dodge.json"), "w", encoding="utf-8") as fh:
         json.dump({"states": report["states"], "player_switch_lists": report["player_switch_lists"],
+                   "head_track_nodes": report.get("head_track_nodes", 0),
                    "files": sorted(files) + plugin, "conversion": conv}, fh, indent=1)
     for d, st in report["states"].items():
         print(f"{d}: event {st['event']} -> state playing {st['tag']}")
+    if a.head_track_variable:
+        print(f"head tracking off with {a.head_track_variable}: {report.get('head_track_nodes', 0)} Dual Direct At node(s)")
     print(f"{len(clip_files)} clip files, 2 graphs, fragment {FRAGMENT}" + (", plugin " + " + ".join(
         os.path.basename(p) for p in plugin) if plugin else "") + f" -> {out}" + ("" if rc == 0 else " (ERRORS above)"))
     return rc

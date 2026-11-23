@@ -2774,4 +2774,10 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - Owner: the head turns right briefly in the forward dodge (not in Skyrim). Unresolved: the queued Papyrus set may
   arrive a few frames late at the start or head tracking may come back at the end; the log's bHeadTrackingActive at
   start / +0.25 s / end tells which.
+- Owner's log (forward dodges, relaxed and ready): LookAtHeadingVar goes from ~0 to 2.4-2.7 rad and LookAtPitchVar to
+  ~1.4 mid-dodge in both stances, with bNoHeadTrack = 1 (read back) and bHeadTrackingActive still 1 (verified): the
+  head tracking (LookAt_Head poses) turns the head; bNoHeadTrack from Papyrus is not honoured. bNoAim is (DirectAt
+  outputs to ~0). Change: sam_dodge_pack points the shipped Player_Melee's Dual Direct At "No Head Track Variable" at
+  bNoAim (--head-track-variable, default bNoAim), so S2SDodge's bNoAim switches both off during a dodge. Side effect:
+  wherever the game itself sets bNoAim, head tracking is off too.
 
