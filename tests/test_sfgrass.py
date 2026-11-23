@@ -534,6 +534,26 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(list(rep["vanilla_paths"]), ["SnowGrass01"])          # FieldGrass01 took no free path
         self.assertEqual(rep["grasses"]["FieldGrass01"]["model"], rep["grasses"]["SnowGrass01"]["model"])
 
+    def test_ltex_kind_overrides(self):
+        import skyrim_grass_native as N
+        h = bytes(24)
+        rock = [(b"EDID", b"LRockLayered05\0"), (b"BNAM", b"rock.mat\0"), (b"HNAM", b"\x1e\x1e"),
+                (b"MNAM", b"7A/\0"), (b"QNAM", struct.pack("<f", 1.0))]
+        dirt = [(b"EDID", b"LDirtCracked02\0"), (b"BNAM", b"dirt.mat\0"), (b"MNAM", b"\x51\xc1\x01\x00"),
+                (b"QNAM", struct.pack("<f", 0.0))]
+        sf = {0x30137: (h, rock), 0x30128: (h, dirt), 0x99: (h, rock)}
+        terrain = {0x30137: (h, [(b"EDID", b"LRockLayered05\0"), (b"BNAM", b"s2s\\LFieldGrass02.mat\0"),
+                                 (b"MNAM", b"7A/\0"), (b"QNAM", struct.pack("<f", 1.0))]),
+                   0x30128: (h, dirt)}
+        recs, changed = N.ltex_kind_overrides(terrain, sf, [0x30137, 0x30128, 0x99], "ldirtcracked02")
+        self.assertEqual(changed, [0x30137])            # 0x30128 already dirt; 0x99 not re-skinned: left alone
+        d = dict(recs[0][2])
+        self.assertEqual(d[b"BNAM"], b"s2s\\LFieldGrass02.mat\0")     # the terrain's look kept
+        self.assertEqual(d[b"MNAM"], b"\x51\xc1\x01\x00")
+        self.assertEqual(struct.unpack("<f", d[b"QNAM"])[0], 0.0)
+        with self.assertRaises(ValueError):
+            N.ltex_kind_overrides(terrain, sf, [0x30137], "LNothing")
+
     def test_model_info(self):
         import skyrim_grass_native as N
         from types import SimpleNamespace as NS

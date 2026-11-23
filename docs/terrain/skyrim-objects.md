@@ -557,6 +557,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   is drawn at full strength there and grows nothing. Slot 00030137 re-skins the vanilla ROCK texture LRockLayered05,
   keeping its fields. Supported hypothesis: ground cover follows the vanilla record's kind. grass_slots.py lists every
   covered slot with the record it re-skins and that record's fields.
+  **grass_slots.py (owner, 17:02, verified):** the re-skinned records differ in MNAM (material type: one value, shown
+  as "7A/", on every rock record; 0x0001C151 on dirt / gravel; others on grass, sand, snow) and QNAM (f32: 1.0 on the
+  rock records, 0 on dirt / grass / sand / snow, 0.2-0.7 on gravel road, loose rocks, volcanic). The slots whose grass
+  never showed (LFieldGrass02 -> LRockLayered05, LPineForest03 ferns -> LVolcanicWrinkled01, every RockGrass slot)
+  re-skin rock records; the tundra slots (LTundra01 -> LDirtPackedGravel01, LFieldGrass01 -> LGrassLiveSparse01_Red)
+  re-skin dirt / grass records, and the straw seen is most likely tundra grass. Supported hypothesis: ground cover
+  follows the re-skinned record's kind (MNAM and / or QNAM). Test: `--ltex-kind-from LDirtCracked02` overrides each
+  covered slot in S2SGrass.esm with the terrain plugin's re-skin (look kept) and the dirt record's MNAM / QNAM.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

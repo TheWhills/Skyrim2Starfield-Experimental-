@@ -342,6 +342,34 @@ def parse_model_from(items):
     return out
 
 
+KIND_FIELDS = (b"MNAM", b"QNAM")
+
+
+def ltex_kind_overrides(terrain_ltex, sf_ltex, slots, donor_edid):
+    """Overrides of the covered slots' LTEX (as the terrain plugin writes them: its re-skin kept) with the donor
+    vanilla LTEX's MNAM (material type) and QNAM. 2026-11-23 (grass_slots.py, owner): every slot whose grass never
+    shows re-skins a vanilla rock record (MNAM the rock type, QNAM 1.0); the tundra slots that grow re-skin dirt /
+    grass records (QNAM 0). terrain_ltex / sf_ltex: {fid: (header, subs)}; slots: covered slot fids.
+    Returns ([(LTEX, header, subs, fid)], [changed fids])."""
+    donor = next((subs for _h, subs in sf_ltex.values() if sfplugin.edid(subs).lower() == donor_edid.lower()), None)
+    if donor is None:
+        raise ValueError(f"--ltex-kind-from: no LTEX {donor_edid!r} in Starfield.esm")
+    want = {s: d for s, d in donor if s in KIND_FIELDS}
+    out, changed = [], []
+    for fid in slots:
+        src = terrain_ltex.get(fid)       # only the terrain's re-skin: the vanilla record would undo its look
+        if src is None:
+            continue
+        h, subs = src
+        cur = {s: d for s, d in subs if s in KIND_FIELDS}
+        if cur == want:
+            continue
+        drop = [s for s in KIND_FIELDS if s in cur and s not in want]
+        out.append((b"LTEX", h, sfplugin.edit(subs, want, drop=drop), fid))
+        changed.append(fid)
+    return out, changed
+
+
 def convert_model(conv, name: str, tint, staging: str, material: str = "", geometry=None, info=None) -> str:
     """The Skyrim grass model as one Starfield static model (materials with Skyrim's tint, back faces when double
     sided); returns its path under meshes\\. info: a dict to fill with model_info."""
@@ -457,6 +485,10 @@ def main(argv=None):
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
+    ap.add_argument("--ltex-kind-from", default="", metavar="EDITORID",
+                    help="test (2026-11-23): give every covered slot's LTEX the material type (MNAM) and QNAM of this "
+                         "vanilla LTEX (e.g. LDirtCracked02), overriding the terrain's re-skin in S2SGrass.esm; the "
+                         "slots whose grass never shows re-skin vanilla rock records")
     ap.add_argument("--model-from", action="append", default=[], metavar="FAMILY=EDITORID",
                     help="test (2026-11-23): the grasses of these families use the converted model of that grass "
                          "(e.g. fieldgrass,forestgrass,ferngrass=SnowGrass01Forest), to tell a model that does not "
@@ -705,6 +737,26 @@ def main(argv=None):
             covers.append((slot, fid))
     report["covers"] = [{"ltex": f"{s:08X}", "gcvr": f"{c:08X}"} for s, c in covers]
     masks = list(range(7)) if a.biome_masks == "all" else [int(x) for x in a.biome_masks.split(",") if x.strip()]
+    if a.ltex_kind_from:
+        terr_p = os.path.join(a.terrain, prm.get("plugin", "")) if prm.get("plugin") else ""
+        terrain_ltex = {}
+        if terr_p and os.path.isfile(terr_p):
+            for _t, h, subs, fid in sfplugin.records(terr_p, [b"LTEX"]):
+                if fid >> 24 == 0:                   # overrides of Starfield.esm records (its first master)
+                    terrain_ltex[fid] = (h, subs)
+        sf_ltex = {fid: (h, subs) for _t, h, subs, fid in sfplugin.records(sf_esm, [b"LTEX"])}
+        try:
+            kind_recs, changed = ltex_kind_overrides(terrain_ltex, sf_ltex, [sl for sl, _c in covers],
+                                                     a.ltex_kind_from)
+        except ValueError as e:
+            sys.exit(str(e))
+        recs += kind_recs
+        report["ltex_kind_from"] = {"donor": a.ltex_kind_from, "slots": [f"{f:08X}" for f in changed],
+                                    "from_terrain_plugin": sum(1 for f in changed if f in terrain_ltex)}
+        print(f"LTEX kind: {len(changed)} covered slot(s) take {a.ltex_kind_from}'s material type / QNAM, "
+              f"their re-skin copied from {os.path.basename(terr_p)}")
+        if not changed:
+            print(f"  (no slot changed: terrain plugin {terr_p or '?'} not found or no re-skin there)")
     if target is not None:
         recs.append((b"BIOM", target[1], sfgrass.biome_with_cover(target[2], covers, masks=masks), target[3]))
         report["biome"] = {"edid": sfplugin.edid(target[2]), "form_id": f"{target[3]:08X}", "masks": masks,
