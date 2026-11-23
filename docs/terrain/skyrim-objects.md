@@ -368,6 +368,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   NiNode + BSXFlags + BSGeometry + MaterialID + BSLightingShaderProperty, standard material). Next:
   `scripts/terrain/grass_model_compare.py` prints a vanilla grass NIF next to ours block by block, with their .mesh
   heads and materials (vanilla source .mat from Data\Scripts\Source\Materials), to build ours like vanilla grass.
+  **Owner's run (2026-11-23 09:53, verified):** GrassHelleboreField02, GrassPrimRoseDried01, GrassMossMounds02 are
+  laid out exactly like our static props: NiNode "<Name>" (flags 0xE, extra BSXFlags) + BSXFlags 0 + one BSGeometry
+  "<Name>:0" (flags 0xE, one LOD mesh, mesh flags 0x40) + NiIntegerExtraData MaterialID + BSLightingShaderProperty
+  naming the .mat (e.g. Materials\Landscape\Grass\Flowers\GrassFlowersHellebore01.mat; MossMounds uses the ground
+  material Materials\Landscape\Ground\Moss\MossForest01.mat). .mesh heads [2, indices, 65536, 2 / 65538 / 196610].
+  So the NIF layout is not the difference. Left: the path (vanilla models all under meshes\Landscape\Grass; ours were
+  meshes\s2s\grassnative: now landscape\grass\s2s\), the material, the .mesh contents, the shape count. Our
+  models were not in the folder for that run (the --keep-template-model build): rebuild, compare again.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
