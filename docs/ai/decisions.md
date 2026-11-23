@@ -2780,4 +2780,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   outputs to ~0). Change: sam_dodge_pack points the shipped Player_Melee's Dual Direct At "No Head Track Variable" at
   bNoAim (--head-track-variable, default bNoAim), so S2SDodge's bNoAim switches both off during a dodge. Side effect:
   wherever the game itself sets bNoAim, head tracking is off too.
+- Owner's run (Player_Melee's No Head Track Variable = bNoAim): LookAtHeadingVar still 2.4-2.7 rad and the head still
+  turned in every forward dodge; back dodges stay at ~0.4. The head-track switch is not what moves it, or the value is
+  only computed. Next: scripts/armor/head_turn_probe.py compares the head's facing relative to the chest per frame in
+  Skyrim's clip and in the retarget, to tell whether the conversion turns the head.
 
