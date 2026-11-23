@@ -362,6 +362,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   they get nothing. Test: `--biome-masks all` (or 0,2,3,4,5).
   `--biome-masks all` (owner, 08:38 / 08:41: 133 entries): **no grass**. Masks are not the (only) block. Next:
   `--keep-template-model` (our records, the vanilla hellebore model).
+  **`--keep-template-model` (owner, 2026-11-23 08:46, verified in game): grass grows** (the hellebore flowers, in
+  Skyrim's grassy places, sparse). So our GRAS / GCVR records, Skyrim's densities and slopes and the biome entries all
+  work; **the converted Skyrim models are what the grass system rejects** (built as ordinary static props:
+  NiNode + BSXFlags + BSGeometry + MaterialID + BSLightingShaderProperty, standard material). Next:
+  `scripts/terrain/grass_model_compare.py` prints a vanilla grass NIF next to ours block by block, with their .mesh
+  heads and materials (vanilla source .mat from Data\Scripts\Source\Materials), to build ours like vanilla grass.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
