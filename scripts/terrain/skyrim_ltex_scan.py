@@ -107,6 +107,36 @@ def active_plugins(path):
         return None
 
 
+def mo2_profile(instance, profile=""):
+    """(profile folder, [enabled mod names, lowest priority first], active plugins lower-case or None) of a Mod
+    Organizer instance (<instance>\\profiles\\<name>\\modlist.txt: '+Mod' enabled, top line = highest priority).
+    Without a name: the only profile, else the one whose plugins.txt changed last."""
+    root = os.path.join(instance, "profiles")
+    names = sorted(n for n in os.listdir(root) if os.path.isdir(os.path.join(root, n)))
+    if profile:
+        if profile not in names:
+            raise SystemExit(f"profile {profile!r} not in {names}")
+        pick = profile
+    elif len(names) == 1:
+        pick = names[0]
+    else:
+        def stamp(n):
+            q = os.path.join(root, n, "plugins.txt")
+            return os.path.getmtime(q) if os.path.isfile(q) else 0.0
+        pick = max(names, key=stamp)
+    folder = os.path.join(root, pick)
+    mods = []
+    try:
+        with open(os.path.join(folder, "modlist.txt"), encoding="utf-8-sig", errors="replace") as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln.startswith("+") and not ln.endswith("_separator"):
+                    mods.append(ln[1:])
+    except OSError:
+        pass
+    return folder, list(reversed(mods)), active_plugins(os.path.join(folder, "plugins.txt"))
+
+
 def report(scans, active=None):
     """Lines: scans = [(plugin name, scan_plugin result)] in load order."""
     gras = {}
@@ -133,15 +163,27 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", required=True, help="Skyrim SE's Data folder")
     ap.add_argument("--mods", action="append", default=[], help="a mod folder with plugins (repeatable)")
+    ap.add_argument("--mo2", default="", help="a Mod Organizer instance folder (e.g. %%LOCALAPPDATA%%\\ModOrganizer\\"
+                                              "Skyrim Special Edition): scans its profile's enabled mods")
+    ap.add_argument("--profile", default="", help="with --mo2: the profile name (default: the only one, else the "
+                                                  "last used)")
     ap.add_argument("--ltex", default=",".join(RIVERWOOD), help="LTEX EditorIDs to show (comma-separated)")
     ap.add_argument("--cell", type=int, nargs=2, action="append", default=[], metavar=("X", "Y"),
                     help="Tamriel cell whose LAND overrides to list (repeatable)")
     ap.add_argument("--plugins-txt", default=os.path.join(os.environ.get("LOCALAPPDATA", ""),
                                                           "Skyrim Special Edition", "plugins.txt"))
     a = ap.parse_args(argv)
+    active = active_plugins(a.plugins_txt)
+    if a.mo2:
+        folder, enabled, active = mo2_profile(a.mo2, a.profile)
+        mods_root = os.path.join(a.mo2, "mods")
+        found = [m for m in enabled if os.path.isdir(os.path.join(mods_root, m))]
+        print(f"Mod Organizer profile {os.path.basename(folder)}: {len(enabled)} mods enabled, {len(found)} found")
+        a.mods += [os.path.join(mods_root, m) for m in found]
     files = []
     for folder in [a.data] + a.mods:
-        names = [n for n in os.listdir(folder) if n.lower().endswith((".esm", ".esp", ".esl"))]
+        names = [n for n in os.listdir(folder) if n.lower().endswith((".esm", ".esp", ".esl"))
+                 and os.path.isfile(os.path.join(folder, n))]
         files += [(n, os.path.join(folder, n)) for n in plugin_order(names)]
     scans = []
     for name, path in files:
@@ -149,7 +191,6 @@ def main(argv=None):
             scans.append((name, scan_plugin(path, a.ltex.split(","), a.cell)))
         except Exception as e:                                     # noqa: BLE001 (reported, the scan goes on)
             print(f"{name}: unreadable ({type(e).__name__}: {e})")
-    active = active_plugins(a.plugins_txt)
     print(f"{len(files)} plugins scanned" + ("" if active is None else f"; plugins.txt: {len(active)} active"))
     for line in report(scans, active):
         print(line)

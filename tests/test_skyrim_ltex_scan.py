@@ -64,6 +64,19 @@ class ScanTest(unittest.TestCase):
             self.assertEqual(s["land_cells"], [(4, -12)])
             self.assertIn("LAND for Tamriel cells [(4, -12)]", S.report([("Fix.esp", s)])[0])
 
+    def test_mo2_profile(self):
+        with tempfile.TemporaryDirectory() as d:
+            prof = os.path.join(d, "profiles", "Default")
+            os.makedirs(prof)
+            with open(os.path.join(prof, "modlist.txt"), "w", encoding="utf-8") as f:
+                f.write("# top = highest priority\n+Grass Fix\n-Off Mod\n+Textures_separator\n+USSEP\n")
+            with open(os.path.join(prof, "plugins.txt"), "w", encoding="utf-8") as f:
+                f.write("*Unofficial Skyrim Special Edition Patch.esp\n")
+            folder, mods, active = S.mo2_profile(d)
+            self.assertEqual(os.path.basename(folder), "Default")
+            self.assertEqual(mods, ["USSEP", "Grass Fix"])                 # lowest priority first
+            self.assertEqual(active, {"unofficial skyrim special edition patch.esp"})
+
     def test_active_plugins(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "plugins.txt")
