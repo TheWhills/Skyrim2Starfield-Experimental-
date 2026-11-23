@@ -411,7 +411,7 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    Enable "S2S SAM Dodge" last, start with sfse_loader.exe, draw a one-handed melee weapon: Alt + W / S / A / D and
    Alt standing (back). Send what each did and SfAnimIndexLoader.log.
-8c. B + C: standalone dodge mod (S2SDodge.dll + the SAM dodge animations, native/combat/sfse/README.md "S2SDodge").
+8c. Done 2026-11-23 (verified: dodges, left arm, sword grip, head): standalone dodge mod (S2SDodge.dll + the SAM dodge animations, native/combat/sfse/README.md "S2SDodge").
    Build the DLL (Visual Studio Build Tools + xmake, as for S2SCombat), then the mod:
    ```powershell
    cd "$HOME\Skyrim2Starfield-Experimental-\native\combat\sfse"; xmake build S2SDodge; cd "$HOME\Skyrim2Starfield-Experimental-"

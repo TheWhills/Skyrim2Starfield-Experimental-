@@ -2805,4 +2805,7 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   forward, at most DEG off the chest's facing (what Skyrim's player head tracking does at runtime). Why: keeps the
   arm fix, needs no runtime system. Alternatives: editing Dual Direct At's chest input (changes every melee look);
   a runtime head turn from the plugin (no bone access yet).
+- Owner's run (--look-ahead 70, S2SDodge bNoAim + bNoHeadTrack): works (verified): left arm in, sword in the hand,
+  head forward in the forward dodge. sam_dodge_pack now passes --look-ahead 70 by default; S2SDodge.ini's diagnostic
+  logging back off. The standalone dodge mod (S2SDodge.dll + SAM dodge animations) is done.
 

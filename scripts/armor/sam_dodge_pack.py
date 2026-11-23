@@ -319,6 +319,9 @@ def main(argv=None):
                     help="head tracking gives up past this heading (vanilla 90; 0 = leave vanilla). Owner's run "
                          "2026-11-23: with head tracking on through the dodge the left arm went out again, so the "
                          "dodges keep it off (S2SDodge: bNoHeadTrack) and carry the look in the clip (--look-ahead)")
+    ap.add_argument("--look-ahead", type=float, default=70.0, metavar="DEG",
+                    help="hkx_to_af --look-ahead: the head faces the character's forward within DEG of the chest "
+                         "(default 70, owner's run 2026-11-23; 0 = the clip's own head)")
     ap.add_argument("--variable", action="append", default=[], metavar="NAME",
                     help="a graph variable window over the whole of every dodge clip, e.g. bNoLeftHandIK (repeatable)")
     ap.add_argument("--dll", help="S2SDodge.dll: make the mod the standalone dodge (DLL + INI in SFSE\\Plugins)")
@@ -340,7 +343,8 @@ def main(argv=None):
     player_raw, _ = hkx_to_af.vanilla_file(PLAYER_REL, a.starfield_data)
     graph_files, report = graphs(attacks_raw, player_raw, state_tags, a.head_track_variable,
                                  a.head_track_limit)   # before converting: fails fast
-    rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data, rest, a.variable)
+    rc, clip_files, conv = convert(a.tk, tag_map, a.starfield_data,
+                                   rest + (["--look-ahead", f"{a.look_ahead:g}"] if a.look_ahead else []), a.variable)
     files = {**clip_files, **graph_files, **fragment_files(tag_map)}
     write(out, files)
     plugin = install_plugin(out, a.dll) if a.dll else []
