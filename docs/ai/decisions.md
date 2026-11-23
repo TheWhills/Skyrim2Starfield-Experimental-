@@ -2745,4 +2745,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   the game chooses (BoneWeightsAction) for its own attacks but not for plugin-sent events. Diagnostic:
   sam_dodge_pack --state-tag Back=MeleeAttackPower_A (Alt standing plays the vanilla power attack through the dodge
   route); compare its left arm with the same attack from the power attack key, both from the combat stance.
+- Owner's run (--state-tag Back=MeleeAttackPower_A): the vanilla power attack holds the left arm out the same from V
+  and from Alt (verified, screenshots). So the plugin route is not the cause: the combat stance changes the left arm
+  of every full-body clip. Next: scripts/armor/stance_layer_probe.py (read-only) lists the IK / constraint / additive
+  / bone-weight nodes and stance switches of Player_Melee and its referenced graphs.
 
