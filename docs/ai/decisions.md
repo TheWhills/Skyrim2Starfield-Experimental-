@@ -2809,3 +2809,14 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   head forward in the forward dodge. sam_dodge_pack now passes --look-ahead 70 by default; S2SDodge.ini's diagnostic
   logging back off. The standalone dodge mod (S2SDodge.dll + SAM dodge animations) is done.
 
+## 2026-11-23 — S2SDodge: dodge hotkey through OSF Settings (optional)
+- Owner: let the player set the dodge key in the Mod Settings menu (OSF Settings 1.1.2, Nexus 18326). Read from its
+  repo (docs/KEYBINDINGS.md, sdk/OSFSettings.h; read only): a schema's `hotkeys` object becomes rebindable actions in
+  Starfield's own keybinding system (ControlMap_Custom.txt); a native plugin registers a callback at kPostLoad
+  (RegisterHotkey(mod, id, fn, ctx), called inline once per accepted key-down, kept out of menus / console / text).
+- Decision: S2SDodge registers `s2sdodge/dodge` when OSFSettings.dll is loaded and otherwise keeps its INI key. Why:
+  no hard dependency, the controller and its tests unchanged (the hotkey feeds a sentinel dodge key). The service is
+  declared ourselves (OsfSettings.h, slot order of ABI 1.0) rather than including its GPL-3.0 header.
+- Unresolved: the schema default "LAlt" is a guess at Starfield's key-name table; a wrong name fails the schema
+  (Mod Issues shows it) and S2SDodge falls back to the INI key.
+

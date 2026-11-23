@@ -420,6 +420,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    ```
    MO2: "S2S Dodge" on (bottom), S2S Combat and the other dodge mods off, SAM + Address Library on. In game: Alt +
    W / S / A / D, Alt standing. Log: SFSE\Plugins\S2SDodge.log (MO2: the mod folder or Overwrite).
+8d. B + C: dodge key in Mod Settings (OSF Settings, Nexus 18326, installed in MO2). Rebuild S2SDodge.dll and the mod
+   (step 8c's commands), start the game, Pause > MOD SETTINGS > KEYBINDINGS: "S2S Dodge / Dodge" (default Left Alt).
+   Rebind it, dodge with the new key; S2SDodge.log says "OSF Settings: dodge key set in Mod Settings". A schema error
+   shows under MOD ISSUES (send its text).
 9. Done 2026-11-09: clothing as items. Ysolda's FarmClothesOutfit04 (dress, boots) in S2S Clothes, male and female
    versions; both test NPCs wear it, and the player's dress follows the body sliders in character creation.
 9b. Done 2026-11-09: Delphine (and Ysolda) wear the shared S2S_FarmClothesOutfit04 in the Riverwood build (in game:

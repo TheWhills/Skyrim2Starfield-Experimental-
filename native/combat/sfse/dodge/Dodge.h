@@ -17,7 +17,14 @@ struct Settings {
     // graph variables logged at each dodge's start and 0.25 s into it ("name" = bool, "name:i" int, "name:f" float)
     std::vector<std::string> log_variables;
     int log_dodges = 20;
+    bool use_osf_settings = true;   // take the dodge key from OSF Settings' Keybindings when it is installed
 };
+
+// The controller's dodge key while OSF Settings delivers the press (never a real SFSE key code).
+inline constexpr std::uint32_t kOsfDodgeKey = 0xFFFF0001u;
+// SFSE key codes from here on are gamepad buttons (InputMap::kMacro_GamepadOffset): an INI gamepad dodge key keeps
+// working next to the OSF Settings keyboard binding.
+inline constexpr std::uint32_t kGamepadKeys = 266;
 
 class Plugin {
 public:
@@ -25,6 +32,9 @@ public:
     void LoadSettings(const std::string& ini_path);
     const Settings& settings() const { return settings_; }
     void Disable(std::string_view why);
+    // At SFSE kPostLoad: register the dodge hotkey with OSF Settings when it is installed (schema s2sdodge.json).
+    void ConnectOsfSettings();
+    void OnOsfDodge();
 
     void OnButton(std::uint32_t key, bool down, std::string_view user_event);
     void OnStick(float x, float y);
@@ -40,6 +50,9 @@ private:
 
     std::mutex lock_;
     combat::Controller controller_;
+    combat::ControllerConfig cfg_;
+    std::uint32_t ini_dodge_key_ = 56;
+    std::atomic_bool osf_dodge_{false};
     combat::MenuGate menus_;
     Settings settings_;
     float stick_x_ = 0.0f, stick_y_ = 0.0f;

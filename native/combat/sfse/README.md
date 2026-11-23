@@ -91,4 +91,10 @@ It switches itself off when S2SCombat.dll is loaded (both would send the dodge e
 * Animations: `scripts/armor/sam_dodge_pack.py --dll <S2SDodge.dll>` writes the whole mod (clips, graphs, SAM fragment,
   DLL + INI). Needs SFSE, Address Library and SAM.
 * Status: core tested (tests/test_dodge_only.cpp); the DLL not yet compiled or run (owner's build).
+* OSF Settings (optional, Nexus 18326, github.com/ozooma10/osf-settings, GPL-3.0): with it installed the dodge key is
+  rebindable in Pause > Mod Settings > Keybindings. Schema `s2sdodge.osf.json` -> `SFSE\Plugins\OSF\Settings\schemas\
+  s2sdodge.json` (sam_dodge_pack --dll copies it); at kPostLoad S2SDodge registers hotkey `s2sdodge/dodge` and the
+  controller's dodge key becomes a sentinel fed by the hotkey callback. Without OSF Settings (or bUseOSFSettings = 0,
+  or a failed registration) uDodgeKey from the INI is used; an INI gamepad key keeps working next to it. The service
+  is declared in `dodge/OsfSettings.h` (ABI 1.0 slot order) instead of including the GPL SDK header.
 

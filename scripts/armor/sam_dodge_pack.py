@@ -216,6 +216,10 @@ def motion_text(blocks: dict) -> str:
 
 
 DODGE_INI = os.path.join(REPO, "native", "combat", "sfse", "S2SDodge.ini")
+# OSF Settings page (optional framework, Nexus 18326): the dodge hotkey in Mod Settings > Keybindings. The file name
+# is the mod id S2SDodge registers ("s2sdodge").
+DODGE_OSF_SCHEMA = os.path.join(REPO, "native", "combat", "sfse", "s2sdodge.osf.json")
+OSF_SCHEMA_REL = "SFSE/Plugins/OSF/Settings/schemas/s2sdodge.json"
 
 
 def install_plugin(out: str, dll: str, ini: str = DODGE_INI) -> list:
@@ -230,6 +234,10 @@ def install_plugin(out: str, dll: str, ini: str = DODGE_INI) -> list:
     if not os.path.isfile(os.path.join(plugins, "S2SDodge.ini")):
         shutil.copyfile(ini, os.path.join(plugins, "S2SDodge.ini"))
         written.append("SFSE/Plugins/S2SDodge.ini")
+    schema = os.path.join(out, *OSF_SCHEMA_REL.split("/"))            # always the current one (not a player file)
+    os.makedirs(os.path.dirname(schema), exist_ok=True)
+    shutil.copyfile(DODGE_OSF_SCHEMA, schema)
+    written.append(OSF_SCHEMA_REL)
     return written
 
 

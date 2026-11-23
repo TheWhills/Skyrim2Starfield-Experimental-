@@ -181,6 +181,12 @@ class SamDodgePackTests(unittest.TestCase):
                     self.assertEqual(fh.read(), "mine")
                 with open(os.path.join(out, "sam_dodge.json")) as fh:
                     self.assertIn("SFSE/Plugins/S2SDodge.dll", json.load(fh)["files"])
+                with open(os.path.join(out, *S.OSF_SCHEMA_REL.split("/")), encoding="utf-8") as fh:
+                    schema = json.load(fh)                                 # OSF Settings page, valid JSON
+                self.assertEqual(schema["schemaVersion"], 1)
+                self.assertEqual(schema["groups"], {})
+                self.assertIn("label", schema["hotkeys"]["dodge"])
+                self.assertTrue(S.OSF_SCHEMA_REL.endswith("/s2sdodge.json"))
         finally:
             S.convert = saved_conv
             if saved_mod is None:

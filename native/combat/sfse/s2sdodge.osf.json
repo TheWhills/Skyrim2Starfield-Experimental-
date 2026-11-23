@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "title": "S2S Dodge",
+  "description": "TK Dodge style dodging: the direction comes from the movement keys or the left stick, standing still dodges backwards.",
+  "groups": {},
+  "hotkeys": {
+    "dodge": {
+      "label": "Dodge",
+      "default": "LAlt"
+    }
+  }
+}

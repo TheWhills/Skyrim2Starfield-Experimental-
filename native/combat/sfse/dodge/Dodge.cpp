@@ -1,6 +1,7 @@
 #include "Dodge.h"
 
 #include "Game.h"
+#include "OsfSettings.h"
 #include "s2s/dodge_only.h"
 
 namespace s2s::dodge {
@@ -46,11 +47,14 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.log_events = to_int(plugin, "iloganimevents", settings_.log_events);
     settings_.log_commands = to_int(plugin, "ilogcommands", settings_.log_commands);
     settings_.log_dodges = to_int(plugin, "ilogdodges", settings_.log_dodges);
+    settings_.use_osf_settings = to_int(plugin, "buseosfsettings", 1) != 0;
     if (auto it = plugin.find("sdodgegraphbools"); it != plugin.end())
         settings_.dodge_bools = combat::MenuGate::parse_list(it->second);
     if (auto it = plugin.find("sloggraphvariables"); it != plugin.end())
         settings_.log_variables = combat::MenuGate::parse_list(it->second);
     std::scoped_lock l(lock_);
+    cfg_ = cfg;
+    ini_dodge_key_ = cfg.dodge_key;
     controller_ = combat::Controller(cfg);
     std::string evs;
     for (const auto& e : cfg.dodge_events) evs += (evs.empty() ? "" : ", ") + (e.empty() ? std::string("-") : e);
@@ -61,6 +65,41 @@ void Plugin::LoadSettings(const std::string& ini_path) {
 void Plugin::Disable(std::string_view why) {
     if (settings_.enabled) REX::WARN("S2SDodge off: {}", why);
     settings_.enabled = false;
+}
+
+namespace {
+void OsfDodgeHotkey(const char*, const char*, void*) noexcept { Plugin::Get().OnOsfDodge(); }
+}  // namespace
+
+void Plugin::ConnectOsfSettings() {
+    if (!settings_.enabled || !settings_.use_osf_settings) return;
+    auto* api = osf::Request();
+    if (!api) {
+        REX::INFO("OSF Settings not installed: dodge key from S2SDodge.ini ({})", ini_dodge_key_);
+        return;
+    }
+    const auto status = api->RegisterHotkey("s2sdodge", "dodge", &OsfDodgeHotkey, nullptr);
+    if (status != osf::Status::Ok) {
+        REX::WARN("OSF Settings: dodge hotkey not registered (status {}; is SFSE\\Plugins\\OSF\\Settings\\schemas\\"
+                  "s2sdodge.json installed?): dodge key from S2SDodge.ini ({})", static_cast<std::uint32_t>(status),
+                  ini_dodge_key_);
+        return;
+    }
+    {
+        std::scoped_lock l(lock_);
+        auto cfg = cfg_;
+        cfg.dodge_key = kOsfDodgeKey;
+        controller_ = combat::Controller(cfg);
+    }
+    osf_dodge_ = true;
+    REX::INFO("OSF Settings: dodge key set in Mod Settings > Keybindings{}", ini_dodge_key_ >= kGamepadKeys
+              ? std::format(" (gamepad key {} from S2SDodge.ini still dodges)", ini_dodge_key_) : std::string());
+}
+
+void Plugin::OnOsfDodge() {
+    // inline during the game's input handling (OSF Settings keeps hotkeys out of menus, the console and text fields)
+    if (logged_input_ < settings_.log_input) REX::INFO("OSF Settings: dodge hotkey");
+    OnButton(kOsfDodgeKey, true, "OSFSettings");
 }
 
 combat::PlayerState Plugin::State() const {
@@ -76,6 +115,8 @@ combat::PlayerState Plugin::State() const {
 
 void Plugin::OnButton(std::uint32_t key, bool down, std::string_view user_event) {
     if (!settings_.enabled || key == 0) return;
+    // OSF Settings delivers the keyboard press; a gamepad dodge button from the INI still dodges
+    if (osf_dodge_ && key == ini_dodge_key_ && key >= kGamepadKeys) key = kOsfDodgeKey;
     if (logged_input_ < settings_.log_input) {
         ++logged_input_;
         REX::INFO("key: code {} {} user event '{}'", key, down ? "down" : "up", user_event);

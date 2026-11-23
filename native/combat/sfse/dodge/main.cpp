@@ -11,6 +11,7 @@ void OnMessage(SFSE::MessagingInterface::Message* a_msg) {
             // every plugin is loaded: S2SCombat would dodge too (both would send the dodge event per press)
             if (REX::W32::GetModuleHandleW(L"S2SCombat.dll"))
                 s2s::dodge::Plugin::Get().Disable("S2SCombat.dll is loaded and has the same dodge (use one of the two)");
+            s2s::dodge::Plugin::Get().ConnectOsfSettings();   // optional: the dodge key in Mod Settings > Keybindings
             break;
         case SFSE::MessagingInterface::kPostDataLoad:
             s2s::dodge::InstallHooks();
