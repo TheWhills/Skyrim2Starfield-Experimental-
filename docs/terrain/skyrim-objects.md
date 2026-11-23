@@ -427,6 +427,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   and no model of ours is seen by the grass loader (plugin archive, loose, MO2). Supported hypothesis: the grass
   loader reads only the archives listed in Starfield.ini [Archive]. Test: `scripts/tools/archive_ini.py` prints the
   game's list with "S2SGrass - Main.ba2" appended, for StarfieldCustom.ini, with the --copy-template-nif build.
+  sResourceArchiveList with S2SGrass - Main.ba2 appended in StarfieldCustom.ini (owner, 12:37): **no grass**. So not
+  the archive lists either (assuming the INI took effect). A vanilla file at a vanilla path works, the identical file
+  at any of our paths does not: the game seems to ship something per vanilla grass model that ours lack, found by the
+  model's path. Starfield.exe names a BSProcGen DensityMapDB and the game has Starfield - DensityMaps.ba2.
+  `scripts/tools/ba2_find.py --grep "hellebore|mossmounds"` lists every archived file naming the two grasses that
+  grew, to see what else exists per grass model.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
