@@ -403,6 +403,14 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    below them), draw a one-handed melee weapon, attack once. The overhead power swing = SAM made our new tag play;
    a snap or nothing = it did not. Send a short clip or what you saw, and SFSE\Plugins\SfAnimIndexLoader.log (MO2:
    in the SAM mod folder or Overwrite).
+8b. B + C: dodges on SAM, own tags (scripts/armor/sam_dodge_pack.py; no Creation Kit run). Needs SAM, Address Library
+   and the S2SCombat plugin (dodge key Left Alt, sDodgeEvents left at its default); stance / combo / dodge packs, "S2S
+   SAM Test" and "S2S AnimInfo" disabled. $tk = the TK Dodge folder (StepDodge*.hkx + animationdatasinglefile.txt):
+   ```powershell
+   python -I scripts\armor\sam_dodge_pack.py --tk "$tk" --starfield-data "$sf\Data" --out "$mods\S2S SAM Dodge" --calumi "$calumi" --skyrim-data "$sky"
+   ```
+   Enable "S2S SAM Dodge" last, start with sfse_loader.exe, draw a one-handed melee weapon: Alt + W / S / A / D and
+   Alt standing (back). Send what each did and SfAnimIndexLoader.log.
 9. Done 2026-11-09: clothing as items. Ysolda's FarmClothesOutfit04 (dress, boots) in S2S Clothes, male and female
    versions; both test NPCs wear it, and the player's dress follows the body sliders in character creation.
 9b. Done 2026-11-09: Delphine (and Ysolda) wear the shared S2S_FarmClothesOutfit04 in the Riverwood build (in game:
