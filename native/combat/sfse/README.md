@@ -121,3 +121,13 @@ Every step logs a `left copy:` line (node names, flags, child counts, timings).
 What to look for: does a second weapon show at the left hand; does it follow the hand while moving and attacking;
 does it vanish on the second press / sheathe; any crash (the last `left copy:` line tells where). Skinned weapon parts
 may stay at the right hand (their bones were bound to the right-hand weapon; findings.md section 3, step 7).
+
+Owner's run 2026-11-23 (second build, screenshots + log), **verified**: the copy works. The weapon node's subtree is
+`Weapon > R_HandIk, L_HandIk, Weapon > Cutlass > Cutlass:0, ProjectileNode, Cutlass_Decals:0`; the test copied the
+inner `Weapon` (the model root) and the whole cutlass, glow included, showed in the left hand and moved with it.
+Sheathing dropped it by itself; three make / drop pairs, no crash. A press before the weapon is in the hand fails
+cleanly ("no model child"). Open: the copy flips between the right angle and pointing outward (it keeps the right
+weapon's local transform under WeaponLeft, and the one-handed clips do not pose the left hand or WeaponLeft for a
+weapon); the left hand does not grip (no dual moveset: S2SWeapons.esm not loaded); the lookup costs 550-590 ms (a
+memory check per node in the walk).
+

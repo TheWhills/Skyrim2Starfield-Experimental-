@@ -2843,4 +2843,8 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
 - First step: the Ghidra + ReVa setup (docs/re/ghidra-ai-setup.md, versions updated: ReVa 7.3.1 for Ghidra 12.1.3,
   JDK 21) and the first session's targets (NiObject clone virtual, NiNode attach, what the equip path calls after
   attaching a weapon so it is drawn). Owner has not installed Ghidra yet.
-
+- 2026-11-23 first in-game copy (S2SCombat left-copy test, branch claude/left-hand-copy-test; findings.md on
+  claude/re-findings-ni-attach): the drawn cutlass cloned with the engine's CreateClone / ProcessClone and attached
+  with NiNode::AttachChild under WeaponLeft shows in the left hand and follows it (verified, owner's screenshots).
+  The runtime-copy route works; what is left is posing (dual moveset, left grip, an orientation offset) and the
+  hotkey / damage steps of the plan.
