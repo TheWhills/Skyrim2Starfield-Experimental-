@@ -404,6 +404,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   describes the template's model at its own path. Supported hypothesis: the grass system resolves the model through
   MODT (resource hashes) and a MODT that does not match MODL draws nothing. Test: `--drop-modt` (with
   `--copy-template-nif`); and a dump of the vanilla GRAS (dump_records.py) to decode MODT.
+  Dump of GrassHelleboreField02 (owner, 11:45, verified): EDID, OBND, ODTY, BFCB/KSIZ/KWDA (keywords 2BBE80,
+  2BBE7F)/BFCE, MODL 'Landscape\Grass\grasshelleborefield02.nif', FLLD 1, DNAM (contrast 60, cluster 0.64, height
+  range 0.33, colour 0, wind 1, above-water 0.5, below-water FLT_MAX, max density 40, slopes 0-40, flags 6, coverage
+  20, dirtiness 127/127); record flags 0x8000. **No MODT**: that hypothesis is out (--drop-modt changes nothing).
+  So our GRAS differs from the growing one only in EDID, MODL and DNAM (DNAM was Skyrim's in the growing
+  --keep-template-model build too): the model PATH alone decides. Both our archive and loose files failed, and both
+  are served by MO2's virtual file system, while every model that grew sat in the game's own archives. Next test: our
+  plugin and archive copied into the real Starfield\Data (as the terrain is installed), the MO2 mod off.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
