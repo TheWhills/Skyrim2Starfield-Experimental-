@@ -90,10 +90,21 @@ class Survey:
         self.pos_of = defaultdict(Counter)             # (file, byte value) -> Counter(position)
         self.alpha = np.zeros((5, 8), np.int64)
         self.edge = {k: np.zeros((MAX_D, 2), np.int64) for k in ("diff", "same")}   # [d] (active, total)
+        self.b6_fid = Counter()                        # LTEX FormIDs byte 6 names (head rule: entry b - 1)
+        self.b6_painted = Counter()                    # ... of those, painted with bytes 0..4 somewhere in the file
+        self.edids, self.covered = {}, set()           # --sf-esm: LTEX EditorIDs, LTEX some biome gives ground cover
 
-    def quads(self, name, quad, nlt=0):
+    def quads(self, name, quad, nlt=0, ltex=None):
         ny, nx, _ = quad.shape
         used = (quad > 0)
+        if ltex:                                             # 2026-11-22: which textures byte 6 names
+            painted = {int(x) for x in np.unique(quad[:, :, :5]) if 0 < x <= len(ltex)}
+            vals, cnt = np.unique(quad[:, :, 6], return_counts=True)
+            for v, k in zip(vals.tolist(), cnt.tolist()):
+                if 0 < v <= len(ltex):
+                    self.b6_fid[ltex[v - 1]] += k
+                    if v in painted:
+                        self.b6_painted[ltex[v - 1]] += k
         for p in (5, 6, 7):                                  # 2026-11-22: what bytes 5..7 hold
             v = quad[:, :, p]
             vals, cnt = np.unique(v, return_counts=True)
@@ -203,6 +214,13 @@ class Survey:
                        f"{c[f'b{p}_valid_entry'] / max(nz, 1):.1%}, repeating one of bytes 0..4 "
                        f"{c[f'b{p}_repeats_0_4'] / max(nz, 1):.1%}; most common values "
                        + ", ".join(f"{k.rsplit('_', 1)[1]} ({v / q:.1%})" for k, v in top))
+        if self.b6_fid:
+            tot6 = sum(self.b6_fid.values())
+            out.append("  byte 6 read as a table entry (b - 1): " + ", ".join(
+                f"{self.edids.get(f, f'{f:08X}')} {k / tot6:.1%}"
+                + (" [ground cover in a biome]" if f in self.covered else "")
+                + (f" (painted in bytes 0..4 for {self.b6_painted[f] / k:.0%})" if self.b6_painted[f] else " (never painted)")
+                for f, k in self.b6_fid.most_common(12)))
         if c["words"]:
             out.append(f"  sample words with bit 15 set: {c['words_bit15'] / c['words']:.2%} of {c['words']:,}")
         tot = self.alpha.sum(axis=1, keepdims=True)
@@ -229,6 +247,8 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--all", action="store_true", help="also the procedural source tiles (no LTEX table)")
     ap.add_argument("--json", default="", help="also write the counts here")
+    ap.add_argument("--sf-esm", default="", help="Starfield.esm: name the LTEX byte 6 points at (default: "
+                                                  "<sf-data>\\Starfield.esm if present)")
     ap.add_argument("--match", default="", help="only BTDs whose path matches this regular expression (e.g. "
                                                  "overlaytrait)")
     a = ap.parse_args(argv)
@@ -256,6 +276,14 @@ def main(argv=None):
     print(f"{len(files)} vanilla BTDs with an LTEX table ({no_table} procedural tiles without one skipped); "
           f"reading the {len(pick)} largest")
     sv = Survey()
+    esm = a.sf_esm or os.path.join(a.sf_data, "Starfield.esm")
+    if os.path.isfile(esm):
+        from fo4sf import sfgrass, sfplugin
+        for t, _h, subs, fid in sfplugin.records(esm, [b"LTEX", b"BIOM"]):
+            if t == b"LTEX":
+                sv.edids[fid] = sfplugin.edid(subs)
+            else:
+                sv.covered |= {e["ltex"] for e in sfgrass.biome_terrain(subs) if e["gcvr"]}
     for ar, i, name, size, _nlt in pick:
         before = {k: v.copy() for k, v in sv.edge.items()}
         try:
@@ -263,7 +291,12 @@ def main(argv=None):
         except Exception as e:                               # noqa: BLE001 - report and go on
             print(f"  {name}: not read ({e})")
             continue
-        sv.quads(name, quad, len(ltex))
+        sv.quads(name, quad, len(ltex), ltex)
+        b6 = quad[:, :, 6]
+        if (b6 > 0).any():
+            vals, cnt = np.unique(b6, return_counts=True)
+            print(f"    byte 6 values {dict(zip(vals.tolist(), cnt.tolist()))}; table head "
+                  + ", ".join(sv.edids.get(f, f"{f:08X}") for f in ltex[:3]))
         cells = [(cy, cx) for cy in range(ncy) for cx in range(ncx)]
         rng.shuffle(cells)
         done = 0

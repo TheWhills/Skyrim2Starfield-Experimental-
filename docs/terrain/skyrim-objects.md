@@ -312,6 +312,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   repeat of bytes 0..4, bit 15 share; --match overlaytrait for planet overlays); in game,
   `player.GetBiomeMaskValue <mask>` ("the ref's biome mask on the terrain at its position") on our ground would show
   whether the engine sees any mask there.
+  **Owner's survey (2026-11-22 20:19, verified):** 12 largest hand-made worlds (62,352 quadrants) and 12 planet-trait
+  overlays (948): **byte 6 is the only extra byte used** (non-zero in 96.6 % / 77.5 % of quadrants; values 1 or 2 in
+  worlds, always 1 in the trait overlays, 8 once), bytes 5 and 7 always 0, bit 15 of the sample words never set.
+  Byte 6's value never equals any of the quadrant's bytes 0..4. Ours writes 0 there. Read with the head rule it names
+  table entry 0 or 1, which bytes 0..4 then never paint in that quadrant. Unresolved what it is: a sixth "texture"
+  that is not drawn (e.g. the one ground cover or biome material comes from), or a small code. The survey now names the
+  LTEX it would point at (from Starfield.esm), whether a biome gives that LTEX ground cover, and whether the file paints
+  it anywhere with bytes 0..4.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

@@ -68,10 +68,13 @@ class SurveyTest(unittest.TestCase):
         t = btd.Btd(6, 0.0, 10.0, [0x100, 0x200, 0x300, 0x400], np.zeros((128, 256), np.uint16), w, q)
         sv = V.Survey()
         ltex, quad, (ncy, ncx), read_cell = V.parse(btd.write(t))
-        sv.quads("x", quad, len(ltex))
+        sv.quads("x", quad, len(ltex), ltex)
         for cx in range(ncx):
             sv.cell(quad, 0, cx, read_cell(0, cx))
         c = sv.c
+        self.assertEqual(sv.b6_fid, {0x400: 8})                       # byte 6 = 4 -> entry 3
+        self.assertEqual(sv.b6_painted[0x400], 0)
+        sv.edids, sv.covered = {0x400: "LGrassy"}, {0x400}
         self.assertEqual((c["b5_nonzero"], c["b5_valid_entry"], c["b5_repeats_0_4"]), (8, 4, 4))
         self.assertEqual((c["b6_nonzero"], c["b6_valid_entry"], c["b6_repeats_0_4"]), (8, 8, 0))
         self.assertEqual(c["b7_nonzero"], 0)
@@ -79,6 +82,7 @@ class SurveyTest(unittest.TestCase):
         rep = "\n".join(sv.report())
         self.assertIn("byte 5: non-zero in 100.0% of quadrants; of those a valid table entry 50.0%", rep)
         self.assertIn("bit 15 set: 25.00%", rep)
+        self.assertIn("byte 6 read as a table entry (b - 1): LGrassy 100.0% [ground cover in a biome] (never painted)", rep)
 
 
 if __name__ == "__main__":
