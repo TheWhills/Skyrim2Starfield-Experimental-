@@ -69,6 +69,10 @@ class SamDodgePackTests(unittest.TestCase):
             S.motion_blocks(singlefile().replace("TKDodgeLeft", "TKDodgeSideways"))
         with self.assertRaises(SystemExit):
             S.motion_blocks(singlefile(), project="FirstPerson")
+        bad = singlefile().replace("0.866667 0 999.0 0", "0.066667 animmotion 0.0 0.0 0.0")   # other project
+        self.assertEqual(S.motion_blocks(bad)["Forward"][1]["translations"][-1][2], 409.0)
+        bad = singlefile().replace("0.866667 0 1.0 0", "0.066667 animmotion 0.0 0.0 0.0")     # unwanted block
+        self.assertEqual(S.motion_blocks(bad)["Right"][1]["translations"][-1][2], 252.5)
 
     def test_fragment(self):
         t = S.tags()

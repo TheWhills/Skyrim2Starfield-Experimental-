@@ -73,28 +73,83 @@ def write(out: str, files: dict):
             fh.write(data)
 
 
+def _numbers(line: str):
+    out = []
+    for tok in line.split():
+        try:
+            out.append(float(tok))
+        except ValueError:
+            pass
+    return out
+
+
+def _project_sections(lines, project: str):
+    """(clip lines, motion lines) of one project, the others skipped by their line counts only (their contents are
+    not read: other mods' copies can hold malformed lines, owner's run 2026-11-23: '0.066667 animmotion 0.0 0.0 0.0'
+    in motion 32755)."""
+    count = int(lines[0].strip())
+    names = [ln.strip() for ln in lines[1:1 + count]]
+    i = 1 + count
+    for name in names:
+        n = int(lines[i].strip())
+        block = lines[i + 1:i + 1 + n]
+        i += 1 + n
+        files_n = int(block[1].strip())
+        has_clips = 2 + files_n < len(block) and block[2 + files_n].strip() == "1"
+        motion = []
+        if has_clips:
+            m = int(lines[i].strip())
+            motion = lines[i + 1:i + 1 + m]
+            i += 1 + m
+        if name.lower().removesuffix(".txt") == project.lower():
+            return block[3 + files_n:] if has_clips else [], motion
+    raise SystemExit(f"no {project} project in the animationdatasinglefile")
+
+
+def _motion_by_counts(lines, wanted):
+    """{id: block} for the wanted ids, walking the motion section by its key counts; only wanted blocks are parsed."""
+    out, i = {}, 0
+    while i < len(lines) and len(out) < len(wanted):
+        if not lines[i].strip():
+            i += 1
+            continue
+        ident, dur = lines[i].strip(), _numbers(lines[i + 1])
+        n = int(lines[i + 2].strip())
+        tr_lines = lines[i + 3:i + 3 + n]
+        j = i + 3 + n
+        m = int(lines[j].strip())
+        rot_lines = lines[j + 1:j + 1 + m]
+        if ident in wanted:
+            tr = [tuple(v[-4:]) for v in map(_numbers, tr_lines)]
+            rot = [tuple(v[-5:]) for v in map(_numbers, rot_lines)]
+            if any(len(t) != 4 for t in tr) or any(len(r) != 5 for r in rot) or not dur:
+                raise SystemExit(f"motion block {ident}: unreadable keys")
+            out[ident] = {"duration": dur[0], "translations": tr, "rotations": rot}
+        i = j + 1 + m
+    return out
+
+
 def motion_blocks(text: str, directions=DIRECTIONS, project: str = "DefaultMale") -> dict:
     """{direction: (motion block id, block)} looked up by clip generator name (TKDodge<Direction>) in an
     animationdatasinglefile's third-person project. The ids differ between copies: TK Dodge RE's full copy has 1656
     for TKDodgeForward, TK Dodge SE's file does not (owner's run 2026-11-23: "no motion block 1656")."""
-    from fo4sf import animdata
-    projects = animdata.parse(text)
-    proj = next((p for k, p in projects.items() if k.lower() == project.lower()), None)
-    if proj is None:
-        raise SystemExit(f"no {project} project in the animationdatasinglefile")
-    by_name = {c["name"].lower(): c["id"] for c in proj["clips"]}
-    out, missing = {}, []
-    for d in directions:
-        ident = by_name.get(f"tkdodge{d}".lower())
-        if ident is None or ident not in proj["motion"]:
-            missing.append(d)
-        else:
-            out[d] = (ident, proj["motion"][ident])
+    clip_lines, motion_lines = _project_sections(text.splitlines(), project)
+    ids, i = {}, 0
+    while i + 5 < len(clip_lines):                # clip blocks: name, id, speed, crop start, crop end, event count
+        if not clip_lines[i].strip():
+            i += 1
+            continue
+        name, ident = clip_lines[i].strip().lower(), clip_lines[i + 1].strip()
+        ids.setdefault(name, ident)
+        i += 6 + int(clip_lines[i + 5].strip())
+    want = {d: ids.get(f"tkdodge{d}".lower()) for d in directions}
+    blocks = _motion_by_counts(motion_lines, {x for x in want.values() if x})
+    missing = [d for d, x in want.items() if x not in blocks]
     if missing:
-        near = sorted(c["name"] for c in proj["clips"] if "dodge" in c["name"].lower())[:20]
+        near = sorted(n for n in ids if "dodge" in n)[:20]
         raise SystemExit(f"no motion for TKDodge{', TKDodge'.join(missing)} in {project}; dodge clip generators there: "
                          f"{', '.join(near) or 'none'}")
-    return out
+    return {d: (x, blocks[x]) for d, x in want.items()}
 
 
 def motion_text(blocks: dict) -> str:
