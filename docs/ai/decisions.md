@@ -2680,3 +2680,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   positions). Why: owner's in-game side-by-sides at five Riverwood spots show soft fades with no straight quadrant edges
   or specks, and the vanilla survey found partial alphas at aligned positions are what Bethesda's worlds use; it is
   also 3x faster than noise (4.7 vs 15.5 min). Alternatives kept as options: noise (irregular patches), solid, dither.
+- 2026-11-22 Native grass un-parked: S2SGrass.esm's ground cover goes into the planet's own biome under the overlay
+  (Nirn's ocean copy, `--biome planet`, default) instead of the world's land biome, since Nirn's biome map is all ocean
+  (the October test extended a biome that is nowhere under Riverwood). Why this one: our own record (no vanilla planet
+  changes), and the ocean biome's coat on Riverwood objects showed the engine uses that biome there. Alternatives:
+  a land disc under the overlay in the biome map (changes the surrounding sea); the baked static patches (no wind or
+  fade). `--control` (a vanilla cover) separates a route failure from a model failure.

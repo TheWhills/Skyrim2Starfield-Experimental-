@@ -165,7 +165,8 @@ class NativeBuildTests(unittest.TestCase):
                 json.dump({"skyrim": {"119": {"edid": "LFernGround", "starfield": "SKYG_LFernGround"}}}, fh)
             out = os.path.join(tmp, "mod")
             rc = N.main(["--skyrim", sky_esm, "--skyrim-data", data, "--starfield", sf, "--terrain", terrain,
-                         "--texconv", "texconv.exe", "--out", out, "--density-scale", "2", "--biome-masks", "0,4"])
+                         "--texconv", "texconv.exe", "--out", out, "--density-scale", "2", "--biome-masks", "0,4",
+                         "--biome", "world"])
             self.assertEqual(rc, 0)
             recs = sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS", b"GCVR", b"BIOM"])
             with open(os.path.join(out, "grass_native.json"), encoding="utf-8") as fh:
@@ -186,6 +187,96 @@ class NativeBuildTests(unittest.TestCase):
         self.assertEqual(rep["biome"]["edid"], "BiomeA")
         self.assertEqual(rep["templates"]["gras"], "GrassA")
         self.assertEqual(rep["failed"], {})
+
+
+
+class PlanetBiomeTests(unittest.TestCase):
+    """2026-11-22: the cover goes into the planet's own biome under the overlay (Nirn's ocean copy), and --control
+    puts a vanilla cover on every converted texture."""
+
+    def test_helpers(self):
+        import skyrim_grass_native as N
+        m = N.mapping_from_fids({0x77: 0x31, 0x78: 0x99}, {0x77: "LFernGround"}, [{"form_id": 0x31, "skyrim": "LFernGround"}])
+        self.assertEqual(m["119"], {"edid": "LFernGround", "starfield": "SKYG_LFernGround"})
+        self.assertEqual(m["120"]["starfield"], "00000099")                   # a vanilla LTEX: no cover later
+        h = bytes(24)
+        recs = [(b"BIOM", h, [(b"EDID", b"NirnLand\0")], 0x02000805),
+                (b"BIOM", h, [(b"EDID", b"NirnOceanNoCoating\0")], 0x02000801),
+                (b"BIOM", h, [(b"EDID", b"Vanilla\0")], 0x40)]
+        self.assertEqual(N.location_biome(recs)[3], 0x02000801)
+        self.assertIsNone(N.location_biome([recs[2]]))
+        subs = [(b"LNAM", struct.pack("<3I", 0, 1, 0x20)), (b"LNAM", struct.pack("<3I", 1, 2, 0x20)),
+                (b"LNAM", struct.pack("<3I", 1, 3, 0x21)), (b"LNAM", struct.pack("<3I", 1, 4, 0))]
+        self.assertEqual(N.control_cover(subs), 0x20)
+
+    def _setup(self, tmp):
+        import skyrim_fixtures as F
+        sf = os.path.join(tmp, "Starfield")
+        os.makedirs(os.path.join(sf, "Data"))
+        os.makedirs(os.path.join(sf, "Tools"))
+        sf_esm(os.path.join(sf, "Data", "Starfield.esm"))
+        F.content_resources(os.path.join(sf, "Tools", "ContentResources.zip"))
+        data = F.skyrim_data(os.path.join(tmp, "Data"))
+        sky_esm = os.path.join(tmp, "Skyrim.esm")
+        h = struct.pack("<4sIII", b"LTEX", 0, 0, 0) + bytes(8)
+        with open(sky_esm, "wb") as fh:
+            fh.write(sfplugin.build([(b"LTEX", h, [(b"EDID", b"LFernGround\0")], 0x77)],
+                                    {"hedr_version": 1.71, "form_version": 44}, masters=()))
+        terrain = os.path.join(tmp, "terrain")
+        os.makedirs(terrain)
+        bh = struct.pack("<4sIII", b"BIOM", 0, 0, 0) + bytes(4) + struct.pack("<HH", 555, 0)
+        with open(os.path.join(terrain, "Terr_Mars.esm"), "wb") as fh:
+            fh.write(sfplugin.build([(b"BIOM", bh, [(b"EDID", b"NirnOceanNoCoating\0"),
+                                                     (b"LNAM", struct.pack("<3I", 0, 0x30, 0))], 0x02000801)],
+                                    {"hedr_version": 0.96, "form_version": 555},
+                                    masters=("Starfield.esm", "Terr.esm")))
+        with open(os.path.join(terrain, "overlays_params.json"), "w") as fh:
+            json.dump({"plugin": "Terr.esm", "mars": {"plugin": "Terr_Mars.esm"},
+                       "ltex_overrides": [{"form_id": 0x31, "skyrim": "LFernGround"}],
+                       "world_overrides": {"biome": "00000040"}}, fh)
+        with open(os.path.join(terrain, "ltex_mapping.json"), "w") as fh:
+            json.dump({"skyrim": {"119": {"edid": "LFernGround", "starfield": "SKYG_LFernGround"}}}, fh)
+        return sf, data, sky_esm, terrain
+
+    def _run(self, extra):
+        import skyrim_grass_native as N
+        lg = {0x77: [0x88]}
+        gr = {0x88: dict(skyrimgrass.parse_gras_data(struct.pack("<BBBBHHIffffB3x", 30, 0, 40, 0, 0, 0, 0, 0.0,
+                                                                  0.3, 0.2, 0.0, 4)),
+                         edid="Fern", model="landscape\\plants\\fern01.nif")}
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                mock.patch.object(skyrimgrass, "read_grass", return_value=(lg, gr)), \
+                contextlib.redirect_stdout(io.StringIO()) as log:
+            sf, data, sky_esm, terrain = self._setup(tmp)
+            out = os.path.join(tmp, "mod")
+            rc = N.main(["--skyrim", sky_esm, "--skyrim-data", data, "--starfield", sf, "--terrain", terrain,
+                         "--texconv", "texconv.exe", "--out", out, "--biome-masks", "0,4"] + extra)
+            self.assertEqual(rc, 0)
+            with open(os.path.join(out, N.PLUGIN), "rb") as fh:
+                raw = fh.read()
+            recs = sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS", b"GCVR", b"BIOM"])
+        return raw, {sfplugin.edid(r[2]): r for r in recs}, log.getvalue()
+
+    def test_planet_biome_default(self):
+        raw, by, log = self._run([])
+        self.assertIn(b"MAST\x0e\x00Starfield.esm\x00", raw)
+        self.assertIn(b"Terr_Mars.esm", raw)
+        cover = by["S2S_Cover_00000031"]
+        self.assertEqual(cover[3] >> 24, 3)                                   # own records after three masters
+        self.assertEqual(by["S2S_Fern"][3] >> 24, 3)
+        biome = by["NirnOceanNoCoating"]
+        self.assertEqual(biome[3], 0x02000801)                                # the planet plugin's own ocean biome
+        terr = sfgrass.biome_terrain(biome[2])
+        self.assertEqual([(e["mask"], e["gcvr"]) for e in terr if e["ltex"] == 0x31], [(0, cover[3]), (4, cover[3])])
+        self.assertEqual(terr[0], {"kind": "LNAM", "mask": 0, "ltex": 0x30, "gcvr": 0})   # its own entry kept
+        self.assertIn("load S2SGrass.esm after them", log)
+
+    def test_control(self):
+        raw, by, log = self._run(["--control"])
+        self.assertNotIn("S2S_Fern", by)                                      # no Skyrim grass converted
+        terr = sfgrass.biome_terrain(by["NirnOceanNoCoating"][2])
+        self.assertEqual([(e["mask"], e["gcvr"]) for e in terr if e["ltex"] == 0x31], [(0, 0x20), (4, 0x20)])
+        self.assertIn("control: vanilla ground cover CoverA", log)
 
 
 if __name__ == "__main__":

@@ -308,6 +308,11 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    skyrim_all\btd_before_blend). For a wrong texture at a spot (the grey-blue "snow"): in game
    `player.getpos x` / `y`, then python -I scripts\terrain\ground_at.py --skyrim "$sky\Skyrim.esm" --terrain
    C:\Modding\staging\skyrim_all --pos <x> <y> --spawn-at 225.70 -627.74
+8i. (2026-11-22) Skyrim's grass as Starfield grass (wind, fade), through Nirn's own biome under Riverwood:
+   python -I scripts\terrain\skyrim_grass_native.py --skyrim "$sky\Skyrim.esm" --skyrim-data $sky --starfield $sf
+   --terrain C:\Modding\staging\skyrim_all --texconv C:\Modding\tools\texconv.exe --out "$mods\S2S Grass Native"
+   Enable S2S Grass Native in MO2 with S2SGrass.esm after SkyrimTerrainTamriel_Mars.esm. --control instead grows a
+   vanilla Jemison grass on every converted texture (tells our grass apart from the route).
 8h. (2026-11-22) Ground colour against Skyrim at a spot (read-only): in game `player.getpos x` / `y`, then
    python -I scripts\terrain\ground_tone.py --skyrim "$sky\Skyrim.esm" --terrain C:\Modding\staging\skyrim_all
    --pos X Y --spawn-at 225.70 -627.74 --radius 20

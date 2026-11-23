@@ -230,6 +230,23 @@ Max Density; what a vanilla grass model needs. Two tools:
   listing the grasses of the Skyrim textures painted with it. Textures that fell back to a vanilla Starfield LTEX get
   no cover (it would grow Skyrim grass on vanilla planets). `--biome <EDID>` also overrides that biome with
   {LTEX, GCVR} entries (second attempt). Test with the terrain staged `--no-grass`.
+* **Un-parked (2026-11-22, owner: Skyrim's grass as a Starfield grass type, with its fading).** The October biome
+  route went to the wrong biome: it extended the world's land biome (ForestDeciduousLifeJemison), but Nirn's biome map
+  is ocean everywhere (make_planet.py --land-px 0 since 2026-10-18), so the planet biome under Riverwood is Nirn's
+  ocean biome (NirnOceanNoCoating, our copy of OceanLife04 in the _Mars plugin). Evidence that the engine applies that
+  biome to the overlay: vanilla OceanLife04's slime global layer once coated every Riverwood object (why make_planet
+  strips it). Supported hypothesis: ground cover is taken from the same biome. Now `--biome planet` (default) adds the
+  {mask, LTEX, GCVR} entries to that biome: our own record, so no vanilla planet changes (Nirn's procedural sea floor
+  may pick the Skyrim textures too). S2SGrass.esm then has SkyrimTerrainTamriel.esm and its _Mars plugin as masters
+  and loads after them. `--control` lists one vanilla cover (the one the world's land biome uses most) on every
+  converted texture instead: vanilla grass there but none with Skyrim's points at our grass records / models, none
+  either way at the route. Without ltex_mapping.json the texture mapping is read off the installed terrain
+  (refresh_btd.infer_mapping) and kept as ltex_mapping_inferred.json. Synthetic tests: tests/test_sfgrass.py
+  (PlanetBiomeTests). In game: pending.
+* Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
+  painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
+  imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
+  other textures in places (index rule, edge byte blending), which made them look misplaced.
 
 ## Model-space normal maps (2026-10-16)
 Riverwood's riverbank ledges and cliffs drew dark and flat with only the grass texture's flowers showing, while the
