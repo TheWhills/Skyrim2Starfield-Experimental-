@@ -551,6 +551,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   3-bit alphas: Skyrim blends LFieldGrass02 with its look-alike NoGrass twin and dirt, so its alpha rarely passes it),
   or ground cover not growing on a quadrant's base layer (the open floor is the base; rock edges are overlays).
   ground_at.py now takes `--skyrim-pos` too, to read the quadrant bytes and alphas at the spot.
+  **ground_at at Skyrim (17448, -48815) (owner, 16:59, verified):** Skyrim paints LFieldGrass02 100 %; the BTD
+  draws slot 00030137 (SKYG LFieldGrass02) as overlay 1 at alpha 7/7, and the 31 m maps match Skyrim's layout. So
+  the mapping, the five-layer limit and the threshold are not it (refuted at that spot): the field cover's own slot
+  is drawn at full strength there and grows nothing. Slot 00030137 re-skins the vanilla ROCK texture LRockLayered05,
+  keeping its fields. Supported hypothesis: ground cover follows the vanilla record's kind. grass_slots.py lists every
+  covered slot with the record it re-skins and that record's fields.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
