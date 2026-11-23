@@ -489,7 +489,15 @@ Max Density; what a vanilla grass model needs. Two tools:
   the rest of the family shares it: 15 families, 12 land families fit), and `--vanilla-material auto` gives each
   family's model the closest game material (FAMILY_MATERIALS: forest / field / fern -> GrassFieldLive01, tundra ->
   GrassFieldDried01, Reach -> ...Red, snow / frozen marsh -> ...Snow, fall forest -> ...Yellow, rock -> ...Dried03,
-  beach -> GrassCostal01, volcanic -> GrassDesert01, water -> wetlands / seaweed / eelgrass). In game: pending.
+  beach -> GrassCostal01, volcanic -> GrassDesert01, water -> wetlands / seaweed / eelgrass).
+  **Owner (2026-11-23 14:17, three screenshots, verified in game): Skyrim grass grows as Starfield ground cover** on
+  the rocky slopes and the Riverwood forest floor, in tall bladed clumps that sway and fade like the game's grass. Two
+  gaps against Skyrim: (1) every clump is pale straw, also on the green forest floor where Skyrim's grass is green
+  (unresolved: GrassFieldLive01 may itself be a pale field grass, or Riverwood's grasses fell into a dried family);
+  GrassCityShort01 drew green at the same spot at 13:51. (2) It grows in scattered clumps with bare ground between,
+  where Skyrim's is a carpet: Max Density is Skyrim's raw 3-37 against the vanilla template's 40. Next:
+  `--family-material FAMILY=MATERIAL` overrides a family's stand-in (the build now prints each family model's
+  material after its path), and `--density-scale 3` (Skyrim 3-37 -> 9-111).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

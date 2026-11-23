@@ -164,9 +164,33 @@ FAMILY_MATERIALS = {
 DEFAULT_MATERIAL = "Bladed\\GrassFieldLive01"
 
 
-def family_material(edid: str) -> str:
-    """The game grass material standing in for a Skyrim grass family (--vanilla-material auto)."""
-    return "Materials\\Landscape\\Grass\\" + FAMILY_MATERIALS.get(family(edid), DEFAULT_MATERIAL) + ".mat"
+def family_material(edid: str, overrides=None) -> str:
+    """The game grass material standing in for a Skyrim grass family (--vanilla-material auto); overrides maps a
+    family to a material under Materials\\Landscape\\Grass (--family-material forestgrass=Bladed\\GrassCityShort01)."""
+    fam = family(edid)
+    mat = (overrides or {}).get(fam) or FAMILY_MATERIALS.get(fam, DEFAULT_MATERIAL)
+    return "Materials\\Landscape\\Grass\\" + mat + ".mat"
+
+
+def parse_family_materials(items):
+    """--family-material FAMILY=MATERIAL (repeatable; several families may share one item: forestgrass,fieldgrass=...)
+    -> {family: material path under Materials\\Landscape\\Grass without .mat}."""
+    out = {}
+    for it in items or ():
+        if "=" not in it:
+            raise ValueError(f"--family-material wants FAMILY=MATERIAL, got {it!r}")
+        fams, mat = it.split("=", 1)
+        mat = mat.strip().replace("/", "\\")
+        low = mat.lower()
+        for pre in ("materials\\landscape\\grass\\",):
+            if low.startswith(pre):
+                mat = mat[len(pre):]
+        if mat.lower().endswith(".mat"):
+            mat = mat[:-4]
+        for f in fams.split(","):
+            if f.strip():
+                out[f.strip().lower()] = mat
+    return out
 
 
 def shared_model(edid: str, placed):
@@ -404,7 +428,15 @@ def main(argv=None):
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
+    ap.add_argument("--family-material", action="append", default=[], metavar="FAMILY=MATERIAL",
+                    help="with --vanilla-material auto: the game grass material for a Skyrim grass family, under "
+                         "Materials\\Landscape\\Grass (e.g. forestgrass,fieldgrass=Bladed\\GrassCityShort01); "
+                         "repeatable")
     a = ap.parse_args(argv)
+    try:
+        fam_mats = parse_family_materials(a.family_material)
+    except ValueError as e:
+        sys.exit(str(e))
     out = os.path.abspath(a.out)
     if out.lower().startswith(os.path.abspath(REPO).lower()):
         sys.exit("--out must be outside the repository")
@@ -587,7 +619,8 @@ def main(argv=None):
                     report.setdefault("shared_models", {})[r["edid"]] = model
                     print(f"  {r['edid']} shares {model}")
                 else:
-                    mat = family_material(r["edid"]) if a.vanilla_material == "auto" else a.vanilla_material
+                    mat = (family_material(r["edid"], fam_mats) if a.vanilla_material == "auto"
+                           else a.vanilla_material)
                     model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry)
                     if mat:
                         report.setdefault("materials", {})[r["edid"]] = mat
@@ -598,7 +631,7 @@ def main(argv=None):
                         os.makedirs(os.path.dirname(dst_p), exist_ok=True)
                         shutil.move(src_p, dst_p)
                         report.setdefault("vanilla_paths", {})[r["edid"]] = vpath
-                        print(f"  {r['edid']} -> {vpath}")
+                        print(f"  {r['edid']} -> {vpath}" + (f"  [{mat.rsplit(chr(92), 1)[-1]}]" if mat else ""))
                         model = vpath.split("\\", 1)[1]
                         placed.append((r["edid"], model))
             except Exception as e:                                   # noqa: BLE001 (reported; that grass is left out)

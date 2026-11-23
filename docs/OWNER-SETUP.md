@@ -315,6 +315,10 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    --terrain C:\Modding\staging\skyrim_all --texconv C:\Modding\tools\texconv.exe --out "$mods\S2S Grass Native"
    Enable S2S Grass Native in MO2 with S2SGrass.esm after SkyrimTerrainTamriel_Mars.esm. --control instead grows a
    vanilla Jemison grass on every converted texture (tells our grass apart from the route).
+   Working route (2026-11-23): add --biome-masks all --vanilla-paths --coverage 100 --vanilla-material auto (Skyrim
+   shapes over the free vanilla grass paths, each family in the closest game grass material; terrain_byte6.ps1 first).
+   Tuning: --density-scale N (Skyrim's density x N), --family-material forestgrass,fieldgrass=Bladed\GrassCityShort01
+   (any material from grass_model_compare.py --list-materials, path under Materials\Landscape\Grass).
 8h. (2026-11-22) Ground colour against Skyrim at a spot (read-only): in game `player.getpos x` / `y`, then
    python -I scripts\terrain\ground_tone.py --skyrim "$sky\Skyrim.esm" --terrain C:\Modding\staging\skyrim_all
    --pos X Y --spawn-at 225.70 -627.74 --radius 20

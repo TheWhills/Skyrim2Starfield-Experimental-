@@ -467,6 +467,19 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertEqual(N.family_material("Unknown01"), "Materials\\Landscape\\Grass\\Bladed\\GrassFieldLive01.mat")
         self.assertTrue(N.family_material("SnowGrass01Forest").endswith("GrassFieldDried01Snow.mat"))
 
+    def test_family_material_overrides(self):
+        import skyrim_grass_native as N
+        o = N.parse_family_materials(["ForestGrass,fieldgrass=Bladed/GrassCityShort01.mat",
+                                      "tundragrass=Materials\\Landscape\\Grass\\Bladed\\GrassSedge01"])
+        self.assertEqual(o, {"forestgrass": "Bladed\\GrassCityShort01", "fieldgrass": "Bladed\\GrassCityShort01",
+                             "tundragrass": "Bladed\\GrassSedge01"})
+        self.assertEqual(N.family_material("ForestGrass02", o),
+                         "Materials\\Landscape\\Grass\\Bladed\\GrassCityShort01.mat")
+        self.assertTrue(N.family_material("TundraGrass01", o).endswith("Bladed\\GrassSedge01.mat"))
+        self.assertTrue(N.family_material("RockGrass01", o).endswith("GrassFieldDried03.mat"))
+        with self.assertRaises(ValueError):
+            N.parse_family_materials(["forestgrass"])
+
     def test_one_path_per_family_and_auto_material(self):
         import numpy as np
         import skyrim_grass_native as N
@@ -489,6 +502,7 @@ class PlanetBiomeTests(unittest.TestCase):
         self.assertIn("TundraGrass02 shares", log.getvalue())               # same family: no second path used
         self.assertEqual(list(rep["vanilla_paths"]), ["TundraGrass01"])
         self.assertTrue(rep["materials"]["TundraGrass01"].endswith("GrassFieldDried01.mat"))
+        self.assertIn("[GrassFieldDried01.mat]", log.getvalue())           # the build names each family's material
 
     def test_grass_coverage(self):
         import numpy as np
