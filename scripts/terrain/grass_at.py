@@ -85,13 +85,31 @@ def describe(near, ltex_info, ltex_grass, gras_sky, mapping, overrides, report):
     return out
 
 
+def skyrim_units(ov, pos=None, spawn_at=None, skyrim_pos=None):
+    """The spot in Skyrim units: --skyrim-pos as given, else the Starfield position shifted into the overlay frame
+    (through the coc marker when spawn_at is given) and scaled by 70 units per metre."""
+    if skyrim_pos:
+        return float(skyrim_pos[0]), float(skyrim_pos[1])
+    x, y = pos
+    if spawn_at:
+        sx, sy = ov["spawn"][:2]
+        x, y = x - spawn_at[0] + sx, y - spawn_at[1] + sy
+    ox, oy = (float(v) for v in ov.get("origin_cw_m", [0, 0]))
+    return (x + ox) * 70.0, (y + oy) * 70.0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skyrim", required=True, help="Skyrim.esm")
     ap.add_argument("--terrain", required=True, help="the staged exterior (e.g. C:\\Modding\\staging\\skyrim_all)")
     ap.add_argument("--grass", required=True, help="the native-grass mod folder (grass_native.json, and "
                                                    "ltex_mapping_inferred.json when the staging has no mapping)")
-    ap.add_argument("--pos", type=float, nargs=2, required=True, metavar=("X", "Y"), help="player.getpos x / y")
+    where = ap.add_mutually_exclusive_group(required=True)
+    where.add_argument("--pos", type=float, nargs=2, metavar=("X", "Y"), help="Starfield player.getpos x / y (m)")
+    where.add_argument("--skyrim-pos", type=float, nargs=2, metavar=("X", "Y"),
+                       help="Skyrim's player.getpos x / y (game units) at the same spot: no frame shift to get wrong "
+                            "(2026-11-23: a Starfield position read after walking away from the coc spot, given as "
+                            "--spawn-at too, pointed at the spawn instead)")
     ap.add_argument("--spawn-at", type=float, nargs=2, metavar=("X", "Y"), help="as ground_at.py")
     ap.add_argument("--radius", type=float, default=10.0, help="metres around the spot (default 10)")
     a = ap.parse_args(argv)
@@ -100,11 +118,7 @@ def main(argv=None):
     with open(os.path.join(a.terrain, "overlays_params.json"), encoding="utf-8") as f:
         prm = json.load(f)
     ov = prm["overlays"][0]
-    if a.spawn_at:
-        sx, sy = ov["spawn"][:2]
-        a.pos = [a.pos[0] - a.spawn_at[0] + sx, a.pos[1] - a.spawn_at[1] + sy]
-    ox, oy = (float(v) for v in ov.get("origin_cw_m", [0, 0]))
-    xu, yu = (a.pos[0] + ox) * 70.0, (a.pos[1] + oy) * 70.0
+    xu, yu = skyrim_units(ov, a.pos, a.spawn_at, a.skyrim_pos)
     mapping = None
     for p in (os.path.join(a.terrain, "ltex_mapping.json"), os.path.join(a.grass, "ltex_mapping_inferred.json")):
         if os.path.isfile(p):
@@ -124,7 +138,7 @@ def main(argv=None):
     if not near:
         sys.exit(f"no Skyrim LAND textures within {a.radius:g} m of ({a.pos[0]:g}, {a.pos[1]:g})")
     ltex_grass, gras_sky = skyrimgrass.read_grass(a.skyrim)
-    print(f"within {a.radius:g} m of ({a.pos[0]:g}, {a.pos[1]:g}) m = Skyrim ({xu:.0f}, {yu:.0f}) units:")
+    print(f"within {a.radius:g} m of Skyrim ({xu:.0f}, {yu:.0f}) units, cell ({int(xu // 4096)}, {int(yu // 4096)}):")
     for line in describe(near, ltex, ltex_grass, gras_sky, mapping, prm.get("ltex_overrides") or [], report):
         print(line)
     return 0

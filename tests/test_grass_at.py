@@ -46,5 +46,14 @@ class DescribeTest(unittest.TestCase):
         self.assertIn("not mapped", lines[1])
 
 
+class PositionTest(unittest.TestCase):
+    def test_skyrim_pos_wins_and_shift(self):
+        ov = {"spawn": [10.0, 20.0, 0.0], "origin_cw_m": [100.0, -50.0]}
+        self.assertEqual(G.skyrim_units(ov, [1, 2], [3, 4], [18000.5, -46000.0]), (18000.5, -46000.0))
+        self.assertEqual(G.skyrim_units(ov, [5.0, 6.0]), ((5 + 100) * 70.0, (6 - 50) * 70.0))
+        # walked 2 m east of the coc spot (3, 4): overlay spot = spawn + (2, 0)
+        self.assertEqual(G.skyrim_units(ov, [5.0, 4.0], [3.0, 4.0]), ((12 + 100) * 70.0, (20 - 50) * 70.0))
+
+
 if __name__ == "__main__":
     unittest.main()

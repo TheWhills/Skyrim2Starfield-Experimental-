@@ -504,6 +504,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   textures with 19 slots, and a slot's ground cover grows every grass of every Skyrim texture drawn with it.
   `grass_at.py --pos X Y` prints, per Skyrim texture at a spot, the grasses Skyrim grows there, the slot our terrain
   uses, and every grass (model, material) that slot's cover grows.
+  Owner (14:35 / 14:41): grass_at with the Starfield getpos given as both --pos and --spawn-at listed mostly LDirt02
+  and NoGrass textures, while Skyrim's screenshots of the same spot (grass on / off) show a dense grass carpet: the
+  position was read after walking away from the coc spot, so the tool looked at the spawn (unresolved until re-run).
+  grass_at now takes `--skyrim-pos X Y` (Skyrim's own getpos at the spot), no frame shift involved. Also seen at the
+  Riverwood mill (verified, screenshots): Skyrim's green grass on the riverbank meadow, ours a few straw clumps on
+  the dirt edges and none on the meadow.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
