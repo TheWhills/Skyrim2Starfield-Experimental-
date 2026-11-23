@@ -11,8 +11,11 @@ Confidence labels follow docs/ai/research-log.md:
 - **supported hypothesis**: the code fits the name, but part of the reading is inference.
 - **unresolved**: not established.
 
-Address Library IDs: only the vtable IDs that CommonLibSF lists (`IDs_VTABLE.h`) are given. No function IDs, because
-the versionlib file (`versionlib-1-16-244-0.bin`) is not in the repo yet. Section 3 of the setup doc explains how to add it.
+Address Library IDs (verified): looked up in the Address Library v22 offsets table for 1.16.244.0
+(`offsets-1-16-244-0.txt`, from the owner's download of the SFSE Address Library mod; not in Git). The table maps
+ID -> absolute address. As a check, CommonLibSF's vtable IDs land exactly on the vtables found from RTTI: NiNode
+497979 = 0x144eefb60, NiAVObject 497991 = 0x144eefed8, WeaponAttachHandler 453937 = 0x144cc5068. Every ID is listed in
+the rename index at the end. In a plugin, use `REL::ID(n)`, not the raw address.
 
 Every function below has been renamed in Ghidra. Names that start with `S2S_` are our own, not Bethesda's. Save the
 project (Ctrl+S) to keep them.
@@ -114,7 +117,7 @@ Call chain on draw (verified unless marked):
    it runs step 3 at once, otherwise it queues a `BSService::Detail::TCmd<lambda>` that does it later.
 3. **`S2S_AttachWeaponToHand_Run`** 0x1418c0c40 calls the **Actor virtual at +0x740 (slot 232 = 0xE8)**.
    CommonLibSF has this slot as `Unk_E8` in TESObjectREFR.h.
-4. **`Actor__AttachWeapon_vE8`** 0x140b41240 (Actor vtable **0x144cb9248** slot 232; locator 0x1451c0458):
+4. **`Actor__AttachWeapon_vE8`** 0x140b41240 (Actor vtable **0x144cb9248**, ID 451614, slot 232; locator 0x1451c0458):
    picks first or third person, calls step 5, and for the player also calls 0x141a60900(DAT_145f43230).
 5. **`S2S_Actor_AttachWeapon_Impl`** 0x140b6fe60 `(actor, weaponData, slot, bool firstPerson)`: gets the biped
    (actor slot 0x8c8 / 0x8d0) and a per-slot object (0x8d8 / 0x8e0). Under the actor's lock (slot 0x948) it calls
@@ -174,31 +177,47 @@ weapon sub-parts under the hand node). Verified.
 
 ## Index of renames
 
-| Address | Name |
-|---|---|
-| 0x142bd2cc0 | NiNode__CreateClone |
-| 0x142bd2de0 | NiNode__CopyMembers |
-| 0x142bd2ed0 | NiNode__ProcessClone |
-| 0x142bd15e0 | NiNode__AttachChild |
-| 0x142bd1820 | NiNode__InsertChildAt |
-| 0x142bd1b20 | NiNode__DetachChild_Out |
-| 0x142bd1ad0 | NiNode__DetachChild |
-| 0x142bd1c70 | NiNode__DetachChild_NoBoundUpdate |
-| 0x142bd4260 | NiAVObject__SetParent |
-| 0x142bd4620 | NiAVObject__MarkDirtyUpward |
-| 0x142421370 | S2S_FindNodeByName |
-| 0x140e4b9b0 | S2S_ModelEntry_CloneOrShareRoot |
-| 0x140683300 | TESRace__GetEquipSlotAttachNodeName |
-| 0x141aebca0 | WeaponAttachHandler__Handle |
-| 0x1418c0a60 | S2S_AttachWeaponToHand_RunOrQueue |
-| 0x1418c0c40 | S2S_AttachWeaponToHand_Run |
-| 0x140b41240 | Actor__AttachWeapon_vE8 |
-| 0x140b6fe60 | S2S_Actor_AttachWeapon_Impl |
-| 0x140b6ff90 | S2S_Actor_SubmitAttachRequest |
-| 0x14034bcc0 | S2S_AttachRegistry_AddRequest |
-| 0x140b718d0 | S2S_Actor_ProcessAttachRegistry |
-| 0x14034d400 | S2S_AttachRegistry_BindSkinAndAttach |
-| 0x140354910 | S2S_AttachRegistry_PostAttach |
+| Address | Addr. Lib. ID | Name |
+|---|---|---|
+| 0x142bd2cc0 | 147194 | NiNode__CreateClone |
+| 0x142bd2de0 | 147195 | NiNode__CopyMembers |
+| 0x142bd2ed0 | 147196 | NiNode__ProcessClone |
+| 0x142bd15e0 | 147173 | NiNode__AttachChild |
+| 0x142bd1820 | 147174 | NiNode__InsertChildAt |
+| 0x142bd1b20 | 147178 | NiNode__DetachChild_Out |
+| 0x142bd1ad0 | 147177 | NiNode__DetachChild |
+| 0x142bd1c70 | 147179 | NiNode__DetachChild_NoBoundUpdate |
+| 0x142bd4260 | 147223 | NiAVObject__SetParent |
+| 0x142bd4620 | 147226 | NiAVObject__MarkDirtyUpward |
+| 0x142421370 | 127050 | S2S_FindNodeByName |
+| 0x140e4b9b0 | 71477 | S2S_ModelEntry_CloneOrShareRoot |
+| 0x140683300 | 49314 | TESRace__GetEquipSlotAttachNodeName |
+| 0x141aebca0 | 104062 | WeaponAttachHandler__Handle |
+| 0x1418c0a60 | 99999 | S2S_AttachWeaponToHand_RunOrQueue |
+| 0x1418c0c40 | 100000 | S2S_AttachWeaponToHand_Run |
+| 0x140b41240 | 63323 | Actor__AttachWeapon_vE8 |
+| 0x140b6fe60 | 63662 | S2S_Actor_AttachWeapon_Impl |
+| 0x140b6ff90 | 63663 | S2S_Actor_SubmitAttachRequest |
+| 0x14034bcc0 | 37947 | S2S_AttachRegistry_AddRequest |
+| 0x140b718d0 | 63676 | S2S_Actor_ProcessAttachRegistry |
+| 0x14034d400 | 37954 | S2S_AttachRegistry_BindSkinAndAttach |
+| 0x140354910 | 38059 | S2S_AttachRegistry_PostAttach |
+
+Not renamed, but with IDs:
+
+| Address | Addr. Lib. ID | What |
+|---|---|---|
+| 0x142bd1960 | 147175 | NiNode slot 90 (remove child by index, supported hypothesis) |
+| 0x142bd1de0 | 147181 | NiNode slot 92 SetAt (supported hypothesis) |
+| 0x142bd2c30 | 147193 | NiNode slot 62 GetObjectByName override |
+| 0x144eefb60 | 497979 | NiNode vtable |
+| 0x144eefed8 | 497991 | NiAVObject vtable |
+| 0x144cb9248 | 451614 | Actor primary vtable (offset 0). CommonLibSF's `VTABLE::Actor[0]` (451608 = 0x144cb8c98) is a secondary vtable (locator offset 0x48), so use `VTABLE::Actor[22]` or REL::ID(451614) for slot 232 |
+| 0x144cc5068 | 453937 | WeaponAttachHandler vtable |
+| 0x145e89cc0 | 888911 | BSFixedString global "Weapon" |
+| 0x145e89cc8 | 888912 | BSFixedString global "WeaponLeft" |
+| 0x145e89cb8 | 888910 | BSFixedString global "Prn" |
+| 0x145e7a424 | 884304 | default NiCloningProcess copy type (u32) |
 
 Note: the Ghidra project was not set up with PyGhidra, so ReVa's `run-script` was unavailable. Every lookup
 above was done with ReVa's decompile / cross-reference / vtable tools.
