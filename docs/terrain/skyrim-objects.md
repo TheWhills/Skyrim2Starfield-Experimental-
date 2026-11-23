@@ -257,6 +257,11 @@ Max Density; what a vanilla grass model needs. Two tools:
   Atlantis) is hand-made cells, and no vanilla hand-made world gets run-time grass. Last cheap test:
   `--allow-procgen` also sets the world's Allow ProcGen flag (WRLD FNAM bit 3), which no vanilla world sets. If that
   grows nothing, grass stays placed objects and the work moves to making those behave like grass (wind, fade).
+  What has and has not been probed (owner asked, 19:44): records (grass_survey: GRAS / GCVR / BIOM, world flags),
+  vanilla BTDs (no ground cover data in Starfield's BTD layout; bytes 5..7 of each quadrant unresolved) and four
+  in-game setups. Not yet: the engine itself, and where vanilla grass actually grows in game (procedural surface only,
+  or also on hand-made terrain). `scripts/re/exe_strings.py` lists Starfield.exe's grass-related INI settings,
+  console commands and RTTI class names (read-only), the cheap first look before Ghidra (docs/re/ghidra-ai-setup.md).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
