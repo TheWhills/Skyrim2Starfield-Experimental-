@@ -131,7 +131,8 @@ def convert_model(conv, name: str, tint, staging: str) -> str:
     if not shapes:
         raise ValueError("no drawable shape")
     stem = re.sub(r"[^a-z0-9_]+", "_", os.path.splitext(name.lower().replace("\\", "/").split("meshes/", 1)[-1])[0])
-    out_name = f"{PREFIX}/grassnative/{stem}"
+    # 2026-11-23: under Landscape/Grass like every vanilla grass model (Starfield.exe names meshes/landscape/grass/)
+    out_name = f"landscape/grass/{PREFIX}/{stem}"
     files = skyrimconvert.convert_static_sse(src, shapes, out_name, mats, None, {})
     for rel, data in files.items():
         p = os.path.join(staging, *rel.split("/"))

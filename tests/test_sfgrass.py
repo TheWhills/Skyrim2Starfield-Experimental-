@@ -175,7 +175,7 @@ class NativeBuildTests(unittest.TestCase):
         g = by["S2S_Fern"]
         d = sfgrass.parse_gras_dnam(dict(g[2])[b"DNAM"])
         self.assertEqual((d["max_density"], d["max_slope"], d["flags"] & 7), (60, 40, 4))
-        self.assertEqual(dict(g[2])[b"MODL"], b"s2s\\grassnative\\landscape_plants_fern01.nif\0")
+        self.assertEqual(dict(g[2])[b"MODL"], b"landscape\\grass\\s2s\\landscape_plants_fern01.nif\0")
         cover = sfgrass.parse_gcvr(by["S2S_Cover_00000031"][2])
         self.assertEqual(cover["grasses"], [(g[3], -1)])
         self.assertEqual(cover["ltex"], [])                                  # no texture list (vanilla covers have none)
