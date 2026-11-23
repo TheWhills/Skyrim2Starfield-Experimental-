@@ -98,9 +98,25 @@ root->vtbl[47](root, &cp);           // ProcessClone
 There is no separate non-virtual `Clone()` here. The two calls are inlined at each call site. At least 40 functions
 make a slot-41 call (the search stopped at 40), and many follow it with slot 47 on the same object, for example
 0x140353d80, 0x140a07b30, 0x140e49060. **Plan for S2SCombat:** build the same 0x38-byte struct
-and call slots 41 and 47 on the weapon's 3D root. The two maps at +0x00 are left as zeroed memory and are freed by
-the engine's allocator afterwards: the exact cleanup (to avoid a leak) is **unresolved**. Read the second half of
-0x140e4b9b0 (decompiled lines 94-194) before shipping.
+and call slots 41 and 47 on the weapon's 3D root, then free the struct as below.
+
+**Cleanup (second session).** The same cleanup is inlined after every clone (0x140e4b9b0 lines 94-194 and
+0x140a07b30 lines 109-200 match). The first 0x20 bytes are a small tree map that CreateClone fills (original -> copy):
++0x00 root node, +0x10 element count, +0x18 one spare node. Nodes are 0x80 bytes: int +0x00 = 0 for a leaf,
+u32 +0x04 = key count, child pointers from +0x40.
+
+```
+if (cp.count /*+0x10*/ != 0) {
+    S2S_CloneMap_FreeNode(&cp, cp.root /*+0x00*/);   // 0x140359090, ID 38088: frees the tree; keeps one node at +0x18
+    cp.root = 0; cp.+0x08 = 0; cp.count = 0;
+}
+if (cp.spare /*+0x18*/) S2S_MemoryManager_FreeSized(cp.spare, 0x80);   // 0x1402ba340, ID 35771
+```
+
+`S2S_CloneMap_FreeNode(map, node)` frees the children first, then makes `node` the new spare and frees the old spare
+with `S2S_MemoryManager_Free` (0x1402b7910, ID 35698, the engine's global free). The inlined code does the same, except
+that for a leaf root it skips the call (the result is identical). Status: the code is **verified**; that calling
+`S2S_CloneMap_FreeNode` on any root gives the same result as the inlined code is a **supported hypothesis**.
 
 ## 3. Drawing a weapon: how the model is attached
 
@@ -144,23 +160,58 @@ Call chain on draw (verified unless marked):
    - Children that were not bound are removed through slot 90, and 0x14034fdb0 runs.
    - Then **`NiNode__AttachChild` (slot 84)** on the target: if there is exactly one child, that child is attached
      directly and step 8 runs; otherwise the whole model root is attached (firstAvailable = 1).
-8. **After the attach:** `S2S_AttachRegistry_PostAttach` 0x140354910 `(registryEntry, attachedObject)`. It walks a
-   list at +0x18 of the actor's 3D (slot 0x1b0 on each element). For the first element that returns something, it
-   links that object onto the attached object (0x142be0500, which writes object +0x18 and its +0x40) and calls
-   that object's +200 member's vtable +0x1d0 with the attached object. That looks like handing the new 3D the actor's
-   shared render / fade state. **Meaning: unresolved.** The rest of 0x140354910 (lines 51-178, string global
-   DAT_145f613d0) has not been read yet.
+8. **After the attach:** `S2S_AttachRegistry_PostAttach` 0x140354910 `(slotEntry, newObject)` (second Ghidra
+   label `S2S_AttachSlot_ReplaceObject`). It swaps the slot's old 3D (`*slotEntry`) for the new one and carries over
+   the old object's extras (all verified from the full function):
+   - the first controller in the old object's list (+0x18, found through vtable +0x1b0) is moved onto the new object
+     (0x142be0500), and its target is set to the new object (vtable +0x1d0 on the controller's +200 member);
+   - the `"CPA"` extra data (global 0x145f613d0, ID 929960; connect-point parents, the attach points object mods use)
+     is merged into a new 0x28-byte object (0x142372c50 + 0x140353340), removed from the old object and added to the new
+     one (`S2S_NiObjectNET_AddExtraData` 0x142bdff20, ID 147347);
+   - the `"CED"` extra data (global 0x145f61448, ID 929972; meaning unresolved) is added to the new object;
+   - `*slotEntry = newObject` (smart-pointer assignment).
+
+   So step 8 is bookkeeping for the slot. **It does not register anything with the renderer** (the earlier guess was
+   wrong). A copy we attach ourselves does not need it unless we also want its connect points.
 
    AttachChild itself marks the new branch dirty (`NiAVObject__MarkDirtyUpward`, bit 29) and sets +0x88 = 1 on the
-   object at +0x20 of the parent node (supported hypothesis: scene / render-graph "changed" flag). Neither step 7 nor
-   step 8 contains an explicit `Update(NiUpdateData)` call (slot 73 per CommonLibSF). The update probably comes from the
-   dirty flag in the next frame's update pass (**unresolved**: confirm by finding who reads bit 29 of +0x118).
+   object at +0x20 of the parent node. Neither step 7 nor step 8 calls an update. The per-frame update is
+   `NiNode__UpdateSelectedDownwardPass` (slot 74, 0x142bd23a0, ID 147185; verified). It visits a child only when bit 1 of
+   the child's +0x118 is set. Bit 2 = update the world transform (slot 79), bit 3 = run controllers, bit 4 = rigid
+   (slot 75). These are Gamebryo's selective-update flags. The plain `NiNode__UpdateDownwardPass` (slot 73,
+   0x142bd21e0, ID 147184) updates all children. Neither reads bit 29. Who reads it is **unresolved**: the constant
+   search hit ReVa's instruction limit, and a full decompile search of 203k functions was not run. Consequence for us
+   (supported hypothesis): a copy follows its new parent if it carries the selective bits 1-2. A clone of the drawn
+   weapon copies them from the original.
 
 Related: **`TESRace__GetEquipSlotAttachNodeName`** 0x140683300 `(race, equipSlotIndex)` -> BSFixedString*.
 It returns the race's per-slot node name (race +0x5a8, count +0x5a0, 16-byte entries, name at +8). When that name is
 empty it falls back to `"Weapon"` for the right-hand slot (DAT_145e810c4) and `"WeaponLeft"` for every other slot.
 The race is obtained through actor vfunc +0x580. 18 call sites use it to find the hand node (for example 0x141987c60:
 weapon sub-parts under the hand node). Verified.
+
+### Sheathe / unequip: how the model is detached (second session)
+
+The mirror of the draw path (verified unless marked):
+
+1. **`WeaponDetachHandler__Handle`** 0x141aebd20 (ID 104063) = vtable `WeaponDetachHandler` 0x144cc5080 (ID 453939)
+   slot 1. Same slot / weapon lookup as the attach handler. It only acts when the hand's state (0x140b72b60) is
+   0x10 or 0x11.
+2. **`S2S_DetachWeaponFromHand_RunOrQueue`** 0x1418c1850 (ID 100012), same manager: runs on the main thread or
+   queues a `BSService` command.
+3. **`S2S_DetachWeaponFromHand_Run`** 0x1418c19d0 (ID 100013) calls the **Actor virtual at +0x748 (slot 233 =
+   0xE9)**, the next slot after attach.
+4. **`Actor__DetachWeapon_vE9`** 0x140b412d0 (ID 63324): under the actor's lock (slot 0x948) it calls
+   **`S2S_AttachRegistry_RemoveRequest`** 0x14034bdf0 (ID 37948) on each registry in the actor's list (slot 0x950),
+   keyed by the weapon object's +0x238. That is the same key the attach request stores (0x140aa75b0).
+5. `S2S_AttachRegistry_RemoveRequest` takes the entry out of the map (+0x20), puts its object in a pending list at
+   +0x50, then runs 0x14034dd90 / 0x14034c090 (as on attach) and 0x14034bf70 (ID 37950). That last one presumably
+   processes the pending list, ending in DetachChild (**supported hypothesis**, not read).
+
+For our copy this means: the game never removes it, because it was never in the registry. S2SCombat has to call
+`NiNode__DetachChild` (slot 87, ID 147177) on the left node itself on sheathe / unequip / load (as the plan in
+decisions.md 2026-11-23 says). Hooking `Actor__DetachWeapon_vE9` (Actor vtable 451614 slot 233) is one way to catch
+the moment.
 
 ## 4. What this means for the left hand
 
@@ -172,8 +223,10 @@ weapon sub-parts under the hand node). Verified.
   attach time. They do not use the transforms of the shape's own parent node. A copy attached under `WeaponLeft`
   should follow that node, unless its geometry is skinned to the right-hand bones. Then the bones need rebinding
   as in step 7, or the copy has to go through the registry. **Unresolved until tested in game.**
-- Next RE steps: the cleanup of the cloning maps (section 2), who clears bit 29 (the update pass), the rest of
-  0x140354910, and the unequip / sheathe path (which calls DetachChild slot 86/87).
+- Free the cloning process after the copy (section 2, cleanup).
+- Remove the copy yourself (detach section above): the game's sheathe path only empties its own registry.
+- Still open: who reads bit 29, what `"CED"` is, and whether 0x14034bf70 ends in DetachChild. None of them blocks
+  the first in-game test.
 
 ## Index of renames
 
@@ -201,7 +254,18 @@ weapon sub-parts under the hand node). Verified.
 | 0x14034bcc0 | 37947 | S2S_AttachRegistry_AddRequest |
 | 0x140b718d0 | 63676 | S2S_Actor_ProcessAttachRegistry |
 | 0x14034d400 | 37954 | S2S_AttachRegistry_BindSkinAndAttach |
-| 0x140354910 | 38059 | S2S_AttachRegistry_PostAttach |
+| 0x140354910 | 38059 | S2S_AttachRegistry_PostAttach (also labelled S2S_AttachSlot_ReplaceObject) |
+| 0x140359090 | 38088 | S2S_CloneMap_FreeNode |
+| 0x1402b7910 | 35698 | S2S_MemoryManager_Free |
+| 0x1402ba340 | 35771 | S2S_MemoryManager_FreeSized |
+| 0x142bd21e0 | 147184 | NiNode__UpdateDownwardPass (slot 73) |
+| 0x142bd23a0 | 147185 | NiNode__UpdateSelectedDownwardPass (slot 74) |
+| 0x141aebd20 | 104063 | WeaponDetachHandler__Handle |
+| 0x1418c1850 | 100012 | S2S_DetachWeaponFromHand_RunOrQueue |
+| 0x1418c19d0 | 100013 | S2S_DetachWeaponFromHand_Run |
+| 0x140b412d0 | 63324 | Actor__DetachWeapon_vE9 |
+| 0x14034bdf0 | 37948 | S2S_AttachRegistry_RemoveRequest |
+| 0x142bdff20 | 147347 | S2S_NiObjectNET_AddExtraData |
 
 Not renamed, but with IDs:
 
@@ -218,6 +282,9 @@ Not renamed, but with IDs:
 | 0x145e89cc8 | 888912 | BSFixedString global "WeaponLeft" |
 | 0x145e89cb8 | 888910 | BSFixedString global "Prn" |
 | 0x145e7a424 | 884304 | default NiCloningProcess copy type (u32) |
+| 0x144cc5080 | 453939 | WeaponDetachHandler vtable |
+| 0x145f613d0 | 929960 | BSFixedString global "CPA" |
+| 0x145f61448 | 929972 | BSFixedString global "CED" |
 
 Note: the Ghidra project was not set up with PyGhidra, so ReVa's `run-script` was unavailable. Every lookup
 above was done with ReVa's decompile / cross-reference / vtable tools.

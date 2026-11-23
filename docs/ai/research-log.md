@@ -3,6 +3,16 @@
 New findings go here (newest first). Each entry: question, method, evidence, **status**: verified /
 supported hypothesis / unresolved. Older research lives in docs/JOURNAL.md and docs/spikes/; link, don't copy.
 
+## 2026-11-23 Claude: clone cleanup, post-attach step, update flags, weapon detach (Ghidra + ReVa, second session)
+- Question: the four open points of the first session (docs/re/findings.md section 4).
+- Evidence (**verified**, addresses and Address Library IDs in findings.md): the NiCloningProcess tree map is freed
+  by 0x140359090 and the spare node with FreeSized(ptr, 0x80). 0x140354910 swaps the slot's 3D and moves the
+  controller, "CPA" (connect points) and "CED" extra data; it does no render registration (the first session's guess
+  was **refuted**). The selective update (NiNode slot 74) visits children with +0x118 bit 1 (bits 2/3/4: transforms /
+  controllers / rigid). Sheathe: WeaponDetachHandler -> Actor vfunc 0xE9 -> the attach registry drops the entry.
+- Status: who reads +0x118 bit 29 and what "CED" means are **unresolved**. That the copy follows its parent when it
+  carries bits 1-2 is a **supported hypothesis**. Not tested in game.
+
 ## 2026-11-23 Claude: Starfield 1.16.244 clone and weapon attach (Ghidra + ReVa, first session)
 - Question: which NiObject / NiNode virtuals copy a model and attach a child, and what does the game call to draw a
   weapon? (left-hand runtime copy, docs/ai/decisions.md 2026-11-23). Write-up: [docs/re/findings.md](../re/findings.md).
