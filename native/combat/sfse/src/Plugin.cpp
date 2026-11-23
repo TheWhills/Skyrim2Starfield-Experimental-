@@ -102,6 +102,8 @@ void Plugin::LoadSettings(const std::string& ini_path) {
         settings_.left_copy_weapon_node = it->second;
     if (auto it = plugin.find("sleftcopynodes"); it != plugin.end() && !it->second.empty())
         settings_.left_copy_nodes = it->second;
+    if (auto it = plugin.find("sleftcopymodel"); it != plugin.end()) settings_.left_copy_model = it->second;
+    if (auto it = plugin.find("sleftcopyskip"); it != plugin.end()) settings_.left_copy_skip = it->second;
     left_copy_ = combat::LeftCopy(settings_.left_copy_key != 0);
     if (auto it = plugin.find("sblockingmenus"); it != plugin.end() && !it->second.empty())
         menus_ = combat::MenuGate(combat::MenuGate::parse_list(it->second));
@@ -364,8 +366,9 @@ void Plugin::DoLeftCopy(combat::LeftCopy::Action a) {
     using A = combat::LeftCopy::Action;
     if (a == A::None) return;
     REX::INFO("left copy: {} asked", a == A::Make ? "make" : "drop");
-    SFSE::GetTaskInterface()->AddTask([this, a, right = settings_.left_copy_weapon_node, left = settings_.left_copy_nodes]() {
-        const auto r = a == A::Make ? game::MakeLeftCopy(right, left) : game::DropLeftCopy();
+    SFSE::GetTaskInterface()->AddTask([this, a, right = settings_.left_copy_weapon_node, left = settings_.left_copy_nodes,
+                                       model = settings_.left_copy_model, skip = settings_.left_copy_skip]() {
+        const auto r = a == A::Make ? game::MakeLeftCopy(right, left, model, skip) : game::DropLeftCopy();
         REX::INFO("left copy: {} {}: {}", a == A::Make ? "make" : "drop", r.ok ? "ok" : "FAILED", r.text);
         if (a == A::Make) game::Notify(r.ok ? "Left copy on" : "Left copy failed (see S2SCombat.log)");
         std::scoped_lock l(lock_);

@@ -25,6 +25,32 @@ std::array<std::uint8_t, CloningProcessLayout::kSize> cloning_process_bytes(std:
     return b;
 }
 
+std::vector<std::string_view> split_names(std::string_view list) {
+    std::vector<std::string_view> out;
+    while (!list.empty()) {
+        const auto comma = list.find(',');
+        auto name = list.substr(0, comma);
+        list = comma == std::string_view::npos ? std::string_view{} : list.substr(comma + 1);
+        while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front()))) name.remove_prefix(1);
+        while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back()))) name.remove_suffix(1);
+        if (!name.empty()) out.push_back(name);
+    }
+    return out;
+}
+
+int pick_model(const std::vector<std::string_view>& children, std::string_view override_name,
+               const std::vector<std::string_view>& skip) {
+    for (std::size_t i = 0; i < children.size(); ++i) {
+        if (!override_name.empty()) {
+            if (iequals(children[i], override_name)) return static_cast<int>(i);
+            continue;
+        }
+        if (std::none_of(skip.begin(), skip.end(), [&](std::string_view s) { return iequals(children[i], s); }))
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
 LeftCopy::Action LeftCopy::on_key() {
     if (!enabled_ || busy()) return Action::None;
     pending_ = attached_ ? Action::Drop : Action::Make;

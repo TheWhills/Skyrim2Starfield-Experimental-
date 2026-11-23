@@ -458,16 +458,6 @@ std::uintptr_t VSlot(const void* obj, int slot) {
     return reinterpret_cast<const std::uintptr_t*>(vtbl)[slot];
 }
 
-RE::NiAVObject* FindNamed(RE::NiAVObject* root, std::string_view name) {
-    RE::NiAVObject* hit = nullptr;
-    int budget = 4000;
-    Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
-        const char* n = o->name.c_str();
-        if (!hit && n && name == n) hit = o;
-    });
-    return hit;
-}
-
 RE::NiAVObject* ParentOf(const RE::NiAVObject* o) {
     RE::NiAVObject* p = nullptr;
     std::memcpy(&p, reinterpret_cast<const std::byte*>(o) + 0x38, 8);
@@ -501,7 +491,8 @@ void FreeCloningProcess(std::uint8_t* cp) {
 }
 }  // namespace
 
-LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes) {
+LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes, std::string_view model_name,
+                            std::string_view skip_names) {
     if (g_left_copy.copy) return {true, "a copy is already on"};
     auto* root = Player3D();
     if (!root) return {false, "no player 3D"};
@@ -509,34 +500,54 @@ LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_n
         if (g_layout_tries >= 3 || (++g_layout_tries, !FindChildLayout(root))) return {false, "no child list found"};
     }
     const double t0 = Now();
-    auto* weapon_node = FindNamed(root, right_node);
+    // one walk for every name (owner's run 2026-11-23: a walk per name cost ~250 ms)
+    const auto left_names = combat::split_names(left_nodes);
+    RE::NiAVObject* weapon_node = nullptr;
+    std::vector<RE::NiAVObject*> left_hits(left_names.size(), nullptr);
+    {
+        int budget = 4000;
+        Walk(root, 0, budget, [&](RE::NiAVObject* o, int) {
+            const char* n = o->name.c_str();
+            if (!n || !*n) return;
+            if (!weapon_node && right_node == n) weapon_node = o;
+            for (std::size_t i = 0; i < left_names.size(); ++i)
+                if (!left_hits[i] && left_names[i] == n) left_hits[i] = o;
+        });
+    }
     if (!weapon_node) return {false, std::format("no node '{}' in the player's 3D (weapon drawn?)", right_node)};
-    // the drawn weapon's model: the first child of the weapon node whose parent is that node
+    // the weapon node's subtree (names, depth), for the log: shows where the drawn model hangs
+    std::string subtree;
+    {
+        int budget = 40;
+        Walk(weapon_node, 0, budget, [&](RE::NiAVObject* o, int depth) {
+            const char* n = o->name.c_str();
+            subtree += std::format(" {}{}", std::string(static_cast<std::size_t>(depth), '>'), n ? n : "");
+        });
+    }
+    // the drawn weapon's model: a child of the weapon node (pick_model: the override, else the first not skipped)
     RE::NiAVObject** data = nullptr;
     std::uint32_t size = 0;
-    RE::NiAVObject* model = nullptr;
-    std::string children;
+    std::vector<RE::NiAVObject*> kids;
+    std::vector<std::string_view> kid_names;
     if (ReadChildren(weapon_node, g_children, data, size)) {
         for (std::uint32_t i = 0; i < size; ++i) {
             auto* c = data[i];
             if (!c || !Readable(c, 0x150) || ParentOf(c) != weapon_node) continue;
             const char* n = c->name.c_str();
-            children += std::format(" '{}'", n ? n : "");
-            if (!model) model = c;
+            kids.push_back(c);
+            kid_names.emplace_back(n ? n : "");
         }
     }
-    if (!model) return {false, std::format("'{}' has no child (no weapon drawn?)", right_node)};
+    const int pick = combat::pick_model(kid_names, model_name, combat::split_names(skip_names));
+    if (pick < 0)
+        return {false, std::format("no model child under '{}' (model '{}', skipped '{}'); subtree:{}", right_node,
+                                   model_name, skip_names, subtree)};
+    auto* model = kids[static_cast<std::size_t>(pick)];
     RE::NiAVObject* left = nullptr;
     std::string tried;
-    for (std::string_view rest = left_nodes; !rest.empty();) {
-        const auto comma = rest.find(',');
-        auto name = rest.substr(0, comma);
-        rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
-        while (!name.empty() && name.front() == ' ') name.remove_prefix(1);
-        while (!name.empty() && name.back() == ' ') name.remove_suffix(1);
-        if (name.empty()) continue;
-        tried += std::format(" '{}'", name);
-        if ((left = FindNamed(root, name))) break;
+    for (std::size_t i = 0; i < left_names.size() && !left; ++i) {
+        tried += std::format(" '{}'", left_names[i]);
+        left = left_hits[i];
     }
     if (!left) return {false, std::format("none of the left nodes found:{}", tried)};
     const double t_find = Now() - t0;
@@ -569,9 +580,9 @@ LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_n
     const bool hung = ParentOf(copy) == left;
     g_left_copy = {copy, left};
     const auto base = REX::FModule::GetExecutingModule().GetBaseAddress();
-    return {hung, std::format("weapon node '{}' children:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
+    return {hung, std::format("weapon node '{}' subtree:{}; model {} cloned ({} at 0x{:X}, CreateClone +0x{:X}); copy "
                               "{} attached under {} (children {} -> {}, parent {}); lookup {:.1f} ms, copy {:.1f} ms",
-                              right_node, children, Describe(model), copy == model ? "SAME OBJECT" : "new object",
+                              right_node, subtree, Describe(model), copy == model ? "SAME OBJECT" : "new object",
                               reinterpret_cast<std::uintptr_t>(copy), create - base, Describe(copy), Describe(left),
                               left_before, left_after, hung ? "set" : "NOT SET", t_find * 1000.0,
                               (Now() - t0 - t_find) * 1000.0)};

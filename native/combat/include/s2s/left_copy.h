@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace s2s::combat {
 
@@ -27,6 +28,16 @@ struct CloningProcessLayout {
 
 // The 0x38 bytes of a fresh NiCloningProcess (zeroed maps, copy type, '$', 1, scale 1,1,1).
 std::array<std::uint8_t, CloningProcessLayout::kSize> cloning_process_bytes(std::uint32_t copy_type);
+
+// A comma separated INI list, trimmed, empty entries left out.
+std::vector<std::string_view> split_names(std::string_view list);
+
+// Which child of the weapon node is the weapon's model. The owner's run 2026-11-23: the skeleton's "Weapon" node holds
+// 'R_HandIk', 'L_HandIk' (IK helpers, nothing drawn) and then the model, so the first child is the wrong one.
+// override_name non-empty: the child with that name (case-insensitive), else -1. Otherwise the first child whose name
+// is not in skip (case-insensitive). -1 = none.
+int pick_model(const std::vector<std::string_view>& children, std::string_view override_name,
+               const std::vector<std::string_view>& skip);
 
 // When the copy is made and dropped. The game side reports back whether it worked (on_result); until then nothing
 // else is asked for.

@@ -106,8 +106,11 @@ docs/re/findings.md on branch `claude/re-findings-ni-attach`). Code: `s2s/left_c
 NiCloningProcess bytes; tested in tests/test_left_copy.cpp) and `game::MakeLeftCopy` / `DropLeftCopy` in Game.cpp.
 
 What a press of `iLeftCopyKey` (default 43, the `\` key) does with a weapon drawn, on the main thread:
-1. finds `sLeftCopyWeaponNode` ("Weapon") in the player's 3D and takes its first child (the drawn weapon's model);
-2. finds the first of `sLeftCopyNodes` ("WeaponLeft", then "L_Wrist");
+1. finds `sLeftCopyWeaponNode` ("Weapon") in the player's 3D and picks the drawn weapon's model among its children:
+   `sLeftCopyModel` if set, else the first child not in `sLeftCopySkip` (the hand IK helpers R_HandIk / L_HandIk;
+   first run 2026-11-23 copied R_HandIk: attach and detach worked, nothing visible). The log line lists the node's
+   subtree;
+2. finds the first of `sLeftCopyNodes` ("WeaponLeft", then "L_Wrist"; found: WeaponLeft) in the same walk;
 3. checks that the left node's vtable slots 84 / 87 are NiNode's AttachChild / DetachChild (Address Library 147173 /
    147177); if not, it stops there and logs both addresses;
 4. clones the model as the engine does (a 0x38-byte NiCloningProcess, CreateClone slot 41, ProcessClone slot 47),

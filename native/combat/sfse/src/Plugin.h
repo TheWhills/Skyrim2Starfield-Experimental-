@@ -41,6 +41,8 @@ struct Settings {
     std::uint32_t left_copy_key = 0;
     std::string left_copy_weapon_node = "Weapon";
     std::string left_copy_nodes = "WeaponLeft, L_Wrist";
+    std::string left_copy_model;                                  // "" = first child not in left_copy_skip
+    std::string left_copy_skip = "R_HandIk, L_HandIk";
 };
 
 class Plugin {

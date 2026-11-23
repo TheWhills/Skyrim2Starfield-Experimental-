@@ -76,6 +76,21 @@ static void sheathe_unequip_and_load_drop() {
     CHECK(c.on_menu("LoadingMenu", true) == A::Drop);
 }
 
+static void names_and_model_pick() {
+    const auto l = split_names(" WeaponLeft, ,L_Wrist ,");
+    CHECK(l.size() == 2);
+    CHECK(l.size() == 2 && l[0] == "WeaponLeft" && l[1] == "L_Wrist");
+    CHECK(split_names("").empty());
+    // the owner's run 2026-11-23: the "Weapon" node's children
+    const std::vector<std::string_view> kids{"R_HandIk", "L_HandIk", "Weapon"};
+    const auto skip = split_names("R_HandIk, l_handik");
+    CHECK(pick_model(kids, "", skip) == 2);
+    CHECK(pick_model(kids, "", {}) == 0);
+    CHECK(pick_model(kids, "weapon", skip) == 2);          // override, any case
+    CHECK(pick_model(kids, "Longsword", skip) == -1);      // override not there: nothing (no guessing)
+    CHECK(pick_model({"R_HandIk", "L_HandIk"}, "", skip) == -1);
+}
+
 static void disabled() {
     LeftCopy c(false);
     CHECK(c.on_key() == A::None);
@@ -86,6 +101,7 @@ int main() {
     cloning_process_layout();
     key_toggles();
     sheathe_unequip_and_load_drop();
+    names_and_model_pick();
     disabled();
     if (failures) {
         std::printf("%d failure(s)\n", failures);

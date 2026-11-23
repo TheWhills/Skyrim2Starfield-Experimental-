@@ -43,12 +43,14 @@ int FollowBone(std::string_view node_name, std::string_view bone_name);
 void InvalidateBoneFollow();                     // the 3D may be rebuilt (equip, menu, load): look the nodes up again
 std::string BoneFollowReport();                  // read-backs and time since the last report
 // Left-hand copy test (s2s/left_copy.h, docs/re/findings.md): MakeLeftCopy clones the first child of the node
-// `right_node` (the drawn weapon's model under "Weapon") with the engine's CreateClone / ProcessClone and attaches the
+// `right_node` (the drawn weapon's model under "Weapon"; see model_name) with the engine's CreateClone / ProcessClone and attaches the
 // copy with NiNode::AttachChild under the first node of `left_nodes` (comma separated) that exists. DropLeftCopy
 // detaches it and lets it go. Main thread. ok = whether a copy is now on (Make) / was taken off (Drop); the text is
 // for the log.
 struct LeftCopyResult { bool ok = false; std::string text; };
-LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes);
+// model_name: the weapon node's child to copy ("" = the first child not in skip_names, comma separated).
+LeftCopyResult MakeLeftCopy(std::string_view right_node, std::string_view left_nodes, std::string_view model_name,
+                            std::string_view skip_names);
 LeftCopyResult DropLeftCopy();
 // Dual wield's left blade (s2s/left_blade.h). ArmorsBesideKeyword: the ARMO forms of the plugin file that defines the
 // keyword (S2SWeapons.esm: its ARMOs are the left blades). IsEquipped / ItemCount: Papyrus Actor.IsEquipped /
