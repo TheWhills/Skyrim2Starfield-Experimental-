@@ -457,8 +457,38 @@ class PlanetBiomeTests(unittest.TestCase):
                     "--texconv", "texconv.exe", "--out", out, "--vanilla-paths", "--loose", "--coverage", "100"])
             recs = {sfplugin.edid(r[2]): r for r in sfplugin.records(os.path.join(out, N.PLUGIN), [b"GRAS"])}
         self.assertIn("Fern02 shares landscape\\grass\\spare01.nif", log.getvalue())
+        self.assertNotIn("Fern02 ->", log.getvalue())
         self.assertEqual(dict(recs["S2S_Fern02"][2])[b"MODL"], dict(recs["S2S_Fern01"][2])[b"MODL"])
         self.assertEqual(sfgrass.parse_gras_dnam(dict(recs["S2S_Fern01"][2])[b"DNAM"])["coverage"], 100.0)
+
+    def test_family_material(self):
+        import skyrim_grass_native as N
+        self.assertEqual(N.family_material("TundraGrass04"), "Materials\\Landscape\\Grass\\Bladed\\GrassFieldDried01.mat")
+        self.assertEqual(N.family_material("Unknown01"), "Materials\\Landscape\\Grass\\Bladed\\GrassFieldLive01.mat")
+        self.assertTrue(N.family_material("SnowGrass01Forest").endswith("GrassFieldDried01Snow.mat"))
+
+    def test_one_path_per_family_and_auto_material(self):
+        import numpy as np
+        import skyrim_grass_native as N
+        data = struct.pack("<BBBBHHIffffB3x", 30, 0, 40, 0, 0, 0, 0, 0.0, 0.3, 0.2, 0.0, 4)
+        lg = {0x77: [0x88, 0x89]}
+        gr = {0x88: dict(skyrimgrass.parse_gras_data(data), edid="TundraGrass01", model="landscape\\plants\\fern01.nif"),
+              0x89: dict(skyrimgrass.parse_gras_data(data), edid="TundraGrass02", model="landscape\\plants\\fern01.nif")}
+        pool = (["meshes\\landscape\\grass\\spare01.nif", "meshes\\landscape\\grass\\spare02.nif"], 5, 3)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(textures, "texconv", lambda *a, **k: None), \
+                mock.patch.object(skyrimgrass, "read_grass", return_value=(lg, gr)), \
+                mock.patch.object(N, "unused_grass_paths", return_value=pool), \
+                mock.patch.object(N, "world_cells", return_value={(0, 0): {0x77: np.ones((33, 33))}}), \
+                contextlib.redirect_stdout(io.StringIO()) as log:
+            sf, data_dir, sky_esm, terrain = self._setup(tmp)
+            out = os.path.join(tmp, "mod")
+            N.main(["--skyrim", sky_esm, "--skyrim-data", data_dir, "--starfield", sf, "--terrain", terrain,
+                    "--texconv", "texconv.exe", "--out", out, "--vanilla-paths", "--loose", "--vanilla-material", "auto"])
+            with open(os.path.join(out, "grass_native.json"), encoding="utf-8") as fh:
+                rep = json.load(fh)
+        self.assertIn("TundraGrass02 shares", log.getvalue())               # same family: no second path used
+        self.assertEqual(list(rep["vanilla_paths"]), ["TundraGrass01"])
+        self.assertTrue(rep["materials"]["TundraGrass01"].endswith("GrassFieldDried01.mat"))
 
     def test_grass_coverage(self):
         import numpy as np

@@ -482,6 +482,14 @@ Max Density; what a vanilla grass model needs. Two tools:
   Skyrim grass records grow; `--coverage 100` (GRAS 'Distribution': the templates' 20 % made the grass sparse; Skyrim
   fills every spot its density allows); `grass_model_compare.py --list-materials` lists the materials of every vanilla
   grass model, to pick the closest Starfield material per Skyrim grass family.
+  Owner's run (14:00): 12 placed + 15 shared, 0 failed; 82 vanilla grass materials listed (Bladed: GrassFieldLive01,
+  GrassFieldDried01/02/03/04 with Cyan / Red / Snow / Yellow variants, GrassCostal01/02, GrassDesert01, GrassWetlands01/02,
+  GrassWheat01, GrassSedge01, ...; Aquatic, Flowers, Forest, Rocks, Shrubs, Xophile; MossForest01/03). A material
+  lives in the NIF, so it is per converted model: now each free path goes to one grass FAMILY (its commonest grass;
+  the rest of the family shares it: 15 families, 12 land families fit), and `--vanilla-material auto` gives each
+  family's model the closest game material (FAMILY_MATERIALS: forest / field / fern -> GrassFieldLive01, tundra ->
+  GrassFieldDried01, Reach -> ...Red, snow / frozen marsh -> ...Snow, fall forest -> ...Yellow, rock -> ...Dried03,
+  beach -> GrassCostal01, volcanic -> GrassDesert01, water -> wetlands / seaweed / eelgrass). In game: pending.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew

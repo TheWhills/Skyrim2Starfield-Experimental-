@@ -148,6 +148,27 @@ def family(edid: str) -> str:
     return re.sub(r"\d+[a-z]*$", "", edid.lower())
 
 
+# 2026-11-23: the grass system refuses our own .mat, so each Skyrim grass family wears the closest of the game's own
+# grass materials (grass_model_compare.py --list-materials, owner's list): a working stand-in until Skyrim's textures
+# can be used.
+FAMILY_MATERIALS = {
+    "forestgrass": "Bladed\\GrassFieldLive01", "fieldgrass": "Bladed\\GrassFieldLive01",
+    "ferngrass": "Bladed\\GrassFieldLive01", "fallforestgrass": "Bladed\\GrassFieldDried01Yellow",
+    "tundragrass": "Bladed\\GrassFieldDried01", "reachgrass": "Bladed\\GrassFieldDried01Red",
+    "snowgrass": "Bladed\\GrassFieldDried01Snow", "frozenmarshgrass": "Bladed\\GrassFieldDried01Snow",
+    "rockgrasssnow": "Bladed\\GrassFieldDried01Snow", "rockgrass": "Bladed\\GrassFieldDried03",
+    "beachgrass": "Bladed\\GrassCostal01", "volcanicgrass": "Bladed\\GrassDesert01",
+    "rockgrasswater": "Bladed\\GrassWetlands01", "watercoralgrass": "Aquatic\\GrassSeaweed01",
+    "waterkelpgrass": "Aquatic\\GrassEelgrass01",
+}
+DEFAULT_MATERIAL = "Bladed\\GrassFieldLive01"
+
+
+def family_material(edid: str) -> str:
+    """The game grass material standing in for a Skyrim grass family (--vanilla-material auto)."""
+    return "Materials\\Landscape\\Grass\\" + FAMILY_MATERIALS.get(family(edid), DEFAULT_MATERIAL) + ".mat"
+
+
 def shared_model(edid: str, placed):
     """For a grass left without a free path (only 12, 2026-11-23): the model of a converted grass of the same family,
     else of the commonest converted grass (placed is in coverage order); None if nothing was converted."""
@@ -345,10 +366,9 @@ def main(argv=None):
                          "2026-11-22: the cover that grows (GC_MossMoundsGrass01) has none, like 95 of 96 vanilla "
                          "covers; the biome entry pairs texture and cover")
     ap.add_argument("--vanilla-material", default="",
-                    help="test (2026-11-23): our converted geometry with this vanilla material path instead of our "
-                         "own .mat, e.g. Materials\\Landscape\\Grass\\Flowers\\GrassFlowersHellebore01.mat "
-                         "(in the compiled material database). Grass then = the grass system needs a database "
-                         "material")
+                    help="our converted geometry with this game material instead of our own .mat (the grass "
+                         "system refuses ours, 2026-11-23), e.g. Materials\\Landscape\\Grass\\Bladed\\GrassCityShort01.mat; 'auto' = the "
+                         "closest game grass material per Skyrim grass family (FAMILY_MATERIALS)")
     ap.add_argument("--vanilla-geometry", action="store_true",
                     help="test (2026-11-23): our NIFs (path, archive, records) drawing the template grass's vanilla "
                          ".mesh instead of ours. Grass then = our .mesh data is what the grass system rejects")
@@ -558,14 +578,19 @@ def main(argv=None):
                     model = rel.split("/", 1)[1].replace("/", "\\")
                 elif a.keep_template_model:
                     model = dict((x, bytes(d)) for x, d in gt[2])[b"MODL"].rstrip(b"\0").decode()
-                elif free is not None and not free:  # --vanilla-paths, none left: share a converted model
+                elif free is not None and (not free or any(family(e) == family(r["edid"]) for e, _m in placed)):
+                    # --vanilla-paths: one free path per grass family (the family's commonest grass); the rest of
+                    # the family, and families without a path, share a converted model
                     model = shared_model(r["edid"], placed)
                     if model is None:
                         raise RuntimeError("no unused vanilla grass path left")
                     report.setdefault("shared_models", {})[r["edid"]] = model
                     print(f"  {r['edid']} shares {model}")
                 else:
-                    model = convert_model(conv, name, tints.get(r["model"]), staging, a.vanilla_material, geometry)
+                    mat = family_material(r["edid"]) if a.vanilla_material == "auto" else a.vanilla_material
+                    model = convert_model(conv, name, tints.get(r["model"]), staging, mat, geometry)
+                    if mat:
+                        report.setdefault("materials", {})[r["edid"]] = mat
                     if free is not None:             # --vanilla-paths: move it over an unused vanilla grass path
                         vpath = free.pop(0)
                         src_p = os.path.join(staging, "meshes", *model.split("\\"))
