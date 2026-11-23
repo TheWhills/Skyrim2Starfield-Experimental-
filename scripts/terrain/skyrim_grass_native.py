@@ -48,6 +48,13 @@ from fo4sf import bsa, sfgrass, sfplugin, skyrimconvert, skyrimgrass, skyrimnif 
 from fo4sf import nif as nifmod  # noqa: E402
 
 PLUGIN = "S2SGrass.esm"
+# --path-variants (2026-11-23): which model paths the grass system accepts. Each variant copies a different vanilla
+# grass NIF (so the owner can tell them apart in game) to a different kind of path; grass i takes variant i % 3.
+PATH_VARIANTS = (
+    ("flowers (hellebore)", "Landscape\\Grass\\grasshelleborefield02.nif", "Landscape\\Grass\\S2S_{stem}.nif"),
+    ("moss mounds", "Landscape\\Grass\\GrassMossMounds02.nif", "Landscape\\Grass\\S2S\\{stem}.nif"),
+    ("dried primrose", "Landscape\\Grass\\GrassPrimRoseDried01.nif", "Landscape\\Grass\\S2S\\GrassPrimRoseDried01.nif"),
+)
 PREFIX = "s2s"
 VANILLA_OCEAN = 0x07F88A      # OceanLife04: the biome under the overlay when make_planet kept its coating
 VANILLA_LAND = 0x1CBD6A       # ForestDeciduousLifeJemison: where --control takes its vanilla ground cover from
@@ -268,6 +275,9 @@ def main(argv=None):
     ap.add_argument("--drop-modt", action="store_true",
                     help="test (2026-11-23): leave out the template GRAS's MODT (model hashes of the vanilla model) "
                          "from our grass records")
+    ap.add_argument("--path-variants", action="store_true",
+                    help="test (2026-11-23): three kinds of model path at once, each with a different vanilla grass "
+                         "NIF so they can be told apart in game (see PATH_VARIANTS)")
     ap.add_argument("--keep-template-model", action="store_true",
                     help="test: our GRAS records with the template grass's own (vanilla) model instead of the "
                          "converted Skyrim one, to tell a model problem from a record problem")
@@ -392,14 +402,26 @@ def main(argv=None):
         conv = skyrimconvert.SkyrimConverter(bsa.SkyrimArchives(a.skyrim_data), staging, a.texconv, cr, None,
                                              prefix=PREFIX)
         tdnam = dict((s, bytes(d)) for s, d in gt[2])[b"DNAM"]
-        for g in sorted({g for v in plan["slots"].values() for g in v},
-                        key=lambda g: gras_sky.get(g, {}).get("edid", "")):
+        variants = [template_nif(os.path.join(a.starfield, "Data"), v[1]) for v in PATH_VARIANTS] \
+            if a.path_variants else None
+        for gi, g in enumerate(sorted({g for v in plan["slots"].values() for g in v},
+                                      key=lambda g: gras_sky.get(g, {}).get("edid", ""))):
             r = gras_sky.get(g)
             if r is None:
                 continue
             name = "meshes\\" + r["model"].replace("/", "\\").lstrip("\\")
             try:
-                if copied is not None:               # --copy-template-nif: vanilla bytes at our path, in our archive
+                if variants is not None:
+                    k = gi % len(PATH_VARIANTS)
+                    stem = re.sub(r"[^A-Za-z0-9_]+", "_", os.path.splitext(os.path.basename(
+                        r["model"].replace("\\", "/")))[0])
+                    model = PATH_VARIANTS[k][2].format(stem=stem)
+                    pth = os.path.join(staging, "meshes", *model.split("\\"))
+                    os.makedirs(os.path.dirname(pth), exist_ok=True)
+                    with open(pth, "wb") as fh:
+                        fh.write(variants[k])
+                    report.setdefault("path_variants", {}).setdefault(PATH_VARIANTS[k][0], []).append(model)
+                elif copied is not None:               # --copy-template-nif: vanilla bytes at our path, in our archive
                     stem = re.sub(r"[^a-z0-9_]+", "_", os.path.splitext(r["model"].lower().replace("\\", "/"))[0])
                     rel = f"meshes/landscape/grass/{PREFIX}/{stem}.nif"
                     pth = os.path.join(staging, *rel.split("/"))
@@ -489,6 +511,8 @@ def main(argv=None):
             f"{len(report['failed'])} models failed")
     if a.allow_procgen:
         print(f"world {report['allow_procgen']['world']} ({report['allow_procgen']['form_id']}): Allow ProcGen set")
+    for label, paths in (report.get("path_variants") or {}).items():
+        print(f"  {label}: {len(paths)} grasses at paths like {paths[0]}")
     if report.get("packing"):
         print("files: " + (f"loose ({', '.join(report['packing']['loose'])})" if "loose" in report["packing"]
                            else ", ".join(report["packing"].get("archives", []))))

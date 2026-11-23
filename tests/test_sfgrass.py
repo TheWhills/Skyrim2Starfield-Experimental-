@@ -353,6 +353,14 @@ class PlanetBiomeTests(unittest.TestCase):
         _raw, by, _log = self._run([])
         self.assertIn(b"MODT", dict(by["S2S_Fern"][2]))                     # kept by default
 
+    def test_path_variants(self):
+        import skyrim_grass_native as N
+        with mock.patch.object(N, "template_nif", side_effect=[b"A", b"B", b"C"]) as tn:
+            _raw, by, log = self._run(["--path-variants"])
+        self.assertEqual(tn.call_count, 3)
+        self.assertEqual(dict(by["S2S_Fern"][2])[b"MODL"], b"Landscape\\Grass\\S2S_fern01.nif\0")   # first grass: variant 0
+        self.assertIn("flowers (hellebore): 1 grasses at paths like Landscape\\Grass\\S2S_fern01.nif", log)
+
     def test_loose_build(self):
         _raw, by, log = self._run(["--loose"])
         self.assertIn("files: loose (meshes", log)
