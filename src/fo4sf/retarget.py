@@ -405,6 +405,37 @@ def shoulder_calibration(ours: Dict[str, np.ndarray], reference: Dict[str, np.nd
     return out
 
 
+def reattach(rig: "Rig", lt, lq, before, pairs: Dict[int, int]):
+    """Locals with each bone of `pairs` ({bone: hand}) put back where it was RELATIVE TO ITS HAND in `before` (world
+    (t, q) of the same frames before a change that moved the hands), wherever it hangs in the skeleton. Returns (lt,
+    lq, largest move in metres).
+
+    Why (2026-11-23, owner: "the sword ever so slightly goes out of the hand when dodging", only with the shoulder
+    calibration): Starfield's Weapon / WEAPON / WeaponLeft and the hand IK targets hang off C_Chest, not the hand; the
+    retarget places them against the hand, then apply_shoulder_offsets turns the clavicles, which moves the hands but
+    not those bones."""
+    if not pairs:
+        return lt, lq, 0.0
+    wt0, wq0 = before
+    lt, lq = np.asarray(lt, float).copy(), np.asarray(lq, float).copy()
+    moved = 0.0
+    for i in sorted(pairs):                                   # parents before children (Rig order)
+        h = pairs[i]
+        wt, wq = rig.fk(lt, lq)
+        rel_q = qmul(qinv(wq0[:, h]), wq0[:, i])
+        rel_t = qrot(qinv(wq0[:, h]), wt0[:, i] - wt0[:, h])
+        tq = qmul(wq[:, h], rel_q)
+        tt = wt[:, h] + qrot(wq[:, h], rel_t)
+        moved = max(moved, float(np.max(np.linalg.norm(tt - wt[:, i], axis=-1))))
+        p = rig.parents[i]
+        if p >= 0:
+            lq[:, i] = qmul(qinv(wq[:, p]), tq)
+            lt[:, i] = qrot(qinv(wq[:, p]), tt - wt[:, p])
+        else:
+            lq[:, i], lt[:, i] = tq, tt
+    return lt, lq, moved
+
+
 def apply_shoulder_offsets(rig: "Rig", lt, lq, offsets: Dict[str, list]):
     """Locals with each clavicle turned by offsets[side] (body-frame quaternion, shoulder_calibration), its children
     keeping their world rotations, so the shoulder joint moves and the arm still points where it did.
@@ -813,7 +844,18 @@ def retarget(clip: dict, sk: Rig, sf: Rig, unit: float = SKYRIM_M_PER_UNIT, weap
         wt[:, i, :] = pw_t + qrot(pw_q, out_t[:, i, :])
     shoulder_report = None
     if shoulder_offsets:
+        before = sf.fk(out_t, out_q)
         out_t, out_q, shoulder_report = apply_shoulder_offsets(sf, out_t, out_q, shoulder_offsets)
+        # bones held against a hand but hanging off the chest follow the moved hands (the weapon stays in the fist)
+        held = {i: g[0] for i, g in grips.items() if g[0] < i}
+        held.update({i: h for i, h in targets.items() if h < i})
+        for i in world_src:
+            hand = sf.index.get("R_Wrist" if not sf.names[i].startswith(("L_", "WeaponLeft")) else "L_Wrist")
+            if hand is not None and hand < i and i not in held:
+                held[i] = hand
+        out_t, out_q, moved = reattach(sf, out_t, out_q, before, held)
+        if shoulder_report is not None:
+            shoulder_report = {**shoulder_report, "held_bones_moved_m": round(moved, 4)}
         wt = sf.fk(out_t, out_q)[0]
     grip_report = None
     if two_hand_grip:

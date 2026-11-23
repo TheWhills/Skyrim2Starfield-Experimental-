@@ -176,6 +176,29 @@ class RetargetTests(unittest.TestCase):
         self.assertTrue(np.allclose(rel, gq, atol=1e-6) or np.allclose(rel, -np.array(gq), atol=1e-6))
         self.assertTrue(np.allclose(wt[0, ik], wt[0, wr], atol=1e-9))           # IK target on the hand
 
+    def test_reattach_keeps_the_weapon_in_the_moved_hand(self):
+        # chest -> clavicle -> wrist, and the weapon hanging off the chest (Starfield's layout)
+        sf = R.Rig(["C_Chest", "R_Clavicle", "R_Wrist", "Weapon"], [-1, 0, 1, 0],
+                   [(0, 0, 1.4), (0.1, 0, 0), (0.5, 0, -0.3), (0.65, 0.05, -0.32)], [I, I, I, I])
+        lt = np.repeat(sf.t[None], 2, axis=0)
+        lq = np.repeat(sf.q[None], 2, axis=0)
+        before = sf.fk(lt, lq)
+        wr, wp = sf.index["R_Wrist"], sf.index["Weapon"]
+        rel0 = R.qrot(R.qinv(before[1][:, wr]), before[0][:, wp] - before[0][:, wr])
+        lq2 = lq.copy()
+        lq2[:, sf.index["R_Clavicle"]] = qaxis((0, 1, 0), 27)               # the shoulder calibration's turn
+        wt, wq = sf.fk(lt, lq2)
+        drift = np.linalg.norm(R.qrot(R.qinv(wq[:, wr]), wt[:, wp] - wt[:, wr]) - rel0, axis=-1)
+        self.assertGreater(float(drift.max()), 0.05)                          # the bug: the hand left the weapon
+        lt3, lq3, moved = R.reattach(sf, lt, lq2, before, {wp: wr})
+        wt, wq = sf.fk(lt3, lq3)
+        rel = R.qrot(R.qinv(wq[:, wr]), wt[:, wp] - wt[:, wr])
+        self.assertTrue(np.allclose(rel, rel0, atol=1e-9))
+        self.assertTrue(np.allclose(np.abs(np.sum(R.qmul(R.qinv(wq[:, wr]), wq[:, wp]) *
+                                                  R.qmul(R.qinv(before[1][:, wr]), before[1][:, wp]), -1)), 1, atol=1e-9))
+        self.assertGreater(moved, 0.05)
+        self.assertEqual(R.reattach(sf, lt, lq2, before, {})[2], 0.0)
+
     def test_mirror_grip_is_the_mirror_image(self):
         rng = np.random.default_rng(3)
         def rq():

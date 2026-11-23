@@ -2762,3 +2762,16 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   next run with bNoAim / bNoHeadTrack forced and bAimActive, BoneWeightsAction, iSyncRelaxReadySneak, the DirectAt
   outputs logged, from the relaxed and the ready stance.
 
+## 2026-11-23 — Left arm fixed by bNoAim / bNoHeadTrack from the plugin; weapon re-held after the shoulder turn
+- Owner's run: S2SDodge setting bNoAim and bNoHeadTrack (Papyrus SetAnimationVariableBool) while a dodge runs keeps
+  the left arm in from the combat stance (verified). The same as clip variable windows did nothing: supported, the
+  descriptor windows do not drive these. Default now in S2SDodge.ini.
+- Owner: the sword slightly out of the hand while dodging. Found: Weapon / WEAPON / WeaponLeft and the hand IK targets
+  hang off C_Chest; retarget placed them against the hand, then apply_shoulder_offsets turned the clavicles and moved
+  the hands only. retarget.reattach now puts every hand-held bone back relative to its hand after the shoulder turn
+  (test: test_reattach_keeps_the_weapon_in_the_moved_hand). Affects every clip converted with --shoulder-calibration
+  (furniture packs too: their IK targets were off the same way).
+- Owner: the head turns right briefly in the forward dodge (not in Skyrim). Unresolved: the queued Papyrus set may
+  arrive a few frames late at the start or head tracking may come back at the end; the log's bHeadTrackingActive at
+  start / +0.25 s / end tells which.
+
