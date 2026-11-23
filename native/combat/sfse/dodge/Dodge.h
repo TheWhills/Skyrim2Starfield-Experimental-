@@ -12,6 +12,11 @@ struct Settings {
     bool ghost_during_iframes = true;
     std::string stamina_value;
     int log_input = 20, log_events = 0, log_commands = 40;
+    // graph bools set true on the player while a dodge runs, false after (Papyrus SetAnimationVariableBool)
+    std::vector<std::string> dodge_bools;
+    // graph variables logged at each dodge's start and 0.25 s into it ("name" = bool, "name:i" int, "name:f" float)
+    std::vector<std::string> log_variables;
+    int log_dodges = 20;
 };
 
 class Plugin {
@@ -29,6 +34,8 @@ public:
 
 private:
     void Run(std::vector<combat::Command> commands);
+    void OnDodgeChange(bool dodging, double now);
+    std::string Variables() const;
     combat::PlayerState State() const;
 
     std::mutex lock_;
@@ -39,6 +46,9 @@ private:
     int logged_input_ = 0, logged_events_ = 0;
     std::atomic_int logged_commands_ = 0;
     bool ghost_ = false;
+    bool was_dodging_ = false;
+    double dodge_started_ = -1.0;      // >= 0: the mid-dodge log line is still due
+    int dodges_logged_ = 0;
 };
 
 // Hooks.cpp of S2SDodge: call once the game data is loaded; safe to call again.

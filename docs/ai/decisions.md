@@ -2756,4 +2756,9 @@ western (eu) face material for the same reason (2026-11-12). Alternative: by rac
   R_AnimObject1 / L_AnimObject1), the RelaxReadySneakSwitch (iSyncRelaxReadySneak, prefix) and Copy Bone Weights
   (BoneWeightsAction); no IK node. Supported hypothesis: in the ready stance the aim is active and the LookAt_Chest
   poses (made for the ready stance's aim) move the left arm over every full-body clip. Test: --variable bNoAim.
+- Owner's run (--variable bNoAim on the dodge clips): left arm still out from the combat stance. Unresolved whether a
+  descriptor variable window sets bNoAim at all. S2SDodge gets two diagnostics: sDodgeGraphBools (bools set on the
+  player by Papyrus while a dodge runs) and sLogGraphVariables (graph variables logged at dodge start, +0.25 s, end):
+  next run with bNoAim / bNoHeadTrack forced and bAimActive, BoneWeightsAction, iSyncRelaxReadySneak, the DirectAt
+  outputs logged, from the relaxed and the ready stance.
 

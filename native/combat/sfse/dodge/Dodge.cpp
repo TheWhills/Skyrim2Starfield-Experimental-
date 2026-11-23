@@ -45,6 +45,11 @@ void Plugin::LoadSettings(const std::string& ini_path) {
     settings_.log_input = to_int(plugin, "ilogkeys", settings_.log_input);
     settings_.log_events = to_int(plugin, "iloganimevents", settings_.log_events);
     settings_.log_commands = to_int(plugin, "ilogcommands", settings_.log_commands);
+    settings_.log_dodges = to_int(plugin, "ilogdodges", settings_.log_dodges);
+    if (auto it = plugin.find("sdodgegraphbools"); it != plugin.end())
+        settings_.dodge_bools = combat::MenuGate::parse_list(it->second);
+    if (auto it = plugin.find("sloggraphvariables"); it != plugin.end())
+        settings_.log_variables = combat::MenuGate::parse_list(it->second);
     std::scoped_lock l(lock_);
     controller_ = combat::Controller(cfg);
     std::string evs;
@@ -122,10 +127,73 @@ void Plugin::Tick() {
         invulnerable = controller_.invulnerable(now);
     }
     Run(std::move(cmds));
+    bool dodging = false;
+    {
+        std::scoped_lock l(lock_);
+        dodging = controller_.dodging();
+    }
+    if (dodging != was_dodging_) {
+        was_dodging_ = dodging;
+        OnDodgeChange(dodging, now);
+    }
+    if (dodge_started_ >= 0.0 && now - dodge_started_ >= 0.25) {
+        dodge_started_ = -1.0;
+        if (dodges_logged_ <= settings_.log_dodges && !settings_.log_variables.empty())
+            REX::INFO("dodge +0.25 s:{}", Variables());
+    }
     if (settings_.ghost_during_iframes && invulnerable != ghost_) {
         ghost_ = invulnerable;
         SFSE::GetTaskInterface()->AddTask([g = ghost_]() { game::SetGhost(g); });
     }
+}
+
+std::string Plugin::Variables() const {
+    std::string out;
+    auto* player = game::Player();
+    if (!player) return " (no player)";
+    for (const auto& spec : settings_.log_variables) {
+        const auto colon = spec.find(':');
+        const std::string name = spec.substr(0, colon);
+        const char type = colon == std::string::npos || colon + 1 >= spec.size() ? 'b' : spec[colon + 1];
+        const RE::BSFixedString fs(name.c_str());
+        bool ok = false;
+        std::string value;
+        if (type == 'i') {
+            std::int32_t v = 0;
+            ok = player->GetGraphVariableImplInt(fs, v);
+            value = std::to_string(v);
+        } else if (type == 'f') {
+            float v = 0.0f;
+            ok = player->GetGraphVariableImplFloat(fs, v);
+            value = std::format("{:.3f}", v);
+        } else {
+            bool v = false;
+            ok = player->GetGraphVariableImplBool(fs, v);
+            value = v ? "1" : "0";
+        }
+        out += std::format(" {}={}", name, ok ? value : std::string("?"));
+    }
+    return out;
+}
+
+void Plugin::OnDodgeChange(bool dodging, double now) {
+    const bool log = dodges_logged_ < settings_.log_dodges;
+    if (dodging) {
+        ++dodges_logged_;
+        dodge_started_ = now;
+        if (log && !settings_.log_variables.empty()) REX::INFO("dodge start:{}", Variables());
+    } else if (log) {
+        REX::INFO("dodge end{}", settings_.log_variables.empty() ? std::string() : ":" + Variables());
+    }
+    if (settings_.dodge_bools.empty()) return;
+    SFSE::GetTaskInterface()->AddTask([names = settings_.dodge_bools, dodging, log]() {
+        std::string line;
+        for (const auto& n : names) {
+            const bool ok = game::SetVariable(combat::VariableSet{combat::VariableSet::Type::Bool, n, dodging ? 1.0 : 0.0});
+            line += std::format(" {}={}{}", n, dodging ? 1 : 0, ok ? "" : " (not dispatched)");
+        }
+        if (log) REX::INFO("dodge graph bools:{}", line);
+    });
 }
 
 void Plugin::Run(std::vector<combat::Command> commands) {
