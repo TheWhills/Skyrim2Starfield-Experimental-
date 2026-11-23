@@ -470,6 +470,13 @@ Max Density; what a vanilla grass model needs. Two tools:
   confirm and as the likely route: a Starfield bladed-grass material on the Skyrim meshes
   (Materials\Landscape\Grass\Bladed\GrassCityShort01.mat, the Creation Kit wiki's example; VegetationTranslucent
   with wind and terrain tint).
+  **`--vanilla-paths --vanilla-material ...Bladed\GrassCityShort01.mat` (owner, 13:51, verified in game): green
+  bladed grass tufts in Skyrim's grass-card shapes grow** on Riverwood's forest floor (sparse, dusk). So: Skyrim
+  meshes load; models must sit at shipped grass paths (12 free); materials must be the game's own (our .mat refused,
+  in grass only: statics accept it). Open: Skyrim's textures on grass (a Layered Material Swap is opaque REFL data in
+  Mutagen; overriding the textures of a used vanilla grass material would recolour vanilla grass), more than 12
+  grass types (shared models), density (Skyrim's 3-37 against vanilla 40+ plus coverage), and why the game refuses
+  new paths (Starfield.exe; Ghidra).
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
