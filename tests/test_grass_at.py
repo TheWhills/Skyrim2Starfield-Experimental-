@@ -1,0 +1,50 @@
+"""scripts/terrain/grass_at.py (2026-11-23): Skyrim's grass at a spot against what our native-grass build grows."""
+import os
+import sys
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts", "terrain"))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+
+import grass_at as G  # noqa: E402
+
+GRAS = {0x10: {"edid": "ForestGrass01", "density": 30, "min_slope": 0, "max_slope": 60},
+        0x11: {"edid": "TundraGrass01", "density": 20, "min_slope": 0, "max_slope": 45},
+        0x12: {"edid": "TundraGrass02", "density": 10, "min_slope": 0, "max_slope": 45}}
+REPORT = {"slots": {"00000100": ["ForestGrass01", "TundraGrass01", "TundraGrass02"]},
+          "vanilla_paths": {"ForestGrass01": "meshes\\landscape\\grass\\a.nif",
+                            "TundraGrass01": "meshes\\landscape\\grass\\b.nif"},
+          "shared_models": {"TundraGrass02": "landscape\\grass\\b.nif"},
+          "materials": {"ForestGrass01": "Materials\\Landscape\\Grass\\Bladed\\GrassCityShort01.mat",
+                        "TundraGrass01": "Materials\\Landscape\\Grass\\Bladed\\GrassFieldDried01.mat"},
+          "failed": {}}
+
+
+class DescribeTest(unittest.TestCase):
+    def test_slot_shared_by_two_textures(self):
+        near = {1: (3.0, None), 2: (1.0, None), 3: (1.0, None)}
+        info = {1: {"edid": "LForest"}, 2: {"edid": "LTundra"}, 3: {"edid": "LRoad"}}
+        mapping = {"a": {"edid": "LForest", "starfield": "SKYG_LForest"},
+                   "b": {"edid": "LTundra", "starfield": "SKYG_LForest"},     # drawn with the same slot
+                   "c": {"edid": "LRoad", "starfield": "Rock01"}}             # a vanilla texture
+        lines = G.describe(near, info, {1: [0x10], 2: [0x11, 0x12]}, GRAS, mapping,
+                           [{"form_id": 0x100, "skyrim": "LForest"}], REPORT)
+        text = "\n".join(lines)
+        self.assertTrue(lines[0].startswith("LForest  60 %  Skyrim grows: ForestGrass01"))
+        self.assertIn("its ground cover grows 3", text)
+        self.assertIn("* ForestGrass01        density  30  slope 0-60  a.nif  [GrassCityShort01.mat]", text)
+        self.assertIn("  TundraGrass01", text)                       # grows on LForest via the shared slot
+        self.assertIn("shares b.nif  [GrassFieldDried01.mat]", text)  # material of the model's owner
+        self.assertIn("LRoad  20 %  Skyrim grows: no grass", text)
+        self.assertIn("Rock01 (a vanilla Starfield texture", text)
+
+    def test_unmapped_and_failed(self):
+        rep = dict(REPORT, failed={"TundraGrass01": "boom"})
+        self.assertIn("FAILED", G.grass_line("TundraGrass01", GRAS[0x11], rep))
+        lines = G.describe({1: (1.0, None)}, {1: {"edid": "LX"}}, {}, GRAS, {}, [], rep)
+        self.assertIn("not mapped", lines[1])
+
+
+if __name__ == "__main__":
+    unittest.main()

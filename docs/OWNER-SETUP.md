@@ -319,6 +319,9 @@ Each step says what to send back. A: read-only, Starfield may stay open; B: buil
    shapes over the free vanilla grass paths, each family in the closest game grass material; terrain_byte6.ps1 first).
    Tuning: --density-scale N (Skyrim's density x N), --family-material forestgrass,fieldgrass=Bladed\GrassCityShort01
    (any material from grass_model_compare.py --list-materials, path under Materials\Landscape\Grass).
+   Which grass should grow at a spot (read-only): in game `player.getpos x` / `y`, then
+   python -I scripts\terrain\grass_at.py --skyrim "$sky\Skyrim.esm" --terrain C:\Modding\staging\skyrim_all
+   --grass "$mods\S2S Grass Native" --pos X Y
 8h. (2026-11-22) Ground colour against Skyrim at a spot (read-only): in game `player.getpos x` / `y`, then
    python -I scripts\terrain\ground_tone.py --skyrim "$sky\Skyrim.esm" --terrain C:\Modding\staging\skyrim_all
    --pos X Y --spawn-at 225.70 -627.74 --radius 20

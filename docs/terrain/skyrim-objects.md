@@ -498,6 +498,12 @@ Max Density; what a vanilla grass model needs. Two tools:
   where Skyrim's is a carpet: Max Density is Skyrim's raw 3-37 against the vanilla template's 40. Next:
   `--family-material FAMILY=MATERIAL` overrides a family's stand-in (the build now prints each family model's
   material after its path), and `--density-scale 3` (Skyrim 3-37 -> 9-111).
+  Owner's run (14:28 / 14:30, `--density-scale 3`, forest / field / fern on GrassCityShort01): the clumps on the rocky
+  slopes and by the mill are denser but still straw; the forest-floor spot that had one straw tuft now has none
+  (verified, screenshots). Unresolved which Skyrim grasses those places grow: the inferred mapping draws 66 Skyrim
+  textures with 19 slots, and a slot's ground cover grows every grass of every Skyrim texture drawn with it.
+  `grass_at.py --pos X Y` prints, per Skyrim texture at a spot, the grasses Skyrim grows there, the slot our terrain
+  uses, and every grass (model, material) that slot's cover grows.
 * Why native grass is the faithful route: Skyrim stores no grass positions either. It grows GRAS at run time from the
   painted ground textures (density, slope, height / colour range), as Starfield's ground cover does; the baked patches
   imitate that with our own random scatter. They also sat on Skyrim's layers while, until 2026-11-22, the terrain drew
